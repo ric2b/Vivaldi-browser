@@ -67,6 +67,7 @@
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "extensions/common/scoped_worker_based_extensions_channel.h"
 #include "extensions/common/value_builder.h"
 #include "extensions/common/verifier_formats.h"
 #include "extensions/test/background_page_watcher.h"
@@ -226,13 +227,7 @@ class ServiceWorkerTest : public ExtensionApiTest {
 
 class ServiceWorkerBasedBackgroundTest : public ServiceWorkerTest {
  public:
-  ServiceWorkerBasedBackgroundTest()
-      : ServiceWorkerTest(
-            // Extensions APIs from SW are only enabled on trunk.
-            // It is important to set the channel early so that this change is
-            // visible in renderers running with service workers (and no
-            // extension).
-            version_info::Channel::UNKNOWN) {}
+  ServiceWorkerBasedBackgroundTest() = default;
   ~ServiceWorkerBasedBackgroundTest() override {}
 
   void SetUpOnMainThread() override {
@@ -274,6 +269,8 @@ class ServiceWorkerBasedBackgroundTest : public ServiceWorkerTest {
   }
 
  private:
+  ScopedWorkerBasedExtensionsChannel channel_;
+
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerBasedBackgroundTest);
 };
 
@@ -314,7 +311,9 @@ class ServiceWorkerBasedBackgroundTestWithNotification
 // The extension is installed and loaded during this step and it registers
 // an event listener for tabs.onCreated event. The step also verifies that tab
 // creation correctly fires the listener.
-IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, PRE_Basic) {
+//
+// Disabled due to flakiness: https://crbug.com/1003244.
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, DISABLED_PRE_Basic) {
   ExtensionTestMessageListener newtab_listener("CREATED", false);
   newtab_listener.set_failure_message("CREATE_FAILED");
   ExtensionTestMessageListener worker_listener("WORKER_RUNNING", false);
@@ -339,7 +338,9 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, PRE_Basic) {
 // tabs.onCreated event listener to the extension without explicitly loading the
 // extension. This is because the extension registered a listener before browser
 // restarted in PRE_Basic.
-IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, Basic) {
+//
+// Disabled due to flakiness: https://crbug.com/1003244.
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, DISABLED_Basic) {
   ExtensionTestMessageListener newtab_listener("CREATED", false);
   newtab_listener.set_failure_message("CREATE_FAILED");
   const GURL url = embedded_test_server()->GetURL("/extensions/test_file.html");
@@ -754,13 +755,7 @@ class ServiceWorkerPushMessagingTest : public ServiceWorkerTest {
 
 class ServiceWorkerLazyBackgroundTest : public ServiceWorkerTest {
  public:
-  ServiceWorkerLazyBackgroundTest()
-      : ServiceWorkerTest(
-            // Extensions APIs from SW are only enabled on trunk.
-            // It is important to set the channel early so that this change is
-            // visible in renderers running with service workers (and no
-            // extension).
-            version_info::Channel::UNKNOWN) {}
+  ServiceWorkerLazyBackgroundTest() = default;
   ~ServiceWorkerLazyBackgroundTest() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -779,6 +774,8 @@ class ServiceWorkerLazyBackgroundTest : public ServiceWorkerTest {
   }
 
  private:
+  ScopedWorkerBasedExtensionsChannel channel_;
+
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerLazyBackgroundTest);
 };
 
@@ -1179,7 +1176,13 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, NotificationAPI) {
                                   "page.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WebAccessibleResourcesFetch) {
+// Flaky on Linux (crbug.com/1006129).
+#if defined(OS_LINUX)
+#define MAYBE_WebAccessibleResourcesFetch DISABLED_WebAccessibleResourcesFetch
+#else
+#define MAYBE_WebAccessibleResourcesFetch WebAccessibleResourcesFetch
+#endif
+IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, MAYBE_WebAccessibleResourcesFetch) {
   EXPECT_TRUE(RunExtensionSubtest(
       "service_worker/web_accessible_resources/fetch/", "page.html"));
 }
@@ -1187,9 +1190,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WebAccessibleResourcesFetch) {
 // Tests that updating a packed extension with modified scripts works
 // properly -- we expect that the new script will execute, rather than the
 // previous one.
-IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, UpdatePackedExtension) {
-  // Extensions APIs from SW are only enabled on trunk.
-  ScopedCurrentChannel current_channel_override(version_info::Channel::UNKNOWN);
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
+                       UpdatePackedExtension) {
   constexpr char kManifest1[] =
       R"({
            "name": "Test Extension",
@@ -1203,11 +1205,17 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, UpdatePackedExtension) {
   // a callback that forces itself to reload.
   constexpr char kScript1[] =
       R"(
+         addEventListener('activate', event => {
+           // TODO(crbug.com/999027, crbug.com/984522): Delaying sending
+           // 'ready1' until activation seems to reduce the flakiness described
+           // in the bugs. It'd be better to fix the underlying bugs.
+           chrome.test.sendMessage('ready1');
+         });
+
          chrome.runtime.onUpdateAvailable.addListener(function(details) {
            chrome.test.assertEq('%s', details.version);
            chrome.runtime.reload();
          });
-         chrome.test.sendMessage('ready1');
         )";
 
   std::string id;
@@ -1270,9 +1278,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, UpdatePackedExtension) {
 // Tests that updating an unpacked extension with modified scripts works
 // properly -- we expect that the new script will execute, rather than the
 // previous one.
-IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, UpdateUnpackedExtension) {
-  // Extensions APIs from SW are only enabled on trunk.
-  ScopedCurrentChannel current_channel_override(version_info::Channel::UNKNOWN);
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
+                       UpdateUnpackedExtension) {
   constexpr char kManifest1[] =
       R"({
            "name": "Test Extension",
@@ -1289,11 +1296,29 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, UpdateUnpackedExtension) {
          })";
   constexpr char kScript[] =
       R"(
-         chrome.runtime.onInstalled.addListener(function(details) {
-           chrome.test.assertEq('%s', details.reason);
-           chrome.test.sendMessage('onInstalled');
+         let activated;
+         let installed;
+
+         addEventListener('activate', event => {
+           activated = true;
+           NotifyIfDone();
          });
-         chrome.test.sendMessage('%s');
+
+         chrome.runtime.onInstalled.addListener(function(details) {
+           installed = true;
+           chrome.test.assertEq('%s', details.reason);
+           NotifyIfDone();
+         });
+
+         // TODO(crbug.com/999027, crbug.com/984522): Delaying notification
+         // until activation seems to reduce the flakiness described in the
+         // bugs. It'd be better to fix the underlying bugs.
+         function NotifyIfDone() {
+           if (!activated || !installed)
+             return;
+           chrome.test.sendMessage('%s');
+           chrome.test.sendMessage('onInstalled');
+         }
         )";
 
   std::string id;
@@ -1431,9 +1456,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WebAccessibleResourcesIframeSrc) {
 
 // Verifies that service workers that aren't specified as the background script
 // for the extension do not have extension API bindings.
-IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, VerifyNoApiBindings) {
-  // Extensions APIs from SW are only enabled on trunk.
-  ScopedCurrentChannel current_channel_override(version_info::Channel::UNKNOWN);
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, VerifyNoApiBindings) {
   const Extension* extension = LoadExtensionWithFlags(
       test_data_dir_.AppendASCII("service_worker/verify_no_api_bindings"),
       kFlagNone);
@@ -1485,8 +1508,9 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBackgroundSyncTest, Sync) {
   EXPECT_TRUE(sync_listener.WaitUntilSatisfied());
 }
 
-IN_PROC_BROWSER_TEST_F(ServiceWorkerTest,
-                       FetchFromContentScriptShouldNotGoToServiceWorkerOfPage) {
+IN_PROC_BROWSER_TEST_F(
+    ServiceWorkerTest,
+    DISABLED_FetchFromContentScriptShouldNotGoToServiceWorkerOfPage) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   GURL page_url = embedded_test_server()->GetURL(
       "/extensions/api_test/service_worker/content_script_fetch/"
@@ -1587,6 +1611,7 @@ class TestRegistrationObserver : public content::ServiceWorkerContextObserver {
   }
 
   void OnDestruct(content::ServiceWorkerContext* context) override {
+    context_->RemoveObserver(this);
     context_ = nullptr;
   }
 
@@ -1787,8 +1812,9 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, TabsOnUpdatedSplit) {
   }
 }
 
+// Disabled due to flakiness: https://crbug.com/1003244.
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
-                       TabsOnUpdatedSpanning) {
+                       DISABLED_TabsOnUpdatedSpanning) {
   ExtensionTestMessageListener ready_listener("Script started regular", true);
 
   // Open an incognito window.
@@ -2018,8 +2044,9 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, TabsOnCreated) {
       << message_;
 }
 
+// Disabled due to flakiness: https://crbug.com/1003244.
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
-                       PRE_FilteredEventsAfterRestart) {
+                       DISABLED_PRE_FilteredEventsAfterRestart) {
   ExtensionTestMessageListener listener_added("ready", false);
   const Extension* extension = LoadExtensionWithFlags(
       test_data_dir_.AppendASCII("service_worker/worker_based_background/"
@@ -2039,8 +2066,10 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
 // tabs.onCreated event listener to the extension without explicitly loading the
 // extension. This is because the extension registered a listener for
 // tabs.onMoved before browser restarted in PRE_EventsAfterRestart.
+//
+// Disabled due to flakiness: https://crbug.com/1003244.
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
-                       FilteredEventsAfterRestart) {
+                       DISABLED_FilteredEventsAfterRestart) {
   // Verify there is no RenderProcessHost for the extension.
   // TODO(crbug.com/971309): This is currently broken because the test
   // infrastructure opens a tab, which dispatches an event to our

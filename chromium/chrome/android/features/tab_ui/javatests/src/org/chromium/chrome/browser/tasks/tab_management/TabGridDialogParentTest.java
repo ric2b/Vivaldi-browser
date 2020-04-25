@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.tasks.tab_management;
 
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
-import android.graphics.Rect;
 import android.provider.Settings;
 import android.support.test.annotation.UiThreadTest;
 import android.support.test.filters.MediumTest;
@@ -78,7 +77,7 @@ public class TabGridDialogParentTest extends DummyUiActivityTestCase {
     @Test
     @SmallTest
     @UiThreadTest
-    public void testUpdateDialogWithOrientation() throws Exception {
+    public void testUpdateDialogWithOrientation() {
         mockDialogStatus(false);
 
         mTabGridDialogParent.updateDialogWithOrientation(
@@ -119,7 +118,7 @@ public class TabGridDialogParentTest extends DummyUiActivityTestCase {
     @Test
     @SmallTest
     @UiThreadTest
-    public void testResetDialog() throws Exception {
+    public void testResetDialog() {
         mTabGridDialogContainer.removeAllViews();
         View toolbarView = new View(getActivity());
         View recyclerView = new View(getActivity());
@@ -139,8 +138,22 @@ public class TabGridDialogParentTest extends DummyUiActivityTestCase {
     }
 
     @Test
+    @SmallTest
+    @UiThreadTest
+    public void testSetPopupWindowFocusable() {
+        PopupWindow popupWindow = mTabGridDialogParent.getPopupWindowForTesting();
+        popupWindow.setFocusable(false);
+
+        mTabGridDialogParent.setPopupWindowFocusable(true);
+        Assert.assertTrue(popupWindow.isFocusable());
+
+        mTabGridDialogParent.setPopupWindowFocusable(false);
+        Assert.assertFalse(popupWindow.isFocusable());
+    }
+
+    @Test
     @MediumTest
-    public void testUpdateUngroupBar() throws Exception {
+    public void testUpdateUngroupBar() {
         mTabGridDialogContainer.removeAllViews();
         View toolbarView = new View(getActivity());
         View recyclerView = new View(getActivity());
@@ -249,11 +262,10 @@ public class TabGridDialogParentTest extends DummyUiActivityTestCase {
 
     @Test
     @MediumTest
-    public void testDialog_ZoomInZoomOut() throws Exception {
-        // Setup the animation with a dummy animation params.
-        TabGridDialogParent.AnimationParams params = new TabGridDialogParent.AnimationParams(
-                new Rect(3, 3, 3, 3), new View(getActivity()));
-        mTabGridDialogParent.setupDialogAnimation(params);
+    public void testDialog_ZoomInZoomOut() {
+        // Setup the animation with a dummy animation source view.
+        View sourceView = new View(getActivity());
+        mTabGridDialogParent.setupDialogAnimation(sourceView);
         ViewGroup parent = (ViewGroup) mTabGridDialogContainer.getParent();
 
         // Show the dialog with zoom-out animation.
@@ -306,11 +318,10 @@ public class TabGridDialogParentTest extends DummyUiActivityTestCase {
 
     @Test
     @MediumTest
-    public void testDialog_ZoomInFadeOut() throws Exception {
-        // Setup the animation with a dummy animation params.
-        TabGridDialogParent.AnimationParams params = new TabGridDialogParent.AnimationParams(
-                new Rect(3, 3, 3, 3), new View(getActivity()));
-        mTabGridDialogParent.setupDialogAnimation(params);
+    public void testDialog_ZoomInFadeOut() {
+        // Setup the animation with a dummy animation source view.
+        View sourceView = new View(getActivity());
+        mTabGridDialogParent.setupDialogAnimation(sourceView);
         // Show the dialog.
         TestThreadUtils.runOnUiThreadBlocking(() -> mTabGridDialogParent.showDialog());
         // Hide the dialog with basic fade-out animation.
@@ -337,7 +348,7 @@ public class TabGridDialogParentTest extends DummyUiActivityTestCase {
 
     @Test
     @MediumTest
-    public void testDialog_FadeInFadeOut() throws Exception {
+    public void testDialog_FadeInFadeOut() {
         // Setup the the basic fade-in and fade-out animation.
         mTabGridDialogParent.setupDialogAnimation(null);
 

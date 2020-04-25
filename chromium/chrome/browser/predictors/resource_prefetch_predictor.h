@@ -25,6 +25,7 @@
 #include "chrome/browser/predictors/navigation_id.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor_tables.h"
 #include "components/history/core/browser/history_db_task.h"
+#include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -192,8 +193,11 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
                            PopulatePrefetcherRequest);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, GetRedirectOrigin);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, GetPrefetchData);
+  FRIEND_TEST_ALL_PREFIXES(
+      ResourcePrefetchPredictorPreconnectToRedirectTargetTest,
+      TestPredictPreconnectOrigins);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
-                           TestPredictPreconnectOrigins);
+                           TestPredictPreconnectOrigins_RedirectsToNewOrigin);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
                            TestPrecisionRecallHistograms);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
@@ -216,6 +220,13 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
   static bool GetRedirectOrigin(const url::Origin& entry_origin,
                                 const RedirectDataMap& redirect_data,
                                 url::Origin* redirect_origin);
+
+  // Returns true if a redirect endpoint is available. Appends the redirect
+  // domains to |prediction->requests|. Sets |prediction->host| if it's empty.
+  bool GetRedirectEndpointsForPreconnect(
+      const url::Origin& entry_origin,
+      const RedirectDataMap& redirect_data,
+      PreconnectPrediction* prediction) const;
 
   // Callback for the task to read the predictor database. Takes ownership of
   // all arguments.
@@ -266,7 +277,7 @@ class ResourcePrefetchPredictor : public history::HistoryServiceObserver {
   std::unique_ptr<OriginDataMap> origin_data_;
 
   ScopedObserver<history::HistoryService, history::HistoryServiceObserver>
-      history_service_observer_;
+      history_service_observer_{this};
 
   // Indicates if all predictors data should be deleted after the
   // initialization is completed.

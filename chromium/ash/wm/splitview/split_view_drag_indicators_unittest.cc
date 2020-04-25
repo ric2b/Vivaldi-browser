@@ -64,7 +64,7 @@ class SplitViewDragIndicatorsTest : public AshTestBase {
   }
 
   SplitViewController* split_view_controller() {
-    return Shell::Get()->split_view_controller();
+    return SplitViewController::Get(Shell::GetPrimaryRootWindow());
   }
 
   IndicatorState indicator_state() {
@@ -316,7 +316,8 @@ TEST_F(SplitViewDragIndicatorsTest, SplitViewDragIndicatorsState) {
   // Snap window to the left.
   overview_session_->CompleteDrag(item, gfx::PointF(edge_inset, y_position));
   ASSERT_TRUE(split_view_controller()->InSplitViewMode());
-  ASSERT_EQ(SplitViewState::kLeftSnapped, split_view_controller()->state());
+  ASSERT_EQ(SplitViewController::State::kLeftSnapped,
+            split_view_controller()->state());
 
   // Verify that when there is a left snapped window, dragging an item to the
   // right will show the right preview area.
@@ -392,6 +393,40 @@ TEST_F(SplitViewDragIndicatorsTest, SplitViewDragIndicatorsVisibility) {
   check_helper(indicator.get(), to_int(IndicatorType::kLeftHighlight));
   indicator->SetIndicatorState(IndicatorState::kPreviewAreaRight, gfx::Point());
   check_helper(indicator.get(), to_int(IndicatorType::kRightHighlight));
+
+  const int left_with_text =
+      to_int(IndicatorType::kLeftHighlight) | to_int(IndicatorType::kLeftText);
+  const int right_with_text = to_int(IndicatorType::kRightHighlight) |
+                              to_int(IndicatorType::kRightText);
+  // Verify that only one highlight shows up for each one-sided dragging or
+  // cannot snap state, if the previous state is |IndicatorState::kNone|.
+  indicator->SetIndicatorState(IndicatorState::kNone, gfx::Point());
+  indicator->SetIndicatorState(IndicatorState::kDragAreaLeft, gfx::Point());
+  check_helper(indicator.get(), left_with_text);
+  indicator->SetIndicatorState(IndicatorState::kNone, gfx::Point());
+  indicator->SetIndicatorState(IndicatorState::kDragAreaRight, gfx::Point());
+  check_helper(indicator.get(), right_with_text);
+  indicator->SetIndicatorState(IndicatorState::kNone, gfx::Point());
+  indicator->SetIndicatorState(IndicatorState::kCannotSnapLeft, gfx::Point());
+  check_helper(indicator.get(), left_with_text);
+  indicator->SetIndicatorState(IndicatorState::kNone, gfx::Point());
+  indicator->SetIndicatorState(IndicatorState::kCannotSnapRight, gfx::Point());
+  check_helper(indicator.get(), right_with_text);
+
+  // Verify that only one highlight shows up for each one-sided dragging or
+  // cannot snap state, if the previous state is of a preview on the same side.
+  indicator->SetIndicatorState(IndicatorState::kPreviewAreaLeft, gfx::Point());
+  indicator->SetIndicatorState(IndicatorState::kDragAreaLeft, gfx::Point());
+  check_helper(indicator.get(), left_with_text);
+  indicator->SetIndicatorState(IndicatorState::kPreviewAreaRight, gfx::Point());
+  indicator->SetIndicatorState(IndicatorState::kDragAreaRight, gfx::Point());
+  check_helper(indicator.get(), right_with_text);
+  indicator->SetIndicatorState(IndicatorState::kPreviewAreaLeft, gfx::Point());
+  indicator->SetIndicatorState(IndicatorState::kCannotSnapLeft, gfx::Point());
+  check_helper(indicator.get(), left_with_text);
+  indicator->SetIndicatorState(IndicatorState::kPreviewAreaRight, gfx::Point());
+  indicator->SetIndicatorState(IndicatorState::kCannotSnapRight, gfx::Point());
+  check_helper(indicator.get(), right_with_text);
 }
 
 // Verify that the split view drag indicators widget reparents when starting a

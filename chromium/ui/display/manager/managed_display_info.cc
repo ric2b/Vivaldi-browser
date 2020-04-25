@@ -282,11 +282,13 @@ ManagedDisplayInfo::ManagedDisplayInfo()
       touch_support_(Display::TouchSupport::UNKNOWN),
       device_scale_factor_(1.0f),
       device_dpi_(kDpi96),
+      panel_orientation_(display::PanelOrientation::kNormal),
       overscan_insets_in_dip_(0, 0, 0, 0),
       zoom_factor_(1.f),
       refresh_rate_(60.f),
       is_interlaced_(false),
       is_zoom_factor_from_ui_scale_(false),
+      from_native_platform_(false),
       native_(false),
       is_aspect_preserving_scaling_(false),
       clear_overscan_insets_(false),
@@ -303,11 +305,13 @@ ManagedDisplayInfo::ManagedDisplayInfo(int64_t id,
       touch_support_(Display::TouchSupport::UNKNOWN),
       device_scale_factor_(1.0f),
       device_dpi_(kDpi96),
+      panel_orientation_(display::PanelOrientation::kNormal),
       overscan_insets_in_dip_(0, 0, 0, 0),
       zoom_factor_(1.f),
       refresh_rate_(60.f),
       is_interlaced_(false),
       is_zoom_factor_from_ui_scale_(false),
+      from_native_platform_(false),
       native_(false),
       is_aspect_preserving_scaling_(false),
       clear_overscan_insets_(false),
@@ -327,6 +331,15 @@ void ManagedDisplayInfo::SetRotation(Display::Rotation rotation,
 
 Display::Rotation ManagedDisplayInfo::GetActiveRotation() const {
   return GetRotation(Display::RotationSource::ACTIVE);
+}
+
+Display::Rotation ManagedDisplayInfo::GetLogicalActiveRotation() const {
+  return GetRotationWithPanelOrientation(
+      GetRotation(Display::RotationSource::ACTIVE));
+}
+
+Display::Rotation ManagedDisplayInfo::GetNaturalOrientationRotation() const {
+  return GetRotationWithPanelOrientation(Display::ROTATE_0);
 }
 
 Display::Rotation ManagedDisplayInfo::GetRotation(
@@ -350,6 +363,7 @@ void ManagedDisplayInfo::Copy(const ManagedDisplayInfo& native_info) {
   DCHECK(!native_info.bounds_in_native_.IsEmpty());
   bounds_in_native_ = native_info.bounds_in_native_;
   device_dpi_ = native_info.device_dpi_;
+  panel_orientation_ = native_info.panel_orientation_,
   size_in_pixel_ = native_info.size_in_pixel_;
   is_aspect_preserving_scaling_ = native_info.is_aspect_preserving_scaling_;
   display_modes_ = native_info.display_modes_;
@@ -358,11 +372,12 @@ void ManagedDisplayInfo::Copy(const ManagedDisplayInfo& native_info) {
   bits_per_channel_ = native_info.bits_per_channel_;
   refresh_rate_ = native_info.refresh_rate_;
   is_interlaced_ = native_info.is_interlaced_;
+  native_ = native_info.native_;
 
   // Rotation, color_profile and overscan are given by preference,
   // or unit tests. Don't copy if this native_info came from
   // DisplayChangeObserver.
-  if (native_info.native())
+  if (native_info.from_native_platform())
     return;
   // Update the overscan_insets_in_dip_ either if the inset should be
   // cleared, or has non empty insts.
@@ -392,8 +407,18 @@ float ManagedDisplayInfo::GetEffectiveDeviceScaleFactor() const {
   return device_scale_factor_ * zoom_factor_;
 }
 
+gfx::Size ManagedDisplayInfo::GetSizeInPixelWithPanelOrientation() const {
+  gfx::Size size = bounds_in_native_.size();
+  if (panel_orientation_ == display::PanelOrientation::kLeftUp ||
+      panel_orientation_ == display::PanelOrientation::kRightUp) {
+    return gfx::Size(size.height(), size.width());
+  }
+  return size;
+}
+
 void ManagedDisplayInfo::UpdateDisplaySize() {
-  size_in_pixel_ = bounds_in_native_.size();
+  size_in_pixel_ = GetSizeInPixelWithPanelOrientation();
+
   if (!overscan_insets_in_dip_.IsEmpty()) {
     gfx::Insets insets_in_pixel =
         overscan_insets_in_dip_.Scale(device_scale_factor_);
@@ -459,6 +484,26 @@ std::string ManagedDisplayInfo::ToFullString() const {
                         m.device_scale_factor());
   }
   return ToString() + ", display_modes==" + display_modes_str;
+}
+
+Display::Rotation ManagedDisplayInfo::GetRotationWithPanelOrientation(
+    Display::Rotation rotation) const {
+  int offset = 0;
+  switch (panel_orientation_) {
+    case PanelOrientation::kNormal:
+      break;
+    case PanelOrientation::kBottomUp:
+      offset = 2;
+      break;
+    case PanelOrientation::kRightUp:
+      offset = 1;
+      break;
+    case PanelOrientation::kLeftUp:
+      offset = 3;
+      break;
+  }
+  return static_cast<Display::Rotation>((static_cast<int>(rotation) + offset) %
+                                        4);
 }
 
 void ResetDisplayIdForTest() {

@@ -331,11 +331,10 @@ void LayoutView::UpdateLayout() {
   // to date DSF when layout happens, we plumb this through to the FontCache, so
   // that we can correctly retrieve RenderStyleForStrike from out of
   // process. crbug.com/845468
-  FontCache::SetDeviceScaleFactor(GetFrameView()
-                                      ->GetFrame()
-                                      .GetChromeClient()
-                                      .GetScreenInfo()
-                                      .device_scale_factor);
+  LocalFrame& frame = GetFrameView()->GetFrame();
+  ChromeClient& chrome_client = frame.GetChromeClient();
+  FontCache::SetDeviceScaleFactor(
+      chrome_client.GetScreenInfo(frame).device_scale_factor);
 #endif
 
   LayoutBlockFlow::UpdateLayout();
@@ -717,10 +716,8 @@ void LayoutView::MayUpdateHoverWhenContentUnderMouseChanged(
       MouseEventManager::UpdateHoverReason::kScrollOffsetChanged);
 }
 
-IntRect LayoutView::DocumentRect() const {
-  PhysicalRect overflow_rect = FlipForWritingMode(LayoutOverflowRect());
-  // TODO(crbug.com/650768): The pixel snapping looks incorrect.
-  return PixelSnappedIntRect(overflow_rect);
+PhysicalRect LayoutView::DocumentRect() const {
+  return FlipForWritingMode(LayoutOverflowRect());
 }
 
 IntSize LayoutView::GetLayoutSize(
@@ -898,6 +895,11 @@ void LayoutView::UpdateCounters() {
 
     ToLayoutCounter(layout_object)->UpdateCounter();
   }
+}
+
+bool LayoutView::HasTickmarks() const {
+  return !tickmarks_override_.IsEmpty() ||
+         GetDocument().Markers().PossiblyHasTextMatchMarkers();
 }
 
 Vector<IntRect> LayoutView::GetTickmarks() const {

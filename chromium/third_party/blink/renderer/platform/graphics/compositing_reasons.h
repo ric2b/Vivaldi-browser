@@ -27,6 +27,7 @@ using CompositingReasons = uint64_t;
   V(ActiveOpacityAnimation)                                                   \
   V(ActiveFilterAnimation)                                                    \
   V(ActiveBackdropFilterAnimation)                                            \
+  V(ImmersiveArOverlay)                                                       \
   V(ScrollDependentPosition)                                                  \
   V(OverflowScrollingTouch)                                                   \
   V(OverflowScrollingParent)                                                  \
@@ -39,7 +40,6 @@ using CompositingReasons = uint64_t;
   V(WillChangeOther)                                                          \
   V(BackdropFilter)                                                           \
   V(RootScroller)                                                             \
-  V(ScrollTimelineTarget)                                                     \
                                                                               \
   /* Overlap reasons that require knowing what's behind you in paint-order    \
      before knowing the answer. */                                            \
@@ -70,7 +70,6 @@ using CompositingReasons = uint64_t;
   /* CompositedLayerMapping internal hierarchy reasons. */                    \
   V(LayerForAncestorClip)                                                     \
   V(LayerForDescendantClip)                                                   \
-  V(LayerForPerspective)                                                      \
   V(LayerForHorizontalScrollbar)                                              \
   V(LayerForVerticalScrollbar)                                                \
   V(LayerForOverflowControlsHost)                                             \
@@ -129,8 +128,8 @@ class PLATFORM_EXPORT CompositingReason {
 
     kComboAllDirectNonStyleDeterminedReasons =
         kVideo | kCanvas | kPlugin | kIFrame | kOverflowScrollingParent |
-        kOutOfFlowClipping | kVideoOverlay | kRoot | kRootScroller |
-        kScrollDependentPosition | kScrollTimelineTarget,
+        kOutOfFlowClipping | kVideoOverlay | kImmersiveArOverlay | kRoot |
+        kRootScroller | kScrollDependentPosition,
 
     kComboAllDirectReasons = kComboAllDirectStyleDeterminedReasons |
                              kComboAllDirectNonStyleDeterminedReasons,
@@ -159,7 +158,7 @@ class PLATFORM_EXPORT CompositingReason {
         kPerspectiveWith3DDescendants | kPreserve3DWith3DDescendants |
         kActiveTransformAnimation,
     kDirectReasonsForEffectProperty = kActiveOpacityAnimation |
-                                      kWillChangeOpacity |
+                                      kWillChangeOpacity | kBackdropFilter |
                                       kActiveBackdropFilterAnimation,
     kDirectReasonsForFilterProperty = kActiveFilterAnimation,
   };

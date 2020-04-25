@@ -9,7 +9,6 @@
 
 #include "ash/ash_export.h"
 #include "ash/frame/header_view.h"
-#include "ash/public/cpp/split_view.h"
 #include "ash/wm/overview/overview_observer.h"
 #include "base/macros.h"
 #include "base/optional.h"
@@ -63,10 +62,6 @@ class ASH_EXPORT NonClientFrameViewAsh : public views::NonClientFrameView {
   // Sets the active and inactive frame colors. Note the inactive frame color
   // will have some transparency added when the frame is drawn.
   void SetFrameColors(SkColor active_frame_color, SkColor inactive_frame_color);
-
-  // Sets the height of the header. If |height| has no value (the default), the
-  // preferred height is used.
-  void SetHeaderHeight(base::Optional<int> height);
 
   // Get the view of the header.
   HeaderView* GetHeaderView();

@@ -155,13 +155,13 @@ verify_channel() {
       CHANNEL=stable
       RELEASENOTES="https://www.vivaldi.com/"
       ;;
-    unstable|dev|alpha )
-      CHANNEL=unstable
-      RELEASENOTES="https://www.vivaldi.com/search/label/Dev%20updates"
-      ;;
-    testing|beta )
+    beta|testing )
       CHANNEL=beta
-      RELEASENOTES="https://www.vivaldi.com/search/label/Beta%20updates"
+      RELEASENOTES="https://chromereleases.googleblog.com/search/label/Beta%20updates"
+      ;;
+    dev|unstable|alpha )
+      CHANNEL=unstable
+      RELEASENOTES="https://chromereleases.googleblog.com/search/label/Dev%20updates"
       ;;
     * )
       echo
@@ -263,7 +263,6 @@ eval $(sed -e "s/^\([^=]\+\)=\(.*\)$/export \1='\2'/" \
   "${BUILDDIR}/installer/theme/BRANDING")
 
 REPOCONFIG="deb http://repo.vivaldi.com/$CHANNEL/deb/ stable main"
-SSLREPOCONFIG="deb https://repo.vivaldi.com/$CHANNEL/deb/ stable main"
 verify_channel
 
 # Some Debian packaging tools want these set.

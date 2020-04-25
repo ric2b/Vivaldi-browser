@@ -15,6 +15,7 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
+#include "base/environment.h"
 #include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
 #include "base/i18n/number_formatting.h"
@@ -31,7 +32,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/notifications/notification_display_service_impl.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/shell_integration_linux.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -657,8 +658,7 @@ class NotificationPlatformBridgeLinuxImpl
       actions.push_back(kDefaultButtonId);
       actions.push_back("Activate");
       // Always add a settings button for web notifications.
-      if (notification_type != NotificationHandler::Type::EXTENSION &&
-          notification_type != NotificationHandler::Type::SEND_TAB_TO_SELF) {
+      if (notification->should_show_settings_button()) {
         actions.push_back(kSettingsButtonId);
         actions.push_back(
             l10n_util::GetStringUTF8(IDS_NOTIFICATION_BUTTON_SETTINGS));
@@ -692,8 +692,7 @@ class NotificationPlatformBridgeLinuxImpl
     }
 
     std::unique_ptr<base::Environment> env = base::Environment::Create();
-    base::FilePath desktop_file(
-        shell_integration_linux::GetDesktopName(env.get()));
+    base::FilePath desktop_file(chrome::GetDesktopName(env.get()));
     const char kDesktopFileSuffix[] = ".desktop";
     DCHECK(base::EndsWith(desktop_file.value(), kDesktopFileSuffix,
                           base::CompareCase::SENSITIVE));

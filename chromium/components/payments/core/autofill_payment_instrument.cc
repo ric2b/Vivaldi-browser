@@ -233,7 +233,8 @@ void AutofillPaymentInstrument::GenerateBasicCardResponse() {
           ->ToDictionaryValue();
   std::string stringified_details;
   base::JSONWriter::Write(*response_value, &stringified_details);
-  delegate_->OnInstrumentDetailsReady(method_name_, stringified_details);
+  delegate_->OnInstrumentDetailsReady(method_name_, stringified_details,
+                                      PayerData());
 
   delegate_ = nullptr;
   cvc_ = base::UTF8ToUTF16("");
@@ -249,6 +250,22 @@ void AutofillPaymentInstrument::OnAddressNormalized(
 
   if (!is_waiting_for_card_unmask_)
     GenerateBasicCardResponse();
+}
+
+bool AutofillPaymentInstrument::HandlesShippingAddress() const {
+  return false;
+}
+
+bool AutofillPaymentInstrument::HandlesPayerName() const {
+  return false;
+}
+
+bool AutofillPaymentInstrument::HandlesPayerEmail() const {
+  return false;
+}
+
+bool AutofillPaymentInstrument::HandlesPayerPhone() const {
+  return false;
 }
 
 }  // namespace payments

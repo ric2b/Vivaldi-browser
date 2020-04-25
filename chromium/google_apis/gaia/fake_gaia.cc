@@ -38,7 +38,8 @@
   request_handlers_.insert(std::make_pair( \
         path, base::Bind(&FakeGaia::method, base::Unretained(this))))
 
-using namespace net::test_server;
+using net::test_server::BasicHttpResponse;
+using net::test_server::HttpRequest;
 
 namespace {
 
@@ -51,6 +52,10 @@ const char kTestSessionLSIDCookie[] = "fake-session-LSID-cookie";
 const char kTestOAuthLoginSID[] = "fake-oauth-SID-cookie";
 const char kTestOAuthLoginLSID[] = "fake-oauth-LSID-cookie";
 const char kTestOAuthLoginAuthCode[] = "fake-oauth-auth-code";
+// Add SameSite=None and Secure because these cookies are needed in a
+// cross-site context.
+const char kTestCookieAttributes[] =
+    "; Path=/; HttpOnly; SameSite=None; Secure";
 
 const char kDefaultGaiaId[] = "12345";
 
@@ -92,11 +97,11 @@ void SetCookies(BasicHttpResponse* http_response,
                 const std::string& sid_cookie,
                 const std::string& lsid_cookie) {
   http_response->AddCustomHeader(
-      "Set-Cookie",
-      base::StringPrintf("SID=%s; Path=/; HttpOnly", sid_cookie.c_str()));
+      "Set-Cookie", base::StringPrintf("SID=%s%s", sid_cookie.c_str(),
+                                       kTestCookieAttributes));
   http_response->AddCustomHeader(
-      "Set-Cookie",
-      base::StringPrintf("LSID=%s; Path=/; HttpOnly", lsid_cookie.c_str()));
+      "Set-Cookie", base::StringPrintf("LSID=%s%s", lsid_cookie.c_str(),
+                                       kTestCookieAttributes));
 }
 
 }  // namespace
@@ -184,21 +189,19 @@ std::string FakeGaia::GetGaiaIdOfEmail(const std::string& email) const {
       it->second;
 }
 
-void FakeGaia::AddGoogleAccountsSigninHeader(
-    net::test_server::BasicHttpResponse* http_response,
-    const std::string& email) const {
+void FakeGaia::AddGoogleAccountsSigninHeader(BasicHttpResponse* http_response,
+                                             const std::string& email) const {
   http_response->AddCustomHeader("google-accounts-signin",
       base::StringPrintf(
           "email=\"%s\", obfuscatedid=\"%s\", sessionindex=0",
           email.c_str(), GetGaiaIdOfEmail(email).c_str()));
 }
 
-void FakeGaia::SetOAuthCodeCookie(
-    net::test_server::BasicHttpResponse* http_response) const {
+void FakeGaia::SetOAuthCodeCookie(BasicHttpResponse* http_response) const {
   http_response->AddCustomHeader(
-      "Set-Cookie",
-      base::StringPrintf("oauth_code=%s; Path=/; Secure; HttpOnly;",
-                         merge_session_params_.auth_code.c_str()));
+      "Set-Cookie", base::StringPrintf("oauth_code=%s%s",
+                                       merge_session_params_.auth_code.c_str(),
+                                       kTestCookieAttributes));
 }
 
 void FakeGaia::Initialize() {
@@ -211,9 +214,6 @@ void FakeGaia::Initialize() {
   REGISTER_RESPONSE_HANDLER(
       gaia_urls->service_login_url(), HandleServiceLogin);
 
-  // Handles /embedded/setup/chromeos GAIA call.
-  REGISTER_RESPONSE_HANDLER(gaia_urls->embedded_setup_chromeos_url(1),
-                            HandleEmbeddedSetupChromeos);
   // Handles /embedded/setup/v2/chromeos GAIA call.
   REGISTER_RESPONSE_HANDLER(gaia_urls->embedded_setup_chromeos_url(2),
                             HandleEmbeddedSetupChromeos);
@@ -276,20 +276,20 @@ void FakeGaia::Initialize() {
       HandleGetCheckConnectionInfo);
 }
 
-std::unique_ptr<HttpResponse> FakeGaia::HandleRequest(
+std::unique_ptr<net::test_server::HttpResponse> FakeGaia::HandleRequest(
     const HttpRequest& request) {
   // The scheme and host of the URL is actually not important but required to
   // get a valid GURL in order to parse |request.relative_url|.
   GURL request_url = GURL("http://localhost").Resolve(request.relative_url);
   std::string request_path = request_url.path();
-  std::unique_ptr<BasicHttpResponse> http_response(new BasicHttpResponse());
+  auto http_response = std::make_unique<BasicHttpResponse>();
   RequestHandlerMap::iterator iter = request_handlers_.find(request_path);
   if (iter != request_handlers_.end()) {
     LOG(WARNING) << "Serving request " << request_path;
     iter->second.Run(request, http_response.get());
   } else {
     LOG(ERROR) << "Unhandled request " << request_path;
-    return std::unique_ptr<HttpResponse>();  // Request not understood.
+    return std::unique_ptr<net::test_server::HttpResponse>();
   }
 
   return std::move(http_response);
@@ -522,8 +522,8 @@ void FakeGaia::HandleServiceLoginAuth(const HttpRequest& request,
 }
 
 void FakeGaia::HandleEmbeddedLookupAccountLookup(
-    const net::test_server::HttpRequest& request,
-    net::test_server::BasicHttpResponse* http_response) {
+    const HttpRequest& request,
+    BasicHttpResponse* http_response) {
   std::string email;
   const bool is_saml =
       GetQueryParameter(request.content, "identifier", &email) &&
@@ -727,9 +727,8 @@ void FakeGaia::HandleGetUserInfo(const HttpRequest& request,
   http_response->set_code(net::HTTP_OK);
 }
 
-void FakeGaia::HandleOAuthUserInfo(
-    const net::test_server::HttpRequest& request,
-    net::test_server::BasicHttpResponse* http_response) {
+void FakeGaia::HandleOAuthUserInfo(const HttpRequest& request,
+                                   BasicHttpResponse* http_response) {
   const AccessTokenInfo* token_info = nullptr;
   std::string access_token;
   if (GetAccessToken(request, kAuthHeaderBearer, &access_token) ||
@@ -749,9 +748,8 @@ void FakeGaia::HandleOAuthUserInfo(
   }
 }
 
-void FakeGaia::HandleSAMLRedirect(
-    const net::test_server::HttpRequest& request,
-    net::test_server::BasicHttpResponse* http_response) {
+void FakeGaia::HandleSAMLRedirect(const HttpRequest& request,
+                                  BasicHttpResponse* http_response) {
   GURL request_url = GURL("http://localhost").Resolve(request.relative_url);
   std::string domain;
   GetQueryParameter(request_url.query(), "domain", &domain);
@@ -776,9 +774,8 @@ void FakeGaia::HandleSAMLRedirect(
   http_response->AddCustomHeader("Location", redirect_url);
 }
 
-void FakeGaia::HandleGetCheckConnectionInfo(
-    const net::test_server::HttpRequest& request,
-    net::test_server::BasicHttpResponse* http_response) {
+void FakeGaia::HandleGetCheckConnectionInfo(const HttpRequest& request,
+                                            BasicHttpResponse* http_response) {
   base::ListValue connection_list;
   FormatJSONResponse(connection_list, http_response);
 }

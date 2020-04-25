@@ -28,8 +28,8 @@
 
 #include <memory>
 
-#include "third_party/blink/public/common/manifest/web_display_mode.h"
-#include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/platform/shape_properties.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/frame/frame_view.h"
@@ -114,7 +114,7 @@ struct LifecycleData {
 };
 
 class CORE_EXPORT LocalFrameView final
-    : public GarbageCollectedFinalized<LocalFrameView>,
+    : public GarbageCollected<LocalFrameView>,
       public FrameView {
   USING_GARBAGE_COLLECTED_MIXIN(LocalFrameView);
 
@@ -215,7 +215,7 @@ class CORE_EXPORT LocalFrameView final
   void ForceUpdateViewportIntersections();
 
   void SetPaintArtifactCompositorNeedsUpdate();
-  void GraphicsLayersDidChange();
+  void SetForeignLayerListNeedsUpdate();
 
   // Marks this frame, and ancestor frames, as needing a mandatory compositing
   // update. This overrides throttling for one frame, up to kCompositingClean.
@@ -273,8 +273,8 @@ class CORE_EXPORT LocalFrameView final
   void SetMediaType(const AtomicString&);
   void AdjustMediaTypeForPrinting(bool printing);
 
-  WebDisplayMode DisplayMode() { return display_mode_; }
-  void SetDisplayMode(WebDisplayMode);
+  blink::mojom::DisplayMode DisplayMode() { return display_mode_; }
+  void SetDisplayMode(blink::mojom::DisplayMode);
 
   DisplayShape GetDisplayShape() { return display_shape_; }
   void SetDisplayShape(DisplayShape);
@@ -460,21 +460,7 @@ class CORE_EXPORT LocalFrameView final
     return animating_scrollable_areas_.Get();
   }
 
-  // With CSS style "resize:" enabled, a little resizer handle will appear at
-  // the bottom right of the object. We keep track of these resizer areas for
-  // checking if touches (implemented using Scroll gesture) are targeting the
-  // resizer.
-  // TODO(pdr): The resizers do not need to be tracked with
-  // PaintNonFastScrollableRegions and can be removed once that ships.
-  typedef HashSet<LayoutBox*> ResizerAreaSet;
-  void AddResizerArea(LayoutBox&);
-  void RemoveResizerArea(LayoutBox&);
-  const ResizerAreaSet* ResizerAreas() const {
-    DCHECK(!RuntimeEnabledFeatures::PaintNonFastScrollableRegionsEnabled());
-    return resizer_areas_.get();
-  }
-
-  void ScheduleAnimation();
+  void ScheduleAnimation(base::TimeDelta = base::TimeDelta());
 
   // FIXME: This should probably be renamed as the 'inSubtreeLayout' parameter
   // passed around the LocalFrameView layout methods can be true while this
@@ -700,6 +686,10 @@ class CORE_EXPORT LocalFrameView final
   void RegisterForLifecycleNotifications(LifecycleNotificationObserver*);
   void UnregisterFromLifecycleNotifications(LifecycleNotificationObserver*);
 
+  // Sets whether all ResizeObservers should check all their ResizeObservations
+  // for a resize. This is needed when exiting a display lock.
+  void SetNeedsForcedResizeObservations();
+
  protected:
   void FrameRectsChanged(const IntRect&) override;
   void SelfVisibleChanged() override;
@@ -848,7 +838,7 @@ class CORE_EXPORT LocalFrameView final
 
   Member<LocalFrame> frame_;
 
-  WebDisplayMode display_mode_;
+  blink::mojom::DisplayMode display_mode_;
 
   DisplayShape display_shape_;
 
@@ -884,7 +874,6 @@ class CORE_EXPORT LocalFrameView final
 
   Member<ScrollableAreaSet> scrollable_areas_;
   Member<ScrollableAreaSet> animating_scrollable_areas_;
-  std::unique_ptr<ResizerAreaSet> resizer_areas_;
   std::unique_ptr<ObjectSet> viewport_constrained_objects_;
   unsigned sticky_position_object_count_;
   ObjectSet background_attachment_fixed_objects_;
@@ -961,9 +950,9 @@ class CORE_EXPORT LocalFrameView final
   std::unique_ptr<Vector<ObjectPaintInvalidation>>
       tracked_object_paint_invalidations_;
 
-  // Currently used in PushPaintArtifactToCompositor() to collect GraphicsLayers
-  // as foreign layers. It's transient, but may live across frame updates until
-  // GraphicsLayersDidChange() is called.
+  // Currently used in PushPaintArtifactToCompositor() to collect composited
+  // layers as foreign layers. It's transient, but may live across frame updates
+  // until SetForeignLayerListNeedsUpdate() is called.
   // For CompositeAfterPaint, we use it in PaintTree() for all paintings of the
   // frame tree in PaintTree(). It caches display items and subsequences across
   // frame updates and repaints.

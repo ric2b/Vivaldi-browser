@@ -29,6 +29,7 @@
 #include "ui/gl/init/gl_factory.h"
 
 #if BUILDFLAG(USE_DAWN)
+#include <dawn/dawn_proc.h>
 #include <dawn/dawncpp.h>
 #include <dawn_native/DawnNative.h>
 #endif  // BUILDFLAG(USE_DAWN)
@@ -267,7 +268,7 @@ TEST_F(SharedImageBackingFactoryIOSurfaceTest, Dawn_SkiaGL) {
 
   dawn::Device device = dawn::Device::Acquire(adapter_it->CreateDevice());
   DawnProcTable procs = dawn_native::GetProcs();
-  dawnSetProcs(&procs);
+  dawnProcSetProcs(&procs);
 
   // Create a backing using mailbox.
   auto mailbox = Mailbox::GenerateForSharedImage();
@@ -300,12 +301,9 @@ TEST_F(SharedImageBackingFactoryIOSurfaceTest, Dawn_SkiaGL) {
     color_desc.storeOp = dawn::StoreOp::Store;
     color_desc.clearColor = {0, 255, 0, 255};
 
-    dawn::RenderPassColorAttachmentDescriptor* color_attachments_ptr =
-        &color_desc;
-
     dawn::RenderPassDescriptor renderPassDesc;
     renderPassDesc.colorAttachmentCount = 1;
-    renderPassDesc.colorAttachments = &color_attachments_ptr;
+    renderPassDesc.colorAttachments = &color_desc;
     renderPassDesc.depthStencilAttachment = nullptr;
 
     dawn::CommandEncoder encoder = device.CreateCommandEncoder();
@@ -358,7 +356,7 @@ TEST_F(SharedImageBackingFactoryIOSurfaceTest, Dawn_SkiaGL) {
 
   // Shut down Dawn
   device = dawn::Device();
-  dawnSetProcs(nullptr);
+  dawnProcSetProcs(nullptr);
 
   skia_representation.reset();
   factory_ref.reset();

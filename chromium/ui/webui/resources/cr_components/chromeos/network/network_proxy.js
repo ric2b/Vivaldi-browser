@@ -490,7 +490,8 @@ Polymer({
       return false;
     }
     const source = this.managedProperties.source;
-    return source == 'Device' || source == 'DevicePolicy';
+    return source == chromeos.networkConfig.mojom.OncSource.kDevice ||
+        source == chromeos.networkConfig.mojom.OncSource.kDevicePolicy;
   },
 
   /**

@@ -50,8 +50,9 @@ bool TestSyncUserSettings::IsFirstSetupComplete() const {
   return first_setup_complete_;
 }
 
-void TestSyncUserSettings::SetFirstSetupComplete() {
-  SetFirstSetupComplete(true);
+void TestSyncUserSettings::SetFirstSetupComplete(
+    SyncFirstSetupCompleteSource source) {
+  SetFirstSetupComplete();
 }
 
 bool TestSyncUserSettings::IsSyncEverythingEnabled() const {
@@ -121,8 +122,13 @@ bool TestSyncUserSettings::IsPassphraseRequired() const {
   return passphrase_required_;
 }
 
-bool TestSyncUserSettings::IsPassphraseRequiredForDecryption() const {
-  return passphrase_required_for_decryption_;
+bool TestSyncUserSettings::IsPassphraseRequiredForPreferredDataTypes() const {
+  return passphrase_required_for_preferred_data_types_;
+}
+
+bool TestSyncUserSettings::IsTrustedVaultKeyRequiredForPreferredDataTypes()
+    const {
+  return trusted_vault_key_required_for_preferred_data_types_;
 }
 
 bool TestSyncUserSettings::IsUsingSecondaryPassphrase() const {
@@ -134,8 +140,8 @@ base::Time TestSyncUserSettings::GetExplicitPassphraseTime() const {
 }
 
 PassphraseType TestSyncUserSettings::GetPassphraseType() const {
-  return IsUsingSecondaryPassphrase() ? PassphraseType::CUSTOM_PASSPHRASE
-                                      : PassphraseType::IMPLICIT_PASSPHRASE;
+  return IsUsingSecondaryPassphrase() ? PassphraseType::kCustomPassphrase
+                                      : PassphraseType::kImplicitPassphrase;
 }
 
 void TestSyncUserSettings::SetEncryptionPassphrase(
@@ -146,16 +152,30 @@ bool TestSyncUserSettings::SetDecryptionPassphrase(
   return false;
 }
 
-void TestSyncUserSettings::SetFirstSetupComplete(bool first_setup_complete) {
-  first_setup_complete_ = first_setup_complete;
+void TestSyncUserSettings::AddTrustedVaultDecryptionKeys(
+    const std::string& gaia_id,
+    const std::vector<std::string>& keys) {}
+
+void TestSyncUserSettings::SetFirstSetupComplete() {
+  first_setup_complete_ = true;
+}
+
+void TestSyncUserSettings::ClearFirstSetupComplete() {
+  first_setup_complete_ = false;
 }
 
 void TestSyncUserSettings::SetPassphraseRequired(bool required) {
   passphrase_required_ = required;
 }
 
-void TestSyncUserSettings::SetPassphraseRequiredForDecryption(bool required) {
-  passphrase_required_for_decryption_ = required;
+void TestSyncUserSettings::SetPassphraseRequiredForPreferredDataTypes(
+    bool required) {
+  passphrase_required_for_preferred_data_types_ = required;
+}
+
+void TestSyncUserSettings::SetTrustedVaultKeyRequiredForPreferredDataTypes(
+    bool required) {
+  trusted_vault_key_required_for_preferred_data_types_ = required;
 }
 
 void TestSyncUserSettings::SetIsUsingSecondaryPassphrase(bool enabled) {

@@ -100,7 +100,7 @@ class ImeObserverChromeOS : public ui::ImeObserver {
   ImeObserverChromeOS(const std::string& extension_id, Profile* profile)
       : ImeObserver(extension_id, profile) {}
 
-  ~ImeObserverChromeOS() override {}
+  ~ImeObserverChromeOS() override = default;
 
   // input_method::InputMethodEngineBase::Observer overrides.
   void OnInputContextUpdate(
@@ -191,12 +191,12 @@ class ImeObserverChromeOS : public ui::ImeObserver {
 
     // Note: this is a private API event.
     auto bounds_list = std::make_unique<base::ListValue>();
-    for (size_t i = 0; i < bounds.size(); ++i) {
+    for (auto bound : bounds) {
       auto bounds_value = std::make_unique<base::DictionaryValue>();
-      bounds_value->SetInteger("x", bounds[i].x());
-      bounds_value->SetInteger("y", bounds[i].y());
-      bounds_value->SetInteger("w", bounds[i].width());
-      bounds_value->SetInteger("h", bounds[i].height());
+      bounds_value->SetInteger("x", bound.x());
+      bounds_value->SetInteger("y", bound.y());
+      bounds_value->SetInteger("w", bound.width());
+      bounds_value->SetInteger("h", bound.height());
       bounds_list->Append(std::move(bounds_value));
     }
 
@@ -231,8 +231,8 @@ class ImeObserverChromeOS : public ui::ImeObserver {
           ConvertInputContextType(context));
       input_context.auto_correct = ConvertInputContextAutoCorrect(context);
       input_context.auto_complete = ConvertInputContextAutoComplete(context);
-      input_context.auto_capitalize = (input_method_private::AutoCapitalizeType)
-          ConvertInputContextAutoCapitalize(context);
+      input_context.auto_capitalize =
+          ConvertInputContextAutoCapitalize(context.flags);
       input_context.spell_check = ConvertInputContextSpellCheck(context);
       input_context.has_been_password = ConvertHasBeenPassword(context);
       input_context.should_do_learning = context.should_do_learning;
@@ -344,11 +344,22 @@ class ImeObserverChromeOS : public ui::ImeObserver {
     return ImeObserver::ConvertInputContextAutoComplete(input_context);
   }
 
-  input_ime::AutoCapitalizeType ConvertInputContextAutoCapitalize(
-      ui::IMEEngineHandlerInterface::InputContext input_context) override {
+  input_method_private::AutoCapitalizeType ConvertInputContextAutoCapitalize(
+      int flags) {
     if (!GetKeyboardConfig().auto_capitalize)
-      return input_ime::AUTO_CAPITALIZE_TYPE_NONE;
-    return ImeObserver::ConvertInputContextAutoCapitalize(input_context);
+      return input_method_private::AUTO_CAPITALIZE_TYPE_OFF;
+    if (flags & ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_NONE)
+      return input_method_private::AUTO_CAPITALIZE_TYPE_OFF;
+    if (flags & ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_CHARACTERS)
+      return input_method_private::AUTO_CAPITALIZE_TYPE_CHARACTERS;
+    if (flags & ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_WORDS)
+      return input_method_private::AUTO_CAPITALIZE_TYPE_WORDS;
+    if (flags & ui::TEXT_INPUT_FLAG_AUTOCAPITALIZE_SENTENCES)
+      return input_method_private::AUTO_CAPITALIZE_TYPE_SENTENCES;
+
+    // Autocapitalize flag may be missing for native text fields.
+    // See https://crbug.com/1002713.
+    return input_method_private::AUTO_CAPITALIZE_TYPE_NONE;
   }
 
   bool ConvertInputContextSpellCheck(
@@ -383,7 +394,7 @@ InputMethodEngine* GetEngineIfActive(Profile* profile,
 InputImeEventRouter::InputImeEventRouter(Profile* profile)
     : InputImeEventRouterBase(profile) {}
 
-InputImeEventRouter::~InputImeEventRouter() {}
+InputImeEventRouter::~InputImeEventRouter() = default;
 
 bool InputImeEventRouter::RegisterImeExtension(
     const std::string& extension_id,
@@ -402,11 +413,7 @@ bool InputImeEventRouter::RegisterImeExtension(
   // Only creates descriptors for 3rd party IME extension, because the
   // descriptors for component IME extensions are managed by InputMethodUtil.
   if (!comp_ext_ime_manager->IsWhitelistedExtension(extension_id)) {
-    for (std::vector<InputComponentInfo>::const_iterator it =
-             input_components.begin();
-         it != input_components.end();
-         ++it) {
-      const InputComponentInfo& component = *it;
+    for (const auto& component : input_components) {
       DCHECK(component.type == INPUT_COMPONENT_TYPE_IME);
 
       std::vector<std::string> layouts;
@@ -439,40 +446,37 @@ bool InputImeEventRouter::RegisterImeExtension(
 
   std::unique_ptr<InputMethodEngineBase::Observer> observer(
       new ImeObserverChromeOS(extension_id, profile));
-  chromeos::InputMethodEngine* engine = new chromeos::InputMethodEngine();
+  auto engine = std::make_unique<chromeos::InputMethodEngine>();
   engine->Initialize(std::move(observer), extension_id.c_str(), profile);
-  engine_map_[extension_id] = engine;
+  engine_map_[extension_id] = std::move(engine);
   chromeos::UserSessionManager::GetInstance()
       ->GetDefaultIMEState(profile)
-      ->AddInputMethodExtension(extension_id, descriptors, engine);
+      ->AddInputMethodExtension(extension_id, descriptors,
+                                engine_map_[extension_id].get());
 
   return true;
 }
 
 void InputImeEventRouter::UnregisterAllImes(const std::string& extension_id) {
-  std::map<std::string, InputMethodEngine*>::iterator it =
-      engine_map_.find(extension_id);
+  auto it = engine_map_.find(extension_id);
   if (it != engine_map_.end()) {
     chromeos::input_method::InputMethodManager::Get()
         ->GetActiveIMEState()
         ->RemoveInputMethodExtension(extension_id);
-    delete it->second;
     engine_map_.erase(it);
   }
 }
 
 InputMethodEngine* InputImeEventRouter::GetEngine(
     const std::string& extension_id) {
-  std::map<std::string, InputMethodEngine*>::iterator it =
-      engine_map_.find(extension_id);
-  return (it != engine_map_.end()) ? it->second : nullptr;
+  auto it = engine_map_.find(extension_id);
+  return (it != engine_map_.end()) ? it->second.get() : nullptr;
 }
 
 InputMethodEngineBase* InputImeEventRouter::GetEngineIfActive(
     const std::string& extension_id) {
-  std::map<std::string, InputMethodEngine*>::iterator it =
-      engine_map_.find(extension_id);
-  return (it != engine_map_.end() && it->second->IsActive()) ? it->second
+  auto it = engine_map_.find(extension_id);
+  return (it != engine_map_.end() && it->second->IsActive()) ? it->second.get()
                                                              : nullptr;
 }
 
@@ -592,7 +596,7 @@ ExtensionFunction::ResponseAction InputImeSetCandidatesFunction::Run() {
 
   std::vector<InputMethodEngine::Candidate> candidates_out;
   for (const auto& candidate_in : params.candidates) {
-    candidates_out.push_back(InputMethodEngine::Candidate());
+    candidates_out.emplace_back();
     candidates_out.back().value = candidate_in.candidate;
     candidates_out.back().id = candidate_in.id;
     if (candidate_in.label)
@@ -652,7 +656,7 @@ ExtensionFunction::ResponseAction InputImeSetMenuItemsFunction::Run() {
 
   std::vector<chromeos::input_method::InputMethodManager::MenuItem> items_out;
   for (const input_ime::MenuItem& item_in : params.items) {
-    items_out.push_back(chromeos::input_method::InputMethodManager::MenuItem());
+    items_out.emplace_back();
     SetMenuItemToMenu(item_in, &items_out.back());
   }
 
@@ -676,7 +680,7 @@ ExtensionFunction::ResponseAction InputImeUpdateMenuItemsFunction::Run() {
 
   std::vector<chromeos::input_method::InputMethodManager::MenuItem> items_out;
   for (const input_ime::MenuItem& item_in : params.items) {
-    items_out.push_back(chromeos::input_method::InputMethodManager::MenuItem());
+    items_out.emplace_back();
     SetMenuItemToMenu(item_in, &items_out.back());
   }
 

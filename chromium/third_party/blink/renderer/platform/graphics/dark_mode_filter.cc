@@ -31,7 +31,7 @@ bool AreFloatsEqual(float a, float b) {
 
 void VerifySettingsAreUnchanged(const DarkModeSettings& a,
                                 const DarkModeSettings& b) {
-  if (a.mode == DarkMode::kOff)
+  if (a.mode == DarkModeInversionAlgorithm::kOff)
     return;
 
   DCHECK_EQ(a.image_policy, b.image_policy);
@@ -45,6 +45,7 @@ void VerifySettingsAreUnchanged(const DarkModeSettings& a,
 
 bool ShouldApplyToImage(const DarkModeSettings& settings,
                         const FloatRect& src_rect,
+                        const FloatRect& dest_rect,
                         Image* image) {
   switch (settings.image_policy) {
     case DarkModeImagePolicy::kFilterSmart: {
@@ -61,7 +62,8 @@ bool ShouldApplyToImage(const DarkModeSettings& settings,
           break;
         }
       }
-      DarkModeClassification result = classifier->Classify(image, src_rect);
+      DarkModeClassification result =
+          classifier->Classify(image, src_rect, dest_rect);
       return result == DarkModeClassification::kApplyFilter;
     }
     case DarkModeImagePolicy::kFilterNone:
@@ -89,7 +91,7 @@ DarkModeFilter::DarkModeFilter()
       color_filter_(nullptr),
       image_filter_(nullptr) {
   DarkModeSettings default_settings;
-  default_settings.mode = DarkMode::kOff;
+  default_settings.mode = DarkModeInversionAlgorithm::kOff;
   UpdateSettings(default_settings);
 }
 
@@ -133,9 +135,11 @@ Color DarkModeFilter::InvertColorIfNeeded(const Color& color,
 }
 
 void DarkModeFilter::ApplyToImageFlagsIfNeeded(const FloatRect& src_rect,
+                                               const FloatRect& dest_rect,
                                                Image* image,
                                                cc::PaintFlags* flags) {
-  if (!image_filter_ || !ShouldApplyToImage(settings(), src_rect, image))
+  if (!image_filter_ ||
+      !ShouldApplyToImage(settings(), src_rect, dest_rect, image))
     return;
   flags->setColorFilter(image_filter_);
 }

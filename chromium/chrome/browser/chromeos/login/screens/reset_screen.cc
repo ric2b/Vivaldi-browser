@@ -12,6 +12,7 @@
 #include "base/task/post_task.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/login/screens/error_screen.h"
 #include "chrome/browser/chromeos/login/screens/network_error.h"
@@ -412,17 +413,17 @@ void ResetScreen::ShowHelpArticle(HelpAppLauncher::HelpTopic topic) {
 }
 
 void ResetScreen::UpdateStatusChanged(
-    const UpdateEngineClient::Status& status) {
-  VLOG(1) << "Update status change to " << status.status;
-  if (status.status == UpdateEngineClient::UPDATE_STATUS_ERROR ||
-      status.status ==
-          UpdateEngineClient::UPDATE_STATUS_REPORTING_ERROR_EVENT) {
+    const update_engine::StatusResult& status) {
+  VLOG(1) << "Update status operation change to " << status.current_operation();
+  if (status.current_operation() == update_engine::Operation::ERROR ||
+      status.current_operation() ==
+          update_engine::Operation::REPORTING_ERROR_EVENT) {
     view_->SetScreenState(ResetView::State::kError);
     // Show error screen.
     error_screen_->SetUIState(NetworkError::UI_STATE_ROLLBACK_ERROR);
     error_screen_->Show();
-  } else if (status.status ==
-             UpdateEngineClient::UPDATE_STATUS_UPDATED_NEED_REBOOT) {
+  } else if (status.current_operation() ==
+             update_engine::Operation::UPDATED_NEED_REBOOT) {
     PowerManagerClient::Get()->RequestRestart(
         power_manager::REQUEST_RESTART_FOR_UPDATE, "login reset screen update");
   }

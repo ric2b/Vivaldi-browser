@@ -347,8 +347,8 @@ device::mojom::XRInputSourceStatePtr OculusRenderLoop::GetTouchData(
       break;
   }
 
-  // Touch controller are fully 6DoF.
-  desc->emulated_position = false;
+  // Touch controllers are fully 6DoF.
+  state->emulated_position = false;
 
   // The grip pose will be rotated and translated back a bit from the pointer
   // pose, which is what the Oculus API returns.
@@ -368,7 +368,7 @@ device::mojom::XRInputSourceStatePtr OculusRenderLoop::GetTouchData(
   // The absence of "touchpad" in this string indicates that the slots in the
   // button and axes arrays are placeholders required by the xr-standard mapping
   // but not actually updated with any input.
-  desc->profiles.push_back("grip-thumbstick-controller");
+  desc->profiles.push_back("generic-trigger-squeeze-thumbstick");
 
   state->description = std::move(desc);
 

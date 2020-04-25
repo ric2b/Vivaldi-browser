@@ -166,6 +166,10 @@ void VivaldiNativeAppWindowViews::OnBeforePanelWidgetInit(
   views::Widget* widget) {
 }
 
+bool VivaldiNativeAppWindowViews::IsOnCurrentWorkspace() const {
+  return true;
+}
+
 void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
   const AppWindow::CreateParams& create_params) {
   views::Widget::InitParams init_params(views::Widget::InitParams::TYPE_WINDOW);
@@ -193,9 +197,6 @@ void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
   // can get it later when all we have is a native view.
   widget()->SetNativeWindowProperty(Profile::kProfileKey,
                                     window_->browser()->profile());
-
-  // Vivaldi: This will be used as window state for the first Show()
-  widget()->SetSavedShowState(create_params.state);
 
   // The frame insets are required to resolve the bounds specifications
   // correctly. So we set the window bounds and constraints now.
@@ -402,14 +403,9 @@ void VivaldiNativeAppWindowViews::Show() {
   ui::WindowShowState current_state = GetRestoredState();
   if (widget_->IsVisible() && current_state != ui::SHOW_STATE_MAXIMIZED) {
     widget_->Activate();
-    widget_->SetSavedShowState(current_state);
     return;
   }
 
-  if (shown_) {
-    // Shown previously so we can change the saved state.
-    widget_->SetSavedShowState(current_state);
-  }
   widget_->Show();
   shown_ = true;
 }
@@ -494,6 +490,18 @@ void VivaldiNativeAppWindowViews::OnViewWasResized() {
 // WidgetDelegate implementation.
 
 gfx::ImageSkia VivaldiNativeAppWindowViews::GetWindowAppIcon() {
+  if (window_->browser()->is_type_popup()) {
+    content::WebContents* web_contents =
+        window_->browser()->tab_strip_model()->GetActiveWebContents();
+    if (web_contents) {
+      favicon::FaviconDriver* favicon_driver =
+          favicon::ContentFaviconDriver::FromWebContents(web_contents);
+      gfx::Image app_icon = favicon_driver->GetFavicon();
+      if (!app_icon.IsEmpty())
+        return *app_icon.ToImageSkia();
+    }
+  }
+
   if (icon_family_.empty()) {
     return gfx::ImageSkia();
   }
@@ -532,11 +540,11 @@ std::string VivaldiNativeAppWindowViews::GetWindowName() const {
 }
 
 bool VivaldiNativeAppWindowViews::WidgetHasHitTestMask() const {
-  return shape_ != NULL;
+  return false;
 }
 
 void VivaldiNativeAppWindowViews::GetWidgetHitTestMask(SkPath* mask) const {
-  shape_->getBoundaryPath(mask);
+  NOTREACHED();
 }
 
 void VivaldiNativeAppWindowViews::OnWindowBeginUserBoundsChange() {
@@ -815,17 +823,7 @@ bool VivaldiNativeAppWindowViews::IsFullscreenOrPending() const {
 
 void VivaldiNativeAppWindowViews::UpdateShape(
     std::unique_ptr<ShapeRects> rects) {
-  shape_rects_ = std::move(rects);
-
-  // Build a region from the list of rects when it is supplied.
-  std::unique_ptr<SkRegion> region;
-  if (shape_rects_) {
-    region = std::make_unique<SkRegion>();
-    for (const gfx::Rect& input_rect : *shape_rects_.get())
-      region->op(gfx::RectToSkIRect(input_rect), SkRegion::kUnion_Op);
-  }
-  widget()->SetShape(shape() ? std::make_unique<ShapeRects>(*shape_rects_)
-                             : nullptr);
+  widget()->SetShape(nullptr);
   widget()->OnSizeConstraintsChanged();
 }
 
@@ -1020,8 +1018,9 @@ bool VivaldiAppWindowClientView::CanClose() {
       !window_->GetProfile()->IsGuestSession() && !closed_due_to_profile) {
     if (prefs->GetBoolean(
             vivaldiprefs::kWindowsShowWindowCloseConfirmationDialog)) {
-      if (!close_dialog_shown_ && !browser_shutdown::IsTryingToQuit() &&
-          browser->type() == Browser::TYPE_NORMAL && tabbed_windows_cnt > 1) {
+      if (!close_dialog_shown_ && !quit_dialog_shown_ &&
+          !browser_shutdown::IsTryingToQuit() &&
+          browser->type() == Browser::TYPE_NORMAL && tabbed_windows_cnt >= 1) {
         if (window_->IsMinimized()) {
           // Dialog is not visible if the window is minimized, so restore it
           // now.

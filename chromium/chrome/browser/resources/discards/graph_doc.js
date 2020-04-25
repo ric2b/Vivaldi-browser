@@ -104,10 +104,10 @@ class GraphNode {
 }
 
 class PageNode extends GraphNode {
-  /** @param {!performanceManager.mojom.WebUIPageInfo} page */
+  /** @param {!discards.mojom.PageInfo} page */
   constructor(page) {
     super(page.id);
-    /** @type {!performanceManager.mojom.WebUIPageInfo} */
+    /** @type {!discards.mojom.PageInfo} */
     this.page = page;
     this.y = kPageNodesTargetY;
   }
@@ -135,10 +135,10 @@ class PageNode extends GraphNode {
 }
 
 class FrameNode extends GraphNode {
-  /** @param {!performanceManager.mojom.WebUIFrameInfo} frame */
+  /** @param {!discards.mojom.FrameInfo} frame */
   constructor(frame) {
     super(frame.id);
-    /** @type {!performanceManager.mojom.WebUIFrameInfo} frame */
+    /** @type {!discards.mojom.FrameInfo} frame */
     this.frame = frame;
     this.color = this.selectColor(frame.processId);
   }
@@ -168,10 +168,10 @@ class FrameNode extends GraphNode {
 }
 
 class ProcessNode extends GraphNode {
-  /** @param {!performanceManager.mojom.WebUIProcessInfo} process */
+  /** @param {!discards.mojom.ProcessInfo} process */
   constructor(process) {
     super(process.id);
-    /** @type {!performanceManager.mojom.WebUIProcessInfo} */
+    /** @type {!discards.mojom.ProcessInfo} */
     this.process = process;
 
     this.color = this.selectColor(process.id);
@@ -234,7 +234,7 @@ function bounding_force(graph_height) {
 }
 
 /**
- * @implements {performanceManager.mojom.WebUIGraphChangeStreamInterface}
+ * @implements {discards.mojom.GraphChangeStreamInterface}
  */
 class Graph {
   /**
@@ -377,31 +377,31 @@ class Graph {
     switch (type) {
       case 'frameCreated':
         this.frameCreated(
-            /** @type {!performanceManager.mojom.WebUIFrameInfo} */ (data));
+            /** @type {!discards.mojom.FrameInfo} */ (data));
         break;
       case 'pageCreated':
         this.pageCreated(
-            /** @type {!performanceManager.mojom.WebUIPageInfo} */ (data));
+            /** @type {!discards.mojom.PageInfo} */ (data));
         break;
       case 'processCreated':
         this.processCreated(
-            /** @type {!performanceManager.mojom.WebUIProcessInfo} */ (data));
+            /** @type {!discards.mojom.ProcessInfo} */ (data));
         break;
       case 'frameChanged':
         this.frameChanged(
-            /** @type {!performanceManager.mojom.WebUIFrameInfo} */ (data));
+            /** @type {!discards.mojom.FrameInfo} */ (data));
         break;
       case 'pageChanged':
         this.pageChanged(
-            /** @type {!performanceManager.mojom.WebUIPageInfo} */ (data));
+            /** @type {!discards.mojom.PageInfo} */ (data));
         break;
       case 'processChanged':
         this.processChanged(
-            /** @type {!performanceManager.mojom.WebUIProcessInfo} */ (data));
+            /** @type {!discards.mojom.ProcessInfo} */ (data));
         break;
       case 'favIconDataAvailable':
         this.favIconDataAvailable(
-            /** @type {!performanceManager.mojom.WebUIFavIconInfo} */ (data));
+            /** @type {!discards.mojom.FavIconInfo} */ (data));
         break;
       case 'nodeDeleted':
         this.nodeDeleted(/** @type {number} */ (data));

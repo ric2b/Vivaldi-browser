@@ -10,10 +10,10 @@ import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.provider.Browser;
-import android.support.annotation.Nullable;
 import android.support.v7.preference.Preference;
 import android.support.v7.preference.PreferenceFragmentCompat;
 
+import androidx.annotation.Nullable;
 import androidx.browser.customtabs.CustomTabsIntent;
 
 import org.chromium.base.BuildInfo;
@@ -38,8 +38,7 @@ import org.chromium.ui.UiUtils;
  */
 public class SyncPreferenceUtils {
     private static final String DASHBOARD_URL = "https://www.google.com/settings/chrome/sync";
-    private static final String MY_ACCOUNT_URL =
-            "https://accounts.google.com/AccountChooser?Email=%s&continue=https://myaccount.google.com/";
+    private static final String MY_ACCOUNT_URL = "https://myaccount.google.com/smartlink/home";
 
     /**
      * Checks if sync error icon should be shown. Show sync error icon if sync is off because
@@ -61,7 +60,7 @@ public class SyncPreferenceUtils {
             }
 
             if (profileSyncService.isSyncActive()
-                    && profileSyncService.isPassphraseRequiredForDecryption()) {
+                    && profileSyncService.isPassphraseRequiredForPreferredDataTypes()) {
                 return true;
             }
         }
@@ -116,7 +115,7 @@ public class SyncPreferenceUtils {
                 return res.getString(R.string.sync_setup_progress);
             }
 
-            if (profileSyncService.isPassphraseRequiredForDecryption()) {
+            if (profileSyncService.isPassphraseRequiredForPreferredDataTypes()) {
                 return res.getString(R.string.sync_need_passphrase);
             }
             return context.getString(R.string.sync_and_services_summary_sync_on);
@@ -150,7 +149,7 @@ public class SyncPreferenceUtils {
         if (profileSyncService.isEngineInitialized()
                 && (profileSyncService.hasUnrecoverableError()
                         || profileSyncService.getAuthError() != GoogleServiceAuthError.State.NONE
-                        || profileSyncService.isPassphraseRequiredForDecryption())) {
+                        || profileSyncService.isPassphraseRequiredForPreferredDataTypes())) {
             return UiUtils.getTintedDrawable(
                     context, R.drawable.ic_sync_error_40dp, R.color.default_red);
         }
@@ -233,8 +232,6 @@ public class SyncPreferenceUtils {
     public static void openGoogleMyAccount(Activity activity) {
         assert ChromeSigninController.get().isSignedIn();
         RecordUserAction.record("SyncPreferences_ManageGoogleAccountClicked");
-        openCustomTabWithURL(activity,
-                String.format(
-                        MY_ACCOUNT_URL, ChromeSigninController.get().getSignedInAccountName()));
+        openCustomTabWithURL(activity, MY_ACCOUNT_URL);
     }
 }

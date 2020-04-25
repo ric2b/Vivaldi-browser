@@ -31,7 +31,7 @@ namespace blink {
 class Document;
 class Length;
 
-class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
+class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
  public:
   static void* AllocateObject(size_t size) {
     ThreadState* state =
@@ -171,6 +171,9 @@ class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
   bool IsShorthandWrapperValue() const {
     return class_type_ == kKeyframeShorthandClass;
   }
+  bool IsLightDarkColorPair() const {
+    return class_type_ == kLightDarkColorPairClass;
+  }
 
   bool HasFailedOrCanceledSubresources() const;
   bool MayContainUrl() const;
@@ -201,6 +204,7 @@ class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
     kStringClass,
     kURIClass,
     kValuePairClass,
+    kLightDarkColorPairClass,
 
     // Basic shape classes.
     // TODO(sashab): Represent these as a single subclass, BasicShapeClass.

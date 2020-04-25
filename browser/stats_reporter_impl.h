@@ -38,6 +38,8 @@ class StatsReporterImpl : public StatsReporter {
     std::string user_id;
     NextPingTimes next_pings;
     base::Time installation_time;
+    int next_extra_ping = 0;
+    base::Time next_extra_ping_time;
   };
 
   class Worker {
@@ -57,13 +59,14 @@ class StatsReporterImpl : public StatsReporter {
              const ReportingData& local_state_reporting_data);
     void LoadUrlOnUIThread();
     void OnURLLoadComplete(std::unique_ptr<std::string> response_body);
-    void Finish();
+    void Finish(bool success);
 
     base::File os_profile_reporting_data_file_;
 
     base::Value os_profile_reporting_data_json_;
     std::string user_id_;
     NextPingTimes new_next_pings_;
+    int next_extra_ping_ = false;
 
     std::unique_ptr<network::SimpleURLLoader> url_loader_;
 
@@ -74,11 +77,12 @@ class StatsReporterImpl : public StatsReporter {
   static std::string GetUserIdFromLegacyStorage();
   static base::FilePath GetReportingDataFileDir();
 
-  void Init();
   void OnLegacyUserIdGot(const std::string& legacy_user_id);
   void StartReporting();
 
-  void OnWorkerDone(const std::string& user_id, NextPingTimes next_pings);
+  void OnWorkerDone(const std::string& user_id,
+                    NextPingTimes next_pings,
+                    int next_extra_ping);
   void OnWorkerFailed(base::TimeDelta next_try_delay);
 
   std::string legacy_user_id_;

@@ -23,6 +23,9 @@
 #include "components/version_info/version_info.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+#if defined(OS_ANDROID)
+#include "base/android/apk_assets.h"
+#endif
 
 namespace vivaldi {
 
@@ -31,9 +34,10 @@ void MigrateOldPlatformPrefs(PrefService* prefs);
 std::string GetPlatformDefaultKey();
 std::unique_ptr<base::Value> GetPlatformComputedDefault(
     const std::string& path);
-
+#if !defined(OS_ANDROID)
 const base::FilePath::CharType kVivaldiResourcesFolder[] =
     FILE_PATH_LITERAL("vivaldi");
+#endif
 const base::FilePath::CharType kPrefsDefinitionFileName[] =
     FILE_PATH_LITERAL("prefs_definitions.json");
 
@@ -80,6 +84,9 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsNextWeeklyPing,
                              base::Time());
   registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsNextMonthlyPing,
+                             base::Time());
+  registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStatsExtraPing, 0);
+  registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsExtraPingTime,
                              base::Time());
 }
 
@@ -322,6 +329,30 @@ std::unordered_map<std::string, PrefProperties> RegisterBrowserPrefs(
     }
   }
 #endif  // !OS_ANDROID
+
+std::string prefs_definitions_content;
+
+#if defined(OS_ANDROID)
+  // For Android, get the prefs definitions from assets.
+  prefs_definition_file = base::FilePath(FILE_PATH_LITERAL("assets"));
+  prefs_definition_file =
+      prefs_definition_file.Append(kPrefsDefinitionFileName);
+
+  base::MemoryMappedFile::Region prefs_region;
+  int prefs_fd =
+      base::android::OpenApkAsset(prefs_definition_file.value(),
+                                  &prefs_region);
+  LOG_IF(DFATAL, prefs_fd < 0)
+      << "No preference definitions file in APK assets: "
+      << prefs_definition_file.value();
+  std::unique_ptr<base::MemoryMappedFile>
+      mapped_file(new base::MemoryMappedFile());
+  if (mapped_file->Initialize(base::File(prefs_fd), prefs_region)) {
+    prefs_definitions_content.assign(
+        reinterpret_cast<char*>(mapped_file->data()),
+        mapped_file->length());
+  }
+#else  // defined(OS_ANDROID)
   if (prefs_definition_file.empty() ||
       !base::PathExists(prefs_definition_file)) {
     base::PathService::Get(chrome::DIR_RESOURCES, &prefs_definition_file);
@@ -331,10 +362,10 @@ std::unordered_map<std::string, PrefProperties> RegisterBrowserPrefs(
   }
 
   LOG_IF(DFATAL, !base::PathExists(prefs_definition_file))
-      << "Could not find the preference definition file";
+      << "Could not find the preference definitions file";
 
-  std::string prefs_definitions_content;
   base::ReadFileToString(prefs_definition_file, &prefs_definitions_content);
+#endif  // OS_ANDROID
 
   auto prefs_definitions_json =
       base::JSONReader::Read(prefs_definitions_content);

@@ -35,6 +35,7 @@
 #include "media/base/scopedfd_helper.h"
 #include "media/base/unaligned_shared_memory.h"
 #include "media/base/video_types.h"
+#include "media/gpu/chromeos/fourcc.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/v4l2/v4l2_decode_surface.h"
 #include "media/gpu/v4l2/v4l2_h264_accelerator.h"
@@ -146,7 +147,6 @@ V4L2SliceVideoDecodeAccelerator::V4L2SliceVideoDecodeAccelerator(
       child_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       device_(device),
       decoder_thread_("V4L2SliceVideoDecodeAcceleratorThread"),
-      device_poll_thread_("V4L2SliceVideoDecodeAcceleratorDevicePollThread"),
       video_profile_(VIDEO_CODEC_PROFILE_UNKNOWN),
       input_format_fourcc_(0),
       output_format_fourcc_(0),
@@ -170,7 +170,6 @@ V4L2SliceVideoDecodeAccelerator::~V4L2SliceVideoDecodeAccelerator() {
 
   DCHECK(child_task_runner_->BelongsToCurrentThread());
   DCHECK(!decoder_thread_.IsRunning());
-  DCHECK(!device_poll_thread_.IsRunning());
 
   DCHECK(requests_.empty());
   DCHECK(output_buffer_map_.empty());
@@ -384,6 +383,11 @@ void V4L2SliceVideoDecodeAccelerator::Destroy() {
         //    executes after all the tasks potentially posted by the IP.
         base::BindOnce(
             [](V4L2SliceVideoDecodeAccelerator* vda) {
+              vda->gl_image_device_ = nullptr;
+              // The image processor's thread was the user of the image
+              // processor device, so let it keep the last reference and destroy
+              // it in its own thread.
+              vda->image_processor_device_ = nullptr;
               vda->image_processor_ = nullptr;
               vda->surfaces_at_ip_ = {};
               vda->decoder_thread_task_runner_->PostTask(
@@ -427,6 +431,10 @@ void V4L2SliceVideoDecodeAccelerator::DestroyTask() {
 
   base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
       this);
+
+  // Clear the V4L2 devices in the decoder thread so the V4L2Device's
+  // destructor is called from the thread that used it.
+  device_ = nullptr;
 
   DCHECK(surfaces_at_device_.empty());
   DCHECK(surfaces_at_display_.empty());
@@ -577,7 +585,7 @@ bool V4L2SliceVideoDecodeAccelerator::CreateImageProcessor() {
     return false;
   }
 
-  DCHECK_EQ(gl_image_size_, image_processor_->output_layout().coded_size());
+  DCHECK_EQ(gl_image_size_, image_processor_->output_config().size);
 
   return true;
 }
@@ -673,9 +681,9 @@ bool V4L2SliceVideoDecodeAccelerator::CreateOutputBuffers() {
     // coded_size_ may include padding required by the decoder).
     gl_image_size_ = pic_size;
     size_t planes_count;
-    if (!V4L2ImageProcessor::TryOutputFormat(output_format_fourcc_,
-                                             gl_image_format_fourcc_,
-                                             &gl_image_size_, &planes_count)) {
+    if (!V4L2ImageProcessor::TryOutputFormat(
+            output_format_fourcc_, gl_image_format_fourcc_, coded_size_,
+            &gl_image_size_, &planes_count)) {
       VLOGF(1) << "Failed to get output size and plane count of IP";
       return false;
     }
@@ -699,7 +707,7 @@ bool V4L2SliceVideoDecodeAccelerator::CreateOutputBuffers() {
             << ", coded size=" << coded_size_.ToString();
 
   VideoPixelFormat pixel_format =
-      V4L2Device::V4L2PixFmtToVideoPixelFormat(gl_image_format_fourcc_);
+      Fourcc::FromV4L2PixFmt(gl_image_format_fourcc_).ToVideoPixelFormat();
   child_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(
@@ -749,60 +757,9 @@ void V4L2SliceVideoDecodeAccelerator::DismissPictures(
   done->Signal();
 }
 
-void V4L2SliceVideoDecodeAccelerator::DevicePollTask(bool poll_device) {
-  DVLOGF(3);
-  DCHECK(device_poll_thread_.task_runner()->BelongsToCurrentThread());
-  TRACE_EVENT0("media,gpu", "V4L2SVDA::DevicePollTask");
-  bool event_pending;
-  if (!device_->Poll(poll_device, &event_pending)) {
-    NOTIFY_ERROR(PLATFORM_FAILURE);
-    return;
-  }
-
-  // All processing should happen on ServiceDeviceTask(), since we shouldn't
-  // touch encoder state from this thread.
-  decoder_thread_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&V4L2SliceVideoDecodeAccelerator::ServiceDeviceTask,
-                     base::Unretained(this)));
-}
-
-void V4L2SliceVideoDecodeAccelerator::ServiceDeviceTask() {
+void V4L2SliceVideoDecodeAccelerator::ServiceDeviceTask(bool event) {
   DVLOGF(4);
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
-
-  if (IsDestroyPending())
-    return;
-
-  // ServiceDeviceTask() should only ever be scheduled from DevicePollTask().
-
-  Dequeue();
-  SchedulePollIfNeeded();
-}
-
-void V4L2SliceVideoDecodeAccelerator::SchedulePollIfNeeded() {
-  DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
-
-  if (!device_poll_thread_.IsRunning()) {
-    DVLOGF(4) << "Device poll thread stopped, will not schedule poll";
-    return;
-  }
-
-  DCHECK(input_queue_->IsStreaming() || output_queue_->IsStreaming());
-
-  if (input_queue_->QueuedBuffersCount() +
-          output_queue_->QueuedBuffersCount() ==
-      0) {
-    DVLOGF(4) << "No buffers queued, will not schedule poll";
-    return;
-  }
-
-  DVLOGF(4) << "Scheduling device poll task";
-
-  device_poll_thread_.task_runner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&V4L2SliceVideoDecodeAccelerator::DevicePollTask,
-                     base::Unretained(this), true));
 
   DVLOGF(3) << "buffer counts: "
             << "INPUT[" << decoder_input_queue_.size() << "]"
@@ -814,14 +771,16 @@ void V4L2SliceVideoDecodeAccelerator::SchedulePollIfNeeded() {
             << output_buffer_map_.size() << "]"
             << " => DISPLAYQ[" << decoder_display_queue_.size() << "]"
             << " => CLIENT[" << surfaces_at_display_.size() << "]";
+
+  if (IsDestroyPending())
+    return;
+
+  Dequeue();
 }
 
 void V4L2SliceVideoDecodeAccelerator::Enqueue(
     const scoped_refptr<V4L2DecodeSurface>& dec_surface) {
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
-
-  const int old_inputs_queued = input_queue_->QueuedBuffersCount();
-  const int old_outputs_queued = output_queue_->QueuedBuffersCount();
 
   if (!EnqueueInputRecord(dec_surface.get())) {
     VLOGF(1) << "Failed queueing an input buffer";
@@ -836,9 +795,6 @@ void V4L2SliceVideoDecodeAccelerator::Enqueue(
   }
 
   surfaces_at_device_.push(dec_surface);
-
-  if (old_inputs_queued == 0 && old_outputs_queued == 0)
-    SchedulePollIfNeeded();
 }
 
 void V4L2SliceVideoDecodeAccelerator::Dequeue() {
@@ -1021,14 +977,6 @@ bool V4L2SliceVideoDecodeAccelerator::EnqueueOutputRecord(
 bool V4L2SliceVideoDecodeAccelerator::StartDevicePoll() {
   DVLOGF(3) << "Starting device poll";
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
-  DCHECK(!device_poll_thread_.IsRunning());
-
-  // Start up the device poll thread and schedule its first DevicePollTask().
-  if (!device_poll_thread_.Start()) {
-    VLOGF(1) << "Device thread failed to start";
-    NOTIFY_ERROR(PLATFORM_FAILURE);
-    return false;
-  }
 
   if (!input_queue_->Streamon())
     return false;
@@ -1036,12 +984,17 @@ bool V4L2SliceVideoDecodeAccelerator::StartDevicePoll() {
   if (!output_queue_->Streamon())
     return false;
 
-  device_poll_thread_.task_runner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&V4L2SliceVideoDecodeAccelerator::DevicePollTask,
-                     base::Unretained(this), true));
+  // We can use base::Unretained here because the client thread will flush
+  // all tasks posted to the decoder thread before deleting the SVDA.
+  return device_->StartPolling(
+      base::BindRepeating(&V4L2SliceVideoDecodeAccelerator::ServiceDeviceTask,
+                          base::Unretained(this)),
+      base::BindRepeating(&V4L2SliceVideoDecodeAccelerator::OnPollError,
+                          base::Unretained(this)));
+}
 
-  return true;
+void V4L2SliceVideoDecodeAccelerator::OnPollError() {
+  NOTIFY_ERROR(PLATFORM_FAILURE);
 }
 
 bool V4L2SliceVideoDecodeAccelerator::StopDevicePoll() {
@@ -1049,20 +1002,8 @@ bool V4L2SliceVideoDecodeAccelerator::StopDevicePoll() {
   if (decoder_thread_.IsRunning())
     DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
 
-  // Signal the DevicePollTask() to stop, and stop the device poll thread.
-  if (!device_->SetDevicePollInterrupt()) {
-    VPLOGF(1) << "SetDevicePollInterrupt(): failed";
-    NOTIFY_ERROR(PLATFORM_FAILURE);
+  if (!device_->StopPolling())
     return false;
-  }
-  device_poll_thread_.Stop();
-  DVLOGF(3) << "Device poll thread stopped";
-
-  // Clear the interrupt now, to be sure.
-  if (!device_->ClearDevicePollInterrupt()) {
-    NOTIFY_ERROR(PLATFORM_FAILURE);
-    return false;
-  }
 
   // We may be called before the queue is acquired.
   if (input_queue_) {
@@ -1246,6 +1187,10 @@ bool V4L2SliceVideoDecodeAccelerator::FinishSurfaceSetChange() {
   if (!surfaces_at_device_.empty())
     return false;
 
+  // Wait until all pending frames in image processor are processed.
+  if (image_processor_ && !surfaces_at_ip_.empty())
+    return false;
+
   DCHECK_EQ(state_, kIdle);
   DCHECK(decoder_display_queue_.empty());
   // All output buffers should've been returned from decoder and device by now.
@@ -1260,7 +1205,6 @@ bool V4L2SliceVideoDecodeAccelerator::FinishSurfaceSetChange() {
   }
 
   image_processor_ = nullptr;
-  surfaces_at_ip_ = {};
 
   // Dequeued decoded surfaces may be pended in pending_picture_ready_ if they
   // are waiting for some pictures to be cleared. We should post them right away
@@ -1435,9 +1379,12 @@ void V4L2SliceVideoDecodeAccelerator::AssignPictureBuffersTask(
   DCHECK(output_wait_map_.empty());
   output_buffer_map_.resize(buffers.size());
 
-  if (image_processor_device_ && !CreateImageProcessor()) {
-    NOTIFY_ERROR(PLATFORM_FAILURE);
-    return;
+  // In import mode we will create the IP when importing the first buffer.
+  if (image_processor_device_ && output_mode_ == Config::OutputMode::ALLOCATE) {
+    if (!CreateImageProcessor()) {
+      NOTIFY_ERROR(PLATFORM_FAILURE);
+      return;
+    }
   }
 
   // Reserve all buffers until ImportBufferForPictureTask() is called
@@ -1486,8 +1433,12 @@ void V4L2SliceVideoDecodeAccelerator::AssignPictureBuffersTask(
         }
       }
 
-      ImportBufferForPictureTask(output_record.picture_id,
-                                 std::move(passed_dmabuf_fds));
+      int plane_horiz_bits_per_pixel = VideoFrame::PlaneHorizontalBitsPerPixel(
+          Fourcc::FromV4L2PixFmt(gl_image_format_fourcc_).ToVideoPixelFormat(),
+          0);
+      ImportBufferForPictureTask(
+          output_record.picture_id, std::move(passed_dmabuf_fds),
+          gl_image_size_.width() * plane_horiz_bits_per_pixel / 8);
     }  // else we'll get triggered via ImportBufferForPicture() from client.
     DVLOGF(3) << "buffer[" << i << "]: picture_id=" << output_record.picture_id;
   }
@@ -1496,12 +1447,6 @@ void V4L2SliceVideoDecodeAccelerator::AssignPictureBuffersTask(
     NOTIFY_ERROR(PLATFORM_FAILURE);
     return;
   }
-
-  // Put us in kIdle to allow further event processing.
-  // ProcessPendingEventsIfNeeded() will put us back into kDecoding after all
-  // other pending events are processed successfully.
-  state_ = kIdle;
-  ProcessPendingEventsIfNeeded();
 }
 
 void V4L2SliceVideoDecodeAccelerator::CreateGLImageFor(
@@ -1552,8 +1497,39 @@ void V4L2SliceVideoDecodeAccelerator::ImportBufferForPicture(
   DVLOGF(3) << "picture_buffer_id=" << picture_buffer_id;
   DCHECK(child_task_runner_->BelongsToCurrentThread());
 
+  if (output_mode_ != Config::OutputMode::IMPORT) {
+    VLOGF(1) << "Cannot import in non-import mode";
+    NOTIFY_ERROR(INVALID_ARGUMENT);
+    return;
+  }
+
+  decoder_thread_.task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &V4L2SliceVideoDecodeAccelerator::ImportBufferForPictureForImportTask,
+          base::Unretained(this), picture_buffer_id, pixel_format,
+          std::move(gpu_memory_buffer_handle.native_pixmap_handle)));
+}
+
+void V4L2SliceVideoDecodeAccelerator::ImportBufferForPictureForImportTask(
+    int32_t picture_buffer_id,
+    VideoPixelFormat pixel_format,
+    gfx::NativePixmapHandle handle) {
+  DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
+
+  if (pixel_format !=
+      Fourcc::FromV4L2PixFmt(gl_image_format_fourcc_).ToVideoPixelFormat()) {
+    VLOGF(1) << "Unsupported import format: "
+             << VideoPixelFormatToString(pixel_format);
+    NOTIFY_ERROR(INVALID_ARGUMENT);
+    return;
+  }
+
   std::vector<base::ScopedFD> dmabuf_fds;
-#if defined(USE_OZONE)
+  for (auto& plane : handle.planes) {
+    dmabuf_fds.push_back(std::move(plane.fd));
+  }
+
   // If the driver does not accept as many fds as we received from the client,
   // we have to check if the additional fds are actually duplicated fds pointing
   // to previous planes; if so, we can close the duplicates and keep only the
@@ -1561,11 +1537,9 @@ void V4L2SliceVideoDecodeAccelerator::ImportBufferForPicture(
   // Assume that an fd is a duplicate of a previous plane's fd if offset != 0.
   // Otherwise, if offset == 0, return error as it may be pointing to a new
   // plane.
-  for (auto& plane : gpu_memory_buffer_handle.native_pixmap_handle.planes) {
-    dmabuf_fds.push_back(std::move(plane.fd));
-  }
-  for (size_t i = dmabuf_fds.size() - 1; i >= gl_image_planes_count_; i--) {
-    if (gpu_memory_buffer_handle.native_pixmap_handle.planes[i].offset == 0) {
+  while (dmabuf_fds.size() > gl_image_planes_count_) {
+    const size_t idx = dmabuf_fds.size() - 1;
+    if (handle.planes[idx].offset == 0) {
       VLOGF(1) << "The dmabuf fd points to a new buffer, ";
       NOTIFY_ERROR(INVALID_ARGUMENT);
       return;
@@ -1574,32 +1548,15 @@ void V4L2SliceVideoDecodeAccelerator::ImportBufferForPicture(
     // buffer and the appropriate address can be accessed by associated offset.
     dmabuf_fds.pop_back();
   }
-#endif
 
-  if (output_mode_ != Config::OutputMode::IMPORT) {
-    VLOGF(1) << "Cannot import in non-import mode";
-    NOTIFY_ERROR(INVALID_ARGUMENT);
-    return;
-  }
-
-  if (pixel_format !=
-      V4L2Device::V4L2PixFmtToVideoPixelFormat(gl_image_format_fourcc_)) {
-    VLOGF(1) << "Unsupported import format: "
-             << VideoPixelFormatToString(pixel_format);
-    NOTIFY_ERROR(INVALID_ARGUMENT);
-    return;
-  }
-
-  decoder_thread_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &V4L2SliceVideoDecodeAccelerator::ImportBufferForPictureTask,
-          base::Unretained(this), picture_buffer_id, std::move(dmabuf_fds)));
+  ImportBufferForPictureTask(picture_buffer_id, std::move(dmabuf_fds),
+                             handle.planes[0].stride);
 }
 
 void V4L2SliceVideoDecodeAccelerator::ImportBufferForPictureTask(
     int32_t picture_buffer_id,
-    std::vector<base::ScopedFD> passed_dmabuf_fds) {
+    std::vector<base::ScopedFD> passed_dmabuf_fds,
+    int32_t stride) {
   DVLOGF(3) << "picture_buffer_id=" << picture_buffer_id;
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
 
@@ -1627,6 +1584,46 @@ void V4L2SliceVideoDecodeAccelerator::ImportBufferForPictureTask(
     return;
   }
 
+  // TODO(crbug.com/982172): This must be done in AssignPictureBuffers().
+  // However the size of PictureBuffer might not be adjusted by ARC++. So we
+  // keep this until ARC++ side is fixed.
+  int plane_horiz_bits_per_pixel = VideoFrame::PlaneHorizontalBitsPerPixel(
+      Fourcc::FromV4L2PixFmt(gl_image_format_fourcc_).ToVideoPixelFormat(), 0);
+  if (plane_horiz_bits_per_pixel == 0 ||
+      (stride * 8) % plane_horiz_bits_per_pixel != 0) {
+    VLOGF(1) << "Invalid format " << gl_image_format_fourcc_ << " or stride "
+             << stride;
+    NOTIFY_ERROR(INVALID_ARGUMENT);
+    return;
+  }
+  int adjusted_coded_width = stride * 8 / plane_horiz_bits_per_pixel;
+  if (image_processor_device_ && !image_processor_) {
+    DCHECK_EQ(kAwaitingPictureBuffers, state_);
+    // This is the first buffer import. Create the image processor and change
+    // the decoder state. The client may adjust the coded width. We don't have
+    // the final coded size in AssignPictureBuffers yet. Use the adjusted coded
+    // width to create the image processor.
+    DVLOGF(3) << "Original gl_image_size=" << gl_image_size_.ToString()
+              << ", adjusted coded width=" << adjusted_coded_width;
+    DCHECK_GE(adjusted_coded_width, gl_image_size_.width());
+    gl_image_size_.set_width(adjusted_coded_width);
+    if (!CreateImageProcessor())
+      return;
+  }
+  DCHECK_EQ(gl_image_size_.width(), adjusted_coded_width);
+
+  // Put us in kIdle to allow further event processing.
+  // ProcessPendingEventsIfNeeded() will put us back into kDecoding after all
+  // other pending events are processed successfully.
+  if (state_ == kAwaitingPictureBuffers) {
+    state_ = kIdle;
+    decoder_thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &V4L2SliceVideoDecodeAccelerator::ProcessPendingEventsIfNeeded,
+            base::Unretained(this)));
+  }
+
   // If in import mode, build output_frame from the passed DMABUF FDs.
   if (output_mode_ == Config::OutputMode::IMPORT) {
     DCHECK_EQ(gl_image_planes_count_, passed_dmabuf_fds.size());
@@ -1636,7 +1633,7 @@ void V4L2SliceVideoDecodeAccelerator::ImportBufferForPictureTask(
     // of assuming the image size will be enough (we may have extra information
     // between planes).
     auto layout = VideoFrameLayout::Create(
-        V4L2Device::V4L2PixFmtToVideoPixelFormat(gl_image_format_fourcc_),
+        Fourcc::FromV4L2PixFmt(gl_image_format_fourcc_).ToVideoPixelFormat(),
         gl_image_size_);
     if (!layout) {
       VLOGF(1) << "Cannot create layout!";
@@ -2247,8 +2244,8 @@ bool V4L2SliceVideoDecodeAccelerator::ProcessFrame(
     // We will set a destruction observer to the output frame, so wrap the
     // imported frame into another one that we can destruct.
     scoped_refptr<VideoFrame> wrapped_frame = VideoFrame::WrapVideoFrame(
-        *output_frame.get(), output_frame->format(),
-        output_frame->visible_rect(), output_frame->coded_size());
+        output_frame, output_frame->format(), output_frame->visible_rect(),
+        output_frame->coded_size());
     DCHECK(output_frame != nullptr);
 
     image_processor_->Process(

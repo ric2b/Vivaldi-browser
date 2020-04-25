@@ -383,7 +383,8 @@ class LockDebugView::DebugDataDispatcherTransformer
                            base::Time::Now() +
                                base::TimeDelta::FromHours(user_index) +
                                base::TimeDelta::FromHours(8),
-                           base::TimeDelta::FromMinutes(15)));
+                           base::TimeDelta::FromMinutes(15),
+                           true /*bool disable_lock_screen_media*/));
       UpdateAuthDisabledReason();
     }
   }
@@ -432,8 +433,9 @@ class LockDebugView::DebugDataDispatcherTransformer
   void AddSystemInfo(const std::string& os_version,
                      const std::string& enterprise_info,
                      const std::string& bluetooth_name) {
-    debug_dispatcher_.SetSystemInfo(true /*show_if_hidden*/, os_version,
-                                    enterprise_info, bluetooth_name);
+    debug_dispatcher_.SetSystemInfo(true /*show*/, false /*enforced*/,
+                                    os_version, enterprise_info,
+                                    bluetooth_name);
   }
 
   void UpdateWarningMessage(const base::string16& message) {
@@ -751,8 +753,10 @@ LockDebugView::LockDebugView(mojom::TrayActionState initial_note_action_state,
     scroll->SetPreferredSize(gfx::Size(600, height));
     scroll->SetContents(base::WrapUnique(content));
     scroll->SetBackgroundColor(SK_ColorTRANSPARENT);
-    scroll->SetVerticalScrollBar(new views::OverlayScrollBar(false));
-    scroll->SetHorizontalScrollBar(new views::OverlayScrollBar(true));
+    scroll->SetVerticalScrollBar(
+        std::make_unique<views::OverlayScrollBar>(false));
+    scroll->SetHorizontalScrollBar(
+        std::make_unique<views::OverlayScrollBar>(true));
     return scroll;
   };
   container_->AddChildView(make_scroll(global_action_view_container_, 110));

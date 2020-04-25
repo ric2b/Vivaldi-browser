@@ -66,12 +66,11 @@ class BookmarkBubbleView : public LocationBarBubbleDelegateView,
   void WindowClosing() override;
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   std::unique_ptr<views::View> CreateExtraView() override;
-  bool GetExtraViewPadding(int* padding) override;
   std::unique_ptr<views::View> CreateFootnoteView() override;
   bool Cancel() override;
   bool Accept() override;
   bool Close() override;
-  void UpdateButton(views::LabelButton* button, ui::DialogButton type) override;
+  void OnDialogInitialized() override;
   const char* GetClassName() const override;
 
   // views::ButtonListener:

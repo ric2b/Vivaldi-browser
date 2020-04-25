@@ -12,11 +12,12 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.support.annotation.Nullable;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.ScrollView;
+
+import androidx.annotation.Nullable;
 
 import com.google.android.libraries.feed.api.client.scope.ProcessScope;
 import com.google.android.libraries.feed.api.client.scope.StreamScope;
@@ -32,7 +33,6 @@ import com.google.android.libraries.feed.api.host.stream.TooltipApi;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.GlobalDiscardableReferencePool;
 import org.chromium.chrome.browser.feed.tooltip.BasicTooltipApi;
@@ -45,9 +45,10 @@ import org.chromium.chrome.browser.ntp.snippets.SectionHeaderView;
 import org.chromium.chrome.browser.signin.PersonalizedSigninPromoView;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.ui.widget.displaystyle.UiConfig;
+import org.chromium.chrome.browser.ui.widget.displaystyle.ViewResizer;
 import org.chromium.chrome.browser.util.ViewUtils;
-import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
-import org.chromium.chrome.browser.widget.displaystyle.ViewResizer;
+import org.chromium.chrome.feed.R;
 import org.chromium.ui.UiUtils;
 
 import java.util.Arrays;
@@ -268,6 +269,7 @@ public class FeedSurfaceCoordinator {
      * @param historyNavigationDelegate The {@link HistoryNavigationDelegate} for the root view.
      * @param snapScrollHelper The {@link SnapScrollHelper} for the New Tab Page.
      * @param ntpHeader The extra header on top of the feeds for the New Tab Page.
+     * @param sectionHeaderView The {@link SectionHeaderView} for the feed.
      * @param actionApi The {@link ActionApi} implementation to handle actions.
      * @param showDarkBackground Whether is shown on dark background.
      * @param delegate The constructing {@link FeedSurfaceDelegate}.
@@ -275,9 +277,11 @@ public class FeedSurfaceCoordinator {
     public FeedSurfaceCoordinator(ChromeActivity activity,
             @Nullable HistoryNavigationDelegate historyNavigationDelegate,
             @Nullable SnapScrollHelper snapScrollHelper, @Nullable View ntpHeader,
-            ActionApi actionApi, boolean showDarkBackground, FeedSurfaceDelegate delegate) {
+            @Nullable SectionHeaderView sectionHeaderView, ActionApi actionApi,
+            boolean showDarkBackground, FeedSurfaceDelegate delegate) {
         mActivity = activity;
         mNtpHeader = ntpHeader;
+        mSectionHeaderView = sectionHeaderView;
         mActionApi = actionApi;
         mShowDarkBackground = showDarkBackground;
         mDelegate = delegate;
@@ -289,8 +293,9 @@ public class FeedSurfaceCoordinator {
 
         mRootView = new RootView(mActivity);
         mRootView.setPadding(0, resources.getDimensionPixelOffset(R.dimen.tab_strip_height), 0, 0);
-        if (historyNavigationDelegate != null)
+        if (historyNavigationDelegate != null) {
             mRootView.setNavigationDelegate(historyNavigationDelegate);
+        }
         mUiConfig = new UiConfig(mRootView);
 
         // Mediator should be created before any Stream changes.
@@ -376,10 +381,6 @@ public class FeedSurfaceCoordinator {
         mStream = streamScope.getStream();
         mStreamLifecycleManager = mDelegate.createStreamLifecycleManager(mStream, mActivity);
 
-        LayoutInflater inflater = LayoutInflater.from(mActivity);
-        mSectionHeaderView = (SectionHeaderView) inflater.inflate(
-                R.layout.new_tab_page_snippets_expandable_header, mRootView, false);
-
         View view = mStream.getView();
         view.setBackgroundResource(R.color.modern_primary_color);
         mRootView.addView(view);
@@ -387,12 +388,13 @@ public class FeedSurfaceCoordinator {
                 ViewResizer.createAndAttach(view, mUiConfig, mDefaultMargin, mWideMargin);
 
         if (mNtpHeader != null) UiUtils.removeViewFromParent(mNtpHeader);
-        UiUtils.removeViewFromParent(mSectionHeaderView);
+        if (mSectionHeaderView != null) UiUtils.removeViewFromParent(mSectionHeaderView);
         if (mSigninPromoView != null) UiUtils.removeViewFromParent(mSigninPromoView);
+
         if (mNtpHeader != null) {
             mStream.setHeaderViews(Arrays.asList(new NonDismissibleHeader(mNtpHeader),
                     new NonDismissibleHeader(mSectionHeaderView)));
-        } else {
+        } else if (mSectionHeaderView != null) {
             mStream.setHeaderViews(Arrays.asList(new NonDismissibleHeader(mSectionHeaderView)));
         }
         mStream.addScrollListener(new FeedLoggingBridge.ScrollEventReporter(
@@ -480,11 +482,14 @@ public class FeedSurfaceCoordinator {
     /** Update header views in the Stream. */
     void updateHeaderViews(boolean isPromoVisible) {
         if (mNtpHeader != null) {
+            assert mSectionHeaderView != null;
             mStream.setHeaderViews(
                     isPromoVisible ? Arrays.asList(new NonDismissibleHeader(mNtpHeader),
                             new NonDismissibleHeader(mSectionHeaderView), new SignInPromoHeader())
                                    : Arrays.asList(new NonDismissibleHeader(mNtpHeader),
                                            new NonDismissibleHeader(mSectionHeaderView)));
+        } else if (mSectionHeaderView == null) {
+            if (isPromoVisible) mStream.setHeaderViews(Arrays.asList(new SignInPromoHeader()));
         } else {
             mStream.setHeaderViews(isPromoVisible
                             ? Arrays.asList(new NonDismissibleHeader(mSectionHeaderView),

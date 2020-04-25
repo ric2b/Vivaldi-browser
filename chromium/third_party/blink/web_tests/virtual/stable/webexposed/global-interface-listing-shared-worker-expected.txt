@@ -62,8 +62,10 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     setter onmessage
 [Worker]     setter onmessageerror
 [Worker] interface ByteLengthQueuingStrategy
+[Worker]     attribute @@toStringTag
+[Worker]     getter highWaterMark
+[Worker]     getter size
 [Worker]     method constructor
-[Worker]     method size
 [Worker] interface CSSSkewX : CSSTransformComponent
 [Worker]     attribute @@toStringTag
 [Worker]     getter ax
@@ -107,8 +109,10 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter wasClean
 [Worker]     method constructor
 [Worker] interface CountQueuingStrategy
+[Worker]     attribute @@toStringTag
+[Worker]     getter highWaterMark
+[Worker]     getter size
 [Worker]     method constructor
-[Worker]     method size
 [Worker] interface Crypto
 [Worker]     attribute @@toStringTag
 [Worker]     getter subtle
@@ -1865,6 +1869,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method isVertexArray
 [Worker]     method lineWidth
 [Worker]     method linkProgram
+[Worker]     method makeXRCompatible
 [Worker]     method pauseTransformFeedback
 [Worker]     method pixelStorei
 [Worker]     method polygonOffset
@@ -2357,6 +2362,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method isTexture
 [Worker]     method lineWidth
 [Worker]     method linkProgram
+[Worker]     method makeXRCompatible
 [Worker]     method pixelStorei
 [Worker]     method polygonOffset
 [Worker]     method readPixels
@@ -2474,7 +2480,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter self
 [Worker]     method atob
 [Worker]     method btoa
-[Worker]     method cancelAnimationFrame
 [Worker]     method clearInterval
 [Worker]     method clearTimeout
 [Worker]     method constructor
@@ -2482,7 +2487,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method fetch
 [Worker]     method importScripts
 [Worker]     method queueMicrotask
-[Worker]     method requestAnimationFrame
 [Worker]     method setInterval
 [Worker]     method setTimeout
 [Worker]     setter onerror

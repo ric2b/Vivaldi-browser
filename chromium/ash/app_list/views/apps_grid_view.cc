@@ -30,6 +30,7 @@
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/app_list_switches.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/pagination/pagination_controller.h"
 #include "base/guid.h"
 #include "base/macros.h"
@@ -60,7 +61,7 @@
 #include "ui/views/view_model_utils.h"
 #include "ui/views/widget/widget.h"
 
-namespace app_list {
+namespace ash {
 
 namespace {
 
@@ -271,8 +272,8 @@ std::string GridIndex::ToString() const {
 // gradient fading out zones.
 class AppsGridView::FadeoutLayerDelegate : public ui::LayerDelegate {
  public:
-  explicit FadeoutLayerDelegate(int fadeout_zone_height)
-      : layer_(ui::LAYER_TEXTURED), fadeout_zone_height_(fadeout_zone_height) {
+  explicit FadeoutLayerDelegate(int fadeout_mask_height)
+      : layer_(ui::LAYER_TEXTURED), fadeout_mask_height_(fadeout_mask_height) {
     layer_.set_delegate(this);
     layer_.SetFillsBoundsOpaquely(false);
   }
@@ -287,9 +288,9 @@ class AppsGridView::FadeoutLayerDelegate : public ui::LayerDelegate {
   // the mask for the central area and only use it for top/bottom areas.
   void OnPaintLayer(const ui::PaintContext& context) override {
     const gfx::Size size = layer()->size();
-    gfx::Rect top_rect(0, 0, size.width(), fadeout_zone_height_);
-    gfx::Rect bottom_rect(0, size.height() - fadeout_zone_height_, size.width(),
-                          fadeout_zone_height_);
+    gfx::Rect top_rect(0, 0, size.width(), fadeout_mask_height_);
+    gfx::Rect bottom_rect(0, size.height() - fadeout_mask_height_, size.width(),
+                          fadeout_mask_height_);
 
     views::PaintInfo paint_info =
         views::PaintInfo::CreateRootPaintInfo(context, size);
@@ -310,12 +311,12 @@ class AppsGridView::FadeoutLayerDelegate : public ui::LayerDelegate {
     flags.setBlendMode(SkBlendMode::kSrc);
     flags.setAntiAlias(false);
     flags.setShader(gfx::CreateGradientShader(
-        gfx::Point(), gfx::Point(0, fadeout_zone_height_), SK_ColorTRANSPARENT,
+        gfx::Point(), gfx::Point(0, fadeout_mask_height_), SK_ColorTRANSPARENT,
         SK_ColorBLACK));
     canvas->DrawRect(top_rect, flags);
     // Draw bottom gradient zone.
     flags.setShader(gfx::CreateGradientShader(
-        gfx::Point(0, size.height() - fadeout_zone_height_),
+        gfx::Point(0, size.height() - fadeout_mask_height_),
         gfx::Point(0, size.height()), SK_ColorBLACK, SK_ColorTRANSPARENT));
     canvas->DrawRect(bottom_rect, flags);
   }
@@ -323,7 +324,7 @@ class AppsGridView::FadeoutLayerDelegate : public ui::LayerDelegate {
                                   float new_device_scale_factor) override {}
 
   ui::Layer layer_;
-  const int fadeout_zone_height_;
+  const int fadeout_mask_height_;
 
   DISALLOW_COPY_AND_ASSIGN(FadeoutLayerDelegate);
 };
@@ -349,19 +350,21 @@ AppsGridView::AppsGridView(ContentsView* contents_view,
 
   if (!folder_delegate) {
     SetBorder(views::CreateEmptyBorder(
-        gfx::Insets(GetAppListConfig().grid_fadeout_zone_height(), 0)));
+        gfx::Insets(GetAppListConfig().grid_fadeout_mask_height(), 0)));
   }
 
   pagination_model_.SetTransitionDurations(
-      GetAppListConfig().page_transition_duration_ms(),
-      GetAppListConfig().overscroll_page_transition_duration_ms());
+      GetAppListConfig().page_transition_duration(),
+      GetAppListConfig().overscroll_page_transition_duration());
 
   pagination_model_.AddObserver(this);
   pagination_controller_ = std::make_unique<ash::PaginationController>(
       &pagination_model_,
       folder_delegate_ ? ash::PaginationController::SCROLL_AXIS_HORIZONTAL
                        : ash::PaginationController::SCROLL_AXIS_VERTICAL,
-      base::BindRepeating(&RecordPageSwitcherSourceByEventType),
+      folder_delegate_
+          ? base::DoNothing()
+          : base::BindRepeating(&AppListRecordPageSwitcherSourceByEventType),
       IsTabletMode());
   bounds_animator_->AddObserver(this);
 }
@@ -666,7 +669,7 @@ void AppsGridView::UpdateDrag(Pointer pointer, const gfx::Point& point) {
 }
 
 void AppsGridView::EndDrag(bool cancel) {
-  // EndDrag was called before if |drag_view_| is NULL.
+  // EndDrag was called before if |drag_view_| is nullptr.
   if (!drag_view_)
     return;
 
@@ -815,9 +818,9 @@ void AppsGridView::ScheduleShowHideAnimation(bool show) {
   animation.AddObserver(this);
   animation.SetTweenType(show ? kFolderFadeInTweenType
                               : kFolderFadeOutTweenType);
-  animation.SetTransitionDuration(base::TimeDelta::FromMilliseconds(
-      show ? GetAppListConfig().folder_transition_in_duration_ms()
-           : GetAppListConfig().folder_transition_out_duration_ms()));
+  animation.SetTransitionDuration(
+      show ? GetAppListConfig().folder_transition_in_duration()
+           : GetAppListConfig().folder_transition_out_duration());
 
   layer()->SetOpacity(show ? 1.0f : 0.0f);
 }
@@ -877,7 +880,7 @@ void AppsGridView::UpdateDragFromReparentItem(Pointer pointer,
                                               const gfx::Point& drag_point) {
   // Note that if a cancel ocurrs while reparenting, the |drag_view_| in both
   // root and folder grid views is cleared, so the check in UpdateDragFromItem()
-  // for |drag_view_| being NULL (in the folder grid) is sufficient.
+  // for |drag_view_| being nullptr (in the folder grid) is sufficient.
   DCHECK(drag_view_);
   DCHECK(IsDraggingForReparentInRootLevelGridView());
 
@@ -1003,7 +1006,7 @@ void AppsGridView::Layout() {
 
 void AppsGridView::UpdateControlVisibility(ash::AppListViewState app_list_state,
                                            bool is_in_drag) {
-  if (!folder_delegate_ && app_list_features::IsBackgroundBlurEnabled()) {
+  if (!folder_delegate_ && ash::features::IsBackgroundBlurEnabled()) {
     if (is_in_drag) {
       layer()->SetMaskLayer(nullptr);
     } else {
@@ -1014,16 +1017,19 @@ void AppsGridView::UpdateControlVisibility(ash::AppListViewState app_list_state,
         // and using the mask layer used by the detached layer can lead to
         // crash. b/118822974.
         fadeout_layer_delegate_ = std::make_unique<FadeoutLayerDelegate>(
-            GetAppListConfig().grid_fadeout_zone_height());
+            GetAppListConfig().grid_fadeout_mask_height());
         layer()->SetMaskLayer(fadeout_layer_delegate_->layer());
         fadeout_layer_delegate_->layer()->SetBounds(layer()->bounds());
       }
     }
   }
 
-  const bool fullscreen_apps_in_drag =
-      app_list_state == ash::AppListViewState::kFullscreenAllApps || is_in_drag;
-  SetVisible(fullscreen_apps_in_drag);
+  const bool fullscreen_or_in_drag =
+      is_in_drag ||
+      app_list_state == ash::AppListViewState::kFullscreenAllApps ||
+      (app_list_features::IsScalableAppListEnabled() &&
+       app_list_state == ash::AppListViewState::kFullscreenSearch);
+  SetVisible(fullscreen_or_in_drag);
 }
 
 bool AppsGridView::OnKeyPressed(const ui::KeyEvent& event) {
@@ -1195,14 +1201,16 @@ void AppsGridView::OnMouseEvent(ui::MouseEvent* event) {
 }
 
 bool AppsGridView::EventIsBetweenOccupiedTiles(const ui::LocatedEvent* event) {
-  return IsValidIndex(GetNearestTileIndexForPoint(event->location()));
+  gfx::Point mirrored_point(GetMirroredXInView(event->location().x()),
+                            event->location().y());
+  return IsValidIndex(GetNearestTileIndexForPoint(mirrored_point));
 }
 
 void AppsGridView::Update() {
   DCHECK(!selected_view_ && !drag_view_);
   if (!folder_delegate_) {
     SetBorder(views::CreateEmptyBorder(
-        gfx::Insets(GetAppListConfig().grid_fadeout_zone_height(), 0)));
+        gfx::Insets(GetAppListConfig().grid_fadeout_mask_height(), 0)));
   }
 
   view_model_.Clear();
@@ -1888,7 +1896,7 @@ void AppsGridView::DispatchDragEventForReparent(Pointer pointer,
 void AppsGridView::EndDragFromReparentItemInRootLevel(
     bool events_forwarded_to_drag_drop_host,
     bool cancel_drag) {
-  // EndDrag was called before if |drag_view_| is NULL.
+  // EndDrag was called before if |drag_view_| is nullptr.
   if (!drag_view_)
     return;
 
@@ -1931,7 +1939,7 @@ void AppsGridView::EndDragFromReparentItemInRootLevel(
 
   SetAsFolderDroppingTarget(drop_target_, false);
   if (!cancel_reparent) {
-    // By setting |drag_view_| to NULL here, we prevent ClearDragState() from
+    // By setting |drag_view_| to nullptr here, we prevent ClearDragState() from
     // cleaning up the newly created AppListItemView, effectively claiming
     // ownership of the newly created drag view.
     drag_view_->OnDragEnded();
@@ -1979,7 +1987,7 @@ void AppsGridView::OnFolderItemRemoved() {
   item_list_ = nullptr;
 }
 
-void AppsGridView::UpdateOpacity() {
+void AppsGridView::UpdateOpacity(bool restore_opacity) {
   if (view_structure_.pages().empty())
     return;
 
@@ -1988,9 +1996,6 @@ void AppsGridView::UpdateOpacity() {
   // above the bottom of work area and transitioning to 1.0f by the time the
   // centerline reaches |kAllAppsOpacityEndPx| above the work area bottom.
   AppListView* app_list_view = contents_view_->app_list_view();
-  const bool should_restore_opacity =
-      !app_list_view->is_in_drag() &&
-      (app_list_view->app_list_state() != ash::AppListViewState::kClosed);
   const int selected_page = pagination_model_.selected_page();
   auto current_page = view_structure_.pages()[selected_page];
 
@@ -1999,7 +2004,7 @@ void AppsGridView::UpdateOpacity() {
   // unnecessary. Do not dynamically ensure/destroy layers of individual items
   // since the creation/destruction of the layer requires to repaint the parent
   // view (i.e. this class).
-  if (should_restore_opacity) {
+  if (restore_opacity) {
     // Layers are not necessary. Destroy them, and return. No need to update
     // opacity. This needs to be done on all views within |view_model_| because
     // some item view might have been moved out from the current page. See also
@@ -2126,8 +2131,7 @@ void AppsGridView::StartDragAndDropHostDrag(const gfx::Point& grid_location) {
   DCHECK(!IsDraggingForReparentInRootLevelGridView());
   drag_and_drop_host_->CreateDragIconProxyByLocationWithNoAnimation(
       drag_view_->GetIconBoundsInScreen().origin(), drag_view_->GetIconImage(),
-      drag_view_,
-      kDragAndDropProxyScale * contents_view_->GetAppListMainViewScale(),
+      drag_view_, kDragAndDropProxyScale,
       drag_view_->item()->is_folder() && IsTabletMode()
           ? GetAppListConfig().blur_radius()
           : 0);
@@ -2224,7 +2228,8 @@ void AppsGridView::OnPageFlipTimer() {
   }
 
   pagination_model_.SelectPage(page_flip_target_, true);
-  RecordPageSwitcherSource(kDragAppToBorder, IsTabletMode());
+  if (!folder_delegate_)
+    RecordPageSwitcherSource(kDragAppToBorder, IsTabletMode());
 
   BeginHideCurrentGhostImageView();
 }
@@ -2339,10 +2344,10 @@ void AppsGridView::ReparentItemForReorder(AppListItemView* item_view,
   int target_model_index = GetTargetModelIndexForMove(item_view, target);
   int target_item_index = GetTargetItemIndexForMove(item_view, target);
 
-  // If the folder is a candidate for removal, the view needs to be updated
-  // accordingly.
+  // Remove the source folder view if there is only 1 item in it, since the
+  // source folder will be deleted after its only child item removed from it.
   GridIndex target_override = target;
-  if (source_folder->ShouldAutoRemove()) {
+  if (source_folder->ChildItemCount() == 1u) {
     const int deleted_folder_index =
         view_model_.GetIndexOfView(activated_folder_item_view_);
     const GridIndex deleted_folder_grid_index =
@@ -2410,8 +2415,10 @@ bool AppsGridView::ReparentItemToAnotherFolder(AppListItemView* item_view,
   // Make change to data model.
   item_list_->RemoveObserver(this);
 
-  // Remove the source folder view if the folder is a candidate for removal.
-  if (source_folder->ShouldAutoRemove()) {
+  // Remove the source folder view if there is only 1 item in it, since the
+  // source folder will be deleted after its only child item merged into the
+  // target item.
+  if (source_folder->ChildItemCount() == 1u) {
     DeleteItemViewAtIndex(
         view_model_.GetIndexOfView(activated_folder_item_view()),
         false /* sanitize */);
@@ -2775,8 +2782,8 @@ void AppsGridView::TransitionEnded() {
   if (end_frame_number > pagination_animation_start_frame_number_ &&
       !duration.is_zero()) {
     RecordPaginationAnimationSmoothness(
-        end_frame_number - pagination_animation_start_frame_number_,
-        duration.InMilliseconds(), compositor->refresh_rate(), IsTabletMode());
+        end_frame_number - pagination_animation_start_frame_number_, duration,
+        compositor->refresh_rate(), IsTabletMode());
   }
 }
 
@@ -3128,8 +3135,10 @@ void AppsGridView::HandleKeyboardMove(ui::KeyboardCode key_code) {
   Layout();
   AnnounceReorder(target_index);
 
-  if (target_index.page != original_selected_view_index.page)
+  if (target_index.page != original_selected_view_index.page &&
+      !folder_delegate_) {
     RecordPageSwitcherSource(kMoveAppWithKeyboard, IsTabletMode());
+  }
 }
 
 size_t AppsGridView::GetTargetItemIndexForMove(AppListItemView* moved_view,
@@ -3477,4 +3486,4 @@ bool AppsGridView::ShouldHandleDragEvent(const ui::LocatedEvent& event) {
   return true;
 }
 
-}  // namespace app_list
+}  // namespace ash

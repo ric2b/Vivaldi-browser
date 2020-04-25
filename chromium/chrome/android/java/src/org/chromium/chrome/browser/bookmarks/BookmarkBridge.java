@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.bookmarks;
 
 import android.os.SystemClock;
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.Pair;
 
@@ -16,12 +17,16 @@ import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksShim;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.url_formatter.UrlFormatter;
+import org.chromium.content_public.browser.WebContents;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Provides the communication channel for Android to fetch and manipulate the
@@ -36,6 +41,25 @@ public class BookmarkBridge {
             new ArrayList<DelayedBookmarkCallback>();
     private final ObserverList<BookmarkModelObserver> mObservers =
             new ObserverList<BookmarkModelObserver>();
+
+    /**
+     * @param tab Tab whose current URL is checked against.
+     * @return {@code true} if the current Tab URL has a bookmark associated with it.
+     */
+    public static boolean hasBookmarkIdForTab(Tab tab) {
+        if (tab.isFrozen()) return false;
+        return BookmarkBridgeJni.get().getBookmarkIdForWebContents(tab.getWebContents(), false)
+                != BookmarkId.INVALID_ID;
+    }
+
+    /**
+     * @param tab Tab whose current URL is checked against.
+     * @return ser-editable bookmark ID.
+     */
+    public static long getUserBookmarkIdForTab(Tab tab) {
+        if (tab.isFrozen()) return BookmarkId.INVALID_ID;
+        return BookmarkBridgeJni.get().getBookmarkIdForWebContents(tab.getWebContents(), true);
+    }
 
     /**
      * Interface for callback object for fetching bookmarks and folder hierarchy.
@@ -162,6 +186,14 @@ public class BookmarkBridge {
          *  - Falling back from other methods that are not overridden in this class.
          */
         public abstract void bookmarkModelChanged();
+
+        /**
+         * (Vivaldi) Invoked when the Speed Dial property (boolean) of a node changes.
+         * @param node The node being changed.
+         */
+        public void bookmarkSpeedDialNodeChanged(BookmarkItem node) {
+            bookmarkModelChanged();
+        }
     }
 
     /**
@@ -175,6 +207,7 @@ public class BookmarkBridge {
         private final BookmarkId mParentId;
         private final boolean mIsEditable;
         private final boolean mIsManaged;
+        private boolean mForceEditableForTesting;
 
         private BookmarkItem(BookmarkId id, String title, String url, boolean isFolder,
                 BookmarkId parentId, boolean isEditable, boolean isManaged) {
@@ -214,7 +247,7 @@ public class BookmarkBridge {
 
         /** @return Whether this bookmark can be edited. */
         public boolean isEditable() {
-            return mIsEditable;
+            return mForceEditableForTesting || mIsEditable;
         }
 
         /**@return Whether this bookmark's URL can be edited */
@@ -235,6 +268,47 @@ public class BookmarkBridge {
         public BookmarkId getId() {
             return mId;
         }
+
+        // TODO(https://crbug.com/1019217): Remove when BookmarkModel is stubbed in tests instead.
+        void forceEditableForTesting() {
+            mForceEditableForTesting = true;
+        }
+
+        /** Vivaldi specific members. */
+        private boolean mIsSpeedDial;
+        private String mNickName;
+        private String mDescription;
+        private String mFaviconUrl;
+        private String mThumbnailPath;
+
+        /** Constructor used with Vivaldi. */
+        private BookmarkItem(BookmarkId id, String title, String url, boolean isFolder,
+                             BookmarkId parentId, boolean isEditable, boolean isManaged,
+                             boolean isSpeedDial, String nickName, String description,
+                             String faviconUrl, String thumbnailPath) {
+            this(id, title, url, isFolder, parentId, isEditable, isManaged);
+            assert ChromeApplication.isVivaldi();
+            mIsSpeedDial = isSpeedDial;
+            mNickName = nickName;
+            mDescription = description;
+            mFaviconUrl = faviconUrl;
+            mThumbnailPath = thumbnailPath;
+        }
+
+        /** @return (Vivaldi) Whether this is a speed dial bookmark. */
+        public boolean isSpeeddial() { return mIsSpeedDial; }
+
+        /** @return (Vivaldi) Nickname of the bookmark item. */
+        public String getNickName() { return mNickName; }
+
+        /** @return (Vivaldi) Description of the bookmark item. */
+        public String getDescription() { return mDescription; }
+
+        /** @return (Vivaldi) Favicon url of the bookmark item. */
+        public String getFaviconUrl() { return mFaviconUrl; }
+
+        /** @return (Vivaldi) Thumbnail path of the bookmark item. */
+        public String getThumbnailPath() { return mThumbnailPath; }
     }
 
     /**
@@ -340,6 +414,7 @@ public class BookmarkBridge {
      * @return A BookmarkItem instance for the given BookmarkId.
      *         <code>null</code> if it doesn't exist.
      */
+    @Nullable
     public BookmarkItem getBookmarkById(BookmarkId id) {
         assert mIsNativeBookmarkModelLoaded;
         return BookmarkBridgeJni.get().getBookmarkByID(
@@ -497,6 +572,16 @@ public class BookmarkBridge {
         List<BookmarkId> result = new ArrayList<BookmarkId>();
         BookmarkBridgeJni.get().getChildIDs(mNativeBookmarkBridge, BookmarkBridge.this, id.getId(),
                 id.getType(), getFolders, getBookmarks, result);
+        return result;
+    }
+
+    public List<BookmarkId> getChildIDsVivaldi(BookmarkId id, boolean getFolders,
+                                               boolean getBookmarks, boolean getSeparators) {
+        // TODO(crbug.com/160194): Remove boolean parameters after bookmark reordering launches.
+        assert mIsNativeBookmarkModelLoaded;
+        List<BookmarkId> result = new ArrayList<BookmarkId>();
+        BookmarkBridgeJni.get().getChildIDsVivaldi(mNativeBookmarkBridge, BookmarkBridge.this,
+                id.getId(), id.getType(), getFolders, getBookmarks, getSeparators, result);
         return result;
     }
 
@@ -659,7 +744,7 @@ public class BookmarkBridge {
      * Add a new folder to the given parent folder
      *
      * @param parent Folder where to add. Must be a normal editable folder, instead of a partner
-     *               bookmark folder or a managed bookomark folder or root node of the entire
+     *               bookmark folder or a managed bookmark folder or root node of the entire
      *               bookmark model.
      * @param index The position to locate the new folder
      * @param title The title text of the new folder
@@ -679,7 +764,7 @@ public class BookmarkBridge {
      * Add a new bookmark to a specific position below parent
      *
      * @param parent Folder where to add. Must be a normal editable folder, instead of a partner
-     *               bookmark folder or a managed bookomark folder or root node of the entire
+     *               bookmark folder or a managed bookmark folder or root node of the entire
      *               bookmark model.
      * @param index The position where the bookmark will be placed in parent folder
      * @param title Title of the new bookmark. If empty, the URL will be used as the title.
@@ -733,7 +818,8 @@ public class BookmarkBridge {
     /**
      * Notifies the observer that bookmark model has been loaded.
      */
-    protected void notifyBookmarkModelLoaded() {
+    @VisibleForTesting
+    public void notifyBookmarkModelLoaded() {
         // Call isBookmarkModelLoaded() to do the check since it could be overridden by the child
         // class to add the addition logic.
         if (isBookmarkModelLoaded()) {
@@ -752,6 +838,13 @@ public class BookmarkBridge {
     public void reorderBookmarks(BookmarkId parent, long[] newOrder) {
         BookmarkBridgeJni.get().reorderChildren(
                 mNativeBookmarkBridge, BookmarkBridge.this, parent, newOrder);
+    }
+
+    @VisibleForTesting
+    BookmarkId getPartnerFolderId() {
+        assert mIsNativeBookmarkModelLoaded;
+        return BookmarkBridgeJni.get().getPartnerFolderId(
+                mNativeBookmarkBridge, BookmarkBridge.this);
     }
 
     @CalledByNative
@@ -926,6 +1019,7 @@ public class BookmarkBridge {
 
     @NativeMethods
     interface Natives {
+        long getBookmarkIdForWebContents(WebContents webContents, boolean onlyEditable);
         BookmarkItem getBookmarkByID(
                 long nativeBookmarkBridge, BookmarkBridge caller, long id, int type);
         void getPermanentNodeIDs(
@@ -940,6 +1034,7 @@ public class BookmarkBridge {
         BookmarkId getMobileFolderId(long nativeBookmarkBridge, BookmarkBridge caller);
         BookmarkId getOtherFolderId(long nativeBookmarkBridge, BookmarkBridge caller);
         BookmarkId getDesktopFolderId(long nativeBookmarkBridge, BookmarkBridge caller);
+        BookmarkId getPartnerFolderId(long nativeBookmarkBridge, BookmarkBridge caller);
         int getChildCount(long nativeBookmarkBridge, BookmarkBridge caller, long id, int type);
         void getChildIDs(long nativeBookmarkBridge, BookmarkBridge caller, long id, int type,
                 boolean getFolders, boolean getBookmarks, List<BookmarkId> bookmarksList);
@@ -983,5 +1078,87 @@ public class BookmarkBridge {
         boolean isEditBookmarksEnabled(long nativeBookmarkBridge);
         void reorderChildren(long nativeBookmarkBridge, BookmarkBridge caller, BookmarkId parent,
                 long[] orderedNodes);
+        /** Vivaldi */
+        BookmarkId getTrashFolderId(long nativeBookmarkBridge, BookmarkBridge caller);
+        void setBookmarkDescription(long nativeBookmarkBridge, BookmarkBridge caller,
+                long id, int type, String description);
+        void setBookmarkNickName(
+                long nativeBookmarkBridge, BookmarkBridge caller, long id, int type, String nickName);
+        void setBookmarkSpeedDial(long nativeBookmarkBridge, BookmarkBridge caller,
+                long id, int type, boolean isSpeedDial);
+        void getSpeedDialFolders(
+                long nativeBookmarkBridge, BookmarkBridge caller, List<BookmarkId> folderList);
+
+        void getChildIDsVivaldi(long nativeBookmarkBridge, BookmarkBridge caller, long id, int type,
+                         boolean getFolders, boolean getBookmarks, boolean getSeparators,
+                         List<BookmarkId> bookmarksList);
+    }
+
+    /** Vivaldi */
+    @CalledByNative
+    private static BookmarkItem createVivaldiBookmarkItem(long id, int type,
+            String title, String url, boolean isFolder, long parentId,
+            int parentIdType, boolean isEditable, boolean isManaged,
+            boolean isSpeeddial, String nickName, String description,
+            String faviconUrl, String thumbnailPath) {
+        return new BookmarkItem(new BookmarkId(id, type), title, url, isFolder,
+                new BookmarkId(parentId, parentIdType), isEditable, isManaged,
+                isSpeeddial, nickName, description, faviconUrl, thumbnailPath);
+    }
+
+    /** Vivaldi */
+    @CalledByNative
+    private void bookmarkSpeedDialNodeChanged(BookmarkItem node) {
+        if (mIsDoingExtensiveChanges) return;
+
+        for (BookmarkModelObserver observer : mObservers) {
+            observer.bookmarkSpeedDialNodeChanged(node);
+        }
+    }
+
+    /** Vivaldi
+     * @return BookmarkId The BookmarkId for Trash folder node.
+     */
+    public BookmarkId getTrashFolderId() {
+        assert mIsNativeBookmarkModelLoaded;
+        return BookmarkBridgeJni.get().getTrashFolderId(mNativeBookmarkBridge, BookmarkBridge.this);
+    }
+
+    /** Vivaldi
+     * Set description of the given bookmark.
+     */
+    public void setBookmarkDescription(BookmarkId id, String description) {
+        assert mIsNativeBookmarkModelLoaded;
+        BookmarkBridgeJni.get().setBookmarkDescription(
+                mNativeBookmarkBridge, BookmarkBridge.this, id.getId(), id.getType(), description);
+    }
+
+    /** Vivaldi
+     * Set nickname for the given bookmark.
+     */
+    public void setBookmarkNickName(BookmarkId id, String nickName) {
+        assert mIsNativeBookmarkModelLoaded;
+        assert id.getType() == BookmarkType.NORMAL;
+        BookmarkBridgeJni.get().setBookmarkNickName(
+                mNativeBookmarkBridge, BookmarkBridge.this, id.getId(), id.getType(), nickName);
+    }
+
+    /** Vivaldi
+     * Set as speed dial for the given (folder) bookmark.
+     */
+    public void setBookmarkSpeedDial(BookmarkId id, Boolean isSpeedDial) {
+        assert mIsNativeBookmarkModelLoaded;
+        BookmarkBridgeJni.get().setBookmarkSpeedDial(
+                mNativeBookmarkBridge, BookmarkBridge.this, id.getId(), id.getType(), isSpeedDial);
+    }
+
+    /** Vivaldi
+     * Get speed dial folders.
+     * @param folderList
+     */
+    public void getSpeedDialFolders(List<BookmarkId> folderList) {
+        assert mIsNativeBookmarkModelLoaded;
+        BookmarkBridgeJni.get().getSpeedDialFolders(
+                mNativeBookmarkBridge, BookmarkBridge.this, folderList);
     }
 }

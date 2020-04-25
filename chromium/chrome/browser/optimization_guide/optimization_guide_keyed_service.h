@@ -6,13 +6,14 @@
 #define CHROME_BROWSER_OPTIMIZATION_GUIDE_OPTIMIZATION_GUIDE_KEYED_SERVICE_H_
 
 #include <memory>
-#include <unordered_set>
 #include <vector>
 
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/optimization_guide/optimization_guide_decider.h"
 #include "components/optimization_guide/proto/hints.pb.h"
+#include "components/optimization_guide/proto/models.pb.h"
 
 namespace base {
 class FilePath;
@@ -30,6 +31,7 @@ class ProtoDatabaseProvider;
 namespace optimization_guide {
 class OptimizationGuideService;
 class TopHostProvider;
+class PredictionManager;
 }  // namespace optimization_guide
 
 class OptimizationGuideHintsManager;
@@ -58,6 +60,10 @@ class OptimizationGuideKeyedService
     return top_host_provider_.get();
   }
 
+  optimization_guide::PredictionManager* GetPredictionManager() {
+    return prediction_manager_.get();
+  }
+
   // Prompts the load of the hint for the navigation, if there is at least one
   // optimization type registered and there is a hint available.
   void MaybeLoadHintForNavigation(content::NavigationHandle* navigation_handle);
@@ -66,23 +72,32 @@ class OptimizationGuideKeyedService
   void ClearData();
 
   // optimization_guide::OptimizationGuideDecider implementation:
-  void RegisterOptimizationTypes(
-      std::vector<optimization_guide::proto::OptimizationType>
-          optimization_types) override;
+  void RegisterOptimizationTypesAndTargets(
+      const std::vector<optimization_guide::proto::OptimizationType>&
+          optimization_types,
+      const std::vector<optimization_guide::proto::OptimizationTarget>&
+          optimization_targets) override;
   optimization_guide::OptimizationGuideDecision CanApplyOptimization(
       content::NavigationHandle* navigation_handle,
-      optimization_guide::OptimizationTarget optimization_target,
+      optimization_guide::proto::OptimizationTarget optimization_target,
       optimization_guide::proto::OptimizationType optimization_type,
       optimization_guide::OptimizationMetadata* optimization_metadata) override;
 
   // KeyedService implementation:
   void Shutdown() override;
 
+  // Updates |prediction_manager_| with the provided fcp value.
+  void UpdateSessionFCP(base::TimeDelta fcp);
+
  private:
   content::BrowserContext* browser_context_;
 
   // Manages the storing, loading, and fetching of hints.
   std::unique_ptr<OptimizationGuideHintsManager> hints_manager_;
+
+  // Manages the storing, loading, and evaluating of optimization target
+  // prediction models.
+  std::unique_ptr<optimization_guide::PredictionManager> prediction_manager_;
 
   // The top host provider to use for fetching information for the user's top
   // hosts. Will be null if the user has not consented to this type of browser

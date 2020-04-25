@@ -12,18 +12,14 @@
 #include "chrome/browser/permissions/permission_request_id.h"
 #include "chrome/browser/profiles/profile.h"
 #include "extensions/browser/extension_registry.h"
-#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 #include "extensions/browser/process_map.h"
 #include "extensions/browser/suggest_permission_util.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/extension.h"
 
-#include "app/vivaldi_apptools.h"
-
 using extensions::APIPermission;
 using extensions::ExtensionRegistry;
-using extensions::WebViewGuest;
 #endif
 
 namespace {
@@ -65,12 +61,7 @@ bool GeolocationPermissionContextExtensions::DecidePermission(
 
   extensions::WebViewPermissionHelper* web_view_permission_helper =
       extensions::WebViewPermissionHelper::FromWebContents(web_contents);
-  // NOTE(yngve) extensions are not allowed to create webviews when running as
-  // Vivaldi, so this is only non-null for Vivaldi, but adding check of Vivaldi
-  // just to be on the safe side
-  WebViewGuest *guest = WebViewGuest::FromWebContents(web_contents);
-  if (web_view_permission_helper &&
-      !(guest && vivaldi::IsVivaldiRunning())) {
+  if (web_view_permission_helper) {
     web_view_permission_helper->RequestGeolocationPermission(
         bridge_id, requesting_frame, user_gesture,
         base::BindOnce(&CallbackContentSettingWrapper, std::move(*callback)));

@@ -11,7 +11,6 @@
 #include "chrome/browser/chromeos/arc/accessibility/accessibility_window_info_data_wrapper.h"
 #include "chrome/browser/chromeos/arc/accessibility/arc_accessibility_util.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
-#include "chrome/common/extensions/chrome_extension_messages.h"
 #include "extensions/browser/api/automation_internal/automation_event_router.h"
 #include "extensions/common/extension_messages.h"
 #include "ui/accessibility/platform/ax_android_constants.h"
@@ -189,33 +188,36 @@ void AXTreeSourceArc::NotifyAccessibilityEvent(AXEventData* event_data) {
 
   event_bundle.events.emplace_back();
   ui::AXEvent& event = event_bundle.events.back();
-  event.event_type = ToAXEvent(event_data->event_type);
+  // When the focused node exists, give it as a hint to decide a Chrome
+  // automation event type.
+  AXNodeInfoData* opt_focused_node = nullptr;
+  if (tree_map_.find(focused_id_) != tree_map_.end())
+    opt_focused_node = tree_map_[focused_id_]->GetNode();
+  event.event_type = ToAXEvent(event_data->event_type, opt_focused_node);
   event.id = event_data->source_id;
 
   event_bundle.updates.emplace_back();
-  if (event_data->event_type == AXEventType::WINDOW_CONTENT_CHANGED) {
-    current_tree_serializer_->InvalidateSubtree(
-        GetFromId(event_data->source_id));
-  }
+
+  // Force the tree, starting at the target of the event, to update, so
+  // unignored fields get updated.
+  event_bundle.updates[0].node_id_to_clear = event_data->source_id;
+  current_tree_serializer_->InvalidateSubtree(GetFromId(event_data->source_id));
+
   current_tree_serializer_->SerializeChanges(GetFromId(event_data->source_id),
                                              &event_bundle.updates.back());
 
-  extensions::AutomationEventRouter* router =
-      extensions::AutomationEventRouter::GetInstance();
-  router->DispatchAccessibilityEvents(event_bundle);
+  GetAutomationEventRouter()->DispatchAccessibilityEvents(event_bundle);
 }
 
 void AXTreeSourceArc::NotifyActionResult(const ui::AXActionData& data,
                                          bool result) {
-  extensions::AutomationEventRouter::GetInstance()->DispatchActionResult(
-      data, result);
+  GetAutomationEventRouter()->DispatchActionResult(data, result);
 }
 
 void AXTreeSourceArc::NotifyGetTextLocationDataResult(
     const ui::AXActionData& data,
     const base::Optional<gfx::Rect>& rect) {
-  extensions::AutomationEventRouter::GetInstance()
-      ->DispatchGetTextLocationDataResult(data, rect);
+  GetAutomationEventRouter()->DispatchGetTextLocationDataResult(data, rect);
 }
 
 bool AXTreeSourceArc::GetTreeData(ui::AXTreeData* data) const {
@@ -262,7 +264,7 @@ void AXTreeSourceArc::GetChildren(
   // descendants.
   std::sort(
       out_children->begin(), out_children->end(),
-      [this, id_to_index](auto left, auto right) {
+      [this, &id_to_index](auto left, auto right) {
         auto left_bounds = ComputeEnclosingBounds(left);
         auto right_bounds = ComputeEnclosingBounds(right);
 
@@ -335,16 +337,6 @@ void AXTreeSourceArc::SerializeNode(ArcAccessibilityInfoData* info_data,
 
   int32_t id = info_data->GetId();
   out_data->id = id;
-  // If the node is the root, or if the node's parent is the root window,
-  // set a role of generic container.
-  if (info_data->IsNode() && id == root_id_) {
-    out_data->role = ax::mojom::Role::kRootWebArea;
-  } else if (info_data->IsNode() && parent_map_.at(id) == root_id_) {
-    out_data->role = ax::mojom::Role::kGenericContainer;
-    out_data->AddBoolAttribute(ax::mojom::BoolAttribute::kModal, true);
-  } else {
-    info_data->PopulateAXRole(out_data);
-  }
   info_data->Serialize(out_data);
 }
 
@@ -396,6 +388,23 @@ void AXTreeSourceArc::InvalidateTree() {
   current_tree_serializer_->Reset();
 }
 
+bool AXTreeSourceArc::IsRootOfNodeTree(int32_t id) const {
+  const auto& node_it = tree_map_.find(id);
+  if (node_it == tree_map_.end())
+    return false;
+
+  if (!node_it->second->IsNode())
+    return false;
+
+  const auto& parent_it = parent_map_.find(id);
+  if (parent_it == parent_map_.end())
+    return true;
+
+  const auto& parent_tree_it = tree_map_.find(parent_it->second);
+  CHECK(parent_tree_it != tree_map_.end());
+  return !parent_tree_it->second->IsNode();
+}
+
 gfx::Rect AXTreeSourceArc::ComputeEnclosingBounds(
     ArcAccessibilityInfoData* info_data) const {
   gfx::Rect computed_bounds;
@@ -443,12 +452,17 @@ void AXTreeSourceArc::Reset() {
   current_tree_serializer_.reset(new AXTreeArcSerializer(this));
   root_id_ = -1;
   focused_id_ = -1;
-  extensions::AutomationEventRouter* router =
-      extensions::AutomationEventRouter::GetInstance();
+  extensions::AutomationEventRouterInterface* router =
+      GetAutomationEventRouter();
   if (!router)
     return;
 
   router->DispatchTreeDestroyedEvent(ax_tree_id(), nullptr);
+}
+
+extensions::AutomationEventRouterInterface*
+AXTreeSourceArc::GetAutomationEventRouter() const {
+  return extensions::AutomationEventRouter::GetInstance();
 }
 
 }  // namespace arc

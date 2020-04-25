@@ -184,11 +184,6 @@ class TouchSelectionControllerClientAuraTest : public ContentBrowserTest {
         ui::test::MockMotionEvent(ui::MotionEvent::Action::DOWN));
   }
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ContentBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(switches::kAllowPreCommitInput);
-  }
-
   void SetUpOnMainThread() override {
     ContentBrowserTest::SetUpOnMainThread();
     if (!ui::TouchSelectionMenuRunner::GetInstance())
@@ -352,7 +347,7 @@ class TouchSelectionControllerClientAuraSiteIsolationTest
   void SendTouch(RenderWidgetHostViewAura* view,
                  ui::EventType type,
                  gfx::Point point) {
-    DCHECK(type >= ui::ET_TOUCH_RELEASED && type << ui::ET_TOUCH_CANCELLED);
+    DCHECK(type >= ui::ET_TOUCH_RELEASED && type <= ui::ET_TOUCH_CANCELLED);
     // If we want the GestureRecognizer to create the gestures for us, we must
     // register the outgoing touch event with it by sending it through the
     // window's event dispatching system.
@@ -879,7 +874,6 @@ class TouchSelectionControllerClientAuraScaleFactorTest
     : public TouchSelectionControllerClientAuraTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kAllowPreCommitInput);
     command_line->AppendSwitchASCII(switches::kForceDeviceScaleFactor, "2");
   }
 };

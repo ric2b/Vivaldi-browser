@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="da">
+<translation id="1397811292916898096">Søg med <ph name="PRODUCT_NAME" /></translation>
+<translation id="1644574205037202324">Historik</translation>
+<translation id="17513872634828108">Åbne faner</translation>
+<translation id="1829244130665387512">Find på siden</translation>
+<translation id="2038563949887743358">Slå computerversionen af websitet til</translation>
+<translation id="2433507940547922241">Udseende</translation>
+<translation id="2633278372998075009">Private faner</translation>
+<translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Alle rettigheder forbeholdes.</translation>
+<translation id="3234355010754616171">Ny privat fane</translation>
+<translation id="3700829948786686853">Velkommen til Vivaldi</translation>
+<translation id="4121750346708795461">Ved at bruge denne app accepterer du Vivaldi's <ph name="BEGIN_LINK1" />servicevilkår<ph name="END_LINK1" /> og <ph name="BEGIN_LINK2" />privatlivspolitik<ph name="END_LINK2" />.</translation>
+<translation id="4243710787042215766">Åbn i privat fane</translation>
+<translation id="4883379392681899581">Forlad privat tilstand</translation>
+<translation id="4943872375798546930">Ingen resultater</translation>
+<translation id="5118676864324397542"><ph name="APP_NAME" />-lagerplads</translation>
+<translation id="5233638681132016545">Ny fane</translation>
+<translation id="5495228542153126976">Du er gået i privat tilstand</translation>
+<translation id="572328651809341494">Seneste faner</translation>
+<translation id="5840488417521835756">Få oplysninger om emner på websites uden at forlade siden. "Tryk for at søge" er en funktion, der kun er tilgængelig når Google er valgt som standardsøgemaskine i Vivaldi. Den sender et ord dets nærværende kontekst til Google Søgning, og returnerer definitioner, billeder, søgeresultater og andre detaljer.
+
+Tryk længe på din søgeterm for at vælge og tilpasse den. Du kan afgrænse din søgning ved at trække panelet helt op og trykke i søgefeltet.</translation>
+<translation id="6336451774241870485">Ny privat fane</translation>
+<translation id="6593061639179217415">Standardwebsite</translation>
+<translation id="6610147964972079463">Luk private faner</translation>
+<translation id="706339621163631076">Browser-privatlivspolitik</translation>
+<translation id="7427132068601343474">Om Vivaldi</translation>
+<translation id="7465104139234185284">Luk alle private faner</translation>
+<translation id="7519434535192513364">Funktionen "Tryk for at søge" er kun tilgængelig når Google er valgt som standardsøgemaskines i Vivaldi. Den sender det markerede ord og den aktuelle side som kontekst til Google Søgning. Du kan deaktivere funktionen i <ph name="BEGIN_LINK" />Indstillinger<ph name="END_LINK" />.</translation>
+<translation id="7649070708921625228">Hjælp</translation>
+<translation id="804786196054284061">Servicevilkår</translation>
+<translation id="8428213095426709021">Indstillinger</translation>
+<translation id="8820817407110198400">Bogmærker</translation>
+<translation id="9063523880881406963">Slå anmodning om computerversionen af websitet fra</translation>
+<translation id="9080642952018487277">Gå i privat tilstand</translation>
+</translationbundle>

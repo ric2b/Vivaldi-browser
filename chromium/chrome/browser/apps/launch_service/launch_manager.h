@@ -9,7 +9,6 @@
 
 #include "base/macros.h"
 
-struct AppLaunchParams;
 class Profile;
 
 namespace base {
@@ -22,6 +21,8 @@ class WebContents;
 }
 
 namespace apps {
+
+struct AppLaunchParams;
 
 // A LaunchManager handles launch requests for a given type of apps.
 class LaunchManager {
@@ -40,6 +41,10 @@ class LaunchManager {
 
   // Attempt to open |app_id| in a new tab.
   virtual bool OpenApplicationTab(const std::string& app_id) = 0;
+
+  // Converts file arguments to an app on |command_line| into base::FilePaths.
+  static std::vector<base::FilePath> GetLaunchFilesFromCommandLine(
+      const base::CommandLine& command_line);
 
  protected:
   explicit LaunchManager(Profile*);

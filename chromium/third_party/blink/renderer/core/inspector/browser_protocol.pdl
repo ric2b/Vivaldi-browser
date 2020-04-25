@@ -844,6 +844,10 @@ experimental domain CSS
       number startColumn
       # Size of the content (in characters).
       number length
+      # Line offset of the end of the stylesheet within the resource (zero based).
+      number endLine
+      # Column offset of the end of the stylesheet within the resource (zero based).
+      number endColumn
 
   # CSS rule representation.
   type CSSRule extends object
@@ -1730,7 +1734,7 @@ domain DOM
 
   # Returns node id at given location. Depending on whether DOM domain is enabled, nodeId is
   # either returned or not.
-  experimental command getNodeForLocation
+  command getNodeForLocation
     parameters
       # X coordinate.
       integer x
@@ -1738,9 +1742,13 @@ domain DOM
       integer y
       # False to skip to the nearest non-UA shadow root ancestor (default: false).
       optional boolean includeUserAgentShadowDOM
+      # Whether to ignore pointer-events: none on elements and hit test them.
+      optional boolean ignorePointerEventsNone
     returns
       # Resulting node.
       BackendNodeId backendNodeId
+      # Frame this node belongs to.
+      Page.FrameId frameId
       # Id of the node at given coordinates, only when enabled and requested document.
       optional NodeId nodeId
 
@@ -2396,6 +2404,8 @@ experimental domain DOMSnapshot
     properties
       # Document URL that `Document` or `FrameOwner` node points to.
       StringIndex documentURL
+      # Document title.
+      StringIndex title
       # Base URL that `Document` or `FrameOwner` node uses for URL completion.
       StringIndex baseURL
       # Contains the document's content language.
@@ -2418,6 +2428,10 @@ experimental domain DOMSnapshot
       optional number scrollOffsetX
       # Vertical scroll offset.
       optional number scrollOffsetY
+      # Document content width.
+      optional number contentWidth
+      # Document content height.
+      optional number contentHeight
 
   # Table containing nodes.
   type NodeTreeSnapshot extends object
@@ -2686,6 +2700,11 @@ domain Emulation
       # Orientation angle.
       integer angle
 
+  type MediaFeature extends object
+    properties
+      string name
+      string value
+
   # advance: If the scheduler runs out of immediate work, the virtual time base may fast forward to
   # allow the next delayed task (if any) to run; pause: The virtual time base may not advance;
   # pauseIfNetworkFetchesPending: The virtual time base may not advance if there are any pending
@@ -2782,11 +2801,13 @@ domain Emulation
         mobile
         desktop
 
-  # Emulates the given media for CSS media queries.
+  # Emulates the given media type or media feature for CSS media queries.
   command setEmulatedMedia
     parameters
       # Media type to emulate. Empty string disables the override.
-      string media
+      optional string media
+      # Media features to emulate.
+      optional array of MediaFeature features
 
   # Overrides the Geolocation Position or Error. Omitting any of the parameters emulates position
   # unavailable.
@@ -2924,7 +2945,9 @@ experimental domain HeadlessExperimental
   command enable
 
   # Issued when the target starts or stops needing BeginFrames.
-  event needsBeginFramesChanged
+  # Deprecated. Issue beginFrame unconditionally instead and use result from
+  # beginFrame to detect whether the frames were suppressed.
+  deprecated event needsBeginFramesChanged
     parameters
       # True if BeginFrames are needed, false otherwise.
       boolean needsBeginFrames
@@ -4189,8 +4212,8 @@ domain Network
   # A cookie which was not stored from a response with the corresponding reason.
   experimental type BlockedSetCookieWithReason extends object
     properties
-      # The reason this cookie was blocked.
-      SetCookieBlockedReason blockedReason
+      # The reason(s) this cookie was blocked.
+      array of SetCookieBlockedReason blockedReasons
       # The string representing this individual cookie as it would appear in the header.
       # This is not the entire "cookie" or "set-cookie" header which could have multiple cookies.
       string cookieLine
@@ -4202,8 +4225,8 @@ domain Network
   # A cookie with was not sent with a request with the corresponding reason.
   experimental type BlockedCookieWithReason extends object
     properties
-      # The reason the cookie was blocked.
-      CookieBlockedReason blockedReason
+      # The reason(s) the cookie was blocked.
+      array of CookieBlockedReason blockedReasons
       # The cookie object representing the cookie which was not sent.
       Cookie cookie
 
@@ -6039,6 +6062,52 @@ domain Security
       secure
       info
 
+  # Details about the security state of the page certificate.
+  experimental type CertificateSecurityState extends object
+    properties
+      # Protocol name (e.g. "TLS 1.2" or "QUIC").
+      string protocol
+      # Key Exchange used by the connection, or the empty string if not applicable.
+      string keyExchange
+      # (EC)DH group used by the connection, if applicable.
+      optional string keyExchangeGroup
+      # Cipher name.
+      string cipher
+      # TLS MAC. Note that AEAD ciphers do not have separate MACs.
+      optional string mac
+      # Page certificate.
+      array of string certificate
+      # Certificate subject name.
+      string subjectName
+      # Name of the issuing CA.
+      string issuer
+      # Certificate valid from date.
+      Network.TimeSinceEpoch validFrom
+      # Certificate valid to (expiration) date
+      Network.TimeSinceEpoch validTo
+      # True if the certificate uses a weak signature aglorithm.
+      boolean certifcateHasWeakSignature
+      # True if modern SSL
+      boolean modernSSL
+      # True if the connection is using an obsolete SSL protocol.
+      boolean obsoleteSslProtocol
+      # True if the connection is using an obsolete SSL key exchange.
+      boolean obsoleteSslKeyExchange
+      # True if the connection is using an obsolete SSL cipher.
+      boolean obsoleteSslCipher
+      # True if the connection is using an obsolete SSL signature.
+      boolean obsoleteSslSignature
+
+  # Security state information about the page.
+  experimental type VisibleSecurityState extends object
+    properties
+      # The security level of the page.
+      SecurityState securityState
+      # Security state details about the page certificate.
+      optional CertificateSecurityState certificateSecurityState
+      # Array of security state issues ids.
+      array of string securityStateIssueIds
+
   # An explanation of an factor contributing to the security state.
   type SecurityStateExplanation extends object
     properties
@@ -6121,6 +6190,12 @@ domain Security
       string errorType
       # The url that was requested.
       string requestURL
+
+  # The security state of the page changed.
+  experimental event visibleSecurityStateChanged
+    parameters
+      # Security state information about the page.
+      VisibleSecurityState visibleSecurityState
 
   # The security state of the page changed.
   event securityStateChanged
@@ -6364,6 +6439,10 @@ experimental domain SystemInfo
       number vendorId
       # PCI ID of the GPU device, if available; 0 otherwise.
       number deviceId
+      # Sub sys ID of the GPU, only available on Windows.
+      optional number subSysId
+      # Revision of the GPU, only available on Windows.
+      optional number revision
       # String description of the GPU vendor, if the PCI ID is not available.
       string vendorString
       # String description of the GPU device, if the PCI ID is not available.
@@ -6520,7 +6599,9 @@ domain Target
     parameters
       TargetID targetId
       # Enables "flat" access to the session via specifying sessionId attribute in the commands.
-      experimental optional boolean flatten
+      # We plan to make this the default, deprecate non-flattened mode,
+      # and eventually retire it. See crbug.com/991325.
+      optional boolean flatten
     returns
       # Id assigned to the session.
       SessionID sessionId
@@ -6616,7 +6697,9 @@ domain Target
       array of TargetInfo targetInfos
 
   # Sends protocol message over session with given id.
-  command sendMessageToTarget
+  # Consider using flat mode instead; see commands attachToTarget, setAutoAttach,
+  # and crbug.com/991325.
+  deprecated command sendMessageToTarget
     parameters
       string message
       # Identifier of the session.
@@ -6635,7 +6718,11 @@ domain Target
       # to run paused targets.
       boolean waitForDebuggerOnStart
       # Enables "flat" access to the session via specifying sessionId attribute in the commands.
-      experimental optional boolean flatten
+      # We plan to make this the default, deprecate non-flattened mode,
+      # and eventually retire it. See crbug.com/991325.
+      optional boolean flatten
+      # Auto-attach to the targets created via window.open from current target.
+      experimental optional boolean windowOpen
 
   # Controls whether to discover available targets and notify via
   # `targetCreated/targetInfoChanged/targetDestroyed` events.
@@ -6785,6 +6872,9 @@ experimental domain Tracing
 
   # Request a global memory dump.
   command requestMemoryDump
+    parameters
+      # Enables more deterministic results by forcing garbage collection
+      optional boolean deterministic
     returns
       # GUID of the resulting global memory dump.
       string dumpGuid
@@ -6939,11 +7029,16 @@ experimental domain Fetch
       # An HTTP response code.
       integer responseCode
       # Response headers.
-      array of HeaderEntry responseHeaders
+      optional array of HeaderEntry responseHeaders
+      # Alternative way of specifying response headers as a \0-separated
+      # series of name: value pairs. Prefer the above method unless you
+      # need to represent some non-UTF8 values that can't be transmitted
+      # over the protocol as text.
+      optional binary binaryResponseHeaders
       # A response body.
       optional binary body
       # A textual representation of responseCode.
-      # If absent, a standard phrase mathcing responseCode is used.
+      # If absent, a standard phrase matching responseCode is used.
       optional string responsePhrase
 
   # Continues the request, optionally modifying some of its parameters.
@@ -7268,11 +7363,16 @@ experimental domain WebAuthn
     properties
       AuthenticatorProtocol protocol
       AuthenticatorTransport transport
-      boolean hasResidentKey
-      boolean hasUserVerification
+      # Defaults to false.
+      optional boolean hasResidentKey
+      # Defaults to false.
+      optional boolean hasUserVerification
       # If set to true, tests of user presence will succeed immediately.
       # Otherwise, they will not be resolved. Defaults to true.
       optional boolean automaticPresenceSimulation
+      # Sets whether User Verification succeeds or fails for an authenticator.
+      # Defaults to false.
+      optional boolean isUserVerified
 
   type Credential extends object
     properties

@@ -25,7 +25,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.DisableIf;
@@ -38,7 +37,7 @@ import org.chromium.chrome.browser.accessibility.FontSizePrefs;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.preferences.website.ContentSettingValues;
 import org.chromium.chrome.browser.preferences.website.PermissionInfo;
-import org.chromium.chrome.browser.preferences.website.WebsitePreferenceBridge;
+import org.chromium.chrome.browser.preferences.website.WebsitePreferenceBridgeJni;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -118,7 +117,7 @@ public class PreferencesTest {
             // first and ensure that location permission is NOT granted.
             String keyword3 = pref.getKeywordFromIndexForTesting(3);
             String url = templateUrlService.getSearchEngineUrlFromTemplateUrl(keyword3);
-            WebsitePreferenceBridge.nativeSetGeolocationSettingForOrigin(
+            WebsitePreferenceBridgeJni.get().setGeolocationSettingForOrigin(
                     url, url, ContentSettingValues.BLOCK, false);
             keyword3 = pref.setValueForTesting("3");
             Assert.assertEquals(keyword3,
@@ -135,11 +134,11 @@ public class PreferencesTest {
             // setting to allow for search engine 3 before changing to search engine 2.
             // Otherwise the block setting will cause the content setting for search engine 2
             // to be reset when we switch to it.
-            WebsitePreferenceBridge.nativeSetGeolocationSettingForOrigin(
+            WebsitePreferenceBridgeJni.get().setGeolocationSettingForOrigin(
                     url, url, ContentSettingValues.ALLOW, false);
             keyword2 = pref.getKeywordFromIndexForTesting(2);
             url = templateUrlService.getSearchEngineUrlFromTemplateUrl(keyword2);
-            WebsitePreferenceBridge.nativeSetGeolocationSettingForOrigin(
+            WebsitePreferenceBridgeJni.get().setGeolocationSettingForOrigin(
                     url, url, ContentSettingValues.ALLOW, false);
             keyword2 = pref.setValueForTesting("2");
             Assert.assertEquals(keyword2,
@@ -161,18 +160,14 @@ public class PreferencesTest {
     @Policies.Add({ @Policies.Item(key = "DefaultSearchProviderEnabled", string = "false") })
     public void testSearchEnginePreference_DisabledIfNoDefaultSearchEngine() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            try {
-                ChromeBrowserInitializer.getInstance(InstrumentationRegistry.getTargetContext())
-                        .handleSynchronousStartup();
-            } catch (ProcessInitException e) {
-                Assert.fail("Unable to initialize process: " + e);
-            }
+            ChromeBrowserInitializer.getInstance(InstrumentationRegistry.getTargetContext())
+                    .handleSynchronousStartup();
         });
 
         ensureTemplateUrlServiceLoaded();
         CriteriaHelper.pollUiThread(Criteria.equals(true, new Callable<Boolean>() {
             @Override
-            public Boolean call() throws Exception {
+            public Boolean call() {
                 return TemplateUrlServiceFactory.get().isDefaultSearchManaged();
             }
         }));
@@ -188,7 +183,7 @@ public class PreferencesTest {
 
         CriteriaHelper.pollUiThread(Criteria.equals(null, new Callable<Object>() {
             @Override
-            public Object call() throws Exception {
+            public Object call() {
                 return searchEnginePref.getFragment();
             }
         }));
@@ -342,7 +337,7 @@ public class PreferencesTest {
     @Test
     @SmallTest
     @Feature({"Accessibility"})
-    public void testCaptionPreferences() throws Exception {
+    public void testCaptionPreferences() {
         String accessibilityPrefClassname = AccessibilityPreferences.class.getName();
         AccessibilityPreferences accessibilityPref = (AccessibilityPreferences) startPreferences(
                 InstrumentationRegistry.getInstrumentation(), accessibilityPrefClassname)
@@ -365,14 +360,9 @@ public class PreferencesTest {
     @Test
     @SmallTest
     @Policies.Add({ @Policies.Item(key = "PasswordManagerEnabled", string = "false") })
-    public void testSavePasswordsPreferences_ManagedAndDisabled() throws ExecutionException {
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            try {
-                ChromeBrowserInitializer.getInstance().handleSynchronousStartup();
-            } catch (ProcessInitException e) {
-                Assert.fail("Unable to initialize process: " + e);
-            }
-        });
+    public void testSavePasswordsPreferences_ManagedAndDisabled() {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { ChromeBrowserInitializer.getInstance().handleSynchronousStartup(); });
 
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
@@ -423,7 +413,7 @@ public class PreferencesTest {
         return TestThreadUtils.runOnUiThreadBlocking(
                 new Callable<android.support.v7.preference.Preference>() {
                     @Override
-                    public android.support.v7.preference.Preference call() throws Exception {
+                    public android.support.v7.preference.Preference call() {
                         return prefFragment.findPreference(preferenceKey);
                     }
                 });

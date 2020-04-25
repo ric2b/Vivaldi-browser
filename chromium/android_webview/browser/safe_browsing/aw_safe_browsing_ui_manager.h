@@ -1,16 +1,13 @@
 // Copyright (c) 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-//
-// The Safe Browsing service is responsible for downloading anti-phishing and
-// anti-malware tables and checking urls against them. This is android_webview
-// specific ui_manager.
 
 #ifndef ANDROID_WEBVIEW_BROWSER_SAFE_BROWSING_AW_SAFE_BROWSING_UI_MANAGER_H_
 #define ANDROID_WEBVIEW_BROWSER_SAFE_BROWSING_AW_SAFE_BROWSING_UI_MANAGER_H_
 
 #include "components/safe_browsing/base_ui_manager.h"
 #include "content/public/browser/web_contents.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 
 namespace network {
@@ -24,6 +21,9 @@ class SafeBrowsingNetworkContext;
 
 namespace android_webview {
 
+// The Safe Browsing service is responsible for checking URLs against
+// anti-phishing and anti-malware tables. This is an Android WebView-specific UI
+// manager.
 class AwSafeBrowsingUIManager : public safe_browsing::BaseUIManager {
  public:
   class UIManagerClient {
@@ -64,7 +64,7 @@ class AwSafeBrowsingUIManager : public safe_browsing::BaseUIManager {
   // Called on the UI thread to create a URLLoaderFactory interface ptr for
   // the IO thread.
   void CreateURLLoaderFactoryForIO(
-      network::mojom::URLLoaderFactoryRequest request);
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver);
 
   // Provides phishing and malware statistics. Accessed on IO thread.
   std::unique_ptr<safe_browsing::PingManager> ping_manager_;

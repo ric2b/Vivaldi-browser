@@ -16,6 +16,7 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/compiler_specific.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
@@ -67,7 +68,8 @@
 #include "extensions/common/manifest_handlers/incognito_info.h"
 #include "extensions/common/manifest_handlers/shared_module_info.h"
 #include "extensions/common/manifest_handlers/web_accessible_resources_info.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "net/base/filename_util.h"
 #include "net/base/io_buffer.h"
 #include "net/base/mime_util.h"
@@ -77,6 +79,7 @@
 #include "net/http/http_response_info.h"
 #include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
+#include "third_party/blink/public/common/features.h"
 #include "url/url_util.h"
 
 
@@ -201,11 +204,16 @@ bool AllowExtensionResourceLoad(const GURL& url,
 
   // Frame navigations to extensions have already been checked in
   // the ExtensionNavigationThrottle.
+  // Dedicated Worker (with PlzDedicatedWorker) and Shared Worker main scripts
+  // can be loaded with extension URLs in browser process.
   // Service Worker and the imported scripts can be loaded with extension URLs
   // in browser process during update check when
   // ServiceWorkerImportedScriptUpdateCheck is enabled.
   if (child_id == -1 &&
       (content::IsResourceTypeFrame(resource_type) ||
+       (base::FeatureList::IsEnabled(blink::features::kPlzDedicatedWorker) &&
+        resource_type == content::ResourceType::kWorker) ||
+       resource_type == content::ResourceType::kSharedWorker ||
        resource_type == content::ResourceType::kScript ||
        resource_type == content::ResourceType::kServiceWorker)) {
     return true;
@@ -430,8 +438,9 @@ class ExtensionURLLoaderFactory : public network::mojom::URLLoaderFactory {
                   std::move(directory_path));
   }
 
-  void Clone(network::mojom::URLLoaderFactoryRequest request) override {
-    bindings_.AddBinding(this, std::move(request));
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
+      override {
+    receivers_.Add(this, std::move(receiver));
   }
 
  private:
@@ -600,7 +609,7 @@ class ExtensionURLLoaderFactory : public network::mojom::URLLoaderFactory {
   // the objects.
   const int render_process_id_;
   scoped_refptr<extensions::InfoMap> extension_info_map_;
-  mojo::BindingSet<network::mojom::URLLoaderFactory> bindings_;
+  mojo::ReceiverSet<network::mojom::URLLoaderFactory> receivers_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionURLLoaderFactory);
 };
@@ -655,6 +664,13 @@ CreateExtensionNavigationURLLoaderFactory(
     bool is_web_view_request) {
   return std::make_unique<ExtensionURLLoaderFactory>(browser_context,
                                                      is_web_view_request);
+}
+
+std::unique_ptr<network::mojom::URLLoaderFactory>
+CreateExtensionWorkerMainResourceURLLoaderFactory(
+    content::BrowserContext* browser_context) {
+  return std::make_unique<ExtensionURLLoaderFactory>(
+      browser_context, /*is_web_view_request=*/false);
 }
 
 std::unique_ptr<network::mojom::URLLoaderFactory>

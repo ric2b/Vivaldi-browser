@@ -10,6 +10,7 @@
 #include "device/vr/openxr/openxr_api_wrapper.h"
 #include "device/vr/openxr/openxr_render_loop.h"
 #include "device/vr/util/transform_utils.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 
 namespace device {
 
@@ -85,9 +86,6 @@ bool OpenXrDevice::IsApiAvailable() {
 
 OpenXrDevice::OpenXrDevice()
     : VRDeviceBase(device::mojom::XRDeviceId::OPENXR_DEVICE_ID),
-      exclusive_controller_binding_(this),
-      gamepad_provider_factory_binding_(this),
-      compositor_host_binding_(this),
       weak_ptr_factory_(this) {
   SetVRDisplayInfo(CreateFakeVRDisplayInfo(GetId()));
 }
@@ -101,16 +99,14 @@ OpenXrDevice::~OpenXrDevice() {
   }
 }
 
-mojom::IsolatedXRGamepadProviderFactoryPtr OpenXrDevice::BindGamepadFactory() {
-  mojom::IsolatedXRGamepadProviderFactoryPtr ret;
-  gamepad_provider_factory_binding_.Bind(mojo::MakeRequest(&ret));
-  return ret;
+mojo::PendingRemote<mojom::IsolatedXRGamepadProviderFactory>
+OpenXrDevice::BindGamepadFactory() {
+  return gamepad_provider_factory_receiver_.BindNewPipeAndPassRemote();
 }
 
-mojom::XRCompositorHostPtr OpenXrDevice::BindCompositorHost() {
-  mojom::XRCompositorHostPtr ret;
-  compositor_host_binding_.Bind(mojo::MakeRequest(&ret));
-  return ret;
+mojo::PendingRemote<mojom::XRCompositorHost>
+OpenXrDevice::BindCompositorHost() {
+  return compositor_host_receiver_.BindNewPipeAndPassRemote();
 }
 
 void OpenXrDevice::EnsureRenderLoop() {
@@ -132,22 +128,22 @@ void OpenXrDevice::RequestSession(
     render_loop_->Start();
 
     if (!render_loop_->IsRunning()) {
-      std::move(callback).Run(nullptr, nullptr);
+      std::move(callback).Run(nullptr, mojo::NullRemote());
       return;
     }
 
-    if (provider_request_) {
+    if (provider_receiver_) {
       render_loop_->task_runner()->PostTask(
           FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestGamepadProvider,
                                     base::Unretained(render_loop_.get()),
-                                    std::move(provider_request_)));
+                                    std::move(provider_receiver_)));
     }
 
-    if (overlay_request_) {
+    if (overlay_receiver_) {
       render_loop_->task_runner()->PostTask(
           FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestOverlay,
                                     base::Unretained(render_loop_.get()),
-                                    std::move(overlay_request_)));
+                                    std::move(overlay_receiver_)));
     }
   }
 
@@ -160,10 +156,12 @@ void OpenXrDevice::RequestSession(
   // a method and cannot take nullptr, so passing in base::DoNothing::Once()
   // for on_presentation_ended
   render_loop_->task_runner()->PostTask(
-      FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestSession,
-                                base::Unretained(render_loop_.get()),
-                                base::DoNothing::Once(), std::move(options),
-                                std::move(my_callback)));
+      FROM_HERE,
+      base::BindOnce(&XRCompositorCommon::RequestSession,
+                     base::Unretained(render_loop_.get()),
+                     base::DoNothing::Once(),
+                     base::DoNothing::Repeatedly<mojom::XRVisibilityState>(),
+                     std::move(options), std::move(my_callback)));
 }
 
 void OpenXrDevice::OnRequestSessionResult(
@@ -171,20 +169,11 @@ void OpenXrDevice::OnRequestSessionResult(
     bool result,
     mojom::XRSessionPtr session) {
   if (!result) {
-    std::move(callback).Run(nullptr, nullptr);
+    std::move(callback).Run(nullptr, mojo::NullRemote());
     return;
   }
 
   OnStartPresenting();
-
-  mojom::XRSessionControllerPtr session_controller;
-  exclusive_controller_binding_.Bind(mojo::MakeRequest(&session_controller));
-
-  // Use of Unretained is safe because the callback will only occur if the
-  // binding is not destroyed.
-  exclusive_controller_binding_.set_connection_error_handler(
-      base::BindOnce(&OpenXrDevice::OnPresentingControllerMojoConnectionError,
-                     base::Unretained(this)));
 
   EnsureRenderLoop();
   gfx::Size view_size = render_loop_->GetViewSize();
@@ -194,7 +183,15 @@ void OpenXrDevice::OnRequestSessionResult(
   display_info_->right_eye->render_height = view_size.height();
   session->display_info = display_info_.Clone();
 
-  std::move(callback).Run(std::move(session), std::move(session_controller));
+  std::move(callback).Run(
+      std::move(session),
+      exclusive_controller_receiver_.BindNewPipeAndPassRemote());
+
+  // Use of Unretained is safe because the callback will only occur if the
+  // binding is not destroyed.
+  exclusive_controller_receiver_.set_disconnect_handler(
+      base::BindOnce(&OpenXrDevice::OnPresentingControllerMojoConnectionError,
+                     base::Unretained(this)));
 }
 
 void OpenXrDevice::OnPresentingControllerMojoConnectionError() {
@@ -206,7 +203,7 @@ void OpenXrDevice::OnPresentingControllerMojoConnectionError() {
                                   base::Unretained(render_loop_.get())));
   }
   OnExitPresent();
-  exclusive_controller_binding_.Close();
+  exclusive_controller_receiver_.reset();
 }
 
 void OpenXrDevice::SetFrameDataRestricted(bool restricted) {
@@ -215,28 +212,28 @@ void OpenXrDevice::SetFrameDataRestricted(bool restricted) {
 }
 
 void OpenXrDevice::GetIsolatedXRGamepadProvider(
-    mojom::IsolatedXRGamepadProviderRequest provider_request) {
+    mojo::PendingReceiver<mojom::IsolatedXRGamepadProvider> provider_receiver) {
   EnsureRenderLoop();
   if (render_loop_->IsRunning()) {
     render_loop_->task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestGamepadProvider,
                                   base::Unretained(render_loop_.get()),
-                                  std::move(provider_request)));
+                                  std::move(provider_receiver)));
   } else {
-    provider_request_ = std::move(provider_request);
+    provider_receiver_ = std::move(provider_receiver);
   }
 }
 
 void OpenXrDevice::CreateImmersiveOverlay(
-    mojom::ImmersiveOverlayRequest overlay_request) {
+    mojo::PendingReceiver<mojom::ImmersiveOverlay> overlay_receiver) {
   EnsureRenderLoop();
   if (render_loop_->IsRunning()) {
     render_loop_->task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestOverlay,
                                   base::Unretained(render_loop_.get()),
-                                  std::move(overlay_request)));
+                                  std::move(overlay_receiver)));
   } else {
-    overlay_request_ = std::move(overlay_request);
+    overlay_receiver_ = std::move(overlay_receiver);
   }
 }
 

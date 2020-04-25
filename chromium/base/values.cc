@@ -58,7 +58,7 @@ std::unique_ptr<Value> CopyListWithoutEmptyChildren(const Value& list) {
   for (const auto& entry : list.GetList()) {
     std::unique_ptr<Value> child_copy = CopyWithoutEmptyChildren(entry);
     if (child_copy)
-      copy.GetList().push_back(std::move(*child_copy));
+      copy.Append(std::move(*child_copy));
   }
   return copy.GetList().empty() ? nullptr
                                 : std::make_unique<Value>(std::move(copy));
@@ -145,6 +145,18 @@ Value Value::FromUniquePtrValue(std::unique_ptr<Value> val) {
 // static
 std::unique_ptr<Value> Value::ToUniquePtrValue(Value val) {
   return std::make_unique<Value>(std::move(val));
+}
+
+// static
+const DictionaryValue& Value::AsDictionaryValue(const Value& val) {
+  CHECK(val.is_dict());
+  return static_cast<const DictionaryValue&>(val);
+}
+
+// static
+const ListValue& Value::AsListValue(const Value& val) {
+  CHECK(val.is_list());
+  return static_cast<const ListValue&>(val);
 }
 
 Value::Value(Value&& that) noexcept {
@@ -234,7 +246,7 @@ Value::Value(const DictStorage& in_dict) : type_(Type::DICTIONARY), dict_() {
 Value::Value(DictStorage&& in_dict) noexcept
     : type_(Type::DICTIONARY), dict_(std::move(in_dict)) {}
 
-Value::Value(const ListStorage& in_list) : type_(Type::LIST), list_() {
+Value::Value(span<const Value> in_list) : type_(Type::LIST), list_() {
   list_.reserve(in_list.size());
   for (const auto& val : in_list)
     list_.emplace_back(val.Clone());
@@ -335,9 +347,77 @@ Value::ListStorage& Value::GetList() {
   return list_;
 }
 
-const Value::ListStorage& Value::GetList() const {
+span<const Value> Value::GetList() const {
   CHECK(is_list());
   return list_;
+}
+
+Value::ListStorage Value::TakeList() {
+  CHECK(is_list());
+  return std::exchange(list_, ListStorage());
+}
+
+void Value::Append(bool value) {
+  CHECK(is_list());
+  list_.emplace_back(value);
+}
+
+void Value::Append(int value) {
+  CHECK(is_list());
+  list_.emplace_back(value);
+}
+
+void Value::Append(double value) {
+  CHECK(is_list());
+  list_.emplace_back(value);
+}
+
+void Value::Append(const char* value) {
+  CHECK(is_list());
+  list_.emplace_back(value);
+}
+
+void Value::Append(StringPiece value) {
+  CHECK(is_list());
+  list_.emplace_back(value);
+}
+
+void Value::Append(std::string&& value) {
+  CHECK(is_list());
+  list_.emplace_back(std::move(value));
+}
+
+void Value::Append(const char16* value) {
+  CHECK(is_list());
+  list_.emplace_back(value);
+}
+
+void Value::Append(StringPiece16 value) {
+  CHECK(is_list());
+  list_.emplace_back(value);
+}
+
+void Value::Append(Value&& value) {
+  CHECK(is_list());
+  list_.emplace_back(std::move(value));
+}
+
+bool Value::EraseListIter(ListStorage::const_iterator iter) {
+  CHECK(is_list());
+  if (iter == list_.end())
+    return false;
+
+  list_.erase(iter);
+  return true;
+}
+
+bool Value::EraseListIter(CheckedContiguousConstIterator<Value> iter) {
+  const auto offset = iter - static_cast<const Value*>(this)->GetList().begin();
+  return EraseListIter(list_.begin() + offset);
+}
+
+size_t Value::EraseListValue(const Value& val) {
+  return EraseListValueIf([&val](const Value& other) { return val == other; });
 }
 
 Value* Value::FindKey(StringPiece key) {
@@ -1535,7 +1615,7 @@ std::unique_ptr<ListValue> ListValue::From(std::unique_ptr<Value> value) {
 }
 
 ListValue::ListValue() : Value(Type::LIST) {}
-ListValue::ListValue(const ListStorage& in_list) : Value(in_list) {}
+ListValue::ListValue(span<const Value> in_list) : Value(in_list) {}
 ListValue::ListValue(ListStorage&& in_list) noexcept
     : Value(std::move(in_list)) {}
 

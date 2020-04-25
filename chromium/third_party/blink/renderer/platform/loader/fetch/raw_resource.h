@@ -33,11 +33,13 @@
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 
 namespace blink {
+
 class BytesConsumer;
 class BufferingBytesConsumer;
 class FetchParameters;
 class RawResourceClient;
 class ResourceFetcher;
+class SingleCachedMetadataHandler;
 
 class PLATFORM_EXPORT RawResource final : public Resource {
  public:
@@ -90,9 +92,7 @@ class PLATFORM_EXPORT RawResource final : public Resource {
   // type is kRaw.
   SingleCachedMetadataHandler* ScriptCacheHandler();
 
-  scoped_refptr<BlobDataHandle> DownloadedBlob() const {
-    return downloaded_blob_;
-  }
+  scoped_refptr<BlobDataHandle> DownloadedBlob() const;
 
   void Trace(Visitor* visitor) override;
 
@@ -199,7 +199,7 @@ class PLATFORM_EXPORT RawResourceClient : public ResourceClient {
   // null if creating the blob failed for some reason (but the download itself
   // otherwise succeeded). Could also not be called at all if the downloaded
   // resource ended up being zero bytes.
-  virtual void DidDownloadToBlob(Resource*, scoped_refptr<BlobDataHandle>) {}
+  virtual void DidDownloadToBlob(Resource*, scoped_refptr<BlobDataHandle>);
 };
 
 // Checks the sequence of callbacks of RawResourceClient. This can be used only

@@ -10,6 +10,7 @@
 #include "ash/wm/overview/overview_constants.h"
 #include "ash/wm/overview/rounded_rect_view.h"
 #include "ash/wm/window_preview_view.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -298,9 +299,10 @@ void CaptionContainerView::Layout() {
     preview_view_->SetBoundsRect(preview_bounds);
   }
 
-  // Position the header at the top.
+  // Position the header at the top. The close button should be right aligned so
+  // that the edge of its icon, not the button itself lines up with the margins.
   const gfx::Rect header_bounds(kOverviewMargin, kOverviewMargin,
-                                GetLocalBounds().width() - kOverviewMargin,
+                                GetLocalBounds().width() - kWindowMargin,
                                 kHeaderHeightDp);
   header_view_->SetBoundsRect(header_bounds);
 }

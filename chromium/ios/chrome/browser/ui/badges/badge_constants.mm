@@ -16,3 +16,12 @@ NSString* const kBadgeButtonUpdatePasswordAccessibilityIdentifier =
 
 NSString* const kBadgeButtonIncognitoAccessibilityIdentifier =
     @"badgeButtonIncognitoAXID";
+
+NSString* const kBadgeButtonOverflowAccessibilityIdentifier =
+    @"badgeButtonOverflowAXID";
+
+NSString* const kBadgePopupMenuTableViewAccessibilityIdentifier =
+    @"badgePopupMenuOverflowAXID";
+
+NSString* const kBadgeUnreadIndicatorAccessibilityIdentifier =
+    @"badgeUnreadIndicatorAXID";

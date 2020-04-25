@@ -24,7 +24,6 @@ jumbo_static_library("apis") {
     "//skia:skia",
     "//third_party/cacheinvalidation",
     "//third_party/blink/public:blink_headers",
-    "//vivaldi/app/resources",
     "//vivaldi/extensions/schema",
     "//vivaldi/prefs:prefs_files_generator",
     "//vivaldi/ui:skia_utils",

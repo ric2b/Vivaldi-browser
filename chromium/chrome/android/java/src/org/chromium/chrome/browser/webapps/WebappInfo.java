@@ -5,9 +5,9 @@
 package org.chromium.chrome.browser.webapps;
 
 import android.content.Intent;
-import android.support.annotation.NonNull;
 
-import org.chromium.blink_public.platform.WebDisplayMode;
+import androidx.annotation.NonNull;
+
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.ShortcutSource;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;

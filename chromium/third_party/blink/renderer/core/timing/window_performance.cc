@@ -396,7 +396,6 @@ void WindowPerformance::AddElementTiming(const AtomicString& name,
                                          const IntSize& intrinsic_size,
                                          const AtomicString& id,
                                          Element* element) {
-  DCHECK(RuntimeEnabledFeatures::ElementTimingEnabled(GetExecutionContext()));
   PerformanceElementTiming* entry = PerformanceElementTiming::Create(
       name, url, rect, MonotonicTimeToDOMHighResTimeStamp(start_time),
       MonotonicTimeToDOMHighResTimeStamp(load_time), identifier,
@@ -425,8 +424,6 @@ void WindowPerformance::DispatchFirstInputTiming(
 void WindowPerformance::AddLayoutShiftValue(double value,
                                             bool input_detected,
                                             base::TimeTicks input_timestamp) {
-  DCHECK(RuntimeEnabledFeatures::LayoutInstabilityAPIEnabled(
-      GetExecutionContext()));
   auto* entry = MakeGarbageCollected<LayoutShift>(
       now(), value, input_detected,
       input_detected ? MonotonicTimeToDOMHighResTimeStamp(input_timestamp)

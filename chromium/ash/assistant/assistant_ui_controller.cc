@@ -435,11 +435,6 @@ void AssistantUiController::OnUiVisibilityChanged(
     AssistantVisibility old_visibility,
     base::Optional<AssistantEntryPoint> entry_point,
     base::Optional<AssistantExitPoint> exit_point) {
-  AssistantState::Get()->NotifyStatusChanged(
-      new_visibility == AssistantVisibility::kVisible
-          ? mojom::VoiceInteractionState::RUNNING
-          : mojom::VoiceInteractionState::STOPPED);
-
   switch (new_visibility) {
     case AssistantVisibility::kClosed:
       // When the UI is closed, we stop the auto close timer as it may be
@@ -524,8 +519,7 @@ void AssistantUiController::ShowUi(AssistantEntryPoint entry_point) {
   }
 
   // TODO(dmblack): Show a more helpful message to the user.
-  if (assistant_state->voice_interaction_state() ==
-      mojom::VoiceInteractionState::NOT_READY) {
+  if (assistant_state->assistant_state() == mojom::AssistantState::NOT_READY) {
     ShowToast(kUnboundServiceToastId, IDS_ASH_ASSISTANT_ERROR_GENERIC);
     return;
   }
@@ -700,8 +694,10 @@ void AssistantUiController::OnEvent(const ui::Event& event) {
 
   const gfx::Rect screen_bounds =
       container_view_->GetWidget()->GetWindowBoundsInScreen();
-  const gfx::Rect keyboard_bounds = keyboard::KeyboardUIController::Get()
-                                        ->GetWorkspaceOccludedBoundsInScreen();
+  const gfx::Rect keyboard_bounds =
+      keyboard::KeyboardUIController::Get()->IsKeyboardVisible()
+          ? keyboard::KeyboardUIController::Get()->GetVisualBoundsInScreen()
+          : gfx::Rect();
 
   // Pressed events outside our widget bounds should result in hiding of the
   // Assistant UI. The exception to this rule is if the user is interacting

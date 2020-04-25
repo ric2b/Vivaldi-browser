@@ -142,11 +142,8 @@ TEST(WebInputEventBuilderMacTest, ControlSequence) {
   EXPECT_EQ(ui::VKEY_OEM_4, web_event.windows_key_code);
   EXPECT_EQ(ui::DomCode::BRACKET_LEFT,
             static_cast<ui::DomCode>(web_event.dom_code));
-// Vivaldi testers use non-US keyboards
-#if !defined(VIVALDI_BUILD)
   // Will only pass on US layout.
   EXPECT_EQ(ui::DomKey::FromCharacter('['), web_event.dom_key);
-#endif // !defined(VIVALDI_BUILD)
 }
 
 // Test that numpad keys get mapped correctly.
@@ -437,8 +434,6 @@ TEST(WebInputEventBuilderMacTest, USDvorakQWERTYCommand) {
   }
 }
 
-// Vivaldi testers use non-US keyboards
-#if !defined(VIVALDI_BUILD)
 // Test conversion from key combination with Control to DomKey.
 // TODO(input-dev): Move DomKey tests for all platforms into one place.
 // http://crbug.com/587589
@@ -476,9 +471,7 @@ TEST(WebInputEventBuilderMacTest, DomKeyCtrlShift) {
               web_event.dom_key);
   }
 }
-#endif // !defined(VIVALDI_BUILD)
 
-#if !defined(VIVALDI_BUILD)
 // This test case only works for U.S. layout.
 TEST(WebInputEventBuilderMacTest, DomKeyCtrlAlt) {
   struct DomKeyTestCase {
@@ -548,7 +541,6 @@ TEST(WebInputEventBuilderMacTest, DomKeyCtrlAlt) {
         << "a_c " << entry.alt_accent_character;
   }
 }
-#endif
 
 TEST(WebInputEventBuilderMacTest, DomKeyNonPrintable) {
   struct DomKeyTestCase {

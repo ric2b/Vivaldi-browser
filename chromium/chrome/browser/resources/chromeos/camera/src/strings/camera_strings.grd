@@ -297,6 +297,12 @@
       <message desc="Label for the button of grid-type options." name="IDS_GRID_TYPE_BUTTON">
         Grid type
       </message>
+      <message desc="Label showing current state of 30 FPS on tooltip of toggle 60 FPS recording checkbox." name="IDS_LABEL_30FPS">
+        30 FPS
+      </message>
+      <message desc="Label showing current state of 60 FPS on tooltip of toggle 60 FPS recording checkbox." name="IDS_LABEL_60FPS">
+        60 FPS
+      </message>
       <message desc="Label for the checkbox to toggle 60 FPS recording." name="IDS_TOGGLE_60FPS_BUTTON">
         60 FPS
       </message>
@@ -315,17 +321,14 @@
       <message desc="Label for switch to take portrait photo mode button." name="IDS_LABEL_SWITCH_TAKE_PORTRAIT_PHOTO_BUTTON">
         Portrait
       </message>
-      <message desc="Title of banner shown for introducing new camera App UI." name="IDS_BANNER_TITLE">
-        A whole new look
+      <message desc="Label for the confirm button to confirm with the reviewed photo or video." name="IDS_CONFIRM_REVIEW_BUTTON">
+        Confirm
       </message>
-      <message desc="Message in the banner shown for introducing new camera App UI." name="IDS_BANNER_MSG">
-        Your camera now supports new modes and your photos and videos will be available under your Downloads folders.
+      <message desc="Label for the cancel button to cancel with the reviewed photo or video." name="IDS_CANCEL_REVIEW_BUTTON">
+        Cancel
       </message>
-      <message desc="Label for close introducing new camera App UI banner button." name="IDS_BANNER_CLOSE_BUTTON">
-        Close
-      </message>
-      <message desc="Label for learn more about new camera App UI button." name="IDS_BANNER_LEARN_MORE_BUTTON">
-        Learn more
+      <message desc="Label for the button to play video." name="IDS_PLAY_RESULT_VIDEO_BUTTON">
+        Play video
       </message>
     </messages>
   </release>

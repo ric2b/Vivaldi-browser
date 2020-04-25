@@ -18,18 +18,33 @@ namespace blink {
 
 class DisplayLockSuspendedHandle;
 class Element;
-class DisplayLockOptions;
 class DisplayLockScopedLogger;
-class TaskHandle;
 
 enum class DisplayLockLifecycleTarget { kSelf, kChildren };
+enum class DisplayLockActivationReason {
+  // This represents activations triggered by intersection observer when the
+  // element intersects the viewport.
+  kViewport = 1 << 0,
+  // This represents activations triggered by script or user actions, such as
+  // find-in-page or scrollIntoView().
+  kUser = 1 << 1,
+  // This represents any activation, and should be result of all other flags
+  // combined.
+  kAny =
+      static_cast<unsigned char>(kViewport) | static_cast<unsigned char>(kUser)
+};
+
+// Instead of specifying an underlying type, which would propagate throughout
+// forward declarations, we static assert that the activation reasons enum is
+// small.
+static_assert(static_cast<int>(DisplayLockActivationReason::kAny) <
+                  std::numeric_limits<unsigned char>::max(),
+              "DisplayLockActivationReason is too large");
 
 class CORE_EXPORT DisplayLockContext final
-    : public ScriptWrappable,
-      public ActiveScriptWrappable<DisplayLockContext>,
+    : public GarbageCollected<DisplayLockContext>,
       public ContextLifecycleObserver,
       public LocalFrameView::LifecycleNotificationObserver {
-  DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(DisplayLockContext);
   USING_PRE_FINALIZER(DisplayLockContext, Dispose);
 
@@ -66,6 +81,7 @@ class CORE_EXPORT DisplayLockContext final
   enum StyleType {
     kStyleUpdateNotRequired,
     kStyleUpdateSelf,
+    kStyleUpdatePseudoElements,
     kStyleUpdateChildren,
     kStyleUpdateDescendants
   };
@@ -75,7 +91,7 @@ class CORE_EXPORT DisplayLockContext final
     DISALLOW_NEW();
 
    public:
-    ScopedForcedUpdate(ScopedForcedUpdate&&) noexcept;
+    ScopedForcedUpdate(ScopedForcedUpdate&&);
     ~ScopedForcedUpdate();
 
    private:
@@ -87,7 +103,7 @@ class CORE_EXPORT DisplayLockContext final
   };
 
   DisplayLockContext(Element*, ExecutionContext*);
-  ~DisplayLockContext() override;
+  ~DisplayLockContext();
 
   // GC functions.
   void Trace(blink::Visitor*) override;
@@ -95,23 +111,16 @@ class CORE_EXPORT DisplayLockContext final
 
   // ContextLifecycleObserver overrides.
   void ContextDestroyed(ExecutionContext*) override;
-  // ActiveScriptWrappable overrides. This keeps the context alive as long as we
-  // have an element and we're not unlocked.
-  bool HasPendingActivity() const final;
 
-  // JavaScript interface implementation. See display_lock_context.idl for
-  // description.
-  ScriptPromise acquire(ScriptState*, DisplayLockOptions*);
-  ScriptPromise update(ScriptState*);
-  ScriptPromise commit(ScriptState*);
-  ScriptPromise updateAndCommit(ScriptState*);
-
-  void SetActivatable(bool activatable);
+  // Set which reasons activate, as a mask of DisplayLockActivationReason enums.
+  void SetActivatable(unsigned char activatable_mask);
 
   // Acquire the lock, should only be called when unlocked.
   void StartAcquire();
   // Initiate a commit.
   void StartCommit();
+  // Update rendering of the subtree.
+  ScriptPromise UpdateRendering(ScriptState*);
 
   // Lifecycle observation / state functions.
   bool ShouldStyle(DisplayLockLifecycleTarget) const;
@@ -130,14 +139,18 @@ class CORE_EXPORT DisplayLockContext final
   }
 
   // Returns true if the contents of the associated element should be visible
-  // from and activatable by find-in-page, tab order, anchor links, etc.
-  bool IsActivatable() const;
+  // from and activatable by a specified reason. Note that passing
+  // kAny will return true if the lock is activatable for any
+  // reason.
+  bool IsActivatable(DisplayLockActivationReason reason) const;
 
   // Trigger commit because of activation from tab order, url fragment,
-  // find-in-page, etc.
-  void CommitForActivation();
+  // find-in-page, scrolling, etc.
+  // This issues a before activate signal with the given element as the
+  // activated element.
+  void CommitForActivationWithSignal(Element* activated_element);
 
-  bool ShouldCommitForActivation() const;
+  bool ShouldCommitForActivation(DisplayLockActivationReason reason) const;
 
   // Returns true if this lock is locked. Note from the outside perspective, the
   // lock is locked any time the state is not kUnlocked or kCommitting.
@@ -189,20 +202,15 @@ class CORE_EXPORT DisplayLockContext final
   // Notify this element will be disconnected.
   void NotifyWillDisconnect();
 
+  // Called when the element disconnects or connects.
+  void ElementDisconnected();
+  void ElementConnected();
+
   void SetNeedsPrePaintSubtreeWalk(
       bool needs_effective_allowed_touch_action_update) {
     needs_effective_allowed_touch_action_update_ =
         needs_effective_allowed_touch_action_update;
     needs_prepaint_subtree_walk_ = true;
-  }
-
-  LayoutUnit GetLockedContentLogicalWidth() const {
-    return is_horizontal_writing_mode_ ? locked_content_logical_size_.Width()
-                                       : locked_content_logical_size_.Height();
-  }
-  LayoutUnit GetLockedContentLogicalHeight() const {
-    return is_horizontal_writing_mode_ ? locked_content_logical_size_.Height()
-                                       : locked_content_logical_size_.Width();
   }
 
  private:
@@ -262,22 +270,11 @@ class CORE_EXPORT DisplayLockContext final
   // frame.
   void ScheduleAnimation();
 
-  // Timeout implementation. When the lock is acquired, we kick off a timeout
-  // task that will trigger a commit (which can be canceled by other calls to
-  // schedule or by a call to commit). Note that calling RescheduleTimeoutTask()
-  // will cancel any previously scheduled task.
-  void RescheduleTimeoutTask(double delay);
-  void CancelTimeoutTask();
-  void TriggerTimeout();
-
   // Helper functions to resolve the update/commit promises.
   enum ResolverState { kResolve, kReject, kDetach };
   void MakeResolver(ScriptState*, Member<ScriptPromiseResolver>*);
   bool HasResolver();
   void FinishUpdateResolver(ResolverState, const char* reject_reason = nullptr);
-  void FinishCommitResolver(ResolverState, const char* reject_reason = nullptr);
-  void FinishAcquireResolver(ResolverState,
-                             const char* reject_reason = nullptr);
   void FinishResolver(Member<ScriptPromiseResolver>*,
                       ResolverState,
                       const char* reject_reason);
@@ -305,11 +302,15 @@ class CORE_EXPORT DisplayLockContext final
   // promises if the lock is not connected to the tree.
   bool CleanupAndRejectCommitIfNotConnected();
 
+  // Registers or unregisters the element for intersection observations in the
+  // document. This is used to activate on visibily changes. This can be safely
+  // called even if changes are not required, since it will only act if a
+  // register/unregister is required.
+  void UpdateActivationObservationIfNeeded();
+
   std::unique_ptr<DisplayLockBudget> update_budget_;
 
-  Member<ScriptPromiseResolver> commit_resolver_;
   Member<ScriptPromiseResolver> update_resolver_;
-  Member<ScriptPromiseResolver> acquire_resolver_;
   WeakMember<Element> element_;
   WeakMember<Document> document_;
 
@@ -323,12 +324,9 @@ class CORE_EXPORT DisplayLockContext final
   HeapHashSet<Member<Element>> whitespace_reattach_set_;
 
   StateChangeHelper state_;
-  LayoutSize locked_content_logical_size_;
 
   bool update_forced_ = false;
-  bool activatable_ = false;
 
-  bool is_locked_after_connect_ = false;
   StyleType blocked_style_traversal_type_ = kStyleUpdateNotRequired;
   // Signifies whether we've blocked a layout tree reattachment on |element_|'s
   // descendants or not, so that we can mark |element_| for reattachment when
@@ -345,7 +343,12 @@ class CORE_EXPORT DisplayLockContext final
   // traversed into, we will traverse to the children of the locked element.
   bool child_layout_was_blocked_ = false;
 
-  TaskHandle timeout_task_handle_;
+  // Tracks whether the element associated with this lock is being tracked by a
+  // document level intersection observer.
+  bool is_observed_ = false;
+
+  unsigned char activatable_mask_ =
+      static_cast<unsigned char>(DisplayLockActivationReason::kAny);
 };
 
 }  // namespace blink

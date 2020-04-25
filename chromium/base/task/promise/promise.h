@@ -30,12 +30,12 @@ BASE_EXPORT scoped_refptr<TaskRunner> CreateTaskRunner(
 // callback will be posted immediately, otherwise it has to wait.
 //
 // Promise<> is copyable, moveable and thread safe. Under the hood
-// internal::AbstractPromise is refcounted so retaining multiple Promises<> will
+// AbstractPromise is refcounted so retaining multiple Promises<> will
 // prevent that part of the promise graph from being released.
 template <typename ResolveType, typename RejectType = NoReject>
-class Promise {
+class Promise : public internal::BasePromise {
  public:
-  Promise() : abstract_promise_(nullptr) {}
+  Promise() = default;
 
   static_assert(
       !std::is_reference<ResolveType>::value ||
@@ -49,16 +49,17 @@ class Promise {
 
   explicit Promise(
       scoped_refptr<internal::AbstractPromise> abstract_promise) noexcept
-      : abstract_promise_(std::move(abstract_promise)) {}
+      : BasePromise(std::move(abstract_promise)) {}
+
+  // Every PostTask calls this constructor so we need to be careful to avoid
+  // unnecessary binary bloat.
+  explicit Promise(internal::PassedPromise passed_promise) noexcept
+      : BasePromise(std::move(passed_promise),
+                    BasePromise::InlineConstructor()) {}
 
   ~Promise() = default;
 
-  operator bool() const { return !!abstract_promise_; }
-
-  bool IsCancelledForTesting() const {
-    DCHECK(abstract_promise_);
-    return abstract_promise_->IsCanceled();
-  }
+  bool IsCancelledForTesting() const { return abstract_promise_->IsCanceled(); }
 
   // Waits until the promise has settled and if resolved it returns the resolved
   // value.
@@ -75,8 +76,10 @@ class Promise {
     }
     DCHECK(abstract_promise_->IsResolved())
         << "Can't take resolved value, promise wasn't resolved.";
-    return std::move(
-        abstract_promise_->TakeValue().value().Get<Resolved<T>>()->value);
+    return std::move(abstract_promise_->TakeValue()
+                         .value()
+                         .template Get<Resolved<T>>()
+                         ->value);
   }
 
   // Waits until the promise has settled and if rejected it returns the rejected
@@ -95,8 +98,10 @@ class Promise {
     abstract_promise_->IgnoreUncaughtCatchForTesting();
     DCHECK(abstract_promise_->IsRejected())
         << "Can't take rejected value, promise wasn't rejected.";
-    return std::move(
-        abstract_promise_->TakeValue().value().Get<Rejected<T>>()->value);
+    return std::move(abstract_promise_->TakeValue()
+                         .value()
+                         .template Get<Rejected<T>>()
+                         ->value);
   }
 
   bool IsResolvedForTesting() const {
@@ -122,22 +127,22 @@ class Promise {
   //
   // |task_runner| is const-ref to avoid bloat due the destructor (which posts a
   // task).
-  template <typename RejectCb>
+  template <typename CatchCb>
   auto CatchOn(const scoped_refptr<TaskRunner>& task_runner,
                const Location& from_here,
-               RejectCb on_reject) noexcept {
+               CatchCb on_reject) noexcept {
     DCHECK(!on_reject.is_null());
 
     // Extract properties from the |on_reject| callback.
-    using RejectCallbackTraits = internal::CallbackTraits<RejectCb>;
-    using RejectCallbackArgT = typename RejectCallbackTraits::ArgType;
+    using CatchCallbackTraits = internal::CallbackTraits<CatchCb>;
+    using CatchCallbackArgT = typename CatchCallbackTraits::ArgType;
 
     // Compute the resolve and reject types of the returned Promise.
     using ReturnedPromiseTraits =
         internal::PromiseCombiner<ResolveType,
                                   NoReject,  // We've caught the reject case.
-                                  typename RejectCallbackTraits::ResolveType,
-                                  typename RejectCallbackTraits::RejectType>;
+                                  typename CatchCallbackTraits::ResolveType,
+                                  typename CatchCallbackTraits::RejectType>;
     using ReturnedPromiseResolveT = typename ReturnedPromiseTraits::ResolveType;
     using ReturnedPromiseRejectT = typename ReturnedPromiseTraits::RejectType;
 
@@ -148,13 +153,13 @@ class Promise {
     static_assert(ReturnedPromiseTraits::valid,
                   "Ambiguous promise resolve type");
     static_assert(
-        internal::IsValidPromiseArg<RejectType, RejectCallbackArgT>::value ||
-            std::is_void<RejectCallbackArgT>::value,
+        internal::IsValidPromiseArg<RejectType, CatchCallbackArgT>::value ||
+            std::is_void<CatchCallbackArgT>::value,
         "|on_reject| callback must accept Promise::RejectType or void.");
 
     static_assert(
-        !std::is_reference<RejectCallbackArgT>::value ||
-            std::is_const<std::remove_reference_t<RejectCallbackArgT>>::value,
+        !std::is_reference<CatchCallbackArgT>::value ||
+            std::is_const<std::remove_reference_t<CatchCallbackArgT>>::value,
         "Google C++ Style: References in function parameters must be const.");
 
     return Promise<ReturnedPromiseResolveT, ReturnedPromiseRejectT>(
@@ -163,7 +168,7 @@ class Promise {
             internal::PromiseExecutor::Data(
                 in_place_type_t<internal::ThenAndCatchExecutor<
                     OnceClosure,  // Never called.
-                    OnceCallback<typename RejectCallbackTraits::SignatureType>,
+                    OnceCallback<typename CatchCallbackTraits::SignatureType>,
                     internal::NoCallback, RejectType,
                     Resolved<ReturnedPromiseResolveT>,
                     Rejected<ReturnedPromiseRejectT>>>(),
@@ -171,18 +176,59 @@ class Promise {
                 internal::ToCallbackBase(std::move(on_reject)))));
   }
 
-  template <typename RejectCb>
+  template <typename CatchCb>
   auto CatchOn(const TaskTraits& traits,
                const Location& from_here,
-               RejectCb&& on_reject) noexcept {
+               CatchCb&& on_reject) noexcept {
     return CatchOn(CreateTaskRunner(traits), from_here,
-                   std::forward<RejectCb>(on_reject));
+                   std::forward<CatchCb>(on_reject));
   }
 
-  template <typename RejectCb>
-  auto CatchHere(const Location& from_here, RejectCb&& on_reject) noexcept {
-    return CatchOn(internal::GetCurrentSequence(), from_here,
-                   std::forward<RejectCb>(on_reject));
+  template <typename CatchCb>
+  auto CatchHere(const Location& from_here, CatchCb&& on_reject) noexcept {
+    DCHECK(!on_reject.is_null());
+
+    // Extract properties from the |on_reject| callback.
+    using CatchCallbackTraits = internal::CallbackTraits<CatchCb>;
+    using CatchCallbackArgT = typename CatchCallbackTraits::ArgType;
+
+    // Compute the resolve and reject types of the returned Promise.
+    using ReturnedPromiseTraits =
+        internal::PromiseCombiner<ResolveType,
+                                  NoReject,  // We've caught the reject case.
+                                  typename CatchCallbackTraits::ResolveType,
+                                  typename CatchCallbackTraits::RejectType>;
+    using ReturnedPromiseResolveT = typename ReturnedPromiseTraits::ResolveType;
+    using ReturnedPromiseRejectT = typename ReturnedPromiseTraits::RejectType;
+
+    static_assert(!std::is_same<NoReject, RejectType>::value,
+                  "Can't catch a NoReject promise.");
+
+    // Check we wouldn't need to return Promise<Variant<...>, ...>
+    static_assert(ReturnedPromiseTraits::valid,
+                  "Ambiguous promise resolve type");
+    static_assert(
+        internal::IsValidPromiseArg<RejectType, CatchCallbackArgT>::value ||
+            std::is_void<CatchCallbackArgT>::value,
+        "|on_reject| callback must accept Promise::RejectType or void.");
+
+    static_assert(
+        !std::is_reference<CatchCallbackArgT>::value ||
+            std::is_const<std::remove_reference_t<CatchCallbackArgT>>::value,
+        "Google C++ Style: References in function parameters must be const.");
+
+    return Promise<ReturnedPromiseResolveT, ReturnedPromiseRejectT>(
+        ConstructHereAbstractPromiseWithSinglePrerequisite(
+            from_here, abstract_promise_.get(),
+            internal::PromiseExecutor::Data(
+                in_place_type_t<internal::ThenAndCatchExecutor<
+                    OnceClosure,  // Never called.
+                    OnceCallback<typename CatchCallbackTraits::SignatureType>,
+                    internal::NoCallback, RejectType,
+                    Resolved<ReturnedPromiseResolveT>,
+                    Rejected<ReturnedPromiseRejectT>>>(),
+                OnceClosure(),
+                internal::ToCallbackBase(std::move(on_reject)))));
   }
 
   // A task to execute |on_resolve| is posted on |task_runner| as soon as this
@@ -198,23 +244,22 @@ class Promise {
   //
   // |task_runner| is const-ref to avoid bloat due the destructor (which posts a
   // task).
-  template <typename ResolveCb>
+  template <typename ThenCb>
   auto ThenOn(const scoped_refptr<TaskRunner>& task_runner,
               const Location& from_here,
-              ResolveCb on_resolve) noexcept {
+              ThenCb on_resolve) noexcept {
     DCHECK(!on_resolve.is_null());
 
     // Extract properties from the |on_resolve| callback.
-    using ResolveCallbackTraits =
-        internal::CallbackTraits<std::decay_t<ResolveCb>>;
-    using ResolveCallbackArgT = typename ResolveCallbackTraits::ArgType;
+    using ThenCallbackTraits = internal::CallbackTraits<std::decay_t<ThenCb>>;
+    using ThenCallbackArgT = typename ThenCallbackTraits::ArgType;
 
     // Compute the resolve and reject types of the returned Promise.
     using ReturnedPromiseTraits =
         internal::PromiseCombiner<NoResolve,  // We've caught the resolve case.
                                   RejectType,
-                                  typename ResolveCallbackTraits::ResolveType,
-                                  typename ResolveCallbackTraits::RejectType>;
+                                  typename ThenCallbackTraits::ResolveType,
+                                  typename ThenCallbackTraits::RejectType>;
     using ReturnedPromiseResolveT = typename ReturnedPromiseTraits::ResolveType;
     using ReturnedPromiseRejectT = typename ReturnedPromiseTraits::RejectType;
 
@@ -223,13 +268,13 @@ class Promise {
                   "Ambiguous promise reject type");
 
     static_assert(
-        internal::IsValidPromiseArg<ResolveType, ResolveCallbackArgT>::value ||
-            std::is_void<ResolveCallbackArgT>::value,
+        internal::IsValidPromiseArg<ResolveType, ThenCallbackArgT>::value ||
+            std::is_void<ThenCallbackArgT>::value,
         "|on_resolve| callback must accept Promise::ResolveType or void.");
 
     static_assert(
-        !std::is_reference<ResolveCallbackArgT>::value ||
-            std::is_const<std::remove_reference_t<ResolveCallbackArgT>>::value,
+        !std::is_reference<ThenCallbackArgT>::value ||
+            std::is_const<std::remove_reference_t<ThenCallbackArgT>>::value,
         "Google C++ Style: References in function parameters must be const.");
 
     return Promise<ReturnedPromiseResolveT, ReturnedPromiseRejectT>(
@@ -237,7 +282,7 @@ class Promise {
             task_runner, from_here, abstract_promise_.get(),
             internal::PromiseExecutor::Data(
                 in_place_type_t<internal::ThenAndCatchExecutor<
-                    OnceCallback<typename ResolveCallbackTraits::SignatureType>,
+                    OnceCallback<typename ThenCallbackTraits::SignatureType>,
                     OnceClosure, ResolveType, internal::NoCallback,
                     Resolved<ReturnedPromiseResolveT>,
                     Rejected<ReturnedPromiseRejectT>>>(),
@@ -245,18 +290,56 @@ class Promise {
                 OnceClosure())));
   }
 
-  template <typename ResolveCb>
+  template <typename ThenCb>
   auto ThenOn(const TaskTraits& traits,
               const Location& from_here,
-              ResolveCb&& on_resolve) noexcept {
+              ThenCb&& on_resolve) noexcept {
     return ThenOn(CreateTaskRunner(traits), from_here,
-                  std::forward<ResolveCb>(on_resolve));
+                  std::forward<ThenCb>(on_resolve));
   }
 
-  template <typename ResolveCb>
-  auto ThenHere(const Location& from_here, ResolveCb&& on_resolve) noexcept {
-    return ThenOn(internal::GetCurrentSequence(), from_here,
-                  std::forward<ResolveCb>(on_resolve));
+  template <typename ThenCb>
+  auto ThenHere(const Location& from_here, ThenCb&& on_resolve) noexcept {
+    DCHECK(!on_resolve.is_null());
+
+    // Extract properties from the |on_resolve| callback.
+    using ThenCallbackTraits = internal::CallbackTraits<std::decay_t<ThenCb>>;
+    using ThenCallbackArgT = typename ThenCallbackTraits::ArgType;
+
+    // Compute the resolve and reject types of the returned Promise.
+    using ReturnedPromiseTraits =
+        internal::PromiseCombiner<NoResolve,  // We've caught the resolve case.
+                                  RejectType,
+                                  typename ThenCallbackTraits::ResolveType,
+                                  typename ThenCallbackTraits::RejectType>;
+    using ReturnedPromiseResolveT = typename ReturnedPromiseTraits::ResolveType;
+    using ReturnedPromiseRejectT = typename ReturnedPromiseTraits::RejectType;
+
+    // Check we wouldn't need to return Promise<..., Variant<...>>
+    static_assert(ReturnedPromiseTraits::valid,
+                  "Ambiguous promise reject type");
+
+    static_assert(
+        internal::IsValidPromiseArg<ResolveType, ThenCallbackArgT>::value ||
+            std::is_void<ThenCallbackArgT>::value,
+        "|on_resolve| callback must accept Promise::ResolveType or void.");
+
+    static_assert(
+        !std::is_reference<ThenCallbackArgT>::value ||
+            std::is_const<std::remove_reference_t<ThenCallbackArgT>>::value,
+        "Google C++ Style: References in function parameters must be const.");
+
+    return Promise<ReturnedPromiseResolveT, ReturnedPromiseRejectT>(
+        ConstructHereAbstractPromiseWithSinglePrerequisite(
+            from_here, abstract_promise_.get(),
+            internal::PromiseExecutor::Data(
+                in_place_type_t<internal::ThenAndCatchExecutor<
+                    OnceCallback<typename ThenCallbackTraits::SignatureType>,
+                    OnceClosure, ResolveType, internal::NoCallback,
+                    Resolved<ReturnedPromiseResolveT>,
+                    Rejected<ReturnedPromiseRejectT>>>(),
+                internal::ToCallbackBase(std::move(on_resolve)),
+                OnceClosure())));
   }
 
   // A task to execute |on_reject| is posted on |task_runner| as soon as this
@@ -279,26 +362,26 @@ class Promise {
   //
   // |task_runner| is const-ref to avoid bloat due the destructor (which posts a
   // task).
-  template <typename ResolveCb, typename RejectCb>
+  template <typename ThenCb, typename CatchCb>
   auto ThenOn(const scoped_refptr<TaskRunner>& task_runner,
               const Location& from_here,
-              ResolveCb on_resolve,
-              RejectCb on_reject) noexcept {
+              ThenCb on_resolve,
+              CatchCb on_reject) noexcept {
     DCHECK(!on_resolve.is_null());
     DCHECK(!on_reject.is_null());
 
     // Extract properties from the |on_resolve| and |on_reject| callbacks.
-    using ResolveCallbackTraits = internal::CallbackTraits<ResolveCb>;
-    using RejectCallbackTraits = internal::CallbackTraits<RejectCb>;
-    using ResolveCallbackArgT = typename ResolveCallbackTraits::ArgType;
-    using RejectCallbackArgT = typename RejectCallbackTraits::ArgType;
+    using ThenCallbackTraits = internal::CallbackTraits<ThenCb>;
+    using CatchCallbackTraits = internal::CallbackTraits<CatchCb>;
+    using ThenCallbackArgT = typename ThenCallbackTraits::ArgType;
+    using CatchCallbackArgT = typename CatchCallbackTraits::ArgType;
 
     // Compute the resolve and reject types of the returned Promise.
     using ReturnedPromiseTraits =
-        internal::PromiseCombiner<typename ResolveCallbackTraits::ResolveType,
-                                  typename ResolveCallbackTraits::RejectType,
-                                  typename RejectCallbackTraits::ResolveType,
-                                  typename RejectCallbackTraits::RejectType>;
+        internal::PromiseCombiner<typename ThenCallbackTraits::ResolveType,
+                                  typename ThenCallbackTraits::RejectType,
+                                  typename CatchCallbackTraits::ResolveType,
+                                  typename CatchCallbackTraits::RejectType>;
     using ReturnedPromiseResolveT = typename ReturnedPromiseTraits::ResolveType;
     using ReturnedPromiseRejectT = typename ReturnedPromiseTraits::RejectType;
 
@@ -310,23 +393,23 @@ class Promise {
                   "compatible types.");
 
     static_assert(
-        internal::IsValidPromiseArg<ResolveType, ResolveCallbackArgT>::value ||
-            std::is_void<ResolveCallbackArgT>::value,
+        internal::IsValidPromiseArg<ResolveType, ThenCallbackArgT>::value ||
+            std::is_void<ThenCallbackArgT>::value,
         "|on_resolve| callback must accept Promise::ResolveType or void.");
 
     static_assert(
-        internal::IsValidPromiseArg<RejectType, RejectCallbackArgT>::value ||
-            std::is_void<RejectCallbackArgT>::value,
+        internal::IsValidPromiseArg<RejectType, CatchCallbackArgT>::value ||
+            std::is_void<CatchCallbackArgT>::value,
         "|on_reject| callback must accept Promise::RejectType or void.");
 
     static_assert(
-        !std::is_reference<ResolveCallbackArgT>::value ||
-            std::is_const<std::remove_reference_t<ResolveCallbackArgT>>::value,
+        !std::is_reference<ThenCallbackArgT>::value ||
+            std::is_const<std::remove_reference_t<ThenCallbackArgT>>::value,
         "Google C++ Style: References in function parameters must be const.");
 
     static_assert(
-        !std::is_reference<RejectCallbackArgT>::value ||
-            std::is_const<std::remove_reference_t<RejectCallbackArgT>>::value,
+        !std::is_reference<CatchCallbackArgT>::value ||
+            std::is_const<std::remove_reference_t<CatchCallbackArgT>>::value,
         "Google C++ Style: References in function parameters must be const.");
 
     return Promise<ReturnedPromiseResolveT, ReturnedPromiseRejectT>(
@@ -334,31 +417,84 @@ class Promise {
             task_runner, from_here, abstract_promise_.get(),
             internal::PromiseExecutor::Data(
                 in_place_type_t<internal::ThenAndCatchExecutor<
-                    OnceCallback<typename ResolveCallbackTraits::SignatureType>,
-                    OnceCallback<typename RejectCallbackTraits::SignatureType>,
+                    OnceCallback<typename ThenCallbackTraits::SignatureType>,
+                    OnceCallback<typename CatchCallbackTraits::SignatureType>,
                     ResolveType, RejectType, Resolved<ReturnedPromiseResolveT>,
                     Rejected<ReturnedPromiseRejectT>>>(),
                 internal::ToCallbackBase(std::move(on_resolve)),
                 internal::ToCallbackBase(std::move(on_reject)))));
   }
 
-  template <typename ResolveCb, typename RejectCb>
+  template <typename ThenCb, typename CatchCb>
   auto ThenOn(const TaskTraits& traits,
               const Location& from_here,
-              ResolveCb on_resolve,
-              RejectCb on_reject) noexcept {
+              ThenCb on_resolve,
+              CatchCb on_reject) noexcept {
     return ThenOn(CreateTaskRunner(traits), from_here,
-                  std::forward<ResolveCb>(on_resolve),
-                  std::forward<RejectCb>(on_reject));
+                  std::forward<ThenCb>(on_resolve),
+                  std::forward<CatchCb>(on_reject));
   }
 
-  template <typename ResolveCb, typename RejectCb>
+  template <typename ThenCb, typename CatchCb>
   auto ThenHere(const Location& from_here,
-                ResolveCb on_resolve,
-                RejectCb on_reject) noexcept {
-    return ThenOn(internal::GetCurrentSequence(), from_here,
-                  std::forward<ResolveCb>(on_resolve),
-                  std::forward<RejectCb>(on_reject));
+                ThenCb on_resolve,
+                CatchCb on_reject) noexcept {
+    DCHECK(!on_resolve.is_null());
+    DCHECK(!on_reject.is_null());
+
+    // Extract properties from the |on_resolve| and |on_reject| callbacks.
+    using ThenCallbackTraits = internal::CallbackTraits<ThenCb>;
+    using CatchCallbackTraits = internal::CallbackTraits<CatchCb>;
+    using ThenCallbackArgT = typename ThenCallbackTraits::ArgType;
+    using CatchCallbackArgT = typename CatchCallbackTraits::ArgType;
+
+    // Compute the resolve and reject types of the returned Promise.
+    using ReturnedPromiseTraits =
+        internal::PromiseCombiner<typename ThenCallbackTraits::ResolveType,
+                                  typename ThenCallbackTraits::RejectType,
+                                  typename CatchCallbackTraits::ResolveType,
+                                  typename CatchCallbackTraits::RejectType>;
+    using ReturnedPromiseResolveT = typename ReturnedPromiseTraits::ResolveType;
+    using ReturnedPromiseRejectT = typename ReturnedPromiseTraits::RejectType;
+
+    static_assert(!std::is_same<NoReject, RejectType>::value,
+                  "Can't catch a NoReject promise.");
+
+    static_assert(ReturnedPromiseTraits::valid,
+                  "|on_resolve| callback and |on_resolve| callback must return "
+                  "compatible types.");
+
+    static_assert(
+        internal::IsValidPromiseArg<ResolveType, ThenCallbackArgT>::value ||
+            std::is_void<ThenCallbackArgT>::value,
+        "|on_resolve| callback must accept Promise::ResolveType or void.");
+
+    static_assert(
+        internal::IsValidPromiseArg<RejectType, CatchCallbackArgT>::value ||
+            std::is_void<CatchCallbackArgT>::value,
+        "|on_reject| callback must accept Promise::RejectType or void.");
+
+    static_assert(
+        !std::is_reference<ThenCallbackArgT>::value ||
+            std::is_const<std::remove_reference_t<ThenCallbackArgT>>::value,
+        "Google C++ Style: References in function parameters must be const.");
+
+    static_assert(
+        !std::is_reference<CatchCallbackArgT>::value ||
+            std::is_const<std::remove_reference_t<CatchCallbackArgT>>::value,
+        "Google C++ Style: References in function parameters must be const.");
+
+    return Promise<ReturnedPromiseResolveT, ReturnedPromiseRejectT>(
+        ConstructHereAbstractPromiseWithSinglePrerequisite(
+            from_here, abstract_promise_.get(),
+            internal::PromiseExecutor::Data(
+                in_place_type_t<internal::ThenAndCatchExecutor<
+                    OnceCallback<typename ThenCallbackTraits::SignatureType>,
+                    OnceCallback<typename CatchCallbackTraits::SignatureType>,
+                    ResolveType, RejectType, Resolved<ReturnedPromiseResolveT>,
+                    Rejected<ReturnedPromiseRejectT>>>(),
+                internal::ToCallbackBase(std::move(on_resolve)),
+                internal::ToCallbackBase(std::move(on_reject)))));
   }
 
   // A task to execute |finally_callback| on |task_runner| is posted after the
@@ -405,8 +541,24 @@ class Promise {
   template <typename FinallyCb>
   auto FinallyHere(const Location& from_here,
                    FinallyCb finally_callback) noexcept {
-    return FinallyOn(internal::GetCurrentSequence(), from_here,
-                     std::move(finally_callback));
+    // Extract properties from |finally_callback| callback.
+    using CallbackTraits = internal::CallbackTraits<FinallyCb>;
+    using ReturnedPromiseResolveT = typename CallbackTraits::ResolveType;
+    using ReturnedPromiseRejectT = typename CallbackTraits::RejectType;
+
+    using CallbackArgT = typename CallbackTraits::ArgType;
+    static_assert(std::is_void<CallbackArgT>::value,
+                  "|finally_callback| callback must have no arguments");
+
+    return Promise<ReturnedPromiseResolveT, ReturnedPromiseRejectT>(
+        ConstructHereAbstractPromiseWithSinglePrerequisite(
+            from_here, abstract_promise_.get(),
+            internal::PromiseExecutor::Data(
+                in_place_type_t<internal::FinallyExecutor<
+                    OnceCallback<typename CallbackTraits::ReturnType()>,
+                    Resolved<ReturnedPromiseResolveT>,
+                    Rejected<ReturnedPromiseRejectT>>>(),
+                internal::ToCallbackBase(std::move(finally_callback)))));
   }
 
   template <typename... Args>
@@ -442,8 +594,6 @@ class Promise {
             nullptr, from_here, nullptr, RejectPolicy::kMustCatchRejection,
             internal::DependentList::ConstructResolved(),
             std::move(executor_data)));
-    promise->emplace(in_place_type_t<Rejected<RejectType>>(),
-                     std::forward<Args>(args)...);
     return Promise<ResolveType, RejectType>(std::move(promise));
   }
 
@@ -452,6 +602,11 @@ class Promise {
 
   void IgnoreUncaughtCatchForTesting() {
     abstract_promise_->IgnoreUncaughtCatchForTesting();
+  }
+
+  const scoped_refptr<internal::AbstractPromise>& GetScopedRefptrForTesting()
+      const {
+    return abstract_promise_;
   }
 
  private:
@@ -471,8 +626,6 @@ class Promise {
 
   template <typename A, typename B>
   friend class ManualPromiseResolver;
-
-  scoped_refptr<internal::AbstractPromise> abstract_promise_;
 };
 
 // Used for manually resolving and rejecting a Promise. This is for
@@ -624,8 +777,8 @@ class Promises {
     std::vector<internal::DependentList::Node> prerequisite_list(
         sizeof...(promises));
     int i = 0;
-    for (auto&& p : {promises.abstract_promise_...}) {
-      prerequisite_list[i++].SetPrerequisite(p.get());
+    for (auto&& p : {promises.abstract_promise_.get()...}) {
+      prerequisite_list[i++].SetPrerequisite(p);
     }
 
     internal::PromiseExecutor::Data executor_data(

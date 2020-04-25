@@ -1464,7 +1464,7 @@ void MediaControlsImpl::DefaultEventHandler(Event& event) {
     ResetHideMediaControlsTimer();
   }
 
-  if (event.IsKeyboardEvent() &&
+  if (event.IsKeyboardEvent() && !event.defaultPrevented() &&
       !IsSpatialNavigationEnabled(GetDocument().GetFrame())) {
     const String& key = ToKeyboardEvent(event).key();
     if (key == "Enter" || ToKeyboardEvent(event).keyCode() == ' ') {
@@ -1905,6 +1905,9 @@ void MediaControlsImpl::NotifyElementSizeChanged(DOMRectReadOnly* new_size) {
 }
 
 void MediaControlsImpl::ElementSizeChangedTimerFired(TimerBase*) {
+  if (!MediaElement().isConnected())
+    return;
+
   ComputeWhichControlsFit();
 
   // Rerender timeline bar segments when size changed.

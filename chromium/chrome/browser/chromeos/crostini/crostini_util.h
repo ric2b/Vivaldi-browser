@@ -24,20 +24,33 @@ namespace gfx {
 class ImageSkia;
 }  // namespace gfx
 
+namespace views {
+class Widget;
+}  // namespace views
+
 class Profile;
 
+// TODO(crbug.com/1004708): Move Is*[Enabled|Allowed] functions to
+// CrostiniFeatures.
 namespace crostini {
 
 struct LinuxPackageInfo;
 
-// A unique identifier for our containers. This is <vm_name, container_name>.
-using ContainerId = std::pair<std::string, std::string>;
+// A unique identifier for our containers.
+struct ContainerId {
+  ContainerId(std::string vm_name, std::string container_name) noexcept;
+
+  std::string vm_name;
+  std::string container_name;
+};
+
+bool operator<(const ContainerId& lhs, const ContainerId& rhs) noexcept;
+
+std::ostream& operator<<(std::ostream& ostream,
+                         const ContainerId& container_id);
 
 using LaunchCrostiniAppCallback =
     base::OnceCallback<void(bool success, const std::string& failure_reason)>;
-
-// Return" (<vm_name>, <container_name>)".
-std::string ContainerIdToString(const ContainerId& container_id);
 
 // Checks if user profile is able to a crostini app with a given app_id.
 bool IsUninstallable(Profile* profile, const std::string& app_id);
@@ -54,23 +67,12 @@ bool IsCrostiniAllowedForProfile(Profile* profile);
 // UI uses this to indicate that crostini is available but disabled by policy.
 bool IsCrostiniUIAllowedForProfile(Profile* profile, bool check_policy = true);
 
-// Returns true if policy allows export import UI.
-bool IsCrostiniExportImportUIAllowedForProfile(Profile* profile);
-
-// Returns whether if Crostini has been enabled, i.e. the user has launched it
-// at least once and not deleted it.
-bool IsCrostiniEnabled(Profile* profile);
-
 // Returns whether the default Crostini VM is running for the user.
 bool IsCrostiniRunning(Profile* profile);
 
 // Returns whether infrastructure for applying Ansible playbook to default
 // Crostini container is enabled.
 bool IsCrostiniAnsibleInfrastructureEnabled();
-
-// Returns whether user is allowed root access to Crostini. Always returns true
-// when advanced access controls feature flag is disabled.
-bool IsCrostiniRootAccessAllowed(Profile* profile);
 
 // Launches the Crostini app with ID of |app_id| on the display with ID of
 // |display_id|. |app_id| should be a valid Crostini app list id.
@@ -101,8 +103,7 @@ void LoadIcons(Profile* profile,
 // Retrieves cryptohome_id from profile.
 std::string CryptohomeIdForProfile(Profile* profile);
 
-// Retrieves username from profile.  This is the text until '@' in
-// profile->GetProfileUserName() email address.
+// Retrieves username from profile.
 std::string DefaultContainerUserNameForProfile(Profile* profile);
 
 // Returns the mount directory within the container where paths from the Chrome
@@ -136,6 +137,13 @@ void ShowCrostiniAppInstallerView(Profile* profile,
 // Shows the Crostini App Uninstaller dialog.
 void ShowCrostiniAppUninstallerView(Profile* profile,
                                     const std::string& app_id);
+// Shows the Crostini force-close dialog. If |app_name| is nonempty, the dialog
+// will include the window's name as text. Returns a handle to that dialog, so
+// that we can add observers to the dialog itself.
+views::Widget* ShowCrostiniForceCloseDialog(
+    const std::string& app_name,
+    views::Widget* closable_widget,
+    base::OnceClosure force_close_callback);
 // Shows the Crostini Termina Upgrade dialog (for blocking crostini start until
 // Termina version matches).
 void ShowCrostiniUpgradeView(Profile* profile, CrostiniUISurface ui_surface);
@@ -152,12 +160,17 @@ void PrepareShowCrostiniUpgradeContainerView(Profile* profile,
 // not open until PrepareShowCrostiniUpgradeContainerView is called again.
 void CloseCrostiniUpgradeContainerView();
 
+// Show the Crostini Software Config Upgrade dialog (for installing Ansible and
+// applying an Ansible playbook in the container).
+void ShowCrostiniAnsibleSoftwareConfigView(Profile* profile);
+
 // We use an arbitrary well-formed extension id for the Terminal app, this
 // is equal to GenerateId("Terminal").
 constexpr char kCrostiniTerminalId[] = "oajcgpnkmhaalajejhlfpacbiokdnnfe";
 
 constexpr char kCrostiniDefaultVmName[] = "termina";
 constexpr char kCrostiniDefaultContainerName[] = "penguin";
+constexpr char kCrostiniDefaultUsername[] = "emperor";
 constexpr char kCrostiniCroshBuiltinAppId[] =
     "nkoccljplnhpfnfiajclkommnmllphnl";
 // In order to be compatible with sync folder id must match standard.

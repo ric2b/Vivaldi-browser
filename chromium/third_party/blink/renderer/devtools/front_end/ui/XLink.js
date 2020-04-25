@@ -5,7 +5,7 @@
 /**
  * @extends {UI.XElement}
  */
-UI.XLink = class extends UI.XElement {
+export default class XLink extends UI.XElement {
   /**
    * @param {string} url
    * @param {string=} linkText
@@ -14,8 +14,9 @@ UI.XLink = class extends UI.XElement {
    * @return {!Element}
    */
   static create(url, linkText, className, preventClick) {
-    if (!linkText)
+    if (!linkText) {
       linkText = url;
+    }
     className = className || '';
     // clang-format off
     // TODO(dgozman): migrate css from 'devtools-link' to 'x-link'.
@@ -39,17 +40,18 @@ UI.XLink = class extends UI.XElement {
 
     this._onClick = event => {
       event.consume(true);
-      InspectorFrontendHost.openInNewTab(/** @type {string} */ (this._href));
+      Host.InspectorFrontendHost.openInNewTab(/** @type {string} */ (this._href));
     };
     this._onKeyDown = event => {
       if (isEnterOrSpaceKey(event)) {
         event.consume(true);
-        InspectorFrontendHost.openInNewTab(/** @type {string} */ (this._href));
+        Host.InspectorFrontendHost.openInNewTab(/** @type {string} */ (this._href));
       }
     };
   }
 
   /**
+   * @override
    * @return {!Array<string>}
    */
   static get observedAttributes() {
@@ -72,10 +74,12 @@ UI.XLink = class extends UI.XElement {
 
     if (attr === 'href') {
       let href = newValue;
-      if (newValue.trim().toLowerCase().startsWith('javascript:'))
+      if (newValue.trim().toLowerCase().startsWith('javascript:')) {
         href = null;
-      if (Common.ParsedURL.isRelativeURL(newValue))
+      }
+      if (Common.ParsedURL.isRelativeURL(newValue)) {
         href = null;
+      }
 
       this._href = href;
       this.title = newValue;
@@ -97,12 +101,12 @@ UI.XLink = class extends UI.XElement {
       this.style.removeProperty('cursor');
     }
   }
-};
+}
 
 /**
  * @implements {UI.ContextMenu.Provider}
  */
-UI.XLink.ContextMenuProvider = class {
+export class ContextMenuProvider {
   /**
    * @override
    * @param {!Event} event
@@ -111,15 +115,31 @@ UI.XLink.ContextMenuProvider = class {
    */
   appendApplicableItems(event, contextMenu, target) {
     let targetNode = /** @type {!Node} */ (target);
-    while (targetNode && !(targetNode instanceof UI.XLink))
+    while (targetNode && !(targetNode instanceof XLink)) {
       targetNode = targetNode.parentNodeOrShadowHost();
-    if (!targetNode || !targetNode._href)
+    }
+    if (!targetNode || !targetNode._href) {
       return;
+    }
     contextMenu.revealSection().appendItem(
-        UI.openLinkExternallyLabel(), () => InspectorFrontendHost.openInNewTab(targetNode._href));
+        UI.openLinkExternallyLabel(), () => Host.InspectorFrontendHost.openInNewTab(targetNode._href));
     contextMenu.revealSection().appendItem(
-        UI.copyLinkAddressLabel(), () => InspectorFrontendHost.copyText(targetNode._href));
+        UI.copyLinkAddressLabel(), () => Host.InspectorFrontendHost.copyText(targetNode._href));
   }
-};
+}
 
-self.customElements.define('x-link', UI.XLink);
+self.customElements.define('x-link', XLink);
+
+/* Legacy exported object*/
+self.UI = self.UI || {};
+
+/* Legacy exported object*/
+UI = UI || {};
+
+/** @constructor */
+UI.XLink = XLink;
+
+/**
+ * @implements {UI.ContextMenu.Provider}
+ */
+UI.XLink.ContextMenuProvider = ContextMenuProvider;

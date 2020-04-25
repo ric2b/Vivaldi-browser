@@ -25,7 +25,8 @@
 #include "chrome/browser/web_applications/test/test_data_retriever.h"
 #include "chrome/browser/web_applications/test/test_file_utils.h"
 #include "chrome/browser/web_applications/test/test_install_finalizer.h"
-#include "chrome/browser/web_applications/test/test_web_app_database.h"
+#include "chrome/browser/web_applications/test/test_web_app_database_factory.h"
+#include "chrome/browser/web_applications/test/test_web_app_registry_controller.h"
 #include "chrome/browser/web_applications/test/test_web_app_ui_manager.h"
 #include "chrome/browser/web_applications/test/web_app_icon_test_utils.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
@@ -34,11 +35,13 @@
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "url/gurl.h"
@@ -79,7 +82,7 @@ bool ContainsOneIconOfEachSize(const WebApplicationInfo& web_app_info) {
   for (int size_px : kIconSizes) {
     int num_icons_for_size =
         std::count_if(web_app_info.icons.begin(), web_app_info.icons.end(),
-                      [&size_px](const WebApplicationInfo::IconInfo& icon) {
+                      [&size_px](const WebApplicationIconInfo& icon) {
                         return icon.width == size_px && icon.height == size_px;
                       });
     if (num_icons_for_size != 1)
@@ -116,26 +119,29 @@ class WebAppInstallTaskTest : public WebAppTest {
   void SetUp() override {
     WebAppTest::SetUp();
 
-    database_ = std::make_unique<TestWebAppDatabase>();
-    registrar_ = std::make_unique<WebAppRegistrar>(profile(), database_.get());
+    test_registry_controller_ =
+        std::make_unique<TestWebAppRegistryController>();
+    test_registry_controller_->SetUp(profile());
 
     auto file_utils = std::make_unique<TestFileUtils>();
     file_utils_ = file_utils.get();
 
-    icon_manager_ = std::make_unique<WebAppIconManager>(profile(), *registrar_,
+    icon_manager_ = std::make_unique<WebAppIconManager>(profile(), registrar(),
                                                         std::move(file_utils));
 
     ui_manager_ = std::make_unique<TestWebAppUiManager>();
 
-    install_finalizer_ =
-        std::make_unique<WebAppInstallFinalizer>(icon_manager_.get());
-    install_finalizer_->SetSubsystems(registrar_.get(), ui_manager_.get());
+    install_finalizer_ = std::make_unique<WebAppInstallFinalizer>(
+        &controller().sync_bridge(), icon_manager_.get());
+    install_finalizer_->SetSubsystems(&registrar(), ui_manager_.get());
 
     auto data_retriever = std::make_unique<TestDataRetriever>();
     data_retriever_ = data_retriever.get();
 
     install_task_ = std::make_unique<WebAppInstallTask>(
         profile(), install_finalizer_.get(), std::move(data_retriever));
+
+    controller().Init();
 
 #if defined(OS_CHROMEOS)
     arc_test_.SetUp(profile());
@@ -162,6 +168,13 @@ class WebAppInstallTaskTest : public WebAppTest {
     intent_helper_bridge_.reset();
     arc_test_.TearDown();
 #endif
+    install_task_.reset();
+    install_finalizer_.reset();
+    ui_manager_.reset();
+    icon_manager_.reset();
+
+    test_registry_controller_.reset();
+
     WebAppTest::TearDown();
   }
 
@@ -312,8 +325,12 @@ class WebAppInstallTaskTest : public WebAppTest {
   }
 
  protected:
-  std::unique_ptr<TestWebAppDatabase> database_;
-  std::unique_ptr<WebAppRegistrar> registrar_;
+  TestWebAppRegistryController& controller() {
+    return *test_registry_controller_;
+  }
+
+  WebAppRegistrar& registrar() { return controller().registrar(); }
+
   std::unique_ptr<WebAppIconManager> icon_manager_;
   std::unique_ptr<WebAppInstallTask> install_task_;
   std::unique_ptr<TestWebAppUiManager> ui_manager_;
@@ -330,6 +347,7 @@ class WebAppInstallTaskTest : public WebAppTest {
 #endif
 
  private:
+  std::unique_ptr<TestWebAppRegistryController> test_registry_controller_;
   TestInstallFinalizer* test_install_finalizer_ = nullptr;
 };
 
@@ -366,7 +384,7 @@ TEST_F(WebAppInstallTaskTest, InstallFromWebContents) {
 
   EXPECT_TRUE(callback_called);
 
-  const WebApp* web_app = registrar_->GetAppById(app_id);
+  const WebApp* web_app = registrar().GetAppById(app_id);
   EXPECT_NE(nullptr, web_app);
 
   EXPECT_EQ(app_id, web_app->app_id());
@@ -504,7 +522,7 @@ TEST_F(WebAppInstallTaskTest, InstallableCheck) {
 
   EXPECT_TRUE(callback_called);
 
-  const WebApp* web_app = registrar_->GetAppById(app_id);
+  const WebApp* web_app = registrar().GetAppById(app_id);
   EXPECT_NE(nullptr, web_app);
 
   // Manifest data overrides Renderer data, except |description|.
@@ -540,7 +558,7 @@ TEST_F(WebAppInstallTaskTest, GetIcons) {
   // Make sure that icons have been generated for all sub sizes.
   EXPECT_TRUE(ContainsOneIconOfEachSize(*web_app_info));
 
-  for (const WebApplicationInfo::IconInfo& icon : web_app_info->icons) {
+  for (const WebApplicationIconInfo& icon : web_app_info->icons) {
     EXPECT_FALSE(icon.data.drawsNothing());
     EXPECT_EQ(color, icon.data.getColor(0, 0));
 
@@ -569,7 +587,7 @@ TEST_F(WebAppInstallTaskTest, GetIcons_NoIconsProvided) {
   // Make sure that icons have been generated for all sizes.
   EXPECT_TRUE(ContainsOneIconOfEachSize(*web_app_info));
 
-  for (const WebApplicationInfo::IconInfo& icon : web_app_info->icons) {
+  for (const WebApplicationIconInfo& icon : web_app_info->icons) {
     EXPECT_FALSE(icon.data.drawsNothing());
     // Since all icons are generated, they should have an empty url.
     EXPECT_TRUE(icon.url.is_empty());
@@ -592,7 +610,7 @@ TEST_F(WebAppInstallTaskTest, WriteDataToDisk) {
 
   // Generate one icon as if it was fetched from renderer.
   {
-    WebApplicationInfo::IconInfo icon_info = GenerateIconInfo(
+    WebApplicationIconInfo icon_info = GenerateIconInfo(
         GURL("https://example.com/app.ico"), original_icon_size_px, color);
     data_retriever_->web_app_info().icons.push_back(std::move(icon_info));
   }
@@ -714,7 +732,7 @@ TEST_F(WebAppInstallTaskTest, UserInstallDeclined) {
 
   EXPECT_TRUE(callback_called);
 
-  const WebApp* web_app = registrar_->GetAppById(app_id);
+  const WebApp* web_app = registrar().GetAppById(app_id);
   EXPECT_EQ(nullptr, web_app);
 }
 
@@ -823,7 +841,7 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromInfo_GenerateIcons) {
     bitmap.allocN32Pixels(icon_size::k256, icon_size::k128);
     bitmap.eraseColor(SK_ColorRED);
 
-    WebApplicationInfo::IconInfo icon_info;
+    WebApplicationIconInfo icon_info;
     icon_info.url = GURL("https://example.com/path/bad.ico");
     icon_info.width = icon_size::k256;
     icon_info.height = icon_size::k128;
@@ -845,7 +863,7 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromInfo_GenerateIcons) {
             EXPECT_TRUE(ContainsOneIconOfEachSize(*final_web_app_info));
 
             // Make sure no red non-square icons, only square yellow ones.
-            for (const WebApplicationInfo::IconInfo& icon :
+            for (const WebApplicationIconInfo& icon :
                  final_web_app_info->icons) {
               EXPECT_FALSE(icon.data.drawsNothing());
               EXPECT_EQ(SK_ColorYELLOW, icon.data.getColor(0, 0));
@@ -877,12 +895,12 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromInfoRetrieveIcons_TwoIcons) {
   auto web_app_info = std::make_unique<WebApplicationInfo>();
   web_app_info->app_url = url;
 
-  WebApplicationInfo::IconInfo icon1_info;
+  WebApplicationIconInfo icon1_info;
   icon1_info.url = icon1_url;
   icon1_info.width = icon_size::k128;
   web_app_info->icons.push_back(std::move(icon1_info));
 
-  WebApplicationInfo::IconInfo icon2_info;
+  WebApplicationIconInfo icon2_info;
   icon2_info.url = icon2_url;
   icon2_info.width = icon_size::k256;
   web_app_info->icons.push_back(std::move(icon2_info));
@@ -961,7 +979,7 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromInfoRetrieveIcons_NoIcons) {
             // Make sure that icons have been generated for all sub sizes.
             EXPECT_TRUE(ContainsOneIconOfEachSize(*final_web_app_info));
 
-            for (const WebApplicationInfo::IconInfo& icon :
+            for (const WebApplicationIconInfo& icon :
                  final_web_app_info->icons) {
               EXPECT_FALSE(icon.data.drawsNothing());
               EXPECT_TRUE(icon.url.is_empty());
@@ -994,7 +1012,7 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromManifestWithFallback_NoIcons) {
             // Make sure that icons have been generated for all sub sizes.
             EXPECT_TRUE(ContainsOneIconOfEachSize(*final_web_app_info));
 
-            for (const WebApplicationInfo::IconInfo& icon :
+            for (const WebApplicationIconInfo& icon :
                  final_web_app_info->icons) {
               EXPECT_FALSE(icon.data.drawsNothing());
               EXPECT_TRUE(icon.url.is_empty());
@@ -1076,48 +1094,48 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppWithParams_GuestProfile) {
   run_loop.Run();
 }
 
-TEST_F(WebAppInstallTaskTest, InstallWebAppWithParams_LaunchContainer) {
+TEST_F(WebAppInstallTaskTest, InstallWebAppWithParams_DisplayMode) {
   {
     CreateDataToRetrieve(GURL("https://example.com/"),
                          /*open_as_window*/ false);
 
     InstallManager::InstallParams params;
-    params.launch_container = LaunchContainer::kDefault;
+    params.display_mode = blink::mojom::DisplayMode::kUndefined;
     auto app_id = InstallWebAppWithParams(params);
 
-    EXPECT_EQ(LaunchContainer::kTab,
-              registrar_->GetAppById(app_id)->launch_container());
+    EXPECT_EQ(blink::mojom::DisplayMode::kBrowser,
+              registrar().GetAppById(app_id)->display_mode());
   }
   {
     CreateDataToRetrieve(GURL("https://example.org/"), /*open_as_window*/ true);
 
     InstallManager::InstallParams params;
-    params.launch_container = LaunchContainer::kDefault;
+    params.display_mode = blink::mojom::DisplayMode::kUndefined;
     auto app_id = InstallWebAppWithParams(params);
 
-    EXPECT_EQ(LaunchContainer::kWindow,
-              registrar_->GetAppById(app_id)->launch_container());
+    EXPECT_EQ(blink::mojom::DisplayMode::kStandalone,
+              registrar().GetAppById(app_id)->display_mode());
   }
   {
     CreateDataToRetrieve(GURL("https://example.au/"), /*open_as_window*/ true);
 
     InstallManager::InstallParams params;
-    params.launch_container = LaunchContainer::kTab;
+    params.display_mode = blink::mojom::DisplayMode::kBrowser;
     auto app_id = InstallWebAppWithParams(params);
 
-    EXPECT_EQ(LaunchContainer::kTab,
-              registrar_->GetAppById(app_id)->launch_container());
+    EXPECT_EQ(blink::mojom::DisplayMode::kBrowser,
+              registrar().GetAppById(app_id)->display_mode());
   }
   {
     CreateDataToRetrieve(GURL("https://example.app/"),
                          /*open_as_window*/ false);
 
     InstallManager::InstallParams params;
-    params.launch_container = LaunchContainer::kWindow;
+    params.display_mode = blink::mojom::DisplayMode::kStandalone;
     auto app_id = InstallWebAppWithParams(params);
 
-    EXPECT_EQ(LaunchContainer::kWindow,
-              registrar_->GetAppById(app_id)->launch_container());
+    EXPECT_EQ(blink::mojom::DisplayMode::kStandalone,
+              registrar().GetAppById(app_id)->display_mode());
   }
 }
 
@@ -1128,14 +1146,14 @@ TEST_F(WebAppInstallTaskTest,
     CreateDataToRetrieve(url, /*open_as_window*/ false);
     auto app_id =
         InstallWebAppFromInfoRetrieveIcons(url, /*is_locally_installed*/ false);
-    EXPECT_FALSE(registrar_->GetAppById(app_id)->is_locally_installed());
+    EXPECT_FALSE(registrar().GetAppById(app_id)->is_locally_installed());
   }
   {
     const auto url = GURL("https://example.org/");
     CreateDataToRetrieve(url, /*open_as_window*/ false);
     auto app_id =
         InstallWebAppFromInfoRetrieveIcons(url, /*is_locally_installed*/ true);
-    EXPECT_TRUE(registrar_->GetAppById(app_id)->is_locally_installed());
+    EXPECT_TRUE(registrar().GetAppById(app_id)->is_locally_installed());
   }
 }
 

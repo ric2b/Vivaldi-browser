@@ -163,6 +163,7 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
     case DISTANCE_BUBBLE_PREFERRED_WIDTH:
       return kSmallSnapPoint;
     case DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH:
+    case DISTANCE_STANDALONE_BUBBLE_PREFERRED_WIDTH:
       return kMediumSnapPoint;
     case DISTANCE_LARGE_MODAL_DIALOG_PREFERRED_WIDTH:
       return kLargeSnapPoint;
@@ -195,40 +196,6 @@ ChromeLayoutProvider::GetControlLabelGridAlignment() const {
 
 bool ChromeLayoutProvider::ShouldShowWindowIcon() const {
   return false;
-}
-
-int ChromeLayoutProvider::GetCornerRadiusMetric(
-    views::EmphasisMetric emphasis_metric,
-    const gfx::Size& size) const {
-  switch (emphasis_metric) {
-    case views::EMPHASIS_NONE:
-      NOTREACHED();
-      return 0;
-    case views::EMPHASIS_LOW:
-    case views::EMPHASIS_MEDIUM:
-      return 4;
-    case views::EMPHASIS_HIGH:
-      return 8;
-    case views::EMPHASIS_MAXIMUM:
-      return std::min(size.width(), size.height()) / 2;
-  }
-}
-
-int ChromeLayoutProvider::GetShadowElevationMetric(
-    views::EmphasisMetric emphasis_metric) const {
-  switch (emphasis_metric) {
-    case views::EMPHASIS_NONE:
-      NOTREACHED();
-      return 0;
-    case views::EMPHASIS_LOW:
-      return 1;
-    case views::EMPHASIS_MEDIUM:
-      return 2;
-    case views::EMPHASIS_HIGH:
-      return 3;
-    case views::EMPHASIS_MAXIMUM:
-      return 16;
-  }
 }
 
 gfx::ShadowValues ChromeLayoutProvider::MakeShadowValues(int elevation,

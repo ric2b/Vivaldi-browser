@@ -79,11 +79,7 @@ class PLATFORM_EXPORT PaintChunksToCcLayer {
 
   // NOTE(igor@vivaldi.com): We use this during the whole page capture
   // to filter out the scrolling clip.
-  static const ClipPaintPropertyNode*& TopClipToIgnore() {
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(
-        const ClipPaintPropertyNode*, clip_to_ignore, (nullptr));
-    return clip_to_ignore;
-  }
+  static const ClipPaintPropertyNode*& TopClipToIgnore();
 
 };
 

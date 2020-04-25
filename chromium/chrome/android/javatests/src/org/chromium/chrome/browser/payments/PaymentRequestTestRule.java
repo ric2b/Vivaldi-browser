@@ -117,6 +117,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     final CallbackHelper mHasEnrolledInstrumentQueryResponded;
     final CallbackHelper mExpirationMonthChange;
     final CallbackHelper mPaymentResponseReady;
+    final CallbackHelper mCompleteReplied;
     PaymentRequestImpl mPaymentRequest;
     PaymentRequestUI mUI;
 
@@ -156,6 +157,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
         mShowFailed = new CallbackHelper();
         mCanMakePaymentQueryResponded = new CallbackHelper();
         mHasEnrolledInstrumentQueryResponded = new CallbackHelper();
+        mCompleteReplied = new CallbackHelper();
         mWebContentsRef = new AtomicReference<>();
         mTestFilePath = testFileName.equals("about:blank") || testFileName.startsWith("data:")
                 ? testFileName
@@ -169,11 +171,11 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
         this(testFileName, null);
     }
 
-    public void startMainActivity() throws InterruptedException {
+    public void startMainActivity() {
         startMainActivityWithURL(mTestFilePath);
     }
 
-    protected void openPage() throws InterruptedException, TimeoutException {
+    protected void openPage() throws TimeoutException {
         onMainActivityStarted();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             mWebContentsRef.set(getActivity().getCurrentWebContents());
@@ -242,75 +244,72 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     public CallbackHelper getPaymentResponseReady() {
         return mPaymentResponseReady;
     }
+    public CallbackHelper getCompleteReplied() {
+        return mCompleteReplied;
+    }
     public PaymentRequestUI getPaymentRequestUI() {
         return mUI;
     }
 
     protected void triggerUIAndWait(PaymentsCallbackHelper<PaymentRequestUI> helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         openPageAndClickNodeAndWait("buy", helper);
         mUI = helper.getTarget();
     }
 
     protected void openPageAndClickNodeAndWait(String nodeId, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         openPage();
         clickNodeAndWait(nodeId, helper);
     }
 
-    protected void openPageAndClickBuyAndWait(CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+    protected void openPageAndClickBuyAndWait(CallbackHelper helper) throws TimeoutException {
         openPageAndClickNodeAndWait("buy", helper);
     }
 
-    protected void openPageAndClickNode(String nodeId)
-            throws InterruptedException, TimeoutException {
+    protected void openPageAndClickNode(String nodeId) throws TimeoutException {
         openPage();
         clickNode(nodeId);
     }
 
     protected void triggerUIAndWait(String nodeId, PaymentsCallbackHelper<PaymentRequestUI> helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         openPageAndClickNodeAndWait(nodeId, helper);
         mUI = helper.getTarget();
     }
 
-    protected void reTriggerUIAndWait(
-            String nodeId, PaymentsCallbackHelper<PaymentRequestUI> helper)
-            throws InterruptedException, TimeoutException {
+    protected void reTriggerUIAndWait(String nodeId,
+            PaymentsCallbackHelper<PaymentRequestUI> helper) throws TimeoutException {
         clickNodeAndWait(nodeId, helper);
         mUI = helper.getTarget();
     }
 
     protected void retryPaymentRequest(String validationErrors, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         int callCount = helper.getCallCount();
         JavaScriptUtils.executeJavaScriptAndWaitForResult(
                 mWebContentsRef.get(), "retry(" + validationErrors + ");");
         helper.waitForCallback(callCount);
     }
 
-    protected String executeJavaScriptAndWaitForResult(String script)
-            throws InterruptedException, TimeoutException {
+    protected String executeJavaScriptAndWaitForResult(String script) throws TimeoutException {
         return JavaScriptUtils.executeJavaScriptAndWaitForResult(mWebContentsRef.get(), script);
     }
 
     /** Clicks on an HTML node. */
-    protected void clickNodeAndWait(String nodeId, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+    protected void clickNodeAndWait(String nodeId, CallbackHelper helper) throws TimeoutException {
         int callCount = helper.getCallCount();
         clickNode(nodeId);
         helper.waitForCallback(callCount);
     }
 
     /** Clicks on an HTML node. */
-    protected void clickNode(String nodeId) throws InterruptedException, TimeoutException {
+    protected void clickNode(String nodeId) throws TimeoutException {
         DOMUtils.clickNode(mWebContentsRef.get(), nodeId);
     }
 
     /** Clicks on an element in the payments UI. */
-    protected void clickAndWait(int resourceId, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+    protected void clickAndWait(int resourceId, CallbackHelper helper) throws TimeoutException {
         int callCount = helper.getCallCount();
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
@@ -323,9 +322,20 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
         helper.waitForCallback(callCount);
     }
 
+    /** Clicks on an element in the error overlay. */
+    protected void clickErrorOverlayAndWait(int resourceId, CallbackHelper helper)
+            throws TimeoutException {
+        int callCount = helper.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            // Error overlay always allows clicks and is not taken into account in
+            // isAcceptingUserInput().
+            mUI.getDialogForTest().findViewById(resourceId).performClick();
+        });
+        helper.waitForCallback(callCount);
+    }
+
     /** Clicks on an element in the "Order summary" section of the payments UI. */
-    protected void clickInOrderSummaryAndWait(CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+    protected void clickInOrderSummaryAndWait(CallbackHelper helper) throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             mUI.getOrderSummarySectionForTest().findViewById(R.id.payments_section).performClick();
@@ -335,7 +345,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     /** Clicks on an element in the "Shipping address" section of the payments UI. */
     protected void clickInShippingAddressAndWait(final int resourceId, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             mUI.getShippingAddressSectionForTest().findViewById(resourceId).performClick();
@@ -345,7 +355,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     /** Clicks on an element in the "Payment" section of the payments UI. */
     protected void clickInPaymentMethodAndWait(final int resourceId, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             mUI.getPaymentMethodSectionForTest().findViewById(resourceId).performClick();
@@ -355,7 +365,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     /** Clicks on an element in the "Contact Info" section of the payments UI. */
     protected void clickInContactInfoAndWait(final int resourceId, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             mUI.getContactDetailsSectionForTest().findViewById(resourceId).performClick();
@@ -365,7 +375,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     /** Clicks on an element in the editor UI for credit cards. */
     protected void clickInCardEditorAndWait(final int resourceId, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(
                 () -> { mUI.getCardEditorDialog().findViewById(resourceId).performClick(); });
@@ -374,7 +384,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     /** Clicks on an element in the editor UI. */
     protected void clickInEditorAndWait(final int resourceId, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(
                 () -> { mUI.getEditorDialog().findViewById(resourceId).performClick(); });
@@ -382,7 +392,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     }
 
     protected void clickAndroidBackButtonInEditorAndWait(CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         int callCount = helper.getCallCount();
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
             mUI.getEditorDialog().dispatchKeyEvent(
@@ -395,7 +405,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     /** Clicks on a button in the card unmask UI. */
     protected void clickCardUnmaskButtonAndWait(final int dialogButtonId, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             PropertyModel model = mCardUnmaskPrompt.getDialogForTest();
@@ -584,10 +594,9 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     /**
      * Clicks on the label corresponding to the shipping address suggestion at the specified
      * |suggestionIndex|.
-     * @throws InterruptedException
      */
-    protected void clickOnShippingAddressSuggestionOptionAndWait(final int suggestionIndex,
-            CallbackHelper helper) throws TimeoutException, InterruptedException {
+    protected void clickOnShippingAddressSuggestionOptionAndWait(
+            final int suggestionIndex, CallbackHelper helper) throws TimeoutException {
         Assert.assertTrue(suggestionIndex < getNumberOfShippingAddressSuggestions());
 
         int callCount = helper.getCallCount();
@@ -602,10 +611,9 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     /**
      * Clicks on the label corresponding to the payment method suggestion at the specified
      * |suggestionIndex|.
-     * @throws InterruptedException
      */
-    protected void clickOnPaymentMethodSuggestionOptionAndWait(final int suggestionIndex,
-            CallbackHelper helper) throws TimeoutException, InterruptedException {
+    protected void clickOnPaymentMethodSuggestionOptionAndWait(
+            final int suggestionIndex, CallbackHelper helper) throws TimeoutException {
         Assert.assertTrue(suggestionIndex < getNumberOfPaymentInstruments());
 
         int callCount = helper.getCallCount();
@@ -620,10 +628,9 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     /**
      * Clicks on the label corresponding to the contact info suggestion at the specified
      * |suggestionIndex|.
-     * @throws InterruptedException
      */
-    protected void clickOnContactInfoSuggestionOptionAndWait(final int suggestionIndex,
-            CallbackHelper helper) throws TimeoutException, InterruptedException {
+    protected void clickOnContactInfoSuggestionOptionAndWait(
+            final int suggestionIndex, CallbackHelper helper) throws TimeoutException {
         Assert.assertTrue(suggestionIndex < getNumberOfContactDetailSuggestions());
 
         int callCount = helper.getCallCount();
@@ -639,8 +646,8 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
      * Clicks on the edit icon corresponding to the payment method suggestion at the specified
      * |suggestionIndex|.
      */
-    protected void clickOnPaymentMethodSuggestionEditIconAndWait(final int suggestionIndex,
-            CallbackHelper helper) throws TimeoutException, InterruptedException {
+    protected void clickOnPaymentMethodSuggestionEditIconAndWait(
+            final int suggestionIndex, CallbackHelper helper) throws TimeoutException {
         Assert.assertTrue(suggestionIndex < getNumberOfPaymentInstruments());
 
         int callCount = helper.getCallCount();
@@ -731,8 +738,8 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     }
 
     /** Selects the spinner value in the editor UI for credit cards. */
-    protected void setSpinnerSelectionsInCardEditorAndWait(final int[] selections,
-            CallbackHelper helper) throws InterruptedException, TimeoutException {
+    protected void setSpinnerSelectionsInCardEditorAndWait(
+            final int[] selections, CallbackHelper helper) throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             List<Spinner> fields = mUI.getCardEditorDialog().getDropdownFieldsForTest();
@@ -745,7 +752,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     /** Selects the spinner value in the editor UI. */
     protected void setSpinnerSelectionInEditorAndWait(final int selection, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(
                 ()
@@ -756,7 +763,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     /** Directly sets the text in the editor UI for credit cards. */
     protected void setTextInCardEditorAndWait(final String[] values, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             ViewGroup contents =
@@ -774,7 +781,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     /** Directly sets the text in the editor UI. */
     protected void setTextInEditorAndWait(final String[] values, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+            throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             List<EditText> fields = mUI.getEditorDialog().getEditableTextFieldsForTest();
@@ -788,7 +795,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     /** Directly sets the checkbox selection in the editor UI for credit cards. */
     protected void selectCheckboxAndWait(final int resourceId, final boolean isChecked,
-            CallbackHelper helper) throws InterruptedException, TimeoutException {
+            CallbackHelper helper) throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(
                 ()
@@ -799,7 +806,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     /** Directly sets the text in the card unmask UI. */
     protected void setTextInCardUnmaskDialogAndWait(final int resourceId, final String input,
-            CallbackHelper helper) throws InterruptedException, TimeoutException {
+            CallbackHelper helper) throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             EditText editText = mCardUnmaskPrompt.getDialogForTest()
@@ -812,9 +819,8 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     }
 
     /** Directly sets the text in the expired card unmask UI. */
-    protected void setTextInExpiredCardUnmaskDialogAndWait(
-            final int[] resourceIds, final String[] values, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
+    protected void setTextInExpiredCardUnmaskDialogAndWait(final int[] resourceIds,
+            final String[] values, CallbackHelper helper) throws TimeoutException {
         assert resourceIds.length == values.length;
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
@@ -830,8 +836,8 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     }
 
     /** Focues a view and hits the "submit" button on the software keyboard. */
-    /* package */ void hitSoftwareKeyboardSubmitButtonAndWait(final int resourceId,
-            CallbackHelper helper) throws InterruptedException, TimeoutException {
+    /* package */ void hitSoftwareKeyboardSubmitButtonAndWait(
+            final int resourceId, CallbackHelper helper) throws TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             EditText editText = mCardUnmaskPrompt.getDialogForTest()
@@ -862,9 +868,6 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
                         }
                     }
                     return true;
-                } catch (InterruptedException e1) {
-                    updateFailureReason(e1.getMessage());
-                    return false;
                 } catch (TimeoutException e2) {
                     updateFailureReason(e2.getMessage());
                     return false;
@@ -936,7 +939,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
         }
     }
 
-    /* package */ View getPaymentRequestView() throws Throwable {
+    /* package */ View getPaymentRequestView() {
         return ThreadUtils.runOnUiThreadBlockingNoException(
                 () -> mUI.getDialogForTest().findViewById(R.id.payment_request));
     }
@@ -1079,6 +1082,12 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     public void onPaymentResponseReady() {
         ThreadUtils.assertOnUiThread();
         mPaymentResponseReady.notifyCalled();
+    }
+
+    @Override
+    public void onCompleteReplied() {
+        ThreadUtils.assertOnUiThread();
+        mCompleteReplied.notifyCalled();
     }
 
     /**
@@ -1253,7 +1262,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
         public void dismissInstrument() {}
     }
 
-    public void onMainActivityStarted() throws InterruptedException, TimeoutException {
+    public void onMainActivityStarted() throws TimeoutException {
         if (mCallback != null) {
             mCallback.onMainActivityStarted();
         }
@@ -1273,6 +1282,6 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     /** The interface for being notified of the main activity startup. */
     public interface MainActivityStartCallback {
         /** Called when the main activity has started up. */
-        void onMainActivityStarted() throws InterruptedException, TimeoutException;
+        void onMainActivityStarted() throws TimeoutException;
     }
 }

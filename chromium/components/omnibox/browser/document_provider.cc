@@ -37,6 +37,7 @@
 #include "components/omnibox/browser/document_suggestions_service.h"
 #include "components/omnibox/browser/history_provider.h"
 #include "components/omnibox/browser/in_memory_url_index_types.h"
+#include "components/omnibox/browser/keyword_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_pref_names.h"
 #include "components/omnibox/browser/search_provider.h"
@@ -101,6 +102,11 @@ AutocompleteMatch::DocumentType GetIconForMIMEType(
 const char kErrorMessageAdminDisabled[] =
     "Not eligible to query due to admin disabled Chrome search settings.";
 const char kErrorMessageRetryLater[] = "Not eligible to query, see retry info.";
+
+// TODO(manukh): Remove ResponseContainsBackoffSignal once the check using http
+// status code in |OnURLLoadComplete| rolls out and the backend returns to
+// sending 4xx backoff responses as opposed to 2xx; or, if the backend is never
+// adjusted to send 2xx responses, once that check rolls out.
 bool ResponseContainsBackoffSignal(const base::DictionaryValue* root_dict) {
   const base::DictionaryValue* error_info;
   if (!root_dict->GetDictionary("error", &error_info)) {
@@ -185,7 +191,7 @@ std::vector<const std::string*> ExtractResultList(
   if (!values)
     return {};
 
-  const base::Value::ListStorage& list = values->GetList();
+  base::span<const base::Value> list = values->GetList();
   std::vector<const std::string*> extracted(list.size());
   std::transform(list.begin(), list.end(), extracted.begin(),
                  [field_path](const auto& value) {
@@ -334,6 +340,11 @@ std::string ExtractDocIdFromUrl(const std::string& url) {
   return std::string();
 }
 
+base::string16 TitleForAutocompletion(AutocompleteMatch match) {
+  return match.contents +
+         base::UTF8ToUTF16(" - " + match.destination_url.spec());
+}
+
 }  // namespace
 
 // static
@@ -351,7 +362,8 @@ void DocumentProvider::RegisterProfilePrefs(
 }
 
 bool DocumentProvider::IsDocumentProviderAllowed(
-    AutocompleteProviderClient* client) {
+    AutocompleteProviderClient* client,
+    const AutocompleteInput& input) {
   // Feature must be on.
   if (!base::FeatureList::IsEnabled(omnibox::kDocumentProvider))
     return false;
@@ -375,9 +387,8 @@ bool DocumentProvider::IsDocumentProviderAllowed(
     return false;
 
   // We haven't received a server backoff signal.
-  if (backoff_for_session_) {
+  if (backoff_for_session_)
     return false;
-  }
 
   // Google must be set as default search provider.
   auto* template_url_service = client->GetTemplateURLService();
@@ -385,9 +396,28 @@ bool DocumentProvider::IsDocumentProviderAllowed(
     return false;
   const TemplateURL* default_provider =
       template_url_service->GetDefaultSearchProvider();
-  return default_provider != nullptr &&
-         default_provider->GetEngineType(
-             template_url_service->search_terms_data()) == SEARCH_ENGINE_GOOGLE;
+  if (default_provider == nullptr ||
+      default_provider->GetEngineType(
+          template_url_service->search_terms_data()) != SEARCH_ENGINE_GOOGLE)
+    return false;
+  if (OmniboxFieldTrial::IsExperimentalKeywordModeEnabled() &&
+      input.prefer_keyword()) {
+    // If a keyword provider matches, and we're explicitly in keyword mode,
+    // then the keyword provider must match the default, or the document
+    // provider.
+    AutocompleteInput keyword_input = input;
+    const TemplateURL* keyword_provider =
+        KeywordProvider::GetSubstitutingTemplateURLForInput(
+            template_url_service, &keyword_input);
+    if (keyword_provider == nullptr)
+      return true;
+    // True if not explicitly in keyword mode, or a Drive suggestion.
+    return !IsExplicitlyInKeywordMode(input, keyword_provider->keyword()) ||
+           base::StartsWith(input.text(),
+                            base::ASCIIToUTF16("drive.google.com"),
+                            base::CompareCase::SENSITIVE);
+  }
+  return true;
 }
 
 // static
@@ -420,7 +450,7 @@ void DocumentProvider::Start(const AutocompleteInput& input,
 
   // Perform various checks - feature is enabled, user is allowed to use the
   // feature, we're not under backoff, etc.
-  if (!IsDocumentProviderAllowed(client_)) {
+  if (!IsDocumentProviderAllowed(client_, input)) {
     return;
   }
 
@@ -542,10 +572,15 @@ void DocumentProvider::OnURLLoadComplete(
 
   LogOmniboxDocumentRequest(DOCUMENT_REPLY_RECEIVED);
 
+  int httpStatusCode = source->ResponseInfo() && source->ResponseInfo()->headers
+                           ? source->ResponseInfo()->headers->response_code()
+                           : 0;
+
+  if (httpStatusCode == 400 || httpStatusCode == 499)
+    backoff_for_session_ = true;
+
   const bool results_updated =
-      response_body && source->NetError() == net::OK &&
-      (source->ResponseInfo() && source->ResponseInfo()->headers &&
-       source->ResponseInfo()->headers->response_code() == 200) &&
+      response_body && source->NetError() == net::OK && httpStatusCode == 200 &&
       UpdateResults(SearchSuggestionParser::ExtractJsonData(
           source, std::move(response_body)));
   loader_.reset();
@@ -690,9 +725,6 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
   // Ensure server's suggestions are added with monotonically decreasing scores.
   int previous_score = INT_MAX;
   for (size_t i = 0; i < num_results; i++) {
-    if (matches.size() >= provider_max_matches_) {
-      break;
-    }
     const base::DictionaryValue* result = nullptr;
     if (!results_list->GetDictionary(i, &result)) {
       return matches;
@@ -711,25 +743,31 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
     int server_score = 0;
     result->GetInteger("score", &server_score);
     int score = 0;
-    if (use_client_score && use_server_score)
-      score = std::min(client_score, server_score);
-    else
-      score = use_client_score ? client_score : server_score;
+    // Set |score| only if we haven't surpassed |provider_max_matches_| yet.
+    // Otherwise, score the remaining matches 0 to avoid displaying them except
+    // when deduped with history, shortcut, or bookmark matches.
+    if (matches.size() < provider_max_matches_) {
+      if (use_client_score && use_server_score)
+        score = std::min(client_score, server_score);
+      else
+        score = use_client_score ? client_score : server_score;
 
-    if (cap_score_per_rank) {
-      int score_cap = i < score_caps.size() ? score_caps[i] : score_caps.back();
-      score = std::min(score, score_cap);
+      if (cap_score_per_rank) {
+        int score_cap =
+            i < score_caps.size() ? score_caps[i] : score_caps.back();
+        score = std::min(score, score_cap);
+      }
+
+      if (boost_owned)
+        score = BoostOwned(score, client_->ProfileUserName(), result);
+
+      // Decrement scores if necessary to ensure suggestion order is preserved.
+      // Don't decrement client scores which don't necessarily rank suggestions
+      // the same as the server.
+      if (!use_client_score && score >= previous_score)
+        score = std::max(previous_score - 1, 0);
+      previous_score = score;
     }
-
-    if (boost_owned)
-      score = BoostOwned(score, client_->ProfileUserName(), result);
-
-    // Decrement scores if necessary to ensure suggestion order is preserved.
-    // Don't decrement client scores which don't necessarily rank suggestions
-    // the same as the server.
-    if (!use_client_score && score >= previous_score)
-      score = std::max(previous_score - 1, 0);
-    previous_score = score;
 
     AutocompleteMatch match(this, score, false,
                             AutocompleteMatchType::DOCUMENT_SUGGESTION);
@@ -767,9 +805,12 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
       AutocompleteMatch::AddLastClassificationIfNecessary(
           &match.description_class, 0, ACMatchClassification::DIM);
     }
+    match.TryAutocompleteWithTitle(TitleForAutocompletion(match), input_);
     match.transition = ui::PAGE_TRANSITION_GENERATED;
     match.RecordAdditionalInfo("client score", client_score);
     match.RecordAdditionalInfo("server score", server_score);
+    if (matches.size() >= provider_max_matches_)
+      match.RecordAdditionalInfo("for deduping only", "true");
     const std::string* snippet = result->FindStringPath("snippet.snippet");
     if (snippet)
       match.RecordAdditionalInfo("snippet", *snippet);
@@ -788,6 +829,9 @@ void DocumentProvider::CopyCachedMatchesToMatches(
                 matches_cache_.end(), [this](const auto& cache_key_match_pair) {
                   auto match = cache_key_match_pair.second;
                   match.relevance = 0;
+                  match.allowed_to_be_default_match = false;
+                  match.TryAutocompleteWithTitle(TitleForAutocompletion(match),
+                                                 input_);
                   match.contents_class =
                       DocumentProvider::Classify(match.contents, input_.text());
                   match.RecordAdditionalInfo("from cache", "true");

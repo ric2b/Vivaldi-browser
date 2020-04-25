@@ -41,8 +41,8 @@ namespace blink {
 // TODO(ricea): Create internal versions of ReadableStreamDefaultReader::Read()
 // and WritableStreamDefaultWriter::Write() to bypass promise creation and so
 // reduce the number of allocations on the hot path.
-class ReadableStreamNative::PipeToEngine
-    : public GarbageCollectedFinalized<PipeToEngine> {
+class ReadableStreamNative::PipeToEngine final
+    : public GarbageCollected<PipeToEngine> {
  public:
   PipeToEngine(ScriptState* script_state, PipeOptions pipe_options)
       : script_state_(script_state), pipe_options_(pipe_options) {}
@@ -599,7 +599,7 @@ class ReadableStreamNative::PipeToEngine
 };
 
 class ReadableStreamNative::TeeEngine final
-    : public GarbageCollectedFinalized<TeeEngine> {
+    : public GarbageCollected<TeeEngine> {
  public:
   TeeEngine() = default;
 
@@ -965,8 +965,9 @@ ReadableStreamNative* ReadableStreamNative::Create(
     ScriptValue underlying_source,
     ScriptValue strategy,
     ExceptionState& exception_state) {
-  auto* stream = MakeGarbageCollected<ReadableStreamNative>(
-      script_state, underlying_source, strategy, false, exception_state);
+  auto* stream = MakeGarbageCollected<ReadableStreamNative>();
+  stream->InitInternal(script_state, underlying_source, strategy, false,
+                       exception_state);
   if (exception_state.HadException()) {
     return nullptr;
   }
@@ -1001,9 +1002,12 @@ ReadableStreamNative* ReadableStreamNative::CreateWithCountQueueingStrategy(
   v8::Local<v8::Value> underlying_source_v8 =
       ToV8(underlying_source, script_state);
 
-  auto* stream = MakeGarbageCollected<ReadableStreamNative>(
-      script_state, ScriptValue(script_state, underlying_source_v8),
-      ScriptValue(script_state, strategy_object), true, exception_state);
+  auto* stream = MakeGarbageCollected<ReadableStreamNative>();
+  stream->InitInternal(
+      script_state,
+      ScriptValue(script_state->GetIsolate(), underlying_source_v8),
+      ScriptValue(script_state->GetIsolate(), strategy_object), true,
+      exception_state);
 
   if (exception_state.HadException()) {
     exception_state.ClearException();
@@ -1058,11 +1062,157 @@ ReadableStreamNative* ReadableStreamNative::Create(
 
 ReadableStreamNative::ReadableStreamNative() = default;
 
-ReadableStreamNative::ReadableStreamNative(ScriptState* script_state,
-                                           ScriptValue raw_underlying_source,
-                                           ScriptValue raw_strategy,
-                                           bool created_by_ua,
+ReadableStreamNative::~ReadableStreamNative() = default;
+
+bool ReadableStreamNative::locked(ScriptState* script_state,
+                                  ExceptionState& exception_state) const {
+  // https://streams.spec.whatwg.org/#rs-locked
+  // 2. Return ! IsReadableStreamLocked(this).
+  return IsLocked(this);
+}
+
+ScriptPromise ReadableStreamNative::cancel(ScriptState* script_state,
                                            ExceptionState& exception_state) {
+  return cancel(script_state,
+                ScriptValue(script_state->GetIsolate(),
+                            v8::Undefined(script_state->GetIsolate())),
+                exception_state);
+}
+
+ScriptPromise ReadableStreamNative::cancel(ScriptState* script_state,
+                                           ScriptValue reason,
+                                           ExceptionState& exception_state) {
+  // https://streams.spec.whatwg.org/#rs-cancel
+  // 2. If ! IsReadableStreamLocked(this) is true, return a promise rejected
+  //    with a TypeError exception.
+  if (IsLocked(this)) {
+    exception_state.ThrowTypeError("Cannot cancel a locked stream");
+    return ScriptPromise();
+  }
+
+  // 3. Return ! ReadableStreamCancel(this, reason).
+  v8::Local<v8::Promise> result = Cancel(script_state, this, reason.V8Value());
+  return ScriptPromise(script_state, result);
+}
+
+ScriptValue ReadableStreamNative::getReader(ScriptState* script_state,
+                                            ExceptionState& exception_state) {
+  // https://streams.spec.whatwg.org/#rs-get-reader
+  // 2. If mode is undefined, return ? AcquireReadableStreamDefaultReader(this,
+  //    true).
+  auto* reader = ReadableStreamNative::AcquireDefaultReader(
+      script_state, this, true, exception_state);
+  if (!reader) {
+    return ScriptValue();
+  }
+
+  return ScriptValue(script_state->GetIsolate(), ToV8(reader, script_state));
+}
+
+ScriptValue ReadableStreamNative::getReader(ScriptState* script_state,
+                                            ScriptValue options,
+                                            ExceptionState& exception_state) {
+  // https://streams.spec.whatwg.org/#rs-get-reader
+  // Since we don't support byob readers, the only thing
+  // GetReaderValidateOptions() needs to do is throw an exception if
+  // |options.mode| is invalid.
+  GetReaderValidateOptions(script_state, options, exception_state);
+  if (exception_state.HadException()) {
+    return ScriptValue();
+  }
+
+  return getReader(script_state, exception_state);
+}
+
+ScriptValue ReadableStreamNative::pipeThrough(ScriptState* script_state,
+                                              ScriptValue transform_stream,
+                                              ExceptionState& exception_state) {
+  return pipeThrough(script_state, transform_stream,
+                     ScriptValue(script_state->GetIsolate(),
+                                 v8::Undefined(script_state->GetIsolate())),
+                     exception_state);
+}
+
+// https://streams.spec.whatwg.org/#rs-pipe-through
+ScriptValue ReadableStreamNative::pipeThrough(ScriptState* script_state,
+                                              ScriptValue transform_stream,
+                                              ScriptValue options,
+                                              ExceptionState& exception_state) {
+  // TODO(ricea): Get the order of operations to strictly match the standard.
+  ScriptValue readable;
+  WritableStream* writable;
+  PipeThroughExtractReadableWritable(script_state, this, transform_stream,
+                                     &readable, &writable, exception_state);
+  if (exception_state.HadException()) {
+    return ScriptValue();
+  }
+
+  PipeOptions pipe_options;
+  UnpackPipeOptions(script_state, options, &pipe_options, exception_state);
+
+  // This cast is safe because the following code will only be run when the
+  // native version of WritableStream is in use.
+  WritableStreamNative* writable_native =
+      static_cast<WritableStreamNative*>(writable);
+
+  // 8. Let _promise_ be ! ReadableStreamPipeTo(*this*, _writable_,
+  //    _preventClose_, _preventAbort_, _preventCancel_,
+  //   _signal_).
+
+  ScriptPromise promise =
+      PipeTo(script_state, this, writable_native, pipe_options);
+
+  // 9. Set _promise_.[[PromiseIsHandled]] to *true*.
+  promise.MarkAsHandled();
+
+  // 10. Return _readable_.
+  return readable;
+}
+
+ScriptPromise ReadableStreamNative::pipeTo(ScriptState* script_state,
+                                           ScriptValue destination,
+                                           ExceptionState& exception_state) {
+  return pipeTo(script_state, destination,
+                ScriptValue(script_state->GetIsolate(),
+                            v8::Undefined(script_state->GetIsolate())),
+                exception_state);
+}
+
+ScriptPromise ReadableStreamNative::pipeTo(ScriptState* script_state,
+                                           ScriptValue destination_value,
+                                           ScriptValue options,
+                                           ExceptionState& exception_state) {
+  WritableStream* destination = PipeToCheckSourceAndDestination(
+      script_state, this, destination_value, exception_state);
+  if (exception_state.HadException()) {
+    return ScriptPromise();
+  }
+  CHECK(destination);
+
+  PipeOptions pipe_options;
+  UnpackPipeOptions(script_state, options, &pipe_options, exception_state);
+
+  // This cast is safe because the following code will only be run when the
+  // native version of WritableStream is in use.
+  WritableStreamNative* destination_native =
+      static_cast<WritableStreamNative*>(destination);
+
+  return PipeTo(script_state, this, destination_native, pipe_options);
+}
+
+ScriptValue ReadableStreamNative::tee(ScriptState* script_state,
+                                      ExceptionState& exception_state) {
+  return CallTeeAndReturnBranchArray(script_state, this, exception_state);
+}
+
+// Unlike in the standard, this is defined as a separate method from the
+// constructor. This prevents problems when garbage collection happens
+// re-entrantly during construction.
+void ReadableStreamNative::InitInternal(ScriptState* script_state,
+                                        ScriptValue raw_underlying_source,
+                                        ScriptValue raw_strategy,
+                                        bool created_by_ua,
+                                        ExceptionState& exception_state) {
   if (!created_by_ua) {
     // TODO(ricea): Move this to IDL once blink::ReadableStreamOperations is
     // no longer using the public constructor.
@@ -1149,153 +1299,6 @@ ReadableStreamNative::ReadableStreamNative(ScriptState* script_state,
   ReadableStreamDefaultController::SetUpFromUnderlyingSource(
       script_state, this, underlying_source, high_water_mark, size_algorithm,
       exception_state);
-}
-
-ReadableStreamNative::~ReadableStreamNative() = default;
-
-bool ReadableStreamNative::locked(ScriptState* script_state,
-                                  ExceptionState& exception_state) const {
-  // https://streams.spec.whatwg.org/#rs-locked
-  // 2. Return ! IsReadableStreamLocked(this).
-  return IsLocked(this);
-}
-
-ScriptPromise ReadableStreamNative::cancel(ScriptState* script_state,
-                                           ExceptionState& exception_state) {
-  return cancel(
-      script_state,
-      ScriptValue(script_state, v8::Undefined(script_state->GetIsolate())),
-      exception_state);
-}
-
-ScriptPromise ReadableStreamNative::cancel(ScriptState* script_state,
-                                           ScriptValue reason,
-                                           ExceptionState& exception_state) {
-  // https://streams.spec.whatwg.org/#rs-cancel
-  // 2. If ! IsReadableStreamLocked(this) is true, return a promise rejected
-  //    with a TypeError exception.
-  if (IsLocked(this)) {
-    exception_state.ThrowTypeError("Cannot cancel a locked stream");
-    return ScriptPromise();
-  }
-
-  // 3. Return ! ReadableStreamCancel(this, reason).
-  v8::Local<v8::Promise> result = Cancel(script_state, this, reason.V8Value());
-  return ScriptPromise(script_state, result);
-}
-
-ScriptValue ReadableStreamNative::getReader(ScriptState* script_state,
-                                            ExceptionState& exception_state) {
-  // https://streams.spec.whatwg.org/#rs-get-reader
-  // 2. If mode is undefined, return ? AcquireReadableStreamDefaultReader(this,
-  //    true).
-  auto* reader = ReadableStreamNative::AcquireDefaultReader(
-      script_state, this, true, exception_state);
-  if (!reader) {
-    return ScriptValue();
-  }
-
-  return ScriptValue(script_state, ToV8(reader, script_state));
-}
-
-ScriptValue ReadableStreamNative::getReader(ScriptState* script_state,
-                                            ScriptValue options,
-                                            ExceptionState& exception_state) {
-  // https://streams.spec.whatwg.org/#rs-get-reader
-  // Since we don't support byob readers, the only thing
-  // GetReaderValidateOptions() needs to do is throw an exception if
-  // |options.mode| is invalid.
-  GetReaderValidateOptions(script_state, options, exception_state);
-  if (exception_state.HadException()) {
-    return ScriptValue();
-  }
-
-  return getReader(script_state, exception_state);
-}
-
-ScriptValue ReadableStreamNative::pipeThrough(ScriptState* script_state,
-                                              ScriptValue transform_stream,
-                                              ExceptionState& exception_state) {
-  return pipeThrough(
-      script_state, transform_stream,
-      ScriptValue(script_state, v8::Undefined(script_state->GetIsolate())),
-      exception_state);
-}
-
-// https://streams.spec.whatwg.org/#rs-pipe-through
-ScriptValue ReadableStreamNative::pipeThrough(ScriptState* script_state,
-                                              ScriptValue transform_stream,
-                                              ScriptValue options,
-                                              ExceptionState& exception_state) {
-  // TODO(ricea): Get the order of operations to strictly match the standard.
-  ScriptValue readable;
-  WritableStream* writable;
-  PipeThroughExtractReadableWritable(script_state, this, transform_stream,
-                                     &readable, &writable, exception_state);
-  if (exception_state.HadException()) {
-    return ScriptValue();
-  }
-
-  PipeOptions pipe_options;
-  UnpackPipeOptions(script_state, options, &pipe_options, exception_state);
-
-  DCHECK(RuntimeEnabledFeatures::StreamsNativeEnabled());
-
-  // This cast is safe because the following code will only be run when the
-  // native version of WritableStream is in use.
-  WritableStreamNative* writable_native =
-      static_cast<WritableStreamNative*>(writable);
-
-  // 8. Let _promise_ be ! ReadableStreamPipeTo(*this*, _writable_,
-  //    _preventClose_, _preventAbort_, _preventCancel_,
-  //   _signal_).
-
-  ScriptPromise promise =
-      PipeTo(script_state, this, writable_native, pipe_options);
-
-  // 9. Set _promise_.[[PromiseIsHandled]] to *true*.
-  promise.MarkAsHandled();
-
-  // 10. Return _readable_.
-  return readable;
-}
-
-ScriptPromise ReadableStreamNative::pipeTo(ScriptState* script_state,
-                                           ScriptValue destination,
-                                           ExceptionState& exception_state) {
-  return pipeTo(
-      script_state, destination,
-      ScriptValue(script_state, v8::Undefined(script_state->GetIsolate())),
-      exception_state);
-}
-
-ScriptPromise ReadableStreamNative::pipeTo(ScriptState* script_state,
-                                           ScriptValue destination_value,
-                                           ScriptValue options,
-                                           ExceptionState& exception_state) {
-  WritableStream* destination = PipeToCheckSourceAndDestination(
-      script_state, this, destination_value, exception_state);
-  if (exception_state.HadException()) {
-    return ScriptPromise();
-  }
-  CHECK(destination);
-
-  PipeOptions pipe_options;
-  UnpackPipeOptions(script_state, options, &pipe_options, exception_state);
-
-  DCHECK(RuntimeEnabledFeatures::StreamsNativeEnabled());
-
-  // This cast is safe because the following code will only be run when the
-  // native version of WritableStream is in use.
-  WritableStreamNative* destination_native =
-      static_cast<WritableStreamNative*>(destination);
-
-  return PipeTo(script_state, this, destination_native, pipe_options);
-}
-
-ScriptValue ReadableStreamNative::tee(ScriptState* script_state,
-                                      ExceptionState& exception_state) {
-  return CallTeeAndReturnBranchArray(script_state, this, exception_state);
 }
 
 //

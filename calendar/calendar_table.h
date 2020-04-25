@@ -44,6 +44,7 @@ class CalendarTable {
   bool UpdateCalendarRow(const CalendarRow& calendar);
   bool DeleteCalendar(CalendarID calendar_id);
   bool DoesCalendarIdExist(CalendarID calendar_id);
+  bool MigrateCalendarToVersion3();
 
  protected:
   virtual sql::Database& GetDB() = 0;
@@ -58,7 +59,8 @@ class CalendarTable {
 
 #define CALENDAR_ROW_FIELDS                                         \
   " id, name, description,  url, ctag, orderindex, color, hidden, " \
-  " active, iconindex, username, created, last_modified "
+  " active, iconindex, username, type, interval, last_checked ,"    \
+  " created, last_modified "
 
 }  // namespace calendar
 

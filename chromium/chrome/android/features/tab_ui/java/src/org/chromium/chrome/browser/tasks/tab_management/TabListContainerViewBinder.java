@@ -11,7 +11,6 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerP
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.IS_VISIBLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.SHADOW_TOP_MARGIN;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.TOP_CONTROLS_HEIGHT;
-import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.TOP_PADDING;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.VISIBILITY_LISTENER;
 
 import android.support.v7.widget.LinearLayoutManager;
@@ -20,6 +19,8 @@ import android.widget.FrameLayout;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * ViewBinder for TabListRecyclerView.
@@ -40,6 +41,7 @@ class TabListContainerViewBinder {
                 view.startHiding(model.get(ANIMATE_VISIBILITY_CHANGES));
             }
         } else if (IS_INCOGNITO == propertyKey) {
+            if (!ChromeApplication.isVivaldi())
             view.setBackgroundColor(ColorUtils.getPrimaryBackgroundColor(
                     view.getResources(), model.get(IS_INCOGNITO)));
         } else if (VISIBILITY_LISTENER == propertyKey) {
@@ -49,16 +51,21 @@ class TabListContainerViewBinder {
             int index = (Integer) model.get(INITIAL_SCROLL_INDEX);
             ((LinearLayoutManager) view.getLayoutManager()).scrollToPositionWithOffset(index, 0);
         } else if (TOP_CONTROLS_HEIGHT == propertyKey) {
+            // NOTE(david@vivaldi.com): In Vivaldi the layout params can be RecycleView layout
+            // params
+            if (!(view.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
+
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
             params.topMargin = model.get(TOP_CONTROLS_HEIGHT);
             view.requestLayout();
         } else if (BOTTOM_CONTROLS_HEIGHT == propertyKey) {
+            // NOTE(david@vivaldi.com): In Vivaldi the layout params can be RecycleView layout
+            // params
+            if (!(view.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
+
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
             params.bottomMargin = model.get(BOTTOM_CONTROLS_HEIGHT);
             view.requestLayout();
-        } else if (TOP_PADDING == propertyKey) {
-            view.setPadding(view.getPaddingLeft(), model.get(TOP_PADDING), view.getPaddingRight(),
-                    view.getPaddingBottom());
         } else if (SHADOW_TOP_MARGIN == propertyKey) {
             view.setShadowTopMargin(model.get(SHADOW_TOP_MARGIN));
         }

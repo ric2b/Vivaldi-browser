@@ -17,7 +17,6 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.os.SystemClock;
-import android.support.annotation.Nullable;
 import android.support.v7.content.res.AppCompatResources;
 import android.support.v7.widget.RecyclerView;
 import android.util.AttributeSet;
@@ -29,8 +28,11 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.Log;
 import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
@@ -38,6 +40,10 @@ import org.chromium.ui.modelutil.SimpleRecyclerViewAdapter;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
 import org.chromium.ui.widget.ViewLookupCachingFrameLayout;
+
+import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * A custom RecyclerView implementation for the tab grid, to handle show/hide logic in class.
@@ -148,6 +154,17 @@ class TabListRecyclerView extends RecyclerView {
      * @param animate Whether the visibility change should be animated.
      */
     void startShowing(boolean animate) {
+        // NOTE (david@vivaldi.com): Showing animation is handled in the |TabSwitcherView|.
+        if (ChromeApplication.isVivaldi()) {
+            mListener.startedShowing(animate);
+            setAlpha(1);
+            setVisibility(View.VISIBLE);
+            mListener.finishedShowing();
+            setVerticalScrollBarEnabled(ChromePreferenceManager.getInstance().readBoolean(
+                    VivaldiPreferences.SHOW_SCROLLBARS, false));
+            return;
+        }
+
         assert mFadeOutAnimator == null;
         mListener.startedShowing(animate);
 
@@ -387,6 +404,13 @@ class TabListRecyclerView extends RecyclerView {
      * @param animate Whether the visibility change should be animated.
      */
     void startHiding(boolean animate) {
+        // NOTE (david@vivaldi.com): Hiding animation is handled in the |TabSwitcherView|.
+        if (ChromeApplication.isVivaldi()) {
+            mListener.startedHiding(animate);
+            mListener.finishedHiding();
+            return;
+        }
+
         endAllAnimations();
 
         registerDynamicView();
@@ -438,22 +462,10 @@ class TabListRecyclerView extends RecyclerView {
         SimpleRecyclerViewAdapter.ViewHolder holder =
                 (SimpleRecyclerViewAdapter.ViewHolder) findViewHolderForAdapterPosition(
                         selectedTabIndex);
-        if (holder == null) return null;
+        if (holder == null || selectedTabIndex == TabModel.INVALID_TAB_INDEX) return null;
         assert holder.model.get(TabProperties.TAB_ID) == selectedTabId;
         ViewLookupCachingFrameLayout root = (ViewLookupCachingFrameLayout) holder.itemView;
         return getRectOfComponent(root.fastFindViewById(R.id.tab_thumbnail));
-    }
-
-    /**
-     * @param currentTabIndex The the current tab's index in the model.
-     * @return The {@link Rect} of the tab grid card of the current tab, relative to the
-     *         {@link TabListRecyclerView} coordinates.
-     */
-    @Nullable
-    Rect getRectOfCurrentTabGridCard(int currentTabIndex) {
-        ViewHolder holder = findViewHolderForAdapterPosition(currentTabIndex);
-        if (holder == null) return null;
-        return getRectOfComponent(holder.itemView);
     }
 
     private Rect getRectOfComponent(View v) {

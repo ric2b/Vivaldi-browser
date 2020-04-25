@@ -80,8 +80,8 @@ android_library("content_java") {
     "//services/shape_detection:shape_detection_java",
     "//services/shape_detection/public/mojom:mojom_java",
     "//skia/public/mojom:mojom_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:com_android_support_collections_java",
-    "//third_party/android_deps:com_android_support_support_annotations_java",
     "//third_party/android_deps:com_android_support_support_compat_java",
     "//third_party/blink/public:blink_headers_java",
     "//third_party/blink/public/mojom:android_mojo_bindings_java",
@@ -90,6 +90,7 @@ android_library("content_java") {
     "//third_party/jsr-305:jsr_305_javalib",
     "//ui/android:ui_java",
     "//ui/gfx/geometry/mojom:mojom_java",
+    "//url:origin_java",
   ]
 
   srcjar_deps = [
@@ -295,6 +296,7 @@ android_library("content_java") {
     "java/src/org/chromium/content_public/common/ScreenOrientationConstants.java",
     "java/src/org/chromium/content_public/common/ServiceManagerConnection.java",
     "java/src/org/chromium/content_public/common/UseZoomForDSFPolicy.java",
+    "java/src/org/chromium/content_public/app/ChildProcessServiceFactory.java",
   ]
   annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
 }
@@ -481,8 +483,8 @@ android_library("content_javatests") {
     "//services/device/public/java:geolocation_java_test_support",
     "//services/service_manager/public/java:service_manager_java",
     "//services/test/echo/public/mojom:mojom_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:com_android_support_collections_java",
-    "//third_party/android_deps:com_android_support_support_annotations_java",
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",
     "//third_party/blink/public:blink_headers_java",
@@ -595,5 +597,9 @@ junit_binary("content_junit_tests") {
     "//third_party/blink/public/mojom:android_mojo_bindings_java",
     "//ui/android:ui_java",
     "//ui/gfx/geometry/mojom:mojom_java",
+  ]
+
+  data_deps = [
+    "//testing/buildbot/filters:content_junit_tests_filters",
   ]
 }

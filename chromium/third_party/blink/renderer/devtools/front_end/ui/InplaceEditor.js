@@ -4,16 +4,17 @@
 /**
  * @unrestricted
  */
-UI.InplaceEditor = class {
+export default class InplaceEditor {
   /**
    * @param {!Element} element
-   * @param {!UI.InplaceEditor.Config=} config
-   * @return {?UI.InplaceEditor.Controller}
+   * @param {!InplaceEditor.Config=} config
+   * @return {?InplaceEditor.Controller}
    */
   static startEditing(element, config) {
-    if (!UI.InplaceEditor._defaultInstance)
-      UI.InplaceEditor._defaultInstance = new UI.InplaceEditor();
-    return UI.InplaceEditor._defaultInstance.startEditing(element, config);
+    if (!InplaceEditor._defaultInstance) {
+      InplaceEditor._defaultInstance = new InplaceEditor();
+    }
+    return InplaceEditor._defaultInstance.startEditing(element, config);
   }
 
   /**
@@ -21,8 +22,9 @@ UI.InplaceEditor = class {
    */
   editorContent(editingContext) {
     const element = editingContext.element;
-    if (element.tagName === 'INPUT' && element.type === 'text')
+    if (element.tagName === 'INPUT' && element.type === 'text') {
       return element.value;
+    }
 
     return element.textContent;
   }
@@ -37,8 +39,9 @@ UI.InplaceEditor = class {
     editingContext.oldRole = oldRole;
 
     const oldTabIndex = element.getAttribute('tabIndex');
-    if (typeof oldTabIndex !== 'number' || oldTabIndex < 0)
+    if (typeof oldTabIndex !== 'number' || oldTabIndex < 0) {
       element.tabIndex = 0;
+    }
     this._focusRestorer = new UI.ElementFocusRestorer(element);
     editingContext.oldTabIndex = oldTabIndex;
   }
@@ -48,25 +51,28 @@ UI.InplaceEditor = class {
     element.classList.remove('editing');
     element.removeAttribute('contenteditable');
 
-    if (typeof editingContext.oldRole !== 'string')
+    if (typeof editingContext.oldRole !== 'string') {
       element.removeAttribute('role');
-    else
+    } else {
       element.role = editingContext.oldRole;
+    }
 
-    if (typeof editingContext.oldTabIndex !== 'number')
+    if (typeof editingContext.oldTabIndex !== 'number') {
       element.removeAttribute('tabIndex');
-    else
+    } else {
       element.tabIndex = editingContext.oldTabIndex;
+    }
     element.scrollTop = 0;
     element.scrollLeft = 0;
   }
 
   cancelEditing(editingContext) {
     const element = editingContext.element;
-    if (element.tagName === 'INPUT' && element.type === 'text')
+    if (element.tagName === 'INPUT' && element.type === 'text') {
       element.value = editingContext.oldText;
-    else
+    } else {
       element.textContent = editingContext.oldText;
+    }
   }
 
   augmentEditingHandle(editingContext, handle) {
@@ -74,14 +80,15 @@ UI.InplaceEditor = class {
 
   /**
    * @param {!Element} element
-   * @param {!UI.InplaceEditor.Config=} config
-   * @return {?UI.InplaceEditor.Controller}
+   * @param {!InplaceEditor.Config=} config
+   * @return {?InplaceEditor.Controller}
    */
   startEditing(element, config) {
-    if (!UI.markBeingEdited(element, true))
+    if (!UI.markBeingEdited(element, true)) {
       return null;
+    }
 
-    config = config || new UI.InplaceEditor.Config(function() {}, function() {});
+    config = config || new InplaceEditor.Config(function() {}, function() {});
     const editingContext = {element: element, config: config};
     const committedCallback = config.commitHandler;
     const cancelledCallback = config.cancelHandler;
@@ -98,8 +105,9 @@ UI.InplaceEditor = class {
      * @param {!Event=} e
      */
     function blurEventListener(e) {
-      if (config.blurHandler && !config.blurHandler(element, e))
+      if (config.blurHandler && !config.blurHandler(element, e)) {
         return;
+      }
       editingCommitted.call(element);
     }
 
@@ -108,11 +116,13 @@ UI.InplaceEditor = class {
 
       element.removeEventListener('blur', blurEventListener, false);
       element.removeEventListener('keydown', keyDownEventListener, true);
-      if (pasteCallback)
+      if (pasteCallback) {
         element.removeEventListener('paste', pasteEventListener, true);
+      }
 
-      if (self._focusRestorer)
+      if (self._focusRestorer) {
         self._focusRestorer.restore();
+      }
       self.closeEditor(editingContext);
     }
 
@@ -135,12 +145,13 @@ UI.InplaceEditor = class {
      * @return {string}
      */
     function defaultFinishHandler(event) {
-      if (isEnterKey(event))
+      if (isEnterKey(event)) {
         return 'commit';
-      else if (event.keyCode === UI.KeyboardShortcut.Keys.Esc.code || event.key === 'Escape')
+      } else if (event.keyCode === UI.KeyboardShortcut.Keys.Esc.code || event.key === 'Escape') {
         return 'cancel';
-      else if (event.key === 'Tab')
+      } else if (event.key === 'Tab') {
         return 'move-' + (event.shiftKey ? 'backward' : 'forward');
+      }
       return '';
     }
 
@@ -153,8 +164,9 @@ UI.InplaceEditor = class {
         event.consume(true);
       } else if (result && result.startsWith('move-')) {
         moveDirection = result.substring(5);
-        if (event.key === 'Tab')
+        if (event.key === 'Tab') {
           event.consume(true);
+        }
         blurEventListener();
       }
     }
@@ -172,33 +184,30 @@ UI.InplaceEditor = class {
      */
     function keyDownEventListener(event) {
       let result = defaultFinishHandler(event);
-      if (!result && config.postKeydownFinishHandler)
+      if (!result && config.postKeydownFinishHandler) {
         result = config.postKeydownFinishHandler(event);
+      }
       handleEditingResult(result, event);
     }
 
     element.addEventListener('blur', blurEventListener, false);
     element.addEventListener('keydown', keyDownEventListener, true);
-    if (pasteCallback)
+    if (pasteCallback) {
       element.addEventListener('paste', pasteEventListener, true);
+    }
 
     const handle = {cancel: editingCancelled.bind(element), commit: editingCommitted.bind(element)};
     this.augmentEditingHandle(editingContext, handle);
     return handle;
   }
-};
-
-/**
- * @typedef {{cancel: function(), commit: function()}}
- */
-UI.InplaceEditor.Controller;
+}
 
 
 /**
  * @template T
  * @unrestricted
  */
-UI.InplaceEditor.Config = class {
+export class Config {
   /**
    * @param {function(!Element,string,string,T,string)} commitHandler
    * @param {function(!Element,T)} cancelHandler
@@ -232,4 +241,23 @@ UI.InplaceEditor.Config = class {
   setPostKeydownFinishHandler(postKeydownFinishHandler) {
     this.postKeydownFinishHandler = postKeydownFinishHandler;
   }
-};
+}
+
+/* Legacy exported object*/
+self.UI = self.UI || {};
+
+/* Legacy exported object*/
+UI = UI || {};
+
+/** @constructor */
+UI.InplaceEditor = InplaceEditor;
+
+/**
+ * @constructor
+ */
+UI.InplaceEditor.Config = Config;
+
+/**
+ * @typedef {{cancel: function(), commit: function()}}
+ */
+UI.InplaceEditor.Controller;

@@ -9,13 +9,14 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Rect;
-import android.support.annotation.IntDef;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+
+import androidx.annotation.IntDef;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
@@ -24,6 +25,8 @@ import org.chromium.chrome.R;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Handles the drag touch events on AppMenu that start from the menu button.
@@ -246,6 +249,9 @@ class AppMenuDragHelper {
         // Unfortunately, there is no available listener for sliding animation finished. Thus the
         // following nasty heuristics.
         final View firstRow = listView.getChildAt(0);
+        // NOTE(david@vivaldi.com): In Vivaldi we have popup menus that slides up and slides down.
+        // Therefore skip check and always try to highlight when dragging is performed.
+        if(!ChromeApplication.isVivaldi())
         if (listView.getFirstVisiblePosition() == 0
                 && firstRow != null
                 && firstRow.getTop() == 0

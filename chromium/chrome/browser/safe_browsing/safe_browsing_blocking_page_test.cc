@@ -1609,10 +1609,10 @@ class SecurityStyleTestObserver : public content::WebContentsObserver {
  public:
   explicit SecurityStyleTestObserver(content::WebContents* web_contents)
       : content::WebContentsObserver(web_contents),
-        latest_security_style_(blink::kWebSecurityStyleUnknown),
+        latest_security_style_(blink::SecurityStyle::kUnknown),
         latest_security_style_explanations_() {}
 
-  blink::WebSecurityStyle latest_security_style() const {
+  blink::SecurityStyle latest_security_style() const {
     return latest_security_style_;
   }
 
@@ -1628,7 +1628,7 @@ class SecurityStyleTestObserver : public content::WebContentsObserver {
   }
 
  private:
-  blink::WebSecurityStyle latest_security_style_;
+  blink::SecurityStyle latest_security_style_;
   content::SecurityStyleExplanations latest_security_style_explanations_;
   DISALLOW_COPY_AND_ASSIGN(SecurityStyleTestObserver);
 };
@@ -1654,7 +1654,7 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
   // The security indicator should be downgraded while the interstitial shows.
   SetupThreatIframeWarningAndNavigate();
   ExpectSecurityIndicatorDowngrade(error_tab, 0u);
-  EXPECT_EQ(blink::kWebSecurityStyleInsecure, observer.latest_security_style());
+  EXPECT_EQ(blink::SecurityStyle::kInsecure, observer.latest_security_style());
   // Security style summary for Developer Tools should contain a warning.
   EXPECT_EQ(l10n_util::GetStringUTF8(IDS_SAFEBROWSING_WARNING),
             observer.latest_security_style_explanations().summary);
@@ -1856,17 +1856,34 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
   EXPECT_FALSE(IsShowingInterstitial(contents));
 }
 
+INSTANTIATE_TEST_SUITE_P(
+    SafeBrowsingBlockingPageBrowserTestWithThreatTypeAndIsolationSetting,
+    SafeBrowsingBlockingPageBrowserTest,
+    testing::Combine(
+        testing::Values(SB_THREAT_TYPE_URL_MALWARE,  // Threat types
+                        SB_THREAT_TYPE_URL_PHISHING,
+                        SB_THREAT_TYPE_URL_UNWANTED),
+        testing::Bool()));  // If isolate all sites for testing.
+
+class SafeBrowsingBlockingPageBrowserTestWithCommittedSBInterstitials
+    : public SafeBrowsingBlockingPageBrowserTest {
+ public:
+  SafeBrowsingBlockingPageBrowserTestWithCommittedSBInterstitials() {
+    feature_list_.InitAndEnableFeature(kCommittedSBInterstitials);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
 // TODO(crbug.com/916683): Once interstitial bindings are hooked with committed
 // interstitials, all other tests should run with committed interstitials
 // enabled. At that point this test will become redundant and should be removed.
 // Test that an main frame interstitial is displayed with committed
 // interstitials enabled.
-IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
-                       CommittedInterstitialShows) {
-  base::test::ScopedFeatureList feature_list;
-  std::vector<base::Feature> enable;
-  enable.push_back(kCommittedSBInterstitials);
-  feature_list.InitWithFeatures(enable, std::vector<base::Feature>());
+IN_PROC_BROWSER_TEST_P(
+    SafeBrowsingBlockingPageBrowserTestWithCommittedSBInterstitials,
+    CommittedInterstitialShows) {
   SetupWarningAndNavigate(browser());
   EXPECT_TRUE(IsShowingInterstitial(
       browser()->tab_strip_model()->GetActiveWebContents()));
@@ -1874,7 +1891,7 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
 
 INSTANTIATE_TEST_SUITE_P(
     SafeBrowsingBlockingPageBrowserTestWithThreatTypeAndIsolationSetting,
-    SafeBrowsingBlockingPageBrowserTest,
+    SafeBrowsingBlockingPageBrowserTestWithCommittedSBInterstitials,
     testing::Combine(
         testing::Values(SB_THREAT_TYPE_URL_MALWARE,  // Threat types
                         SB_THREAT_TYPE_URL_PHISHING,

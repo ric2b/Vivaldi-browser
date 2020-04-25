@@ -7,6 +7,7 @@
 <translation id="1156623771253174079">{SECONDS,plural, =1{1 నిమిషం క్రితం}other{# నిమిషాల క్రితం}}</translation>
 <translation id="1169783199079129864">{MINUTES,plural, =1{1ని}other{#ని}}</translation>
 <translation id="1181037720776840403">తీసివేయి</translation>
+<translation id="1201402288615127009">తరువాత</translation>
 <translation id="1243314992276662751">అప్‌లోడ్ చేయి</translation>
 <translation id="1266864766717917324"><ph name="CONTENT_TYPE" />ను షేర్ చేయడం సాధ్యపడలేదు</translation>
 <translation id="1269641567813814718">Win</translation>
@@ -51,6 +52,7 @@
 <translation id="2289052229480071835">మీ స్క్రీన్‌పై ఉన్న స్పర్శ లక్ష్యాలను నొక్కండి.</translation>
 <translation id="2295140143284145483">సర్వే</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="2353636109065292463">మీ ఇంటర్నెట్ కనెక్షన్‌ను తనిఖీ చేస్తోంది</translation>
 <translation id="2388990488038464401">మీ ఫోన్ నుండి ఈ నంబర్‌‌కు కాల్ చేయాలా?</translation>
 <translation id="24452542372838207">నోటిఫికేషన్‌ను విస్తరించు</translation>
 <translation id="2445449901874883781">ఎక్కువ సాంద్రతను ఉపయోగించు</translation>
@@ -81,7 +83,6 @@
 <translation id="3295886253693811851">దీని నుండి కాల్ చేయండి</translation>
 <translation id="335581015389089642">ప్రసంగం</translation>
 <translation id="3389286852084373014">వచనం చాలా పెద్దదిగా ఉంది</translation>
-<translation id="3443810440409579745">ట్యాబ్‌ను అందుకున్నారు.</translation>
 <translation id="3479552764303398839">ఇప్పుడు కాదు</translation>
 <translation id="348799646910989694">అర ఆటోమేటిక్‌గా దాచి పెట్టబడుతుంది</translation>
 <translation id="3600566671520689681">{DAYS,plural, =1{1 రోజు మిగిలి ఉంది}other{# రోజులు మిగిలి ఉన్నాయి}}</translation>
@@ -111,14 +112,11 @@
 <translation id="4724120544754982507">నోటిఫికేషన్ కేంద్రం, <ph name="UNREAD_NOTIFICATION_COUNT" /> చదవని నోటిఫికేషన్‌లు</translation>
 <translation id="4730374152663651037">తరచుగా ఉపయోగించేవి</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{1 నెల మిగిలి ఉంది}other{# నెలలు మిగిలి ఉన్నాయి}}</translation>
-<translation id="4841881773802181781">చొప్పించడం</translation>
-<translation id="4881695831933465202">తెరువు</translation>
 <translation id="4888938634149558681">కాల్ చేయి</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 సెకను}other{# సెకన్లు}}</translation>
 <translation id="4971687151119236543">మీడియా మునుపటి ట్రాక్</translation>
 <translation id="5046499563572181734">ఇక్కడ నొక్కండి</translation>
 <translation id="5076340679995252485">&amp;అతికించు</translation>
-<translation id="5137751499640340777">Google అసిస్టెంట్‌ను ప్రారంభించండి</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">కంటెంట్‌ను విస్తరింపజేసే లేదా కుదించే త్రిభుజం</translation>
 <translation id="5278860589123563674">పంపడం విఫలమైంది</translation>
@@ -155,6 +153,7 @@
 <translation id="6394627529324717982">కామా</translation>
 <translation id="6397363302884558537">మాట్లాడటాన్ని ఆపివేయి</translation>
 <translation id="6404817160109697034">{SECONDS,plural, =1{1 సెక. క్రితం}other{# సెక. క్రితం}}</translation>
+<translation id="6417265370957905582">Google అసిస్టెంట్</translation>
 <translation id="6430678249303439055">ఈ యాప్ నుండి నోటిఫికేషన్‌లు అన్ని బ్లాక్ చేయండి</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 సెకను క్రితం}other{# సెకన్ల క్రితం}}</translation>
 <translation id="6539092367496845964">ఏదో తప్పు జరిగింది. తర్వాత మళ్లీ ప్రయత్నించండి.</translation>
@@ -165,7 +164,7 @@
 <translation id="6620110761915583480">ఫైల్‌ను సేవ్ చేయి</translation>
 <translation id="6656912866303152668">Chromeతో <ph name="TARGET_DEVICE_NAME" /> సింక్ చేయబడి ఉందని నిర్ధారించుకుని, ఆపై మళ్లీ పంపే ప్రయత్నం చేయండి.</translation>
 <translation id="6699343763173986273">మీడియా తరువాత ట్రాక్</translation>
-<translation id="673773751041746814">తొలగింపు</translation>
+<translation id="6710213216561001401">మునుపటి</translation>
 <translation id="6779314412797872738">దీని నుండి మీ ఫోన్‌కు Android నంబర్‌ను పంపడానికి, రెండు పరికరాలలోని సెట్టింగ్‌లలో "<ph name="TROUBLESHOOT_LINK" />".</translation>
 <translation id="6786750046913594791">ఫోల్డర్‌ను మూసివేయండి</translation>
 <translation id="6808150112686056157">మీడియా ఆపివేయి</translation>
@@ -183,6 +182,7 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{1 నిమి. మిగిలి ఉంది}other{# నిమి. మిగిలి ఉన్నాయి}}</translation>
 <translation id="7319740667687257810">లాంఛ‌ర్‌, పాక్షిక వీక్షణ</translation>
+<translation id="7352651011704765696">ఏదో తప్పు జరిగింది</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{1 నిమి. క్రితం}other{# నిమి. క్రితం}}</translation>
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{1 నిమిషం మిగిలి ఉంది}other{# నిమిషాలు మిగిలి ఉన్నాయి}}</translation>
@@ -198,9 +198,10 @@
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{1 కంటే ఎక్కువ చదవని నోటిఫికేషన్‌లు ఉన్నాయి}other{# కంటే ఎక్కువ చదవని నోటిఫికేషన్‌లు ఉన్నాయి}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{1 నిమిషంలో}other{# నిమిషంలో}}</translation>
 <translation id="8087772101393322318"><ph name="KEY_MODIFIER_NAME" />+<ph name="KEY_COMBO_NAME" /></translation>
-<translation id="8098075892845277643">Google అసిస్టెంట్ వాయిస్ ప్రశ్నను ప్రారంభిస్తుంది</translation>
+<translation id="8090736967111090568"><ph name="ORIGIN" /> నుండి నంబర్</translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{1 గంట క్రితం}other{# గంటల క్రితం}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{1 సెక. మిగిలి ఉంది}other{# సెక. మిగిలి ఉన్నాయి}}</translation>
+<translation id="8134065097954893699">ఈ పేజీని మళ్లీ లోడ్ చేస్తోంది</translation>
 <translation id="8144660977431427332">మీ శోధనలు Google అసిస్టెంట్ ఆధారితంగా ఉంటాయి. <ph name="LEARN_MORE" /></translation>
 <translation id="8152264887680882389"><ph name="TEXT" />, స్వయంపూర్తి</translation>
 <translation id="815598010540052116">కిందికి స్క్రోల్ చేయి</translation>

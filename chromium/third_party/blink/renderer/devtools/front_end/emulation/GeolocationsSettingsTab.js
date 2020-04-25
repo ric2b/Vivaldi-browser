@@ -40,14 +40,15 @@ Emulation.GeolocationsSettingsTab = class extends UI.VBox {
     this._list.clear();
 
     const conditions = this._customSetting.get();
-    for (let i = 0; i < conditions.length; ++i)
+    for (let i = 0; i < conditions.length; ++i) {
       this._list.appendItem(conditions[i], true);
+    }
 
     this._list.appendSeparator();
   }
 
   _addButtonClicked() {
-    this._list.addNewItem(this._customSetting.get().length, {title: '', lat: 0, long: 0});
+    this._list.addNewItem(this._customSetting.get().length, {title: '', lat: 0, long: 0, timezoneId: ''});
   }
 
   /**
@@ -67,6 +68,8 @@ Emulation.GeolocationsSettingsTab = class extends UI.VBox {
     element.createChild('div', 'geolocations-list-text').textContent = geolocation.lat;
     element.createChild('div', 'geolocations-list-separator');
     element.createChild('div', 'geolocations-list-text').textContent = geolocation.long;
+    element.createChild('div', 'geolocations-list-separator');
+    element.createChild('div', 'geolocations-list-text').textContent = geolocation.timezoneId;
     return element;
   }
 
@@ -94,10 +97,13 @@ Emulation.GeolocationsSettingsTab = class extends UI.VBox {
     geolocation.lat = lat ? parseFloat(lat) : 0;
     const long = editor.control('long').value.trim();
     geolocation.long = long ? parseFloat(long) : 0;
+    const timezoneId = editor.control('timezoneId').value.trim();
+    geolocation.timezoneId = timezoneId;
 
     const list = this._customSetting.get();
-    if (isNew)
+    if (isNew) {
       list.push(geolocation);
+    }
     this._customSetting.set(list);
   }
 
@@ -112,6 +118,7 @@ Emulation.GeolocationsSettingsTab = class extends UI.VBox {
     editor.control('title').value = geolocation.title;
     editor.control('lat').value = String(geolocation.lat);
     editor.control('long').value = String(geolocation.long);
+    editor.control('timezoneId').value = String(geolocation.timezoneId);
     return editor;
   }
 
@@ -119,8 +126,9 @@ Emulation.GeolocationsSettingsTab = class extends UI.VBox {
    * @return {!UI.ListWidget.Editor}
    */
   _createEditor() {
-    if (this._editor)
+    if (this._editor) {
       return this._editor;
+    }
 
     const editor = new UI.ListWidget.Editor();
     this._editor = editor;
@@ -133,6 +141,8 @@ Emulation.GeolocationsSettingsTab = class extends UI.VBox {
     titles.createChild('div', 'geolocations-list-text').textContent = Common.UIString('Lat');
     titles.createChild('div', 'geolocations-list-separator geolocations-list-separator-invisible');
     titles.createChild('div', 'geolocations-list-text').textContent = Common.UIString('Long');
+    titles.createChild('div', 'geolocations-list-separator geolocations-list-separator-invisible');
+    titles.createChild('div', 'geolocations-list-text').textContent = Common.UIString('Timezone ID');
 
     const fields = content.createChild('div', 'geolocations-edit-row');
     fields.createChild('div', 'geolocations-list-text geolocations-list-title')
@@ -145,6 +155,9 @@ Emulation.GeolocationsSettingsTab = class extends UI.VBox {
 
     cell = fields.createChild('div', 'geolocations-list-text');
     cell.appendChild(editor.createInput('long', 'text', ls`Longitude`, longValidator));
+
+    cell = fields.createChild('div', 'geolocations-list-text');
+    cell.appendChild(editor.createInput('timezoneId', 'text', ls`Timezone ID`, timezoneIdValidator));
 
     return editor;
 
@@ -159,13 +172,15 @@ Emulation.GeolocationsSettingsTab = class extends UI.VBox {
       const value = input.value.trim();
 
       let errorMessage;
-      if (!value.length)
+      if (!value.length) {
         errorMessage = ls`Location name cannot be empty`;
-      else if (value.length > maxLength)
+      } else if (value.length > maxLength) {
         errorMessage = ls`Location name must be less than ${maxLength} characters`;
+      }
 
-      if (errorMessage)
+      if (errorMessage) {
         return {valid: false, errorMessage};
+      }
       return {valid: true};
     }
 
@@ -179,20 +194,24 @@ Emulation.GeolocationsSettingsTab = class extends UI.VBox {
       const minLat = -90;
       const maxLat = 90;
       const value = input.value.trim();
+      const parsedValue = Number(value);
 
-      if (!value)
+      if (!value) {
         return {valid: true};
+      }
 
       let errorMessage;
-      if (!/^-?[\d]+(\.\d+)?|\.\d+$/.test(value))
+      if (Number.isNaN(parsedValue)) {
         errorMessage = ls`Latitude must be a number`;
-      else if (parseFloat(value) < minLat)
+      } else if (parseFloat(value) < minLat) {
         errorMessage = ls`Latitude must be greater than or equal to ${minLat}`;
-      else if (parseFloat(value) > maxLat)
+      } else if (parseFloat(value) > maxLat) {
         errorMessage = ls`Latitude must be less than or equal to ${maxLat}`;
+      }
 
-      if (errorMessage)
+      if (errorMessage) {
         return {valid: false, errorMessage};
+      }
       return {valid: true};
     }
 
@@ -206,21 +225,45 @@ Emulation.GeolocationsSettingsTab = class extends UI.VBox {
       const minLong = -180;
       const maxLong = 180;
       const value = input.value.trim();
+      const parsedValue = Number(value);
 
-      if (!value)
+      if (!value) {
         return {valid: true};
+      }
 
       let errorMessage;
-      if (!/^-?[\d]+(\.\d+)?|\.\d+$/.test(value))
+      if (Number.isNaN(parsedValue)) {
         errorMessage = ls`Longitude must be a number`;
-      else if (parseFloat(value) < minLong)
+      } else if (parseFloat(value) < minLong) {
         errorMessage = ls`Longitude must be greater than or equal to ${minLong}`;
-      else if (parseFloat(value) > maxLong)
+      } else if (parseFloat(value) > maxLong) {
         errorMessage = ls`Longitude must be less than or equal to ${maxLong}`;
+      }
 
-      if (errorMessage)
+      if (errorMessage) {
         return {valid: false, errorMessage};
+      }
       return {valid: true};
+    }
+
+    /**
+     * @param {*} item
+     * @param {number} index
+     * @param {!HTMLInputElement|!HTMLSelectElement} input
+     * @return {!UI.ListWidget.ValidatorResult}
+     */
+    function timezoneIdValidator(item, index, input) {
+      const value = input.value.trim();
+      // Chromium uses ICU's timezone implementation, which is very
+      // liberal in what it accepts. ICU does not simply use an allowlist
+      // but instead tries to make sense of the input, even for
+      // weird-looking timezone IDs. There's not much point in validating
+      // the input other than checking if it contains at least one slash.
+      if (value === '' || value.includes('/')) {
+        return {valid: true};
+      }
+      const errorMessage = ls`Timezone ID must contain "/"`;
+      return {valid: false, errorMessage};
     }
   }
 };

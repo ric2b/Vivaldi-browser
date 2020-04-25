@@ -36,6 +36,7 @@
 #include "third_party/perfetto/include/perfetto/protozero/scattered_stream_writer.h"
 #include "third_party/perfetto/protos/perfetto/trace/trace_packet.pb.h"
 #include "third_party/perfetto/protos/perfetto/trace/trace_packet.pbzero.h"
+#include "third_party/perfetto/protos/perfetto/trace/track_event/process_descriptor.pb.h"
 #include "third_party/perfetto/protos/perfetto/trace/track_event/thread_descriptor.pb.h"
 
 using TrackEvent = perfetto::protos::TrackEvent;
@@ -244,13 +245,22 @@ class TraceEventDataSourceTest : public testing::Test {
     producer_client_.reset();
   }
 
-  void CreateTraceEventDataSource(bool privacy_filtering_enabled = false) {
-    TraceEventDataSource::ResetForTesting();
-    perfetto::DataSourceConfig config;
-    config.mutable_chrome_config()->set_privacy_filtering_enabled(
-        privacy_filtering_enabled);
-    TraceEventDataSource::GetInstance()->StartTracing(producer_client(),
-                                                      config);
+  void CreateTraceEventDataSource(bool privacy_filtering_enabled = false,
+                                  bool start_trace = true) {
+    task_environment_.RunUntilIdle();
+    base::RunLoop tracing_started;
+    base::SequencedTaskRunnerHandle::Get()->PostTaskAndReply(
+        FROM_HERE,
+        base::BindOnce([]() { TraceEventDataSource::ResetForTesting(); }),
+        tracing_started.QuitClosure());
+    tracing_started.Run();
+    if (start_trace) {
+      perfetto::DataSourceConfig config;
+      config.mutable_chrome_config()->set_privacy_filtering_enabled(
+          privacy_filtering_enabled);
+      TraceEventDataSource::GetInstance()->StartTracing(producer_client(),
+                                                        config);
+    }
   }
 
   MockProducerClient* producer_client() { return producer_client_.get(); }
@@ -287,6 +297,13 @@ class TraceEventDataSourceTest : public testing::Test {
     // ThreadDescriptor is only emitted when incremental state was reset, and
     // thus also always serves as indicator for the state reset to the consumer.
     EXPECT_TRUE(packet->incremental_state_cleared());
+  }
+
+  void ExpectProcessDescriptor(const perfetto::protos::TracePacket* packet) {
+    EXPECT_TRUE(packet->has_process_descriptor());
+    EXPECT_NE(packet->process_descriptor().pid(), 0);
+    EXPECT_EQ(packet->process_descriptor().chrome_process_type(),
+              perfetto::protos::ProcessDescriptor::PROCESS_UNSPECIFIED);
   }
 
   void ExpectTraceEvent(const perfetto::protos::TracePacket* packet,
@@ -486,21 +503,22 @@ void MetadataHasNamedValue(const google::protobuf::RepeatedPtrField<
   NOTREACHED();
 }
 
-TEST_F(TraceEventDataSourceTest, MetadataSourceBasicTypes) {
+std::unique_ptr<base::DictionaryValue> AddJsonMetadataGenerator() {
+  auto metadata = std::make_unique<base::DictionaryValue>();
+  metadata->SetInteger("foo_int", 42);
+  metadata->SetString("foo_str", "bar");
+  metadata->SetBoolean("foo_bool", true);
+
+  auto child_dict = std::make_unique<base::DictionaryValue>();
+  child_dict->SetString("child_str", "child_val");
+  metadata->Set("child_dict", std::move(child_dict));
+  return metadata;
+}
+
+TEST_F(TraceEventDataSourceTest, MetadataGeneratorBeforeTracing) {
   auto* metadata_source = TraceEventMetadataSource::GetInstance();
-  metadata_source->AddGeneratorFunction(base::BindRepeating([]() {
-    auto metadata = std::make_unique<base::DictionaryValue>();
-    metadata->SetInteger("foo_int", 42);
-    metadata->SetString("foo_str", "bar");
-    metadata->SetBoolean("foo_bool", true);
-
-    auto child_dict = std::make_unique<base::DictionaryValue>();
-    child_dict->SetString("child_str", "child_val");
-    metadata->Set("child_dict", std::move(child_dict));
-    return metadata;
-  }));
-
-  CreateTraceEventDataSource();
+  metadata_source->AddGeneratorFunction(
+      base::BindRepeating(&AddJsonMetadataGenerator));
 
   metadata_source->StartTracing(producer_client(),
                                 perfetto::DataSourceConfig());
@@ -518,6 +536,61 @@ TEST_F(TraceEventDataSourceTest, MetadataSourceBasicTypes) {
   auto child_dict = std::make_unique<base::DictionaryValue>();
   child_dict->SetString("child_str", "child_val");
   MetadataHasNamedValue(metadata, "child_dict", *child_dict);
+}
+
+TEST_F(TraceEventDataSourceTest, MetadataGeneratorWhileTracing) {
+  auto* metadata_source = TraceEventMetadataSource::GetInstance();
+
+  metadata_source->StartTracing(producer_client(),
+                                perfetto::DataSourceConfig());
+  metadata_source->AddGeneratorFunction(
+      base::BindRepeating(&AddJsonMetadataGenerator));
+
+  base::RunLoop wait_for_stop;
+  metadata_source->StopTracing(wait_for_stop.QuitClosure());
+  wait_for_stop.Run();
+
+  auto metadata = producer_client()->GetChromeMetadata();
+  EXPECT_EQ(4, metadata.size());
+  MetadataHasNamedValue(metadata, "foo_int", 42);
+  MetadataHasNamedValue(metadata, "foo_str", "bar");
+  MetadataHasNamedValue(metadata, "foo_bool", true);
+
+  auto child_dict = std::make_unique<base::DictionaryValue>();
+  child_dict->SetString("child_str", "child_val");
+  MetadataHasNamedValue(metadata, "child_dict", *child_dict);
+}
+
+TEST_F(TraceEventDataSourceTest, MultipleMetadataGenerators) {
+  auto* metadata_source = TraceEventMetadataSource::GetInstance();
+  metadata_source->AddGeneratorFunction(base::BindRepeating([]() {
+    auto metadata = std::make_unique<base::DictionaryValue>();
+    metadata->SetInteger("before_int", 42);
+    return metadata;
+  }));
+
+  metadata_source->StartTracing(producer_client(),
+                                perfetto::DataSourceConfig());
+  metadata_source->AddGeneratorFunction(
+      base::BindRepeating(&AddJsonMetadataGenerator));
+
+  base::RunLoop wait_for_stop;
+  metadata_source->StopTracing(wait_for_stop.QuitClosure());
+  wait_for_stop.Run();
+
+  auto metadata = producer_client()->GetChromeMetadata();
+  EXPECT_EQ(4, metadata.size());
+  MetadataHasNamedValue(metadata, "foo_int", 42);
+  MetadataHasNamedValue(metadata, "foo_str", "bar");
+  MetadataHasNamedValue(metadata, "foo_bool", true);
+
+  auto child_dict = std::make_unique<base::DictionaryValue>();
+  child_dict->SetString("child_str", "child_val");
+  MetadataHasNamedValue(metadata, "child_dict", *child_dict);
+
+  metadata = producer_client()->GetChromeMetadata(1);
+  EXPECT_EQ(1, metadata.size());
+  MetadataHasNamedValue(metadata, "before_int", 42);
 }
 
 TEST_F(TraceEventDataSourceTest, BasicTraceEvent) {
@@ -968,12 +1041,15 @@ TEST_F(TraceEventDataSourceTest, FilteringSimpleTraceEvent) {
   CreateTraceEventDataSource(/* privacy_filtering_enabled =*/true);
   TRACE_EVENT_BEGIN0(kCategoryGroup, "bar");
 
-  EXPECT_EQ(producer_client()->GetFinalizedPacketCount(), 2u);
+  EXPECT_EQ(producer_client()->GetFinalizedPacketCount(), 3u);
 
-  auto* td_packet = producer_client()->GetFinalizedPacket();
+  auto* pd_packet = producer_client()->GetFinalizedPacket(0);
+  ExpectProcessDescriptor(pd_packet);
+
+  auto* td_packet = producer_client()->GetFinalizedPacket(1);
   ExpectThreadDescriptor(td_packet, 1u, 1u, /*filtering_enabled=*/true);
 
-  auto* e_packet = producer_client()->GetFinalizedPacket(1);
+  auto* e_packet = producer_client()->GetFinalizedPacket(2);
   ExpectTraceEvent(e_packet, /*category_iid=*/1u, /*name_iid=*/1u,
                    TRACE_EVENT_PHASE_BEGIN);
 
@@ -987,8 +1063,8 @@ TEST_F(TraceEventDataSourceTest, FilteringEventWithArgs) {
   TRACE_EVENT_INSTANT2(kCategoryGroup, "bar", TRACE_EVENT_SCOPE_THREAD, "foo",
                        42, "bar", "string_val");
 
-  EXPECT_EQ(producer_client()->GetFinalizedPacketCount(), 2u);
-  auto* e_packet = producer_client()->GetFinalizedPacket(1);
+  EXPECT_EQ(producer_client()->GetFinalizedPacketCount(), 3u);
+  auto* e_packet = producer_client()->GetFinalizedPacket(2);
   ExpectTraceEvent(e_packet, /*category_iid=*/1u, /*name_iid=*/1u,
                    TRACE_EVENT_PHASE_INSTANT, TRACE_EVENT_SCOPE_THREAD);
 
@@ -1010,8 +1086,8 @@ TEST_F(TraceEventDataSourceTest, FilteringEventWithFlagCopy) {
                            TRACE_EVENT_FLAG_JAVA_STRING_LITERALS,
                        "arg1_name", "arg1_val", "arg2_name", "arg2_val");
 
-  EXPECT_EQ(producer_client()->GetFinalizedPacketCount(), 3u);
-  auto* e_packet = producer_client()->GetFinalizedPacket(1);
+  EXPECT_EQ(producer_client()->GetFinalizedPacketCount(), 4u);
+  auto* e_packet = producer_client()->GetFinalizedPacket(2);
   ExpectTraceEvent(e_packet, /*category_iid=*/1u, /*name_iid=*/1u,
                    TRACE_EVENT_PHASE_INSTANT, TRACE_EVENT_SCOPE_THREAD);
 
@@ -1022,7 +1098,7 @@ TEST_F(TraceEventDataSourceTest, FilteringEventWithFlagCopy) {
   ExpectEventNames(e_packet, {{1u, "PRIVACY_FILTERED"}});
   ExpectDebugAnnotationNames(e_packet, {});
 
-  e_packet = producer_client()->GetFinalizedPacket(2);
+  e_packet = producer_client()->GetFinalizedPacket(3);
   ExpectTraceEvent(e_packet, /*category_iid=*/1u, /*name_iid=*/2u,
                    TRACE_EVENT_PHASE_INSTANT, TRACE_EVENT_SCOPE_THREAD);
 
@@ -1060,6 +1136,7 @@ TEST_F(TraceEventDataSourceTest, FilteringMetadataSource) {
 }
 
 TEST_F(TraceEventDataSourceTest, ProtoMetadataSource) {
+  CreateTraceEventDataSource();
   auto* metadata_source = TraceEventMetadataSource::GetInstance();
   metadata_source->AddGeneratorFunction(base::BindRepeating(
       [](perfetto::protos::pbzero::ChromeMetadataPacket* metadata,
@@ -1072,8 +1149,6 @@ TEST_F(TraceEventDataSourceTest, ProtoMetadataSource) {
                 MONITOR_AND_DUMP_WHEN_SPECIFIC_HISTOGRAM_AND_VALUE);
         rule->set_histogram_rule()->set_histogram_min_trigger(123);
       }));
-
-  CreateTraceEventDataSource();
 
   perfetto::DataSourceConfig config;
   config.mutable_chrome_config()->set_privacy_filtering_enabled(true);
@@ -1157,10 +1232,11 @@ TEST_F(TraceEventDataSourceNoInterningTest, InterningScopedToPackets) {
 }
 
 TEST_F(TraceEventDataSourceTest, StartupTracingTimeout) {
+  CreateTraceEventDataSource(/* privacy_filtering_enabled = */ false,
+                             /* start_trace = */ false);
   PerfettoTracedProcess::ResetTaskRunnerForTesting(
       base::SequencedTaskRunnerHandle::Get());
   constexpr char kStartupTestEvent1[] = "startup_registry";
-  TraceEventDataSource::ResetForTesting();
   auto* data_source = TraceEventDataSource::GetInstance();
 
   // Start startup tracing registry with no timeout. This would cause startup

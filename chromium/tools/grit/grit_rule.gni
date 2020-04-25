@@ -100,10 +100,6 @@ import("//build/config/ui.gni")
 import("//build/toolchain/gcc_toolchain.gni")  # For enable_resource_whitelist_generation
 import("//third_party/closure_compiler/closure_args.gni")
 
-if (defined(is_vivaldi) && is_vivaldi) {
-  import("//vivaldi/app/resources/vivaldi_chromium_grit.gni")
-}
-
 if (enable_resource_whitelist_generation) {
   assert(target_os == "android" || target_os == "win",
          "unsupported platform for resource whitelist generation")
@@ -274,11 +270,6 @@ template("grit") {
     depfile_dir = output_dir
   }
 
-  if (defined(is_vivaldi) && is_vivaldi && defined(invoker.vivaldi_resource_path)) {
-    master_resource_ids = resource_ids
-    resource_ids = "${invoker.target_dir}/resource_ids"
-  }
-
   # These are all passed as arguments to the script so have to be relative to
   # the build directory.
   rebased_output_dir = rebase_path(output_dir, root_build_dir)
@@ -333,48 +324,7 @@ template("grit") {
     pak_info_outputs += [ "${output}.info" ]
   }
 
-  grit_extra_target = []
-  search_paths = []
-  if (defined(is_vivaldi) && is_vivaldi && defined(invoker.vivaldi_resource_path)) {
-    #print("$target_name : merge_$target_name")
-    grit_extra_target += [ ":merge_$target_name" ]
-    chromium_merge_grit_action("merge_$target_name") {
-      forward_variables_from(invoker,
-                             [
-                               "main_resource_dir",
-                               "combined_target_dir",
-                               "merge_main_file",
-                               "translation_dir",
-                               "target_filename",
-                               "have_strings",
-                               "vivaldi_resource_path",
-                               "extra_grit_defines",
-                               "grit_additional_defines",
-                             ])
-      if (defined(invoker.defines)) {
-        foreach(i, invoker.defines) {
-          grit_defines += [
-            "-D",
-            i,
-          ]
-        }
-      }
-    }
-    #print("A $target_name ${invoker.vivaldi_resource_path}  $resource_ids")
-    source_path = rebase_path(invoker.full_target_path, root_build_dir)
-    #resource_ids = rebase_path(resource_ids, root_build_dir)
-
-    #print("$target_name : merge_$target_name  : $source_path")
-    search_paths += [
-      invoker.combined_target_dir,
-      get_path_info(invoker.vivaldi_resource_path, "dir"),
-      get_path_info(invoker.source, "dir"),
-    ]
-  }
-
   grit_custom_target = target_name + "_grit"
-
-  #print ("$target_name  $grit_custom_target  $source_path")
   action(grit_custom_target) {
     testonly = defined(invoker.testonly) && invoker.testonly
 
@@ -384,7 +334,6 @@ template("grit") {
       invoker.source,
       asserted_list_file,
     ]
-    #print("B $target_name ${invoker.source}  $resource_ids")
     if (resource_ids != "") {
       # The script depends on the ID file. Only add this dependency if the ID
       # file is specified.
@@ -457,14 +406,6 @@ template("grit") {
         args += [ "--whitelist-support" ]
       }
     }
-
-    foreach(p, search_paths) {
-      args += [
-        "-I",
-        rebase_path(p, root_build_dir),
-      ]
-    }
-
     if (_strip_resource_files) {
       js_minifier_command = rebase_path(_js_minifier, root_build_dir)
       args += [
@@ -511,7 +452,7 @@ template("grit") {
 
     deps = [
       "//tools/grit:grit_sources",
-    ] + grit_extra_target
+    ]
     if (defined(invoker.use_brotli) && invoker.use_brotli) {
       if (is_mac && is_asan) {
         deps += [ "//tools/grit:brotli_mac_asan_workaround" ]
@@ -548,7 +489,7 @@ template("grit") {
     # script as inputs.
     public_deps = [
       ":$grit_custom_target",
-    ] + grit_extra_target
+    ]
 
     deps = [
       "//base",

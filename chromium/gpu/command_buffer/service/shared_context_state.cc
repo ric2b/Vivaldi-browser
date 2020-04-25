@@ -149,13 +149,19 @@ void SharedContextState::InitializeGrContext(
     // in GetCapabilities and ensuring these are also used by the
     // PaintOpBufferSerializer.
     GrContextOptions options;
+    if (GrContextIsMetal()) {
+      options.fRuntimeProgramCacheSize = 1024;
+    }
     options.fDriverBugWorkarounds =
         GrDriverBugWorkarounds(workarounds.ToIntSet());
     options.fDisableCoverageCountingPaths = true;
     options.fGlyphCacheTextureMaximumBytes = glyph_cache_max_texture_bytes_;
     options.fPersistentCache = cache;
     options.fAvoidStencilBuffers = workarounds.avoid_stencil_buffers;
-    options.fDisallowGLSLBinaryCaching = workarounds.disable_program_disk_cache;
+    if (workarounds.disable_program_disk_cache) {
+      options.fShaderCacheStrategy =
+          GrContextOptions::ShaderCacheStrategy::kBackendSource;
+    }
     options.fShaderErrorHandler = this;
     // TODO(csmartdalton): enable internal multisampling after the related Skia
     // rolls are in.

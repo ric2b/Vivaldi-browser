@@ -186,8 +186,8 @@ void CrostiniPackageNotification::UpdateProgress(PackageOperationStatus status,
           auto registration =
               crostini_registry_service->GetRegistration(app_id);
           if (registration.has_value() &&
-              registration->VmName() == container_id_.first &&
-              registration->ContainerName() == container_id_.second) {
+              registration->VmName() == container_id_.vm_name &&
+              registration->ContainerName() == container_id_.container_name) {
             app_id_ = app_id;
             app_count_++;
           }
@@ -268,6 +268,9 @@ void CrostiniPackageNotification::Close(bool by_user) {
 void CrostiniPackageNotification::Click(
     const base::Optional<int>& button_index,
     const base::Optional<base::string16>& reply) {
+  if (current_status_ != PackageOperationStatus::SUCCEEDED)
+    return;
+
   if (app_count_ == 0) {
     LaunchCrostiniApp(profile_, kCrostiniTerminalId,
                       display::Screen::GetScreen()->GetPrimaryDisplay().id());

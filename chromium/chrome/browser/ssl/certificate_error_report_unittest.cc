@@ -176,7 +176,7 @@ TEST(ErrorReportTest, SerializedReportAsProtobufWithInterstitialInfo) {
       UnorderedElementsAre(kFirstReportedCertError, kSecondReportedCertError));
 
   EXPECT_EQ(
-      interstitial_time.ToInternalValue(),
+      interstitial_time.ToDeltaSinceWindowsEpoch().InMicroseconds(),
       deserialized_report.interstitial_info().interstitial_created_time_usec());
 }
 
@@ -348,10 +348,31 @@ TEST(ErrorReportTest, TrialDebugInfo) {
   network::mojom::CertVerifierDebugInfoPtr debug_info =
       network::mojom::CertVerifierDebugInfo::New();
 #if defined(OS_MACOSX)
+  debug_info->mac_platform_debug_info =
+      network::mojom::MacPlatformVerifierDebugInfo::New();
+  debug_info->mac_platform_debug_info->trust_result = 1;
+  debug_info->mac_platform_debug_info->result_code = 20;
+  network::mojom::MacCertEvidenceInfoPtr info =
+      network::mojom::MacCertEvidenceInfo::New();
+  info->status_bits = 30;
+  info->status_codes = {40, 41};
+  debug_info->mac_platform_debug_info->status_chain.push_back(std::move(info));
+  info = network::mojom::MacCertEvidenceInfo::New();
+  info->status_bits = 50;
+  info->status_codes = {};
+  debug_info->mac_platform_debug_info->status_chain.push_back(std::move(info));
+  info = network::mojom::MacCertEvidenceInfo::New();
+  info->status_bits = 70;
+  info->status_codes = {80, 81, 82};
+  debug_info->mac_platform_debug_info->status_chain.push_back(std::move(info));
+
   debug_info->mac_combined_trust_debug_info =
       net::TrustStoreMac::TRUST_SETTINGS_DICT_CONTAINS_APPLICATION |
       net::TrustStoreMac::TRUST_SETTINGS_DICT_CONTAINS_RESULT;
 #endif
+  base::Time time = base::Time::Now();
+  debug_info->trial_verification_time = time;
+  debug_info->trial_der_verification_time = "it's just a string";
 
   CertificateErrorReport report("example.com", *unverified_cert, false, false,
                                 false, false, primary_result, trial_result,
@@ -366,6 +387,36 @@ TEST(ErrorReportTest, TrialDebugInfo) {
       parsed.features_info().trial_verification_info();
 
 #if defined(OS_MACOSX)
+  ASSERT_TRUE(trial_info.has_mac_platform_debug_info());
+  EXPECT_EQ(1U, trial_info.mac_platform_debug_info().trust_result());
+  EXPECT_EQ(20, trial_info.mac_platform_debug_info().result_code());
+  ASSERT_EQ(3, trial_info.mac_platform_debug_info().status_chain_size());
+  EXPECT_EQ(30U,
+            trial_info.mac_platform_debug_info().status_chain(0).status_bits());
+  ASSERT_EQ(
+      2,
+      trial_info.mac_platform_debug_info().status_chain(0).status_codes_size());
+  EXPECT_EQ(
+      40, trial_info.mac_platform_debug_info().status_chain(0).status_codes(0));
+  EXPECT_EQ(
+      41, trial_info.mac_platform_debug_info().status_chain(0).status_codes(1));
+  EXPECT_EQ(50U,
+            trial_info.mac_platform_debug_info().status_chain(1).status_bits());
+  EXPECT_EQ(
+      0,
+      trial_info.mac_platform_debug_info().status_chain(1).status_codes_size());
+  EXPECT_EQ(70U,
+            trial_info.mac_platform_debug_info().status_chain(2).status_bits());
+  ASSERT_EQ(
+      3,
+      trial_info.mac_platform_debug_info().status_chain(2).status_codes_size());
+  EXPECT_EQ(
+      80, trial_info.mac_platform_debug_info().status_chain(2).status_codes(0));
+  EXPECT_EQ(
+      81, trial_info.mac_platform_debug_info().status_chain(2).status_codes(1));
+  EXPECT_EQ(
+      82, trial_info.mac_platform_debug_info().status_chain(2).status_codes(2));
+
   ASSERT_EQ(2, trial_info.mac_combined_trust_debug_info_size());
   EXPECT_EQ(chrome_browser_ssl::TrialVerificationInfo::
                 MAC_TRUST_SETTINGS_DICT_CONTAINS_APPLICATION,
@@ -376,6 +427,11 @@ TEST(ErrorReportTest, TrialDebugInfo) {
 #else
   EXPECT_EQ(0, trial_info.mac_combined_trust_debug_info_size());
 #endif
+  ASSERT_TRUE(trial_info.has_trial_verification_time_usec());
+  EXPECT_EQ(time.ToDeltaSinceWindowsEpoch().InMicroseconds(),
+            trial_info.trial_verification_time_usec());
+  ASSERT_TRUE(trial_info.has_trial_der_verification_time());
+  EXPECT_EQ("it's just a string", trial_info.trial_der_verification_time());
 }
 #endif  // BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
 

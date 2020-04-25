@@ -14,7 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
 #include "chrome/browser/ui/tabs/tab_group_id.h"
-#include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
+#include "chrome/browser/ui/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/views/tabs/tab_slot_view.h"
 #include "ui/base/layout.h"
 #include "ui/gfx/animation/animation_delegate.h"
@@ -79,7 +79,6 @@ class Tab : public gfx::AnimationDelegate,
   // TabSlotView:
   void Layout() override;
   const char* GetClassName() const override;
-  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
@@ -120,10 +119,6 @@ class Tab : public gfx::AnimationDelegate,
 
   // Returns the color for the tab's group, if any.
   base::Optional<SkColor> GetGroupColor() const;
-
-  // Should be called when the result of
-  // |TabController::GetVisualDataForGroup()| changes.
-  void GroupColorChanged();
 
   // Returns the color used for the alert indicator icon.
   SkColor GetAlertIndicatorColor(TabAlertState state) const;
@@ -180,8 +175,9 @@ class Tab : public gfx::AnimationDelegate,
   // Returns the text to show in a tab's tooltip: The contents |title|, followed
   // by a break, followed by a localized string describing the |alert_state|.
   // Exposed publicly for tests.
-  static base::string16 GetTooltipText(const base::string16& title,
-                                       TabAlertState alert_state);
+  static base::string16 GetTooltipText(
+      const base::string16& title,
+      base::Optional<TabAlertState> alert_state);
 
  private:
   class TabCloseButtonObserver;

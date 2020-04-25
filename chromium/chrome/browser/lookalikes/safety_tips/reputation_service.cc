@@ -5,7 +5,7 @@
 #include "chrome/browser/lookalikes/safety_tips/reputation_service.h"
 
 #include <string>
-#include <vector>
+#include <utility>
 
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
@@ -13,58 +13,26 @@
 #include "chrome/browser/lookalikes/lookalike_url_interstitial_page.h"
 #include "chrome/browser/lookalikes/lookalike_url_navigation_throttle.h"
 #include "chrome/browser/lookalikes/lookalike_url_service.h"
+#include "chrome/browser/lookalikes/safety_tips/local_heuristics.h"
 #include "chrome/browser/lookalikes/safety_tips/safety_tip_ui_helper.h"
 #include "chrome/browser/lookalikes/safety_tips/safety_tips_config.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_features.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/safe_browsing/db/v4_protocol_manager_util.h"
+#include "components/url_formatter/spoof_checks/top_domains/top500_domains.h"
+#include "url/url_constants.h"
 
 namespace {
 
 using chrome_browser_safety_tips::FlaggedPage;
+using chrome_browser_safety_tips::UrlPattern;
 using lookalikes::DomainInfo;
-using lookalikes::LookalikeUrlNavigationThrottle;
 using lookalikes::LookalikeUrlService;
-using LookalikeMatchType = LookalikeUrlInterstitialPage::MatchType;
 using safe_browsing::V4ProtocolManagerUtil;
 using safety_tips::ReputationService;
-
-const base::FeatureParam<bool> kEnableLookalikeEditDistance{
-    &features::kSafetyTipUI, "editdistance", false};
-const base::FeatureParam<bool> kEnableLookalikeEditDistanceSiteEngagement{
-    &features::kSafetyTipUI, "editdistance_siteengagement", false};
-
-bool ShouldTriggerSafetyTipFromLookalike(
-    const GURL& url,
-    const DomainInfo& navigated_domain,
-    const std::vector<DomainInfo>& engaged_sites) {
-  std::string matched_domain;
-  LookalikeMatchType match_type;
-
-  if (!LookalikeUrlNavigationThrottle::GetMatchingDomain(
-          navigated_domain, engaged_sites, &matched_domain, &match_type)) {
-    return false;
-  }
-
-  // If we're already displaying an interstitial, don't warn again.
-  if (LookalikeUrlNavigationThrottle::ShouldDisplayInterstitial(
-          match_type, navigated_domain)) {
-    return false;
-  }
-
-  // Edit distance has higher false positives, so it gets its own feature param
-  if (match_type == LookalikeMatchType::kEditDistance) {
-    return kEnableLookalikeEditDistance.Get();
-  }
-  if (match_type == LookalikeMatchType::kEditDistanceSiteEngagement) {
-    return kEnableLookalikeEditDistanceSiteEngagement.Get();
-  }
-
-  return true;
-}
+using security_state::SafetyTipStatus;
 
 // This factory helps construct and find the singleton ReputationService linked
 // to a Profile.
@@ -149,6 +117,43 @@ security_state::SafetyTipStatus FlagTypeToSafetyTipStatus(
   return security_state::SafetyTipStatus::kNone;
 }
 
+// Returns whether or not the Safety Tip should be suppressed for the given URL.
+// Checks SafeBrowsing-style permutations of |url| against the component updater
+// allowlist and returns whether the URL is explicitly allowed. Fails closed, so
+// that warnings are suppressed if the component is unavailable.
+bool ShouldSuppressWarning(const GURL& url) {
+  std::vector<std::string> patterns;
+  UrlToPatterns(url, &patterns);
+
+  auto* proto = safety_tips::GetRemoteConfigProto();
+  if (!proto) {
+    // This happens when the component hasn't downloaded yet. This should only
+    // happen for a short time after initial upgrade to M79.
+    //
+    // Disable all Safety Tips during that time. Otherwise, we would continue to
+    // flag on any known false positives until the client received the update.
+    return true;
+  }
+
+  auto allowed_pages = proto->allowed_pattern();
+  for (const auto& pattern : patterns) {
+    UrlPattern search_target;
+    search_target.set_pattern(pattern);
+
+    auto lower = std::lower_bound(
+        allowed_pages.begin(), allowed_pages.end(), search_target,
+        [](const UrlPattern& a, const UrlPattern& b) -> bool {
+          return a.pattern() < b.pattern();
+        });
+
+    if (lower != allowed_pages.end() && pattern == lower->pattern()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 }  // namespace
 
 namespace safety_tips {
@@ -166,28 +171,33 @@ void ReputationService::GetReputationStatus(const GURL& url,
                                             ReputationCheckCallback callback) {
   DCHECK(url.SchemeIsHTTPOrHTTPS());
 
-  // Skip top domains.
-  const DomainInfo navigated_domain = lookalikes::GetDomainInfo(url);
-
   LookalikeUrlService* service = LookalikeUrlService::Get(profile_);
   if (service->EngagedSitesNeedUpdating()) {
     service->ForceUpdateEngagedSites(
         base::BindOnce(&ReputationService::GetReputationStatusWithEngagedSites,
-                       weak_factory_.GetWeakPtr(), std::move(callback), url,
-                       navigated_domain));
+                       weak_factory_.GetWeakPtr(), std::move(callback), url));
     // If the engaged sites need updating, there's nothing to do until callback.
     return;
   }
 
   GetReputationStatusWithEngagedSites(std::move(callback), url,
-                                      navigated_domain,
                                       service->GetLatestEngagedSites());
 }
 
 void ReputationService::SetUserIgnore(content::WebContents* web_contents,
-                                      const GURL& url) {
+                                      const GURL& url,
+                                      SafetyTipInteraction interaction) {
+  // Record that the user dismissed the safety tip. kDismiss is the base case,
+  // which makes it easier to track overall dismissal metrics without having
+  // to re-constitute from separate histograms that record specifically how the
+  // user dismissed the safety tip. The way the user dismissed the dialog is
+  // also recorded to this interaction histogram, but with a more specific value
+  // (e.g. kDismissWithEsc) that is passed into this method.
   RecordSafetyTipInteractionHistogram(web_contents,
                                       SafetyTipInteraction::kDismiss);
+  // Record a histogram indicating how the user dismissed the safety tip
+  // (i.e. esc key, close button, or ignore button).
+  RecordSafetyTipInteractionHistogram(web_contents, interaction);
   warning_dismissed_origins_.insert(url::Origin::Create(url));
 }
 
@@ -198,8 +208,18 @@ bool ReputationService::IsIgnored(const GURL& url) const {
 void ReputationService::GetReputationStatusWithEngagedSites(
     ReputationCheckCallback callback,
     const GURL& url,
-    const DomainInfo& navigated_domain,
     const std::vector<DomainInfo>& engaged_sites) {
+  const DomainInfo navigated_domain = lookalikes::GetDomainInfo(url);
+
+  // 0. Server-side warning suppression.
+  // If the URL is on the allowlist list, do nothing else. This is only used to
+  // mitigate false positives, so no further processing should be done.
+  if (ShouldSuppressWarning(url)) {
+    std::move(callback).Run(security_state::SafetyTipStatus::kNone, url,
+                            GURL());
+    return;
+  }
+
   // 1. Engagement check
   // Ensure that this URL is not already engaged. We can't use the synchronous
   // SiteEngagementService::IsEngagementAtLeast as it has side effects.  This
@@ -211,15 +231,20 @@ void ReputationService::GetReputationStatusWithEngagedSites(
                              engaged_domain.domain_and_registry);
                    });
   if (already_engaged != engaged_sites.end()) {
-    std::move(callback).Run(security_state::SafetyTipStatus::kNone,
-                            IsIgnored(url), url);
+    std::move(callback).Run(security_state::SafetyTipStatus::kNone, url,
+                            GURL());
     return;
   }
 
   // 2. Server-side blocklist check.
   security_state::SafetyTipStatus status = GetUrlBlockType(url);
   if (status != security_state::SafetyTipStatus::kNone) {
-    std::move(callback).Run(status, IsIgnored(url), url);
+    // This is a merge-hack, and does not exist in M80+. See crbug/1022017.
+    // In M79, status is always kBadReputation if not kNone.
+    status =
+        (IsIgnored(url) ? security_state::SafetyTipStatus::kBadReputationIgnored
+                        : status);
+    std::move(callback).Run(status, url, GURL());
     return;
   }
 
@@ -227,22 +252,32 @@ void ReputationService::GetReputationStatusWithEngagedSites(
   // Empty domain_and_registry happens on private domains.
   if (navigated_domain.domain_and_registry.empty() ||
       lookalikes::IsTopDomain(navigated_domain)) {
-    std::move(callback).Run(security_state::SafetyTipStatus::kNone,
-                            IsIgnored(url), url);
+    std::move(callback).Run(security_state::SafetyTipStatus::kNone, url,
+                            GURL());
     return;
   }
 
   // 4. Lookalike heuristics.
-  if (ShouldTriggerSafetyTipFromLookalike(url, navigated_domain,
-                                          engaged_sites)) {
-    std::move(callback).Run(security_state::SafetyTipStatus::kLookalike,
-                            IsIgnored(url), url);
+  GURL safe_url;
+  if (ShouldTriggerSafetyTipFromLookalike(url, navigated_domain, engaged_sites,
+                                          &safe_url)) {
+    std::move(callback).Run(
+        (IsIgnored(url) ? security_state::SafetyTipStatus::kLookalikeIgnored
+                        : security_state::SafetyTipStatus::kLookalike),
+        url, safe_url);
     return;
   }
 
-  // TODO(crbug/984725): 5. Additional client-side heuristics
-  std::move(callback).Run(security_state::SafetyTipStatus::kNone,
-                          IsIgnored(url), url);
+  // 5. Keyword heuristics.
+  if (ShouldTriggerSafetyTipFromKeywordInURL(
+          url, top500_domains::kTop500Keywords, 500)) {
+    std::move(callback).Run(security_state::SafetyTipStatus::kBadKeyword, url,
+                            GURL());
+    return;
+  }
+
+  // TODO(crbug/984725): 6. Additional client-side heuristics.
+  std::move(callback).Run(security_state::SafetyTipStatus::kNone, url, GURL());
 }
 
 security_state::SafetyTipStatus GetUrlBlockType(const GURL& url) {

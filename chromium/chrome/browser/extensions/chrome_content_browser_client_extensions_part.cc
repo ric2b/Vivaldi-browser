@@ -78,8 +78,6 @@
 #include "extensions/browser/api/vpn_provider/vpn_service_factory.h"
 #endif  // defined(OS_CHROMEOS)
 
-#include "app/vivaldi_apptools.h"
-
 using content::BrowserContext;
 using content::BrowserThread;
 using content::BrowserURLHandler;
@@ -597,29 +595,6 @@ bool ChromeContentBrowserClientExtensionsPart::AllowServiceWorkerOnUI(
 }
 
 // static
-void ChromeContentBrowserClientExtensionsPart::OverrideNavigationParams(
-    content::SiteInstance* site_instance,
-    ui::PageTransition* transition,
-    bool* is_renderer_initiated,
-    content::Referrer* referrer,
-    base::Optional<url::Origin>* initiator_origin) {
-  const Extension* extension =
-      ExtensionRegistry::Get(site_instance->GetBrowserContext())
-          ->enabled_extensions()
-          .GetExtensionOrAppByURL(site_instance->GetSiteURL());
-  if (!extension)
-    return;
-
-  // Hide the |referrer| for extension pages. We don't want sites to see a
-  // referrer of chrome-extension://<...>.
-  //
-  // OTOH, don't change |initiator_origin| - SameSite-cookies and Sec-Fetch-Site
-  // should still see the request as cross-site.
-  if (extension->is_extension())
-    *referrer = content::Referrer();
-}
-
-// static
 std::vector<url::Origin> ChromeContentBrowserClientExtensionsPart::
     GetOriginsRequiringDedicatedProcess() {
   std::vector<url::Origin> list;
@@ -629,85 +604,6 @@ std::vector<url::Origin> ChromeContentBrowserClientExtensionsPart::
   list.push_back(url::Origin::Create(extension_urls::GetWebstoreLaunchURL()));
 
   return list;
-}
-
-// static
-bool ChromeContentBrowserClientExtensionsPart::ShouldAllowOpenURL(
-    content::SiteInstance* site_instance,
-    const GURL& to_url,
-    bool* result) {
-  DCHECK(result);
-
-  // Using url::Origin is important to properly handle blob: and filesystem:
-  // URLs.
-  url::Origin to_origin = url::Origin::Create(to_url);
-  if (to_origin.scheme() != kExtensionScheme) {
-    // We're not responsible for protecting this resource.  Note that hosted
-    // apps fall into this category.
-    return false;
-  }
-
-  // Do not allow pages from the web or other extensions navigate to
-  // non-web-accessible extension resources.
-
-  ExtensionRegistry* registry =
-      ExtensionRegistry::Get(site_instance->GetBrowserContext());
-  const Extension* to_extension =
-      registry->enabled_extensions().GetByID(to_origin.host());
-  if (!to_extension) {
-    // Treat non-existent extensions the same as an extension without accessible
-    // resources.
-    *result = false;
-    return true;
-  }
-
-  GURL site_url(site_instance->GetSiteURL());
-  const Extension* from_extension =
-      registry->enabled_extensions().GetExtensionOrAppByURL(site_url);
-  if (from_extension && from_extension == to_extension) {
-    *result = true;
-    return true;
-  }
-
-  // Blob and filesystem URLs are never considered web-accessible.  See
-  // https://crbug.com/656752.
-  if (to_url.SchemeIsFileSystem() || to_url.SchemeIsBlob()) {
-    *result = false;
-    return true;
-  }
-
-  // Navigations from chrome://, chrome-search:// and devtools:// pages
-  // need to be allowed, even if |to_url| is not web-accessible. See
-  // https://crbug.com/662602.
-  //
-  // Note that this is intentionally done after the check for blob: and
-  // filesystem: URLs above, for consistency with the renderer-side checks
-  // which already disallow navigations from chrome URLs to blob/filesystem
-  // URLs.
-  if (site_url.SchemeIs(content::kChromeUIScheme) ||
-      site_url.SchemeIs(content::kChromeDevToolsScheme) ||
-      site_url.SchemeIs(chrome::kChromeSearchScheme)) {
-    *result = true;
-    return true;
-  }
-
-  // <webview> guests should be allowed to load only webview-accessible
-  // resources, but that check is done later in
-  // AllowCrossRendererResourceLoadHelper, so allow <webview> guests to proceed
-  // here and rely on that check instead.  See https://crbug.com/691941.
-  if (site_url.SchemeIs(content::kGuestScheme)) {
-    *result = true;
-    return true;
-  }
-
-  if (WebAccessibleResourcesInfo::IsResourceWebAccessible(to_extension,
-                                                          to_url.path())) {
-    *result = true;
-    return true;
-  }
-
-  *result = false;
-  return true;
 }
 
 // static
@@ -733,9 +629,11 @@ ChromeContentBrowserClientExtensionsPart::
         network::mojom::NetworkContext* network_context,
         mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
             header_client,
-        const url::Origin& request_initiator) {
+        const url::Origin& request_initiator,
+        const base::Optional<net::NetworkIsolationKey>& network_isolation_key) {
   return URLLoaderFactoryManager::CreateFactory(
-      process, network_context, header_client, request_initiator);
+      process, network_context, header_client, request_initiator,
+      network_isolation_key);
 }
 
 // static
@@ -836,8 +734,7 @@ void ChromeContentBrowserClientExtensionsPart::OverrideWebkitPrefs(
   // webview tags as well as hosts that happen to match the id of an
   // installed extension would get the wrong preferences.
   const GURL& site_url = rvh->GetSiteInstance()->GetSiteURL();
-  if (!site_url.SchemeIs(kExtensionScheme) ||
-    vivaldi::IsVivaldiApp(site_url.host()))
+  if (!site_url.SchemeIs(kExtensionScheme))
     return;
 
   WebContents* web_contents = WebContents::FromRenderViewHost(rvh);

@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {getFavicon, getFaviconForPageURL} from 'chrome://resources/js/icon.m.js';
+import {assert} from 'chrome://resources/js/assert.m.js';
+import {getFavicon} from 'chrome://resources/js/icon.m.js';
 
 import {CustomElement} from './custom_element.js';
-import {TabsApiProxy} from './tabs_api_proxy.js';
+import {TabStripEmbedderProxy} from './tab_strip_embedder_proxy.js';
+import {TabData, TabNetworkState, TabsApiProxy} from './tabs_api_proxy.js';
 
 export const DEFAULT_ANIMATION_DURATION = 125;
 
@@ -22,6 +24,11 @@ export class TabElement extends CustomElement {
         /** @type {!HTMLElement} */ (this.shadowRoot.querySelector('#close'));
 
     /** @private {!HTMLElement} */
+    this.dragImage_ =
+        /** @type {!HTMLElement} */ (
+            this.shadowRoot.querySelector('#dragImage'));
+
+    /** @private {!HTMLElement} */
     this.faviconEl_ =
         /** @type {!HTMLElement} */ (this.shadowRoot.querySelector('#favicon'));
 
@@ -34,51 +41,76 @@ export class TabElement extends CustomElement {
     this.thumbnail_ =
         /** @type {!Image} */ (this.shadowRoot.querySelector('#thumbnailImg'));
 
-    /** @private {!Tab} */
+    /** @private {!TabData} */
     this.tab_;
 
     /** @private {!TabsApiProxy} */
     this.tabsApi_ = TabsApiProxy.getInstance();
+
+    /** @private {!TabStripEmbedderProxy} */
+    this.embedderApi_ = TabStripEmbedderProxy.getInstance();
 
     /** @private {!HTMLElement} */
     this.titleTextEl_ = /** @type {!HTMLElement} */ (
         this.shadowRoot.querySelector('#titleText'));
 
     this.addEventListener('click', this.onClick_.bind(this));
+    this.addEventListener('contextmenu', this.onContextMenu_.bind(this));
     this.closeButtonEl_.addEventListener('click', this.onClose_.bind(this));
   }
 
-  /** @return {!Tab} */
+  /** @return {!TabData} */
   get tab() {
     return this.tab_;
   }
 
-  /** @param {!Tab} tab */
+  /** @param {!TabData} tab */
   set tab(tab) {
+    assert(this.tab_ !== tab);
     this.toggleAttribute('active', tab.active);
-    this.toggleAttribute('pinned', tab.pinned);
+    this.toggleAttribute('hide-icon_', !tab.showIcon);
+    this.toggleAttribute(
+        'waiting_',
+        !tab.shouldHideThrobber &&
+            tab.networkState === TabNetworkState.WAITING);
+    this.toggleAttribute(
+        'loading_',
+        !tab.shouldHideThrobber &&
+            tab.networkState === TabNetworkState.LOADING);
+    this.toggleAttribute('pinned_', tab.pinned);
+    this.toggleAttribute('blocked_', tab.blocked);
+    this.setAttribute('draggable', tab.pinned);
+    this.toggleAttribute('crashed_', tab.crashed);
 
     if (!this.tab_ || this.tab_.title !== tab.title) {
       this.titleTextEl_.textContent = tab.title;
     }
 
-    if (tab.favIconUrl &&
-        (!this.tab_ || this.tab_.favIconUrl !== tab.favIconUrl)) {
-      this.faviconEl_.style.backgroundImage = getFavicon(tab.favIconUrl);
-    } else if (!this.tab_ || this.tab_.url !== tab.url) {
-      this.faviconEl_.style.backgroundImage =
-          getFaviconForPageURL(tab.url, false);
+    if (tab.networkState === TabNetworkState.WAITING ||
+        (tab.networkState === TabNetworkState.LOADING &&
+         tab.isDefaultFavicon)) {
+      this.faviconEl_.style.backgroundImage = 'none';
+    } else if (tab.favIconUrl) {
+      this.faviconEl_.style.backgroundImage = `url(${tab.favIconUrl})`;
+    } else {
+      this.faviconEl_.style.backgroundImage = getFavicon('');
     }
 
     // Expose the ID to an attribute to allow easy querySelector use
     this.setAttribute('data-tab-id', tab.id);
 
     if (!this.tab_ || this.tab_.id !== tab.id) {
-      // Request thumbnail updates
-      chrome.send('addTrackedTab', [tab.id]);
+      this.tabsApi_.trackThumbnailForTab(tab.id);
     }
 
     this.tab_ = Object.freeze(tab);
+  }
+
+  /**
+   * @return {!HTMLElement}
+   */
+  getDragImage() {
+    return this.dragImage_;
   }
 
   /**
@@ -95,6 +127,19 @@ export class TabElement extends CustomElement {
     }
 
     this.tabsApi_.activateTab(this.tab_.id);
+    this.embedderApi_.closeContainer();
+  }
+
+  /** @private */
+  onContextMenu_(event) {
+    event.preventDefault();
+
+    if (!this.tab_) {
+      return;
+    }
+
+    this.embedderApi_.showTabContextMenu(
+        this.tab_.id, event.clientX, event.clientY);
   }
 
   /**
@@ -108,6 +153,13 @@ export class TabElement extends CustomElement {
 
     event.stopPropagation();
     this.tabsApi_.closeTab(this.tab_.id);
+  }
+
+  /**
+   * @param {boolean} dragging
+   */
+  setDragging(dragging) {
+    this.toggleAttribute('dragging_', dragging);
   }
 
   /**

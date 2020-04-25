@@ -44,7 +44,6 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/base/passphrase_enums.h"
 #include "components/sync/base/user_selectable_type.h"
-#include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_service_utils.h"
 #include "components/sync/driver/sync_user_settings.h"
 #include "components/unified_consent/feature.h"
@@ -204,24 +203,23 @@ base::string16 GetEnterPassphraseBody(syncer::PassphraseType passphrase_type,
                                       base::Time passphrase_time) {
   DCHECK(syncer::IsExplicitPassphrase(passphrase_type));
   switch (passphrase_type) {
-    case syncer::PassphraseType::FROZEN_IMPLICIT_PASSPHRASE:
+    case syncer::PassphraseType::kFrozenImplicitPassphrase:
       if (passphrase_time.is_null()) {
         return GetStringUTF16(IDS_SYNC_ENTER_GOOGLE_PASSPHRASE_BODY);
       }
       return GetStringFUTF16(IDS_SYNC_ENTER_GOOGLE_PASSPHRASE_BODY_WITH_DATE,
                              base::ASCIIToUTF16(chrome::kSyncErrorsHelpURL),
                              base::TimeFormatShortDate(passphrase_time));
-    case syncer::PassphraseType::CUSTOM_PASSPHRASE:
+    case syncer::PassphraseType::kCustomPassphrase:
       if (passphrase_time.is_null()) {
         return GetStringUTF16(IDS_SYNC_ENTER_PASSPHRASE_BODY);
       }
       return GetStringFUTF16(IDS_SYNC_ENTER_PASSPHRASE_BODY_WITH_DATE,
                              base::ASCIIToUTF16(chrome::kSyncErrorsHelpURL),
                              base::TimeFormatShortDate(passphrase_time));
-    case syncer::PassphraseType::IMPLICIT_PASSPHRASE:
-    case syncer::PassphraseType::KEYSTORE_PASSPHRASE:
-    case syncer::PassphraseType::TRUSTED_VAULT_PASSPHRASE:
-    case syncer::PassphraseType::PASSPHRASE_TYPE_SIZE:
+    case syncer::PassphraseType::kImplicitPassphrase:
+    case syncer::PassphraseType::kKeystorePassphrase:
+    case syncer::PassphraseType::kTrustedVaultPassphrase:
       break;
   }
   NOTREACHED();
@@ -235,16 +233,15 @@ base::string16 GetFullEncryptionBody(syncer::PassphraseType passphrase_type,
     return GetStringUTF16(IDS_SYNC_FULL_ENCRYPTION_BODY_CUSTOM);
   }
   switch (passphrase_type) {
-    case syncer::PassphraseType::FROZEN_IMPLICIT_PASSPHRASE:
+    case syncer::PassphraseType::kFrozenImplicitPassphrase:
       return GetStringFUTF16(IDS_SYNC_FULL_ENCRYPTION_BODY_GOOGLE_WITH_DATE,
                              base::TimeFormatShortDate(passphrase_time));
-    case syncer::PassphraseType::CUSTOM_PASSPHRASE:
+    case syncer::PassphraseType::kCustomPassphrase:
       return GetStringFUTF16(IDS_SYNC_FULL_ENCRYPTION_BODY_CUSTOM_WITH_DATE,
                              base::TimeFormatShortDate(passphrase_time));
-    case syncer::PassphraseType::IMPLICIT_PASSPHRASE:
-    case syncer::PassphraseType::KEYSTORE_PASSPHRASE:
-    case syncer::PassphraseType::TRUSTED_VAULT_PASSPHRASE:
-    case syncer::PassphraseType::PASSPHRASE_TYPE_SIZE:
+    case syncer::PassphraseType::kImplicitPassphrase:
+    case syncer::PassphraseType::kKeystorePassphrase:
+    case syncer::PassphraseType::kTrustedVaultPassphrase:
       break;
   }
   NOTREACHED();
@@ -263,11 +260,7 @@ const char PeopleHandler::kDonePageStatus[] = "done";
 const char PeopleHandler::kPassphraseFailedPageStatus[] = "passphraseFailed";
 
 PeopleHandler::PeopleHandler(Profile* profile)
-    : profile_(profile),
-      configuring_sync_(false),
-      identity_manager_observer_(this),
-      sync_service_observer_(this) {
-}
+    : profile_(profile), configuring_sync_(false) {}
 
 PeopleHandler::~PeopleHandler() {
   // Early exit if running unit tests (no actual WebUI is attached).
@@ -626,8 +619,8 @@ void PeopleHandler::HandleSetEncryption(const base::ListValue* args) {
   bool passphrase_failed = false;
   if (!configuration.passphrase.empty()) {
     // We call IsPassphraseRequired() here (instead of
-    // IsPassphraseRequiredForDecryption()) because the user may try to enter
-    // a passphrase even though no encrypted data types are enabled.
+    // IsPassphraseRequiredForPreferredDataTypes()) because the user may try to
+    // enter a passphrase even though no encrypted data types are enabled.
     if (service->GetUserSettings()->IsPassphraseRequired()) {
       // If we have pending keys, try to decrypt them with the provided
       // passphrase. We track if this succeeds or fails because a failed
@@ -649,7 +642,7 @@ void PeopleHandler::HandleSetEncryption(const base::ListValue* args) {
   }
 
   if (passphrase_failed ||
-      service->GetUserSettings()->IsPassphraseRequiredForDecryption()) {
+      service->GetUserSettings()->IsPassphraseRequiredForPreferredDataTypes()) {
     // If the user doesn't enter any passphrase, we won't call
     // SetDecryptionPassphrase() (passphrase_failed == false), but we still
     // want to display an error message to let the user know that their blank
@@ -1104,8 +1097,8 @@ void PeopleHandler::PushSyncPrefs() {
                   sync_user_settings->IsEncryptEverythingAllowed());
 
   // We call IsPassphraseRequired() here, instead of calling
-  // IsPassphraseRequiredForDecryption(), because we want to show the passphrase
-  // UI even if no encrypted data types are enabled.
+  // IsPassphraseRequiredForPreferredDataTypes(), because we want to show the
+  // passphrase UI even if no encrypted data types are enabled.
   args.SetBoolean("passphraseRequired",
                   sync_user_settings->IsPassphraseRequired());
 
@@ -1156,7 +1149,8 @@ void PeopleHandler::MarkFirstSetupComplete() {
 
   // We're done configuring, so notify SyncService that it is OK to start
   // syncing.
-  service->GetUserSettings()->SetFirstSetupComplete();
+  service->GetUserSettings()->SetFirstSetupComplete(
+      syncer::SyncFirstSetupCompleteSource::ADVANCED_FLOW_CONFIRM);
   FireWebUIListener("sync-settings-saved");
 }
 

@@ -61,7 +61,7 @@ class BundledExchangesReaderTest : public testing::Test {
  private:
   base::test::TaskEnvironment task_environment_;
   std::unique_ptr<MockBundledExchangesReaderFactory> reader_factory_;
-  std::unique_ptr<BundledExchangesReader> reader_;
+  scoped_refptr<BundledExchangesReader> reader_;
   const GURL primary_url_ = GURL("https://test.example.org/");
   const std::string body_ = std::string("hello new open world.");
 };
@@ -88,14 +88,17 @@ TEST_F(BundledExchangesReaderTest, ReadResponse) {
 
   GetMockFactory()->ReadAndFullfillResponse(
       GetReader(), GetPrimaryURL(), std::move(response),
-      base::BindOnce([](data_decoder::mojom::BundleResponsePtr response) {
-        EXPECT_TRUE(response);
-        if (response) {
-          EXPECT_EQ(200, response->response_code);
-          EXPECT_EQ(0xdeadu, response->payload_offset);
-          EXPECT_EQ(0xbeafu, response->payload_length);
-        }
-      }));
+      base::BindOnce(
+          [](data_decoder::mojom::BundleResponsePtr response,
+             data_decoder::mojom::BundleResponseParseErrorPtr error) {
+            EXPECT_TRUE(response);
+            EXPECT_FALSE(error);
+            if (response) {
+              EXPECT_EQ(200, response->response_code);
+              EXPECT_EQ(0xdeadu, response->payload_offset);
+              EXPECT_EQ(0xbeafu, response->payload_length);
+            }
+          }));
 }
 
 TEST_F(BundledExchangesReaderTest, ReadResponseForURLContainingUserAndPass) {
@@ -112,14 +115,17 @@ TEST_F(BundledExchangesReaderTest, ReadResponseForURLContainingUserAndPass) {
 
   GetMockFactory()->ReadAndFullfillResponse(
       GetReader(), url, std::move(response),
-      base::BindOnce([](data_decoder::mojom::BundleResponsePtr response) {
-        EXPECT_TRUE(response);
-        if (response) {
-          EXPECT_EQ(200, response->response_code);
-          EXPECT_EQ(0xdeadu, response->payload_offset);
-          EXPECT_EQ(0xbeafu, response->payload_length);
-        }
-      }));
+      base::BindOnce(
+          [](data_decoder::mojom::BundleResponsePtr response,
+             data_decoder::mojom::BundleResponseParseErrorPtr error) {
+            EXPECT_TRUE(response);
+            EXPECT_FALSE(error);
+            if (response) {
+              EXPECT_EQ(200, response->response_code);
+              EXPECT_EQ(0xdeadu, response->payload_offset);
+              EXPECT_EQ(0xbeafu, response->payload_length);
+            }
+          }));
 }
 
 TEST_F(BundledExchangesReaderTest, ReadResponseForURLContainingFragment) {
@@ -136,14 +142,17 @@ TEST_F(BundledExchangesReaderTest, ReadResponseForURLContainingFragment) {
 
   GetMockFactory()->ReadAndFullfillResponse(
       GetReader(), url, std::move(response),
-      base::BindOnce([](data_decoder::mojom::BundleResponsePtr response) {
-        EXPECT_TRUE(response);
-        if (response) {
-          EXPECT_EQ(200, response->response_code);
-          EXPECT_EQ(0xdeadu, response->payload_offset);
-          EXPECT_EQ(0xbeafu, response->payload_length);
-        }
-      }));
+      base::BindOnce(
+          [](data_decoder::mojom::BundleResponsePtr response,
+             data_decoder::mojom::BundleResponseParseErrorPtr error) {
+            EXPECT_TRUE(response);
+            EXPECT_FALSE(error);
+            if (response) {
+              EXPECT_EQ(200, response->response_code);
+              EXPECT_EQ(0xdeadu, response->payload_offset);
+              EXPECT_EQ(0xbeafu, response->payload_length);
+            }
+          }));
 }
 
 TEST_F(BundledExchangesReaderTest, ReadResponseBody) {

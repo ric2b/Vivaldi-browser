@@ -345,11 +345,12 @@ base::LazyInstance<UnboundWidgetInputHandler>::Leaky g_unbound_input_handler =
 ///////////////////////////////////////////////////////////////////////////////
 // RenderWidgetHostImpl
 
-RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
-                                           RenderProcessHost* process,
-                                           int32_t routing_id,
-                                           mojom::WidgetPtr widget,
-                                           bool hidden)
+RenderWidgetHostImpl::RenderWidgetHostImpl(
+    RenderWidgetHostDelegate* delegate,
+    RenderProcessHost* process,
+    int32_t routing_id,
+    mojo::PendingRemote<mojom::Widget> widget,
+    bool hidden)
     : delegate_(delegate),
       process_(process),
       routing_id_(routing_id),
@@ -359,7 +360,7 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
       hung_renderer_delay_(TimeDelta::FromMilliseconds(kHungRendererDelayMs)),
       new_content_rendering_delay_(
           TimeDelta::FromMilliseconds(kNewContentRenderingDelayMs)),
-      compositor_frame_sink_binding_(this),
+      compositor_frame_sink_receiver_(this),
       frame_token_message_queue_(
           std::make_unique<FrameTokenMessageQueue>(this)),
       render_frame_metadata_provider_(
@@ -407,8 +408,8 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
 
   if (!command_line->HasSwitch(switches::kDisableNewContentRenderingTimeout)) {
     new_content_rendering_timeout_ = std::make_unique<TimeoutMonitor>(
-        base::Bind(&RenderWidgetHostImpl::ClearDisplayedGraphics,
-                   weak_factory_.GetWeakPtr()));
+        base::BindRepeating(&RenderWidgetHostImpl::ClearDisplayedGraphics,
+                            weak_factory_.GetWeakPtr()));
   }
 
   enable_viz_ = features::IsVizDisplayCompositorEnabled();
@@ -650,8 +651,6 @@ bool RenderWidgetHostImpl::OnMessageReceived(const IPC::Message &msg) {
                         OnForceRedrawComplete)
     IPC_MESSAGE_HANDLER(WidgetHostMsg_DidFirstVisuallyNonEmptyPaint,
                         OnFirstVisuallyNonEmptyPaint)
-    IPC_MESSAGE_HANDLER(WidgetHostMsg_DidCommitAndDrawCompositorFrame,
-                        OnCommitAndDrawCompositorFrame)
     IPC_MESSAGE_HANDLER(WidgetHostMsg_HasTouchEventHandlers,
                         OnHasTouchEventHandlers)
     IPC_MESSAGE_HANDLER(WidgetHostMsg_IntrinsicSizingInfoChanged,
@@ -768,12 +767,34 @@ void RenderWidgetHostImpl::SetImportance(ChildProcessImportance importance) {
   importance_ = importance;
   process_->UpdateClientPriority(this);
 }
+
+void RenderWidgetHostImpl::OnImeTextCommittedEvent(
+    const base::string16& text_str) {
+  for (auto& observer : ime_text_committed_observers_) {
+    observer.OnImeTextCommittedEvent(text_str);
+  }
+}
+
+void RenderWidgetHostImpl::AddImeTextCommittedEventObserver(
+    RenderWidgetHost::InputEventObserver* observer) {
+  if (!ime_text_committed_observers_.HasObserver(observer)) {
+    ime_text_committed_observers_.AddObserver(observer);
+  }
+}
+
+void RenderWidgetHostImpl::RemoveImeTextCommittedEventObserver(
+    RenderWidgetHost::InputEventObserver* observer) {
+  ime_text_committed_observers_.RemoveObserver(observer);
+}
 #endif
 
 VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   // This is only called while the RenderWidgetHost is attached to a delegate
   // still.
   DCHECK(delegate_);
+  // When the renderer process is gone, there's no need for VisualProperties
+  // which are to be sent to the renderer process.
+  DCHECK(view_);
 
   VisualProperties visual_properties;
 
@@ -812,29 +833,25 @@ VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   visual_properties.page_scale_factor = page_scale_factor_;
   visual_properties.is_pinch_gesture_active = is_pinch_gesture_active_;
 
-  if (view_) {
-    visual_properties.new_size = view_->GetRequestedRendererSize();
-    visual_properties.capture_sequence_number =
-        view_->GetCaptureSequenceNumber();
-    // For OOPIFs, use the compositor viewport received from the FrameConnector.
-    visual_properties.compositor_viewport_pixel_rect =
-        view_->IsRenderWidgetHostViewChildFrame() &&
-                !view_->IsRenderWidgetHostViewGuest()
-            ? gfx::ScaleToEnclosingRect(
-                  compositor_viewport_,
-                  IsUseZoomForDSFEnabled()
-                      ? 1.f
-                      : visual_properties.screen_info.device_scale_factor)
-            : gfx::Rect(view_->GetCompositorViewportPixelSize());
-    visual_properties.visible_viewport_size = view_->GetVisibleViewportSize();
-    // TODO(ccameron): GetLocalSurfaceId is not synchronized with the device
-    // scale factor of the surface. Fix this.
-    viz::LocalSurfaceIdAllocation local_surface_id_allocation =
-        view_->GetLocalSurfaceIdAllocation();
-    if (local_surface_id_allocation.IsValid()) {
-      visual_properties.local_surface_id_allocation =
-          local_surface_id_allocation;
-    }
+  visual_properties.new_size = view_->GetRequestedRendererSize();
+  visual_properties.capture_sequence_number = view_->GetCaptureSequenceNumber();
+  // For OOPIFs, use the compositor viewport received from the FrameConnector.
+  visual_properties.compositor_viewport_pixel_rect =
+      view_->IsRenderWidgetHostViewChildFrame() &&
+              !view_->IsRenderWidgetHostViewGuest()
+          ? gfx::ScaleToEnclosingRect(
+                compositor_viewport_,
+                IsUseZoomForDSFEnabled()
+                    ? 1.f
+                    : visual_properties.screen_info.device_scale_factor)
+          : gfx::Rect(view_->GetCompositorViewportPixelSize());
+  visual_properties.visible_viewport_size = view_->GetVisibleViewportSize();
+  // TODO(ccameron): GetLocalSurfaceId is not synchronized with the device
+  // scale factor of the surface. Fix this.
+  viz::LocalSurfaceIdAllocation local_surface_id_allocation =
+      view_->GetLocalSurfaceIdAllocation();
+  if (local_surface_id_allocation.IsValid()) {
+    visual_properties.local_surface_id_allocation = local_surface_id_allocation;
   }
 
   if (screen_orientation_type_for_testing_) {
@@ -869,6 +886,25 @@ void RenderWidgetHostImpl::SynchronizeVisualPropertiesIgnoringPendingAck() {
 
 bool RenderWidgetHostImpl::SynchronizeVisualProperties(
     bool scroll_focused_node_into_view) {
+  // If the RenderViewHost is inactive, then there is no RenderWidget that can
+  // receive visual properties yet, even though we are setting them on the
+  // browser side. Wait until the RenderWidget is not undead before sending the
+  // visual properties.
+  //
+  // When the RenderViewHost becomes active, a SynchronizeVisualProperties()
+  // call does not explicitly get made. That is because RenderWidgets for frames
+  // are created and initialized with a valid VisualProperties already, and once
+  // their initial navigation completes (and they are in the foreground) the
+  // RenderWidget will be shown, which means a VisualProperties update happens
+  // at the time where compositing begins.
+  //
+  // Note that this drops |scroll_focused_node_into_view| but this value does
+  // not make sense for an inactive RenderViewHost's top level RenderWidgetHost,
+  // because there is no frames associated with the RenderWidget when it is
+  // inactive, so there is no focused node, or anything to scroll and display.
+  if (owner_delegate_ && !owner_delegate_->IsMainFrameActive())
+    return false;
+
   // Skip if the |delegate_| has already been detached because
   // it's web contents is being deleted, or if LocalSurfaceIdAllocation is
   // suppressed, as we are first updating our internal state from a child's
@@ -889,68 +925,45 @@ bool RenderWidgetHostImpl::SynchronizeVisualProperties(
   visual_properties->scroll_focused_node_into_view =
       scroll_focused_node_into_view;
 
-  ScreenInfo screen_info = visual_properties->screen_info;
-  bool width_changed =
-      !old_visual_properties_ || old_visual_properties_->new_size.width() !=
-                                     visual_properties->new_size.width();
   bool visible_viewport_size_changed =
       !old_visual_properties_ ||
       old_visual_properties_->visible_viewport_size !=
           visual_properties->visible_viewport_size;
 
-  // TODO(jonross): Enable on ChromeOS once blocking mus bugs are fixed:
-  // https://crbug.com/920642 https://crbug.com/920006
-  // TODO(jonross): Enable on Android once root cause of crash is found and
-  // fixed: https://crbug.com/923742
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
-  // When the size has changed, we must ensure that there is a new, updated
-  // viz::LocalSurfaceId. Otherwise we encounter Surface Invariants Violation at
-  // the time of frame submission. Check for this violation here in order to
-  // detect the source of the bug.
-  if (old_visual_properties_ &&
-      old_visual_properties_->new_size != visual_properties->new_size &&
-      old_visual_properties_->local_surface_id_allocation &&
-      visual_properties->local_surface_id_allocation) {
-    // We suspect that we may not be updating viz::LocalSurfaceIds correctly
-    // when auto-resize is enabled. Logging this additional information to
-    // confirm if that is the case. https://crbug.com/900948
-    CHECK_NE(old_visual_properties_->local_surface_id_allocation.value(),
-             visual_properties->local_surface_id_allocation.value())
-        << "Invalid Surface Id State: size changed without a change in "
-           "LocalSurfaceId: auto_resize_enabled "
-        << visual_properties->auto_resize_enabled << " old "
-        << old_visual_properties_->local_surface_id_allocation->ToString()
-        << " new "
-        << visual_properties->local_surface_id_allocation->ToString();
-  }
-#endif
+  Send(new WidgetMsg_UpdateVisualProperties(routing_id_, *visual_properties));
 
-  bool sent_visual_properties = false;
-  if (Send(new WidgetMsg_SynchronizeVisualProperties(routing_id_,
-                                                     *visual_properties))) {
-    TRACE_EVENT_WITH_FLOW2(
-        TRACE_DISABLED_BY_DEFAULT("viz.surface_id_flow"),
-        "RenderWidgetHostImpl::SynchronizeVisualProperties send message",
-        visual_properties->local_surface_id_allocation->local_surface_id()
-            .submission_trace_id(),
-        TRACE_EVENT_FLAG_FLOW_OUT, "message",
-        "WidgetMsg_SynchronizeVisualProperties", "local_surface_id",
-        visual_properties->local_surface_id_allocation->local_surface_id()
-            .ToString());
-    visual_properties_ack_pending_ =
-        DoesVisualPropertiesNeedAck(old_visual_properties_, *visual_properties);
-    if (delegate() && visible_viewport_size_changed) {
-      delegate()->NotifyVisibleViewportSizeChanged(
-          visual_properties->visible_viewport_size);
-    }
-    old_visual_properties_.swap(visual_properties);
-    sent_visual_properties = true;
+  // TODO(danakj): All visual properties should go through
+  // WidgetMsg_UpdateVisualProperties in order to be synchronized by the
+  // LocalSurfaceIdAllocation which synchronizes in the display compositor for
+  // a global atomic screen update across all frame widgets. This should move.
+  if (delegate() && visible_viewport_size_changed) {
+    delegate()->NotifyVisibleViewportSizeChanged(
+        visual_properties->visible_viewport_size);
   }
 
-  if (delegate_)
-    delegate_->RenderWidgetWasResized(this, screen_info, width_changed);
+  bool width_changed =
+      !old_visual_properties_ || old_visual_properties_->new_size.width() !=
+                                     visual_properties->new_size.width();
+  TRACE_EVENT_WITH_FLOW2(
+      TRACE_DISABLED_BY_DEFAULT("viz.surface_id_flow"),
+      "RenderWidgetHostImpl::SynchronizeVisualProperties send message",
+      visual_properties->local_surface_id_allocation->local_surface_id()
+          .submission_trace_id(),
+      TRACE_EVENT_FLAG_FLOW_OUT, "message",
+      "WidgetMsg_SynchronizeVisualProperties", "local_surface_id",
+      visual_properties->local_surface_id_allocation->local_surface_id()
+          .ToString());
+  visual_properties_ack_pending_ =
+      DoesVisualPropertiesNeedAck(old_visual_properties_, *visual_properties);
+  old_visual_properties_ = std::move(visual_properties);
 
-  return sent_visual_properties;
+  // Warning: |visual_properties| invalid after this point.
+
+  if (delegate_) {
+    delegate_->RenderWidgetWasResized(this, width_changed);
+  }
+
+  return true;
 }
 
 void RenderWidgetHostImpl::GotFocus() {
@@ -1502,6 +1515,17 @@ void RenderWidgetHostImpl::EnsureReadyForSyntheticGestures(
   }
 }
 
+void RenderWidgetHostImpl::TakeSyntheticGestureController(
+    RenderWidgetHostImpl* host) {
+  DCHECK(!synthetic_gesture_controller_);
+  if (host->synthetic_gesture_controller_) {
+    synthetic_gesture_controller_ =
+        std::move(host->synthetic_gesture_controller_);
+    synthetic_gesture_controller_->UpdateSyntheticGestureTarget(
+        view_->CreateSyntheticGestureTarget(), this);
+  }
+}
+
 void RenderWidgetHostImpl::SetCursor(const WebCursor& cursor) {
   if (!view_)
     return;
@@ -1728,12 +1752,12 @@ void RenderWidgetHostImpl::NotifyScreenInfoChanged() {
 }
 
 void RenderWidgetHostImpl::GetSnapshotFromBrowser(
-    const GetSnapshotFromBrowserCallback& callback,
+    GetSnapshotFromBrowserCallback callback,
     bool from_surface) {
   int snapshot_id = next_browser_snapshot_id_++;
   if (from_surface) {
     pending_surface_browser_snapshots_.insert(
-        std::make_pair(snapshot_id, callback));
+        std::make_pair(snapshot_id, std::move(callback)));
     Send(new WidgetMsg_ForceRedraw(GetRoutingID(), snapshot_id));
     return;
   }
@@ -1746,7 +1770,8 @@ void RenderWidgetHostImpl::GetSnapshotFromBrowser(
     GetWakeLock()->RequestWakeLock();
 #endif
   // TODO(nzolghadr): Remove the duplication here and the if block just above.
-  pending_browser_snapshots_.insert(std::make_pair(snapshot_id, callback));
+  pending_browser_snapshots_.insert(
+      std::make_pair(snapshot_id, std::move(callback)));
   Send(new WidgetMsg_ForceRedraw(GetRoutingID(), snapshot_id));
 }
 
@@ -1856,11 +1881,6 @@ void RenderWidgetHostImpl::OnForceRedrawComplete(int snapshot_id) {
 void RenderWidgetHostImpl::OnFirstVisuallyNonEmptyPaint() {
   if (owner_delegate_)
     owner_delegate_->RenderWidgetDidFirstVisuallyNonEmptyPaint();
-}
-
-void RenderWidgetHostImpl::OnCommitAndDrawCompositorFrame() {
-  if (owner_delegate_)
-    owner_delegate_->RenderWidgetDidCommitAndDrawCompositorFrame();
 }
 
 void RenderWidgetHostImpl::RendererExited() {
@@ -1991,6 +2011,11 @@ void RenderWidgetHostImpl::OnMouseEventAck(
   for (auto& input_event_observer : input_event_observers_)
     input_event_observer.OnInputEventAck(ack_source, ack_result,
                                          mouse_event.event);
+
+  // Give the delegate the ability to handle a mouse event that wasn't consumed
+  // by the renderer. eg. Back/Forward mouse buttons.
+  if (delegate_ && ack_result != INPUT_EVENT_ACK_STATE_CONSUMED && !is_hidden())
+    delegate_->HandleMouseEvent(mouse_event.event);
 }
 
 bool RenderWidgetHostImpl::IsMouseLocked() const {
@@ -2368,6 +2393,8 @@ void RenderWidgetHostImpl::OnAutoscrollStart(const gfx::PointF& position) {
   GetView()->OnAutoscrollStart();
   sent_autoscroll_scroll_begin_ = false;
   autoscroll_in_progress_ = true;
+  delegate()->GetInputEventRouter()->SetAutoScrollInProgress(
+      autoscroll_in_progress_);
   autoscroll_start_position_ = position;
 }
 
@@ -2400,6 +2427,9 @@ void RenderWidgetHostImpl::OnAutoscrollFling(const gfx::Vector2dF& velocity) {
 
 void RenderWidgetHostImpl::OnAutoscrollEnd() {
   autoscroll_in_progress_ = false;
+
+  delegate()->GetInputEventRouter()->SetAutoScrollInProgress(
+      autoscroll_in_progress_);
   // Don't send a GFC if no GSB is sent.
   if (!sent_autoscroll_scroll_begin_)
     return;
@@ -2858,8 +2888,8 @@ void RenderWidgetHostImpl::WindowSnapshotReachedScreen(int snapshot_id) {
 
     ui::GrabViewSnapshotAsync(
         GetView()->GetNativeView(), snapshot_bounds,
-        base::Bind(&RenderWidgetHostImpl::OnSnapshotReceived,
-                   weak_factory_.GetWeakPtr(), snapshot_id));
+        base::BindOnce(&RenderWidgetHostImpl::OnSnapshotReceived,
+                       weak_factory_.GetWeakPtr(), snapshot_id));
   }
 }
 
@@ -2885,7 +2915,7 @@ void RenderWidgetHostImpl::OnSnapshotFromSurfaceReceived(
   auto it = pending_surface_browser_snapshots_.begin();
   while (it != pending_surface_browser_snapshots_.end()) {
     if (it->first <= snapshot_id) {
-      it->second.Run(image);
+      std::move(it->second).Run(image);
       pending_surface_browser_snapshots_.erase(it++);
     } else {
       ++it;
@@ -2900,7 +2930,7 @@ void RenderWidgetHostImpl::OnSnapshotReceived(int snapshot_id,
   auto it = pending_browser_snapshots_.begin();
   while (it != pending_browser_snapshots_.end()) {
     if (it->first <= snapshot_id) {
-      it->second.Run(image);
+      std::move(it->second).Run(image);
       pending_browser_snapshots_.erase(it++);
     } else {
       ++it;
@@ -2941,22 +2971,24 @@ void RenderWidgetHostImpl::RequestCompositionUpdates(bool immediate_request,
 }
 
 void RenderWidgetHostImpl::RequestCompositorFrameSink(
-    viz::mojom::CompositorFrameSinkRequest compositor_frame_sink_request,
-    viz::mojom::CompositorFrameSinkClientPtr compositor_frame_sink_client) {
+    mojo::PendingReceiver<viz::mojom::CompositorFrameSink>
+        compositor_frame_sink_receiver,
+    mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient>
+        compositor_frame_sink_client) {
   if (enable_viz_) {
       // Connects the viz process end of CompositorFrameSink message pipes. The
       // renderer compositor may request a new CompositorFrameSink on context
       // loss, which will destroy the existing CompositorFrameSink.
       auto callback = base::BindOnce(
           [](viz::HostFrameSinkManager* manager,
-             viz::mojom::CompositorFrameSinkRequest request,
-             viz::mojom::CompositorFrameSinkClientPtr client,
+             mojo::PendingReceiver<viz::mojom::CompositorFrameSink> receiver,
+             mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client,
              const viz::FrameSinkId& frame_sink_id) {
             manager->CreateCompositorFrameSink(
-                frame_sink_id, std::move(request), std::move(client));
+                frame_sink_id, std::move(receiver), std::move(client));
           },
           base::Unretained(GetHostFrameSinkManager()),
-          std::move(compositor_frame_sink_request),
+          std::move(compositor_frame_sink_receiver),
           std::move(compositor_frame_sink_client));
 
       if (view_)
@@ -2974,24 +3006,29 @@ void RenderWidgetHostImpl::RequestCompositorFrameSink(
     shared_bitmap_manager_->ChildDeletedSharedBitmap(id);
   owned_bitmaps_.clear();
 
-  if (compositor_frame_sink_binding_.is_bound())
-    compositor_frame_sink_binding_.Close();
-  compositor_frame_sink_binding_.Bind(
-      std::move(compositor_frame_sink_request),
+  compositor_frame_sink_receiver_.reset();
+  compositor_frame_sink_receiver_.Bind(
+      std::move(compositor_frame_sink_receiver),
       BrowserMainLoop::GetInstance()->GetResizeTaskRunner());
+
+  renderer_compositor_frame_sink_.reset();
+  renderer_compositor_frame_sink_.Bind(std::move(compositor_frame_sink_client));
+  auto* compositor_frame_sink_client_ptr =
+      renderer_compositor_frame_sink_.get();
+
   if (view_) {
     view_->DidCreateNewRendererCompositorFrameSink(
-        compositor_frame_sink_client.get());
+        compositor_frame_sink_client_ptr);
   }
-  renderer_compositor_frame_sink_ = std::move(compositor_frame_sink_client);
 }
 
 void RenderWidgetHostImpl::RegisterRenderFrameMetadataObserver(
-    mojom::RenderFrameMetadataObserverClientRequest
-        render_frame_metadata_observer_client_request,
-    mojom::RenderFrameMetadataObserverPtr render_frame_metadata_observer) {
+    mojo::PendingReceiver<mojom::RenderFrameMetadataObserverClient>
+        render_frame_metadata_observer_client_receiver,
+    mojo::PendingRemote<mojom::RenderFrameMetadataObserver>
+        render_frame_metadata_observer) {
   render_frame_metadata_provider_.Bind(
-      std::move(render_frame_metadata_observer_client_request),
+      std::move(render_frame_metadata_observer_client_receiver),
       std::move(render_frame_metadata_observer));
 }
 
@@ -3119,12 +3156,14 @@ void RenderWidgetHostImpl::SetInputTargetClient(
   input_target_client_ = std::move(input_target_client);
 }
 
-void RenderWidgetHostImpl::SetWidget(mojom::WidgetPtr widget) {
-  if (widget) {
+void RenderWidgetHostImpl::SetWidget(
+    mojo::PendingRemote<mojom::Widget> widget_remote) {
+  if (widget_remote) {
     // If we have a bound handler ensure that we destroy the old input router.
     if (widget_input_handler_.is_bound())
       SetupInputRouter();
 
+    mojo::Remote<mojom::Widget> widget(std::move(widget_remote));
     widget->SetupWidgetInputHandler(
         widget_input_handler_.BindNewPipeAndPassReceiver(),
         input_router_->BindNewHost());

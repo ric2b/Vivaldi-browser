@@ -932,7 +932,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   scoped_refptr<DownloadsOpenFunction> scoped_open(new DownloadsOpenFunction());
   scoped_open->set_user_gesture(true);
   base::Value args_list(base::Value::Type::LIST);
-  args_list.GetList().emplace_back(static_cast<int>(download_item->GetId()));
+  args_list.Append(static_cast<int>(download_item->GetId()));
   scoped_open->SetArgs(std::move(args_list));
   scoped_open->set_browser_context(current_browser()->profile());
   scoped_open->set_extension(extension());
@@ -1900,31 +1900,31 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   GoOnTheRecord();
 
   static const char* const kUnsafeHeaders[] = {
-    "Accept-chArsEt",
-    "accept-eNcoding",
-    "coNNection",
-    "coNteNt-leNgth",
-    "cooKIE",
-    "cOOkie2",
-    "coNteNt-traNsfer-eNcodiNg",
-    "dAtE",
-    "ExpEcT",
-    "hOsT",
-    "kEEp-aLivE",
-    "rEfErEr",
-    "tE",
-    "trAilER",
-    "trANsfer-eNcodiNg",
-    "upGRAde",
-    "usER-agENt",
-    "viA",
-    "pRoxY-",
-    "sEc-",
-    "pRoxY-probably-not-evil",
-    "sEc-probably-not-evil",
-    "oRiGiN",
-    "Access-Control-Request-Headers",
-    "Access-Control-Request-Method",
+      "Accept-chArsEt",
+      "accept-eNcoding",
+      "coNNection",
+      "coNteNt-leNgth",
+      "cooKIE",
+      "cOOkie2",
+      "dAtE",
+      "DNT",
+      "ExpEcT",
+      "hOsT",
+      "kEEp-aLivE",
+      "rEfErEr",
+      "tE",
+      "trAilER",
+      "trANsfer-eNcodiNg",
+      "upGRAde",
+      "usER-agENt",
+      "viA",
+      "pRoxY-",
+      "sEc-",
+      "pRoxY-probably-not-evil",
+      "sEc-probably-not-evil",
+      "oRiGiN",
+      "Access-Control-Request-Headers",
+      "Access-Control-Request-Method",
   };
 
   for (size_t index = 0; index < base::size(kUnsafeHeaders); ++index) {

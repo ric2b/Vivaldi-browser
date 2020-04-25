@@ -39,6 +39,8 @@ const char kVivaldiUniqueUserId[] = "vivaldi.unique_user_id";
 const char kVivaldiStatsNextDailyPing[] = "vivaldi.stats.next_daily_ping";
 const char kVivaldiStatsNextWeeklyPing[] = "vivaldi.stats.next_weekly_ping";
 const char kVivaldiStatsNextMonthlyPing[] = "vivaldi.stats.next_monthly_ping";
+const char kVivaldiStatsExtraPing[] = "vivaldi.stats.extra_ping";
+const char kVivaldiStatsExtraPingTime[] = "vivaldi.stats.extra_ping_time";
 
 // Enable native window decoration
 const char kOldVivaldiUseNativeWindowDecoration[] =

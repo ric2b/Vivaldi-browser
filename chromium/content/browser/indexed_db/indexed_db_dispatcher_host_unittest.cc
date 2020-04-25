@@ -33,6 +33,8 @@
 #include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "storage/browser/test/mock_quota_manager.h"
 #include "storage/browser/test/mock_quota_manager_proxy.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
@@ -45,8 +47,6 @@
 using blink::IndexedDBDatabaseMetadata;
 using blink::IndexedDBIndexKeys;
 using blink::IndexedDBKey;
-using blink::mojom::IDBFactory;
-using blink::mojom::IDBFactoryPtr;
 using blink::mojom::IDBValue;
 using blink::mojom::IDBValuePtr;
 using testing::_;
@@ -117,7 +117,7 @@ struct TestDatabaseConnection {
       default;
   ~TestDatabaseConnection() {}
 
-  void Open(IDBFactory* factory) {
+  void Open(blink::mojom::IDBFactory* factory) {
     factory->Open(
         open_callbacks->CreateInterfacePtrAndBind(),
         connection_callbacks->CreateInterfacePtrAndBind(), db_name, version,
@@ -201,7 +201,7 @@ class IndexedDBDispatcherHostTest : public testing::Test {
     base::RunLoop loop;
     context_impl_->TaskRunner()->PostTask(FROM_HERE,
                                           base::BindLambdaForTesting([&]() {
-                                            idb_mojo_factory_ = nullptr;
+                                            idb_mojo_factory_.reset();
                                             loop.Quit();
                                           }));
     loop.Run();
@@ -217,8 +217,10 @@ class IndexedDBDispatcherHostTest : public testing::Test {
     base::RunLoop loop;
     context_impl_->TaskRunner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
-          host_->AddBinding(::mojo::MakeRequest(&idb_mojo_factory_),
-                            {url::Origin::Create(GURL(kOrigin))});
+          constexpr int kRenderFrameId = 42;
+          host_->AddReceiver(kFakeProcessId, kRenderFrameId,
+                             url::Origin::Create(GURL(kOrigin)),
+                             idb_mojo_factory_.BindNewPipeAndPassReceiver());
           loop.Quit();
         }));
     loop.Run();
@@ -233,7 +235,7 @@ class IndexedDBDispatcherHostTest : public testing::Test {
   scoped_refptr<MockQuotaManager> quota_manager_;
   scoped_refptr<IndexedDBContextImpl> context_impl_;
   std::unique_ptr<IndexedDBDispatcherHost, base::OnTaskRunnerDeleter> host_;
-  IDBFactoryPtr idb_mojo_factory_;
+  mojo::Remote<blink::mojom::IDBFactory> idb_mojo_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(IndexedDBDispatcherHostTest);
 };
@@ -277,7 +279,8 @@ TEST_F(IndexedDBDispatcherHostTest, CloseConnectionBeforeUpgrade) {
   loop2.Run();
 }
 
-TEST_F(IndexedDBDispatcherHostTest, CloseAfterUpgrade) {
+// Flaky on multiple platforms.  http://crbug.com/1001265
+TEST_F(IndexedDBDispatcherHostTest, DISABLED_CloseAfterUpgrade) {
   const int64_t kDBVersion = 1;
   const int64_t kTransactionId = 1;
   const int64_t kObjectStoreId = 10;
@@ -346,14 +349,8 @@ TEST_F(IndexedDBDispatcherHostTest, CloseAfterUpgrade) {
   loop3.Run();
 }
 
-// TODO(https://crbug.com/995716) Test is flaky on Mac ASan.
-#if defined(OS_MACOSX) && defined(ADDRESS_SANITIZER)
-#define MAYBE_OpenNewConnectionWhileUpgrading \
-  DISABLED_OpenNewConnectionWhileUpgrading
-#else
-#define MAYBE_OpenNewConnectionWhileUpgrading OpenNewConnectionWhileUpgrading
-#endif
-TEST_F(IndexedDBDispatcherHostTest, MAYBE_OpenNewConnectionWhileUpgrading) {
+// TODO(https://crbug.com/995716) Test is flaky on multiple platforms.
+TEST_F(IndexedDBDispatcherHostTest, DISABLED_OpenNewConnectionWhileUpgrading) {
   const int64_t kDBVersion = 1;
   const int64_t kTransactionId = 1;
   const int64_t kObjectStoreId = 10;
@@ -453,12 +450,7 @@ MATCHER_P(IsCallbackError, error_code, "") {
 }
 
 // See https://crbug.com/989723 for more context, this test seems to flake.
-#if defined(OS_WIN) || (defined(OS_MACOSX) && defined(ADDRESS_SANITIZER))
-#define MAYBE_PutWithInvalidBlob DISABLED_PutWithInvalidBlob
-#else
-#define MAYBE_PutWithInvalidBlob PutWithInvalidBlob
-#endif
-TEST_F(IndexedDBDispatcherHostTest, MAYBE_PutWithInvalidBlob) {
+TEST_F(IndexedDBDispatcherHostTest, DISABLED_PutWithInvalidBlob) {
   const int64_t kDBVersion = 1;
   const int64_t kTransactionId = 1;
   const int64_t kObjectStoreId = 10;
@@ -527,9 +519,10 @@ TEST_F(IndexedDBDispatcherHostTest, MAYBE_PutWithInvalidBlob) {
             blink::IndexedDBKeyPath(), false);
         // Call Put with an invalid blob.
         std::vector<blink::mojom::IDBBlobInfoPtr> blobs;
-        blink::mojom::BlobPtrInfo blob;
-        // Ignore the result of MakeRequest, to end up with an invalid blob.
-        mojo::MakeRequest(&blob);
+        mojo::PendingRemote<blink::mojom::Blob> blob;
+        // Ignore the result of InitWithNewPipeAndPassReceiver, to end up with
+        // an invalid blob.
+        ignore_result(blob.InitWithNewPipeAndPassReceiver());
         blobs.push_back(blink::mojom::IDBBlobInfo::New(
             std::move(blob), "fakeUUID", base::string16(), 100, nullptr));
 

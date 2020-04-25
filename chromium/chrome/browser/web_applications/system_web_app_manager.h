@@ -16,6 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/one_shot_event.h"
 #include "chrome/browser/web_applications/components/pending_app_manager.h"
+#include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -40,6 +41,7 @@ enum class SystemAppType {
   DISCOVER,
   CAMERA,
   TERMINAL,
+  MEDIA,
 };
 
 // The configuration options for a System App.
@@ -55,6 +57,11 @@ struct SystemAppInfo {
   // If specified, the apps in |uninstall_and_replace| will have their data
   // migrated to this System App.
   std::vector<AppId> uninstall_and_replace;
+
+  // Minimum window size in DIPs. Empty if the app does not have a minimum.
+  // TODO(https://github.com/w3c/manifest/issues/436): Replace with PWA manifest
+  // properties for window size.
+  gfx::Size minimum_window_size;
 };
 
 // Installs, uninstalls, and updates System Web Apps.
@@ -101,8 +108,15 @@ class SystemWebAppManager {
   // Returns the app id for the given System App |type|.
   base::Optional<AppId> GetAppIdForSystemApp(SystemAppType type) const;
 
+  // Returns the System App Type for the given |app_id|.
+  base::Optional<SystemAppType> GetSystemAppTypeForAppId(AppId app_id) const;
+
   // Returns whether |app_id| points to an installed System App.
   bool IsSystemWebApp(const AppId& app_id) const;
+
+  // Returns the minimum window size for |app_id| or an empty size if the app
+  // doesn't specify a minimum.
+  gfx::Size GetMinimumWindowSize(const AppId& app_id) const;
 
   const base::OneShotEvent& on_apps_synchronized() const {
     return *on_apps_synchronized_;
@@ -127,7 +141,9 @@ class SystemWebAppManager {
 
   base::flat_map<SystemAppType, SystemAppInfo> system_app_infos_;
 
-  PrefService* pref_service_;
+  base::flat_map<AppId, SystemAppType> app_id_to_app_type_;
+
+  PrefService* const pref_service_;
 
   // Used to install, uninstall, and update apps. Should outlive this class.
   PendingAppManager* pending_app_manager_ = nullptr;

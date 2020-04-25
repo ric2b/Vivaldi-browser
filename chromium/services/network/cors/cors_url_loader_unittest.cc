@@ -22,6 +22,8 @@
 #include "base/test/task_environment.h"
 #include "mojo/core/embedder/embedder.h"
 #include "mojo/public/cpp/bindings/message.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_request_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -65,15 +67,15 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
   void NotifyClientOnReceiveResponse(
       int status_code,
       const std::vector<std::string>& extra_headers) {
-    ResourceResponseHead response;
-    response.headers = new net::HttpResponseHeaders(
+    auto response = mojom::URLResponseHead::New();
+    response->headers = new net::HttpResponseHeaders(
         base::StringPrintf("HTTP/1.1 %d OK\n"
                            "Content-Type: image/png\n",
                            status_code));
     for (const auto& header : extra_headers)
-      response.headers->AddHeader(header);
+      response->headers->AddHeader(header);
 
-    client_ptr_->OnReceiveResponse(response);
+    client_ptr_->OnReceiveResponse(std::move(response));
   }
 
   void NotifyClientOnComplete(int error_code) {
@@ -84,13 +86,13 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
   void NotifyClientOnReceiveRedirect(
       const net::RedirectInfo& redirect_info,
       const std::vector<std::string>& extra_headers) {
-    ResourceResponseHead response;
-    response.headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+    auto response = mojom::URLResponseHead::New();
+    response->headers = base::MakeRefCounted<net::HttpResponseHeaders>(
         base::StringPrintf("HTTP/1.1 %d\n", redirect_info.status_code));
     for (const auto& header : extra_headers)
-      response.headers->AddHeader(header);
+      response->headers->AddHeader(header);
 
-    client_ptr_->OnReceiveRedirect(redirect_info, response);
+    client_ptr_->OnReceiveRedirect(redirect_info, std::move(response));
   }
 
   bool IsCreateLoaderAndStartCalled() { return !!client_ptr_; }
@@ -122,7 +124,9 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
       on_create_loader_and_start_.Run();
   }
 
-  void Clone(mojom::URLLoaderFactoryRequest request) override { NOTREACHED(); }
+  void Clone(mojo::PendingReceiver<mojom::URLLoaderFactory> receiver) override {
+    NOTREACHED();
+  }
 
   mojom::URLLoaderClientPtr client_ptr_;
 
@@ -142,8 +146,7 @@ class CorsURLLoaderTest : public testing::Test {
   using ReferrerPolicy = net::URLRequest::ReferrerPolicy;
 
   CorsURLLoaderTest()
-      : task_environment_(base::test::TaskEnvironment::MainThreadType::IO),
-        resource_scheduler_(true) {
+      : task_environment_(base::test::TaskEnvironment::MainThreadType::IO) {
     net::URLRequestContextBuilder context_builder;
     context_builder.set_proxy_resolution_service(
         net::ProxyResolutionService::CreateDirect());
@@ -161,8 +164,10 @@ class CorsURLLoaderTest : public testing::Test {
     context_params->initial_proxy_config =
         net::ProxyConfigWithAnnotation::CreateDirect();
     context_params->cors_exempt_header_list.push_back(kTestCorsExemptHeader);
+    context_params->cors_mode = mojom::NetworkContextParams::CorsMode::kEnable;
     network_context_ = std::make_unique<NetworkContext>(
-        network_service_.get(), mojo::MakeRequest(&network_context_ptr_),
+        network_service_.get(),
+        network_context_remote_.BindNewPipeAndPassReceiver(),
         std::move(context_params));
 
     ResetFactory(base::nullopt, kRendererProcessId);
@@ -342,11 +347,12 @@ class CorsURLLoaderTest : public testing::Test {
         base::MakeRefCounted<ResourceSchedulerClient>(
             process_id, kRouteId, &resource_scheduler_,
             url_request_context_->network_quality_estimator());
+    cors_url_loader_factory_remote_.reset();
     cors_url_loader_factory_ = std::make_unique<CorsURLLoaderFactory>(
         network_context_.get(), std::move(factory_params),
         resource_scheduler_client,
-        mojo::MakeRequest(&cors_url_loader_factory_ptr_), &origin_access_list_,
-        std::move(factory));
+        cors_url_loader_factory_remote_.BindNewPipeAndPassReceiver(),
+        &origin_access_list_, std::move(factory));
   }
 
   NetworkContext* network_context() { return network_context_.get(); }
@@ -361,11 +367,11 @@ class CorsURLLoaderTest : public testing::Test {
   ResourceScheduler resource_scheduler_;
   std::unique_ptr<NetworkService> network_service_;
   std::unique_ptr<NetworkContext> network_context_;
-  mojom::NetworkContextPtr network_context_ptr_;
+  mojo::Remote<mojom::NetworkContext> network_context_remote_;
 
   // CorsURLLoaderFactory instance under tests.
   std::unique_ptr<mojom::URLLoaderFactory> cors_url_loader_factory_;
-  mojom::URLLoaderFactoryPtr cors_url_loader_factory_ptr_;
+  mojo::Remote<mojom::URLLoaderFactory> cors_url_loader_factory_remote_;
 
   // Factory bound origin access list for testing.
   std::vector<mojom::CorsOriginPatternPtr> factory_bound_allow_patterns_;
@@ -1216,7 +1222,93 @@ TEST_F(CorsURLLoaderTest, OriginAccessList_Allowed) {
   EXPECT_FALSE(client().has_received_redirect());
   EXPECT_TRUE(client().has_received_response());
   EXPECT_EQ(network::mojom::FetchResponseType::kBasic,
-            client().response_head().response_type);
+            client().response_head()->response_type);
+  EXPECT_TRUE(client().has_received_completion());
+  EXPECT_EQ(net::OK, client().completion_status().error_code);
+}
+
+// Tests if CorsURLLoader takes into account
+// ResourceRequest::isolated_world_origin when consulting OriginAccessList.
+TEST_F(CorsURLLoaderTest, OriginAccessList_IsolatedWorldOrigin) {
+  const GURL main_world_origin("http://main-world.com");
+  const GURL isolated_world_origin("http://isolated-world.com");
+  const GURL url("http://other.com/foo.png");
+
+  AddAllowListEntryForOrigin(url::Origin::Create(isolated_world_origin),
+                             url.scheme(), url.host(),
+                             mojom::CorsDomainMatchMode::kDisallowSubdomains);
+
+  ResourceRequest request;
+  request.mode = mojom::RequestMode::kCors;
+  request.credentials_mode = mojom::CredentialsMode::kOmit;
+  request.method = net::HttpRequestHeaders::kGetMethod;
+  request.url = url;
+  request.request_initiator = url::Origin::Create(main_world_origin);
+  request.isolated_world_origin = url::Origin::Create(isolated_world_origin);
+  CreateLoaderAndStart(request);
+
+  NotifyLoaderClientOnReceiveResponse();
+  NotifyLoaderClientOnComplete(net::OK);
+
+  RunUntilComplete();
+
+  EXPECT_TRUE(IsNetworkLoaderStarted());
+  EXPECT_FALSE(client().has_received_redirect());
+  EXPECT_TRUE(client().has_received_response());
+  EXPECT_EQ(network::mojom::FetchResponseType::kBasic,
+            client().response_head()->response_type);
+  EXPECT_TRUE(client().has_received_completion());
+  EXPECT_EQ(net::OK, client().completion_status().error_code);
+}
+
+// Tests if CorsURLLoader takes into account
+// ResourceRequest::isolated_world_origin when consulting OriginAccessList
+// after redirects.
+TEST_F(CorsURLLoaderTest, OriginAccessList_IsolatedWorldOrigin_Redirect) {
+  const GURL main_world_origin("http://main-world.com");
+  const GURL isolated_world_origin("http://isolated-world.com");
+  const GURL url("http://other.com/foo.png");
+  // |new_url| is same-origin as |url| to avoid tainting the response
+  // in CorsURLLoader::OnReceiveRedirect.
+  const GURL new_url("http://other.com/bar.png");
+
+  AddAllowListEntryForOrigin(url::Origin::Create(isolated_world_origin),
+                             url.scheme(), url.host(),
+                             mojom::CorsDomainMatchMode::kDisallowSubdomains);
+  AddAllowListEntryForOrigin(url::Origin::Create(isolated_world_origin),
+                             new_url.scheme(), new_url.host(),
+                             mojom::CorsDomainMatchMode::kDisallowSubdomains);
+
+  ResourceRequest request;
+  // Using no-cors to force opaque response (unless the allowlist entry added
+  // above is taken into account).
+  request.mode = mojom::RequestMode::kNoCors;
+  request.credentials_mode = mojom::CredentialsMode::kOmit;
+  request.method = net::HttpRequestHeaders::kGetMethod;
+  request.url = url;
+  request.request_initiator = url::Origin::Create(main_world_origin);
+  request.isolated_world_origin = url::Origin::Create(isolated_world_origin);
+  CreateLoaderAndStart(request);
+
+  NotifyLoaderClientOnReceiveRedirect(CreateRedirectInfo(301, "GET", new_url));
+  RunUntilRedirectReceived();
+
+  EXPECT_TRUE(IsNetworkLoaderStarted());
+  EXPECT_FALSE(client().has_received_completion());
+  EXPECT_FALSE(client().has_received_response());
+  EXPECT_TRUE(client().has_received_redirect());
+
+  FollowRedirect();
+  NotifyLoaderClientOnReceiveResponse();
+  NotifyLoaderClientOnComplete(net::OK);
+
+  RunUntilComplete();
+
+  EXPECT_TRUE(IsNetworkLoaderStarted());
+  EXPECT_TRUE(client().has_received_redirect());
+  EXPECT_TRUE(client().has_received_response());
+  EXPECT_EQ(network::mojom::FetchResponseType::kBasic,
+            client().response_head()->response_type);
   EXPECT_TRUE(client().has_received_completion());
   EXPECT_EQ(net::OK, client().completion_status().error_code);
 }
@@ -1268,7 +1360,7 @@ TEST_F(CorsURLLoaderTest, OriginAccessList_AllowedByFactoryList) {
   EXPECT_FALSE(client().has_received_redirect());
   EXPECT_TRUE(client().has_received_response());
   EXPECT_EQ(network::mojom::FetchResponseType::kBasic,
-            client().response_head().response_type);
+            client().response_head()->response_type);
   EXPECT_TRUE(client().has_received_completion());
   EXPECT_EQ(net::OK, client().completion_status().error_code);
 }
@@ -1320,7 +1412,7 @@ TEST_F(CorsURLLoaderTest, OriginAccessList_NoCors) {
   EXPECT_FALSE(client().has_received_redirect());
   EXPECT_TRUE(client().has_received_response());
   EXPECT_EQ(network::mojom::FetchResponseType::kBasic,
-            client().response_head().response_type);
+            client().response_head()->response_type);
   EXPECT_TRUE(client().has_received_completion());
   EXPECT_EQ(net::OK, client().completion_status().error_code);
 }
@@ -1472,86 +1564,86 @@ TEST(CorsURLLoaderTaintingTest, CalculateResponseTainting) {
   // CORS flag is false, same-origin request
   EXPECT_EQ(FetchResponseType::kBasic,
             CorsURLLoader::CalculateResponseTainting(
-                same_origin_url, RequestMode::kSameOrigin, origin, false, false,
-                &origin_access_list));
+                same_origin_url, RequestMode::kSameOrigin, origin,
+                base::nullopt, false, false, &origin_access_list));
   EXPECT_EQ(FetchResponseType::kBasic,
             CorsURLLoader::CalculateResponseTainting(
-                same_origin_url, RequestMode::kNoCors, origin, false, false,
-                &origin_access_list));
-  EXPECT_EQ(FetchResponseType::kBasic,
-            CorsURLLoader::CalculateResponseTainting(
-                same_origin_url, RequestMode::kCors, origin, false, false,
-                &origin_access_list));
-  EXPECT_EQ(FetchResponseType::kBasic,
-            CorsURLLoader::CalculateResponseTainting(
-                same_origin_url, RequestMode::kCorsWithForcedPreflight, origin,
+                same_origin_url, RequestMode::kNoCors, origin, base::nullopt,
                 false, false, &origin_access_list));
   EXPECT_EQ(FetchResponseType::kBasic,
             CorsURLLoader::CalculateResponseTainting(
-                same_origin_url, RequestMode::kNavigate, origin, false, false,
-                &origin_access_list));
+                same_origin_url, RequestMode::kCors, origin, base::nullopt,
+                false, false, &origin_access_list));
+  EXPECT_EQ(FetchResponseType::kBasic,
+            CorsURLLoader::CalculateResponseTainting(
+                same_origin_url, RequestMode::kCorsWithForcedPreflight, origin,
+                base::nullopt, false, false, &origin_access_list));
+  EXPECT_EQ(FetchResponseType::kBasic,
+            CorsURLLoader::CalculateResponseTainting(
+                same_origin_url, RequestMode::kNavigate, origin, base::nullopt,
+                false, false, &origin_access_list));
 
   // CORS flag is false, cross-origin request
   EXPECT_EQ(FetchResponseType::kOpaque,
             CorsURLLoader::CalculateResponseTainting(
-                cross_origin_url, RequestMode::kNoCors, origin, false, false,
-                &origin_access_list));
+                cross_origin_url, RequestMode::kNoCors, origin, base::nullopt,
+                false, false, &origin_access_list));
   EXPECT_EQ(FetchResponseType::kBasic,
             CorsURLLoader::CalculateResponseTainting(
-                cross_origin_url, RequestMode::kNavigate, origin, false, false,
-                &origin_access_list));
+                cross_origin_url, RequestMode::kNavigate, origin, base::nullopt,
+                false, false, &origin_access_list));
 
   // CORS flag is true, same-origin request
   EXPECT_EQ(FetchResponseType::kCors,
             CorsURLLoader::CalculateResponseTainting(
-                same_origin_url, RequestMode::kCors, origin, true, false,
-                &origin_access_list));
+                same_origin_url, RequestMode::kCors, origin, base::nullopt,
+                true, false, &origin_access_list));
   EXPECT_EQ(FetchResponseType::kCors,
             CorsURLLoader::CalculateResponseTainting(
                 same_origin_url, RequestMode::kCorsWithForcedPreflight, origin,
-                true, false, &origin_access_list));
+                base::nullopt, true, false, &origin_access_list));
 
   // CORS flag is true, cross-origin request
   EXPECT_EQ(FetchResponseType::kCors,
             CorsURLLoader::CalculateResponseTainting(
-                cross_origin_url, RequestMode::kCors, origin, true, false,
-                &origin_access_list));
+                cross_origin_url, RequestMode::kCors, origin, base::nullopt,
+                true, false, &origin_access_list));
   EXPECT_EQ(FetchResponseType::kCors,
             CorsURLLoader::CalculateResponseTainting(
                 cross_origin_url, RequestMode::kCorsWithForcedPreflight, origin,
-                true, false, &origin_access_list));
+                base::nullopt, true, false, &origin_access_list));
 
   // Origin is not provided.
   EXPECT_EQ(FetchResponseType::kBasic,
             CorsURLLoader::CalculateResponseTainting(
-                same_origin_url, RequestMode::kNoCors, no_origin, false, false,
-                &origin_access_list));
+                same_origin_url, RequestMode::kNoCors, no_origin, base::nullopt,
+                false, false, &origin_access_list));
   EXPECT_EQ(FetchResponseType::kBasic,
             CorsURLLoader::CalculateResponseTainting(
-                same_origin_url, RequestMode::kNavigate, no_origin, false,
-                false, &origin_access_list));
+                same_origin_url, RequestMode::kNavigate, no_origin,
+                base::nullopt, false, false, &origin_access_list));
   EXPECT_EQ(FetchResponseType::kBasic,
             CorsURLLoader::CalculateResponseTainting(
-                cross_origin_url, RequestMode::kNoCors, no_origin, false, false,
-                &origin_access_list));
+                cross_origin_url, RequestMode::kNoCors, no_origin,
+                base::nullopt, false, false, &origin_access_list));
   EXPECT_EQ(FetchResponseType::kBasic,
             CorsURLLoader::CalculateResponseTainting(
-                cross_origin_url, RequestMode::kNavigate, no_origin, false,
-                false, &origin_access_list));
+                cross_origin_url, RequestMode::kNavigate, no_origin,
+                base::nullopt, false, false, &origin_access_list));
 
   // Tainted origin.
   EXPECT_EQ(FetchResponseType::kOpaque,
             CorsURLLoader::CalculateResponseTainting(
-                same_origin_url, RequestMode::kNoCors, origin, false, true,
-                &origin_access_list));
-  EXPECT_EQ(FetchResponseType::kBasic,
-            CorsURLLoader::CalculateResponseTainting(
-                same_origin_url, RequestMode::kCorsWithForcedPreflight, origin,
+                same_origin_url, RequestMode::kNoCors, origin, base::nullopt,
                 false, true, &origin_access_list));
   EXPECT_EQ(FetchResponseType::kBasic,
             CorsURLLoader::CalculateResponseTainting(
-                same_origin_url, RequestMode::kNavigate, origin, false, true,
-                &origin_access_list));
+                same_origin_url, RequestMode::kCorsWithForcedPreflight, origin,
+                base::nullopt, false, true, &origin_access_list));
+  EXPECT_EQ(FetchResponseType::kBasic,
+            CorsURLLoader::CalculateResponseTainting(
+                same_origin_url, RequestMode::kNavigate, origin, base::nullopt,
+                false, true, &origin_access_list));
 }
 
 TEST_F(CorsURLLoaderTest, RequestWithHostHeaderFails) {

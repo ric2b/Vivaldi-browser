@@ -18,13 +18,12 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.blink_public.platform.WebDisplayMode;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.browser.WebappTestPage;
+import org.chromium.chrome.test.util.browser.webapps.WebappTestPage;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
@@ -48,7 +47,7 @@ public class WebappDisplayModeTest {
     @Test
     @SmallTest
     @Feature({"Webapps"})
-    public void testStandalone() throws Exception {
+    public void testStandalone() {
         WebappActivity activity = startActivity(WebDisplayMode.STANDALONE, "");
 
         Assert.assertFalse(activity.getToolbarManager().getToolbarLayoutForTesting().isShown());
@@ -58,7 +57,7 @@ public class WebappDisplayModeTest {
     @Test
     @SmallTest
     @Feature({"Webapps"})
-    public void testFullScreen() throws Exception {
+    public void testFullScreen() {
         WebappActivity activity = startActivity(WebDisplayMode.FULLSCREEN, "");
 
         Assert.assertFalse(activity.getToolbarManager().getToolbarLayoutForTesting().isShown());
@@ -68,7 +67,7 @@ public class WebappDisplayModeTest {
     @Test
     @MediumTest
     @Feature({"Webapps"})
-    public void testFullScreenInFullscreen() throws Exception {
+    public void testFullScreenInFullscreen() {
         WebappActivity activity = startActivity(WebDisplayMode.FULLSCREEN, "fullscreen_on_click");
 
         Assert.assertFalse(activity.getToolbarManager().getToolbarLayoutForTesting().isShown());
@@ -91,7 +90,7 @@ public class WebappDisplayModeTest {
     @Test
     @SmallTest
     @Feature({"Webapps"})
-    public void testMinimalUi() throws Exception {
+    public void testMinimalUi() {
         WebappActivity activity = startActivity(WebDisplayMode.MINIMAL_UI, "");
 
         Assert.assertFalse(isFullscreen(activity));
@@ -110,15 +109,14 @@ public class WebappDisplayModeTest {
     private String getJavascriptResult(WebContents webContents, String js) {
         try {
             return JavaScriptUtils.executeJavaScriptAndWaitForResult(webContents, js);
-        } catch (InterruptedException | TimeoutException e) {
+        } catch (TimeoutException e) {
             Assert.fail("Fatal interruption or timeout running JavaScript '" + js
                     + "': " + e.toString());
             return "";
         }
     }
 
-    private WebappActivity startActivity(@WebDisplayMode int displayMode, String action)
-            throws Exception {
+    private WebappActivity startActivity(@WebDisplayMode int displayMode, String action) {
         String url = WebappTestPage.getServiceWorkerUrlWithAction(
                 mActivityTestRule.getTestServer(), action);
         mActivityTestRule.startWebappActivity(
@@ -135,7 +133,6 @@ public class WebappDisplayModeTest {
 
     private static boolean isFullscreen(WebappActivity activity) {
         int systemUiVisibility = activity.getWindow().getDecorView().getSystemUiVisibility();
-        return (systemUiVisibility & WebappActivity.IMMERSIVE_MODE_UI_FLAGS)
-                == WebappActivity.IMMERSIVE_MODE_UI_FLAGS;
+        return (systemUiVisibility & View.SYSTEM_UI_FLAG_IMMERSIVE) != 0;
     }
 }

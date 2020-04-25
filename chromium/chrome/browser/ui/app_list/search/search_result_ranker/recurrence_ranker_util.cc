@@ -256,9 +256,9 @@ void JsonConfigConverter::Start(const std::string& json_string,
                                 const std::string& model_identifier,
                                 OnConfigLoadedCallback callback) {
   DCHECK(connector_);
-  connector_->BindInterface(data_decoder::mojom::kServiceName,
-                            mojo::MakeRequest(&json_parser_));
-  json_parser_.set_connection_error_handler(base::BindOnce(
+  connector_->Connect(data_decoder::mojom::kServiceName,
+                      json_parser_.BindNewPipeAndPassReceiver());
+  json_parser_.set_disconnect_handler(base::BindOnce(
       [](JsonConfigConverter* const converter) {
         converter->json_parser_.reset();
       },

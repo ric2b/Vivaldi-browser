@@ -16,6 +16,7 @@
     "CookieStore",
     "MediaKeySession",
     "FileWriter",
+    "GPUDevice",
     "HID",
     "HIDDevice",
     "IdleDetector",
@@ -76,5 +77,6 @@
       ImplementedAs: "DOMWebSocket",
     },
     "USB",
+    "WakeLockSentinel",
   ],
 }

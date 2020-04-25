@@ -33,6 +33,7 @@
 #include "third_party/blink/public/mojom/choosers/date_time_chooser.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_scroll_into_view_params.h"
+#include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
@@ -414,6 +415,10 @@ void HTMLInputElement::UpdateType() {
   DropInnerEditorElement();
   SetForceReattachLayoutTree();
 
+  // In this function, we should not do force to do style recalc and layout.
+  DocumentLifecycle::DisallowTransitionScope disallow_transition(
+      GetDocument().Lifecycle());
+
   if (input_type_->SupportsRequired() != new_type->SupportsRequired() &&
       IsRequired()) {
     PseudoStateChanged(CSSSelector::kPseudoRequired);
@@ -788,7 +793,7 @@ void HTMLInputElement::ParseAttribute(
     // attribute. So, delay the setChecked() call until
     // finishParsingChildren() is called if parsing is in progress.
     if ((!parsing_in_progress_ ||
-         !GetDocument().GetFormController().HasFormStates()) &&
+         !GetDocument().GetFormController().HasControlStates()) &&
         !dirty_checkedness_) {
       setChecked(!value.IsNull());
       dirty_checkedness_ = false;
@@ -919,7 +924,7 @@ String HTMLInputElement::AltText() const {
   if (alt.IsNull())
     alt = FastGetAttribute(kValueAttr);
   if (alt.IsNull())
-    alt = GetLocale().QueryString(WebLocalizedString::kInputElementAltText);
+    alt = GetLocale().QueryString(IDS_FORM_INPUT_ALT);
   return alt;
 }
 
@@ -1277,6 +1282,8 @@ EventDispatchHandlingState* HTMLInputElement::PreDispatchEventHandler(
       ToMouseEvent(event).button() !=
           static_cast<int16_t>(WebPointerProperties::Button::kLeft))
     return nullptr;
+  if (formOwner() && CanBeSuccessfulSubmitButton())
+    formOwner()->WillActivateSubmitButton(this);
   return input_type_view_->WillDispatchClick();
 }
 
@@ -1289,7 +1296,19 @@ void HTMLInputElement::PostDispatchEventHandler(
                                      *static_cast<ClickHandlingState*>(state));
 }
 
-void HTMLInputElement::DefaultEventHandler(Event& evt) {
+void HTMLInputElement::DidPreventDefault(const Event& event) {
+  if (auto* form = formOwner())
+    form->DidActivateSubmitButton(this);
+}
+
+void HTMLInputElement::DefaultEventHandler(Event& event) {
+  DefaultEventHandlerInternal(event);
+
+  if (event.type() == event_type_names::kDOMActivate && formOwner())
+    formOwner()->DidActivateSubmitButton(this);
+}
+
+void HTMLInputElement::DefaultEventHandlerInternal(Event& evt) {
   if (evt.IsMouseEvent() && evt.type() == event_type_names::kClick &&
       ToMouseEvent(evt).button() ==
           static_cast<int16_t>(WebPointerProperties::Button::kLeft)) {
@@ -1914,7 +1933,7 @@ bool HTMLInputElement::SetupDateTimeChooserParameters(
         continue;
       suggestion->localized_value = LocalizeValue(option->value());
       suggestion->label =
-          option->value() == option->label() ? String() : option->label();
+          option->value() == option->label() ? String("") : option->label();
       parameters.suggestions.push_back(std::move(suggestion));
     }
   }
@@ -1938,10 +1957,6 @@ void HTMLInputElement::SetShouldRevealPassword(bool value) {
 }
 
 bool HTMLInputElement::IsInteractiveContent() const {
-  return input_type_->IsInteractiveContent();
-}
-
-bool HTMLInputElement::SupportsAutofocus() const {
   return input_type_->IsInteractiveContent();
 }
 

@@ -9,10 +9,15 @@ source_set("components") {
     "app_registrar.cc",
     "app_registrar.h",
     "app_registrar_observer.h",
+    "app_registry_controller.cc",
+    "app_registry_controller.h",
+    "app_shortcut_manager.cc",
+    "app_shortcut_manager.h",
     "external_install_options.cc",
     "external_install_options.h",
     "externally_installed_web_app_prefs.cc",
     "externally_installed_web_app_prefs.h",
+    "file_handler_manager.cc",
     "file_handler_manager.h",
     "install_bounce_metric.cc",
     "install_bounce_metric.h",
@@ -36,6 +41,9 @@ source_set("components") {
     "web_app_constants.h",
     "web_app_data_retriever.cc",
     "web_app_data_retriever.h",
+    "web_app_file_handler_registration.cc",
+    "web_app_file_handler_registration.h",
+    "web_app_file_handler_registration_win.cc",
     "web_app_helpers.cc",
     "web_app_helpers.h",
     "web_app_icon_generator.cc",
@@ -101,6 +109,7 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "file_handler_manager_unittest.cc",
     "pending_app_manager_unittest.cc",
     "web_app_data_retriever_unittest.cc",
     "web_app_helpers_unittest.cc",

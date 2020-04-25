@@ -6,6 +6,7 @@
 
 #include <memory>
 #include "build/build_config.h"
+#include "components/viz/test/test_context_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
@@ -35,8 +36,7 @@
 #include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/test/fake_canvas_resource_host.h"
-#include "third_party/blink/renderer/platform/graphics/test/fake_gles2_interface.h"
-#include "third_party/blink/renderer/platform/graphics/test/fake_web_graphics_context_3d_provider.h"
+#include "third_party/blink/renderer/platform/graphics/test/gpu_test_utils.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
@@ -110,13 +110,15 @@ class CanvasRenderingContext2DTest : public ::testing::Test {
   bool IsCanvasResourceHostSet(Canvas2DLayerBridge* bridge) {
     return !!bridge->resource_host_;
   }
-  CanvasRenderingContext2D* Context2d() const {
+  CanvasRenderingContext2D* Context2D() const {
     return static_cast<CanvasRenderingContext2D*>(
         CanvasElement().RenderingContext());
   }
   void DrawSomething() {
     CanvasElement().DidDraw();
-    CanvasElement().FinalizeFrame();
+    CanvasElement().PreFinalizeFrame();
+    Context2D()->FinalizeFrame();
+    CanvasElement().PostFinalizeFrame();
     // Grabbing an image forces a flush
     CanvasElement().Snapshot(kBackBuffer, kPreferAcceleration);
   }
@@ -155,7 +157,7 @@ class CanvasRenderingContext2DTest : public ::testing::Test {
   Persistent<MemoryCache> global_memory_cache_;
   std::unique_ptr<ScopedAccelerated2dCanvasForTest> allow_accelerated_;
 
-  class WrapGradients final : public GarbageCollectedFinalized<WrapGradients> {
+  class WrapGradients final : public GarbageCollected<WrapGradients> {
    public:
     void Trace(blink::Visitor* visitor) {
       visitor->Trace(opaque_gradient_);
@@ -176,7 +178,7 @@ class CanvasRenderingContext2DTest : public ::testing::Test {
   Persistent<ImageData> partial_image_data_;
   FakeImageSource opaque_bitmap_;
   FakeImageSource alpha_bitmap_;
-  FakeGLES2Interface gl_;
+  scoped_refptr<viz::TestContextProvider> test_context_provider_;
 
   StringOrCanvasGradientOrCanvasPattern& OpaqueGradient() {
     return wrap_gradients_->opaque_gradient_;
@@ -201,15 +203,8 @@ void CanvasRenderingContext2DTest::CreateContext(OpacityMode opacity_mode,
 }
 
 void CanvasRenderingContext2DTest::SetUp() {
-  auto factory = [](FakeGLES2Interface* gl, bool* gpu_compositing_disabled)
-      -> std::unique_ptr<WebGraphicsContext3DProvider> {
-    *gpu_compositing_disabled = false;
-    gl->SetIsContextLost(false);
-    return std::make_unique<FakeWebGraphicsContext3DProvider>(gl);
-  };
-  SharedGpuContext::SetContextProviderFactoryForTesting(
-      WTF::BindRepeating(factory, WTF::Unretained(&gl_)));
-
+  test_context_provider_ = viz::TestContextProvider::Create();
+  InitializeSharedGpuContext(test_context_provider_.get());
   allow_accelerated_.reset(
       new ScopedAccelerated2dCanvasForTest(AllowsAcceleration()));
   web_view_helper_ = std::make_unique<frame_test_helpers::WebViewHelper>();
@@ -350,43 +345,43 @@ class MockImageBufferSurfaceForOverwriteTesting : public Canvas2DLayerBridge {
   CanvasElement().SetResourceProviderForTesting(                               \
       nullptr, std::move(mock_surface), size);                                 \
   EXPECT_CALL(*surface_ptr, WillOverwriteCanvas()).Times(EXPECTED_OVERDRAWS);  \
-  Context2d()->save();
+  Context2D()->save();
 
 #define TEST_OVERDRAW_FINALIZE \
-  Context2d()->restore();      \
+  Context2D()->restore();      \
   Mock::VerifyAndClearExpectations(surface_ptr);
 
 #define TEST_OVERDRAW_1(EXPECTED_OVERDRAWS, CALL1) \
   do {                                             \
     TEST_OVERDRAW_SETUP(EXPECTED_OVERDRAWS)        \
-    Context2d()->CALL1;                            \
+    Context2D()->CALL1;                            \
     TEST_OVERDRAW_FINALIZE                         \
   } while (0)
 
 #define TEST_OVERDRAW_2(EXPECTED_OVERDRAWS, CALL1, CALL2) \
   do {                                                    \
     TEST_OVERDRAW_SETUP(EXPECTED_OVERDRAWS)               \
-    Context2d()->CALL1;                                   \
-    Context2d()->CALL2;                                   \
+    Context2D()->CALL1;                                   \
+    Context2D()->CALL2;                                   \
     TEST_OVERDRAW_FINALIZE                                \
   } while (0)
 
 #define TEST_OVERDRAW_3(EXPECTED_OVERDRAWS, CALL1, CALL2, CALL3) \
   do {                                                           \
     TEST_OVERDRAW_SETUP(EXPECTED_OVERDRAWS)                      \
-    Context2d()->CALL1;                                          \
-    Context2d()->CALL2;                                          \
-    Context2d()->CALL3;                                          \
+    Context2D()->CALL1;                                          \
+    Context2D()->CALL2;                                          \
+    Context2D()->CALL3;                                          \
     TEST_OVERDRAW_FINALIZE                                       \
   } while (0)
 
 #define TEST_OVERDRAW_4(EXPECTED_OVERDRAWS, CALL1, CALL2, CALL3, CALL4) \
   do {                                                                  \
     TEST_OVERDRAW_SETUP(EXPECTED_OVERDRAWS)                             \
-    Context2d()->CALL1;                                                 \
-    Context2d()->CALL2;                                                 \
-    Context2d()->CALL3;                                                 \
-    Context2d()->CALL4;                                                 \
+    Context2D()->CALL1;                                                 \
+    Context2D()->CALL2;                                                 \
+    Context2D()->CALL3;                                                 \
+    Context2D()->CALL4;                                                 \
     TEST_OVERDRAW_FINALIZE                                              \
   } while (0)
 
@@ -644,14 +639,14 @@ TEST_F(CanvasRenderingContext2DTest, GPUMemoryUpdateForAcceleratedCanvas) {
 
 TEST_F(CanvasRenderingContext2DTest, CanvasDisposedBeforeContext) {
   CreateContext(kNonOpaque);
-  Context2d()->fillRect(0, 0, 1, 1);  // results in task observer registration
+  Context2D()->fillRect(0, 0, 1, 1);  // results in task observer registration
 
-  Context2d()->DetachHost();
+  Context2D()->DetachHost();
 
   // This is the only method that is callable after DetachHost
   // Test passes by not crashing.
   base::PendingTask dummy_pending_task(FROM_HERE, base::Closure());
-  Context2d()->DidProcessTask(dummy_pending_task);
+  Context2D()->DidProcessTask(dummy_pending_task);
 
   // Test passes by not crashing during teardown
 }
@@ -691,7 +686,7 @@ TEST_F(CanvasRenderingContext2DTest,
       size, CanvasColorParams(), kPreferAcceleration);
   CanvasElement().SetResourceProviderForTesting(
       nullptr, std::move(fake_accelerate_surface), size);
-  CanvasRenderingContext2D* context = Context2d();
+  CanvasRenderingContext2D* context = Context2D();
 
   // 800 = 10 * 10 * 4 * 2 where 10*10 is canvas size, 4 is num of bytes per
   // pixel per buffer, and 2 is an estimate of num of gpu buffers required

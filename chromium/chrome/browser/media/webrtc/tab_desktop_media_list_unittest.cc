@@ -12,7 +12,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/media/webrtc/desktop_media_list_observer.h"
+#include "chrome/browser/media/webrtc/desktop_media_list.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -39,8 +39,8 @@ using content::WebContentsTester;
 
 namespace {
 
-static const int kDefaultSourceCount = 2;
-static const int kThumbnailSize = 50;
+constexpr int kDefaultSourceCount = 2;
+constexpr int kThumbnailSize = 50;
 
 class UnittestProfileManager : public ::ProfileManagerWithoutInit {
  public:
@@ -48,12 +48,11 @@ class UnittestProfileManager : public ::ProfileManagerWithoutInit {
       : ::ProfileManagerWithoutInit(user_data_dir) {}
 
  protected:
-  Profile* CreateProfileHelper(const base::FilePath& file_path) override {
-    if (!base::PathExists(file_path)) {
-      if (!base::CreateDirectory(file_path))
-        return NULL;
-    }
-    return new TestingProfile(file_path, NULL);
+  std::unique_ptr<Profile> CreateProfileHelper(
+      const base::FilePath& path) override {
+    if (!base::PathExists(path) && !base::CreateDirectory(path))
+      return nullptr;
+    return std::make_unique<TestingProfile>(path);
   }
 };
 
@@ -92,6 +91,7 @@ class MockObserver : public DesktopMediaListObserver {
   MOCK_METHOD2(OnSourceNameChanged, void(DesktopMediaList* list, int index));
   MOCK_METHOD2(OnSourceThumbnailChanged,
                void(DesktopMediaList* list, int index));
+  MOCK_METHOD1(OnAllSourcesFound, void(DesktopMediaList* list));
 
   void VerifyAndClearExpectations() {
     testing::Mock::VerifyAndClearExpectations(this);

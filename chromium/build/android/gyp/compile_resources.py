@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import zipfile
 from xml.etree import ElementTree
 
@@ -48,13 +49,6 @@ _PNG_WEBP_BLACKLIST_PATTERN = re.compile('|'.join([
     r'.*\.9\.png',
     # Daydream requires pngs for icon files.
     r'.*daydream_icon_.*\.png']))
-
-
-def _ListToDictionary(lst, separator):
-  """Splits each element of the passed-in |lst| using |separator| and creates
-  dictionary treating first element of the split as the key and second as the
-  value."""
-  return dict(item.split(separator, 1) for item in lst)
 
 
 def _ParseArgs(args):
@@ -100,17 +94,13 @@ def _ParseArgs(args):
 
   input_opts.add_argument(
       '--package-id',
-      help='Custom package ID for resources (instead of 0x7f). Cannot be used '
-      'with --shared-resources.')
-
-  input_opts.add_argument(
-      '--package-name-to-id-mapping',
-      help='List containing mapping from package name to package IDs that will '
-      'be assigned.')
+      type=int,
+      help='Decimal integer representing custom package ID for resources '
+      '(instead of 127==0x7f). Cannot be used with --shared-resources.')
 
   input_opts.add_argument(
       '--package-name',
-      help='Package name that will be used to determine package ID.')
+      help='Package name that will be used to create R class.')
 
   input_opts.add_argument(
       '--rename-manifest-package', help='Package name to force AAPT to use.')
@@ -266,11 +256,8 @@ def _ParseArgs(args):
     parser.error(
         '--resources-path-map-out-path requires --short-resource-paths')
 
-  if options.package_name_to_id_mapping:
-    package_names_list = build_utils.ParseGnList(
-        options.package_name_to_id_mapping)
-    options.package_name_to_id_mapping = _ListToDictionary(
-        package_names_list, '=')
+  if options.package_id and options.shared_resources:
+    parser.error('--package-id and --shared-resources are mutually exclusive')
 
   return options
 
@@ -421,19 +408,6 @@ def _MoveImagesToNonMdpiFolders(res_root):
       renamed_paths[os.path.relpath(dst_file, res_root)] = os.path.relpath(
           src_file, res_root)
   return renamed_paths
-
-
-def _PackageIdFromOptions(options):
-  package_id = None
-  if options.package_id:
-    package_id = options.package_id
-  if options.package_name:
-    package_id = options.package_name_to_id_mapping.get(options.package_name)
-    if package_id is None:
-      raise Exception(
-          'Package name %s is not present in package_name_to_id_mapping.' %
-          options.package_name)
-  return package_id
 
 
 def _FixManifest(options, temp_dir):
@@ -684,6 +658,8 @@ def _PackageApk(options, build):
   Args:
     options: The command-line options.
     build: BuildContext object.
+  Returns:
+    The manifest package name for the APK.
   """
   dep_subdirs = resource_utils.ExtractDeps(options.dependencies_res_zips,
                                            build.deps_dir)
@@ -751,9 +727,12 @@ def _PackageApk(options, build):
   if options.no_xml_namespaces:
     link_command.append('--no-xml-namespaces')
 
-  package_id = _PackageIdFromOptions(options)
-  if package_id is not None:
-    link_command += ['--package-id', package_id, '--allow-reserved-package-id']
+  if options.package_id:
+    link_command += [
+        '--package-id',
+        hex(options.package_id),
+        '--allow-reserved-package-id',
+    ]
 
   fixed_manifest, desired_manifest_package_name = _FixManifest(
       options, build.temp_dir)
@@ -787,6 +766,19 @@ def _PackageApk(options, build):
 
   build_utils.CheckOutput(link_command, print_stdout=False, print_stderr=False)
 
+  if options.proguard_file and (options.shared_resources
+                                or options.app_as_shared_lib):
+    # Make sure the R class associated with the manifest package does not have
+    # its onResourcesLoaded method obfuscated or removed, so that the framework
+    # can call it in the case where the APK is being loaded as a library.
+    with open(build.proguard_path, 'a') as proguard_file:
+      keep_rule = '''
+                  -keep class {package}.R {{
+                    public static void onResourcesLoaded(int);
+                  }}
+                  '''.format(package=desired_manifest_package_name)
+      proguard_file.write(textwrap.dedent(keep_rule))
+
   if options.proto_path and options.arsc_path:
     build_utils.CheckOutput([
         options.aapt2_path, 'convert', '-o', build.arsc_path, build.proto_path
@@ -798,6 +790,8 @@ def _PackageApk(options, build):
   elif options.optimized_arsc_path:
     _OptimizeApk(build.optimized_arsc_path, options, build.temp_dir,
                  build.arsc_path, build.r_txt_path)
+
+  return desired_manifest_package_name
 
 
 def _OptimizeApk(output, options, temp_dir, unoptimized_path, r_txt_path):
@@ -921,7 +915,7 @@ def main(args):
     build_utils.MakeDirectory(debug_temp_resources_dir)
 
   with resource_utils.BuildContext(debug_temp_resources_dir) as build:
-    _PackageApk(options, build)
+    manifest_package_name = _PackageApk(options, build)
 
     # If --shared-resources-whitelist is used, the all resources listed in
     # the corresponding R.txt file will be non-final, and an onResourcesLoaded()
@@ -953,19 +947,26 @@ def main(args):
       custom_root_package_name = options.package_name
       grandparent_custom_package_name = options.r_java_root_package_name
 
+    if options.shared_resources or options.app_as_shared_lib:
+      package_for_library = manifest_package_name
+    else:
+      package_for_library = None
+
     resource_utils.CreateRJavaFiles(
-        build.srcjar_dir, None, build.r_txt_path, options.extra_res_packages,
-        options.extra_r_text_files, rjava_build_options, options.srcjar_out,
-        custom_root_package_name, grandparent_custom_package_name,
-        options.extra_main_r_text_files)
+        build.srcjar_dir, package_for_library, build.r_txt_path,
+        options.extra_res_packages, options.extra_r_text_files,
+        rjava_build_options, options.srcjar_out, custom_root_package_name,
+        grandparent_custom_package_name, options.extra_main_r_text_files)
 
     build_utils.ZipDir(build.srcjar_path, build.srcjar_dir)
 
     # Sanity check that the created resources have the expected package ID.
-    expected_id = _PackageIdFromOptions(options)
-    if expected_id is None:
-      expected_id = '0x00' if options.shared_resources else '0x7f'
-    expected_id = int(expected_id, 16)
+    if options.package_id:
+      expected_id = options.package_id
+    elif options.shared_resources:
+      expected_id = 0
+    else:
+      expected_id = 127  # == '0x7f'.
     _, package_id = resource_utils.ExtractArscPackage(
         options.aapt2_path,
         build.arsc_path if options.arsc_path else build.proto_path)

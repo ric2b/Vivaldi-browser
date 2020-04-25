@@ -153,10 +153,10 @@ bool AutofillExternalDelegate::HasActiveScreenReader() const {
 }
 
 void AutofillExternalDelegate::OnAutofillAvailabilityEvent(
-    bool has_suggestions) {
+    const mojom::AutofillState state) {
   // Availability of suggestions should be communicated to Blink because
   // accessibility objects live in both the renderer and browser processes.
-  driver_->RendererShouldSetSuggestionAvailability(has_suggestions);
+  driver_->RendererShouldSetSuggestionAvailability(state);
 }
 
 void AutofillExternalDelegate::SetCurrentDataListValues(
@@ -372,18 +372,6 @@ void AutofillExternalDelegate::ApplyAutofillOptions(
             : "googlePay";
 #endif
   }
-
-// On iOS, GooglePayIcon comes at the begining and hence prepended to the list.
-#if defined(OS_IOS)
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillDownstreamUseGooglePayBrandingOniOS) &&
-      is_all_server_suggestions) {
-    Suggestion googlepay_icon;
-    googlepay_icon.icon = "googlePay";
-    googlepay_icon.frontend_id = POPUP_ITEM_ID_GOOGLE_PAY_BRANDING;
-    suggestions->insert(suggestions->begin(), googlepay_icon);
-  }
-#endif
 
 #if defined(OS_ANDROID)
   if (IsKeyboardAccessoryEnabled()) {

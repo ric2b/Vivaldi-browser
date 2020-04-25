@@ -102,7 +102,7 @@ class ScrollPredictorTest : public testing::Test {
   }
 
   gfx::PointF GetLastAccumulatedDelta() {
-    return scroll_predictor_->last_accumulated_delta_;
+    return scroll_predictor_->last_predicted_accumulated_delta_;
   }
 
   bool GetResamplingState() {
@@ -420,9 +420,9 @@ TEST_F(ScrollPredictorTest, ScrollPredictorNotChangeScrollDirection) {
 }
 
 TEST_F(ScrollPredictorTest, ScrollPredictorTypeSelection) {
-  // Empty Predictor when kResamplingScrollEvents is disabled.
+  // Use LinearResampling predictor by default.
   scroll_predictor_ = std::make_unique<ScrollPredictor>();
-  VerifyPredictorType(input_prediction::kScrollPredictorNameEmpty);
+  VerifyPredictorType(input_prediction::kScrollPredictorNameLinearResampling);
 
   // When resampling is enabled, predictor type is set from
   // kResamplingScrollEvents.

@@ -24,7 +24,6 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryPrefetcher;
 import org.chromium.base.library_loader.LibraryProcessType;
-import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.memory.MemoryPressureUma;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.PostTask;
@@ -44,8 +43,7 @@ import org.chromium.components.background_task_scheduler.BackgroundTaskScheduler
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerPrefs;
 import org.chromium.components.crash.browser.ChildProcessCrashObserver;
 import org.chromium.components.minidump_uploader.CrashFileManager;
-import org.chromium.components.module_installer.ModuleInstaller;
-import org.chromium.components.module_installer.observers.ModuleActivityObserver;
+import org.chromium.components.module_installer.util.ModuleUtil;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.DeviceUtils;
 import org.chromium.content_public.browser.SpeechRecognition;
@@ -135,22 +133,19 @@ public class ChromeBrowserInitializer {
 
     /**
      * Initializes the Chrome browser process synchronously.
-     *
-     * @throws ProcessInitException if there is a problem with the native library.
      */
-    public void handleSynchronousStartup() throws ProcessInitException {
+    public void handleSynchronousStartup() {
         handleSynchronousStartupInternal(false);
     }
 
     /**
      * Initializes the Chrome browser process synchronously with GPU process warmup.
      */
-    public void handleSynchronousStartupWithGpuWarmUp() throws ProcessInitException {
+    public void handleSynchronousStartupWithGpuWarmUp() {
         handleSynchronousStartupInternal(true);
     }
 
-    private void handleSynchronousStartupInternal(final boolean startGpuProcess)
-            throws ProcessInitException {
+    private void handleSynchronousStartupInternal(final boolean startGpuProcess) {
         ThreadUtils.checkUiThread();
 
         BrowserParts parts = new EmptyBrowserParts() {
@@ -241,7 +236,6 @@ public class ChromeBrowserInitializer {
 
         DeviceUtils.addDeviceSpecificUserAgentSwitch();
         ApplicationStatus.registerStateListenerForAllActivities(createActivityStateListener());
-        ApplicationStatus.registerStateListenerForAllActivities(new ModuleActivityObserver());
 
         mPreInflationStartupComplete = true;
     }
@@ -268,8 +262,7 @@ public class ChromeBrowserInitializer {
      * @param delegate The delegate for the {@link ChromeBrowserInitializer} to communicate
      *                 initialization tasks.
      */
-    public void handlePostNativeStartup(final boolean isAsync, final BrowserParts delegate)
-            throws ProcessInitException {
+    public void handlePostNativeStartup(final boolean isAsync, final BrowserParts delegate) {
         assert ThreadUtils.runningOnUiThread() : "Tried to start the browser on the wrong thread";
         if (!mPostInflationStartupComplete) {
             throw new IllegalStateException(
@@ -351,8 +344,7 @@ public class ChromeBrowserInitializer {
     }
 
     private void startChromeBrowserProcessesAsync(boolean startGpuProcess,
-            boolean startServiceManagerOnly, BrowserStartupController.StartupCallback callback)
-            throws ProcessInitException {
+            boolean startServiceManagerOnly, BrowserStartupController.StartupCallback callback) {
         try {
             TraceEvent.begin("ChromeBrowserInitializer.startChromeBrowserProcessesAsync");
             getBrowserStartupController().startBrowserProcessesAsync(
@@ -362,7 +354,7 @@ public class ChromeBrowserInitializer {
         }
     }
 
-    private void startChromeBrowserProcessesSync() throws ProcessInitException {
+    private void startChromeBrowserProcessesSync() {
         try {
             TraceEvent.begin("ChromeBrowserInitializer.startChromeBrowserProcessesSync");
             ThreadUtils.assertOnUiThread();
@@ -446,7 +438,7 @@ public class ChromeBrowserInitializer {
         // Needed for field trial metrics to be properly collected in ServiceManager only mode.
         FeatureUtilities.cacheNativeFlagsForServiceManagerOnlyMode();
 
-        ModuleInstaller.getInstance().recordStartupTime();
+        ModuleUtil.recordStartupTime();
     }
 
     private ActivityStateListener createActivityStateListener() {

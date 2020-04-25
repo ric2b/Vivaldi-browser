@@ -39,6 +39,7 @@
 #include "printing/buildflags/buildflags.h"
 #include "printing/metafile_skia.h"
 #include "printing/units.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/sandbox_flags.h"
 #include "third_party/blink/public/mojom/frame/document_interface_broker.mojom.h"
@@ -57,6 +58,7 @@
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_navigation_control.h"
 #include "third_party/blink/public/web/web_plugin.h"
+#include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/blink/public/web/web_plugin_document.h"
 #include "third_party/blink/public/web/web_print_params.h"
 #include "third_party/blink/public/web/web_print_preset_options.h"
@@ -352,13 +354,20 @@ bool IsPrintingNodeOrPdfFrame(const blink::WebLocalFrame* frame,
   return plugin && plugin->SupportsPaginatedPrint();
 }
 
+bool IsPrintingPdf(blink::WebLocalFrame* frame, const blink::WebNode& node) {
+  blink::WebPlugin* plugin;
+  if (node.IsNull()) {
+    plugin = GetPlugin(frame);
+  } else {
+    blink::WebPluginContainer* plugin_container = node.PluginContainer();
+    plugin = plugin_container ? plugin_container->Plugin() : nullptr;
+  }
+  return plugin && plugin->IsPdfPlugin();
+}
+
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-// Returns true if the current destination printer is PRINT_TO_PDF.
 bool IsPrintToPdfRequested(const base::DictionaryValue& job_settings) {
-  bool print_to_pdf = false;
-  if (!job_settings.GetBoolean(kSettingPrintToPDF, &print_to_pdf))
-    NOTREACHED();
-  return print_to_pdf;
+  return job_settings.FindIntKey(kSettingPrinterType).value() == kPdfPrinter;
 }
 
 bool PrintingFrameHasPageSizeStyle(blink::WebLocalFrame* frame,
@@ -435,12 +444,10 @@ gfx::Size GetPdfPageSize(const gfx::Size& page_size, int dpi) {
                    ConvertUnit(page_size.height(), dpi, kPointsPerInch));
 }
 
-bool FitToPageEnabled(const base::DictionaryValue& job_settings) {
-  bool fit_to_paper_size = false;
-  if (!job_settings.GetBoolean(kSettingFitToPageEnabled, &fit_to_paper_size)) {
-    NOTREACHED();
-  }
-  return fit_to_paper_size;
+ScalingType ScalingTypeFromJobSettings(
+    const base::DictionaryValue& job_settings) {
+  int scaling_type = job_settings.FindIntKey(kSettingScalingType).value();
+  return static_cast<ScalingType>(scaling_type);
 }
 
 // Returns the print scaling option to retain/scale/crop the source page size
@@ -467,12 +474,17 @@ blink::WebPrintScalingOption GetPrintScalingOption(
     return blink::kWebPrintScalingOptionSourceSize;
 
   if (!source_is_html) {
-    if (!FitToPageEnabled(job_settings))
+    ScalingType scaling_type = ScalingTypeFromJobSettings(job_settings);
+    // The following conditions are ordered for an optimization that avoids
+    // calling PDFShouldDisableScaling(), which has to make a call using PPAPI.
+    if (scaling_type == DEFAULT || scaling_type == CUSTOM)
       return blink::kWebPrintScalingOptionNone;
-
-    bool no_plugin_scaling = PDFShouldDisableScaling(frame, node, params, true);
-    if (params.is_first_request && no_plugin_scaling)
+    if (params.is_first_request &&
+        PDFShouldDisableScaling(frame, node, params, true)) {
       return blink::kWebPrintScalingOptionNone;
+    }
+    if (scaling_type == FIT_TO_PAPER)
+      return blink::kWebPrintScalingOptionFitToPaper;
   }
   return blink::kWebPrintScalingOptionFitToPrintableArea;
 }
@@ -702,27 +714,28 @@ void PrintRenderFrameHelper::PrintHeaderAndFooter(
   blink::WebWidgetClient web_widget_client;
   blink::WebFrameWidget::CreateForMainFrame(&web_widget_client, frame);
 
-  base::Value html(ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
-      IDR_PRINT_HEADER_FOOTER_TEMPLATE_PAGE));
+  base::Value html(
+      ui::ResourceBundle::GetSharedInstance().DecompressDataResource(
+          IDR_PRINT_HEADER_FOOTER_TEMPLATE_PAGE));
   // Load page with script to avoid async operations.
   ExecuteScript(frame, kPageLoadScriptFormat, html);
 
   auto options = std::make_unique<base::DictionaryValue>();
-  options->SetDouble(kSettingHeaderFooterDate, base::Time::Now().ToJsTime());
-  options->SetDouble("width", page_size.width);
-  options->SetDouble("height", page_size.height);
-  options->SetDouble("topMargin", page_layout.margin_top);
-  options->SetDouble("bottomMargin", page_layout.margin_bottom);
-  options->SetDouble("leftMargin", page_layout.margin_left);
-  options->SetDouble("rightMargin", page_layout.margin_right);
-  options->SetInteger("pageNumber", page_number);
-  options->SetInteger("totalPages", total_pages);
-  options->SetString("url", params.url);
+  options->SetDoubleKey(kSettingHeaderFooterDate, base::Time::Now().ToJsTime());
+  options->SetDoubleKey("width", page_size.width);
+  options->SetDoubleKey("height", page_size.height);
+  options->SetDoubleKey("topMargin", page_layout.margin_top);
+  options->SetDoubleKey("bottomMargin", page_layout.margin_bottom);
+  options->SetDoubleKey("leftMargin", page_layout.margin_left);
+  options->SetDoubleKey("rightMargin", page_layout.margin_right);
+  options->SetIntKey("pageNumber", page_number);
+  options->SetIntKey("totalPages", total_pages);
+  options->SetStringKey("url", params.url);
   base::string16 title = source_frame.GetDocument().Title().Utf16();
-  options->SetString("title", title.empty() ? params.title : title);
-  options->SetString("headerTemplate", params.header_template);
-  options->SetString("footerTemplate", params.footer_template);
-  options->SetBoolean("isRtl", base::i18n::IsRTL());
+  options->SetStringKey("title", title.empty() ? params.title : title);
+  options->SetStringKey("headerTemplate", params.header_template);
+  options->SetStringKey("footerTemplate", params.footer_template);
+  options->SetBoolKey("isRtl", base::i18n::IsRTL());
 
   ExecuteScript(frame, kPageSetupScriptFormat, *options);
 
@@ -1059,6 +1072,10 @@ PrintRenderFrameHelper::PrintRenderFrameHelper(
       delegate_(std::move(delegate)) {
   if (!delegate_->IsPrintPreviewEnabled())
     DisablePreview();
+
+  render_frame->GetAssociatedInterfaceRegistry()->AddInterface(
+      base::BindRepeating(&PrintRenderFrameHelper::BindPrintRenderFrameReceiver,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 PrintRenderFrameHelper::~PrintRenderFrameHelper() {}
@@ -1088,8 +1105,7 @@ void PrintRenderFrameHelper::DidStartNavigation(
   is_loading_ = true;
 }
 
-void PrintRenderFrameHelper::DidFailProvisionalLoad(
-    const blink::WebURLError& error) {
+void PrintRenderFrameHelper::DidFailProvisionalLoad() {
   DidFinishLoad();
 }
 
@@ -1134,34 +1150,20 @@ void PrintRenderFrameHelper::ScriptedPrint(bool user_initiated) {
 }
 
 bool PrintRenderFrameHelper::OnMessageReceived(const IPC::Message& message) {
-  // The class is not designed to handle recursive messages. This is not
-  // expected during regular flow. However, during rendering of content for
-  // printing, lower level code may run nested run loop. E.g. PDF may has
-  // script to show message box http://crbug.com/502562. In that moment browser
-  // may receive updated printer capabilities and decide to restart print
-  // preview generation. When this happened message handling function may
-  // choose to ignore message or safely crash process.
-  ++ipc_nesting_level_;
+  ScopedIPC scoped_ipc(weak_ptr_factory_.GetWeakPtr());
 
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(PrintRenderFrameHelper, message)
     IPC_MESSAGE_HANDLER(PrintMsg_PrintPages, OnPrintPages)
-    IPC_MESSAGE_HANDLER(PrintMsg_PrintForSystemDialog, OnPrintForSystemDialog)
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-    IPC_MESSAGE_HANDLER(PrintMsg_InitiatePrintPreview, OnInitiatePrintPreview)
     IPC_MESSAGE_HANDLER(PrintMsg_PrintPreview, OnPrintPreview)
     IPC_MESSAGE_HANDLER(PrintMsg_PrintingDone, OnPrintingDone)
-    IPC_MESSAGE_HANDLER(PrintMsg_ClosePrintPreviewDialog,
-                        OnClosePrintPreviewDialog)
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
     IPC_MESSAGE_HANDLER(PrintMsg_PrintFrameContent, OnPrintFrameContent)
     IPC_MESSAGE_HANDLER(PrintMsg_SetPrintingEnabled, OnSetPrintingEnabled)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
-  --ipc_nesting_level_;
-  if (ipc_nesting_level_ == 0 && render_frame_gone_)
-    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
   return handled;
 }
 
@@ -1172,6 +1174,61 @@ void PrintRenderFrameHelper::OnDestruct() {
   }
   delete this;
 }
+
+void PrintRenderFrameHelper::BindPrintRenderFrameReceiver(
+    mojo::PendingAssociatedReceiver<mojom::PrintRenderFrame> receiver) {
+  receivers_.Add(this, std::move(receiver));
+}
+
+void PrintRenderFrameHelper::PrintForSystemDialog() {
+  ScopedIPC scoped_ipc(weak_ptr_factory_.GetWeakPtr());
+  if (ipc_nesting_level_ > 1)
+    return;
+  blink::WebLocalFrame* frame = print_preview_context_.source_frame();
+  if (!frame) {
+    NOTREACHED();
+    return;
+  }
+  auto weak_this = weak_ptr_factory_.GetWeakPtr();
+  Print(frame, print_preview_context_.source_node(),
+        PrintRequestType::kRegular);
+  if (weak_this)
+    frame->DispatchAfterPrintEvent();
+  // WARNING: |this| may be gone at this point. Do not do any more work here and
+  // just return.
+}
+
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+void PrintRenderFrameHelper::InitiatePrintPreview(
+    mojom::PrintRendererAssociatedPtrInfo print_renderer,
+    bool has_selection) {
+  ScopedIPC scoped_ipc(weak_ptr_factory_.GetWeakPtr());
+  if (ipc_nesting_level_ > 1)
+    return;
+
+  if (print_renderer)
+    print_renderer_.Bind(std::move(print_renderer));
+
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
+
+  // If we are printing a PDF extension frame, find the plugin node and print
+  // that instead.
+  auto plugin = delegate_->GetPdfElement(frame);
+  if (!plugin.IsNull()) {
+    PrintNode(plugin);
+    return;
+  }
+  print_preview_context_.InitWithFrame(frame);
+  RequestPrintPreview(has_selection
+                          ? PRINT_PREVIEW_USER_INITIATED_SELECTION
+                          : PRINT_PREVIEW_USER_INITIATED_ENTIRE_FRAME);
+}
+
+void PrintRenderFrameHelper::OnPrintPreviewDialogClosed() {
+  ScopedIPC scoped_ipc(weak_ptr_factory_.GetWeakPtr());
+  print_preview_context_.source_frame()->DispatchAfterPrintEvent();
+}
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
 void PrintRenderFrameHelper::OnPrintPages() {
   if (ipc_nesting_level_ > 1)
@@ -1187,23 +1244,6 @@ void PrintRenderFrameHelper::OnPrintPages() {
   // that instead.
   auto plugin = delegate_->GetPdfElement(frame);
   Print(frame, plugin, PrintRequestType::kRegular);
-  if (weak_this)
-    frame->DispatchAfterPrintEvent();
-  // WARNING: |this| may be gone at this point. Do not do any more work here and
-  // just return.
-}
-
-void PrintRenderFrameHelper::OnPrintForSystemDialog() {
-  if (ipc_nesting_level_ > 1)
-    return;
-  blink::WebLocalFrame* frame = print_preview_context_.source_frame();
-  if (!frame) {
-    NOTREACHED();
-    return;
-  }
-  auto weak_this = weak_ptr_factory_.GetWeakPtr();
-  Print(frame, print_preview_context_.source_node(),
-        PrintRequestType::kRegular);
   if (weak_this)
     frame->DispatchAfterPrintEvent();
   // WARNING: |this| may be gone at this point. Do not do any more work here and
@@ -1227,10 +1267,9 @@ void PrintRenderFrameHelper::GetPageSizeAndContentAreaFromPageLayout(
 
 void PrintRenderFrameHelper::UpdateFrameMarginsCssInfo(
     const base::DictionaryValue& settings) {
-  int margins_type = 0;
-  if (!settings.GetInteger(kSettingMarginsType, &margins_type))
-    margins_type = DEFAULT_MARGINS;
-  ignore_css_margins_ = (margins_type != DEFAULT_MARGINS);
+  base::Optional<int> margins_type = settings.FindIntKey(kSettingMarginsType);
+  ignore_css_margins_ =
+      margins_type.value_or(DEFAULT_MARGINS) != DEFAULT_MARGINS;
 }
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -1511,31 +1550,6 @@ void PrintRenderFrameHelper::OnPrintingDone(bool success) {
 void PrintRenderFrameHelper::OnSetPrintingEnabled(bool enabled) {
   is_printing_enabled_ = enabled;
 }
-
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-void PrintRenderFrameHelper::OnInitiatePrintPreview(bool has_selection) {
-  if (ipc_nesting_level_ > 1)
-    return;
-
-  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
-
-  // If we are printing a PDF extension frame, find the plugin node and print
-  // that instead.
-  auto plugin = delegate_->GetPdfElement(frame);
-  if (!plugin.IsNull()) {
-    PrintNode(plugin);
-    return;
-  }
-  print_preview_context_.InitWithFrame(frame);
-  RequestPrintPreview(has_selection
-                          ? PRINT_PREVIEW_USER_INITIATED_SELECTION
-                          : PRINT_PREVIEW_USER_INITIATED_ENTIRE_FRAME);
-}
-
-void PrintRenderFrameHelper::OnClosePrintPreviewDialog() {
-  print_preview_context_.source_frame()->DispatchAfterPrintEvent();
-}
-#endif
 
 void PrintRenderFrameHelper::OnPrintFrameContent(
     const PrintMsg_PrintFrame_Params& params) {
@@ -1878,6 +1892,23 @@ std::vector<int> PrintRenderFrameHelper::GetPrintedPages(
   return printed_pages;
 }
 
+void PrintRenderFrameHelper::IPCReceived() {
+  // The class is not designed to handle recursive messages. This is not
+  // expected during regular flow. However, during rendering of content for
+  // printing, lower level code may run a nested run loop. E.g. PDF may have a
+  // script to show message box (http://crbug.com/502562). In that moment, the
+  // browser may receive updated printer capabilities and decide to restart
+  // print preview generation. When this happens, message handling functions may
+  // choose to ignore messages or safely crash the process.
+  ++ipc_nesting_level_;
+}
+
+void PrintRenderFrameHelper::IPCProcessed() {
+  --ipc_nesting_level_;
+  if (ipc_nesting_level_ == 0 && render_frame_gone_)
+    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+}
+
 bool PrintRenderFrameHelper::InitPrintSettings(bool fit_to_paper_size) {
   PrintMsg_PrintPages_Params settings;
   Send(new PrintHostMsg_GetDefaultPrintSettings(routing_id(),
@@ -1958,8 +1989,8 @@ bool PrintRenderFrameHelper::UpdatePrintSettings(
     job_settings = &passed_job_settings;
   } else {
     modified_job_settings.MergeDictionary(&passed_job_settings);
-    modified_job_settings.SetBoolean(kSettingHeaderFooterEnabled, false);
-    modified_job_settings.SetInteger(kSettingMarginsType, NO_MARGINS);
+    modified_job_settings.SetBoolKey(kSettingHeaderFooterEnabled, false);
+    modified_job_settings.SetIntKey(kSettingMarginsType, NO_MARGINS);
     job_settings = &modified_job_settings;
   }
 
@@ -1976,6 +2007,7 @@ bool PrintRenderFrameHelper::UpdatePrintSettings(
     return false;
   }
 
+  // TODO(dhoss): Replace deprecated base::DictionaryValue::Get<Type>() calls
   if (!job_settings->GetInteger(kPreviewUIID, &settings.params.preview_ui_id)) {
     NOTREACHED();
     print_preview_context_.set_error(PREVIEW_ERROR_BAD_SETTING);
@@ -2172,9 +2204,11 @@ void PrintRenderFrameHelper::RequestPrintPreview(PrintPreviewRequestType type) {
   if (!weak_this)
     return;
   const bool is_modifiable = print_preview_context_.IsModifiable();
+  const bool is_pdf = print_preview_context_.IsPdf();
   const bool has_selection = print_preview_context_.HasSelection();
   PrintHostMsg_RequestPrintPreview_Params params;
   params.is_modifiable = is_modifiable;
+  params.is_pdf = is_pdf;
   params.has_selection = has_selection;
   switch (type) {
     case PRINT_PREVIEW_SCRIPTED: {
@@ -2297,6 +2331,7 @@ void PrintRenderFrameHelper::PrintPreviewContext::InitWithFrame(
   source_frame_.Reset(web_frame);
   source_node_.Reset();
   CalculateIsModifiable();
+  CalculateIsPdf();
 }
 
 void PrintRenderFrameHelper::PrintPreviewContext::InitWithNode(
@@ -2308,6 +2343,7 @@ void PrintRenderFrameHelper::PrintPreviewContext::InitWithNode(
   source_frame_.Reset(web_node.GetDocument().GetFrame());
   source_node_ = web_node;
   CalculateIsModifiable();
+  CalculateIsPdf();
 }
 
 void PrintRenderFrameHelper::PrintPreviewContext::OnPrintPreview() {
@@ -2431,6 +2467,11 @@ bool PrintRenderFrameHelper::PrintPreviewContext::IsModifiable() const {
   return is_modifiable_;
 }
 
+bool PrintRenderFrameHelper::PrintPreviewContext::IsPdf() const {
+  DCHECK(state_ != UNINITIALIZED);
+  return is_pdf_;
+}
+
 bool PrintRenderFrameHelper::PrintPreviewContext::HasSelection() {
   return IsModifiable() && source_frame()->HasSelection();
 }
@@ -2503,8 +2544,11 @@ void PrintRenderFrameHelper::PrintPreviewContext::ClearContext() {
 }
 
 void PrintRenderFrameHelper::PrintPreviewContext::CalculateIsModifiable() {
-  // The only kind of node we can print right now is a PDF node.
   is_modifiable_ = !IsPrintingNodeOrPdfFrame(source_frame(), source_node_);
+}
+
+void PrintRenderFrameHelper::PrintPreviewContext::CalculateIsPdf() {
+  is_pdf_ = IsPrintingPdf(source_frame(), source_node_);
 }
 
 void PrintRenderFrameHelper::SetPrintPagesParams(
@@ -2512,6 +2556,18 @@ void PrintRenderFrameHelper::SetPrintPagesParams(
   print_pages_params_ = std::make_unique<PrintMsg_PrintPages_Params>(settings);
   Send(new PrintHostMsg_DidGetDocumentCookie(routing_id(),
                                              settings.params.document_cookie));
+}
+
+PrintRenderFrameHelper::ScopedIPC::ScopedIPC(
+    base::WeakPtr<PrintRenderFrameHelper> weak_this)
+    : weak_this_(std::move(weak_this)) {
+  DCHECK(weak_this_);
+  weak_this_->IPCReceived();
+}
+
+PrintRenderFrameHelper::ScopedIPC::~ScopedIPC() {
+  if (weak_this_)
+    weak_this_->IPCProcessed();
 }
 
 PrintRenderFrameHelper::ScriptingThrottler::ScriptingThrottler() = default;

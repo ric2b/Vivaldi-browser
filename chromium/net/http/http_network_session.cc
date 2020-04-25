@@ -87,8 +87,9 @@ HttpNetworkSession::Params::Params()
       enable_websocket_over_http2(false),
       enable_quic(false),
       enable_quic_proxies_for_https_urls(false),
-      http_09_on_non_default_ports_enabled(false),
-      disable_idle_sockets_close_on_memory_pressure(false) {
+      disable_idle_sockets_close_on_memory_pressure(false),
+      allow_default_credentials(HttpAuthPreferences::DefaultCredentials::
+                                    DISALLOW_DEFAULT_CREDENTIALS) {
   enable_early_data =
       base::FeatureList::IsEnabled(features::kEnableTLS13EarlyData);
 }
@@ -175,7 +176,6 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
                          params.enable_spdy_ping_based_connection_checking,
                          params.enable_http2,
                          params.enable_quic,
-                         params.quic_params.support_ietf_format_quic_altsvc,
                          params.spdy_session_max_recv_window_size,
                          params.spdy_session_max_queued_capped_frames,
                          AddDefaultHttp2Settings(params.http2_settings),
@@ -279,9 +279,6 @@ std::unique_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
                    params_.quic_params.idle_connection_timeout.InSeconds());
   dict->SetInteger("reduced_ping_timeout_seconds",
                    params_.quic_params.reduced_ping_timeout.InSeconds());
-  dict->SetBoolean(
-      "mark_quic_broken_when_network_blackholes",
-      params_.quic_params.mark_quic_broken_when_network_blackholes);
   dict->SetBoolean("retry_without_alt_svc_on_quic_errors",
                    params_.quic_params.retry_without_alt_svc_on_quic_errors);
   dict->SetBoolean("race_cert_verification",

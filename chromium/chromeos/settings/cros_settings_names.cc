@@ -31,6 +31,7 @@ const char kAccountsPrefDeviceLocalAccountsKeyArcKioskAction[] =
     "arc_kiosk_action";
 const char kAccountsPrefDeviceLocalAccountsKeyArcKioskDisplayName[] =
     "arc_kiosk_display_name";
+const char kAccountsPrefDeviceLocalAccountsKeyWebKioskUrl[] = "web_kiosk_url";
 const char kAccountsPrefDeviceLocalAccountAutoLoginId[] =
     "cros.accounts.deviceLocalAccountAutoLoginId";
 const char kAccountsPrefDeviceLocalAccountAutoLoginDelay[] =
@@ -277,6 +278,11 @@ const char kDeviceLoginScreenLocales[] = "cros.device_login_screen_locales";
 // A list pref containing the input method IDs allowed on the login screen.
 const char kDeviceLoginScreenInputMethods[] =
     "cros.device_login_screen_input_methods";
+
+// A boolean pref that indicates whether the system information is forcedly
+// shown (or hidden) on the login screen.
+const char kDeviceLoginScreenSystemInfoEnforced[] =
+    "cros.device_login_screen_system_info_enforced";
 
 // A boolean pref that matches enable-per-user-time-zone chrome://flags value.
 const char kPerUserTimezoneEnabled[] = "cros.flags.per_user_timezone_enabled";

@@ -12,6 +12,7 @@
     <script src="../js/browser_proxy/browser_proxy.js"></script>
     <script src="../js/google-analytics-bundle.js"></script>
     <script src="../js/metrics.js"></script>
+    <script src="../js/intent.js"></script>
     <script src="../js/util.js"></script>
     <script src="../js/resolution_event_broker.js"></script>
     <script src="../js/toast.js"></script>
@@ -20,6 +21,7 @@
     <script src="../js/sound.js"></script>
     <script src="../js/scrollbar.js"></script>
     <script src="../js/gallerybutton.js"></script>
+    <script src="../js/device/error.js"></script>
     <script src="../js/device/camera3_device_info.js"></script>
     <script src="../js/device/constraints_preferrer.js"></script>
     <script src="../js/device/device_info_updater.js"></script>
@@ -27,7 +29,9 @@
     <script src="../js/models/gallery.js"></script>
     <script src="../js/models/filesystem.js"></script>
     <script src="../js/models/result_saver.js"></script>
-    <script src="../js/models/video_saver.js"></script>
+    <script src="../js/models/video_saver_interface.js"></script>
+    <script src="../js/models/file_video_saver.js"></script>
+    <script src="../js/models/intent_video_saver.js"></script>
     <script src="../js/mojo/mojo_bindings_lite.js"></script>
     <script src="../js/mojo/camera_metadata_tags.mojom-lite.js"></script>
     <script src="../js/mojo/camera_metadata.mojom-lite.js"></script>
@@ -35,16 +39,21 @@
     <script src="../js/mojo/image_capture.mojom-lite.js"></script>
     <script src="../js/mojo/geometry.mojom-lite.js"></script>
     <script src="../js/mojo/range.mojom-lite.js"></script>
+    <script src="../js/mojo/camera_intent.mojom-lite.js"></script>
     <script src="../js/mojo/camera_app.mojom-lite.js"></script>
+    <script src="../js/mojo/camera_app_helper.mojom-lite.js"></script>
+    <script src="../js/mojo/chrome_helper.js"></script>
     <script src="../js/mojo/device_operator.js"></script>
     <script src="../js/mojo/image_capture.js"></script>
     <script src="../js/views/view.js"></script>
     <script src="../js/views/gallery_base.js"></script>
     <script src="../js/views/camera.js"></script>
+    <script src="../js/views/camera_intent.js"></script>
     <script src="../js/views/camera/layout.js"></script>
     <script src="../js/views/camera/options.js"></script>
     <script src="../js/views/camera/preview.js"></script>
     <script src="../js/views/camera/recordtime.js"></script>
+    <script src="../js/views/camera/review_result.js"></script>
     <script src="../js/views/camera/timertick.js"></script>
     <script src="../js/views/camera/modes.js"></script>
     <script src="../js/views/dialog.js"></script>
@@ -56,25 +65,38 @@
   </head>
   <body class="sound mirror mic _3x3">
     <div id="camera">
-      <div id="preview-wrapper" aria-hidden="true">
-        <video id="preview-video"></video>
+      <div id="preview-wrapper">
+        <img id="review-photo-result" class="preview-content"
+          aria-hidden="true">
+        <video id="review-video-result" class="preview-content"></video>
+        <div class="buttons circle centered-overlay">
+          <button id="play-result-video" tabindex="0"
+            i18n-label="play_result_video_button"></button>
+        </div>
+        <video id="preview-video" class="preview-content"></video>
         <div id="preview-metadata">
+          <div id="preview-stat" class="metadata-row mode-on">
+            <span class="metadata-category">Stat</span>
+            <div id="preview-fps" class="metadata-value"></div>
+          </div>
           <div id="preview-af" class="metadata-row">
             <span class="metadata-category">AF</span>
             <div id="preview-focus-distance" class="metadata-value"></div>
-            <div id="preview-focal-length" class="metadata-value"></div>
-            <div id="preview-aperture" class="metadata-value"></div>
+            <div id="preview-af-state" class="metadata-value"></div>
           </div>
           <div id="preview-ae" class="metadata-row">
             <span class="metadata-category">AE</span>
             <div id="preview-sensitivity" class="metadata-value"></div>
             <div id="preview-exposure-time" class="metadata-value"></div>
             <div id="preview-frame-duration" class="metadata-value"></div>
+            <div id="preview-ae-antibanding-mode" class="metadata-value"></div>
+            <div id="preview-ae-state" class="metadata-value"></div>
           </div>
           <div id="preview-awb" class="metadata-row">
             <span class="metadata-category">AWB</span>
             <div id="preview-wb-gain-red" class="metadata-value"></div>
             <div id="preview-wb-gain-blue" class="metadata-value"></div>
+            <div id="preview-awb-state" class="metadata-value"></div>
           </div>
         </div>
         <div id="preview-grid">
@@ -98,7 +120,7 @@
         <button id="stop-takephoto" class="shutter" tabindex="0"
                 i18n-label="take_photo_cancel_button"></button>
       </div>
-      <div id="modes-group" class="buttons right-stripe">
+      <div id="modes-group" class="buttons right-stripe hide">
         <div class="mode-item">
           <input type="radio" name="mode"
                data-mode="video-mode" tabindex="0"
@@ -132,18 +154,11 @@
         <button id="gallery-enter" tabindex="0"
                 i18n-label="gallery_button" hidden></button>
       </div>
-      <div id="banner" class="horizontal-center-stripe" aria-live="polite">
-        <div id="banner-title">
-          <div id="banner-title-icon"></div>
-          <span id="banner-title-text" i18n-content="banner_title"></span>
-        </div>
-        <div id="banner-msg">
-          <span i18n-content="banner_msg"></span>
-          <button id="banner-learn-more"
-                  i18n-content="banner_learn_more_button">
-          </button>
-        </div>
-        <button id="banner-close" i18n-label="banner_close_button"></button>
+      <div id="confirm-result-groups" class="buttons right-stripe circle">
+        <button id="confirm-result" tabindex="0"
+          i18n-label="confirm_review_button"></button>
+        <button id="cancel-result" tabindex="0"
+          i18n-label="cancel_review_button"></button>
       </div>
       <div class="bottom-stripe left-stripe buttons circle">
         <button id="switch-device" tabindex="0"
@@ -159,7 +174,9 @@
         <input type="checkbox" id="toggle-mirror" tabindex="0"
                i18n-label="toggle_mirror_button" data-state="mirror" checked>
         <input type="checkbox" id="toggle-fps" tabindex="0"
-               i18n-label="toggle_60fps_button">
+               i18n-label="toggle_60fps_button"
+               i18n-tooltip-true="label_60fps"
+               i18n-tooltip-false="label_30fps">
       </div>
       <div class="top-stripe left-stripe buttons">
         <button id="open-settings" tabindex="0"
@@ -399,9 +416,14 @@
     </div>
     <div class="centered-overlay" id="toast" aria-live="polite"></div>
     <div id="tooltip" aria-hidden="true"></div>
-    <audio id="sound-tick" src="../sounds/tick.ogg" data-timeout="200">
+    <audio id="sound-tick-final" src="../sounds/tick_final.ogg"
+      data-timeout="1000">
+    <audio id="sound-tick-inc" src="../sounds/tick_inc.ogg" data-timeout="1000">
+    <audio id="sound-tick-start" src="../sounds/tick_start.ogg"
+      data-timeout="1000">
     <audio id="sound-shutter" src="../sounds/shutter.ogg" data-timeout="350">
-    <audio id="sound-rec-start" src="../sounds/record_start.ogg" data-timeout="200">
+    <audio id="sound-rec-start" src="../sounds/record_start.ogg"
+      data-timeout="200">
     <audio id="sound-rec-end" src="../sounds/record_end.ogg" data-timeout="450">
     <template id="resolution-item-template">
       <label class="menu-item circle">

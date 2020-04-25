@@ -25,6 +25,7 @@ jumbo_static_library("importer") {
       #"//chrome/app:generated_resources",
       #"//chrome/common:common",
       #"//chrome/utility:utility",
+      "//components/autofill/core/common",
       "//components/bookmarks/browser:browser",
       "//third_party/boringssl",
       "//url:url",

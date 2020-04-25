@@ -5,9 +5,10 @@
 package org.chromium.components.signin;
 
 import android.accounts.Account;
-import android.support.annotation.MainThread;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
+
+import androidx.annotation.MainThread;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -15,6 +16,7 @@ import org.chromium.base.StrictModeContext;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.net.NetworkChangeNotifier;
 
@@ -63,32 +65,40 @@ public final class OAuth2TokenService
 
     private final long mNativeOAuth2TokenServiceDelegate;
     private final AccountTrackerService mAccountTrackerService;
+    private final AccountManagerFacade mAccountManagerFacade;
 
     private boolean mPendingUpdate;
 
-    private OAuth2TokenService(
-            long nativeOAuth2TokenServiceDelegate, AccountTrackerService accountTrackerService) {
+    @VisibleForTesting
+    public OAuth2TokenService(long nativeOAuth2TokenServiceDelegate,
+            AccountTrackerService accountTrackerService,
+            AccountManagerFacade accountManagerFacade) {
         mNativeOAuth2TokenServiceDelegate = nativeOAuth2TokenServiceDelegate;
         mAccountTrackerService = accountTrackerService;
+        mAccountManagerFacade = accountManagerFacade;
 
-        mAccountTrackerService.addSystemAccountsSeededListener(this);
+        // AccountTrackerService might be null in tests.
+        if (mAccountTrackerService != null) {
+            mAccountTrackerService.addSystemAccountsSeededListener(this);
+        }
     }
 
     @CalledByNative
-    private static OAuth2TokenService create(
-            long nativeOAuth2TokenServiceDelegate, AccountTrackerService accountTrackerService) {
-        ThreadUtils.assertOnUiThread();
-        return new OAuth2TokenService(nativeOAuth2TokenServiceDelegate, accountTrackerService);
+    private static OAuth2TokenService create(long nativeOAuth2TokenServiceDelegate,
+            AccountTrackerService accountTrackerService,
+            AccountManagerFacade accountManagerFacade) {
+        assert nativeOAuth2TokenServiceDelegate != 0;
+        return new OAuth2TokenService(
+                nativeOAuth2TokenServiceDelegate, accountTrackerService, accountManagerFacade);
     }
 
-    private static Account getAccountOrNullFromUsername(String username) {
+    private Account getAccountOrNullFromUsername(String username) {
         if (username == null) {
             Log.e(TAG, "Username is null");
             return null;
         }
 
-        AccountManagerFacade accountManagerFacade = AccountManagerFacade.get();
-        Account account = accountManagerFacade.getAccountFromName(username);
+        Account account = mAccountManagerFacade.getAccountFromName(username);
         if (account == null) {
             Log.e(TAG, "Account not found for provided username.");
             return null;
@@ -101,11 +111,11 @@ public final class OAuth2TokenService
      */
     @VisibleForTesting
     @CalledByNative
-    public static String[] getSystemAccountNames() {
+    public String[] getSystemAccountNames() {
         // TODO(https://crbug.com/768366): Remove this after adding cache to account manager facade.
         // This function is called by native code on UI thread.
         try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
-            List<String> accountNames = AccountManagerFacade.get().tryGetGoogleAccountNames();
+            List<String> accountNames = mAccountManagerFacade.tryGetGoogleAccountNames();
             return accountNames.toArray(new String[accountNames.size()]);
         }
     }
@@ -116,6 +126,7 @@ public final class OAuth2TokenService
      * from the OS. updateAccountList should be called to keep these two
      * in sync.
      */
+    @VisibleForTesting
     @CalledByNative
     public static String[] getAccounts() {
         return getStoredAccounts();
@@ -129,23 +140,26 @@ public final class OAuth2TokenService
      */
     @MainThread
     @CalledByNative
-    private static void getAccessTokenFromNative(
+    private void getAccessTokenFromNative(
             String username, String scope, final long nativeCallback) {
         Account account = getAccountOrNullFromUsername(username);
         if (account == null) {
-            ThreadUtils.postOnUiThread(() -> nativeOAuth2TokenFetched(null, false, nativeCallback));
+            ThreadUtils.postOnUiThread(() -> {
+                OAuth2TokenServiceJni.get().onOAuth2TokenFetched(null, false, nativeCallback);
+            });
             return;
         }
         String oauth2Scope = OAUTH2_SCOPE_PREFIX + scope;
         getAccessToken(account, oauth2Scope, new GetAccessTokenCallback() {
             @Override
             public void onGetTokenSuccess(String token) {
-                nativeOAuth2TokenFetched(token, false, nativeCallback);
+                OAuth2TokenServiceJni.get().onOAuth2TokenFetched(token, false, nativeCallback);
             }
 
             @Override
             public void onGetTokenFailure(boolean isTransientError) {
-                nativeOAuth2TokenFetched(null, isTransientError, nativeCallback);
+                OAuth2TokenServiceJni.get().onOAuth2TokenFetched(
+                        null, isTransientError, nativeCallback);
             }
         });
     }
@@ -158,12 +172,30 @@ public final class OAuth2TokenService
      * @param callback called on successful and unsuccessful fetching of auth token.
      */
     @MainThread
-    public static void getAccessToken(
+    public void getAccessToken(Account account, String scope, GetAccessTokenCallback callback) {
+        getAccessTokenWithFacade(mAccountManagerFacade, account, scope, callback);
+    }
+
+    /**
+     * Call this method to retrieve an OAuth2 access token for the given account and scope. Please
+     * note that this method expects a scope with 'oauth2:' prefix.
+     *
+     * @deprecated Use getAccessToken instead. crbug.com/1014098: This method is available as a
+     *         workaround for a callsite where native is not initialized yet.
+     *
+     * @param accountManagerFacade AccountManagerFacade to request the access token from.
+     * @param account the account to get the access token for.
+     * @param scope The scope to get an auth token for (with Android-style 'oauth2:' prefix).
+     * @param callback called on successful and unsuccessful fetching of auth token.
+     */
+    @MainThread
+    @Deprecated
+    public static void getAccessTokenWithFacade(AccountManagerFacade accountManagerFacade,
             Account account, String scope, GetAccessTokenCallback callback) {
         ConnectionRetry.runAuthTask(new AuthTask<String>() {
             @Override
             public String run() throws AuthException {
-                return AccountManagerFacade.get().getAccessToken(account, scope);
+                return accountManagerFacade.getAccessToken(account, scope);
             }
             @Override
             public void onSuccess(String token) {
@@ -182,14 +214,14 @@ public final class OAuth2TokenService
      */
     @MainThread
     @CalledByNative
-    public static void invalidateAccessToken(String accessToken) {
+    public void invalidateAccessToken(String accessToken) {
         if (TextUtils.isEmpty(accessToken)) {
             return;
         }
         ConnectionRetry.runAuthTask(new AuthTask<Boolean>() {
             @Override
             public Boolean run() throws AuthException {
-                AccountManagerFacade.get().invalidateAccessToken(accessToken);
+                mAccountManagerFacade.invalidateAccessToken(accessToken);
                 return true;
             }
             @Override
@@ -233,8 +265,8 @@ public final class OAuth2TokenService
      * Called by native to check whether the account has an OAuth2 refresh token.
      */
     @CalledByNative
-    public static boolean hasOAuth2RefreshToken(String accountName) {
-        if (!AccountManagerFacade.get().isCachePopulated()) {
+    private boolean hasOAuth2RefreshToken(String accountName) {
+        if (!mAccountManagerFacade.isCachePopulated()) {
             return false;
         }
 
@@ -281,7 +313,8 @@ public final class OAuth2TokenService
             // change (re-signin or sign out signed-in account).
             currentlySignedInAccount = null;
         }
-        nativeUpdateAccountList(mNativeOAuth2TokenServiceDelegate, currentlySignedInAccount);
+        OAuth2TokenServiceJni.get().updateAccountList(mNativeOAuth2TokenServiceDelegate,
+                OAuth2TokenService.this, currentlySignedInAccount);
     }
 
     private boolean isSignedInAccountChanged(String signedInAccountName) {
@@ -298,12 +331,12 @@ public final class OAuth2TokenService
         return accounts == null ? new String[] {} : accounts.toArray(new String[0]);
     }
 
-    @CalledByNative
     /**
      * Called by native to save the account IDs that have associated OAuth2 refresh tokens.
      * This is called during updateAccountList to sync with getSystemAccountNames.
      * @param accounts IDs to save.
      */
+    @CalledByNative
     private static void setAccounts(String[] accounts) {
         Set<String> set = new HashSet<>(Arrays.asList(accounts));
         ContextUtils.getAppSharedPreferences()
@@ -390,8 +423,11 @@ public final class OAuth2TokenService
         }
     }
 
-    private static native void nativeOAuth2TokenFetched(
-            String authToken, boolean isTransientError, long nativeCallback);
-    private native void nativeUpdateAccountList(
-            long nativeOAuth2TokenServiceDelegateAndroid, String currentlySignedInAccount);
+    @NativeMethods
+    interface Natives {
+        void onOAuth2TokenFetched(
+                String authToken, boolean isTransientError, long nativeCallback);
+        void updateAccountList(long nativeOAuth2TokenServiceDelegateAndroid,
+                OAuth2TokenService caller, String currentlySignedInAccount);
+    }
 }

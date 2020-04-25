@@ -14,18 +14,17 @@
 #include "base/util/type_safety/pass_key.h"
 
 #include "chrome/browser/vr/metrics/session_metrics_helper.h"
-#include "chrome/browser/vr/service/interface_set.h"
 #include "chrome/browser/vr/service/xr_consent_prompt_level.h"
 #include "chrome/browser/vr/vr_export.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "device/vr/public/cpp/session_mode.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/vr_device.h"
-#include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/public/cpp/bindings/interface_ptr_set.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/remote_set.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 
 namespace content {
 class RenderFrameHost;
@@ -53,7 +52,7 @@ class VR_EXPORT VRServiceImpl : public device::mojom::VRService,
   ~VRServiceImpl() override;
 
   static void Create(content::RenderFrameHost* render_frame_host,
-                     device::mojom::VRServiceRequest request);
+                     mojo::PendingReceiver<device::mojom::VRService> receiver);
 
   // device::mojom::VRService implementation
   void SetClient(mojo::PendingRemote<device::mojom::VRServiceClient>
@@ -65,6 +64,7 @@ class VR_EXPORT VRServiceImpl : public device::mojom::VRService,
       device::mojom::XRSessionOptionsPtr options,
       device::mojom::VRService::SupportsSessionCallback callback) override;
   void ExitPresent() override;
+  void SetFramesThrottled(bool throttled) override;
   // device::mojom::VRService WebVR compatibility functions
   void GetImmersiveVRDisplayInfo(
       device::mojom::VRService::GetImmersiveVRDisplayInfoCallback callback)
@@ -75,12 +75,12 @@ class VR_EXPORT VRServiceImpl : public device::mojom::VRService,
   // Called when inline session gets disconnected. |session_id| is the value
   // returned by |magic_window_controllers_| when adding session controller to
   // it.
-  void OnInlineSessionDisconnected(size_t session_id);
+  void OnInlineSessionDisconnected(mojo::RemoteSetElementId session_id);
 
   // Notifications/calls from BrowserXRRuntime:
   void OnExitPresent();
-  void OnBlur();
-  void OnFocus();
+  void OnVisibilityStateChanged(
+      device::mojom::XRVisibilityState visibility_state);
   void OnActivate(device::mojom::VRDisplayEventReason reason,
                   base::OnceCallback<void(bool)> on_handled);
   void OnDeactivate(device::mojom::VRDisplayEventReason reason);
@@ -121,7 +121,7 @@ class VR_EXPORT VRServiceImpl : public device::mojom::VRService,
       device::mojom::VRService::RequestSessionCallback callback,
       const std::set<device::mojom::XRSessionFeature>& enabled_features,
       device::mojom::XRSessionPtr session,
-      device::mojom::XRSessionControllerPtr controller);
+      mojo::PendingRemote<device::mojom::XRSessionController> controller);
 
   void OnSessionCreated(
       device::mojom::XRDeviceId session_runtime_id,
@@ -131,15 +131,17 @@ class VR_EXPORT VRServiceImpl : public device::mojom::VRService,
   void DoRequestSession(
       device::mojom::XRSessionOptionsPtr options,
       device::mojom::VRService::RequestSessionCallback callback,
+      BrowserXRRuntime* runtime,
       std::set<device::mojom::XRSessionFeature> enabled_features);
   void ShowConsentPrompt(
       device::mojom::XRSessionOptionsPtr options,
       device::mojom::VRService::RequestSessionCallback callback,
-      const BrowserXRRuntime* runtime,
+      BrowserXRRuntime* runtime,
       std::set<device::mojom::XRSessionFeature> requested_features);
   void OnConsentResult(
       device::mojom::XRSessionOptionsPtr options,
       device::mojom::VRService::RequestSessionCallback callback,
+      device::mojom::XRDeviceId expected_runtime_id,
       std::set<device::mojom::XRSessionFeature> enabled_features,
       XrConsentPromptLevel consent_level,
       bool is_consent_granted);
@@ -150,11 +152,13 @@ class VR_EXPORT VRServiceImpl : public device::mojom::VRService,
                                XrConsentPromptLevel consent_level);
 
   scoped_refptr<XRRuntimeManager> runtime_manager_;
-  mojo::InterfacePtrSet<device::mojom::XRSessionClient> session_clients_;
+  mojo::RemoteSet<device::mojom::XRSessionClient> session_clients_;
   mojo::Remote<device::mojom::VRServiceClient> service_client_;
   content::RenderFrameHost* render_frame_host_;
-  mojo::StrongBindingPtr<VRService> binding_;
-  InterfaceSet<device::mojom::XRSessionControllerPtr> magic_window_controllers_;
+  mojo::SelfOwnedReceiverRef<VRService> receiver_;
+  mojo::RemoteSet<device::mojom::XRSessionController> magic_window_controllers_;
+  device::mojom::XRVisibilityState visibility_state_ =
+      device::mojom::XRVisibilityState::VISIBLE;
 
   // List of callbacks to run when initialization is completed.
   std::vector<base::OnceCallback<void()>> pending_requests_;
@@ -164,6 +168,7 @@ class VR_EXPORT VRServiceImpl : public device::mojom::VRService,
 
   bool initialization_complete_ = false;
   bool in_focused_frame_ = false;
+  bool frames_throttled_ = false;
 
   std::map<device::mojom::XRDeviceId, XrConsentPromptLevel>
       consent_granted_devices_;

@@ -6,9 +6,10 @@ package org.chromium.chrome.browser.feed;
 
 import android.content.res.Resources;
 import android.graphics.Rect;
-import android.support.annotation.Nullable;
 import android.view.View;
 import android.widget.ScrollView;
+
+import androidx.annotation.Nullable;
 
 import com.google.android.libraries.feed.api.client.stream.Stream;
 import com.google.android.libraries.feed.api.client.stream.Stream.ContentChangedListener;
@@ -49,6 +50,7 @@ class FeedSurfaceMediator
     private @Nullable SignInPromo mSignInPromo;
 
     private boolean mFeedEnabled;
+    private boolean mHasHeader;
     private boolean mTouchEnabled = true;
     private boolean mStreamContentChanged;
     private int mThumbnailWidth;
@@ -66,6 +68,7 @@ class FeedSurfaceMediator
         mSigninManager = IdentityServicesProvider.getSigninManager();
 
         mPrefChangeRegistrar = new PrefChangeRegistrar();
+        mHasHeader = mCoordinator.getSectionHeaderView() != null;
         mPrefChangeRegistrar.addObserver(Pref.NTP_ARTICLES_SECTION_ENABLED, this::updateContent);
         initialize();
         // Create the content.
@@ -94,19 +97,22 @@ class FeedSurfaceMediator
     private void updateContent() {
         mFeedEnabled = FeedProcessScopeFactory.isFeedProcessEnabled();
         if ((mFeedEnabled && mCoordinator.getStream() != null)
-                || (!mFeedEnabled && mCoordinator.getScrollViewForPolicy() != null))
+                || (!mFeedEnabled && mCoordinator.getScrollViewForPolicy() != null)) {
             return;
+        }
 
         if (mFeedEnabled) {
             mCoordinator.createStream();
-            if (mSnapScrollHelper != null)
+            if (mSnapScrollHelper != null) {
                 mSnapScrollHelper.setView(mCoordinator.getStream().getView());
+            }
             initializePropertiesForStream();
         } else {
             destroyPropertiesForStream();
             mCoordinator.createScrollViewForPolicy();
-            if (mSnapScrollHelper != null)
+            if (mSnapScrollHelper != null) {
                 mSnapScrollHelper.setView(mCoordinator.getScrollViewForPolicy());
+            }
             initializePropertiesForPolicy();
         }
     }
@@ -139,13 +145,19 @@ class FeedSurfaceMediator
 
         boolean suggestionsVisible =
                 PrefServiceBridge.getInstance().getBoolean(Pref.NTP_ARTICLES_LIST_VISIBLE);
-        Resources res = mCoordinator.getSectionHeaderView().getResources();
-        mSectionHeader =
-                new SectionHeader(res.getString(R.string.ntp_article_suggestions_section_header),
-                        suggestionsVisible, this::onSectionHeaderToggled);
-        mPrefChangeRegistrar.addObserver(Pref.NTP_ARTICLES_LIST_VISIBLE, this::updateSectionHeader);
-        mCoordinator.getSectionHeaderView().setHeader(mSectionHeader);
-        stream.setStreamContentVisibility(mSectionHeader.isExpanded());
+
+        if (mHasHeader) {
+            Resources res = mCoordinator.getSectionHeaderView().getResources();
+            mSectionHeader = new SectionHeader(
+                    res.getString(R.string.ntp_article_suggestions_section_header),
+                    suggestionsVisible, this::onSectionHeaderToggled);
+            mPrefChangeRegistrar.addObserver(
+                    Pref.NTP_ARTICLES_LIST_VISIBLE, this::updateSectionHeader);
+            mCoordinator.getSectionHeaderView().setHeader(mSectionHeader);
+        }
+        // Show feed if there is no header that would allow user to hide feed.
+        // This is currently only relevant for the two panes start surface.
+        stream.setStreamContentVisibility(mHasHeader ? mSectionHeader.isExpanded() : true);
 
         if (SignInPromo.shouldCreatePromo()) {
             mSignInPromo = new FeedSignInPromo(mSigninManager);

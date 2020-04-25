@@ -17,7 +17,6 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
-import android.support.annotation.Nullable;
 import android.support.v4.text.BidiFormatter;
 import android.support.v4.view.MarginLayoutParamsCompat;
 import android.support.v7.content.res.AppCompatResources;
@@ -36,6 +35,8 @@ import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
@@ -45,9 +46,11 @@ import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.WindowDelegate;
+import org.chromium.chrome.browser.native_page.NativePage;
 import org.chromium.chrome.browser.native_page.NativePageFactory;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.LocationBar;
+import org.chromium.chrome.browser.omnibox.LocationBarVoiceRecognitionHandler;
 import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.omnibox.UrlBarCoordinator;
 import org.chromium.chrome.browser.omnibox.UrlBarCoordinator.SelectionState;
@@ -58,9 +61,8 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TrustedCdn;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
-import org.chromium.chrome.browser.util.AccessibilityUtil;
+import org.chromium.chrome.browser.ui.widget.TintedDrawable;
 import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.widget.TintedDrawable;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.common.ContentUrlConstants;
@@ -71,6 +73,7 @@ import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
+import org.chromium.ui.widget.Toast;
 
 import java.util.List;
 import java.util.regex.Pattern;
@@ -519,8 +522,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
     @Override
     public boolean onLongClick(View v) {
         if (v == mCloseButton || v.getParent() == mCustomActionButtons) {
-            return AccessibilityUtil.showAccessibilityToast(
-                    getContext(), v, v.getContentDescription());
+            return Toast.showAnchoredToast(getContext(), v, v.getContentDescription());
         }
         if (v == mTitleUrlContainer) {
             Tab tab = getCurrentTab();
@@ -607,6 +609,9 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         public boolean shouldCutCopyVerbatim() {
             return false;
         }
+
+        @Override
+        public void gestureDetected(boolean isLongPress) {}
 
         @Override
         public void setShowTitle(boolean showTitle) {
@@ -803,15 +808,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         }
 
         @Override
-        public void setUrlBarFocus(boolean shouldBeFocused) {}
-
-        @Override
         public void showUrlBarCursorWithoutFocusAnimations() {}
-
-        @Override
-        public boolean isUrlBarFocused() {
-            return false;
-        }
 
         @Override
         public void selectAll() {}
@@ -842,5 +839,25 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         @Override
         public void updateSearchEngineStatusIcon(boolean shouldShowSearchEngineLogo,
                 boolean isSearchEngineGoogle, String searchEngineUrl) {}
+
+        // Implements FakeBoxDelegate.
+        @Override
+        public boolean isUrlBarFocused() {
+            return false;
+        }
+
+        @Override
+        public void setUrlBarFocus(boolean shouldBeFocused, @Nullable String pastedText,
+                @LocationBar.OmniboxFocusReason int reason) {}
+
+        @Override
+        public boolean isCurrentPage(NativePage nativePage) {
+            return false;
+        }
+
+        @Override
+        public LocationBarVoiceRecognitionHandler getLocationBarVoiceRecognitionHandler() {
+            return null;
+        }
     }
 }

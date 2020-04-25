@@ -33,6 +33,7 @@
 #include "cc/base/switches.h"
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
+#include "cc/metrics/begin_main_frame_metrics.h"
 #include "cc/mojo_embedder/async_layer_tree_frame_sink.h"
 #include "cc/resources/ui_resource_manager.h"
 #include "cc/trees/layer_tree_host.h"
@@ -69,13 +70,13 @@
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/ipc/common/gpu_surface_tracker.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkMallocPixelRef.h"
 #include "ui/android/window_android.h"
-#include "ui/compositor/host/external_begin_frame_controller_client_impl.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/ca_layer_params.h"
@@ -120,8 +121,6 @@ gfx::OverlayTransform RotationToDisplayTransform(
   NOTREACHED();
   return gfx::OVERLAY_TRANSFORM_NONE;
 }
-
-const unsigned int kMaxDisplaySwapBuffers = 1U;
 
 gpu::SharedMemoryLimits GetCompositorContextSharedMemoryLimits(
     gfx::NativeWindow window) {
@@ -213,121 +212,6 @@ void CreateContextProviderAfterGpuChannelEstablished(
           viz::command_buffer_metrics::ContextType::UNKNOWN);
   callback.Run(std::move(context_provider));
 }
-
-class AndroidOutputSurface : public viz::OutputSurface {
- public:
-  AndroidOutputSurface(
-      scoped_refptr<viz::ContextProviderCommandBuffer> context_provider,
-      base::RepeatingCallback<void(const gfx::Size&)> swap_buffers_callback)
-      : viz::OutputSurface(std::move(context_provider)),
-        swap_buffers_callback_(std::move(swap_buffers_callback)) {
-    capabilities_.max_frames_pending = kMaxDisplaySwapBuffers;
-  }
-
-  ~AndroidOutputSurface() override = default;
-
-  void SwapBuffers(viz::OutputSurfaceFrame frame) override {
-    auto callback =
-        base::BindOnce(&AndroidOutputSurface::OnSwapBuffersCompleted,
-                       weak_ptr_factory_.GetWeakPtr(),
-                       std::move(frame.latency_info), frame.size);
-    uint32_t flags = 0;
-    gpu::ContextSupport::PresentationCallback presentation_callback;
-    presentation_callback = base::BindOnce(
-        &AndroidOutputSurface::OnPresentation, weak_ptr_factory_.GetWeakPtr());
-    if (frame.sub_buffer_rect) {
-      DCHECK(frame.sub_buffer_rect->IsEmpty());
-      context_provider_->ContextSupport()->CommitOverlayPlanes(
-          flags, std::move(callback), std::move(presentation_callback));
-    } else {
-      context_provider_->ContextSupport()->Swap(
-          flags, std::move(callback), std::move(presentation_callback));
-    }
-  }
-
-  void BindToClient(viz::OutputSurfaceClient* client) override {
-    DCHECK(client);
-    DCHECK(!client_);
-    client_ = client;
-  }
-
-  void EnsureBackbuffer() override {}
-
-  void DiscardBackbuffer() override {
-    context_provider()->ContextGL()->DiscardBackbufferCHROMIUM();
-  }
-
-  void BindFramebuffer() override {
-    context_provider()->ContextGL()->BindFramebuffer(GL_FRAMEBUFFER, 0);
-  }
-
-  void SetDrawRectangle(const gfx::Rect& rect) override {}
-
-  void Reshape(const gfx::Size& size,
-               float device_scale_factor,
-               const gfx::ColorSpace& color_space,
-               bool has_alpha,
-               bool use_stencil) override {
-    context_provider()->ContextGL()->ResizeCHROMIUM(
-        size.width(), size.height(), device_scale_factor,
-        gl::ColorSpaceUtils::GetGLColorSpace(color_space), has_alpha);
-  }
-
-  bool IsDisplayedAsOverlayPlane() const override { return false; }
-  unsigned GetOverlayTextureId() const override { return 0; }
-  gfx::BufferFormat GetOverlayBufferFormat() const override {
-    return gfx::BufferFormat::RGBX_8888;
-  }
-  bool HasExternalStencilTest() const override { return false; }
-  void ApplyExternalStencil() override {}
-
-  uint32_t GetFramebufferCopyTextureFormat() override {
-    auto* gl =
-        static_cast<viz::ContextProviderCommandBuffer*>(context_provider());
-    return gl->GetCopyTextureInternalFormat();
-  }
-
-  unsigned UpdateGpuFence() override { return 0; }
-
-  void SetUpdateVSyncParametersCallback(
-      viz::UpdateVSyncParametersCallback callback) override {}
-
-  void SetDisplayTransformHint(gfx::OverlayTransform transform) override {}
-  gfx::OverlayTransform GetDisplayTransform() override {
-    return gfx::OVERLAY_TRANSFORM_NONE;
-  }
-
- private:
-  gpu::CommandBufferProxyImpl* GetCommandBufferProxy() {
-    viz::ContextProviderCommandBuffer* provider_command_buffer =
-        static_cast<viz::ContextProviderCommandBuffer*>(
-            context_provider_.get());
-    gpu::CommandBufferProxyImpl* command_buffer_proxy =
-        provider_command_buffer->GetCommandBufferProxy();
-    DCHECK(command_buffer_proxy);
-    return command_buffer_proxy;
-  }
-
-  void OnSwapBuffersCompleted(std::vector<ui::LatencyInfo> latency_info,
-                              gfx::Size swap_size,
-                              const gpu::SwapBuffersCompleteParams& params) {
-    client_->DidReceiveSwapBuffersAck(params.swap_response.timings);
-    swap_buffers_callback_.Run(swap_size);
-    UpdateLatencyInfoOnSwap(params.swap_response, &latency_info);
-    latency_tracker_.OnGpuSwapBuffersCompleted(latency_info);
-  }
-
-  void OnPresentation(const gfx::PresentationFeedback& feedback) {
-    client_->DidReceivePresentationFeedback(feedback);
-  }
-
- private:
-  viz::OutputSurfaceClient* client_ = nullptr;
-  base::RepeatingCallback<void(const gfx::Size&)> swap_buffers_callback_;
-  ui::LatencyTracker latency_tracker_;
-
-  base::WeakPtrFactory<AndroidOutputSurface> weak_ptr_factory_{this};
-};
 
 static bool g_initialized = false;
 
@@ -534,7 +418,6 @@ void CompositorImpl::CreateLayerTreeHost() {
 
   cc::LayerTreeSettings settings;
   settings.use_zero_copy = true;
-  settings.enable_surface_synchronization = true;
   settings.build_hit_test_data = features::IsVizHitTestingSurfaceLayerEnabled();
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -653,6 +536,10 @@ void CompositorImpl::SetNeedsComposite() {
     return;
   TRACE_EVENT0("compositor", "Compositor::SetNeedsComposite");
   host_->SetNeedsAnimate();
+}
+
+void CompositorImpl::SetNeedsRedraw() {
+  host_->SetNeedsRedrawRect(host_->device_viewport_rect());
 }
 
 void CompositorImpl::DidUpdateLayers() {
@@ -819,6 +706,11 @@ void CompositorImpl::DidCommit() {
   root_window_->OnCompositingDidCommit();
 }
 
+std::unique_ptr<cc::BeginMainFrameMetrics>
+CompositorImpl::GetBeginMainFrameMetrics() {
+  return nullptr;
+}
+
 void CompositorImpl::AttachLayerForReadback(scoped_refptr<cc::Layer> layer) {
   readback_layer_tree_->AddChild(layer);
 }
@@ -929,10 +821,12 @@ void CompositorImpl::InitializeVizLayerTreeFrameSink(
   root_params->send_swap_size_notifications = true;
 
   // Create interfaces for a root CompositorFrameSink.
-  viz::mojom::CompositorFrameSinkAssociatedPtrInfo sink_info;
-  root_params->compositor_frame_sink = mojo::MakeRequest(&sink_info);
-  viz::mojom::CompositorFrameSinkClientRequest client_request =
-      mojo::MakeRequest(&root_params->compositor_frame_sink_client);
+  mojo::PendingAssociatedRemote<viz::mojom::CompositorFrameSink> sink_remote;
+  root_params->compositor_frame_sink =
+      sink_remote.InitWithNewEndpointAndPassReceiver();
+  mojo::PendingReceiver<viz::mojom::CompositorFrameSinkClient> client_receiver =
+      root_params->compositor_frame_sink_client
+          .InitWithNewPipeAndPassReceiver();
   root_params->display_private = mojo::MakeRequest(&display_private_);
   display_client_ = std::make_unique<AndroidHostDisplayClient>(this);
   root_params->display_client =
@@ -965,8 +859,8 @@ void CompositorImpl::InitializeVizLayerTreeFrameSink(
   params.gpu_memory_buffer_manager = BrowserMainLoop::GetInstance()
                                          ->gpu_channel_establish_factory()
                                          ->GetGpuMemoryBufferManager();
-  params.pipes.compositor_frame_sink_associated_info = std::move(sink_info);
-  params.pipes.client_request = std::move(client_request);
+  params.pipes.compositor_frame_sink_associated_remote = std::move(sink_remote);
+  params.pipes.client_receiver = std::move(client_receiver);
   params.hit_test_data_provider =
       std::make_unique<viz::HitTestDataProviderDrawQuad>(
           false /* should_ask_for_child_region */,

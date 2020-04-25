@@ -37,7 +37,7 @@ const base::Feature kAImageReaderMediaPlayer{"AImageReaderMediaPlayer",
 // and using overlays on Android.
 // Note that the feature only works with VizDisplayCompositor enabled.
 const base::Feature kAndroidSurfaceControl{"AndroidSurfaceControl",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Enable GPU Rasterization by default. This can still be overridden by
@@ -119,6 +119,10 @@ const base::Feature kVaapiJpegImageDecodeAcceleration{
 // https://crbug.com/877694 is resolved.
 const base::Feature kVaapiWebPImageDecodeAcceleration{
     "VaapiWebPImageDecodeAcceleration", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable Vulkan graphics backend if --use-vulkan flag is not used. Otherwise
+// --use-vulkan will be followed.
+const base::Feature kVulkan{"Vulkan", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
 bool IsAndroidSurfaceControlEnabled() {

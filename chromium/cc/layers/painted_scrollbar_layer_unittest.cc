@@ -8,8 +8,8 @@
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/fake_layer_tree_host_client.h"
 #include "cc/test/fake_scrollbar.h"
+#include "cc/test/layer_test_common.h"
 #include "cc/test/test_task_graph_runner.h"
-#include "cc/trees/layer_tree_host_common.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 using ::testing::Mock;
@@ -21,11 +21,11 @@ namespace {
 
 class MockScrollbar : public FakeScrollbar {
  public:
-  MockScrollbar() : FakeScrollbar(true, true, true) {}
-  MOCK_METHOD3(PaintPart,
-               void(PaintCanvas* canvas,
-                    ScrollbarPart part,
-                    const gfx::Rect& content_rect));
+  MockScrollbar()
+      : FakeScrollbar(/*paint*/ true,
+                      /*has_thumb*/ true,
+                      /*is_overlay*/ false) {}
+  MOCK_METHOD2(PaintPart, void(PaintCanvas* canvas, ScrollbarPart part));
 };
 
 TEST(PaintedScrollbarLayerTest, NeedsPaint) {
@@ -44,10 +44,7 @@ TEST(PaintedScrollbarLayerTest, NeedsPaint) {
   scrollbar_layer->SetBounds(gfx::Size(100, 100));
 
   layer_tree_host->SetRootLayer(scrollbar_layer);
-
-  LayerTreeHostCommon::CalcDrawPropsMainInputsForTesting inputs(
-      scrollbar_layer.get(), gfx::Rect(scrollbar_layer->bounds()));
-  LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
+  UpdateDrawProperties(layer_tree_host.get());
 
   EXPECT_EQ(scrollbar_layer->layer_tree_host(), layer_tree_host.get());
 
@@ -55,28 +52,28 @@ TEST(PaintedScrollbarLayerTest, NeedsPaint) {
   // yet been initialized.
   scrollbar->set_needs_paint_thumb(false);
   scrollbar->set_needs_paint_track(false);
-  EXPECT_CALL(*scrollbar, PaintPart(_, THUMB, _)).Times(1);
-  EXPECT_CALL(*scrollbar, PaintPart(_, TRACK, _)).Times(1);
+  EXPECT_CALL(*scrollbar, PaintPart(_, THUMB)).Times(1);
+  EXPECT_CALL(*scrollbar, PaintPart(_, TRACK)).Times(1);
   scrollbar_layer->Update();
   Mock::VerifyAndClearExpectations(scrollbar);
 
   // The next update will paint nothing because the first update caused a paint.
-  EXPECT_CALL(*scrollbar, PaintPart(_, THUMB, _)).Times(0);
-  EXPECT_CALL(*scrollbar, PaintPart(_, TRACK, _)).Times(0);
+  EXPECT_CALL(*scrollbar, PaintPart(_, THUMB)).Times(0);
+  EXPECT_CALL(*scrollbar, PaintPart(_, TRACK)).Times(0);
   scrollbar_layer->Update();
   Mock::VerifyAndClearExpectations(scrollbar);
 
   // Enable the thumb.
-  EXPECT_CALL(*scrollbar, PaintPart(_, THUMB, _)).Times(1);
-  EXPECT_CALL(*scrollbar, PaintPart(_, TRACK, _)).Times(0);
+  EXPECT_CALL(*scrollbar, PaintPart(_, THUMB)).Times(1);
+  EXPECT_CALL(*scrollbar, PaintPart(_, TRACK)).Times(0);
   scrollbar->set_needs_paint_thumb(true);
   scrollbar->set_needs_paint_track(false);
   scrollbar_layer->Update();
   Mock::VerifyAndClearExpectations(scrollbar);
 
   // Enable the track.
-  EXPECT_CALL(*scrollbar, PaintPart(_, THUMB, _)).Times(0);
-  EXPECT_CALL(*scrollbar, PaintPart(_, TRACK, _)).Times(1);
+  EXPECT_CALL(*scrollbar, PaintPart(_, THUMB)).Times(0);
+  EXPECT_CALL(*scrollbar, PaintPart(_, TRACK)).Times(1);
   scrollbar->set_needs_paint_thumb(false);
   scrollbar->set_needs_paint_track(true);
   scrollbar_layer->Update();

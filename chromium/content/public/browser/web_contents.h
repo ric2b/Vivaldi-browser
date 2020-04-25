@@ -20,6 +20,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/accessibility_tree_formatter.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/mhtml_generation_result.h"
 #include "content/public/browser/navigation_controller.h"
@@ -156,9 +157,6 @@ class WebContents : public PageNavigator,
     // window.open('', 'bar')).
     std::string main_frame_name;
 
-    // Initial size of the new WebContent's view. Can be (0, 0) if not needed.
-    gfx::Size initial_size;
-
     // True if the contents should be initially hidden.
     bool initially_hidden;
 
@@ -228,6 +226,12 @@ class WebContents : public PageNavigator,
     // default initialized then the value is not passed on to the WebContents
     // and GetLastActiveTime() will return the WebContents' creation time.
     base::TimeTicks last_active_time;
+
+    // Normal WebContents initialization is split between construction and the
+    // first time it is shown. Some WebContents are never shown though.
+    // Setting this to true will invoke the WebContents delayed initialization
+    // that doesn't require visibility.
+    bool is_never_visible;
   };
 
   // Creates a new WebContents.
@@ -406,7 +410,10 @@ class WebContents : public PageNavigator,
 
   virtual void SetAccessibilityMode(ui::AXMode mode) = 0;
 
-  virtual base::string16 DumpAccessibilityTree(bool internal) = 0;
+  virtual base::string16 DumpAccessibilityTree(
+      bool internal,
+      std::vector<content::AccessibilityTreeFormatter::PropertyFilter>
+          property_filters) = 0;
 
   virtual const PageImportanceSignals& GetPageImportanceSignals() = 0;
 
@@ -602,6 +609,10 @@ class WebContents : public PageNavigator,
   // an IPC to all the renderer processes associated with this WebContents.
   virtual void NotifyPreferencesChanged() = 0;
 
+  // Sends the current preferences to all renderer processes for the current
+  // page.
+  virtual void SyncRendererPrefs() = 0;
+
   // Notifies WebContents that an attempt has been made to read the cookies in
   // |cookie_list|.
   virtual void OnCookiesRead(const GURL& url,
@@ -630,11 +641,7 @@ class WebContents : public PageNavigator,
   virtual std::unique_ptr<WebContents> Clone() = 0;
 
   // Reloads the focused frame.
-  virtual void ReloadFocusedFrame(bool bypass_cache) = 0;
-
-  // Reloads all the Lo-Fi images in this WebContents. Ignores the cache and
-  // reloads from the network.
-  virtual void ReloadLoFiImages() = 0;
+  virtual void ReloadFocusedFrame() = 0;
 
   // Attains PauseSubresourceLoadingHandles for each frame in the web contents.
   // As long as these handles are not deleted, subresources will continue to be

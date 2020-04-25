@@ -59,7 +59,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/buildflags/buildflags.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "rlz/buildflags/buildflags.h"
 #include "services/preferences/public/cpp/tracked/configuration.h"
 #include "services/preferences/public/cpp/tracked/pref_names.h"
@@ -151,10 +151,6 @@ const prefs::TrackedPreferenceMetadata kTrackedPrefs[] = {
     {19, prefs::kSwReporterPromptVersion, EnforcementLevel::ENFORCE_ON_LOAD,
      PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
 #endif
-    // This pref is deprecated and will be removed a few releases after M43.
-    // kGoogleServicesAccountId replaces it.
-    {21, prefs::kGoogleServicesUsername, EnforcementLevel::ENFORCE_ON_LOAD,
-     PrefTrackingStrategy::ATOMIC, ValueType::PERSONAL},
 #if defined(OS_WIN)
     {22, prefs::kSwReporterPromptSeed, EnforcementLevel::ENFORCE_ON_LOAD,
      PrefTrackingStrategy::ATOMIC, ValueType::IMPERSONAL},
@@ -423,7 +419,8 @@ std::unique_ptr<PrefService> CreateLocalState(
 
 std::unique_ptr<sync_preferences::PrefServiceSyncable> CreateProfilePrefs(
     const base::FilePath& profile_path,
-    prefs::mojom::TrackedPreferenceValidationDelegatePtr validation_delegate,
+    mojo::PendingRemote<prefs::mojom::TrackedPreferenceValidationDelegate>
+        validation_delegate,
     policy::PolicyService* policy_service,
     SupervisedUserSettingsService* supervised_user_settings,
     scoped_refptr<PrefStore> extension_prefs,
@@ -434,10 +431,10 @@ std::unique_ptr<sync_preferences::PrefServiceSyncable> CreateProfilePrefs(
     std::unique_ptr<PrefValueStore::Delegate> delegate) {
   TRACE_EVENT0("browser", "chrome_prefs::CreateProfilePrefs");
 
-  prefs::mojom::ResetOnLoadObserverPtr reset_on_load_observer;
-  mojo::MakeStrongBinding(
+  mojo::PendingRemote<prefs::mojom::ResetOnLoadObserver> reset_on_load_observer;
+  mojo::MakeSelfOwnedReceiver(
       std::make_unique<ResetOnLoadObserverImpl>(profile_path),
-      mojo::MakeRequest(&reset_on_load_observer));
+      reset_on_load_observer.InitWithNewPipeAndPassReceiver());
   sync_preferences::PrefServiceSyncableFactory factory;
   scoped_refptr<PersistentPrefStore> user_pref_store =
       CreateProfilePrefStoreManager(profile_path)

@@ -15,18 +15,15 @@
 #include "chrome/browser/ui/toolbar/app_menu_icon_controller.h"
 #include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "components/feature_engagement/buildflags.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/material_design/material_design_controller_observer.h"
 #include "ui/views/view.h"
-
-namespace ui {
-class MaterialDesignController;
-}
 
 class ToolbarView;
 enum class InProductHelpFeature;
 
-// The app menu button in the main browser window (as opposed to hosted app
-// windows, which is implemented in HostedAppMenuButton).
+// The app menu button in the main browser window (as opposed to web app
+// windows, which is implemented in WebAppMenuButton).
 class BrowserAppMenuButton : public AppMenuButton,
                              public ui::MaterialDesignControllerObserver {
  public:
@@ -76,6 +73,7 @@ class BrowserAppMenuButton : public AppMenuButton,
   base::Optional<SkColor> GetPromoHighlightColor() const;
 
   // AppMenuButton:
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   const char* GetClassName() const override;
   bool GetDropFormats(int* formats,
                       std::set<ui::ClipboardFormatType>* format_types) override;

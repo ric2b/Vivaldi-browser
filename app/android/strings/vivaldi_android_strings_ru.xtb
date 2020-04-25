@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="ru">
+<translation id="1029351048239796117">Vivaldi нужен доступ к вашему микрофону для данного веб-сайта.</translation>
+<translation id="1063227610401477317">Сохранить изменения</translation>
+<translation id="1067048845568873861">Создана</translation>
+<translation id="1151669774236491028">На Vivaldi.net обнаружены проблемы: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="1193152013480891461">Создать учётную запись Vivaldi</translation>
+<translation id="119944043368869598">Удалить данные</translation>
+<translation id="1228311134236651326">Заметки не найдены</translation>
+<translation id="1243314992276662751">Отправка</translation>
+<translation id="1249276067323441352">Синхронизировать</translation>
+<translation id="1302932907222175914">Поиск в заметках</translation>
+<translation id="1644574205037202324">История</translation>
+<translation id="1689333818294560261">Название</translation>
+<translation id="1721552494230946796">Новая папка Экспресс-панели</translation>
+<translation id="1799160781006135561">Мастер-пароль не задан</translation>
+<translation id="1887193815546011584">Новая Экспресс-панель</translation>
+<translation id="1984391066297619717">Синхронизировать все данные</translation>
+<translation id="2030706494969937066">Ошибка получения данных. Повторите вход снова.</translation>
+<translation id="2034405583989639424">Изменить ссылку</translation>
+<translation id="2071726368047511075">Снимок страницы</translation>
+<translation id="2199644148227291099">Вы уверены, что не хотите использовать Мастер-пароль? Это значительно снижает уровень защищённости данных.</translation>
+<translation id="2243210264130642074">Заметка сохранена</translation>
+<translation id="2336309953058658733">Очистить корзину</translation>
+<translation id="2359808026110333948">Продолжить</translation>
+<translation id="2526968784648867272">Создание снимка...</translation>
+<translation id="2709516037105925701">Данные форм</translation>
+<translation id="271033894570825754">Новая</translation>
+<translation id="2745324713975967671">Мастер-пароль</translation>
+<translation id="2818042133587341562">Vivaldi нужен доступ к вашей камере для данного веб-сайта.</translation>
+<translation id="2842985007712546952">Уровень выше</translation>
+<translation id="2850144663494818309">Запуск синхронизации...</translation>
+<translation id="2873951654529031587">Корзина</translation>
+<translation id="2915527103487649658">Синхронизировать всё</translation>
+<translation id="2953995378235516294">Данные на сервере зашифрованы. Пожалуйста, введите Мастер-пароль для дешифровки данных.</translation>
+<translation id="2996809686854298943">Введите URL</translation>
+<translation id="3177673846235066154">Сервер не принял ваши данные.</translation>
+<translation id="3183006304368105350">Клонировать</translation>
+<translation id="3271422135763022755">Начните ввод...</translation>
+<translation id="3335772982573114336">Новая заметка</translation>
+<translation id="33451081266695216">Соединение ограничено сервером.</translation>
+<translation id="3377025655491224618">Приватная вкладка</translation>
+<translation id="3513566764071045027">Выйти</translation>
+<translation id="3596285013654573099">Войти в синхронизацию</translation>
+<translation id="3611176835527015865">Применяется к внутренним страницам, не к веб-сайтам</translation>
+<translation id="3723593528923555236">Продолжить без Мастер-пароля</translation>
+<translation id="3838463869765243557">Имя устройства (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">Описание</translation>
+<translation id="3897711243931585177">ОСНОВНЫЕ</translation>
+<translation id="4014682279600355881">Мы рекомендуем назначить Мастер-пароль для лучшей защиты данных. Если вы оставите это поле пустым - будет использоваться пароль вашей учётной записи.</translation>
+<translation id="4073968054795398875">Синхронизация не удалась. Попытка запуска будет скоро повторена...</translation>
+<translation id="4082980568238151037">Установить Мастер-пароль.</translation>
+<translation id="4145489350420416595">Неизвестная ошибка.</translation>
+<translation id="4268574628540273656">URL:</translation>
+<translation id="4304224509867189079">Вход</translation>
+<translation id="4435780204941264251">Очистить данные</translation>
+<translation id="4532845899244822526">Выбрать папку</translation>
+<translation id="4579489600439872414">Синхронизация отключена на устройстве.</translation>
+<translation id="4589558845651536280">Подождите...</translation>
+<translation id="4752136117982598343">Заметка сохранена в <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">Загрузки</translation>
+<translation id="4833044618885331665">Для синхронизации требуется обновить Vivaldi.</translation>
+<translation id="4847896847259487518">Поместить в закладки</translation>
+<translation id="4890701585167892790">Нет заметок</translation>
+<translation id="4892521078757281695">Закрывать вкладки свайпом</translation>
+<translation id="4936710149174207991">Не синхронизировано</translation>
+<translation id="4954427294703861104">Создайте учётную запись Vivaldi.</translation>
+<translation id="504986598654589766">Приватный просмотр позволяет не сохранять в браузере историю просмотра и поиска, временные файлы. Никакого скрытия или шифрования данных не производится.</translation>
+<translation id="5161254044473106830">Введите название</translation>
+<translation id="5186185447130319458">Приватный</translation>
+<translation id="5271549068863921519">Сохранить пароль</translation>
+<translation id="5286002386457946212">Ошибка клиента.</translation>
+<translation id="5290452628447338707">Заметок нет</translation>
+<translation id="5351912500249789547">Vivaldi.net не принял ваши данные: Код ошибки <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">Открыть снимок</translation>
+<translation id="5421638721143596928">Ошибка распознавания данных. Повторите вход.</translation>
+<translation id="5443210757369395869">Снимок видимой области</translation>
+<translation id="5448025735280530073">Vivaldi нужен доступ к вашим геоданным для передачи данному веб-сайту.</translation>
+<translation id="5510723066938954312">Закладки и Экспресс-панели</translation>
+<translation id="5525981542754785361">Заметка сохранена в <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">В заметки</translation>
+<translation id="5754087700864822036">ВЕБ-СТРАНИЦЫ</translation>
+<translation id="5765833063161370062">Переместить заметки</translation>
+<translation id="5790085346892983794">Успешно</translation>
+<translation id="5803562371819294631">Будут удалены все данные с сервера синхронизации, пароль будет сброшен и осуществлён выход из учётной записи. Вы уверены?</translation>
+<translation id="5823830882692559950">Vivaldi.net не принял ваши данные: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5841317974325635710">Заметка создана</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> заметка}
+          other {<ph name="NOTES_COUNT_MANY" /> заметок}}</translation>
+<translation id="6012194412768958291">Нет подключения к vivaldi.net.</translation>
+<translation id="6027204815015935175">Требуется ввести Мастер-пароль.</translation>
+<translation id="6059232451013891645">Папка:</translation>
+<translation id="6077943432358741146">Экспресс-панель</translation>
+<translation id="6091125352818749975">Удаление данных с сервера.</translation>
+<translation id="6135798666968342262">Полосы прокрутки</translation>
+<translation id="6179463181009746489">Удалить заметки</translation>
+<translation id="6231148928368101651">Панели</translation>
+<translation id="6406506848690869874">Синхронизация</translation>
+<translation id="6657585470893396449">Пароль</translation>
+<translation id="6682232524697939870">Vivaldi нужен доступ к вашим камере и микрофону для данного веб-сайта.</translation>
+<translation id="6698381487523150993">Создана:</translation>
+<translation id="6786747875388722282">Расширения</translation>
+<translation id="6887143077297974801">Ошибка запуска.</translation>
+<translation id="6945221475159498467">Выбрать</translation>
+<translation id="6960734555676205519">Предыдущая</translation>
+<translation id="7029809446516969842">Пароли</translation>
+<translation id="7075547914712055886">Перезапуск</translation>
+<translation id="7222342267839079597">Пожалуйста, назначьте Мастер-пароль для лучшей защиты данных.</translation>
+<translation id="7228660378238874411">Включить полную версию</translation>
+<translation id="7390295729483215958">Идёт синхронизация...</translation>
+<translation id="7492794630657957996">Для завершения подтвердите данные синхронизации</translation>
+<translation id="7514365320538308">Загрузка</translation>
+<translation id="7547490097772831952">Снимок всей страницы</translation>
+<translation id="7725641807765767506">Нет Экспресс-панелей</translation>
+<translation id="7765158879357617694">Переместить</translation>
+<translation id="7822864833609233785">РАСШИРЕННЫЕ</translation>
+<translation id="798930073512159071">
+
+Создайте первую заметку
+
+Используйте значок «Новая заметка» или выберите текст на веб-странице и воспользуйтесь контекстным меню.</translation>
+<translation id="8004991133350335392">Требуется минимальная длина пароля 12 символов.</translation>
+<translation id="8028021641083150097">Для восстановления доступа к учётной записи данные на сервере нужно удалить. Затем вы начнёте синхронизацию с текущими данными браузера.</translation>
+<translation id="8035133914807600019">Новая папка…</translation>
+<translation id="8066170816074394954">Ошибка сервера.</translation>
+<translation id="8123787473700925741">На Vivaldi.net обнаружены проблемы: Код ошибки <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">Начать синхронизацию</translation>
+<translation id="8206267832882844324">Правка заметки</translation>
+<translation id="8225478925744929238">Удалить из закладок</translation>
+<translation id="8233521945095997439">Нет Экспресс-панелей</translation>
+<translation id="8257908958623224237">Конфликт с другими данными клиента.</translation>
+<translation id="8261506727792406068">Удалить</translation>
+<translation id="8305137170060620165">История введённых адресов и сессии</translation>
+<translation id="8414685983518053656">Заметки</translation>
+<translation id="8422778094137438683">Для входа требуется учётная запись на vivaldi.net.</translation>
+<translation id="8428213095426709021">Настройки</translation>
+<translation id="8462396943848220200">Повтор через <ph name="TIME" /></translation>
+<translation id="8480556999740355963">Вошли как <ph name="USERNAME" /> на <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">Производится вход на Vivaldi.net как <ph name="USERNAME" />. Подождите.</translation>
+<translation id="8503813439785031346">Имя пользователя</translation>
+<translation id="8661216209723599816">Удалить данные с сервера</translation>
+<translation id="8721244337025311110">Новая закладка</translation>
+<translation id="8724114686743788114">Ошибка открытия снимка</translation>
+<translation id="8730621377337864115">Готово</translation>
+<translation id="8738958257180686306">Создана: <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Нужен доступ к папке для сохранения файлов.</translation>
+<translation id="8808060551076378370">Ошибка создания заметки.</translation>
+<translation id="8817201557520703060">Снимок создан</translation>
+<translation id="8820817407110198400">Закладки</translation>
+<translation id="8884751487662988673">Для просмотра синхронизированных страниц, войдите в синхронизацию в настройках.</translation>
+<translation id="895749247724466293">Поиск Экспресс-панелей</translation>
+<translation id="8959245489304000426">Я забыл пароль</translation>
+<translation id="8979401359137062629">Примечание:</translation>
+<translation id="9028089729841356743">Ошибка сети.</translation>
+<translation id="9065203028668620118">Правка</translation>
+<translation id="9148058034647219655">Выход</translation>
+<translation id="9173575361559252669">Снимок не удался</translation>
+</translationbundle>

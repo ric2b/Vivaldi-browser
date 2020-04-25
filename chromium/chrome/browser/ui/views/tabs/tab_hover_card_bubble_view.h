@@ -11,6 +11,7 @@
 #include "base/scoped_observer.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/thumbnails/thumbnail_image.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 
@@ -54,7 +55,9 @@ class TabHoverCardBubbleView : public views::BubbleDialogDelegateView,
 
   // BubbleDialogDelegateView:
   void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
+  ax::mojom::Role GetAccessibleWindowRole() override;
   int GetDialogButtons() const override;
+  std::unique_ptr<views::View> CreateFootnoteView() override;
 
   void set_last_mouse_exit_timestamp(
       base::TimeTicks last_mouse_exit_timestamp) {
@@ -72,7 +75,7 @@ class TabHoverCardBubbleView : public views::BubbleDialogDelegateView,
 
   void FadeInToShow();
 
-  // Updates and formats title, domain, and preview image.
+  // Updates and formats title, alert state, domain, and preview image.
   void UpdateCardContent(const Tab* tab);
 
   void RegisterToThumbnailImageUpdates(
@@ -107,6 +110,7 @@ class TabHoverCardBubbleView : public views::BubbleDialogDelegateView,
 
   views::Widget* widget_ = nullptr;
   views::Label* title_label_ = nullptr;
+  base::Optional<TabAlertState> alert_state_;
   views::Label* domain_label_ = nullptr;
   views::ImageView* preview_image_ = nullptr;
 

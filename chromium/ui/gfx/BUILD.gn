@@ -98,6 +98,8 @@ jumbo_component("gfx") {
     "font_render_params_linux.cc",
     "font_render_params_mac.cc",
     "font_render_params_win.cc",
+    "font_util.cc",
+    "font_util.h",
     "gdi_util.cc",
     "gdi_util.h",
     "half_float.cc",
@@ -132,6 +134,8 @@ jumbo_component("gfx") {
     "ios/NSString+CrStringDrawing.mm",
     "ios/uikit_util.h",
     "ios/uikit_util.mm",
+    "linux/fontconfig_util.cc",
+    "linux/fontconfig_util.h",
     "mac/coordinate_conversion.h",
     "mac/coordinate_conversion.mm",
     "mac/nswindow_frame_controls.h",
@@ -146,8 +150,6 @@ jumbo_component("gfx") {
     "path_mac.mm",
     "path_win.cc",
     "path_win.h",
-    "path_x11.cc",
-    "path_x11.h",
     "platform_font.h",
     "platform_font_ios.h",
     "platform_font_ios.mm",
@@ -393,8 +395,6 @@ jumbo_component("gfx") {
   if (use_x11) {
     deps += [ "//ui/gfx/x" ]
     configs += [ "//build/config/linux:x11" ]
-  } else {
-    sources -= [ "path_x11.cc" ]
   }
 }
 
@@ -685,6 +685,7 @@ test("gfx_unittests") {
   if (!is_ios) {
     sources += [
       "animation/animation_container_unittest.cc",
+      "animation/animation_runner_unittest.cc",
       "animation/animation_unittest.cc",
       "animation/multi_animation_unittest.cc",
       "animation/slide_animation_unittest.cc",
@@ -847,7 +848,10 @@ test("gfx_unittests") {
   }
 
   if (is_linux) {
-    sources += [ "linux/native_pixmap_dmabuf_unittest.cc" ]
+    sources += [
+      "linux/fontconfig_util_unittest.cc",
+      "linux/native_pixmap_dmabuf_unittest.cc",
+    ]
     deps += [ "//third_party/fontconfig" ]
   }
 
@@ -878,4 +882,18 @@ fuzzer_test("color_transform_fuzzer") {
   ]
 
   libfuzzer_options = [ "max_len=4194304" ]
+}
+
+fuzzer_test("render_text_fuzzer") {
+  sources = [
+    "render_text_fuzzer.cc",
+  ]
+
+  deps = [
+    ":gfx",
+    "//base",
+    "//base/test:test_support",
+  ]
+
+  dict = "test/data/render_text/unicode_text_fuzzer.dict"
 }

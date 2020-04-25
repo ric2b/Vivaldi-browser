@@ -10,7 +10,6 @@ import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.Intent;
-import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Point;
@@ -19,13 +18,14 @@ import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.UserManager;
-import android.support.annotation.Nullable;
 import android.support.v4.app.DialogFragment;
 import android.support.v7.content.res.AppCompatResources;
 import android.support.v7.preference.Preference;
 import android.support.v7.preference.PreferenceCategory;
 import android.support.v7.preference.PreferenceFragmentCompat;
 import android.support.v7.preference.PreferenceScreen;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
@@ -35,7 +35,6 @@ import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileAccountManagementMetrics;
-import org.chromium.chrome.browser.signin.ConfirmManagedSyncDataDialog;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.ProfileDataCache;
 import org.chromium.chrome.browser.signin.SignOutDialogFragment;
@@ -43,11 +42,11 @@ import org.chromium.chrome.browser.signin.SignOutDialogFragment.SignOutDialogLis
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.signin.SigninUtils;
-import org.chromium.chrome.browser.signin.SignoutReason;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.signin.GAIAServiceType;
+import org.chromium.components.signin.metrics.SignoutReason;
 
 import java.util.List;
 
@@ -61,8 +60,7 @@ import java.util.List;
  * Note: This can be triggered from a web page, e.g. a GAIA sign-in page.
  */
 public class AccountManagementFragment extends PreferenceFragmentCompat
-        implements SignOutDialogListener, SignInStateObserver,
-                   ConfirmManagedSyncDataDialog.Listener, ProfileDataCache.Observer {
+        implements SignOutDialogListener, SignInStateObserver, ProfileDataCache.Observer {
     private static final String TAG = "AcctManagementPref";
 
     public static final String SIGN_OUT_DIALOG_TAG = "sign_out_dialog_tag";
@@ -212,24 +210,13 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
                     SigninUtils.logEvent(
                             ProfileAccountManagementMetrics.TOGGLE_SIGNOUT, mGaiaServiceType);
 
-                    String managementDomain =
-                            IdentityServicesProvider.getSigninManager().getManagementDomain();
-                    if (managementDomain != null) {
-                        // Show the 'You are signing out of a managed account' dialog.
+                    SignOutDialogFragment signOutFragment = new SignOutDialogFragment();
+                    Bundle args = new Bundle();
+                    args.putInt(SHOW_GAIA_SERVICE_TYPE_EXTRA, mGaiaServiceType);
+                    signOutFragment.setArguments(args);
 
-                        ConfirmManagedSyncDataDialog.showSignOutFromManagedAccountDialog(
-                                AccountManagementFragment.this, getFragmentManager(),
-                                getResources(), managementDomain);
-                    } else {
-                        // Show the 'You are signing out' dialog.
-                        SignOutDialogFragment signOutFragment = new SignOutDialogFragment();
-                        Bundle args = new Bundle();
-                        args.putInt(SHOW_GAIA_SERVICE_TYPE_EXTRA, mGaiaServiceType);
-                        signOutFragment.setArguments(args);
-
-                        signOutFragment.setTargetFragment(AccountManagementFragment.this, 0);
-                        signOutFragment.show(getFragmentManager(), SIGN_OUT_DIALOG_TAG);
-                    }
+                    signOutFragment.setTargetFragment(AccountManagementFragment.this, 0);
+                    signOutFragment.show(getFragmentManager(), SIGN_OUT_DIALOG_TAG);
 
                     return true;
                 }
@@ -243,7 +230,6 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
         Preference parentAccounts = findPreference(PREF_PARENT_ACCOUNTS);
         Preference childContent = findPreference(PREF_CHILD_CONTENT);
         if (mProfile.isChild()) {
-            Resources res = getActivity().getResources();
             PrefServiceBridge prefService = PrefServiceBridge.getInstance();
 
             String firstParent = prefService.getSupervisedUserCustodianEmail();
@@ -251,13 +237,12 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
             String parentText;
 
             if (!secondParent.isEmpty()) {
-                parentText = res.getString(
+                parentText = getString(
                         R.string.account_management_two_parent_names, firstParent, secondParent);
             } else if (!firstParent.isEmpty()) {
-                parentText =
-                        res.getString(R.string.account_management_one_parent_name, firstParent);
+                parentText = getString(R.string.account_management_one_parent_name, firstParent);
             } else {
-                parentText = res.getString(R.string.account_management_no_parental_data);
+                parentText = getString(R.string.account_management_no_parental_data);
             }
             parentAccounts.setSummary(parentText);
 
@@ -325,6 +310,8 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
             SigninUtils.logEvent(ProfileAccountManagementMetrics.ADD_ACCOUNT, mGaiaServiceType);
 
             AccountManagerFacade.get().createAddAccountIntent((@Nullable Intent intent) -> {
+                if (!isVisible() || !isResumed()) return;
+
                 if (intent != null) {
                     startActivity(intent);
                     return;
@@ -390,15 +377,15 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
 
         final DialogFragment clearDataProgressDialog = new ClearDataProgressDialog();
         IdentityServicesProvider.getSigninManager().signOut(
-                SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS,
-                null, new SigninManager.WipeDataHooks() {
+                SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS, new SigninManager.SignOutCallback() {
                     @Override
                     public void preWipeData() {
                         clearDataProgressDialog.show(
                                 getFragmentManager(), CLEAR_DATA_PROGRESS_DIALOG_TAG);
                     }
+
                     @Override
-                    public void postWipeData() {
+                    public void signOutComplete() {
                         if (clearDataProgressDialog.isAdded()) {
                             clearDataProgressDialog.dismissAllowingStateLoss();
                         }
@@ -412,17 +399,6 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
         if (!signOutClicked) {
             SigninUtils.logEvent(ProfileAccountManagementMetrics.SIGNOUT_CANCEL, mGaiaServiceType);
         }
-    }
-
-    // ConfirmManagedSyncDataDialog.Listener implementation
-    @Override
-    public void onConfirm() {
-        onSignOutClicked(false);
-    }
-
-    @Override
-    public void onCancel() {
-        onSignOutDialogDismissed(false);
     }
 
     // SignInStateObserver implementation:

@@ -50,11 +50,18 @@ class AutocompleteResult {
 
   // Removes duplicates, puts the list in sorted order and culls to leave only
   // the best GetMaxMatches() matches. Sets the default match to the best match
-  // and updates the alternate nav URL. On desktop, it filters the matches to be
-  // either all tail suggestions (except for the first match) or no tail
-  // suggestions.
+  // and updates the alternate nav URL.
+  //
+  // |preserve_default_match| can be used to prevent the default match from
+  // being surprisingly swapped out during the asynchronous pass. If it has a
+  // value, this method searches the results for that match, and promotes it to
+  // the top. But we don't add back that match if it doesn't already exist.
+  //
+  // On desktop, it filters the matches to be either all tail suggestions
+  // (except for the first match) or no tail suggestions.
   void SortAndCull(const AutocompleteInput& input,
-                   TemplateURLService* template_url_service);
+                   TemplateURLService* template_url_service,
+                   const AutocompleteMatch* preserve_default_match = nullptr);
 
   // Creates and adds any dedicated Pedal matches triggered by existing matches.
   // This should be the only place where new Pedal suggestions are introduced
@@ -133,6 +140,11 @@ class AutocompleteResult {
   // Estimates dynamic memory usage.
   // See base/trace_event/memory_usage_estimator.h for more info.
   size_t EstimateMemoryUsage() const;
+
+  // Logs metrics for when |new_result| replaces |old_result| asynchronously.
+  static void LogAsynchronousUpdateMetrics(
+      const AutocompleteResult& old_result,
+      const AutocompleteResult& new_result);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(AutocompleteResultTest, ConvertsOpenTabsCorrectly);

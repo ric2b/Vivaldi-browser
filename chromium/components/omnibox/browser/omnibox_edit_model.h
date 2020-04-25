@@ -291,7 +291,15 @@ class OmniboxEditModel {
 
   // Called when the view is gaining focus.  |control_down| is whether the
   // control key is down (at the time we're gaining focus).
-  void OnSetFocus(bool control_down);
+  // |suppress_on_focus_suggestions| is set to true when on-focus suggestions
+  // should not appear for this focus event. For instance, for
+  // renderer-initiated focus events, it should be set to true.
+  void OnSetFocus(bool control_down, bool suppress_on_focus_suggestions);
+
+  // Shows On-Focus Suggestions (ZeroSuggest) if no query is currently running
+  // and the popup is closed. This can be called multiple times without harm,
+  // since it will early-exit if an earlier request is in progress (or done).
+  void ShowOnFocusSuggestionsIfAutocompleteIdle();
 
   // Sets the visibility of the caret in the omnibox, if it has focus. The
   // visibility of the caret is reset to visible if either
@@ -342,19 +350,19 @@ class OmniboxEditModel {
   // separate pieces of data into one call so we can update all the UI
   // efficiently:
   //   |text| is either the new temporary text from the user manually selecting
-  //     a different match, or the inline autocomplete text.  We distinguish by
-  //     checking if |destination_for_temporary_text_change| is NULL.
+  //     a different match, or the inline autocomplete text.
+  //   |is_temporary_text| is true if |text| contains the temporary text for
+  //     a match, and is false if |text| contains the inline autocomplete text.
   //   |destination_for_temporary_text_change| is NULL (if temporary text should
   //     not change) or the pre-change destination URL (if temporary text should
   //     change) so we can save it off to restore later.
   //   |keyword| is the keyword to show a hint for if |is_keyword_hint| is true,
   //     or the currently selected keyword if |is_keyword_hint| is false (see
   //     comments on keyword_ and is_keyword_hint_).
-  void OnPopupDataChanged(
-      const base::string16& text,
-      GURL* destination_for_temporary_text_change,
-      const base::string16& keyword,
-      bool is_keyword_hint);
+  void OnPopupDataChanged(const base::string16& text,
+                          bool is_temporary_text,
+                          const base::string16& keyword,
+                          bool is_keyword_hint);
 
   // Called by the OmniboxView after something changes, with details about what
   // state changes occured.  Updates internal state, updates the popup if
@@ -435,8 +443,8 @@ class OmniboxEditModel {
                              GURL* alternate_nav_url) const;
 
   // Reverts the edit box from a temporary text back to the original user text.
-  // If |revert_popup| is true then the popup will be reverted as well.
-  void RevertTemporaryText(bool revert_popup);
+  // Also resets the popup to the default match.
+  void RevertTemporaryTextAndPopup();
 
   // Accepts current keyword if the user just typed a space at the end of
   // |new_text|.  This handles both of the following cases:

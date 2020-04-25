@@ -35,7 +35,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
-#include "third_party/blink/public/common/manifest/web_display_mode.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/platform/web_float_size.h"
 #include "third_party/blink/public/platform/web_gesture_event.h"
 #include "third_party/blink/public/platform/web_input_event.h"
@@ -69,6 +69,7 @@
 
 namespace cc {
 class Layer;
+struct BeginMainFrameMetrics;
 class ScopedDeferMainFrameUpdate;
 }
 
@@ -155,8 +156,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
                                 WebLocalFrame* to) override;
   double ZoomLevel() override;
   double SetZoomLevel(double) override;
-  void ZoomLimitsChanged(double minimum_zoom_level,
-                         double maximum_zoom_level) override;
   float TextZoomFactor() override;
   float SetTextZoomFactor(float) override;
   float PageScaleFactor() const override;
@@ -171,10 +170,11 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   WebFloatSize VisualViewportSize() const override;
   void ResizeVisualViewport(const WebSize&) override;
   void Resize(const WebSize&) override;
+  WebSize GetSize() override;
   void ResetScrollAndScaleState() override;
   void SetIgnoreViewportTagScaleLimits(bool) override;
   WebSize ContentsPreferredMinimumSize() override;
-  void SetDisplayMode(WebDisplayMode) override;
+  void SetDisplayMode(blink::mojom::DisplayMode) override;
   void AnimateDoubleTapZoom(const gfx::Point&,
                             const WebRect& block_bounds) override;
   void ZoomToFindInPageRect(const WebRect&) override;
@@ -186,7 +186,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void EnableAutoResizeMode(const WebSize& min_size,
                             const WebSize& max_size) override;
   void DisableAutoResizeMode() override;
-  void PerformPluginAction(const WebPluginAction&, const gfx::Point&) override;
+  void PerformPluginAction(const PluginAction&, const gfx::Point&) override;
   void AudioStateChanged(bool is_audio_playing) override;
   WebHitTestResult HitTestResultAt(const gfx::Point&);
   WebHitTestResult HitTestResultForTap(const gfx::Point&,
@@ -312,7 +312,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   LocalDOMWindow* PagePopupWindow() const;
 
   GraphicsLayer* RootGraphicsLayer();
-  void RegisterViewportLayersWithCompositor();
   PaintLayerCompositor* Compositor() const;
 
   PageScheduler* Scheduler() const override;
@@ -335,7 +334,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   Node* BestTapNode(const GestureEventWithHitTestResults& targeted_tap_event);
   void EnableTapHighlightAtPoint(
       const GestureEventWithHitTestResults& targeted_tap_event);
-  void EnableTapHighlights(HeapVector<Member<Node>>&);
 
   void EnableFakePageScaleAnimationForTesting(bool);
   bool FakeDoubleTapAnimationPendingForTesting() const {
@@ -381,7 +379,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   WebSize Size();
   IntSize MainFrameSize();
-  WebDisplayMode DisplayMode() const { return display_mode_; }
+  blink::mojom::DisplayMode DisplayMode() const { return display_mode_; }
 
   PageScaleConstraintsSet& GetPageScaleConstraintsSet() const;
 
@@ -438,6 +436,8 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   FRIEND_TEST_ALL_PREFIXES(WebFrameTest,
                            DivScrollIntoEditableTestWithDeviceScaleFactor);
   FRIEND_TEST_ALL_PREFIXES(WebViewTest, SetBaseBackgroundColorBeforeMainFrame);
+  FRIEND_TEST_ALL_PREFIXES(WebViewTest, LongPressImage);
+  FRIEND_TEST_ALL_PREFIXES(WebViewTest, LongPressImageAndThenLongTapImage);
   friend class frame_test_helpers::WebViewHelper;
   friend class SimCompositor;
   friend class WebView;  // So WebView::Create can call our constructor
@@ -468,6 +468,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void EndCommitCompositorFrame();
   void RecordStartOfFrameMetrics();
   void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time);
+  std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics();
   void UpdateLifecycle(WebWidget::LifecycleUpdate requested_update,
                        WebWidget::LifecycleUpdateReason reason);
   void ThemeChanged();
@@ -535,7 +536,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // PageWidgetEventHandler functions
   void HandleMouseLeave(LocalFrame&, const WebMouseEvent&) override;
   void HandleMouseDown(LocalFrame&, const WebMouseEvent&) override;
-  void HandleMouseUp(LocalFrame&, const WebMouseEvent&) override;
+  WebInputEventResult HandleMouseUp(LocalFrame&, const WebMouseEvent&) override;
   WebInputEventResult HandleMouseWheel(LocalFrame&,
                                        const WebMouseWheelEvent&) override;
   WebInputEventResult HandleGestureEvent(const WebGestureEvent&) override;
@@ -607,9 +608,8 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // mean zoom in, negative numbers mean zoom out.
   double zoom_level_ = 0.;
 
-  double minimum_zoom_level_;
-
-  double maximum_zoom_level_;
+  const double minimum_zoom_level_;
+  const double maximum_zoom_level_;
 
   // Additional zoom factor used to scale the content by device scale factor.
   double zoom_factor_for_device_scale_factor_ = 0.;
@@ -695,7 +695,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   bool should_dispatch_first_visually_non_empty_layout_ = false;
   bool should_dispatch_first_layout_after_finished_parsing_ = false;
   bool should_dispatch_first_layout_after_finished_loading_ = false;
-  WebDisplayMode display_mode_ = kWebDisplayModeBrowser;
+  blink::mojom::DisplayMode display_mode_ = blink::mojom::DisplayMode::kBrowser;
 
   // TODO(bokan): Temporary debugging added to diagnose
   // https://crbug.com/992315. Somehow we're synchronously calling

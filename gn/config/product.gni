@@ -1,5 +1,6 @@
 declare_args() {
   build_branch = "master"
+  force_sopranos_build = false
 }
 
 _vivaldi_version_py_path = "//build/util/version.py"
@@ -21,18 +22,21 @@ official_product_kind_string =
                 "trim string",
                 [_vivaldi_product_kind_file])
 
+android_vivaldi_manifest_package = "com.vivaldi.browser.sopranos"
 if (release_kind == "final") {
   extra_grit_defines = [
     "-D",
     "vivaldi_release_final",
   ]
   VIVALDI_RELEASE_KIND = "vivaldi_final"
-} else if (is_official_build) {
+  android_vivaldi_manifest_package = "com.vivaldi.browser"
+} else if (is_official_build && !force_sopranos_build) {
   extra_grit_defines = [
     "-D",
     "vivaldi_release_snapshot",
   ]
   VIVALDI_RELEASE_KIND = "vivaldi_snapshot"
+  android_vivaldi_manifest_package = "com.vivaldi.browser.snapshot"
 } else {
   extra_grit_defines = [
     "-D",

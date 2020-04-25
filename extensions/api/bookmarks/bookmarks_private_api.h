@@ -38,10 +38,13 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 
   static bool SetBookmarkThumbnail(content::BrowserContext* browser_context,
                                    int64_t bookmark_id,
-                                   const std::string& url);
+                                   const std::string& url,
+                                   std::string* old_url);
 
  private:
   // bookmarks::BookmarkModelObserver
+  void BookmarkModelLoaded(BookmarkModel* model, bool ids_reassigned) override;
+
   void BookmarkNodeMoved(BookmarkModel* model,
                          const BookmarkNode* old_parent,
                          size_t old_index,
@@ -57,8 +60,6 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
                          const BookmarkNode* parent,
                          size_t index) override {}
 
-  void BookmarkModelLoaded(BookmarkModel* model, bool ids_reassigned) override {
-  }
   // Invoked when the title or url of a node changes.
   void BookmarkNodeChanged(BookmarkModel* model,
                            const BookmarkNode* node) override;
@@ -82,10 +83,6 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 
   bool partner_upgrade_active_;
   std::unique_ptr<MetaInfoChangeFilter> change_filter_;
-
-  // Helper to detect thumbnail change between OnWillChangeBookmarkMetaInfo and
-  // BookmarkMetaInfoChanged calls.
-  std::string saved_thumbnail_url_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "VivaldiBookmarksAPI"; }

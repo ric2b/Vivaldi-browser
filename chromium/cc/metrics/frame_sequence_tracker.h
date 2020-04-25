@@ -15,6 +15,7 @@
 #include "base/containers/circular_deque.h"
 #include "base/containers/flat_map.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/trace_event/traced_value.h"
 #include "cc/cc_export.h"
 
@@ -33,12 +34,13 @@ class CompositorFrameReportingController;
 
 enum FrameSequenceTrackerType {
   kCompositorAnimation = 0,
-  kMainThreadAnimation,
-  kPinchZoom,
-  kRAF,
-  kTouchScroll,
-  kVideo,
-  kWheelScroll,
+  kMainThreadAnimation = 1,
+  kPinchZoom = 2,
+  kRAF = 3,
+  kTouchScroll = 4,
+  kUniversal = 5,
+  kVideo = 6,
+  kWheelScroll = 7,
   kMaxType
 };
 
@@ -46,8 +48,9 @@ enum FrameSequenceTrackerType {
 // submitted frames.
 class CC_EXPORT FrameSequenceTrackerCollection {
  public:
-  explicit FrameSequenceTrackerCollection(
-      CompositorFrameReportingController* = nullptr);
+  FrameSequenceTrackerCollection(
+      bool is_single_threaded,
+      CompositorFrameReportingController* frame_reporting_controller);
   ~FrameSequenceTrackerCollection();
 
   FrameSequenceTrackerCollection(const FrameSequenceTrackerCollection&) =
@@ -93,6 +96,9 @@ class CC_EXPORT FrameSequenceTrackerCollection {
  private:
   friend class FrameSequenceTrackerTest;
 
+  void RecreateTrackers(const viz::BeginFrameArgs& args);
+
+  const bool is_single_threaded_;
   // The callsite can use the type to manipulate the tracker.
   base::flat_map<FrameSequenceTrackerType,
                  std::unique_ptr<FrameSequenceTracker>>
@@ -163,6 +169,9 @@ class CC_EXPORT FrameSequenceTracker {
 
   TerminationStatus termination_status() const { return termination_status_; }
 
+  // Returns true if we should ask this tracker to report its throughput data.
+  bool ShouldReportMetricsNow(const viz::BeginFrameArgs& args) const;
+
  private:
   friend class FrameSequenceTrackerCollection;
   friend class FrameSequenceTrackerTest;
@@ -189,10 +198,13 @@ class CC_EXPORT FrameSequenceTracker {
     static std::unique_ptr<base::trace_event::TracedValue> ToTracedValue(
         const ThroughputData& impl,
         const ThroughputData& main);
-    static void ReportHistogram(FrameSequenceTrackerType sequence_type,
-                                const char* thread_name,
-                                int metric_index,
-                                const ThroughputData& data);
+    // Returns the throughput in percent, a return value of base::nullopt
+    // indicates that no throughput metric is reported.
+    static base::Optional<int> ReportHistogram(
+        FrameSequenceTrackerType sequence_type,
+        const char* thread_name,
+        int metric_index,
+        const ThroughputData& data);
     // Tracks the number of frames that were expected to be shown during this
     // frame-sequence.
     uint32_t frames_expected = 0;
@@ -225,6 +237,9 @@ class CC_EXPORT FrameSequenceTracker {
                               uint64_t sequence_number);
 
   bool ShouldIgnoreBeginFrameSource(uint64_t source_id) const;
+
+  // Report related metrics: throughput, checkboarding...
+  void ReportMetrics();
 
   const FrameSequenceTrackerType type_;
 
@@ -262,6 +277,13 @@ class CC_EXPORT FrameSequenceTracker {
   // Keeps track of the last sequence-number that produced a frame from the
   // main-thread.
   uint64_t last_submitted_main_sequence_ = 0;
+
+  // The time when this tracker is created, or the time when it was previously
+  // scheduled to report histogram.
+  base::TimeTicks first_frame_timestamp_;
+
+  // Report the throughput metrics every 5 seconds.
+  const base::TimeDelta time_delta_to_report_ = base::TimeDelta::FromSeconds(5);
 };
 
 }  // namespace cc

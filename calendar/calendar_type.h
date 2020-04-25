@@ -40,6 +40,9 @@ enum UpdateCalendarFields {
   CALENDAR_ACTIVE = 1 << 7,
   CALENDAR_ICONINDEX = 1 << 8,
   CALENDAR_USERNAME = 1 << 9,
+  CALENDAR_TYPE = 1 << 10,
+  CALENDAR_INTERVAL = 1 << 11,
+  CALENDAR_LAST_CHECKED = 1 << 12,
 };
 
 // Holds all information associated with a specific Calendar.
@@ -57,6 +60,9 @@ class CalendarRow {
               bool active,
               int iconindex,
               base::string16 username,
+              int type,
+              int interval,
+              base::Time last_checked,
               base::Time created,
               base::Time lastmodified);
   ~CalendarRow();
@@ -98,6 +104,17 @@ class CalendarRow {
   base::string16 username() const { return username_; }
   void set_username(base::string16 username) { username_ = username; }
 
+  int type() const { return type_; }
+  void set_type(int type) { type_ = type; }
+
+  int interval() const { return interval_; }
+  void set_interval(int interval) { interval_ = interval; }
+
+  base::Time last_checked() const { return last_checked_; }
+  void set_last_checked(base::Time last_checked) {
+    last_checked_ = last_checked;
+  }
+
   base::Time created() const { return created_; }
   void set_created(base::Time created) { created_ = created; }
 
@@ -118,6 +135,9 @@ class CalendarRow {
   bool active_;
   int iconindex_;
   base::string16 username_;
+  int type_;
+  int interval_;
+  base::Time last_checked_;
   base::Time created_;
   base::Time lastmodified_;
 };
@@ -150,6 +170,9 @@ struct Calendar {
   bool active;
   int iconindex;
   base::string16 username;
+  int type;
+  int interval;
+  base::Time last_checked;
   base::Time created;
   base::Time lastmodified;
   int updateFields;

@@ -35,7 +35,7 @@ enum WebViewPermissionType {
   // permission type for code reuse.
   WEB_VIEW_PERMISSION_TYPE_NEW_WINDOW,
 
-#include "notifications/vivaldi_web_view_permission_types.inc"
+#include "permissions/vivaldi_web_view_permission_types.inc"
 
   WEB_VIEW_PERMISSION_TYPE_POINTER_LOCK
 };

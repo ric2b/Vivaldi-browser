@@ -3,6 +3,7 @@
 #include "sync/vivaldi_hash_util.h"
 
 #include "base/logging.h"
+#include "components/sync/base/client_tag_hash.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/driver/sync_client.h"
 #include "components/sync/engine_impl/syncer_util.h"
@@ -17,8 +18,8 @@ namespace syncer {
 std::string GenerateSyncableNotesHash(
     const std::string& originator_cache_guid,
     const std::string& originator_client_item_id) {
-  return GenerateSyncableHash(
-      NOTES, originator_cache_guid + originator_client_item_id);
+  return ClientTagHash::FromUnhashed(
+      NOTES, originator_cache_guid + originator_client_item_id).value();
 }
 
 std::string GetUniqueNotesTagFromUpdate(const sync_pb::SyncEntity& update) {

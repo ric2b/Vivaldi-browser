@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/services/app_service/public/cpp/app_update.h"
+#include "chrome/services/app_service/public/cpp/intent_filter_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -65,6 +66,9 @@ class AppUpdateTest : public testing::Test {
   apps::mojom::OptionalBool expect_show_in_management_;
   bool expect_show_in_management_changed_;
 
+  std::vector<apps::mojom::IntentFilterPtr> expect_intent_filters_;
+  bool expect_intent_filters_changed_;
+
   static constexpr uint32_t kPermissionTypeLocation = 100;
   static constexpr uint32_t kPermissionTypeNotification = 200;
 
@@ -95,6 +99,7 @@ class AppUpdateTest : public testing::Test {
     expect_show_in_launcher_changed_ = false;
     expect_show_in_search_changed_ = false;
     expect_show_in_management_changed_ = false;
+    expect_intent_filters_changed_ = false;
   }
 
   void CheckExpects(const apps::AppUpdate& u) {
@@ -149,6 +154,9 @@ class AppUpdateTest : public testing::Test {
 
     EXPECT_EQ(expect_show_in_management_, u.ShowInManagement());
     EXPECT_EQ(expect_show_in_management_changed_, u.ShowInManagementChanged());
+
+    EXPECT_EQ(expect_intent_filters_, u.IntentFilters());
+    EXPECT_EQ(expect_intent_filters_changed_, u.IntentFiltersChanged());
   }
 
   void TestAppUpdate(apps::mojom::App* state, apps::mojom::App* delta) {
@@ -175,6 +183,7 @@ class AppUpdateTest : public testing::Test {
     expect_show_in_launcher_ = apps::mojom::OptionalBool::kUnknown;
     expect_show_in_search_ = apps::mojom::OptionalBool::kUnknown;
     expect_show_in_management_ = apps::mojom::OptionalBool::kUnknown;
+    expect_intent_filters_.clear();
     ExpectNoChange();
     CheckExpects(u);
 
@@ -561,6 +570,70 @@ class AppUpdateTest : public testing::Test {
       expect_permissions_.push_back(p0.Clone());
       expect_permissions_.push_back(p1.Clone());
       expect_permissions_changed_ = true;
+      CheckExpects(u);
+    }
+
+    if (state) {
+      apps::AppUpdate::Merge(state, delta);
+      ExpectNoChange();
+      CheckExpects(u);
+    }
+
+    // Intent Filter tests.
+
+    if (state) {
+      auto intent_filter = apps::mojom::IntentFilter::New();
+
+      std::vector<apps::mojom::ConditionValuePtr> scheme_condition_values;
+      scheme_condition_values.push_back(apps_util::MakeConditionValue(
+          "https", apps::mojom::PatternMatchType::kNone));
+      auto scheme_condition =
+          apps_util::MakeCondition(apps::mojom::ConditionType::kScheme,
+                                   std::move(scheme_condition_values));
+      intent_filter->conditions.push_back(std::move(scheme_condition));
+
+      std::vector<apps::mojom::ConditionValuePtr> host_condition_values;
+      host_condition_values.push_back(apps_util::MakeConditionValue(
+          "www.google.com", apps::mojom::PatternMatchType::kNone));
+      auto host_condition = apps_util::MakeCondition(
+          apps::mojom::ConditionType::kHost, std::move(host_condition_values));
+      intent_filter->conditions.push_back(std::move(host_condition));
+
+      intent_filter->conditions.push_back(scheme_condition.Clone());
+      intent_filter->conditions.push_back(host_condition.Clone());
+
+      state->intent_filters.push_back(intent_filter.Clone());
+      expect_intent_filters_.push_back(intent_filter.Clone());
+      expect_intent_filters_changed_ = false;
+      CheckExpects(u);
+    }
+
+    if (delta) {
+      expect_intent_filters_.clear();
+
+      auto intent_filter = apps::mojom::IntentFilter::New();
+
+      std::vector<apps::mojom::ConditionValuePtr> scheme_condition_values;
+      scheme_condition_values.push_back(apps_util::MakeConditionValue(
+          "https", apps::mojom::PatternMatchType::kNone));
+      auto scheme_condition =
+          apps_util::MakeCondition(apps::mojom::ConditionType::kScheme,
+                                   std::move(scheme_condition_values));
+      intent_filter->conditions.push_back(std::move(scheme_condition));
+
+      std::vector<apps::mojom::ConditionValuePtr> host_condition_values;
+      host_condition_values.push_back(apps_util::MakeConditionValue(
+          "www.abc.com", apps::mojom::PatternMatchType::kNone));
+      auto host_condition = apps_util::MakeCondition(
+          apps::mojom::ConditionType::kHost, std::move(host_condition_values));
+      intent_filter->conditions.push_back(std::move(host_condition));
+
+      intent_filter->conditions.push_back(scheme_condition.Clone());
+      intent_filter->conditions.push_back(host_condition.Clone());
+
+      delta->intent_filters.push_back(intent_filter.Clone());
+      expect_intent_filters_.push_back(intent_filter.Clone());
+      expect_intent_filters_changed_ = true;
       CheckExpects(u);
     }
 

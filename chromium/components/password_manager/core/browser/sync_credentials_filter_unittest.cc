@@ -70,7 +70,7 @@ class FakePasswordManagerClient : public StubPasswordManagerClient {
   const GURL& GetLastCommittedEntryURL() const override {
     return last_committed_entry_url_;
   }
-  MockPasswordStore* GetPasswordStore() const override {
+  MockPasswordStore* GetProfilePasswordStore() const override {
     return password_store_.get();
   }
   signin::IdentityManager* GetIdentityManager() override {
@@ -135,7 +135,7 @@ class CredentialsFilterTest : public SyncUsernameTestBase {
     fetcher_.SetNonFederated(matches);
     fetcher_.NotifyFetchCompleted();
 
-    form_manager_.ProvisionallySave(pending_.form_data, &driver_);
+    form_manager_.ProvisionallySave(pending_.form_data, &driver_, nullptr);
   }
 
  protected:

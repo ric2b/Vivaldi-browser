@@ -10,6 +10,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
+#include "base/scoped_observer.h"
 #include "base/time/time.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/fake_embedded_worker_instance_client.h"
@@ -97,7 +98,7 @@ void ExpectRegisteredWorkers(
 
 class InstallActivateWorker : public FakeServiceWorker {
  public:
-  InstallActivateWorker(EmbeddedWorkerTestHelper* helper)
+  explicit InstallActivateWorker(EmbeddedWorkerTestHelper* helper)
       : FakeServiceWorker(helper) {}
   ~InstallActivateWorker() override = default;
 
@@ -248,7 +249,8 @@ class TestServiceWorkerContextObserver : public ServiceWorkerContextObserver {
     VersionActivated,
     VersionRedundant,
     NoControllees,
-    VersionRunningStatusChanged,
+    VersionStartedRunning,
+    VersionStoppedRunning,
     Destruct
   };
   struct EventLog {
@@ -257,18 +259,14 @@ class TestServiceWorkerContextObserver : public ServiceWorkerContextObserver {
     base::Optional<int64_t> version_id;
     base::Optional<int64_t> registration_id;
     base::Optional<bool> is_running;
-    base::Optional<ServiceWorkerContext*> context;
   };
 
   explicit TestServiceWorkerContextObserver(ServiceWorkerContext* context)
-      : context_(context) {
-    context_->AddObserver(this);
+      : scoped_observer_(this) {
+    scoped_observer_.Add(context);
   }
 
-  ~TestServiceWorkerContextObserver() override {
-    if (context_)
-      context_->RemoveObserver(this);
-  }
+  ~TestServiceWorkerContextObserver() override = default;
 
   void OnRegistrationCompleted(const GURL& scope) override {
     EventLog log;
@@ -310,28 +308,37 @@ class TestServiceWorkerContextObserver : public ServiceWorkerContextObserver {
     events_.push_back(log);
   }
 
-  void OnVersionRunningStatusChanged(content::ServiceWorkerContext* context,
-                                     int64_t version_id,
-                                     bool is_running) override {
+  void OnVersionStartedRunning(
+      content::ServiceWorkerContext* context,
+      int64_t version_id,
+      const ServiceWorkerRunningInfo& running_info) override {
     EventLog log;
-    log.type = EventType::VersionRunningStatusChanged;
+    log.type = EventType::VersionStartedRunning;
     log.version_id = version_id;
-    log.is_running = is_running;
+    events_.push_back(log);
+  }
+
+  void OnVersionStoppedRunning(content::ServiceWorkerContext* context,
+                               int64_t version_id) override {
+    EventLog log;
+    log.type = EventType::VersionStoppedRunning;
+    log.version_id = version_id;
     events_.push_back(log);
   }
 
   void OnDestruct(content::ServiceWorkerContext* context) override {
+    scoped_observer_.Remove(context);
+
     EventLog log;
     log.type = EventType::Destruct;
-    log.context = context;
     events_.push_back(log);
-    context_ = nullptr;
   }
 
   const std::vector<EventLog>& events() { return events_; }
 
  private:
-  ServiceWorkerContext* context_;
+  ScopedObserver<ServiceWorkerContext, ServiceWorkerContextObserver>
+      scoped_observer_;
   std::vector<EventLog> events_;
   DISALLOW_COPY_AND_ASSIGN(TestServiceWorkerContextObserver);
 };
@@ -470,7 +477,8 @@ TEST_F(ServiceWorkerContextTest, VersionRedundantObserver) {
   EXPECT_EQ(2l, observer.events()[0].version_id);
 }
 
-// Make sure OnVersionRunningStatusChanged is called on observer.
+// Make sure OnVersionStartedRunning and OnVersionStoppedRunning are called on
+// observer.
 TEST_F(ServiceWorkerContextTest, OnVersionRunningStatusChangedObserver) {
   GURL scope("https://www.example.com/");
   GURL script_url("https://www.example.com/service_worker.js");
@@ -492,13 +500,18 @@ TEST_F(ServiceWorkerContextTest, OnVersionRunningStatusChangedObserver) {
   // Filter the events to be verified.
   for (auto event : observer.events()) {
     if (event.type == TestServiceWorkerContextObserver::EventType::
-                          VersionRunningStatusChanged)
+                          VersionStartedRunning ||
+        event.type == TestServiceWorkerContextObserver::EventType::
+                          VersionStoppedRunning) {
       events.push_back(event);
+    }
   }
 
   ASSERT_EQ(2u, events.size());
-  EXPECT_EQ(true, events[0].is_running);
-  EXPECT_EQ(false, events[1].is_running);
+  EXPECT_EQ(TestServiceWorkerContextObserver::EventType::VersionStartedRunning,
+            events[0].type);
+  EXPECT_EQ(TestServiceWorkerContextObserver::EventType::VersionStoppedRunning,
+            events[1].type);
   EXPECT_EQ(events[0].version_id, events[1].version_id);
 }
 
@@ -512,7 +525,6 @@ TEST_F(ServiceWorkerContextTest, OnDestructObserver) {
   ASSERT_EQ(1u, observer.events().size());
   EXPECT_EQ(TestServiceWorkerContextObserver::EventType::Destruct,
             observer.events()[0].type);
-  EXPECT_EQ(context, observer.events()[0].context);
 }
 
 // Make sure basic registration is working.
@@ -944,21 +956,21 @@ TEST_F(ServiceWorkerContextTest, ProviderHostIterator) {
   base::WeakPtr<ServiceWorkerProviderHost> host1 = CreateProviderHostForWindow(
       kRenderProcessId1, true /* is_parent_frame_secure */,
       context()->AsWeakPtr(), &remote_endpoints.back());
-  host1->UpdateUrls(kOrigin1, kOrigin1);
+  host1->UpdateUrls(kOrigin1, kOrigin1, url::Origin::Create(kOrigin1));
 
   // Host2 : process_id=2, origin2.
   remote_endpoints.emplace_back();
   base::WeakPtr<ServiceWorkerProviderHost> host2 = CreateProviderHostForWindow(
       kRenderProcessId2, true /* is_parent_frame_secure */,
       context()->AsWeakPtr(), &remote_endpoints.back());
-  host2->UpdateUrls(kOrigin2, kOrigin2);
+  host2->UpdateUrls(kOrigin2, kOrigin2, url::Origin::Create(kOrigin2));
 
   // Host3 : process_id=2, origin1.
   remote_endpoints.emplace_back();
   base::WeakPtr<ServiceWorkerProviderHost> host3 = CreateProviderHostForWindow(
       kRenderProcessId2, true /* is_parent_frame_secure */,
       context()->AsWeakPtr(), &remote_endpoints.back());
-  host3->UpdateUrls(kOrigin1, kOrigin1);
+  host3->UpdateUrls(kOrigin1, kOrigin1, url::Origin::Create(kOrigin1));
 
   // Host4 : process_id=2, origin2, for ServiceWorker.
   blink::mojom::ServiceWorkerRegistrationOptions registration_opt;

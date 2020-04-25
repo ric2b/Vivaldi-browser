@@ -17,8 +17,8 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.blink_public.platform.WebDisplayMode;
 import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.metrics.WebApkUma;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.UrlUtilities;
@@ -339,6 +339,9 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer {
             return WebApkUpdateReason.DISPLAY_MODE_DIFFERS;
         } else if (!oldInfo.shareTarget().equals(fetchedInfo.shareTarget())) {
             return WebApkUpdateReason.WEB_SHARE_TARGET_DIFFERS;
+        } else if (ShortcutHelper.doesAndroidSupportMaskableIcons()
+                && oldInfo.isIconAdaptive() != fetchedInfo.isIconAdaptive()) {
+            return WebApkUpdateReason.PRIMARY_ICON_MASKABLE_DIFFERS;
         }
         return WebApkUpdateReason.NONE;
     }

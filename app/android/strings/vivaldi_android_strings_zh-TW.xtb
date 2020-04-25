@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="zh-TW">
+<translation id="1029351048239796117">Vivaldi 需要授權方可允許該網站存取麥克風。</translation>
+<translation id="1063227610401477317">套用變更</translation>
+<translation id="1067048845568873861">建立於</translation>
+<translation id="1151669774236491028">Vivalid.net 遇到問題：<ph name="SERVER_ERROR" />（<ph name="ERROR_CODE" />）</translation>
+<translation id="1193152013480891461">新增 Vivaldi 帳號</translation>
+<translation id="119944043368869598">清除全部</translation>
+<translation id="1228311134236651326">筆記未找到</translation>
+<translation id="1243314992276662751">上載</translation>
+<translation id="1249276067323441352">同步日期</translation>
+<translation id="1302932907222175914">搜尋筆記</translation>
+<translation id="1644574205037202324">瀏覽紀錄</translation>
+<translation id="1689333818294560261">暱稱</translation>
+<translation id="1721552494230946796">新增快速撥號資料夾</translation>
+<translation id="1799160781006135561">未設定加密密碼</translation>
+<translation id="1887193815546011584">新增快速撥號</translation>
+<translation id="1984391066297619717">自動同步</translation>
+<translation id="2030706494969937066">取回憑證失敗，請重新登入。</translation>
+<translation id="2034405583989639424">編輯快速撥號</translation>
+<translation id="2071726368047511075">擷取頁面</translation>
+<translation id="2199644148227291099">確定繼續而不設定加密密碼？這大大降低了線上同步資料的安全性。</translation>
+<translation id="2243210264130642074">筆記已儲存</translation>
+<translation id="2336309953058658733">清空垃圾桶</translation>
+<translation id="2359808026110333948">繼續</translation>
+<translation id="2526968784648867272">擷取頁面...</translation>
+<translation id="2709516037105925701">自動填充</translation>
+<translation id="271033894570825754">新增</translation>
+<translation id="2745324713975967671">加密密碼</translation>
+<translation id="2818042133587341562">Vivaldi 需要授權方可允許該網站存取攝像頭。</translation>
+<translation id="2842985007712546952">上級資料夾</translation>
+<translation id="2850144663494818309">正在初始化同步...</translation>
+<translation id="2873951654529031587">垃圾桶</translation>
+<translation id="2915527103487649658">同步全部資料</translation>
+<translation id="2953995378235516294">您的同步帳號下的資料已加密，請提供密碼以解密。</translation>
+<translation id="2996809686854298943">URL 為必填</translation>
+<translation id="3177673846235066154">您的憑據遭伺服器拒絕。</translation>
+<translation id="3183006304368105350">複製分頁</translation>
+<translation id="3271422135763022755">開始輸入...</translation>
+<translation id="3335772982573114336">新增筆記</translation>
+<translation id="33451081266695216">伺服器限制連線。</translation>
+<translation id="3377025655491224618">無痕分頁</translation>
+<translation id="3513566764071045027">登出</translation>
+<translation id="3596285013654573099">登入以同步資料</translation>
+<translation id="3611176835527015865">僅影響 Vivaldi 內部頁面，而不是網站</translation>
+<translation id="3723593528923555236">不使用獨立密碼並繼續</translation>
+<translation id="3838463869765243557">裝置名稱（<ph name="DEVICE_NAME" />）</translation>
+<translation id="3866249974567520381">描述</translation>
+<translation id="3897711243931585177">一般</translation>
+<translation id="4014682279600355881">我們建議您創建獨立且強壯的加密密碼。當然您也可以留空，此時我們將使用您的帳號密碼作為加密密碼。</translation>
+<translation id="4073968054795398875">同步伺服器遇到問題，稍後再嘗試初始化同步...</translation>
+<translation id="4082980568238151037">設置加密密碼。</translation>
+<translation id="4145489350420416595">意外的錯誤。</translation>
+<translation id="4268574628540273656">URL：</translation>
+<translation id="4304224509867189079">登入</translation>
+<translation id="4435780204941264251">清除同步資料</translation>
+<translation id="4532845899244822526">選取資料夾</translation>
+<translation id="4579489600439872414">同步於 android 設定中已遭停用。</translation>
+<translation id="4589558845651536280">正在進行中...</translation>
+<translation id="4752136117982598343">筆記已儲存至 <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">下載</translation>
+<translation id="4833044618885331665">您必須升級 Vivaldi 才能使用資料同步。</translation>
+<translation id="4847896847259487518">新增為書籤</translation>
+<translation id="4890701585167892790">暫無筆記</translation>
+<translation id="4892521078757281695">滑動關閉分頁</translation>
+<translation id="4936710149174207991">未同步</translation>
+<translation id="4954427294703861104">首次使用 Vivaldi？先新增一個帳號。</translation>
+<translation id="504986598654589766">於無痕分頁中瀏覽時，Vivaldi 將不會儲存搜尋紀錄、瀏覽紀錄、Cookie 及臨時文件，且不會加密或以其他方式修改您的連線。</translation>
+<translation id="5161254044473106830">標題為必填</translation>
+<translation id="5186185447130319458">無痕</translation>
+<translation id="5271549068863921519">儲存密碼</translation>
+<translation id="5286002386457946212">用戶端錯誤。</translation>
+<translation id="5290452628447338707">暫無筆記</translation>
+<translation id="5351912500249789547">Vivaldi.net 拒絕了您的憑證：錯誤碼 <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">開啟圖片</translation>
+<translation id="5421638721143596928">解密憑證失敗，請重新登入。</translation>
+<translation id="5443210757369395869">擷取可視區域</translation>
+<translation id="5448025735280530073">Vivaldi 需要授權方可允許該網站存取位置資訊。</translation>
+<translation id="5510723066938954312">書籤及快速撥號</translation>
+<translation id="5525981542754785361">筆記已儲存至<ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">拷貝至筆記</translation>
+<translation id="5754087700864822036">網頁</translation>
+<translation id="5765833063161370062">移動筆記</translation>
+<translation id="5790085346892983794">成功</translation>
+<translation id="5803562371819294631">這會移除儲存於 Vivaldi 資料同步伺服器上的所有同步的資料、重設加密密碼，並將您登出。是否繼續？</translation>
+<translation id="5823830882692559950">Vivaldi.net 拒絕了您的憑證：<ph name="SERVER_ERROR" />（<ph name="ERROR_CODE" />）</translation>
+<translation id="5841317974325635710">筆記已新增</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> 篇筆記}
+          other {<ph name="NOTES_COUNT_MANY" /> 篇筆記}}</translation>
+<translation id="6012194412768958291">無法連線至 vivaldi.net。</translation>
+<translation id="6027204815015935175">需要密碼以解密。</translation>
+<translation id="6059232451013891645">資料夾：</translation>
+<translation id="6077943432358741146">快速撥號</translation>
+<translation id="6091125352818749975">正在清除遠端同步的資料。</translation>
+<translation id="6135798666968342262">顯示滾動條</translation>
+<translation id="6179463181009746489">刪除筆記</translation>
+<translation id="6231148928368101651">面板</translation>
+<translation id="6406506848690869874">資料同步</translation>
+<translation id="6657585470893396449">密碼</translation>
+<translation id="6682232524697939870">Vivaldi 需要授權方可允許該網站存取攝像頭及麥克風。</translation>
+<translation id="6698381487523150993">建立時間：</translation>
+<translation id="6786747875388722282">擴充功能</translation>
+<translation id="6887143077297974801">資料同步啟動失敗。</translation>
+<translation id="6945221475159498467">選取</translation>
+<translation id="6960734555676205519">最後同步</translation>
+<translation id="7029809446516969842">密碼</translation>
+<translation id="7075547914712055886">重新啟動同步</translation>
+<translation id="7222342267839079597">請選擇一個強壯的加密密碼來保護您的資料。</translation>
+<translation id="7228660378238874411">總是顯示桌面站點</translation>
+<translation id="7390295729483215958">正在處理同步資料...</translation>
+<translation id="7492794630657957996">確認資料同步以完成設置</translation>
+<translation id="7514365320538308">下載</translation>
+<translation id="7547490097772831952">擷取完整頁面</translation>
+<translation id="7725641807765767506">快速撥號未找到</translation>
+<translation id="7765158879357617694">移動</translation>
+<translation id="7822864833609233785">進階</translation>
+<translation id="798930073512159071">
+
+寫下第一篇筆記
+
+點一下筆記圖示或選取網頁中的任意文本並從上下文選單中新增筆記。</translation>
+<translation id="8004991133350335392">密碼最小長度不可少於 12 個字元。</translation>
+<translation id="8028021641083150097">為了重新取得對您帳號的存取權限，必須重設儲存在資料同步伺服器上所有同步的資料。 您可以稍後使用瀏覽器中的當前資料再次啟用同步。</translation>
+<translation id="8035133914807600019">新增資料夾…</translation>
+<translation id="8066170816074394954">伺服器錯誤。</translation>
+<translation id="8123787473700925741">Vivalid.net 遇到問題：錯誤碼 <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">開始同步</translation>
+<translation id="8206267832882844324">編輯筆記</translation>
+<translation id="8225478925744929238">從書籤移除</translation>
+<translation id="8233521945095997439">暫無快速撥號</translation>
+<translation id="8257908958623224237">與另一用戶端資料衝突。</translation>
+<translation id="8261506727792406068">刪除</translation>
+<translation id="8305137170060620165">輸入紀錄及遠端對話</translation>
+<translation id="8414685983518053656">筆記</translation>
+<translation id="8422778094137438683">您必須使用 vivaldi.net 帳號登入。</translation>
+<translation id="8428213095426709021">設定</translation>
+<translation id="8462396943848220200"><ph name="TIME" /> 後再次嘗試</translation>
+<translation id="8480556999740355963">已透過身分 <ph name="USERNAME" /> 登入 <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">正在以身分 <ph name="USERNAME" /> 登入 Vivaldi.net，請稍候。</translation>
+<translation id="8503813439785031346">使用者名稱</translation>
+<translation id="8661216209723599816">重設遠端資料</translation>
+<translation id="8721244337025311110">新增書籤</translation>
+<translation id="8724114686743788114">無法顯示圖片</translation>
+<translation id="8730621377337864115">完成</translation>
+<translation id="8738958257180686306">建立時間： <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Vivaldi 需要取得儲存權限方可下載文件。</translation>
+<translation id="8808060551076378370">新增筆記失敗。</translation>
+<translation id="8817201557520703060">頁面已擷取</translation>
+<translation id="8820817407110198400">書籤</translation>
+<translation id="8884751487662988673">要查看已同步的分頁，請在同步設定中登入。</translation>
+<translation id="895749247724466293">搜尋快速撥號</translation>
+<translation id="8959245489304000426">忘記密碼</translation>
+<translation id="8979401359137062629">筆記：</translation>
+<translation id="9028089729841356743">網路錯誤。</translation>
+<translation id="9065203028668620118">編輯</translation>
+<translation id="9148058034647219655">結束</translation>
+<translation id="9173575361559252669">擷取頁面失敗</translation>
+</translationbundle>

@@ -185,8 +185,9 @@ void BlinkInitializer::RegisterInterfaces(
 
 void BlinkInitializer::InitLocalFrame(LocalFrame& frame) const {
   if (RuntimeEnabledFeatures::DisplayCutoutAPIEnabled()) {
-    frame.GetInterfaceRegistry()->AddAssociatedInterface(WTF::BindRepeating(
-        &DisplayCutoutClientImpl::BindMojoRequest, WrapWeakPersistent(&frame)));
+    frame.GetInterfaceRegistry()->AddAssociatedInterface(
+        WTF::BindRepeating(&DisplayCutoutClientImpl::BindMojoReceiver,
+                           WrapWeakPersistent(&frame)));
   }
   frame.GetInterfaceRegistry()->AddAssociatedInterface(WTF::BindRepeating(
       &DevToolsFrontendImpl::BindMojoRequest, WrapWeakPersistent(&frame)));
@@ -195,12 +196,6 @@ void BlinkInitializer::InitLocalFrame(LocalFrame& frame) const {
 
   frame.GetInterfaceRegistry()->AddInterface(WTF::BindRepeating(
       &LocalFrame::PauseSubresourceLoading, WrapWeakPersistent(&frame)));
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kSendPreviewsLoadingHintsBeforeCommit)) {
-    frame.GetInterfaceRegistry()->AddInterface(WTF::BindRepeating(
-        &LocalFrame::BindPreviewsResourceLoadingHintsReceiver,
-        WrapWeakPersistent(&frame)));
-  }
   ModulesInitializer::InitLocalFrame(frame);
 }
 

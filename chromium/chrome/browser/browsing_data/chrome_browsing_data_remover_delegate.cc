@@ -853,6 +853,9 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
           nullable_filter, delete_begin_, delete_end_,
           base::AdaptCallbackForRepeating(CreateTaskCompletionClosure(
               TracingDataType::kPasswordsStatistics)));
+      password_store->RemoveLeakedCredentialsByUrlAndTime(
+          nullable_filter, delete_begin_, delete_end_,
+          CreateTaskCompletionClosure(TracingDataType::kLeakedCredentials));
     }
   }
 
@@ -931,8 +934,13 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
 
 #if defined(OS_ANDROID)
 #if BUILDFLAG(ENABLE_FEED_IN_CHROME)
-    if (base::FeatureList::IsEnabled(feed::kInterestFeedContentSuggestions))
-      feed::FeedLifecycleBridge::ClearCachedData();
+    if (base::FeatureList::IsEnabled(feed::kInterestFeedContentSuggestions)) {
+      // Don't bridge through if the service isn't present, which means we're
+      // probably running in a native unit test.
+      if (feed::FeedHostServiceFactory::GetForBrowserContext(profile_)) {
+        feed::FeedLifecycleBridge::ClearCachedData();
+      }
+    }
 #endif  // BUILDFLAG(ENABLE_FEED_IN_CHROME)
 #endif  // defined(OS_ANDROID)
 
@@ -958,8 +966,7 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
 #if defined(OS_ANDROID)
     // For now we're considering offline pages as cache, so if we're removing
     // cache we should remove offline pages as well.
-    if ((remove_mask & content::BrowsingDataRemover::DATA_TYPE_CACHE) &&
-        offline_pages::IsOfflinePagesEnabled()) {
+    if (remove_mask & content::BrowsingDataRemover::DATA_TYPE_CACHE) {
       auto* offline_page_model =
           offline_pages::OfflinePageModelFactory::GetForBrowserContext(
               profile_);

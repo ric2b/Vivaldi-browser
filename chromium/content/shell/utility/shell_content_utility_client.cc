@@ -20,10 +20,11 @@
 #include "content/public/test/test_service.h"
 #include "content/public/test/test_service.mojom.h"
 #include "content/public/utility/utility_thread.h"
+#include "content/shell/common/power_monitor_test.mojom.h"
 #include "content/shell/common/power_monitor_test_impl.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/bindings/service_factory.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/test/echo/echo_service.h"
@@ -34,9 +35,9 @@ namespace {
 
 class TestUtilityServiceImpl : public mojom::TestService {
  public:
-  static void Create(mojom::TestServiceRequest request) {
-    mojo::MakeStrongBinding(base::WrapUnique(new TestUtilityServiceImpl),
-                            std::move(request));
+  static void Create(mojo::PendingReceiver<mojom::TestService> receiver) {
+    mojo::MakeSelfOwnedReceiver(base::WrapUnique(new TestUtilityServiceImpl),
+                                std::move(receiver));
   }
 
   // mojom::TestService implementation:
@@ -105,7 +106,7 @@ void ShellContentUtilityClient::UtilityThreadStarted() {
   registry->AddInterface(base::BindRepeating(&TestUtilityServiceImpl::Create),
                          base::ThreadTaskRunnerHandle::Get());
   registry->AddInterface<mojom::PowerMonitorTest>(
-      base::BindRepeating(&PowerMonitorTestImpl::MakeStrongBinding),
+      base::BindRepeating(&PowerMonitorTestImpl::MakeSelfOwnedReceiver),
       base::ThreadTaskRunnerHandle::Get());
   content::ChildThread::Get()
       ->GetServiceManagerConnection()

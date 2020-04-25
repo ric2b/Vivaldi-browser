@@ -6,9 +6,10 @@ package org.chromium.chrome.browser.omaha;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.support.annotation.IntDef;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
+
+import androidx.annotation.IntDef;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -198,14 +199,14 @@ public class OmahaBaseTest {
     }
 
     @Before
-    public void setUp() throws Exception {
+    public void setUp() {
         Context targetContext = InstrumentationRegistry.getTargetContext();
         OmahaBase.setIsDisabledForTesting(false);
         mContext = new AdvancedMockContext(targetContext);
     }
 
     @After
-    public void tearDown() throws Exception {
+    public void tearDown() {
         OmahaBase.setIsDisabledForTesting(true);
     }
 
@@ -254,7 +255,7 @@ public class OmahaBaseTest {
         }
 
         @Override
-        protected HttpURLConnection createConnection() throws RequestFailureException {
+        protected HttpURLConnection createConnection() {
             MockConnection connection = null;
             try {
                 URL url = new URL(mDelegate.getRequestGenerator().getServerUrl());

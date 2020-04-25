@@ -4,8 +4,8 @@
 
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
+#include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/test/shell_test_api.h"
-#include "ash/shelf/shelf_constants.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/perf/drag_event_generator.h"
 #include "chrome/test/base/perf/performance_test.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -72,20 +73,28 @@ IN_PROC_BROWSER_TEST_P(LauncherDragTest, Open) {
   gfx::Rect display_bounds = GetDisplayBounds(browser_window);
   gfx::Point start_point = gfx::Point(
       display_bounds.width() / 4,
-      display_bounds.bottom() - ash::ShelfConstants::shelf_size() / 2);
+      display_bounds.bottom() - ash::ShelfConfig::Get()->shelf_size() / 2);
   gfx::Point end_point(start_point);
   end_point.set_y(10);
-  ui_test_utils::DragEventGenerator generator(
+  auto generator = ui_test_utils::DragEventGenerator::CreateForTouch(
       std::make_unique<ui_test_utils::InterpolatedProducer>(
-          start_point, end_point, base::TimeDelta::FromMilliseconds(1000)),
-      /*touch=*/true);
-  generator.Wait();
+          start_point, end_point, base::TimeDelta::FromMilliseconds(1000)));
+  generator->Wait();
+
+  const bool is_tablet_mode = GetParam();
+  if (is_tablet_mode && chromeos::switches::ShouldShowShelfHotseat()) {
+    // The first swipe should show the hotseat, a second swipe is required to
+    // show the applist.
+    auto generator = ui_test_utils::DragEventGenerator::CreateForTouch(
+        std::make_unique<ui_test_utils::InterpolatedProducer>(
+            start_point, end_point, base::TimeDelta::FromMilliseconds(1000)));
+    generator->Wait();
+  }
 
   shell_test_api.WaitForLauncherAnimationState(
       ash::AppListViewState::kFullscreenAllApps);
 }
 
-// Drag to close the launcher.
 IN_PROC_BROWSER_TEST_P(LauncherDragTest, Close) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
   aura::Window* browser_window = browser_view->GetWidget()->GetNativeWindow();
@@ -102,12 +111,11 @@ IN_PROC_BROWSER_TEST_P(LauncherDragTest, Close) {
   gfx::Point start_point = gfx::Point(display_bounds.width() / 4, 10);
   gfx::Point end_point(start_point);
   end_point.set_y(display_bounds.bottom() -
-                  ash::ShelfConstants::shelf_size() / 2);
-  ui_test_utils::DragEventGenerator generator(
+                  ash::ShelfConfig::Get()->shelf_size() / 2);
+  auto generator = ui_test_utils::DragEventGenerator::CreateForTouch(
       std::make_unique<ui_test_utils::InterpolatedProducer>(
-          start_point, end_point, base::TimeDelta::FromMilliseconds(1000)),
-      /*touch=*/true);
-  generator.Wait();
+          start_point, end_point, base::TimeDelta::FromMilliseconds(1000)));
+  generator->Wait();
 
   shell_test_api.WaitForLauncherAnimationState(ash::AppListViewState::kClosed);
 }

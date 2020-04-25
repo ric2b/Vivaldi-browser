@@ -36,17 +36,17 @@ namespace policy {
 namespace {
 
 const char kDmTokenBaseDir[] =
-    FILE_PATH_LITERAL("Policy/Enrollment/");
+    FILE_PATH_LITERAL("Google/Chrome Cloud Enrollment/");
 const CFStringRef kEnrollmentTokenPolicyName =
     CFSTR("CloudManagementEnrollmentToken");
 // TODO(crbug.com/907589) : Remove once no longer in use.
 const CFStringRef kEnrollmentTokenOldPolicyName =
     CFSTR("MachineLevelUserCloudPolicyEnrollmentToken");
 const char kEnrollmentTokenFilePath[] =
-    FILE_PATH_LITERAL("CloudManagementEnrollmentToken");
+    FILE_PATH_LITERAL("/Library/Google/Chrome/CloudManagementEnrollmentToken");
 // TODO(crbug.com/907589) : Remove once no longer in use.
 const char kEnrollmentTokenOldFilePath[] = FILE_PATH_LITERAL(
-    "MachineLevelUserCloudPolicyEnrollmentToken");
+    "/Library/Google/Chrome/MachineLevelUserCloudPolicyEnrollmentToken");
 
 // Enrollment Mandatory Option
 const CFStringRef kEnrollmentMandatoryOptionPolicyName =
@@ -63,7 +63,7 @@ const CFStringRef kBundleId = CFSTR("com.vivaldi.Vivaldi");
 bool GetDmTokenFilePath(base::FilePath* token_file_path,
                         const std::string& client_id,
                         bool create_dir) {
-  if (!base::PathService::Get(chrome::DIR_USER_DATA, token_file_path))
+  if (!base::PathService::Get(base::DIR_APP_DATA, token_file_path))
     return false;
 
   *token_file_path = token_file_path->Append(kDmTokenBaseDir);
@@ -120,17 +120,13 @@ bool GetEnrollmentTokenFromPolicy(std::string* enrollment_token) {
 }
 
 bool GetEnrollmentTokenFromFile(std::string* enrollment_token) {
-	base::FilePath token_file_path;
-  if (!base::PathService::Get(chrome::DIR_USER_DATA, &token_file_path))
-    return false;
-
   // Read the enrollment token from the new location. If that fails, try the old
   // location (which will be deprecated soon). If that also fails, bail as there
   // is no token set.
-  if (!base::ReadFileToString(token_file_path.Append(kEnrollmentTokenFilePath),
+  if (!base::ReadFileToString(base::FilePath(kEnrollmentTokenFilePath),
                               enrollment_token)) {
     // TODO(crbug.com/907589) : Remove once no longer in use.
-    if (!base::ReadFileToString(token_file_path.Append(kEnrollmentTokenOldFilePath),
+    if (!base::ReadFileToString(base::FilePath(kEnrollmentTokenOldFilePath),
                                 enrollment_token)) {
       return false;
     }

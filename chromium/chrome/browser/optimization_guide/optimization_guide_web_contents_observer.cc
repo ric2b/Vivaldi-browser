@@ -4,6 +4,7 @@
 
 #include "chrome/browser/optimization_guide/optimization_guide_web_contents_observer.h"
 
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -19,19 +20,25 @@ namespace {
 
 // Records if the host for the current navigation was successfully
 // covered by a HintsFetch. HintsFetching must be enabled and only HTTPS
-// navigations are logged.
-void MaybeRecordHintsFetcherCoverage(
-    content::NavigationHandle* navigation_handle) {
+// navigations are logged. Returns whether navigation was covered by fetch.
+bool RecordHintsFetcherCoverage(content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->GetURL().SchemeIs(url::kHttpsScheme))
-    return;
+    return false;
   if (!optimization_guide::features::IsHintsFetchingEnabled())
-    return;
+    return false;
 
-  optimization_guide::HintsFetcher::RecordHintsFetcherCoverage(
-      Profile::FromBrowserContext(
-          navigation_handle->GetWebContents()->GetBrowserContext())
-          ->GetPrefs(),
-      navigation_handle->GetURL().GetOrigin().host());
+  bool was_host_covered_by_fetch =
+      optimization_guide::HintsFetcher::WasHostCoveredByFetch(
+          Profile::FromBrowserContext(
+              navigation_handle->GetWebContents()->GetBrowserContext())
+              ->GetPrefs(),
+          navigation_handle->GetURL().GetOrigin().host());
+
+  UMA_HISTOGRAM_BOOLEAN(
+      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch",
+      was_host_covered_by_fetch);
+
+  return was_host_covered_by_fetch;
 }
 
 }  // namespace
@@ -77,13 +84,18 @@ void OptimizationGuideWebContentsObserver::DidStartNavigation(
 
   // Record the HintsFetcher coverage for the navigation, regardless if the
   // keyed service is active or not.
-  MaybeRecordHintsFetcherCoverage(navigation_handle);
+  bool was_host_covered_by_fetch =
+      RecordHintsFetcherCoverage(navigation_handle);
 
   if (!optimization_guide_keyed_service_)
     return;
 
   optimization_guide_keyed_service_->MaybeLoadHintForNavigation(
       navigation_handle);
+  OptimizationGuideNavigationData* nav_data =
+      GetOrCreateOptimizationGuideNavigationData(navigation_handle);
+  nav_data->set_was_host_covered_by_fetch_at_navigation_start(
+      was_host_covered_by_fetch);
 }
 
 void OptimizationGuideWebContentsObserver::DidRedirectNavigation(
@@ -95,7 +107,7 @@ void OptimizationGuideWebContentsObserver::DidRedirectNavigation(
 
   // Record the HintsFetcher coverage for the navigation, regardless if the
   // keyed service is active or not.
-  MaybeRecordHintsFetcherCoverage(navigation_handle);
+  RecordHintsFetcherCoverage(navigation_handle);
 
   if (!optimization_guide_keyed_service_)
     return;
@@ -135,6 +147,16 @@ void OptimizationGuideWebContentsObserver::
   (nav_data_iter->second).RecordMetrics(has_committed);
 
   inflight_optimization_guide_navigation_datas_.erase(navigation_id);
+}
+
+void OptimizationGuideWebContentsObserver::UpdateSessionTimingStatistics(
+    const page_load_metrics::mojom::PageLoadTiming& timing) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!optimization_guide_keyed_service_)
+    return;
+
+  optimization_guide_keyed_service_->UpdateSessionFCP(
+      timing.paint_timing->first_contentful_paint.value());
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(OptimizationGuideWebContentsObserver)

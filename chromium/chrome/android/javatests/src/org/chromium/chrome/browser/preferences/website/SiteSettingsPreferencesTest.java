@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.preferences.website;
 
-import android.app.Activity;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.support.v7.preference.Preference;
@@ -19,26 +18,21 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.ApplicationStatus;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ContentSettingsType;
-import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.preferences.ChromeBaseCheckBoxPreference;
 import org.chromium.chrome.browser.preferences.ChromeSwitchPreference;
 import org.chromium.chrome.browser.preferences.LocationSettings;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.Preferences;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.InfoBarTestAnimationListener;
 import org.chromium.chrome.test.util.browser.LocationSettingsTestUtil;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -73,7 +67,7 @@ public class SiteSettingsPreferencesTest {
     }
 
     @After
-    public void tearDown() throws Exception {
+    public void tearDown() {
         mTestServer.stopAndDestroyServer();
     }
 
@@ -100,7 +94,7 @@ public class SiteSettingsPreferencesTest {
         return TestThreadUtils.runOnUiThreadBlockingNoException(
                 new Callable<InfoBarTestAnimationListener>() {
                     @Override
-                    public InfoBarTestAnimationListener call() throws Exception {
+                    public InfoBarTestAnimationListener call() {
                         InfoBarContainer container = mActivityTestRule.getInfoBarContainer();
                         InfoBarTestAnimationListener listener = new InfoBarTestAnimationListener();
                         container.addAnimationListener(listener);
@@ -116,7 +110,6 @@ public class SiteSettingsPreferencesTest {
      */
     @Test
     @SmallTest
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_REQUIRES_TOUCH})
     @Feature({"Preferences"})
     @DisabledTest(message = "Modals are now enabled and test needs to be reworked crbug.com/935900")
     public void testSetAllowLocationEnabled() throws Exception {
@@ -138,10 +131,9 @@ public class SiteSettingsPreferencesTest {
      */
     @Test
     @SmallTest
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_REQUIRES_TOUCH})
     @Feature({"Preferences"})
     @DisabledTest(message = "Modals are now enabled and test needs to be reworked crbug.com/935900")
-    public void testSetAllowLocationNotEnabled() throws Exception {
+    public void testSetAllowLocationNotEnabled() {
         setAllowLocation(false);
 
         // Launch a page that uses geolocation.
@@ -271,13 +263,11 @@ public class SiteSettingsPreferencesTest {
 
     /**
      * Tests that disabling cookies turns off the third-party cookie toggle.
-     * @throws Exception
      */
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_REQUIRES_TOUCH})
-    public void testThirdPartyCookieToggleGetsDisabled() throws Exception {
+    public void testThirdPartyCookieToggleGetsDisabled() {
         Preferences preferenceActivity =
                 SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.COOKIES);
         setCookiesEnabled(preferenceActivity, true);
@@ -399,75 +389,54 @@ public class SiteSettingsPreferencesTest {
 
     /**
      * Sets Allow Popups Enabled to be false and make sure it is set correctly.
-     * @throws Exception
      */
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testPopupsBlocked() throws Exception {
+    public void testPopupsBlocked() {
         setEnablePopups(false);
 
         // Test that the popup doesn't open.
         mActivityTestRule.loadUrl(mTestServer.getURL("/chrome/test/data/android/popup.html"));
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
 
-        if (FeatureUtilities.isNoTouchModeEnabled()) {
-            // Popups open in a CustomTabActivity in touchless mode.
-            for (Activity activity : ApplicationStatus.getRunningActivities()) {
-                Assert.assertFalse(
-                        "Popup was not blocked, an instance of CustomTabActivity is running",
-                        activity instanceof CustomTabActivity);
-            }
-        } else {
-            Assert.assertEquals(1, getTabCount());
-        }
+        Assert.assertEquals(1, getTabCount());
     }
 
     /**
      * Sets Allow Popups Enabled to be true and make sure it is set correctly.
-     * @throws Exception
      */
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testPopupsNotBlocked() throws Exception {
+    public void testPopupsNotBlocked() {
         setEnablePopups(true);
 
         // Test that a popup opens.
         mActivityTestRule.loadUrl(mTestServer.getURL("/chrome/test/data/android/popup.html"));
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
 
-        if (FeatureUtilities.isNoTouchModeEnabled()) {
-            // Popups open in a CustomTabActivity in touchless mode.
-            for (Activity activity : ApplicationStatus.getRunningActivities()) {
-                if (activity instanceof CustomTabActivity) return;
-            }
-            Assert.fail("Popup was blocked, no instance of CustomTabActivity is running");
-        } else {
-            Assert.assertEquals(2, getTabCount());
-        }
+        Assert.assertEquals(2, getTabCount());
     }
 
     /**
      * Test that showing the Site Settings menu doesn't crash (crbug.com/610576).
-     * @throws Exception
      */
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testSiteSettingsMenu() throws Exception {
+    public void testSiteSettingsMenu() {
         final Preferences preferenceActivity = SiteSettingsTestUtils.startSiteSettingsMenu("");
         preferenceActivity.finish();
     }
 
     /**
      * Test the Media Menu.
-     * @throws Exception
      */
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testMediaMenu() throws Exception {
+    public void testMediaMenu() {
         final Preferences preferenceActivity =
                 SiteSettingsTestUtils.startSiteSettingsMenu(SiteSettingsPreferences.MEDIA_KEY);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -494,12 +463,11 @@ public class SiteSettingsPreferencesTest {
 
     /**
      * Tests that only expected Preferences are shown for a category.
-     * @throws Exception
      */
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testOnlyExpectedPreferencesShown() throws Exception {
+    public void testOnlyExpectedPreferencesShown() {
         // If you add a category in the SiteSettings UI, please add a test for it below.
         Assert.assertEquals(19, SiteSettingsCategory.Type.NUM_ENTRIES);
 
@@ -570,12 +538,11 @@ public class SiteSettingsPreferencesTest {
     /**
      * Tests that {@link SingleWebsitePreferences#resetSite} doesn't crash
      * (see e.g. the crash on host names in issue 600232).
-     * @throws Exception
      */
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testResetDoesntCrash() throws Exception {
+    public void testResetDoesntCrash() {
         WebsiteAddress address = WebsiteAddress.create("example.com");
         resetSite(address);
     }
@@ -640,7 +607,6 @@ public class SiteSettingsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_REQUIRES_TOUCH})
     @CommandLineFlags.Add({ContentSwitches.USE_FAKE_DEVICE_FOR_MEDIA_STREAM})
     @DisabledTest(message = "Modals are now enabled and test needs to be reworked crbug.com/935900")
     public void testCameraNotBlocked() throws Exception {
@@ -667,7 +633,6 @@ public class SiteSettingsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_REQUIRES_TOUCH})
     @CommandLineFlags.Add({ContentSwitches.USE_FAKE_DEVICE_FOR_MEDIA_STREAM})
     @DisabledTest(message = "Modals are now enabled and test needs to be reworked crbug.com/935900")
     public void testMicNotBlocked() throws Exception {

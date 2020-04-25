@@ -18,6 +18,8 @@ proto_library("chrome_settings_full_runtime") {
         "/components/policy/proto/cloud_policy_full_runtime.proto",
     "$root_gen_dir" +
         "/components/policy/proto/chrome_settings_full_runtime.proto",
+    "$root_gen_dir" +
+        "/components/policy/proto/policy_common_definitions_full_runtime.proto",
   ]
 
   use_protobuf_full = true
@@ -95,8 +97,7 @@ test("traffic_annotation_auditor_unittests") {
     "tests/annotations_sample1.xml",
     "tests/annotations_sample2.xml",
     "tests/annotations_sample3.xml",
-    "tests/extractor_outputs/bad_assignment1.txt",
-    "tests/extractor_outputs/bad_assignment2.txt",
+    "tests/extractor_outputs/bad_assignment.txt",
     "tests/extractor_outputs/bad_call.txt",
     "tests/extractor_outputs/bad_syntax_annotation1.txt",
     "tests/extractor_outputs/bad_syntax_annotation2.txt",

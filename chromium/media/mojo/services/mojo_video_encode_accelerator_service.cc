@@ -10,20 +10,21 @@
 #include "base/logging.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/limits.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 
 namespace media {
 
 // static
 void MojoVideoEncodeAcceleratorService::Create(
-    mojom::VideoEncodeAcceleratorRequest request,
+    mojo::PendingReceiver<mojom::VideoEncodeAccelerator> receiver,
     const CreateAndInitializeVideoEncodeAcceleratorCallback&
         create_vea_callback,
     const gpu::GpuPreferences& gpu_preferences) {
-  mojo::MakeStrongBinding(std::make_unique<MojoVideoEncodeAcceleratorService>(
-                              create_vea_callback, gpu_preferences),
-                          std::move(request));
+  mojo::MakeSelfOwnedReceiver(
+      std::make_unique<MojoVideoEncodeAcceleratorService>(create_vea_callback,
+                                                          gpu_preferences),
+      std::move(receiver));
 }
 
 MojoVideoEncodeAcceleratorService::MojoVideoEncodeAcceleratorService(
@@ -89,7 +90,8 @@ void MojoVideoEncodeAcceleratorService::Encode(
   if (!encoder_)
     return;
 
-  if (frame->coded_size() != input_coded_size_) {
+  if (frame->coded_size() != input_coded_size_ &&
+      frame->storage_type() != media::VideoFrame::STORAGE_GPU_MEMORY_BUFFER) {
     DLOG(ERROR) << __func__ << " wrong input coded size, expected "
                 << input_coded_size_.ToString() << ", got "
                 << frame->coded_size().ToString();

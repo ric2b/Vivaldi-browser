@@ -13,20 +13,19 @@
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">Anda melihat sumber halaman web</translation>
 <translation id="1734878702283171397">Coba hubungi admin sistem.</translation>
-<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Mencoba menjalankan Pendiagnosa Jaringan Windows<ph name="END_LINK" />.</translation>
 <translation id="194030505837763158">Pergi ke <ph name="LINK" /></translation>
 <translation id="2030481566774242610">Mungkin maksud anda <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Memeriksa proxy dan firewall<ph name="END_LINK" /></translation>
 <translation id="2166378884831602661">Situs ini tidak dapat menyediakan sambungan aman</translation>
 <translation id="2230458221926704099">Perbaiki sambungan menggunakan <ph name="BEGIN_LINK" />aplikasi diagnosa<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Akses Internet anda terblokir</translation>
-<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Menjalankan Pendiagnosa Jaringan<ph name="END_LINK" /></translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> mengirimkan tanggapan yang tidak sah.</translation>
 <translation id="2609632851001447353">Variasi</translation>
 <translation id="2650446666397867134">Akses ke berkas ditolak</translation>
 <translation id="2705137772291741111">Salinan tersimpan (dalam tembolok) salinan situs ini tidak dapat di baca.</translation>
 <translation id="2784949926578158345">Sambungan di setel ulang.</translation>
 <translation id="2909946352844186028">Perubahan jaringan terdeteksi.</translation>
+<translation id="2948083400971632585">Anda bisa mematikan sembarang proksi yang diatur untuk suatu koneksi dari halaman pengaturan.</translation>
 <translation id="3005723025932146533">Tampilkan salinan yang tersimpan</translation>
 <translation id="3109728660330352905">Anda tidak memiliki otorisasi untuk melihat halaman ini.</translation>
 <translation id="3176929007561373547">Periksa pengaturan proxy atau hubungi admin jaringan untuk
@@ -47,14 +46,11 @@
 <translation id="4130226655945681476">Memeriksa kabel jaringan, modem, dan router</translation>
 <translation id="4165986682804962316">Pengaturan situs</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Memeriksa konfigurasi antivirus dan firewall<ph name="END_LINK" /></translation>
-<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Coba jalankan Pendiagnosa Jaringan<ph name="END_LINK" />.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> tidak menerima sertifikat masuk anda, atau sertifikat masuk mungkin tidak di berikan.</translation>
 <translation id="4506599922270137252">Menghubungi admin sistem</translation>
 <translation id="4522570452068850558">Semua Detail</translation>
 <translation id="4558551763791394412">Coba nonaktifkan semua ekstensi.</translation>
-<translation id="4690462567478992370">Berhenti menggunakan sertifikat tidak sah</translation>
 <translation id="4708268264240856090">Sambungan anda terganggu</translation>
-<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Menjalankan Pendiagnosa Jaringan Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Jalur Berkas Eksekusi</translation>
 <translation id="4764776831041365478">Halaman web di <ph name="URL" /> mungkin sedang tidak aktif untuk sementara atau di pindahkan secara permanen ke alamat web baru.</translation>
 <translation id="5023310440958281426">Periksa kebijakan admin anda</translation>
@@ -84,7 +80,6 @@
 <translation id="6569060085658103619">Anda melihat halaman ekstensi</translation>
 <translation id="6685834062052613830">Keluar dan selesaikan penyiapan</translation>
 <translation id="6711464428925977395">Ada yang salah dengan server proxy, atau alamat tidak benar.</translation>
-<translation id="6757797048963528358">Perangkat anda pergi untuk tidur.</translation>
 <translation id="6897140037006041989">Agen Pengguna</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> tidak mematuhi semua standar keamanan.</translation>
 <translation id="7353601530677266744">Baris Perintah</translation>
@@ -96,7 +91,6 @@
 <translation id="7758069387465995638">Perangkat lunak antivirus atau firewall mungkin memblokir sambungan.</translation>
 <translation id="7951415247503192394">(32 bit)</translation>
 <translation id="8142868475871995937">Kunjungi &lt;strong&gt;vivaldi://policy&lt;/strong&gt; untuk melihat daftar URL yang masuk daftar hitam dan kebijakan lain yang di terapkan oleh admin sistem anda.</translation>
-<translation id="8149426793427495338">Komputer anda pergi untuk tidur.</translation>
 <translation id="8150722005171944719">Berkas pada <ph name="URL" /> tidak dapat di baca.  Berkas mungkin telah di hapus, di pindahkan, atau izin berkas mungkin mencegah akses.</translation>
 <translation id="8225771182978767009">Orang yang menyiapkan komputer ini telah memilih untuk memblokir situs ini.</translation>
 <translation id="8289355894181816810">Hubungi admin jaringan anda jika anda tidak yakin apa maksud ini.</translation>

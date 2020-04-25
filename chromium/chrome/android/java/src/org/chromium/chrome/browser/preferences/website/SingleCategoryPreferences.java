@@ -8,10 +8,8 @@ import static org.chromium.chrome.browser.preferences.SearchUtils.handleSearchNa
 
 import android.content.Context;
 import android.content.DialogInterface;
-import android.content.res.Resources;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.support.graphics.drawable.VectorDrawableCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.preference.Preference;
@@ -34,6 +32,8 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
@@ -49,11 +49,11 @@ import org.chromium.chrome.browser.preferences.LocationSettings;
 import org.chromium.chrome.browser.preferences.ManagedPreferenceDelegate;
 import org.chromium.chrome.browser.preferences.ManagedPreferencesUtils;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.preferences.PrefServiceBridgeJni;
 import org.chromium.chrome.browser.preferences.PreferenceUtils;
 import org.chromium.chrome.browser.preferences.SearchUtils;
 import org.chromium.chrome.browser.preferences.website.Website.StoredDataClearedCallback;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.ui.widget.Toast;
 
@@ -253,8 +253,7 @@ public class SingleCategoryPreferences extends PreferenceFragmentCompat
     }
 
     private CharSequence getHeaderTitle(int resourceId, int count) {
-        SpannableStringBuilder spannable =
-                new SpannableStringBuilder(getResources().getString(resourceId));
+        SpannableStringBuilder spannable = new SpannableStringBuilder(getString(resourceId));
         String prefCount = String.format(Locale.getDefault(), " - %d", count);
         spannable.append(prefCount);
 
@@ -366,9 +365,6 @@ public class SingleCategoryPreferences extends PreferenceFragmentCompat
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
         menu.clear();
-        // We don't need the options menu in touchless mode (crbug/962562).
-        if (FeatureUtilities.isNoTouchModeEnabled()) return;
-
         inflater.inflate(R.menu.website_preferences_menu, menu);
 
         mSearchItem = menu.findItem(R.id.search);
@@ -392,7 +388,7 @@ public class SingleCategoryPreferences extends PreferenceFragmentCompat
             if (mCategory.showSites(SiteSettingsCategory.Type.PROTECTED_MEDIA)) {
                 helpContextResId = R.string.help_context_protected_content;
             }
-            HelpAndFeedback.getInstance(getActivity()).show(
+            HelpAndFeedback.getInstance().show(
                     getActivity(), getString(helpContextResId), Profile.getLastUsedProfile(), null);
             return true;
         }
@@ -454,8 +450,7 @@ public class SingleCategoryPreferences extends PreferenceFragmentCompat
                 });
         builder.setNegativeButton(R.string.cancel, null);
         builder.setTitle(R.string.storage_clear_site_storage_title);
-        Resources res = getResources();
-        String dialogFormattedText = res.getString(R.string.storage_clear_dialog_text,
+        String dialogFormattedText = getString(R.string.storage_clear_dialog_text,
                 Formatter.formatShortFileSize(getActivity(), totalUsage));
         builder.setMessage(dialogFormattedText);
         builder.create().show();
@@ -480,9 +475,7 @@ public class SingleCategoryPreferences extends PreferenceFragmentCompat
                 prefServiceBridge.setCategoryEnabled(
                         SiteSettingsCategory.contentSettingsType(type), (boolean) newValue);
 
-                // Third-party cookies toggle doesn't exist in touchless. Refer to crbug/951850.
-                if (type == SiteSettingsCategory.Type.COOKIES
-                        && !FeatureUtilities.isNoTouchModeEnabled()) {
+                if (type == SiteSettingsCategory.Type.COOKIES) {
                     updateThirdPartyCookiesCheckBox();
                 } else if (type == SiteSettingsCategory.Type.NOTIFICATIONS) {
                     updateNotificationsVibrateCheckBox();
@@ -556,7 +549,7 @@ public class SingleCategoryPreferences extends PreferenceFragmentCompat
                     : R.string.website_settings_add_site_description_cookies_allow;
         }
         assert resource > 0;
-        return getResources().getString(resource);
+        return getString(resource);
     }
 
     // OnPreferenceClickListener:
@@ -593,7 +586,7 @@ public class SingleCategoryPreferences extends PreferenceFragmentCompat
                 ? ContentSettingValues.BLOCK
                 : ContentSettingValues.ALLOW;
 
-        PrefServiceBridge.getInstance().nativeSetContentSettingForPattern(
+        PrefServiceBridgeJni.get().setContentSettingForPattern(PrefServiceBridge.getInstance(),
                 mCategory.getContentSettingsType(), hostname, setting);
         Toast.makeText(getActivity(),
                 String.format(getActivity().getString(
@@ -882,9 +875,7 @@ public class SingleCategoryPreferences extends PreferenceFragmentCompat
         }
 
         // Configure/hide the third-party cookies toggle, as needed.
-        // We don't need this toggle in touchless. Refer to crbug/951850.
-        if (mCategory.showSites(SiteSettingsCategory.Type.COOKIES)
-                && !FeatureUtilities.isNoTouchModeEnabled()) {
+        if (mCategory.showSites(SiteSettingsCategory.Type.COOKIES)) {
             thirdPartyCookies.setOnPreferenceChangeListener(this);
             updateThirdPartyCookiesCheckBox();
         } else {

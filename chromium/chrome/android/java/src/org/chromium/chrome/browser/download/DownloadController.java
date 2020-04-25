@@ -29,6 +29,9 @@ import org.chromium.ui.base.AndroidPermissionDelegate;
 import org.chromium.ui.base.PermissionCallback;
 import org.chromium.ui.base.WindowAndroid;
 
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.panels.PanelActivity;
+
 /**
  * Java counterpart of android DownloadController.
  *
@@ -179,6 +182,9 @@ public class DownloadController {
             }
         } else if (activity instanceof DownloadActivity) {
             delegate = ((DownloadActivity) activity).getAndroidPermissionDelegate();
+        }
+        else if (ChromeApplication.isVivaldi() && activity instanceof PanelActivity) {
+            delegate = ((PanelActivity) activity).getAndroidPermissionDelegate();
         }
 
         if (delegate == null) {

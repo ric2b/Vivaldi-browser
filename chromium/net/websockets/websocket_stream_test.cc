@@ -838,7 +838,7 @@ TEST_P(WebSocketStreamCreateExtensionTest, PerMessageDeflateInflates) {
   ASSERT_EQ(1U, frames.size());
   ASSERT_EQ(5U, frames[0]->header.payload_length);
   EXPECT_EQ(std::string("Hello"),
-            std::string(frames[0]->data, frames[0]->header.payload_length));
+            std::string(frames[0]->payload, frames[0]->header.payload_length));
 }
 
 // Unknown extension in the response is rejected
@@ -1687,6 +1687,53 @@ TEST_P(WebSocketStreamCreateTest, HandleErrTunnelConnectionFailed) {
   EXPECT_TRUE(has_failed());
   EXPECT_EQ("Establishing a tunnel via proxy server failed.",
             failure_message());
+}
+
+TEST_P(WebSocketStreamCreateTest, CancelSSLRequestAfterDelete) {
+  auto ssl_socket_data = std::make_unique<SSLSocketDataProvider>(
+      ASYNC, ERR_CERT_AUTHORITY_INVALID);
+  ssl_socket_data->ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "unittest.selfsigned.der");
+  ASSERT_TRUE(ssl_socket_data->ssl_info.cert.get());
+  url_request_context_host_.AddSSLSocketDataProvider(
+      std::move(ssl_socket_data));
+
+  MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_CONNECTION_RESET, 0)};
+  MockWrite writes[] = {MockWrite(SYNCHRONOUS, ERR_CONNECTION_RESET, 1)};
+  std::unique_ptr<SequencedSocketData> raw_socket_data(
+      BuildSocketData(reads, writes));
+  CreateAndConnectRawExpectations("wss://www.example.org/", NoSubProtocols(),
+                                  HttpRequestHeaders(),
+                                  std::move(raw_socket_data));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(has_failed());
+  ASSERT_TRUE(ssl_error_callbacks_);
+  stream_request_.reset();
+  ssl_error_callbacks_->CancelSSLRequest(ERR_CERT_AUTHORITY_INVALID,
+                                         &ssl_info_);
+}
+
+TEST_P(WebSocketStreamCreateTest, ContinueSSLRequestAfterDelete) {
+  auto ssl_socket_data = std::make_unique<SSLSocketDataProvider>(
+      ASYNC, ERR_CERT_AUTHORITY_INVALID);
+  ssl_socket_data->ssl_info.cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "unittest.selfsigned.der");
+  ASSERT_TRUE(ssl_socket_data->ssl_info.cert.get());
+  url_request_context_host_.AddSSLSocketDataProvider(
+      std::move(ssl_socket_data));
+
+  MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_CONNECTION_RESET, 0)};
+  MockWrite writes[] = {MockWrite(SYNCHRONOUS, ERR_CONNECTION_RESET, 1)};
+  std::unique_ptr<SequencedSocketData> raw_socket_data(
+      BuildSocketData(reads, writes));
+  CreateAndConnectRawExpectations("wss://www.example.org/", NoSubProtocols(),
+                                  HttpRequestHeaders(),
+                                  std::move(raw_socket_data));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(has_failed());
+  ASSERT_TRUE(ssl_error_callbacks_);
+  stream_request_.reset();
+  ssl_error_callbacks_->ContinueSSLRequest();
 }
 
 }  // namespace

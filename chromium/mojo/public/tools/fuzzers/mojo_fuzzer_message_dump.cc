@@ -13,6 +13,7 @@
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "mojo/core/embedder/embedder.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/tools/fuzzers/fuzz.mojom.h"
 #include "mojo/public/tools/fuzzers/fuzz_impl.h"
 
@@ -37,12 +38,12 @@ Environment* env = new Environment();
 
 /* MessageReceiver which dumps raw message bytes to disk in the provided
  * directory. */
-class MessageDumper : public mojo::MessageReceiver {
+class MessageDumper : public mojo::MessageFilter {
  public:
   explicit MessageDumper(std::string directory)
       : directory_(directory), count_(0) {}
 
-  bool Accept(mojo::Message* message) override {
+  bool WillDispatch(mojo::Message* message) override {
     base::FilePath path = directory_.Append(FILE_PATH_LITERAL("message_") +
                                             base::NumberToString(count_++) +
                                             FILE_PATH_LITERAL(".mojomsg"));
@@ -63,6 +64,8 @@ class MessageDumper : public mojo::MessageReceiver {
     }
     return true;
   }
+
+  void DidDispatchOrReject(mojo::Message* message, bool accepted) override {}
 
   base::FilePath directory_;
   int count_;
@@ -225,11 +228,11 @@ void FuzzCallback() {}
  * supplied directory. */
 void DumpMessages(std::string output_directory) {
   fuzz::mojom::FuzzInterfacePtr fuzz;
-  fuzz::mojom::FuzzDummyInterfaceAssociatedPtr dummy;
+  mojo::AssociatedRemote<fuzz::mojom::FuzzDummyInterface> dummy;
 
   /* Create the impl and add a MessageDumper to the filter chain. */
   env->impl = std::make_unique<FuzzImpl>(MakeRequest(&fuzz));
-  env->impl->binding_.RouterForTesting()->AddIncomingMessageFilter(
+  env->impl->binding_.RouterForTesting()->SetIncomingMessageFilter(
       std::make_unique<MessageDumper>(output_directory));
 
   /* Call methods in various ways to generate interesting messages. */
@@ -247,7 +250,7 @@ void DumpMessages(std::string output_directory) {
                          GetPopulatedFuzzStruct(), base::Bind(FuzzCallback));
   fuzz->FuzzArgsSyncResp(fuzz::mojom::FuzzStruct::New(),
                          GetPopulatedFuzzStruct(), base::Bind(FuzzCallback));
-  fuzz->FuzzAssociated(MakeRequest(&dummy));
+  fuzz->FuzzAssociated(dummy.BindNewEndpointAndPassReceiver());
   dummy->Ping();
 }
 

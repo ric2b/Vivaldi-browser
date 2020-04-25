@@ -12,9 +12,9 @@
 #include "base/files/file_path.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_mime_types_service.h"
 #include "chrome/browser/chromeos/crostini/crostini_mime_types_service_factory.h"
@@ -40,6 +40,7 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/prefs/pref_service.h"
+#include "components/user_manager/user.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
@@ -127,11 +128,13 @@ void OnSharePathForLaunchApplication(
       base::BindOnce(OnApplicationLaunched, std::move(callback), app_id));
 }
 
-void LaunchTerminal(AppLaunchParams launch_params,
+void LaunchTerminal(Profile* profile,
+                    apps::AppLaunchParams launch_params,
                     GURL vsh_in_crosh_url,
                     Browser* browser,
                     crostini::LaunchCrostiniAppCallback callback) {
-  crostini::ShowContainerTerminal(launch_params, vsh_in_crosh_url, browser);
+  crostini::ShowContainerTerminal(profile, launch_params, vsh_in_crosh_url,
+                                  browser);
   std::move(callback).Run(true, "");
 }
 
@@ -295,19 +298,25 @@ bool IsCrostiniAllowedForProfileImpl(Profile* profile) {
 
 namespace crostini {
 
-std::string ContainerIdToString(const ContainerId& container_id) {
-  return base::StrCat(
-      {"(", container_id.first, ", ", container_id.second, ")"});
+ContainerId::ContainerId(std::string vm_name,
+                         std::string container_name) noexcept
+    : vm_name(std::move(vm_name)), container_name(std::move(container_name)) {}
+
+bool operator<(const ContainerId& lhs, const ContainerId& rhs) noexcept {
+  const auto result = lhs.vm_name.compare(rhs.vm_name);
+  return result < 0 || (result == 0 && lhs.container_name < rhs.container_name);
+}
+
+std::ostream& operator<<(std::ostream& ostream,
+                         const ContainerId& container_id) {
+  return ostream << "(vm: \"" << container_id.vm_name << "\" container: \""
+                 << container_id.container_name << "\")";
 }
 
 bool IsUninstallable(Profile* profile, const std::string& app_id) {
-  if (!IsCrostiniEnabled(profile))
+  if (!CrostiniFeatures::Get()->IsEnabled(profile) ||
+      app_id == kCrostiniTerminalId) {
     return false;
-  if (app_id == kCrostiniTerminalId &&
-      !crostini::CrostiniManager::GetForProfile(profile)
-           ->GetInstallerViewStatus()) {
-    // Crostini should not be uninstalled if the installer is still running.
-    return true;
   }
   CrostiniRegistryService* registry_service =
       CrostiniRegistryServiceFactory::GetForProfile(profile);
@@ -344,18 +353,6 @@ bool IsCrostiniUIAllowedForProfile(Profile* profile, bool check_policy) {
   return IsCrostiniAllowedForProfileImpl(profile);
 }
 
-bool IsCrostiniExportImportUIAllowedForProfile(Profile* profile) {
-  return IsCrostiniUIAllowedForProfile(profile, true) &&
-         base::FeatureList::IsEnabled(chromeos::features::kCrostiniBackup) &&
-         profile->GetPrefs()->GetBoolean(
-             crostini::prefs::kUserCrostiniExportImportUIAllowedByPolicy);
-}
-
-bool IsCrostiniEnabled(Profile* profile) {
-  return IsCrostiniUIAllowedForProfile(profile) &&
-         profile->GetPrefs()->GetBoolean(crostini::prefs::kCrostiniEnabled);
-}
-
 bool IsCrostiniRunning(Profile* profile) {
   return crostini::CrostiniManager::GetForProfile(profile)->IsVmRunning(
       kCrostiniDefaultVmName);
@@ -363,14 +360,6 @@ bool IsCrostiniRunning(Profile* profile) {
 
 bool IsCrostiniAnsibleInfrastructureEnabled() {
   return base::FeatureList::IsEnabled(features::kCrostiniAnsibleInfrastructure);
-}
-
-bool IsCrostiniRootAccessAllowed(Profile* profile) {
-  if (base::FeatureList::IsEnabled(features::kCrostiniAdvancedAccessControls)) {
-    return profile->GetPrefs()->GetBoolean(
-        crostini::prefs::kUserCrostiniRootAccessAllowedByPolicy);
-  }
-  return true;
 }
 
 void LaunchCrostiniApp(Profile* profile,
@@ -433,14 +422,15 @@ void LaunchCrostiniApp(Profile* profile,
 
     GURL vsh_in_crosh_url = GenerateVshInCroshUrl(
         profile, vm_name, container_name, std::vector<std::string>());
-    AppLaunchParams launch_params = GenerateTerminalAppLaunchParams(profile);
+    apps::AppLaunchParams launch_params = GenerateTerminalAppLaunchParams();
     // Create the terminal here so it's created in the right display. If the
     // browser creation is delayed into the callback the root window for new
     // windows setting can be changed due to the launcher or shelf dismissal.
-    Browser* browser = CreateContainerTerminal(launch_params, vsh_in_crosh_url);
+    Browser* browser =
+        CreateContainerTerminal(profile, launch_params, vsh_in_crosh_url);
     launch_closure =
-        base::BindOnce(&LaunchTerminal, launch_params, vsh_in_crosh_url,
-                       browser, std::move(callback));
+        base::BindOnce(&LaunchTerminal, profile, launch_params,
+                       vsh_in_crosh_url, browser, std::move(callback));
   } else {
     RecordAppLaunchHistogram(CrostiniAppLaunchAppType::kRegisteredApp);
     launch_closure =
@@ -484,15 +474,12 @@ std::string CryptohomeIdForProfile(Profile* profile) {
 }
 
 std::string DefaultContainerUserNameForProfile(Profile* profile) {
-  // Get rid of the @domain.name in the profile user name (an email address).
-  std::string container_username = profile->GetProfileUserName();
-  if (container_username.find('@') != std::string::npos) {
-    // gaia::CanonicalizeEmail CHECKs its argument contains'@'.
-    container_username = gaia::CanonicalizeEmail(container_username);
-    // |container_username| may have changed, so we have to find again.
-    return container_username.substr(0, container_username.find('@'));
+  const user_manager::User* user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
+  if (!user) {
+    return kCrostiniDefaultUsername;
   }
-  return container_username;
+  return user->GetAccountName(/*use_display_email=*/false);
 }
 
 base::FilePath ContainerChromeOSBaseDirectory() {
@@ -533,7 +520,7 @@ void AddNewLxdContainerToPrefs(Profile* profile,
   new_container.SetKey(prefs::kContainerKey, base::Value(container_name));
 
   ListPrefUpdate updater(pref_service, crostini::prefs::kCrostiniContainers);
-  updater->GetList().emplace_back(std::move(new_container));
+  updater->Append(std::move(new_container));
 }
 
 void RemoveLxdContainerFromPrefs(Profile* profile,

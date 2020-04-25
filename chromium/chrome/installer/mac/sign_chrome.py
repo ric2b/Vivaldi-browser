@@ -27,10 +27,14 @@ def create_config(config_args, development):
     Returns:
         An instance of |model.CodeSignConfig|.
     """
-    config_class = config.CodeSignConfig
+    # First look up the processed Chromium config.
+    from signing.chromium_config import ChromiumCodeSignConfig
+    config_class = ChromiumCodeSignConfig
+
+    # Then search for the internal config for Google Chrome.
     try:
-        import signing.internal_config
-        config_class = signing.internal_config.InternalCodeSignConfig
+        from signing.internal_config import InternalCodeSignConfig
+        config_class = InternalCodeSignConfig
     except ImportError as e:
         # If the build specified Google Chrome as the product, then the
         # internal config has to be available.
@@ -69,7 +73,11 @@ def main():
     parser.add_argument(
         '--keychain', help='The keychain to load the identity from.')
     parser.add_argument(
-        '--identity', required=True, help='The identity to sign with.')
+        '--identity',
+        required=True,
+        help='The identity to sign everything but PKGs with.')
+    parser.add_argument(
+        '--installer-identity', help='The identity to sign PKGs with.')
     parser.add_argument(
         '--notary-user',
         help='The username used to authenticate to the Apple notary service.')
@@ -101,10 +109,15 @@ def main():
         'products and installer tools will be placed here.')
     parser.add_argument(
         '--disable-packaging',
-        dest='disable_packaging',
         action='store_true',
         help='Disable creating any packaging (.dmg/.pkg) specified by the '
         'configuration.')
+    parser.add_argument(
+        '--skip-brand',
+        dest='skip_brands',
+        action='append',
+        default=[],
+        help='Causes any distribution whose brand code matches to be skipped.')
 
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument(
@@ -123,9 +136,10 @@ def main():
             parser.error('The --notary-user and --notary-password arguments '
                          'are required with --notarize.')
 
-    config = create_config((args.identity, args.keychain, args.notary_user,
-                            args.notary_password, args.notary_asc_provider),
-                           args.development)
+    config = create_config(
+        (args.identity, args.installer_identity, args.keychain,
+         args.notary_user, args.notary_password, args.notary_asc_provider),
+        args.development)
     paths = model.Paths(args.input, args.output, None)
 
     if not os.path.exists(paths.output):
@@ -135,7 +149,8 @@ def main():
         paths,
         config,
         disable_packaging=args.disable_packaging,
-        do_notarization=args.notarize)
+        do_notarization=args.notarize,
+        skip_brands=args.skip_brands)
 
 
 if __name__ == '__main__':

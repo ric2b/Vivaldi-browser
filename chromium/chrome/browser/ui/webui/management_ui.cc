@@ -25,6 +25,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/grit/chromium_strings.h"
 #include "ui/chromeos/devicetype_utils.h"
@@ -115,14 +116,12 @@ content::WebUIDataSource* CreateManagementUIHtmlSource(Profile* profile) {
 #endif  // defined(OS_CHROMEOS)
 
   source->UseStringsJs();
+  source->EnableReplaceI18nInJS();
   // Add required resources.
-  source->AddResourcePath("management_browser_proxy.html",
-                          IDR_MANAGEMENT_BROWSER_PROXY_HTML);
   source->AddResourcePath("management_browser_proxy.js",
                           IDR_MANAGEMENT_BROWSER_PROXY_JS);
-  source->AddResourcePath("management_ui.html", IDR_MANAGEMENT_UI_HTML);
   source->AddResourcePath("management_ui.js", IDR_MANAGEMENT_UI_JS);
-  source->AddResourcePath("icons.html", IDR_MANAGEMENT_ICONS_HTML);
+  source->AddResourcePath("icons.js", IDR_MANAGEMENT_ICONS_JS);
   source->SetDefaultResource(IDR_MANAGEMENT_HTML);
   return source;
 }

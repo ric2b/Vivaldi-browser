@@ -6,12 +6,12 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/memory/fake_memory_pressure_monitor.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
+#include "base/util/memory_pressure/fake_memory_pressure_monitor.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
@@ -300,7 +300,8 @@ class TabManagerTest : public InProcessBrowserTest {
   void SimulateFreezeSignal(content::WebContents* contents) {
     GetTabLifecycleUnitSource()
         ->GetTabLifecycleUnit(contents)
-        ->UpdateLifecycleState(mojom::LifecycleState::kFrozen);
+        ->UpdateLifecycleState(
+            performance_manager::mojom::LifecycleState::kFrozen);
   }
 
   TabManager* tab_manager() { return g_browser_process->GetTabManager(); }
@@ -315,7 +316,7 @@ class TabManagerTest : public InProcessBrowserTest {
         GetWebContentsAt(index));
   }
 
-  base::test::FakeMemoryPressureMonitor fake_memory_pressure_monitor_;
+  util::test::FakeMemoryPressureMonitor fake_memory_pressure_monitor_;
   base::SimpleTestTickClock test_clock_;
   ScopedSetTickClockForTesting scoped_set_tick_clock_for_testing_;
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -1267,6 +1268,12 @@ IN_PROC_BROWSER_TEST_F(TabManagerTestWithTwoTabs,
 // - Freeze happens in renderer: PENDING_DISCARD->DISCARDED
 IN_PROC_BROWSER_TEST_F(TabManagerTestWithTwoTabs,
                        TabFreezeDisallowedWhenProactivelyDiscarding) {
+  // Pretend that the background tab reported its origin trial freeze policy, to
+  // prevent CanFreeze() from returning false.
+  TabLifecycleUnitSource::OnOriginTrialFreezePolicyChanged(
+      GetWebContentsAt(1),
+      performance_manager::mojom::InterventionPolicy::kDefault);
+
   // Proactively discard the background tab.
   EXPECT_EQ(LifecycleUnitState::ACTIVE, GetLifecycleUnitAt(1)->GetState());
   EXPECT_TRUE(

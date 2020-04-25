@@ -20,6 +20,8 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.toolbar.TabCountProvider.TabCountObserver;
 import org.chromium.ui.widget.ChromeImageView;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * TabLayout shown in the Horizontal Tab Switcher.
  */
@@ -60,7 +62,9 @@ public class IncognitoToggleTabLayout extends TabLayout implements TabCountObser
         mStandardButtonIcon.setContentDescription(
                 getResources().getString(R.string.accessibility_tab_switcher_standard_stack));
         mIncognitoButtonIcon = new ChromeImageView(getContext());
-        mIncognitoButtonIcon.setImageResource(R.drawable.incognito_small);
+        mIncognitoButtonIcon.setImageResource(R.drawable.incognito_simple);
+        if (ChromeApplication.isVivaldi())
+            mIncognitoButtonIcon.setImageResource(R.drawable.vivaldi_private_page_favicon_small);
         mIncognitoButtonIcon.setContentDescription(
                 getResources().getString(R.string.accessibility_tab_switcher_incognito_stack));
 

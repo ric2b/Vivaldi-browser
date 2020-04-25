@@ -5,12 +5,13 @@
 package org.chromium.chrome.browser.preferences.sync;
 
 import android.content.Context;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
 import android.support.v7.content.res.AppCompatResources;
 import android.support.v7.preference.Preference;
 import android.support.v7.preference.PreferenceViewHolder;
 import android.util.AttributeSet;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
@@ -21,7 +22,6 @@ import org.chromium.chrome.browser.signin.DisplayableProfileData;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.PersonalizedSigninPromoView;
 import org.chromium.chrome.browser.signin.ProfileDataCache;
-import org.chromium.chrome.browser.signin.SigninAccessPoint;
 import org.chromium.chrome.browser.signin.SigninActivity;
 import org.chromium.chrome.browser.signin.SigninManager.SignInAllowedObserver;
 import org.chromium.chrome.browser.signin.SigninPromoController;
@@ -32,6 +32,7 @@ import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountsChangeObserver;
 import org.chromium.components.signin.ChromeSigninController;
+import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.sync.AndroidSyncSettings;
 
 import java.lang.annotation.Retention;

@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/fetch/fetch_request_data.h"
 
 #include "net/base/request_priority.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_http_body.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -132,7 +133,7 @@ FetchRequestData* FetchRequestData::CloneExceptBody() {
   request->method_ = method_;
   request->header_list_ = header_list_->Clone();
   request->origin_ = origin_;
-  request->same_origin_data_url_flag_ = same_origin_data_url_flag_;
+  request->isolated_world_origin_ = isolated_world_origin_;
   request->context_ = context_;
   request->referrer_string_ = referrer_string_;
   request->referrer_policy_ = referrer_policy_;
@@ -148,8 +149,6 @@ FetchRequestData* FetchRequestData::CloneExceptBody() {
   request->keepalive_ = keepalive_;
   request->is_history_navigation_ = is_history_navigation_;
   request->window_id_ = window_id_;
-  request->should_also_use_factory_bound_origin_for_cors_ =
-      should_also_use_factory_bound_origin_for_cors_;
   return request;
 }
 
@@ -166,7 +165,8 @@ FetchRequestData* FetchRequestData::Clone(ScriptState* script_state,
     request->buffer_ = new2;
   }
   if (url_loader_factory_) {
-    url_loader_factory_->Clone(MakeRequest(&request->url_loader_factory_));
+    url_loader_factory_->Clone(
+        request->url_loader_factory_.BindNewPipeAndPassReceiver());
   }
   return request;
 }
@@ -192,7 +192,6 @@ FetchRequestData::FetchRequestData()
     : method_(http_names::kGET),
       header_list_(MakeGarbageCollected<FetchHeaderList>()),
       context_(mojom::RequestContextType::UNSPECIFIED),
-      same_origin_data_url_flag_(false),
       referrer_string_(Referrer::ClientReferrerString()),
       referrer_policy_(network::mojom::ReferrerPolicy::kDefault),
       mode_(network::mojom::RequestMode::kNoCors),

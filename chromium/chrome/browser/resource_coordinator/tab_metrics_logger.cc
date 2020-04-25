@@ -32,7 +32,7 @@
 #include "content/public/common/page_importance_signals.h"
 #include "net/base/mime_util.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
-#include "third_party/blink/public/platform/web_sudden_termination_disabler_type.h"
+#include "third_party/blink/public/common/sudden_termination_disabler_type.h"
 #include "url/gurl.h"
 
 using metrics::TabMetricsEvent;
@@ -212,9 +212,7 @@ void TabMetricsLogger::LogForegroundedOrClosedMetrics(
   ukm::builders::TabManager_Background_ForegroundedOrClosed(ukm_source_id)
       .SetLabelId(metrics.label_id)
       .SetIsForegrounded(metrics.is_foregrounded)
-      .SetMRUIndex(metrics.mru_index)
       .SetTimeFromBackgrounded(metrics.time_from_backgrounded)
-      .SetTotalTabCount(metrics.total_tab_count)
       .SetIsDiscarded(metrics.is_discarded)
       .Record(ukm::UkmRecorder::Get());
 }

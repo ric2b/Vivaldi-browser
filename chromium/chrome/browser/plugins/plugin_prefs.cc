@@ -106,17 +106,6 @@ void PluginPrefs::UpdatePdfPolicy(const std::string& pref_name) {
   }
 }
 
-void PluginPrefs::UpdateWidevinePolicy(const std::string& pref_name) {
-  enable_widevine_ =
-      prefs_->GetBoolean(vivaldiprefs::kPluginsWidevineEnabled);
-
-  content::PluginService::GetInstance()->PurgePluginListCache(profile_, false);
-  if (profile_->HasOffTheRecordProfile()) {
-    content::PluginService::GetInstance()->PurgePluginListCache(
-        profile_->GetOffTheRecordProfile(), false);
-  }
-}
-
 void PluginPrefs::SetPrefs(PrefService* prefs) {
   prefs_ = prefs;
   bool update_internal_dir = false;
@@ -217,4 +206,16 @@ PluginPrefs::~PluginPrefs() = default;
 void PluginPrefs::SetAlwaysOpenPdfExternallyForTests(
     bool always_open_pdf_externally) {
   always_open_pdf_externally_ = always_open_pdf_externally;
+}
+
+// Vivaldi
+void PluginPrefs::UpdateWidevinePolicy(const std::string& pref_name) {
+  enable_widevine_ =
+      prefs_->GetBoolean(vivaldiprefs::kPluginsWidevineEnabled);
+
+  content::PluginService::GetInstance()->PurgePluginListCache(profile_, false);
+  if (profile_->HasOffTheRecordProfile()) {
+    content::PluginService::GetInstance()->PurgePluginListCache(
+        profile_->GetOffTheRecordProfile(), false);
+  }
 }

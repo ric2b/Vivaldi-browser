@@ -5,8 +5,9 @@
 package org.chromium.chrome.browser.keyboard_accessory;
 
 import android.graphics.Bitmap;
-import android.support.annotation.Px;
 import android.util.SparseArray;
+
+import androidx.annotation.Px;
 
 import org.chromium.base.Callback;
 import org.chromium.base.VisibleForTesting;
@@ -91,11 +92,6 @@ class ManualFillingComponentBridge {
     @CalledByNative
     void showWhenKeyboardIsVisible() {
         mManualFillingComponent.showWhenKeyboardIsVisible();
-    }
-
-    @CalledByNative
-    void showTouchToFillSheet() {
-        // TODO(crbug.com/957532): Implement this method.
     }
 
     @CalledByNative

@@ -568,7 +568,8 @@ IN_PROC_BROWSER_TEST_F(OAuth2Test, PRE_MergeSession) {
 // MergeSession test is attempting to merge session for an existing profile
 // that was generated in PRE_PRE_MergeSession test. This attempt should fail
 // since FakeGaia instance isn't configured to return relevant tokens/cookies.
-IN_PROC_BROWSER_TEST_F(OAuth2Test, MergeSession) {
+// Disabling because of flakiness. Details in crbug.com/1003772.
+IN_PROC_BROWSER_TEST_F(OAuth2Test, DISABLED_MergeSession) {
   SimulateNetworkOnline();
 
   content::WindowedNotificationObserver(
@@ -1028,7 +1029,7 @@ IN_PROC_BROWSER_TEST_P(MergeSessionTest, PageThrottle) {
   DVLOG(1) << "Loaded page at the end : " << title;
 }
 
-IN_PROC_BROWSER_TEST_P(MergeSessionTest, XHRThrottle) {
+IN_PROC_BROWSER_TEST_P(MergeSessionTest, Throttle) {
   StartNewUserSession(/*wait_for_merge=*/false,
                       /*is_under_advanced_protection=*/false);
 

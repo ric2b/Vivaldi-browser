@@ -89,6 +89,7 @@ bool SupportsInvalidation(CSSSelector::PseudoType type) {
     case CSSSelector::kPseudoNthLastChild:
     case CSSSelector::kPseudoNthLastOfType:
     case CSSSelector::kPseudoPart:
+    case CSSSelector::kPseudoState:
     case CSSSelector::kPseudoLink:
     case CSSSelector::kPseudoVisited:
     case CSSSelector::kPseudoAny:
@@ -168,6 +169,7 @@ bool SupportsInvalidation(CSSSelector::PseudoType type) {
     case CSSSelector::kPseudoSlotted:
     case CSSSelector::kPseudoVideoPersistent:
     case CSSSelector::kPseudoVideoPersistentAncestor:
+    case CSSSelector::kPseudoXrImmersiveDomOverlay:
       return true;
     case CSSSelector::kPseudoIs:
     case CSSSelector::kPseudoWhere:
@@ -533,6 +535,7 @@ InvalidationSet* RuleFeatureSet::InvalidationSetForSimpleSelector(
       case CSSSelector::kPseudoRequired:
       case CSSSelector::kPseudoReadOnly:
       case CSSSelector::kPseudoReadWrite:
+      case CSSSelector::kPseudoState:
       case CSSSelector::kPseudoValid:
       case CSSSelector::kPseudoInvalid:
       case CSSSelector::kPseudoIndeterminate:
@@ -548,6 +551,7 @@ InvalidationSet* RuleFeatureSet::InvalidationSetForSimpleSelector(
       case CSSSelector::kPseudoDefined:
       case CSSSelector::kPseudoVideoPersistent:
       case CSSSelector::kPseudoVideoPersistentAncestor:
+      case CSSSelector::kPseudoXrImmersiveDomOverlay:
       case CSSSelector::kPseudoSpatialNavigationInterest:
         return &EnsurePseudoInvalidationSet(selector.GetPseudoType(), type,
                                             position);

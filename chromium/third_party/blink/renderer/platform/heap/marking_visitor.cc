@@ -32,12 +32,7 @@ MarkingVisitorBase::MarkingVisitorBase(ThreadState* state,
       backing_store_callback_worklist_(Heap().GetBackingStoreCallbackWorklist(),
                                        task_id),
       marking_mode_(marking_mode),
-      task_id_(task_id) {
-  DCHECK(state->InAtomicMarkingPause());
-#if DCHECK_IS_ON()
-  DCHECK(state->CheckThread());
-#endif  // DCHECK_IS_ON
-}
+      task_id_(task_id) {}
 
 void MarkingVisitorBase::FlushCompactionWorklists() {
   movable_reference_worklist_.FlushToGlobal();
@@ -46,9 +41,6 @@ void MarkingVisitorBase::FlushCompactionWorklists() {
 
 void MarkingVisitorBase::RegisterWeakCallback(void* object,
                                               WeakCallback callback) {
-  // We don't want to run weak processings when taking a snapshot.
-  if (marking_mode_ == kSnapshotMarking)
-    return;
   weak_callback_worklist_.Push({object, callback});
 }
 
@@ -80,40 +72,50 @@ bool MarkingVisitorBase::RegisterWeakTable(
   return true;
 }
 
-void MarkingVisitorBase::FlushWeakTableCallbacks() {
-  weak_table_worklist_.FlushToGlobal();
-}
-
 void MarkingVisitorBase::AdjustMarkedBytes(HeapObjectHeader* header,
                                            size_t old_size) {
-  DCHECK(header->IsMarked());
+  DCHECK(header->IsMarked<HeapObjectHeader::AccessMode::kAtomic>());
   // Currently, only expansion of an object is supported during marking.
   DCHECK_GE(header->size(), old_size);
   marked_bytes_ += header->size() - old_size;
 }
 
+// static
 bool MarkingVisitor::WriteBarrierSlow(void* value) {
   if (!value || IsHashTableDeleteValue(value))
     return false;
 
-  ThreadState* const thread_state = ThreadState::Current();
+  // It is guaranteed that managed references point to either GarbageCollected
+  // or GarbageCollectedMixin. Mixins are restricted to regular objects sizes.
+  // It is thus possible to get to the page header by aligning properly.
+  BasePage* base_page = PageFromObject(value);
+
+  ThreadState* const thread_state = base_page->thread_state();
   if (!thread_state->IsIncrementalMarking())
     return false;
 
-  HeapObjectHeader* const header = HeapObjectHeader::FromInnerAddress(
-      reinterpret_cast<Address>(const_cast<void*>(value)));
-  if (header->IsMarked())
+  HeapObjectHeader* header;
+  if (LIKELY(!base_page->IsLargeObjectPage())) {
+    header = reinterpret_cast<HeapObjectHeader*>(
+        static_cast<NormalPage*>(base_page)->FindHeaderFromAddress(
+            reinterpret_cast<Address>(value)));
+  } else {
+    header = static_cast<LargeObjectPage*>(base_page)->ObjectHeader();
+  }
+  DCHECK(header->IsValid());
+
+  if (!header->TryMark<HeapObjectHeader::AccessMode::kAtomic>())
     return false;
 
-  if (header->IsInConstruction()) {
+  if (UNLIKELY(header->IsInConstruction())) {
+    // It is assumed that objects on not_fully_constructed_worklist_ are not
+    // marked.
+    header->Unmark();
     thread_state->CurrentVisitor()->not_fully_constructed_worklist_.Push(
         header->Payload());
     return true;
   }
 
-  // Mark and push trace callback.
-  if (!header->TryMark<HeapObjectHeader::AccessMode::kAtomic>())
-    return false;
   MarkingVisitor* visitor = thread_state->CurrentVisitor();
   visitor->AccountMarkedBytes(header);
   visitor->marking_worklist_.Push(
@@ -142,7 +144,7 @@ void MarkingVisitor::TraceMarkedBackingStoreSlow(void* value) {
 }
 
 MarkingVisitor::MarkingVisitor(ThreadState* state, MarkingMode marking_mode)
-    : MarkingVisitorBase(state, marking_mode, WorklistTaskId::MainThread) {
+    : MarkingVisitorBase(state, marking_mode, WorklistTaskId::MutatorThread) {
   DCHECK(state->InAtomicMarkingPause());
   DCHECK(state->CheckThread());
 }
@@ -164,7 +166,8 @@ void MarkingVisitor::ConservativelyMarkAddress(BasePage* page,
   HeapObjectHeader* const header =
       page->IsLargeObjectPage()
           ? static_cast<LargeObjectPage*>(page)->ObjectHeader()
-          : static_cast<NormalPage*>(page)->FindHeaderFromAddress(address);
+          : static_cast<NormalPage*>(page)->ConservativelyFindHeaderFromAddress(
+                address);
   if (!header || header->IsMarked())
     return;
 
@@ -205,13 +208,27 @@ void MarkingVisitor::ConservativelyMarkAddress(BasePage* page,
   }
 }
 
+void MarkingVisitor::FlushMarkingWorklist() {
+  marking_worklist_.FlushToGlobal();
+}
+
 ConcurrentMarkingVisitor::ConcurrentMarkingVisitor(ThreadState* state,
                                                    MarkingMode marking_mode,
                                                    int task_id)
     : MarkingVisitorBase(state, marking_mode, task_id) {
-  DCHECK(state->InAtomicMarkingPause());
-  DCHECK(state->CheckThread());
-  DCHECK_NE(WorklistTaskId::MainThread, task_id);
+  DCHECK(!state->CheckThread());
+  DCHECK_NE(WorklistTaskId::MutatorThread, task_id);
+}
+
+void ConcurrentMarkingVisitor::FlushWorklists() {
+  // Flush marking worklists for further marking on the mutator thread.
+  marking_worklist_.FlushToGlobal();
+  not_fully_constructed_worklist_.FlushToGlobal();
+  weak_callback_worklist_.FlushToGlobal();
+  weak_table_worklist_.FlushToGlobal();
+  // Flush compaction worklists.
+  movable_reference_worklist_.FlushToGlobal();
+  backing_store_callback_worklist_.FlushToGlobal();
 }
 
 }  // namespace blink

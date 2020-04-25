@@ -23,7 +23,8 @@
 #include "content/common/content_export.h"
 #include "content/common/render_widget_host_ns_view.mojom.h"
 #include "ipc/ipc_sender.h"
-#include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
 #include "ui/base/cocoa/accessibility_focus_overrider.h"
 #include "ui/base/cocoa/remote_layer_api.h"
@@ -526,7 +527,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void GetPageTextForSpeech(SpeechCallback callback);
 
   // Interface through which the NSView is to be manipulated. This points either
-  // to |in_process_ns_view_bridge_| or to |remote_ns_view_ptr_|.
+  // to |in_process_ns_view_bridge_| or to |remote_ns_view_|.
   remote_cocoa::mojom::RenderWidgetHostNSView* ns_view_ = nullptr;
 
   // If |ns_view_| is hosted in this process, then this will be non-null,
@@ -537,11 +538,12 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       in_process_ns_view_bridge_;
 
   // If the NSView is hosted in a remote process and accessed via mojo then
-  // - |ns_view_| will point to |remote_ns_view_ptr_|
-  // - |remote_ns_view_client_binding_| is the binding provided to the bridge.
-  remote_cocoa::mojom::RenderWidgetHostNSViewAssociatedPtr remote_ns_view_ptr_;
-  mojo::AssociatedBinding<remote_cocoa::mojom::RenderWidgetHostNSViewHost>
-      remote_ns_view_client_binding_;
+  // - |ns_view_| will point to |remote_ns_view_|
+  // - |remote_ns_view_client_receiver_| is the receiver provided to the bridge.
+  mojo::AssociatedRemote<remote_cocoa::mojom::RenderWidgetHostNSView>
+      remote_ns_view_;
+  mojo::AssociatedReceiver<remote_cocoa::mojom::RenderWidgetHostNSViewHost>
+      remote_ns_view_client_receiver_{this};
 
   // State tracked by Show/Hide/IsShowing.
   bool is_visible_ = false;

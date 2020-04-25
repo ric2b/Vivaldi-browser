@@ -139,11 +139,11 @@ struct DohUpgradeEntry {
   const DnsConfig::DnsOverHttpsServerConfig dns_over_https_config;
 };
 
-const std::vector<const DohUpgradeEntry>& GetDohUpgradeList() {
+const std::vector<DohUpgradeEntry>& GetDohUpgradeList() {
   // The provider names in these entries should be kept in sync with the
   // DohProviderId histogram suffix list in
   // tools/metrics/histograms/histograms.xml.
-  static const base::NoDestructor<std::vector<const DohUpgradeEntry>>
+  static const base::NoDestructor<std::vector<DohUpgradeEntry>>
       upgradable_servers({
           DohUpgradeEntry(
               "CleanBrowsingAdult",
@@ -174,6 +174,12 @@ const std::vector<const DohUpgradeEntry>& GetDohUpgradeList() {
                "1dot1dot1dot1.cloudflare-dns.com"} /* DoT hostname */,
               {"https://chrome.cloudflare-dns.com/dns-query",
                true /* use-post */}),
+          DohUpgradeEntry("Comcast",
+                          {"75.75.75.75", "75.75.76.76", "2001:558:feed::1",
+                           "2001:558:feed::2"},
+                          {""} /* DoT hostname */,
+                          {"https://doh.xfinity.com/dns-query{?dns}",
+                           false /* use_post */}),
           DohUpgradeEntry(
               "Dnssb",
               {"185.222.222.222", "185.184.222.222", "2a09::", "2a09::1"},
@@ -222,8 +228,7 @@ const std::vector<const DohUpgradeEntry>& GetDohUpgradeList() {
 std::vector<const DohUpgradeEntry*> GetDohUpgradeEntriesFromNameservers(
     const std::vector<IPEndPoint>& dns_servers,
     const std::vector<std::string>& excluded_providers) {
-  const std::vector<const DohUpgradeEntry>& upgradable_servers =
-      GetDohUpgradeList();
+  const std::vector<DohUpgradeEntry>& upgradable_servers = GetDohUpgradeList();
   std::vector<const DohUpgradeEntry*> entries;
 
   for (const auto& server : dns_servers) {
@@ -417,8 +422,7 @@ std::vector<DnsConfig::DnsOverHttpsServerConfig>
 GetDohUpgradeServersFromDotHostname(
     const std::string& dot_server,
     const std::vector<std::string>& excluded_providers) {
-  const std::vector<const DohUpgradeEntry>& upgradable_servers =
-      GetDohUpgradeList();
+  const std::vector<DohUpgradeEntry>& upgradable_servers = GetDohUpgradeList();
   std::vector<DnsConfig::DnsOverHttpsServerConfig> doh_servers;
 
   if (dot_server.empty())
@@ -451,8 +455,7 @@ GetDohUpgradeServersFromNameservers(
 
 std::string GetDohProviderIdForHistogramFromDohConfig(
     const DnsConfig::DnsOverHttpsServerConfig& doh_server) {
-  const std::vector<const DohUpgradeEntry>& upgradable_servers =
-      GetDohUpgradeList();
+  const std::vector<DohUpgradeEntry>& upgradable_servers = GetDohUpgradeList();
   for (const auto& upgrade_entry : upgradable_servers) {
     if (doh_server.server_template ==
         upgrade_entry.dns_over_https_config.server_template) {

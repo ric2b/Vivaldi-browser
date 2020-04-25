@@ -45,7 +45,7 @@ class GPUCanvasContext : public CanvasRenderingContext {
   // CanvasRenderingContext implementation
   ContextType GetContextType() const override;
   void SetCanvasGetContextResult(RenderingContext&) final;
-  scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint) const final {
+  scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint) final {
     return nullptr;
   }
   void SetIsHidden(bool) override {}
@@ -62,6 +62,8 @@ class GPUCanvasContext : public CanvasRenderingContext {
 
   // gpu_canvas_context.idl
   GPUSwapChain* configureSwapChain(const GPUSwapChainDescriptor* descriptor);
+  ScriptPromise getSwapChainPreferredFormat(ScriptState* script_state,
+                                            const GPUDevice* device);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(GPUCanvasContext);

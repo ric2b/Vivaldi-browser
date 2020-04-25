@@ -27,8 +27,6 @@
 #include "components/sync/model/sync_change.h"
 #include "components/sync/model/sync_error_factory.h"
 #include "extensions/browser/app_sorting.h"
-#include "extensions/browser/extension_prefs.h"
-#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/uninstall_reason.h"
@@ -108,8 +106,6 @@ struct ExtensionSyncService::PendingUpdate {
 
 ExtensionSyncService::ExtensionSyncService(Profile* profile)
     : profile_(profile),
-      registry_observer_(this),
-      prefs_observer_(this),
       ignore_updates_(false),
       flare_(sync_start_util::GetFlareForSyncableService(profile->GetPath())) {
   registry_observer_.Add(ExtensionRegistry::Get(profile_));
@@ -439,14 +435,6 @@ void ExtensionSyncService::ApplySyncData(
         extension_service()->EnableExtension(id);
       else if (extension_sync_data.supports_disable_reasons())
         reenable_after_update = true;
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-      if (!has_all_permissions && (state == INSTALLED_NEWER) &&
-          extensions::util::IsExtensionSupervised(extension, profile_)) {
-        SupervisedUserServiceFactory::GetForProfile(profile_)
-            ->AddExtensionUpdateRequest(id, extension->version());
-      }
-#endif
     } else {
       // The extension is not installed yet. Set it to enabled; we'll check for
       // permission increase (more accurately, for a version change) when it's
@@ -549,7 +537,7 @@ void ExtensionSyncService::ApplyBookmarkAppSyncData(
         &web_app_info->generated_icon_color);
   }
   for (const auto& icon : extension_sync_data.linked_icons()) {
-    WebApplicationInfo::IconInfo icon_info;
+    WebApplicationIconInfo icon_info;
     icon_info.url = icon.url;
     icon_info.width = icon.size;
     icon_info.height = icon.size;
@@ -559,7 +547,7 @@ void ExtensionSyncService::ApplyBookmarkAppSyncData(
   auto* provider = web_app::WebAppProviderBase::GetProviderBase(profile_);
   DCHECK(provider);
 
-  provider->install_manager().InstallOrUpdateWebAppFromSync(
+  provider->install_manager().InstallWebAppFromSync(
       extension_sync_data.id(), std::move(web_app_info), base::DoNothing());
 }
 

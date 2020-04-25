@@ -6,12 +6,16 @@
 #import "base/test/ios/wait_util.h"
 
 #include "base/strings/sys_string_conversions.h"
+#include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #import "components/payments/core/features.h"
 #import "components/ukm/ios/features.h"
+#include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
 #import "ios/chrome/browser/ntp/features.h"
+#import "ios/chrome/browser/ui/settings/autofill/features.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #import "ios/chrome/test/app/bookmarks_test_util.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/history_test_util.h"
@@ -22,10 +26,13 @@
 #import "ios/chrome/test/app/tab_test_util.h"
 #import "ios/chrome/test/earl_grey/accessibility_util.h"
 #import "ios/testing/nserror_util.h"
+#include "ios/testing/verify_custom_webkit.h"
 #import "ios/web/common/features.h"
 #import "ios/web/public/deprecated/crw_js_injection_receiver.h"
+#import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/test/earl_grey/js_test_util.h"
 #import "ios/web/public/test/element_selector.h"
+#include "ios/web/public/test/url_test_util.h"
 #import "ios/web/public/test/web_view_content_test_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 #import "ios/web/public/web_client.h"
@@ -141,6 +148,14 @@ using chrome_test_util::BrowserCommandDispatcherForMainBVC;
   chrome_test_util::OpenNewIncognitoTab();
 }
 
++ (NSString*)currentTabTitle {
+  return chrome_test_util::GetCurrentTabTitle();
+}
+
++ (NSString*)nextTabTitle {
+  return chrome_test_util::GetNextTabTitle();
+}
+
 + (void)closeAllTabsInCurrentMode {
   chrome_test_util::CloseAllTabsInCurrentMode();
 }
@@ -164,6 +179,16 @@ using chrome_test_util::BrowserCommandDispatcherForMainBVC;
 
 + (void)startGoingForward {
   [BrowserCommandDispatcherForMainBVC() goForward];
+}
+
++ (NSString*)currentTabID {
+  web::WebState* web_state = chrome_test_util::GetCurrentWebState();
+  return TabIdTabHelper::FromWebState(web_state)->tab_id();
+}
+
++ (NSString*)nextTabID {
+  web::WebState* web_state = chrome_test_util::GetNextWebState();
+  return TabIdTabHelper::FromWebState(web_state)->tab_id();
 }
 
 #pragma mark - WebState Utilities (EG2)
@@ -266,6 +291,18 @@ using chrome_test_util::BrowserCommandDispatcherForMainBVC;
       chrome_test_util::GetCurrentWebState()->GetVisibleURL().spec());
 }
 
++ (void)purgeCachedWebViewPages {
+  web::WebState* web_state = chrome_test_util::GetCurrentWebState();
+  web_state->SetWebUsageEnabled(false);
+  web_state->SetWebUsageEnabled(true);
+  web_state->GetNavigationManager()->LoadIfNecessary();
+}
+
++ (BOOL)isRestoreSessionInProgress {
+  web::WebState* web_state = chrome_test_util::GetCurrentWebState();
+  return web_state->GetNavigationManager()->IsRestoreSessionInProgress();
+}
+
 #pragma mark - Sync Utilities (EG2)
 
 + (void)clearAutofillProfileWithGUID:(NSString*)GUID {
@@ -309,6 +346,26 @@ using chrome_test_util::BrowserCommandDispatcherForMainBVC;
   return nil;
 }
 
+#pragma mark - URL Utilities (EG2)
+
++ (NSString*)displayTitleForURL:(NSString*)URL {
+  return base::SysUTF16ToNSString(
+      web::GetDisplayTitleForUrl(GURL(base::SysNSStringToUTF8(URL))));
+}
+
+#pragma mark - Autofill Utilities (EG2)
+
++ (void)clearCreditCards {
+  autofill::PersonalDataManager* personalDataManager =
+      autofill::PersonalDataManagerFactory::GetForBrowserState(
+          chrome_test_util::GetOriginalBrowserState());
+  for (const auto* creditCard : personalDataManager->GetCreditCards()) {
+    personalDataManager->RemoveByGUID(creditCard->guid());
+  }
+}
+
+#pragma mark - Sync Utilities (EG2)
+
 + (int)numberOfSyncEntitiesWithType:(syncer::ModelType)type {
   return chrome_test_util::GetNumberOfSyncEntities(type);
 }
@@ -348,8 +405,6 @@ using chrome_test_util::BrowserCommandDispatcherForMainBVC;
   chrome_test_util::DeleteAutofillProfileOnFakeSyncServer(
       base::SysNSStringToUTF8(GUID));
 }
-
-#pragma mark - Sync Utilities (EG2)
 
 + (void)clearSyncServerData {
   chrome_test_util::ClearSyncServerData();
@@ -492,6 +547,18 @@ using chrome_test_util::BrowserCommandDispatcherForMainBVC;
 + (BOOL)isWebPaymentsModifiersEnabled {
   return base::FeatureList::IsEnabled(
       payments::features::kWebPaymentsModifiers);
+}
+
++ (BOOL)isSettingsAddPaymentMethodEnabled {
+  return base::FeatureList::IsEnabled(kSettingsAddPaymentMethod);
+}
+
++ (BOOL)isCreditCardScannerEnabled {
+  return base::FeatureList::IsEnabled(kCreditCardScanner);
+}
+
++ (BOOL)isCustomWebKitLoadedIfRequested {
+  return IsCustomWebKitLoadedIfRequested();
 }
 
 #pragma mark - ScopedBlockPopupsPref

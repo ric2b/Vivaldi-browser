@@ -14,6 +14,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -37,6 +38,31 @@ using metrics::OmniboxEventProto;
 
 typedef AutocompleteMatchType ACMatchType;
 
+namespace {
+
+// Rotates |it| and its associated submatches to be in the front of |matches|.
+// |it| must be a valid iterator of |matches| or equal to |matches->end()|.
+void RotateMatchToFront(ACMatches::iterator it, ACMatches* matches) {
+  if (it == matches->end())
+    return;
+
+  const size_t cookie = it->subrelevance;
+  auto next = std::next(it);
+  if (cookie != 0) {
+    // If default match followed by sub-match(es), move them too.
+    while (next != matches->end() &&
+           AutocompleteMatch::IsSameFamily(cookie, next->subrelevance))
+      next = std::next(next);
+  }
+  std::rotate(matches->begin(), it, next);
+}
+
+// This value should be comfortably larger than any max-autocomplete-matches
+// under consideration.
+constexpr size_t kMaxAutocompletePositionValue = 30;
+
+}  // namespace
+
 struct MatchGURLHash {
   // The |bool| is whether the match is a calculator suggestion. We want them
   // compare differently against other matches with the same URL.
@@ -54,11 +80,16 @@ size_t AutocompleteResult::GetMaxMatches(bool is_zero_suggest) {
 #else
   constexpr size_t kDefaultMaxAutocompleteMatches = 6;
 #endif  // defined(OS_ANDROID)
+  static_assert(kMaxAutocompletePositionValue > kDefaultMaxAutocompleteMatches,
+                "kMaxAutocompletePositionValue must be larger than the largest "
+                "possible autocomplete result size.");
 
-  return base::GetFieldTrialParamByFeatureAsInt(
+  size_t field_trial_value = base::GetFieldTrialParamByFeatureAsInt(
       omnibox::kUIExperimentMaxAutocompleteMatches,
       OmniboxFieldTrial::kUIMaxAutocompleteMatchesParam,
       kDefaultMaxAutocompleteMatches);
+  DCHECK(kMaxAutocompletePositionValue > field_trial_value);
+  return field_trial_value;
 }
 
 AutocompleteResult::AutocompleteResult() {
@@ -162,7 +193,8 @@ void AutocompleteResult::AppendMatches(const AutocompleteInput& input,
 
 void AutocompleteResult::SortAndCull(
     const AutocompleteInput& input,
-    TemplateURLService* template_url_service) {
+    TemplateURLService* template_url_service,
+    const AutocompleteMatch* preserve_default_match) {
   for (auto i(matches_.begin()); i != matches_.end(); ++i)
     i->ComputeStrippedDestinationURL(input, template_url_service);
 
@@ -186,19 +218,31 @@ void AutocompleteResult::SortAndCull(
   CompareWithDemoteByType<AutocompleteMatch> comparing_object(
       input.current_page_classification());
   std::sort(matches_.begin(), matches_.end(), comparing_object);
-  // Top match is not allowed to be the default match.  Find the most
-  // relevant legal match and shift it to the front.
-  auto it = FindTopMatch(input, &matches_);
-  if (it != matches_.end()) {
-    const size_t cookie = it->subrelevance;
-    auto next = std::next(it);
-    if (cookie != 0) {
-      // If default match followed by sub-match(es), move them too.
-      while (next != matches_.end() &&
-             AutocompleteMatch::IsSameFamily(cookie, next->subrelevance))
-        next = std::next(next);
+
+  // Find the best match and rotate it to the front to become the default match.
+  {
+    ACMatches::iterator top_match = matches_.end();
+
+    // If we are trying to keep a default match from a previous pass stable,
+    // search the current results for it, and if found, make it the top match.
+    if (preserve_default_match) {
+      std::pair<GURL, bool> default_match_fields =
+          GetMatchComparisonFields(*preserve_default_match);
+
+      top_match = std::find_if(
+          matches_.begin(), matches_.end(), [&](const AutocompleteMatch& m) {
+            // Find a match that is a duplicate AND has the same fill_into_edit.
+            return default_match_fields == GetMatchComparisonFields(m) &&
+                   preserve_default_match->fill_into_edit == m.fill_into_edit;
+          });
     }
-    std::rotate(matches_.begin(), it, next);
+
+    // Otherwise, if there's no default match from a previous pass to preserve,
+    // find the top match based on our normal undemoted scoring method.
+    if (top_match == matches_.end())
+      top_match = FindTopMatch(input, &matches_);
+
+    RotateMatchToFront(top_match, &matches_);
   }
 
   DiscourageTopMatchFromBeingSearchEntity(&matches_);
@@ -366,7 +410,7 @@ void AutocompleteResult::AppendDedicatedPedalMatches(
   for (auto& match : matches_) {
     // We do not want to deal with pedals of pedals, or pedals among
     // exclusive tail suggestions.
-    if (match.pedal || match.type == AutocompleteMatchType::SEARCH_SUGGEST_TAIL)
+    if (match.pedal || match.type == ACMatchType::SEARCH_SUGGEST_TAIL)
       continue;
     OmniboxPedal* const pedal = provider->FindPedalMatch(match.contents);
     if (pedal)
@@ -678,6 +722,30 @@ size_t AutocompleteResult::EstimateMemoryUsage() const {
   res += base::trace_event::EstimateMemoryUsage(alternate_nav_url_);
 
   return res;
+}
+
+// static
+void AutocompleteResult::LogAsynchronousUpdateMetrics(
+    const AutocompleteResult& old_result,
+    const AutocompleteResult& new_result) {
+  constexpr char kAsyncMatchChangeHistogramName[] =
+      "Omnibox.MatchStability.AsyncMatchChange";
+
+  size_t min_size = std::min(old_result.size(), new_result.size());
+  for (size_t i = 0; i < min_size; ++i) {
+    if (GetMatchComparisonFields(old_result.match_at(i)) !=
+        GetMatchComparisonFields(new_result.match_at(i))) {
+      base::UmaHistogramExactLinear(kAsyncMatchChangeHistogramName, i,
+                                    kMaxAutocompletePositionValue);
+    }
+  }
+
+  // Also log a change for when the match count decreases. But don't make a log
+  // for appending new matches on the bottom, since that's less disruptive.
+  for (size_t i = new_result.size(); i < old_result.size(); ++i) {
+    base::UmaHistogramExactLinear(kAsyncMatchChangeHistogramName, i,
+                                  kMaxAutocompletePositionValue);
+  }
 }
 
 // static

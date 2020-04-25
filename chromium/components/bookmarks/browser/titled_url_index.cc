@@ -68,6 +68,14 @@ void TitledUrlIndex::Add(const TitledUrlNode* node) {
       CleanUpUrlForMatching(node->GetTitledUrlNodeUrl(), nullptr));
   for (size_t i = 0; i < terms.size(); ++i)
     RegisterNode(terms[i], node);
+#if defined(VIVALDI_BUILD) && defined(OS_ANDROID)
+  terms = ExtractQueryWords(Normalize(node->GetTitledUrlNodeDescription()));
+  for (size_t i = 0; i < terms.size(); ++i)
+    RegisterNode(terms[i], node);
+  terms = ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()));
+  for (size_t i = 0; i < terms.size(); ++i)
+    RegisterNode(terms[i], node);
+#endif
 }
 
 void TitledUrlIndex::Remove(const TitledUrlNode* node) {
@@ -79,6 +87,14 @@ void TitledUrlIndex::Remove(const TitledUrlNode* node) {
       CleanUpUrlForMatching(node->GetTitledUrlNodeUrl(), nullptr));
   for (size_t i = 0; i < terms.size(); ++i)
     UnregisterNode(terms[i], node);
+#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+  terms = ExtractQueryWords(Normalize(node->GetTitledUrlNodeDescription()));
+  for (size_t i = 0; i < terms.size(); ++i)
+    UnregisterNode(terms[i], node);
+  terms = ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()));
+  for (size_t i = 0; i < terms.size(); ++i)
+    UnregisterNode(terms[i], node);
+#endif
 }
 
 void TitledUrlIndex::GetResultsMatching(
@@ -143,6 +159,9 @@ void TitledUrlIndex::AddMatchToResults(
   // ["thi"] will match the title [Thinking], but since
   // ["thi"] is quoted we don't want to do a prefix match.
   query_parser::QueryWordVector title_words, url_words;
+#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+  query_parser::QueryWordVector description_words, nickname_words;
+#endif
   const base::string16 lower_title =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeTitle()));
   parser->ExtractQueryWords(lower_title, &title_words);
@@ -150,12 +169,33 @@ void TitledUrlIndex::AddMatchToResults(
   parser->ExtractQueryWords(
       CleanUpUrlForMatching(node->GetTitledUrlNodeUrl(), &adjustments),
       &url_words);
+#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+  const base::string16 lower_description =
+      base::i18n::ToLower(Normalize(node->GetTitledUrlNodeDescription()));
+  parser->ExtractQueryWords(lower_description, &description_words);
+  const base::string16 lower_nickname =
+      base::i18n::ToLower(Normalize(node->GetTitledUrlNodeNickName()));
+  parser->ExtractQueryWords(lower_nickname, &nickname_words);
+#endif
   query_parser::Snippet::MatchPositions title_matches, url_matches;
+#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+  query_parser::Snippet::MatchPositions description_matches, nickname_matches;
+#endif
   for (const auto& node : query_nodes) {
     const bool has_title_matches =
         node->HasMatchIn(title_words, &title_matches);
     const bool has_url_matches = node->HasMatchIn(url_words, &url_matches);
-    if (!has_title_matches && !has_url_matches)
+#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+    const bool has_description_matches =
+        node->HasMatchIn(description_words, &description_matches);
+    const bool has_nickname_matches =
+        node->HasMatchIn(nickname_words, &nickname_matches);
+#endif
+    if (!has_title_matches && !has_url_matches
+#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+        && !has_description_matches && !has_nickname_matches
+#endif
+        )
       return;
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&title_matches);
     query_parser::QueryParser::SortAndCoalesceMatchPositions(&url_matches);

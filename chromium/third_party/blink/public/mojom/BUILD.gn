@@ -44,6 +44,8 @@ mojom("mojom_platform") {
     "dom_storage/storage_area.mojom",
     "dom_storage/storage_partition_service.mojom",
     "feature_policy/feature_policy.mojom",
+    "feature_policy/feature_policy_feature.mojom",
+    "feature_policy/policy_value.mojom",
     "fetch/fetch_api_request.mojom",
     "fetch/fetch_api_response.mojom",
     "file/file_utilities.mojom",
@@ -52,6 +54,7 @@ mojom("mojom_platform") {
     "frame/find_in_page.mojom",
     "frame/frame.mojom",
     "frame/frame_host_test_interface.mojom",
+    "frame/fullscreen.mojom",
     "frame/lifecycle.mojom",
     "frame/navigation_initiator.mojom",
     "geolocation/geolocation_service.mojom",
@@ -141,6 +144,7 @@ mojom("mojom_platform") {
     "worker/shared_worker_creation_context_type.mojom",
     "worker/shared_worker_host.mojom",
     "worker/shared_worker_info.mojom",
+    "worker/subresource_loader_updater.mojom",
     "worker/worker_content_settings_proxy.mojom",
     "worker/worker_main_script_load_params.mojom",
   ]
@@ -226,9 +230,6 @@ mojom("android_mojo_bindings") {
     "webauthn/internal_authenticator.mojom",
     "webshare/webshare.mojom",
   ]
-  if (is_android && notouch_build) {
-    sources += [ "media_controls/touchless/media_controls.mojom" ]
-  }
   public_deps = [
     "//components/payments/mojom",
     "//mojo/public/mojom/base",

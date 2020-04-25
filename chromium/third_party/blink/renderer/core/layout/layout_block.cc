@@ -308,7 +308,8 @@ void LayoutBlock::AddChildBeforeDescendant(LayoutObject* new_child,
     // Insert the child into the anonymous block box instead of here.
     if (new_child->IsInline() ||
         (new_child->IsFloatingOrOutOfFlowPositioned() &&
-         !IsFlexibleBoxIncludingNG() && !IsLayoutGrid()) ||
+         (StyleRef().IsDeprecatedFlexboxUsingFlexLayout() ||
+          (!IsFlexibleBoxIncludingNG() && !IsLayoutGrid()))) ||
         before_descendant->Parent()->SlowFirstChild() != before_descendant) {
       before_descendant_container->AddChild(new_child, before_descendant);
     } else {
@@ -350,7 +351,8 @@ void LayoutBlock::AddChild(LayoutObject* new_child,
 
   if (new_child->IsInline() ||
       (new_child->IsFloatingOrOutOfFlowPositioned() &&
-       !IsFlexibleBoxIncludingNG() && !IsLayoutGrid())) {
+       (StyleRef().IsDeprecatedFlexboxUsingFlexLayout() ||
+        (!IsFlexibleBoxIncludingNG() && !IsLayoutGrid())))) {
     // If we're inserting an inline child but all of our children are blocks,
     // then we have to make sure it is put into an anomyous block box. We try to
     // use an existing anonymous box if possible, otherwise a new one is created
@@ -470,6 +472,9 @@ void LayoutBlock::UpdateBlockLayout(bool) {
 }
 
 void LayoutBlock::AddVisualOverflowFromChildren() {
+  if (LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren))
+    return;
+
   if (ChildrenInline())
     To<LayoutBlockFlow>(this)->AddVisualOverflowFromInlineChildren();
   else
@@ -477,7 +482,7 @@ void LayoutBlock::AddVisualOverflowFromChildren() {
 }
 
 void LayoutBlock::AddLayoutOverflowFromChildren() {
-  if (DisplayLockInducesSizeContainment())
+  if (LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren))
     return;
 
   if (ChildrenInline())
@@ -571,6 +576,9 @@ void LayoutBlock::AddLayoutOverflowFromBlockChildren() {
 }
 
 void LayoutBlock::AddLayoutOverflowFromPositionedObjects() {
+  if (LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren))
+    return;
+
   TrackedLayoutBoxListHashSet* positioned_descendants = PositionedObjects();
   if (!positioned_descendants)
     return;
@@ -1042,7 +1050,7 @@ void LayoutBlock::ImageChanged(WrappedImagePtr image,
                                CanDeferInvalidation defer) {
   LayoutBox::ImageChanged(image, defer);
 
-  if (!StyleRef().HasPseudoStyle(kPseudoIdFirstLine))
+  if (!StyleRef().HasPseudoElementStyle(kPseudoIdFirstLine))
     return;
 
   const auto* first_line_style = FirstLineStyleWithoutFallback();
@@ -1445,11 +1453,6 @@ void LayoutBlock::ComputeIntrinsicLogicalWidths(
           ContentLogicalWidthForSizeContainment() + LayoutUnit(scrollbar_width);
       return;
     }
-  } else if (DisplayLockInducesSizeContainment()) {
-    min_logical_width = max_logical_width =
-        LayoutUnit(scrollbar_width) +
-        GetDisplayLockContext()->GetLockedContentLogicalWidth();
-    return;
   }
 
   if (ChildrenInline()) {
@@ -1493,7 +1496,8 @@ void LayoutBlock::ComputePreferredLogicalWidths() {
   const ComputedStyle& style_to_use = StyleRef();
   if (!IsTableCell() && style_to_use.LogicalWidth().IsFixed() &&
       style_to_use.LogicalWidth().Value() >= 0 &&
-      !(IsDeprecatedFlexItem() && !style_to_use.LogicalWidth().IntValue()))
+      !(IsFlexItemCommon() && Parent()->StyleRef().IsDeprecatedWebkitBox() &&
+        !style_to_use.LogicalWidth().IntValue()))
     min_preferred_logical_width_ = max_preferred_logical_width_ =
         AdjustContentBoxLogicalWidthForBoxSizing(
             LayoutUnit(style_to_use.LogicalWidth().Value()));
@@ -1896,7 +1900,7 @@ const LayoutBlock* LayoutBlock::EnclosingFirstLineStyleBlock() const {
   bool has_pseudo = false;
   while (true) {
     has_pseudo =
-        first_line_block->StyleRef().HasPseudoStyle(kPseudoIdFirstLine);
+        first_line_block->StyleRef().HasPseudoElementStyle(kPseudoIdFirstLine);
     if (has_pseudo)
       break;
     LayoutObject* parent_block = first_line_block->Parent();

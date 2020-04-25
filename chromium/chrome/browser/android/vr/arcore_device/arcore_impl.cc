@@ -37,9 +37,51 @@ device::mojom::VRPosePtr GetMojomPoseFromArPose(
   return result;
 }
 
+device::internal::ScopedArCoreObject<ArPose*> GetArPoseFromMojomPose(
+    ArSession* session,
+    const device::mojom::VRPosePtr& pose) {
+  float pose_raw[7] = {};  // 7 = orientation(4) + position(3).
+
+  if (pose->orientation) {
+    pose_raw[0] = pose->orientation->x();
+    pose_raw[1] = pose->orientation->y();
+    pose_raw[2] = pose->orientation->z();
+    pose_raw[3] = pose->orientation->w();
+  } else {
+    // Only need to set the .w to 1.
+    pose_raw[3] = 1;
+  }
+
+  if (pose->position) {
+    pose_raw[4] = pose->position->x();
+    pose_raw[5] = pose->position->y();
+    pose_raw[6] = pose->position->z();
+  }
+
+  device::internal::ScopedArCoreObject<ArPose*> result;
+
+  ArPose_create(
+      session, pose_raw,
+      device::internal::ScopedArCoreObject<ArPose*>::Receiver(result).get());
+
+  return result;
+}
+
+constexpr float kDefaultFloorHeightEstimation = 1.2;
+
 }  // namespace
 
 namespace device {
+
+HitTestSubscriptionData::HitTestSubscriptionData(
+    mojom::XRNativeOriginInformationPtr native_origin_information,
+    mojom::XRRayPtr ray)
+    : native_origin_information(std::move(native_origin_information)),
+      ray(std::move(ray)) {}
+
+HitTestSubscriptionData::HitTestSubscriptionData(
+    HitTestSubscriptionData&& other) = default;
+HitTestSubscriptionData::~HitTestSubscriptionData() = default;
 
 ArCoreImpl::ArCoreImpl()
     : gl_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
@@ -259,7 +301,7 @@ void ArCoreImpl::ForEachArCorePlane(FunctionType fn) {
       continue;
     }
 
-    fn(ar_plane);
+    fn(std::move(trackable), ar_plane);
   }
 }  // namespace device
 
@@ -289,20 +331,25 @@ std::vector<mojom::XRAnchorDataPtr> ArCoreImpl::GetUpdatedAnchorsData() {
       return;
     }
 
-    int32_t anchor_id;
+    AnchorId anchor_id;
     bool created;
     std::tie(anchor_id, created) = *maybe_anchor_id_and_created;
 
-    result.push_back(mojom::XRAnchorData::New(anchor_id, std::move(pose)));
+    DCHECK(!created)
+        << "Anchor creation is app-initiated - we should never encounter an "
+           "anchor that was created outside of `ArCoreImpl::CreateAnchor()`.";
+
+    result.push_back(
+        mojom::XRAnchorData::New(anchor_id.GetUnsafeValue(), std::move(pose)));
   });
 
   return result;
 }
 
-std::vector<int32_t> ArCoreImpl::GetAllAnchorIds() {
+std::vector<uint32_t> ArCoreImpl::GetAllAnchorIds() {
   EnsureArCoreAnchorsList();
 
-  std::vector<int32_t> result;
+  std::vector<uint32_t> result;
 
   ArSession_getAllAnchors(arcore_session_.get(), arcore_anchors_.get());
 
@@ -315,13 +362,13 @@ std::vector<int32_t> ArCoreImpl::GetAllAnchorIds() {
       return;
     }
 
-    int32_t anchor_id;
+    AnchorId anchor_id;
     bool created;
     std::tie(anchor_id, created) = *maybe_anchor_id_and_created;
 
-    // TODO(https://crbug.com/992033): Add explanation for the below DCHECK when
-    // implementing anchor creation.
-    DCHECK(!created);
+    DCHECK(!created)
+        << "Anchor creation is app-initiated - we should never encounter an "
+           "anchor that was created outside of `ArCoreImpl::CreateAnchor()`.";
 
     result.emplace_back(anchor_id);
   });
@@ -365,7 +412,9 @@ std::vector<mojom::XRPlaneDataPtr> ArCoreImpl::GetUpdatedPlanesData() {
   ArFrame_getUpdatedTrackables(arcore_session_.get(), arcore_frame_.get(),
                                plane_tracked_type, arcore_planes_.get());
 
-  ForEachArCorePlane([this, &result](ArPlane* ar_plane) {
+  ForEachArCorePlane([this, &result](
+                         internal::ScopedArCoreObject<ArTrackable*> trackable,
+                         ArPlane* ar_plane) {
     // orientation
     ArPlaneType plane_type;
     ArPlane_getType(arcore_session_.get(), ar_plane, &plane_type);
@@ -404,12 +453,12 @@ std::vector<mojom::XRPlaneDataPtr> ArCoreImpl::GetUpdatedPlanesData() {
       return;
     }
 
-    int32_t plane_id;
+    PlaneId plane_id;
     bool created;
     std::tie(plane_id, created) = *maybe_plane_id_and_created;
 
     result.push_back(mojom::XRPlaneData::New(
-        plane_id,
+        plane_id.GetUnsafeValue(),
         mojo::ConvertTo<device::mojom::XRPlaneOrientation>(plane_type),
         std::move(pose), std::move(vertices)));
   });
@@ -417,16 +466,21 @@ std::vector<mojom::XRPlaneDataPtr> ArCoreImpl::GetUpdatedPlanesData() {
   return result;
 }
 
-std::vector<int32_t> ArCoreImpl::GetAllPlaneIds() {
+std::vector<uint32_t> ArCoreImpl::GetAllPlaneIds() {
   EnsureArCorePlanesList();
 
-  std::vector<int32_t> result;
+  std::vector<uint32_t> result;
 
   ArTrackableType plane_tracked_type = AR_TRACKABLE_PLANE;
   ArSession_getAllTrackables(arcore_session_.get(), plane_tracked_type,
                              arcore_planes_.get());
 
-  ForEachArCorePlane([this, &result](ArPlane* ar_plane) {
+  std::map<PlaneId, device::internal::ScopedArCoreObject<ArTrackable*>>
+      plane_id_to_plane_object;
+
+  ForEachArCorePlane([this, &plane_id_to_plane_object, &result](
+                         internal::ScopedArCoreObject<ArTrackable*> trackable,
+                         ArPlane* ar_plane) {
     // ID
     auto maybe_plane_id_and_created = CreateOrGetPlaneId(ar_plane);
     if (!maybe_plane_id_and_created) {
@@ -435,7 +489,7 @@ std::vector<int32_t> ArCoreImpl::GetAllPlaneIds() {
       return;
     }
 
-    int32_t plane_id;
+    PlaneId plane_id;
     bool created;
     std::tie(plane_id, created) = *maybe_plane_id_and_created;
 
@@ -443,7 +497,10 @@ std::vector<int32_t> ArCoreImpl::GetAllPlaneIds() {
         << "Newly detected planes should be handled by GetUpdatedPlanesData().";
 
     result.emplace_back(plane_id);
+    plane_id_to_plane_object[plane_id] = std::move(trackable);
   });
+
+  plane_id_to_plane_object_.swap(plane_id_to_plane_object);
 
   return result;
 }
@@ -451,8 +508,8 @@ std::vector<int32_t> ArCoreImpl::GetAllPlaneIds() {
 mojom::XRPlaneDetectionDataPtr ArCoreImpl::GetDetectedPlanesData() {
   TRACE_EVENT0("gpu", __FUNCTION__);
 
-  std::vector<mojom::XRPlaneDataPtr> updated_planes = GetUpdatedPlanesData();
-  std::vector<int32_t> all_plane_ids = GetAllPlaneIds();
+  auto updated_planes = GetUpdatedPlanesData();
+  auto all_plane_ids = GetAllPlaneIds();
 
   return mojom::XRPlaneDetectionData::New(all_plane_ids,
                                           std::move(updated_planes));
@@ -467,38 +524,38 @@ mojom::XRAnchorsDataPtr ArCoreImpl::GetAnchorsData() {
   return mojom::XRAnchorsData::New(all_anchor_ids, std::move(updated_anchors));
 }
 
-base::Optional<std::pair<int32_t, bool>> ArCoreImpl::CreateOrGetPlaneId(
+base::Optional<std::pair<PlaneId, bool>> ArCoreImpl::CreateOrGetPlaneId(
     void* plane_address) {
   auto it = ar_plane_address_to_id_.find(plane_address);
   if (it != ar_plane_address_to_id_.end()) {
     return std::make_pair(it->second, false);
   }
 
-  if (next_id_ == std::numeric_limits<int32_t>::max()) {
+  if (next_id_ == std::numeric_limits<uint32_t>::max()) {
     return base::nullopt;
   }
 
-  int32_t current_id = next_id_++;
+  uint32_t current_id = next_id_++;
   ar_plane_address_to_id_.emplace(plane_address, current_id);
 
-  return std::make_pair(current_id, true);
+  return std::make_pair(PlaneId(current_id), true);
 }
 
-base::Optional<std::pair<int32_t, bool>> ArCoreImpl::CreateOrGetAnchorId(
+base::Optional<std::pair<AnchorId, bool>> ArCoreImpl::CreateOrGetAnchorId(
     void* anchor_address) {
   auto it = ar_anchor_address_to_id_.find(anchor_address);
   if (it != ar_anchor_address_to_id_.end()) {
     return std::make_pair(it->second, false);
   }
 
-  if (next_id_ == std::numeric_limits<int32_t>::max()) {
+  if (next_id_ == std::numeric_limits<uint32_t>::max()) {
     return base::nullopt;
   }
 
-  int32_t current_id = next_id_++;
+  uint32_t current_id = next_id_++;
   ar_anchor_address_to_id_.emplace(anchor_address, current_id);
 
-  return std::make_pair(current_id, true);
+  return std::make_pair(AnchorId(current_id), true);
 }
 
 void ArCoreImpl::Pause() {
@@ -544,16 +601,238 @@ gfx::Transform ArCoreImpl::GetProjectionMatrix(float near, float far) {
   return result;
 }
 
+float ArCoreImpl::GetEstimatedFloorHeight() {
+  return kDefaultFloorHeightEstimation;
+}
+
+base::Optional<uint32_t> ArCoreImpl::SubscribeToHitTest(
+    mojom::XRNativeOriginInformationPtr native_origin_information,
+    mojom::XRRayPtr ray) {
+  // First, check if we recognize the type of the native origin.
+
+  if (native_origin_information->is_reference_space_category()) {
+    // Reference spaces are implicitly recognized and don't carry an ID.
+  } else if (native_origin_information->is_input_source_id()) {
+    // Input source IDs are verified in the higher layer as ArCoreImpl does
+    // not carry input source state.
+  } else if (native_origin_information->is_plane_id()) {
+    // Validate that we know which plane's space the hit test is interested in
+    // tracking.
+    if (plane_id_to_plane_object_.count(
+            PlaneId(native_origin_information->get_plane_id())) == 0) {
+      return base::nullopt;
+    }
+  } else if (native_origin_information->is_anchor_id()) {
+    // Validate that we know which anchor's space the hit test is interested
+    // in tracking.
+    if (anchor_id_to_anchor_object_.count(
+            AnchorId(native_origin_information->get_anchor_id())) == 0) {
+      return base::nullopt;
+    }
+  } else {
+    NOTREACHED();
+    return base::nullopt;
+  }
+
+  auto maybe_subscription_id = CreateHitTestSubscriptionId();
+  if (!maybe_subscription_id) {
+    return base::nullopt;
+  }
+
+  hit_test_subscription_id_to_data_.emplace(
+      *maybe_subscription_id,
+      HitTestSubscriptionData{std::move(native_origin_information),
+                              std::move(ray)});
+
+  return maybe_subscription_id->GetUnsafeValue();
+}
+
+mojom::XRHitTestSubscriptionResultsDataPtr
+ArCoreImpl::GetHitTestSubscriptionResults(
+    const device::mojom::VRPosePtr& pose) {
+  mojom::XRHitTestSubscriptionResultsDataPtr result =
+      mojom::XRHitTestSubscriptionResultsData::New();
+
+  for (auto& subscription_id_and_data : hit_test_subscription_id_to_data_) {
+    // First, check if we can find the current transformation for a ray. If not,
+    // skip processing this subscription.
+    auto maybe_mojo_from_native_origin = GetMojoFromNativeOrigin(
+        subscription_id_and_data.second.native_origin_information, pose);
+
+    if (!maybe_mojo_from_native_origin) {
+      continue;
+    }
+
+    // Since we have a transform, let's use it to obtain hit test results.
+    result->results.push_back(GetHitTestSubscriptionResult(
+        HitTestSubscriptionId(subscription_id_and_data.first),
+        *subscription_id_and_data.second.ray, *maybe_mojo_from_native_origin));
+  }
+
+  return result;
+}
+
+device::mojom::XRHitTestSubscriptionResultDataPtr
+ArCoreImpl::GetHitTestSubscriptionResult(
+    HitTestSubscriptionId id,
+    const mojom::XRRay& native_origin_ray,
+    const gfx::Transform& mojo_from_native_origin) {
+  // Transform the ray according to the latest transform based on the XRSpace
+  // used in hit test subscription.
+
+  gfx::Point3F origin = native_origin_ray.origin;
+  mojo_from_native_origin.TransformPoint(&origin);
+
+  gfx::Vector3dF direction = native_origin_ray.direction;
+  mojo_from_native_origin.TransformVector(&direction);
+
+  std::vector<mojom::XRHitResultPtr> hit_results;
+  RequestHitTest(origin, direction, &hit_results);
+
+  return mojom::XRHitTestSubscriptionResultData::New(id.GetUnsafeValue(),
+                                                     std::move(hit_results));
+}
+
+base::Optional<gfx::Transform> ArCoreImpl::GetMojoFromReferenceSpace(
+    device::mojom::XRReferenceSpaceCategory category,
+    const device::mojom::VRPosePtr& mojo_from_viewer) {
+  switch (category) {
+    case device::mojom::XRReferenceSpaceCategory::LOCAL:
+      return gfx::Transform{};
+    case device::mojom::XRReferenceSpaceCategory::LOCAL_FLOOR: {
+      auto result = gfx::Transform{};
+      result.Translate3d(0, -GetEstimatedFloorHeight(), 0);
+      return result;
+    }
+    case device::mojom::XRReferenceSpaceCategory::VIEWER:
+      return mojo::ConvertTo<gfx::Transform>(mojo_from_viewer);
+    case device::mojom::XRReferenceSpaceCategory::BOUNDED_FLOOR:
+      return base::nullopt;
+    case device::mojom::XRReferenceSpaceCategory::UNBOUNDED:
+      return base::nullopt;
+  }
+}
+
+base::Optional<gfx::Transform> ArCoreImpl::GetMojoFromNativeOrigin(
+    const mojom::XRNativeOriginInformationPtr& native_origin_information,
+    const device::mojom::VRPosePtr& mojo_from_viewer) {
+  if (native_origin_information->is_input_source_id()) {
+    if (!mojo_from_viewer->input_state) {
+      return base::nullopt;
+    }
+
+    // Linear search should be fine for ARCore device as it only has one input
+    // source (for now).
+    for (auto& input_source_state : *mojo_from_viewer->input_state) {
+      if (input_source_state->source_id ==
+          native_origin_information->get_input_source_id()) {
+        if (!input_source_state->description->pointer_offset) {
+          return base::nullopt;
+        }
+
+        auto view_from_pointer =
+            *input_source_state->description->pointer_offset;
+
+        auto mojo_from_view = mojo::ConvertTo<gfx::Transform>(mojo_from_viewer);
+
+        return mojo_from_view * view_from_pointer;
+      }
+    }
+
+    return base::nullopt;
+  } else if (native_origin_information->is_reference_space_category()) {
+    return GetMojoFromReferenceSpace(
+        native_origin_information->get_reference_space_category(),
+        mojo_from_viewer);
+  } else if (native_origin_information->is_plane_id()) {
+    auto plane_it = plane_id_to_plane_object_.find(
+        PlaneId(native_origin_information->get_plane_id()));
+    if (plane_it == plane_id_to_plane_object_.end()) {
+      return base::nullopt;
+    }
+
+    // Naked pointer is fine as we don't own the object and ArAsPlane does not
+    // increase the refcount.
+    ArPlane* plane = ArAsPlane(plane_it->second.get());
+
+    internal::ScopedArCoreObject<ArPose*> ar_pose;
+    ArPose_create(
+        arcore_session_.get(), nullptr,
+        internal::ScopedArCoreObject<ArPose*>::Receiver(ar_pose).get());
+    ArPlane_getCenterPose(arcore_session_.get(), plane, ar_pose.get());
+    mojom::VRPosePtr mojo_pose =
+        GetMojomPoseFromArPose(arcore_session_.get(), std::move(ar_pose));
+
+    return mojo::ConvertTo<gfx::Transform>(mojo_pose);
+  } else if (native_origin_information->is_anchor_id()) {
+    auto anchor_it = anchor_id_to_anchor_object_.find(
+        AnchorId(native_origin_information->get_anchor_id()));
+    if (anchor_it == anchor_id_to_anchor_object_.end()) {
+      return base::nullopt;
+    }
+
+    internal::ScopedArCoreObject<ArPose*> ar_pose;
+    ArPose_create(
+        arcore_session_.get(), nullptr,
+        internal::ScopedArCoreObject<ArPose*>::Receiver(ar_pose).get());
+
+    ArAnchor_getPose(arcore_session_.get(), anchor_it->second.get(),
+                     ar_pose.get());
+    mojom::VRPosePtr mojo_pose =
+        GetMojomPoseFromArPose(arcore_session_.get(), std::move(ar_pose));
+
+    return mojo::ConvertTo<gfx::Transform>(mojo_pose);
+  } else {
+    NOTREACHED();
+    return base::nullopt;
+  }
+}  // namespace device
+
+void ArCoreImpl::UnsubscribeFromHitTest(uint32_t subscription_id) {
+  auto it = hit_test_subscription_id_to_data_.find(
+      HitTestSubscriptionId(subscription_id));
+  if (it == hit_test_subscription_id_to_data_.end()) {
+    return;
+  }
+
+  hit_test_subscription_id_to_data_.erase(it);
+}
+
+base::Optional<HitTestSubscriptionId>
+ArCoreImpl::CreateHitTestSubscriptionId() {
+  if (next_id_ == std::numeric_limits<uint32_t>::max()) {
+    return base::nullopt;
+  }
+
+  uint32_t current_id = next_id_++;
+
+  return HitTestSubscriptionId(current_id);
+}
+
 bool ArCoreImpl::RequestHitTest(
     const mojom::XRRayPtr& ray,
     std::vector<mojom::XRHitResultPtr>* hit_results) {
-  DVLOG(2) << __func__ << ": ray origin=" << ray->origin.ToString()
-           << ", direction=" << ray->direction.ToString();
+  DCHECK(ray);
+  return RequestHitTest(ray->origin, ray->direction, hit_results);
+}
+
+bool ArCoreImpl::RequestHitTest(
+    const gfx::Point3F& origin,
+    const gfx::Vector3dF& direction,
+    std::vector<mojom::XRHitResultPtr>* hit_results) {
+  DVLOG(2) << __func__ << ": origin=" << origin.ToString()
+           << ", direction=" << direction.ToString();
 
   DCHECK(hit_results);
   DCHECK(IsOnGlThread());
   DCHECK(arcore_session_.is_valid());
   DCHECK(arcore_frame_.is_valid());
+
+  // ArCore returns hit-results in sorted order, thus providing the guarantee
+  // of sorted results promised by the WebXR spec for requestHitTest().
+  std::array<float, 3> origin_array = {origin.x(), origin.y(), origin.z()};
+  std::array<float, 3> direction_array = {direction.x(), direction.y(),
+                                          direction.z()};
 
   internal::ScopedArCoreObject<ArHitResultList*> arcore_hit_result_list;
   ArHitResultList_create(
@@ -566,14 +845,9 @@ bool ArCoreImpl::RequestHitTest(
     return false;
   }
 
-  // ArCore returns hit-results in sorted order, thus providing the guarantee
-  // of sorted results promised by the WebXR spec for requestHitTest().
-  float origin[3] = {ray->origin.x(), ray->origin.y(), ray->origin.z()};
-  float direction[3] = {ray->direction.x(), ray->direction.y(),
-                        ray->direction.z()};
-
-  ArFrame_hitTestRay(arcore_session_.get(), arcore_frame_.get(), origin,
-                     direction, arcore_hit_result_list.get());
+  ArFrame_hitTestRay(arcore_session_.get(), arcore_frame_.get(),
+                     origin_array.data(), direction_array.data(),
+                     arcore_hit_result_list.get());
 
   int arcore_hit_result_list_size = 0;
   ArHitResultList_getSize(arcore_session_.get(), arcore_hit_result_list.get(),
@@ -670,6 +944,81 @@ bool ArCoreImpl::RequestHitTest(
 
   DVLOG(2) << __func__ << ": hit_results->size()=" << hit_results->size();
   return true;
+}
+
+base::Optional<uint32_t> ArCoreImpl::CreateAnchor(
+    const device::mojom::VRPosePtr& pose) {
+  DCHECK(pose);
+
+  auto ar_pose = GetArPoseFromMojomPose(arcore_session_.get(), pose);
+
+  device::internal::ScopedArCoreObject<ArAnchor*> ar_anchor;
+  ArSession_acquireNewAnchor(
+      arcore_session_.get(), ar_pose.get(),
+      device::internal::ScopedArCoreObject<ArAnchor*>::Receiver(ar_anchor)
+          .get());
+
+  auto maybe_anchor_id_and_created = CreateOrGetAnchorId(ar_anchor.get());
+  if (!maybe_anchor_id_and_created) {
+    return base::nullopt;
+  }
+
+  AnchorId anchor_id;
+  bool created;
+  std::tie(anchor_id, created) = *maybe_anchor_id_and_created;
+
+  DCHECK(created) << "This should always be a new anchor, not something we've "
+                     "seen previously.";
+
+  anchor_id_to_anchor_object_[anchor_id] = std::move(ar_anchor);
+
+  return anchor_id.GetUnsafeValue();
+}
+
+base::Optional<uint32_t> ArCoreImpl::CreateAnchor(
+    const device::mojom::VRPosePtr& pose,
+    uint32_t plane_id) {
+  DCHECK(pose);
+
+  auto ar_pose = GetArPoseFromMojomPose(arcore_session_.get(), pose);
+
+  auto it = plane_id_to_plane_object_.find(PlaneId(plane_id));
+  if (it == plane_id_to_plane_object_.end()) {
+    return base::nullopt;
+  }
+
+  device::internal::ScopedArCoreObject<ArAnchor*> ar_anchor;
+  ArTrackable_acquireNewAnchor(
+      arcore_session_.get(), it->second.get(), ar_pose.get(),
+      device::internal::ScopedArCoreObject<ArAnchor*>::Receiver(ar_anchor)
+          .get());
+
+  auto maybe_anchor_id_and_created = CreateOrGetAnchorId(ar_anchor.get());
+  if (!maybe_anchor_id_and_created) {
+    return base::nullopt;
+  }
+
+  AnchorId anchor_id;
+  bool created;
+  std::tie(anchor_id, created) = *maybe_anchor_id_and_created;
+
+  DCHECK(created) << "This should always be a new anchor, not something we've "
+                     "seen previously.";
+
+  anchor_id_to_anchor_object_[anchor_id] = std::move(ar_anchor);
+
+  return anchor_id.GetUnsafeValue();
+}
+
+void ArCoreImpl::DetachAnchor(uint32_t anchor_id) {
+  auto it = anchor_id_to_anchor_object_.find(AnchorId(anchor_id));
+  if (it == anchor_id_to_anchor_object_.end()) {
+    return;
+  }
+
+  ArAnchor_detach(arcore_session_.get(), it->second.get());
+
+  anchor_id_to_anchor_object_.erase(it);
 }
 
 bool ArCoreImpl::IsOnGlThread() {

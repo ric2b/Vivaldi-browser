@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.ntp.cards;
 
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
@@ -15,7 +15,7 @@ import org.chromium.chrome.browser.signin.ProfileDataCache;
 import org.chromium.chrome.browser.signin.SigninPromoController;
 import org.chromium.chrome.browser.signin.SigninPromoUtil;
 import org.chromium.chrome.browser.suggestions.SuggestionsRecyclerView;
-import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
+import org.chromium.chrome.browser.ui.widget.displaystyle.UiConfig;
 
 /**
  * View Holder for {@link SignInPromo} if the personalized promo is to be shown.

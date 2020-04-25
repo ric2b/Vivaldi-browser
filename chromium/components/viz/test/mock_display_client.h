@@ -8,6 +8,7 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/context_result.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -26,14 +27,14 @@ class MockDisplayClient : public mojom::DisplayClient {
 #endif
 #if defined(OS_WIN)
   MOCK_METHOD1(CreateLayeredWindowUpdater,
-               void(mojom::LayeredWindowUpdaterRequest));
+               void(mojo::PendingReceiver<mojom::LayeredWindowUpdater>));
 #endif
 #if defined(OS_ANDROID)
   MOCK_METHOD1(DidCompleteSwapWithSize, void(const gfx::Size&));
   MOCK_METHOD1(OnContextCreationResult, void(gpu::ContextResult));
   MOCK_METHOD1(SetPreferredRefreshRate, void(float refresh_rate));
 #endif
-#if defined(USE_X11)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   MOCK_METHOD1(DidCompleteSwapWithNewSize, void(const gfx::Size&));
 #endif
 

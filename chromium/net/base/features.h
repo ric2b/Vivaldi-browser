@@ -22,13 +22,6 @@ NET_EXPORT extern const base::Feature kAcceptLanguageHeader;
 NET_EXPORT extern const base::Feature kCapRefererHeaderLength;
 NET_EXPORT extern const base::FeatureParam<int> kMaxRefererHeaderLength;
 
-// Enables the additional TLS 1.3 server-random-based downgrade protection
-// described in https://tools.ietf.org/html/rfc8446#section-4.1.3
-//
-// This is a MUST-level requirement of TLS 1.3, but has compatibility issues
-// with some buggy non-compliant TLS-terminating proxies.
-NET_EXPORT extern const base::Feature kEnforceTLS13Downgrade;
-
 // Enables TLS 1.3 early data.
 NET_EXPORT extern const base::Feature kEnableTLS13EarlyData;
 
@@ -82,6 +75,15 @@ NET_EXPORT extern const base::Feature kSameSiteByDefaultCookies;
 // as secure if set from a secure context. This ONLY has an effect if
 // SameSiteByDefaultCookies is also enabled.
 NET_EXPORT extern const base::Feature kCookiesWithoutSameSiteMustBeSecure;
+
+// When enabled, the time threshold for Lax-allow-unsafe cookies will be lowered
+// from 2 minutes to 10 seconds. This time threshold refers to the age cutoff
+// for which cookies that default into SameSite=Lax, which are newer than the
+// threshold, will be sent with any top-level cross-site navigation regardless
+// of HTTP method (i.e. allowing unsafe methods). This is a convenience for
+// integration tests which may want to test behavior of cookies older than the
+// threshold, but which would not be practical to run for 2 minutes.
+NET_EXPORT extern const base::Feature kShortLaxAllowUnsafeThreshold;
 
 #if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
 // When enabled, use the builtin cert verifier instead of the platform verifier.

@@ -30,7 +30,6 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/local_window_proxy.h"
 
-#include "third_party/blink/renderer/bindings/core/v8/initialize_v8_extras_binding.h"
 #include "third_party/blink/renderer/bindings/core/v8/isolated_world_csp.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_for_core.h"
@@ -182,9 +181,15 @@ void LocalWindowProxy::Initialize() {
   if (evaluate_csp_for_eval) {
     ContentSecurityPolicy* csp =
         GetFrame()->GetDocument()->GetContentSecurityPolicyForWorld();
-    context->AllowCodeGenerationFromStrings(csp->AllowEval(
-        nullptr, SecurityViolationReportingPolicy::kSuppressReporting,
-        ContentSecurityPolicy::kWillNotThrowException, g_empty_string));
+    // CSP has two mechanisms for controlling eval, script-src and Trusted
+    // Types, and we need to check both.
+    // TODO(vogelheim): Provide a simple(e) API for this use case.
+    bool allow_code_generation =
+        csp->AllowEval(SecurityViolationReportingPolicy::kSuppressReporting,
+                       ContentSecurityPolicy::kWillNotThrowException,
+                       g_empty_string) &&
+        !csp->IsRequireTrustedTypes();
+    context->AllowCodeGenerationFromStrings(allow_code_generation);
     context->SetErrorMessageForCodeGenerationFromStrings(
         V8String(GetIsolate(), csp->EvalDisabledErrorMessage()));
   }
@@ -209,9 +214,6 @@ void LocalWindowProxy::Initialize() {
   }
 
   InstallConditionalFeatures();
-
-  // This needs to go after everything else since it accesses the window object.
-  InitializeV8ExtrasBinding(script_state_);
 
   if (World().IsMainWorld()) {
     GetFrame()->Loader().DispatchDidClearWindowObjectInMainWorld();

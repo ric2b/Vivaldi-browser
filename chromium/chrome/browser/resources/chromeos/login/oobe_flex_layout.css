@@ -53,6 +53,10 @@
   align-items: flex-end;
 }
 
+.layout.stretch {
+  align-items: stretch;
+}
+
 /* alignment in main axis */
 
 .layout.start-justified {
@@ -111,4 +115,10 @@
   position: absolute;
   right: 0;
   top: 0;
+}
+
+.oobe-illustration {
+  max-height: -webkit-fill-available;
+  max-width: -webkit-fill-available;
+  object-fit: contain;
 }

@@ -220,6 +220,7 @@
     ],
     "dependencies": [
         "components",
+        "coverage",
         "layer_viewer",
         "timeline_model",
         "perf_ui",
@@ -247,7 +248,9 @@
         "TimelineUIUtils.js",
         "TimelineLayersView.js",
         "TimelinePaintProfilerView.js",
-        "TimelinePanel.js"
+        "TimelinePanel.js",
+        "UIDevtoolsUtils.js",
+        "UIDevtoolsController.js"
     ],
     "resources": [
         "historyToolbarButton.css",

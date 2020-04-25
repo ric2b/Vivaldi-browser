@@ -89,13 +89,14 @@ class CastRemotingConnector::RemotingBridge : public media::mojom::Remoter {
   void StartDataStreams(
       mojo::ScopedDataPipeConsumerHandle audio_pipe,
       mojo::ScopedDataPipeConsumerHandle video_pipe,
-      media::mojom::RemotingDataStreamSenderRequest audio_sender_request,
-      media::mojom::RemotingDataStreamSenderRequest video_sender_request)
-      final {
+      mojo::PendingReceiver<media::mojom::RemotingDataStreamSender>
+          audio_sender_receiver,
+      mojo::PendingReceiver<media::mojom::RemotingDataStreamSender>
+          video_sender_receiver) final {
     if (connector_) {
       connector_->StartRemotingDataStreams(
           this, std::move(audio_pipe), std::move(video_pipe),
-          std::move(audio_sender_request), std::move(video_sender_request));
+          std::move(audio_sender_receiver), std::move(video_sender_receiver));
     }
   }
   void Stop(RemotingStopReason reason) final {
@@ -191,8 +192,6 @@ CastRemotingConnector::CastRemotingConnector(
       tab_id_(tab_id),
       permission_request_callback_(std::move(permission_request_callback)),
       active_bridge_(nullptr),
-      deprecated_binding_(this),
-      binding_(this),
       pref_service_(pref_service) {
   DCHECK(permission_request_callback_);
 #if !defined(OS_ANDROID)
@@ -224,18 +223,18 @@ CastRemotingConnector::~CastRemotingConnector() {
 }
 
 void CastRemotingConnector::ConnectToService(
-    media::mojom::MirrorServiceRemotingSourceRequest source_request,
-    media::mojom::MirrorServiceRemoterPtr remoter) {
-  DCHECK(!deprecated_binding_);
+    mojo::PendingReceiver<media::mojom::MirrorServiceRemotingSource>
+        source_receiver,
+    mojo::PendingRemote<media::mojom::MirrorServiceRemoter> remoter) {
   DCHECK(!deprecated_remoter_);
   DCHECK(remoter);
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  deprecated_binding_.Bind(std::move(source_request));
-  deprecated_binding_.set_connection_error_handler(base::BindOnce(
+  deprecated_receiver_.Bind(std::move(source_receiver));
+  deprecated_receiver_.set_disconnect_handler(base::BindOnce(
       &CastRemotingConnector::OnMirrorServiceStopped, base::Unretained(this)));
-  deprecated_remoter_ = std::move(remoter);
-  deprecated_remoter_.set_connection_error_handler(base::BindOnce(
+  deprecated_remoter_.Bind(std::move(remoter));
+  deprecated_remoter_.set_disconnect_handler(base::BindOnce(
       &CastRemotingConnector::OnMirrorServiceStopped, base::Unretained(this)));
 }
 
@@ -244,19 +243,18 @@ void CastRemotingConnector::ResetRemotingPermission() {
 }
 
 void CastRemotingConnector::ConnectWithMediaRemoter(
-    media::mojom::RemoterPtr remoter,
-    media::mojom::RemotingSourceRequest request) {
-  DCHECK(!binding_);
+    mojo::PendingRemote<media::mojom::Remoter> remoter,
+    mojo::PendingReceiver<media::mojom::RemotingSource> receiver) {
   DCHECK(!remoter_);
   DCHECK(remoter);
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DVLOG(2) << __func__;
 
-  binding_.Bind(std::move(request));
-  binding_.set_connection_error_handler(base::BindOnce(
+  receiver_.Bind(std::move(receiver));
+  receiver_.set_disconnect_handler(base::BindOnce(
       &CastRemotingConnector::OnMirrorServiceStopped, base::Unretained(this)));
-  remoter_ = std::move(remoter);
-  remoter_.set_connection_error_handler(base::BindOnce(
+  remoter_.Bind(std::move(remoter));
+  remoter_.set_disconnect_handler(base::BindOnce(
       &CastRemotingConnector::OnMirrorServiceStopped, base::Unretained(this)));
 }
 
@@ -264,11 +262,9 @@ void CastRemotingConnector::OnMirrorServiceStopped() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DVLOG(2) << __func__;
 
-  if (deprecated_binding_)
-    deprecated_binding_.Close();
+  deprecated_receiver_.reset();
   deprecated_remoter_.reset();
-  if (binding_)
-    binding_.Close();
+  receiver_.reset();
   remoter_.reset();
 
   sink_metadata_ = RemotingSinkMetadata();
@@ -384,8 +380,10 @@ void CastRemotingConnector::StartRemotingDataStreams(
     RemotingBridge* bridge,
     mojo::ScopedDataPipeConsumerHandle audio_pipe,
     mojo::ScopedDataPipeConsumerHandle video_pipe,
-    media::mojom::RemotingDataStreamSenderRequest audio_sender_request,
-    media::mojom::RemotingDataStreamSenderRequest video_sender_request) {
+    mojo::PendingReceiver<media::mojom::RemotingDataStreamSender>
+        audio_sender_receiver,
+    mojo::PendingReceiver<media::mojom::RemotingDataStreamSender>
+        video_sender_receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // Refuse to start if there is no remoting route available, or if remoting is
@@ -395,27 +393,27 @@ void CastRemotingConnector::StartRemotingDataStreams(
   // Also, if neither audio nor video pipe was provided, or if a request for a
   // RemotingDataStreamSender was not provided for a data pipe, error-out early.
   if ((!audio_pipe.is_valid() && !video_pipe.is_valid()) ||
-      (audio_pipe.is_valid() && !audio_sender_request.is_pending()) ||
-      (video_pipe.is_valid() && !video_sender_request.is_pending())) {
+      (audio_pipe.is_valid() && !audio_sender_receiver.is_valid()) ||
+      (video_pipe.is_valid() && !video_sender_receiver.is_valid())) {
     StopRemoting(active_bridge_, RemotingStopReason::DATA_SEND_FAILED, false);
     return;
   }
 
   if (deprecated_remoter_) {
     DCHECK(!remoter_);
-    const bool want_audio = audio_sender_request.is_pending();
-    const bool want_video = video_sender_request.is_pending();
+    const bool want_audio = audio_sender_receiver.is_valid();
+    const bool want_video = video_sender_receiver.is_valid();
     deprecated_remoter_->StartDataStreams(
         want_audio, want_video,
         base::BindOnce(&CastRemotingConnector::OnDataStreamsStarted,
                        weak_factory_.GetWeakPtr(), std::move(audio_pipe),
-                       std::move(video_pipe), std::move(audio_sender_request),
-                       std::move(video_sender_request)));
+                       std::move(video_pipe), std::move(audio_sender_receiver),
+                       std::move(video_sender_receiver)));
   } else {
     DCHECK(remoter_);
     remoter_->StartDataStreams(std::move(audio_pipe), std::move(video_pipe),
-                               std::move(audio_sender_request),
-                               std::move(video_sender_request));
+                               std::move(audio_sender_receiver),
+                               std::move(video_sender_receiver));
   }
 }
 

@@ -20,6 +20,7 @@
 <translation id="1087788677726983142">ซ่อนตัวกรองสตรีมเหตุการณ์</translation>
 <translation id="1088219014394087294">ไม่มีส่วนหัว</translation>
 <translation id="1106741348836243114">เปิดหรือปิดเสียงความคิดเห็น (earcons)</translation>
+<translation id="1114836634143403764">คำแนะนำ</translation>
 <translation id="1120743664840974483">{"a": "อัลฟ่า", "b": "บราโว่", "c": "ชาร์ลี", "d": "เดลต้า", "e": "เอคโค่", "f": "ฟอกซ์ทรอต", "g": "กอล์ฟ", "h": "โฮเท็ล", "i": "อินเดีย", "j": "จูเลียต","k": "กิโล", "l": "ลิมา", "m": "ไมค์", "n": "โนเวมเบอร์", "o": "ออสการ์","p": "ปาป้า", "q": "ควิเบค", "r": "โรมิโอ", "s": "เซียร์ร่า", "t": "แทงโก้", "u": "ยูนิฟอร์ม", "v": "วิคเตอร์", "w": "วิสกี้","x": "เอ็กซเรย์", "y": "แยงกี้", "z": "ซูลู"}</translation>
 <translation id="1120938014254001895">เลื่อน 2 นิ้วขึ้น</translation>
 <translation id="1124771028211010580">รูปแบบการแสดงผลปัจจุบันคือการแสดงคู่กัน</translation>
@@ -126,6 +127,7 @@
 <translation id="1845944666972354496">แตะสองครั้งเพื่อเปิดใช้งาน</translation>
 <translation id="1846771122725914429">อุปกรณ์แสดงผลอักษรเบรลล์ผ่านบลูทูธ</translation>
 <translation id="1865601187525349519">สิ้นสุดข้อความ</translation>
+<translation id="1875375785454778375">ผู้ทำงานร่วมกันที่ดูเนื้อหานี้อยู่</translation>
 <translation id="1876229593313240038">เอกสาร</translation>
 <translation id="188130072164734898">พูดเวลาและวันที่ปัจจุบัน</translation>
 <translation id="1902396333223336119">เซลล์</translation>
@@ -146,6 +148,7 @@
 <translation id="2009187674653301682">ไม่เป็นตัวยก</translation>
 <translation id="2010555995361223825">เมนู ChromeVox</translation>
 <translation id="2045490512405922022">ไม่ได้เลือก</translation>
+<translation id="2049107626739254612">ข้อมูลการเขียนโปรแกรม</translation>
 <translation id="20601713649439366">ไม่มีสูตรคณิตศาสตร์ก่อนหน้า</translation>
 <translation id="2063539687800151747">คำจารึก</translation>
 <translation id="207477615537953741">ปิดความหมาย</translation>
@@ -156,6 +159,7 @@
 <translation id="2110480898214777136">ย้ายจากจุดเริ่มต้นจนถึงจุดสิ้นสุดหรือจุดสิ้นสุดจนถึงจุดเริ่มต้นในหน้าเว็บ กล่องโต้ตอบ หรือคอนเทนเนอร์อื่นๆ</translation>
 <translation id="2119965627982867824">spnbtn</translation>
 <translation id="2121067395472282800">รหัสการเข้าถึง: <ph name="KEY" /></translation>
+<translation id="2126597928985245619">ไม่มีข้อความสำหรับรายการนี้</translation>
 <translation id="2127747486437921899">ตัวเอียง</translation>
 <translation id="2138345533858834403">จำลองผลลัพธ์ของเครื่องแสดงผลอักษรเบรลล์แบบรีเฟรชได้ในแผง ChromeVox ที่ด้านบนของหน้าจอ</translation>
 <translation id="2163782704988363449">ข้อผิดพลาด</translation>
@@ -167,6 +171,7 @@
 <translation id="2203046366315513658">ลดค่า</translation>
 <translation id="2220529011494928058">รายงานปัญหา</translation>
 <translation id="2223693656926968778">ดำเนินการกับรายการปัจจุบัน</translation>
+<translation id="224426591676115802">ไม่มีเสียงสำหรับภาษา<ph name="LANGUAGE" /></translation>
 <translation id="225732394367814946">เพิ่มอัตราการพูด</translation>
 <translation id="2267538686624070261">กำลังออกจากคำที่สะกดผิด</translation>
 <translation id="2267945578749931355">อักขระถัดไป</translation>
@@ -208,7 +213,6 @@
 <translation id="2582407057977008361">ส่วนที่ไม่เกี่ยวข้อง</translation>
 <translation id="2592212930811759050">แตะสองครั้งเพื่อเริ่มแก้ไข</translation>
 <translation id="2598495320872286378">ข้อผิดพลาดด้านไวยากรณ์</translation>
-<translation id="2606210917827248971">ที่มี {COUNT,plural, =1{# รายการ}other{# รายการ}}</translation>
 <translation id="2614981083756825552">รูปแบบ ML คณิตศาสตร์</translation>
 <translation id="2624431853467395961">เปิดโหมดการเรียนรู้</translation>
 <translation id="2626530649491650971">คลิกได้</translation>
@@ -235,6 +239,7 @@
 <translation id="27527859628328957">ข้ามไปยังรายการที่โฟกัสได้ถัดไป</translation>
 <translation id="2770781857296573485">ป้อนการสำรวจกลุ่ม</translation>
 <translation id="2777845298774924149">ออกแล้ว</translation>
+<translation id="2783001728278437613">{COUNT,plural, =1{+#}other{+#}}</translation>
 <translation id="2784959586797362050">คุณส่งความคิดเห็นถึงเราได้ตามปกติด้วยการกด Search+a แล้วกด i เรายินดีอย่างยิ่งที่จะได้รับฟังความคิดเห็นจากคุณ</translation>
 <translation id="2800204403141299078">ไม่มีองค์ประกอบที่ต่างกันเพิ่มเติม</translation>
 <translation id="2800780099804980316">ไม่มีส่วนหัวระดับ 1 ก่อนหน้า</translation>
@@ -260,6 +265,7 @@
 <translation id="2911433807131383493">เปิดบทแนะนำ ChromeVox</translation>
 <translation id="2912405967290226587">เลื่อน 3 นิ้วไปทางขวา</translation>
 <translation id="2932083475399492303">สลับประเภทบรรทัดระหว่างโครงสร้างหรือรูปแบบ</translation>
+<translation id="293796669683825859">ความคิดเห็น</translation>
 <translation id="2942710183375260152">สีน้ำเงินอมเทาเข้ม</translation>
 <translation id="2943596527105977722">สีเหลืองโกลเด้นร็อดเข้ม</translation>
 <translation id="2944762337049891859">อ่านหน้าโดยอัตโนมัติหลังจากที่โหลดเสร็จ</translation>
@@ -321,6 +327,7 @@
 <translation id="3241052487511142956">ลิงก์ที่เคยเข้าชมก่อนหน้า</translation>
 <translation id="3241638166094654466">จำนวนเซลล์ในแต่ละบรรทัด:</translation>
 <translation id="3244209481693235975"><ph name="LANGUAGE" />: <ph name="CONTENT" /></translation>
+<translation id="3260949043575829030">รายการที่คล้ายกันก่อนหน้า</translation>
 <translation id="3286372614333682499">แนวตั้ง</translation>
 <translation id="3286390186030710347">แถบเลื่อน</translation>
 <translation id="3299925995433437805">ไม่มีลิงก์ที่เคยเข้าชมถัดไป</translation>
@@ -336,6 +343,7 @@
 <translation id="3324983252691184275">แดงเข้ม</translation>
 <translation id="3338224621010291843">แถบเลื่อน <ph name="VALUE" /> <ph name="NAME" /></translation>
 <translation id="335581015389089642">คำพูด</translation>
+<translation id="3356951775008366684">ประกาศการออกเสียงคำ</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{เครื่องหมายบวก}other{# เครื่องหมายบวก}}</translation>
 <translation id="338583716107319301">ตัวแยก</translation>
@@ -374,6 +382,7 @@
 <translation id="3646890046000188562">{COUNT,plural, =1{เครื่องหมายแบ็กทิก}other{# เครื่องหมายแบ็กทิก}}</translation>
 <translation id="3650317109285159359">chkmnuitm</translation>
 <translation id="3655855170848725876">{COUNT,plural, =1{เครื่องหมายดอลลาร์}other{# เครื่องหมายดอลลาร์}}</translation>
+<translation id="3658742229777143148">การแก้ไข</translation>
 <translation id="3659787053479271466">การแจ้งเตือน</translation>
 <translation id="3665563998540286755">ช่องรายการ <ph name="VALUE" /></translation>
 <translation id="3681531118904532409">สีชมพูพาพายาวิป</translation>
@@ -392,7 +401,6 @@
 <translation id="3781428340399460090">ชมพูเจิดจ้า</translation>
 <translation id="3783725005098956899">แสดงบันทึก</translation>
 <translation id="3793710123303304873">ออกจากช่องโต้ตอบแล้ว</translation>
-<translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">รายการเติมข้อความอัตโนมัติ</translation>
 <translation id="3810838688059735925">วิดีโอ</translation>
 <translation id="3813387282697781382">สีส้มอมชมพูอ่อน</translation>
@@ -502,6 +510,7 @@
 <translation id="4517854969512651305">เพิ่มค่า</translation>
 <translation id="4529987814483543472">รูปแบบแป้นคลาสสิก</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{เครื่องหมายทับ}other{# เครื่องหมายทับ}}</translation>
+<translation id="4537277403911487429">รายการที่คล้ายกันถัดไป</translation>
 <translation id="4547556996012970016">ส่วนหัวระดับ 5 ถัดไป</translation>
 <translation id="4562381607973973258">ส่วนหัว</translation>
 <translation id="4569941707103739422">กดลูกศรขึ้นหรือลงเพื่อนำทาง แล้วกด Enter เพื่อเปิดใช้งาน</translation>
@@ -532,6 +541,7 @@
 <translation id="4763480195061959176">วิดีโอ</translation>
 <translation id="4764692524839457597">ค่าเริ่มต้น</translation>
 <translation id="4772771694153161212">ไม่ขีดเส้นใต้</translation>
+<translation id="4787577491510559358">ประกาศการจัดรูปแบบของรายการปัจจุบัน</translation>
 <translation id="479989351350248267">ค้นหา</translation>
 <translation id="4804818685124855865">ตัดการเชื่อมต่อ</translation>
 <translation id="481165870889056555">แจ้งชื่อของหน้าเว็บปัจจุบัน</translation>
@@ -568,6 +578,7 @@
 <translation id="4983588134362688868">ข้ามไปที่ส่วนบนสุดของหน้าเว็บ</translation>
 <translation id="4986606102545753256">หน้าต่าง <ph name="NAME" /></translation>
 <translation id="4993152509206108683">ระดับ <ph name="PERCENT" /> เปอร์เซ็นต์</translation>
+<translation id="4994420463726586413">ประกาศสถานะปัจจุบันของแบตเตอรี่</translation>
 <translation id="4996716799442435517">ภาพ</translation>
 <translation id="4997282455736854877">ปุ่มตัวเลือก <ph name="NAME" /> ที่เลือกไว้</translation>
 <translation id="4997475792277222884">ไม่มีรายการถัดไปที่ไม่ใช่ลิงก์</translation>
@@ -716,6 +727,7 @@
 <translation id="5956928062748260866">ช่องโต้ตอบ</translation>
 <translation id="5963413905009737549">ส่วน</translation>
 <translation id="5968607524793740041">แสดงเมนูตามบริบท</translation>
+<translation id="597121107011153418">{COUNT,plural, =1{ที่มี # รายการ}other{ที่มี # รายการ}}</translation>
 <translation id="5981446804259161541">สีฟ้าอ่อน</translation>
 <translation id="5983179082906765664">เพิ่มความละเอียดในการนำทาง</translation>
 <translation id="5992285135956208197">เอกสารกราฟิก</translation>

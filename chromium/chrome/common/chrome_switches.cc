@@ -137,8 +137,10 @@ const char kCrashOnHangThreads[]            = "crash-on-hang-threads";
 const char kCreateBrowserOnStartupForTests[] =
     "create-browser-on-startup-for-tests";
 
-// Specifies the HTTP endpoint which will be used to serve
+// Specifies the http:// endpoint which will be used to serve
 // devtools://devtools/custom/<path>
+// Or a file:// URL to specify a custom file path to load from for
+// devtools://devtools/bundled/<path>
 const char kCustomDevtoolsFrontend[] = "custom-devtools-frontend";
 
 // Enables a frame context menu item that toggles the frame in and out of glass
@@ -248,9 +250,6 @@ const char kDiskCacheDir[]                  = "disk-cache-dir";
 const char kDiskCacheSize[]                 = "disk-cache-size";
 
 const char kDnsLogDetails[]                 = "dns-log-details";
-
-// Enables new UI for net-error page.
-const char kNewNetErrorPageUI[] = "new-net-error-page-ui";
 
 // Requests that a running browser process dump its collected histograms to a
 // given file. The file is overwritten if it exists.
@@ -860,12 +859,11 @@ const char kEnableNewAppMenuIcon[] = "enable-new-app-menu-icon";
 const char kGuest[] = "guest";
 #endif
 
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && \
-    !defined(GOOGLE_CHROME_BUILD)
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 // Enables Machine level user cloud policy on Chromium build. This policy is
 // always enabled on the branded builds.
-const char kEnableMachineLevelUserCloudPolicy[] =
-    "enable-machine-level-user-cloud-policy";
+const char kEnableChromeBrowserCloudManagement[] =
+    "enable-chrome-browser-cloud-management";
 #endif
 
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)

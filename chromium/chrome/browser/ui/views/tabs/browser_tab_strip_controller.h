@@ -20,7 +20,6 @@
 class Browser;
 class BrowserNonClientFrameView;
 class Tab;
-struct TabRendererData;
 
 namespace content {
 class WebContents;
@@ -62,6 +61,7 @@ class BrowserTabStripController : public TabStripController,
   void AddSelectionFromAnchorTo(int model_index) override;
   bool BeforeCloseTab(int model_index, CloseTabSource source) override;
   void CloseTab(int model_index, CloseTabSource source) override;
+  void MoveTab(int start_index, int final_index) override;
   void ShowContextMenuForTab(Tab* tab,
                              const gfx::Point& p,
                              ui::MenuSourceType source_type) override;
@@ -72,6 +72,7 @@ class BrowserTabStripController : public TabStripController,
   void StackedLayoutMaybeChanged() override;
   void OnStartedDraggingTabs() override;
   void OnStoppedDraggingTabs() override;
+  void OnKeyboardFocusedTabChanged(base::Optional<int> index) override;
   const TabGroupVisualData* GetVisualDataForGroup(
       TabGroupId group_id) const override;
   void SetVisualDataForGroup(TabGroupId group,
@@ -82,12 +83,10 @@ class BrowserTabStripController : public TabStripController,
   bool EverHasVisibleBackgroundTabShapes() const override;
   bool ShouldPaintAsActiveFrame() const override;
   bool CanDrawStrokes() const override;
-  SkColor GetFrameColor(
-      BrowserNonClientFrameView::ActiveState active_state =
-          BrowserNonClientFrameView::kUseCurrent) const override;
+  SkColor GetFrameColor(BrowserFrameActiveState active_state) const override;
   SkColor GetToolbarTopSeparatorColor() const override;
   base::Optional<int> GetCustomBackgroundId(
-      BrowserNonClientFrameView::ActiveState active_state) const override;
+      BrowserFrameActiveState active_state) const override;
   base::string16 GetAccessibleTabName(const Tab* tab) const override;
   Profile* GetProfile() const override;
 
@@ -115,19 +114,8 @@ class BrowserTabStripController : public TabStripController,
  private:
   class TabContextMenuContents;
 
-  // The context in which TabRendererDataFromModel is being called.
-  enum TabStatus {
-    NEW_TAB,
-    EXISTING_TAB
-  };
-
   BrowserNonClientFrameView* GetFrameView();
   const BrowserNonClientFrameView* GetFrameView() const;
-
-  // Returns the TabRendererData for the specified tab.
-  TabRendererData TabRendererDataFromModel(content::WebContents* contents,
-                                           int model_index,
-                                           TabStatus tab_status);
 
   // Invokes tabstrip_->SetTabData.
   void SetTabDataAt(content::WebContents* web_contents, int model_index);

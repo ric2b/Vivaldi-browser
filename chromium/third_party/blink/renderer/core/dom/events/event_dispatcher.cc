@@ -337,7 +337,7 @@ inline void EventDispatcher::DispatchEventPostProcess(
   // TODO(dtapuska): Change this to a target SDK quirk crbug.com/643705
   if (!is_trusted_or_click && event_->IsMouseEvent() &&
       event_->type() == event_type_names::kMousedown &&
-      IsHTMLSelectElement(*node_)) {
+      IsA<HTMLSelectElement>(*node_)) {
     if (Settings* settings = node_->GetDocument().GetSettings()) {
       is_trusted_or_click = settings->GetWideViewportQuirkEnabled();
     }
@@ -346,8 +346,10 @@ inline void EventDispatcher::DispatchEventPostProcess(
   // Call default event handlers. While the DOM does have a concept of
   // preventing default handling, the detail of which handlers are called is an
   // internal implementation detail and not part of the DOM.
-  if (!event_->defaultPrevented() && !event_->DefaultHandled() &&
-      is_trusted_or_click) {
+  if (event_->defaultPrevented()) {
+    if (activation_target)
+      activation_target->DidPreventDefault(*event_);
+  } else if (!event_->DefaultHandled() && is_trusted_or_click) {
     // Non-bubbling events call only one default event handler, the one for the
     // target.
     node_->WillCallDefaultEventHandler(*event_);
@@ -382,7 +384,7 @@ inline void EventDispatcher::DispatchEventPostProcess(
   // events to open select boxes.
   if (!event_->isTrusted() && event_->IsMouseEvent() &&
       event_->type() == event_type_names::kMousedown &&
-      IsHTMLSelectElement(*node_)) {
+      IsA<HTMLSelectElement>(*node_)) {
     UseCounter::Count(node_->GetDocument(),
                       WebFeature::kUntrustedMouseDownEventDispatchedToSelect);
   }

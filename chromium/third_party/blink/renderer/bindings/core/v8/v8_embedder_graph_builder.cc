@@ -173,8 +173,9 @@ class GC_PLUGIN_IGNORE(
                              uint16_t class_id) override;
 
   // v8::EmbedderHeapTracer::TracedGlobalHandleVisitor override.
-  void VisitTracedGlobalHandle(
-      const v8::TracedGlobal<v8::Value>& value) override;
+  void VisitTracedReference(
+      const v8::TracedReference<v8::Value>& value) override;
+  void VisitTracedGlobalHandle(const v8::TracedGlobal<v8::Value>&) override;
 
   // Visitor overrides.
   void VisitRoot(void*, TraceDescriptor, const base::Location&) final;
@@ -508,13 +509,18 @@ void V8EmbedderGraphBuilder::VisitPersistentHandleInternal(
   }
 }
 
-void V8EmbedderGraphBuilder::VisitTracedGlobalHandle(
-    const v8::TracedGlobal<v8::Value>& value) {
+void V8EmbedderGraphBuilder::VisitTracedReference(
+    const v8::TracedReference<v8::Value>& value) {
   const uint16_t class_id = value.WrapperClassId();
   if (class_id != WrapperTypeInfo::kNodeClassId &&
       class_id != WrapperTypeInfo::kObjectClassId)
     return;
   VisitPersistentHandleInternal(value.As<v8::Object>().Get(isolate_), class_id);
+}
+
+void V8EmbedderGraphBuilder::VisitTracedGlobalHandle(
+    const v8::TracedGlobal<v8::Value>&) {
+  CHECK(false) << "Blink does not use v8::TracedGlobal.";
 }
 
 void V8EmbedderGraphBuilder::VisitPersistentHandle(
@@ -637,7 +643,7 @@ void V8EmbedderGraphBuilder::VisitBlinkRoots() {
         std::unique_ptr<Graph::Node>(new EmbedderRootNode("Blink roots"))));
     EnsureRootState(root);
     ParentScope parent(this, root);
-    ThreadState::Current()->GetPersistentRegion()->TracePersistentNodes(this);
+    ThreadState::Current()->GetPersistentRegion()->TraceNodes(this);
   }
   {
     EmbedderNode* root =
@@ -646,7 +652,7 @@ void V8EmbedderGraphBuilder::VisitBlinkRoots() {
     EnsureRootState(root);
     ParentScope parent(this, root);
     MutexLocker persistent_lock(ProcessHeap::CrossThreadPersistentMutex());
-    ProcessHeap::GetCrossThreadPersistentRegion().TracePersistentNodes(this);
+    ProcessHeap::GetCrossThreadPersistentRegion().TraceNodes(this);
   }
 }
 

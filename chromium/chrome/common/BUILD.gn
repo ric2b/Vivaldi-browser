@@ -35,11 +35,13 @@ grit("resources") {
 buildflag_header("buildflags") {
   header = "buildflags.h"
   flags = [
+    "BUILTIN_CERT_VERIFIER_POLICY_SUPPORTED=$builtin_cert_verifier_policy_supported",
     "ENABLE_APP_LIST=$enable_app_list",
     "ENABLE_BACKGROUND_MODE=$enable_background_mode",
     "ENABLE_BACKGROUND_CONTENTS=$enable_background_contents",
     "ENABLE_BASIC_PRINT_DIALOG=$enable_basic_print_dialog",
     "ENABLE_CAPTIVE_PORTAL_DETECTION=$enable_captive_portal_detection",
+    "ENABLE_CLICK_TO_CALL=$enable_click_to_call",
     "ENABLE_HANGOUT_SERVICES_EXTENSION=$enable_hangout_services_extension",
     "ENABLE_ONE_CLICK_SIGNIN=$enable_one_click_signin",
     "ENABLE_NATIVE_NOTIFICATIONS=$enable_native_notifications",
@@ -62,10 +64,14 @@ source_set("channel_info") {
     "channel_info_mac.mm",
     "channel_info_win.cc",
   ]
-
   if (is_posix && !is_android && !is_chromeos && !is_mac) {
     sources += [ "channel_info_posix.cc" ]
   }
+
+  deps = [
+    "//build:branding_buildflags",
+  ]
+
   public_deps = [
     "//base",
     "//components/version_info",
@@ -107,7 +113,6 @@ static_library("common") {
     "attrition_experiments.h",
     "auto_start_linux.cc",
     "auto_start_linux.h",
-    "browser_controls_state_param_traits.h",
     "child_process_logging.h",
     "child_process_logging_win.cc",
     "chrome_content_client.cc",
@@ -285,6 +290,7 @@ static_library("common") {
 
   deps = [
     "//build:branding_buildflags",
+    "//components/crash/content/app",
     "//components/metrics:call_stack_profile_builder",
     "//components/page_load_metrics/common:common",
   ]
@@ -315,7 +321,6 @@ static_library("common") {
       "extensions/api/system_indicator/system_indicator_handler.h",
       "extensions/api/url_handlers/url_handlers_parser.cc",
       "extensions/api/url_handlers/url_handlers_parser.h",
-      "extensions/chrome_extension_messages.h",
       "extensions/chrome_extensions_api_provider.cc",
       "extensions/chrome_extensions_api_provider.h",
       "extensions/chrome_extensions_client.cc",
@@ -492,8 +497,20 @@ static_library("common") {
     ]
   }
 
-  if (enable_widevine && enable_library_cdms) {
-    deps += [ "//third_party/widevine/cdm:headers" ]
+  if (enable_library_cdms) {
+    sources += [
+      "media/cdm_manifest.cc",
+      "media/cdm_manifest.h",
+    ]
+    if (enable_widevine) {
+      if (is_desktop_linux) {
+        sources += [
+          "media/component_widevine_cdm_hint_file_linux.cc",
+          "media/component_widevine_cdm_hint_file_linux.h",
+        ]
+      }
+      deps += [ "//third_party/widevine/cdm:headers" ]
+    }
   }
 
   if (safe_browsing_mode != 0) {
@@ -505,6 +522,9 @@ static_library("common") {
   }
 
   if (enable_cdm_host_verification) {
+    if (is_win && is_multi_dll_chrome) {
+      defines += [ "CHROME_MULTIPLE_DLL" ]
+    }
     sources += [
       "media/cdm_host_file_path.cc",
       "media/cdm_host_file_path.h",
@@ -571,6 +591,7 @@ component("chrome_features") {
     "//device/vr/buildflags",
     "//extensions/buildflags",
     "//media:media_buildflags",
+    "//net:buildflags",
     "//ppapi/buildflags",
     "//printing/buildflags",
     "//rlz/buildflags",
@@ -601,7 +622,6 @@ static_library("constants") {
     ":buildflags",
     ":chrome_features",
     ":non_code_constants",
-    "//build:branding_buildflags",
     "//content/public/common:result_codes",
     "//rlz/buildflags",
   ]
@@ -611,6 +631,7 @@ static_library("constants") {
     ":version_header",
     "//base",
     "//base/third_party/dynamic_annotations",
+    "//build:branding_buildflags",
     "//components/bookmarks/common",
     "//components/nacl/common:switches",
     "//components/offline_pages/buildflags",
@@ -754,6 +775,7 @@ mojom("mojo_bindings") {
     "//mojo/public/mojom/base",
     "//third_party/blink/public/mojom:mojom_platform",
     "//ui/gfx/geometry/mojom",
+    "//ui/gfx/image/mojom",
     "//url/mojom:url_mojom_gurl",
     "//url/mojom:url_mojom_origin",
   ]

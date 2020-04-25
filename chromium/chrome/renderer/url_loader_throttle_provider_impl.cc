@@ -54,8 +54,9 @@ chrome::mojom::PrerenderCanceler* GetPrerenderCanceller(int render_frame_id) {
   if (!helper)
     return nullptr;
 
-  auto* canceler = new chrome::mojom::PrerenderCancelerPtr;
-  render_frame->GetRemoteInterfaces()->GetInterface(canceler);
+  auto* canceler = new mojo::Remote<chrome::mojom::PrerenderCanceler>;
+  render_frame->GetRemoteInterfaces()->GetInterface(
+      canceler->BindNewPipeAndPassReceiver());
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, canceler);
   return canceler->get();
 }
@@ -72,12 +73,6 @@ CreateExtensionThrottleManager() {
 
 void SetExtensionThrottleManagerTestPolicy(
     extensions::ExtensionThrottleManager* extension_throttle_manager) {
-  // Requests issued within within |kUserGestureWindowMs| of a user gesture
-  // are also considered as user gestures (see
-  // resource_dispatcher_host_impl.cc), so these tests need to bypass the
-  // checking of the net::LOAD_MAYBE_USER_GESTURE load flag in the manager
-  // in order to test the throttling logic.
-  extension_throttle_manager->SetIgnoreUserGestureLoadFlagForTests(true);
   std::unique_ptr<net::BackoffEntry::Policy> policy(
       new net::BackoffEntry::Policy{
           // Number of initial errors (in sequence) to ignore before
@@ -117,9 +112,11 @@ URLLoaderThrottleProviderImpl::URLLoaderThrottleProviderImpl(
     : type_(type),
       chrome_content_renderer_client_(chrome_content_renderer_client) {
   DETACH_FROM_THREAD(thread_checker_);
-  broker->GetInterface(mojo::MakeRequest(&safe_browsing_info_));
-  if (data_reduction_proxy::params::IsEnabledWithNetworkService())
-    broker->GetInterface(mojo::MakeRequest(&data_reduction_proxy_info_));
+  broker->GetInterface(safe_browsing_remote_.InitWithNewPipeAndPassReceiver());
+  if (data_reduction_proxy::params::IsEnabledWithNetworkService()) {
+    broker->GetInterface(
+        data_reduction_proxy_remote_.InitWithNewPipeAndPassReceiver());
+  }
 }
 
 URLLoaderThrottleProviderImpl::~URLLoaderThrottleProviderImpl() {
@@ -131,11 +128,13 @@ URLLoaderThrottleProviderImpl::URLLoaderThrottleProviderImpl(
     : type_(other.type_),
       chrome_content_renderer_client_(other.chrome_content_renderer_client_) {
   DETACH_FROM_THREAD(thread_checker_);
-  if (other.safe_browsing_)
-    other.safe_browsing_->Clone(mojo::MakeRequest(&safe_browsing_info_));
+  if (other.safe_browsing_) {
+    other.safe_browsing_->Clone(
+        safe_browsing_remote_.InitWithNewPipeAndPassReceiver());
+  }
   if (other.data_reduction_proxy_) {
     other.data_reduction_proxy_->Clone(
-        mojo::MakeRequest(&data_reduction_proxy_info_));
+        data_reduction_proxy_remote_.InitWithNewPipeAndPassReceiver());
   }
   // An ad_delay_factory_ is created, rather than cloning the existing one.
 }
@@ -143,10 +142,10 @@ URLLoaderThrottleProviderImpl::URLLoaderThrottleProviderImpl(
 std::unique_ptr<content::URLLoaderThrottleProvider>
 URLLoaderThrottleProviderImpl::Clone() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  if (safe_browsing_info_)
-    safe_browsing_.Bind(std::move(safe_browsing_info_));
-  if (data_reduction_proxy_info_)
-    data_reduction_proxy_.Bind(std::move(data_reduction_proxy_info_));
+  if (safe_browsing_remote_)
+    safe_browsing_.Bind(std::move(safe_browsing_remote_));
+  if (data_reduction_proxy_remote_)
+    data_reduction_proxy_.Bind(std::move(data_reduction_proxy_remote_));
   return base::WrapUnique(new URLLoaderThrottleProviderImpl(*this));
 }
 
@@ -167,8 +166,8 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
          type_ == content::URLLoaderThrottleProviderType::kFrame);
 
   if (data_reduction_proxy::params::IsEnabledWithNetworkService()) {
-    if (data_reduction_proxy_info_)
-      data_reduction_proxy_.Bind(std::move(data_reduction_proxy_info_));
+    if (data_reduction_proxy_remote_)
+      data_reduction_proxy_.Bind(std::move(data_reduction_proxy_remote_));
     if (!data_reduction_proxy_manager_) {
       data_reduction_proxy_manager_ = std::make_unique<
           data_reduction_proxy::DataReductionProxyThrottleManager>(
@@ -182,8 +181,8 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
   }
 
   if (!is_frame_resource) {
-    if (safe_browsing_info_)
-      safe_browsing_.Bind(std::move(safe_browsing_info_));
+    if (safe_browsing_remote_)
+      safe_browsing_.Bind(std::move(safe_browsing_remote_));
     throttles.push_back(
         std::make_unique<safe_browsing::RendererURLLoaderThrottle>(
             safe_browsing_.get(), render_frame_id));

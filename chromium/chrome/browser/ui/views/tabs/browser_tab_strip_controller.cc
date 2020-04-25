@@ -4,12 +4,15 @@
 
 #include "chrome/browser/ui/views/tabs/browser_tab_strip_controller.h"
 
+#include <limits>
 #include <utility>
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "build/build_config.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
@@ -19,6 +22,7 @@
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/in_product_help/reopen_tab_in_product_help.h"
@@ -26,13 +30,12 @@
 #include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/tab_menu_model.h"
 #include "chrome/browser/ui/tabs/tab_network_state.h"
+#include "chrome/browser/ui/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
-#include "chrome/browser/ui/thumbnails/thumbnail_tab_helper.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_drag_controller.h"
-#include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -45,6 +48,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/peak_gpu_memory_tracker.h"
 #include "content/public/browser/web_contents.h"
 #include "ipc/ipc_message.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
@@ -239,6 +243,14 @@ bool BrowserTabStripController::IsTabPinned(int model_index) const {
 
 void BrowserTabStripController::SelectTab(int model_index,
                                           const ui::Event& event) {
+  std::unique_ptr<content::PeakGpuMemoryTracker> tracker =
+      content::PeakGpuMemoryTracker::Create(
+          base::BindOnce([](uint64_t peak_memory) {
+            // Converting Bytes to Kilobytes.
+            UMA_HISTOGRAM_MEMORY_KB("Memory.GPU.PeakMemoryUsage.ChangeTab",
+                                    peak_memory / 1024u);
+          }));
+
   TabStripModel::UserGestureDetails gesture_detail(
       TabStripModel::GestureType::kOther, event.time_stamp());
   TabStripModel::GestureType type = TabStripModel::GestureType::kOther;
@@ -248,6 +260,16 @@ void BrowserTabStripController::SelectTab(int model_index,
     type = TabStripModel::GestureType::kTouch;
   gesture_detail.type = type;
   model_->ActivateTabAt(model_index, gesture_detail);
+
+  tabstrip_->GetWidget()->GetCompositor()->RequestPresentationTimeForNextFrame(
+      base::BindOnce(
+          [](std::unique_ptr<content::PeakGpuMemoryTracker> tracker,
+             const gfx::PresentationFeedback& feedback) {
+            // This callback will be ran once the ui::Compositor presents the
+            // next frame for the |tabstrip_|. The destruction of |tracker| will
+            // get the peak GPU memory and record a histogram.
+          },
+          std::move(tracker)));
 }
 
 void BrowserTabStripController::ExtendSelectionTo(int model_index) {
@@ -291,6 +313,10 @@ void BrowserTabStripController::CloseTab(int model_index,
   model_->CloseWebContentsAt(model_index,
                              TabStripModel::CLOSE_USER_GESTURE |
                              TabStripModel::CLOSE_CREATE_HISTORICAL_TAB);
+}
+
+void BrowserTabStripController::MoveTab(int start_index, int final_index) {
+  model_->MoveWebContentsAt(start_index, final_index, false);
 }
 
 void BrowserTabStripController::ShowContextMenuForTab(
@@ -390,6 +416,12 @@ void BrowserTabStripController::OnStoppedDraggingTabs() {
     source_browser_view->TabDraggingStatusChanged(/*is_dragging=*/false);
 }
 
+void BrowserTabStripController::OnKeyboardFocusedTabChanged(
+    base::Optional<int> index) {
+  browser_view_->browser()->command_controller()->TabKeyboardFocusChangedTo(
+      index);
+}
+
 const TabGroupVisualData* BrowserTabStripController::GetVisualDataForGroup(
     TabGroupId group) const {
   return model_->GetVisualDataForGroup(group);
@@ -412,7 +444,7 @@ bool BrowserTabStripController::IsFrameCondensed() const {
 
 bool BrowserTabStripController::HasVisibleBackgroundTabShapes() const {
   return GetFrameView()->HasVisibleBackgroundTabShapes(
-      BrowserNonClientFrameView::kUseCurrent);
+      BrowserFrameActiveState::kUseCurrent);
 }
 
 bool BrowserTabStripController::EverHasVisibleBackgroundTabShapes() const {
@@ -428,7 +460,7 @@ bool BrowserTabStripController::CanDrawStrokes() const {
 }
 
 SkColor BrowserTabStripController::GetFrameColor(
-    BrowserNonClientFrameView::ActiveState active_state) const {
+    BrowserFrameActiveState active_state) const {
   return GetFrameView()->GetFrameColor(active_state);
 }
 
@@ -437,7 +469,7 @@ SkColor BrowserTabStripController::GetToolbarTopSeparatorColor() const {
 }
 
 base::Optional<int> BrowserTabStripController::GetCustomBackgroundId(
-    BrowserNonClientFrameView::ActiveState active_state) const {
+    BrowserFrameActiveState active_state) const {
   return GetFrameView()->GetCustomBackgroundId(active_state);
 }
 
@@ -482,9 +514,9 @@ void BrowserTabStripController::OnTabStripModelChanged(
 
       // A move may have resulted in the pinned state changing, so pass in a
       // TabRendererData.
-      tabstrip_->MoveTab(move->from_index, move->to_index,
-                         TabRendererDataFromModel(
-                             move->contents, move->to_index, EXISTING_TAB));
+      tabstrip_->MoveTab(
+          move->from_index, move->to_index,
+          TabRendererData::FromTabInModel(model_, move->to_index));
       break;
     }
     case TabStripModelChange::kReplaced: {
@@ -560,36 +592,10 @@ const BrowserNonClientFrameView* BrowserTabStripController::GetFrameView()
   return browser_view_->frame()->GetFrameView();
 }
 
-TabRendererData BrowserTabStripController::TabRendererDataFromModel(
-    WebContents* contents,
-    int model_index,
-    TabStatus tab_status) {
-  TabRendererData data;
-  TabUIHelper* const tab_ui_helper = TabUIHelper::FromWebContents(contents);
-  data.favicon = tab_ui_helper->GetFavicon().AsImageSkia();
-  ThumbnailTabHelper* const thumbnail_tab_helper =
-      ThumbnailTabHelper::FromWebContents(contents);
-  if (thumbnail_tab_helper)
-    data.thumbnail = thumbnail_tab_helper->thumbnail();
-  data.network_state = TabNetworkStateForWebContents(contents);
-  data.title = tab_ui_helper->GetTitle();
-  data.visible_url = contents->GetVisibleURL();
-  data.last_committed_url = contents->GetLastCommittedURL();
-  data.crashed_status = contents->GetCrashedStatus();
-  data.incognito = contents->GetBrowserContext()->IsOffTheRecord();
-  data.pinned = model_->IsTabPinned(model_index);
-  data.show_icon = data.pinned || favicon::ShouldDisplayFavicon(contents);
-  data.blocked = model_->IsTabBlocked(model_index);
-  data.alert_state = chrome::GetTabAlertStateForContents(contents);
-  data.should_hide_throbber = tab_ui_helper->ShouldHideThrobber();
-  return data;
-}
-
 void BrowserTabStripController::SetTabDataAt(content::WebContents* web_contents,
                                              int model_index) {
-  tabstrip_->SetTabData(
-      model_index,
-      TabRendererDataFromModel(web_contents, model_index, EXISTING_TAB));
+  tabstrip_->SetTabData(model_index,
+                        TabRendererData::FromTabInModel(model_, model_index));
 }
 
 void BrowserTabStripController::AddTab(WebContents* contents,
@@ -598,7 +604,7 @@ void BrowserTabStripController::AddTab(WebContents* contents,
   // Cancel any pending tab transition.
   hover_tab_selector_.CancelTabTransition();
 
-  tabstrip_->AddTabAt(index, TabRendererDataFromModel(contents, index, NEW_TAB),
+  tabstrip_->AddTabAt(index, TabRendererData::FromTabInModel(model_, index),
                       is_active);
 }
 

@@ -58,6 +58,7 @@
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_switches.h"
+#include "components/autofill/core/common/autofill_tick_clock.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
@@ -561,6 +562,13 @@ class AutofillManagerTest : public testing::Test {
         autofill_manager_->credit_card_access_manager_->cvc_authenticator_
             ->full_card_request_.get();
     DCHECK(full_card_request);
+
+    // Mock user response.
+    payments::FullCardRequest::UserProvidedUnmaskDetails details;
+    details.cvc = base::ASCIIToUTF16("123");
+    full_card_request->OnUnmaskPromptAccepted(details);
+
+    // Mock payments response.
     payments::PaymentsClient::UnmaskResponseDetails response;
     full_card_request->OnDidGetRealPan(result,
                                        response.with_real_pan(real_pan));
@@ -5816,8 +5824,8 @@ TEST_F(AutofillManagerTest, OnTextFieldDidChangeAndUnfocus_Upload) {
   form.fields[1].value = ASCIIToUTF16("Presley");
   form.fields[2].value = ASCIIToUTF16("theking@gmail.com");
   // Simulate editing a field.
-  autofill_manager_->OnTextFieldDidChange(form, form.fields.front(),
-                                          gfx::RectF(), base::TimeTicks::Now());
+  autofill_manager_->OnTextFieldDidChange(
+      form, form.fields.front(), gfx::RectF(), AutofillTickClock::NowTicks());
 
   // Simulate lost of focus on the form.
   autofill_manager_->OnFocusNoLongerOnForm();
@@ -5866,8 +5874,8 @@ TEST_F(AutofillManagerTest, OnTextFieldDidChangeAndNavigation_Upload) {
   form.fields[1].value = ASCIIToUTF16("Presley");
   form.fields[2].value = ASCIIToUTF16("theking@gmail.com");
   // Simulate editing a field.
-  autofill_manager_->OnTextFieldDidChange(form, form.fields.front(),
-                                          gfx::RectF(), base::TimeTicks::Now());
+  autofill_manager_->OnTextFieldDidChange(
+      form, form.fields.front(), gfx::RectF(), AutofillTickClock::NowTicks());
 
   // Simulate a navigation so that the pending form is uploaded.
   autofill_manager_->Reset();
@@ -5915,7 +5923,8 @@ TEST_F(AutofillManagerTest, OnDidFillAutofillFormDataAndUnfocus_Upload) {
   form.fields[0].value = ASCIIToUTF16("Elvis");
   form.fields[1].value = ASCIIToUTF16("Presley");
   form.fields[2].value = ASCIIToUTF16("theking@gmail.com");
-  autofill_manager_->OnDidFillAutofillFormData(form, base::TimeTicks::Now());
+  autofill_manager_->OnDidFillAutofillFormData(form,
+                                               AutofillTickClock::NowTicks());
 
   // Simulate lost of focus on the form.
   autofill_manager_->OnFocusNoLongerOnForm();
@@ -7668,6 +7677,58 @@ TEST_F(AutofillManagerTest,
   EXPECT_THAT(histograms, Not(AnyOf(HasSubstr("Autofill.UserHappiness"),
                                     HasSubstr("Autocomplete.Events"),
                                     HasSubstr("Autofill.FormEvents.Address"))));
+}
+
+// Test that we import data when the field type is determined by the value and
+// without any heuristics on the attributes.
+TEST_F(AutofillManagerTest, ImportDataWhenValueDetected) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kAutofillSaveAndFillVPA);
+
+  FormData form;
+  form.url = GURL("https://wwww.foo.com");
+
+  FormFieldData field;
+  test::CreateTestFormField("VPA:", "vpa", "", "text", &field);
+  form.fields.push_back(field);
+
+  FormsSeen({form});
+  autofill_manager_->SetExpectedSubmittedFieldTypes({{UPI_VPA}});
+  autofill_manager_->SetExpectedObservedSubmission(true);
+  autofill_manager_->SetCallParentUploadFormData(true);
+  form.submission_event =
+      mojom::SubmissionIndicatorEvent::SAME_DOCUMENT_NAVIGATION;
+
+  form.fields[0].value = ASCIIToUTF16("user@indianbank");
+  FormSubmitted(form);
+
+  EXPECT_EQ(1, personal_data_.num_times_save_vpa_called());
+}
+
+// Test that we do not import VPA data when in incognito.
+TEST_F(AutofillManagerTest, DontImportVPAWhenIncognito) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kAutofillSaveAndFillVPA);
+  autofill_driver_->SetIsIncognito(true);
+
+  FormData form;
+  form.url = GURL("https://wwww.foo.com");
+
+  FormFieldData field;
+  test::CreateTestFormField("VPA:", "vpa", "", "text", &field);
+  form.fields.push_back(field);
+
+  FormsSeen({form});
+  autofill_manager_->SetExpectedSubmittedFieldTypes({{UPI_VPA}});
+  autofill_manager_->SetExpectedObservedSubmission(true);
+  autofill_manager_->SetCallParentUploadFormData(true);
+  form.submission_event =
+      mojom::SubmissionIndicatorEvent::SAME_DOCUMENT_NAVIGATION;
+
+  form.fields[0].value = ASCIIToUTF16("user@indianbank");
+  FormSubmitted(form);
+
+  EXPECT_EQ(0, personal_data_.num_times_save_vpa_called());
 }
 
 // Test param indicates if there is an active screen reader.

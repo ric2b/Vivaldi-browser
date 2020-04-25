@@ -120,12 +120,12 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
                                     String& result) override;
   bool TabsToLinks() override;
   void InvalidateRect(const IntRect&) override;
-  void ScheduleAnimation(const LocalFrameView*) override;
+  void ScheduleAnimation(const LocalFrameView*,
+                         base::TimeDelta = base::TimeDelta()) override;
   IntRect ViewportToScreen(const IntRect&,
                            const LocalFrameView*) const override;
-  float WindowToViewportScalar(const float) const override;
   float WindowToViewportScalar(LocalFrame*, const float) const override;
-  WebScreenInfo GetScreenInfo() const override;
+  WebScreenInfo GetScreenInfo(LocalFrame&) const override;
   void OverrideVisibleRectForMainFrame(LocalFrame& frame,
                                        IntRect* paint_rect) const override;
   float InputEventsScaleForEmulation() const override;
@@ -233,8 +233,6 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   void AjaxSucceeded(LocalFrame*) override;
 
   void ShowVirtualKeyboardOnElementFocus(LocalFrame&) override;
-
-  void RegisterViewportLayers() const override;
 
   TransformationMatrix GetDeviceEmulationTransform() const override;
 

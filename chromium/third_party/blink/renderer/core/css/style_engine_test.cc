@@ -8,8 +8,10 @@
 
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/css/forced_colors.h"
+#include "third_party/blink/public/common/css/navigation_controls.h"
 #include "third_party/blink/public/common/css/preferred_color_scheme.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
+#include "third_party/blink/public/platform/web_theme_engine.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/animation/element_animations.h"
 #include "third_party/blink/renderer/core/css/css_font_selector.h"
@@ -65,6 +67,10 @@ class StyleEngineTest : public testing::Test {
   void UpdateAllLifecyclePhases() {
     GetDocument().View()->UpdateAllLifecyclePhases(
         DocumentLifecycle::LifecycleUpdateReason::kTest);
+  }
+
+  Node* GetStyleRecalcRoot() {
+    return GetStyleEngine().style_recalc_root_.GetRootNode();
   }
 
  private:
@@ -1582,11 +1588,13 @@ TEST_F(StyleEngineTest, MediaQueriesChangeForcedColors) {
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
                 GetCSSPropertyColor()));
 
-  GetDocument().GetSettings()->SetForcedColors(ForcedColors::kActive);
+  Platform::Current()->ThemeEngine()->SetForcedColors(ForcedColors::kActive);
+  GetDocument().PlatformColorsChanged();
   UpdateAllLifecyclePhases();
   EXPECT_EQ(MakeRGB(0, 128, 0),
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
                 GetCSSPropertyColor()));
+  Platform::Current()->ThemeEngine()->SetForcedColors(ForcedColors::kNone);
 }
 
 TEST_F(StyleEngineTest, MediaQueriesChangeForcedColorsAndPreferredColorScheme) {
@@ -1616,7 +1624,7 @@ TEST_F(StyleEngineTest, MediaQueriesChangeForcedColorsAndPreferredColorScheme) {
   )HTML");
 
   // ForcedColors = kNone, PreferredColorScheme = kLight
-  GetDocument().GetSettings()->SetForcedColors(ForcedColors::kNone);
+  Platform::Current()->ThemeEngine()->SetForcedColors(ForcedColors::kNone);
   GetDocument().GetSettings()->SetPreferredColorScheme(
       PreferredColorScheme::kLight);
   UpdateAllLifecyclePhases();
@@ -1633,7 +1641,8 @@ TEST_F(StyleEngineTest, MediaQueriesChangeForcedColorsAndPreferredColorScheme) {
                 GetCSSPropertyColor()));
 
   // ForcedColors = kActive, PreferredColorScheme = kDark
-  GetDocument().GetSettings()->SetForcedColors(ForcedColors::kActive);
+  Platform::Current()->ThemeEngine()->SetForcedColors(ForcedColors::kActive);
+  GetDocument().PlatformColorsChanged();
   UpdateAllLifecyclePhases();
   EXPECT_EQ(MakeRGB(255, 165, 0),
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
@@ -1652,6 +1661,101 @@ TEST_F(StyleEngineTest, MediaQueriesChangeForcedColorsAndPreferredColorScheme) {
       PreferredColorScheme::kLight);
   UpdateAllLifecyclePhases();
   EXPECT_EQ(MakeRGB(0, 0, 255),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+  Platform::Current()->ThemeEngine()->SetForcedColors(ForcedColors::kNone);
+}
+
+TEST_F(StyleEngineTest, MediaQueriesColorSchemeOverride) {
+  ScopedMediaQueryPrefersColorSchemeForTest feature_scope(true);
+
+  EXPECT_EQ(PreferredColorScheme::kNoPreference,
+            GetDocument().GetSettings()->GetPreferredColorScheme());
+
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <style>
+      body { color: red }
+      @media (prefers-color-scheme: dark) {
+        body { color: green }
+      }
+    </style>
+    <body></body>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(255, 0, 0),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+
+  GetDocument().GetPage()->SetMediaFeatureOverride("prefers-color-scheme",
+                                                   "dark");
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(0, 128, 0),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+
+  GetDocument().GetPage()->ClearMediaFeatureOverrides();
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(255, 0, 0),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+}
+
+TEST_F(StyleEngineTest, MediaQueriesReducedMotionOverride) {
+  EXPECT_FALSE(GetDocument().GetSettings()->GetPrefersReducedMotion());
+
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <style>
+      body { color: red }
+      @media (prefers-reduced-motion: reduce) {
+        body { color: green }
+      }
+    </style>
+    <body></body>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(255, 0, 0),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+
+  GetDocument().GetPage()->SetMediaFeatureOverride("prefers-reduced-motion",
+                                                   "reduce");
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(0, 128, 0),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+
+  GetDocument().GetPage()->ClearMediaFeatureOverrides();
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(255, 0, 0),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+}
+
+TEST_F(StyleEngineTest, MediaQueriesChangeNavigationControls) {
+  ScopedMediaQueryNavigationControlsForTest scoped_feature(true);
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <style>
+      @media (navigation-controls: none) {
+        body { color: red }
+      }
+      @media (navigation-controls: back-button) {
+        body { color: green }
+      }
+    </style>
+    <body></body>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(255, 0, 0),
+            GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
+                GetCSSPropertyColor()));
+
+  GetDocument().GetSettings()->SetNavigationControls(
+      NavigationControls::kBackButton);
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(MakeRGB(0, 128, 0),
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
                 GetCSSPropertyColor()));
 }
@@ -1740,10 +1844,10 @@ TEST_F(StyleEngineTest, MarkForWhitespaceReattachment) {
   EXPECT_TRUE(GetStyleEngine().NeedsWhitespaceReattachment(d1));
   EXPECT_FALSE(GetDocument().ChildNeedsStyleInvalidation());
   EXPECT_FALSE(GetDocument().ChildNeedsStyleRecalc());
-  EXPECT_FALSE(GetDocument().NeedsLayoutTreeRebuild());
+  EXPECT_FALSE(GetStyleEngine().NeedsLayoutTreeRebuild());
 
   GetStyleEngine().MarkForWhitespaceReattachment();
-  EXPECT_FALSE(GetDocument().NeedsLayoutTreeRebuild());
+  EXPECT_FALSE(GetStyleEngine().NeedsLayoutTreeRebuild());
 
   UpdateAllLifecyclePhases();
 
@@ -1752,10 +1856,10 @@ TEST_F(StyleEngineTest, MarkForWhitespaceReattachment) {
   EXPECT_TRUE(GetStyleEngine().NeedsWhitespaceReattachment(d2));
   EXPECT_FALSE(GetDocument().ChildNeedsStyleInvalidation());
   EXPECT_FALSE(GetDocument().ChildNeedsStyleRecalc());
-  EXPECT_FALSE(GetDocument().NeedsLayoutTreeRebuild());
+  EXPECT_FALSE(GetStyleEngine().NeedsLayoutTreeRebuild());
 
   GetStyleEngine().MarkForWhitespaceReattachment();
-  EXPECT_FALSE(GetDocument().NeedsLayoutTreeRebuild());
+  EXPECT_FALSE(GetStyleEngine().NeedsLayoutTreeRebuild());
 
   UpdateAllLifecyclePhases();
 
@@ -1763,10 +1867,10 @@ TEST_F(StyleEngineTest, MarkForWhitespaceReattachment) {
   EXPECT_TRUE(GetStyleEngine().NeedsWhitespaceReattachment(d3));
   EXPECT_FALSE(GetDocument().ChildNeedsStyleInvalidation());
   EXPECT_FALSE(GetDocument().ChildNeedsStyleRecalc());
-  EXPECT_FALSE(GetDocument().NeedsLayoutTreeRebuild());
+  EXPECT_FALSE(GetStyleEngine().NeedsLayoutTreeRebuild());
 
   GetStyleEngine().MarkForWhitespaceReattachment();
-  EXPECT_TRUE(GetDocument().NeedsLayoutTreeRebuild());
+  EXPECT_TRUE(GetStyleEngine().NeedsLayoutTreeRebuild());
 }
 
 TEST_F(StyleEngineTest, FirstLetterRemoved) {
@@ -2035,6 +2139,71 @@ TEST_F(StyleEngineTest, ColorSchemeBaseBackgroundChange) {
   EXPECT_EQ(Color::kBlack, GetDocument().View()->BaseBackgroundColor());
 }
 
+TEST_F(StyleEngineTest, ColorSchemeOverride) {
+  ScopedCSSColorSchemeForTest enable_color_scheme(true);
+
+  GetDocument().documentElement()->SetInlineStyleProperty(
+      CSSPropertyID::kColorScheme, "light dark");
+  UpdateAllLifecyclePhases();
+
+  EXPECT_EQ(
+      WebColorScheme::kLight,
+      GetDocument().documentElement()->GetComputedStyle()->UsedColorScheme());
+
+  GetDocument().GetPage()->SetMediaFeatureOverride("prefers-color-scheme",
+                                                   "dark");
+
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(
+      WebColorScheme::kDark,
+      GetDocument().documentElement()->GetComputedStyle()->UsedColorScheme());
+}
+
+TEST_F(StyleEngineTest, InternalRootColor) {
+  ScopedCSSColorSchemeForTest enable_color_scheme(true);
+  GetDocument().GetSettings()->SetPreferredColorScheme(
+      PreferredColorScheme::kDark);
+
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <style>
+      #container { color-scheme: dark }
+      #light { color-scheme: light }
+    </style>
+    <div id="container">
+      <span id="dark">Text</span>
+      <span id="light">Text</span>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+
+  auto* container = GetDocument().getElementById("container");
+  auto* light = GetDocument().getElementById("light");
+  auto* dark = GetDocument().getElementById("dark");
+
+  // Initial value of color-scheme is 'light'.
+  EXPECT_EQ(
+      WebColorScheme::kLight,
+      GetDocument().documentElement()->GetComputedStyle()->UsedColorScheme());
+  EXPECT_EQ(WebColorScheme::kDark,
+            container->GetComputedStyle()->UsedColorScheme());
+  // color-scheme:dark inherited from #container.
+  EXPECT_EQ(WebColorScheme::kDark, dark->GetComputedStyle()->UsedColorScheme());
+  EXPECT_EQ(WebColorScheme::kLight,
+            light->GetComputedStyle()->UsedColorScheme());
+
+  EXPECT_EQ(Color::kBlack, GetDocument()
+                               .documentElement()
+                               ->GetComputedStyle()
+                               ->VisitedDependentColor(GetCSSPropertyColor()));
+  EXPECT_EQ(Color::kWhite, container->GetComputedStyle()->VisitedDependentColor(
+                               GetCSSPropertyColor()));
+  EXPECT_EQ(Color::kWhite, dark->GetComputedStyle()->VisitedDependentColor(
+                               GetCSSPropertyColor()));
+  EXPECT_EQ(Color::kBlack, light->GetComputedStyle()->VisitedDependentColor(
+                               GetCSSPropertyColor()));
+}
+
 TEST_F(StyleEngineTest, PseudoElementBaseComputedStyle) {
   GetDocument().body()->SetInnerHTMLFromString(R"HTML(
     <style>
@@ -2080,16 +2249,54 @@ TEST_F(StyleEngineTest, NeedsLayoutTreeRebuild) {
   UpdateAllLifecyclePhases();
 
   EXPECT_FALSE(GetDocument().NeedsLayoutTreeUpdate());
-  EXPECT_FALSE(GetDocument().NeedsLayoutTreeRebuild());
+  EXPECT_FALSE(GetStyleEngine().NeedsLayoutTreeRebuild());
 
   GetDocument().documentElement()->SetInlineStyleProperty(
       CSSPropertyID::kDisplay, "none");
 
+  EXPECT_TRUE(GetDocument().NeedsLayoutTreeUpdate());
+
   GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
   GetDocument().GetStyleEngine().RecalcStyle();
 
-  EXPECT_TRUE(GetDocument().NeedsLayoutTreeUpdate());
-  EXPECT_TRUE(GetDocument().NeedsLayoutTreeRebuild());
+  EXPECT_TRUE(GetStyleEngine().NeedsLayoutTreeRebuild());
+}
+
+TEST_F(StyleEngineTest, ForceReattachLayoutTreeStyleRecalcRoot) {
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <div id="outer">
+      <div id="inner"></div>
+    </div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+
+  Element* outer = GetDocument().getElementById("outer");
+  Element* inner = GetDocument().getElementById("inner");
+
+  outer->SetForceReattachLayoutTree();
+  inner->SetInlineStyleProperty(CSSPropertyID::kColor, "blue");
+
+  EXPECT_EQ(outer, GetStyleRecalcRoot());
+}
+
+TEST_F(StyleEngineTest, RecalcPropagatedWritingMode) {
+  GetDocument().body()->SetInlineStyleProperty(CSSPropertyID::kWritingMode,
+                                               "vertical-lr");
+
+  UpdateAllLifecyclePhases();
+
+  // Make sure that recalculating style for the root element does not trigger a
+  // visual diff that requires layout. That is, we take the body -> root
+  // propagation of writing-mode into account before setting ComputedStyle on
+  // the root LayoutObject.
+  GetDocument().documentElement()->SetInlineStyleProperty(
+      CSSPropertyID::kWritingMode, "horizontal-tb");
+
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
+  GetDocument().GetStyleEngine().RecalcStyle();
+
+  EXPECT_FALSE(GetStyleEngine().NeedsLayoutTreeRebuild());
+  EXPECT_FALSE(GetDocument().View()->NeedsLayout());
 }
 
 }  // namespace blink

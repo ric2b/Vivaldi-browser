@@ -10,8 +10,10 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
-#include "chrome/browser/previews/previews_lite_page_navigation_throttle.h"
+#include "chrome/browser/previews/previews_lite_page_redirect_url_loader_interceptor.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
+#include "components/previews/core/previews_experiments.h"
 #include "components/previews/core/previews_lite_page_redirect.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/common/previews_state.h"
@@ -116,7 +118,7 @@ bool PreviewsLitePageRedirectURLLoader::ShouldSendNextProbe() {
 
 bool PreviewsLitePageRedirectURLLoader::IsResponseSuccess(
     net::Error net_error,
-    const network::ResourceResponseHead* head,
+    const network::mojom::URLResponseHead* head,
     std::unique_ptr<std::string> body) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Any HTTP response is fine, so long as we got it.
@@ -129,10 +131,26 @@ void PreviewsLitePageRedirectURLLoader::StartRedirectToPreview(
         network_loader_factory,
     int frame_tree_node_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(data_reduction_proxy::DataReductionProxyRequestOptions::
+             GetSessionKeyFromRequestHeaders(chrome_proxy_headers)
+                 .has_value());
 
-  GURL original_url = modified_resource_request_.url;
-  GURL lite_page_url = PreviewsLitePageNavigationThrottle::GetPreviewsURLForURL(
-      modified_resource_request_.url);
+  std::string original_url_str;
+  GURL original_url;
+  GURL lite_page_url;
+
+  if (previews::ExtractOriginalURLFromLitePageRedirectURL(
+          modified_resource_request_.url, &original_url_str)) {
+    // We are navigating directly to a lite pages URL. This can happen for
+    // forward/back navigations.
+    original_url = GURL(original_url_str);
+    lite_page_url = modified_resource_request_.url;
+  } else {
+    // We are navigating to an origin URL, which needs to be redirected to a
+    // lite pages URL.
+    original_url = modified_resource_request_.url;
+    lite_page_url = GetLitePageRedirectURLForURL(original_url);
+  }
 
   CreateRedirectInformation(lite_page_url);
 
@@ -144,9 +162,10 @@ void PreviewsLitePageRedirectURLLoader::StartRedirectToPreview(
     origin_probe_finished_successfully_ = true;
   }
 
-  serving_url_loader_ = std::make_unique<PreviewsLitePageServingURLLoader>(
-      base::BindOnce(&PreviewsLitePageRedirectURLLoader::OnResultDetermined,
-                     weak_ptr_factory_.GetWeakPtr()));
+  serving_url_loader_ =
+      std::make_unique<PreviewsLitePageRedirectServingURLLoader>(
+          base::BindOnce(&PreviewsLitePageRedirectURLLoader::OnResultDetermined,
+                         weak_ptr_factory_.GetWeakPtr()));
   // |serving_url_loader_| can be null after this call.
   serving_url_loader_->StartNetworkRequest(
       modified_resource_request_, network_loader_factory, frame_tree_node_id);
@@ -172,7 +191,6 @@ void PreviewsLitePageRedirectURLLoader::CreateRedirectInformation(
   redirect_info_ = net::RedirectInfo::ComputeRedirectInfo(
       modified_resource_request_.method, modified_resource_request_.url,
       modified_resource_request_.site_for_cookies,
-      modified_resource_request_.top_frame_origin,
       net::URLRequest::UPDATE_FIRST_PARTY_URL_ON_REDIRECT,
       modified_resource_request_.referrer_policy,
       modified_resource_request_.referrer.spec(), net::HTTP_TEMPORARY_REDIRECT,
@@ -190,8 +208,6 @@ void PreviewsLitePageRedirectURLLoader::CreateRedirectInformation(
   modified_resource_request_.method = redirect_info_.new_method;
   modified_resource_request_.site_for_cookies =
       redirect_info_.new_site_for_cookies;
-  modified_resource_request_.top_frame_origin =
-      redirect_info_.new_top_frame_origin;
   modified_resource_request_.referrer = GURL(redirect_info_.new_referrer);
   modified_resource_request_.referrer_policy =
       redirect_info_.new_referrer_policy;

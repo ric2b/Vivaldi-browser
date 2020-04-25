@@ -16,15 +16,13 @@
 #include "components/remote_cocoa/common/application.mojom.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "ui/base/ui_base_features.h"
 
 AppShimHost::AppShimHost(AppShimHost::Client* client,
                          const std::string& app_id,
                          const base::FilePath& profile_path,
                          bool uses_remote_views)
     : client_(client),
-      host_binding_(this),
-      app_shim_request_(mojo::MakeRequest(&app_shim_)),
+      app_shim_receiver_(app_shim_.BindNewPipeAndPassReceiver()),
       launch_shim_has_been_called_(false),
       app_id_(app_id),
       profile_path_(profile_path),
@@ -124,11 +122,11 @@ void AppShimHost::OnBootstrapConnected(
 
   DCHECK(!bootstrap_);
   bootstrap_ = std::move(bootstrap);
-  bootstrap_->OnConnectedToHost(std::move(app_shim_request_));
+  bootstrap_->OnConnectedToHost(std::move(app_shim_receiver_));
 
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  host_binding_.Bind(bootstrap_->GetLaunchAppShimHostRequest());
-  host_binding_.set_connection_error_with_reason_handler(
+  host_receiver_.Bind(bootstrap_->GetAppShimHostReceiver());
+  host_receiver_.set_disconnect_with_reason_handler(
       base::BindOnce(&AppShimHost::ChannelError, base::Unretained(this)));
 }
 
@@ -153,7 +151,13 @@ void AppShimHost::FocusApp(apps::AppShimFocusType focus_type,
   client_->OnShimFocus(this, focus_type, files);
 }
 
+void AppShimHost::ProfileSelectedFromMenu(const base::FilePath& profile_path) {
+  client_->OnShimSelectedProfile(this, profile_path);
+}
+
 base::FilePath AppShimHost::GetProfilePath() const {
+  // This should only be used by single-profile-app paths.
+  DCHECK(!profile_path_.empty());
   return profile_path_;
 }
 

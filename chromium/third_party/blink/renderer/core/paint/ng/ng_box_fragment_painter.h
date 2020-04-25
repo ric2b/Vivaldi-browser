@@ -22,6 +22,7 @@ class HitTestLocation;
 class HitTestRequest;
 class HitTestResult;
 class NGFragmentItems;
+class NGInlineCursor;
 class NGPhysicalFragment;
 class ScopedPaintState;
 struct PaintInfo;
@@ -101,7 +102,7 @@ class NGBoxFragmentPainter : public BoxPainterBase {
   void PaintTextChild(const NGPaintFragment&,
                       const PaintInfo&,
                       const PhysicalOffset& paint_offset);
-  void PaintTextItem(const NGFragmentItem& item,
+  void PaintTextItem(const NGInlineCursor& cursor,
                      const PaintInfo&,
                      const PhysicalOffset& paint_offset);
   MoveTo PaintBoxItem(const NGFragmentItem& item,
@@ -109,6 +110,7 @@ class NGBoxFragmentPainter : public BoxPainterBase {
                       const PhysicalOffset& paint_offset);
   void PaintInlineFloatingChildren(NGPaintFragment::ChildList,
                                    const PaintInfo&);
+  void PaintFloatingItems(const PaintInfo&);
   void PaintBlockFloatingChildren(const NGPhysicalContainerFragment&,
                                   const PaintInfo&);
   void PaintFloats(const PaintInfo&);
@@ -208,8 +210,8 @@ inline NGBoxFragmentPainter::NGBoxFragmentPainter(
   DCHECK(box.IsBox() || box.IsRenderedLegend());
 #if DCHECK_IS_ON()
   if (box.IsInlineBox()) {
-    DCHECK(paint_fragment);
-    DCHECK_EQ(&paint_fragment->PhysicalFragment(), &box);
+    if (paint_fragment)
+      DCHECK_EQ(&paint_fragment->PhysicalFragment(), &box);
   } else if (box.ChildrenInline()) {
     // If no children, there maybe or may not be NGPaintFragment.
     // TODO(kojii): To be investigated if this correct or should be fixed.

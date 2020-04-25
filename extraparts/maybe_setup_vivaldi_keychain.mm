@@ -2,7 +2,9 @@
 
 #include "extraparts/maybe_setup_vivaldi_keychain.h"
 
+#include "base/lazy_instance.h"
 #include "base/synchronization/lock.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "components/os_crypt/encryption_key_creation_util_mac.h"

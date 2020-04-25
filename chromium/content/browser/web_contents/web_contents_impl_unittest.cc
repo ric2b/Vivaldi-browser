@@ -63,6 +63,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/frame/sandbox_flags.h"
+#include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/url_constants.h"
 
@@ -348,7 +349,7 @@ class FakeFullscreenDelegate : public WebContentsDelegate {
   void EnterFullscreenModeForTab(
       WebContents* web_contents,
       const GURL& origin,
-      const blink::WebFullscreenOptions& options) override {
+      const blink::mojom::FullscreenOptions& options) override {
     fullscreened_contents_ = web_contents;
   }
 
@@ -1407,8 +1408,7 @@ TEST_F(WebContentsImplTest, NavigationExitsFullscreen) {
   // Toggle fullscreen mode on (as if initiated via IPC from renderer).
   EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
-  orig_rfh->OnMessageReceived(FrameHostMsg_EnterFullscreen(
-      orig_rfh->GetRoutingID(), blink::WebFullscreenOptions()));
+  orig_rfh->EnterFullscreen(blink::mojom::FullscreenOptions::New());
   EXPECT_TRUE(contents()->IsFullscreenForCurrentTab());
   EXPECT_TRUE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
@@ -1446,8 +1446,7 @@ TEST_F(WebContentsImplTest, HistoryNavigationExitsFullscreen) {
 
   for (int i = 0; i < 2; ++i) {
     // Toggle fullscreen mode on (as if initiated via IPC from renderer).
-    orig_rfh->OnMessageReceived(FrameHostMsg_EnterFullscreen(
-        orig_rfh->GetRoutingID(), blink::WebFullscreenOptions()));
+    orig_rfh->EnterFullscreen(blink::mojom::FullscreenOptions::New());
     EXPECT_TRUE(contents()->IsFullscreenForCurrentTab());
     EXPECT_TRUE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
@@ -1478,8 +1477,7 @@ TEST_F(WebContentsImplTest, CrashExitsFullscreen) {
   // Toggle fullscreen mode on (as if initiated via IPC from renderer).
   EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
-  main_test_rfh()->OnMessageReceived(FrameHostMsg_EnterFullscreen(
-      main_test_rfh()->GetRoutingID(), blink::WebFullscreenOptions()));
+  main_test_rfh()->EnterFullscreen(blink::mojom::FullscreenOptions::New());
   EXPECT_TRUE(contents()->IsFullscreenForCurrentTab());
   EXPECT_TRUE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
@@ -2792,8 +2790,9 @@ TEST_F(WebContentsImplTest, HandleWheelEvent) {
 
   int modifiers = 0;
   // Verify that normal mouse wheel events do nothing to change the zoom level.
-  blink::WebMouseWheelEvent event =
-      SyntheticWebMouseWheelEventBuilder::Build(0, 0, 0, 1, modifiers, false);
+  blink::WebMouseWheelEvent event = SyntheticWebMouseWheelEventBuilder::Build(
+      0, 0, 0, 1, modifiers,
+      ui::input_types::ScrollGranularity::kScrollByPixel);
   EXPECT_FALSE(contents()->HandleWheelEvent(event));
   EXPECT_EQ(0, delegate->GetAndResetContentsZoomChangedCallCount());
 
@@ -2801,8 +2800,9 @@ TEST_F(WebContentsImplTest, HandleWheelEvent) {
   // decreased. Except on MacOS where we never want to adjust zoom
   // with mousewheel.
   modifiers = WebInputEvent::kControlKey;
-  event =
-      SyntheticWebMouseWheelEventBuilder::Build(0, 0, 0, 1, modifiers, false);
+  event = SyntheticWebMouseWheelEventBuilder::Build(
+      0, 0, 0, 1, modifiers,
+      ui::input_types::ScrollGranularity::kScrollByPixel);
   bool handled = contents()->HandleWheelEvent(event);
 #if defined(USE_AURA)
   EXPECT_TRUE(handled);
@@ -2815,8 +2815,9 @@ TEST_F(WebContentsImplTest, HandleWheelEvent) {
 
   modifiers = WebInputEvent::kControlKey | WebInputEvent::kShiftKey |
               WebInputEvent::kAltKey;
-  event =
-      SyntheticWebMouseWheelEventBuilder::Build(0, 0, 2, -5, modifiers, false);
+  event = SyntheticWebMouseWheelEventBuilder::Build(
+      0, 0, 2, -5, modifiers,
+      ui::input_types::ScrollGranularity::kScrollByPixel);
   handled = contents()->HandleWheelEvent(event);
 #if defined(USE_AURA)
   EXPECT_TRUE(handled);
@@ -2828,8 +2829,9 @@ TEST_F(WebContentsImplTest, HandleWheelEvent) {
 #endif
 
   // Unless there is no vertical movement.
-  event =
-      SyntheticWebMouseWheelEventBuilder::Build(0, 0, 2, 0, modifiers, false);
+  event = SyntheticWebMouseWheelEventBuilder::Build(
+      0, 0, 2, 0, modifiers,
+      ui::input_types::ScrollGranularity::kScrollByPixel);
   EXPECT_FALSE(contents()->HandleWheelEvent(event));
   EXPECT_EQ(0, delegate->GetAndResetContentsZoomChangedCallCount());
 
@@ -2837,8 +2839,9 @@ TEST_F(WebContentsImplTest, HandleWheelEvent) {
   // zoom being adjusted, to avoid accidental adjustments caused by
   // two-finger-scrolling on a touchpad.
   modifiers = WebInputEvent::kControlKey;
-  event =
-      SyntheticWebMouseWheelEventBuilder::Build(0, 0, 0, 5, modifiers, true);
+  event = SyntheticWebMouseWheelEventBuilder::Build(
+      0, 0, 0, 5, modifiers,
+      ui::input_types::ScrollGranularity::kScrollByPrecisePixel);
   EXPECT_FALSE(contents()->HandleWheelEvent(event));
   EXPECT_EQ(0, delegate->GetAndResetContentsZoomChangedCallCount());
 
@@ -3230,13 +3233,13 @@ TEST_F(WebContentsImplTest, MediaWakeLock) {
   // Send a fake audio stream monitor notification.  The audio wake lock
   // should be created.
   monitor->set_was_recently_audible_for_testing(true);
-  contents()->NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
+  contents()->NotifyNavigationStateChanged(INVALIDATE_TYPE_AUDIO);
   EXPECT_TRUE(has_audio_wake_lock());
 
   // Send another fake notification, this time when WasRecentlyAudible() will
   // be false.  The wake lock should be released.
   monitor->set_was_recently_audible_for_testing(false);
-  contents()->NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
+  contents()->NotifyNavigationStateChanged(INVALIDATE_TYPE_AUDIO);
   EXPECT_FALSE(has_audio_wake_lock());
 
   main_test_rfh()->GetProcess()->SimulateCrash();
@@ -3255,8 +3258,7 @@ TEST_F(WebContentsImplTest, ThemeColorChangeDependingOnFirstVisiblePaint) {
 
   // Theme color changes should not propagate past the WebContentsImpl before
   // the first visually non-empty paint has occurred.
-  rfh->OnMessageReceived(
-      FrameHostMsg_DidChangeThemeColor(rfh->GetRoutingID(), SK_ColorRED));
+  rfh->DidChangeThemeColor(SK_ColorRED);
 
   EXPECT_EQ(SK_ColorRED, contents()->GetThemeColor());
   EXPECT_EQ(base::nullopt, observer.last_theme_color());
@@ -3269,8 +3271,7 @@ TEST_F(WebContentsImplTest, ThemeColorChangeDependingOnFirstVisiblePaint) {
   EXPECT_EQ(SK_ColorRED, observer.last_theme_color());
 
   // Additional changes made by the web contents should propagate as well.
-  rfh->OnMessageReceived(
-      FrameHostMsg_DidChangeThemeColor(rfh->GetRoutingID(), SK_ColorGREEN));
+  rfh->DidChangeThemeColor(SK_ColorGREEN);
 
   EXPECT_EQ(SK_ColorGREEN, contents()->GetThemeColor());
   EXPECT_EQ(SK_ColorGREEN, observer.last_theme_color());

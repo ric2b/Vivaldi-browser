@@ -71,6 +71,7 @@
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "content/public/browser/render_frame_host.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 
 // Vivaldi constants
 #include "extensions/api/guest_view/vivaldi_web_view_constants.h"
@@ -86,7 +87,7 @@ namespace extensions {
 namespace {
 
 void SetAllowRunningInsecureContent(content::RenderFrameHost* frame) {
-  chrome::mojom::ContentSettingsRendererAssociatedPtr renderer;
+  mojo::AssociatedRemote<chrome::mojom::ContentSettingsRenderer> renderer;
   frame->GetRemoteAssociatedInterfaces()->GetInterface(&renderer);
   renderer->SetAllowRunningInsecureContent();
 }
@@ -96,9 +97,9 @@ static std::string SSLStateToString(security_state::SecurityLevel status) {
     case security_state::NONE:
       // HTTP/no URL/user is editing
       return "none";
-    case security_state::HTTP_SHOW_WARNING:
-      // HTTP, show a visible warning about the page's lack of security
-      return "http_show_warning";
+    case security_state::WARNING:
+      // show a visible warning about the page's lack of security
+      return "warning";
     case security_state::EV_SECURE:
       // HTTPS with valid EV cert
       return "secure_with_ev";
@@ -590,20 +591,20 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
     content::RenderFrameHost* host =
         navigate_params.navigated_or_inserted_contents->GetMainFrame();
     DCHECK(host);
-    chrome::mojom::ChromeRenderFrameAssociatedPtr client;
+    mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame> client;
     host->GetRemoteAssociatedInterfaces()->GetInterface(&client);
     client->SetWindowFeatures(blink::mojom::WindowFeatures().Clone());
   }
 }
 
-blink::WebSecurityStyle WebViewGuest::GetSecurityStyle(
+blink::SecurityStyle WebViewGuest::GetSecurityStyle(
     WebContents* contents,
     content::SecurityStyleExplanations* security_style_explanations) {
   Browser* browser = chrome::FindBrowserWithWebContents(contents);
   if (browser) {
     return browser->GetSecurityStyle(contents, security_style_explanations);
   } else {
-    return blink::kWebSecurityStyleUnknown;
+    return blink::SecurityStyle::kUnknown;
   }
 }
 

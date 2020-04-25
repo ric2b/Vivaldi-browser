@@ -486,7 +486,7 @@ void ImageLoader::DoUpdateFromElement(
     resource_request.SetReferrerPolicy(referrer_policy);
 
     // Correct the RequestContext if necessary.
-    if (IsHTMLPictureElement(GetElement()->parentNode()) ||
+    if (IsA<HTMLPictureElement>(GetElement()->parentNode()) ||
         !GetElement()->FastGetAttribute(html_names::kSrcsetAttr).IsNull()) {
       resource_request.SetRequestContext(mojom::RequestContextType::IMAGE_SET);
     } else if (IsHTMLObjectElement(GetElement())) {
@@ -521,13 +521,9 @@ void ImageLoader::DoUpdateFromElement(
     if (update_behavior != kUpdateForcedReload &&
         lazy_image_load_state_ == LazyImageLoadState::kNone) {
       const auto* frame = document.GetFrame();
-      if (frame->IsClientLoFiAllowed(params.GetResourceRequest())) {
-        params.SetClientLoFiPlaceholder();
-      } else if (auto* html_image = ToHTMLImageElementOrNull(GetElement())) {
-        const LazyImageHelper::Eligibility lazy_image_eligibility =
-            LazyImageHelper::DetermineEligibilityAndTrackVisibilityMetrics(
-                *frame, html_image, params.Url());
-        switch (lazy_image_eligibility) {
+      if (auto* html_image = ToHTMLImageElementOrNull(GetElement())) {
+        switch (LazyImageHelper::DetermineEligibilityAndTrackVisibilityMetrics(
+            *frame, html_image, params.Url())) {
           case LazyImageHelper::Eligibility::kEnabledFullyDeferred:
             lazy_image_load_state_ = LazyImageLoadState::kDeferred;
             was_fully_deferred_ = true;
@@ -555,7 +551,7 @@ void ImageLoader::DoUpdateFromElement(
     }
 
     if (lazy_image_load_state_ == LazyImageLoadState::kDeferred &&
-        was_fully_deferred_) {
+        was_fully_deferred_ && !ShouldLoadImmediately(url)) {
       // TODO(rajendrant): Remove this temporary workaround of creating a 1x1
       // placeholder to fix an intersection observer issue not firing with
       // certain styles (https://crbug.com/992765). Instead
@@ -791,10 +787,6 @@ void ImageLoader::ImageNotifyFinished(ImageResourceContent* resource) {
 
   image_complete_ = true;
   delay_until_image_notify_finished_ = nullptr;
-
-  // Update ImageAnimationPolicy for image_content_.
-  if (image_content_)
-    image_content_->UpdateImageAnimationPolicy();
 
   UpdateLayoutObject();
 

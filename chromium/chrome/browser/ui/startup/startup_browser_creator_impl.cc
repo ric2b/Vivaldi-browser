@@ -55,6 +55,7 @@
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_tab_provider.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/webui/welcome/helpers.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -68,10 +69,6 @@
 #include "google_apis/google_api_keys.h"
 #include "rlz/buildflags/buildflags.h"
 #include "ui/base/buildflags.h"
-
-#if !defined(OS_CHROMEOS)
-#include "chrome/browser/ui/webui/welcome/helpers.h"
-#endif  // !defined(OS_CHROMEOS)
 
 #if defined(OS_MACOSX)
 #include "base/mac/mac_util.h"
@@ -511,12 +508,6 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(Browser* browser,
       content::WebContents::CreateParams create_params(
         browser->profile(),
         tab_util::GetSiteInstanceForNewTab(browser->profile(), restore_url));
-      content::WebContents* base_web_contents =
-        browser->tab_strip_model()->GetActiveWebContents();
-      if (base_web_contents) {
-        create_params.initial_size =
-          base_web_contents->GetContainerBounds().size();
-      }
 
       create_params.always_create_guest = vivaldi::IsVivaldiRunning();
 
@@ -529,13 +520,13 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(Browser* browser,
           &contentsimpl->GetController();
 
       std::unique_ptr<content::NavigationEntryImpl> entry =
-        content::NavigationEntryImpl::FromNavigationEntry(
-          controller->CreateNavigationEntry(
-            restore_url, content::Referrer(), initiator_origin,
-            ui::PAGE_TRANSITION_LINK,
-            false /* is_renderer_initiated */, std::string(),
-            controller->GetBrowserContext(),
-            nullptr /* blob_url_loader_factory */));
+          content::NavigationEntryImpl::FromNavigationEntry(
+              content::NavigationControllerImpl::CreateNavigationEntry(
+                  restore_url, content::Referrer(), initiator_origin,
+                  nullptr /* source_site_instance */, ui::PAGE_TRANSITION_LINK,
+                  false /* is_renderer_initiated */, std::string(),
+                  controller->GetBrowserContext(),
+                  nullptr /* blob_url_loader_factory */));
 
       controller->SetPendingEntry(std::move(entry));
       controller->SetNeedsReload();
@@ -660,14 +651,15 @@ void StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
   const bool is_incognito_or_guest = profile_->IsOffTheRecord();
   bool is_post_crash_launch = HasPendingUncleanExit(profile_);
   bool has_incompatible_applications = false;
-#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if defined(OS_WIN)
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   if (is_post_crash_launch) {
     // Check if there are any incompatible applications cached from the last
     // Chrome run.
     has_incompatible_applications =
         IncompatibleApplicationsUpdater::HasCachedApplications();
   }
-
+#endif
   welcome::JoinOnboardingGroup(profile_);
 #endif
 

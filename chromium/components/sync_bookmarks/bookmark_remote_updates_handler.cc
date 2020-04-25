@@ -11,6 +11,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/guid.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_piece.h"
@@ -126,6 +127,17 @@ void ApplyRemoteUpdate(
                 << (node->is_folder() ? "folder" : "bookmark");
     LogProblematicBookmark(RemoteBookmarkUpdateError::kConflictingTypes);
     return;
+  }
+
+  // If there is a different GUID in the specifics and it is valid, we must
+  // replace the entire node in order to use it, as GUIDs are immutable. Further
+  // updates are then applied to the new node instead.
+  if (update_entity.specifics.bookmark().guid() != node->guid() &&
+      base::IsValidGUID(update_entity.specifics.bookmark().guid())) {
+    const bookmarks::BookmarkNode* old_node = node;
+    node = ReplaceBookmarkNodeGUID(
+        node, update_entity.specifics.bookmark().guid(), model);
+    tracker->UpdateBookmarkNodePointer(old_node, node);
   }
   UpdateBookmarkNodeFromSpecifics(update_entity.specifics.bookmark(), node,
                                   model, favicon_service);
@@ -399,6 +411,13 @@ bool BookmarkRemoteUpdatesHandler::ProcessCreate(
 
   DCHECK(IsValidBookmarkSpecifics(update_entity.specifics.bookmark(),
                                   update_entity.is_folder));
+
+  // If specifics do not have a valid GUID, create a new one. Legacy clients do
+  // not populate GUID field and if the originator_client_item_id is not of
+  // valid GUID format to replace it, the field is left blank.
+  if (!base::IsValidGUID(update_entity.specifics.bookmark().guid())) {
+    update.entity->specifics.mutable_bookmark()->set_guid(base::GenerateGUID());
+  }
 
   const bookmarks::BookmarkNode* parent_node = GetParentNode(update_entity);
   if (!parent_node) {

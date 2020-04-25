@@ -497,6 +497,10 @@ class CORE_EXPORT Node : public EventTarget {
     return GetFlag(kForceReattachLayoutTree);
   }
 
+  bool IsDirtyForStyleRecalc() const {
+    return NeedsStyleRecalc() || GetForceReattachLayoutTree();
+  }
+
   bool NeedsDistributionRecalc() const;
 
   bool ChildNeedsDistributionRecalc() const {
@@ -627,7 +631,9 @@ class CORE_EXPORT Node : public EventTarget {
   bool IsChildOfV1ShadowHost() const;
   bool IsChildOfV0ShadowHost() const;
   ShadowRoot* V1ShadowRootOfParent() const;
-  Element* GetReattachParent() const;
+  Element* FlatTreeParentForChildDirty() const;
+  ContainerNode* GetStyleRecalcParent() const;
+  Element* GetReattachParent() const { return FlatTreeParentForChildDirty(); }
 
   bool IsDocumentTypeNode() const { return getNodeType() == kDocumentTypeNode; }
   virtual bool ChildTypeAllowed(NodeType) const { return false; }
@@ -812,6 +818,10 @@ class CORE_EXPORT Node : public EventTarget {
     return nullptr;
   }
   virtual void PostDispatchEventHandler(Event&, EventDispatchHandlingState*) {}
+
+  // TODO(crbug.com/1013385): Remove DidPreventDefault. It is here as a
+  //   temporary fix for form double-submit.
+  virtual void DidPreventDefault(const Event&) {}
 
   void DispatchScopedEvent(Event&);
 

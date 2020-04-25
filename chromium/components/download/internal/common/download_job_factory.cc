@@ -58,6 +58,8 @@ ConnectionType GetConnectionType(
     case net::HttpResponseInfo::CONNECTION_INFO_QUIC_46:
     case net::HttpResponseInfo::CONNECTION_INFO_QUIC_47:
     case net::HttpResponseInfo::CONNECTION_INFO_QUIC_48:
+    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_49:
+    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_50:
     case net::HttpResponseInfo::CONNECTION_INFO_QUIC_99:
     case net::HttpResponseInfo::CONNECTION_INFO_QUIC_999:
       return ConnectionType::kQUIC;

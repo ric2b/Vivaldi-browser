@@ -855,6 +855,19 @@ TEST(V8ScriptValueSerializerTest, DecodeImageDataV18) {
                      new_image_data->BufferBase()->Data())[0]);
 }
 
+TEST(V8ScriptValueSerializerTest, InvalidImageDataDecodeV18) {
+  V8TestingScope scope;
+  ScriptState* script_state = scope.GetScriptState();
+  {
+    // Nonsense image serialization tag (kOriginCleanTag).
+    scoped_refptr<SerializedScriptValue> input =
+        SerializedValue({0xff, 0x12, 0xff, 0x0d, 0x5c, 0x23, 0x02, 0x00, 0x00,
+                         0x01, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00});
+    EXPECT_TRUE(
+        V8ScriptValueDeserializer(script_state, input).Deserialize()->IsNull());
+  }
+}
+
 MessagePort* MakeMessagePort(ExecutionContext* execution_context,
                              ::MojoHandle* unowned_handle_out = nullptr) {
   auto* port = MakeGarbageCollected<MessagePort>(*execution_context);
@@ -1252,6 +1265,14 @@ TEST(V8ScriptValueSerializerTest, InvalidImageBitmapDecodeV18) {
     EXPECT_TRUE(
         V8ScriptValueDeserializer(script_state, input).Deserialize()->IsNull());
   }
+  {
+    // Nonsense image serialization tag (kImageDataStorageFormatTag).
+    scoped_refptr<SerializedScriptValue> input =
+        SerializedValue({0xff, 0x12, 0xff, 0x0d, 0x5c, 0x67, 0x03, 0x00, 0x00,
+                         0x01, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00});
+    EXPECT_TRUE(
+        V8ScriptValueDeserializer(script_state, input).Deserialize()->IsNull());
+  }
 }
 
 TEST(V8ScriptValueSerializerTest, TransferImageBitmap) {
@@ -1293,7 +1314,8 @@ TEST(V8ScriptValueSerializerTest, TransferImageBitmap) {
 TEST(V8ScriptValueSerializerTest, TransferOffscreenCanvas) {
   // More exhaustive tests in web_tests/. This is a sanity check.
   V8TestingScope scope;
-  OffscreenCanvas* canvas = OffscreenCanvas::Create(10, 7);
+  OffscreenCanvas* canvas =
+      OffscreenCanvas::Create(scope.GetExecutionContext(), 10, 7);
   canvas->SetPlaceholderCanvasId(519);
   v8::Local<v8::Value> wrapper = ToV8(canvas, scope.GetScriptState());
   Transferables transferables;
@@ -1850,7 +1872,7 @@ TEST(V8ScriptValueSerializerTest, RoundTripReadableStream) {
 
   auto* rs = ReadableStream::Create(script_state, ASSERT_NO_EXCEPTION);
   v8::Local<v8::Value> wrapper = ToV8(rs, script_state);
-  Vector<ScriptValue> transferable_array = {ScriptValue(script_state, wrapper)};
+  HeapVector<ScriptValue> transferable_array = {ScriptValue(isolate, wrapper)};
   Transferables transferables;
   ASSERT_TRUE(SerializedScriptValue::ExtractTransferables(
       isolate, transferable_array, transferables, ASSERT_NO_EXCEPTION));

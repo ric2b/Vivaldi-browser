@@ -22,6 +22,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
@@ -170,10 +171,32 @@ void WebAppInstallTask::InstallWebAppFromInfoRetrieveIcons(
 
   // Skip downloading the page favicons as everything in is the URL list.
   data_retriever_->GetIcons(
-      web_contents, icon_urls, /*skip_page_fav_icons*/ true, install_source_,
+      web_contents, icon_urls, /*skip_page_fav_icons*/ true,
+      install_source_ == WebappInstallSource::SYNC
+          ? WebAppIconDownloader::Histogram::kForSync
+          : WebAppIconDownloader::Histogram::kForCreate,
       base::BindOnce(&WebAppInstallTask::OnIconsRetrieved,
                      base::Unretained(this), std::move(web_application_info),
                      is_locally_installed));
+}
+
+void WebAppInstallTask::UpdateWebAppFromInfo(
+    content::WebContents* web_contents,
+    const AppId& app_id,
+    std::unique_ptr<WebApplicationInfo> web_application_info,
+    InstallManager::OnceInstallCallback callback) {
+  Observe(web_contents);
+  install_callback_ = std::move(callback);
+  background_installation_ = true;
+
+  std::vector<GURL> icon_urls =
+      GetValidIconUrlsToDownload(*web_application_info, /*data=*/nullptr);
+
+  data_retriever_->GetIcons(
+      web_contents, std::move(icon_urls),
+      /*skip_page_fav_icons=*/true, WebAppIconDownloader::Histogram::kForUpdate,
+      base::BindOnce(&WebAppInstallTask::OnIconsRetrievedFinalizeUpdate,
+                     base::Unretained(this), std::move(web_application_info)));
 }
 
 void WebAppInstallTask::WebContentsDestroyed() {
@@ -208,7 +231,6 @@ void WebAppInstallTask::CallInstallCallback(const AppId& app_id,
   Observe(nullptr);
   dialog_callback_.Reset();
 
-  DCHECK(install_source_ != kNoInstallSource);
   install_source_ = kNoInstallSource;
 
   DCHECK(install_callback_);
@@ -295,10 +317,11 @@ void WebAppInstallTask::CheckForPlayStoreIntentOrGetIcons(
     ForInstallableSite for_installable_site,
     bool skip_page_favicons) {
 #if defined(OS_CHROMEOS)
-  // If we have install options, this is not a user-triggered install, and thus
-  // cannot be sent to the store.
+  // Background installations are not a user-triggered installs, and thus cannot
+  // be sent to the store.
   if (base::FeatureList::IsEnabled(features::kApkWebAppInstalls) &&
-      for_installable_site == ForInstallableSite::kYes && !install_params_) {
+      for_installable_site == ForInstallableSite::kYes &&
+      !background_installation_) {
     for (const auto& application : manifest.related_applications) {
       std::string id = base::UTF16ToUTF8(application.id.string());
       if (!base::EqualsASCII(application.platform.string(),
@@ -370,7 +393,10 @@ void WebAppInstallTask::OnDidCheckForIntentToPlayStore(
 #endif  // defined(OS_CHROMEOS)
 
   data_retriever_->GetIcons(
-      web_contents(), icon_urls, skip_page_favicons, install_source_,
+      web_contents(), icon_urls, skip_page_favicons,
+      install_source_ == WebappInstallSource::SYNC
+          ? WebAppIconDownloader::Histogram::kForSync
+          : WebAppIconDownloader::Histogram::kForCreate,
       base::BindOnce(&WebAppInstallTask::OnIconsRetrievedShowDialog,
                      base::Unretained(this), std::move(web_app_info),
                      for_installable_site));
@@ -386,9 +412,9 @@ void WebAppInstallTask::OnIconsRetrieved(
   DCHECK(web_app_info);
 
   // Installing from sync should not change icon links.
-  // TODO(loyso): Limit this only to WebappInstallSource::SYNC.
-  FilterAndResizeIconsGenerateMissing(web_app_info.get(), &icons_map,
-                                      /*is_for_sync*/ true);
+  FilterAndResizeIconsGenerateMissing(
+      web_app_info.get(), &icons_map,
+      /*is_for_sync=*/install_source_ == WebappInstallSource::SYNC);
 
   InstallFinalizer::FinalizeOptions options;
   options.install_source = install_source_;
@@ -409,8 +435,9 @@ void WebAppInstallTask::OnIconsRetrievedShowDialog(
 
   DCHECK(web_app_info);
 
-  FilterAndResizeIconsGenerateMissing(web_app_info.get(), &icons_map,
-                                      /*is_for_sync*/ false);
+  FilterAndResizeIconsGenerateMissing(
+      web_app_info.get(), &icons_map,
+      /*is_for_sync=*/install_source_ == WebappInstallSource::SYNC);
 
   if (background_installation_) {
     DCHECK(!dialog_callback_);
@@ -424,6 +451,23 @@ void WebAppInstallTask::OnIconsRetrievedShowDialog(
                             weak_ptr_factory_.GetWeakPtr(),
                             for_installable_site));
   }
+}
+
+void WebAppInstallTask::OnIconsRetrievedFinalizeUpdate(
+    std::unique_ptr<WebApplicationInfo> web_app_info,
+    IconsMap icons_map) {
+  if (ShouldStopInstall())
+    return;
+
+  DCHECK(web_app_info);
+
+  // TODO(crbug.com/926083): Abort update if icons fail to download.
+  FilterAndResizeIconsGenerateMissing(web_app_info.get(), &icons_map,
+                                      /*is_for_sync=*/false);
+
+  install_finalizer_->FinalizeUpdate(
+      *web_app_info, base::BindOnce(&WebAppInstallTask::OnInstallFinalized,
+                                    weak_ptr_factory_.GetWeakPtr()));
 }
 
 void WebAppInstallTask::OnDialogCompleted(
@@ -446,9 +490,9 @@ void WebAppInstallTask::OnDialogCompleted(
   InstallFinalizer::FinalizeOptions finalize_options;
   finalize_options.install_source = install_source_;
   if (install_params_ &&
-      install_params_->launch_container != LaunchContainer::kDefault) {
+      install_params_->display_mode != blink::mojom::DisplayMode::kUndefined) {
     web_app_info_copy.open_as_window =
-        install_params_->launch_container == LaunchContainer::kWindow;
+        install_params_->display_mode != blink::mojom::DisplayMode::kBrowser;
   }
 
   install_finalizer_->FinalizeInstall(

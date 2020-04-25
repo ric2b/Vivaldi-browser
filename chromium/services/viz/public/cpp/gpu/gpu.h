@@ -13,6 +13,7 @@
 #include "base/single_thread_task_runner.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/viz/public/cpp/gpu/client_gpu_memory_buffer_manager.h"
 #include "services/viz/public/mojom/gpu.mojom.h"
@@ -43,23 +44,24 @@ class Gpu : public gpu::GpuChannelEstablishFactory {
 
 #if defined(OS_CHROMEOS)
   void CreateJpegDecodeAccelerator(
-      chromeos_camera::mojom::MjpegDecodeAcceleratorRequest jda_request);
+      mojo::PendingReceiver<chromeos_camera::mojom::MjpegDecodeAccelerator>
+          jda_receiver);
 #endif  // defined(OS_CHROMEOS)
   void CreateVideoEncodeAcceleratorProvider(
-      media::mojom::VideoEncodeAcceleratorProviderRequest vea_provider_request);
+      mojo::PendingReceiver<media::mojom::VideoEncodeAcceleratorProvider>
+          vea_provider_receiver);
 
   // gpu::GpuChannelEstablishFactory:
   void EstablishGpuChannel(
       gpu::GpuChannelEstablishedCallback callback) override;
   scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync() override;
-
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  void SetForceAllowAccessToGpu(bool enable) override;
-
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
 
   void LoseChannel();
   scoped_refptr<gpu::GpuChannelHost> GetGpuChannel();
+
+  // FEATURE_FORCE_ACCESS_TO_GPU
+  void SetForceAllowAccessToGpu(bool enable) override;
 
  private:
   friend class GpuTest;

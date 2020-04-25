@@ -6,6 +6,9 @@
 
 #include "ui/vivaldi_native_app_window_views_win.h"
 
+#include <shobjidl.h>
+#include <wrl/client.h>
+#include "base/win/windows_version.h"
 #include "apps/ui/views/app_window_frame_view.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -29,6 +32,12 @@
 #include "ui/views/win/hwnd_util.h"
 #include "ui/vivaldi_app_window_desktop_native_widget_aura_win.h"
 #include "ui/vivaldi_browser_window.h"
+
+// static
+std::unique_ptr<VivaldiNativeAppWindowViews>
+VivaldiNativeAppWindowViews::Create() {
+  return std::make_unique<VivaldiNativeAppWindowViewsWin>();
+}
 
 VivaldiNativeAppWindowViewsWin::VivaldiNativeAppWindowViewsWin()
     : glass_frame_view_(NULL), is_translucent_(false), weak_ptr_factory_(this) {
@@ -99,6 +108,41 @@ VivaldiNativeAppWindowViewsWin::CreateStandardDesktopAppFrame() {
   return VivaldiNativeAppWindowViewsAura::CreateStandardDesktopAppFrame();
 }
 
+bool VivaldiNativeAppWindowViewsWin::IsOnCurrentWorkspace() const {
+  // In tests, the native window can be nullptr.
+  gfx::NativeWindow native_win = GetNativeWindow();
+  if (!native_win)
+    return true;
+
+  if (base::win::GetVersion() < base::win::Version::WIN10)
+    return true;
+
+  Microsoft::WRL::ComPtr<IVirtualDesktopManager> virtual_desktop_manager;
+  if (!SUCCEEDED(::CoCreateInstance(__uuidof(VirtualDesktopManager), nullptr,
+    CLSCTX_ALL,
+    IID_PPV_ARGS(&virtual_desktop_manager)))) {
+    return true;
+  }
+
+  BOOL on_current_desktop;
+  if (!native_win ||
+    FAILED(virtual_desktop_manager->IsWindowOnCurrentVirtualDesktop(
+      native_win->GetHost()->GetAcceleratedWidget(),
+      &on_current_desktop)) ||
+    on_current_desktop) {
+    return true;
+  }
+
+  // IsWindowOnCurrentVirtualDesktop() is flaky for newly opened windows,
+  // which causes test flakiness. Occasionally, it incorrectly says a window
+  // is not on the current virtual desktop when it is. In this situation,
+  // it also returns GUID_NULL for the desktop id.
+  GUID workspace_guid;
+  return SUCCEEDED(virtual_desktop_manager->GetWindowDesktopId(
+    native_win->GetHost()->GetAcceleratedWidget(), &workspace_guid)) &&
+    workspace_guid != GUID_NULL;
+}
+
 bool VivaldiNativeAppWindowViewsWin::CanMinimize() const {
   // Resizing on Windows breaks translucency if the window also has shape.
   // See http://crbug.com/417947.
@@ -160,6 +204,10 @@ bool VivaldiNativeAppWindowViewsWin::ExecuteWindowsCommand(int command_id) {
 // NOTE(pettern@vivaldi.com): Returning empty icons will make Windows
 // grab the icons from the resource section instead, fixing VB-34191.
 gfx::ImageSkia VivaldiNativeAppWindowViewsWin::GetWindowAppIcon() {
+  if (window()->browser()->is_type_popup()) {
+    return VivaldiNativeAppWindowViews::GetWindowAppIcon();
+  }
+
   return gfx::ImageSkia();
 }
 

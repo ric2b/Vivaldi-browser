@@ -182,6 +182,7 @@ void LayoutBox::WillBeDestroyed() {
       first_inline_fragment->LayoutObjectWillBeDestroyed();
   }
 
+  SetSnapContainer(nullptr);
   LayoutBoxModelObject::WillBeDestroyed();
 }
 
@@ -475,9 +476,7 @@ void LayoutBox::UpdateGridPositionAfterStyleChange(
 void LayoutBox::UpdateScrollSnapMappingAfterStyleChange(
     const ComputedStyle& old_style) {
   DCHECK(Style());
-  SnapCoordinator* snap_coordinator = GetDocument().GetSnapCoordinator();
-  if (!snap_coordinator)
-    return;
+  SnapCoordinator& snap_coordinator = GetDocument().GetSnapCoordinator();
 
   // scroll-snap-type and scroll-padding invalidate the snap container.
   if (old_style.GetScrollSnapType() != StyleRef().GetScrollSnapType() ||
@@ -485,7 +484,7 @@ void LayoutBox::UpdateScrollSnapMappingAfterStyleChange(
       old_style.ScrollPaddingLeft() != StyleRef().ScrollPaddingLeft() ||
       old_style.ScrollPaddingTop() != StyleRef().ScrollPaddingTop() ||
       old_style.ScrollPaddingRight() != StyleRef().ScrollPaddingRight()) {
-    snap_coordinator->SnapContainerDidChange(*this, false /* is_removed */);
+    snap_coordinator.SnapContainerDidChange(*this);
   }
 
   // scroll-snap-align, scroll-snap-stop and scroll-margin invalidate the snap
@@ -496,25 +495,17 @@ void LayoutBox::UpdateScrollSnapMappingAfterStyleChange(
       old_style.ScrollMarginLeft() != StyleRef().ScrollMarginLeft() ||
       old_style.ScrollMarginTop() != StyleRef().ScrollMarginTop() ||
       old_style.ScrollMarginRight() != StyleRef().ScrollMarginRight())
-    snap_coordinator->SnapAreaDidChange(*this, StyleRef().GetScrollSnapAlign());
+    snap_coordinator.SnapAreaDidChange(*this, StyleRef().GetScrollSnapAlign());
 }
 
 void LayoutBox::AddScrollSnapMapping() {
-  SnapCoordinator* snap_coordinator = GetDocument().GetSnapCoordinator();
-  if (!snap_coordinator)
-    return;
-
-  snap_coordinator->SnapContainerDidChange(*this, false /* is_removed */);
-  snap_coordinator->SnapAreaDidChange(*this, Style()->GetScrollSnapAlign());
+  SnapCoordinator& snap_coordinator = GetDocument().GetSnapCoordinator();
+  snap_coordinator.SnapAreaDidChange(*this, Style()->GetScrollSnapAlign());
 }
 
 void LayoutBox::ClearScrollSnapMapping() {
-  SnapCoordinator* snap_coordinator = GetDocument().GetSnapCoordinator();
-  if (!snap_coordinator)
-    return;
-
-  snap_coordinator->SnapContainerDidChange(*this, true /* is_removed */);
-  snap_coordinator->SnapAreaDidChange(*this, cc::ScrollSnapAlign());
+  SnapCoordinator& snap_coordinator = GetDocument().GetSnapCoordinator();
+  snap_coordinator.SnapAreaDidChange(*this, cc::ScrollSnapAlign());
 }
 
 void LayoutBox::UpdateFromStyle() {
@@ -586,6 +577,41 @@ int LayoutBox::PixelSnappedClientWidth() const {
 DISABLE_CFI_PERF
 int LayoutBox::PixelSnappedClientHeight() const {
   return SnapSizeToPixel(ClientHeight(), Location().Y() + ClientTop());
+}
+
+int LayoutBox::PixelSnappedClientWidthWithTableSpecialBehavior() const {
+  // clientWidth/Height is the visual portion of the box content, not including
+  // borders or scroll bars, but includes padding. And per
+  // https://www.w3.org/TR/CSS2/tables.html#model,
+  // table wrapper box is a principal block box that contains the table box
+  // itself and any caption boxes, and table grid box is a block-level box that
+  // contains the table's internal table boxes. When table's border is specified
+  // in CSS, the border is added to table grid box, not table wrapper box.
+  // Currently, Blink doesn't have table wrapper box, and we are supposed to
+  // retrieve clientWidth/Height from table wrapper box, not table grid box. So
+  // when we retrieve clientWidth/Height, it includes table's border size.
+  LayoutUnit client_width = ClientWidth();
+  if (IsTable())
+    client_width += BorderLeft() + BorderRight();
+  return SnapSizeToPixel(client_width, Location().X() + ClientLeft());
+}
+
+DISABLE_CFI_PERF
+int LayoutBox::PixelSnappedClientHeightWithTableSpecialBehavior() const {
+  // clientWidth/Height is the visual portion of the box content, not including
+  // borders or scroll bars, but includes padding. And per
+  // https://www.w3.org/TR/CSS2/tables.html#model,
+  // table wrapper box is a principal block box that contains the table box
+  // itself and any caption boxes, and table grid box is a block-level box that
+  // contains the table's internal table boxes. When table's border is specified
+  // in CSS, the border is added to table grid box, not table wrapper box.
+  // Currently, Blink doesn't have table wrapper box, and we are supposed to
+  // retrieve clientWidth/Height from table wrapper box, not table grid box. So
+  // when we retrieve clientWidth/Height, it includes table's border size.
+  LayoutUnit client_height = ClientHeight();
+  if (IsTable())
+    client_height += BorderTop() + BorderBottom();
+  return SnapSizeToPixel(client_height, Location().Y() + ClientTop());
 }
 
 int LayoutBox::PixelSnappedOffsetWidth(const Element*) const {
@@ -2028,6 +2054,7 @@ void LayoutBox::ExcludeScrollbars(
         overlay_scrollbar_clip_behavior);
     rect.size.height -= scrollable_area->HorizontalScrollbarHeight(
         overlay_scrollbar_clip_behavior);
+    rect.size.ClampNegativeToZero();
   }
 }
 
@@ -2278,13 +2305,10 @@ void LayoutBox::InLayoutNGInlineFormattingContextWillChange(bool new_value) {
 
 void LayoutBox::SetCachedLayoutResult(const NGLayoutResult& layout_result,
                                       const NGBreakToken* break_token) {
+  DCHECK_EQ(layout_result.Status(), NGLayoutResult::kSuccess);
+  DCHECK(!layout_result.GetConstraintSpaceForCaching().IsIntermediateLayout());
+
   if (break_token)
-    return;
-  if (layout_result.Status() != NGLayoutResult::kSuccess)
-    return;
-  if (!layout_result.HasValidConstraintSpaceForCaching())
-    return;
-  if (layout_result.GetConstraintSpaceForCaching().IsIntermediateLayout())
     return;
   if (layout_result.PhysicalFragment().BreakToken())
     return;
@@ -2292,9 +2316,14 @@ void LayoutBox::SetCachedLayoutResult(const NGLayoutResult& layout_result,
   cached_layout_result_ = &layout_result;
 }
 
+void LayoutBox::ClearCachedLayoutResult() {
+  cached_layout_result_ = nullptr;
+}
+
 scoped_refptr<const NGLayoutResult> LayoutBox::CachedLayoutResult(
     const NGConstraintSpace& new_space,
     const NGBreakToken* break_token,
+    const NGEarlyBreak* early_break,
     base::Optional<NGFragmentGeometry>* initial_fragment_geometry,
     NGLayoutCacheStatus* out_cache_status) {
   *out_cache_status = NGLayoutCacheStatus::kNeedsLayout;
@@ -2309,6 +2338,11 @@ scoped_refptr<const NGLayoutResult> LayoutBox::CachedLayoutResult(
   // TODO(cbiesinger): Support caching fragmented boxes.
   if (break_token)
     return nullptr;
+
+  if (early_break)
+    return nullptr;
+
+  DCHECK_EQ(cached_layout_result->Status(), NGLayoutResult::kSuccess);
 
   // Set our initial temporary cache status to "hit".
   NGLayoutCacheStatus cache_status = NGLayoutCacheStatus::kHit;
@@ -2442,10 +2476,6 @@ scoped_refptr<const NGLayoutResult> LayoutBox::CachedLayoutResult(
   // and have cached a locked layout result. In that case, this function will
   // not clear the child dirty bits.
   ClearNeedsLayout();
-
-  // The checks above should be enough to bail if layout is incomplete, but
-  // let's verify:
-  DCHECK(IsBlockLayoutComplete(old_space, *cached_layout_result));
 
   // OOF-positioned nodes have to two-tier cache. The additional cache check
   // runs before the OOF-positioned sizing, and positioning calculations.
@@ -2870,7 +2900,7 @@ static float GetMaxWidthListMarker(const LayoutBox* layout_object) {
   DCHECK(layout_object);
   Node* parent_node = layout_object->GeneratingNode();
   DCHECK(parent_node);
-  DCHECK(IsHTMLOListElement(parent_node) || IsHTMLUListElement(parent_node));
+  DCHECK(IsA<HTMLOListElement>(parent_node) || IsHTMLUListElement(parent_node));
   DCHECK_NE(layout_object->StyleRef().TextAutosizingMultiplier(), 1);
 #endif
   float max_width = 0;
@@ -2903,10 +2933,6 @@ void LayoutBox::ComputeLogicalWidth(
     computed_values.extent_ = ContentLogicalWidthForSizeContainment() +
                               BorderAndPaddingLogicalWidth() +
                               ScrollbarLogicalWidth();
-  } else if (DisplayLockInducesSizeContainment()) {
-    computed_values.extent_ =
-        BorderAndPaddingLogicalWidth() + ScrollbarLogicalWidth() +
-        GetDisplayLockContext()->GetLockedContentLogicalWidth();
   } else {
     computed_values.extent_ = LogicalWidth();
   }
@@ -3011,7 +3037,7 @@ void LayoutBox::ComputeLogicalWidth(
   if (style_to_use.TextAutosizingMultiplier() != 1 &&
       style_to_use.MarginStart().IsFixed()) {
     Node* parent_node = GeneratingNode();
-    if (parent_node && (IsHTMLOListElement(*parent_node) ||
+    if (parent_node && (IsA<HTMLOListElement>(*parent_node) ||
                         IsHTMLUListElement(*parent_node))) {
       // Make sure the markers in a list are properly positioned (i.e. not
       // chopped off) when autosized.
@@ -3162,7 +3188,7 @@ bool LayoutBox::ColumnFlexItemHasStretchAlignment() const {
 
 bool LayoutBox::IsStretchingColumnFlexItem() const {
   LayoutObject* parent = Parent();
-  if (parent->IsDeprecatedFlexibleBox() &&
+  if (parent->StyleRef().IsDeprecatedWebkitBox() &&
       parent->StyleRef().BoxOrient() == EBoxOrient::kVertical &&
       parent->StyleRef().BoxAlign() == EBoxAlignment::kStretch)
     return true;
@@ -3231,7 +3257,9 @@ bool LayoutBox::SizesLogicalWidthToFitContent(
   // their intrinsic widths.
   // FIXME: Think about writing-mode here.
   // https://bugs.webkit.org/show_bug.cgi?id=46473
-  if (Parent()->IsDeprecatedFlexibleBox() &&
+  if ((Parent()->IsDeprecatedFlexibleBox() ||
+       (Parent()->StyleRef().IsDeprecatedWebkitBox() &&
+        Parent()->IsFlexibleBox())) &&
       (Parent()->StyleRef().BoxOrient() == EBoxOrient::kHorizontal ||
        Parent()->StyleRef().BoxAlign() != EBoxAlignment::kStretch))
     return true;
@@ -3254,10 +3282,10 @@ bool LayoutBox::SizesLogicalWidthToFitContent(
 }
 
 bool LayoutBox::AutoWidthShouldFitContent() const {
-  return GetNode() &&
-         (IsHTMLInputElement(*GetNode()) || IsHTMLSelectElement(*GetNode()) ||
-          IsA<HTMLButtonElement>(*GetNode()) ||
-          IsHTMLTextAreaElement(*GetNode()) || IsRenderedLegend());
+  return GetNode() && (IsHTMLInputElement(*GetNode()) ||
+                       IsA<HTMLSelectElement>(*GetNode()) ||
+                       IsA<HTMLButtonElement>(*GetNode()) ||
+                       IsHTMLTextAreaElement(*GetNode()) || IsRenderedLegend());
 }
 
 void LayoutBox::ComputeMarginsForDirection(MarginDirection flow_direction,
@@ -3409,9 +3437,6 @@ void LayoutBox::ComputeLogicalHeight(
   if (ShouldApplySizeContainment() && !IsLayoutGrid()) {
     height = ContentLogicalHeightForSizeContainment() +
              BorderAndPaddingLogicalHeight() + ScrollbarLogicalHeight();
-  } else if (DisplayLockInducesSizeContainment()) {
-    height = BorderAndPaddingLogicalHeight() + ScrollbarLogicalHeight() +
-             GetDisplayLockContext()->GetLockedContentLogicalHeight();
   } else {
     height = LogicalHeight();
   }
@@ -3549,17 +3574,10 @@ void LayoutBox::ComputeLogicalHeight(
 LayoutUnit LayoutBox::ComputeLogicalHeightWithoutLayout() const {
   LogicalExtentComputedValues computed_values;
 
-  if (!SelfNeedsLayout()) {
-    if (ShouldApplySizeContainment()) {
-      ComputeLogicalHeight(ContentLogicalHeightForSizeContainment() +
-                               BorderAndPaddingLogicalHeight(),
-                           LayoutUnit(), computed_values);
-    } else if (DisplayLockInducesSizeContainment()) {
-      ComputeLogicalHeight(
-          BorderAndPaddingLogicalHeight() +
-              GetDisplayLockContext()->GetLockedContentLogicalHeight(),
-          LayoutUnit(), computed_values);
-    }
+  if (!SelfNeedsLayout() && ShouldApplySizeContainment()) {
+    ComputeLogicalHeight(ContentLogicalHeightForSizeContainment() +
+                             BorderAndPaddingLogicalHeight(),
+                         LayoutUnit(), computed_values);
   } else {
     // TODO(cbiesinger): We should probably return something other than just
     // border + padding, but for now we have no good way to do anything else
@@ -5542,6 +5560,8 @@ void LayoutBox::AddVisualOverflowFromChild(const LayoutBox& child,
 DISABLE_CFI_PERF
 void LayoutBox::AddLayoutOverflowFromChild(const LayoutBox& child,
                                            const LayoutSize& delta) {
+  DCHECK(!LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren));
+
   // Never allow flow threads to propagate overflow up to a parent.
   if (child.IsLayoutFlowThread())
     return;
@@ -5729,8 +5749,7 @@ LayoutBox::PaginationBreakability LayoutBox::GetPaginationBreakability() const {
       (Parent() && IsWritingModeRoot()) ||
       (IsOutOfFlowPositioned() &&
        StyleRef().GetPosition() == EPosition::kFixed) ||
-      ShouldApplySizeContainment() || DisplayLockInducesSizeContainment() ||
-      IsFrameSet())
+      ShouldApplySizeContainment() || IsFrameSet())
     return kForbidBreaks;
 
   EBreakInside break_value = BreakInside();

@@ -315,8 +315,9 @@ AccessibilityManager::AccessibilityManager() {
                           weak_ptr_factory_.GetWeakPtr())));
 
   // Connect to the media session service.
-  content::GetSystemConnector()->BindInterface(
-      media_session::mojom::kServiceName, &audio_focus_manager_ptr_);
+  content::GetSystemConnector()->Connect(
+      media_session::mojom::kServiceName,
+      audio_focus_manager_.BindNewPipeAndPassReceiver());
 
   ash::AcceleratorController::SetVolumeAdjustmentSoundCallback(
       base::BindRepeating(&AccessibilityManager::PlayVolumeAdjustSound,
@@ -908,7 +909,7 @@ bool AccessibilityManager::IsSwitchAccessEnabled() const {
   return switch_access_enabled_;
 }
 
-void AccessibilityManager::UpdateSwitchAccessFromPref() {
+void AccessibilityManager::OnSwitchAccessChanged() {
   if (!profile_)
     return;
 
@@ -1115,7 +1116,7 @@ void AccessibilityManager::SetProfile(Profile* profile) {
                    base::Unretained(this)));
     pref_change_registrar_->Add(
         ash::prefs::kAccessibilitySwitchAccessEnabled,
-        base::Bind(&AccessibilityManager::UpdateSwitchAccessFromPref,
+        base::Bind(&AccessibilityManager::OnSwitchAccessChanged,
                    base::Unretained(this)));
     pref_change_registrar_->Add(
         ash::prefs::kAccessibilityAutoclickEnabled,
@@ -1150,11 +1151,11 @@ void AccessibilityManager::SetProfile(Profile* profile) {
   else
     UpdateBrailleImeState();
   UpdateAlwaysShowMenuFromPref();
-  UpdateSwitchAccessFromPref();
 
   // TODO(warx): reconcile to ash once the prefs registration above is moved to
   // ash.
   OnSpokenFeedbackChanged();
+  OnSwitchAccessChanged();
   OnSelectToSpeakChanged();
   OnAutoclickChanged();
 }
@@ -1369,7 +1370,7 @@ void AccessibilityManager::PostLoadChromeVox() {
                        base::Unretained(this))));
   }
 
-  audio_focus_manager_ptr_->SetEnforcementMode(
+  audio_focus_manager_->SetEnforcementMode(
       media_session::mojom::EnforcementMode::kNone);
 
   InitializeFocusRings(extension_id);
@@ -1396,7 +1397,7 @@ void AccessibilityManager::PostUnloadChromeVox() {
   // Stop speech.
   content::TtsController::GetInstance()->Stop();
 
-  audio_focus_manager_ptr_->SetEnforcementMode(
+  audio_focus_manager_->SetEnforcementMode(
       media_session::mojom::EnforcementMode::kDefault);
 }
 

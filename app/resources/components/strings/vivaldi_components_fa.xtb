@@ -1,4 +1,36 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fa">
+<translation id="3830627370375585318">‏در تنظیمات دیوار آتش یا ضدویروس خود، به ویوالدی اجازه دسترسی به شبکه را
+          بدهید.</translation>
+<translation id="4200102020577305737">‏به
+          منوی Vivaldi  &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          تنظیمات LAN
+          رفته و گزینه‌ی "استفاده از سرور پراکسی برای LAN" را از انتخاب خارج کنید.</translation>
+<translation id="4932161901409251843">‏به
+          منوی Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          رفته و مطمئن شوید تنظیمات بر روی "بدون پراکسی" یا "مستقیم" باشد</translation>
+<translation id="5248344925342018662">‏شما درحال مشاهده‌ی یک صفحه‌ی امن ویوالدی هستید</translation>
+<translation id="7023871570427738255">‏به
+          منوی ویوالدی&gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          رفته و علامت «<ph name="NO_PREFETCH_DESCRIPTION" />» را بردارید.
+          درصورتی‌که با این کار مشکل حل نشد، توصیه می‌کنیم برای بهبود عملکرد مرورگر،
+          این گزینه را دوباره انتخاب کنید.</translation>
+<translation id="8187289872471304532">به
+          برنامه‌ها &gt; موارد برگزیده سیستم &gt; شبکه &gt; پیشرفته &gt; پراکسی‌ها
+          رفته و تمام پراکسی‌های انتخاب شده را از حالت انتخاب خارج کنید.</translation>
 </translationbundle>

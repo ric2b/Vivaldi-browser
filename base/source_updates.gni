@@ -5,7 +5,21 @@ update_template_instance("//base:base") {
   }
   sources += [
     "//vivaldi/base/vivaldi_running.cpp",
+    "//vivaldi/base/vivaldi_user_agent.cc",
+    "//vivaldi/base/vivaldi_user_agent.h",
+    "//vivaldi/base/vivaldi_user_agent_white_list.inc",
   ]
+  if (!defined(jumbo_excluded_sources)) {
+    jumbo_excluded_sources = []
+  }
+  jumbo_excluded_sources += [
+    "threading/thread_collision_warner.cc",
+  ]
+  if (is_win) {
+    jumbo_excluded_sources += [
+      "timer/hi_res_timer_manager_win.cc",
+    ]
+  }
 }
 
 update_target("//base:base_static") {

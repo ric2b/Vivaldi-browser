@@ -86,7 +86,7 @@ class LocalFrameView;
 class NGPaintFragment;
 class NGPhysicalBoxFragment;
 class PaintLayer;
-class PseudoStyleRequest;
+class PseudoElementStyleRequest;
 struct PaintInfo;
 struct PaintInvalidatorContext;
 struct WebScrollIntoViewParams;
@@ -661,6 +661,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool IsLayoutNGListMarkerImage() const {
     return IsOfType(kLayoutObjectNGListMarkerImage);
   }
+  bool IsLayoutNGProgress() const { return IsOfType(kLayoutObjectNGProgress); }
   bool IsLayoutNGText() const { return IsOfType(kLayoutObjectNGText); }
   bool IsLayoutTableCol() const {
     return IsOfType(kLayoutObjectLayoutTableCol);
@@ -688,8 +689,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool IsLayoutReplaced() const {
     return IsOfType(kLayoutObjectLayoutReplaced);
   }
-  bool IsLayoutScrollbarPart() const {
-    return IsOfType(kLayoutObjectLayoutScrollbarPart);
+  bool IsLayoutCustomScrollbarPart() const {
+    return IsOfType(kLayoutObjectLayoutCustomScrollbarPart);
   }
   bool IsLayoutView() const { return IsOfType(kLayoutObjectLayoutView); }
   bool IsRuby() const { return IsOfType(kLayoutObjectRuby); }
@@ -1170,9 +1171,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // has no concept of changing state). The cached pseudo style always inherits
   // from the originating element's style (because we can cache only one
   // version), while the uncached pseudo style can inherit from any style.
-  const ComputedStyle* GetCachedPseudoStyle(PseudoId) const;
-  scoped_refptr<ComputedStyle> GetUncachedPseudoStyle(
-      const PseudoStyleRequest&,
+  const ComputedStyle* GetCachedPseudoElementStyle(PseudoId) const;
+  scoped_refptr<ComputedStyle> GetUncachedPseudoElementStyle(
+      const PseudoElementStyleRequest&,
       const ComputedStyle* parent_style = nullptr) const;
 
   LayoutView* View() const { return GetDocument().GetLayoutView(); }
@@ -1519,7 +1520,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
                 ApplyStyleChanges = ApplyStyleChanges::kYes);
 
   // Set the style of the object if it's generated content.
-  void SetPseudoStyle(scoped_refptr<const ComputedStyle>);
+  void SetPseudoElementStyle(scoped_refptr<const ComputedStyle>);
 
   // In some cases we modify the ComputedStyle after the style recalc, either
   // for updating anonymous style or doing layout hacks for special elements
@@ -2174,6 +2175,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   IntRect FragmentsVisualRectBoundingBox() const;
 
   void SetNeedsOverflowRecalc();
+  void SetNeedsVisualOverflowAndPaintInvalidation();
 
   void InvalidateClipPathCache();
 
@@ -2316,7 +2318,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
    protected:
     friend class LayoutBoxModelObject;
-    friend class LayoutScrollbar;
+    friend class CustomScrollbar;
     friend class PaintInvalidator;
     friend class PaintPropertyTreeBuilder;
     friend class PrePaintTreeWalk;
@@ -2431,11 +2433,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return context && !context->ShouldLayout(target);
   }
 
-  bool DisplayLockInducesSizeContainment() const {
-    auto* context = GetDisplayLockContext();
-    return context && context->IsLocked();
-  }
-
   bool PrePaintBlockedByDisplayLock(DisplayLockLifecycleTarget target) const {
     auto* context = GetDisplayLockContext();
     return context && !context->ShouldPrePaint(target);
@@ -2469,7 +2466,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
 
   DisplayLockContext* GetDisplayLockContext() const {
-    if (!RuntimeEnabledFeatures::DisplayLockingEnabled())
+    if (!RuntimeEnabledFeatures::DisplayLockingEnabled(&GetDocument()))
       return nullptr;
     auto* element = DynamicTo<Element>(GetNode());
     if (!element)
@@ -2502,6 +2499,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     kLayoutObjectNGListMarker,
     kLayoutObjectNGInsideListMarker,
     kLayoutObjectNGListMarkerImage,
+    kLayoutObjectNGProgress,
     kLayoutObjectNGText,
     kLayoutObjectProgress,
     kLayoutObjectQuote,
@@ -2516,7 +2514,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     kLayoutObjectLayoutMultiColumnSpannerPlaceholder,
     kLayoutObjectLayoutEmbeddedContent,
     kLayoutObjectLayoutReplaced,
-    kLayoutObjectLayoutScrollbarPart,
+    kLayoutObjectLayoutCustomScrollbarPart,
     kLayoutObjectLayoutView,
     kLayoutObjectRuby,
     kLayoutObjectRubyBase,
@@ -2745,7 +2743,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
                             const ComputedStyle* new_style);
   void UpdateFirstLineImageObservers(const ComputedStyle* new_style);
 
-  void ApplyPseudoStyleChanges(const ComputedStyle* old_style);
+  void ApplyPseudoElementStyleChanges(const ComputedStyle* old_style);
   void ApplyFirstLineChanges(const ComputedStyle* old_style);
 
   IntRect AdjustVisualRectForInlineBox(const IntRect&) const;

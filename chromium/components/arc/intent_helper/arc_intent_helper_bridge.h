@@ -61,10 +61,6 @@ class ArcIntentHelperBridge : public KeyedService,
   void RemoveObserver(ArcIntentHelperObserver* observer);
   bool HasObserver(ArcIntentHelperObserver* observer) const;
 
-  void OnCameraIntentHandled(uint32_t intent_id,
-                             bool is_success,
-                             const std::vector<uint8_t>& captured_data);
-
   // mojom::IntentHelperHost
   void OnIconInvalidated(const std::string& package_name) override;
   void OnIntentFiltersUpdated(
@@ -83,11 +79,19 @@ class ArcIntentHelperBridge : public KeyedService,
   void FactoryResetArc() override;
   void OnOpenWebApp(const std::string& url) override;
   void RecordShareFilesMetrics(mojom::ShareFiles flag) override;
-  void LaunchCameraApp(arc::mojom::CameraIntentMode mode,
+  void LaunchCameraApp(uint32_t intent_id,
+                       arc::mojom::CameraIntentMode mode,
                        bool should_handle_result,
                        bool should_down_scale,
-                       bool is_secure,
-                       LaunchCameraAppCallback callback) override;
+                       bool is_secure) override;
+  void HandleCameraResult(
+      uint32_t intent_id,
+      arc::mojom::CameraIntentAction action,
+      const std::vector<uint8_t>& data,
+      arc::mojom::IntentHelperInstance::HandleCameraResultCallback callback);
+  void OnIntentFiltersUpdatedForPackage(
+      const std::string& package_name,
+      std::vector<IntentFilter> intent_filters) override;
 
   // Retrieves icons for the |activities| and calls |callback|.
   // See ActivityIconLoader::GetActivityIcons() for more details.
@@ -118,6 +122,9 @@ class ArcIntentHelperBridge : public KeyedService,
 
   static const char kArcIntentHelperPackageName[];
 
+  const std::vector<IntentFilter>& GetIntentFilterForPackage(
+      const std::string& package_name);
+
  private:
   THREAD_CHECKER(thread_checker_);
 
@@ -126,16 +133,15 @@ class ArcIntentHelperBridge : public KeyedService,
 
   internal::ActivityIconLoader icon_loader_;
 
-  // List of intent filters from Android. Used to determine if Chrome should
-  // handle a URL without handing off to Android.
-  std::vector<IntentFilter> intent_filters_;
+  // A map of each package name to the intent filters for that package.
+  // Used to determine if Chrome should handle a URL without handing off to
+  // Android.
+  // TODO(crbug.com/853604): Now the package name exists in the map key as well
+  // as the IntentFilter struct, it is a duplication. Should update the ARC
+  // mojom type to optimise the structure.
+  std::map<std::string, std::vector<IntentFilter>> intent_filters_;
 
   base::ObserverList<ArcIntentHelperObserver>::Unchecked observer_list_;
-
-  base::flat_map<uint32_t, LaunchCameraAppCallback>
-      launch_camera_app_callback_map_;
-
-  uint32_t camera_intent_id_;
 
   // Schemes that ARC is known to send via OnOpenUrl.
   const std::set<std::string> allowed_arc_schemes_;

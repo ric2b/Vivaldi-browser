@@ -33,7 +33,6 @@
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/forms/validity_state.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
-#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
@@ -179,14 +178,6 @@ bool HTMLFormControlElement::IsDisabledOrReadOnly() const {
   return IsDisabledFormControl() || IsReadOnly();
 }
 
-bool HTMLFormControlElement::SupportsAutofocus() const {
-  return false;
-}
-
-bool HTMLFormControlElement::IsAutofocusable() const {
-  return FastHasAttribute(kAutofocusAttr) && SupportsAutofocus();
-}
-
 void HTMLFormControlElement::SetAutofillState(WebAutofillState autofill_state) {
   if (autofill_state == autofill_state_)
     return;
@@ -214,41 +205,6 @@ const AtomicString& HTMLFormControlElement::autocapitalize() const {
   return g_empty_atom;
 }
 
-static bool ShouldAutofocusOnAttach(const HTMLFormControlElement* element) {
-  if (!element->IsAutofocusable())
-    return false;
-
-  Document& doc = element->GetDocument();
-
-  // The rest of this function implements part of the autofocus algorithm in the
-  // spec:
-  // https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#autofocusing-a-form-control:-the-autofocus-attribute
-
-  // Step 4 of the spec algorithm above.
-  if (doc.IsSandboxed(WebSandboxFlags::kAutomaticFeatures)) {
-    doc.AddConsoleMessage(ConsoleMessage::Create(
-        mojom::ConsoleMessageSource::kSecurity,
-        mojom::ConsoleMessageLevel::kError,
-        "Blocked autofocusing on a form control because the form's frame is "
-        "sandboxed and the 'allow-scripts' permission is not set."));
-    return false;
-  }
-
-  // TODO(mustaq): Add Step 5 checks.
-
-  // Step 6 of the spec algorithm above.
-  if (!doc.IsInMainFrame() &&
-      !doc.TopFrameOrigin()->CanAccess(doc.GetSecurityOrigin())) {
-    doc.AddConsoleMessage(ConsoleMessage::Create(
-        mojom::ConsoleMessageSource::kSecurity,
-        mojom::ConsoleMessageLevel::kError,
-        "Blocked autofocusing on a form control in a cross-origin subframe."));
-    return false;
-  }
-
-  return true;
-}
-
 void HTMLFormControlElement::AttachLayoutTree(AttachContext& context) {
   HTMLElement::AttachLayoutTree(context);
 
@@ -259,11 +215,6 @@ void HTMLFormControlElement::AttachLayoutTree(AttachContext& context) {
   // to the base class's attachLayoutTree() because that can sometimes do a
   // close on the layoutObject.
   GetLayoutObject()->UpdateFromElement();
-
-  // FIXME: Autofocus handling should be moved to insertedInto according to
-  // the standard.
-  if (ShouldAutofocusOnAttach(this))
-    GetDocument().SetAutofocusElement(this);
 }
 
 void HTMLFormControlElement::DidMoveToNewDocument(Document& old_document) {

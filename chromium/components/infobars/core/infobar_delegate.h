@@ -172,6 +172,8 @@ class InfoBarDelegate {
     bool did_replace_entry;
     bool is_reload;
     bool is_redirect;
+    // True if the navigation was caused by a form submission.
+    bool is_form_submission = false;
   };
 
   // Value to use when the InfoBar has no icon to show.
@@ -224,6 +226,10 @@ class InfoBarDelegate {
 
   // Returns true if the InfoBar has a close button; true by default.
   virtual bool IsCloseable() const;
+
+  // Returns true if the InfoBar should animate when showing or hiding; true by
+  // default.
+  virtual bool ShouldAnimate() const;
 
   // Type-checking downcast routines:
   virtual ConfirmInfoBarDelegate* AsConfirmInfoBarDelegate();

@@ -464,12 +464,6 @@ void GpuChannel::SetUnhandledMessageListener(IPC::Listener* listener) {
   unhandled_message_listener_ = listener;
 }
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-void GpuChannel::SetProprietaryMediaMessageListener(IPC::Listener* listener) {
-  proprietary_media_message_listener_ = listener;
-}
-#endif
-
 base::WeakPtr<GpuChannel> GpuChannel::AsWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
@@ -878,5 +872,11 @@ scoped_refptr<gl::GLImage> GpuChannel::CreateImageForGpuMemoryBuffer(
     }
   }
 }
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+void GpuChannel::SetProprietaryMediaMessageListener(IPC::Listener* listener) {
+  proprietary_media_message_listener_ = listener;
+}
+#endif
 
 }  // namespace gpu

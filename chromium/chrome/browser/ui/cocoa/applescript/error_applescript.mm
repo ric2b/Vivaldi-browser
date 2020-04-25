@@ -9,6 +9,7 @@
 #include "ui/base/l10n/l10n_util_mac.h"
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_resources.h"
 
 void AppleScript::SetError(AppleScript::ErrorCode errorCode) {
   using l10n_util::GetNSString;

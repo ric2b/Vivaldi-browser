@@ -6,6 +6,7 @@
 #include "base/bind.h"
 #include "base/threading/thread.h"
 #include "content/renderer/loader/sync_load_response.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -33,7 +34,9 @@ class TestSharedURLLoaderFactory : public network::TestURLLoaderFactory,
         std::move(client), traffic_annotation);
   }
 
-  void Clone(network::mojom::URLLoaderFactoryRequest) override { NOTREACHED(); }
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory>) override {
+    NOTREACHED();
+  }
 
   std::unique_ptr<network::SharedURLLoaderFactoryInfo> Clone() override {
     NOTREACHED();
@@ -129,7 +132,7 @@ class SyncLoadContextTest : public testing::Test {
     context->resource_dispatcher_ = std::move(dispatcher);
 
     // Simulate the response.
-    context->OnReceivedResponse(network::ResourceResponseInfo());
+    context->OnReceivedResponse(network::mojom::URLResponseHead::New());
     mojo::ScopedDataPipeProducerHandle producer_handle;
     mojo::ScopedDataPipeConsumerHandle consumer_handle;
     EXPECT_EQ(MOJO_RESULT_OK,

@@ -21,6 +21,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/strings/string_split.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -37,6 +38,7 @@
 #include "chromecast/browser/cast_content_browser_client.h"
 #include "chromecast/browser/cast_feature_list_creator.h"
 #include "chromecast/browser/cast_system_memory_pressure_evaluator.h"
+#include "chromecast/browser/cast_system_memory_pressure_evaluator_adjuster.h"
 #include "chromecast/browser/devtools/remote_debugging_server.h"
 #include "chromecast/browser/media/media_caps_impl.h"
 #include "chromecast/browser/metrics/cast_browser_metrics.h"
@@ -61,7 +63,6 @@
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/browser/system_connector.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
@@ -75,6 +76,7 @@
 #include <fontconfig/fontconfig.h>
 #include <signal.h>
 #include <sys/prctl.h>
+#include "ui/gfx/linux/fontconfig_util.h"
 #endif
 
 #if defined(OS_ANDROID)
@@ -358,7 +360,8 @@ CastBrowserMainParts::CastBrowserMainParts(
       parameters_(parameters),
       cast_content_browser_client_(cast_content_browser_client),
       url_request_context_factory_(url_request_context_factory),
-      media_caps_(new media::MediaCapsImpl()) {
+      media_caps_(new media::MediaCapsImpl()),
+      cast_system_memory_pressure_evaluator_adjuster_(nullptr) {
   DCHECK(cast_content_browser_client);
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   AddDefaultCommandLineSwitches(command_line);
@@ -434,25 +437,19 @@ void CastBrowserMainParts::ToolkitInitialized() {
 #endif  // defined(USE_AURA)
 
 #if defined(OS_LINUX)
-  // Without this call, the FontConfig library gets implicitly initialized
-  // on the first call to FontConfig. Since it's not safe to initialize it
-  // concurrently from multiple threads, we explicitly initialize it here
-  // to prevent races when there are multiple renderer's querying the library:
-  // http://crbug.com/404311
-  // Also, implicit initialization can cause a long delay on the first
-  // rendering if the font cache has to be regenerated for some reason. Doing it
-  // explicitly here helps in cases where the browser process is starting up in
-  // the background (resources have not yet been granted to cast) since it
-  // prevents the long delay the user would have seen on first rendering. Note
-  // that future calls to FcInit() are safe no-ops per the FontConfig interface.
   base::FilePath dir_module;
   base::PathService::Get(base::DIR_MODULE, &dir_module);
   base::FilePath dir_font = dir_module.Append("fonts");
 
-  FcInit();
+  // Setting rescan interval to 0 will disable re-scan. More details in
+  // b/141204302#comment41.
+  // TODO(crbug/1015146): move re-scan disable logic to GetGlobalFontConfig().
+  if (!FcConfigSetRescanInterval(gfx::GetGlobalFontConfig(), 0)) {
+    LOG(WARNING) << "Cannot disable fontconfig rescan.";
+  }
 
   const FcChar8 *dir_font_char8 = reinterpret_cast<const FcChar8*>(dir_font.value().data());
-  if (FcConfigAppFontAddDir(nullptr, dir_font_char8) == FcFalse) {
+  if (!FcConfigAppFontAddDir(gfx::GetGlobalFontConfig(), dir_font_char8)) {
     LOG(ERROR) << "Cannot load fonts from " << dir_font_char8;
   }
 #endif
@@ -486,9 +483,13 @@ int CastBrowserMainParts::PreCreateThreads() {
 void CastBrowserMainParts::PreMainMessageLoopRun() {
 #if !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
   memory_pressure_monitor_.reset(new util::MultiSourceMemoryPressureMonitor());
-  memory_pressure_monitor_->SetSystemEvaluator(
+  auto cast_system_memory_pressure_evaluator =
       std::make_unique<CastSystemMemoryPressureEvaluator>(
-          memory_pressure_monitor_->CreateVoter()));
+          memory_pressure_monitor_->CreateVoter());
+  cast_system_memory_pressure_evaluator_adjuster_ =
+      cast_system_memory_pressure_evaluator.get();
+  memory_pressure_monitor_->SetSystemEvaluator(
+      std::move(cast_system_memory_pressure_evaluator));
 
   // base::Unretained() is safe because the browser client will outlive any
   // component in the browser; this factory method will not be called after
@@ -564,6 +565,7 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
   cast_browser_process_->SetCastService(
       cast_browser_process_->browser_client()->CreateCastService(
           cast_browser_process_->browser_context(),
+          cast_system_memory_pressure_evaluator_adjuster_,
           cast_browser_process_->pref_service(),
           video_plane_controller_.get(), window_manager_.get()));
   cast_browser_process_->cast_service()->Initialize();
@@ -724,7 +726,7 @@ void CastBrowserMainParts::PostCreateThreads() {
       heap_profiling::Supervisor::GetInstance();
   supervisor->SetClientConnectionManagerConstructor(
       &CreateClientConnectionManager);
-  supervisor->Start(content::GetSystemConnector(), base::NullCallback());
+  supervisor->Start(base::NullCallback());
 #endif  // !defined(OS_FUCHSIA)
 }
 

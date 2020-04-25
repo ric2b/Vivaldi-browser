@@ -118,8 +118,6 @@ exec_script_whitelist += [
   "//vivaldi/gn/config/product.gni",
   "//vivaldi/gn/config/stored_version.gni",
   "//vivaldi/gn/config/version.gni",
-  "//vivaldi/app/resources/vivaldi_grit.gni",
-  "//vivaldi/app/resources/vivaldi_chromium_grit.gni",
   "//vivaldi/app/resources/untranslated.gni",
   "//vivaldi/vivapp/BUILD.gn",
 ]

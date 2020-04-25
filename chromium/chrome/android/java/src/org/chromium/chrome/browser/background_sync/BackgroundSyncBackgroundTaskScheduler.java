@@ -5,12 +5,14 @@
 package org.chromium.chrome.browser.background_sync;
 
 import android.os.Bundle;
-import android.support.annotation.IntDef;
 import android.text.format.DateUtils;
+
+import androidx.annotation.IntDef;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.background_task_scheduler.NativeBackgroundTask;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
 import org.chromium.components.background_task_scheduler.TaskIds;
@@ -24,6 +26,14 @@ import org.chromium.components.background_task_scheduler.TaskInfo;
  * Thread model: This class is to be run on the UI thread only.
  */
 public class BackgroundSyncBackgroundTaskScheduler {
+    /**
+     * Any tasks scheduled using GCMNetworkManager directly to wake up Chrome
+     * would use this TASK_TAG. We no longer use GCMNetworkManager directly, so
+     * when these tasks are run, we rescheduling using
+     * BackgroundSyncBackgroundTaskScheduler.
+     */
+    public static final String TASK_TAG = "BackgroundSync Event";
+
     /**
      * Denotes the one-off Background Sync Background Tasks scheduled through
      * this class.
@@ -47,14 +57,17 @@ public class BackgroundSyncBackgroundTaskScheduler {
     // this task.
     public static final String SOONEST_EXPECTED_WAKETIME = "SoonestWakeupTime";
 
-    private static class LazyHolder {
-        static final BackgroundSyncBackgroundTaskScheduler INSTANCE =
-                new BackgroundSyncBackgroundTaskScheduler();
-    }
+    private static BackgroundSyncBackgroundTaskScheduler sInstance;
 
     @CalledByNative
     public static BackgroundSyncBackgroundTaskScheduler getInstance() {
-        return LazyHolder.INSTANCE;
+        if (sInstance == null) sInstance = new BackgroundSyncBackgroundTaskScheduler();
+        return sInstance;
+    }
+
+    @VisibleForTesting
+    static boolean hasInstance() {
+        return sInstance != null;
     }
 
     /**
@@ -120,9 +133,13 @@ public class BackgroundSyncBackgroundTaskScheduler {
         Bundle taskExtras = new Bundle();
         taskExtras.putLong(SOONEST_EXPECTED_WAKETIME, System.currentTimeMillis() + minDelayMs);
 
+        // We setWindowEndTime to Long.MAX_VALUE to wait a long time for network connectivity,
+        // so that we can process the pending sync event. setExpiresAfterWindowEndTime ensures
+        // that we never wake up Chrome without network connectivity.
         TaskInfo.TimingInfo timingInfo = TaskInfo.OneOffInfo.create()
                                                  .setWindowStartTimeMs(minDelayMs)
-                                                 .setWindowEndTimeMs(Integer.MAX_VALUE)
+                                                 .setWindowEndTimeMs(Long.MAX_VALUE)
+                                                 .setExpiresAfterWindowEndTime(true)
                                                  .build();
         TaskInfo taskInfo = TaskInfo.createTask(getAppropriateTaskId(taskType), timingInfo)
                                     .setRequiredNetworkType(TaskInfo.NetworkType.ANY)
@@ -164,5 +181,17 @@ public class BackgroundSyncBackgroundTaskScheduler {
      */
     public void reschedule(@BackgroundSyncTask int taskType) {
         scheduleOneOffTask(MIN_SYNC_RECOVERY_TIME, taskType);
+    }
+
+    @NativeMethods
+    interface Natives {
+        /**
+         * Chrome currently disables BackgroundSyncManager if Google Play Services aren't up-to-date
+         * at startup. Disable this check for tests, since we mock out interaction with GCM.
+         * This method can be removed once our test devices start updating Google Play Services
+         * before tests are run. https://crbug.com/514449
+         * @param disabled disable or enable the version check for Google Play Services.
+         */
+        void setPlayServicesVersionCheckDisabledForTests(boolean disabled);
     }
 }

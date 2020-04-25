@@ -22,10 +22,11 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
 
+#include "app/vivaldi_apptools.h"
 #include "base/command_line.h"
-#include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/api/tab_capture/tab_capture_registry.h"
+#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/plugins/flash_temporary_permission_tracker.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -33,10 +34,7 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
-
-#include "app/vivaldi_apptools.h"
 #include "extensions/helper/vivaldi_app_helper.h"
-#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 
 using base::UserMetricsAction;
 using content::BrowserPluginGuestDelegate;
@@ -55,8 +53,6 @@ static std::string PermissionTypeToString(WebViewPermissionType type) {
       return webview::kPermissionTypeFullscreen;
     case WEB_VIEW_PERMISSION_TYPE_GEOLOCATION:
       return webview::kPermissionTypeGeolocation;
-    case WEB_VIEW_PERMISSION_TYPE_NOTIFICATION:
-      return "notifications";
     case WEB_VIEW_PERMISSION_TYPE_JAVASCRIPT_DIALOG:
       return webview::kPermissionTypeDialog;
     case WEB_VIEW_PERMISSION_TYPE_LOAD_PLUGIN:
@@ -67,6 +63,9 @@ static std::string PermissionTypeToString(WebViewPermissionType type) {
       return webview::kPermissionTypeNewWindow;
     case WEB_VIEW_PERMISSION_TYPE_POINTER_LOCK:
       return webview::kPermissionTypePointerLock;
+    // Vivaldi
+    case WEB_VIEW_PERMISSION_TYPE_NOTIFICATION:
+      return "notifications";
     case WEB_VIEW_PERMISSION_TYPE_CAMERA:
       return "camera";
     case WEB_VIEW_PERMISSION_TYPE_MICROPHONE:
@@ -183,16 +182,6 @@ WebViewPermissionHelper::WebViewPermissionHelper(WebViewGuest* web_view_guest)
       ExtensionsAPIClient::Get()->CreateWebViewPermissionHelperDelegate(this));
 }
 
-WebViewPermissionHelper::WebViewPermissionHelper(GuestViewBase* web_view_guest)
-    : content::WebContentsObserver(web_view_guest->web_contents()),
-      next_permission_request_id_(guest_view::kInstanceIDNone),
-      web_view_guest_(web_view_guest),
-      weak_factory_(this) {
-      web_view_permission_helper_delegate_.reset(
-          ExtensionsAPIClient::Get()->CreateWebViewPermissionHelperDelegate(
-              this));
-}
-
 WebViewPermissionHelper::~WebViewPermissionHelper() {
 }
 
@@ -236,20 +225,76 @@ bool WebViewPermissionHelper::OnMessageReceived(
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 void WebViewPermissionHelper::RequestMediaAccessPermission(
-  content::WebContents* source,
-  const content::MediaStreamRequest& request,
-  content::MediaResponseCallback callback) {
+    content::WebContents* source,
+    const content::MediaStreamRequest& request,
+    content::MediaResponseCallback callback) {
+  // Vivaldi
   Profile* profile = Profile::FromBrowserContext(source->GetBrowserContext());
   const extensions::Extension* extension =
-    extensions::ExtensionRegistry::Get(profile)->enabled_extensions().GetByID(
-      request.security_origin.host());
+      extensions::ExtensionRegistry::Get(profile)->enabled_extensions().GetByID(
+          request.security_origin.host());
   // Let the extension requesting permission handle this as it already has
   // permission.
   if (extension) {
     MediaCaptureDevicesDispatcher::GetInstance()->ProcessMediaAccessRequest(
-      source, request, std::move(callback), extension);
+        source, request, std::move(callback), extension);
     return;
   }
+
+  // The block below will allow or deny access when the permission has been set.
+  extensions::VivaldiAppHelper* helper =
+      extensions::VivaldiAppHelper::FromWebContents(
+          web_view_guest()->embedder_web_contents());
+  if (helper)
+    do {
+      Profile* profile =
+          Profile::FromBrowserContext(source->GetBrowserContext());
+
+      ContentSetting audio_setting = CONTENT_SETTING_DEFAULT;
+      ContentSetting camera_setting = CONTENT_SETTING_DEFAULT;
+
+      if (request.audio_type != blink::mojom::MediaStreamType::NO_SERVICE) {
+        audio_setting =
+            HostContentSettingsMapFactory::GetForProfile(profile)
+                ->GetContentSetting(request.security_origin, GURL(),
+                                    CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
+                                    std::string());
+        if (audio_setting != CONTENT_SETTING_ALLOW &&
+            audio_setting != CONTENT_SETTING_BLOCK)
+          break;
+      }
+      if (request.video_type != blink::mojom::MediaStreamType::NO_SERVICE) {
+        camera_setting =
+            HostContentSettingsMapFactory::GetForProfile(profile)
+                ->GetContentSetting(request.security_origin, GURL(),
+                                    CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
+                                    std::string());
+        if (camera_setting != CONTENT_SETTING_ALLOW &&
+            camera_setting != CONTENT_SETTING_BLOCK)
+          break;
+      }
+
+      // Only default (not requested), allow and block allowed.
+      // Others are "always ask".
+      if (audio_setting == CONTENT_SETTING_BLOCK ||
+          camera_setting == CONTENT_SETTING_BLOCK) {
+        std::move(callback).Run(
+            blink::MediaStreamDevices(),
+            blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED,
+            std::unique_ptr<content::MediaStreamUI>());
+        return;
+      }
+      if (audio_setting == CONTENT_SETTING_ALLOW ||
+          camera_setting == CONTENT_SETTING_ALLOW) {
+        web_view_guest()
+            ->embedder_web_contents()
+            ->GetDelegate()
+            ->RequestMediaAccessPermission(
+                web_view_guest()->embedder_web_contents(), request,
+                std::move(callback));
+        return;
+      }
+    } while (false);
 
   WebViewPermissionType request_type = WEB_VIEW_PERMISSION_TYPE_MEDIA;
 
@@ -260,11 +305,9 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
         request.video_type ==
             blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE) {
       request_type = WEB_VIEW_PERMISSION_TYPE_MICROPHONE_AND_CAMERA;
-
     } else if (request.video_type ==
                blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE) {
       request_type = WEB_VIEW_PERMISSION_TYPE_CAMERA;
-
     } else if (request.audio_type ==
                blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE) {
       request_type = WEB_VIEW_PERMISSION_TYPE_MICROPHONE;
@@ -306,10 +349,8 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
       extensions::VivaldiAppHelper::FromWebContents(
           web_view_guest()->embedder_web_contents());
   if (helper) {
-    Browser* browser = ::vivaldi::FindBrowserWithWebContents(web_contents());
-    DCHECK(browser);
-    Profile* profile = browser->profile();
-
+    Profile* profile = Profile::FromBrowserContext(
+        web_view_guest()->web_contents()->GetBrowserContext());
     if (request.audio_type != blink::mojom::MediaStreamType::NO_SERVICE) {
       HostContentSettingsMapFactory::GetForProfile(profile)
           ->SetContentSettingCustomScope(
@@ -378,21 +419,6 @@ void WebViewPermissionHelper::RequestGeolocationPermission(
 void WebViewPermissionHelper::CancelGeolocationPermissionRequest(
     int bridge_id) {
   web_view_permission_helper_delegate_->CancelGeolocationPermissionRequest(
-      bridge_id);
-}
-
-void WebViewPermissionHelper::RequestNotificationPermission(
-    int bridge_id,
-    const GURL& requesting_frame,
-    bool user_gesture,
-    const base::Callback<void(bool)>& callback) {
-  web_view_permission_helper_delegate_->RequestNotificationPermission(
-      bridge_id, requesting_frame, user_gesture, callback);
-}
-
-void WebViewPermissionHelper::CancelNotificationPermissionRequest(
-    int bridge_id) {
-  web_view_permission_helper_delegate_->CancelNotificationPermissionRequest(
       bridge_id);
 }
 

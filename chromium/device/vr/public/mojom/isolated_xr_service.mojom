@@ -34,6 +34,10 @@ interface XRRuntimeEventListener {
   // A device has indicated that it is idle.
   OnDeviceIdle(device.mojom.VRDisplayEventReason reason);
 
+  // A device has indicated that the visibility of the content it's displaying
+  // has changed.
+  OnVisibilityStateChanged(device.mojom.XRVisibilityState visibility_state);
+
   // Called when the device exits presentation.
   OnExitPresent();
 };
@@ -41,6 +45,10 @@ interface XRRuntimeEventListener {
 struct XRRuntimeSessionOptions {
   bool immersive;
   bool environment_integration;
+
+  // The enabled features combine the active required and optional features as
+  // resolved by BrowserXRRuntime and VRServiceImpl.
+  array<XRSessionFeature> enabled_features;
 
   // The following options are used for permission requests and showing module
   // install UI.
@@ -65,12 +73,13 @@ interface XRRuntime {
   // the browser process.
   RequestSession(XRRuntimeSessionOptions options) => (
                      XRSession? session,
-                     XRSessionController? controller);
+                     pending_remote<XRSessionController>? controller);
 
   // The browser may register for changes to a device. Initial VRDisplayInfo
   // will immediately be returned to the listener to prevent races.
-  ListenToDeviceChanges(associated XRRuntimeEventListener listener) =>
-      (VRDisplayInfo? display_info);
+  ListenToDeviceChanges(
+      pending_associated_remote<XRRuntimeEventListener> listener) =>
+          (VRDisplayInfo? display_info);
 
   // Ensure that the runtime has installed most prerequisites, and is ready to
   // start. May result in updated display info being sent to registered
@@ -144,7 +153,8 @@ interface IsolatedXRGamepadProviderFactory {
   // Get the IsolatedXRGamepadProvider for a specific XR runtime API (Oculus, or
   // OpenVR, which are currently the only two that are hosted outside of the
   // browser process).
-  GetIsolatedXRGamepadProvider(IsolatedXRGamepadProvider& provider);
+  GetIsolatedXRGamepadProvider(
+      pending_receiver<IsolatedXRGamepadProvider> provider);
 };
 
 // Represents an overlay that the browser may show on top of or instead of WebXR
@@ -178,7 +188,7 @@ interface ImmersiveOverlay {
 // obtain an ImmersiveOverlay to show overlay UI.  The obtained overlay will
 // disconnect when presentation ends.
 interface XRCompositorHost {
-  CreateImmersiveOverlay(ImmersiveOverlay& overlay);
+  CreateImmersiveOverlay(pending_receiver<ImmersiveOverlay> overlay);
 };
 
 // Notify the browser process about a set of runtimes.  The browser process
@@ -187,9 +197,9 @@ interface XRCompositorHost {
 interface IsolatedXRRuntimeProviderClient {
   // Called when runtimes are initially enumerated, or when devices are later
   // attached and become available.
-  OnDeviceAdded(XRRuntime runtime,
-      IsolatedXRGamepadProviderFactory gamepad_factory,
-      XRCompositorHost compositor_host,
+  OnDeviceAdded(pending_remote<XRRuntime> runtime,
+      pending_remote<IsolatedXRGamepadProviderFactory> gamepad_factory,
+      pending_remote<XRCompositorHost> compositor_host,
       device.mojom.XRDeviceId device_id);
 
   // Called when runtimes become unavailable - for example if the hardware is
@@ -210,7 +220,7 @@ interface IsolatedXRRuntimeProvider {
   // Register a client, and triggers OnDeviceAdded for all available runtimes,
   // followed by OnDevicesEnumerated.
   // Should only be called once.
-  RequestDevices(IsolatedXRRuntimeProviderClient client);
+  RequestDevices(pending_remote<IsolatedXRRuntimeProviderClient> client);
 };
 
 // The main interface for the XR Device Service.

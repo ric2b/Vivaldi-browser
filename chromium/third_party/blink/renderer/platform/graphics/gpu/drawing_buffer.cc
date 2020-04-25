@@ -253,6 +253,8 @@ void DrawingBuffer::SetIsHidden(bool hidden) {
   is_hidden_ = hidden;
   if (is_hidden_)
     recycled_color_buffer_queue_.clear();
+  gl_->ContextVisibilityHintCHROMIUM(is_hidden_ ? GL_FALSE : GL_TRUE);
+  gl_->Flush();
 }
 
 void DrawingBuffer::SetFilterQuality(SkFilterQuality filter_quality) {
@@ -557,9 +559,10 @@ scoped_refptr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage(
     // to transferToImageBitmap are made back-to-back, or when the context gets
     // lost. We intentionally leave the transparent black image in legacy color
     // space.
-    sk_sp<SkSurface> surface =
-        SkSurface::MakeRasterN32Premul(size_.Width(), size_.Height());
-    return StaticBitmapImage::Create(surface->makeImageSnapshot());
+    SkBitmap black_bitmap;
+    black_bitmap.allocN32Pixels(size_.Width(), size_.Height());
+    black_bitmap.eraseARGB(0, 0, 0, 0);
+    return StaticBitmapImage::Create(SkImage::MakeFromBitmap(black_bitmap));
   }
 
   DCHECK_EQ(size_.Width(), transferable_resource.size.width());
@@ -670,12 +673,11 @@ DrawingBuffer::ColorBuffer::~ColorBuffer() {
 
   sii->DestroySharedImage(receive_sync_token, mailbox);
   gpu_memory_buffer.reset();
-  gl->DeleteTextures(1, &texture_id);
-  if (rgb_workaround_texture_id) {
-    sii->DestroySharedImage(receive_sync_token, rgb_workaround_mailbox);
-    // Avoid deleting this texture if it was unused.
-    gl->DeleteTextures(1, &rgb_workaround_texture_id);
-  }
+  gl->DeleteTextures(1u, &texture_id);
+
+  // Avoid deleting this texture if it was unused.
+  if (rgb_workaround_texture_id)
+    gl->DeleteTextures(1u, &rgb_workaround_texture_id);
 }
 
 bool DrawingBuffer::Initialize(const IntSize& size, bool use_multisampling) {
@@ -808,16 +810,6 @@ bool DrawingBuffer::Initialize(const IntSize& size, bool use_multisampling) {
       //  - extra command buffer validation for CopyTexImage
       //  - explicity re-binding as RGB for FramebufferBlit
       allocate_alpha_channel_ = false;
-      have_alpha_channel_ = true;
-    }
-    if (UsingSwapChain()) {
-      // Swap chains always have an alpha channel, and multisample resolve
-      // doesn't work if we pretend we don't have one.
-      // This configuration will
-      //  - allow invalid CopyTexImage to RGBA targets
-      //  - fail valid FramebufferBlit from RGB targets
-      // TODO(sunnyps): Copy into intermediate texture for blitFramebuffer.
-      allocate_alpha_channel_ = true;
       have_alpha_channel_ = true;
     }
   }
@@ -1071,33 +1063,9 @@ bool DrawingBuffer::ResizeDefaultFramebuffer(const IntSize& size) {
   AttachColorBufferToReadFramebuffer();
 
   if (WantExplicitResolve()) {
-    state_restorer_->SetFramebufferBindingDirty();
-    state_restorer_->SetRenderbufferBindingDirty();
-    gl_->BindFramebuffer(GL_FRAMEBUFFER, multisample_fbo_);
-    gl_->BindRenderbuffer(GL_RENDERBUFFER, multisample_renderbuffer_);
-    // Note that the multisample rendertarget will allocate an alpha channel
-    // based on |have_alpha_channel_|, not |allocate_alpha_channel_|, since it
-    // will resolve into the ColorBuffer.
-    GLenum internal_format = have_alpha_channel_ ? GL_RGBA8_OES : GL_RGB8_OES;
-    if (use_half_float_storage_) {
-      DCHECK(want_alpha_channel_);
-      internal_format = GL_RGBA16F_EXT;
-    }
-    if (has_eqaa_support) {
-      gl_->RenderbufferStorageMultisampleAdvancedAMD(
-          GL_RENDERBUFFER, sample_count_, eqaa_storage_sample_count_,
-          internal_format, size.Width(), size.Height());
-    } else {
-      gl_->RenderbufferStorageMultisampleCHROMIUM(
-          GL_RENDERBUFFER, sample_count_, internal_format, size.Width(),
-          size.Height());
-    }
-
-    if (gl_->GetError() == GL_OUT_OF_MEMORY)
+    if (!ReallocateMultisampleRenderbuffer(size)) {
       return false;
-
-    gl_->FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                 GL_RENDERBUFFER, multisample_renderbuffer_);
+    }
   }
 
   if (WantDepthOrStencil()) {
@@ -1276,6 +1244,47 @@ void DrawingBuffer::ResolveIfNeeded() {
       !contents_change_resolved_)
     ResolveMultisampleFramebufferInternal();
   contents_change_resolved_ = true;
+
+  auto* gl = ContextProvider()->ContextGL();
+  if (gl->DidGpuSwitch() == GL_TRUE) {
+    // TODO(crbug.com/681341): handle preserveDrawingBuffer:true, and
+    // user-allocated multisampled renderbuffers, by dispatching a context lost
+    // event.
+    if (WantExplicitResolve()) {
+      ReallocateMultisampleRenderbuffer(size_);
+    }
+  }
+}
+
+bool DrawingBuffer::ReallocateMultisampleRenderbuffer(const IntSize& size) {
+  state_restorer_->SetFramebufferBindingDirty();
+  state_restorer_->SetRenderbufferBindingDirty();
+  gl_->BindFramebuffer(GL_FRAMEBUFFER, multisample_fbo_);
+  gl_->BindRenderbuffer(GL_RENDERBUFFER, multisample_renderbuffer_);
+  // Note that the multisample rendertarget will allocate an alpha channel
+  // based on |have_alpha_channel_|, not |allocate_alpha_channel_|, since it
+  // will resolve into the ColorBuffer.
+  GLenum internal_format = have_alpha_channel_ ? GL_RGBA8_OES : GL_RGB8_OES;
+  if (use_half_float_storage_) {
+    DCHECK(want_alpha_channel_);
+    internal_format = GL_RGBA16F_EXT;
+  }
+  if (has_eqaa_support) {
+    gl_->RenderbufferStorageMultisampleAdvancedAMD(
+        GL_RENDERBUFFER, sample_count_, eqaa_storage_sample_count_,
+        internal_format, size.Width(), size.Height());
+  } else {
+    gl_->RenderbufferStorageMultisampleCHROMIUM(GL_RENDERBUFFER, sample_count_,
+                                                internal_format, size.Width(),
+                                                size.Height());
+  }
+
+  if (gl_->GetError() == GL_OUT_OF_MEMORY)
+    return false;
+
+  gl_->FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                               GL_RENDERBUFFER, multisample_renderbuffer_);
+  return true;
 }
 
 void DrawingBuffer::RestoreFramebufferBindings() {
@@ -1301,7 +1310,7 @@ void DrawingBuffer::Bind(GLenum target) {
   gl_->BindFramebuffer(target, WantExplicitResolve() ? multisample_fbo_ : fbo_);
 }
 
-scoped_refptr<Uint8Array> DrawingBuffer::PaintRenderingResultsToDataArray(
+sk_sp<SkData> DrawingBuffer::PaintRenderingResultsToDataArray(
     SourceDrawingBuffer source_buffer) {
   ScopedStateRestorer scoped_state_restorer(this);
 
@@ -1318,18 +1327,9 @@ scoped_refptr<Uint8Array> DrawingBuffer::PaintRenderingResultsToDataArray(
   if (!data_size.IsValid())
     return nullptr;
 
-  unsigned byte_length = width * height * 4;
-  if (RuntimeEnabledFeatures::CanvasColorManagementEnabled() &&
-      use_half_float_storage_) {
-    byte_length *= 2;
-  }
-  scoped_refptr<ArrayBuffer> dst_buffer =
-      ArrayBuffer::CreateOrNull(byte_length, 1);
+  unsigned byte_length = data_size.ValueOrDie<unsigned>();
+  sk_sp<SkData> dst_buffer = TryAllocateSkData(byte_length);
   if (!dst_buffer)
-    return nullptr;
-  scoped_refptr<Uint8Array> data_array =
-      Uint8Array::Create(std::move(dst_buffer), 0, byte_length);
-  if (!data_array)
     return nullptr;
 
   GLuint fbo = 0;
@@ -1344,10 +1344,10 @@ scoped_refptr<Uint8Array> DrawingBuffer::PaintRenderingResultsToDataArray(
     gl_->BindFramebuffer(GL_FRAMEBUFFER, fbo_);
   }
 
-  ReadBackFramebuffer(static_cast<unsigned char*>(data_array->Data()), width,
-                      height, kReadbackRGBA,
+  auto* writable_data = static_cast<uint8_t*>(dst_buffer->writable_data());
+  ReadBackFramebuffer(writable_data, width, height, kReadbackRGBA,
                       WebGLImageConversion::kAlphaDoNothing);
-  FlipVertically(static_cast<uint8_t*>(data_array->Data()), width, height);
+  FlipVertically(writable_data, width, height);
 
   if (fbo) {
     gl_->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
@@ -1355,7 +1355,7 @@ scoped_refptr<Uint8Array> DrawingBuffer::PaintRenderingResultsToDataArray(
     gl_->DeleteFramebuffers(1, &fbo);
   }
 
-  return data_array;
+  return dst_buffer;
 }
 
 void DrawingBuffer::ReadBackFramebuffer(unsigned char* pixels,
@@ -1502,7 +1502,6 @@ scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
     format = use_half_float_storage_ ? viz::RGBA_F16 : viz::RGBA_8888;
   } else {
     DCHECK(!use_half_float_storage_);
-    DCHECK(!UsingSwapChain());
     format = viz::RGBX_8888;
   }
 

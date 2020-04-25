@@ -33,6 +33,7 @@ template("chrome_feature_module") {
                              "base_module_target",
                              "manifest_package",
                              "min_sdk_version",
+                             "package_id",
                              "uncompress_shared_libraries",
                              "version_code",
                              "version_name",
@@ -44,17 +45,12 @@ template("chrome_feature_module") {
       deps += _module_desc.java_deps
     }
 
-    if (defined(_module_desc.proguard_async) && _module_desc.proguard_async) {
-      enable_class_deps_output = "${_module_desc.name}_constant_pool_deps.txt"
-    }
-
     # Don't embed more translations than required (http://crbug.com/932017).
     aapt_locale_whitelist = locales
 
     proguard_enabled = !is_java_debug
 
     package_name = _module_desc.name
-    package_name_to_id_mapping = resource_packages_id_mapping
 
     _loadable_modules_32_bit = []
     _loadable_modules_64_bit = []
@@ -65,7 +61,8 @@ template("chrome_feature_module") {
       _loadable_modules_64_bit += _module_desc.loadable_modules_64_bit
     }
 
-    if (defined(_module_desc.native_deps) && _module_desc.native_deps != []) {
+    if (use_native_partitions && defined(_module_desc.native_deps) &&
+        _module_desc.native_deps != []) {
       _arch = ""
       _toolchain = ""
       _root_out_dir = root_out_dir

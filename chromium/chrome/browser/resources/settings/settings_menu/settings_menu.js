@@ -27,12 +27,12 @@ Polymer({
 
   /** @param {!settings.Route} newRoute */
   currentRouteChanged: function(newRoute) {
-    const currentPath = newRoute.path;
-
     // Focus the initially selected path.
     const anchors = this.root.querySelectorAll('a');
     for (let i = 0; i < anchors.length; ++i) {
-      if (anchors[i].getAttribute('href') == currentPath) {
+      const anchorRoute =
+          settings.router.getRouteForPath(anchors[i].getAttribute('href'));
+      if (anchorRoute && anchorRoute.contains(newRoute)) {
         this.setSelectedUrl_(anchors[i].href);
         return;
       }
@@ -94,5 +94,14 @@ Polymer({
   onExtensionsLinkClick_: function() {
     chrome.metricsPrivate.recordUserAction(
         'SettingsMenu_ExtensionsLinkClicked');
+  },
+
+  /**
+   * @param {boolean} bool
+   * @return {string}
+   * @private
+   */
+  boolToString_: function(bool) {
+    return bool.toString();
   },
 });

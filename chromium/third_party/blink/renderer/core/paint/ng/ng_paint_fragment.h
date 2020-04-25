@@ -18,6 +18,7 @@
 namespace blink {
 
 class NGBlockBreakToken;
+class NGInlineCursor;
 struct LayoutSelectionStatus;
 struct NGContainerInkOverflow;
 enum class NGOutlineType;
@@ -130,12 +131,19 @@ class CORE_EXPORT NGPaintFragment : public RefCounted<NGPaintFragment>,
   NGPaintFragment* NextSibling() const {
     return FirstAlive(next_sibling_.get());
   }
+  NGPaintFragment* NextForSameLayoutObject() const {
+    return next_for_same_layout_object_;
+  }
   ChildList Children() const { return ChildList(FirstChild()); }
+  bool IsEllipsis() const;
 
   // Note, as the name implies, |IsDescendantOfNotSelf| returns false for the
   // same object. This is different from |LayoutObject::IsDescendant| but is
   // same as |Node::IsDescendant|.
   bool IsDescendantOfNotSelf(const NGPaintFragment&) const;
+
+  // Returns the root box containing this.
+  const NGPaintFragment* Root() const;
 
   // Returns the first line box for a block-level container.
   NGPaintFragment* FirstLineBox() const;
@@ -164,10 +172,6 @@ class CORE_EXPORT NGPaintFragment : public RefCounted<NGPaintFragment>,
 
   void RecalcInlineChildrenInkOverflow() const;
 
-  void AddSelfOutlineRects(Vector<PhysicalRect>*,
-                           const PhysicalOffset& offset,
-                           NGOutlineType) const;
-
   // TODO(layout-dev): Implement when we have oveflow support.
   // TODO(eae): Switch to using NG geometry types.
   bool HasOverflowClip() const { return PhysicalFragment().HasOverflowClip(); }
@@ -177,8 +181,6 @@ class CORE_EXPORT NGPaintFragment : public RefCounted<NGPaintFragment>,
   IntRect VisualRect() const override;
   IntRect PartialInvalidationVisualRect() const override;
 
-  PhysicalRect ComputeLocalSelectionRectForText(
-      const LayoutSelectionStatus&) const;
   PhysicalRect ComputeLocalSelectionRectForReplaced() const;
 
   // Set ShouldDoFullPaintInvalidation flag in the corresponding LayoutObject.
@@ -209,6 +211,7 @@ class CORE_EXPORT NGPaintFragment : public RefCounted<NGPaintFragment>,
     return offset_;
   }
   PhysicalSize Size() const { return PhysicalFragment().Size(); }
+  PhysicalRect Rect() const { return {Offset(), Size()}; }
 
   // Converts the given point, relative to the fragment itself, into a position
   // in DOM tree.
@@ -420,6 +423,10 @@ extern template class CORE_EXTERN_TEMPLATE_EXPORT
     NGPaintFragment::List<NGPaintFragment::TraverseNextForSameLayoutObject>;
 extern template class CORE_EXTERN_TEMPLATE_EXPORT
     NGPaintFragment::List<NGPaintFragment::TraverseNextSibling>;
+
+PhysicalRect ComputeLocalSelectionRectForText(
+    const NGInlineCursor& cursor,
+    const LayoutSelectionStatus& selection_status);
 
 }  // namespace blink
 

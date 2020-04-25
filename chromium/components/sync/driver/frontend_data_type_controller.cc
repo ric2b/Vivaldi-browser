@@ -31,7 +31,7 @@ void FrontendDataTypeController::LoadModels(
     const ConfigureContext& configure_context,
     const ModelLoadCallback& model_load_callback) {
   DCHECK(CalledOnValidThread());
-  DCHECK_EQ(configure_context.storage_option, STORAGE_ON_DISK);
+  DCHECK_EQ(configure_context.sync_mode, SyncMode::kFull);
 
   model_load_callback_ = model_load_callback;
 
@@ -235,10 +235,8 @@ void FrontendDataTypeController::RecordAssociationTime(base::TimeDelta time) {
 
 void FrontendDataTypeController::RecordStartFailure(ConfigureResult result) {
   DCHECK(CalledOnValidThread());
-  // TODO(wychen): enum uma should be strongly typed. crbug.com/661401
   UMA_HISTOGRAM_ENUMERATION("Sync.DataTypeStartFailures2",
-                            ModelTypeToHistogramInt(type()),
-                            static_cast<int>(ModelType::NUM_ENTRIES));
+                            ModelTypeHistogramValue(type()));
 #define PER_DATA_TYPE_MACRO(type_str)                                    \
   UMA_HISTOGRAM_ENUMERATION("Sync." type_str "ConfigureFailure", result, \
                             MAX_CONFIGURE_RESULT);

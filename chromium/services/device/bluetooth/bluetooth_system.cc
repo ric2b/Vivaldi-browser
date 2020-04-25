@@ -19,7 +19,7 @@
 #include "device/bluetooth/dbus/bluetooth_adapter_client.h"
 #include "device/bluetooth/dbus/bluetooth_device_client.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 
 namespace device {
 
@@ -59,14 +59,17 @@ base::Optional<std::array<uint8_t, 6>> ParseAddress(
 
 }  // namespace
 
-void BluetoothSystem::Create(mojom::BluetoothSystemRequest request,
-                             mojom::BluetoothSystemClientPtr client) {
-  mojo::MakeStrongBinding(std::make_unique<BluetoothSystem>(std::move(client)),
-                          std::move(request));
+void BluetoothSystem::Create(
+    mojo::PendingReceiver<mojom::BluetoothSystem> receiver,
+    mojo::PendingRemote<mojom::BluetoothSystemClient> client) {
+  mojo::MakeSelfOwnedReceiver(
+      std::make_unique<BluetoothSystem>(std::move(client)),
+      std::move(receiver));
 }
 
-BluetoothSystem::BluetoothSystem(mojom::BluetoothSystemClientPtr client) {
-  client_ptr_ = std::move(client);
+BluetoothSystem::BluetoothSystem(
+    mojo::PendingRemote<mojom::BluetoothSystemClient> client)
+    : client_(std::move(client)) {
   GetBluetoothAdapterClient()->AddObserver(this);
 
   std::vector<dbus::ObjectPath> object_paths =
@@ -129,7 +132,7 @@ void BluetoothSystem::AdapterPropertyChanged(
   if (properties->powered.name() == property_name)
     UpdateStateAndNotifyIfNecessary();
   else if (properties->discovering.name() == property_name)
-    client_ptr_->OnScanStateChanged(GetScanStateFromActiveAdapter());
+    client_->OnScanStateChanged(GetScanStateFromActiveAdapter());
 }
 
 void BluetoothSystem::GetState(GetStateCallback callback) {
@@ -157,7 +160,7 @@ void BluetoothSystem::SetPowered(bool powered, SetPoweredCallback callback) {
 
   DCHECK_NE(state_, State::kTransitioning);
   state_ = State::kTransitioning;
-  client_ptr_->OnStateChanged(state_);
+  client_->OnStateChanged(state_);
 
   GetBluetoothAdapterClient()
       ->GetProperties(active_adapter_.value())
@@ -291,7 +294,7 @@ void BluetoothSystem::UpdateStateAndNotifyIfNecessary() {
   }
 
   if (old_state != state_)
-    client_ptr_->OnStateChanged(state_);
+    client_->OnStateChanged(state_);
 }
 
 BluetoothSystem::ScanState BluetoothSystem::GetScanStateFromActiveAdapter() {

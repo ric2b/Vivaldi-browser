@@ -62,6 +62,7 @@ class PerformanceMarkOptions;
 class ExceptionState;
 class LargestContentfulPaint;
 class LayoutShift;
+class MeasureMemoryOptions;
 class MemoryInfo;
 class PerformanceElementTiming;
 class PerformanceEventTiming;
@@ -97,6 +98,8 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   virtual PerformanceTiming* timing() const;
   virtual PerformanceNavigation* navigation() const;
   virtual MemoryInfo* memory() const;
+  virtual ScriptPromise measureMemory(ScriptState*,
+                                      MeasureMemoryOptions*) const;
 
   virtual void UpdateLongTaskInstrumentation() {}
 
@@ -185,10 +188,6 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
 
   PerformanceMark* mark(ScriptState*,
                         const AtomicString& mark_name,
-                        ExceptionState&);
-
-  PerformanceMark* mark(ScriptState*,
-                        const AtomicString& mark_name,
                         PerformanceMarkOptions* mark_options,
                         ExceptionState&);
 
@@ -268,7 +267,8 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   // TODO(npm): is the AtomicString parameter here actually needed?
   static bool PassesTimingAllowCheck(const ResourceResponse&,
                                      const SecurityOrigin&,
-                                     ExecutionContext*);
+                                     ExecutionContext*,
+                                     bool* tainted);
 
   static bool AllowsTimingRedirect(const Vector<ResourceResponse>&,
                                    const ResourceResponse&,

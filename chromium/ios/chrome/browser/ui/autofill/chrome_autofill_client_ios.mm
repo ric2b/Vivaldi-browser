@@ -10,7 +10,9 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/form_data_importer.h"
+#include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/payments/autofill_credit_card_filling_infobar_delegate_mobile.h"
 #include "components/autofill/core/browser/payments/autofill_save_card_infobar_delegate_mobile.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
@@ -25,6 +27,7 @@
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/autofill/address_normalizer_factory.h"
 #include "ios/chrome/browser/autofill/autocomplete_history_manager_factory.h"
+#import "ios/chrome/browser/autofill/autofill_log_router_factory.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/autofill/strike_database_factory.h"
 #include "ios/chrome/browser/infobars/infobar.h"
@@ -34,6 +37,7 @@
 #include "ios/chrome/browser/ssl/ios_security_state_tab_helper.h"
 #include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/translate/chrome_ios_translate_client.h"
+#include "ios/chrome/browser/ui/autofill/card_name_fix_flow_view_bridge.h"
 #include "ios/chrome/browser/ui/autofill/card_unmask_prompt_view_bridge.h"
 #include "ios/chrome/browser/ui/autofill/save_card_infobar_controller.h"
 #include "ios/chrome/browser/webdata_services/web_data_service_factory.h"
@@ -93,7 +97,13 @@ ChromeAutofillClientIOS::ChromeAutofillClientIOS(
       infobar_manager_(infobar_manager),
       password_manager_(password_manager),
       unmask_controller_(browser_state->GetPrefs(),
-                         browser_state->IsOffTheRecord()) {}
+                         browser_state->IsOffTheRecord()),
+      // TODO(crbug.com/928595): Replace the closure with a callback to the
+      // renderer that indicates if log messages should be sent from the
+      // renderer.
+      log_manager_(LogManager::Create(
+          autofill::AutofillLogRouterFactory::GetForBrowserState(browser_state),
+          base::Closure())) {}
 
 ChromeAutofillClientIOS::~ChromeAutofillClientIOS() {
   HideAutofillPopup();
@@ -208,7 +218,7 @@ void ChromeAutofillClientIOS::ShowLocalCardMigrationDialog(
 }
 
 void ChromeAutofillClientIOS::ConfirmMigrateLocalCardToCloud(
-    std::unique_ptr<base::DictionaryValue> legal_message,
+    const LegalMessageLines& legal_message_lines,
     const std::string& user_email,
     const std::vector<MigratableCreditCard>& migratable_credit_cards,
     LocalCardMigrationCallback start_migrating_cards_callback) {
@@ -243,31 +253,45 @@ void ChromeAutofillClientIOS::ConfirmSaveCreditCardLocally(
   DCHECK(options.show_prompt);
   infobar_manager_->AddInfoBar(CreateSaveCardInfoBarMobile(
       std::make_unique<AutofillSaveCardInfoBarDelegateMobile>(
-          /*upload=*/false, options, card,
-          std::make_unique<base::DictionaryValue>(),
+          /*upload=*/false, options, card, LegalMessageLines(),
           /*upload_save_card_callback=*/UploadSaveCardPromptCallback(),
           /*local_save_card_callback=*/std::move(callback), GetPrefs(),
           payments_client_->is_off_the_record())));
 }
 
+void ChromeAutofillClientIOS::ConfirmAccountNameFixFlow(
+    base::OnceCallback<void(const base::string16&)> callback) {
+  base::Optional<AccountInfo> primary_account_info =
+      identity_manager_->FindExtendedAccountInfoForAccountWithRefreshToken(
+          identity_manager_->GetPrimaryAccountInfo());
+  base::string16 account_name =
+      primary_account_info ? base::UTF8ToUTF16(primary_account_info->full_name)
+                           : base::string16();
+
+  card_name_fix_flow_controller_.Show(
+      // autofill::CardNameFixFlowViewBridge manages its own lifetime, so
+      // do not use std::unique_ptr<> here.
+      new autofill::CardNameFixFlowViewBridge(&card_name_fix_flow_controller_,
+                                              base_view_controller_),
+      account_name, std::move(callback));
+}
+
 void ChromeAutofillClientIOS::ConfirmSaveCreditCardToCloud(
     const CreditCard& card,
-    std::unique_ptr<base::DictionaryValue> legal_message,
+    const LegalMessageLines& legal_message_lines,
     SaveCreditCardOptions options,
     UploadSaveCardPromptCallback callback) {
   DCHECK(options.show_prompt);
+
   auto save_card_info_bar_delegate_mobile =
       std::make_unique<AutofillSaveCardInfoBarDelegateMobile>(
-          /*upload=*/true, options, card, std::move(legal_message),
+          /*upload=*/true, options, card, legal_message_lines,
           /*upload_save_card_callback=*/std::move(callback),
           /*local_save_card_callback=*/LocalSaveCardPromptCallback(),
           GetPrefs(), payments_client_->is_off_the_record());
-  // Allow user to save card only if legal messages are successfully parsed.
-  // Legal messages are provided only for the upload case, not for local save.
-  if (save_card_info_bar_delegate_mobile->LegalMessagesParsedSuccessfully()) {
-    infobar_manager_->AddInfoBar(CreateSaveCardInfoBarMobile(
-        std::move(save_card_info_bar_delegate_mobile)));
-  }
+
+  infobar_manager_->AddInfoBar(CreateSaveCardInfoBarMobile(
+      std::move(save_card_info_bar_delegate_mobile)));
 }
 
 void ChromeAutofillClientIOS::CreditCardUploadCompleted(bool card_saved) {
@@ -349,6 +373,10 @@ void ChromeAutofillClientIOS::ExecuteCommand(int id) {
 void ChromeAutofillClientIOS::LoadRiskData(
     base::OnceCallback<void(const std::string&)> callback) {
   std::move(callback).Run(ios::GetChromeBrowserProvider()->GetRiskData());
+}
+
+LogManager* ChromeAutofillClientIOS::GetLogManager() const {
+  return log_manager_.get();
 }
 
 }  // namespace autofill

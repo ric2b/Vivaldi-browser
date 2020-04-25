@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="sr">
+<translation id="1397811292916898096">Претражи помоћу: <ph name="PRODUCT_NAME" /></translation>
+<translation id="1644574205037202324">Историја</translation>
+<translation id="17513872634828108">Отворене картице</translation>
+<translation id="1829244130665387512">Пронађи на страници</translation>
+<translation id="2038563949887743358">Укључи захтевање верзије сајта за рачунаре</translation>
+<translation id="2433507940547922241">Изглед</translation>
+<translation id="2633278372998075009">Приватне картице</translation>
+<translation id="3076631378407175873">Ауторско право <ph name="YEAR" />. Vivaldi Technologies AS. Сва права задржана.</translation>
+<translation id="3234355010754616171">Нова приватна картица</translation>
+<translation id="3700829948786686853">Добро дошли у Vivaldi</translation>
+<translation id="4121750346708795461">Коришћењем ове апликације прихватате Vivaldi <ph name="BEGIN_LINK1" />Уговор о лиценцирању са крајњим корисником<ph name="END_LINK1" /> и <ph name="BEGIN_LINK2" />Политику приватности<ph name="END_LINK2" />.</translation>
+<translation id="4243710787042215766">Отвори у приватној картици</translation>
+<translation id="4883379392681899581">Напусти приватни режим</translation>
+<translation id="4943872375798546930">Нема резултата</translation>
+<translation id="5118676864324397542"><ph name="APP_NAME" /> складиште</translation>
+<translation id="5233638681132016545">Нова картица</translation>
+<translation id="5495228542153126976">Прешли сте у приватни режим</translation>
+<translation id="572328651809341494">Недавне картице</translation>
+<translation id="5840488417521835756">Сазнајте више о темама на веб сајтовима без напуштања странице. Функција „Додирните за претрагу“ је доступна само када је Google постављен као подразумевани претраживач у Vivaldi прегледачу. Она шаље реч и њен околни контекст у Google претрагу враћајући дефиниције, слике, резултате претраге и друге детаље.
+
+Да бисте прилагодили термин за претрагу, притисните и задржите да бисте га изабрали. Да бисте претрагу учинили прецизнијом, превуците панел нагоре до краја и додирните поље за претрагу.</translation>
+<translation id="6336451774241870485">Нова приватна картица</translation>
+<translation id="6593061639179217415">Верзија сајта за рачунар</translation>
+<translation id="6610147964972079463">Затвори приватне картице</translation>
+<translation id="706339621163631076">Политика приватности прегледача</translation>
+<translation id="7427132068601343474">О Vivaldi прегледачу</translation>
+<translation id="7465104139234185284">Затвори све приватне картице</translation>
+<translation id="7519434535192513364">Функција „Додирните за претрагу“ је доступна само када је Google постављен као подразумевани претраживач у Vivaldi прегледачу. Она шаље изабрану реч и актуелну страницу као контекст у Google претрагу. Можете је искључити у <ph name="BEGIN_LINK" />Подешавањима<ph name="END_LINK" />.</translation>
+<translation id="7649070708921625228">Помоћ</translation>
+<translation id="804786196054284061">Уговор о лиценцирању са крајњим корисником</translation>
+<translation id="8428213095426709021">Подешавања</translation>
+<translation id="8820817407110198400">Обележивачи</translation>
+<translation id="9063523880881406963">Искључи захтевање верзије сајта за рачунаре</translation>
+<translation id="9080642952018487277">Уђи у приватни режим</translation>
+</translationbundle>

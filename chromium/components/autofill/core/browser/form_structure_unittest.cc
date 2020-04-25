@@ -2592,7 +2592,7 @@ TEST_F(FormStructureTest, EncodeUploadRequest_WithMatchingValidities) {
 
   form_structure = std::make_unique<FormStructure>(form);
   form_structure->set_password_attributes_vote(
-      std::make_pair(PasswordAttribute::kHasNumeric, true));
+      std::make_pair(PasswordAttribute::kHasLowercaseLetter, true));
   form_structure->set_password_length_vote(10u);
 
   ASSERT_EQ(form_structure->field_count(), possible_field_types.size());
@@ -2623,7 +2623,7 @@ TEST_F(FormStructureTest, EncodeUploadRequest_WithMatchingValidities) {
   upload.set_autofill_used(false);
   upload.set_data_present("144200030e");
   upload.set_passwords_revealed(false);
-  upload.set_password_has_numeric(true);
+  upload.set_password_has_lowercase_letter(true);
   upload.set_password_length(10u);
   upload.set_action_signature(15724779818122431245U);
   upload.set_submission_event(
@@ -2685,7 +2685,7 @@ TEST_F(FormStructureTest, EncodeUploadRequest_WithMatchingValidities) {
 
   form_structure = std::make_unique<FormStructure>(form);
   form_structure->set_password_attributes_vote(
-      std::make_pair(PasswordAttribute::kHasNumeric, true));
+      std::make_pair(PasswordAttribute::kHasLowercaseLetter, true));
   form_structure->set_password_length_vote(10u);
 
   ASSERT_EQ(form_structure->field_count(), possible_field_types.size());
@@ -2787,7 +2787,7 @@ TEST_F(FormStructureTest, EncodeUploadRequest_WithNonMatchingValidities) {
 
   form_structure = std::make_unique<FormStructure>(form);
   form_structure->set_password_attributes_vote(
-      std::make_pair(PasswordAttribute::kHasNumeric, true));
+      std::make_pair(PasswordAttribute::kHasLowercaseLetter, true));
   form_structure->set_password_length_vote(10u);
 
   ASSERT_EQ(form_structure->field_count(), possible_field_types.size());
@@ -2818,7 +2818,7 @@ TEST_F(FormStructureTest, EncodeUploadRequest_WithNonMatchingValidities) {
   upload.set_autofill_used(false);
   upload.set_data_present("144200030e");
   upload.set_passwords_revealed(false);
-  upload.set_password_has_numeric(true);
+  upload.set_password_has_lowercase_letter(true);
   upload.set_password_length(10u);
   upload.set_action_signature(15724779818122431245U);
 
@@ -2918,7 +2918,7 @@ TEST_F(FormStructureTest, EncodeUploadRequest_WithMultipleValidities) {
 
   form_structure = std::make_unique<FormStructure>(form);
   form_structure->set_password_attributes_vote(
-      std::make_pair(PasswordAttribute::kHasNumeric, true));
+      std::make_pair(PasswordAttribute::kHasLowercaseLetter, true));
   form_structure->set_password_length_vote(10u);
 
   ASSERT_EQ(form_structure->field_count(), possible_field_types.size());
@@ -2949,7 +2949,7 @@ TEST_F(FormStructureTest, EncodeUploadRequest_WithMultipleValidities) {
   upload.set_autofill_used(false);
   upload.set_data_present("144200030e");
   upload.set_passwords_revealed(false);
-  upload.set_password_has_numeric(true);
+  upload.set_password_has_lowercase_letter(true);
   upload.set_password_length(10u);
   upload.set_action_signature(15724779818122431245U);
   upload.set_submission_event(
@@ -3044,7 +3044,7 @@ TEST_F(FormStructureTest, EncodeUploadRequest) {
 
   form_structure = std::make_unique<FormStructure>(form);
   form_structure->set_password_attributes_vote(
-      std::make_pair(PasswordAttribute::kHasNumeric, true));
+      std::make_pair(PasswordAttribute::kHasLowercaseLetter, true));
   form_structure->set_password_length_vote(10u);
   form_structure->set_submission_event(
       SubmissionIndicatorEvent::HTML_FORM_SUBMISSION);
@@ -3078,7 +3078,7 @@ TEST_F(FormStructureTest, EncodeUploadRequest) {
   upload.set_autofill_used(false);
   upload.set_data_present("144200030e");
   upload.set_passwords_revealed(false);
-  upload.set_password_has_numeric(true);
+  upload.set_password_has_lowercase_letter(true);
   upload.set_password_length(10u);
   upload.set_action_signature(15724779818122431245U);
   upload.set_has_form_tag(true);
@@ -3130,7 +3130,7 @@ TEST_F(FormStructureTest, EncodeUploadRequest) {
 
   form_structure = std::make_unique<FormStructure>(form);
   form_structure->set_password_attributes_vote(
-      std::make_pair(PasswordAttribute::kHasNumeric, true));
+      std::make_pair(PasswordAttribute::kHasLowercaseLetter, true));
   form_structure->set_password_length_vote(10u);
   form_structure->set_submission_event(
       SubmissionIndicatorEvent::HTML_FORM_SUBMISSION);
@@ -7121,6 +7121,21 @@ TEST_F(FormStructureTest, OneFieldPasswordFormShouldNotBeUpload) {
   form.fields.push_back(field);
 
   EXPECT_FALSE(FormStructure(form).ShouldBeUploaded());
+}
+
+// Checks that CreateForPasswordManagerUpload builds FormStructure
+// which is encodable (i.e. ready for uploading).
+TEST_F(FormStructureTest, CreateForPasswordManagerUpload) {
+  std::unique_ptr<FormStructure> form =
+      FormStructure::CreateForPasswordManagerUpload(
+          1234 /* form_signature */, {1, 10, 100} /* field_signatures */);
+  AutofillUploadContents upload;
+  EXPECT_EQ(1234u, form->form_signature());
+  ASSERT_EQ(3u, form->field_count());
+  ASSERT_EQ(100u, form->field(2)->GetFieldSignature());
+  EXPECT_TRUE(form->EncodeUploadRequest(
+      {} /* available_field_types */, false /* form_was_autofilled */,
+      "" /*login_form_signature*/, true /*observed_submission*/, &upload));
 }
 
 }  // namespace autofill

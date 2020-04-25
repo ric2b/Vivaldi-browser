@@ -21,17 +21,22 @@
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "services/image_annotation/public/cpp/image_processor.h"
 #include "services/image_annotation/public/mojom/constants.mojom.h"
 #include "services/image_annotation/public/mojom/image_annotation.mojom.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/ax_enum_util.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_tree.h"
 #include "url/gurl.h"
 
@@ -91,14 +96,17 @@ class FakeAnnotator : public image_annotation::mojom::Annotator {
   FakeAnnotator() = default;
   ~FakeAnnotator() override = default;
 
-  void BindRequest(image_annotation::mojom::AnnotatorRequest request) {
-    bindings_.AddBinding(this, std::move(request));
+  void BindReceiver(
+      mojo::PendingReceiver<image_annotation::mojom::Annotator> receiver) {
+    receivers_.Add(this, std::move(receiver));
   }
 
-  void AnnotateImage(const std::string& image_id,
-                     const std::string& description_language_tag,
-                     image_annotation::mojom::ImageProcessorPtr image_processor,
-                     AnnotateImageCallback callback) override {
+  void AnnotateImage(
+      const std::string& image_id,
+      const std::string& description_language_tag,
+      mojo::PendingRemote<image_annotation::mojom::ImageProcessor>
+          image_processor,
+      AnnotateImageCallback callback) override {
     if (return_error_code_) {
       image_annotation::mojom::AnnotateImageResultPtr result =
           image_annotation::mojom::AnnotateImageResult::NewErrorCode(
@@ -135,7 +143,7 @@ class FakeAnnotator : public image_annotation::mojom::Annotator {
   }
 
  private:
-  mojo::BindingSet<image_annotation::mojom::Annotator> bindings_;
+  mojo::ReceiverSet<image_annotation::mojom::Annotator> receivers_;
   static bool return_ocr_results_;
   static bool return_label_results_;
   static base::Optional<image_annotation::mojom::AnnotateImageError>
@@ -172,7 +180,7 @@ class FakeImageAnnotationService : public service_manager::Service {
 
   void OnStart() override {
     registry_.AddInterface<image_annotation::mojom::Annotator>(
-        base::BindRepeating(&FakeAnnotator::BindRequest,
+        base::BindRepeating(&FakeAnnotator::BindReceiver,
                             base::Unretained(&annotator_)));
   }
 

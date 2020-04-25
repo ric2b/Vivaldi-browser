@@ -525,7 +525,6 @@ crbug.com/874695 paint/invalidation/filters/filter-repaint-on-accelerated-layer.
 crbug.com/874695 plugins/plugin-document-back-forward.html [ Slow ]
 crbug.com/874695 pointer-lock/locked-element-iframe-removed-from-dom.html [ Slow ]
 crbug.com/874695 printing/webgl-oversized-printing.html [ Slow ]
-crbug.com/874695 sensor/magnetometer.html [ Slow ]
 crbug.com/874695 storage/websql/change-version.html [ Slow ]
 crbug.com/874695 storage/websql/executesql-accepts-only-one-statement.html [ Slow ]
 crbug.com/874695 storage/websql/open-database-creation-callback.html [ Slow ]
@@ -571,7 +570,6 @@ crbug.com/874695 virtual/mouseevent_fractional/fast/events/middleClickAutoscroll
 crbug.com/874695 virtual/mouseevent_fractional/fast/events/touch/gesture/gesture-click.html [ Slow ]
 crbug.com/874695 virtual/mouseevent_fractional/fast/events/touch/touch-slider-no-js-touch-listener.html [ Slow ]
 crbug.com/874695 virtual/scroll_customization/fast/scroll-behavior/overscroll-behavior.html [ Slow ]
-crbug.com/874695 virtual/stable/http/tests/navigation/navigation-interrupted-by-fragment.html [ Slow ]
 crbug.com/874695 virtual/stable/http/tests/navigation/new-window-redirect-history.html [ Slow ]
 crbug.com/874695 virtual/stable/http/tests/navigation/slowmetaredirect-basic.html [ Slow ]
 crbug.com/874695 virtual/stable/http/tests/navigation/slowtimerredirect-basic.html [ Slow ]
@@ -642,7 +640,6 @@ crbug.com/980804 fast/scrolling/scrollbars/mouse-autoscrolling-on-scrollbar.html
 crbug.com/980804 virtual/compositor_threaded_scrollbar_scrolling/fast/scrolling/scrollbars/mouse-autoscrolling-on-scrollbar.html [ Slow ]
 crbug.com/980804 virtual/scroll_customization/fast/scrolling/scrollbars/mouse-autoscrolling-on-scrollbar.html [ Slow ]
 crbug.com/980804 virtual/threaded/fast/scrolling/scrollbars/mouse-autoscrolling-on-scrollbar.html [ Slow ]
-crbug.com/980804 virtual/main_thread_scrollbar_gestures/fast/scrolling/scrollbars/mouse-autoscrolling-on-scrollbar.html [ Slow ]
 
 crbug.com/983642 virtual/gpu/fast/canvas/canvas-composite-alpha.html [ Slow ]
 crbug.com/983642 [ Mac Debug ] fast/canvas/canvas-composite-alpha.html [ Slow ]
@@ -665,3 +662,6 @@ crbug.com/984003 http/tests/virtual-scroller/find-element-65-0px.html [ Slow ]
 crbug.com/984003 http/tests/virtual-scroller/find-element-65-10px.html [ Slow ]
 crbug.com/984003 http/tests/virtual-scroller/find-element-66-0px.html [ Slow ]
 crbug.com/984003 http/tests/virtual-scroller/find-element-66-10px.html [ Slow ]
+
+# Slow when using Vulkan.
+crbug.com/994331 compositing/lots-of-img-layers.html [ Slow ]

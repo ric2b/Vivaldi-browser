@@ -12,6 +12,8 @@
 #include "base/component_export.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/address_list.h"
 #include "net/base/ip_endpoint.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -43,7 +45,7 @@ class TestNetworkContext : public mojom::NetworkContext {
   void SetClient(
       mojo::PendingRemote<mojom::NetworkContextClient> client) override {}
   void CreateURLLoaderFactory(
-      mojom::URLLoaderFactoryRequest request,
+      mojo::PendingReceiver<mojom::URLLoaderFactory> receiver,
       mojom::URLLoaderFactoryParamsPtr params) override {}
   void GetCookieManager(
       mojo::PendingReceiver<mojom::CookieManager> cookie_manager) override {}
@@ -52,6 +54,8 @@ class TestNetworkContext : public mojom::NetworkContext {
           restricted_cookie_manager,
       mojom::RestrictedCookieManagerRole role,
       const url::Origin& origin,
+      const GURL& site_for_cookies,
+      const url::Origin& top_frame_origin,
       bool is_service_worker,
       int32_t process_id,
       int32_t routing_id) override {}
@@ -117,26 +121,27 @@ class TestNetworkContext : public mojom::NetworkContext {
   void GetExpectCTState(const std::string& domain,
                         GetExpectCTStateCallback callback) override {}
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
-  void CreateUDPSocket(mojom::UDPSocketRequest request,
-                       mojom::UDPSocketListenerPtr listener) override {}
+  void CreateUDPSocket(
+      mojo::PendingReceiver<mojom::UDPSocket> receiver,
+      mojo::PendingRemote<mojom::UDPSocketListener> listener) override {}
   void CreateTCPServerSocket(
       const net::IPEndPoint& local_addr,
       uint32_t backlog,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
-      mojom::TCPServerSocketRequest socket,
+      mojo::PendingReceiver<mojom::TCPServerSocket> socket,
       CreateTCPServerSocketCallback callback) override {}
   void CreateTCPConnectedSocket(
       const base::Optional<net::IPEndPoint>& local_addr,
       const net::AddressList& remote_addr_list,
       mojom::TCPConnectedSocketOptionsPtr tcp_connected_socket_options,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
-      mojom::TCPConnectedSocketRequest socket,
-      mojom::SocketObserverPtr observer,
+      mojo::PendingReceiver<mojom::TCPConnectedSocket> socket,
+      mojo::PendingRemote<mojom::SocketObserver> observer,
       CreateTCPConnectedSocketCallback callback) override {}
   void CreateTCPBoundSocket(
       const net::IPEndPoint& local_addr,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
-      mojom::TCPBoundSocketRequest request,
+      mojo::PendingReceiver<mojom::TCPBoundSocket> receiver,
       CreateTCPBoundSocketCallback callback) override {}
   void CreateProxyResolvingSocketFactory(
       mojom::ProxyResolvingSocketFactoryRequest request) override {}
@@ -154,14 +159,17 @@ class TestNetworkContext : public mojom::NetworkContext {
       mojo::PendingRemote<mojom::TrustedHeaderClient> header_client) override {}
   void LookUpProxyForURL(
       const GURL& url,
-      ::network::mojom::ProxyLookupClientPtr proxy_lookup_client) override {}
-  void CreateNetLogExporter(mojom::NetLogExporterRequest exporter) override {}
-  void ResolveHost(const net::HostPortPair& host,
-                   mojom::ResolveHostParametersPtr optional_parameters,
-                   mojom::ResolveHostClientPtr response_client) override {}
+      mojo::PendingRemote<::network::mojom::ProxyLookupClient>
+          proxy_lookup_client) override {}
+  void CreateNetLogExporter(
+      mojo::PendingReceiver<mojom::NetLogExporter> receiver) override {}
+  void ResolveHost(
+      const net::HostPortPair& host,
+      mojom::ResolveHostParametersPtr optional_parameters,
+      mojo::PendingRemote<mojom::ResolveHostClient> response_client) override {}
   void CreateHostResolver(
       const base::Optional<net::DnsConfigOverrides>& config_overrides,
-      mojom::HostResolverRequest request) override {}
+      mojo::PendingReceiver<mojom::HostResolver> receiver) override {}
   void NotifyExternalCacheHit(const GURL& url,
                               const std::string& http_method,
                               const net::NetworkIsolationKey& key) override {}
@@ -178,6 +186,9 @@ class TestNetworkContext : public mojom::NetworkContext {
       std::vector<mojom::CorsOriginPatternPtr> allow_patterns,
       std::vector<mojom::CorsOriginPatternPtr> block_patterns,
       base::OnceClosure closure) override {}
+  void SetCorsExtraSafelistedRequestHeaderNames(
+      const std::vector<std::string>&
+          cors_extra_safelisted_request_header_names) override {}
   void AddHSTS(const std::string& host,
                base::Time expiry,
                bool include_subdomains,
@@ -205,7 +216,8 @@ class TestNetworkContext : public mojom::NetworkContext {
       mojom::P2PTrustedSocketManagerRequest trusted_socket_manager,
       mojom::P2PSocketManagerRequest socket_manager_request) override {}
   void CreateMdnsResponder(
-      mojom::MdnsResponderRequest responder_request) override {}
+      mojo::PendingReceiver<mojom::MdnsResponder> responder_receiver) override {
+  }
   void ResetURLLoaderFactories() override {}
   void ForceReloadProxyConfig(
       ForceReloadProxyConfigCallback callback) override {}
@@ -229,7 +241,7 @@ class TestNetworkContext : public mojom::NetworkContext {
       const GURL& url,
       LookupBasicAuthCredentialsCallback callback) override {}
   void GetOriginPolicyManager(
-      mojom::OriginPolicyManagerRequest request) override {}
+      mojo::PendingReceiver<mojom::OriginPolicyManager> receiver) override {}
 };
 
 }  // namespace network

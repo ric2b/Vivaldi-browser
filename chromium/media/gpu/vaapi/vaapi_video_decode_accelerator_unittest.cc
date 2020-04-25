@@ -9,7 +9,6 @@
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "media/gpu/accelerated_video_decoder.h"
-#include "media/gpu/format_utils.h"
 #include "media/gpu/vaapi/vaapi_picture.h"
 #include "media/gpu/vaapi/vaapi_picture_factory.h"
 #include "media/gpu/vaapi/vaapi_wrapper.h"
@@ -68,10 +67,13 @@ class MockAcceleratedVideoDecoder : public AcceleratedVideoDecoder {
 
 class MockVaapiWrapper : public VaapiWrapper {
  public:
-  MockVaapiWrapper() = default;
-  MOCK_METHOD4(
-      CreateContextAndSurfaces,
-      bool(unsigned int, const gfx::Size&, size_t, std::vector<VASurfaceID>*));
+  MockVaapiWrapper(CodecMode mode) : VaapiWrapper(mode) {}
+  MOCK_METHOD5(CreateContextAndSurfaces,
+               bool(unsigned int,
+                    const gfx::Size&,
+                    SurfaceUsageHint,
+                    size_t,
+                    std::vector<VASurfaceID>*));
   MOCK_METHOD1(CreateContext, bool(const gfx::Size&));
   MOCK_METHOD1(DestroyContextAndSurfaces, void(std::vector<VASurfaceID>));
 
@@ -150,8 +152,8 @@ class VaapiVideoDecodeAcceleratorTest : public TestWithParam<TestParams>,
         decoder_thread_("VaapiVideoDecodeAcceleratorTestThread"),
         mock_decoder_(new ::testing::StrictMock<MockAcceleratedVideoDecoder>),
         mock_vaapi_picture_factory_(new MockVaapiPictureFactory()),
-        mock_vaapi_wrapper_(new MockVaapiWrapper()),
-        mock_vpp_vaapi_wrapper_(new MockVaapiWrapper()),
+        mock_vaapi_wrapper_(new MockVaapiWrapper(VaapiWrapper::kDecode)),
+        mock_vpp_vaapi_wrapper_(new MockVaapiWrapper(VaapiWrapper::kDecode)),
         weak_ptr_factory_(this) {
     decoder_thread_.Start();
 
@@ -295,9 +297,11 @@ class VaapiVideoDecodeAcceleratorTest : public TestWithParam<TestParams>,
       const size_t kNumReferenceFrames = 1 + num_pictures / 2;
       EXPECT_CALL(
           *mock_vaapi_wrapper_,
-          CreateContextAndSurfaces(_, picture_size, kNumReferenceFrames, _))
+          CreateContextAndSurfaces(
+              _, picture_size, VaapiWrapper::SurfaceUsageHint::kVideoDecoder,
+              kNumReferenceFrames, _))
           .WillOnce(DoAll(
-              WithArg<3>(Invoke([kNumReferenceFrames](
+              WithArg<4>(Invoke([kNumReferenceFrames](
                                     std::vector<VASurfaceID>* va_surface_ids) {
                 va_surface_ids->resize(kNumReferenceFrames);
               })),

@@ -69,6 +69,7 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
   bool use_swap_with_bounds() const { return use_swap_with_bounds_; }
 
   void SwapBuffers(std::vector<ui::LatencyInfo> latency_info) override;
+  void SwapBuffersSkipped() override;
   void SwapBuffersComplete() override;
 
   void DidReceiveTextureInUseResponses(
@@ -213,7 +214,8 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
                               GLenum* internal_format);
 
   static bool ShouldApplyBackdropFilters(
-      const cc::FilterOperations* backdrop_filters);
+      const DrawRenderPassDrawQuadParams* params);
+
   // Applies the backdrop filters to the backdrop that has been painted to this
   // point, and returns it as an SkImage. Any opacity and/or "regular"
   // (non-backdrop) filters will also be applied directly to the backdrop-
@@ -228,7 +230,8 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
       const base::Optional<gfx::RRectF>& backdrop_filter_bounds,
       const gfx::Transform& backdrop_filter_bounds_transform);
 
-  const TileDrawQuad* CanPassBeDrawnDirectly(const RenderPass* pass) override;
+  // gl_renderer can bypass TileDrawQuads that fill the RenderPass
+  const DrawQuad* CanPassBeDrawnDirectly(const RenderPass* pass) override;
 
   void DrawRenderPassQuad(const RenderPassDrawQuad* quadi,
                           const gfx::QuadF* clip_region);
@@ -292,6 +295,7 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
 
   void ReinitializeGLState();
   void RestoreGLState();
+  void RestoreGLStateAfterSkia();
 
   // TODO(weiliangc): Once the overlay processor could schedule overlays, remove
   // these functions.
@@ -385,6 +389,7 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
   gpu::gles2::GLES2Interface* gl_;
   gpu::ContextSupport* context_support_;
   std::unique_ptr<ContextCacheController::ScopedVisibility> context_visibility_;
+  std::unique_ptr<ContextCacheController::ScopedBusy> context_busy_;
 
   TextureDeleter texture_deleter_;
   GLRendererCopier copier_;

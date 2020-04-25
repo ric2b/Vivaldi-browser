@@ -19,6 +19,7 @@
 #include "base/optional.h"
 #include "base/threading/thread_checker_impl.h"
 #include "base/time/time.h"
+#include "components/download/database/in_progress/download_entry.h"
 #include "components/download/public/common/download_create_info.h"
 #include "components/download/public/common/download_destination_observer.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
@@ -191,7 +192,8 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
       bool opened,
       base::Time last_access_time,
       bool transient,
-      const std::vector<DownloadItem::ReceivedSlice>& received_slices);
+      const std::vector<DownloadItem::ReceivedSlice>& received_slices,
+      std::unique_ptr<DownloadEntry> download_entry);
 
   // Constructing for a regular download.
   // |net_log| is constructed externally for our use.
@@ -290,6 +292,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   DownloadCreationType GetDownloadCreationType() const override;
   void OnContentCheckCompleted(DownloadDangerType danger_type,
                                DownloadInterruptReason reason) override;
+  void OnAsyncScanningCompleted(DownloadDangerType danger_type) override;
   void SetOpenWhenComplete(bool open) override;
   void SetOpened(bool opened) override;
   void SetLastAccessTime(base::Time last_access_time) override;
@@ -367,6 +370,9 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   uint64_t ukm_download_id() const { return ukm_download_id_; }
 
   void SetAutoResumeCountForTesting(int32_t auto_resume_count);
+
+  // Gets the approximate memory usage of this item.
+  size_t GetApproximateMemoryUsage() const;
 
  private:
   // Fine grained states of a download.

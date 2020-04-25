@@ -181,31 +181,6 @@ class UtilitiesClearAllRecentlyClosedSessionsFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesClearAllRecentlyClosedSessionsFunction);
 };
 
-// Obtains a 64-bit integer, encoded as 16 hex characters to be used by piwik
-// as a unique user id. The user id is stored in the vivaldi user profile
-// with a backup copy stored in the OS user profile (registry on Windows).
-// If no stored user id is found, a new one is generated.
-class UtilitiesGetUniqueUserIdFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.getUniqueUserId",
-                             UTILITIES_GETUNIQUEUSERID)
-  UtilitiesGetUniqueUserIdFunction() = default;
-
- protected:
-  ~UtilitiesGetUniqueUserIdFunction() override = default;
-
-  ResponseAction Run() override;
-
-  bool ReadUserIdFromOSProfile(std::string* user_id);
-  void WriteUserIdToOSProfile(const std::string& user_id);
-
-  void GetUniqueUserIdTask(const std::string& legacy_user_id);
-  void RespondOnUIThread(const std::string& user_id, bool is_new_user);
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetUniqueUserIdFunction);
-};
-
 class UtilitiesIsTabInLastSessionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.isTabInLastSession",
@@ -363,16 +338,32 @@ class UtilitiesGetSystemDateFormatFunction : public ExtensionFunction {
  public:
   UtilitiesGetSystemDateFormatFunction() = default;
 
-  bool ReadDateFormats(vivaldi::utilities::DateFormats* date_formats);
-
  protected:
   ~UtilitiesGetSystemDateFormatFunction() override = default;
+
+  bool ReadDateFormats(vivaldi::utilities::DateFormats* date_formats);
 
   // ExtensionFunction:
   ResponseAction Run() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSystemDateFormatFunction);
+};
+
+class UtilitiesGetSystemCountryFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getSystemCountry",
+                             UTILITIES_GET_SYSTEM_COUNTRY)
+  UtilitiesGetSystemCountryFunction() = default;
+
+ private:
+  ~UtilitiesGetSystemCountryFunction() override = default;
+
+  std::string ReadCountry();
+
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSystemCountryFunction);
 };
 
 class UtilitiesSetLanguageFunction : public ExtensionFunction {
@@ -591,21 +582,6 @@ class UtilitiesSetStartupActionFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSetStartupActionFunction);
 };
 
-class UtilitiesCanShowWelcomePageFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.canShowWelcomePage",
-                             UTILITIES_CANSHOWWELCOMEPAGE)
-  UtilitiesCanShowWelcomePageFunction() = default;
-
-  ResponseAction Run() override;
-
- protected:
-  ~UtilitiesCanShowWelcomePageFunction() override = default;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesCanShowWelcomePageFunction);
-};
-
 class UtilitiesCanShowWhatsNewPageFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.canShowWhatsNewPage",
@@ -700,16 +676,40 @@ class UtilitiesIsDownloadManagerReadyFunction : public ExtensionFunction {
 };
 
 class UtilitiesSetContentSettingsFunction : public ExtensionFunction {
-public:
+ public:
   DECLARE_EXTENSION_FUNCTION("utilities.setContentSettings",
                              UTILITIES_SET_CONTENTSETTING)
-   UtilitiesSetContentSettingsFunction() = default;
+  UtilitiesSetContentSettingsFunction() = default;
 
-private:
+ private:
   ~UtilitiesSetContentSettingsFunction() override = default;
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSetContentSettingsFunction);
+};
+
+class UtilitiesIsDialogOpenFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.isDialogOpen", UTILITIES_IS_DIALOG_OPEN)
+  UtilitiesIsDialogOpenFunction() = default;
+
+ private:
+  ~UtilitiesIsDialogOpenFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesIsDialogOpenFunction);
+};
+
+class UtilitiesFocusDialogFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.focusDialog", UTILITIES_FOCUS_DIALOG)
+  UtilitiesFocusDialogFunction() = default;
+
+ private:
+  ~UtilitiesFocusDialogFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesFocusDialogFunction);
 };
 
 }  // namespace extensions

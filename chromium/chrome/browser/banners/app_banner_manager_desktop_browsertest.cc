@@ -21,7 +21,6 @@
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/page_action/page_action_icon_container.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
@@ -64,7 +63,7 @@ class FakeAppBannerManagerDesktop : public banners::AppBannerManagerDesktop {
   }
 
  protected:
-  void OnInstall(blink::WebDisplayMode display) override {
+  void OnInstall(blink::mojom::DisplayMode display) override {
     AppBannerManager::OnInstall(display);
     if (on_install_)
       std::move(on_install_).Run();
@@ -292,7 +291,6 @@ IN_PROC_BROWSER_TEST_F(AppBannerManagerDesktopBrowserTest,
   chrome::SetAutoAcceptPWAInstallConfirmationForTesting(true);
   browser()
       ->window()
-      ->GetOmniboxPageActionIconContainer()
       ->ExecutePageActionIconForTesting(PageActionIconType::kPwaInstall);
   manager->AwaitAppInstall();
   chrome::SetAutoAcceptPWAInstallConfirmationForTesting(false);

@@ -1,4 +1,36 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sl">
+<translation id="3830627370375585318">V nastavitvah požarnega zidu ali protivirusnega programa omogočite dostop do
+        omrežja.</translation>
+<translation id="4200102020577305737">Odprite
+          Vivaldi meni &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Nastavitve LAN
+          in počistite potrditveno polje »Uporabi proxy strežnik za LAN«.</translation>
+<translation id="4932161901409251843">Odprite
+          Vivaldi meni &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          in poskrbite, da je konfiguracija nastavljena na "brez proxy strežnika" ali "neposredno."</translation>
+<translation id="5248344925342018662">Ogledujete si varno stran Vivaldi</translation>
+<translation id="7023871570427738255">Odprite
+        Vivaldi meni &gt;
+        <ph name="SETTINGS_TITLE" />
+        &gt;
+        <ph name="ADVANCED_TITLE" />
+        in počistite polje »<ph name="NO_PREFETCH_DESCRIPTION" />«.
+        Če s tem težave ne odpravite, priporočamo, da to možnost
+        znova izberete.</translation>
+<translation id="8187289872471304532">Odprite
+          Aplikacije &gt; Sistemske nastavitve &gt; Omrežje &gt; Napredno &gt; Proxy strežniki
+          in počistite polja z označenimi Proxy strežniki.</translation>
 </translationbundle>

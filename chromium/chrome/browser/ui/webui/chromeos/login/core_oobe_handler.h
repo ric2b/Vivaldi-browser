@@ -23,6 +23,7 @@
 #include "chrome/browser/chromeos/login/version_info_updater.h"
 #include "chrome/browser/chromeos/tpm_firmware_update.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_webui_handler.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "ui/events/event_source.h"
 
 namespace base {
@@ -38,6 +39,17 @@ namespace chromeos {
 
 class CoreOobeView {
  public:
+  // Enum that specifies how inner padding of OOBE dialog should be calculated.
+  enum class DialogPaddingMode {
+    // Oobe dialog is displayed full screen, padding will be calculated
+    // via css depending on media size.
+    MODE_AUTO,
+    // Oobe dialog have enough free space around and should use wide padding.
+    MODE_WIDE,
+    // Oobe dialog is positioned in limited space and should use narrow padding.
+    MODE_NARROW,
+  };
+
   virtual ~CoreOobeView() {}
 
   virtual void ShowSignInError(int login_attempts,
@@ -58,6 +70,8 @@ class CoreOobeView {
   virtual void ReloadEulaContent(const base::DictionaryValue& dictionary) = 0;
   virtual void SetVirtualKeyboardShown(bool shown) = 0;
   virtual void SetClientAreaSize(int width, int height) = 0;
+  virtual void SetShelfHeight(int height) = 0;
+  virtual void SetDialogPaddingMode(DialogPaddingMode mode) = 0;
   virtual void ShowDeviceResetScreen() = 0;
   virtual void ShowEnableDebuggingScreen() = 0;
   virtual void InitDemoModeDetection() = 0;
@@ -137,6 +151,8 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void ReloadEulaContent(const base::DictionaryValue& dictionary) override;
   void SetVirtualKeyboardShown(bool displayed) override;
   void SetClientAreaSize(int width, int height) override;
+  void SetShelfHeight(int height) override;
+  void SetDialogPaddingMode(CoreOobeView::DialogPaddingMode mode) override;
   void ShowDeviceResetScreen() override;
   void ShowEnableDebuggingScreen() override;
   void ShowActiveDirectoryPasswordChangeScreen(
@@ -222,7 +238,7 @@ class CoreOobeHandler : public BaseWebUIHandler,
 
   DemoModeDetector demo_mode_detector_;
 
-  ash::mojom::CrosDisplayConfigControllerPtr cros_display_config_ptr_;
+  mojo::Remote<ash::mojom::CrosDisplayConfigController> cros_display_config_;
 
   base::WeakPtrFactory<CoreOobeHandler> weak_ptr_factory_{this};
 

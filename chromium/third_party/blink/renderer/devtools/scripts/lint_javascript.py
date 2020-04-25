@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 
-import local_node
+import devtools_paths
 
 files_to_lint = None
 
@@ -63,12 +63,13 @@ def js_lint(files_list=None):
     eslintconfig_path = path.join(devtools_path, ".eslintrc.js")
     eslintignore_path = path.join(devtools_path, ".eslintignore")
     exec_command = [
-        local_node.node_path(),
-        local_node.eslint_path(),
+        devtools_paths.node_path(),
+        devtools_paths.eslint_path(),
         "--config",
         to_platform_path_exact(eslintconfig_path),
         "--ignore-path",
         to_platform_path_exact(eslintignore_path),
+        "--fix",
     ] + files_list
 
     eslint_proc = popen(exec_command, cwd=devtools_path)

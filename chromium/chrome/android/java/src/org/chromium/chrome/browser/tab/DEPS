@@ -1,6 +1,8 @@
 include_rules = [
   "-chrome",
   "+chrome/android/java/src/org/chromium/chrome/browser/AppHooks.java",
+  "+chrome/android/java/src/org/chromium/chrome/browser/ChromeFeatureList.java",
+  "+chrome/android/java/src/org/chromium/chrome/browser/webapps/WebDisplayMode.java",
   "+content/public/android/java/src/org/chromium/content_public",
 ]
 
@@ -8,7 +10,6 @@ specific_include_rules = {
   'Tab\.java': [
     "+chrome/android/java/src/org/chromium/chrome/browser/night_mode",
     "+chrome/android/java/src/org/chromium/chrome/browser/tab",
-    "+chrome/lib/util/public",
     "-components",
     "+components/embedder_support/android/java/src/org/chromium/components/embedder_support/view",
     "+components/navigation_interception/android/java/src/org/chromium/components/navigation_interception",

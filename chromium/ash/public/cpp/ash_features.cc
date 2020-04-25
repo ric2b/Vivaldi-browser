@@ -30,7 +30,7 @@ const base::Feature kLockScreenHideSensitiveNotificationsSupport{
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kLockScreenMediaControls{"LockScreenMediaControls",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kHideArcMediaNotifications{
     "HideArcMediaNotifications", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -45,7 +45,7 @@ const base::Feature kMultiDisplayOverviewAndSplitView{
     "MultiDisplayOverviewAndSplitView", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kNewOverviewLayout{"NewOverviewLayout",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kNightLight{"NightLight", base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -55,8 +55,14 @@ const base::Feature kNotificationExpansionAnimation{
 const base::Feature kNotificationScrollBar{"NotificationScrollBar",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kOverviewCrossFadeWallpaperBlur{
+    "OverviewCrossFadeWallpaperBlur", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kPipRoundedCorners{"PipRoundedCorners",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kReduceDisplayNotifications{
+    "ReduceDisplayNotifications", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSeparateNetworkIcons{"SeparateNetworkIcons",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
@@ -81,14 +87,23 @@ const base::Feature kUseBluetoothSystemInAsh{"UseBluetoothSystemInAsh",
 const base::Feature kSupervisedUserDeprecationNotice{
     "SupervisedUserDeprecationNotice", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kSystemTrayFeaturePodsPagination{
-    "SystemTrayFeaturePodsPagination", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kSwapSideVolumeButtonsForOrientation{
     "SwapSideVolumeButtonsForOrientation", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kUnifiedMessageCenterRefactor{
     "UnifiedMessageCenterRefactor", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnableBackgroundBlur{"EnableBackgroundBlur",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSwipingFromLeftEdgeToGoBack{
+    "SwipingFromLeftEdgeToGoBack", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kDragFromShelfToHomeOrOverview{
+    "DragFromShelfToHomeOrOverview", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kHomerviewGesture{"HomerviewGesture",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsHideArcMediaNotificationsEnabled() {
   return base::FeatureList::IsEnabled(kMediaSessionNotification) &&
@@ -155,16 +170,32 @@ bool IsSupervisedUserDeprecationNoticeEnabled() {
   return base::FeatureList::IsEnabled(kSupervisedUserDeprecationNotice);
 }
 
-bool IsSystemTrayFeaturePodsPaginationEnabled() {
-  return base::FeatureList::IsEnabled(kSystemTrayFeaturePodsPagination);
-}
-
 bool IsSwapSideVolumeButtonsForOrientationEnabled() {
   return base::FeatureList::IsEnabled(kSwapSideVolumeButtonsForOrientation);
 }
 
 bool IsUnifiedMessageCenterRefactorEnabled() {
   return base::FeatureList::IsEnabled(kUnifiedMessageCenterRefactor);
+}
+
+bool IsBackgroundBlurEnabled() {
+  return base::FeatureList::IsEnabled(kEnableBackgroundBlur);
+}
+
+bool IsSwipingFromLeftEdgeToGoBackEnabled() {
+  return base::FeatureList::IsEnabled(kSwipingFromLeftEdgeToGoBack);
+}
+
+bool IsDragFromShelfToHomeOrOverviewEnabled() {
+  return base::FeatureList::IsEnabled(kDragFromShelfToHomeOrOverview);
+}
+
+bool IsReduceDisplayNotificationsEnabled() {
+  return base::FeatureList::IsEnabled(kReduceDisplayNotifications);
+}
+
+bool IsHomerviewGestureEnabled() {
+  return base::FeatureList::IsEnabled(kHomerviewGesture);
 }
 
 }  // namespace features

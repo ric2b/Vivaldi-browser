@@ -128,7 +128,10 @@ public class BasicSuggestionProcessor implements SuggestionProcessor {
     @VisibleForTesting
     public @SuggestionIcon int getSuggestionIconType(OmniboxSuggestion suggestion) {
         if (suggestion.isUrlSuggestion()) {
-            if (suggestion.isStarred()) {
+            if (suggestion.getType() == OmniboxSuggestionType.CLIPBOARD_TEXT
+                    || suggestion.getType() == OmniboxSuggestionType.CLIPBOARD_IMAGE) {
+                return SuggestionIcon.MAGNIFIER;
+            } else if (suggestion.isStarred()) {
                 return SuggestionIcon.BOOKMARK;
             } else {
                 return SuggestionIcon.GLOBE;
@@ -167,7 +170,12 @@ public class BasicSuggestionProcessor implements SuggestionProcessor {
                         model.get(SuggestionCommonProperties.USE_DARK_COLORS)
                                 ? R.color.suggestion_url_dark_modern
                                 : R.color.suggestion_url_light_modern);
-                textLine2Direction = View.TEXT_DIRECTION_LTR;
+
+                if (suggestionType == OmniboxSuggestionType.CLIPBOARD_TEXT) {
+                    textLine2Direction = View.TEXT_DIRECTION_INHERIT;
+                } else {
+                    textLine2Direction = View.TEXT_DIRECTION_LTR;
+                }
             } else {
                 textLine2 = null;
             }
@@ -211,7 +219,9 @@ public class BasicSuggestionProcessor implements SuggestionProcessor {
         model.set(SuggestionViewProperties.TEXT_LINE_2_MAX_LINES, 1);
 
         // Include site favicon if we are presenting URL and have favicon available.
-        if (mLargeIconBridge != null && suggestion.getUrl() != null) {
+        // TODO(gangwu): Create a saparate processor for clipboard suggestions.
+        if (mLargeIconBridge != null && suggestion.getUrl() != null
+                && suggestion.getType() != OmniboxSuggestionType.CLIPBOARD_TEXT) {
             mLargeIconBridge.getLargeIconForUrl(suggestion.getUrl(), mDesiredFaviconWidthPx,
                     (Bitmap icon, int fallbackColor, boolean isFallbackColorDefault,
                             int iconType) -> {

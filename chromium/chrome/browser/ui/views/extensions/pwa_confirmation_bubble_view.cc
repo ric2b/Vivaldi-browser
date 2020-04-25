@@ -13,7 +13,7 @@
 #include "chrome/browser/ui/views/extensions/web_app_info_image_source.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
-#include "chrome/browser/ui/views/page_action/omnibox_page_action_icon_container_view.h"
+#include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
@@ -38,7 +38,7 @@ bool g_auto_accept_pwa_for_testing = false;
 
 // Returns an ImageView containing the app icon.
 std::unique_ptr<views::ImageView> CreateIconView(
-    const std::vector<WebApplicationInfo::IconInfo>& icons) {
+    const std::vector<WebApplicationIconInfo>& icons) {
   constexpr int kIconSize = 48;
   gfx::ImageSkia image(
       std::make_unique<WebAppInfoImageSource>(kIconSize, icons),
@@ -123,9 +123,6 @@ PWAConfirmationBubbleView::PWAConfirmationBubbleView(
 
   chrome::RecordDialogCreation(chrome::DialogIdentifier::PWA_CONFIRMATION);
 
-  if (g_auto_accept_pwa_for_testing)
-    Accept();
-
   SetHighlightedButton(highlight_button);
 }
 
@@ -195,16 +192,19 @@ void ShowPWAInstallBubble(content::WebContents* web_contents,
   } else {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   views::View* anchor_view =
-      browser_view->toolbar_button_provider()->GetAnchorView();
+      browser_view->toolbar_button_provider()->GetAnchorView(
+          PageActionIconType::kPwaInstall);
   PageActionIconView* icon =
       browser_view->toolbar_button_provider()
-          ->GetOmniboxPageActionIconContainerView()
           ->GetPageActionIconView(PageActionIconType::kPwaInstall);
 
   g_bubble_ = new PWAConfirmationBubbleView(
       anchor_view, icon, std::move(web_app_info), std::move(callback));
 
   views::BubbleDialogDelegateView::CreateBubble(g_bubble_)->Show();
+
+  if (g_auto_accept_pwa_for_testing)
+    g_bubble_->GetDialogClientView()->AcceptWindow();
 
   icon->Update();
   DCHECK(icon->GetVisible());

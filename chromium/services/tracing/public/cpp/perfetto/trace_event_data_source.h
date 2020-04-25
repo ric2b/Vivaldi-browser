@@ -12,6 +12,7 @@
 
 #include "base/component_export.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_base.h"
 #include "base/sequence_checker.h"
 #include "base/threading/thread_local.h"
@@ -20,6 +21,15 @@
 #include "base/trace_event/trace_config.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
 #include "third_party/perfetto/protos/perfetto/trace/chrome/chrome_metadata.pbzero.h"
+#include "third_party/perfetto/protos/perfetto/trace/chrome/chrome_trace_event.pbzero.h"
+
+namespace base {
+namespace trace_event {
+class ThreadInstructionCount;
+class TraceEvent;
+struct TraceEventHandle;
+}  // namespace trace_event
+}  // namespace base
 
 namespace perfetto {
 class StartupTraceWriter;
@@ -60,10 +70,17 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventMetadataSource
       perfetto::protos::pbzero::ChromeMetadataPacket*,
       bool /* privacy_filtering_enabled */)>;
 
-  // Any callbacks passed here will be called when tracing starts.
+  // Any callbacks passed here will be called when tracing. Note that if tracing
+  // is enabled while calling this method, the callback may be invoked
+  // directly.
   void AddGeneratorFunction(JsonMetadataGeneratorFunction generator);
   // Same as above, but for filling in proto format.
   void AddGeneratorFunction(MetadataGeneratorFunction generator);
+  // For background tracing, the legacy crash uploader needs
+  // metadata fields to be uploaded as POST args in addition to being
+  // embedded in the trace. TODO(oysteine): Remove when only the
+  // UMA uploader path is used.
+  std::unique_ptr<base::DictionaryValue> GenerateLegacyMetadataDict();
 
   // PerfettoTracedProcess::DataSourceBase implementation, called by
   // ProducerClent.
@@ -81,15 +98,29 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventMetadataSource
   TraceEventMetadataSource();
   ~TraceEventMetadataSource() override;
 
-  void GenerateMetadata(std::unique_ptr<perfetto::TraceWriter> trace_writer);
+  void GenerateMetadata(
+      std::unique_ptr<std::vector<JsonMetadataGeneratorFunction>>
+          json_generators,
+      std::unique_ptr<std::vector<MetadataGeneratorFunction>> proto_generators);
+  void GenerateMetadataFromGenerator(
+      const MetadataGeneratorFunction& generator);
+  void GenerateJsonMetadataFromGenerator(
+      const JsonMetadataGeneratorFunction& generator,
+      perfetto::protos::pbzero::ChromeEventBundle* event_bundle);
   std::unique_ptr<base::DictionaryValue> GenerateTraceConfigMetadataDict();
 
+  // All members are protected by |lock_|.
+  base::Lock lock_;
   std::vector<JsonMetadataGeneratorFunction> json_generator_functions_;
   std::vector<MetadataGeneratorFunction> generator_functions_;
-  scoped_refptr<base::SequencedTaskRunner> origin_task_runner_;
+
+  const scoped_refptr<base::SequencedTaskRunner> origin_task_runner_;
+
   std::unique_ptr<perfetto::TraceWriter> trace_writer_;
   bool privacy_filtering_enabled_ = false;
   std::string chrome_config_;
+  std::unique_ptr<base::trace_event::TraceConfig> parsed_chrome_config_;
+  bool emit_metadata_at_start_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TraceEventMetadataSource);
 };
@@ -140,6 +171,10 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventDataSource
     startup_tracing_timeout_ = timeout_us;
   }
 
+  bool privacy_filtering_enabled() const { return privacy_filtering_enabled_; }
+
+  bool IsEnabled();
+
  private:
   friend class base::NoDestructor<TraceEventDataSource>;
 
@@ -157,6 +192,7 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventDataSource
   void RegisterWithTraceLog();
   void UnregisterFromTraceLog();
 
+  std::unique_ptr<perfetto::StartupTraceWriter> CreateTraceWriterLocked();
   ThreadLocalEventSink* CreateThreadLocalEventSink(bool thread_will_flush);
 
   // Callback from TraceLog, can be called from any thread.
@@ -176,6 +212,7 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventDataSource
   void LogHistograms();
   // Logs a given histogram in traces.
   void LogHistogram(base::HistogramBase* histogram);
+  void EmitProcessDescriptor();
 
   bool disable_interning_ = false;
   base::OnceClosure stop_complete_callback_;
@@ -198,11 +235,15 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventDataSource
   // SetupStartupTracing() is called.
   std::unique_ptr<perfetto::StartupTraceWriterRegistry>
       startup_writer_registry_;
+  std::unique_ptr<perfetto::StartupTraceWriter> trace_writer_;
   base::OneShotTimer startup_tracing_timer_;
+  bool is_enabled_ = false;
   bool flushing_trace_log_ = false;
   base::OnceClosure flush_complete_task_;
   std::vector<std::string> histograms_;
   bool privacy_filtering_enabled_ = false;
+  std::string process_name_;
+  int process_id_ = base::kNullProcessId;
   SEQUENCE_CHECKER(perfetto_sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(TraceEventDataSource);

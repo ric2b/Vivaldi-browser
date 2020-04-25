@@ -16,6 +16,7 @@
 #include "base/strings/string16.h"
 #include "base/util/type_safety/strong_alias.h"
 #include "build/build_config.h"
+#include "components/password_manager/core/browser/leaked_credentials_table.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_change.h"
 #include "components/password_manager/core/browser/password_store_sync.h"
@@ -204,12 +205,15 @@ class LoginDatabase : public PasswordStoreSync::MetadataStore {
   bool CommitTransaction();
 
   StatisticsTable& stats_table() { return stats_table_; }
+  LeakedCredentialsTable& leaked_credentials_table() {
+    return leaked_credentials_table_;
+  }
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
   void enable_encryption() { use_encryption_ = true; }
   // This instance should not encrypt/decrypt password values using OSCrypt.
   void disable_encryption() { use_encryption_ = false; }
-#endif  // defined(OS_POSIX)
+#endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
 
  private:
 #if defined(OS_IOS)
@@ -318,6 +322,7 @@ class LoginDatabase : public PasswordStoreSync::MetadataStore {
   mutable sql::Database db_;
   sql::MetaTable meta_table_;
   StatisticsTable stats_table_;
+  LeakedCredentialsTable leaked_credentials_table_;
 
   // These cached strings are used to build SQL statements.
   std::string add_statement_;

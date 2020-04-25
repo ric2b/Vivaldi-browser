@@ -22,6 +22,7 @@ struct BeginFrameArgs;
 }
 
 namespace cc {
+struct BeginMainFrameMetrics;
 struct ElementId;
 
 struct ApplyViewportChangesArgs {
@@ -149,9 +150,27 @@ class LayerTreeHostClient {
   // the time from the start of BeginMainFrame to the Commit, or early out.
   virtual void RecordStartOfFrameMetrics() = 0;
   virtual void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time) = 0;
+  // Return metrics information for the stages of BeginMainFrame. This is
+  // ultimately implemented by Blink's LocalFrameUKMAggregator. It must be a
+  // distinct call from the FrameMetrics above because the BeginMainFrameMetrics
+  // for compositor latency must be gathered before the layer tree is
+  // committed to the compositor, which is before the call to
+  // RecordEndOfFrameMetrics.
+  virtual std::unique_ptr<BeginMainFrameMetrics> GetBeginMainFrameMetrics() = 0;
 
  protected:
   virtual ~LayerTreeHostClient() {}
+};
+
+// LayerTreeHost->WebThreadScheduler callback interface. Instances of this class
+// must be safe to use on both the compositor and main threads.
+class LayerTreeHostSchedulingClient {
+ public:
+  // Indicates that the compositor thread scheduled a BeginMainFrame to run on
+  // the main thread.
+  virtual void DidScheduleBeginMainFrame() = 0;
+  // Called unconditionally when BeginMainFrame runs on the main thread.
+  virtual void DidRunBeginMainFrame() = 0;
 };
 
 }  // namespace cc

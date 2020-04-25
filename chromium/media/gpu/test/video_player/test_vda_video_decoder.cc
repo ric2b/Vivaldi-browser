@@ -12,10 +12,8 @@
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/video_frame.h"
 #include "media/base/waiting.h"
-#include "media/gpu/buildflags.h"
 #include "media/gpu/gpu_video_decode_accelerator_factory.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/test/video_player/frame_renderer.h"
@@ -37,18 +35,24 @@ constexpr size_t kTimestampCacheSize = 128;
 TestVDAVideoDecoder::TestVDAVideoDecoder(
     AllocationMode allocation_mode,
     const gfx::ColorSpace& target_color_space,
-    FrameRenderer* const frame_renderer)
+    FrameRenderer* const frame_renderer,
+    gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory)
     : output_mode_(allocation_mode == AllocationMode::kAllocate
                        ? VideoDecodeAccelerator::Config::OutputMode::ALLOCATE
                        : VideoDecodeAccelerator::Config::OutputMode::IMPORT),
       target_color_space_(target_color_space),
       frame_renderer_(frame_renderer),
+#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+      gpu_memory_buffer_factory_(gpu_memory_buffer_factory),
+#endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
       decode_start_timestamps_(kTimestampCacheSize) {
-  DETACH_FROM_SEQUENCE(vda_wrapper_sequence_checker_);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(vda_wrapper_sequence_checker_);
 
   // TODO(crbug.com/933632) Remove support for allocate mode, and always use
   // import mode. Support for allocate mode is temporary maintained for older
   // platforms that don't support import mode.
+
+  vda_wrapper_task_runner_ = base::ThreadTaskRunnerHandle::Get();
 
   weak_this_ = weak_this_factory_.GetWeakPtr();
 }
@@ -220,8 +224,9 @@ void TestVDAVideoDecoder::ProvidePictureBuffersWithVisibleRect(
 
 #if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
         video_frame = CreatePlatformVideoFrame(
-            format, dimensions, visible_rect, visible_rect.size(),
-            base::TimeDelta(), gfx::BufferUsage::SCANOUT_VDA_WRITE);
+            gpu_memory_buffer_factory_, format, dimensions, visible_rect,
+            visible_rect.size(), base::TimeDelta(),
+            gfx::BufferUsage::SCANOUT_VDA_WRITE);
 #endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 
         LOG_ASSERT(video_frame) << "Failed to create video frame";
@@ -264,6 +269,8 @@ void TestVDAVideoDecoder::ProvidePictureBuffersWithVisibleRect(
 }
 
 void TestVDAVideoDecoder::DismissPictureBuffer(int32_t picture_buffer_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(vda_wrapper_sequence_checker_);
+
   // Drop reference to the video frame associated with the picture buffer, so
   // the video frame and related texture are automatically destroyed once the
   // renderer and video frame processors are done using them.
@@ -294,7 +301,7 @@ void TestVDAVideoDecoder::PictureReady(const Picture& picture) {
   // new video frame using the same mailbox.
   if (!video_frame->HasTextures()) {
     wrapped_video_frame = VideoFrame::WrapVideoFrame(
-        *video_frame, video_frame->format(), picture.visible_rect(),
+        video_frame, video_frame->format(), picture.visible_rect(),
         picture.visible_rect().size());
   } else {
     gpu::MailboxHolder mailbox_holders[media::VideoFrame::kMaxPlanes];
@@ -307,23 +314,36 @@ void TestVDAVideoDecoder::PictureReady(const Picture& picture) {
 
   DCHECK(wrapped_video_frame);
 
+  // Flag that the video frame was decoded in a power efficient way.
+  wrapped_video_frame->metadata()->SetBoolean(
+      VideoFrameMetadata::POWER_EFFICIENT, true);
+
   // It's important to bind the original video frame to the destruction callback
   // of the wrapped frame, to avoid deleting it before rendering of the wrapped
   // frame is done. A reference to the video frame is already stored in
   // |video_frames_| to map between picture buffers and frames, but that
   // reference will be released when the decoder calls DismissPictureBuffer()
   // (e.g. on a resolution change).
-  base::OnceClosure reuse_cb = BindToCurrentLoop(
-      base::BindOnce(&TestVDAVideoDecoder::ReusePictureBufferTask, weak_this_,
-                     picture.picture_buffer_id(), video_frame));
+  base::OnceClosure reuse_cb =
+      base::BindOnce(&TestVDAVideoDecoder::ReusePictureBufferThunk, weak_this_,
+                     vda_wrapper_task_runner_, picture.picture_buffer_id());
   wrapped_video_frame->AddDestructionObserver(std::move(reuse_cb));
   output_cb_.Run(std::move(wrapped_video_frame));
 }
 
+// static
+void TestVDAVideoDecoder::ReusePictureBufferThunk(
+    base::Optional<base::WeakPtr<TestVDAVideoDecoder>> vda_video_decoder,
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
+    int32_t picture_buffer_id) {
+  DCHECK(vda_video_decoder);
+  task_runner->PostTask(
+      FROM_HERE, base::BindOnce(&TestVDAVideoDecoder::ReusePictureBufferTask,
+                                *vda_video_decoder, picture_buffer_id));
+}
+
 // Called when a picture buffer is ready to be re-used.
-void TestVDAVideoDecoder::ReusePictureBufferTask(
-    int32_t picture_buffer_id,
-    scoped_refptr<VideoFrame> /*video_frame*/) {
+void TestVDAVideoDecoder::ReusePictureBufferTask(int32_t picture_buffer_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(vda_wrapper_sequence_checker_);
   DCHECK(decoder_);
   DVLOGF(4) << "Picture buffer ID: " << picture_buffer_id;

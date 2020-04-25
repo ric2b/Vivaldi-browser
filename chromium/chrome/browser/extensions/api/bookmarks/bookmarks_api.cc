@@ -55,6 +55,8 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
+#include "components/bookmarks/vivaldi_bookmark_api_helpers.h"
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -196,42 +198,39 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
     }
   }
 
-  base::string16 nickname;  // Optional.
-  if (details.nickname.get())
-    nickname = base::UTF8ToUTF16(*details.nickname.get());
-
-  base::string16 description;  // Optional.
-  if (details.description.get())
-    description = base::UTF8ToUTF16(*details.description.get());
-
-  bool speeddial = false;  // Optional.
-  if (details.speeddial.get())
-    speeddial = *details.speeddial.get();
-
-  bool bookmarkbar = false;  // Optional.
-  if (details.bookmarkbar.get())
-    bookmarkbar = *details.bookmarkbar.get();
-
-  base::string16 thumbnail;  // Optional.
-  if (details.thumbnail.get()) {
-    thumbnail = base::UTF8ToUTF16(*details.thumbnail.get());
+  vivaldi_bookmark_kit::CustomMetaInfo vivaldi_meta;
+  if (meta_info) {
+    vivaldi_meta.SetMap(*meta_info);
   }
-
-  base::string16 partner;  // Optional.
-  if (details.partner.get()) {
-    partner = base::UTF8ToUTF16(*details.partner.get());
+  if (details.nickname) {
+    vivaldi_meta.SetNickname(*details.nickname);
   }
+  if (details.description) {
+    vivaldi_meta.SetDescription(*details.description);
+  }
+  if (details.speeddial) {
+    vivaldi_meta.SetSpeeddial(*details.speeddial);
+  }
+  if (details.bookmarkbar) {
+    vivaldi_meta.SetBookmarkbar(*details.bookmarkbar);
+  }
+  if (details.thumbnail) {
+    vivaldi_meta.SetThumbnail(*details.thumbnail);
+  }
+  if (details.partner) {
+    vivaldi_meta.SetPartner(*details.partner);
+  }
+  if (details.default_favicon_uri) {
+    vivaldi_meta.SetDefaultFaviconUri(*details.default_favicon_uri);
+  }
+  meta_info = vivaldi_meta.map();
 
   // --- VIVALDI --- changed by Daniel Sig. @ 11-02-2015
   const BookmarkNode* node;
   if (url_string.length()) {
-    node = model->AddURLWithCreationTimeAndMetaInfo(
-        parent, index, title, url, base::Time::Now(), meta_info,
-        nickname, description, thumbnail, partner, speeddial);
+    node = model->AddURL(parent, index, title, url, meta_info);
   } else {
-    node = model->AddFolderWithMetaInfo(parent, index, title, meta_info,
-                                        nickname, description, partner,
-                                        speeddial, bookmarkbar);
+    node = model->AddFolder(parent, index, title, meta_info);
     model->SetDateFolderModified(parent, base::Time::Now());
   }
 
@@ -673,7 +672,7 @@ bool BookmarksCreateFunction::RunOnReady() {
     base::string16 nick = base::UTF8ToUTF16(*params->bookmark.nickname.get());
 
     if (nick.length() > 0) {
-      bool doesNickExists = ::bookmarks::DoesNickExists(
+      bool doesNickExists = bookmark_api_helpers::DoesNickExists(
           BookmarkModelFactory::GetForBrowserContext(GetProfile()), nick, -1);
 
       if (doesNickExists) {
@@ -768,7 +767,7 @@ bool BookmarksUpdateFunction::RunOnReady() {
         return false;
       }
 
-      bool doesNickExists = ::bookmarks::DoesNickExists(
+      bool doesNickExists = bookmark_api_helpers::DoesNickExists(
           BookmarkModelFactory::GetForBrowserContext(GetProfile()),
                                                      nick, idToCheck);
 
@@ -796,50 +795,6 @@ bool BookmarksUpdateFunction::RunOnReady() {
       error_ = kVivaldiReservedApiError;
       return false;
     }
-  }
-
-  std::string nickname;
-  bool has_nickname = false;
-  if (params->changes.nickname.get()) {
-    nickname = (*params->changes.nickname);
-    has_nickname = true;
-  }
-
-  std::string description;
-  bool has_description = false;
-  if (params->changes.description.get()) {
-    description = (*params->changes.description);
-    has_description = true;
-  }
-
-  std::string thumbnail;
-  bool has_thumbnail = false;
-  if (params->changes.thumbnail.get()) {
-    thumbnail = (*params->changes.thumbnail);
-    has_thumbnail = true;
-  }
-
-  std::string partner;
-  bool has_partner = false;
-  if (params->changes.partner.get()) {
-    partner = (*params->changes.partner);
-    has_partner = true;
-  }
-
-  bool speeddial = false;
-  std::string speeddial_str;
-  bool has_speeddial = false;
-  if (params->changes.speeddial.get()) {
-    speeddial = (*params->changes.speeddial);
-    has_speeddial = true;
-  }
-
-  bool bookmarkbar = false;
-  std::string bookmarkbar_str;
-  bool has_bookmarkbar = false;
-  if (params->changes.bookmarkbar.get()) {
-    bookmarkbar = (*params->changes.bookmarkbar);
-    has_bookmarkbar = true;
   }
 
   // Optional.
@@ -872,23 +827,30 @@ bool BookmarksUpdateFunction::RunOnReady() {
   if (!url.is_empty())
     model->SetURL(node, url);
 
-  if (has_nickname)
-    model->SetNodeMetaInfo(node, "Nickname", nickname);
-
-  if (has_description)
-    model->SetNodeMetaInfo(node, "Description", description);
-
-  if (has_thumbnail)
-    model->SetNodeMetaInfo(node, "Thumbnail", thumbnail);
-
-  if (has_partner)
-    model->SetNodeMetaInfo(node, "Partner", partner);
-
-  if (has_speeddial)
-    model->SetNodeMetaInfo(node, "Speeddial", speeddial ? "true" : "false");
-
-  if (has_bookmarkbar)
-    model->SetNodeMetaInfo(node, "Bookmarkbar", bookmarkbar ? "true" : "false");
+  vivaldi_bookmark_kit::CustomMetaInfo vivaldi_meta;
+  const BookmarkNode::MetaInfoMap *old_meta_info = node->GetMetaInfoMap();
+  if (old_meta_info) {
+    vivaldi_meta.SetMap(*old_meta_info);
+  }
+  if (params->changes.nickname) {
+    vivaldi_meta.SetNickname(*params->changes.nickname);
+  }
+  if (params->changes.description) {
+    vivaldi_meta.SetDescription(*params->changes.description);
+  }
+  if (params->changes.thumbnail) {
+    vivaldi_meta.SetThumbnail(*params->changes.thumbnail);
+  }
+  if (params->changes.partner) {
+    vivaldi_meta.SetPartner(*params->changes.partner);
+  }
+  if (params->changes.speeddial) {
+    vivaldi_meta.SetSpeeddial(*params->changes.speeddial);
+  }
+  if (params->changes.bookmarkbar) {
+    vivaldi_meta.SetBookmarkbar(*params->changes.bookmarkbar);
+  }
+  model->SetNodeMetaInfoMap(node, *vivaldi_meta.map());
 
   BookmarkTreeNode tree_node = bookmark_api_helpers::GetBookmarkTreeNode(
       GetManagedBookmarkService(), node, false, false);

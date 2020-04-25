@@ -24,12 +24,13 @@
 #include "cc/trees/mutator_host.h"
 #include "cc/trees/proxy_main.h"
 #include "cc/trees/render_frame_metadata_observer.h"
+#include "cc/trees/scroll_and_scale_set.h"
 #include "cc/trees/task_runner_provider.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
+#include "components/viz/common/frame_timing_details.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
-#include "ui/gfx/presentation_feedback.h"
 
 namespace cc {
 
@@ -378,6 +379,10 @@ size_t ProxyImpl::MainThreadAnimationsCount() const {
   return host_impl_->mutator_host()->MainThreadAnimationsCount();
 }
 
+bool ProxyImpl::HasCustomPropertyAnimations() const {
+  return host_impl_->mutator_host()->HasCustomPropertyAnimations();
+}
+
 bool ProxyImpl::CurrentFrameHadRAF() const {
   return host_impl_->mutator_host()->CurrentFrameHadRAF();
 }
@@ -500,13 +505,14 @@ void ProxyImpl::NotifyImageDecodeRequestFinished() {
 void ProxyImpl::DidPresentCompositorFrameOnImplThread(
     uint32_t frame_token,
     std::vector<LayerTreeHost::PresentationTimeCallback> callbacks,
-    const gfx::PresentationFeedback& feedback) {
+    const viz::FrameTimingDetails& details) {
   MainThreadTaskRunner()->PostTask(
-      FROM_HERE, base::BindOnce(&ProxyMain::DidPresentCompositorFrame,
-                                proxy_main_weak_ptr_, frame_token,
-                                std::move(callbacks), feedback));
+      FROM_HERE,
+      base::BindOnce(&ProxyMain::DidPresentCompositorFrame,
+                     proxy_main_weak_ptr_, frame_token, std::move(callbacks),
+                     details.presentation_feedback));
   if (scheduler_)
-    scheduler_->DidPresentCompositorFrame(frame_token, feedback.timestamp);
+    scheduler_->DidPresentCompositorFrame(frame_token, details);
 }
 
 void ProxyImpl::NotifyAnimationWorkletStateChange(

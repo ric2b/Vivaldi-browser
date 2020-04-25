@@ -19,19 +19,18 @@
 #include "ui/ozone/platform/x11/x11_cursor_factory_ozone.h"
 #include "ui/ozone/platform/x11/x11_screen_ozone.h"
 #include "ui/ozone/platform/x11/x11_surface_factory.h"
-#include "ui/ozone/platform/x11/x11_window_manager_ozone.h"
 #include "ui/ozone/platform/x11/x11_window_ozone.h"
 #include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/input_controller.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/system_input_injector.h"
-#include "ui/platform_window/platform_window.h"
+#include "ui/platform_window/platform_window_base.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 
 #if defined(OS_CHROMEOS)
 #include "ui/base/ime/chromeos/input_method_chromeos.h"
 #else
-#include "ui/base/ime/input_method_minimal.h"
+#include "ui/base/ime/linux/input_method_auralinux.h"
 #endif
 
 namespace ui {
@@ -80,11 +79,11 @@ class OzonePlatformX11 : public OzonePlatform {
     return gpu_platform_support_host_.get();
   }
 
-  std::unique_ptr<PlatformWindow> CreatePlatformWindow(
+  std::unique_ptr<PlatformWindowBase> CreatePlatformWindow(
       PlatformWindowDelegate* delegate,
       PlatformWindowInitProperties properties) override {
     std::unique_ptr<X11WindowOzone> window =
-        std::make_unique<X11WindowOzone>(delegate, window_manager_.get());
+        std::make_unique<X11WindowOzone>(delegate);
     window->Initialize(std::move(properties));
     window->SetTitle(base::ASCIIToUTF16("Ozone X11"));
     return std::move(window);
@@ -96,8 +95,7 @@ class OzonePlatformX11 : public OzonePlatform {
   }
 
   std::unique_ptr<PlatformScreen> CreateScreen() override {
-    DCHECK(window_manager_);
-    auto screen = std::make_unique<X11ScreenOzone>(window_manager_.get());
+    auto screen = std::make_unique<X11ScreenOzone>();
     screen->Init();
     return screen;
   }
@@ -111,9 +109,7 @@ class OzonePlatformX11 : public OzonePlatform {
 #if defined(OS_CHROMEOS)
     return std::make_unique<InputMethodChromeOS>(delegate);
 #else
-    // TODO(spang): Fix InputMethodAuraLinux which requires another level
-    // of initization.
-    return std::make_unique<InputMethodMinimal>(delegate);
+    return std::make_unique<InputMethodAuraLinux>(delegate);
 #endif
   }
 
@@ -124,7 +120,6 @@ class OzonePlatformX11 : public OzonePlatform {
   void InitializeUI(const InitParams& params) override {
     InitializeCommon(params);
     CreatePlatformEventSource();
-    window_manager_ = std::make_unique<X11WindowManagerOzone>();
     overlay_manager_ = std::make_unique<StubOverlayManager>();
     input_controller_ = CreateStubInputController();
     clipboard_ = std::make_unique<X11ClipboardOzone>();
@@ -177,7 +172,6 @@ class OzonePlatformX11 : public OzonePlatform {
   bool common_initialized_ = false;
 
   // Objects in the UI process.
-  std::unique_ptr<X11WindowManagerOzone> window_manager_;
   std::unique_ptr<OverlayManagerOzone> overlay_manager_;
   std::unique_ptr<InputController> input_controller_;
   std::unique_ptr<X11ClipboardOzone> clipboard_;

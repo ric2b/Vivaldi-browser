@@ -14,7 +14,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "ui/message_center/message_center_observer.h"
 
 namespace message_center {
@@ -126,10 +127,11 @@ class ASH_EXPORT MultiDeviceNotificationPresenter
   // Status::kNoNotificationVisible if there isn't one.
   Status notification_status_ = Status::kNoNotificationVisible;
 
-  chromeos::multidevice_setup::mojom::MultiDeviceSetupPtr
-      multidevice_setup_ptr_;
-  mojo::Binding<chromeos::multidevice_setup::mojom::AccountStatusChangeDelegate>
-      binding_;
+  mojo::Remote<chromeos::multidevice_setup::mojom::MultiDeviceSetup>
+      multidevice_setup_remote_;
+  mojo::Receiver<
+      chromeos::multidevice_setup::mojom::AccountStatusChangeDelegate>
+      receiver_{this};
 
   base::WeakPtrFactory<MultiDeviceNotificationPresenter> weak_ptr_factory_{
       this};

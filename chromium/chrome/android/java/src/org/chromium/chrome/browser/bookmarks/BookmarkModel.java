@@ -13,6 +13,8 @@ import org.chromium.components.bookmarks.BookmarkType;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * A class that encapsulates {@link BookmarkBridge} and provides extra features such as undo, large
  * icon fetching, reader mode url redirecting, etc. This class should serve as the single class for
@@ -84,8 +86,11 @@ public class BookmarkModel extends BookmarkBridge {
      * @param bookmarks Bookmarks to delete. Note this array should not contain a folder and its
      *                  children, because deleting folder will also remove all its children, and
      *                  deleting children once more will cause errors.
+     * Vivaldi specific: Move one or multiple bookmarks to the Trash folder. For Vivaldi, 'undo'
+     * is disabled.
      */
-    void deleteBookmarks(BookmarkId... bookmarks) {
+     void deleteBookmarks(BookmarkId... bookmarks) {
+        if (ChromeApplication.isVivaldi()) { deleteBookmarksPublic(bookmarks); return; }
         assert bookmarks != null && bookmarks.length > 0;
         // Store all titles of bookmarks.
         List<String> titles = new ArrayList<>();
@@ -131,5 +136,40 @@ public class BookmarkModel extends BookmarkBridge {
      */
     public BookmarkId getDefaultFolder() {
         return getMobileFolderId();
+    }
+
+    /** Vivaldi **/
+    public String getBookmarkTitlePublic(BookmarkId bookmarkId) { return getBookmarkTitle(bookmarkId); }
+
+    public boolean isInsideTrashFolder(BookmarkId folderId) {
+        BookmarkItem item = getBookmarkById(folderId);
+        if (item == null) return false;
+        return item.getParentId().equals(getTrashFolderId());
+    }
+
+    /**
+     * Vivaldi specific delete to handle moving items to trash instead of deleting immediately
+     * NOTE: This version does not handle undo
+     * @param bookmarks
+     */
+    public void deleteBookmarksPublic(BookmarkId... bookmarks) {
+        assert bookmarks != null && bookmarks.length > 0;
+        // Store all titles of bookmarks.
+        List<String> titles = new ArrayList<>();
+        BookmarkId trashFolderId = getTrashFolderId();
+        int appendIndex = getChildCount(trashFolderId);
+        for (BookmarkId bookmarkId : bookmarks) {
+            BookmarkItem bookmarkItem = getBookmarkById(bookmarkId);
+            if (bookmarkItem == null) continue;
+            titles.add(bookmarkItem.getTitle());
+            if (bookmarkItem.getParentId().equals(trashFolderId))
+                deleteBookmark(bookmarkId);
+            else
+                moveBookmark(bookmarkId, trashFolderId, appendIndex++);
+        }
+
+        for (BookmarkDeleteObserver observer : mDeleteObservers) {
+            observer.onDeleteBookmarks(titles.toArray(new String[titles.size()]), false);
+        }
     }
 }

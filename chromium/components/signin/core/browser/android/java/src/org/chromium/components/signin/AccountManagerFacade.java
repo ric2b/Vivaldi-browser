@@ -17,10 +17,11 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.os.UserManager;
-import android.support.annotation.AnyThread;
-import android.support.annotation.MainThread;
-import android.support.annotation.Nullable;
-import android.support.annotation.WorkerThread;
+
+import androidx.annotation.AnyThread;
+import androidx.annotation.MainThread;
+import androidx.annotation.Nullable;
+import androidx.annotation.WorkerThread;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
@@ -28,6 +29,7 @@ import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.CachedMetrics;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.components.signin.util.PatternMatcher;
@@ -164,6 +166,7 @@ public class AccountManagerFacade {
      * @return a singleton instance
      */
     @AnyThread
+    @CalledByNative
     public static AccountManagerFacade get() {
         AccountManagerFacade instance = sAtomicInstance.get();
         assert instance != null : "AccountManagerFacade is not initialized!";

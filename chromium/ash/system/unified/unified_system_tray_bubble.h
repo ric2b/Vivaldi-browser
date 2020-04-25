@@ -61,11 +61,23 @@ class ASH_EXPORT UnifiedSystemTrayBubble
   // Close the bubble immediately.
   void CloseNow();
 
+  // Collapse the message center bubble.
+  void CollapseMessageCenter();
+
+  // Expand the message center bubble.
+  void ExpandMessageCenter();
+
+  // Ensure the bubble is collapsed.
+  void EnsureCollapsed();
+
   // Ensure the bubble is expanded.
   void EnsureExpanded();
 
   // Show audio settings detailed view.
   void ShowAudioDetailedView();
+
+  // Show network settings detailed view.
+  void ShowNetworkDetailedView(bool force);
 
   // Update bubble bounds and focus if necessary.
   void UpdateBubble();
@@ -83,6 +95,12 @@ class ASH_EXPORT UnifiedSystemTrayBubble
   // Return the current visible height of the tray, even when partially
   // collapsed / expanded.
   int GetCurrentTrayHeight() const;
+
+  // Relinquish focus and transfer it to the message center widget.
+  bool FocusOut(bool reverse);
+
+  // Inform UnifiedSystemTrayView of focus being acquired.
+  void FocusEntered(bool reverse);
 
   // TrayBubbleBase:
   TrayBackgroundView* GetTray() const override;
@@ -111,6 +129,10 @@ class ASH_EXPORT UnifiedSystemTrayBubble
   void OnAutoHideStateChanged(ShelfAutoHideState new_state) override;
 
   UnifiedSystemTrayView* unified_view() { return unified_view_; }
+
+  UnifiedSystemTrayController* controller_for_test() {
+    return controller_.get();
+  }
 
  private:
   friend class UnifiedSystemTrayTestApi;

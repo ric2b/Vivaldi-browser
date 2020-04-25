@@ -17,7 +17,7 @@
 #include "base/sequence_checker.h"
 #include "base/sequenced_task_runner.h"
 #include "chrome/browser/performance_manager/persistence/site_data/site_data_cache.h"
-#include "chrome/browser/performance_manager/public/graph/graph.h"
+#include "components/performance_manager/public/graph/graph.h"
 #include "content/public/browser/browser_context.h"
 
 namespace content {
@@ -30,7 +30,8 @@ class SiteDataCacheInspector;
 
 // This class is responsible for tracking the SiteDataCache instances associated
 // with each browser context. It is meant to be used as a bridge between the
-// browser contexts living on the UI thread and the PerformanceManager sequence.
+// browser contexts living on the UI thread and the PerformanceManager
+// sequence.
 //
 // This can be created on any sequence but it then should be passed to the
 // graph and used on the PerformanceManager sequence.

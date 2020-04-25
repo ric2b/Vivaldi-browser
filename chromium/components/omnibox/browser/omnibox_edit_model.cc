@@ -405,7 +405,8 @@ void OmniboxEditModel::AdjustTextForCopy(int sel_min,
   client_->GetAutocompleteClassifier()->Classify(*text, is_keyword_selected(),
                                                  true, GetPageClassification(),
                                                  &match_from_text, nullptr);
-  if (AutocompleteMatch::IsSearchType(match_from_text.type))
+  if (AutocompleteMatch::IsSearchType(match_from_text.type) ||
+      match_from_text.is_navigational_title_match)
     return;
 
   // Make our best GURL interpretation of |text|.
@@ -1054,7 +1055,8 @@ void OmniboxEditModel::ClearKeyword() {
   }
 }
 
-void OmniboxEditModel::OnSetFocus(bool control_down) {
+void OmniboxEditModel::OnSetFocus(bool control_down,
+                                  bool suppress_on_focus_suggestions) {
   last_omnibox_focus_ = base::TimeTicks::Now();
   user_input_since_focus_ = false;
 
@@ -1068,24 +1070,36 @@ void OmniboxEditModel::OnSetFocus(bool control_down) {
   // example, if the user presses ctrl-l to focus the omnibox.
   control_key_state_ = control_down ? DOWN_AND_CONSUMED : UP;
 
-  // Try to get ZeroSuggest suggestions if a page is loaded and the user has
-  // not been typing in the omnibox.  The |user_input_in_progress_| check is
-  // used to detect the case where this function is called after right-clicking
-  // in the omnibox and selecting paste in Linux (in which case we actually get
-  // the OnSetFocus() call after the process of handling the paste has kicked
-  // off).
-  // TODO(hfung): Remove this when crbug/271590 is fixed.
-  if (client_->CurrentPageExists() && !user_input_in_progress_) {
-    input_ = AutocompleteInput(url_for_editing_, GetPageClassification(),
-                               client_->GetSchemeClassifier());
-    input_.set_current_url(client_->GetURL());
-    input_.set_current_title(client_->GetTitle());
-    input_.set_from_omnibox_focus(true);
-    autocomplete_controller()->Start(input_);
-  }
+  if (!suppress_on_focus_suggestions)
+    ShowOnFocusSuggestionsIfAutocompleteIdle();
 
   if (user_input_in_progress_ || !in_revert_)
     client_->OnInputStateChanged();
+}
+
+void OmniboxEditModel::ShowOnFocusSuggestionsIfAutocompleteIdle() {
+  // Early exit if a query is already in progress or the popup is already open.
+  // This is what allows this method to be called multiple times in multiple
+  // code locations without harm.
+  if (query_in_progress() || PopupIsOpen())
+    return;
+
+  // Early exit if the page has not loaded yet, so we don't annoy users.
+  if (!client_->CurrentPageExists())
+    return;
+
+  // Early exit if the user already has a navigation or search query in mind.
+  if (user_input_in_progress_)
+    return;
+
+  // Send the textfield contents exactly as-is, as otherwise the verbatim
+  // match can be wrong. The full page URL is anyways in set_current_url().
+  input_ = AutocompleteInput(view_->GetText(), GetPageClassification(),
+                             client_->GetSchemeClassifier());
+  input_.set_current_url(client_->GetURL());
+  input_.set_current_title(client_->GetTitle());
+  input_.set_from_omnibox_focus(true);
+  autocomplete_controller()->Start(input_);
 }
 
 void OmniboxEditModel::SetCaretVisibility(bool visible) {
@@ -1123,7 +1137,7 @@ bool OmniboxEditModel::WillHandleEscapeKey() const {
 
 bool OmniboxEditModel::OnEscapeKeyPressed() {
   if (has_temporary_text_) {
-    RevertTemporaryText(true);
+    RevertTemporaryTextAndPopup();
     return true;
   }
 
@@ -1177,9 +1191,15 @@ void OmniboxEditModel::OnUpOrDownKeyPressed(int count) {
     // If, as a result of the key press, we would select the first result, then
     // we should revert the temporary text same as what pressing escape would
     // have done.
+    //
+    // Reverting, however, does not make sense for on-focus suggestions
+    // (user_input_in_progress_ is false) unless the first result is a
+    // verbatim match of the omnibox input (on-focus query refinements on SERP).
     const size_t line_no = GetNewSelectedLine(count);
-    if (has_temporary_text_ && line_no == 0) {
-      RevertTemporaryText(true);
+    if (has_temporary_text_ && line_no == 0 &&
+        (user_input_in_progress_ ||
+         result().default_match()->IsVerbatimType())) {
+      RevertTemporaryTextAndPopup();
     } else {
       popup_model()->MoveTo(line_no);
     }
@@ -1205,13 +1225,11 @@ void OmniboxEditModel::OnUpOrDownKeyPressed(int count) {
   // force it to open immediately.
 }
 
-void OmniboxEditModel::OnPopupDataChanged(
-    const base::string16& text,
-    GURL* destination_for_temporary_text_change,
-    const base::string16& keyword,
-    bool is_keyword_hint) {
-  if (!original_user_text_with_keyword_.empty() &&
-      !destination_for_temporary_text_change &&
+void OmniboxEditModel::OnPopupDataChanged(const base::string16& text,
+                                          bool is_temporary_text,
+                                          const base::string16& keyword,
+                                          bool is_keyword_hint) {
+  if (!original_user_text_with_keyword_.empty() && !is_temporary_text &&
       (keyword.empty() || is_keyword_hint)) {
     user_text_ = original_user_text_with_keyword_;
     original_user_text_with_keyword_.clear();
@@ -1242,7 +1260,7 @@ void OmniboxEditModel::OnPopupDataChanged(
   }
 
   // Handle changes to temporary text.
-  if (destination_for_temporary_text_change) {
+  if (is_temporary_text) {
     const bool save_original_selection = !has_temporary_text_;
     if (save_original_selection) {
       // Save the original selection and URL so it can be reverted later.
@@ -1273,7 +1291,7 @@ void OmniboxEditModel::OnPopupDataChanged(
     view_->OnInlineAutocompleteTextCleared();
 
   const base::string16& user_text =
-      user_input_in_progress_ ? user_text_ : view_->GetText();
+      user_input_in_progress_ ? user_text_ : input_.text();
   if (keyword_state_changed && is_keyword_selected() &&
       inline_autocomplete_text_.empty()) {
     // If we reach here, the user most likely entered keyword mode by inserting
@@ -1289,8 +1307,9 @@ void OmniboxEditModel::OnPopupDataChanged(
     //
     // It may also be possible to reach here if we're reverting from having
     // temporary text back to a default match that's a keyword search, but in
-    // that case the RevertTemporaryText() call below will reset the caret or
-    // selection correctly so the caret positioning we do here won't matter.
+    // that case the RevertTemporaryTextAndPopup() call below will reset the
+    // caret or selection correctly so the caret positioning we do here won't
+    // matter.
     view_->SetWindowTextAndCaretPos(user_text, 0, false, true);
   } else if (view_->OnInlineAutocompleteTextMaybeChanged(
                  user_text + inline_autocomplete_text_, user_text.length())) {
@@ -1448,7 +1467,8 @@ void OmniboxEditModel::OnCurrentMatchChanged() {
   // on.  Therefore, copy match.inline_autocompletion to a temp to preserve
   // its value across the entire call.
   const base::string16 inline_autocompletion(match.inline_autocompletion);
-  OnPopupDataChanged(inline_autocompletion, nullptr, keyword, is_keyword_hint);
+  OnPopupDataChanged(inline_autocompletion,
+                     /*is_temporary_text=*/false, keyword, is_keyword_hint);
 }
 
 // static
@@ -1507,28 +1527,30 @@ void OmniboxEditModel::GetInfoForCurrentText(AutocompleteMatch* match,
         (!popup_model() || !popup_model()->has_selected_match()))
       *alternate_nav_url = result().alternate_nav_url();
   } else {
-    LocationBarModel* location_bar_model = controller()->GetLocationBarModel();
-    base::string16 text_for_match_generation =
-        (user_input_in_progress() ||
-         location_bar_model->GetDisplaySearchTerms(nullptr))
-            ? view_->GetText()
-            : url_for_editing_;
-
     client_->GetAutocompleteClassifier()->Classify(
-        MaybePrependKeyword(text_for_match_generation), is_keyword_selected(),
-        true, GetPageClassification(), match, alternate_nav_url);
+        MaybePrependKeyword(view_->GetText()), is_keyword_selected(), true,
+        GetPageClassification(), match, alternate_nav_url);
   }
 }
 
-void OmniboxEditModel::RevertTemporaryText(bool revert_popup) {
+void OmniboxEditModel::RevertTemporaryTextAndPopup() {
   // The user typed something, then selected a different item.  Restore the
   // text they typed and change back to the default item.
   // NOTE: This purposefully does not reset paste_state_.
   just_deleted_text_ = false;
   has_temporary_text_ = false;
 
-  if (revert_popup && popup_model())
+  if (popup_model())
     popup_model()->ResetToDefaultMatch();
+
+  // If user input is not in progress, we are reverting an on-focus suggestion.
+  // Set the window text back to the original input, rather than the top match.
+  // The original selection will be restored in OnRevertTemporaryText() below.
+  if (!user_input_in_progress_) {
+    view_->SetWindowTextAndCaretPos(input_.text(), /*caret_pos=*/0,
+                                    /*update_popup=*/false,
+                                    /*notify_text_changed=*/true);
+  }
 
   const AutocompleteMatch& match = CurrentMatch(nullptr);
   view_->OnRevertTemporaryText(match.fill_into_edit, match);
@@ -1635,20 +1657,9 @@ void OmniboxEditModel::SetFocusState(OmniboxFocusState state,
 }
 
 size_t OmniboxEditModel::GetNewSelectedLine(int count) {
-  if (!OmniboxFieldTrial::IsOmniboxWrapPopupPositionEnabled()) {
-    if (count < 0) {
-      if ((size_t)-count >= popup_model()->selected_line())
-        return 0;
-    } else if (count + popup_model()->selected_line() >=
-               popup_model()->result().size()) {
-      return popup_model()->result().size() - 1;
-    }
-    return popup_model()->selected_line() + count;
-  } else {
-    int line_no = (static_cast<int>(popup_model()->selected_line()) + count) %
-                  static_cast<int>(popup_model()->result().size());
-    if (line_no < 0)
-      line_no += popup_model()->result().size();
-    return line_no;
-  }
+  int line_no = (static_cast<int>(popup_model()->selected_line()) + count) %
+                static_cast<int>(popup_model()->result().size());
+  if (line_no < 0)
+    line_no += popup_model()->result().size();
+  return line_no;
 }

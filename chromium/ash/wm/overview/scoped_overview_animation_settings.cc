@@ -44,7 +44,7 @@ constexpr base::TimeDelta kOverviewHighlightTransition =
     base::TimeDelta::FromMilliseconds(250);
 
 // Time duration of the show animation of the drop target.
-constexpr base::TimeDelta kDropTargetFadeIn =
+constexpr base::TimeDelta kDropTargetFade =
     base::TimeDelta::FromMilliseconds(250);
 
 base::TimeDelta GetAnimationDuration(OverviewAnimationType animation_type) {
@@ -60,6 +60,7 @@ base::TimeDelta GetAnimationDuration(OverviewAnimationType animation_type) {
     case OVERVIEW_ANIMATION_LAYOUT_OVERVIEW_ITEMS_ON_EXIT:
     case OVERVIEW_ANIMATION_RESTORE_WINDOW:
     case OVERVIEW_ANIMATION_RESTORE_WINDOW_ZERO:
+    case OVERVIEW_ANIMATION_SPAWN_ITEM_IN_OVERVIEW:
       return kTransition;
     case OVERVIEW_ANIMATION_CLOSING_OVERVIEW_ITEM:
       return kCloseScale;
@@ -68,8 +69,8 @@ base::TimeDelta GetAnimationDuration(OverviewAnimationType animation_type) {
     case OVERVIEW_ANIMATION_ENTER_FROM_HOME_LAUNCHER:
     case OVERVIEW_ANIMATION_EXIT_TO_HOME_LAUNCHER:
       return kHomeLauncherTransition;
-    case OVERVIEW_ANIMATION_DROP_TARGET_FADE_IN:
-      return kDropTargetFadeIn;
+    case OVERVIEW_ANIMATION_DROP_TARGET_FADE:
+      return kDropTargetFade;
     case OVERVIEW_ANIMATION_NO_RECENTS_FADE:
     case OVERVIEW_ANIMATION_SELECTION_WINDOW:
     case OVERVIEW_ANIMATION_FRAME_HEADER_CLIP:
@@ -132,6 +133,7 @@ ScopedOverviewAnimationSettings::ScopedOverviewAnimationSettings(
     case OVERVIEW_ANIMATION_LAYOUT_OVERVIEW_ITEMS_IN_OVERVIEW:
     case OVERVIEW_ANIMATION_LAYOUT_OVERVIEW_ITEMS_ON_EXIT:
     case OVERVIEW_ANIMATION_RESTORE_WINDOW:
+    case OVERVIEW_ANIMATION_SPAWN_ITEM_IN_OVERVIEW:
       animation_settings_->SetTweenType(gfx::Tween::EASE_OUT);
       animation_settings_->SetPreemptionStrategy(
           ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
@@ -161,7 +163,7 @@ ScopedOverviewAnimationSettings::ScopedOverviewAnimationSettings(
       animation_settings_->SetPreemptionStrategy(
           ui::LayerAnimator::REPLACE_QUEUED_ANIMATIONS);
       break;
-    case OVERVIEW_ANIMATION_DROP_TARGET_FADE_IN:
+    case OVERVIEW_ANIMATION_DROP_TARGET_FADE:
       animation_settings_->SetTweenType(gfx::Tween::EASE_IN);
       animation_settings_->SetPreemptionStrategy(
           ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);

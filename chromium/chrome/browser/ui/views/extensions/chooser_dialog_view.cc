@@ -43,11 +43,20 @@ ChooserDialogView::ChooserDialogView(
   // ------------------------------------
 
   DCHECK(chooser_controller);
+
+  DialogDelegate::set_button_label(ui::DIALOG_BUTTON_OK,
+                                   chooser_controller->GetOkButtonLabel());
+  DialogDelegate::set_button_label(ui::DIALOG_BUTTON_CANCEL,
+                                   chooser_controller->GetCancelButtonLabel());
+
   device_chooser_content_view_ =
       new DeviceChooserContentView(this, std::move(chooser_controller));
   device_chooser_content_view_->SetBorder(views::CreateEmptyBorder(
       ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
           views::CONTROL, views::CONTROL)));
+
+  DialogDelegate::SetExtraView(device_chooser_content_view_->CreateExtraView());
+
   chrome::RecordDialogCreation(chrome::DialogIdentifier::CHOOSER);
 }
 
@@ -65,11 +74,6 @@ ui::ModalType ChooserDialogView::GetModalType() const {
   return ui::MODAL_TYPE_CHILD;
 }
 
-base::string16 ChooserDialogView::GetDialogButtonLabel(
-    ui::DialogButton button) const {
-  return device_chooser_content_view_->GetDialogButtonLabel(button);
-}
-
 bool ChooserDialogView::IsDialogButtonEnabled(ui::DialogButton button) const {
   return device_chooser_content_view_->IsDialogButtonEnabled(button);
 }
@@ -77,10 +81,6 @@ bool ChooserDialogView::IsDialogButtonEnabled(ui::DialogButton button) const {
 views::View* ChooserDialogView::GetInitiallyFocusedView() {
   const views::DialogClientView* dcv = GetDialogClientView();
   return dcv ? dcv->cancel_button() : nullptr;
-}
-
-std::unique_ptr<views::View> ChooserDialogView::CreateExtraView() {
-  return device_chooser_content_view_->CreateExtraView();
 }
 
 bool ChooserDialogView::Accept() {

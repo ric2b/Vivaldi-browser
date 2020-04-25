@@ -8,6 +8,7 @@
 #include "ipc/ipc_message_utils.h"
 #include "mojo/public/cpp/bindings/enum_traits.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_change_dispatcher.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_options.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
@@ -29,6 +30,15 @@ struct EnumTraits<network::mojom::CookieSameSite, net::CookieSameSite> {
 };
 
 template <>
+struct EnumTraits<network::mojom::CookieAccessSemantics,
+                  net::CookieAccessSemantics> {
+  static network::mojom::CookieAccessSemantics ToMojom(
+      net::CookieAccessSemantics input);
+  static bool FromMojom(network::mojom::CookieAccessSemantics input,
+                        net::CookieAccessSemantics* output);
+};
+
+template <>
 struct EnumTraits<network::mojom::CookieInclusionStatusWarningReason,
                   net::CanonicalCookie::CookieInclusionStatus::WarningReason> {
   static network::mojom::CookieInclusionStatusWarningReason ToMojom(
@@ -46,6 +56,15 @@ struct EnumTraits<network::mojom::CookieSameSiteContext,
 
   static bool FromMojom(network::mojom::CookieSameSiteContext input,
                         net::CookieOptions::SameSiteCookieContext* output);
+};
+
+template <>
+struct EnumTraits<network::mojom::CookieChangeCause, net::CookieChangeCause> {
+  static network::mojom::CookieChangeCause ToMojom(
+      net::CookieChangeCause input);
+
+  static bool FromMojom(network::mojom::CookieChangeCause input,
+                        net::CookieChangeCause* output);
 };
 
 template <>
@@ -151,6 +170,23 @@ struct StructTraits<network::mojom::CookieAndLineWithStatusDataView,
   }
   static bool Read(network::mojom::CookieAndLineWithStatusDataView cookie,
                    net::CookieAndLineWithStatus* out);
+};
+
+template <>
+struct StructTraits<network::mojom::CookieChangeInfoDataView,
+                    net::CookieChangeInfo> {
+  static const net::CanonicalCookie& cookie(const net::CookieChangeInfo& c) {
+    return c.cookie;
+  }
+  static net::CookieAccessSemantics access_semantics(
+      const net::CookieChangeInfo& c) {
+    return c.access_semantics;
+  }
+  static net::CookieChangeCause cause(const net::CookieChangeInfo& c) {
+    return c.cause;
+  }
+  static bool Read(network::mojom::CookieChangeInfoDataView info,
+                   net::CookieChangeInfo* out);
 };
 
 }  // namespace mojo

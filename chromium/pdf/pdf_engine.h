@@ -55,10 +55,12 @@ class VarDictionary;
 
 namespace chrome_pdf {
 
+class DocumentLayout;
+
 // Do one time initialization of the SDK.
 // If |enable_v8| is false, then the PDFEngine will not be able to run
 // JavaScript.
-bool InitializeSDK(bool enable_v8);
+void InitializeSDK(bool enable_v8);
 // Tells the SDK that we're shutting down.
 void ShutdownSDK();
 
@@ -136,8 +138,10 @@ class PDFEngine {
    public:
     virtual ~Client() {}
 
-    // Informs the client about the document's size in pixels.
-    virtual void DocumentSizeUpdated(const pp::Size& size) {}
+    // Proposes a document layout to the client.
+    // TODO(crbug.com/885110): Layout still occurs immediately for now. In the
+    // future, the client will need to accept the layout before it takes effect.
+    virtual void ProposeDocumentLayout(const DocumentLayout& layout) = 0;
 
     // Informs the client that the given rect needs to be repainted.
     virtual void Invalidate(const pp::Rect& rect) {}
@@ -163,6 +167,13 @@ class PDFEngine {
     // Navigate to the given url.
     virtual void NavigateTo(const std::string& url,
                             WindowOpenDisposition disposition) {}
+
+    // Navigate to the given destination. Zero-based |page| index. |x|, |y| and
+    // |zoom| are optional and can be nullptr.
+    virtual void NavigateToDestination(int page,
+                                       const float* x,
+                                       const float* y,
+                                       const float* zoom) {}
 
     // Updates the cursor.
     virtual void UpdateCursor(PP_CursorType_Dev cursor) {}
@@ -340,8 +351,6 @@ class PDFEngine {
       const std::string& destination) = 0;
   // Gets the index of the most visible page, or -1 if none are visible.
   virtual int GetMostVisiblePage() = 0;
-  // Gets the rectangle of the page including shadow.
-  virtual pp::Rect GetPageRect(int index) = 0;
   // Gets the rectangle of the page not including the shadow.
   virtual pp::Rect GetPageBoundsRect(int index) = 0;
   // Gets the rectangle of the page excluding any additional areas.
@@ -367,6 +376,24 @@ class PDFEngine {
   virtual base::Optional<PP_PrivateAccessibilityTextRunInfo> GetTextRunInfo(
       int page_index,
       int start_char_index) = 0;
+  // Gets the number of links on a given page.
+  virtual uint32_t GetLinkCount(int page_index) = 0;
+  // Gets url, underlying text range and bounding box of a link at |link_index|
+  // on page |page_index|. Returns false if the |link_index| is invalid.
+  virtual bool GetLinkInfo(int page_index,
+                           uint32_t link_index,
+                           std::string* out_url,
+                           int* out_start_char_index,
+                           int* out_char_count,
+                           pp::FloatRect* out_bounds) = 0;
+  // Gets the number of images on a given page.
+  virtual uint32_t GetImageCount(int page_index) = 0;
+  // Gets the alt text and bounding box of an image at |image_index| on page
+  // |page_index|. Returns false if the |image_index| is invalid.
+  virtual bool GetImageInfo(int page_index,
+                            uint32_t image_index,
+                            std::string* out_alt_text,
+                            pp::FloatRect* out_bounds) = 0;
   // Gets the PDF document's print scaling preference. True if the document can
   // be scaled to fit.
   virtual bool GetPrintScaling() = 0;

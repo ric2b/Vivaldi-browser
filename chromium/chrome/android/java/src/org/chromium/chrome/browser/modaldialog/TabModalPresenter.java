@@ -22,6 +22,7 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabAttributeKeys;
 import org.chromium.chrome.browser.tab.TabAttributes;
@@ -289,6 +290,8 @@ public class TabModalPresenter
      * @param restricted Whether the browser controls access should be restricted.
      */
     private void setBrowserControlsAccess(boolean restricted) {
+        if (mChromeActivity.getToolbarManager() == null) return;
+
         View menuButton = mChromeActivity.getToolbarManager().getMenuButtonView();
 
         if (restricted) {
@@ -324,7 +327,8 @@ public class TabModalPresenter
             // Force toolbar to show and disable overflow menu.
             onTabModalDialogStateChanged(true);
 
-            mChromeActivity.getToolbarManager().setUrlBarFocus(false);
+            mChromeActivity.getToolbarManager().setUrlBarFocus(
+                    false, LocationBar.OmniboxFocusReason.UNFOCUS);
 
             menuButton.setEnabled(false);
         } else {
@@ -355,12 +359,16 @@ public class TabModalPresenter
         if (isShowing) mActiveTab.exitFullscreenMode();
 
         // Also need to update browser control state after dismissal to refresh the constraints.
-        if (isShowing && mActiveTab.areRendererInputEventsIgnored()) {
+        if (isShowing && areRendererInputEventsIgnored()) {
             mChromeFullscreenManager.showAndroidControls(true);
         } else {
             TabBrowserControlsState.update(mActiveTab, BrowserControlsState.SHOWN,
                     !mChromeFullscreenManager.offsetOverridden());
         }
+    }
+
+    private boolean areRendererInputEventsIgnored() {
+        return mActiveTab.getWebContents().getMainFrame().areInputEventsIgnored();
     }
 
     /**

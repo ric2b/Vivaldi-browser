@@ -12,7 +12,6 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.support.v4.app.DialogFragment;
@@ -30,13 +29,13 @@ import org.chromium.base.CollectionUtil;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.favicon.FaviconUtils;
 import org.chromium.chrome.browser.favicon.IconType;
 import org.chromium.chrome.browser.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.favicon.LargeIconBridge.LargeIconCallback;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.ui.widget.RoundedIconGenerator;
 import org.chromium.chrome.browser.util.ConversionUtils;
-import org.chromium.chrome.browser.util.ViewUtils;
-import org.chromium.chrome.browser.widget.RoundedIconGenerator;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -65,7 +64,7 @@ public class ConfirmImportantSitesDialogFragment extends DialogFragment {
             mDomains = domains;
             mFaviconURLs = faviconURLs;
             mFaviconSize = resources.getDimensionPixelSize(R.dimen.default_favicon_size);
-            mIconGenerator = ViewUtils.createDefaultRoundedIconGenerator(getResources(), false);
+            mIconGenerator = FaviconUtils.createRoundedRectangleIconGenerator(getResources());
         }
 
         @Override
@@ -117,23 +116,12 @@ public class ConfirmImportantSitesDialogFragment extends DialogFragment {
                 public void onLargeIconAvailable(Bitmap icon, int fallbackColor,
                         boolean isFallbackColorDefault, @IconType int iconType) {
                     if (this != viewHolder.imageCallback) return;
-                    Drawable image = getFaviconDrawable(icon, fallbackColor, url);
+                    Drawable image = FaviconUtils.getIconDrawableWithoutFilter(
+                            icon, url, fallbackColor, mIconGenerator, getResources(), mFaviconSize);
                     viewHolder.imageView.setImageDrawable(image);
                 }
             };
             mLargeIconBridge.getLargeIconForUrl(url, mFaviconSize, viewHolder.imageCallback);
-        }
-
-        private Drawable getFaviconDrawable(Bitmap icon, int fallbackColor, String url) {
-            if (icon == null) {
-                mIconGenerator.setBackgroundColor(fallbackColor);
-                icon = mIconGenerator.generateIconForUrl(url);
-                return new BitmapDrawable(getResources(), icon);
-            } else {
-                return ViewUtils.createRoundedBitmapDrawable(
-                        Bitmap.createScaledBitmap(icon, mFaviconSize, mFaviconSize, false),
-                        ViewUtils.DEFAULT_FAVICON_CORNER_RADIUS);
-            }
         }
     }
 

@@ -9,6 +9,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/loader/download_utils_impl.h"
@@ -208,7 +209,6 @@ net::RedirectInfo CreateRedirectInfo(
   // Step 3. Set actualResponse's status to 303. [spec text]
   return net::RedirectInfo::ComputeRedirectInfo(
       "GET", outer_request.url, outer_request.site_for_cookies,
-      outer_request.top_frame_origin,
       outer_request.update_first_party_url_on_redirect
           ? net::URLRequest::FirstPartyURLPolicy::
                 UPDATE_FIRST_PARTY_URL_ON_REDIRECT

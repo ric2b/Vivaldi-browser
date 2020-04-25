@@ -501,7 +501,7 @@ def _ParseOptions(argv):
 
 def main(argv):
   logging.basicConfig(
-      level=logging.INFO if os.environ.get('_JAVAC_DEBUG') else logging.WARNING,
+      level=logging.INFO if os.environ.get('JAVAC_DEBUG') else logging.WARNING,
       format='%(levelname).1s %(relativeCreated)6d %(message)s')
   colorama.init()
 
@@ -591,7 +591,7 @@ def main(argv):
       options.jar_path + '.info',
   ]
 
-  input_strings = javac_cmd + classpath
+  input_strings = javac_cmd + classpath + java_files
   if options.jar_info_exclude_globs:
     input_strings.append(options.jar_info_exclude_globs)
   build_utils.CallAndWriteDepfileIfStale(
@@ -600,8 +600,7 @@ def main(argv):
       depfile_deps=depfile_deps,
       input_paths=input_paths,
       input_strings=input_strings,
-      output_paths=output_paths,
-      add_pydeps=False)
+      output_paths=output_paths)
   logging.info('Script complete: %s', __file__)
 
 

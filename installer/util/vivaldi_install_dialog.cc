@@ -65,6 +65,7 @@ std::map<const std::wstring, const std::wstring> kLanguages = {
   {L"id", L"Indonesian"},
   {L"it", L"Italian"},
   {L"ja", L"Japanese"},
+  {L"ja_KS", L"Japanese (Kansai)"},
   {L"ko", L"Korean"},
   {L"lt", L"Lithuanian"},
   {L"no", L"Norwegian (Bokm\U000000E5l)"},

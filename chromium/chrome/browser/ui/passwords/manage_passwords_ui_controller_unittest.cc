@@ -228,7 +228,7 @@ class ManagePasswordsUIControllerTest : public ChromeRenderViewHostTestHarness {
 
   std::unique_ptr<PasswordFormManager> CreateFormManagerWithBlacklistedMatches(
       const FormData& observed_form,
-      const std::vector<const PasswordForm*>& blacklisted_matches,
+      bool is_blacklisted,
       scoped_refptr<password_manager::PasswordFormMetricsRecorder>
           metrics_recorder);
 
@@ -330,13 +330,13 @@ ManagePasswordsUIControllerTest::CreateFormManagerWithBestMatches(
 std::unique_ptr<PasswordFormManager>
 ManagePasswordsUIControllerTest::CreateFormManagerWithBlacklistedMatches(
     const FormData& observed_form,
-    const std::vector<const PasswordForm*>& blacklisted_matches,
+    bool is_blacklisted,
     scoped_refptr<password_manager::PasswordFormMetricsRecorder>
         metrics_recorder) {
   auto form_manager = std::make_unique<PasswordFormManager>(
       &client_, driver_.AsWeakPtr(), observed_form, &fetcher_,
       std::make_unique<password_manager::StubFormSaver>(), metrics_recorder);
-  fetcher_.SetBlacklisted(blacklisted_matches);
+  fetcher_.SetBlacklisted(is_blacklisted);
   fetcher_.NotifyFetchCompleted();
   return form_manager;
 }
@@ -362,7 +362,7 @@ void ManagePasswordsUIControllerTest::TestNotChangingStateOnAutofill(
 
   // Set the bubble state to |state|.
   std::unique_ptr<PasswordFormManager> test_form_manager(CreateFormManager());
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   if (state == password_manager::ui::PENDING_PASSWORD_STATE)
     controller()->OnPasswordSubmitted(std::move(test_form_manager));
@@ -373,10 +373,9 @@ void ManagePasswordsUIControllerTest::TestNotChangingStateOnAutofill(
   ASSERT_EQ(state, controller()->GetState());
 
   // Autofill happens.
-  std::map<base::string16, const PasswordForm*> map;
-  map.insert(
-      std::make_pair(test_local_form().username_value, &test_local_form()));
-  controller()->OnPasswordAutofilled(map, map.begin()->second->origin, nullptr);
+  std::vector<const PasswordForm*> forms;
+  forms.push_back(&test_local_form());
+  controller()->OnPasswordAutofilled(forms, forms.front()->origin, nullptr);
 
   // State shouldn't changed.
   ExpectIconAndControllerStateIs(state);
@@ -391,10 +390,10 @@ TEST_F(ManagePasswordsUIControllerTest, DefaultState) {
 TEST_F(ManagePasswordsUIControllerTest, PasswordAutofilled) {
   const PasswordForm* test_form_ptr = &test_local_form();
   base::string16 kTestUsername = test_form_ptr->username_value;
-  std::map<base::string16, const PasswordForm*> map;
-  map.insert(std::make_pair(kTestUsername, test_form_ptr));
+  std::vector<const PasswordForm*> forms;
+  forms.push_back(test_form_ptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
-  controller()->OnPasswordAutofilled(map, map.begin()->second->origin, nullptr);
+  controller()->OnPasswordAutofilled(forms, forms.front()->origin, nullptr);
 
   EXPECT_EQ(test_form_ptr->origin, controller()->GetOrigin());
   ASSERT_EQ(1u, controller()->GetCurrentForms().size());
@@ -408,7 +407,7 @@ TEST_F(ManagePasswordsUIControllerTest, PasswordAutofilled) {
 
 TEST_F(ManagePasswordsUIControllerTest, PasswordSubmitted) {
   std::unique_ptr<PasswordFormManager> test_form_manager(CreateFormManager());
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
   EXPECT_TRUE(controller()->opened_automatic_bubble());
@@ -418,13 +417,9 @@ TEST_F(ManagePasswordsUIControllerTest, PasswordSubmitted) {
 }
 
 TEST_F(ManagePasswordsUIControllerTest, BlacklistedFormPasswordSubmitted) {
-  PasswordForm blacklisted;
-  blacklisted.origin = test_local_form().origin;
-  blacklisted.signon_realm = blacklisted.origin.spec();
-  blacklisted.blacklisted_by_user = true;
   std::unique_ptr<PasswordFormManager> test_form_manager =
-      CreateFormManagerWithBlacklistedMatches(observed_form(), {&blacklisted},
-                                              nullptr);
+      CreateFormManagerWithBlacklistedMatches(observed_form(),
+                                              /*is_blacklisted=*/true, nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
   EXPECT_FALSE(controller()->opened_automatic_bubble());
@@ -440,7 +435,7 @@ TEST_F(ManagePasswordsUIControllerTest, PasswordSubmittedBubbleSuppressed) {
   stats[0].username_value = test_local_form().username_value;
   stats[0].dismissal_count = kGreatDissmisalCount;
   fetcher().set_stats(stats);
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
   EXPECT_FALSE(controller()->opened_automatic_bubble());
@@ -459,7 +454,7 @@ TEST_F(ManagePasswordsUIControllerTest, PasswordSubmittedBubbleNotSuppressed) {
   stats[0].username_value = ASCIIToUTF16("not my username");
   stats[0].dismissal_count = kGreatDissmisalCount;
   fetcher().set_stats(stats);
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
   EXPECT_TRUE(controller()->opened_automatic_bubble());
@@ -480,7 +475,7 @@ TEST_F(ManagePasswordsUIControllerTest, PasswordSubmittedBubbleCancelled) {
   controller->set_client(&client());
 
   std::unique_ptr<PasswordFormManager> test_form_manager(CreateFormManager());
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
   // The bubble is ready to open but the tab is inactive. Therefore, we don't
   // call UpdateIconAndBubbleState here.
   controller->OnPasswordSubmitted(std::move(test_form_manager));
@@ -495,7 +490,7 @@ TEST_F(ManagePasswordsUIControllerTest, PasswordSubmittedBubbleCancelled) {
 
 TEST_F(ManagePasswordsUIControllerTest, PasswordSaved) {
   std::unique_ptr<PasswordFormManager> test_form_manager(CreateFormManager());
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
 
@@ -534,7 +529,7 @@ TEST_F(ManagePasswordsUIControllerTest, PasswordSavedUKMRecording) {
     // Exercise controller.
     std::unique_ptr<PasswordFormManager> test_form_manager(
         CreateFormManagerWithMetricsRecorder(recorder));
-    test_form_manager->ProvisionallySave(submitted_form(), &driver());
+    test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
     EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
     controller()->OnPasswordSubmitted(std::move(test_form_manager));
 
@@ -592,7 +587,7 @@ TEST_F(ManagePasswordsUIControllerTest, PasswordSavedUKMRecording) {
 
 TEST_F(ManagePasswordsUIControllerTest, PasswordBlacklisted) {
   std::unique_ptr<PasswordFormManager> test_form_manager(CreateFormManager());
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
 
@@ -606,7 +601,7 @@ TEST_F(ManagePasswordsUIControllerTest,
   std::unique_ptr<PasswordFormManager> test_form_manager(
       CreateFormManagerWithBestMatches(observed_form(), {&test_local_form()},
                                        nullptr));
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
 
@@ -632,7 +627,7 @@ TEST_F(ManagePasswordsUIControllerTest, NormalNavigations) {
 
 TEST_F(ManagePasswordsUIControllerTest, NormalNavigationsClosedBubble) {
   std::unique_ptr<PasswordFormManager> test_form_manager(CreateFormManager());
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
   controller()->SavePassword(test_local_form().username_value,
@@ -656,7 +651,7 @@ TEST_F(ManagePasswordsUIControllerTest, PasswordSubmittedToNonWebbyURL) {
       ->NavigateAndCommit(GURL("chrome://sign-in"));
 
   std::unique_ptr<PasswordFormManager> test_form_manager(CreateFormManager());
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
   EXPECT_EQ(GURL::EmptyGURL(), controller()->GetOrigin());
@@ -666,10 +661,10 @@ TEST_F(ManagePasswordsUIControllerTest, PasswordSubmittedToNonWebbyURL) {
 
 TEST_F(ManagePasswordsUIControllerTest, BlacklistedElsewhere) {
   base::string16 kTestUsername = ASCIIToUTF16("test_username");
-  std::map<base::string16, const PasswordForm*> map;
-  map.insert(std::make_pair(kTestUsername, &test_local_form()));
+  std::vector<const PasswordForm*> forms;
+  forms.push_back(&test_local_form());
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
-  controller()->OnPasswordAutofilled(map, map.begin()->second->origin, nullptr);
+  controller()->OnPasswordAutofilled(forms, forms.front()->origin, nullptr);
 
   test_local_form().blacklisted_by_user = true;
   password_manager::PasswordStoreChange change(
@@ -863,10 +858,10 @@ TEST_F(ManagePasswordsUIControllerTest, AutoSigninFirstRunAfterAutofill) {
   // Setup the managed state first.
   const PasswordForm* test_form_ptr = &test_local_form();
   const base::string16 kTestUsername = test_form_ptr->username_value;
-  std::map<base::string16, const PasswordForm*> map;
-  map.insert(std::make_pair(kTestUsername, test_form_ptr));
+  std::vector<const PasswordForm*> forms;
+  forms.push_back(test_form_ptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
-  controller()->OnPasswordAutofilled(map, test_form_ptr->origin, nullptr);
+  controller()->OnPasswordAutofilled(forms, test_form_ptr->origin, nullptr);
   EXPECT_EQ(password_manager::ui::MANAGE_STATE, controller()->GetState());
 
   // Pop up the autosignin promo. The state should stay intact.
@@ -906,22 +901,22 @@ TEST_F(ManagePasswordsUIControllerTest, AutofillDuringAutoSignin) {
   controller()->OnAutoSignin(std::move(local_credentials),
                              test_local_form().origin);
   ExpectIconAndControllerStateIs(password_manager::ui::AUTO_SIGNIN_STATE);
-  std::map<base::string16, const PasswordForm*> map;
+  std::vector<const PasswordForm*> forms;
   base::string16 kTestUsername = test_local_form().username_value;
-  map.insert(std::make_pair(kTestUsername, &test_local_form()));
-  controller()->OnPasswordAutofilled(map, map.begin()->second->origin, nullptr);
+  forms.push_back(&test_local_form());
+  controller()->OnPasswordAutofilled(forms, forms.front()->origin, nullptr);
 
   ExpectIconAndControllerStateIs(password_manager::ui::AUTO_SIGNIN_STATE);
 }
 
 TEST_F(ManagePasswordsUIControllerTest, InactiveOnPSLMatched) {
   base::string16 kTestUsername = ASCIIToUTF16("test_username");
-  std::map<base::string16, const PasswordForm*> map;
+  std::vector<const PasswordForm*> forms;
   PasswordForm psl_matched_test_form(test_local_form());
   psl_matched_test_form.is_public_suffix_match = true;
-  map.insert(std::make_pair(kTestUsername, &psl_matched_test_form));
+  forms.push_back(&psl_matched_test_form);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
-  controller()->OnPasswordAutofilled(map, map.begin()->second->origin, nullptr);
+  controller()->OnPasswordAutofilled(forms, forms.front()->origin, nullptr);
 
   EXPECT_EQ(password_manager::ui::INACTIVE_STATE, controller()->GetState());
 }
@@ -936,7 +931,7 @@ TEST_F(ManagePasswordsUIControllerTest, UpdatePasswordSubmitted) {
 
 TEST_F(ManagePasswordsUIControllerTest, PasswordUpdated) {
   std::unique_ptr<PasswordFormManager> test_form_manager(CreateFormManager());
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnUpdatePasswordSubmitted(std::move(test_form_manager));
 
@@ -1003,7 +998,7 @@ TEST_F(ManagePasswordsUIControllerTest, ManualFallbackForSaving_UseFallback) {
     std::unique_ptr<PasswordFormManager> test_form_manager(
         CreateFormManagerWithMetricsRecorder(recorder));
 
-    test_form_manager->ProvisionallySave(submitted_form(), &driver());
+    test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
     EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility()).Times(3);
     controller()->OnShowManualFallbackForSaving(
         std::move(test_form_manager), false /* has_generated_password */,
@@ -1056,7 +1051,7 @@ TEST_F(ManagePasswordsUIControllerTest,
                                          nullptr));
 
     // Simulate user typing a password.
-    test_form_manager->ProvisionallySave(submitted_form(), &driver());
+    test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
 
     EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
     controller()->OnShowManualFallbackForSaving(
@@ -1086,7 +1081,7 @@ TEST_F(ManagePasswordsUIControllerTest,
       CreateFormManagerWithBestMatches(observed_form(), {}, nullptr));
 
   // Simulate user typing a password.
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
 
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnShowManualFallbackForSaving(
@@ -1111,7 +1106,7 @@ TEST_F(ManagePasswordsUIControllerTest,
     ManagePasswordsUIController::set_save_fallback_timeout_in_seconds(0);
 
     std::unique_ptr<PasswordFormManager> test_form_manager(CreateFormManager());
-    test_form_manager->ProvisionallySave(submitted_form(), &driver());
+    test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
 
     EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
     controller()->OnShowManualFallbackForSaving(
@@ -1148,7 +1143,7 @@ TEST_F(ManagePasswordsUIControllerTest,
 
     ManagePasswordsUIController::set_save_fallback_timeout_in_seconds(0);
     std::unique_ptr<PasswordFormManager> test_form_manager(CreateFormManager());
-    test_form_manager->ProvisionallySave(submitted_form(), &driver());
+    test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
 
     EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
     controller()->OnShowManualFallbackForSaving(
@@ -1188,7 +1183,7 @@ TEST_F(ManagePasswordsUIControllerTest,
 TEST_F(ManagePasswordsUIControllerTest,
        ManualFallbackForSavingFollowedByAutomaticBubble) {
   std::unique_ptr<PasswordFormManager> test_form_manager(CreateFormManager());
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
 
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnShowManualFallbackForSaving(
@@ -1205,7 +1200,7 @@ TEST_F(ManagePasswordsUIControllerTest,
   FormData form = submitted_form();
   form.fields[0].value = ASCIIToUTF16("some_other_username");
   form.fields[1].value = ASCIIToUTF16("password123");
-  test_form_manager->ProvisionallySave(form, &driver());
+  test_form_manager->ProvisionallySave(form, &driver(), nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility()).Times(0);
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
 
@@ -1225,7 +1220,7 @@ TEST_F(ManagePasswordsUIControllerTest,
     std::unique_ptr<PasswordFormManager> test_form_manager(
         CreateFormManagerWithBestMatches(observed_form(), {&test_local_form()},
                                          nullptr));
-    test_form_manager->ProvisionallySave(submitted_form(), &driver());
+    test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
     EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
     controller()->OnShowManualFallbackForSaving(
         std::move(test_form_manager), true /* has_generated_password */, false);
@@ -1247,7 +1242,7 @@ TEST_F(ManagePasswordsUIControllerTest,
 
 TEST_F(ManagePasswordsUIControllerTest, AutofillDuringSignInPromo) {
   std::unique_ptr<PasswordFormManager> test_form_manager(CreateFormManager());
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
 
@@ -1258,10 +1253,9 @@ TEST_F(ManagePasswordsUIControllerTest, AutofillDuringSignInPromo) {
   ExpectIconAndControllerStateIs(password_manager::ui::MANAGE_STATE);
   // The controller shouldn't force close the bubble if an autofill happened.
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility()).Times(0);
-  std::map<base::string16, const PasswordForm*> map;
-  base::string16 test_username = test_local_form().username_value;
-  map.insert(std::make_pair(test_username, &test_local_form()));
-  controller()->OnPasswordAutofilled(map, map.begin()->second->origin, nullptr);
+  std::vector<const PasswordForm*> forms;
+  forms.push_back(&test_local_form());
+  controller()->OnPasswordAutofilled(forms, forms.front()->origin, nullptr);
 
   // Once the bubble is closed the controller is reacting again.
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
@@ -1270,7 +1264,7 @@ TEST_F(ManagePasswordsUIControllerTest, AutofillDuringSignInPromo) {
 
 TEST_F(ManagePasswordsUIControllerTest, AuthenticateUserToRevealPasswords) {
   std::unique_ptr<PasswordFormManager> test_form_manager(CreateFormManager());
-  test_form_manager->ProvisionallySave(submitted_form(), &driver());
+  test_form_manager->ProvisionallySave(submitted_form(), &driver(), nullptr);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
   EXPECT_EQ(password_manager::ui::PENDING_PASSWORD_STATE,

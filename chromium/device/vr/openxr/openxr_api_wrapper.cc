@@ -4,13 +4,12 @@
 
 #include "device/vr/openxr/openxr_api_wrapper.h"
 
-#include <directxmath.h>
 #include <stdint.h>
 #include <algorithm>
 #include <array>
 
 #include "base/logging.h"
-#include "device/vr/openxr/openxr_gamepad_helper.h"
+#include "device/vr/openxr/openxr_input_helper.h"
 #include "device/vr/openxr/openxr_util.h"
 #include "device/vr/test/test_hook.h"
 #include "ui/gfx/geometry/point3_f.h"
@@ -33,6 +32,7 @@ constexpr uint32_t kNumViews = 2;
 XrResult CreateInstance(XrInstance* instance) {
   XrInstanceCreateInfo instance_create_info = {XR_TYPE_INSTANCE_CREATE_INFO};
   strcpy_s(instance_create_info.applicationInfo.applicationName, "Chromium");
+  instance_create_info.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
 
   // xrCreateInstance validates the list of extensions and returns
   // XR_ERROR_EXTENSION_NOT_PRESENT if an extension is not supported,
@@ -116,7 +116,8 @@ void OpenXrApiWrapper::Reset() {
   view_configs_.clear();
   color_swapchain_images_.clear();
   frame_state_ = {};
-  views_.clear();
+  origin_from_eye_views_.clear();
+  head_from_eye_views_.clear();
   layer_projection_views_.clear();
 }
 
@@ -278,7 +279,7 @@ XrResult OpenXrApiWrapper::PickEnvironmentBlendMode(XrSystemId system) {
 // objects that may have been created before the failure.
 XrResult OpenXrApiWrapper::InitSession(
     const Microsoft::WRL::ComPtr<ID3D11Device>& d3d_device,
-    std::unique_ptr<OpenXrGamepadHelper>* gamepad_helper) {
+    std::unique_ptr<OpenXRInputHelper>* input_helper) {
   DCHECK(d3d_device.Get());
   DCHECK(IsInitialized());
 
@@ -289,7 +290,7 @@ XrResult OpenXrApiWrapper::InitSession(
   RETURN_IF_XR_FAILED(
       CreateSpace(XR_REFERENCE_SPACE_TYPE_LOCAL, &local_space_));
   RETURN_IF_XR_FAILED(CreateSpace(XR_REFERENCE_SPACE_TYPE_VIEW, &view_space_));
-  RETURN_IF_XR_FAILED(CreateGamepadHelper(gamepad_helper));
+  RETURN_IF_XR_FAILED(CreateGamepadHelper(input_helper));
 
   // It's ok if stage_space_ fails since not all OpenXR devices are required to
   // support this reference space.
@@ -298,15 +299,16 @@ XrResult OpenXrApiWrapper::InitSession(
   // Since the objects in these arrays are used on every frame,
   // we don't want to create and destroy these objects every frame,
   // so create the number of objects we need and reuse them.
-  views_.resize(view_configs_.size());
-  layer_projection_views_.resize(view_configs_.size());
+  origin_from_eye_views_.resize(kNumViews);
+  head_from_eye_views_.resize(kNumViews);
+  layer_projection_views_.resize(kNumViews);
 
   // Make sure all of the objects we initialized are there.
   DCHECK(HasSession());
   DCHECK(HasColorSwapChain());
   DCHECK(HasSpace(XR_REFERENCE_SPACE_TYPE_LOCAL));
   DCHECK(HasSpace(XR_REFERENCE_SPACE_TYPE_VIEW));
-  DCHECK(gamepad_helper);
+  DCHECK(input_helper);
 
   return xr_result;
 }
@@ -387,12 +389,12 @@ XrResult OpenXrApiWrapper::CreateSpace(XrReferenceSpaceType type,
 }
 
 XrResult OpenXrApiWrapper::CreateGamepadHelper(
-    std::unique_ptr<OpenXrGamepadHelper>* gamepad_helper) {
+    std::unique_ptr<OpenXRInputHelper>* input_helper) {
   DCHECK(HasSession());
   DCHECK(HasSpace(XR_REFERENCE_SPACE_TYPE_LOCAL));
 
-  return OpenXrGamepadHelper::CreateOpenXrGamepadHelper(
-      instance_, session_, local_space_, gamepad_helper);
+  return OpenXRInputHelper::CreateOpenXRInputHelper(instance_, session_,
+                                                    local_space_, input_helper);
 }
 
 XrResult OpenXrApiWrapper::BeginSession() {
@@ -456,7 +458,7 @@ XrResult OpenXrApiWrapper::EndFrame() {
   XrCompositionLayerProjection* multi_projection_layer_ptr =
       &multi_projection_layer;
   multi_projection_layer.space = local_space_;
-  multi_projection_layer.viewCount = views_.size();
+  multi_projection_layer.viewCount = origin_from_eye_views_.size();
   multi_projection_layer.views = layer_projection_views_.data();
 
   XrFrameEndInfo end_frame_info = {XR_TYPE_FRAME_END_INFO};
@@ -475,25 +477,15 @@ XrResult OpenXrApiWrapper::EndFrame() {
 XrResult OpenXrApiWrapper::UpdateProjectionLayers() {
   XrResult xr_result;
 
-  XrViewState view_state = {XR_TYPE_VIEW_STATE};
-
-  XrViewLocateInfo view_locate_info = {XR_TYPE_VIEW_LOCATE_INFO};
-
-  view_locate_info.viewConfigurationType = kSupportedViewConfiguration;
-  view_locate_info.displayTime = frame_state_.predictedDisplayTime;
-  view_locate_info.space = local_space_;
-
-  uint32_t view_count = 0;
-  RETURN_IF_XR_FAILED(xrLocateViews(session_, &view_locate_info, &view_state,
-                                    views_.size(), &view_count, views_.data()));
+  RETURN_IF_XR_FAILED(
+      LocateViews(XR_REFERENCE_SPACE_TYPE_LOCAL, &origin_from_eye_views_));
+  RETURN_IF_XR_FAILED(
+      LocateViews(XR_REFERENCE_SPACE_TYPE_VIEW, &head_from_eye_views_));
 
   gfx::Size view_size = GetViewSize();
-
-  DCHECK(view_count <= views_.size());
-  DCHECK(view_count <= layer_projection_views_.size());
-
-  for (uint32_t view_index = 0; view_index < view_count; view_index++) {
-    const XrView& view = views_[view_index];
+  for (uint32_t view_index = 0; view_index < origin_from_eye_views_.size();
+       view_index++) {
+    const XrView& view = origin_from_eye_views_[view_index];
 
     XrCompositionLayerProjectionView& layer_projection_view =
         layer_projection_views_[view_index];
@@ -511,6 +503,47 @@ XrResult OpenXrApiWrapper::UpdateProjectionLayers() {
     layer_projection_view.subImage.imageRect.offset.x =
         view_size.width() * view_index;
     layer_projection_view.subImage.imageRect.offset.y = 0;
+  }
+
+  return xr_result;
+}
+
+XrResult OpenXrApiWrapper::LocateViews(XrReferenceSpaceType type,
+                                       std::vector<XrView>* views) const {
+  DCHECK(HasSession());
+
+  XrResult xr_result;
+
+  XrViewState view_state = {XR_TYPE_VIEW_STATE};
+  XrViewLocateInfo view_locate_info = {XR_TYPE_VIEW_LOCATE_INFO};
+  view_locate_info.viewConfigurationType = kSupportedViewConfiguration;
+  view_locate_info.displayTime = frame_state_.predictedDisplayTime;
+
+  switch (type) {
+    case XR_REFERENCE_SPACE_TYPE_LOCAL:
+      view_locate_info.space = local_space_;
+      break;
+    case XR_REFERENCE_SPACE_TYPE_VIEW:
+      view_locate_info.space = view_space_;
+      break;
+    case XR_REFERENCE_SPACE_TYPE_STAGE:
+    case XR_REFERENCE_SPACE_TYPE_UNBOUNDED_MSFT:
+    case XR_REFERENCE_SPACE_TYPE_MAX_ENUM:
+      NOTREACHED();
+  }
+
+  std::vector<XrView> new_views(kNumViews);
+  uint32_t view_count;
+  RETURN_IF_XR_FAILED(xrLocateViews(session_, &view_locate_info, &view_state,
+                                    new_views.size(), &view_count,
+                                    new_views.data()));
+  DCHECK(view_count == kNumViews);
+
+  // If the position or orientation is not valid, don't update the views so that
+  // the previous valid views are used instead.
+  if ((view_state.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) &&
+      (view_state.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
+    *views = std::move(new_views);
   }
 
   return xr_result;
@@ -544,26 +577,35 @@ XrResult OpenXrApiWrapper::GetHeadPose(
 
   XrResult xr_result;
 
-  XrSpaceLocation location = {XR_TYPE_SPACE_LOCATION};
-  RETURN_IF_XR_FAILED(xrLocateSpace(
-      view_space_, local_space_, frame_state_.predictedDisplayTime, &location));
+  XrSpaceLocation view_from_local = {XR_TYPE_SPACE_LOCATION};
+  RETURN_IF_XR_FAILED(xrLocateSpace(view_space_, local_space_,
+                                    frame_state_.predictedDisplayTime,
+                                    &view_from_local));
 
-  if (location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) {
+  if (view_from_local.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) {
     *orientation = gfx::Quaternion(
-        location.pose.orientation.x, location.pose.orientation.y,
-        location.pose.orientation.z, location.pose.orientation.w);
+        view_from_local.pose.orientation.x, view_from_local.pose.orientation.y,
+        view_from_local.pose.orientation.z, view_from_local.pose.orientation.w);
   } else {
     *orientation = base::nullopt;
   }
 
-  if (location.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) {
-    *position = gfx::Point3F(location.pose.position.x, location.pose.position.y,
-                             location.pose.position.z);
+  if (view_from_local.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) {
+    *position = gfx::Point3F(view_from_local.pose.position.x,
+                             view_from_local.pose.position.y,
+                             view_from_local.pose.position.z);
   } else {
     *position = base::nullopt;
   }
 
   return xr_result;
+}
+
+void OpenXrApiWrapper::GetHeadFromEyes(XrView* left, XrView* right) const {
+  DCHECK(HasSession());
+
+  *left = head_from_eye_views_[0];
+  *right = head_from_eye_views_[1];
 }
 
 XrResult OpenXrApiWrapper::GetLuid(LUID* luid) const {
@@ -648,17 +690,6 @@ std::string OpenXrApiWrapper::GetRuntimeName() const {
   }
 }
 
-const XrView& OpenXrApiWrapper::GetView(uint32_t index) const {
-  DCHECK(HasSession());
-
-  // XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO so the OpenXR runtime must have
-  // returned two view configurations.
-  DCHECK(views_.size() == kNumViews);
-  DCHECK(index < kNumViews);
-
-  return views_[index];
-}
-
 XrResult OpenXrApiWrapper::GetStageBounds(XrExtent2Df* stage_bounds) const {
   DCHECK(stage_bounds);
   DCHECK(HasSession());
@@ -667,10 +698,11 @@ XrResult OpenXrApiWrapper::GetStageBounds(XrExtent2Df* stage_bounds) const {
                                        stage_bounds);
 }
 
-bool OpenXrApiWrapper::GetStageParameters(XrExtent2Df* stage_bounds,
-                                          gfx::Transform* transform) const {
+bool OpenXrApiWrapper::GetStageParameters(
+    XrExtent2Df* stage_bounds,
+    gfx::Transform* local_from_stage) const {
   DCHECK(stage_bounds);
-  DCHECK(transform);
+  DCHECK(local_from_stage);
   DCHECK(HasSession());
 
   if (!HasSpace(XR_REFERENCE_SPACE_TYPE_LOCAL))
@@ -682,25 +714,33 @@ bool OpenXrApiWrapper::GetStageParameters(XrExtent2Df* stage_bounds,
   if (XR_FAILED(GetStageBounds(stage_bounds)))
     return false;
 
-  XrSpaceLocation location = {XR_TYPE_SPACE_LOCATION};
-  if (FAILED(xrLocateSpace(stage_space_, local_space_,
-                           frame_state_.predictedDisplayTime, &location)) ||
-      !(location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) ||
-      !(location.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT)) {
+  XrSpaceLocation local_from_stage_location = {XR_TYPE_SPACE_LOCATION};
+  if (FAILED(xrLocateSpace(local_space_, stage_space_,
+                           frame_state_.predictedDisplayTime,
+                           &local_from_stage_location)) ||
+      !(local_from_stage_location.locationFlags &
+        XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) ||
+      !(local_from_stage_location.locationFlags &
+        XR_SPACE_LOCATION_POSITION_VALID_BIT)) {
     return false;
   }
 
   // Convert the orientation and translation given by runtime into a
   // transformation matrix.
-  gfx::DecomposedTransform seat_to_standing_decomp;
-  seat_to_standing_decomp.quaternion =
-      gfx::Quaternion(location.pose.orientation.x, location.pose.orientation.y,
-                      location.pose.orientation.z, location.pose.orientation.w);
-  seat_to_standing_decomp.translate[0] = location.pose.position.x;
-  seat_to_standing_decomp.translate[1] = location.pose.position.y;
-  seat_to_standing_decomp.translate[2] = location.pose.position.z;
+  gfx::DecomposedTransform local_from_stage_decomp;
+  local_from_stage_decomp.quaternion =
+      gfx::Quaternion(local_from_stage_location.pose.orientation.x,
+                      local_from_stage_location.pose.orientation.y,
+                      local_from_stage_location.pose.orientation.z,
+                      local_from_stage_location.pose.orientation.w);
+  local_from_stage_decomp.translate[0] =
+      local_from_stage_location.pose.position.x;
+  local_from_stage_decomp.translate[1] =
+      local_from_stage_location.pose.position.y;
+  local_from_stage_decomp.translate[2] =
+      local_from_stage_location.pose.position.z;
 
-  *transform = gfx::ComposeTransform(seat_to_standing_decomp);
+  *local_from_stage = gfx::ComposeTransform(local_from_stage_decomp);
   return true;
 }
 

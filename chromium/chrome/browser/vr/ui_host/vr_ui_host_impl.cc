@@ -122,8 +122,9 @@ void VRUiHostImpl::CapturingStateModelTransience::
     *active_capture_state_model_ = CapturingStateModel();
 }
 
-VRUiHostImpl::VRUiHostImpl(device::mojom::XRDeviceId device_id,
-                           device::mojom::XRCompositorHostPtr compositor)
+VRUiHostImpl::VRUiHostImpl(
+    device::mojom::XRDeviceId device_id,
+    mojo::PendingRemote<device::mojom::XRCompositorHost> compositor)
     : compositor_(std::move(compositor)),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       triggered_capturing_transience_(&triggered_capturing_state_model_) {
@@ -137,8 +138,9 @@ VRUiHostImpl::VRUiHostImpl(device::mojom::XRDeviceId device_id,
     runtime->AddObserver(this);
   }
 
-  content::GetSystemConnector()->BindInterface(device::mojom::kServiceName,
-                                               &geolocation_config_);
+  content::GetSystemConnector()->Connect(
+      device::mojom::kServiceName,
+      geolocation_config_.BindNewPipeAndPassReceiver());
 }
 
 VRUiHostImpl::~VRUiHostImpl() {
@@ -155,7 +157,7 @@ VRUiHostImpl::~VRUiHostImpl() {
 // static
 std::unique_ptr<VRUiHost> VRUiHostImpl::Create(
     device::mojom::XRDeviceId device_id,
-    device::mojom::XRCompositorHostPtr compositor) {
+    mojo::PendingRemote<device::mojom::XRCompositorHost> compositor) {
   DVLOG(1) << __func__;
   return std::make_unique<VRUiHostImpl>(device_id, std::move(compositor));
 }
@@ -227,6 +229,7 @@ void VRUiHostImpl::SetWebXRWebContents(content::WebContents* contents) {
     StartUiRendering();
     InitCapturingStates();
     ui_rendering_thread_->SetWebXrPresenting(true);
+    ui_rendering_thread_->SetFramesThrottled(frames_throttled_);
 
     PollCapturingState();
 
@@ -254,6 +257,17 @@ void VRUiHostImpl::SetWebXRWebContents(content::WebContents* contents) {
       ui_rendering_thread_->SetWebXrPresenting(false);
     StopUiRendering();
   }
+}
+
+void VRUiHostImpl::SetFramesThrottled(bool throttled) {
+  frames_throttled_ = throttled;
+
+  if (!ui_rendering_thread_) {
+    DVLOG(1) << __func__ << ": no ui_rendering_thread_";
+    return;
+  }
+
+  ui_rendering_thread_->SetFramesThrottled(frames_throttled_);
 }
 
 void VRUiHostImpl::SetVRDisplayInfo(

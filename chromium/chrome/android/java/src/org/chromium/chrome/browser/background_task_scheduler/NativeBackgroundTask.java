@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser.background_task_scheduler;
 
 import android.content.Context;
-import android.support.annotation.IntDef;
+
+import androidx.annotation.IntDef;
 
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
@@ -128,19 +129,23 @@ public abstract class NativeBackgroundTask implements BackgroundTask {
             final Runnable rescheduleRunnable) {
         if (isNativeLoadedInFullBrowserMode()) {
             mRunningInServiceManagerOnlyMode = false;
-            recordMetrics();
+            BackgroundTaskSchedulerExternalUma.reportNativeTaskStarted(
+                    mTaskId, mRunningInServiceManagerOnlyMode);
+            recordMemoryUsageWithRandomDelay(mRunningInServiceManagerOnlyMode);
             PostTask.postTask(UiThreadTaskTraits.DEFAULT, startWithNativeRunnable);
             return;
         }
 
         boolean wasInServiceManagerOnlyMode = isNativeLoadedInServiceManagerOnlyMode();
         mRunningInServiceManagerOnlyMode = supportsServiceManagerOnly();
-        recordMetrics();
+        BackgroundTaskSchedulerExternalUma.reportNativeTaskStarted(
+                mTaskId, mRunningInServiceManagerOnlyMode);
 
         final BrowserParts parts = new EmptyBrowserParts() {
             @Override
             public void finishNativeInitialization() {
                 PostTask.postTask(UiThreadTaskTraits.DEFAULT, startWithNativeRunnable);
+                recordMemoryUsageWithRandomDelay(mRunningInServiceManagerOnlyMode);
             }
             @Override
             public boolean startServiceManagerOnly() {
@@ -172,9 +177,8 @@ public abstract class NativeBackgroundTask implements BackgroundTask {
                     ChromeBrowserInitializer.getInstance(context).handlePostNativeStartup(
                             true /* isAsync */, parts);
                 } catch (ProcessInitException e) {
-                    Log.e(TAG, "ProcessInitException while starting the browser process.");
+                    Log.e(TAG, "Background Launch Error", e);
                     rescheduleRunnable.run();
-                    return;
                 }
             }
         });
@@ -255,12 +259,6 @@ public abstract class NativeBackgroundTask implements BackgroundTask {
     /** Whether the native part of the browser is loaded in Service Manager Only Mode. */
     private boolean isNativeLoadedInServiceManagerOnlyMode() {
         return getBrowserStartupController().isRunningInServiceManagerMode();
-    }
-
-    private void recordMetrics() {
-        BackgroundTaskSchedulerExternalUma.reportNativeTaskStarted(
-                mTaskId, mRunningInServiceManagerOnlyMode);
-        recordMemoryUsageWithRandomDelay(mRunningInServiceManagerOnlyMode);
     }
 
     @VisibleForTesting

@@ -3,8 +3,9 @@
 // found in the LICENSE file.
 
 #include "chrome/services/isolated_xr_device/xr_runtime_provider.h"
+
 #include "base/bind.h"
-#include "base/trace_event/common/trace_event_common.h"
+#include "base/trace_event/trace_event.h"
 #include "chrome/common/chrome_features.h"
 #include "device/vr/buildflags/buildflags.h"
 #include "device/vr/vr_device_base.h"
@@ -38,20 +39,19 @@ constexpr base::TimeDelta kTimeBetweenPollingEvents =
 
 template <typename VrDeviceT>
 std::unique_ptr<VrDeviceT> EnableRuntime(
-    device::mojom::IsolatedXRRuntimeProviderClientPtr& client) {
+    device::mojom::IsolatedXRRuntimeProviderClient* client) {
   auto device = std::make_unique<VrDeviceT>();
   TRACE_EVENT_INSTANT1("xr", "HardwareAdded", TRACE_EVENT_SCOPE_THREAD, "id",
                        static_cast<int>(device->GetId()));
   // "Device" here refers to a runtime + hardware pair, not necessarily
   // a physical device.
-  client->OnDeviceAdded(device->BindXRRuntimePtr(),
-                        device->BindGamepadFactory(),
+  client->OnDeviceAdded(device->BindXRRuntime(), device->BindGamepadFactory(),
                         device->BindCompositorHost(), device->GetId());
   return device;
 }
 
 template <typename VrDeviceT>
-void DisableRuntime(device::mojom::IsolatedXRRuntimeProviderClientPtr& client,
+void DisableRuntime(device::mojom::IsolatedXRRuntimeProviderClient* client,
                     std::unique_ptr<VrDeviceT> device) {
   TRACE_EVENT_INSTANT1("xr", "HardwareRemoved", TRACE_EVENT_SCOPE_THREAD, "id",
                        static_cast<int>(device->GetId()));
@@ -61,7 +61,7 @@ void DisableRuntime(device::mojom::IsolatedXRRuntimeProviderClientPtr& client,
 }
 
 template <typename VrHardwareT>
-void SetRuntimeStatus(device::mojom::IsolatedXRRuntimeProviderClientPtr& client,
+void SetRuntimeStatus(device::mojom::IsolatedXRRuntimeProviderClient* client,
                       IsolatedXRRuntimeProvider::RuntimeStatus status,
                       std::unique_ptr<VrHardwareT>* out_device) {
   if (status == IsolatedXRRuntimeProvider::RuntimeStatus::kEnable &&
@@ -170,9 +170,10 @@ void IsolatedXRRuntimeProvider::SetupPollingForDeviceChanges() {
 }
 
 void IsolatedXRRuntimeProvider::RequestDevices(
-    device::mojom::IsolatedXRRuntimeProviderClientPtr client) {
+    mojo::PendingRemote<device::mojom::IsolatedXRRuntimeProviderClient>
+        client) {
   // Start polling to detect devices being added/removed.
-  client_ = std::move(client);
+  client_.Bind(std::move(client));
   SetupPollingForDeviceChanges();
   client_->OnDevicesEnumerated();
 }
@@ -185,7 +186,7 @@ bool IsolatedXRRuntimeProvider::IsOculusVrHardwareAvailable() {
 }
 
 void IsolatedXRRuntimeProvider::SetOculusVrRuntimeStatus(RuntimeStatus status) {
-  SetRuntimeStatus(client_, status, &oculus_device_);
+  SetRuntimeStatus(client_.get(), status, &oculus_device_);
 }
 #endif  // BUILDFLAG(ENABLE_OCULUS_VR)
 
@@ -197,7 +198,7 @@ bool IsolatedXRRuntimeProvider::IsOpenVrHardwareAvailable() {
 }
 
 void IsolatedXRRuntimeProvider::SetOpenVrRuntimeStatus(RuntimeStatus status) {
-  SetRuntimeStatus(client_, status, &openvr_device_);
+  SetRuntimeStatus(client_.get(), status, &openvr_device_);
 }
 #endif  // BUILDFLAG(ENABLE_OPENVR)
 
@@ -207,7 +208,7 @@ bool IsolatedXRRuntimeProvider::IsWMRHardwareAvailable() {
 }
 
 void IsolatedXRRuntimeProvider::SetWMRRuntimeStatus(RuntimeStatus status) {
-  SetRuntimeStatus(client_, status, &wmr_device_);
+  SetRuntimeStatus(client_.get(), status, &wmr_device_);
 }
 #endif  // BUILDFLAG(ENABLE_WINDOWS_MR)
 
@@ -217,7 +218,7 @@ bool IsolatedXRRuntimeProvider::IsOpenXrHardwareAvailable() {
 }
 
 void IsolatedXRRuntimeProvider::SetOpenXrRuntimeStatus(RuntimeStatus status) {
-  SetRuntimeStatus(client_, status, &openxr_device_);
+  SetRuntimeStatus(client_.get(), status, &openxr_device_);
 }
 #endif  // BUILDFLAG(ENABLE_OPENXR)
 

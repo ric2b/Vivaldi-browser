@@ -23,7 +23,12 @@ class Widget;
 }
 
 namespace ui {
+class MenuModel;
 class SimpleMenuModel;
+}
+
+namespace vivaldi {
+class ContextMenuPostitionDelegate;
 }
 
 class ToolkitDelegateViews : public RenderViewContextMenuBase::ToolkitDelegate {
@@ -35,12 +40,16 @@ class ToolkitDelegateViews : public RenderViewContextMenuBase::ToolkitDelegate {
                  const gfx::Point& point,
                  ui::MenuSourceType type);
 
-  views::MenuItemView* VivaldiInit(ui::SimpleMenuModel* menu_model);
+  views::MenuItemView* VivaldiInit(ui::SimpleMenuModel* menu_model,
+      vivaldi::ContextMenuPostitionDelegate* delegate);
   void VivaldiUpdateMenu(views::MenuItemView* view,
                          ui::SimpleMenuModel* menu_model);
+  void VivaldiSetMenu(views::MenuItemView* view,
+                      ui::MenuModel* menu_model);
   void VivaldiRunMenuAt(views::Widget* parent,
                         const gfx::Rect& rect,
                         ui::MenuSourceType type);
+  views::MenuItemView* vivaldi_get_menu_view() const { return  menu_view_; }
  protected:
   // ToolkitDelegate:
   void Init(ui::SimpleMenuModel* menu_model) override;

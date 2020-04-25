@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/platform/heap/blink_gc.h"
 #include "third_party/blink/renderer/platform/heap/gc_info.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
+#include "third_party/blink/renderer/platform/heap/thread_state_statistics.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
@@ -49,12 +50,6 @@
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/sanitizers.h"
 #include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
-
-namespace base {
-namespace trace_event {
-class MemoryAllocatorDump;
-}  // namespace trace_event
-}  // namespace base
 
 namespace blink {
 
@@ -400,8 +395,7 @@ class FreeList {
   bool IsEmpty() const;
   size_t FreeListSize() const;
 
-  // Returns true if the freelist snapshot is captured.
-  bool TakeSnapshot(const String& dump_base_name);
+  void CollectStatistics(ThreadState::Statistics::FreeListStatistics*);
 
   template <typename Predicate>
   FreeListEntry* FindEntry(Predicate pred) {
@@ -477,6 +471,10 @@ enum class FinalizeType : uint8_t { kInlined, kDeferred };
 // |SweepResult| indicates if page turned out to be empty after sweeping.
 enum class SweepResult : uint8_t { kPageEmpty, kPageNotEmpty };
 
+// |PageType| indicates whether a page is used for normal objects or whether it
+// holds a large object.
+enum class PageType : uint8_t { kNormalPage, kLargeObjectPage };
+
 // |BasePage| is a base class for |NormalPage| and |LargeObjectPage|.
 //
 // - |NormalPage| is a page whose size is |kBlinkPageSize|. A |NormalPage| can
@@ -493,7 +491,7 @@ class BasePage {
   DISALLOW_NEW();
 
  public:
-  BasePage(PageMemory*, BaseArena*);
+  BasePage(PageMemory*, BaseArena*, PageType);
   virtual ~BasePage() = default;
 
   // Virtual methods are slow. So performance-sensitive methods should be
@@ -513,28 +511,21 @@ class BasePage {
   virtual void PoisonUnmarkedObjects() = 0;
 #endif
 
-  class HeapSnapshotInfo {
-    STACK_ALLOCATED();
+  virtual void CollectStatistics(
+      ThreadState::Statistics::ArenaStatistics* arena_stats) = 0;
 
-   public:
-    size_t free_count = 0;
-    size_t free_size = 0;
-  };
-
-  virtual void TakeSnapshot(base::trace_event::MemoryAllocatorDump*,
-                            ThreadState::GCSnapshotInfo&,
-                            HeapSnapshotInfo&) = 0;
 #if DCHECK_IS_ON()
   virtual bool Contains(Address) = 0;
 #endif
   virtual size_t size() = 0;
-  virtual bool IsLargeObjectPage() { return false; }
 
   Address GetAddress() { return reinterpret_cast<Address>(this); }
   PageMemory* Storage() const { return storage_; }
   BaseArena* Arena() const { return arena_; }
+  ThreadState* thread_state() const { return thread_state_; }
 
-  // Returns true if this page has been swept by the ongoing lazy sweep.
+  // Returns true if this page has been swept by the ongoing sweep; false
+  // otherwise.
   bool HasBeenSwept() const { return swept_; }
 
   void MarkAsSwept() {
@@ -545,6 +536,11 @@ class BasePage {
   void MarkAsUnswept() {
     DCHECK(swept_);
     swept_ = false;
+  }
+
+  // Returns true  if this page is a large object page; false otherwise.
+  bool IsLargeObjectPage() const {
+    return page_type_ == PageType::kLargeObjectPage;
   }
 
   // Returns true if magic number is valid.
@@ -559,10 +555,13 @@ class BasePage {
   uint32_t const magic_;
   PageMemory* const storage_;
   BaseArena* const arena_;
+  ThreadState* const thread_state_;
 
   // Track the sweeping state of a page. Set to false at the start of a sweep,
-  // true  upon completion of lazy sweeping.
-  bool swept_;
+  // true upon completion of sweeping that page.
+  bool swept_ = true;
+
+  PageType page_type_;
 
   friend class BaseArena;
 };
@@ -700,9 +699,9 @@ class PLATFORM_EXPORT NormalPage final : public BasePage {
   void PoisonUnmarkedObjects() override;
 #endif
 
-  void TakeSnapshot(base::trace_event::MemoryAllocatorDump*,
-                    ThreadState::GCSnapshotInfo&,
-                    HeapSnapshotInfo&) override;
+  void CollectStatistics(
+      ThreadState::Statistics::ArenaStatistics* arena_stats) override;
+
 #if DCHECK_IS_ON()
   // Returns true for the whole |kBlinkPageSize| page that the page is on, even
   // for the header, and the unmapped guard page at the start. That ensures the
@@ -752,6 +751,11 @@ class PLATFORM_EXPORT NormalPage final : public BasePage {
   // Uses the object_start_bit_map_ to find an object for a given address. The
   // returned header is either nullptr, indicating that no object could be
   // found, or it is pointing to valid object or free list entry.
+  HeapObjectHeader* ConservativelyFindHeaderFromAddress(Address);
+
+  // Uses the object_start_bit_map_ to find an object for a given address. It is
+  // assumed that the address points into a valid heap object. Use the
+  // conservative version if that assumption does not hold.
   HeapObjectHeader* FindHeaderFromAddress(Address);
 
   void VerifyMarking() override;
@@ -841,11 +845,8 @@ class PLATFORM_EXPORT LargeObjectPage final : public BasePage {
   void MakeConsistentForMutator() override;
   void FinalizeSweep(SweepResult) override;
 
-  void TakeSnapshot(base::trace_event::MemoryAllocatorDump*,
-                    ThreadState::GCSnapshotInfo&,
-                    HeapSnapshotInfo&) override;
-
-  bool IsLargeObjectPage() override { return true; }
+  void CollectStatistics(
+      ThreadState::Statistics::ArenaStatistics* arena_stats) override;
 
   void VerifyMarking() override;
 
@@ -889,11 +890,13 @@ class PLATFORM_EXPORT BaseArena {
   virtual ~BaseArena();
   void RemoveAllPages();
 
-  void TakeSnapshot(const String& dump_base_name, ThreadState::GCSnapshotInfo&);
+  void CollectStatistics(std::string, ThreadState::Statistics*);
+  virtual void CollectFreeListStatistics(
+      ThreadState::Statistics::FreeListStatistics*) {}
+
 #if DCHECK_IS_ON()
   BasePage* FindPageFromAddress(Address);
 #endif
-  virtual void TakeFreelistSnapshot(const String& dump_base_name) {}
   virtual void ClearFreeLists() {}
   virtual void MakeIterable() {}
   virtual void MakeConsistentForGC();
@@ -912,8 +915,8 @@ class PLATFORM_EXPORT BaseArena {
   // Returns true if we have swept all pages within the deadline. Returns false
   // otherwise.
   bool LazySweepWithDeadline(base::TimeTicks deadline);
+  bool ConcurrentSweepWithDeadline(base::TimeTicks deadline);
   void CompleteSweep();
-  void SweepOnConcurrentThread();
   void InvokeFinalizersOnSweptPages();
 
   ThreadState* GetThreadState() { return thread_state_; }
@@ -970,13 +973,14 @@ class PLATFORM_EXPORT NormalPageArena final : public BaseArena {
   }
   void AddToFreeList(FreeList* other) { free_list_.MoveFrom(other); }
   void ClearFreeLists() override;
+  void CollectFreeListStatistics(
+      ThreadState::Statistics::FreeListStatistics*) override;
   void MakeIterable() override;
 
 #if DCHECK_IS_ON()
   bool IsConsistentForGC() override;
   bool PagesToBeSweptContains(Address);
 #endif
-  void TakeFreelistSnapshot(const String& dump_base_name) override;
 
   Address AllocateObject(size_t allocation_size, size_t gc_info_index);
 
@@ -1073,7 +1077,7 @@ PLATFORM_EXPORT ALWAYS_INLINE BasePage* PageFromObject(const void* object) {
   BasePage* page = reinterpret_cast<BasePage*>(BlinkPageAddress(address) +
                                                kBlinkGuardPageSize);
   // Page must have a valid magic.
-  DCHECK(page->IsValid());
+  CHECK(page->IsValid());
 #if DCHECK_IS_ON()
   DCHECK(page->Contains(address));
 #endif
@@ -1129,7 +1133,7 @@ NO_SANITIZE_ADDRESS inline bool HeapObjectHeader::IsInConstruction() const {
 
 template <HeapObjectHeader::AccessMode mode>
 NO_SANITIZE_ADDRESS inline void HeapObjectHeader::MarkFullyConstructed() {
-  DCHECK(IsInConstruction());
+  DCHECK(IsInConstruction<mode>());
   StoreEncoded<mode, EncodedHalf::kHigh>(kHeaderIsInConstructionMask,
                                          kHeaderIsInConstructionMask);
 }
@@ -1195,7 +1199,7 @@ NO_SANITIZE_ADDRESS inline void HeapObjectHeader::Mark() {
 template <HeapObjectHeader::AccessMode mode>
 NO_SANITIZE_ADDRESS inline void HeapObjectHeader::Unmark() {
   CheckHeader();
-  DCHECK(IsMarked());
+  DCHECK(IsMarked<mode>());
   StoreEncoded<mode, EncodedHalf::kLow>(0u, kHeaderMarkBitMask);
 }
 

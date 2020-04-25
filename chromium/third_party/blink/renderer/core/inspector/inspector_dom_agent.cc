@@ -55,6 +55,7 @@
 #include "third_party/blink/renderer/core/editing/serializers/serialization.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/remote_frame.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_link_element.h"
@@ -64,6 +65,7 @@
 #include "third_party/blink/renderer/core/html/imports/html_import_loader.h"
 #include "third_party/blink/renderer/core/html/portal/document_portals.h"
 #include "third_party/blink/renderer/core/html/portal/html_portal_element.h"
+#include "third_party/blink/renderer/core/html/portal/portal_contents.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/inspector/dom_editor.h"
 #include "third_party/blink/renderer/core/inspector/dom_patch_support.h"
@@ -100,7 +102,7 @@ const UChar kEllipsisUChar[] = {0x2026, 0};
 }  // namespace
 
 class InspectorRevalidateDOMTask final
-    : public GarbageCollectedFinalized<InspectorRevalidateDOMTask> {
+    : public GarbageCollected<InspectorRevalidateDOMTask> {
  public:
   explicit InspectorRevalidateDOMTask(InspectorDOMAgent*);
   void ScheduleStyleAttrRevalidationFor(Element*);
@@ -1339,7 +1341,9 @@ Response InspectorDOMAgent::getNodeForLocation(
     int x,
     int y,
     Maybe<bool> optional_include_user_agent_shadow_dom,
+    Maybe<bool> optional_ignore_pointer_events_none,
     int* backend_node_id,
+    String* frame_id,
     Maybe<int>* node_id) {
   bool include_user_agent_shadow_dom =
       optional_include_user_agent_shadow_dom.fromMaybe(false);
@@ -1347,8 +1351,12 @@ Response InspectorDOMAgent::getNodeForLocation(
   PhysicalOffset document_point(
       LayoutUnit(x * inspected_frames_->Root()->PageZoomFactor()),
       LayoutUnit(y * inspected_frames_->Root()->PageZoomFactor()));
-  HitTestRequest request(HitTestRequest::kMove | HitTestRequest::kReadOnly |
-                         HitTestRequest::kAllowChildFrameContent);
+  HitTestRequest::HitTestRequestType hit_type =
+      HitTestRequest::kMove | HitTestRequest::kReadOnly |
+      HitTestRequest::kAllowChildFrameContent;
+  if (optional_ignore_pointer_events_none.fromMaybe(false))
+    hit_type |= HitTestRequest::kIgnorePointerEventsNone;
+  HitTestRequest request(hit_type);
   HitTestLocation location(document->View()->DocumentToFrame(document_point));
   HitTestResult result(request, location);
   document->GetFrame()->ContentLayoutObject()->HitTest(location, result);
@@ -1360,6 +1368,8 @@ Response InspectorDOMAgent::getNodeForLocation(
   if (!node)
     return Response::Error("No node found at given location");
   *backend_node_id = IdentifiersFactory::IntIdForNode(node);
+  LocalFrame* frame = node->GetDocument().GetFrame();
+  *frame_id = IdentifiersFactory::FrameId(frame);
   if (enabled_.Get() && document_ &&
       document_node_to_id_map_->Contains(document_)) {
     *node_id = PushNodePathToFrontend(node);
@@ -1552,7 +1562,7 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::BuildObjectForNode(
           BuildArrayForDistributedNodes(insertion_point));
       force_push_children = true;
     }
-    if (auto* slot = ToHTMLSlotElementOrNull(*element)) {
+    if (auto* slot = DynamicTo<HTMLSlotElement>(*element)) {
       if (node->IsInShadowTree()) {
         value->setDistributedNodes(BuildDistributedNodesForSlot(slot));
         force_push_children = true;
@@ -2273,10 +2283,10 @@ protocol::Response InspectorDOMAgent::getFrameOwner(
       break;
   }
   if (!frame) {
-    for (HTMLPortalElement* portal :
+    for (PortalContents* portal :
          DocumentPortals::From(*inspected_frames_->Root()->GetDocument())
              .GetPortals()) {
-      frame = portal->ContentFrame();
+      frame = portal->GetFrame();
       if (IdentifiersFactory::FrameId(frame) == frame_id)
         break;
     }

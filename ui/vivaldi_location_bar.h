@@ -32,9 +32,6 @@ class VivaldiLocationBar : public LocationBar {
   void FocusLocation(bool select_all) override {}
   void FocusSearch() override {}
   void UpdateContentSettingsIcons() override {}
-  void UpdateSaveCreditCardIcon() override {}
-  void UpdateBookmarkStarVisibility() override {}
-  void UpdateLocalCardMigrationIcon() override {}
 
   base::TimeTicks GetMatchSelectionTimestamp() const override;
 

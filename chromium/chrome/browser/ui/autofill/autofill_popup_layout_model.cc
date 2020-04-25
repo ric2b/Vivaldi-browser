@@ -189,7 +189,6 @@ const gfx::FontList& AutofillPopupLayoutModel::GetValueFontListForRow(
     case POPUP_ITEM_ID_PASSWORD_ENTRY:
     case POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY:
     case POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY:
-    case POPUP_ITEM_ID_GOOGLE_PAY_BRANDING:
     case POPUP_ITEM_ID_SHOW_ACCOUNT_CARDS:
       return normal_font_list_;
     case POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY:
@@ -224,7 +223,7 @@ gfx::ImageSkia AutofillPopupLayoutModel::GetIconImage(size_t index) const {
                                  gfx::kChromeIconGrey);
   }
   if (icon_str == "httpsInvalid") {
-    return gfx::CreateVectorIcon(omnibox::kHttpsInvalidIcon, kIconSize,
+    return gfx::CreateVectorIcon(omnibox::kNotSecureWarningIcon, kIconSize,
                                  gfx::kGoogleRed700);
   }
   if (icon_str == "keyIcon") {
@@ -298,15 +297,6 @@ int AutofillPopupLayoutModel::GetIconResourceID(
   }
 
   return result;
-}
-
-int AutofillPopupLayoutModel::GetIconAccessibleNameResourceId(
-    const std::string& resource_name) const {
-  for (size_t i = 0; i < base::size(kDataResources); ++i) {
-    if (resource_name == kDataResources[i].name)
-      return kDataResources[i].accessible_string_id;
-  }
-  return kResourceNotFoundId;
 }
 
 void AutofillPopupLayoutModel::SetUpForTesting(

@@ -40,6 +40,7 @@ if (defined(is_vivaldi) && is_vivaldi) {
 packaging_files_executables = [
   "$root_out_dir/chrome",
   "$root_out_dir/chrome_sandbox",
+  "$root_out_dir/crashpad_handler",
 ]
 }
 packaging_files_shlibs = []
@@ -300,8 +301,8 @@ copy("theme_files") {
   visibility = [ ":*" ]
   sources = [
     "$branding_dir/BRANDING",
-    "$branding_dir_100/product_logo_16.png",
-    "$branding_dir_100/product_logo_32.png",
+    "$branding_dir_100/../$VIVALDI_RELEASE_KIND/product_logo_16.png",
+    "$branding_dir_100/../$VIVALDI_RELEASE_KIND/product_logo_32.png",
   ]
   if (is_chrome_branded) {
     sources += [
@@ -379,6 +380,7 @@ group("installer_deps") {
     "//chrome:packed_resources",
     "//chrome/browser/resources/media/mei_preload:component",
     "//sandbox/linux:chrome_sandbox",
+    "//third_party/crashpad/crashpad/handler:crashpad_handler",
   ]
   if (enable_nacl) {
     public_deps += [

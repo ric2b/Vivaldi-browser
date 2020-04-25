@@ -47,6 +47,7 @@
 #include "content/public/common/referrer_type_converters.h"
 #include "crypto/hmac.h"
 #include "crypto/symmetric_key.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/completion_repeating_callback.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -355,7 +356,8 @@ blink::mojom::FetchAPIResponsePtr CreateResponse(
       std::vector<std::string>(
           metadata.response().cors_exposed_header_names().begin(),
           metadata.response().cors_exposed_header_names().end()),
-      nullptr /* side_data_blob */);
+      nullptr /* side_data_blob */, nullptr /* side_data_blob_for_cache_put */,
+      nullptr /* content_security_policy */);
 }
 
 // The size of opaque (non-cors) resource responses are padded in order
@@ -522,6 +524,7 @@ bool LegacyCacheStorageCache::IsUnreferenced() const {
 void LegacyCacheStorageCache::Match(
     blink::mojom::FetchAPIRequestPtr request,
     blink::mojom::CacheQueryOptionsPtr match_options,
+    CacheStorageSchedulerPriority priority,
     int64_t trace_id,
     ResponseCallback callback) {
   if (backend_state_ == BACKEND_CLOSED) {
@@ -533,6 +536,7 @@ void LegacyCacheStorageCache::Match(
   auto id = scheduler_->CreateId();
   scheduler_->ScheduleOperation(
       id, CacheStorageSchedulerMode::kShared, CacheStorageSchedulerOp::kMatch,
+      priority,
       base::BindOnce(
           &LegacyCacheStorageCache::MatchImpl, weak_ptr_factory_.GetWeakPtr(),
           std::move(request), std::move(match_options), trace_id,
@@ -555,6 +559,7 @@ void LegacyCacheStorageCache::MatchAll(
   scheduler_->ScheduleOperation(
       id, CacheStorageSchedulerMode::kShared,
       CacheStorageSchedulerOp::kMatchAll,
+      CacheStorageSchedulerPriority::kNormal,
       base::BindOnce(
           &LegacyCacheStorageCache::MatchAllImpl,
           weak_ptr_factory_.GetWeakPtr(), std::move(request),
@@ -641,9 +646,10 @@ void LegacyCacheStorageCache::BatchOperation(
   for (const auto& operation : operations) {
     if (operation->operation_type == blink::mojom::OperationType::kPut) {
       safe_space_required += CalculateRequiredSafeSpaceForPut(operation);
-      safe_side_data_size += (operation->response->side_data_blob
-                                  ? operation->response->side_data_blob->size
-                                  : 0);
+      safe_side_data_size +=
+          (operation->response->side_data_blob_for_cache_put
+               ? operation->response->side_data_blob_for_cache_put->size
+               : 0);
     }
   }
   if (!safe_space_required.IsValid() || !safe_side_data_size.IsValid()) {
@@ -754,7 +760,7 @@ void LegacyCacheStorageCache::BatchDidGetUsageAndQuota(
     switch (operation->operation_type) {
       case blink::mojom::OperationType::kPut:
         if (skip_side_data) {
-          operation->response->side_data_blob = nullptr;
+          operation->response->side_data_blob_for_cache_put = nullptr;
           Put(std::move(operation), trace_id, completion_callback);
         } else {
           Put(std::move(operation), trace_id, completion_callback);
@@ -822,6 +828,7 @@ void LegacyCacheStorageCache::Keys(blink::mojom::FetchAPIRequestPtr request,
   auto id = scheduler_->CreateId();
   scheduler_->ScheduleOperation(
       id, CacheStorageSchedulerMode::kShared, CacheStorageSchedulerOp::kKeys,
+      CacheStorageSchedulerPriority::kNormal,
       base::BindOnce(
           &LegacyCacheStorageCache::KeysImpl, weak_ptr_factory_.GetWeakPtr(),
           std::move(request), std::move(options), trace_id,
@@ -835,7 +842,7 @@ void LegacyCacheStorageCache::Close(base::OnceClosure callback) {
   auto id = scheduler_->CreateId();
   scheduler_->ScheduleOperation(
       id, CacheStorageSchedulerMode::kExclusive,
-      CacheStorageSchedulerOp::kClose,
+      CacheStorageSchedulerOp::kClose, CacheStorageSchedulerPriority::kNormal,
       base::BindOnce(
           &LegacyCacheStorageCache::CloseImpl, weak_ptr_factory_.GetWeakPtr(),
           scheduler_->WrapCallbackToRunNext(id, std::move(callback))));
@@ -852,6 +859,7 @@ void LegacyCacheStorageCache::Size(SizeCallback callback) {
   auto id = scheduler_->CreateId();
   scheduler_->ScheduleOperation(
       id, CacheStorageSchedulerMode::kShared, CacheStorageSchedulerOp::kSize,
+      CacheStorageSchedulerPriority::kNormal,
       base::BindOnce(
           &LegacyCacheStorageCache::SizeImpl, weak_ptr_factory_.GetWeakPtr(),
           scheduler_->WrapCallbackToRunNext(id, std::move(callback))));
@@ -868,6 +876,7 @@ void LegacyCacheStorageCache::GetSizeThenClose(SizeCallback callback) {
   scheduler_->ScheduleOperation(
       id, CacheStorageSchedulerMode::kExclusive,
       CacheStorageSchedulerOp::kSizeThenClose,
+      CacheStorageSchedulerPriority::kNormal,
       base::BindOnce(
           &LegacyCacheStorageCache::SizeImpl, weak_ptr_factory_.GetWeakPtr(),
           base::BindOnce(
@@ -1356,6 +1365,7 @@ void LegacyCacheStorageCache::WriteSideDataDidGetQuota(
   scheduler_->ScheduleOperation(
       id, CacheStorageSchedulerMode::kExclusive,
       CacheStorageSchedulerOp::kWriteSideData,
+      CacheStorageSchedulerPriority::kNormal,
       base::BindOnce(&LegacyCacheStorageCache::WriteSideDataImpl,
                      weak_ptr_factory_.GetWeakPtr(),
                      scheduler_->WrapCallbackToRunNext(id, std::move(callback)),
@@ -1557,6 +1567,7 @@ void LegacyCacheStorageCache::Put(blink::mojom::FetchAPIRequestPtr request,
 
   scheduler_->ScheduleOperation(
       id, CacheStorageSchedulerMode::kExclusive, CacheStorageSchedulerOp::kPut,
+      CacheStorageSchedulerPriority::kNormal,
       base::BindOnce(&LegacyCacheStorageCache::PutImpl,
                      weak_ptr_factory_.GetWeakPtr(), std::move(put_context)));
 }
@@ -1779,7 +1790,7 @@ void LegacyCacheStorageCache::PutWriteBlobToCache(
                          TRACE_ID_GLOBAL(put_context->trace_id),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
 
-  blink::mojom::BlobPtr blob;
+  mojo::PendingRemote<blink::mojom::Blob> blob;
   int64_t blob_size = 0;
 
   switch (disk_cache_body_index) {
@@ -1971,6 +1982,7 @@ void LegacyCacheStorageCache::GetAllMatchedEntries(
   scheduler_->ScheduleOperation(
       id, CacheStorageSchedulerMode::kShared,
       CacheStorageSchedulerOp::kGetAllMatched,
+      CacheStorageSchedulerPriority::kNormal,
       base::BindOnce(
           &LegacyCacheStorageCache::GetAllMatchedEntriesImpl,
           weak_ptr_factory_.GetWeakPtr(), std::move(request),
@@ -2056,7 +2068,7 @@ void LegacyCacheStorageCache::Delete(blink::mojom::BatchOperationPtr operation,
   auto id = scheduler_->CreateId();
   scheduler_->ScheduleOperation(
       id, CacheStorageSchedulerMode::kExclusive,
-      CacheStorageSchedulerOp::kDelete,
+      CacheStorageSchedulerOp::kDelete, CacheStorageSchedulerPriority::kNormal,
       base::BindOnce(
           &LegacyCacheStorageCache::DeleteImpl, weak_ptr_factory_.GetWeakPtr(),
           std::move(request), std::move(operation->match_options),
@@ -2263,6 +2275,7 @@ void LegacyCacheStorageCache::InitBackend() {
   auto id = scheduler_->CreateId();
   scheduler_->ScheduleOperation(
       id, CacheStorageSchedulerMode::kExclusive, CacheStorageSchedulerOp::kInit,
+      CacheStorageSchedulerPriority::kNormal,
       base::BindOnce(
           &LegacyCacheStorageCache::CreateBackend,
           weak_ptr_factory_.GetWeakPtr(),

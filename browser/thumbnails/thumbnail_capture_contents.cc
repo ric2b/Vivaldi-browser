@@ -178,26 +178,6 @@ bool ThumbnailCaptureContents::CanDragEnter(
   return false;
 }
 
-bool ThumbnailCaptureContents::ShouldCreateWebContents(
-    content::WebContents* web_contents,
-    content::RenderFrameHost* opener,
-    content::SiteInstance* source_site_instance,
-    int32_t route_id,
-    int32_t main_frame_route_id,
-    int32_t main_frame_widget_route_id,
-    content::mojom::WindowContainerType window_container_type,
-    const GURL& opener_url,
-    const std::string& frame_name,
-    const GURL& target_url,
-    const std::string& partition_id,
-    content::SessionStorageNamespace* session_storage_namespace) {
-  DCHECK_EQ(offscreen_tab_web_contents_.get(), web_contents);
-  // Disallow creating separate WebContentses.  The WebContents implementation
-  // uses this to spawn new windows/tabs, which is also not allowed for
-  // offscreen tabs.
-  return false;
-}
-
 bool ThumbnailCaptureContents::EmbedsFullscreenWidget() {
   return false;
 }

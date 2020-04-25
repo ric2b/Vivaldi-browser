@@ -278,7 +278,11 @@ ExtensionActionUtil::ExtensionActionUtil(Profile* profile)
 }
 void ExtensionActionUtil::PrefsChange() {
   const base::Value* hidden_extensions = profile_->GetPrefs()->GetList(
-    vivaldiprefs::kAddressBarExtensionsHiddenExtensions);
+      vivaldiprefs::kAddressBarExtensionsHiddenExtensions);
+  // Can happen if we start in an old profile.
+  if (!hidden_extensions || !hidden_extensions->is_list()) {
+    return;
+  }
 
   user_hidden_extensions_.reset(
     new base::ListValue(hidden_extensions->GetList()));

@@ -32,6 +32,7 @@
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/cookie_change_dispatcher.h"
+#include "net/cookies/cookie_constants.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -74,7 +75,7 @@ const net::BackoffEntry::Policy kBackoffPolicy = {
 
 // Name of the GAIA cookie that is being observed to detect when available
 // accounts have changed in the content-area.
-const char* const kGaiaCookieName = "APISID";
+const char* const kGaiaCookieName = "SAPISID";
 
 // State of requests to Gaia logout endpoint. Used as entry for histogram
 // |Signin.GaiaCookieManager.Logout|.
@@ -458,7 +459,7 @@ void GaiaCookieManagerService::InitCookieListener() {
   // testing contexts.
   if (cookie_manager) {
     cookie_manager->AddCookieChangeListener(
-        GaiaUrls::GetInstance()->google_url(), kGaiaCookieName,
+        GaiaUrls::GetInstance()->secure_google_url(), kGaiaCookieName,
         cookie_listener_receiver_.BindNewPipeAndPassRemote());
     cookie_listener_receiver_.set_disconnect_handler(base::BindOnce(
         &GaiaCookieManagerService::OnCookieListenerConnectionError,
@@ -573,13 +574,16 @@ void GaiaCookieManagerService::TriggerListAccounts() {
 }
 
 void GaiaCookieManagerService::ForceOnCookieChangeProcessing() {
-  GURL google_url = GaiaUrls::GetInstance()->google_url();
+  GURL google_url = GaiaUrls::GetInstance()->secure_google_url();
   std::unique_ptr<net::CanonicalCookie> cookie(
       std::make_unique<net::CanonicalCookie>(
           kGaiaCookieName, std::string(), "." + google_url.host(), "/",
-          base::Time(), base::Time(), base::Time(), false, false,
-          net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_DEFAULT));
-  OnCookieChange(*cookie, network::mojom::CookieChangeCause::UNKNOWN_DELETION);
+          base::Time(), base::Time(), base::Time(), true /* secure */,
+          false /* httponly */, net::CookieSameSite::NO_RESTRICTION,
+          net::COOKIE_PRIORITY_DEFAULT));
+  OnCookieChange(
+      net::CookieChangeInfo(*cookie, net::CookieAccessSemantics::UNKNOWN,
+                            net::CookieChangeCause::UNKNOWN_DELETION));
 }
 
 void GaiaCookieManagerService::LogOutAllAccounts(gaia::GaiaSource source) {
@@ -657,13 +661,13 @@ void GaiaCookieManagerService::MarkListAccountsStale() {
 }
 
 void GaiaCookieManagerService::OnCookieChange(
-    const net::CanonicalCookie& cookie,
-    network::mojom::CookieChangeCause cause) {
-  DCHECK_EQ(kGaiaCookieName, cookie.Name());
-  DCHECK(cookie.IsDomainMatch(GaiaUrls::GetInstance()->google_url().host()));
+    const net::CookieChangeInfo& change) {
+  DCHECK_EQ(kGaiaCookieName, change.cookie.Name());
+  DCHECK(change.cookie.IsDomainMatch(
+      GaiaUrls::GetInstance()->google_url().host()));
   list_accounts_stale_ = true;
 
-  if (cause == network::mojom::CookieChangeCause::EXPLICIT) {
+  if (change.cause == net::CookieChangeCause::EXPLICIT) {
     DCHECK(net::CookieChangeCauseIsDeletion(net::CookieChangeCause::EXPLICIT));
     if (gaia_cookie_deleted_by_user_action_callback_) {
       gaia_cookie_deleted_by_user_action_callback_.Run();

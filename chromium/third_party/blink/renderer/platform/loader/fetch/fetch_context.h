@@ -36,8 +36,8 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
-#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
-#include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/resource_request_blocked_reason.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_info.h"
@@ -64,8 +64,7 @@ class WebScopedVirtualTimePauser;
 // Any processing that depends on components outside platform/loader/fetch/
 // should be implemented on a subclass of this interface, and then exposed to
 // the ResourceFetcher via this interface.
-class PLATFORM_EXPORT FetchContext
-    : public GarbageCollectedFinalized<FetchContext> {
+class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
  public:
   FetchContext() = default;
 

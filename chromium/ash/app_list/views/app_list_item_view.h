@@ -29,7 +29,7 @@ class Label;
 class ProgressBar;
 }  // namespace views
 
-namespace app_list {
+namespace ash {
 
 class AppListConfig;
 class AppListItem;
@@ -228,7 +228,7 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
   // requests.
   bool waiting_for_context_menu_options_ = false;
 
-  AppListItem* item_weak_;  // Owned by AppListModel. Can be NULL.
+  AppListItem* item_weak_;  // Owned by AppListModel. Can be nullptr.
 
   AppListViewDelegate* delegate_;            // Unowned.
   AppsGridView* apps_grid_view_;             // Parent view, owns this.
@@ -283,6 +283,6 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
   DISALLOW_COPY_AND_ASSIGN(AppListItemView);
 };
 
-}  // namespace app_list
+}  // namespace ash
 
 #endif  // ASH_APP_LIST_VIEWS_APP_LIST_ITEM_VIEW_H_

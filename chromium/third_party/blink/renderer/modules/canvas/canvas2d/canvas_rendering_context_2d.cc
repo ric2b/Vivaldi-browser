@@ -317,7 +317,7 @@ CanvasPixelFormat CanvasRenderingContext2D::PixelFormat() const {
 }
 
 void CanvasRenderingContext2D::Reset() {
-  // This is a multiple inherritance bootstrap
+  // This is a multiple inheritance bootstrap
   BaseRenderingContext2D::Reset();
 }
 
@@ -665,10 +665,17 @@ bool CanvasRenderingContext2D::CanCreateCanvas2dResourceProvider() const {
 }
 
 scoped_refptr<StaticBitmapImage> blink::CanvasRenderingContext2D::GetImage(
-    AccelerationHint hint) const {
+    AccelerationHint hint) {
   if (!IsPaintable())
     return nullptr;
   return canvas()->GetCanvas2DLayerBridge()->NewImageSnapshot(hint);
+}
+
+void CanvasRenderingContext2D::FinalizeFrame() {
+  TRACE_EVENT0("blink", "CanvasRenderingContext2D::FinalizeFrame");
+  if (canvas() && canvas()->GetCanvas2DLayerBridge())
+    canvas()->GetCanvas2DLayerBridge()->FinalizeFrame();
+  usage_counters_.num_frames_since_reset++;
 }
 
 bool CanvasRenderingContext2D::ParseColorOrCurrentColor(
@@ -1130,6 +1137,13 @@ bool CanvasRenderingContext2D::IsCanvas2DBufferValid() const {
     return canvas()->GetCanvas2DLayerBridge()->IsValid();
   }
   return false;
+}
+
+bool CanvasRenderingContext2D::IsDeferralEnabled() const {
+  Canvas2DLayerBridge* layer_bridge = canvas()->GetCanvas2DLayerBridge();
+  if (!layer_bridge)
+    return false;
+  return layer_bridge->IsDeferralEnabled();
 }
 
 }  // namespace blink

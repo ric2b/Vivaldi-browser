@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_setup_controller.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_setup_test_utils.h"
 #include "chrome/browser/chromeos/login/test/enrollment_helper_mixin.h"
@@ -43,6 +45,30 @@
 #define MAYBE_TestSelectConnectedNetwork TestSelectConnectedNetwork
 #define MAYBE_TestSelectNetwork TestSelectNetwork
 #define MAYBE_TestDeviceRequisition TestDeviceRequisition
+#endif
+
+// Disabled due to flakiness: https://crbug.com/997685.
+#define MAYBE_TestDemoModeAcceptEula DISABLED_TestDemoModeAcceptEula
+#define MAYBE_TestDemoModeOfflineNetwork DISABLED_TestDemoModeOfflineNetwork
+// Disabled on debug build due to flakiness: https://crbug.com/997685.
+#if !defined(NDEBUG)
+#define MAYBE_TestAcceptEula DISABLED_TestAcceptEula
+#define MAYBE_TestDemoModeAcceptArcTos DISABLED_TestDemoModeAcceptArcTos
+#define MAYBE_TestDemoModePreferences DISABLED_TestDemoModePreferences
+#define MAYBE_TestEnableDemoMode DISABLED_TestEnableDemoMode
+#define MAYBE_TestLeaveWelcomeScreen DISABLED_TestLeaveWelcomeScreen
+#define MAYBE_TestSwitchLanguageIME DISABLED_TestSwitchLanguageIME
+#define MAYBE_TestLeaveWelcomeScreen DISABLED_TestLeaveWelcomeScreen
+#define MAYBE_TestSkipHIDDetection DISABLED_TestSkipHIDDetection
+#else
+#define MAYBE_TestAcceptEula TestAcceptEula
+#define MAYBE_TestDemoModeAcceptArcTos TestDemoModeAcceptArcTos
+#define MAYBE_TestDemoModePreferences TestDemoModePreferences
+#define MAYBE_TestEnableDemoMode TestEnableDemoMode
+#define MAYBE_TestLeaveWelcomeScreen TestLeaveWelcomeScreen
+#define MAYBE_TestSwitchLanguageIME TestSwitchLanguageIME
+#define MAYBE_TestLeaveWelcomeScreen TestLeaveWelcomeScreen
+#define MAYBE_TestSkipHIDDetection TestSkipHIDDetection
 #endif
 
 namespace chromeos {
@@ -153,7 +179,13 @@ class OobeConfigurationTest : public OobeBaseTest {
 // EnterpriseEnrollmentConfigurationTest with no input devices.
 class OobeConfigurationTestNoHID : public OobeConfigurationTest {
  public:
-  OobeConfigurationTestNoHID() = default;
+  OobeConfigurationTestNoHID() {
+    // HID detection screen only appears for Chromebases, Chromebits, and
+    // Chromeboxes.
+    base::SysInfo::SetChromeOSVersionInfoForTest("DEVICETYPE=CHROMEBOX",
+                                                 base::Time::Now());
+  }
+
   ~OobeConfigurationTestNoHID() override = default;
 
  protected:
@@ -179,13 +211,13 @@ class OobeConfigurationEnrollmentTest : public OobeConfigurationTest {
 };
 
 // Check that configuration lets correctly pass Welcome screen.
-IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, TestLeaveWelcomeScreen) {
+IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, MAYBE_TestLeaveWelcomeScreen) {
   LoadConfiguration();
   OobeScreenWaiter(NetworkScreenView::kScreenId).Wait();
 }
 
 // Check that language and input methods are set correctly.
-IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, TestSwitchLanguageIME) {
+IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, MAYBE_TestSwitchLanguageIME) {
   LoadConfiguration();
   OobeScreenWaiter(NetworkScreenView::kScreenId).Wait();
 
@@ -207,20 +239,21 @@ IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, TestSwitchLanguageIME) {
 }
 
 // Check that configuration lets correctly start Demo mode setup.
-IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, TestEnableDemoMode) {
+IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, MAYBE_TestEnableDemoMode) {
   LoadConfiguration();
   OobeScreenWaiter(DemoPreferencesScreenView::kScreenId).Wait();
 }
 
 // Check that configuration lets correctly pass through demo preferences.
-IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, TestDemoModePreferences) {
+IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, MAYBE_TestDemoModePreferences) {
   LoadConfiguration();
   OobeScreenWaiter(NetworkScreenView::kScreenId).Wait();
 }
 
 // Check that configuration lets correctly use offline demo mode on network
 // screen.
-IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, TestDemoModeOfflineNetwork) {
+IN_PROC_BROWSER_TEST_F(OobeConfigurationTest,
+                       MAYBE_TestDemoModeOfflineNetwork) {
   LoadConfiguration();
   OobeScreenWaiter(DemoPreferencesScreenView::kScreenId).Wait();
   SimulateOfflineEnvironment();
@@ -229,7 +262,7 @@ IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, TestDemoModeOfflineNetwork) {
 
 // Check that configuration lets correctly use offline demo mode on EULA
 // screen.
-IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, TestDemoModeAcceptEula) {
+IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, MAYBE_TestDemoModeAcceptEula) {
   LoadConfiguration();
   OobeScreenWaiter(DemoPreferencesScreenView::kScreenId).Wait();
   SimulateOfflineEnvironment();
@@ -238,7 +271,7 @@ IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, TestDemoModeAcceptEula) {
 
 // Check that configuration lets correctly use offline demo mode on ARC++ ToS
 // screen.
-IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, TestDemoModeAcceptArcTos) {
+IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, MAYBE_TestDemoModeAcceptArcTos) {
   LoadConfiguration();
   OobeScreenWaiter(DemoPreferencesScreenView::kScreenId).Wait();
   SimulateOfflineEnvironment();
@@ -274,10 +307,10 @@ IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, TestConnectedNetworkNoWelcome) {
 }
 
 // Check that when configuration has ONC and EULA, we get to update screen.
-IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, TestAcceptEula) {
-  UpdateEngineClient::Status status;
-  status.status = UpdateEngineClient::UPDATE_STATUS_DOWNLOADING;
-  status.download_progress = 0.1;
+IN_PROC_BROWSER_TEST_F(OobeConfigurationTest, MAYBE_TestAcceptEula) {
+  update_engine::StatusResult status;
+  status.set_current_operation(update_engine::Operation::DOWNLOADING);
+  status.set_progress(0.1);
   fake_update_engine_client_->set_default_status(status);
 
   LoadConfiguration();
@@ -317,14 +350,14 @@ IN_PROC_BROWSER_TEST_F(OobeConfigurationEnrollmentTest, TestEnrollUsingToken) {
 
 // Check that HID detection screen is shown if it is not specified by
 // configuration.
-IN_PROC_BROWSER_TEST_F(OobeConfigurationTestNoHID, TestLeaveWelcomeScreen) {
+IN_PROC_BROWSER_TEST_F(OobeConfigurationTestNoHID, TestShowHID) {
   LoadConfiguration();
   OobeScreenWaiter(HIDDetectionView::kScreenId).Wait();
 }
 
 // Check that HID detection screen is really skipped and rest of configuration
 // is applied.
-IN_PROC_BROWSER_TEST_F(OobeConfigurationTestNoHID, TestSkipHIDDetection) {
+IN_PROC_BROWSER_TEST_F(OobeConfigurationTestNoHID, MAYBE_TestSkipHIDDetection) {
   LoadConfiguration();
   OobeScreenWaiter(NetworkScreenView::kScreenId).Wait();
 }

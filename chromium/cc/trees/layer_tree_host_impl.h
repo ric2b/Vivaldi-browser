@@ -60,7 +60,6 @@
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/common/surfaces/surface_range.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/latency/frame_metrics.h"
 
 namespace gfx {
 class ScrollOffset;
@@ -69,7 +68,8 @@ class ScrollOffset;
 namespace viz {
 class CompositorFrame;
 class CompositorFrameMetadata;
-}
+struct FrameTimingDetails;
+}  // namespace viz
 
 namespace cc {
 
@@ -106,7 +106,6 @@ enum class GpuRasterizationStatus {
   ON,
   ON_FORCED,
   OFF_DEVICE,
-  OFF_VIEWPORT,
   MSAA_CONTENT,
 };
 
@@ -160,7 +159,7 @@ class LayerTreeHostImplClient {
   virtual void DidPresentCompositorFrameOnImplThread(
       uint32_t frame_token,
       std::vector<LayerTreeHost::PresentationTimeCallback> callbacks,
-      const gfx::PresentationFeedback& feedback) = 0;
+      const viz::FrameTimingDetails& details) = 0;
 
   // Returns whether the main-thread is expected to receive a BeginMainFrame.
   virtual bool IsBeginMainFrameExpected() = 0;
@@ -198,6 +197,7 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
 
     FrameData& operator=(const FrameData&) = delete;
     void AsValueInto(base::trace_event::TracedValue* value) const;
+    std::string ToString() const;
 
     // frame_token is populated by the LayerTreeHostImpl when submitted.
     uint32_t frame_token = 0;
@@ -251,7 +251,8 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
       TaskGraphRunner* task_graph_runner,
       std::unique_ptr<MutatorHost> mutator_host,
       int id,
-      scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner);
+      scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner,
+      LayerTreeHostSchedulingClient* scheduling_client);
   LayerTreeHostImpl(const LayerTreeHostImpl&) = delete;
   ~LayerTreeHostImpl() override;
 
@@ -277,8 +278,8 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
       const gfx::ScrollOffset& root_content_offset) override;
   void ScrollEnd(ScrollState* scroll_state, bool should_snap = false) override;
 
-  InputHandlerPointerResult MouseDown(
-      const gfx::PointF& viewport_point) override;
+  InputHandlerPointerResult MouseDown(const gfx::PointF& viewport_point,
+                                      bool shift_modifier) override;
   InputHandlerPointerResult MouseUp(const gfx::PointF& viewport_point) override;
   InputHandlerPointerResult MouseMoveAt(
       const gfx::Point& viewport_point) override;
@@ -336,7 +337,7 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
     return viewport_damage_rect_;
   }
 
-  virtual void WillSendBeginMainFrame() {}
+  virtual void WillSendBeginMainFrame();
   virtual void DidSendBeginMainFrame(const viz::BeginFrameArgs& args);
   virtual void BeginMainFrameAborted(
       CommitEarlyOutReason reason,
@@ -494,7 +495,7 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   void DidReceiveCompositorFrameAck() override;
   void DidPresentCompositorFrame(
       uint32_t frame_token,
-      const gfx::PresentationFeedback& feedback) override;
+      const viz::FrameTimingDetails& details) override;
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override;
   void SetMemoryPolicy(const ManagedMemoryPolicy& policy) override;
@@ -521,7 +522,6 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   virtual bool InitializeFrameSink(LayerTreeFrameSink* layer_tree_frame_sink);
   TileManager* tile_manager() { return &tile_manager_; }
 
-  void SetHasGpuRasterizationTrigger(bool flag);
   void SetContentHasSlowPaths(bool flag);
   void SetContentHasNonAAPaint(bool flag);
   void GetGpuRasterizationCapabilities(bool* gpu_rasterization_enabled,
@@ -547,6 +547,14 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
 
   uint32_t next_frame_token() const { return *next_frame_token_; }
 
+  // Buffers |callback| until a relevant frame swap ocurrs, at which point the
+  // callback will be run on the compositor thread. A frame swap is considered
+  // relevant if the swapped frame's token is greater than or equal to
+  // |frame_token|.
+  void RegisterCompositorPresentationTimeCallback(
+      uint32_t frame_token,
+      LayerTreeHost::PresentationTimeCallback callback);
+
   virtual bool WillBeginImplFrame(const viz::BeginFrameArgs& args);
   virtual void DidFinishImplFrame();
   void DidNotProduceFrame(const viz::BeginFrameAck& ack);
@@ -566,11 +574,7 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   virtual void ActivateSyncTree();
 
   // Shortcuts to layers/nodes on the active tree.
-  LayerImpl* InnerViewportContainerLayer() const;
-  LayerImpl* InnerViewportScrollLayer() const;
   ScrollNode* InnerViewportScrollNode() const;
-  LayerImpl* OuterViewportContainerLayer() const;
-  LayerImpl* OuterViewportScrollLayer() const;
   ScrollNode* OuterViewportScrollNode() const;
   ScrollNode* CurrentlyScrollingNode();
   const ScrollNode* CurrentlyScrollingNode() const;
@@ -764,7 +768,6 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   // of these -- we call that the "main" scroll node. When scrolling it, we
   // scroll using the Viewport class which knows how to distribute scroll
   // between the two.
-  LayerImpl* ViewportMainScrollLayer();
   ScrollNode* ViewportMainScrollNode();
 
   void QueueImageDecode(int request_id, const PaintImage& image);
@@ -810,7 +813,8 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
       TaskGraphRunner* task_graph_runner,
       std::unique_ptr<MutatorHost> mutator_host,
       int id,
-      scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner);
+      scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner,
+      LayerTreeHostSchedulingClient* scheduling_client);
 
   // Virtual for testing.
   virtual bool AnimateLayers(base::TimeTicks monotonic_time,
@@ -824,6 +828,7 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   static void RemoveRenderPasses(FrameData* frame);
 
   LayerTreeHostImplClient* const client_;
+  LayerTreeHostSchedulingClient* const scheduling_client_;
   TaskRunnerProvider* const task_runner_provider_;
 
   BeginFrameTracker current_begin_frame_tracker_;
@@ -944,7 +949,6 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
                             bool lost);
 
   void NotifySwapPromiseMonitorsOfSetNeedsRedraw();
-  void NotifySwapPromiseMonitorsOfForwardingToMainThread();
 
   void UpdateRootLayerStateForSynchronousInputHandler();
 
@@ -1034,7 +1038,6 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   bool need_update_gpu_rasterization_status_ = false;
   bool content_has_slow_paths_ = false;
   bool content_has_non_aa_paint_ = false;
-  bool has_gpu_rasterization_trigger_ = false;
   bool use_gpu_rasterization_ = false;
   bool use_oop_rasterization_ = false;
   bool use_msaa_ = false;
@@ -1237,8 +1240,6 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
 
   PresentationTimeCallbackBuffer presentation_time_callbacks_;
-  ui::FrameMetrics frame_metrics_;
-  ui::SkippedFrameTracker skipped_frame_tracker_;
   bool is_animating_for_snap_;
 
   const PaintImage::GeneratorClientId paint_image_generator_client_id_;

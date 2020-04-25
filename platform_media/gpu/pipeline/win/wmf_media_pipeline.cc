@@ -253,7 +253,7 @@ WMFMediaPipeline::WMFMediaPipeline(
     const VideoConfigChangedCB& video_config_changed_cb)
     : audio_config_changed_cb_(audio_config_changed_cb),
       video_config_changed_cb_(video_config_changed_cb),
-      byte_stream_(new WMFByteStream(data_source)),
+      byte_stream_(Microsoft::WRL::Make<WMFByteStream>(data_source)),
       threaded_impl_(std::make_unique<ThreadedImpl>(data_source)),
       media_pipeline_thread_("media_pipeline_thread"),
       media_pipeline_task_runner_(media_pipeline_thread_.task_runner()),

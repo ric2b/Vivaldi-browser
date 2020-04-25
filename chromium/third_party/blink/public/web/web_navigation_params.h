@@ -14,6 +14,7 @@
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/network/public/mojom/ip_address_space.mojom-shared.h"
 #include "services/network/public/mojom/referrer_policy.mojom-shared.h"
+#include "third_party/blink/public/common/navigation/triggering_event_info.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_network_provider.h"
 #include "third_party/blink/public/platform/web_common.h"
@@ -35,7 +36,6 @@
 #include "third_party/blink/public/web/web_navigation_timings.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
 #include "third_party/blink/public/web/web_origin_policy.h"
-#include "third_party/blink/public/web/web_triggering_event_info.h"
 
 #if INSIDE_BLINK
 #include "base/memory/scoped_refptr.h"
@@ -99,9 +99,8 @@ struct BLINK_EXPORT WebNavigationInfo {
   // |BlockingDownloadsInSandboxWithoutUserActivation| is enabled.
   bool blocking_downloads_in_sandbox_without_user_activation_enabled = false;
 
-  // Event information. See WebTriggeringEventInfo.
-  WebTriggeringEventInfo triggering_event_info =
-      WebTriggeringEventInfo::kUnknown;
+  // Event information. See TriggeringEventInfo.
+  TriggeringEventInfo triggering_event_info = TriggeringEventInfo::kUnknown;
 
   // If the navigation is a result of form submit, the form element is provided.
   WebFormElement form;
@@ -282,6 +281,9 @@ struct BLINK_EXPORT WebNavigationParams {
   WebHistoryItem history_item;
   // Whether this navigation is a result of client redirect.
   bool is_client_redirect = false;
+  // Cache mode to be used for subresources, instead of the one determined
+  // by |frame_load_type|.
+  base::Optional<blink::mojom::FetchCacheMode> force_fetch_cache_mode;
 
   // Miscellaneous parameters.
 
@@ -306,6 +308,8 @@ struct BLINK_EXPORT WebNavigationParams {
   bool is_user_activated = false;
   // Whether this navigation was browser initiated.
   bool is_browser_initiated = false;
+  // Whether the document should be able to access local file:// resources.
+  bool grant_load_local_resources = false;
   // The previews state which should be used for this navigation.
   WebURLRequest::PreviewsState previews_state =
       WebURLRequest::kPreviewsUnspecified;
@@ -344,6 +348,10 @@ struct BLINK_EXPORT WebNavigationParams {
   WebVector<int> initiator_origin_trial_features;
 
   base::Optional<WebOriginPolicy> origin_policy;
+
+  // The base URL which will be set for the document to support relative path
+  // subresource loading in unsigned bundled exchanges file.
+  WebURL base_url_override_for_bundled_exchanges;
 };
 
 }  // namespace blink

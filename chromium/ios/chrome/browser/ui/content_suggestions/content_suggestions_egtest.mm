@@ -20,7 +20,6 @@
 #include "components/ntp_snippets/content_suggestions_service.h"
 #include "components/ntp_snippets/mock_content_suggestions_provider.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/unified_consent/feature.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
@@ -48,7 +47,14 @@
 #error "This file requires ARC support."
 #endif
 
-using namespace ntp_snippets;
+using ntp_snippets::AdditionalSuggestionsHelper;
+using ntp_snippets::Category;
+using ntp_snippets::CategoryStatus;
+using ntp_snippets::ContentSuggestion;
+using ntp_snippets::ContentSuggestionsService;
+using ntp_snippets::CreateChromeContentSuggestionsService;
+using ntp_snippets::KnownCategories;
+using ntp_snippets::MockContentSuggestionsProvider;
 using testing::_;
 using testing::Invoke;
 using testing::WithArg;
@@ -199,11 +205,11 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 
   // Add 3 suggestions, persisted accross page loads.
   std::vector<ContentSuggestion> suggestions;
-  suggestions.emplace_back(
+  suggestions.push_back(
       Suggestion(self.category, "chromium1", GURL("http://chromium.org/1")));
-  suggestions.emplace_back(
+  suggestions.push_back(
       Suggestion(self.category, "chromium2", GURL("http://chromium.org/2")));
-  suggestions.emplace_back(
+  suggestions.push_back(
       Suggestion(self.category, "chromium3", GURL("http://chromium.org/3")));
   self.provider->FireSuggestionsChanged(self.category, std::move(suggestions));
 
@@ -234,42 +240,20 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
       assertWithMatcher:grey_notNil()];
 }
 
-
-// Tests that a switch for the ContentSuggestions exists in the settings. The
-// behavior depends on having a real remote provider, so it cannot be tested
-// here.
-- (void)testPrivacySwitch {
-  if (unified_consent::IsUnifiedConsentFeatureEnabled()) {
-    EARL_GREY_TEST_DISABLED(
-        @"Privacy swich for ContentSuggestion was moved to the Sync and Google "
-         "services settings screen, so it is no longer present in the privacy "
-         "section. This test is now covered by "
-         "-[GoogleServicesSettingsTestCase testOpeningServices].");
-  }
-
-  [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI
-      tapSettingsMenuButton:chrome_test_util::SettingsMenuPrivacyButton()];
-  [[EarlGrey selectElementWithMatcher:
-                 chrome_test_util::StaticTextWithAccessibilityLabelId(
-                     IDS_IOS_OPTIONS_SEARCH_URL_SUGGESTIONS)]
-      assertWithMatcher:grey_sufficientlyVisible()];
-}
-
 // Tests that when the page is reloaded using the tools menu, the suggestions
 // are updated.
 - (void)testReloadPage {
   // Add 2 suggestions.
   std::vector<ContentSuggestion> suggestions;
-  suggestions.emplace_back(
+  suggestions.push_back(
       Suggestion(self.category, "chromium1", GURL("http://chromium.org/1")));
-  suggestions.emplace_back(
+  suggestions.push_back(
       Suggestion(self.category, "chromium2", GURL("http://chromium.org/2")));
   self.provider->FireSuggestionsChanged(self.category, std::move(suggestions));
 
   // Change the suggestions to have one the second one.
   std::vector<ContentSuggestion> suggestionsOnly;
-  suggestionsOnly.emplace_back(
+  suggestionsOnly.push_back(
       Suggestion(self.category, "chromium2", GURL("http://chromium.org/2")));
   self.provider->FireSuggestionsChanged(self.category,
                                         std::move(suggestionsOnly));
@@ -299,11 +283,11 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 
   // Add 3 suggestions, persisted accross page loads.
   std::vector<ContentSuggestion> suggestions;
-  suggestions.emplace_back(
+  suggestions.push_back(
       Suggestion(self.category, "chromium1", GURL("http://chromium.org/1")));
-  suggestions.emplace_back(
+  suggestions.push_back(
       Suggestion(self.category, "chromium2", GURL("http://chromium.org/2")));
-  suggestions.emplace_back(
+  suggestions.push_back(
       Suggestion(self.category, "chromium3", GURL("http://chromium.org/3")));
   self.provider->FireSuggestionsChanged(self.category, std::move(suggestions));
 
@@ -362,7 +346,7 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
       assertWithMatcher:grey_nil()];
 
   std::vector<ContentSuggestion> suggestions;
-  suggestions.emplace_back(
+  suggestions.push_back(
       Suggestion(self.category, "chromium", GURL("http://chromium.org")));
   self.provider->FireSuggestionsChanged(self.category, std::move(suggestions));
 

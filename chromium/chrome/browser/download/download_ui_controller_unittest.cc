@@ -13,29 +13,34 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_core_service_impl.h"
 #include "chrome/browser/download/download_history.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ssl/security_state_tab_helper.h"
+#include "chrome/browser/ssl/tls_deprecation_test_utils.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/download/public/common/mock_download_item.h"
 #include "components/history/core/browser/download_row.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/test/mock_download_manager.h"
+#include "content/public/test/navigation_simulator.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gmock_mutant.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using download::MockDownloadItem;
 using content::MockDownloadManager;
+using download::MockDownloadItem;
 using history::HistoryService;
+using testing::_;
 using testing::AnyNumber;
 using testing::Assign;
 using testing::CreateFunctor;
 using testing::Return;
+using testing::ReturnRef;
 using testing::ReturnRefOfCopy;
 using testing::SaveArg;
-using testing::_;
 
 namespace {
 
@@ -96,8 +101,6 @@ class DownloadUIControllerTest : public ChromeRenderViewHostTestHarness {
   // Returns a TestDelegate. Invoking OnNewDownloadReady on the returned
   // delegate results in the DownloadItem* being stored in |notified_item_|.
   std::unique_ptr<DownloadUIController::Delegate> GetTestDelegate();
-
-  DownloadOfflineContentProvider* GetDownloadProvider() { return nullptr; }
 
   MockDownloadManager* manager() { return manager_.get(); }
 
@@ -274,8 +277,7 @@ DownloadUIControllerTest::GetTestDelegate() {
 // a non-empty path.  I.e. once the download target has been determined.
 TEST_F(DownloadUIControllerTest, DownloadUIController_NotifyBasic) {
   std::unique_ptr<MockDownloadItem> item(CreateMockInProgressDownload());
-  DownloadUIController controller(manager(), GetTestDelegate(),
-                                  GetDownloadProvider());
+  DownloadUIController controller(manager(), GetTestDelegate());
   EXPECT_CALL(*item, GetTargetFilePath())
       .WillOnce(ReturnRefOfCopy(base::FilePath()));
 
@@ -297,8 +299,7 @@ TEST_F(DownloadUIControllerTest, DownloadUIController_NotifyBasic) {
 // A download that's created in an interrupted state should also be displayed.
 TEST_F(DownloadUIControllerTest, DownloadUIController_NotifyBasic_Interrupted) {
   std::unique_ptr<MockDownloadItem> item = CreateMockInProgressDownload();
-  DownloadUIController controller(manager(), GetTestDelegate(),
-                                  GetDownloadProvider());
+  DownloadUIController controller(manager(), GetTestDelegate());
   EXPECT_CALL(*item, GetState())
       .WillRepeatedly(Return(download::DownloadItem::INTERRUPTED));
 
@@ -312,8 +313,7 @@ TEST_F(DownloadUIControllerTest, DownloadUIController_NotifyBasic_Interrupted) {
 // additional OnDownloadUpdated() notification.
 TEST_F(DownloadUIControllerTest, DownloadUIController_NotifyReadyOnCreate) {
   std::unique_ptr<MockDownloadItem> item(CreateMockInProgressDownload());
-  DownloadUIController controller(manager(), GetTestDelegate(),
-                                  GetDownloadProvider());
+  DownloadUIController controller(manager(), GetTestDelegate());
 
   ASSERT_TRUE(manager_observer());
   manager_observer()->OnDownloadCreated(manager(), item.get());
@@ -322,8 +322,7 @@ TEST_F(DownloadUIControllerTest, DownloadUIController_NotifyReadyOnCreate) {
 
 // The UI shouldn't be notified of downloads that were restored from history.
 TEST_F(DownloadUIControllerTest, DownloadUIController_HistoryDownload) {
-  DownloadUIController controller(manager(), GetTestDelegate(),
-                                  GetDownloadProvider());
+  DownloadUIController controller(manager(), GetTestDelegate());
   // DownloadHistory should already have been created. It performs a query of
   // existing downloads upon creation. We'll use the callback to inject a
   // history download.
@@ -390,6 +389,84 @@ TEST_F(DownloadUIControllerTest, DownloadUIController_HistoryDownload) {
       .WillRepeatedly(Return(download::DownloadItem::IN_PROGRESS));
   item->NotifyObserversDownloadUpdated();
   EXPECT_EQ(static_cast<download::DownloadItem*>(item.get()), notified_item());
+}
+
+TEST_F(DownloadUIControllerTest, LegacyTLSMetrics) {
+  base::HistogramTester histograms;
+  SecurityStateTabHelper::CreateForWebContents(web_contents());
+  InitializeEmptyLegacyTLSConfig();
+
+  auto navigation =
+      CreateLegacyTLSNavigation(GURL(kLegacyTLSDefaultURL), web_contents());
+  navigation->Commit();
+
+  // Start a download from the same page, setting up the mock item to correctly
+  // associate with the WebContents of the previous navigation.
+  std::unique_ptr<MockDownloadItem> item(CreateMockInProgressDownload());
+  GURL download_url("https://download.test/file.bin");
+  EXPECT_CALL(*item, GetURL()).WillRepeatedly(ReturnRef(download_url));
+  EXPECT_CALL(*item, GetOriginalUrl()).WillRepeatedly(ReturnRef(download_url));
+  content::DownloadItemUtils::AttachInfo(item.get(), browser_context(),
+                                         web_contents());
+
+  DownloadUIController controller(manager(), GetTestDelegate());
+
+  ASSERT_TRUE(manager_observer());
+  manager_observer()->OnDownloadCreated(manager(), item.get());
+
+  histograms.ExpectUniqueSample("Security.LegacyTLS.DownloadStarted", true, 1);
+}
+
+TEST_F(DownloadUIControllerTest, LegacyTLSControlSiteMetrics) {
+  base::HistogramTester histograms;
+  SecurityStateTabHelper::CreateForWebContents(web_contents());
+  InitializeLegacyTLSConfigWithControl();
+
+  auto navigation =
+      CreateLegacyTLSNavigation(GURL(kLegacyTLSControlURL), web_contents());
+  navigation->Commit();
+
+  // Start a download from the same page, setting up the mock item to correctly
+  // associate with the WebContents of the previous navigation.
+  std::unique_ptr<MockDownloadItem> item(CreateMockInProgressDownload());
+  GURL download_url("https://download.test/file.bin");
+  EXPECT_CALL(*item, GetURL()).WillRepeatedly(ReturnRef(download_url));
+  EXPECT_CALL(*item, GetOriginalUrl()).WillRepeatedly(ReturnRef(download_url));
+  content::DownloadItemUtils::AttachInfo(item.get(), browser_context(),
+                                         web_contents());
+
+  DownloadUIController controller(manager(), GetTestDelegate());
+
+  ASSERT_TRUE(manager_observer());
+  manager_observer()->OnDownloadCreated(manager(), item.get());
+
+  histograms.ExpectUniqueSample("Security.LegacyTLS.DownloadStarted", false, 1);
+}
+
+TEST_F(DownloadUIControllerTest, LegacyTLSGoodSiteMetrics) {
+  base::HistogramTester histograms;
+  SecurityStateTabHelper::CreateForWebContents(web_contents());
+  InitializeEmptyLegacyTLSConfig();
+
+  auto navigation =
+      CreateNonlegacyTLSNavigation(GURL("https://good.test"), web_contents());
+  navigation->Commit();
+
+  // Start a download from the same page, setting up the mock item to correctly
+  // associate with the WebContents of the previous navigation.
+  std::unique_ptr<MockDownloadItem> item(CreateMockInProgressDownload());
+  GURL download_url("https://download.test/file.bin");
+  EXPECT_CALL(*item, GetURL()).WillRepeatedly(ReturnRef(download_url));
+  EXPECT_CALL(*item, GetOriginalUrl()).WillRepeatedly(ReturnRef(download_url));
+  content::DownloadItemUtils::AttachInfo(item.get(), browser_context(),
+                                         web_contents());
+
+  DownloadUIController controller(manager(), GetTestDelegate());
+
+  ASSERT_TRUE(manager_observer());
+  manager_observer()->OnDownloadCreated(manager(), item.get());
+
+  histograms.ExpectUniqueSample("Security.LegacyTLS.DownloadStarted", false, 1);
 }
 
 } // namespace

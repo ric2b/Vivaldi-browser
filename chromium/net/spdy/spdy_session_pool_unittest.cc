@@ -207,7 +207,8 @@ TEST_F(SpdySessionPoolTest, CloseCurrentSessions) {
   HostPortPair test_host_port_pair(kTestHost, kTestPort);
   SpdySessionKey test_key = SpdySessionKey(
       test_host_port_pair, ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-      SpdySessionKey::IsProxySession::kFalse, SocketTag());
+      SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+      NetworkIsolationKey(), false /* disable_secure_dns */);
 
   MockConnect connect_data(SYNCHRONOUS, OK);
   MockRead reads[] = {
@@ -267,7 +268,8 @@ TEST_F(SpdySessionPoolTest, CloseCurrentIdleSessions) {
   HostPortPair test_host_port_pair1(HostPortPair::FromURL(url1));
   SpdySessionKey key1(test_host_port_pair1, ProxyServer::Direct(),
                       PRIVACY_MODE_DISABLED,
-                      SpdySessionKey::IsProxySession::kFalse, SocketTag());
+                      SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+                      NetworkIsolationKey(), false /* disable_secure_dns */);
   base::WeakPtr<SpdySession> session1 =
       CreateSpdySession(http_session_.get(), key1, NetLogWithSource());
   base::WeakPtr<SpdyStream> spdy_stream1 = CreateStreamSynchronously(
@@ -281,7 +283,8 @@ TEST_F(SpdySessionPoolTest, CloseCurrentIdleSessions) {
   HostPortPair test_host_port_pair2(HostPortPair::FromURL(url2));
   SpdySessionKey key2(test_host_port_pair2, ProxyServer::Direct(),
                       PRIVACY_MODE_DISABLED,
-                      SpdySessionKey::IsProxySession::kFalse, SocketTag());
+                      SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+                      NetworkIsolationKey(), false /* disable_secure_dns */);
   base::WeakPtr<SpdySession> session2 =
       CreateSpdySession(http_session_.get(), key2, NetLogWithSource());
   base::WeakPtr<SpdyStream> spdy_stream2 = CreateStreamSynchronously(
@@ -296,7 +299,8 @@ TEST_F(SpdySessionPoolTest, CloseCurrentIdleSessions) {
   HostPortPair test_host_port_pair3(HostPortPair::FromURL(url3));
   SpdySessionKey key3(test_host_port_pair3, ProxyServer::Direct(),
                       PRIVACY_MODE_DISABLED,
-                      SpdySessionKey::IsProxySession::kFalse, SocketTag());
+                      SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+                      NetworkIsolationKey(), false /* disable_secure_dns */);
   base::WeakPtr<SpdySession> session3 =
       CreateSpdySession(http_session_.get(), key3, NetLogWithSource());
   base::WeakPtr<SpdyStream> spdy_stream3 = CreateStreamSynchronously(
@@ -373,7 +377,8 @@ TEST_F(SpdySessionPoolTest, CloseAllSessions) {
   HostPortPair test_host_port_pair(kTestHost, kTestPort);
   SpdySessionKey test_key = SpdySessionKey(
       test_host_port_pair, ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-      SpdySessionKey::IsProxySession::kFalse, SocketTag());
+      SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+      NetworkIsolationKey(), false /* disable_secure_dns */);
 
   MockConnect connect_data(SYNCHRONOUS, OK);
   MockRead reads[] = {
@@ -440,10 +445,10 @@ void SpdySessionPoolTest::RunIPPoolingTest(
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
         test_hosts[i].name, test_hosts[i].iplist, std::string());
 
-    test_hosts[i].key =
-        SpdySessionKey(HostPortPair(test_hosts[i].name, kTestPort),
-                       ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-                       SpdySessionKey::IsProxySession::kFalse, SocketTag());
+    test_hosts[i].key = SpdySessionKey(
+        HostPortPair(test_hosts[i].name, kTestPort), ProxyServer::Direct(),
+        PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
+        SocketTag(), NetworkIsolationKey(), false /* disable_secure_dns */);
   }
 
   MockConnect connect_data(SYNCHRONOUS, OK);
@@ -488,9 +493,18 @@ void SpdySessionPoolTest::RunIPPoolingTest(
       test_hosts[1].key.host_port_pair(),
       ProxyServer::FromPacString("HTTP http://proxy.foo.com/"),
       PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
-      SocketTag());
+      SocketTag(), NetworkIsolationKey(), false /* disable_secure_dns */);
   EXPECT_FALSE(TryCreateAliasedSpdySession(spdy_session_pool_, proxy_key,
                                            test_hosts[1].iplist));
+
+  // Verify that the second host, with a different disable_secure_dns value,
+  // won't share the IP, even if the IP list matches.
+  SpdySessionKey disable_secure_dns_key(
+      test_hosts[1].key.host_port_pair(), ProxyServer::Direct(),
+      PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
+      SocketTag(), NetworkIsolationKey(), true /* disable_secure_dns */);
+  EXPECT_FALSE(TryCreateAliasedSpdySession(
+      spdy_session_pool_, disable_secure_dns_key, test_hosts[1].iplist));
 
   // Overlap between 2 and 3 is not transitive to 1.
   EXPECT_FALSE(TryCreateAliasedSpdySession(
@@ -615,10 +629,10 @@ void SpdySessionPoolTest::RunIPPoolingDisabledTest(SSLSocketDataProvider* ssl) {
         test_hosts[i].name, test_hosts[i].iplist, std::string());
 
     // Setup a SpdySessionKey
-    test_hosts[i].key =
-        SpdySessionKey(HostPortPair(test_hosts[i].name, kTestPort),
-                       ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-                       SpdySessionKey::IsProxySession::kFalse, SocketTag());
+    test_hosts[i].key = SpdySessionKey(
+        HostPortPair(test_hosts[i].name, kTestPort), ProxyServer::Direct(),
+        PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
+        SocketTag(), NetworkIsolationKey(), false /* disable_secure_dns */);
   }
 
   MockRead reads[] = {
@@ -671,10 +685,10 @@ TEST_F(SpdySessionPoolTest, IPPoolingNetLog) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
         test_hosts[i].name, test_hosts[i].iplist, std::string());
 
-    test_hosts[i].key =
-        SpdySessionKey(HostPortPair(test_hosts[i].name, kTestPort),
-                       ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-                       SpdySessionKey::IsProxySession::kFalse, SocketTag());
+    test_hosts[i].key = SpdySessionKey(
+        HostPortPair(test_hosts[i].name, kTestPort), ProxyServer::Direct(),
+        PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
+        SocketTag(), NetworkIsolationKey(), false /* disable_secure_dns */);
   }
 
   MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING)};
@@ -737,10 +751,10 @@ TEST_F(SpdySessionPoolTest, IPPoolingDisabled) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
         test_hosts[i].name, test_hosts[i].iplist, std::string());
 
-    test_hosts[i].key =
-        SpdySessionKey(HostPortPair(test_hosts[i].name, kTestPort),
-                       ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-                       SpdySessionKey::IsProxySession::kFalse, SocketTag());
+    test_hosts[i].key = SpdySessionKey(
+        HostPortPair(test_hosts[i].name, kTestPort), ProxyServer::Direct(),
+        PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
+        SocketTag(), NetworkIsolationKey(), false /* disable_secure_dns */);
   }
 
   MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING)};
@@ -833,7 +847,8 @@ TEST_F(SpdySessionPoolTest, IPAddressChanged) {
   HostPortPair test_host_port_pairA(kTestHostA, 80);
   SpdySessionKey keyA(test_host_port_pairA, ProxyServer::Direct(),
                       PRIVACY_MODE_DISABLED,
-                      SpdySessionKey::IsProxySession::kFalse, SocketTag());
+                      SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+                      NetworkIsolationKey(), false /* disable_secure_dns */);
   base::WeakPtr<SpdySession> sessionA =
       CreateSpdySession(http_session_.get(), keyA, NetLogWithSource());
 
@@ -864,7 +879,8 @@ TEST_F(SpdySessionPoolTest, IPAddressChanged) {
   HostPortPair test_host_port_pairB(kTestHostB, 80);
   SpdySessionKey keyB(test_host_port_pairB, ProxyServer::Direct(),
                       PRIVACY_MODE_DISABLED,
-                      SpdySessionKey::IsProxySession::kFalse, SocketTag());
+                      SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+                      NetworkIsolationKey(), false /* disable_secure_dns */);
   base::WeakPtr<SpdySession> sessionB =
       CreateSpdySession(http_session_.get(), keyB, NetLogWithSource());
   EXPECT_TRUE(sessionB->IsAvailable());
@@ -886,7 +902,8 @@ TEST_F(SpdySessionPoolTest, IPAddressChanged) {
   HostPortPair test_host_port_pairC(kTestHostC, 80);
   SpdySessionKey keyC(test_host_port_pairC, ProxyServer::Direct(),
                       PRIVACY_MODE_DISABLED,
-                      SpdySessionKey::IsProxySession::kFalse, SocketTag());
+                      SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+                      NetworkIsolationKey(), false /* disable_secure_dns */);
   base::WeakPtr<SpdySession> sessionC =
       CreateSpdySession(http_session_.get(), keyC, NetLogWithSource());
 
@@ -945,7 +962,8 @@ TEST_F(SpdySessionPoolTest, HandleIPAddressChangeThenShutdown) {
   const GURL url(kDefaultUrl);
   SpdySessionKey key(HostPortPair::FromURL(url), ProxyServer::Direct(),
                      PRIVACY_MODE_DISABLED,
-                     SpdySessionKey::IsProxySession::kFalse, SocketTag());
+                     SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */);
   base::WeakPtr<SpdySession> session =
       CreateSpdySession(http_session_.get(), key, NetLogWithSource());
 
@@ -1002,7 +1020,8 @@ TEST_F(SpdySessionPoolTest, HandleGracefulGoawayThenShutdown) {
   const GURL url(kDefaultUrl);
   SpdySessionKey key(HostPortPair::FromURL(url), ProxyServer::Direct(),
                      PRIVACY_MODE_DISABLED,
-                     SpdySessionKey::IsProxySession::kFalse, SocketTag());
+                     SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */);
   base::WeakPtr<SpdySession> session =
       CreateSpdySession(http_session_.get(), key, NetLogWithSource());
 
@@ -1050,7 +1069,8 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(SpdySessionMemoryDumpTest, DumpMemoryStats) {
   SpdySessionKey key(HostPortPair("www.example.org", 443),
                      ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-                     SpdySessionKey::IsProxySession::kFalse, SocketTag());
+                     SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */);
 
   MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING)};
   StaticSocketDataProvider data(reads, base::span<MockWrite>());
@@ -1112,10 +1132,10 @@ TEST_F(SpdySessionPoolTest, IPConnectionPoolingWithWebSockets) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
         test_hosts[i].name, test_hosts[i].iplist, std::string());
 
-    test_hosts[i].key =
-        SpdySessionKey(HostPortPair(test_hosts[i].name, kTestPort),
-                       ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-                       SpdySessionKey::IsProxySession::kFalse, SocketTag());
+    test_hosts[i].key = SpdySessionKey(
+        HostPortPair(test_hosts[i].name, kTestPort), ProxyServer::Direct(),
+        PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
+        SocketTag(), NetworkIsolationKey(), false /* disable_secure_dns */);
   }
 
   SpdyTestUtil spdy_util;
@@ -1269,10 +1289,10 @@ class TestRequestDelegate
 };
 
 TEST_F(SpdySessionPoolTest, RequestSessionWithNoSessions) {
-  const SpdySessionKey kSessionKey(HostPortPair("foo.test", 443),
-                                   ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-                                   SpdySessionKey::IsProxySession::kFalse,
-                                   SocketTag());
+  const SpdySessionKey kSessionKey(
+      HostPortPair("foo.test", 443), ProxyServer::Direct(),
+      PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
+      SocketTag(), NetworkIsolationKey(), false /* disable_secure_dns */);
 
   CreateNetworkSession();
 
@@ -1331,10 +1351,10 @@ TEST_F(SpdySessionPoolTest, RequestSessionWithNoSessions) {
 }
 
 TEST_F(SpdySessionPoolTest, RequestSessionDuringNotification) {
-  const SpdySessionKey kSessionKey(HostPortPair("foo.test", 443),
-                                   ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-                                   SpdySessionKey::IsProxySession::kFalse,
-                                   SocketTag());
+  const SpdySessionKey kSessionKey(
+      HostPortPair("foo.test", 443), ProxyServer::Direct(),
+      PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
+      SocketTag(), NetworkIsolationKey(), false /* disable_secure_dns */);
 
   CreateNetworkSession();
 
@@ -1463,7 +1483,7 @@ TEST_F(SpdySessionPoolTest, SSLConfigForServerChanged) {
         HostPortPair::FromURL(GURL(kSSLServerTests[i].url)),
         ProxyServer::FromPacString(kSSLServerTests[i].proxy_pac_string),
         PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
-        SocketTag());
+        SocketTag(), NetworkIsolationKey(), false /* disable_secure_dns */);
     sessions.push_back(
         CreateSpdySession(http_session_.get(), key, NetLogWithSource()));
   }
@@ -1518,7 +1538,7 @@ TEST_F(SpdySessionPoolTest, SSLConfigForServerChangedWithStreams) {
         HostPortPair::FromURL(GURL(kSSLServerTests[i].url)),
         ProxyServer::FromPacString(kSSLServerTests[i].proxy_pac_string),
         PRIVACY_MODE_DISABLED, SpdySessionKey::IsProxySession::kFalse,
-        SocketTag());
+        SocketTag(), NetworkIsolationKey(), false /* disable_secure_dns */);
     sessions.push_back(
         CreateSpdySession(http_session_.get(), key, NetLogWithSource()));
     streams.push_back(CreateStreamSynchronously(

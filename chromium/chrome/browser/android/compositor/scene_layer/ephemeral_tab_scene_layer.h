@@ -45,6 +45,8 @@ class EphemeralTabSceneLayer : public SceneLayer {
               const base::android::JavaParamRef<jobject>& object,
               jint title_view_resource_id,
               jint caption_view_resource_id,
+              jint caption_icon_resource_id,
+              jfloat caption_icon_opacity,
               jfloat caption_animation_percentage,
               jfloat text_layer_min_height,
               jfloat term_caption_spacing,
@@ -88,6 +90,7 @@ class EphemeralTabSceneLayer : public SceneLayer {
   scoped_refptr<EphemeralTabLayer> ephemeral_tab_layer_;
   scoped_refptr<cc::SolidColorLayer> color_overlay_;
   scoped_refptr<cc::Layer> content_container_;
+  bool is_new_layout_;
   DISALLOW_COPY_AND_ASSIGN(EphemeralTabSceneLayer);
 };
 

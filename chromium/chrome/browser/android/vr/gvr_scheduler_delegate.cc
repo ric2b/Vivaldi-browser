@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "chrome/browser/android/vr/gl_browser_interface.h"
 #include "chrome/browser/android/vr/mailbox_to_surface_bridge.h"
@@ -78,8 +79,6 @@ GvrSchedulerDelegate::GvrSchedulerDelegate(GlBrowserInterface* browser,
       cardboard_gamepad_(cardboard_gamepad),
       vsync_helper_(base::BindRepeating(&GvrSchedulerDelegate::OnVSync,
                                         base::Unretained(this))),
-      presentation_binding_(this),
-      frame_data_binding_(this),
       graphics_(graphics),
       webvr_render_time_(sliding_time_size),
       webvr_js_time_(sliding_time_size),
@@ -168,11 +167,6 @@ void GvrSchedulerDelegate::ConnectPresentingService(
     device::mojom::XRRuntimeSessionOptionsPtr options) {
   ClosePresentationBindings();
 
-  device::mojom::XRPresentationProviderPtr presentation_provider;
-  presentation_binding_.Bind(mojo::MakeRequest(&presentation_provider));
-  device::mojom::XRFrameDataProviderPtr frame_data_provider;
-  frame_data_binding_.Bind(mojo::MakeRequest(&frame_data_provider));
-
   gfx::Size webxr_size(display_info->left_eye->render_width +
                            display_info->right_eye->render_width,
                        display_info->left_eye->render_height);
@@ -195,12 +189,14 @@ void GvrSchedulerDelegate::ConnectPresentingService(
   }
 
   auto submit_frame_sink = device::mojom::XRPresentationConnection::New();
-  submit_frame_sink->client_request = mojo::MakeRequest(&submit_client_);
-  submit_frame_sink->provider = presentation_provider.PassInterface();
+  submit_frame_sink->client_receiver =
+      submit_client_.BindNewPipeAndPassReceiver();
+  submit_frame_sink->provider =
+      presentation_receiver_.BindNewPipeAndPassRemote();
   submit_frame_sink->transport_options = std::move(transport_options);
 
   auto session = device::mojom::XRSession::New();
-  session->data_provider = frame_data_provider.PassInterface();
+  session->data_provider = frame_data_receiver_.BindNewPipeAndPassRemote();
   session->submit_frame_sink = std::move(submit_frame_sink);
   session->display_info = std::move(display_info);
 
@@ -1065,8 +1061,8 @@ void GvrSchedulerDelegate::ClosePresentationBindings() {
     // the connection is closing.
     std::move(get_frame_data_callback_).Run(nullptr);
   }
-  presentation_binding_.Close();
-  frame_data_binding_.Close();
+  presentation_receiver_.reset();
+  frame_data_receiver_.reset();
 }
 
 void GvrSchedulerDelegate::GetFrameData(
@@ -1321,15 +1317,15 @@ void GvrSchedulerDelegate::ProcessWebVrFrameFromGMB(
 }
 
 void GvrSchedulerDelegate::GetEnvironmentIntegrationProvider(
-    device::mojom::XREnvironmentIntegrationProviderAssociatedRequest
-        environment_provider) {
+    mojo::PendingAssociatedReceiver<
+        device::mojom::XREnvironmentIntegrationProvider> environment_provider) {
   // Environment integration is not supported. This call should not
   // be made on this device.
   mojo::ReportBadMessage("Environment integration is not supported.");
 }
 
 void GvrSchedulerDelegate::SetInputSourceButtonListener(
-    device::mojom::XRInputSourceButtonListenerAssociatedPtrInfo) {
+    mojo::PendingAssociatedRemote<device::mojom::XRInputSourceButtonListener>) {
   // Input eventing is not supported. This call should not
   // be made on this device.
   mojo::ReportBadMessage("Input eventing is not supported.");

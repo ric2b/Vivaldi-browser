@@ -236,12 +236,12 @@ TEST_F(StructTraitsTest, CopyOutputRequest_BitmapRequest) {
   std::unique_ptr<CopyOutputRequest> input(new CopyOutputRequest(
       result_format,
       base::BindOnce(
-          [](const base::Closure& quit_closure, const gfx::Rect& expected_rect,
+          [](base::OnceClosure quit_closure, const gfx::Rect& expected_rect,
              std::unique_ptr<CopyOutputResult> result) {
             EXPECT_EQ(expected_rect, result->rect());
             // Note: CopyOutputResult plumbing for bitmap requests is tested in
             // StructTraitsTest.CopyOutputResult_Bitmap.
-            quit_closure.Run();
+            std::move(quit_closure).Run();
           },
           run_loop.QuitClosure(), result_rect)));
   input->SetScaleRatio(scale_from, scale_to);
@@ -283,10 +283,10 @@ TEST_F(StructTraitsTest, CopyOutputRequest_MessagePipeBroken) {
   auto request = std::make_unique<CopyOutputRequest>(
       CopyOutputRequest::ResultFormat::RGBA_BITMAP,
       base::BindOnce(
-          [](const base::Closure& quit_closure,
+          [](base::OnceClosure quit_closure,
              std::unique_ptr<CopyOutputResult> result) {
             EXPECT_TRUE(result->IsEmpty());
-            quit_closure.Run();
+            std::move(quit_closure).Run();
           },
           run_loop.QuitClosure()));
   auto result_sender = mojo::StructTraits<
@@ -313,12 +313,12 @@ TEST_F(StructTraitsTest, CopyOutputRequest_TextureRequest) {
   std::unique_ptr<CopyOutputRequest> input(new CopyOutputRequest(
       result_format,
       base::BindOnce(
-          [](const base::Closure& quit_closure, const gfx::Rect& expected_rect,
+          [](base::OnceClosure quit_closure, const gfx::Rect& expected_rect,
              std::unique_ptr<CopyOutputResult> result) {
             EXPECT_EQ(expected_rect, result->rect());
             // Note: CopyOutputResult plumbing for texture requests is tested in
             // StructTraitsTest.CopyOutputResult_Texture.
-            quit_closure.Run();
+            std::move(quit_closure).Run();
           },
           run_loop_for_result.QuitClosure(), result_rect)));
   EXPECT_FALSE(input->is_scaled());
@@ -334,13 +334,13 @@ TEST_F(StructTraitsTest, CopyOutputRequest_TextureRequest) {
   base::RunLoop run_loop_for_release;
   output->SendResult(std::make_unique<CopyOutputTextureResult>(
       result_rect, mailbox, sync_token, gfx::ColorSpace::CreateSRGB(),
-      SingleReleaseCallback::Create(base::Bind(
-          [](const base::Closure& quit_closure,
+      SingleReleaseCallback::Create(base::BindOnce(
+          [](base::OnceClosure quit_closure,
              const gpu::SyncToken& expected_sync_token,
              const gpu::SyncToken& sync_token, bool is_lost) {
             EXPECT_EQ(expected_sync_token, sync_token);
             EXPECT_FALSE(is_lost);
-            quit_closure.Run();
+            std::move(quit_closure).Run();
           },
           run_loop_for_release.QuitClosure(), sync_token))));
 
@@ -624,8 +624,7 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   const uint32_t root_background_color = 1337;
   ui::LatencyInfo latency_info;
   latency_info.set_trace_id(5);
-  latency_info.AddLatencyNumber(
-      ui::LATENCY_BEGIN_SCROLL_LISTENER_UPDATE_MAIN_COMPONENT);
+  latency_info.AddLatencyNumber(ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT);
   std::vector<ui::LatencyInfo> latency_infos = {latency_info};
   std::vector<SurfaceRange> referenced_surfaces;
   SurfaceId id(FrameSinkId(1234, 4321),
@@ -677,7 +676,7 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   EXPECT_EQ(root_background_color, output.root_background_color);
   EXPECT_EQ(latency_infos.size(), output.latency_info.size());
   EXPECT_TRUE(output.latency_info[0].FindLatency(
-      ui::LATENCY_BEGIN_SCROLL_LISTENER_UPDATE_MAIN_COMPONENT, nullptr));
+      ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT, nullptr));
   EXPECT_EQ(referenced_surfaces.size(), output.referenced_surfaces.size());
   for (uint32_t i = 0; i < referenced_surfaces.size(); ++i)
     EXPECT_EQ(referenced_surfaces[i], output.referenced_surfaces[i]);
@@ -939,8 +938,8 @@ TEST_F(StructTraitsTest, QuadListBasic) {
   RenderPassDrawQuad* render_pass_quad =
       render_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
   render_pass_quad->SetNew(sqs, rect4, rect4, render_pass_id, resource_id4,
-                           mask_uv_rect, mask_texture_size, false,
-                           filters_scale, filters_origin, tex_coord_rect,
+                           mask_uv_rect, mask_texture_size, filters_scale,
+                           filters_origin, tex_coord_rect,
                            force_anti_aliasing_off, backdrop_filter_quality);
 
   const gfx::Rect rect5(123, 567, 91011, 131415);
@@ -1016,7 +1015,6 @@ TEST_F(StructTraitsTest, QuadListBasic) {
   EXPECT_EQ(render_pass_id, out_render_pass_draw_quad->render_pass_id);
   EXPECT_EQ(resource_id4, out_render_pass_draw_quad->mask_resource_id());
   EXPECT_EQ(mask_texture_size, out_render_pass_draw_quad->mask_texture_size);
-  EXPECT_FALSE(out_render_pass_draw_quad->mask_applies_to_backdrop);
   EXPECT_EQ(filters_scale, out_render_pass_draw_quad->filters_scale);
   EXPECT_EQ(force_anti_aliasing_off,
             out_render_pass_draw_quad->force_anti_aliasing_off);
@@ -1247,12 +1245,13 @@ TEST_F(StructTraitsTest, CopyOutputResult_Texture) {
                             71234838);
   sync_token.SetVerifyFlush();
   base::RunLoop run_loop;
-  auto callback = SingleReleaseCallback::Create(base::Bind(
-      [](base::Closure quit_closure, const gpu::SyncToken& expected_sync_token,
+  auto callback = SingleReleaseCallback::Create(base::BindOnce(
+      [](base::OnceClosure quit_closure,
+         const gpu::SyncToken& expected_sync_token,
          const gpu::SyncToken& sync_token, bool is_lost) {
         EXPECT_EQ(expected_sync_token, sync_token);
         EXPECT_TRUE(is_lost);
-        quit_closure.Run();
+        std::move(quit_closure).Run();
       },
       run_loop.QuitClosure(), sync_token));
   gpu::Mailbox mailbox;

@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/core/page/spatial_navigation_controller.h"
 
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/web_scroll_into_view_params.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -104,7 +104,6 @@ static void ConsiderForBestCandidate(SpatialNavigationDirection direction,
   if (distance == kMaxDistance)
     return;
 
-
   if (distance < *best_distance && IsUnobscured(candidate)) {
     *best_candidate = candidate;
     *best_distance = distance;
@@ -147,12 +146,20 @@ bool SpatialNavigationController::HandleArrowKeyboardEvent(
   if (direction == SpatialNavigationDirection::kNone)
     return false;
 
+  // If the focus has already moved by a previous handler, return false.
+  const Element* focused = GetFocusedElement();
+  if (focused && focused != event->target()) {
+    // SpatNav does not need to handle this arrow key because
+    // the webpage had a key-handler that already moved focus.
+    return false;
+  }
+
   // In focusless mode, the user must explicitly move focus in and out of an
   // editable so we can avoid advancing interest and we should swallow the
   // event. This prevents double-handling actions for things like search box
   // suggestions.
   if (RuntimeEnabledFeatures::FocuslessSpatialNavigationEnabled()) {
-    if (Element* focused = GetFocusedElement()) {
+    if (focused) {
       if (HasEditableStyle(*focused) || focused->IsTextControl())
         return true;
     }
@@ -474,8 +481,11 @@ void SpatialNavigationController::MoveInterestTo(Node* next_node) {
 }
 
 void SpatialNavigationController::DispatchMouseMoveAt(Element* element) {
-  FloatPoint event_position =
-      element ? RectInViewport(*element).Location() : FloatPoint(-1, -1);
+  FloatPoint event_position(-1, -1);
+  if (element) {
+    event_position = RectInViewport(*element).Location();
+    event_position.Move(1, 1);
+  }
 
   // TODO(bokan): Can we get better screen coordinates?
   FloatPoint event_position_screen = event_position;
@@ -647,7 +657,7 @@ SpatialNavigationController::GetSpatialNavigationHost() {
     if (!frame)
       return spatial_navigation_host_;
 
-    frame->GetInterfaceProvider().GetInterface(
+    frame->GetBrowserInterfaceBroker().GetInterface(
         spatial_navigation_host_.BindNewPipeAndPassReceiver(
             frame->GetTaskRunner(TaskType::kMiscPlatformAPI)));
   }

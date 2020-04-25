@@ -309,15 +309,6 @@ div.CodeMirror:focus-within span.CodeMirror-nonmatchingbracket {
     background-color: rgb(171, 191, 254);
 }
 
-.cm-execution-line .CodeMirror-linenumber::after {
-    position: absolute;
-    top:-1px;
-    bottom:-1px;
-    right:-1.5em;
-    content:"";
-    border-right: 1px solid rgb(64, 115, 244);
-}
-
 :host-context(.-theme-with-dark-background) .cm-execution-line,
 .-theme-with-dark-background .cm-execution-line {
     background-color: #14522b;
@@ -437,7 +428,7 @@ div.CodeMirror:focus-within span.CodeMirror-nonmatchingbracket {
 .CodeMirror .text-editor-coverage-unused-marker {
     text-align: right;
     padding-right: 2px;
-    background-color: #E57373;
+    background-color: #EE442F;
 }
 
 .CodeMirror .text-editor-coverage-unused-marker::after {
@@ -447,7 +438,7 @@ div.CodeMirror:focus-within span.CodeMirror-nonmatchingbracket {
 .CodeMirror .text-editor-coverage-used-marker {
     text-align: right;
     padding-right: 2px;
-    background-color: #81C784;
+    background-color: #63ACBE;
 }
 
 .CodeMirror .text-editor-coverage-used-marker::after {

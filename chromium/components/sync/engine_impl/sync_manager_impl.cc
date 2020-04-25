@@ -430,6 +430,14 @@ void SyncManagerImpl::OnPassphraseAccepted() {
   // Does nothing.
 }
 
+void SyncManagerImpl::OnTrustedVaultKeyRequired() {
+  // Does nothing.
+}
+
+void SyncManagerImpl::OnTrustedVaultKeyAccepted() {
+  // Does nothing.
+}
+
 void SyncManagerImpl::OnBootstrapTokenUpdated(
     const std::string& bootstrap_token,
     BootstrapTokenType type) {
@@ -446,10 +454,10 @@ void SyncManagerImpl::OnEncryptionComplete() {
   // Does nothing.
 }
 
-void SyncManagerImpl::OnCryptographerStateChanged(
-    Cryptographer* cryptographer) {
-  allstatus_.SetCryptographerReady(cryptographer->is_ready());
-  allstatus_.SetCryptoHasPendingKeys(cryptographer->has_pending_keys());
+void SyncManagerImpl::OnCryptographerStateChanged(Cryptographer* cryptographer,
+                                                  bool has_pending_keys) {
+  allstatus_.SetCryptographerCanEncrypt(cryptographer->CanEncrypt());
+  allstatus_.SetCryptoHasPendingKeys(has_pending_keys);
   allstatus_.SetKeystoreMigrationTime(
       sync_encryption_handler_->GetKeystoreMigrationTime());
 }
@@ -477,10 +485,6 @@ void SyncManagerImpl::StartConfiguration() {
 syncable::Directory* SyncManagerImpl::directory() {
   DCHECK(share_);
   return share_->directory.get();
-}
-
-const SyncScheduler* SyncManagerImpl::scheduler() const {
-  return scheduler_.get();
 }
 
 // static
@@ -884,11 +888,6 @@ void SyncManagerImpl::NudgeForInitialDownload(ModelType type) {
 void SyncManagerImpl::NudgeForCommit(ModelType type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   RequestNudgeForDataTypes(FROM_HERE, ModelTypeSet(type));
-}
-
-void SyncManagerImpl::NudgeForRefresh(ModelType type) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  RefreshTypes(ModelTypeSet(type));
 }
 
 void SyncManagerImpl::OnSyncCycleEvent(const SyncCycleEvent& event) {

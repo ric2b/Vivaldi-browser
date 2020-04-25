@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
+#include "chrome/browser/ui/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "ui/gfx/color_palette.h"
 
@@ -179,6 +179,9 @@ void FakeBaseTabStripController::OnStartedDraggingTabs() {}
 
 void FakeBaseTabStripController::OnStoppedDraggingTabs() {}
 
+void FakeBaseTabStripController::OnKeyboardFocusedTabChanged(
+    base::Optional<int> index) {}
+
 bool FakeBaseTabStripController::IsFrameCondensed() const {
   return false;
 }
@@ -200,7 +203,7 @@ bool FakeBaseTabStripController::CanDrawStrokes() const {
 }
 
 SkColor FakeBaseTabStripController::GetFrameColor(
-    BrowserNonClientFrameView::ActiveState active_state) const {
+    BrowserFrameActiveState active_state) const {
   return gfx::kPlaceholderColor;
 }
 
@@ -209,7 +212,7 @@ SkColor FakeBaseTabStripController::GetToolbarTopSeparatorColor() const {
 }
 
 base::Optional<int> FakeBaseTabStripController::GetCustomBackgroundId(
-    BrowserNonClientFrameView::ActiveState active_state) const {
+    BrowserFrameActiveState active_state) const {
   return base::nullopt;
 }
 

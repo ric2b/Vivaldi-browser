@@ -13,7 +13,7 @@
 #include "components/arc/video_accelerator/protected_buffer_manager.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_types.h"
-#include "media/gpu/format_utils.h"
+#include "media/gpu/buffer_validation.h"
 #include "media/gpu/gpu_video_decode_accelerator_factory.h"
 #include "media/gpu/macros.h"
 #include "mojo/public/cpp/system/platform_handle.h"
@@ -371,7 +371,7 @@ void GpuArcVideoDecodeAccelerator::Decode(
     }
   } else {
     size_t handle_size;
-    if (!GetFileSize(handle_fd.get(), &handle_size)) {
+    if (!media::GetFileSize(handle_fd.get(), &handle_size)) {
       client_->NotifyError(
           mojom::VideoDecodeAccelerator::Result::INVALID_ARGUMENT);
       return;
@@ -487,8 +487,17 @@ void GpuArcVideoDecodeAccelerator::ImportBufferForPicture(
     }
     gmb_handle.native_pixmap_handle = std::move(protected_native_pixmap);
   } else {
+    std::vector<base::ScopedFD> handle_fds =
+        DuplicateFD(std::move(handle_fd), planes.size());
+    if (handle_fds.empty()) {
+      VLOGF(1) << "Failed to duplicate fd";
+      client_->NotifyError(
+          mojom::VideoDecodeAccelerator::Result::INVALID_ARGUMENT);
+      return;
+    }
+
     auto handle = CreateGpuMemoryBufferHandle(pixel_format, coded_size_,
-                                              std::move(handle_fd), planes);
+                                              std::move(handle_fds), planes);
     if (!handle) {
       VLOGF(1) << "Failed to create GpuMemoryBufferHandle";
       client_->NotifyError(

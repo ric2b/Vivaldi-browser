@@ -193,6 +193,8 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
                              ImageDataColorSettings*,
                              ExceptionState&) const;
 
+  // For deferred canvases this will have the side effect of drawing recorded
+  // commands in order to finalize the frame
   ImageData* getImageData(int sx, int sy, int sw, int sh, ExceptionState&);
   void putImageData(ImageData*, int dx, int dy, ExceptionState&);
   void putImageData(ImageData*,
@@ -341,7 +343,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
     NOTREACHED();
     return false;
   }
-  virtual scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint) const {
+  virtual scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint) {
     NOTREACHED();
     return nullptr;
   }
@@ -361,7 +363,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   mutable UsageCounters usage_counters_;
 
-  virtual void NeedsFinalizeFrame() {}
+  virtual void FinalizeFrame() {}
 
   float GetFontBaseline(const SimpleFontData&) const;
 

@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "build/buildflag.h"
@@ -49,7 +50,6 @@
 #define E2E_ENABLED(test_name) MACRO_CONCAT(test_name, E2ETest)
 
 class ProfileSyncServiceHarness;
-class P2PSyncRefresher;
 
 namespace arc {
 class SyncArcPackageHelper;
@@ -212,6 +212,12 @@ class SyncTest : public InProcessBrowserTest {
 
   // Initializes sync clients and profiles if required and syncs each of them.
   virtual bool SetupSync() WARN_UNUSED_RESULT;
+
+  // This is similar to click the reset button on chrome.google.com/sync.
+  // Only takes effect when running with external servers.
+  // Please call this before setting anything. This method will clear all
+  // local profiles, browsers, etc.
+  void ResetSyncForPrimaryAccount();
 
   // Like SetupSync() but does not wait for the clients to be ready to sync.
   void SetupSyncNoWaitingForCompletion();
@@ -408,6 +414,8 @@ class SyncTest : public InProcessBrowserTest {
   // Internal routine for setting up sync.
   void SetupSyncInternal(SetupSyncMode setup_mode);
 
+  void ClearProfiles();
+
   // GAIA account used by the test case.
   std::string username_;
 
@@ -467,10 +475,6 @@ class SyncTest : public InProcessBrowserTest {
   // Mapping from client indexes to decryption passphrases to use for them.
   std::map<int, std::string> client_decryption_passphrases_;
 
-  // A set of objects to listen for commit activity and broadcast refresh
-  // notifications of this activity to its peer sync clients.
-  std::vector<std::unique_ptr<P2PSyncRefresher>> sync_refreshers_;
-
   // Owns the FakeServerInvalidationSender for each profile.
   std::vector<std::unique_ptr<fake_server::FakeServerInvalidationSender>>
       fake_server_invalidation_observers_;
@@ -499,6 +503,10 @@ class SyncTest : public InProcessBrowserTest {
   // Indicates whether changes to a profile should also change the verifier
   // profile or not.
   bool use_verifier_;
+
+  // Indicates whether to use a new user data dir.
+  // Only used for external server tests with two clients.
+  bool use_new_user_data_dir_ = false;
 
   // Indicates the need to create Gaia user account at runtime. This can only
   // be set if tests are run against external servers with support for user

@@ -3,6 +3,7 @@
 //
 #include "extensions/api/bookmark_context_menu/bookmark_context_menu_api.h"
 
+#include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "chrome/app/chrome_command_ids.h"

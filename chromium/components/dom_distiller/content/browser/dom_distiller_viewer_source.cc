@@ -38,7 +38,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/url_util.h"
 #include "net/url_request/url_request.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
@@ -65,8 +65,7 @@ class DomDistillerViewerSource::RequestViewerHandle
       content::NavigationHandle* navigation_handle) override;
   void RenderProcessGone(base::TerminationStatus status) override;
   void WebContentsDestroyed() override;
-  void DidFinishLoad(content::RenderFrameHost* render_frame_host,
-                     const GURL& validated_url) override;
+  void DOMContentLoaded(content::RenderFrameHost* render_frame_host) override;
   void OnInterfaceRequestFromFrame(
       content::RenderFrameHost* render_frame_host,
       const std::string& interface_name,
@@ -149,9 +148,9 @@ void DomDistillerViewerSource::RequestViewerHandle::DidFinishNavigation(
       CHECK_EQ(0, render_frame_host->GetEnabledBindings());
 
       // Tell the renderer that this is currently a distilled page.
-      mojom::DistillerPageNotifierServicePtr page_notifier_service;
+      mojo::Remote<mojom::DistillerPageNotifierService> page_notifier_service;
       render_frame_host->GetRemoteInterfaces()->GetInterface(
-          &page_notifier_service);
+          page_notifier_service.BindNewPipeAndPassReceiver());
       DCHECK(page_notifier_service);
       page_notifier_service->NotifyIsDistillerPage();
     }
@@ -179,14 +178,24 @@ void DomDistillerViewerSource::RequestViewerHandle::Cancel() {
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
 }
 
-void DomDistillerViewerSource::RequestViewerHandle::DidFinishLoad(
-    content::RenderFrameHost* render_frame_host,
-    const GURL& validated_url) {
+void DomDistillerViewerSource::RequestViewerHandle::DOMContentLoaded(
+    content::RenderFrameHost* render_frame_host) {
+  // DOMContentLoaded() is late enough to execute JavaScript, and is early
+  // enough so that it's more likely that the title and content can be picked up
+  // by TalkBack instead of the placeholder. If distillation is finished by
+  // DOMContentLoaded(), onload() event would also be delayed, so that the
+  // accessibility focus is more likely to be on the web content. Otherwise, the
+  // focus is usually on the close button of the CustomTab (CCT), or nowhere. If
+  // distillation finishes later than DOMContentLoaded(), or if for some
+  // reason the accessibility focus is on the close button of the CCT, the title
+  // could go unannounced.
+  // See http://crbug.com/811417.
   if (render_frame_host->GetParent()) {
     return;
   }
 
-  int64_t start_time_ms = url_utils::GetTimeFromDistillerUrl(validated_url);
+  int64_t start_time_ms = url_utils::GetTimeFromDistillerUrl(
+      render_frame_host->GetLastCommittedURL());
   if (start_time_ms > 0) {
     base::TimeTicks start_time =
         base::TimeDelta::FromMilliseconds(start_time_ms) + base::TimeTicks();

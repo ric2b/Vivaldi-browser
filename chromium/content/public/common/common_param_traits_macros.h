@@ -10,6 +10,7 @@
 
 #include "build/build_config.h"
 #include "cc/input/touch_action.h"
+#include "content/public/common/browser_controls_state.h"
 #include "content/public/common/drop_data.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/web_preferences.h"
@@ -17,6 +18,7 @@
 #include "ipc/ipc_message_macros.h"
 #include "services/network/public/cpp/network_ipc_param_traits.h"
 #include "services/network/public/mojom/referrer_policy.mojom.h"
+#include "third_party/blink/public/common/security/security_style.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
@@ -25,8 +27,8 @@
 #include "third_party/blink/public/platform/web_history_scroll_restoration_type.h"
 #include "third_party/blink/public/platform/web_point.h"
 #include "third_party/blink/public/platform/web_rect.h"
-#include "third_party/blink/public/platform/web_security_style.h"
 #include "third_party/blink/public/platform/web_url_request.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_event.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_relative_bounds.h"
@@ -42,6 +44,9 @@
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
 
+IPC_ENUM_TRAITS_MAX_VALUE(content::BrowserControlsState,
+                          content::BROWSER_CONTROLS_STATE_LAST)
+
 IPC_ENUM_TRAITS_VALIDATE(ui::PageTransition,
                          ((value &
                            ui::PageTransition::PAGE_TRANSITION_CORE_MASK) <=
@@ -52,7 +57,7 @@ IPC_ENUM_TRAITS_MAX_VALUE(network::mojom::ReferrerPolicy,
                           network::mojom::ReferrerPolicy::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebHistoryScrollRestorationType,
                           blink::kWebHistoryScrollRestorationManual)
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebSecurityStyle, blink::kWebSecurityStyleLast)
+IPC_ENUM_TRAITS_MAX_VALUE(blink::SecurityStyle, blink::SecurityStyle::kLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::PermissionStatus,
                           blink::mojom::PermissionStatus::LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(cc::TouchAction, cc::kTouchActionMax)
@@ -81,9 +86,6 @@ IPC_ENUM_TRAITS_MIN_MAX_VALUE(
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(blink::PreferredColorScheme,
                               blink::PreferredColorScheme::kNoPreference,
                               blink::PreferredColorScheme::kLight)
-IPC_ENUM_TRAITS_MIN_MAX_VALUE(blink::ForcedColors,
-                              blink::ForcedColors::kNone,
-                              blink::ForcedColors::kMaxValue)
 
 IPC_STRUCT_TRAITS_BEGIN(blink::WebPoint)
   IPC_STRUCT_TRAITS_MEMBER(x)
@@ -249,7 +251,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(do_not_update_selection_on_mutating_selection_range)
   IPC_STRUCT_TRAITS_MEMBER(autoplay_policy)
   IPC_STRUCT_TRAITS_MEMBER(preferred_color_scheme)
-  IPC_STRUCT_TRAITS_MEMBER(forced_colors)
   IPC_STRUCT_TRAITS_MEMBER(low_priority_iframes_threshold)
   IPC_STRUCT_TRAITS_MEMBER(picture_in_picture_enabled)
   IPC_STRUCT_TRAITS_MEMBER(translate_service_available)
@@ -257,6 +258,8 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(lazy_load_enabled)
   IPC_STRUCT_TRAITS_MEMBER(lazy_frame_loading_distance_thresholds_px)
   IPC_STRUCT_TRAITS_MEMBER(lazy_image_loading_distance_thresholds_px)
+  IPC_STRUCT_TRAITS_MEMBER(lazy_image_first_k_fully_load)
+
   IPC_STRUCT_TRAITS_MEMBER(pictograph_font_family_map)
   IPC_STRUCT_TRAITS_MEMBER(serve_resources_only_from_cache)
   IPC_STRUCT_TRAITS_MEMBER(should_print_backgrounds)

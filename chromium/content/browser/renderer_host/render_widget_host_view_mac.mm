@@ -176,7 +176,6 @@ RenderWidgetHostViewMac::RenderWidgetHostViewMac(RenderWidgetHost* widget,
     : RenderWidgetHostViewBase(widget),
       page_at_minimum_scale_(true),
       mouse_wheel_phase_handler_(this),
-      remote_ns_view_client_binding_(this),
       is_loading_(false),
       is_guest_view_hack_(is_guest_view_hack),
       popup_parent_host_view_(nullptr),
@@ -250,10 +249,10 @@ void RenderWidgetHostViewMac::MigrateNSViewBridge(
   remote_window_accessible_.reset();
 
   // Disconnect from the previous bridge (this will have the effect of
-  // destroying the associated bridge), and close the binding (to allow it
+  // destroying the associated bridge), and close the receiver (to allow it
   // to be re-bound). Note that |in_process_ns_view_bridge_| remains valid.
-  remote_ns_view_client_binding_.Close();
-  remote_ns_view_ptr_.reset();
+  remote_ns_view_client_receiver_.reset();
+  remote_ns_view_.reset();
 
   // Enable accessibility focus overriding for remote NSViews.
   accessibility_focus_overrider_.SetAppIsRemote(remote_cocoa_application !=
@@ -265,26 +264,26 @@ void RenderWidgetHostViewMac::MigrateNSViewBridge(
     return;
   }
 
-  remote_cocoa::mojom::RenderWidgetHostNSViewHostAssociatedPtr client;
-  remote_ns_view_client_binding_.Bind(mojo::MakeRequest(&client));
-  remote_cocoa::mojom::RenderWidgetHostNSViewAssociatedRequest bridge_request =
-      mojo::MakeRequest(&remote_ns_view_ptr_);
+  mojo::PendingAssociatedRemote<remote_cocoa::mojom::RenderWidgetHostNSViewHost>
+      client = remote_ns_view_client_receiver_.BindNewEndpointAndPassRemote();
+  mojo::PendingAssociatedReceiver<remote_cocoa::mojom::RenderWidgetHostNSView>
+      view_receiver = remote_ns_view_.BindNewEndpointAndPassReceiver();
 
   // Cast from mojom::RenderWidgetHostNSViewHostPtr and
-  // mojom::RenderWidgetHostNSViewBridgeRequest to the public interfaces
-  // accepted by the application.
+  // mojo::PendingAssociatedReceiver<mojom::RenderWidgetHostNSView> to the
+  // public interfaces accepted by the application.
   // TODO(ccameron): Remove the need for this cast.
   // https://crbug.com/888290
   mojo::AssociatedInterfacePtrInfo<remote_cocoa::mojom::StubInterface>
-      stub_client(client.PassInterface().PassHandle(), 0);
+      stub_client(client.PassHandle(), 0);
   remote_cocoa::mojom::StubInterfaceAssociatedRequest stub_bridge_request(
-      bridge_request.PassHandle());
+      view_receiver.PassHandle());
 
   remote_cocoa_application->CreateRenderWidgetHostNSView(
       std::move(stub_client), std::move(stub_bridge_request));
 
-  ns_view_ = remote_ns_view_ptr_.get();
-  remote_ns_view_ptr_->SetParentWebContentsNSView(parent_ns_view_id);
+  ns_view_ = remote_ns_view_.get();
+  remote_ns_view_->SetParentWebContentsNSView(parent_ns_view_id);
 }
 
 void RenderWidgetHostViewMac::SetParentUiLayer(ui::Layer* parent_ui_layer) {
@@ -510,6 +509,10 @@ gfx::NativeViewAccessible RenderWidgetHostViewMac::GetNativeViewAccessible() {
 }
 
 void RenderWidgetHostViewMac::Focus() {
+  // Ignore redundant calls, as they can cause unending loops of focus-setting.
+  // https://crbug.com/998123
+  if (is_first_responder_)
+    return;
   ns_view_->MakeFirstResponder();
 }
 
@@ -703,8 +706,8 @@ void RenderWidgetHostViewMac::Destroy() {
   // the other side of |ns_view_| may outlive us due to other retains.
   ns_view_ = nullptr;
   in_process_ns_view_bridge_.reset();
-  remote_ns_view_client_binding_.Close();
-  remote_ns_view_ptr_.reset();
+  remote_ns_view_client_receiver_.reset();
+  remote_ns_view_.reset();
 
   // Delete the delegated frame state, which will reach back into
   // host().

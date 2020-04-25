@@ -11,6 +11,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -111,7 +112,7 @@ class ReportGeneratorTest : public ::testing::Test {
           profile_manager_.profile_attributes_storage()->AddProfile(
               profile_manager()->profiles_dir().AppendASCII(profile_name),
               base::ASCIIToUTF16(profile_name), std::string(), base::string16(),
-              0, std::string(), EmptyAccountId());
+              false, 0, std::string(), EmptyAccountId());
           break;
         case kActive:
           profile_manager_.CreateTestingProfile(profile_name);
@@ -142,6 +143,7 @@ class ReportGeneratorTest : public ::testing::Test {
 
   std::vector<std::unique_ptr<em::ChromeDesktopReportRequest>>
   GenerateRequests() {
+    histogram_tester_ = std::make_unique<base::HistogramTester>();
     base::RunLoop run_loop;
     std::vector<std::unique_ptr<em::ChromeDesktopReportRequest>> rets;
     generator_.Generate(base::BindLambdaForTesting(
@@ -153,6 +155,7 @@ class ReportGeneratorTest : public ::testing::Test {
           run_loop.Quit();
         }));
     run_loop.Run();
+    VerifyMetrics(rets);
     return rets;
   }
 
@@ -190,14 +193,25 @@ class ReportGeneratorTest : public ::testing::Test {
     }
   }
 
+  void VerifyMetrics(
+      std::vector<std::unique_ptr<em::ChromeDesktopReportRequest>>& rets) {
+    histogram_tester_->ExpectUniqueSample(
+        "Enterprise.CloudReportingRequestCount", rets.size(), 1);
+    histogram_tester_->ExpectUniqueSample(
+        "Enterprise.CloudReportingBasicRequestSize",
+        /*basic request size floor to KB*/ 0, 1);
+  }
+
   TestingProfileManager* profile_manager() { return &profile_manager_; }
   ReportGenerator* generator() { return &generator_; }
+  base::HistogramTester* histogram_tester() { return histogram_tester_.get(); }
 
  private:
   ReportGenerator generator_;
 
   content::BrowserTaskEnvironment task_environment_;
   TestingProfileManager profile_manager_;
+  std::unique_ptr<base::HistogramTester> histogram_tester_;
 
   DISALLOW_COPY_AND_ASSIGN(ReportGeneratorTest);
 };
@@ -247,6 +261,9 @@ TEST_F(ReportGeneratorTest, GenerateActiveProfiles) {
 
   VerifyProfileReport(active_profiles_names, inactive_profiles_names,
                       requests[0]->browser_report());
+
+  histogram_tester()->ExpectBucketCount("Enterprise.CloudReportingRequestSize",
+                                        /*report size floor to KB*/ 0, 1);
 }
 
 TEST_F(ReportGeneratorTest, BasicReportIsTooBig) {
@@ -258,6 +275,8 @@ TEST_F(ReportGeneratorTest, BasicReportIsTooBig) {
   // Because the limitation is so small, no request can be created.
   auto requests = GenerateRequests();
   EXPECT_EQ(0u, requests.size());
+  histogram_tester()->ExpectTotalCount("Enterprise.CloudReportingRequestSize",
+                                       0);
 }
 
 TEST_F(ReportGeneratorTest, ReportSeparation) {
@@ -285,6 +304,8 @@ TEST_F(ReportGeneratorTest, ReportSeparation) {
                       requests[0]->browser_report());
   VerifyProfileReport(second_request_profiles, first_request_profiles,
                       requests[1]->browser_report());
+  histogram_tester()->ExpectBucketCount("Enterprise.CloudReportingRequestSize",
+                                        /*report size floor to KB*/ 0, 2);
 }
 
 TEST_F(ReportGeneratorTest, ProfileReportIsTooBig) {
@@ -307,6 +328,8 @@ TEST_F(ReportGeneratorTest, ProfileReportIsTooBig) {
   // reported.
   VerifyProfileReport(second_profile_name, first_profile_name,
                       requests[0]->browser_report());
+  histogram_tester()->ExpectBucketCount("Enterprise.CloudReportingRequestSize",
+                                        /*report size floor to KB*/ 0, 2);
 }
 
 #endif

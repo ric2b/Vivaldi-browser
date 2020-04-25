@@ -75,7 +75,7 @@ template("webapk_java") {
       "//chrome/android/webapk/libs/common:common_java",
       "//chrome/android/webapk/libs/common:splash_java",
     ]
-    min_sdk_version = 16
+    min_sdk_version = 19
   }
 }
 
@@ -92,7 +92,7 @@ template("webapk_with_service_java") {
       "src/org/chromium/webapk/shell_apk/WebApkServiceImplWrapper.java",
     ]
     deps += [ ":compiled_in_runtime_library_java" ]
-    min_sdk_version = 16
+    min_sdk_version = 19
   }
 }
 
@@ -178,7 +178,7 @@ template("webapk_tmpl") {
 
     android_manifest = _manifest_output
     android_manifest_dep = ":$_manifest_target_name"
-    min_sdk_version = 16
+    min_sdk_version = 19
     target_sdk_version = 28
     never_incremental = true
     enable_multidex = false
@@ -332,6 +332,7 @@ junit_binary("webapk_shell_apk_junit_tests") {
     "junit/src/org/chromium/webapk/shell_apk/HostBrowserLauncherParamsTest.java",
     "junit/src/org/chromium/webapk/shell_apk/HostBrowserUtilsTest.java",
     "junit/src/org/chromium/webapk/shell_apk/MainActivityTest.java",
+    "junit/src/org/chromium/webapk/shell_apk/TestBrowserInstaller.java",
     "junit/src/org/chromium/webapk/shell_apk/WebApkServiceImplWrapperTest.java",
     "junit/src/org/chromium/webapk/shell_apk/WebApkUtilsTest.java",
   ]
@@ -346,6 +347,7 @@ junit_binary("webapk_shell_apk_junit_tests") {
 junit_binary("webapk_shell_apk_h2o_junit_tests") {
   java_files = [
     "junit/src/org/chromium/webapk/shell_apk/CustomAndroidOsShadowAsyncTask.java",
+    "junit/src/org/chromium/webapk/shell_apk/TestBrowserInstaller.java",
     "junit/src/org/chromium/webapk/shell_apk/h2o/LaunchTest.java",
     "junit/src/org/chromium/webapk/shell_apk/h2o/SplashActivityTest.java",
   ]

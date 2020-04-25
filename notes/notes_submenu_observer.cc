@@ -14,106 +14,105 @@
 #include "notes/notes_model.h"
 #include "renderer/vivaldi_render_messages.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "vivaldi/grit/vivaldi_native_strings.h"
+#include "vivaldi/app/grit/vivaldi_native_strings.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
+#define MAX_NOTES_MENUITEM_LENGTH 40
 
 using content::BrowserThread;
 using vivaldi::NotesModelFactory;
 
+
 NotesSubMenuObserver::NotesSubMenuObserver(
-    RenderViewContextMenuProxy* proxy,
-    ui::SimpleMenuModel::Delegate* delegate)
-    : proxy_(proxy), submenu_model_(delegate), delegate_(delegate) {
-  DCHECK(proxy_);
+  RenderViewContextMenuProxy* proxy,
+  RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate)
+  : helper_(CreateSubMenuObserverHelper(this, toolkit_delegate)),
+    proxy_(proxy),
+    root_id_(IDC_VIV_CONTENT_INSERT_NOTE) {
 }
 
 NotesSubMenuObserver::~NotesSubMenuObserver() {}
 
 void NotesSubMenuObserver::InitMenu(const content::ContextMenuParams& params) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
   content::BrowserContext* browser_context = proxy_->GetBrowserContext();
   Profile* profile = Profile::FromBrowserContext(browser_context);
 
   if (!profile->IsGuestSession()) {
+    ui::SimpleMenuModel* menu_model = new ui::SimpleMenuModel(helper_.get());
+    models_.push_back(base::WrapUnique(menu_model));
     vivaldi::Notes_Model* model =
         NotesModelFactory::GetForBrowserContext(browser_context);
-
-    vivaldi::Notes_Node* node = model->main_node();
-    for (auto& it: node->children()) {
-      this->AddMenuItems(it.get(), &submenu_model_);
+    menumodel_to_note_map_[menu_model] = model->main_node();
+    proxy_->AddSubMenu(root_id_,
+      l10n_util::GetStringUTF16(IDS_VIV_CONTENT_INSERT_NOTE),
+      menu_model);
+    if (!helper_->SupportsDelayedLoading()) {
+      PopulateModel(menu_model);
     }
-
-    proxy_->AddSubMenu(IDC_VIV_CONTENT_INSERT_NOTE,
-                       l10n_util::GetStringUTF16(IDS_VIV_CONTENT_INSERT_NOTE),
-                       &submenu_model_);
   }
 }
 
-void NotesSubMenuObserver::AddMenuItems(vivaldi::Notes_Node* node,
-    ui::SimpleMenuModel* menu_model) {
-  if (node->is_trash()) {
-    return;
-  }
-
-  if (node->id() < min_notes_id_) {
-    min_notes_id_ = node->id();
-  }
-
-  if (node->id() > max_notes_id_) {
-    max_notes_id_ = node->id();
-  }
-
-  if (node->is_separator()) {
-    menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
-  } else {
-    const int kMaxMenuStringLength = 40;
-    base::string16 data = node->GetTitle();
-    if (data.length() == 0) {
-      data = node->GetContent();
-    }
-    // Remove newlines inside string
-    base::string16 title = base::CollapseWhitespace(data, false);
-    // Remove spaces at start and end
-    base::TrimWhitespace(title, base::TRIM_ALL, &title);
-    // Truncate string if it is too long
-    if (title.length() > kMaxMenuStringLength) {
-      title = title.substr(0, kMaxMenuStringLength - 3) +
-          base::UTF8ToUTF16("...");
-    }
-    // Escape any '&' with a double set to prevent underlining.
+void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
+  vivaldi::Notes_Node* parent = menumodel_to_note_map_[menu_model];
 #if defined(OS_MACOSX)
-    bool underline_letter = false;
+  bool underline_letter = false;
 #else
-    Profile* profile = Profile::FromBrowserContext(proxy_->GetBrowserContext());
-    bool underline_letter = profile->GetPrefs()->GetBoolean(
-          vivaldiprefs::kBookmarksUnderlineMenuLetter);
+  Profile* profile = Profile::FromBrowserContext(proxy_->GetBrowserContext());
+  bool underline_letter = profile->GetPrefs()->GetBoolean(
+      vivaldiprefs::kBookmarksUnderlineMenuLetter);
 #endif
-    if (!underline_letter) {
-      base::StringPiece16 s1 = base::StringPiece16(base::UTF8ToUTF16("&"));
-      base::string16 s2 = base::UTF8ToUTF16("&&");
-      base::ReplaceChars(title, s1, s2, &title);
-    }
 
-    if (node->is_folder()) {
-      ui::SimpleMenuModel* child_menu_model
-          = new ui::SimpleMenuModel(delegate_);
-      menu_model->AddSubMenu(node->id(), title, child_menu_model);
-      for (auto& it: node->children()) {
-        this->AddMenuItems(it.get(), child_menu_model);
+  for (auto& node : parent->children()) {
+
+    if (node->is_separator()) {
+      menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
+    }
+    else {
+      base::string16 data = node->GetTitle();
+      if (data.length() == 0) {
+        data = node->GetContent();
       }
-    } else {
-      menu_model->AddItem(node->id(), title);
+      // Remove newlines inside string
+      base::string16 title = base::CollapseWhitespace(data, false);
+      // Remove spaces at start and end
+      base::TrimWhitespace(title, base::TRIM_ALL, &title);
+      // Truncate string if it is too long
+      if (title.length() > MAX_NOTES_MENUITEM_LENGTH) {
+        title = title.substr(0, MAX_NOTES_MENUITEM_LENGTH - 3) +
+            base::UTF8ToUTF16("...");
+      }
+      // Escape any '&' with a double set to prevent underlining.
+      if (!underline_letter) {
+        base::StringPiece16 s1 = base::StringPiece16(base::UTF8ToUTF16("&"));
+        base::string16 s2 = base::UTF8ToUTF16("&&");
+        base::ReplaceChars(title, s1, s2, &title);
+      }
+
+      if (node->is_folder()) {
+        ui::SimpleMenuModel* child_menu_model =
+            new ui::SimpleMenuModel(helper_.get());
+        models_.push_back(base::WrapUnique(child_menu_model));
+        menumodel_to_note_map_[child_menu_model] = node.get();
+        menu_model->AddSubMenu(node->id(), title, child_menu_model);
+        if (!helper_->SupportsDelayedLoading()) {
+          PopulateModel(child_menu_model);
+        }
+      } else {
+        if (node->id() < min_notes_id_) {
+          min_notes_id_ = node->id();
+        }
+        if (node->id() > max_notes_id_) {
+          max_notes_id_ = node->id();
+        }
+        menu_model->AddItem(node->id(), title);
+      }
     }
   }
 }
 
 bool NotesSubMenuObserver::IsCommandIdSupported(int command_id) {
-  if (command_id == IDC_VIV_CONTENT_INSERT_NOTE ||
-      (command_id >= min_notes_id_ && command_id <= max_notes_id_)) {
-    return true;
-  }
-  return false;
+  return command_id == root_id_;
 }
 
 bool NotesSubMenuObserver::IsCommandIdChecked(int command_id) {
@@ -121,19 +120,14 @@ bool NotesSubMenuObserver::IsCommandIdChecked(int command_id) {
 }
 
 bool NotesSubMenuObserver::IsCommandIdEnabled(int command_id) {
-  if (command_id == IDC_VIV_CONTENT_INSERT_NOTE ||
-      (command_id >= min_notes_id_ && command_id <= max_notes_id_)) {
-    return true;
-  }
-
-  return false;
+  return command_id == root_id_;
 }
 
 vivaldi::Notes_Node* GetNodeFromId(vivaldi::Notes_Node* node, int id) {
   if (node->id() == id) {
     return node;
   }
-  for (auto& it: node->children()) {
+  for (auto& it : node->children()) {
     vivaldi::Notes_Node* childnode = GetNodeFromId(it.get(), id);
     if (childnode) {
       return childnode;
@@ -156,9 +150,9 @@ void NotesSubMenuObserver::ExecuteCommand(int command_id) {
 
     if (focused_frame) {
       proxy_->GetWebContents()->GetRenderViewHost()->Send(
-          new VivaldiMsg_InsertText(
-              proxy_->GetWebContents()->GetRenderViewHost()->GetRoutingID(),
-              node->GetContent()));
+        new VivaldiMsg_InsertText(
+            proxy_->GetWebContents()->GetRenderViewHost()->GetRoutingID(),
+            node->GetContent()));
     }
   }
 }

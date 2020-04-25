@@ -25,7 +25,7 @@ using input_method::InputMethodEngineBase;
 namespace {
 const char kInputImeApiErrorEngineNotAvailable[] = "Engine is not available";
 const char kInputImeApiErrorSetKeyEventsFail[] = "Could not send key events";
-}
+}  // namespace
 namespace ui {
 
 ImeObserver::ImeObserver(const std::string& extension_id, Profile* profile)
@@ -80,7 +80,7 @@ void ImeObserver::OnBlur(int context_id) {
 void ImeObserver::OnKeyEvent(
     const std::string& component_id,
     const InputMethodEngineBase::KeyboardEvent& event,
-    IMEEngineHandlerInterface::KeyEventDoneCallback key_data) {
+    IMEEngineHandlerInterface::KeyEventDoneCallback callback) {
   if (extension_id_.empty())
     return;
 
@@ -89,7 +89,7 @@ void ImeObserver::OnKeyEvent(
   if (!ShouldForwardKeyEvent()) {
     // Continue processing the key event so that the physical keyboard can
     // still work.
-    std::move(key_data).Run(false);
+    std::move(callback).Run(false);
     return;
   }
 
@@ -99,22 +99,27 @@ void ImeObserver::OnKeyEvent(
     return;
   const std::string request_id =
       event_router->GetEngineIfActive(extension_id_)
-          ->AddRequest(component_id, std::move(key_data));
+          ->AddPendingKeyEvent(component_id, std::move(callback));
 
   input_ime::KeyboardEvent key_data_value;
   key_data_value.type = input_ime::ParseKeyboardEventType(event.type);
-  key_data_value.request_id = request_id;
-  if (!event.extension_id.empty())
-      key_data_value.extension_id.reset(new std::string(event.extension_id));
+  // For legacy reasons, we still put a |requestID| into the keyData, even
+  // though there is already a |requestID| argument in OnKeyEvent.
+  key_data_value.request_id = std::make_unique<std::string>(request_id);
+  if (!event.extension_id.empty()) {
+    key_data_value.extension_id =
+        std::make_unique<std::string>(event.extension_id);
+  }
   key_data_value.key = event.key;
   key_data_value.code = event.code;
-  key_data_value.alt_key.reset(new bool(event.alt_key));
-  key_data_value.ctrl_key.reset(new bool(event.ctrl_key));
-  key_data_value.shift_key.reset(new bool(event.shift_key));
-  key_data_value.caps_lock.reset(new bool(event.caps_lock));
+  key_data_value.alt_key = std::make_unique<bool>(event.alt_key);
+  key_data_value.altgr_key = std::make_unique<bool>(event.altgr_key);
+  key_data_value.ctrl_key = std::make_unique<bool>(event.ctrl_key);
+  key_data_value.shift_key = std::make_unique<bool>(event.shift_key);
+  key_data_value.caps_lock = std::make_unique<bool>(event.caps_lock);
 
   std::unique_ptr<base::ListValue> args(
-      input_ime::OnKeyEvent::Create(component_id, key_data_value));
+      input_ime::OnKeyEvent::Create(component_id, key_data_value, request_id));
 
   DispatchEventToExtension(extensions::events::INPUT_IME_ON_KEY_EVENT,
                            input_ime::OnKeyEvent::kEventName, std::move(args));
@@ -148,10 +153,6 @@ void ImeObserver::OnDeactivated(const std::string& component_id) {
 // platforms, while with some changing on the current code on ChromeOS.
 void ImeObserver::OnCompositionBoundsChanged(
     const std::vector<gfx::Rect>& bounds) {}
-
-bool ImeObserver::IsInterestedInKeyEvent() const {
-  return ShouldForwardKeyEvent();
-}
 
 void ImeObserver::OnSurroundingTextChanged(const std::string& component_id,
                                            const std::string& text,
@@ -266,11 +267,9 @@ InputImeEventRouterFactory* InputImeEventRouterFactory::GetInstance() {
   return base::Singleton<InputImeEventRouterFactory>::get();
 }
 
-InputImeEventRouterFactory::InputImeEventRouterFactory() {
-}
+InputImeEventRouterFactory::InputImeEventRouterFactory() = default;
 
-InputImeEventRouterFactory::~InputImeEventRouterFactory() {
-}
+InputImeEventRouterFactory::~InputImeEventRouterFactory() = default;
 
 InputImeEventRouter* InputImeEventRouterFactory::GetRouter(Profile* profile) {
   if (!profile)
@@ -400,16 +399,18 @@ ExtensionFunction::ResponseAction InputImeSendKeyEventsFunction::Run() {
       SendKeyEvents::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(parent_params);
   const SendKeyEvents::Params::Parameters& params = parent_params->parameters;
-  std::vector<InputMethodEngineBase::KeyboardEvent> key_data_out;
 
+  std::vector<InputMethodEngineBase::KeyboardEvent> key_data_out;
+  key_data_out.reserve(params.key_data.size());
   for (const auto& key_event : params.key_data) {
-    key_data_out.push_back(InputMethodEngineBase::KeyboardEvent());
+    key_data_out.emplace_back();
     InputMethodEngineBase::KeyboardEvent& event = key_data_out.back();
     event.type = input_ime::ToString(key_event.type);
     event.key = key_event.key;
     event.code = key_event.code;
     event.key_code = key_event.key_code.get() ? *(key_event.key_code) : 0;
     event.alt_key = key_event.alt_key ? *(key_event.alt_key) : false;
+    event.altgr_key = key_event.altgr_key ? *(key_event.altgr_key) : false;
     event.ctrl_key = key_event.ctrl_key ? *(key_event.ctrl_key) : false;
     event.shift_key = key_event.shift_key ? *(key_event.shift_key) : false;
     event.caps_lock = key_event.caps_lock ? *(key_event.caps_lock) : false;
@@ -420,7 +421,7 @@ ExtensionFunction::ResponseAction InputImeSendKeyEventsFunction::Run() {
 }
 
 InputImeAPI::InputImeAPI(content::BrowserContext* context)
-    : browser_context_(context), extension_registry_observer_(this) {
+    : browser_context_(context) {
   extension_registry_observer_.Add(ExtensionRegistry::Get(browser_context_));
 
   EventRouter* event_router = EventRouter::Get(browser_context_);

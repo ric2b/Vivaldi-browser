@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/i18n/rtl.h"
+#include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
@@ -31,7 +32,6 @@
 #include "components/ntp_tiles/ntp_tile_impression.h"
 #include "components/ntp_tiles/tile_source.h"
 #include "components/ntp_tiles/tile_visual_type.h"
-#include "content/public/common/page_zoom.h"
 #include "content/public/renderer/chrome_object_extensions_utils.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
@@ -40,6 +40,8 @@
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/wrappable.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
+#include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -56,75 +58,6 @@
 #include "url/gurl.h"
 #include "url/url_constants.h"
 #include "v8/include/v8.h"
-
-namespace internal {  // for testing.
-
-// Whether NTP background should be considered dark, so the colors of various
-// UI elements can be adjusted. Light text implies dark theme.
-bool IsNtpBackgroundDark(SkColor ntp_text) {
-  return !color_utils::IsDark(ntp_text);
-}
-
-// Calculate contrasting color for given |bg_color|. Returns lighter color if
-// the color is very dark and returns darker color otherwise.
-SkColor GetContrastingColorForBackground(SkColor bg_color,
-                                         float luminosity_change) {
-  color_utils::HSL hsl;
-  SkColorToHSL(bg_color, &hsl);
-
-  // If luminosity is 0, it means |bg_color| is black. Use white for black
-  // backgrounds.
-  if (hsl.l == 0)
-    return SK_ColorWHITE;
-
-  // Decrease luminosity, unless color is already dark.
-  if (hsl.l > 0.15)
-    luminosity_change *= -1;
-
-  hsl.l *= 1 + luminosity_change;
-  if (hsl.l >= 0.0f && hsl.l <= 1.0f)
-    return HSLToSkColor(hsl, 255);
-  return bg_color;
-}
-
-// Use dark icon when in dark mode and no background. Otherwise, use
-// light icon for NTPs with images, and themed icon for NTPs with solid color.
-SkColor GetIconColor(const ThemeBackgroundInfo& theme_info) {
-  bool has_background_image = theme_info.has_theme_image ||
-                              !theme_info.custom_background_url.is_empty();
-  if (has_background_image)
-    return kNTPLightIconColor;
-
-  if (theme_info.using_dark_colors && theme_info.using_default_theme)
-    return kNTPDarkIconColor;
-
-  SkColor bg_color = theme_info.background_color;
-  SkColor icon_color = kNTPLightIconColor;
-  if (!theme_info.using_default_theme && bg_color != SK_ColorWHITE) {
-    icon_color =
-        GetContrastingColorForBackground(bg_color, /*luminosity_change=*/0.2f);
-  }
-
-  return icon_color;
-}
-
-// For themes that use alternate logo and no NTP background image is present,
-// set logo color in the same hue as NTP background.
-SkColor GetLogoColor(const ThemeBackgroundInfo& theme_info) {
-  SkColor logo_color = kNTPLightLogoColor;
-  bool has_background_image = theme_info.has_theme_image ||
-                              !theme_info.custom_background_url.is_empty();
-  if (theme_info.logo_alternate && !has_background_image) {
-    if (color_utils::IsDark(theme_info.background_color))
-      logo_color = SK_ColorWHITE;
-    else
-      logo_color = GetContrastingColorForBackground(theme_info.background_color,
-                                                    /*luminosity_change=*/0.3f);
-  }
-
-  return logo_color;
-}
-}  // namespace internal
 
 namespace {
 
@@ -307,8 +240,6 @@ bool ArrayToSkColor(v8::Isolate* isolate,
   return true;
 }
 
-// TODO(gayane): Move all non-trival logic to |instant_service| and do only
-// mapping here. crbug.com/983717.
 v8::Local<v8::Object> GenerateThemeBackgroundInfo(
     v8::Isolate* isolate,
     const ThemeBackgroundInfo& theme_info) {
@@ -324,12 +255,16 @@ v8::Local<v8::Object> GenerateThemeBackgroundInfo(
   builder.Set("backgroundColorRgba",
               SkColorToArray(isolate, theme_info.background_color));
 
+  // Theme color for text as an array with the RGBA components in order.
+  // Value is always valid.
+  builder.Set("textColorRgba", SkColorToArray(isolate, theme_info.text_color));
+
   // Theme color for light text as an array with the RGBA components in order.
   // Value is always valid.
   builder.Set("textColorLightRgba",
               SkColorToArray(isolate, theme_info.text_color_light));
 
-  // The theme alternate logo value indicates a white logo when TRUE and a
+  // The theme alternate logo value indicates same color when TRUE and a
   // colorful one when FALSE.
   builder.Set("alternateLogo", theme_info.logo_alternate);
 
@@ -404,17 +339,12 @@ v8::Local<v8::Object> GenerateThemeBackgroundInfo(
   builder.Set("themeId", theme_info.theme_id);
   builder.Set("themeName", theme_info.theme_name);
 
-  // Assume that a custom background has not been configured and then
-  // override based on the condition below.
-  builder.Set("customBackgroundConfigured", false);
-  SkColor ntp_text = theme_info.text_color;
+  builder.Set("customBackgroundConfigured",
+              !theme_info.custom_background_url.is_empty());
 
   // If a custom background has been set provide the relevant information to the
   // page.
   if (!theme_info.custom_background_url.is_empty()) {
-    ntp_text = SkColorSetARGB(255, 248, 249, 250);  // GG050
-    builder.Set("alternateLogo", true);
-    builder.Set("customBackgroundConfigured", true);
     builder.Set("imageUrl", theme_info.custom_background_url.spec());
     builder.Set("attributionActionUrl",
                 theme_info.custom_background_attribution_action_url.spec());
@@ -428,20 +358,18 @@ v8::Local<v8::Object> GenerateThemeBackgroundInfo(
     builder.Set("attributionUrl", std::string());
   }
 
-  // Theme color for text as an array with the RGBA components in order.
-  // Value is always valid.
-  builder.Set("textColorRgba", SkColorToArray(isolate, ntp_text));
-
-  // Generate fields for themeing NTP elements.
-  builder.Set("isNtpBackgroundDark", internal::IsNtpBackgroundDark(ntp_text));
+  // Set fields for themeing NTP elements.
+  builder.Set("isNtpBackgroundDark",
+              !color_utils::IsDark(theme_info.text_color));
   builder.Set("useTitleContainer", theme_info.has_theme_image);
 
-  SkColor icon_color = internal::GetIconColor(theme_info);
-  builder.Set("iconBackgroundColor", SkColorToArray(isolate, icon_color));
-  builder.Set("useWhiteAddIcon", color_utils::IsDark(icon_color));
+  // TODO(gayane): Rename icon color to shortcut color in JS for consitancy.
+  builder.Set("iconBackgroundColor",
+              SkColorToArray(isolate, theme_info.shortcut_color));
+  builder.Set("useWhiteAddIcon",
+              color_utils::IsDark(theme_info.shortcut_color));
 
-  builder.Set("logoColor",
-              SkColorToArray(isolate, internal::GetLogoColor(theme_info)));
+  builder.Set("logoColor", SkColorToArray(isolate, theme_info.logo_color));
 
   builder.Set("colorId", theme_info.color_id);
   if (theme_info.color_id != -1) {
@@ -470,6 +398,44 @@ SearchBox* GetSearchBoxForCurrentContext() {
   if (!main_frame)
     return nullptr;
   return SearchBox::Get(main_frame);
+}
+
+base::Value CreateAutocompleteMatches(
+    const std::vector<chrome::mojom::AutocompleteMatchPtr>& matches) {
+  base::Value list(base::Value::Type::LIST);
+  for (const chrome::mojom::AutocompleteMatchPtr& match : matches) {
+    base::Value dict(base::Value::Type::DICTIONARY);
+    dict.SetBoolKey("allowedToBeDefaultMatch",
+                    match->allowed_to_be_default_match);
+    dict.SetStringKey("contents", match->contents);
+    base::Value contents_class(base::Value::Type::LIST);
+    for (const auto& classification : match->contents_class) {
+      base::Value entry(base::Value::Type::DICTIONARY);
+      entry.SetIntKey("offset", classification->offset);
+      entry.SetIntKey("style", classification->style);
+      contents_class.Append(std::move(entry));
+    }
+    dict.SetKey("contentsClass", std::move(contents_class));
+    dict.SetStringKey("description", match->description);
+    base::Value description_class(base::Value::Type::LIST);
+    for (const auto& classification : match->description_class) {
+      base::Value entry(base::Value::Type::DICTIONARY);
+      entry.SetIntKey("offset", classification->offset);
+      entry.SetIntKey("style", classification->style);
+      description_class.Append(std::move(entry));
+    }
+    dict.SetKey("descriptionClass", std::move(description_class));
+    dict.SetStringKey("destinationUrl", match->destination_url);
+    dict.SetStringKey("inlineAutocompletion", match->inline_autocompletion);
+    dict.SetBoolKey("isSearchType", match->is_search_type);
+    dict.SetStringKey("fillIntoEdit", match->fill_into_edit);
+    dict.SetBoolKey("swapContentsAndDescription",
+                    match->swap_contents_and_description);
+    dict.SetStringKey("type", match->type);
+    dict.SetBoolKey("supportsDeletion", match->supports_deletion);
+    list.Append(std::move(dict));
+  }
+  return list;
 }
 
 static const char kDispatchFocusChangedScript[] =
@@ -502,6 +468,28 @@ static const char kDispatchUpdateCustomLinkResult[] =
     "    typeof window.chrome.embeddedSearch.newTabPage"
     "        .onupdatecustomlinkdone === 'function') {"
     "  window.chrome.embeddedSearch.newTabPage.onupdatecustomlinkdone(%s);"
+    "  true;"
+    "}";
+
+static const char kDispatchQueryAutocompleteResult[] =
+    "if (window.chrome &&"
+    "    window.chrome.embeddedSearch &&"
+    "    window.chrome.embeddedSearch.searchBox &&"
+    "    window.chrome.embeddedSearch.searchBox.onqueryautocompletedone &&"
+    "    typeof window.chrome.embeddedSearch.searchBox"
+    "        .onqueryautocompletedone === 'function') {"
+    "  window.chrome.embeddedSearch.searchBox.onqueryautocompletedone(%s);"
+    "  true;"
+    "}";
+
+static const char kDispatchDeleteAutocompleteMatchResult[] =
+    "if (window.chrome &&"
+    "    window.chrome.embeddedSearch &&"
+    "    window.chrome.embeddedSearch.searchBox &&"
+    "    window.chrome.embeddedSearch.searchBox.ondeleteautocompletematch &&"
+    "    typeof window.chrome.embeddedSearch.searchBox"
+    "        .ondeleteautocompletematch === 'function') {"
+    "  window.chrome.embeddedSearch.searchBox.ondeleteautocompletematch(%s);"
     "  true;"
     "}";
 
@@ -600,12 +588,14 @@ class SearchBoxBindings : public gin::Wrappable<SearchBoxBindings> {
       v8::Isolate* isolate) final;
 
   // Handlers for JS properties.
-  static bool GetRightToLeft();
   static bool IsFocused();
   static bool IsKeyCaptureEnabled();
 
   // Handlers for JS functions.
+  static void DeleteAutocompleteMatch(int line);
   static void Paste(const std::string& text);
+  static void QueryAutocomplete(const base::string16& input);
+  static void StopAutocomplete(bool clear_result);
   static void StartCapturingKeyStrokes();
   static void StopCapturingKeyStrokes();
 
@@ -621,19 +611,19 @@ SearchBoxBindings::~SearchBoxBindings() = default;
 gin::ObjectTemplateBuilder SearchBoxBindings::GetObjectTemplateBuilder(
     v8::Isolate* isolate) {
   return gin::Wrappable<SearchBoxBindings>::GetObjectTemplateBuilder(isolate)
-      .SetProperty("rtl", &SearchBoxBindings::GetRightToLeft)
+      .SetProperty("rtl", &base::i18n::IsRTL)
       .SetProperty("isFocused", &SearchBoxBindings::IsFocused)
       .SetProperty("isKeyCaptureEnabled",
                    &SearchBoxBindings::IsKeyCaptureEnabled)
+      .SetMethod("deleteAutocompleteMatch",
+                 &SearchBoxBindings::DeleteAutocompleteMatch)
       .SetMethod("paste", &SearchBoxBindings::Paste)
+      .SetMethod("queryAutocomplete", &SearchBoxBindings::QueryAutocomplete)
+      .SetMethod("stopAutocomplete", &SearchBoxBindings::StopAutocomplete)
       .SetMethod("startCapturingKeyStrokes",
                  &SearchBoxBindings::StartCapturingKeyStrokes)
       .SetMethod("stopCapturingKeyStrokes",
                  &SearchBoxBindings::StopCapturingKeyStrokes);
-}
-
-bool SearchBoxBindings::GetRightToLeft() {
-  return base::i18n::IsRTL();
 }
 
 // static
@@ -653,11 +643,37 @@ bool SearchBoxBindings::IsKeyCaptureEnabled() {
 }
 
 // static
+void SearchBoxBindings::DeleteAutocompleteMatch(int line) {
+  DCHECK_GE(line, 0);
+  DCHECK_LE(line, 255);
+  SearchBox* search_box = GetSearchBoxForCurrentContext();
+  if (!search_box)
+    return;
+  search_box->DeleteAutocompleteMatch(line);
+}
+
+// static
 void SearchBoxBindings::Paste(const std::string& text) {
   SearchBox* search_box = GetSearchBoxForCurrentContext();
   if (!search_box)
     return;
   search_box->Paste(base::UTF8ToUTF16(text));
+}
+
+// static
+void SearchBoxBindings::QueryAutocomplete(const base::string16& input) {
+  SearchBox* search_box = GetSearchBoxForCurrentContext();
+  if (!search_box)
+    return;
+  search_box->QueryAutocomplete(input);
+}
+
+// static
+void SearchBoxBindings::StopAutocomplete(bool clear_result) {
+  SearchBox* search_box = GetSearchBoxForCurrentContext();
+  if (!search_box)
+    return;
+  search_box->StopAutocomplete(clear_result);
 }
 
 // static
@@ -755,6 +771,7 @@ class NewTabPageBindings : public gin::Wrappable<NewTabPageBindings> {
                                       v8::Local<v8::Value> color);
   static void RevertThemeChanges();
   static void ConfirmThemeChanges();
+  static void BlocklistPromo(const std::string& promo_id);
   static v8::Local<v8::Value> GetColorsInfo(v8::Isolate* isolate);
 
   DISALLOW_COPY_AND_ASSIGN(NewTabPageBindings);
@@ -827,7 +844,8 @@ gin::ObjectTemplateBuilder NewTabPageBindings::GetObjectTemplateBuilder(
       .SetMethod("revertThemeChanges", &NewTabPageBindings::RevertThemeChanges)
       .SetMethod("confirmThemeChanges",
                  &NewTabPageBindings::ConfirmThemeChanges)
-      .SetMethod("getColorsInfo", &NewTabPageBindings::GetColorsInfo);
+      .SetMethod("getColorsInfo", &NewTabPageBindings::GetColorsInfo)
+      .SetMethod("blocklistPromo", &NewTabPageBindings::BlocklistPromo);
 }
 
 // static
@@ -853,13 +871,13 @@ v8::Local<v8::Value> NewTabPageBindings::GetMostVisited(v8::Isolate* isolate) {
   if (!search_box)
     return v8::Null(isolate);
 
-  content::RenderView* render_view =
-      GetMainRenderFrameForCurrentContext()->GetRenderView();
+  content::RenderFrame* render_frame = GetMainRenderFrameForCurrentContext();
+  content::RenderView* render_view = render_frame->GetRenderView();
 
   // This corresponds to "window.devicePixelRatio" in JavaScript.
   float zoom_factor =
-      content::ZoomLevelToZoomFactor(render_view->GetZoomLevel());
-  float device_pixel_ratio = render_view->GetDeviceScaleFactor() * zoom_factor;
+      blink::PageZoomLevelToZoomFactor(render_view->GetZoomLevel());
+  float device_pixel_ratio = render_frame->GetDeviceScaleFactor() * zoom_factor;
 
   int render_view_id = render_view->GetRoutingID();
 
@@ -1313,6 +1331,13 @@ v8::Local<v8::Value> NewTabPageBindings::GetColorsInfo(v8::Isolate* isolate) {
   return v8_colors;
 }
 
+void NewTabPageBindings::BlocklistPromo(const std::string& promo_id) {
+  SearchBox* search_box = GetSearchBoxForCurrentContext();
+  if (!search_box)
+    return;
+  search_box->BlocklistPromo(promo_id);
+}
+
 }  // namespace
 
 // static
@@ -1382,6 +1407,33 @@ void SearchBoxExtension::DispatchDeleteCustomLinkResult(
   blink::WebString script(blink::WebString::FromUTF8(base::StringPrintf(
       kDispatchDeleteCustomLinkResult, success ? "true" : "false")));
   Dispatch(frame, script);
+}
+
+void SearchBoxExtension::DispatchQueryAutocompleteResult(
+    blink::WebLocalFrame* frame,
+    chrome::mojom::AutocompleteResultPtr result) {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetStringKey("input", result->input);
+  dict.SetDoubleKey("status", static_cast<double>(result->status));
+  dict.SetKey("matches", CreateAutocompleteMatches(result->matches));
+
+  std::string json;
+  base::JSONWriter::Write(dict, &json);
+  Dispatch(frame, blink::WebString::FromUTF8(base::StringPrintf(
+                      kDispatchQueryAutocompleteResult, json.c_str())));
+}
+
+void SearchBoxExtension::DispatchDeleteAutocompleteMatchResult(
+    blink::WebLocalFrame* frame,
+    chrome::mojom::DeleteAutocompleteMatchResultPtr result) {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetBoolKey("success", result->success);
+  dict.SetKey("matches", CreateAutocompleteMatches(result->matches));
+
+  std::string json;
+  base::JSONWriter::Write(dict, &json);
+  Dispatch(frame, blink::WebString::FromUTF8(base::StringPrintf(
+                      kDispatchDeleteAutocompleteMatchResult, json.c_str())));
 }
 
 // static

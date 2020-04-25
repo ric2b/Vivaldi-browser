@@ -17,7 +17,7 @@ class TextInputManager {
   }
 
   /**
-   * Enters the keyboard and draws the text input focus ring.
+   * Enters the keyboard.
    * @param {!chrome.automation.AutomationNode} node
    */
   enterKeyboard(node) {
@@ -25,17 +25,13 @@ class TextInputManager {
       return false;
 
     this.node_ = node;
-    this.navigationManager_.focusRingManager.setRing(
-        SAConstants.Focus.ID.TEXT, [this.node_.location]);
     return true;
   }
 
-  /** Resets the focus ring and the focus in |navigationManager_|. */
+  /** Resets the focus in |navigationManager_|. */
   returnToTextFocus() {
     if (!this.node_)
       return;
-    this.navigationManager_.focusRingManager.clearRing(
-        SAConstants.Focus.ID.TEXT);
     this.navigationManager_.exitCurrentScope(this.node_);
     this.node_ = null;
   }
@@ -54,20 +50,7 @@ class TextInputManager {
     const x = node.location.left + Math.round(node.location.width / 2);
     const y = node.location.top + Math.round(node.location.height / 2);
 
-    chrome.accessibilityPrivate.sendSyntheticMouseEvent({
-      type: chrome.accessibilityPrivate.SyntheticMouseEventType.PRESS,
-      x: x,
-      y: y
-    });
-
-    setTimeout(
-        () => chrome.accessibilityPrivate.sendSyntheticMouseEvent({
-          type: chrome.accessibilityPrivate.SyntheticMouseEventType.RELEASE,
-          x: x,
-          y: y
-        }),
-        SAConstants.KEY_PRESS_DURATION_MS);
-
+    EventHelper.simulateMouseClick(x, y, SAConstants.VK_KEY_PRESS_DURATION_MS);
     return true;
   }
 
@@ -108,8 +91,7 @@ class TextInputManager {
    * @public
    */
   cut() {
-    this.navigationManager_.simulateKeyPress(
-        SAConstants.KeyCode.X, {ctrl: true});
+    EventHelper.simulateKeyPress(EventHelper.KeyCode.X, {ctrl: true});
   }
 
   /**
@@ -118,8 +100,7 @@ class TextInputManager {
    * @public
    */
   copy() {
-    this.navigationManager_.simulateKeyPress(
-        SAConstants.KeyCode.C, {ctrl: true});
+    EventHelper.simulateKeyPress(EventHelper.KeyCode.C, {ctrl: true});
   }
 
   /**
@@ -128,7 +109,6 @@ class TextInputManager {
    * @public
    */
   paste() {
-    this.navigationManager_.simulateKeyPress(
-        SAConstants.KeyCode.V, {ctrl: true});
+    EventHelper.simulateKeyPress(EventHelper.KeyCode.V, {ctrl: true});
   }
 }

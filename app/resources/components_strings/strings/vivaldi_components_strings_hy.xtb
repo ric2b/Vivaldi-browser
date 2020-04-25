@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="hy">
 <translation id="1038842779957582377">անհայտ անուն</translation>
+<translation id="1089439967362294234">Փոխել գաղտնաբառը</translation>
 <translation id="1110994991967754504"><ph name="PERMISSION_NAME" />. ընտրեք թույլտվությունը</translation>
 <translation id="1152921474424827756">Բացել <ph name="URL" /> էջի <ph name="BEGIN_LINK" />քեշի պատճենը<ph name="END_LINK" /></translation>
 <translation id="1158211211994409885">Միացումն անսպասելիորեն փակվեց <ph name="HOST_NAME" />-ի կողմից։</translation>
@@ -48,14 +49,18 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Ֆայլին մոտեցումն արգելված է</translation>
 <translation id="2705137772291741111">Այս կայքի՝ քեշում պահպանված պատճենն անընթեռնելի է։</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Աշխատեցնել միացման ախտորոշումը<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Միացումը վերադարձել է սկզբնական վիճակին։</translation>
 <translation id="2826760142808435982">Միացումը գաղտնագրված և վավերացված է <ph name="CIPHER" />-ով և օգտագործում է <ph name="KX" /> որպես բանալիների փոխանակման մեխանիզմ։</translation>
 <translation id="2856444702002559011">Հարձակվողները կարող են փորձել գողանալ Ձեր տեղեկույթը <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />-ից (օրինակ՝ գաղտնաբառեր, հաղորդագրություններ կամ բանկային քարտերի տվյալներ)։ <ph name="BEGIN_LEARN_MORE_LINK" />Իմանալ ավելին<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Հայտնաբերված է ցանցի փոփոխություն։</translation>
+<translation id="2948083400971632585">Միացման համար կարգավորված ցանկացած պրոքսի Դուք կարող եք անջատել կարգավորումների էջից։</translation>
 <translation id="2991571918955627853">Դուք այս պահին չեք կարող այցելել <ph name="SITE" />, քանի որ այդ կայքն օգտագործում է HSTS մեխանիզմը։ Սովորաբար ցանցային սխալներն ու հարձակումները ժամանակավոր են, ուստի միառժամանակ հետո այս էջը հավանաբար կաշխատի։</translation>
 <translation id="3005723025932146533">Ցույց տալ պահպանված օրինակը</translation>
 <translation id="301521992641321250">Ավտոմատ արգելափակված է</translation>
+<translation id="3041612393474885105">Հավաստագրի տվյալներ</translation>
 <translation id="3109728660330352905">Դուք չունեք այս էջը դիտելու արտոնություն։</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Փորձեք աշխատեցնել միացման ախտորոշումը<ph name="END_LINK" />։</translation>
 <translation id="3154506275960390542">Այս էջը պարունակում է ձևաթուղթ, որի ուղարկումը կարող է անվտանգ չլինել։ Ուղարկվող տվյալները փոխանցման ընթացքում կարող են դիտվել երրորդ անձանց կողմից, կամ հարձակվողը կարող է փոփոխել դրանք՝ փոխելու համար այն, ինչ սերվերը ստանում է։</translation>
 <translation id="3176929007561373547">Ստուգեք Ձեր պրոքսիի կարգավորումները կամ կապվեք Ձեր ցանցային
 ադմինիստրատորի հետ՝ համոզվելու համար, որ պրոքսի սերվերն աշխատում է։
@@ -108,6 +113,7 @@
 <translation id="4744603770635761495">Կատարելի ֆայլի ուղի</translation>
 <translation id="4750917950439032686">Ձեր տվյալները (օրինակ՝ գաղտնաբառերը կամ բանկային քարտի համարները), երբ ուղարկվում են այս կայքին, գաղտնի են։</translation>
 <translation id="4764776831041365478"><ph name="URL" /> հասցեով վեբ էջը, հնարավոր է, որ ժամանակավորապես անհասանելի է կամ մշտապես տեղափոխվել է նոր վեբ հասցե։</translation>
+<translation id="4943872375798546930">Արդյունք չկա</translation>
 <translation id="4974590756084640048">Նորից միացնել զգուշացումները</translation>
 <translation id="5023310440958281426">Ստուգեք Ձեր ադմինիստրատորի կողմից սահմանված դրույթները</translation>
 <translation id="5039804452771397117">Թույլատրել</translation>
@@ -124,7 +130,6 @@
     Դիմեք Ձեր համակարգի ադմինիստրատորին։</translation>
 <translation id="5510766032865166053">Հնարավոր է, որ այն տեղափոխված կամ ջնջված է։</translation>
 <translation id="5556459405103347317">Թարմացնել</translation>
-<translation id="5571347317547569613">({NUM_COOKIES, plural, =1 {1-ն օգտագործվում է} other {#-ն օգտագործվում է}})</translation>
 <translation id="5610142619324316209">Ստուգել միացումը</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" />-ը չափից շատ է վերաուղղորդվել։</translation>
 <translation id="5675650730144413517">Այս էջը չի բացվում</translation>
@@ -159,7 +164,7 @@
 <translation id="6657585470893396449">Գաղտնաբառ</translation>
 <translation id="6685834062052613830">Դուրս գրվեք և ավարտին հասցրեք կարգավորելը</translation>
 <translation id="6711464428925977395">Պրոքսի սերվերի հետ ինչ-որ խնդիր կա կամ հասցեն սխալ է նշված։</translation>
-<translation id="6757797048963528358">Ձեր սարքն անցել է քնի ռեժիմին։</translation>
+<translation id="6757797048963528358">Ձեր սարքն անցավ քնի ռեժիմի։</translation>
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="7053983685419859001">Արգելափակել</translation>
 <translation id="7079718277001814089">Այս կայքը վնասագրեր է պարունակում</translation>
@@ -194,7 +199,7 @@
 <translation id="8041940743680923270">Կիրառել գլոբալ ստանդարտը (հարցնել)</translation>
 <translation id="808894953321890993">Փոխել գաղտնաբառը</translation>
 <translation id="8142868475871995937">Այցելեք &lt;strong&gt;vivaldi://policy&lt;/strong&gt;՝ տեսնելու համար URL-ների սև ցուցակը և այլ դրույթներ՝ պարտադրված Ձեր համակարգի ադմինիստրատորի կողմից։</translation>
-<translation id="8149426793427495338">Ձեր համակարգիչն անցել է քնի ռեժիմին։</translation>
+<translation id="8149426793427495338">Ձեր համակարգիչն անցավ քնի ռեժիմի։</translation>
 <translation id="8150722005171944719"><ph name="URL" /> հասցեով ֆայլն ընթեռնելի չէ։ Այն կարող է լինել հեռացված, տեղափոխված, կամ ֆայլի թույլտվությունները կարող են կանխել դրա հասանելիությունը։</translation>
 <translation id="8184538546369750125">Կիրառել գլոբալ ստանդարտը (թույլատրել)</translation>
 <translation id="8211406090763984747">Միացումն անվտանգ է</translation>
@@ -208,6 +213,7 @@
 <translation id="8503813439785031346">Օգտվողի անուն</translation>
 <translation id="8703575177326907206">Ձեր միացումը <ph name="DOMAIN" />-ի հետ գաղտնագրված չէ։</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />-ի &lt;abbr id="dnsDefinition"&gt;DNS հասցեն&lt;/abbr&gt; գտնել չհաջողվեց։ Կատարվում է խնդրի ախտորոշում։</translation>
+<translation id="8820817407110198400">Էջանիշեր</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> պրոքսին պահանջում է օգտվողի անուն և գաղտնաբառ։</translation>
 <translation id="9008201768610948239">Անտեսել</translation>
 <translation id="9011424611726486705">Բացել կայքի կարգավորումները</translation>

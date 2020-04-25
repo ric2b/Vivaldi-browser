@@ -438,6 +438,9 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
     // We want to keep the service sub menu of the original menu.
     bool isAppMenu = topLevel && item.id == IDC_CHROME_MENU;
 
+    // This menu has issues on macOS 10.15+ (VB-58755)
+    bool isWindowMenu = topLevel && item.id == IDC_WINDOW_MENU;
+
     // Special care for the bookmarks menu as we manage it two places.
     // Here and in bookmark_menu_bridge.mm. We never clear its content
     // and we replace menu items if they already exists.
@@ -451,7 +454,7 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
 
     if ([menuItem hasSubmenu]) {
       subMenu = [menuItem submenu];
-      if (!isAppMenu && !isBookmarkMenu && !isEditMenu) {
+      if (!isAppMenu && !isBookmarkMenu && !isEditMenu && !isWindowMenu) {
         [subMenu removeAllItems];
       }
       if (isEditMenu) {
@@ -471,6 +474,15 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
           if (!item.hasSubmenu &&
               [item action] !=
                   NSSelectorFromString(@"unhideAllApplications:")) {
+            [subMenu removeItem:item];
+          }
+        }
+      }
+      if (isWindowMenu) {
+        // Remove tab entries & kSeparatorTag, those are dynamically added when
+        // there are changes.
+        for (NSMenuItem* item in [subMenu itemArray]) {
+          if (item.tag == IDC_VIV_ACTIVATE_TAB) {
             [subMenu removeItem:item];
           }
         }
@@ -527,14 +539,16 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
         PopulateMenu(child, subMenu, false, index, faviconLoader);
         continue;
       }
+      else if (isWindowMenu) {
+        // Insert our open tab menuitems after the kSeparatorTag item,
+        // before the list of open windows.
+        NSMenuItem* item = [subMenu itemWithTag:kSeparatorTag];
+        long index = [subMenu indexOfItem:item] + 1;
+        PopulateMenu(child, subMenu, false, index, faviconLoader);
+        continue;
+      }
       PopulateMenu(child, subMenu, false, index, faviconLoader);
     }
-
-    // Set the native window menu
-    if (topLevel && item.id == IDC_WINDOW_MENU) {
-      [NSApp setWindowsMenu:[menuItem submenu]];
-    }
-
   }
 }
 
@@ -567,18 +581,15 @@ void CreateVivaldiMainMenu(
     std::vector<menubar::MenuItem>* items,
     menubar::Mode mode) {
 
+  NSMenu* mainMenu = [NSApp mainMenu];
+  NSMenuItem* windowMenuItem = GetMenuItemByTag(mainMenu, IDC_WINDOW_MENU);
+
   if (!g_window_menu_delegate) {
-    NSMenu* mainMenu = [NSApp mainMenu];
-    for (long i=0; i<mainMenu.numberOfItems; i++) {
-      if ([mainMenu itemAtIndex:i].tag == IDC_WINDOW_MENU) {
-        NSMenu* menu = [[mainMenu itemAtIndex:i] submenu];
-        if (menu) {
-          g_window_menu_delegate =
-            [[MainMenuDelegate alloc] initWithProfile:profile
-                                                  tag:IDC_VIV_ACTIVATE_TAB];
-          menu.delegate = g_window_menu_delegate;
-        }
-      }
+    if ([windowMenuItem hasSubmenu]) {
+      g_window_menu_delegate =
+        [[MainMenuDelegate alloc] initWithProfile:profile
+                                              tag:IDC_VIV_ACTIVATE_TAB];
+      windowMenuItem.submenu.delegate = g_window_menu_delegate;
     }
   }
 
@@ -586,7 +597,6 @@ void CreateVivaldiMainMenu(
     // Full update. Remove any pending requests.
     [g_window_menu_delegate reset];
 
-    NSMenu* mainMenu = [NSApp mainMenu];
     FaviconLoaderMac* faviconLoader = [g_window_menu_delegate faviconLoader];
     for (const menubar::MenuItem& item : *items) {
       PopulateMenu(item, mainMenu, true, -1, faviconLoader);
@@ -596,9 +606,19 @@ void CreateVivaldiMainMenu(
   } else if (mode == menubar::MODE_UPDATE) {
     // Update one or more items. Title is not changed.
     for (const menubar::MenuItem& item : *items) {
-      NSMenuItem* menuItem = GetMenuItemByTag([NSApp mainMenu], item.id);
+      NSMenuItem* menuItem = GetMenuItemByTag(mainMenu, item.id);
       if (menuItem)
         UpdateMenuItem(item, menuItem);
+    }
+  }
+
+  // macOS will sometimes add the alternateArrangeInFront menuitem.
+  // Remove it if we find it.
+  if ([windowMenuItem hasSubmenu]) {
+    for (NSMenuItem* item in [[windowMenuItem submenu] itemArray]) {
+      if ([item action] == NSSelectorFromString(@"alternateArrangeInFront:")) {
+        [[windowMenuItem submenu] removeItem:item];
+      }
     }
   }
 }

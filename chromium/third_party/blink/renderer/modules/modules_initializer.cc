@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "third_party/blink/public/mojom/dom_storage/session_storage_namespace.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -28,7 +29,6 @@
 #include "third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/core/workers/worker_clients.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_object_cache_impl.h"
 #include "third_party/blink/renderer/modules/accessibility/inspector_accessibility_agent.h"
 #include "third_party/blink/renderer/modules/app_banner/app_banner_controller.h"
@@ -50,7 +50,7 @@
 #include "third_party/blink/renderer/modules/event_target_modules_names.h"
 #include "third_party/blink/renderer/modules/exported/web_embedded_worker_impl.h"
 #include "third_party/blink/renderer/modules/filesystem/dragged_isolated_file_system_impl.h"
-#include "third_party/blink/renderer/modules/filesystem/local_file_system_client.h"
+#include "third_party/blink/renderer/modules/filesystem/local_file_system.h"
 #include "third_party/blink/renderer/modules/gamepad/navigator_gamepad.h"
 #include "third_party/blink/renderer/modules/image_downloader/image_downloader_impl.h"
 #include "third_party/blink/renderer/modules/indexed_db_names.h"
@@ -83,23 +83,19 @@
 #include "third_party/blink/renderer/modules/webdatabase/inspector_database_agent.h"
 #include "third_party/blink/renderer/modules/webdatabase/web_database_host.h"
 #include "third_party/blink/renderer/modules/webdatabase/web_database_impl.h"
-#include "third_party/blink/renderer/modules/worklet/animation_and_paint_worklet_thread.h"
-#include "third_party/blink/renderer/modules/xr/navigator_xr.h"
-#if defined(SUPPORT_WEBGL2_COMPUTE_CONTEXT)
-#include "third_party/blink/renderer/modules/webgl/webgl2_compute_rendering_context.h"
-#endif
-#include "third_party/blink/renderer/modules/accessibility/inspector_accessibility_agent.h"
 #include "third_party/blink/renderer/modules/webgl/webgl2_rendering_context.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_rendering_context.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_canvas_context.h"
+#include "third_party/blink/renderer/modules/worklet/animation_and_paint_worklet_thread.h"
+#include "third_party/blink/renderer/modules/xr/navigator_xr.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
-#if defined(TOUCHLESS_MEDIA_CONTROLS)
-#include "third_party/blink/renderer/modules/media_controls/touchless/media_controls_touchless_impl.h"
+#if defined(SUPPORT_WEBGL2_COMPUTE_CONTEXT)
+#include "third_party/blink/renderer/modules/webgl/webgl2_compute_rendering_context.h"
 #endif
 
 namespace blink {
@@ -182,7 +178,7 @@ void ModulesInitializer::InstallSupplements(LocalFrame& frame) const {
   ProvidePushMessagingClientTo(
       frame, MakeGarbageCollected<PushMessagingClient>(frame));
   ProvideUserMediaTo(frame);
-  ProvideLocalFileSystemTo(frame, std::make_unique<LocalFileSystemClient>());
+  ProvideLocalFileSystemTo(frame);
 
   ScreenOrientationControllerImpl::ProvideTo(frame);
   if (RuntimeEnabledFeatures::PresentationEnabled())
@@ -199,19 +195,14 @@ void ModulesInitializer::InstallSupplements(LocalFrame& frame) const {
 }
 
 void ModulesInitializer::ProvideLocalFileSystemToWorker(
-    WorkerClients& worker_clients) const {
-  ::blink::ProvideLocalFileSystemToWorker(
-      &worker_clients, std::make_unique<LocalFileSystemClient>());
+    WorkerGlobalScope& worker_global_scope) const {
+  ::blink::ProvideLocalFileSystemToWorker(worker_global_scope);
 }
 
 MediaControls* ModulesInitializer::CreateMediaControls(
     HTMLMediaElement& media_element,
     ShadowRoot& shadow_root) const {
-#if defined(TOUCHLESS_MEDIA_CONTROLS)
-  return MediaControlsTouchlessImpl::Create(media_element, shadow_root);
-#else
   return MediaControlsImpl::Create(media_element, shadow_root);
-#endif
 }
 
 PictureInPictureController*

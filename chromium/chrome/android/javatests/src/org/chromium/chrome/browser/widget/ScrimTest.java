@@ -12,7 +12,6 @@ import static org.junit.Assert.assertTrue;
 
 import android.support.test.filters.SmallTest;
 import android.view.View;
-import android.view.ViewGroup;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -62,27 +61,16 @@ public class ScrimTest {
         final ChromeTabbedActivity activity = mActivityTestRule.getActivity();
 
         ThreadUtils.runOnUiThreadBlocking(() -> {
-            ViewGroup coordinator = activity.findViewById(org.chromium.chrome.R.id.coordinator);
-            mBottomSheet = activity.getLayoutInflater()
-                                   .inflate(org.chromium.chrome.R.layout.bottom_sheet, coordinator)
-                                   .findViewById(org.chromium.chrome.R.id.bottom_sheet)
-                                   .findViewById(org.chromium.chrome.R.id.bottom_sheet);
-            mBottomSheet.init(coordinator, activity);
-
+            mSheetController = activity.getBottomSheetController();
+            mBottomSheet = mSheetController.getBottomSheet();
             mScrim = activity.getScrim();
-
-            mSheetController = new BottomSheetController(activity,
-                    activity.getLifecycleDispatcher(), activity.getActivityTabProvider(), mScrim,
-                    mBottomSheet,
-                    activity.getCompositorViewHolder().getLayoutManager().getOverlayPanelManager(),
-                    true);
         });
     }
 
     @Test
     @SmallTest
     @Feature({"Scrim"})
-    public void testScrimVisibility() throws InterruptedException, TimeoutException {
+    public void testScrimVisibility() throws TimeoutException {
         CallbackHelper visibilityHelper = new CallbackHelper();
         ScrimObserver observer = new ScrimObserver() {
             @Override
@@ -116,7 +104,7 @@ public class ScrimTest {
     @Test
     @SmallTest
     @Feature({"Scrim"})
-    public void testBottomSheetScrim() throws InterruptedException, TimeoutException {
+    public void testBottomSheetScrim() {
         mScrim.disableAnimationForTesting(true);
         assertScrimVisibility(false);
         assertFalse("Nothing should be obscuring the tab.",
@@ -149,7 +137,7 @@ public class ScrimTest {
     @SmallTest
     @Feature({"Scrim"})
     @DisabledTest(message = "crbug.com/877774")
-    public void testOmniboxScrim() throws InterruptedException, TimeoutException {
+    public void testOmniboxScrim() {
         assertScrimVisibility(false);
         assertFalse("Nothing should be obscuring the tab.",
                 mActivityTestRule.getActivity().isViewObscuringAllTabs());

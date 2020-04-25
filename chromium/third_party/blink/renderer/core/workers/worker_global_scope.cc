@@ -282,27 +282,6 @@ bool WorkerGlobalScope::FetchClassicImportedScript(
     KURL* out_response_url,
     String* out_source_code,
     std::unique_ptr<Vector<uint8_t>>* out_cached_meta_data) {
-  // InstalledScriptsManager is now used only for starting installed service
-  // workers.
-  // TODO(nhiroki): Consider moving this into ServiceWorkerGlobalScope.
-  InstalledScriptsManager* installed_scripts_manager =
-      GetThread()->GetInstalledScriptsManager();
-  if (installed_scripts_manager &&
-      installed_scripts_manager->IsScriptInstalled(script_url)) {
-    DCHECK(IsServiceWorkerGlobalScope());
-    std::unique_ptr<InstalledScriptsManager::ScriptData> script_data =
-        installed_scripts_manager->GetScriptData(script_url);
-    if (!script_data)
-      return false;
-    *out_response_url = script_url;
-    *out_source_code = script_data->TakeSourceText();
-    *out_cached_meta_data = script_data->TakeMetaData();
-    // TODO(shimazu): Add appropriate probes for inspector.
-    return true;
-  }
-
-  // If the script wasn't provided by the InstalledScriptsManager, load from
-  // ResourceLoader.
   ExecutionContext* execution_context = GetExecutionContext();
   WorkerClassicScriptLoader* classic_script_loader =
       MakeGarbageCollected<WorkerClassicScriptLoader>();
@@ -489,10 +468,6 @@ WorkerGlobalScope::WorkerGlobalScope(
       timers_(GetTaskRunner(TaskType::kJavascriptTimer)),
       time_origin_(time_origin),
       font_selector_(MakeGarbageCollected<OffscreenFontSelector>(this)),
-      animation_frame_provider_(
-          MakeGarbageCollected<WorkerAnimationFrameProvider>(
-              this,
-              creation_params->begin_frame_provider_params)),
       script_eval_state_(ScriptEvalState::kPauseAfterFetch) {
   InstanceCounters::IncrementCounter(
       InstanceCounters::kWorkerGlobalScopeCounter);
@@ -561,28 +536,6 @@ void WorkerGlobalScope::queueMicrotask(V8VoidFunction* callback) {
                 WrapPersistent(callback), nullptr));
 }
 
-int WorkerGlobalScope::requestAnimationFrame(V8FrameRequestCallback* callback,
-                                             ExceptionState& exception_state) {
-  auto* frame_callback =
-      MakeGarbageCollected<FrameRequestCallbackCollection::V8FrameCallback>(
-          callback);
-  frame_callback->SetUseLegacyTimeBase(true);
-
-  int ret = animation_frame_provider_->RegisterCallback(frame_callback);
-
-  if (ret == WorkerAnimationFrameProvider::kInvalidCallbackId) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kNotSupportedError,
-        "requestAnimationFrame not supported in this Worker.");
-  }
-
-  return ret;
-}
-
-void WorkerGlobalScope::cancelAnimationFrame(int id) {
-  animation_frame_provider_->CancelCallback(id);
-}
-
 void WorkerGlobalScope::SetWorkerSettings(
     std::unique_ptr<WorkerSettings> worker_settings) {
   worker_settings_ = std::move(worker_settings);
@@ -605,7 +558,6 @@ void WorkerGlobalScope::Trace(blink::Visitor* visitor) {
   visitor->Trace(timers_);
   visitor->Trace(pending_error_events_);
   visitor->Trace(font_selector_);
-  visitor->Trace(animation_frame_provider_);
   visitor->Trace(trusted_types_);
   visitor->Trace(worker_script_);
   WorkerOrWorkletGlobalScope::Trace(visitor);

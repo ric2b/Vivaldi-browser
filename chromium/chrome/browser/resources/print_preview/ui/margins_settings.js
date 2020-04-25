@@ -11,14 +11,14 @@ Polymer({
     disabled: Boolean,
 
     /** Mirroring the enum so that it can be used from HTML bindings. */
-    MarginsValue: Object,
+    MarginsTypeEnum: Object,
   },
 
   observers: ['onMarginsSettingChange_(settings.margins.value)'],
 
   /** @override */
   ready: function() {
-    this.MarginsValue = print_preview.ticket_items.MarginsTypeValue;
+    this.MarginsTypeEnum = print_preview.MarginsType;
   },
 
   /**
@@ -27,8 +27,7 @@ Polymer({
    */
   onMarginsSettingChange_: function(newValue) {
     this.selectedValue =
-        /** @type {!print_preview.ticket_items.MarginsTypeValue} */ (newValue)
-            .toString();
+        /** @type {!print_preview.MarginsType} */ (newValue).toString();
   },
 
   /** @param {string} value The new select value. */

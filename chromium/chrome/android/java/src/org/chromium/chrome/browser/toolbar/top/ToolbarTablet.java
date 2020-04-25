@@ -14,7 +14,6 @@ import android.content.res.Resources;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LevelListDrawable;
-import android.support.annotation.StringRes;
 import android.support.v4.view.ViewCompat;
 import android.support.v7.content.res.AppCompatResources;
 import android.util.AttributeSet;
@@ -22,6 +21,8 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewStub;
 import android.widget.ImageButton;
+
+import androidx.annotation.StringRes;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordUserAction;
@@ -40,9 +41,9 @@ import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.TabCountProvider.TabCountObserver;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -344,7 +345,7 @@ public class ToolbarTablet extends ToolbarLayout
         } else if (v == mSaveOfflineButton) {
             description = resources.getString(R.string.menu_download);
         }
-        return AccessibilityUtil.showAccessibilityToast(context, v, description);
+        return Toast.showAnchoredToast(context, v, description);
     }
 
     private void updateSwitcherButtonVisibility(boolean enabled) {
@@ -424,9 +425,6 @@ public class ToolbarTablet extends ToolbarLayout
 
     @Override
     void updateButtonVisibility() {
-        if (FeatureUtilities.isNewTabPageButtonEnabled()) {
-            mHomeButton.setVisibility(isIncognito() ? GONE : VISIBLE);
-        }
         mLocationBar.updateButtonVisibility();
     }
 

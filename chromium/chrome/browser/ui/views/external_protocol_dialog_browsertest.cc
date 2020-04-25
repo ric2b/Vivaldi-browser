@@ -9,6 +9,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/external_protocol_dialog_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
@@ -29,7 +30,7 @@ class ExternalProtocolDialogTestApi {
       : dialog_(dialog) {}
 
   void SetCheckBoxSelected(bool checked) {
-    dialog_->remember_decision_checkbox_->SetChecked(checked);
+    dialog_->SetRememberSelectionCheckboxCheckedForTesting(checked);
   }
 
  private:
@@ -50,7 +51,7 @@ class TestExternalProtocolDialogDelegate
                                      bool* called,
                                      bool* accept,
                                      bool* remember)
-      : ExternalProtocolDialogDelegate(url, web_contents),
+      : ExternalProtocolDialogDelegate(url, web_contents, base::nullopt),
         called_(called),
         accept_(accept),
         remember_(remember) {}
@@ -110,10 +111,12 @@ class ExternalProtocolDialogBrowserTest
     return ExternalProtocolHandler::DONT_BLOCK;
   }
   void BlockRequest() override {}
-  void RunExternalProtocolDialog(const GURL& url,
-                                 content::WebContents* web_contents,
-                                 ui::PageTransition page_transition,
-                                 bool has_user_gesture) override {}
+  void RunExternalProtocolDialog(
+      const GURL& url,
+      content::WebContents* web_contents,
+      ui::PageTransition page_transition,
+      bool has_user_gesture,
+      const base::Optional<url::Origin>& initiating_origin) override {}
   void LaunchUrlWithoutSecurityCheck(
       const GURL& url,
       content::WebContents* web_contents) override {
@@ -235,4 +238,15 @@ IN_PROC_BROWSER_TEST_F(ExternalProtocolDialogBrowserTest,
 // run.
 IN_PROC_BROWSER_TEST_F(ExternalProtocolDialogBrowserTest, InvokeUi_default) {
   ShowAndVerifyUi();
+}
+
+// Tests that keyboard focus works when the dialog is shown. Regression test for
+// https://crbug.com/1025343.
+IN_PROC_BROWSER_TEST_F(ExternalProtocolDialogBrowserTest, TestFocus) {
+  ShowUi(std::string());
+  gfx::NativeWindow window = browser()->window()->GetNativeWindow();
+  views::Widget* widget = views::Widget::GetWidgetForNativeWindow(window);
+  const views::FocusManager* focus_manager = widget->GetFocusManager();
+  const views::View* focused_view = focus_manager->GetFocusedView();
+  EXPECT_TRUE(focused_view);
 }

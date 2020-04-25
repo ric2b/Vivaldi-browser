@@ -118,7 +118,7 @@ void CreatePrintSettingsDictionary(base::DictionaryValue* dict) {
   dict->SetBoolean(kSettingLandscape, false);
   dict->SetBoolean(kSettingCollate, false);
   dict->SetInteger(kSettingColor, GRAY);
-  dict->SetBoolean(kSettingPrintToPDF, true);
+  dict->SetInteger(kSettingPrinterType, kPdfPrinter);
   dict->SetInteger(kSettingDuplexMode, SIMPLEX);
   dict->SetInteger(kSettingCopies, 1);
   dict->SetString(kSettingDeviceName, "dummy");
@@ -126,7 +126,8 @@ void CreatePrintSettingsDictionary(base::DictionaryValue* dict) {
   dict->SetInteger(kPreviewRequestID, 12345);
   dict->SetBoolean(kIsFirstRequest, true);
   dict->SetInteger(kSettingMarginsType, DEFAULT_MARGINS);
-  dict->SetBoolean(kSettingPreviewModifiable, false);
+  dict->SetBoolean(kSettingPreviewModifiable, true);
+  dict->SetBoolean(kSettingPreviewIsPdf, false);
   dict->SetBoolean(kSettingHeaderFooterEnabled, false);
   dict->SetBoolean(kSettingShouldPrintBackgrounds, false);
   dict->SetBoolean(kSettingShouldPrintSelectionOnly, false);
@@ -260,7 +261,7 @@ class PrintRenderFrameHelperTestBase : public content::RenderViewTest {
   void OnPrintPreview(const base::DictionaryValue& dict) {
     PrintRenderFrameHelper* print_render_frame_helper =
         GetPrintRenderFrameHelper();
-    print_render_frame_helper->OnInitiatePrintPreview(false);
+    print_render_frame_helper->InitiatePrintPreview(nullptr, false);
     base::RunLoop run_loop;
     DidPreviewPageListener filter(&run_loop);
     render_thread_->sink().AddFilter(&filter);
@@ -270,7 +271,7 @@ class PrintRenderFrameHelperTestBase : public content::RenderViewTest {
   }
 
   void OnClosePrintPreviewDialog() {
-    GetPrintRenderFrameHelper()->OnClosePrintPreviewDialog();
+    GetPrintRenderFrameHelper()->OnPrintPreviewDialogClosed();
   }
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
@@ -798,8 +799,7 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest,
   // Fill in some dummy values.
   base::DictionaryValue dict;
   CreatePrintSettingsDictionary(&dict);
-  dict.SetBoolean(kSettingPrintToPDF, false);
-  dict.SetInteger(kSettingMarginsType, DEFAULT_MARGINS);
+  dict.SetInteger(kSettingPrinterType, kLocalPrinter);
   OnPrintPreview(dict);
 
   EXPECT_EQ(0, print_render_thread()->print_preview_pages_remaining());
@@ -821,7 +821,7 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest,
   // Fill in some dummy values.
   base::DictionaryValue dict;
   CreatePrintSettingsDictionary(&dict);
-  dict.SetBoolean(kSettingPrintToPDF, false);
+  dict.SetInteger(kSettingPrinterType, kLocalPrinter);
   dict.SetInteger(kSettingMarginsType, NO_MARGINS);
   OnPrintPreview(dict);
 
@@ -844,7 +844,6 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest,
   // Fill in some dummy values.
   base::DictionaryValue dict;
   CreatePrintSettingsDictionary(&dict);
-  dict.SetBoolean(kSettingPrintToPDF, true);
   dict.SetInteger(kSettingMarginsType, PRINTABLE_AREA_MARGINS);
   OnPrintPreview(dict);
 
@@ -969,8 +968,7 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest,
   // Fill in some dummy values.
   base::DictionaryValue dict;
   CreatePrintSettingsDictionary(&dict);
-  dict.SetBoolean(kSettingPrintToPDF, false);
-  dict.SetInteger(kSettingMarginsType, DEFAULT_MARGINS);
+  dict.SetInteger(kSettingPrinterType, kLocalPrinter);
   OnPrintPreview(dict);
 
   EXPECT_EQ(0, print_render_thread()->print_preview_pages_remaining());
@@ -1004,8 +1002,6 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest,
   // Fill in some dummy values.
   base::DictionaryValue dict;
   CreatePrintSettingsDictionary(&dict);
-  dict.SetBoolean(kSettingPrintToPDF, true);
-  dict.SetInteger(kSettingMarginsType, DEFAULT_MARGINS);
   OnPrintPreview(dict);
 
   EXPECT_EQ(0, print_render_thread()->print_preview_pages_remaining());
@@ -1028,8 +1024,7 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest, PrintPreviewCenterToFitPage) {
   // Fill in some dummy values.
   base::DictionaryValue dict;
   CreatePrintSettingsDictionary(&dict);
-  dict.SetBoolean(kSettingPrintToPDF, false);
-  dict.SetInteger(kSettingMarginsType, DEFAULT_MARGINS);
+  dict.SetInteger(kSettingPrinterType, kLocalPrinter);
   OnPrintPreview(dict);
 
   EXPECT_EQ(0, print_render_thread()->print_preview_pages_remaining());
@@ -1061,8 +1056,7 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest, PrintPreviewShrinkToFitPage) {
   // Fill in some dummy values.
   base::DictionaryValue dict;
   CreatePrintSettingsDictionary(&dict);
-  dict.SetBoolean(kSettingPrintToPDF, false);
-  dict.SetInteger(kSettingMarginsType, DEFAULT_MARGINS);
+  dict.SetInteger(kSettingPrinterType, kLocalPrinter);
   OnPrintPreview(dict);
 
   EXPECT_EQ(0, print_render_thread()->print_preview_pages_remaining());
@@ -1084,7 +1078,7 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest,
   // Fill in some dummy values.
   base::DictionaryValue dict;
   CreatePrintSettingsDictionary(&dict);
-  dict.SetBoolean(kSettingPrintToPDF, false);
+  dict.SetInteger(kSettingPrinterType, kLocalPrinter);
   dict.SetInteger(kSettingMarginsType, NO_MARGINS);
   OnPrintPreview(dict);
 
@@ -1107,7 +1101,6 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest,
   // Fill in some dummy values.
   base::DictionaryValue dict;
   CreatePrintSettingsDictionary(&dict);
-  dict.SetBoolean(kSettingPrintToPDF, true);
   dict.SetInteger(kSettingMarginsType, CUSTOM_MARGINS);
   OnPrintPreview(dict);
 
@@ -1155,7 +1148,7 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest, PrintPreviewForSelectedPages) {
   page_range.SetKey(kSettingPageRangeFrom, base::Value(2));
   page_range.SetKey(kSettingPageRangeTo, base::Value(3));
   base::Value page_range_array(base::Value::Type::LIST);
-  page_range_array.GetList().push_back(std::move(page_range));
+  page_range_array.Append(std::move(page_range));
   dict.SetKey(kSettingPageRange, std::move(page_range_array));
 
   OnPrintPreview(dict);

@@ -36,7 +36,7 @@
 /**
  * @unrestricted
  */
-SDK.HARLog = class {
+export default class HARLog {
   /**
    * @param {!SDK.NetworkRequest} request
    * @param {number} monotonicTime
@@ -51,10 +51,11 @@ SDK.HARLog = class {
    * @return {!Promise<!Object>}
    */
   static async build(requests) {
-    const log = new SDK.HARLog();
+    const log = new HARLog();
     const entryPromises = [];
-    for (const request of requests)
-      entryPromises.push(SDK.HARLog.Entry.build(request));
+    for (const request of requests) {
+      entryPromises.push(Entry.build(request));
+    }
     const entries = await Promise.all(entryPromises);
     return {version: '1.2', creator: log._creator(), pages: log._buildPages(requests), entries: entries};
   }
@@ -75,8 +76,9 @@ SDK.HARLog = class {
     for (let i = 0; i < requests.length; ++i) {
       const request = requests[i];
       const page = SDK.NetworkLog.PageLoad.forRequest(request);
-      if (!page || seenIdentifiers[page.id])
+      if (!page || seenIdentifiers[page.id]) {
         continue;
+      }
       seenIdentifiers[page.id] = true;
       pages.push(this._convertPage(page, request));
     }
@@ -90,7 +92,7 @@ SDK.HARLog = class {
    */
   _convertPage(page, request) {
     return {
-      startedDateTime: SDK.HARLog.pseudoWallTime(request, page.startTime).toJSON(),
+      startedDateTime: HARLog.pseudoWallTime(request, page.startTime).toJSON(),
       id: 'page_' + page.id,
       title: page.url,  // We don't have actual page title here. URL is probably better than nothing.
       pageTimings: {
@@ -107,16 +109,17 @@ SDK.HARLog = class {
    */
   _pageEventTime(page, time) {
     const startTime = page.startTime;
-    if (time === -1 || startTime === -1)
+    if (time === -1 || startTime === -1) {
       return -1;
-    return SDK.HARLog.Entry._toMilliseconds(time - startTime);
+    }
+    return Entry._toMilliseconds(time - startTime);
   }
-};
+}
 
 /**
  * @unrestricted
  */
-SDK.HARLog.Entry = class {
+export class Entry {
   /**
    * @param {!SDK.NetworkRequest} request
    */
@@ -137,30 +140,35 @@ SDK.HARLog.Entry = class {
    * @return {!Promise<!Object>}
    */
   static async build(request) {
-    const harEntry = new SDK.HARLog.Entry(request);
+    const harEntry = new Entry(request);
     let ipAddress = harEntry._request.remoteAddress();
     const portPositionInString = ipAddress.lastIndexOf(':');
-    if (portPositionInString !== -1)
+    if (portPositionInString !== -1) {
       ipAddress = ipAddress.substr(0, portPositionInString);
+    }
 
     const timings = harEntry._buildTimings();
     let time = 0;
     // "ssl" is included in the connect field, so do not double count it.
-    for (const t of [timings.blocked, timings.dns, timings.connect, timings.send, timings.wait, timings.receive])
+    for (const t of [timings.blocked, timings.dns, timings.connect, timings.send, timings.wait, timings.receive]) {
       time += Math.max(t, 0);
+    }
 
     const initiator = harEntry._request.initiator();
     const exportedInitiator = {};
     exportedInitiator.type = initiator.type;
-    if (initiator.url !== undefined)
+    if (initiator.url !== undefined) {
       exportedInitiator.url = initiator.url;
-    if (initiator.lineNumber !== undefined)
+    }
+    if (initiator.lineNumber !== undefined) {
       exportedInitiator.lineNumber = initiator.lineNumber;
-    if (initiator.stack)
+    }
+    if (initiator.stack) {
       exportedInitiator.stack = initiator.stack;
+    }
 
     const entry = {
-      startedDateTime: SDK.HARLog.pseudoWallTime(harEntry._request, harEntry._request.issueTime()).toJSON(),
+      startedDateTime: HARLog.pseudoWallTime(harEntry._request, harEntry._request.issueTime()).toJSON(),
       time: time,
       request: await harEntry._buildRequest(),
       response: harEntry._buildResponse(),
@@ -175,20 +183,24 @@ SDK.HARLog.Entry = class {
 
     // Chrome specific.
 
-    if (harEntry._request.cached())
+    if (harEntry._request.cached()) {
       entry._fromCache = harEntry._request.cachedInMemory() ? 'memory' : 'disk';
+    }
 
-    if (harEntry._request.connectionId !== '0')
+    if (harEntry._request.connectionId !== '0') {
       entry.connection = harEntry._request.connectionId;
+    }
 
     const page = SDK.NetworkLog.PageLoad.forRequest(harEntry._request);
-    if (page)
+    if (page) {
       entry.pageref = 'page_' + page.id;
+    }
 
     if (harEntry._request.resourceType() === Common.resourceTypes.WebSocket) {
       const messages = [];
-      for (const message of harEntry._request.frames())
+      for (const message of harEntry._request.frames()) {
         messages.push({type: message.type, time: message.time, opcode: message.opCode, data: message.text});
+      }
       entry._webSocketMessages = messages;
     }
 
@@ -211,8 +223,9 @@ SDK.HARLog.Entry = class {
       bodySize: await this._requestBodySize()
     };
     const postData = await this._buildPostData();
-    if (postData)
+    if (postData) {
       res.postData = postData;
+    }
 
     return res;
   }
@@ -247,8 +260,9 @@ SDK.HARLog.Entry = class {
       // text: this._request.content // TODO: pull out into a boolean flag, as content can be huge (and needs to be requested with an async call)
     };
     const compression = this.responseCompression;
-    if (typeof compression === 'number')
+    if (typeof compression === 'number') {
       content.compression = compression;
+    }
     return content;
   }
 
@@ -264,22 +278,25 @@ SDK.HARLog.Entry = class {
     const result = {blocked: -1, dns: -1, ssl: -1, connect: -1, send: 0, wait: 0, receive: 0, _blocked_queueing: -1};
 
     const queuedTime = (issueTime < startTime) ? startTime - issueTime : -1;
-    result.blocked = SDK.HARLog.Entry._toMilliseconds(queuedTime);
-    result._blocked_queueing = SDK.HARLog.Entry._toMilliseconds(queuedTime);
+    result.blocked = Entry._toMilliseconds(queuedTime);
+    result._blocked_queueing = Entry._toMilliseconds(queuedTime);
 
     let highestTime = 0;
     if (timing) {
       // "blocked" here represents both queued + blocked/stalled + proxy (ie: anything before request was started).
       // We pick the better of when the network request start was reported and pref timing.
       const blockedStart = leastNonNegative([timing.dnsStart, timing.connectStart, timing.sendStart]);
-      if (blockedStart !== Infinity)
+      if (blockedStart !== Infinity) {
         result.blocked += blockedStart;
+      }
 
       // Proxy is part of blocked but sometimes (like quic) blocked is -1 but has proxy timings.
-      if (timing.proxyEnd !== -1)
+      if (timing.proxyEnd !== -1) {
         result._blocked_proxy = timing.proxyEnd - timing.proxyStart;
-      if (result._blocked_proxy && result._blocked_proxy > result.blocked)
+      }
+      if (result._blocked_proxy && result._blocked_proxy > result.blocked) {
         result.blocked = result._blocked_proxy;
+      }
 
       const dnsStart = timing.dnsEnd >= 0 ? blockedStart : 0;
       const dnsEnd = timing.dnsEnd >= 0 ? timing.dnsEnd : -1;
@@ -299,8 +316,9 @@ SDK.HARLog.Entry = class {
       const sendEnd = timing.sendEnd >= 0 ? timing.sendEnd : 0;
       result.send = sendEnd - sendStart;
       // Quic sometimes says that sendStart is before connectionEnd (see: crbug.com/740792)
-      if (result.send < 0)
+      if (result.send < 0) {
         result.send = 0;
+      }
       highestTime = Math.max(sendEnd, connectEnd, sslEnd, dnsEnd, blockedStart, 0);
     } else if (this._request.responseReceivedTime === -1) {
       // Means that we don't have any more details after blocked, so attribute all to blocked.
@@ -310,11 +328,11 @@ SDK.HARLog.Entry = class {
 
     const requestTime = timing ? timing.requestTime : startTime;
     const waitStart = highestTime;
-    const waitEnd = SDK.HARLog.Entry._toMilliseconds(this._request.responseReceivedTime - requestTime);
+    const waitEnd = Entry._toMilliseconds(this._request.responseReceivedTime - requestTime);
     result.wait = waitEnd - waitStart;
 
     const receiveStart = waitEnd;
-    const receiveEnd = SDK.HARLog.Entry._toMilliseconds(this._request.endTime - requestTime);
+    const receiveEnd = Entry._toMilliseconds(this._request.endTime - requestTime);
     result.receive = Math.max(receiveEnd - receiveStart, 0);
 
     return result;
@@ -329,16 +347,18 @@ SDK.HARLog.Entry = class {
   }
 
   /**
-   * @return {!Promise<!Object>}
+   * @return {!Promise<?Object>}
    */
   async _buildPostData() {
     const postData = await this._request.requestFormData();
-    if (!postData)
+    if (!postData) {
       return null;
+    }
     const res = {mimeType: this._request.requestContentType() || '', text: postData};
     const formParameters = await this._request.formParameters();
-    if (formParameters)
+    if (formParameters) {
       res.params = this._buildParameters(formParameters);
+    }
     return res;
   }
 
@@ -376,12 +396,13 @@ SDK.HARLog.Entry = class {
       value: cookie.value(),
       path: cookie.path(),
       domain: cookie.domain(),
-      expires: cookie.expiresDate(SDK.HARLog.pseudoWallTime(this._request, this._request.startTime)),
+      expires: cookie.expiresDate(HARLog.pseudoWallTime(this._request, this._request.startTime)),
       httpOnly: cookie.httpOnly(),
       secure: cookie.secure()
     };
-    if (cookie.sameSite())
+    if (cookie.sameSite()) {
       c.sameSite = cookie.sameSite();
+    }
     return c;
   }
 
@@ -390,8 +411,9 @@ SDK.HARLog.Entry = class {
    */
   async _requestBodySize() {
     const postData = await this._request.requestFormData();
-    if (!postData)
+    if (!postData) {
       return 0;
+    }
 
     // As per the har spec, returns the length in bytes of the posted data.
     // TODO(jarhar): This will be wrong if the underlying encoding is not UTF-8. NetworkRequest.requestFormData is
@@ -404,10 +426,12 @@ SDK.HARLog.Entry = class {
    * @return {number}
    */
   get responseBodySize() {
-    if (this._request.cached() || this._request.statusCode === 304)
+    if (this._request.cached() || this._request.statusCode === 304) {
       return 0;
-    if (!this._request.responseHeadersText)
+    }
+    if (!this._request.responseHeadersText) {
       return -1;
+    }
     return this._request.transferSize - this._request.responseHeadersText.length;
   }
 
@@ -415,13 +439,27 @@ SDK.HARLog.Entry = class {
    * @return {number|undefined}
    */
   get responseCompression() {
-    if (this._request.cached() || this._request.statusCode === 304 || this._request.statusCode === 206)
+    if (this._request.cached() || this._request.statusCode === 304 || this._request.statusCode === 206) {
       return;
-    if (!this._request.responseHeadersText)
+    }
+    if (!this._request.responseHeadersText) {
       return;
+    }
     return this._request.resourceSize - this.responseBodySize;
   }
-};
+}
+
+/* Legacy exported object */
+self.SDK = self.SDK || {};
+
+/* Legacy exported object */
+SDK = SDK || {};
+
+/** @constructor */
+SDK.HARLog = HARLog;
+
+/** @constructor */
+SDK.HARLog.Entry = Entry;
 
 /** @typedef {!{
   blocked: number,

@@ -12,6 +12,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
 #include "base/threading/scoped_blocking_call.h"
+#include "build/build_config.h"
 #include "components/tracing/common/trace_startup_config.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "content/public/browser/system_connector.h"
@@ -21,6 +22,10 @@
 #include "services/tracing/public/mojom/constants.mojom.h"
 #include "third_party/perfetto/include/perfetto/tracing/core/trace_config.h"
 #include "third_party/perfetto/protos/perfetto/config/trace_config.pb.h"
+
+#if defined(OS_ANDROID)
+#include "content/browser/android/tracing_controller_android.h"
+#endif
 
 namespace content {
 
@@ -35,6 +40,14 @@ class BackgroundDrainer : public mojo::DataPipeDrainer::Client {
     base::FilePath output_file =
         base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
             switches::kPerfettoOutputFile);
+
+#if defined(OS_ANDROID)
+    if (output_file.empty()) {
+      TracingControllerAndroid::GenerateTracingFilePath(&output_file);
+      VLOG(0) << "Writing to output file: " << output_file.value();
+    }
+#endif
+
     file_.Initialize(output_file,
                      base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
     if (!file_.IsValid()) {
@@ -105,8 +118,9 @@ PerfettoFileTracer::PerfettoFileTracer()
   // We just need a single global trace buffer, for our data.
   trace_config.mutable_buffers()->front().set_size_kb(32 * 1024);
 
-  tracing::mojom::TracingSessionClientPtr tracing_session_client;
-  binding_.Bind(mojo::MakeRequest(&tracing_session_client));
+  mojo::PendingRemote<tracing::mojom::TracingSessionClient>
+      tracing_session_client;
+  binding_.Bind(tracing_session_client.InitWithNewPipeAndPassReceiver());
   binding_.set_connection_error_handler(base::BindOnce(
       &PerfettoFileTracer::OnTracingSessionEnded, base::Unretained(this)));
 

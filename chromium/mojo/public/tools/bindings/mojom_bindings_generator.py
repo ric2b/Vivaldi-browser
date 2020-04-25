@@ -52,11 +52,16 @@ from mojom.generate.generator import AddComputedData, WriteFile
 from mojom.parse.conditional_features import RemoveDisabledDefinitions
 from mojom.parse.parser import Parse
 
+sys.path.append(
+    os.path.join(_GetDirAbove("mojo"), "tools", "diagnosis"))
+import crbug_1001171
+
 
 _BUILTIN_GENERATORS = {
   "c++": "mojom_cpp_generator",
   "javascript": "mojom_js_generator",
   "java": "mojom_java_generator",
+  "typescript": "mojom_ts_generator",
 }
 
 
@@ -547,4 +552,5 @@ def main():
 
 
 if __name__ == "__main__":
-  sys.exit(main())
+  with crbug_1001171.DumpStateOnLookupError():
+    sys.exit(main())

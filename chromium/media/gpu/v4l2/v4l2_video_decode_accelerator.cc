@@ -31,6 +31,7 @@
 #include "media/base/unaligned_shared_memory.h"
 #include "media/base/video_frame_layout.h"
 #include "media/base/video_types.h"
+#include "media/gpu/chromeos/fourcc.h"
 #include "media/gpu/image_processor_factory.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/v4l2/v4l2_image_processor.h"
@@ -445,7 +446,7 @@ void V4L2VideoDecodeAccelerator::AssignPictureBuffersTask(
         return;
       }
       int plane_horiz_bits_per_pixel = VideoFrame::PlaneHorizontalBitsPerPixel(
-          V4L2Device::V4L2PixFmtToVideoPixelFormat(egl_image_format_fourcc_),
+          Fourcc::FromV4L2PixFmt(egl_image_format_fourcc_).ToVideoPixelFormat(),
           0);
       ImportBufferForPictureTask(
           output_record.picture_id, std::move(dmabuf_fds),
@@ -574,7 +575,7 @@ void V4L2VideoDecodeAccelerator::ImportBufferForPictureForImportTask(
   // the final output format from the image processor (if exists).
   // Use |egl_image_format_fourcc_|, it will be the final output format.
   if (pixel_format !=
-      V4L2Device::V4L2PixFmtToVideoPixelFormat(egl_image_format_fourcc_)) {
+      Fourcc::FromV4L2PixFmt(egl_image_format_fourcc_).ToVideoPixelFormat()) {
     VLOGF(1) << "Unsupported import format: " << pixel_format;
     NOTIFY_ERROR(INVALID_ARGUMENT);
     return;
@@ -645,7 +646,7 @@ void V4L2VideoDecodeAccelerator::ImportBufferForPictureTask(
   // However the size of PictureBuffer might not be adjusted by ARC++. So we
   // keep this until ARC++ side is fixed.
   int plane_horiz_bits_per_pixel = VideoFrame::PlaneHorizontalBitsPerPixel(
-      V4L2Device::V4L2PixFmtToVideoPixelFormat(egl_image_format_fourcc_), 0);
+      Fourcc::FromV4L2PixFmt(egl_image_format_fourcc_).ToVideoPixelFormat(), 0);
   if (plane_horiz_bits_per_pixel == 0 ||
       (stride * 8) % plane_horiz_bits_per_pixel != 0) {
     VLOGF(1) << "Invalid format " << egl_image_format_fourcc_ << " or stride "
@@ -683,7 +684,7 @@ void V4L2VideoDecodeAccelerator::ImportBufferForPictureTask(
     DCHECK(!iter->output_frame);
 
     auto layout = VideoFrameLayout::Create(
-        V4L2Device::V4L2PixFmtToVideoPixelFormat(output_format_fourcc_),
+        Fourcc::FromV4L2PixFmt(output_format_fourcc_).ToVideoPixelFormat(),
         coded_size_);
     if (!layout) {
       VLOGF(1) << "Cannot create layout!";
@@ -1924,6 +1925,11 @@ void V4L2VideoDecodeAccelerator::DestroyTask() {
   // First liberate all the frames held by the client.
   buffers_at_client_.clear();
 
+  egl_image_device_ = nullptr;
+
+  // The image processor's thread was the user of the image processor device,
+  // so let it keep the last reference and destroy it in its own thread.
+  image_processor_device_ = nullptr;
   image_processor_ = nullptr;
   while (!buffers_at_ip_.empty())
     buffers_at_ip_.pop();
@@ -1936,6 +1942,10 @@ void V4L2VideoDecodeAccelerator::DestroyTask() {
 
   decoder_h264_parser_ = nullptr;
   workarounds_.clear();
+
+  // Clear the V4L2 devices in the decoder thread so the V4L2Device's
+  // destructor is called from the thread that used it.
+  device_ = nullptr;
 
   base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
       this);
@@ -2186,8 +2196,8 @@ bool V4L2VideoDecodeAccelerator::CreateBuffersForFormat(
     egl_image_size_ = visible_size_;
     egl_image_planes_count_ = 0;
     if (!V4L2ImageProcessor::TryOutputFormat(
-            output_format_fourcc_, egl_image_format_fourcc_, &egl_image_size_,
-            &egl_image_planes_count_)) {
+            output_format_fourcc_, egl_image_format_fourcc_, coded_size_,
+            &egl_image_size_, &egl_image_planes_count_)) {
       VLOGF(1) << "Fail to get output size and plane count of processor";
       return false;
     }
@@ -2468,7 +2478,8 @@ bool V4L2VideoDecodeAccelerator::CreateOutputBuffers() {
   // know the precise format.
   VideoPixelFormat pixel_format =
       (output_mode_ == Config::OutputMode::IMPORT)
-          ? V4L2Device::V4L2PixFmtToVideoPixelFormat(egl_image_format_fourcc_)
+          ? Fourcc::FromV4L2PixFmt(egl_image_format_fourcc_)
+                .ToVideoPixelFormat()
           : PIXEL_FORMAT_UNKNOWN;
 
   child_task_runner_->PostTask(

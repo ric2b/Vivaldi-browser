@@ -55,7 +55,6 @@
 #include "media/media_buildflags.h"
 #include "net/base/data_url.h"
 #include "third_party/blink/public/platform/web_encrypted_media_types.h"
-#include "third_party/blink/public/platform/web_localized_string.h"
 #include "third_party/blink/public/platform/web_media_player_client.h"
 #include "third_party/blink/public/platform/web_media_player_encrypted_media_client.h"
 #include "third_party/blink/public/platform/web_media_player_source.h"
@@ -68,6 +67,7 @@
 #include "third_party/blink/public/platform/web_surface_layer_bridge.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/webaudiosourceprovider_impl.h"
+#include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/public/web/modules/media/webmediaplayer_util.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_frame.h"
@@ -163,36 +163,21 @@ constexpr base::TimeDelta kPrerollAttemptTimeout =
 // Maximum number, per-WMPI, of media logs of playback rate changes.
 constexpr int kMaxNumPlaybackRateLogs = 10;
 
-blink::WebLocalizedString::Name GetSwitchToLocalMessage(
-    MediaObserverClient::ReasonToSwitchToLocal reason) {
+int GetSwitchToLocalMessage(MediaObserverClient::ReasonToSwitchToLocal reason) {
   switch (reason) {
     case MediaObserverClient::ReasonToSwitchToLocal::NORMAL:
-      return blink::WebLocalizedString::kMediaRemotingStopText;
+      return IDS_MEDIA_REMOTING_STOP_TEXT;
     case MediaObserverClient::ReasonToSwitchToLocal::POOR_PLAYBACK_QUALITY:
-      return blink::WebLocalizedString::kMediaRemotingStopByPlaybackQualityText;
+      return IDS_MEDIA_REMOTING_STOP_BY_PLAYBACK_QUALITY_TEXT;
     case MediaObserverClient::ReasonToSwitchToLocal::PIPELINE_ERROR:
-      return blink::WebLocalizedString::kMediaRemotingStopByErrorText;
+      return IDS_MEDIA_REMOTING_STOP_BY_ERROR_TEXT;
     case MediaObserverClient::ReasonToSwitchToLocal::ROUTE_TERMINATED:
-      return blink::WebLocalizedString::kMediaRemotingStopNoText;
+      return blink::WebMediaPlayerClient::kMediaRemotingStopNoText;
   }
   NOTREACHED();
   // To suppress compiler warning on Windows.
-  return blink::WebLocalizedString::kMediaRemotingStopNoText;
+  return blink::WebMediaPlayerClient::kMediaRemotingStopNoText;
 }
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-std::string GetLoadTypeName(WebMediaPlayer::LoadType load_type) {
-  switch (load_type) {
-    case WebMediaPlayer::kLoadTypeURL:
-      return "LoadTypeURL";
-    case WebMediaPlayer::kLoadTypeMediaSource:
-      return "LoadTypeMediaSource";
-    case WebMediaPlayer::kLoadTypeMediaStream:
-      return "LoadTypeMediaStream";
-  }
-  NOTREACHED();
-  return "";
-}
-#endif // USE_SYSTEM_PROPRIETARY_CODECS
 
 // These values are persisted to UMA. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -295,6 +280,21 @@ void DestructionHelper(
           std::move(media_log)));
 }
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+std::string GetLoadTypeName(WebMediaPlayer::LoadType load_type) {
+  switch (load_type) {
+    case WebMediaPlayer::kLoadTypeURL:
+      return "LoadTypeURL";
+    case WebMediaPlayer::kLoadTypeMediaSource:
+      return "LoadTypeMediaSource";
+    case WebMediaPlayer::kLoadTypeMediaStream:
+      return "LoadTypeMediaStream";
+  }
+  NOTREACHED();
+  return "";
+}
+#endif // USE_SYSTEM_PROPRIETARY_CODECS
+
 }  // namespace
 
 class BufferedDataSourceHostImpl;
@@ -355,7 +355,8 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
           base::BindRepeating(&WebMediaPlayerImpl::OnSimpleWatchTimerTick,
                               base::Unretained(this)),
           base::BindRepeating(&WebMediaPlayerImpl::GetCurrentTimeInternal,
-                              base::Unretained(this))) {
+                              base::Unretained(this))),
+      will_play_helper_(nullptr) {
   DVLOG(1) << __func__;
   DCHECK(adjust_allocated_memory_cb_);
   DCHECK(renderer_factory_selector_);
@@ -481,7 +482,7 @@ WebMediaPlayerImpl::~WebMediaPlayerImpl() {
   client_->SetCcLayer(nullptr);
 
   client_->MediaRemotingStopped(
-      blink::WebLocalizedString::kMediaRemotingStopNoText);
+      blink::WebMediaPlayerClient::kMediaRemotingStopNoText);
 
   if (!surface_layer_for_video_enabled_ && video_layer_)
     video_layer_->StopUsingProvider();
@@ -507,6 +508,9 @@ WebMediaPlayerImpl::~WebMediaPlayerImpl() {
   // renderer thread.
   if (observer_)
     observer_->SetClient(nullptr);
+
+  // If we're in the middle of an observation, then finish it.
+  will_play_helper_.CompleteObservationIfNeeded(learning::TargetValue(false));
 
   // Handle destruction of things that need to be destructed after the pipeline
   // completes stopping on the media thread.
@@ -708,6 +712,13 @@ void WebMediaPlayerImpl::DoLoad(LoadType load_type,
   DVLOG(1) << __func__;
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
+  // Start a new observation.  If there was one before, then we didn't play it.
+  will_play_helper_.CompleteObservationIfNeeded(learning::TargetValue(false));
+  // For now, send in an empty set of features.  We should fill some in here,
+  // and / or ask blink (via |client_|) for features from the DOM.
+  learning::FeatureDictionary dict;
+  will_play_helper_.BeginObservation(dict);
+
 #if defined(OS_ANDROID)
   // Only allow credentials if the crossorigin attribute is unspecified
   // (kCorsModeUnspecified) or "use-credentials" (kCorsModeUseCredentials).
@@ -829,6 +840,9 @@ void WebMediaPlayerImpl::Play() {
 
   MaybeUpdateBufferSizesForPlayback();
   UpdatePlayState();
+
+  // Notify the learning task, if needed.
+  will_play_helper_.CompleteObservationIfNeeded(learning::TargetValue(true));
 }
 
 void WebMediaPlayerImpl::Pause() {
@@ -2038,7 +2052,11 @@ void WebMediaPlayerImpl::CreateVideoDecodeStatsReporter() {
 
 void WebMediaPlayerImpl::OnProgress() {
   DVLOG(4) << __func__;
-  if (highest_ready_state_ < ReadyState::kReadyStateHaveMetadata) {
+
+  // See IsPrerollAttemptNeeded() for more details. We can't use that method
+  // here since it considers |preroll_attempt_start_time_| and for OnProgress()
+  // events we must make the attempt -- since there may not be another event.
+  if (highest_ready_state_ < ReadyState::kReadyStateHaveFutureData) {
     // Reset the preroll attempt clock.
     preroll_attempt_pending_ = true;
     preroll_attempt_start_time_ = base::TimeTicks();
@@ -2206,6 +2224,7 @@ void WebMediaPlayerImpl::OnWaiting(WaitingReason reason) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
   switch (reason) {
+    case WaitingReason::kNoCdm:
     case WaitingReason::kNoDecryptionKey:
       encrypted_client_->DidBlockPlaybackWaitingForKey();
       // TODO(jrummell): didResumePlaybackBlockedForKey() should only be called
@@ -2577,7 +2596,7 @@ void WebMediaPlayerImpl::DataSourceInitialized(bool success) {
   } else
 #endif  // USE_SYSTEM_PROPRIETARY_CODECS
   {
-    StartPipeline();
+  StartPipeline();
   }
 }
 
@@ -2881,22 +2900,6 @@ WebMediaPlayerImpl::GetAudioSourceProvider() {
   return audio_source_provider_;
 }
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-void WebMediaPlayerImpl::SniffProtocol() {
-  protocol_sniffer_.SniffProtocol(
-      data_source_.get(),
-      base::Bind(&WebMediaPlayerImpl::ProtocolSniffed, weak_this_));
-}
-
-void WebMediaPlayerImpl::ProtocolSniffed(const std::string& mime_type) {
-  DVLOG(1) << __FUNCTION__ << "(" << mime_type << ")";
-  if (!mime_type.empty())
-    content_type_ = mime_type;
-
-  StartPipeline();
-}
-#endif
-
 scoped_refptr<VideoFrame> WebMediaPlayerImpl::GetCurrentFrameFromCompositor()
     const {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
@@ -3072,15 +3075,16 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_flinging,
   // errors.
   bool has_error = IsNetworkStateError(network_state_);
 
-  // After kReadyStateHaveMetadata, Blink will call play() if the state is not
-  // paused; prior to this point |paused_| is not accurate.
-  bool have_metadata =
-      highest_ready_state_ >= WebMediaPlayer::kReadyStateHaveMetadata;
+  // Note: Even though we get play/pause signals at kReadyStateHaveMetadata, we
+  // must attempt to preroll until kReadyStateHaveFutureData so that the
+  // canplaythrough event will be fired to the page (which may be waiting).
+  bool have_future_data =
+      highest_ready_state_ >= WebMediaPlayer::kReadyStateHaveFutureData;
 
   // Background suspend is only enabled for paused players.
   // In the case of players with audio the session should be kept.
   bool background_suspended =
-      can_auto_suspend && is_backgrounded && paused_ && have_metadata;
+      can_auto_suspend && is_backgrounded && paused_ && have_future_data;
 
   // Idle suspension is allowed prior to kReadyStateHaveMetadata since there
   // exist mechanisms to exit the idle state when the player is capable of
@@ -3095,7 +3099,7 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_flinging,
   // to kReadyStateHaveMetadata, we require |is_stale| to remain suspended.
   // |is_stale| will be cleared when we receive data which may take us to
   // kReadyStateHaveMetadata.
-  bool can_stay_suspended = (is_stale || have_metadata) && is_suspended &&
+  bool can_stay_suspended = (is_stale || have_future_data) && is_suspended &&
                             paused_ && !seeking_ && !needs_first_frame_;
 
   // Combined suspend state.
@@ -3106,7 +3110,8 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_flinging,
            << ", idle_suspended=" << idle_suspended
            << ", background_suspended=" << background_suspended
            << ", can_stay_suspended=" << can_stay_suspended
-           << ", is_stale=" << is_stale << ", have_metadata=" << have_metadata
+           << ", is_stale=" << is_stale
+           << ", have_future_data=" << have_future_data
            << ", paused_=" << paused_ << ", seeking_=" << seeking_;
 
   // We do not treat |playback_rate_| == 0 as paused. For the media session,
@@ -3762,5 +3767,25 @@ void WebMediaPlayerImpl::MaybeUpdateBufferSizesForPlayback() {
 void WebMediaPlayerImpl::OnSimpleWatchTimerTick() {
   RecordSimpleWatchTimeUMA(reported_renderer_type_);
 }
+
+GURL WebMediaPlayerImpl::GetSrcAfterRedirects() {
+  return mb_data_source_ ? mb_data_source_->GetUrlAfterRedirects() : GURL();
+}
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+void WebMediaPlayerImpl::SniffProtocol() {
+  protocol_sniffer_.SniffProtocol(
+      data_source_.get(),
+      base::Bind(&WebMediaPlayerImpl::ProtocolSniffed, weak_this_));
+}
+
+void WebMediaPlayerImpl::ProtocolSniffed(const std::string& mime_type) {
+  DVLOG(1) << __FUNCTION__ << "(" << mime_type << ")";
+  if (!mime_type.empty())
+    content_type_ = mime_type;
+
+  StartPipeline();
+}
+#endif
 
 }  // namespace media

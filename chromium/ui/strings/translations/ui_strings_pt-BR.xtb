@@ -7,6 +7,7 @@
 <translation id="1156623771253174079">{SECONDS,plural, =1{1 minuto atrás}one{# minuto atrás}other{# minutos atrás}}</translation>
 <translation id="1169783199079129864">{MINUTES,plural, =1{1 min}one{# min}other{# min}}</translation>
 <translation id="1181037720776840403">Remover</translation>
+<translation id="1201402288615127009">Próxima</translation>
 <translation id="1243314992276662751">Fazer upload</translation>
 <translation id="1266864766717917324">Falha no compartilhamento de <ph name="CONTENT_TYPE" /></translation>
 <translation id="1269641567813814718">Win</translation>
@@ -51,6 +52,7 @@
 <translation id="2289052229480071835">Toque nas áreas de toque da tela.</translation>
 <translation id="2295140143284145483">Pesquisa</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="2353636109065292463">Verificando sua conexão de Internet</translation>
 <translation id="2388990488038464401">Ligar para este número do seu smartphone?</translation>
 <translation id="24452542372838207">Expandir notificação</translation>
 <translation id="2445449901874883781">Usar alta densidade</translation>
@@ -81,7 +83,6 @@
 <translation id="3295886253693811851">Ligar usando</translation>
 <translation id="335581015389089642">Voz</translation>
 <translation id="3389286852084373014">O texto está grande demais</translation>
-<translation id="3443810440409579745">Guia recebida.</translation>
 <translation id="3479552764303398839">Não agora</translation>
 <translation id="348799646910989694">Estante automaticamente oculta</translation>
 <translation id="3600566671520689681">{DAYS,plural, =1{Um dia restante}one{# dias restantes}other{# dias restantes}}</translation>
@@ -111,14 +112,11 @@
 <translation id="4724120544754982507">Central de Notificações: <ph name="UNREAD_NOTIFICATION_COUNT" /> notificações não lidas</translation>
 <translation id="4730374152663651037">USADOS FREQUENTEMENTE</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{1 mês restante}one{# mês restante}other{# meses restantes}}</translation>
-<translation id="4841881773802181781">Inserção</translation>
-<translation id="4881695831933465202">Abrir</translation>
 <translation id="4888938634149558681">Ligar</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{Um segundo}one{# segundos}other{# segundos}}</translation>
 <translation id="4971687151119236543">Faixa anterior da mídia</translation>
 <translation id="5046499563572181734">Toque aqui</translation>
 <translation id="5076340679995252485">&amp;Colar</translation>
-<translation id="5137751499640340777">Inicie o Google Assistente</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">Triângulo de divulgação</translation>
 <translation id="5278860589123563674">Falha ao enviar</translation>
@@ -155,6 +153,7 @@
 <translation id="6394627529324717982">Vírgula</translation>
 <translation id="6397363302884558537">Pare de falar</translation>
 <translation id="6404817160109697034">{SECONDS,plural, =1{Um segundo atrás}one{# segundos atrás}other{# segundos atrás}}</translation>
+<translation id="6417265370957905582">Google Assistente</translation>
 <translation id="6430678249303439055">Bloquear todas as notificações emitidas por este app</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 segundo atrás}one{# segundo atrás}other{# segundos atrás}}</translation>
 <translation id="6539092367496845964">Algo deu errado. Tente novamente mais tarde.</translation>
@@ -165,7 +164,7 @@
 <translation id="6620110761915583480">Salvar arquivo</translation>
 <translation id="6656912866303152668">Verifique se a sincronização do <ph name="TARGET_DEVICE_NAME" /> está ativada no Chrome e tente novamente.</translation>
 <translation id="6699343763173986273">Próxima faixa da mídia</translation>
-<translation id="673773751041746814">Exclusão</translation>
+<translation id="6710213216561001401">Anterior</translation>
 <translation id="6779314412797872738">Para enviar um número daqui para seu smartphone Android, <ph name="TROUBLESHOOT_LINK" /> para os dois dispositivos nas configurações.</translation>
 <translation id="6786750046913594791">Fechar pasta</translation>
 <translation id="6808150112686056157">Parar mídia</translation>
@@ -183,6 +182,7 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{Um minuto restante}one{# minutos restantes}other{# minutos restantes}}</translation>
 <translation id="7319740667687257810">Iniciador, visualização parcial</translation>
+<translation id="7352651011704765696">Algo deu errado</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{Um minuto atrás}one{# minutos atrás}other{# minutos atrás}}</translation>
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{Um minuto restante}one{# minutos restantes}other{# minutos restantes}}</translation>
@@ -198,9 +198,10 @@
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{Mais de uma notificação não lida}one{Mais de # notificação não lida}other{Mais de # notificações não lidas}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{em 1 min}one{em # min}other{em # min}}</translation>
 <translation id="8087772101393322318"><ph name="KEY_MODIFIER_NAME" />+<ph name="KEY_COMBO_NAME" /></translation>
-<translation id="8098075892845277643">Iniciar a consulta por voz no Google Assistente</translation>
+<translation id="8090736967111090568">Número de <ph name="ORIGIN" /></translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{Uma hora atrás}one{# horas atrás}other{# horas atrás}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{1 segundo restante}one{# segundos restantes}other{# segundos restantes}}</translation>
+<translation id="8134065097954893699">Recarregando esta página</translation>
 <translation id="8144660977431427332">Suas pesquisas são executadas pelo Google Assistente. <ph name="LEARN_MORE" /></translation>
 <translation id="8152264887680882389"><ph name="TEXT" />, preenchimento automático</translation>
 <translation id="815598010540052116">Percorrer para baixo</translation>

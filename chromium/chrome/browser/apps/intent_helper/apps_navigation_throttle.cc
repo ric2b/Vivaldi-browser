@@ -8,13 +8,12 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/optional.h"
 #include "chrome/browser/apps/intent_helper/intent_picker_auto_display_service.h"
 #include "chrome/browser/apps/intent_helper/page_transition_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/menu_manager.h"
-#include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "chrome/browser/prerender/prerender_contents.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -23,6 +22,7 @@
 #include "chrome/browser/ui/intent_picker_tab_helper.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/common/chrome_features.h"
+#include "components/page_load_metrics/browser/page_load_metrics_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
@@ -155,30 +155,11 @@ void AppsNavigationThrottle::OnIntentPickerClosed(
     case PickerEntryType::kDevice:
       NOTREACHED();
   }
-  RecordUma(launch_name, entry_type, close_reason, Source::kHttpOrHttps,
-            should_persist);
-}
-
-// static
-void AppsNavigationThrottle::RecordUma(const std::string& selected_app_package,
-                                       PickerEntryType entry_type,
-                                       IntentPickerCloseReason close_reason,
-                                       Source source,
-                                       bool should_persist) {
   PickerAction action =
       GetPickerAction(entry_type, close_reason, should_persist);
-  Platform platform = GetDestinationPlatform(selected_app_package, action);
-
-  // TODO(crbug.com/985233) For now External Protocol Dialog is only querying
-  // ARC apps.
-  if (source == Source::kExternalProtocol) {
-    UMA_HISTOGRAM_ENUMERATION("ChromeOS.Apps.ExternalProtocolDialog", action);
-  } else {
-    UMA_HISTOGRAM_ENUMERATION("ChromeOS.Apps.IntentPickerAction", action);
-
-    UMA_HISTOGRAM_ENUMERATION("ChromeOS.Apps.IntentPickerDestinationPlatform",
-                              platform);
-  }
+  Platform platform = GetDestinationPlatform(launch_name, action);
+  RecordUma(launch_name, entry_type, close_reason, Source::kHttpOrHttps,
+            should_persist, action, platform);
 }
 
 // static
@@ -211,7 +192,7 @@ void AppsNavigationThrottle::ShowIntentPickerBubbleForApps(
     return;
   browser->window()->ShowIntentPickerBubble(
       std::move(apps), show_stay_in_chrome, show_remember_selection,
-      PageActionIconType::kIntentPicker, std::move(callback));
+      PageActionIconType::kIntentPicker, base::nullopt, std::move(callback));
 }
 
 AppsNavigationThrottle::AppsNavigationThrottle(
@@ -278,6 +259,26 @@ bool AppsNavigationThrottle::CanCreate(content::WebContents* web_contents) {
 }
 
 // static
+void AppsNavigationThrottle::RecordUma(const std::string& selected_app_package,
+                                       PickerEntryType entry_type,
+                                       IntentPickerCloseReason close_reason,
+                                       Source source,
+                                       bool should_persist,
+                                       PickerAction action,
+                                       Platform platform) {
+  // TODO(crbug.com/985233) For now External Protocol Dialog is only querying
+  // ARC apps.
+  if (source == Source::kExternalProtocol) {
+    UMA_HISTOGRAM_ENUMERATION("ChromeOS.Apps.ExternalProtocolDialog", action);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION("ChromeOS.Apps.IntentPickerAction", action);
+
+    UMA_HISTOGRAM_ENUMERATION("ChromeOS.Apps.IntentPickerDestinationPlatform",
+                              platform);
+  }
+}
+
+// static
 AppsNavigationThrottle::Platform AppsNavigationThrottle::GetDestinationPlatform(
     const std::string& selected_launch_name,
     PickerAction picker_action) {
@@ -293,6 +294,8 @@ AppsNavigationThrottle::Platform AppsNavigationThrottle::GetDestinationPlatform(
     case PickerAction::CHROME_PRESSED:
     case PickerAction::CHROME_PREFERRED_PRESSED:
       return Platform::CHROME;
+    case PickerAction::DEVICE_PRESSED:
+      return Platform::DEVICE;
     case PickerAction::PREFERRED_ACTIVITY_FOUND:
     case PickerAction::OBSOLETE_ALWAYS_PRESSED:
     case PickerAction::OBSOLETE_JUST_ONCE_PRESSED:
@@ -301,6 +304,49 @@ AppsNavigationThrottle::Platform AppsNavigationThrottle::GetDestinationPlatform(
   }
   NOTREACHED();
   return Platform::ARC;
+}
+
+// static
+AppsNavigationThrottle::PickerAction AppsNavigationThrottle::GetPickerAction(
+    PickerEntryType entry_type,
+    IntentPickerCloseReason close_reason,
+    bool should_persist) {
+  switch (close_reason) {
+    case IntentPickerCloseReason::ERROR_BEFORE_PICKER:
+      return PickerAction::ERROR_BEFORE_PICKER;
+    case IntentPickerCloseReason::ERROR_AFTER_PICKER:
+      return PickerAction::ERROR_AFTER_PICKER;
+    case IntentPickerCloseReason::DIALOG_DEACTIVATED:
+      return PickerAction::DIALOG_DEACTIVATED;
+    case IntentPickerCloseReason::PREFERRED_APP_FOUND:
+      return PickerAction::PREFERRED_ACTIVITY_FOUND;
+    case IntentPickerCloseReason::STAY_IN_CHROME:
+      return should_persist ? PickerAction::CHROME_PREFERRED_PRESSED
+                            : PickerAction::CHROME_PRESSED;
+    case IntentPickerCloseReason::OPEN_APP:
+      switch (entry_type) {
+        case PickerEntryType::kUnknown:
+          NOTREACHED();
+          return PickerAction::INVALID;
+        case PickerEntryType::kArc:
+          return should_persist ? PickerAction::ARC_APP_PREFERRED_PRESSED
+                                : PickerAction::ARC_APP_PRESSED;
+        case PickerEntryType::kWeb:
+          return PickerAction::PWA_APP_PRESSED;
+        case PickerEntryType::kDevice:
+          return PickerAction::DEVICE_PRESSED;
+      }
+  }
+
+  NOTREACHED();
+  return PickerAction::INVALID;
+}
+
+std::vector<IntentPickerAppInfo> AppsNavigationThrottle::FindAppsForUrl(
+    content::WebContents* web_contents,
+    const GURL& url,
+    std::vector<IntentPickerAppInfo> apps) {
+  return FindPwaForUrl(web_contents, url, std::move(apps));
 }
 
 // static
@@ -419,41 +465,6 @@ bool AppsNavigationThrottle::navigate_from_link() {
   return navigate_from_link_;
 }
 
-// static
-AppsNavigationThrottle::PickerAction AppsNavigationThrottle::GetPickerAction(
-    PickerEntryType entry_type,
-    IntentPickerCloseReason close_reason,
-    bool should_persist) {
-  switch (close_reason) {
-    case IntentPickerCloseReason::ERROR_BEFORE_PICKER:
-      return PickerAction::ERROR_BEFORE_PICKER;
-    case IntentPickerCloseReason::ERROR_AFTER_PICKER:
-      return PickerAction::ERROR_AFTER_PICKER;
-    case IntentPickerCloseReason::DIALOG_DEACTIVATED:
-      return PickerAction::DIALOG_DEACTIVATED;
-    case IntentPickerCloseReason::PREFERRED_APP_FOUND:
-      return PickerAction::PREFERRED_ACTIVITY_FOUND;
-    case IntentPickerCloseReason::STAY_IN_CHROME:
-      return should_persist ? PickerAction::CHROME_PREFERRED_PRESSED
-                            : PickerAction::CHROME_PRESSED;
-    case IntentPickerCloseReason::OPEN_APP:
-      switch (entry_type) {
-        case PickerEntryType::kUnknown:
-          return PickerAction::INVALID;
-        case PickerEntryType::kArc:
-          return should_persist ? PickerAction::ARC_APP_PREFERRED_PRESSED
-                                : PickerAction::ARC_APP_PRESSED;
-        case PickerEntryType::kWeb:
-          return PickerAction::PWA_APP_PRESSED;
-        case PickerEntryType::kDevice:
-          NOTREACHED();
-      }
-  }
-
-  NOTREACHED();
-  return PickerAction::INVALID;
-}
-
 content::NavigationThrottle::ThrottleCheckResult
 AppsNavigationThrottle::HandleRequest() {
   content::NavigationHandle* handle = navigation_handle();
@@ -504,7 +515,7 @@ AppsNavigationThrottle::HandleRequest() {
 
   // We didn't query ARC, so proceed with the navigation and query if we have an
   // installed desktop PWA to handle the URL.
-  std::vector<IntentPickerAppInfo> apps = FindPwaForUrl(web_contents, url, {});
+  std::vector<IntentPickerAppInfo> apps = FindAppsForUrl(web_contents, url, {});
 
   if (!apps.empty())
     ui_displayed_ = true;

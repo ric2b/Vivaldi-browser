@@ -11,5 +11,12 @@
 extern NSString* const kBadgeButtonSavePasswordAccessibilityIdentifier;
 extern NSString* const kBadgeButtonUpdatePasswordAccessibilityIdentifier;
 extern NSString* const kBadgeButtonIncognitoAccessibilityIdentifier;
+extern NSString* const kBadgeButtonOverflowAccessibilityIdentifier;
+
+// A11y identifier for the Badge Popup Menu Table View.
+extern NSString* const kBadgePopupMenuTableViewAccessibilityIdentifier;
+
+// A11y identifier for the unread indicator above the displayed badge.
+extern NSString* const kBadgeUnreadIndicatorAccessibilityIdentifier;
 
 #endif  // IOS_CHROME_BROWSER_UI_BADGES_BADGE_CONSTANTS_H_

@@ -24,6 +24,7 @@
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_store_test_callbacks.h"
 #include "net/cookies/cookie_store_test_helpers.h"
+#include "net/cookies/test_cookie_access_delegate.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -101,6 +102,12 @@ const char kValidCookieLine[] = "A=B; path=/";
 //   // Time to wait between two cookie insertions to ensure that cookies have
 //   // different creation times.
 //   static const int creation_time_granularity_in_ms;
+//
+//   // The cookie store supports setting a CookieAccessDelegate and using it to
+//   // get the access semantics for each cookie via
+//   // CookieStore::GetAllCookiesWithAccessSemanticsAsync().
+//   // If this is not supported, all access semantics will show up as UNKNOWN.
+//   static const bool supports_cookie_access_semantics;
 // };
 
 template <class CookieStoreTestTraits>
@@ -606,12 +613,12 @@ TYPED_TEST_P(CookieStoreTest, SetCanonicalCookieTest) {
 
     // A HttpOnly cookie can be created, but is rejected
     // upon setting if the options do not specify include_httponly.
-    CanonicalCookie::CookieInclusionStatus status;
-    auto c = CanonicalCookie::Create(this->http_www_foo_.url(),
-                                     "bar=1; HttpOnly", base::Time::Now(),
-                                     base::nullopt /* server_time */, &status);
+    CanonicalCookie::CookieInclusionStatus create_status;
+    auto c = CanonicalCookie::Create(
+        this->http_www_foo_.url(), "bar=1; HttpOnly", base::Time::Now(),
+        base::nullopt /* server_time */, &create_status);
     EXPECT_TRUE(c->IsHttpOnly());
-    EXPECT_TRUE(status.IsInclude());
+    EXPECT_TRUE(create_status.IsInclude());
     EXPECT_TRUE(
         this->SetCanonicalCookieReturnStatus(cs, std::move(c), "http",
                                              false /* can_modify_httponly */)
@@ -1661,6 +1668,58 @@ TYPED_TEST_P(CookieStoreTest, GetAllCookiesAsync) {
   ASSERT_TRUE(++it == cookies.end());
 }
 
+TYPED_TEST_P(CookieStoreTest, GetAllCookiesWithAccessSemanticsAsync) {
+  CookieStore* cs = this->GetCookieStore();
+  auto access_delegate = std::make_unique<TestCookieAccessDelegate>();
+  TestCookieAccessDelegate* test_delegate = access_delegate.get();
+  // if !supports_cookie_access_semantics, the delegate will be stored but will
+  // not be used.
+  cs->SetCookieAccessDelegate(std::move(access_delegate));
+
+  test_delegate->SetExpectationForCookieDomain("domain1.test",
+                                               CookieAccessSemantics::LEGACY);
+  test_delegate->SetExpectationForCookieDomain(
+      "domain2.test", CookieAccessSemantics::NONLEGACY);
+  test_delegate->SetExpectationForCookieDomain("domain3.test",
+                                               CookieAccessSemantics::UNKNOWN);
+
+  this->CreateAndSetCookie(cs, GURL("http://domain1.test"), "cookie=1",
+                           CookieOptions::MakeAllInclusive());
+  this->CreateAndSetCookie(cs, GURL("http://domain2.test"), "cookie=1",
+                           CookieOptions::MakeAllInclusive());
+  this->CreateAndSetCookie(cs, GURL("http://domain3.test"), "cookie=1",
+                           CookieOptions::MakeAllInclusive());
+  this->CreateAndSetCookie(cs, GURL("http://domain4.test"), "cookie=1",
+                           CookieOptions::MakeAllInclusive());
+
+  GetAllCookiesWithAccessSemanticsCallback callback;
+  cs->GetAllCookiesWithAccessSemanticsAsync(callback.MakeCallback());
+  callback.WaitUntilDone();
+  EXPECT_TRUE(callback.was_run());
+
+  EXPECT_EQ(callback.cookies().size(), callback.access_semantics_list().size());
+  EXPECT_EQ(4u, callback.access_semantics_list().size());
+  EXPECT_EQ("domain1.test", callback.cookies()[0].Domain());
+  EXPECT_EQ("domain2.test", callback.cookies()[1].Domain());
+  EXPECT_EQ("domain3.test", callback.cookies()[2].Domain());
+  EXPECT_EQ("domain4.test", callback.cookies()[3].Domain());
+
+  if (!TypeParam::supports_cookie_access_semantics) {
+    for (CookieAccessSemantics semantics : callback.access_semantics_list()) {
+      EXPECT_EQ(CookieAccessSemantics::UNKNOWN, semantics);
+    }
+  } else {
+    EXPECT_EQ(CookieAccessSemantics::LEGACY,
+              callback.access_semantics_list()[0]);
+    EXPECT_EQ(CookieAccessSemantics::NONLEGACY,
+              callback.access_semantics_list()[1]);
+    EXPECT_EQ(CookieAccessSemantics::UNKNOWN,
+              callback.access_semantics_list()[2]);
+    EXPECT_EQ(CookieAccessSemantics::UNKNOWN,
+              callback.access_semantics_list()[3]);
+  }
+}
+
 TYPED_TEST_P(CookieStoreTest, DeleteCanonicalCookieAsync) {
   CookieStore* cs = this->GetCookieStore();
 
@@ -1756,6 +1815,7 @@ REGISTER_TYPED_TEST_SUITE_P(CookieStoreTest,
                             EmptyName,
                             CookieOrdering,
                             GetAllCookiesAsync,
+                            GetAllCookiesWithAccessSemanticsAsync,
                             DeleteCanonicalCookieAsync,
                             DeleteSessionCookie);
 

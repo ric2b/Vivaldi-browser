@@ -49,7 +49,6 @@
 #include "third_party/blink/renderer/platform/graphics/compositor_filter_operations.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
-#include "third_party/blink/renderer/platform/graphics/link_highlight.h"
 #include "third_party/blink/renderer/platform/graphics/logging_canvas.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_controller.h"
@@ -61,7 +60,6 @@
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
-#include "third_party/blink/renderer/platform/wtf/text/string_utf8_adaptor.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_stream.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
@@ -82,8 +80,7 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient& client)
       parent_(nullptr),
       mask_layer_(nullptr),
       contents_layer_(nullptr),
-      contents_layer_id_(0),
-      rendering_context3d_(0) {
+      contents_layer_id_(0) {
 #if DCHECK_IS_ON()
   DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
   client.VerifyNotPainting();
@@ -100,9 +97,6 @@ GraphicsLayer::~GraphicsLayer() {
   CcLayer()->ClearClient();
   CcLayer()->SetLayerClient(nullptr);
   SetContentsLayer(nullptr);
-  for (size_t i = 0; i < link_highlights_.size(); ++i)
-    link_highlights_[i]->ClearCurrentGraphicsLayer();
-  link_highlights_.clear();
 
 #if DCHECK_IS_ON()
   client_.VerifyNotPainting();
@@ -230,7 +224,7 @@ IntRect GraphicsLayer::InterestRect() {
   return previous_interest_rect_;
 }
 
-void GraphicsLayer::PaintRecursively() {
+bool GraphicsLayer::PaintRecursively() {
   Vector<GraphicsLayer*> repainted_layers;
   PaintRecursivelyInternal(repainted_layers);
 
@@ -243,6 +237,7 @@ void GraphicsLayer::PaintRecursively() {
 #endif
     layer->GetPaintController().FinishCycle();
   }
+  return !repainted_layers.IsEmpty();
 }
 
 void GraphicsLayer::PaintRecursivelyInternal(
@@ -375,11 +370,8 @@ void GraphicsLayer::UpdateLayerIsDrawable() {
   if (cc::Layer* contents_layer = ContentsLayerIfRegistered())
     contents_layer->SetIsDrawable(contents_visible_);
 
-  if (draws_content_) {
+  if (draws_content_)
     CcLayer()->SetNeedsDisplay();
-    for (size_t i = 0; i < link_highlights_.size(); ++i)
-      link_highlights_[i]->Invalidate();
-  }
 }
 
 void GraphicsLayer::UpdateContentsRect() {
@@ -466,8 +458,6 @@ void GraphicsLayer::SetupContentsLayer(cc::Layer* contents_layer) {
   // SetDrawsContent() and SetContentsVisible().
   contents_layer_->SetIsDrawable(contents_visible_);
   contents_layer_->SetHitTestable(contents_visible_);
-  contents_layer_->SetMaskLayer(nullptr);
-  contents_layer_->Set3dSortingContextId(rendering_context3d_);
 }
 
 void GraphicsLayer::ClearContentsLayerIfUnregistered() {
@@ -550,13 +540,6 @@ String GraphicsLayer::DebugName(const cc::Layer* layer) const {
   if (layer->id() == contents_layer_id_)
     return "ContentsLayer for " + client_.DebugName(this);
 
-  for (size_t i = 0; i < link_highlights_.size(); ++i) {
-    if (layer == link_highlights_[i]->Layer()) {
-      return "LinkHighlight[" + String::Number(i) + "] for " +
-             client_.DebugName(this);
-    }
-  }
-
   if (layer == layer_.get())
     return client_.DebugName(this);
 
@@ -588,37 +571,6 @@ void GraphicsLayer::SetSize(const gfx::Size& size) {
   // Note that we don't resize m_contentsLayer. It's up the caller to do that.
 }
 
-void GraphicsLayer::SetTransform(const TransformationMatrix& transform) {
-  transform_ = transform;
-  CcLayer()->SetTransform(TransformationMatrix::ToTransform(transform));
-}
-
-void GraphicsLayer::SetTransformOrigin(const gfx::Point3F& transform_origin) {
-  CcLayer()->SetTransformOrigin(transform_origin);
-}
-
-const gfx::Point3F& GraphicsLayer::TransformOrigin() const {
-  return CcLayer()->transform_origin();
-}
-
-bool GraphicsLayer::ShouldFlattenTransform() const {
-  return CcLayer()->should_flatten_transform();
-}
-
-void GraphicsLayer::SetShouldFlattenTransform(bool should_flatten) {
-  CcLayer()->SetShouldFlattenTransform(should_flatten);
-}
-
-void GraphicsLayer::SetRenderingContext(int context) {
-  if (rendering_context3d_ == context)
-    return;
-
-  rendering_context3d_ = context;
-  CcLayer()->Set3dSortingContextId(context);
-
-  if (contents_layer_)
-    contents_layer_->Set3dSortingContextId(rendering_context3d_);
-}
 
 bool GraphicsLayer::MasksToBounds() const {
   return CcLayer()->masks_to_bounds();
@@ -685,30 +637,6 @@ bool GraphicsLayer::BackfaceVisibility() const {
   return CcLayer()->double_sided();
 }
 
-void GraphicsLayer::SetOpacity(float opacity) {
-  CcLayer()->SetOpacity(opacity);
-}
-
-float GraphicsLayer::Opacity() const {
-  return CcLayer()->opacity();
-}
-
-void GraphicsLayer::SetBlendMode(BlendMode blend_mode) {
-  CcLayer()->SetBlendMode(WebCoreBlendModeToSkBlendMode(blend_mode));
-}
-
-BlendMode GraphicsLayer::GetBlendMode() const {
-  return BlendModeFromSkBlendMode(CcLayer()->blend_mode());
-}
-
-bool GraphicsLayer::IsRootForIsolatedGroup() const {
-  return CcLayer()->is_root_for_isolated_group();
-}
-
-void GraphicsLayer::SetIsRootForIsolatedGroup(bool isolated) {
-  CcLayer()->SetIsRootForIsolatedGroup(isolated);
-}
-
 void GraphicsLayer::SetHitTestable(bool should_hit_test) {
   if (hit_testable_ == should_hit_test)
     return;
@@ -729,10 +657,11 @@ void GraphicsLayer::SetNeedsDisplay() {
     return;
 
   CcLayer()->SetNeedsDisplay();
-  for (size_t i = 0; i < link_highlights_.size(); ++i)
-    link_highlights_[i]->Invalidate();
 
-  GetPaintController().InvalidateAll();
+  // Invalidate the paint controller if it exists, but don't bother creating one
+  // if not.
+  if (paint_controller_)
+    paint_controller_->InvalidateAll();
 
   if (raster_invalidator_)
     raster_invalidator_->ClearOldStates();
@@ -741,12 +670,16 @@ void GraphicsLayer::SetNeedsDisplay() {
                           PaintInvalidationReason::kFullLayer);
 }
 
+void GraphicsLayer::SetNeedsDisplayRecursively() {
+  for (auto* child : children_) {
+    child->SetNeedsDisplayRecursively();
+  }
+  SetNeedsDisplay();
+}
+
 void GraphicsLayer::SetNeedsDisplayInRect(const IntRect& rect) {
   DCHECK(PaintsContentOrHitTest());
-
   CcLayer()->SetNeedsDisplayRect(rect);
-  for (auto* link_highlight : link_highlights_)
-    link_highlight->Invalidate();
 }
 
 void GraphicsLayer::SetContentsRect(const IntRect& rect) {
@@ -826,24 +759,11 @@ void GraphicsLayer::SetPaintingPhase(GraphicsLayerPaintingPhase phase) {
   SetNeedsDisplay();
 }
 
-void GraphicsLayer::AddLinkHighlight(LinkHighlight* link_highlight) {
-  DCHECK(link_highlight && !link_highlights_.Contains(link_highlight));
-  link_highlights_.push_back(link_highlight);
-  link_highlight->Layer()->SetLayerClient(weak_ptr_factory_.GetWeakPtr());
-  UpdateChildList();
-}
-
-void GraphicsLayer::RemoveLinkHighlight(LinkHighlight* link_highlight) {
-  link_highlights_.EraseAt(link_highlights_.Find(link_highlight));
-  UpdateChildList();
-}
-
 std::unique_ptr<base::trace_event::TracedValue> GraphicsLayer::TakeDebugInfo(
     const cc::Layer* layer) {
   auto traced_value = std::make_unique<base::trace_event::TracedValue>();
 
-  traced_value->SetString(
-      "layer_name", WTF::StringUTF8Adaptor(DebugName(layer)).AsStringPiece());
+  traced_value->SetString("layer_name", LayerDebugName(layer));
 
   traced_value->BeginArray("compositing_reasons");
   for (const char* description :
@@ -866,6 +786,10 @@ std::unique_ptr<base::trace_event::TracedValue> GraphicsLayer::TakeDebugInfo(
   }
 
   return traced_value;
+}
+
+std::string GraphicsLayer::LayerDebugName(const cc::Layer* layer) const {
+  return DebugName(layer).Utf8();
 }
 
 void GraphicsLayer::DidChangeScrollbarsHiddenIfOverlay(bool hidden) {

@@ -13,13 +13,12 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "components/gcm_driver/instance_id/instance_id.h"
+#include "components/sync/protocol/device_info_specifics.pb.h"
+
+class PrefService;
 
 namespace instance_id {
 class InstanceIDDriver;
-}
-
-namespace syncer {
-class LocalDeviceInfoProvider;
 }
 
 class SharingSyncPreference;
@@ -33,11 +32,10 @@ class SharingDeviceRegistration {
   using RegistrationCallback =
       base::OnceCallback<void(SharingDeviceRegistrationResult)>;
 
-  SharingDeviceRegistration(
-      SharingSyncPreference* prefs,
-      instance_id::InstanceIDDriver* instance_id_driver,
-      VapidKeyManager* vapid_key_manager,
-      syncer::LocalDeviceInfoProvider* device_info_tracker);
+  SharingDeviceRegistration(PrefService* pref_service,
+                            SharingSyncPreference* prefs,
+                            instance_id::InstanceIDDriver* instance_id_driver,
+                            VapidKeyManager* vapid_key_manager);
   virtual ~SharingDeviceRegistration();
 
   // Registers device with sharing sync preferences. Takes a |callback| function
@@ -47,8 +45,16 @@ class SharingDeviceRegistration {
   // Un-registers device with sharing sync preferences.
   virtual void UnregisterDevice(RegistrationCallback callback);
 
+  // Returns if device can handle receiving phone numbers for calling.
+  bool IsClickToCallSupported() const;
+
+  // Returns if device can handle receiving of shared clipboard contents.
+  virtual bool IsSharedClipboardSupported() const;
+
   // For testing
-  void SetDeviceCapabilityForTesting(int device_capabilities);
+  void SetEnabledFeaturesForTesting(
+      std::set<sync_pb::SharingSpecificFields_EnabledFeatures>
+          enabled_feautres);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(SharingDeviceRegistrationTest,
@@ -85,20 +91,16 @@ class SharingDeviceRegistration {
   // Returns the authorization entity for FCM registration.
   base::Optional<std::string> GetAuthorizationEntity() const;
 
-  // Computes and returns a bitmask of all capabilities supported by the device.
-  int GetDeviceCapabilities() const;
+  // Computes and returns a set of all enabled features on the device.
+  std::set<sync_pb::SharingSpecificFields_EnabledFeatures> GetEnabledFeatures()
+      const;
 
-  // Returns if device can handle receiving phone numbers for calling.
-  bool IsClickToCallSupported() const;
-
-  // Returns if device can handle receiving of shared clipboard contents.
-  bool IsSharedClipboardSupported() const;
-
+  PrefService* pref_service_;
   SharingSyncPreference* sharing_sync_preference_;
   instance_id::InstanceIDDriver* instance_id_driver_;
   VapidKeyManager* vapid_key_manager_;
-  syncer::LocalDeviceInfoProvider* local_device_info_provider_;
-  base::Optional<int> device_capabilities_testing_value_;
+  base::Optional<std::set<sync_pb::SharingSpecificFields_EnabledFeatures>>
+      enabled_features_testing_value_;
 
   base::WeakPtrFactory<SharingDeviceRegistration> weak_ptr_factory_{this};
 

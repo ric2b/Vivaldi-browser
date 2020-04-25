@@ -18,7 +18,6 @@ import android.content.res.Resources;
 import android.graphics.Rect;
 import android.os.Build;
 import android.provider.Browser;
-import android.support.annotation.Nullable;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.style.CharacterStyle;
@@ -34,8 +33,11 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.textclassifier.TextClassifier;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.BuildInfo;
 import org.chromium.base.Log;
+import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.UserData;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
@@ -850,9 +852,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             return;
         }
 
-        PackageManager packageManager = mContext.getPackageManager();
         List<ResolveInfo> supportedActivities =
-                packageManager.queryIntentActivities(createProcessTextIntent(), 0);
+                PackageManagerUtils.queryIntentActivities(createProcessTextIntent(), 0);
         for (int i = 0; i < supportedActivities.size(); i++) {
             ResolveInfo resolveInfo = supportedActivities.get(i);
             CharSequence label = resolveInfo.loadLabel(mContext.getPackageManager());
@@ -1236,7 +1237,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     // All coordinates are in DIP.
     @VisibleForTesting
     @CalledByNative
-    void onSelectionEvent(int eventType, int left, int top, int right, int bottom) {
+    void onSelectionEvent(
+            @SelectionEventType int eventType, int left, int top, int right, int bottom) {
         // Ensure the provided selection coordinates form a non-empty rect, as required by
         // the selection action mode.
         if (left == right) ++right;
@@ -1244,6 +1246,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
         switch (eventType) {
             case SelectionEventType.SELECTION_HANDLES_SHOWN:
+                mSelectionRect.set(left, top, right, bottom);
                 break;
 
             case SelectionEventType.SELECTION_HANDLES_MOVED:
@@ -1484,10 +1487,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     private boolean isShareAvailable() {
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("text/plain");
-        return mContext.getPackageManager()
-                       .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-                       .size()
-                > 0;
+        return !PackageManagerUtils.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+                        .isEmpty();
     }
 
     // The callback class that delivers the result from a SmartSelectionClient.

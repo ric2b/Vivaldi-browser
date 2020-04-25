@@ -123,8 +123,12 @@
             loadTimeData.getString('networkListItemConnectingTo'),
         networkListItemInitializing:
             loadTimeData.getString('networkListItemInitializing'),
+        networkListItemNotAvailable:
+            loadTimeData.getString('networkListItemNotAvailable'),
         networkListItemScanning:
             loadTimeData.getString('networkListItemScanning'),
+        networkListItemSimCardLocked:
+            loadTimeData.getString('networkListItemSimCardLocked'),
         networkListItemNotConnected:
             loadTimeData.getString('networkListItemNotConnected'),
         networkListItemNoNetwork:
@@ -326,16 +330,15 @@
       var oncType = OncMojo.getNetworkTypeString(networkState.type);
       var guid = networkState.guid;
 
+      var shouldShowNetworkDetails = isConnected ||
+          networkState.connectionState ==
+              chromeos.networkConfig.mojom.ConnectionStateType.kConnecting;
       // Cellular should normally auto connect. If it is selected, show the
       // details UI since there is no configuration UI for Cellular.
-      if (networkState.type ==
-          chromeos.networkConfig.mojom.NetworkType.kCellular) {
-        chrome.send('showNetworkDetails', [oncType, guid]);
-        return;
-      }
+      shouldShowNetworkDetails |= networkState.type ==
+          chromeos.networkConfig.mojom.NetworkType.kCellular;
 
-      // Allow proxy to be set for connected networks.
-      if (isConnected) {
+      if (shouldShowNetworkDetails) {
         chrome.send('showNetworkDetails', [oncType, guid]);
         return;
       }
@@ -345,19 +348,32 @@
         return;
       }
 
-      chrome.networkingPrivate.startConnect(guid, () => {
-        const lastError = chrome.runtime.lastError;
-        if (!lastError)
-          return;
-        const message = lastError.message;
-        if (message == 'connecting' || message == 'connect-canceled' ||
-            message == 'connected' || message == 'Error.InvalidNetworkGuid') {
-          return;
+      const networkConfig =
+          network_config.MojoInterfaceProviderImpl.getInstance()
+              .getMojoServiceRemote();
+
+      networkConfig.startConnect(guid).then(response => {
+        switch (response.result) {
+          case mojom.StartConnectResult.kSuccess:
+            return;
+          case mojom.StartConnectResult.kInvalidGuid:
+          case mojom.StartConnectResult.kInvalidState:
+          case mojom.StartConnectResult.kCanceled:
+            // TODO(stevenjb/khorimoto): Consider handling these cases.
+            return;
+          case mojom.StartConnectResult.kNotConfigured:
+            if (!OncMojo.networkTypeIsMobile(networkState.type)) {
+              chrome.send('showNetworkConfig', [guid]);
+            } else {
+              console.error('Cellular network is not configured: ' + guid);
+            }
+            return;
+          case mojom.StartConnectResult.kBlocked:
+          case mojom.StartConnectResult.kUnknown:
+            console.error(
+                'startConnect failed for: ' + guid + ': ' + response.message);
+            return;
         }
-        console.error(
-            'networkingPrivate.startConnect error: ' + message +
-            ' For: ' + guid);
-        chrome.send('showNetworkConfig', [guid]);
       });
     },
 

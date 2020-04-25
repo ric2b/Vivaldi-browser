@@ -32,6 +32,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/time/time.h"
 #include "services/network/public/cpp/request_mode.h"
@@ -63,6 +64,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/raw_resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher_properties.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_observer.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_load_timing.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_loader.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_loading_log.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_timing_info.h"
@@ -351,7 +353,9 @@ void SetSecFetchHeaders(
       destination_value = "empty";
 
     // We'll handle adding these headers to navigations outside of Blink.
-    if (strncmp(destination_value, "document", 8) != 0 &&
+    if ((strncmp(destination_value, "document", 8) != 0 ||
+         strncmp(destination_value, "iframe", 6) != 0 ||
+         strncmp(destination_value, "frame", 5) != 0) &&
         request.GetRequestContext() != mojom::RequestContextType::INTERNAL) {
       if (blink::RuntimeEnabledFeatures::FetchMetadataDestinationEnabled()) {
         request.SetHttpHeaderField("Sec-Fetch-Dest", destination_value);
@@ -505,7 +509,11 @@ ResourceLoadPriority ResourceFetcher::ComputeLoadPriority(
                  mojom::RequestContextType::PING ||
              resource_request.GetRequestContext() ==
                  mojom::RequestContextType::CSP_REPORT) {
-    priority = ResourceLoadPriority::kVeryLow;
+    if (base::FeatureList::IsEnabled(features::kSetLowPriorityForBeacon)) {
+      priority = ResourceLoadPriority::kLow;
+    } else {
+      priority = ResourceLoadPriority::kVeryLow;
+    }
   }
 
   priority = AdjustPriorityWithPriorityHint(priority, type, resource_request,
@@ -572,8 +580,6 @@ ResourceFetcher::ResourceFetcher(const ResourceFetcherInit& init)
       allow_stale_resources_(false),
       image_fetched_(false),
       should_log_request_as_invalid_in_imported_document_(false) {
-  stale_while_revalidate_enabled_ =
-      RuntimeEnabledFeatures::StaleWhileRevalidateEnabledByRuntimeFlag();
   InstanceCounters::IncrementCounter(InstanceCounters::kResourceFetcherCounter);
   if (IsMainThread())
     MainThreadFetchersSet().insert(this);
@@ -870,8 +876,7 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
   // stale resource is returned a StaleRevalidation request will be scheduled.
   // Explicitly disallow stale responses for fetchers that don't have SWR
   // enabled (via origin trial), and non-GET requests.
-  resource_request.SetAllowStaleResponse(stale_while_revalidate_enabled_ &&
-                                         resource_request.HttpMethod() ==
+  resource_request.SetAllowStaleResponse(resource_request.HttpMethod() ==
                                              http_names::kGET &&
                                          !params.IsStaleRevalidation());
 
@@ -916,14 +921,17 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
     const scoped_refptr<const SecurityOrigin> origin =
         resource_request.RequestorOrigin();
     DCHECK(!options.cors_flag);
-    params.MutableOptions().cors_flag = cors::CalculateCorsFlag(
-        params.Url(), origin.get(), resource_request.GetMode());
+    params.MutableOptions().cors_flag =
+        cors::CalculateCorsFlag(params.Url(), origin.get(),
+                                resource_request.IsolatedWorldOrigin().get(),
+                                resource_request.GetMode());
     // TODO(yhirano): Reject requests for non CORS-enabled schemes.
     // See https://crrev.com/c/1298828.
     resource_request.SetAllowStoredCredentials(cors::CalculateCredentialsFlag(
         resource_request.GetCredentialsMode(),
         cors::CalculateResponseTainting(
             params.Url(), resource_request.GetMode(), origin.get(),
+            resource_request.IsolatedWorldOrigin().get(),
             params.Options().cors_flag ? CorsFlag::Set : CorsFlag::Unset)));
   }
 
@@ -947,6 +955,8 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
     // We don't expect the fetcher to be used, so count such unexpected use.
     UMA_HISTOGRAM_ENUMERATION("HTMLImport.UnexpectedRequest",
                               factory.GetType());
+
+    base::debug::DumpWithoutCrashing();
   }
 
   // If detached, we do very early return here to skip all processing below.
@@ -2033,18 +2043,9 @@ void ResourceFetcher::UpdateAllImageResourcePriorities() {
   }
 
   not_loaded_image_resources_.RemoveAll(to_be_removed);
-}
-
-void ResourceFetcher::ReloadLoFiImages() {
-  for (Resource* resource : image_resources_) {
-    resource->ReloadIfLoFiOrPlaceholderImage(this, Resource::kReloadAlways);
-  }
-
-  // |Resource::ReloadIfLoFiOrPlaceholderImage| can make images pending again,
-  // so we set |not_loaded_image_resources_| to be all the images
-  // conservatively. This isn't expected to cause performance problems as
-  // |ReloadLoFiImages| is relatively rare.
-  not_loaded_image_resources_ = image_resources_;
+  // Explicitly free the backing store to not regress memory.
+  // TODO(bikineev): Revisit when young generation is done.
+  to_be_removed.clear();
 }
 
 String ResourceFetcher::GetCacheIdentifier() const {
@@ -2088,10 +2089,6 @@ void ResourceFetcher::PrepareForLeakDetection() {
   // Stop loaders including keepalive ones that may persist after page
   // navigation and thus affect instance counters of leak detection.
   StopFetchingIncludingKeepaliveLoaders();
-}
-
-void ResourceFetcher::SetStaleWhileRevalidateEnabled(bool enabled) {
-  stale_while_revalidate_enabled_ = enabled;
 }
 
 void ResourceFetcher::StopFetchingInternal(StopFetchingTarget target) {

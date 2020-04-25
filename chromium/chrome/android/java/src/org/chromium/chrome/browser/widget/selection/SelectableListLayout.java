@@ -7,8 +7,6 @@ package org.chromium.chrome.browser.widget.selection;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
-import android.support.annotation.Nullable;
-import android.support.annotation.VisibleForTesting;
 import android.support.v4.view.ViewCompat;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -23,20 +21,28 @@ import android.view.ViewStub;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.gesturenav.HistoryNavigationDelegate;
 import org.chromium.chrome.browser.gesturenav.HistoryNavigationLayout;
 import org.chromium.chrome.browser.ui.widget.FadingShadow;
 import org.chromium.chrome.browser.ui.widget.FadingShadowView;
-import org.chromium.chrome.browser.widget.LoadingView;
-import org.chromium.chrome.browser.widget.displaystyle.DisplayStyleObserver;
-import org.chromium.chrome.browser.widget.displaystyle.HorizontalDisplayStyle;
-import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
-import org.chromium.chrome.browser.widget.displaystyle.UiConfig.DisplayStyle;
+import org.chromium.chrome.browser.ui.widget.LoadingView;
+import org.chromium.chrome.browser.ui.widget.displaystyle.DisplayStyleObserver;
+import org.chromium.chrome.browser.ui.widget.displaystyle.HorizontalDisplayStyle;
+import org.chromium.chrome.browser.ui.widget.displaystyle.UiConfig;
+import org.chromium.chrome.browser.ui.widget.displaystyle.UiConfig.DisplayStyle;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate.SelectionObserver;
 
 import java.util.List;
+
+import android.graphics.drawable.Drawable;
+import android.view.Gravity;
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.notes.NoteItemsAdapter;
 
 /**
  * Contains UI elements common to selectable list views: a loading view, empty view, selection
@@ -66,6 +72,12 @@ public class SelectableListLayout<E>
     private int mSearchEmptyStringResId;
 
     private UiConfig mUiConfig;
+
+    // Vivaldi
+    private TextView mEmptyRootView;
+    private int mEmptyRootStringResId;
+    private final int TAG_SEARCH = 1;
+    private final int TAG_NORMAL = 2;
 
     private final AdapterDataObserver mAdapterObserver = new AdapterDataObserver() {
         @Override
@@ -108,6 +120,16 @@ public class SelectableListLayout<E>
         mLoadingView = (LoadingView) findViewById(R.id.loading_view);
         mLoadingView.showLoadingUI();
 
+        if (ChromeApplication.isVivaldi()) {
+            HistoryNavigationLayout layout = findViewById(R.id.list_content);
+            TextView textView = (TextView) LayoutInflater.from(getContext()).
+                    inflate(R.layout.empty_root_view, layout, false);
+            layout.addView(textView);
+            mEmptyRootView = textView;
+            View view = findViewById(R.id.action_bar_bg);
+            if (view != null)
+                view.setBackgroundColor(getResources().getColor(R.color.panel_toolbar_background_primary));
+        }
         mToolbarStub = (ViewStub) findViewById(R.id.action_bar_stub);
 
         setFocusable(true);
@@ -235,11 +257,26 @@ public class SelectableListLayout<E>
         mSearchEmptyStringResId = searchEmptyStringResId;
 
         mEmptyView.setText(mEmptyStringResId);
+        if (ChromeApplication.isVivaldi())
+            mEmptyView.setGravity(Gravity.CENTER_HORIZONTAL);
 
         // Dummy listener to have the touch events dispatched to this view tree for navigation UI.
         mEmptyViewWrapper.setOnTouchListener((v, event) -> true);
 
         return mEmptyView;
+    }
+
+    // Vivaldi
+    public TextView initializeEmptyRootView(
+            Drawable emptyDrawable, int emptyStringResId) {
+        mEmptyRootStringResId = emptyStringResId;
+
+        mEmptyRootView.setCompoundDrawablesWithIntrinsicBounds(null, emptyDrawable, null, null);
+        mEmptyRootView.setText(mEmptyRootStringResId);
+        if (ChromeApplication.isVivaldi())
+            mEmptyRootView.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        return mEmptyRootView;
     }
 
     /**
@@ -306,6 +343,8 @@ public class SelectableListLayout<E>
         mRecyclerView.setItemAnimator(null);
         mToolbarShadow.setVisibility(View.VISIBLE);
         mEmptyView.setText(mSearchEmptyStringResId);
+        if (ChromeApplication.isVivaldi())
+            mEmptyView.setTag(TAG_SEARCH);
     }
 
     /**
@@ -315,6 +354,8 @@ public class SelectableListLayout<E>
         mRecyclerView.setItemAnimator(mItemAnimator);
         setToolbarShadowVisibility();
         mEmptyView.setText(mEmptyStringResId);
+        if (ChromeApplication.isVivaldi())
+            mEmptyView.setTag(TAG_NORMAL);
     }
 
     /**
@@ -339,6 +380,7 @@ public class SelectableListLayout<E>
 
         boolean showShadow = mRecyclerView.canScrollVertically(-1)
                 || (mToolbar.getSelectionDelegate().isSelectionEnabled() && mShowShadowOnSelection);
+        if (ChromeApplication.isVivaldi()) showShadow = false;
         mToolbarShadow.setVisibility(showShadow ? View.VISIBLE : View.GONE);
     }
 
@@ -355,8 +397,22 @@ public class SelectableListLayout<E>
     private void updateLayout() {
         updateEmptyViewVisibility();
         if (mAdapter.getItemCount() == 0) {
+            if (ChromeApplication.isVivaldi()) {
+                if ((mEmptyView == null || mEmptyView.getTag() == null ||
+                        !mEmptyView.getTag().equals(TAG_SEARCH)) &&
+                        mAdapter instanceof NoteItemsAdapter &&
+                        ((NoteItemsAdapter) mAdapter).isMainFolder()) {
+                    mEmptyRootView.setVisibility(View.VISIBLE);
+                    mEmptyView.setVisibility(View.GONE);
+                    mRecyclerView.setVisibility(View.GONE);
+                } else {
+                    mEmptyRootView.setVisibility(View.GONE);
+                }
+            }
             mRecyclerView.setVisibility(View.GONE);
         } else {
+            if (ChromeApplication.isVivaldi())
+                mEmptyRootView.setVisibility(View.GONE);
             mRecyclerView.setVisibility(View.VISIBLE);
         }
 
@@ -387,5 +443,10 @@ public class SelectableListLayout<E>
         }
 
         return false;
+    }
+
+    /** Vivaldi **/
+    public FadingShadowView getToolbarShadow() {
+        return  mToolbarShadow;
     }
 }

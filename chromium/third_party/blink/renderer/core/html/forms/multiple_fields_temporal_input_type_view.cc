@@ -38,6 +38,8 @@
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/html/forms/base_temporal_input_type.h"
+#include "third_party/blink/renderer/core/html/forms/date_time_chooser.h"
+#include "third_party/blink/renderer/core/html/forms/date_time_field_element.h"
 #include "third_party/blink/renderer/core/html/forms/date_time_fields_state.h"
 #include "third_party/blink/renderer/core/html/forms/form_controller.h"
 #include "third_party/blink/renderer/core/html/forms/html_data_list_element.h"
@@ -310,6 +312,14 @@ Element& MultipleFieldsTemporalInputTypeView::PickerOwnerElement() const {
 
 bool MultipleFieldsTemporalInputTypeView::SetupDateTimeChooserParameters(
     DateTimeChooserParameters& parameters) {
+  // TODO(iopopesc): Get the field information by parsing the datetime format.
+  if (DateTimeEditElement* edit = GetDateTimeEditElement()) {
+    parameters.is_ampm_first = edit->IsFirstFieldAMPM();
+    parameters.has_ampm = edit->HasField(DateTimeField::kAMPM);
+    parameters.has_second = edit->HasField(DateTimeField::kSecond);
+    parameters.has_millisecond = edit->HasField(DateTimeField::kMillisecond);
+  }
+
   return GetElement().SetupDateTimeChooserParameters(parameters);
 }
 
@@ -333,6 +343,7 @@ void MultipleFieldsTemporalInputTypeView::Trace(Visitor* visitor) {
 void MultipleFieldsTemporalInputTypeView::Blur() {
   if (DateTimeEditElement* edit = GetDateTimeEditElement())
     edit->BlurByOwner();
+  ClosePopupView();
 }
 
 scoped_refptr<ComputedStyle>
@@ -465,7 +476,9 @@ void MultipleFieldsTemporalInputTypeView::HandleKeydownEvent(
   if (picker_indicator_is_visible_ &&
       ((event.key() == "ArrowDown" && event.getModifierState("Alt")) ||
        (LayoutTheme::GetTheme().ShouldOpenPickerWithF4Key() &&
-        event.key() == "F4"))) {
+        event.key() == "F4") ||
+       (RuntimeEnabledFeatures::FormControlsRefreshEnabled() &&
+        (event.key() == "Enter" || event.key() == " ")))) {
     if (PickerIndicatorElement* element = GetPickerIndicatorElement())
       element->OpenPopup();
     event.SetDefaultHandled();

@@ -21,6 +21,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/base/locale_util.h"
@@ -115,25 +116,6 @@ void TryMigrateToResolveTimezoneByGeolocationMethod(PrefService* prefs) {
                     static_cast<int>(method));
 }
 
-// Whitelist synable preferences that may be registered after sync system init.
-void WhitelistLateRegistrationPrefsForSync(
-    user_prefs::PrefRegistrySyncable* registry) {
-  // These foreign syncable preferences are registered asynchronously by Ash,
-  // perhaps after sync system initialization. Whitelist these prefs so that any
-  // values obtained via sync before the prefs are registered will be stored.
-  const char* const kAshForeignSyncablePrefs[] = {
-      ash::prefs::kEnableAutoScreenLock,
-      ash::prefs::kEnableStylusTools,
-      ash::prefs::kLaunchPaletteOnEjectEvent,
-      ash::prefs::kMessageCenterLockScreenMode,
-      ash::prefs::kShelfAlignment,
-      ash::prefs::kShelfAutoHideBehavior,
-      ash::prefs::kTapDraggingEnabled,
-  };
-  for (const auto* pref : kAshForeignSyncablePrefs)
-    registry->WhitelistLateRegistrationPrefForSync(pref);
-}
-
 }  // namespace
 
 Preferences::Preferences()
@@ -147,8 +129,8 @@ Preferences::Preferences(input_method::InputMethodManager* input_method_manager)
   // |connector| may be null in tests.
   service_manager::Connector* connector = content::GetSystemConnector();
   if (connector) {
-    connector->BindInterface(ash::mojom::kServiceName,
-                             &cros_display_config_ptr_);
+    connector->Connect(ash::mojom::kServiceName,
+                       cros_display_config_.BindNewPipeAndPassReceiver());
   }
 }
 
@@ -184,8 +166,6 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
 // static
 void Preferences::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  WhitelistLateRegistrationPrefsForSync(registry);
-
   std::string hardware_keyboard_id;
   // TODO(yusukes): Remove the runtime hack.
   if (IsRunningAsSystemCompositor()) {
@@ -275,7 +255,7 @@ void Preferences::RegisterProfilePrefs(
       ash::prefs::kDictationAcceleratorDialogHasBeenAccepted, false,
       PrefRegistry::PUBLIC);
   registry->RegisterBooleanPref(
-      ash::prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted, false,
+      ash::prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted2, false,
       PrefRegistry::PUBLIC);
   registry->RegisterBooleanPref(
       ash::prefs::kAccessibilityScreenMagnifierEnabled, false,
@@ -554,6 +534,9 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kEolNotificationDismissed, false);
   registry->RegisterIntegerPref(prefs::kEolStatus,
                                 update_engine::EndOfLifeStatus::kSupported);
+  registry->RegisterTimePref(prefs::kEndOfLifeDate, base::Time());
+  registry->RegisterBooleanPref(prefs::kFirstEolWarningDismissed, false);
+  registry->RegisterBooleanPref(prefs::kSecondEolWarningDismissed, false);
 
   registry->RegisterBooleanPref(prefs::kCastReceiverEnabled, false);
   registry->RegisterBooleanPref(prefs::kShowArcSettingsOnSessionStart, false);
@@ -771,8 +754,8 @@ void Preferences::ApplyPreferences(ApplyReason reason,
       pref_name == prefs::kUnifiedDesktopEnabledByDefault) {
     // "Unified Desktop" is a per-user policy setting which will not be applied
     // until a user logs in.
-    if (cros_display_config_ptr_) {  // May be null in tests.
-      cros_display_config_ptr_->SetUnifiedDesktopEnabled(
+    if (cros_display_config_) {  // May be null in tests.
+      cros_display_config_->SetUnifiedDesktopEnabled(
           unified_desktop_enabled_by_default_.GetValue());
     }
   }

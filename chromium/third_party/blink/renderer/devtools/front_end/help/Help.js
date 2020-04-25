@@ -29,10 +29,12 @@ Help._innerShowReleaseNoteIfNeeded = function(lastSeenVersion, latestVersion, sh
     Help._releaseNoteVersionSetting.set(latestVersion);
     return;
   }
-  if (!showReleaseNote)
+  if (!showReleaseNote) {
     return;
-  if (lastSeenVersion >= latestVersion)
+  }
+  if (lastSeenVersion >= latestVersion) {
     return;
+  }
   Help._releaseNoteVersionSetting.set(latestVersion);
   UI.viewManager.showView(Help.releaseNoteViewId, true);
 };
@@ -59,9 +61,10 @@ Help.HelpLateInitialization = class {
   /**
    * @override
    */
-  run() {
-    if (!Host.isUnderTest())
+  async run() {
+    if (!Host.isUnderTest()) {
       Help._showReleaseNoteIfNeeded();
+    }
   }
 };
 
@@ -76,7 +79,7 @@ Help.ReleaseNotesActionDelegate = class {
    * @return {boolean}
    */
   handleAction(context, actionId) {
-    InspectorFrontendHost.openInNewTab(Help.latestReleaseNote().link);
+    Host.InspectorFrontendHost.openInNewTab(Help.latestReleaseNote().link);
     return true;
   }
 };
@@ -92,7 +95,8 @@ Help.ReportIssueActionDelegate = class {
    * @return {boolean}
    */
   handleAction(context, actionId) {
-    InspectorFrontendHost.openInNewTab('https://bugs.chromium.org/p/chromium/issues/entry?template=DevTools+issue');
+    Host.InspectorFrontendHost.openInNewTab(
+        'https://bugs.chromium.org/p/chromium/issues/entry?template=DevTools+issue');
     return true;
   }
 };

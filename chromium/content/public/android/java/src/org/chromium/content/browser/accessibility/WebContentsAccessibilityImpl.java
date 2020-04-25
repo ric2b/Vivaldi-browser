@@ -466,8 +466,9 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
             }
             case ACTION_SET_TEXT: {
                 if (!WebContentsAccessibilityImplJni.get().isEditableText(
-                            mNativeObj, WebContentsAccessibilityImpl.this, virtualViewId))
+                            mNativeObj, WebContentsAccessibilityImpl.this, virtualViewId)) {
                     return false;
+                }
                 if (arguments == null) return false;
                 String newText = arguments.getString(ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE);
                 if (newText == null) return false;
@@ -481,8 +482,9 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
             }
             case AccessibilityNodeInfo.ACTION_SET_SELECTION: {
                 if (!WebContentsAccessibilityImplJni.get().isEditableText(
-                            mNativeObj, WebContentsAccessibilityImpl.this, virtualViewId))
+                            mNativeObj, WebContentsAccessibilityImpl.this, virtualViewId)) {
                     return false;
+                }
                 int selectionStart = 0;
                 int selectionEnd = 0;
                 if (arguments != null) {
@@ -808,8 +810,9 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
                 mNativeObj, WebContentsAccessibilityImpl.this, newAccessibilityFocusId);
 
         if (WebContentsAccessibilityImplJni.get().isAutofillPopupNode(
-                    mNativeObj, WebContentsAccessibilityImpl.this, mAccessibilityFocusId))
+                    mNativeObj, WebContentsAccessibilityImpl.this, mAccessibilityFocusId)) {
             mAutofillPopupView.requestFocus();
+        }
 
         sendAccessibilityEvent(
                 mAccessibilityFocusId, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED);
@@ -1004,7 +1007,14 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
 
     @CalledByNative
     private void handleSliderChanged(int id) {
-        sendAccessibilityEvent(id, AccessibilityEvent.TYPE_VIEW_SCROLLED);
+        // If the node has accessibility focus, fire TYPE_VIEW_SELECTED, which triggers
+        // TalkBack to announce the change. If not, fire TYPE_VIEW_SCROLLED, which
+        // does not trigger an immediate announcement but still ensures some event is fired.
+        if (mAccessibilityFocusId == id) {
+            sendAccessibilityEvent(id, AccessibilityEvent.TYPE_VIEW_SELECTED);
+        } else {
+            sendAccessibilityEvent(id, AccessibilityEvent.TYPE_VIEW_SCROLLED);
+        }
     }
 
     @CalledByNative
@@ -1110,13 +1120,17 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
             boolean canScrollForward, boolean canScrollBackward, boolean canScrollUp,
             boolean canScrollDown, boolean canScrollLeft, boolean canScrollRight, boolean clickable,
             boolean editableText, boolean enabled, boolean focusable, boolean focused,
-            boolean isCollapsed, boolean isExpanded, boolean hasNonEmptyValue) {
+            boolean isCollapsed, boolean isExpanded, boolean hasNonEmptyValue,
+            boolean hasNonEmptyInnerText) {
         addAction(node, AccessibilityNodeInfo.ACTION_NEXT_HTML_ELEMENT);
         addAction(node, AccessibilityNodeInfo.ACTION_PREVIOUS_HTML_ELEMENT);
-        addAction(node, AccessibilityNodeInfo.ACTION_NEXT_AT_MOVEMENT_GRANULARITY);
-        addAction(node, AccessibilityNodeInfo.ACTION_PREVIOUS_AT_MOVEMENT_GRANULARITY);
         addAction(node, ACTION_SHOW_ON_SCREEN);
         addAction(node, ACTION_CONTEXT_CLICK);
+
+        if (hasNonEmptyInnerText) {
+            addAction(node, AccessibilityNodeInfo.ACTION_NEXT_AT_MOVEMENT_GRANULARITY);
+            addAction(node, AccessibilityNodeInfo.ACTION_PREVIOUS_AT_MOVEMENT_GRANULARITY);
+        }
 
         if (editableText && enabled) {
             // TODO: don't support actions that modify it if it's read-only (but

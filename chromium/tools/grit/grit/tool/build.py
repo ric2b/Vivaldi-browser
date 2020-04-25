@@ -166,12 +166,14 @@ are exported to translation interchange files (e.g. XMB files), etc.
     depend_on_stamp = False
     js_minifier = None
     replace_ellipsis = True
-    search_paths = []
+    extra_input = None
+    extra_resource_ids = None
     (own_opts, args) = getopt.getopt(
-        args, 'a:p:o:D:E:f:w:t:I:',
+        args, 'a:p:o:D:E:f:w:t:',
         ('depdir=', 'depfile=', 'assert-file-list=', 'help',
          'output-all-resource-defines', 'no-output-all-resource-defines',
          'no-replace-ellipsis', 'depend-on-stamp', 'js-minifier=',
+         "extra-input=", "extra-resource-id=",
          'write-only-new=', 'whitelist-support', 'brotli='))
     for (key, val) in own_opts:
       if key == '-a':
@@ -217,11 +219,10 @@ are exported to translation interchange files (e.g. XMB files), etc.
       elif key == '--help':
         self.ShowUsage()
         sys.exit(0)
-      elif key == '-I':
-        search_paths.append(val)
-
-    if search_paths:
-      util.PathSearcher.Configure(search_paths)
+      elif key == "--extra-input":
+        extra_input = val
+      elif key == "--extra-resource-id":
+        extra_resource_ids = val
 
     if len(args):
       print('This tool takes no tool-specific arguments.')
@@ -257,6 +258,19 @@ are exported to translation interchange files (e.g. XMB files), etc.
     self.res.SetWhitelistSupportEnabled(whitelist_support)
     self.res.RunGatherers()
 
+    if extra_input:
+      assert(extra_resource_ids)
+      sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..", "app", "resources"))
+      import vivaldi_resources as vivaldi
+
+      vivaldi.update_resources(self.res, extra_input,
+                       params = dict(debug=opts.extra_verbose,
+                            first_ids_file=extra_resource_ids,
+                            predetermined_ids_file=predetermined_ids_file,
+                            defines=self.defines,
+                            target_platform=target_platform),
+                       whitelist_support=whitelist_support)
+
     # Replace ... with the single-character version. http://crbug.com/621772
     if replace_ellipsis:
       for node in self.res:
@@ -264,16 +278,6 @@ are exported to translation interchange files (e.g. XMB files), etc.
           node.SetReplaceEllipsis(True)
 
     self.Process()
-
-    # Check that brotli was used if initialized.
-    if brotli_util.IsInitialized():
-      brotli_used = False
-      for node in self.res.ActiveDescendants():
-        if node.attrs.get('compress') == 'brotli':
-          brotli_used = True
-      if not brotli_used:
-        raise Exception('"use_brotli" was set to true in GN grit(...) target, ' +
-                        'but no resources were brotli compressed.')
 
     if assert_output_files:
       if not self.CheckAssertedOutputFiles(assert_output_files):

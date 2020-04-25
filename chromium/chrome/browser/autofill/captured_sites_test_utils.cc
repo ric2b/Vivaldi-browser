@@ -174,66 +174,12 @@ std::vector<CapturedSiteParams> GetCapturedSites(
   return sites;
 }
 
-constexpr base::TimeDelta PageActivityObserver::kPaintEventCheckInterval;
-
 std::string FilePathToUTF8(const base::FilePath::StringType& str) {
 #if defined(OS_WIN)
   return base::WideToUTF8(str);
 #else
   return str;
 #endif
-}
-
-// PageActivityObserver -------------------------------------------------------
-PageActivityObserver::PageActivityObserver(content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {}
-
-PageActivityObserver::PageActivityObserver(content::RenderFrameHost* frame)
-    : content::WebContentsObserver(
-          content::WebContents::FromRenderFrameHost(frame)) {}
-
-void PageActivityObserver::WaitTillPageIsIdle(
-    base::TimeDelta continuous_paint_timeout) {
-  base::TimeTicks finished_load_time = base::TimeTicks::Now();
-  bool page_is_loading = false;
-  do {
-    paint_occurred_during_last_loop_ = false;
-    base::RunLoop heart_beat;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, heart_beat.QuitClosure(), kPaintEventCheckInterval);
-    heart_beat.Run();
-    page_is_loading =
-        web_contents()->IsWaitingForResponse() || web_contents()->IsLoading();
-    if (page_is_loading) {
-      finished_load_time = base::TimeTicks::Now();
-    } else if ((base::TimeTicks::Now() - finished_load_time) >
-               continuous_paint_timeout) {
-      // |continuous_paint_timeout| has expired since Chrome loaded the page.
-      // During this period of time, Chrome has been continuously painting
-      // the page. In this case, the page is probably idle, but a bug, a
-      // blinking caret or a persistent animation is making Chrome paint at
-      // regular intervals. Exit.
-      break;
-    }
-  } while (page_is_loading || paint_occurred_during_last_loop_);
-}
-
-bool PageActivityObserver::WaitForVisualUpdate(base::TimeDelta timeout) {
-  base::TimeTicks start_time = base::TimeTicks::Now();
-  while (!paint_occurred_during_last_loop_) {
-    base::RunLoop heart_beat;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, heart_beat.QuitClosure(), kPaintEventCheckInterval);
-    heart_beat.Run();
-    if ((base::TimeTicks::Now() - start_time) > timeout) {
-      return false;
-    }
-  }
-  return true;
-}
-
-void PageActivityObserver::DidCommitAndDrawCompositorFrame() {
-  paint_occurred_during_last_loop_ = true;
 }
 
 // FrameObserver --------------------------------------------------------------
@@ -421,6 +367,78 @@ Browser* TestRecipeReplayer::browser() {
 
 content::WebContents* TestRecipeReplayer::GetWebContents() {
   return browser_->tab_strip_model()->GetActiveWebContents();
+}
+
+void TestRecipeReplayer::WaitTillPageIsIdle(
+    base::TimeDelta continuous_paint_timeout) {
+  // Loop continually while WebContents are waiting for response or loading.
+  // page_is_loading is expectedWaitTillPageIsIdle to always got to False
+  // eventually, but adding a timeout as a fallback.
+  base::TimeTicks finished_load_time = base::TimeTicks::Now();
+  while (true) {
+    {
+      base::RunLoop heart_beat;
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+          FROM_HERE, heart_beat.QuitClosure(), wait_for_idle_loop_length);
+      heart_beat.Run();
+    }
+    bool page_is_loading = GetWebContents()->IsWaitingForResponse() ||
+                           GetWebContents()->IsLoading();
+    if (!page_is_loading)
+      break;
+    if ((base::TimeTicks::Now() - finished_load_time) >
+        continuous_paint_timeout) {
+      VLOG(1) << "Page is still loading after "
+              << visual_update_timeout.InSeconds()
+              << " seconds. Bailing because timeout was reached.";
+      break;
+    }
+  }
+  finished_load_time = base::TimeTicks::Now();
+  while (true) {
+    // Now, rely on the render frame count to be the indicator of page activity.
+    // Once all the frames are drawn, we're free to continue.
+    content::RenderFrameSubmissionObserver frame_submission_observer(
+        GetWebContents());
+    {
+      base::RunLoop heart_beat;
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+          FROM_HERE, heart_beat.QuitClosure(), wait_for_idle_loop_length);
+      heart_beat.Run();
+    }
+    if (frame_submission_observer.render_frame_count() == 0) {
+      // If the render r has stopped submitting frames
+      break;
+    } else if ((base::TimeTicks::Now() - finished_load_time) >
+               continuous_paint_timeout) {
+      // |continuous_paint_timeout| has expired since Chrome loaded the page.
+      // During this period of time, Chrome has been continuously painting
+      // the page. In this case, the page is probably idle, but a bug, a
+      // blinking caret or a persistent animation is keeping the
+      // |render_frame_count| from reaching zero. Exit.
+      VLOG(1) << "Wait for render frame count timed out after "
+              << continuous_paint_timeout.InSeconds()
+              << " seconds with the frame count still at: "
+              << frame_submission_observer.render_frame_count();
+      break;
+    }
+  }
+}
+
+bool TestRecipeReplayer::WaitForVisualUpdate(base::TimeDelta timeout) {
+  base::TimeTicks start_time = base::TimeTicks::Now();
+  content::RenderFrameSubmissionObserver frame_submission_observer(
+      GetWebContents());
+  while (frame_submission_observer.render_frame_count() == 0) {
+    base::RunLoop heart_beat;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, heart_beat.QuitClosure(), wait_for_idle_loop_length);
+    heart_beat.Run();
+    if ((base::TimeTicks::Now() - start_time) > timeout) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void TestRecipeReplayer::CleanupSiteData() {
@@ -662,6 +680,9 @@ bool TestRecipeReplayer::ReplayRecordedActions(
     } else if (base::CompareCaseInsensitiveASCII(*type, "click") == 0) {
       if (!ExecuteClickAction(*action))
         return false;
+    } else if (base::CompareCaseInsensitiveASCII(*type, "closeTab") == 0) {
+      if (!ExecuteCloseTabAction(*action))
+        return false;
     } else if (base::CompareCaseInsensitiveASCII(*type, "coolOff") == 0) {
       if (!ExecuteCoolOffAction(*action))
         return false;
@@ -680,6 +701,9 @@ bool TestRecipeReplayer::ReplayRecordedActions(
     } else if (base::CompareCaseInsensitiveASCII(*type, "pressEscape") == 0) {
       if (!ExecutePressEscapeAction(*action))
         return false;
+    } else if (base::CompareCaseInsensitiveASCII(*type, "pressSpace") == 0) {
+      if (!ExecutePressSpaceAction(*action))
+        return false;
     } else if (base::CompareCaseInsensitiveASCII(*type, "savePassword") == 0) {
       if (!ExecuteSavePasswordAction(*action))
         return false;
@@ -692,8 +716,8 @@ bool TestRecipeReplayer::ReplayRecordedActions(
     } else if (base::CompareCaseInsensitiveASCII(*type, "typePassword") == 0) {
       if (!ExecuteTypePasswordAction(*action))
         return false;
-    } else if (base::CompareCaseInsensitiveASCII(
-                   *type, "updatePassword") == 0) {
+    } else if (base::CompareCaseInsensitiveASCII(*type, "updatePassword") ==
+               0) {
       if (!ExecuteUpdatePasswordAction(*action))
         return false;
     } else if (base::CompareCaseInsensitiveASCII(*type, "validateField") == 0) {
@@ -752,7 +776,6 @@ bool TestRecipeReplayer::InitializeBrowserToExecuteRecipe(
   }
 
   // Navigate to the starting URL, wait for the page to complete loading.
-  PageActivityObserver page_activity_observer(GetWebContents());
   if (!content::ExecuteScript(GetWebContents(),
                               base::StringPrintf("window.location.href = '%s';",
                                                  starting_url->c_str()))) {
@@ -760,34 +783,21 @@ bool TestRecipeReplayer::InitializeBrowserToExecuteRecipe(
     return false;
   }
 
-  page_activity_observer.WaitTillPageIsIdle();
+  WaitTillPageIsIdle();
   return true;
 }
 
 bool TestRecipeReplayer::ExecuteAutofillAction(
     const base::DictionaryValue& action) {
   std::string xpath;
-  if (!GetTargetHTMLElementXpathFromAction(action, &xpath))
-    return false;
-
-  int visibility_enum_val;
-  if (!GetTargetHTMLElementVisibilityEnumFromAction(action,
-                                                    &visibility_enum_val))
-    return false;
-
   content::RenderFrameHost* frame;
-  if (!GetTargetFrameFromAction(action, &frame))
+  if (!ExtractFrameAndVerifyElement(action, &xpath, &frame))
     return false;
-
   std::vector<std::string> frame_path;
   if (!GetIFramePathFromAction(action, &frame_path))
     return false;
 
-  if (!WaitForElementToBeReady(xpath, visibility_enum_val, frame))
-    return false;
-
   VLOG(1) << "Invoking Chrome Autofill on `" << xpath << "`.";
-  PageActivityObserver page_activity_observer(frame);
   // Clear the input box first, in case a previous value is there.
   // If the text input box is not clear, pressing the down key will not
   // bring up the autofill suggestion box.
@@ -804,37 +814,21 @@ bool TestRecipeReplayer::ExecuteAutofillAction(
   if (!feature_action_executor()->AutofillForm(
           xpath, frame_path, kAutofillActionNumRetries, frame))
     return false;
-  page_activity_observer.WaitTillPageIsIdle(
-      kAutofillActionWaitForVisualUpdateTimeout);
+  WaitTillPageIsIdle(kAutofillActionWaitForVisualUpdateTimeout);
   return true;
 }
 
 bool TestRecipeReplayer::ExecuteClickAction(
     const base::DictionaryValue& action) {
   std::string xpath;
-  if (!GetTargetHTMLElementXpathFromAction(action, &xpath))
-    return false;
-
-  int visibility_enum_val;
-  if (!GetTargetHTMLElementVisibilityEnumFromAction(action,
-                                                    &visibility_enum_val))
-    return false;
-
   content::RenderFrameHost* frame;
-  if (!GetTargetFrameFromAction(action, &frame))
-    return false;
-
-  std::vector<std::string> frame_path;
-  if (!GetIFramePathFromAction(action, &frame_path))
-    return false;
-
-  if (!WaitForElementToBeReady(xpath, visibility_enum_val, frame))
+  if (!ExtractFrameAndVerifyElement(action, &xpath, &frame))
     return false;
 
   VLOG(1) << "Left mouse clicking `" << xpath << "`.";
-  PageActivityObserver page_activity_observer(frame);
   if (!ScrollElementIntoView(xpath, frame))
     return false;
+  WaitTillPageIsIdle(scroll_wait_timeout);
 
   gfx::Rect rect;
   if (!GetBoundingRectOfTargetElement(xpath, frame, &rect))
@@ -842,7 +836,14 @@ bool TestRecipeReplayer::ExecuteClickAction(
   if (!SimulateLeftMouseClickAt(rect.CenterPoint(), frame))
     return false;
 
-  page_activity_observer.WaitTillPageIsIdle();
+  WaitTillPageIsIdle();
+  return true;
+}
+
+bool TestRecipeReplayer::ExecuteCloseTabAction(
+    const base::DictionaryValue& action) {
+  VLOG(1) << "Closing Active Tab";
+  browser_->tab_strip_model()->CloseSelectedTabs();
   return true;
 }
 
@@ -871,26 +872,15 @@ bool TestRecipeReplayer::ExecuteCoolOffAction(
 bool TestRecipeReplayer::ExecuteHoverAction(
     const base::DictionaryValue& action) {
   std::string xpath;
-  if (!GetTargetHTMLElementXpathFromAction(action, &xpath))
-    return false;
-
-  int visibility_enum_val;
-  if (!GetTargetHTMLElementVisibilityEnumFromAction(action,
-                                                    &visibility_enum_val))
-    return false;
-
   content::RenderFrameHost* frame;
-  if (!GetTargetFrameFromAction(action, &frame))
-    return false;
-
-  if (!WaitForElementToBeReady(xpath, visibility_enum_val, frame))
+  if (!ExtractFrameAndVerifyElement(action, &xpath, &frame))
     return false;
 
   VLOG(1) << "Hovering over `" << xpath << "`.";
-  PageActivityObserver page_activity_observer(frame);
 
   if (!ScrollElementIntoView(xpath, frame))
     return false;
+  WaitTillPageIsIdle(scroll_wait_timeout);
 
   gfx::Rect rect;
   if (!GetBoundingRectOfTargetElement(xpath, frame, &rect))
@@ -899,7 +889,7 @@ bool TestRecipeReplayer::ExecuteHoverAction(
   if (!SimulateMouseHoverAt(frame, rect.CenterPoint()))
     return false;
 
-  if (!page_activity_observer.WaitForVisualUpdate()) {
+  if (!WaitForVisualUpdate()) {
     ADD_FAILURE() << "The page did not respond to a mouse hover action!";
     return false;
   }
@@ -919,8 +909,7 @@ bool TestRecipeReplayer::ExecuteForceLoadPage(
   VLOG(1) << "Making explicit URL redirect to '" << *url << "'";
   ui_test_utils::NavigateToURL(browser_, GURL(*url));
 
-  PageActivityObserver page_activity_observer(GetWebContents());
-  page_activity_observer.WaitTillPageIsIdle();
+  WaitTillPageIsIdle();
 
   return true;
 }
@@ -928,49 +917,36 @@ bool TestRecipeReplayer::ExecuteForceLoadPage(
 bool TestRecipeReplayer::ExecutePressEnterAction(
     const base::DictionaryValue& action) {
   std::string xpath;
-  if (!GetTargetHTMLElementXpathFromAction(action, &xpath))
-    return false;
-
-  int visibility_enum_val;
-  if (!GetTargetHTMLElementVisibilityEnumFromAction(action,
-                                                    &visibility_enum_val))
-    return false;
-
   content::RenderFrameHost* frame;
-  if (!GetTargetFrameFromAction(action, &frame))
-    return false;
-
-  std::vector<std::string> frame_path;
-  if (!GetIFramePathFromAction(action, &frame_path))
-    return false;
-
-  if (!WaitForElementToBeReady(xpath, visibility_enum_val, frame))
+  if (!ExtractFrameAndVerifyElement(action, &xpath, &frame))
     return false;
 
   VLOG(1) << "Pressing 'Enter' on `" << xpath << "`.";
-  PageActivityObserver page_activity_observer(frame);
-  if (!PlaceFocusOnElement(xpath, frame_path, frame))
-    return false;
-
-  ui::DomKey key = ui::DomKey::ENTER;
-  ui::KeyboardCode key_code = ui::NonPrintableDomKeyToKeyboardCode(key);
-  ui::DomCode code = ui::UsLayoutKeyboardCodeToDomCode(key_code);
-  SimulateKeyPress(content::WebContents::FromRenderFrameHost(frame), key, code,
-                   key_code, false, false, false, false);
-  page_activity_observer.WaitTillPageIsIdle();
+  SimulateKeyPressWrapper(content::WebContents::FromRenderFrameHost(frame),
+                          ui::DomKey::ENTER);
+  WaitTillPageIsIdle();
   return true;
 }
 
 bool TestRecipeReplayer::ExecutePressEscapeAction(
     const base::DictionaryValue& action) {
-  ui::DomKey key = ui::DomKey::ESCAPE;
-  ui::KeyboardCode key_code = ui::NonPrintableDomKeyToKeyboardCode(key);
-  ui::DomCode code = ui::UsLayoutKeyboardCodeToDomCode(key_code);
-  SimulateKeyPress(GetWebContents(), key, code, key_code, false, false, false,
-                   false);
   VLOG(1) << "Pressing 'Esc' in the current frame";
-  PageActivityObserver page_activity_observer(GetWebContents());
-  page_activity_observer.WaitTillPageIsIdle();
+  SimulateKeyPressWrapper(GetWebContents(), ui::DomKey::ESCAPE);
+  WaitTillPageIsIdle();
+  return true;
+}
+
+bool TestRecipeReplayer::ExecutePressSpaceAction(
+    const base::DictionaryValue& action) {
+  std::string xpath;
+  content::RenderFrameHost* frame;
+  if (!ExtractFrameAndVerifyElement(action, &xpath, &frame, true))
+    return false;
+
+  VLOG(1) << "Pressing 'Space' on `" << xpath << "`.";
+  SimulateKeyPressWrapper(content::WebContents::FromRenderFrameHost(frame),
+                          ui::DomKey::FromCharacter(' '));
+  WaitTillPageIsIdle();
   return true;
 }
 
@@ -1000,7 +976,6 @@ bool TestRecipeReplayer::ExecuteRunCommandAction(
   VLOG(1) << "Running JavaScript commands on the page.";
 
   // Execute the commands.
-  PageActivityObserver page_activity_observer(frame);
   for (const std::string& command : commands) {
     if (!content::ExecuteScript(frame, command)) {
       ADD_FAILURE() << "Failed to execute JavaScript command `" << command
@@ -1009,7 +984,7 @@ bool TestRecipeReplayer::ExecuteRunCommandAction(
     }
     // Wait in case the JavaScript command triggers page load or layout
     // changes.
-    page_activity_observer.WaitTillPageIsIdle();
+    WaitTillPageIsIdle();
   }
 
   return true;
@@ -1043,23 +1018,11 @@ bool TestRecipeReplayer::ExecuteSelectDropdownAction(
   }
 
   std::string xpath;
-  if (!GetTargetHTMLElementXpathFromAction(action, &xpath))
-    return false;
-
-  int visibility_enum_val;
-  if (!GetTargetHTMLElementVisibilityEnumFromAction(action,
-                                                    &visibility_enum_val))
-    return false;
-
   content::RenderFrameHost* frame;
-  if (!GetTargetFrameFromAction(action, &frame))
-    return false;
-
-  if (!WaitForElementToBeReady(xpath, visibility_enum_val, frame))
+  if (!ExtractFrameAndVerifyElement(action, &xpath, &frame))
     return false;
 
   VLOG(1) << "Select option '" << index.value() << "' from `" << xpath << "`.";
-  PageActivityObserver page_activity_observer(frame);
   if (!ExecuteJavaScriptOnElementByXpath(
           frame, xpath,
           base::StringPrintf(
@@ -1069,8 +1032,7 @@ bool TestRecipeReplayer::ExecuteSelectDropdownAction(
     ADD_FAILURE() << "Failed to select drop down option with JavaScript!";
     return false;
   }
-
-  page_activity_observer.WaitTillPageIsIdle();
+  WaitTillPageIsIdle();
   return true;
 }
 
@@ -1082,23 +1044,11 @@ bool TestRecipeReplayer::ExecuteTypeAction(
     return false;
 
   std::string xpath;
-  if (!GetTargetHTMLElementXpathFromAction(action, &xpath))
-    return false;
-
-  int visibility_enum_val;
-  if (!GetTargetHTMLElementVisibilityEnumFromAction(action,
-                                                    &visibility_enum_val))
-    return false;
-
   content::RenderFrameHost* frame;
-  if (!GetTargetFrameFromAction(action, &frame))
+  if (!ExtractFrameAndVerifyElement(action, &xpath, &frame))
     return false;
 
-  if (!WaitForElementToBeReady(xpath, visibility_enum_val, frame))
-    return false;
-
-  VLOG(1) << "Typing '" << value << "' inside `" << xpath << "`.";
-  PageActivityObserver page_activity_observer(frame);
+  VLOG(1) << "Typing '" << *value << "' inside `" << xpath << "`.";
   if (!ExecuteJavaScriptOnElementByXpath(
           frame, xpath,
           base::StringPrintf(
@@ -1107,31 +1057,15 @@ bool TestRecipeReplayer::ExecuteTypeAction(
     ADD_FAILURE() << "Failed to type inside input element with JavaScript!";
     return false;
   }
-
-  page_activity_observer.WaitTillPageIsIdle();
+  WaitTillPageIsIdle();
   return true;
 }
 
 bool TestRecipeReplayer::ExecuteTypePasswordAction(
     const base::DictionaryValue& action) {
   std::string xpath;
-  if (!GetTargetHTMLElementXpathFromAction(action, &xpath))
-    return false;
-
-  int visibility_enum_val;
-  if (!GetTargetHTMLElementVisibilityEnumFromAction(action,
-                                                    &visibility_enum_val))
-    return false;
-
   content::RenderFrameHost* frame;
-  if (!GetTargetFrameFromAction(action, &frame))
-    return false;
-
-  std::vector<std::string> frame_path;
-  if (!GetIFramePathFromAction(action, &frame_path))
-    return false;
-
-  if (!WaitForElementToBeReady(xpath, visibility_enum_val, frame))
+  if (!ExtractFrameAndVerifyElement(action, &xpath, &frame, true))
     return false;
 
   const std::string* value =
@@ -1147,19 +1081,14 @@ bool TestRecipeReplayer::ExecuteTypePasswordAction(
     return false;
   }
 
-  if (!PlaceFocusOnElement(xpath, frame_path, frame))
-    return false;
-
-  VLOG(1) << "Typing '" << value << "' inside `" << xpath << "`.";
-
+  VLOG(1) << "Typing '" << *value << "' inside `" << xpath << "`.";
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(frame);
   for (size_t index = 0; index < value->size(); index++) {
-    ui::DomKey key = ui::DomKey::FromCharacter(value->at(index));
-    ui::KeyboardCode key_code = ui::NonPrintableDomKeyToKeyboardCode(key);
-    ui::DomCode code = ui::UsLayoutKeyboardCodeToDomCode(key_code);
-    SimulateKeyPress(content::WebContents::FromRenderFrameHost(frame), key,
-                     code, key_code, false, false, false, false);
+    SimulateKeyPressWrapper(web_contents,
+                            ui::DomKey::FromCharacter(value->at(index)));
   }
-
+  WaitTillPageIsIdle();
   return true;
 }
 
@@ -1185,26 +1114,8 @@ bool TestRecipeReplayer::ExecuteUpdatePasswordAction(
 bool TestRecipeReplayer::ExecuteValidateFieldValueAction(
     const base::DictionaryValue& action) {
   std::string xpath;
-  if (!GetTargetHTMLElementXpathFromAction(action, &xpath))
-    return false;
-
-  int visibility_enum_val;
-  if (!GetTargetHTMLElementVisibilityEnumFromAction(action,
-                                                    &visibility_enum_val))
-    return false;
-
   content::RenderFrameHost* frame;
-  if (!GetTargetFrameFromAction(action, &frame))
-    return false;
-
-  // If we're just validating we don't care about on_top-ness, as copied from
-  // chrome/test/data/web_page_replay_go_helper_scripts/automation_helper.js
-  // to TestRecipeReplayer::DomElementReadyState enum
-  // So remove (DomElementReadyState::kReadyStateOnTop)
-  if (visibility_enum_val & kReadyStateOnTop)
-    visibility_enum_val -= kReadyStateOnTop;
-
-  if (!WaitForElementToBeReady(xpath, visibility_enum_val, frame))
+  if (!ExtractFrameAndVerifyElement(action, &xpath, &frame, false, true))
     return false;
 
   const base::Value* autofill_prediction_container =
@@ -1392,6 +1303,43 @@ bool TestRecipeReplayer::GetTargetFrameFromAction(
   return true;
 }
 
+bool TestRecipeReplayer::ExtractFrameAndVerifyElement(
+    const base::DictionaryValue& action,
+    std::string* xpath,
+    content::RenderFrameHost** frame,
+    bool set_focus,
+    bool relaxed_visibility) {
+  if (!GetTargetHTMLElementXpathFromAction(action, xpath))
+    return false;
+
+  int visibility_enum_val;
+  if (!GetTargetHTMLElementVisibilityEnumFromAction(action,
+                                                    &visibility_enum_val))
+    return false;
+  if (!GetTargetFrameFromAction(action, frame))
+    return false;
+
+  // If we're just validating we don't care about on_top-ness, as copied from
+  // chrome/test/data/web_page_replay_go_helper_scripts/automation_helper.js
+  // to TestRecipeReplayer::DomElementReadyState enum
+  // So remove (DomElementReadyState::kReadyStateOnTop)
+  if (relaxed_visibility)
+    visibility_enum_val &= ~kReadyStateOnTop;
+
+  if (!WaitForElementToBeReady(*xpath, visibility_enum_val, *frame))
+    return false;
+
+  if (set_focus) {
+    std::vector<std::string> frame_path;
+    if (!GetIFramePathFromAction(action, &frame_path))
+      return false;
+
+    if (!PlaceFocusOnElement(*xpath, frame_path, *frame))
+      return false;
+  }
+  return true;
+}
+
 bool TestRecipeReplayer::GetIFramePathFromAction(
     const base::DictionaryValue& action,
     std::vector<std::string>* iframe_path) {
@@ -1421,7 +1369,7 @@ bool TestRecipeReplayer::GetIFramePathFromAction(
     ADD_FAILURE() << "The action's iframe path is not a list!";
     return false;
   }
-  const base::Value::ListStorage& iframe_xpath_list =
+  base::span<const base::Value> iframe_xpath_list =
       iframe_path_container->GetList();
   for (const auto& xpath : iframe_xpath_list) {
     if (!xpath.is_string()) {
@@ -1477,14 +1425,12 @@ bool TestRecipeReplayer::WaitForStateChange(
     const std::vector<std::string>& state_assertions,
     const base::TimeDelta& timeout) {
   base::TimeTicks start_time = base::TimeTicks::Now();
-  PageActivityObserver page_activity_observer(
-      content::WebContents::FromRenderFrameHost(frame));
   while (!AllAssertionsPassed(frame, state_assertions)) {
     if (base::TimeTicks::Now() - start_time > timeout) {
         ADD_FAILURE() << "State change hasn't completed within timeout.";
         return false;
     }
-    page_activity_observer.WaitTillPageIsIdle();
+    WaitTillPageIsIdle();
   }
   return true;
 }
@@ -1596,7 +1542,6 @@ bool TestRecipeReplayer::ScrollElementIntoView(
     ADD_FAILURE() << "Failed to scroll the element into view with JavaScript!";
     return false;
   }
-
   return true;
 }
 
@@ -1777,6 +1722,15 @@ bool TestRecipeReplayer::SimulateMouseHoverAt(
   return true;
 }
 
+void TestRecipeReplayer::SimulateKeyPressWrapper(
+    content::WebContents* web_contents,
+    ui::DomKey key) {
+  ui::KeyboardCode key_code = ui::NonPrintableDomKeyToKeyboardCode(key);
+  ui::DomCode code = ui::UsLayoutKeyboardCodeToDomCode(key_code);
+  SimulateKeyPress(web_contents, key, code, key_code, false, false, false,
+                   false);
+}
+
 void TestRecipeReplayer::NavigateAwayAndDismissBeforeUnloadDialog() {
   content::PrepContentsForBeforeUnloadTest(GetWebContents());
   ui_test_utils::NavigateToURLWithDisposition(
@@ -1810,7 +1764,7 @@ bool TestRecipeReplayer::SetupSavedAutofillProfile(
     return false;
   }
 
-  const base::Value::ListStorage& profile_entries_list =
+  base::span<const base::Value> profile_entries_list =
       saved_autofill_profile_container.GetList();
   for (auto it_entry = profile_entries_list.begin();
        it_entry != profile_entries_list.end(); ++it_entry) {
@@ -1852,7 +1806,7 @@ bool TestRecipeReplayer::SetupSavedPasswords(
     return false;
   }
 
-  const base::Value::ListStorage& saved_password_list =
+  base::span<const base::Value> saved_password_list =
       saved_password_list_container.GetList();
   for (auto it_password = saved_password_list.begin();
        it_password != saved_password_list.end(); ++it_password) {

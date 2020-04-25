@@ -59,7 +59,6 @@
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/platform/web_dedicated_worker_host_factory_client.h"
 #include "third_party/blink/public/platform/web_gesture_device.h"
-#include "third_party/blink/public/platform/web_localized_string.h"
 #include "third_party/blink/public/platform/web_rtc_api_name.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -84,11 +83,8 @@ class GpuMemoryBufferManager;
 namespace media {
 struct AudioSinkParameters;
 struct AudioSourceParameters;
+class MediaPermission;
 class GpuVideoAcceleratorFactories;
-}
-
-namespace rtc {
-class Thread;
 }
 
 namespace service_manager {
@@ -106,7 +102,6 @@ class ContextProvider;
 }
 
 namespace webrtc {
-struct RtpCapabilities;
 class AsyncResolverFactory;
 }
 
@@ -125,14 +120,11 @@ class WebLocalFrame;
 class WebMediaCapabilitiesClient;
 class WebPrescientNetworking;
 class WebPublicSuffixList;
-class WebRtcAudioDeviceImpl;
-class WebRTCCertificateGenerator;
 class WebRTCPeerConnectionHandler;
 class WebRTCPeerConnectionHandlerClient;
 class WebSandboxSupport;
 class WebSecurityOrigin;
 class WebThemeEngine;
-class WebTransmissionEncodingInfoHandler;
 class WebURLLoaderMockFactory;
 class WebURLResponse;
 class WebURLResponse;
@@ -577,25 +569,10 @@ class BLINK_PLATFORM_EXPORT Platform {
   CreateRTCPeerConnectionHandler(WebRTCPeerConnectionHandlerClient*,
                                  scoped_refptr<base::SingleThreadTaskRunner>);
 
-  // May return null if WebRTC functionality is not available or out of
-  // resources.
-  virtual std::unique_ptr<WebRTCCertificateGenerator>
-  CreateRTCCertificateGenerator();
-
   // Returns the SingleThreadTaskRunner suitable for running WebRTC networking.
   // An rtc::Thread will have already been created.
   // May return null if WebRTC functionality is not implemented.
   virtual scoped_refptr<base::SingleThreadTaskRunner> GetWebRtcWorkerThread() {
-    return nullptr;
-  }
-
-  // Returns the rtc::Thread instance associated with the WebRTC worker thread.
-  // TODO(bugs.webrtc.org/9419): Remove once WebRTC can be built as a component.
-  // May return null if WebRTC functionality is not implemented.
-  virtual rtc::Thread* GetWebRtcWorkerThreadRtcThread() { return nullptr; }
-
-  virtual scoped_refptr<base::SingleThreadTaskRunner>
-  GetWebRtcSignalingTaskRunner() {
     return nullptr;
   }
 
@@ -606,15 +583,6 @@ class BLINK_PLATFORM_EXPORT Platform {
   // May return null if WebRTC functionality is not implemented.
   virtual std::unique_ptr<webrtc::AsyncResolverFactory>
   CreateWebRtcAsyncResolverFactory();
-
-  // Returns the most optimistic view of the capabilities of the system for
-  // sending or receiving media of the given kind ("audio" or "video").
-  virtual std::unique_ptr<webrtc::RtpCapabilities> GetRtpSenderCapabilities(
-      const WebString& kind);
-  virtual std::unique_ptr<webrtc::RtpCapabilities> GetRtpReceiverCapabilities(
-      const WebString& kind);
-
-  virtual void UpdateWebRTCAPICount(WebRTCAPIName api_name) {}
 
   // Checks if the default minimum starting volume value for the AGC is
   // overridden on the command line.
@@ -633,13 +601,40 @@ class BLINK_PLATFORM_EXPORT Platform {
     return media::AudioLatency::LATENCY_PLAYBACK;
   }
 
-  virtual blink::WebRtcAudioDeviceImpl* GetWebRtcAudioDevice() {
-    return nullptr;
-  }
-
   virtual base::Optional<std::string> GetWebRTCAudioProcessingConfiguration() {
     return base::nullopt;
   }
+
+  virtual bool ShouldEnforceWebRTCRoutingPreferences() { return true; }
+
+  virtual media::MediaPermission* GetWebRTCMediaPermission(
+      WebLocalFrame* web_frame) {
+    return nullptr;
+  }
+
+  virtual bool UsesFakeCodecForPeerConnection() { return false; }
+
+  virtual bool IsWebRtcEncryptionEnabled() { return true; }
+
+  virtual bool IsWebRtcStunOriginEnabled() { return false; }
+
+  virtual bool IsWebRtcSrtpAesGcmEnabled() { return false; }
+
+  virtual bool IsWebRtcSrtpEncryptedHeadersEnabled() { return false; }
+
+  virtual base::Optional<std::string> WebRtcStunProbeTrialParameter() {
+    return base::nullopt;
+  }
+
+  // TODO(qingsi): Consolidate the legacy |ip_handling_policy| with
+  // |allow_mdns_obfuscation| following the latest spec on IP handling modes
+  // with mDNS introduced
+  // (https://tools.ietf.org/html/draft-ietf-rtcweb-ip-handling-12);
+  virtual void GetWebRTCRendererPreferences(WebLocalFrame* web_frame,
+                                            WebString* ip_handling_policy,
+                                            uint16_t* udp_min_port,
+                                            uint16_t* udp_max_port,
+                                            bool* allow_mdns_obfuscation) {}
 
   virtual base::Optional<int> GetAgcStartupMinimumVolume() {
     return base::nullopt;
@@ -652,6 +647,12 @@ class BLINK_PLATFORM_EXPORT Platform {
       webrtc::VideoCodecType video_coded_type) {
     return true;
   }
+
+  virtual bool IsWebRtcHWEncodingEnabled() { return true; }
+
+  virtual bool IsWebRtcHWDecodingEnabled() { return true; }
+
+  virtual bool AllowsLoopbackInPeerConnection() { return false; }
 
   // VideoCapture -------------------------------------------------------
 
@@ -706,11 +707,6 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Media Capabilities --------------------------------------------------
 
   virtual WebMediaCapabilitiesClient* MediaCapabilitiesClient() {
-    return nullptr;
-  }
-
-  virtual WebTransmissionEncodingInfoHandler*
-  TransmissionEncodingInfoHandler() {
     return nullptr;
   }
 

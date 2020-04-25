@@ -8,7 +8,10 @@
   </outputs>
   <release seq="1">
     <structures>
-      <structure name="IDR_SIGNIN_SHARED_CSS_HTML" file="resources\signin\signin_shared_css.html" preprocess="true" allowexternalscript="true" type="chrome_html" />
+      <if expr="is_win or is_macosx or desktop_linux">
+        <structure name="IDR_SIGNIN_SHARED_CSS_JS" file="${root_gen_dir}\chrome\browser\resources\signin\signin_shared_css.js" use_base_dir="false" preprocess="true" type="chrome_html" />
+        <structure name="IDR_SIGNIN_SHARED_OLD_CSS_HTML" file="resources\signin\signin_shared_old_css.html" preprocess="true" allowexternalscript="true" type="chrome_html" />
+      </if>
       <if expr="not is_android">
         <structure name="IDR_INCOGNITO_TAB_HTML" file="resources\ntp4\incognito_tab.html" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_GUEST_TAB_HTML" file="resources\ntp4\guest_tab.html" flattenhtml="true" type="chrome_html" />
@@ -74,7 +77,7 @@
         <structure name="IDR_MD_LOGIN_JS" file="resources\chromeos\login\md_login.js" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_OOBE_HTML" file="resources\chromeos\login\oobe.html" flattenhtml="true" type="chrome_html" variables="OOBE=oobe" expand_variables="true"/>
         <structure name="IDR_OOBE_JS" file="resources\chromeos\login\oobe.js" flattenhtml="true" type="chrome_html" />
-        <structure name="IDR_KEYBOARD_UTILS_JS" file="resources\chromeos\keyboard\keyboard_utils.js" flattenhtml="true" type="chrome_html" />
+        <structure name="IDR_KEYBOARD_UTILS_JS" file="resources\chromeos\keyboard\keyboard_utils.js" flattenhtml="true" type="chrome_html" compress="gzip"/>
         <structure name="IDR_CHROMEOS_DISCOVER_APP_HTML" file="resources\chromeos\login\discover\discover_app.html" flattenhtml="true" type="chrome_html"/>
         <structure name="IDR_CHROMEOS_DISCOVER_APP_JS" file="resources\chromeos\login\discover\discover_app.js" flattenhtml="true" type="chrome_html"/>
         <structure name="IDR_CHROMEOS_DISCOVER_MANIFEST" file="resources\chromeos\login\discover\manifest.json" flattenhtml="true" type="chrome_html"/>
@@ -104,12 +107,9 @@
         <include name="IDR_DISCARDS_MOJO_PUBLIC_BASE_PROCESS_ID_MOJOM_LITE_JS" file="${root_gen_dir}\mojo\public\mojom\base\process_id.mojom-lite.js" compress="gzip" use_base_dir="false" type="BINDATA" />
         <include name="IDR_DISCARDS_SORTED_TABLE_BEHAVIOR_HTML" file="resources\discards\sorted_table_behavior.html" compress="gzip" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_DISCARDS_SORTED_TABLE_BEHAVIOR_JS" file="resources\discards\sorted_table_behavior.js" compress="gzip" type="BINDATA" />
-        <include name="IDR_DISCARDS_WEBUI_GRAPH_DUMP_MOJOM_LITE_JS" file="${root_gen_dir}\chrome\browser\performance_manager\webui_graph_dump.mojom-lite.js" compress="gzip" use_base_dir="false" type="BINDATA" />
       </if>
       <if expr="is_win or is_macosx or (is_linux and not is_chromeos)">
-        <include name="IDR_BROWSER_SWITCH_APP_HTML" file="resources\browser_switch\app.html" compress="gzip" allowexternalscript="true" type="BINDATA" />
-        <include name="IDR_BROWSER_SWITCH_APP_JS" file="resources\browser_switch\app.js" compress="gzip" type="BINDATA" />
-        <include name="IDR_BROWSER_SWITCH_PROXY_HTML" file="resources\browser_switch\browser_switch_proxy.html" compress="gzip" allowexternalscript="true" type="BINDATA" />
+        <include name="IDR_BROWSER_SWITCH_APP_JS" file="${root_gen_dir}\chrome\browser\resources\browser_switch\app.js" compress="gzip" use_base_dir="false" type="BINDATA" />
         <include name="IDR_BROWSER_SWITCH_PROXY_JS" file="resources\browser_switch\browser_switch_proxy.js" compress="gzip" type="BINDATA" />
         <include name="IDR_BROWSER_SWITCH_HTML" file="resources\browser_switch\browser_switch.html" compress="gzip" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_BROWSER_SWITCH_INTERNALS_HTML" file="resources\browser_switch\internals\browser_switch_internals.html" compress="gzip" allowexternalscript="true" type="BINDATA" />
@@ -148,7 +148,7 @@
       <if expr="enable_printing">
         <include name="IDR_CLOUDPRINT_MANIFEST" file="resources\cloud_print_app\manifest.json" type="BINDATA" />
       </if>
-      <include name="IDR_DEVTOOLS_DISCOVERY_PAGE_HTML" file="devtools\frontend\devtools_discovery_page.html" type="BINDATA"/>
+      <include name="IDR_DEVTOOLS_DISCOVERY_PAGE_HTML" file="devtools\frontend\devtools_discovery_page.html" type="BINDATA" compress="gzip"/>
       <include name="IDR_DOMAIN_RELIABILITY_INTERNALS_HTML" file="resources\domain_reliability_internals\domain_reliability_internals.html" compress="gzip" type="BINDATA" />
       <include name="IDR_DOMAIN_RELIABILITY_INTERNALS_CSS" file="resources\domain_reliability_internals\domain_reliability_internals.css" compress="gzip" type="BINDATA" />
       <include name="IDR_DOMAIN_RELIABILITY_INTERNALS_JS" file="resources\domain_reliability_internals\domain_reliability_internals.js" compress="gzip" type="BINDATA" />
@@ -171,6 +171,7 @@
       <include name="IDR_TRANSLATE_INTERNALS_JS" file="../../components/translate/translate_internals/translate_internals.js" flattenhtml="true" compress="gzip" type="BINDATA" />
       <include name="IDR_FEEDBACK_MANIFEST" file="resources\feedback\manifest.json" type="BINDATA" />
       <if expr="is_android">
+        <include name="IDR_DEV_UI_LOADER_ERROR_HTML" file="resources/dev_ui/dev_ui_loader_error.html" compress="gzip" type="BINDATA" />
         <include name="IDR_EXPLORE_SITES_INTERNALS_HTML" file="resources\explore_sites_internals\explore_sites_internals.html" allowexternalscript="true" compress="gzip" type="BINDATA" />
         <include name="IDR_EXPLORE_SITES_INTERNALS_CSS" file="resources\explore_sites_internals\explore_sites_internals.css" compress="gzip" type="BINDATA" />
         <include name="IDR_EXPLORE_SITES_INTERNALS_JS" file="resources\explore_sites_internals\explore_sites_internals.js" compress="gzip" type="BINDATA" />
@@ -187,7 +188,6 @@
         <include name="IDR_SNIPPETS_INTERNALS_CSS" file="resources\snippets_internals\snippets_internals.css" compress="gzip" type="BINDATA" />
         <include name="IDR_SNIPPETS_INTERNALS_JS" file="resources\snippets_internals\snippets_internals.js" compress="gzip" type="BINDATA" />
         <include name="IDR_SNIPPETS_INTERNALS_MOJOM_LITE_JS" file="${root_gen_dir}\chrome\browser\ui\webui\snippets_internals\snippets_internals.mojom-lite.js" use_base_dir="false" type="BINDATA" compress="gzip" />
-        <part file="resources/dev_ui_loader/dev_ui_loader.grdp" />
       </if>
 
       <if expr="enable_supervised_users">
@@ -291,16 +291,6 @@
       <include name="IDR_LOCAL_STATE_HTML" file="resources\local_state\local_state.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
       <include name="IDR_LOCAL_STATE_JS" file="resources\local_state\local_state.js" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
       <include name="IDR_DESKTOP_HATS_HTML" file="resources\hats\hats.html" type="BINDATA" />
-      <include name="IDR_OMNIBOX_HTML" file="resources\omnibox\omnibox.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
-      <include name="IDR_OMNIBOX_CSS" file="resources\omnibox\omnibox.css" type="BINDATA" compress="gzip" />
-      <include name="IDR_OMNIBOX_INPUT_CSS" file="resources\omnibox\omnibox_input.css" type="BINDATA" compress="gzip" />
-      <include name="IDR_OUTPUT_RESULTS_GROUP_CSS" file="resources\omnibox\output_results_group.css" type="BINDATA" compress="gzip" />
-      <include name="IDR_OMNIBOX_OUTPUT_COLUMN_WIDTHS_CSS" file="resources\omnibox\omnibox_output_column_widths.css" type="BINDATA" compress="gzip" />
-      <include name="IDR_OMNIBOX_ELEMENT_JS" file="resources\omnibox\omnibox_element.js" type="BINDATA" compress="gzip" />
-      <include name="IDR_OMNIBOX_INPUT_JS" file="resources\omnibox\omnibox_input.js" type="BINDATA" compress="gzip" />
-      <include name="IDR_OMNIBOX_OUTPUT_JS" file="resources\omnibox\omnibox_output.js" type="BINDATA" compress="gzip" />
-      <include name="IDR_OMNIBOX_JS" file="resources\omnibox\omnibox.js" type="BINDATA" compress="gzip" />
-      <include name="IDR_OMNIBOX_MOJO_JS" file="${root_gen_dir}\chrome\browser\ui\webui\omnibox\omnibox.mojom-lite.js" use_base_dir="false" type="BINDATA" compress="gzip" />
       <include name="IDR_ORIGIN_MOJO_JS" file="${root_gen_dir}\url\mojom\origin.mojom-lite.js" use_base_dir="false" type="BINDATA" compress="gzip"/>
       <include name="IDR_COMPONENTS_HTML" file="resources\components.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
       <include name="IDR_COMPONENTS_JS" file="resources\components.js" type="BINDATA" compress="gzip" />
@@ -327,42 +317,36 @@
       <include name="IDR_POLICY_JS" file="resources\policy\policy.js" type="BINDATA" compress="gzip" />
       <if expr="not is_android">
         <include name="IDR_MANAGEMENT_HTML" file="resources\management\management.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
-        <include name="IDR_MANAGEMENT_UI_HTML" file="resources\management\management_ui.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
-        <include name="IDR_MANAGEMENT_UI_JS" file="resources\management\management_ui.js" type="BINDATA" compress="gzip" preprocess="true" />
-        <include name="IDR_MANAGEMENT_BROWSER_PROXY_HTML" file="resources\management\management_browser_proxy.html" allowexternalscript="true" type="BINDATA" compress="gzip" />
+        <include name="IDR_MANAGEMENT_UI_JS" file="${root_gen_dir}/chrome/browser/resources/management/management_ui.js" use_base_dir="false" type="BINDATA" compress="gzip" preprocess="true" />
         <include name="IDR_MANAGEMENT_BROWSER_PROXY_JS" file="resources\management\management_browser_proxy.js" type="BINDATA" compress="gzip" preprocess="true" />
-        <include name="IDR_MANAGEMENT_ICONS_HTML" file="resources\management\icons.html" type="BINDATA" compress="gzip" preprocess="true" />
+        <include name="IDR_MANAGEMENT_ICONS_JS" file="${root_gen_dir}/chrome/browser/resources/management/icons.js" use_base_dir="false" type="BINDATA" compress="gzip" preprocess="true" />
       </if>
       <include name="IDR_SITE_ENGAGEMENT_HTML" file="resources\engagement\site_engagement.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
       <include name="IDR_SITE_ENGAGEMENT_JS" file="resources\engagement\site_engagement.js" flattenhtml="true" type="BINDATA" compress="gzip" />
       <include name="IDR_SITE_ENGAGEMENT_DETAILS_MOJOM_LITE_JS" file="${root_gen_dir}\chrome\browser\engagement\site_engagement_details.mojom-lite.js" use_base_dir="false" type="BINDATA" compress="gzip" />
       <include name="IDR_URL_MOJOM_LITE_JS" file="${root_gen_dir}\url\mojom\url.mojom-lite.js" use_base_dir="false" type="BINDATA" compress="gzip" />
-      <include name="IDR_SYNC_DISABLED_CONFIRMATION_HTML" file="resources\signin\sync_confirmation\sync_disabled_confirmation.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
-      <include name="IDR_SYNC_DISABLED_CONFIRMATION_JS" file="resources\signin\sync_confirmation\sync_disabled_confirmation.js" type="BINDATA" />
-      <include name="IDR_SYNC_CONFIRMATION_HTML" file="resources\signin\sync_confirmation\sync_confirmation.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
-      <include name="IDR_SYNC_CONFIRMATION_JS" file="resources\signin\sync_confirmation\sync_confirmation.js" type="BINDATA" />
-      <include name="IDR_SYNC_CONFIRMATION_BROWSER_PROXY_HTML" file="resources\signin\sync_confirmation\sync_confirmation_browser_proxy.html" type="BINDATA" />
-      <include name="IDR_SYNC_CONFIRMATION_BROWSER_PROXY_JS" file="resources\signin\sync_confirmation\sync_confirmation_browser_proxy.js" type="BINDATA" />
-      <include name="IDR_SYNC_CONFIRMATION_APP_HTML" file="resources\signin\sync_confirmation\sync_confirmation_app.html" type="BINDATA" flattenhtml="true" allowexternalscript="true" />
-      <include name="IDR_SYNC_CONFIRMATION_APP_JS" file="resources\signin\sync_confirmation\sync_confirmation_app.js" type="BINDATA" />
-      <include name="IDR_SIGNIN_EMAIL_CONFIRMATION_HTML" file="resources\signin\signin_email_confirmation\signin_email_confirmation.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
-      <include name="IDR_SIGNIN_EMAIL_CONFIRMATION_JS" file="resources\signin\signin_email_confirmation\signin_email_confirmation.js" type="BINDATA" />
-      <include name="IDR_SIGNIN_ERROR_HTML" file="resources\signin\signin_error\signin_error.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
-      <include name="IDR_SIGNIN_ERROR_JS" file="resources\signin\signin_error\signin_error.js" type="BINDATA" />
+      <if expr="is_win or is_macosx or desktop_linux">
+        <include name="IDR_SYNC_DISABLED_CONFIRMATION_HTML" file="resources\signin\sync_confirmation\sync_disabled_confirmation.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
+        <include name="IDR_SYNC_DISABLED_CONFIRMATION_JS" file="resources\signin\sync_confirmation\sync_disabled_confirmation.js" type="BINDATA" />
+        <include name="IDR_SYNC_CONFIRMATION_HTML" file="resources\signin\sync_confirmation\sync_confirmation.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
+        <include name="IDR_SYNC_CONFIRMATION_JS" file="resources\signin\sync_confirmation\sync_confirmation.js" type="BINDATA" />
+        <include name="IDR_SYNC_CONFIRMATION_BROWSER_PROXY_JS" file="resources\signin\sync_confirmation\sync_confirmation_browser_proxy.js" type="BINDATA" />
+        <include name="IDR_SYNC_CONFIRMATION_APP_JS" file="${root_gen_dir}\chrome\browser\resources\signin\sync_confirmation\sync_confirmation_app.js" use_base_dir="false" preprocess="true" type="BINDATA" />
+        <include name="IDR_SYNC_CONFIRMATION_IMAGES_SYNC_CONFIRMATION_ILLUSTRATION_SVG" file="resources\signin\sync_confirmation\images\sync_confirmation_illustration.svg" type="BINDATA" compress="gzip" />
+        <include name="IDR_SYNC_CONFIRMATION_IMAGES_SYNC_CONFIRMATION_ILLUSTRATION_DARK_SVG" file="resources\signin\sync_confirmation\images\sync_confirmation_illustration_dark.svg" type="BINDATA" compress="gzip" />
+        <include name="IDR_SIGNIN_EMAIL_CONFIRMATION_HTML" file="resources\signin\signin_email_confirmation\signin_email_confirmation.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
+        <include name="IDR_SIGNIN_EMAIL_CONFIRMATION_JS" file="resources\signin\signin_email_confirmation\signin_email_confirmation.js" type="BINDATA" />
+        <include name="IDR_SIGNIN_ERROR_HTML" file="resources\signin\signin_error\signin_error.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
+        <include name="IDR_SIGNIN_ERROR_JS" file="resources\signin\signin_error\signin_error.js" type="BINDATA" />
+      </if>
       <include name="IDR_USB_ENUMERATION_OPTIONS_MOJOM_LITE_JS" file="${root_gen_dir}\services\device\public\mojom\usb_enumeration_options.mojom-lite.js" use_base_dir="false" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
       <include name="IDR_USB_DEVICE_MANAGER_CLIENT_MOJOM_LITE_JS" file="${root_gen_dir}\services\device\public\mojom\usb_manager_client.mojom-lite.js" use_base_dir="false" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
       <include name="IDR_USB_DEVICE_MANAGER_MOJOM_LITE_JS" file="${root_gen_dir}\services\device\public\mojom\usb_manager.mojom-lite.js" use_base_dir="false" type="BINDATA" compress="gzip" />
       <include name="IDR_USB_DEVICE_MANAGER_TEST_MOJOM_LITE_JS" file="${root_gen_dir}\services\device\public\mojom\usb_manager_test.mojom-lite.js" use_base_dir="false" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
       <include name="IDR_USB_DEVICE_MOJOM_LITE_JS" file="${root_gen_dir}\services\device\public\mojom\usb_device.mojom-lite.js" use_base_dir="false" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
-      <include name="IDR_USB_INTERNALS_CSS" file="resources\usb_internals\usb_internals.css" type="BINDATA" compress="gzip" />
-      <include name="IDR_USB_INTERNALS_DESCRIPTOR_PANEL_JS" file="resources\usb_internals\descriptor_panel.js" type="BINDATA" compress="gzip" />
-      <include name="IDR_USB_INTERNALS_DEVICES_PAGE_JS" file="resources\usb_internals\devices_page.js" type="BINDATA" compress="gzip" />
-      <include name="IDR_USB_INTERNALS_HTML" file="resources\usb_internals\usb_internals.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
-      <include name="IDR_USB_INTERNALS_JS" file="resources\usb_internals\usb_internals.js" type="BINDATA" compress="gzip" />
-      <include name="IDR_USB_INTERNALS_MOJOM_LITE_JS" file="${root_gen_dir}\chrome\browser\ui\webui\usb_internals\usb_internals.mojom-lite.js" use_base_dir="false" type="BINDATA" compress="gzip" />
       <include name="IDR_WEB_FOOTER_EXPERIMENT_HTML" file="resources\web_footer_experiment\index.html" type="BINDATA" />
-      <include name="IDR_WEBRTC_LOGS_HTML" file="resources\media\webrtc_logs.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
-      <include name="IDR_WEBRTC_LOGS_JS" file="resources\media\webrtc_logs.js" type="BINDATA" />
+      <include name="IDR_WEBRTC_LOGS_HTML" file="resources\media\webrtc_logs.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="brotli" />
+      <include name="IDR_WEBRTC_LOGS_JS" file="resources\media\webrtc_logs.js" type="BINDATA" compress="brotli" />
       <include name="IDR_WEBSTORE_MANIFEST" file="resources\webstore_app\manifest.json" type="BINDATA" />
       <include name="IDR_CRYPTOTOKEN_MANIFEST" file="resources\cryptotoken\manifest.json" type="BINDATA" />
       <if expr="chromeos">
@@ -384,6 +368,8 @@
         <include name="IDR_ACCOUNT_MIGRATION_WELCOME_JS" file="resources\chromeos\account_migration_welcome.js" flattenhtml="true" type="BINDATA" compress="gzip" />
         <include name="IDR_ACCOUNT_MIGRATION_BROWSER_PROXY_HTML" file="resources\chromeos\account_migration_browser_proxy.html" type="BINDATA" />
         <include name="IDR_ACCOUNT_MIGRATION_BROWSER_PROXY_JS" file="resources\chromeos\account_migration_browser_proxy.js" type="BINDATA" />
+        <include name="IDR_ACCOUNT_MANAGER_ERROR_HTML" file="resources\chromeos\account_manager_error.html" allowexternalscript="true" type="BINDATA" compress="gzip" preprocess="true"/>
+        <include name="IDR_ACCOUNT_MANAGER_ERROR_JS" file="resources\chromeos\account_manager_error.js" type="BINDATA" compress="gzip" />
         <if expr="_google_chrome">
           <include name="IDR_ACCOUNT_MANAGER_WELCOME_1X_PNG" file="resources\chromeos\account_manager_welcome_1x.png" type="BINDATA" compress="gzip" />
           <include name="IDR_ACCOUNT_MANAGER_WELCOME_2X_PNG" file="resources\chromeos\account_manager_welcome_2x.png" type="BINDATA" compress="gzip" />
@@ -399,6 +385,10 @@
         <include name="IDR_URGENT_PASSWORD_EXPIRY_NOTIFICATION_JS" file="resources\chromeos\password_change\urgent_password_expiry_notification.js" type="chrome_html" />
 
         <include name="IDR_CROSH_BUILTIN_MANIFEST" file="resources\chromeos\crosh_builtin\manifest.json" type="BINDATA" />
+        <include name="IDR_CROSTINI_INSTALLER_INDEX_HTML" file="resources\chromeos\crostini_installer\index.html" type="BINDATA" />
+        <include name="IDR_CROSTINI_INSTALLER_APP_JS" file="${root_gen_dir}\chrome\browser\resources\chromeos\crostini_installer\app.js" type="BINDATA" use_base_dir="false" />
+        <include name="IDR_CROSTINI_INSTALLER_BROWSER_PROXY_JS" file="resources\chromeos\crostini_installer\browser_proxy.js" type="BINDATA" />
+        <include name="IDR_CROSTINI_INSTALLER_MOJO_LITE_JS" file="${root_gen_dir}\chrome\browser\ui\webui\chromeos\crostini_installer\crostini_installer.mojom-lite.js" use_base_dir="false" type="BINDATA" />
         <include name="IDR_CRYPTOHOME_HTML" file="resources\chromeos\cryptohome.html" flattenhtml="true" type="BINDATA" />
         <include name="IDR_CRYPTOHOME_JS" file="resources\chromeos\cryptohome.js" type="BINDATA" />
         <!-- manifest file of Connectivity Diagnostics app -->
@@ -524,9 +514,8 @@
         <include name="IDR_DEVICE_EMULATOR_SHARED_STYLES_HTML" file="resources\chromeos\emulator\shared_styles.html" type="BINDATA" />
       </if>
       <if expr="chromeos">
-        <include name="IDR_SET_TIME_DIALOG_HTML" file="resources\chromeos\set_time_dialog\set_time_dialog.html" type="BINDATA" compress="gzip" />
-        <include name="IDR_SET_TIME_DIALOG_JS" file="resources\chromeos\set_time_dialog\set_time_dialog.js" type="BINDATA" compress="gzip" />
-        <include name="IDR_SET_TIME_BROWSER_PROXY_HTML" file="resources\chromeos\set_time_dialog\set_time_browser_proxy.html" type="BINDATA" compress="gzip" />
+        <include name="IDR_SET_TIME_HTML" file="resources\chromeos\set_time_dialog\set_time.html" type="BINDATA" compress="gzip" />
+        <include name="IDR_SET_TIME_DIALOG_JS" file="${root_gen_dir}\chrome\browser\resources\chromeos\set_time_dialog\set_time_dialog.js" use_base_dir="false" type="BINDATA" compress="gzip" />
         <include name="IDR_SET_TIME_BROWSER_PROXY_JS" file="resources\chromeos\set_time_dialog\set_time_browser_proxy.js" type="BINDATA" compress="gzip" />
       </if>
       <if expr="chromeos">
@@ -560,10 +549,14 @@
         <include name="IDR_IME_WINDOW_CLOSE_C" file="resources\input_ime\ime_window_close_click.png" type="BINDATA" />
         <include name="IDR_IME_WINDOW_CLOSE_H" file="resources\input_ime\ime_window_close_hover.png" type="BINDATA" />
       </if>
-      <include name="IDR_SSL_ERROR_ASSISTANT_PB" file="${root_gen_dir}/chrome/browser/resources/ssl/ssl_error_assistant/ssl_error_assistant.pb" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_SSL_ERROR_ASSISTANT_PB" file="${root_gen_dir}/chrome/browser/resources/ssl/ssl_error_assistant/ssl_error_assistant.pb" use_base_dir="false" type="BINDATA" compress="gzip" />
       <if expr="is_android or is_linux">
         <include name="IDR_SANDBOX_INTERNALS_HTML" file="resources\sandbox_internals\sandbox_internals.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
         <include name="IDR_SANDBOX_INTERNALS_JS" file="resources\sandbox_internals\sandbox_internals.js" type="BINDATA" compress="gzip" />
+      </if>
+      <if expr="is_win">
+        <include name="IDR_SANDBOX_INTERNALS_HTML" file="resources\sandbox_internals\sandbox_internals.html" preprocess="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
+        <include name="IDR_SANDBOX_INTERNALS_JS" file="resources\sandbox_internals\sandbox_internals_win.js" type="BINDATA" compress="gzip" />
       </if>
       <include name="IDR_MEDIA_ENGAGEMENT_HTML" file="resources\media\media_engagement.html" flattenhtml="true" type="BINDATA" compress="gzip" allowexternalscript="true" />
       <include name="IDR_MEDIA_ENGAGEMENT_JS" file="resources\media\media_engagement.js" flattenhtml="true" type="BINDATA" compress="gzip" />
@@ -609,8 +602,9 @@
       </if>
       <if expr="chromeos">
         <include name="IDR_SMART_DIM_20181115_EXAMPLE_PREPROCESSOR_CONFIG_PB" file="chromeos\power\ml\smart_dim\20181115_example_preprocessor_config.pb" type="BINDATA" />
-        <include name="IDR_SMART_DIM_20190221_EXAMPLE_PREPROCESSOR_CONFIG_PB" file="chromeos\power\ml\smart_dim\20190221_example_preprocessor_config.pb" type="BINDATA" />
+        <include name="IDR_SMART_DIM_20190521_EXAMPLE_PREPROCESSOR_CONFIG_PB" file="chromeos\power\ml\smart_dim\20190521_example_preprocessor_config.pb" type="BINDATA" />
         <include name="IDR_TOP_CAT_20190722_EXAMPLE_PREPROCESSOR_CONFIG_PB" file="ui\app_list\search\search_result_ranker\20190722_example_preprocessor_config.pb" type="BINDATA" />
+        <include name="IDR_SEARCH_RANKER_20190923_EXAMPLE_PREPROCESSOR_CONFIG_PB" file="ui\app_list\search\search_result_ranker\search_ranker_assets\20190923_example_preprocessor_config.pb" type="BINDATA" />
       </if>
       <if expr="chromeos">
         <include name="IDR_ARC_GRAPHICS_TRACING_HTML" file="resources\chromeos\arc_graphics_tracing\arc_graphics_tracing.html" compress="gzip" type="BINDATA"/>

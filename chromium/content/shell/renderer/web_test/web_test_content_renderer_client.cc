@@ -10,7 +10,6 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
-#include "build/build_config.h"
 #include "components/web_cache/renderer/web_cache_impl.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
@@ -78,12 +77,6 @@ void WebTestContentRendererClient::RenderViewCreated(RenderView* render_view) {
   test_runner->Reset(false /* for_new_test */);
 }
 
-WebThemeEngine* WebTestContentRendererClient::OverrideThemeEngine() {
-  return WebTestRenderThreadObserver::GetInstance()
-      ->test_interfaces()
-      ->ThemeEngine();
-}
-
 std::unique_ptr<blink::WebMediaStreamRendererFactory>
 WebTestContentRendererClient::CreateMediaStreamRendererFactory() {
   return std::unique_ptr<blink::WebMediaStreamRendererFactory>(
@@ -122,16 +115,6 @@ bool WebTestContentRendererClient::IsIdleMediaSuspendEnabled() {
   // Disable idle media suspend to avoid web tests getting into accidentally
   // bad states if they take too long to run.
   return false;
-}
-
-bool WebTestContentRendererClient::SuppressLegacyTLSVersionConsoleMessage() {
-#if defined(OS_MACOSX)
-  // Blink uses an outdated test server on older versions of macOS. Until those
-  // are fixed, suppress the warning. See https://crbug.com/936515.
-  return true;
-#else
-  return false;
-#endif
 }
 
 }  // namespace content

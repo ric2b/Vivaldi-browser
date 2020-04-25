@@ -71,7 +71,19 @@ cca.views.camera.PhotoResult;
  */
 
 /**
+ * Capture modes.
+ * @enum {string}
+ */
+cca.views.camera.Mode = {
+  PHOTO: 'photo-mode',
+  VIDEO: 'video-mode',
+  SQUARE: 'square-mode',
+  PORTRAIT: 'portrait-mode',
+};
+
+/**
  * Mode controller managing capture sequence of different camera mode.
+ * @param {!cca.views.camera.Mode} defaultMode Default mode to be switched to.
  * @param {cca.device.PhotoResolPreferrer} photoResolPreferrer
  * @param {cca.device.VideoConstraintsPreferrer} videoPreferrer
  * @param {!DoSwitchMode} doSwitchMode
@@ -81,7 +93,7 @@ cca.views.camera.PhotoResult;
  * @constructor
  */
 cca.views.camera.Modes = function(
-    photoResolPreferrer, videoPreferrer, doSwitchMode, doSavePhoto,
+    defaultMode, photoResolPreferrer, videoPreferrer, doSwitchMode, doSavePhoto,
     createVideoSaver, doSaveVideo) {
   /**
    * @type {!DoSwitchMode}
@@ -91,7 +103,7 @@ cca.views.camera.Modes = function(
 
   /**
    * Capture controller of current camera mode.
-   * @type {cca.views.camera.Mode}
+   * @type {cca.views.camera.ModeBase}
    */
   this.current = null;
 
@@ -150,12 +162,14 @@ cca.views.camera.Modes = function(
     'portrait-mode': {
       captureFactory: () => new cca.views.camera.Portrait(
           this.stream_, doSavePhoto, this.captureResolution_),
-      isSupported: async (stream) => {
-        const deviceOperator = await cca.mojo.DeviceOperator.getInstance();
-        if (!deviceOperator) {
+      isSupported: async (deviceId) => {
+        if (deviceId === null) {
           return false;
         }
-        const deviceId = stream.getVideoTracks()[0].getSettings().deviceId;
+        const deviceOperator = await cca.mojo.DeviceOperator.getInstance();
+        if (deviceOperator === null) {
+          return false;
+        }
         return await deviceOperator.isPortraitModeSupported(deviceId);
       },
       resolutionConfig: photoResolPreferrer,
@@ -188,22 +202,28 @@ cca.views.camera.Modes = function(
   });
 
   // Set default mode when app started.
-  this.updateModeUI_('photo-mode');
+  this.updateModeUI_(defaultMode);
 };
 
 /**
  * Updates state of mode related UI to the target mode.
- * @param {string} mode Mode to be toggled.
+ * @param {!cca.views.camera.Mode} mode Mode to be toggled.
  */
 cca.views.camera.Modes.prototype.updateModeUI_ = function(mode) {
   Object.keys(this.allModes_).forEach((m) => cca.state.set(m, m == mode));
   const element = document.querySelector(`.mode-item>input[data-mode=${mode}]`);
   element.checked = true;
   const wrapper = element.parentElement;
+  let scrollTop = wrapper.offsetTop - this.modesGroup_.offsetHeight / 2 +
+      wrapper.offsetHeight / 2;
+  // Make photo mode scroll slightly upper so that the third mode item falls in
+  // blur area: crbug.com/988869
+  if (mode === 'photo-mode') {
+    scrollTop -= 16;
+  }
   this.modesGroup_.scrollTo({
     left: 0,
-    top: wrapper.offsetTop - this.modesGroup_.offsetHeight / 2 +
-        wrapper.offsetHeight / 2,
+    top: scrollTop,
     behavior: 'smooth',
   });
 };
@@ -212,9 +232,10 @@ cca.views.camera.Modes.prototype.updateModeUI_ = function(mode) {
  * Returns a set of available constraints for HALv1 device.
  * @param {boolean} videoMode Is getting constraints for video mode.
  * @param {?string} deviceId Id of video device.
- * @return {Array<Object>} Result of constraints-candidates.
+ * @return {!Promise<Array<Object>>} Result of constraints-candidates.
  */
-cca.views.camera.Modes.getV1Constraints = function(videoMode, deviceId) {
+cca.views.camera.Modes.getV1Constraints = async function(videoMode, deviceId) {
+  const defaultFacing = await cca.util.getDefaultFacing();
   return [
     {
       aspectRatio: {ideal: videoMode ? 1.7777777778 : 1.3333333333},
@@ -230,10 +251,13 @@ cca.views.camera.Modes.getV1Constraints = function(videoMode, deviceId) {
       constraint.deviceId = {exact: deviceId};
     } else {
       // HALv1 devices are unable to know facing before stream configuration,
-      // deviceId is set to null for requesting user facing camera as default.
-      constraint.facingMode = {exact: 'user'};
+      // deviceId is set to null for requesting camera with default facing.
+      constraint.facingMode = {exact: defaultFacing};
     }
-    return {audio: videoMode, video: constraint};
+    return {
+      audio: videoMode ? {echoCancellation: false} : false,
+      video: constraint,
+    };
   });
 };
 
@@ -254,7 +278,7 @@ cca.views.camera.Modes.prototype.switchMode_ = function(mode) {
 /**
  * Gets all mode candidates. Desired trying sequence of candidate modes is
  * reflected in the order of the returned array.
- * @return {Array<string>} Mode candidates to be tried out.
+ * @return {!Array<string>} Mode candidates to be tried out.
  */
 cca.views.camera.Modes.prototype.getModeCandidates = function() {
   const tried = {};
@@ -288,13 +312,13 @@ cca.views.camera.Modes.prototype.getResolutionCandidates = function(
  * given mode on camera HALv1 device.
  * @param {string} mode
  * @param {?string} deviceId
- * @return {Array<[?[number, number], Array<Object>]>} Result capture resolution
- *     width, height and constraints-candidates for its preview.
+ * @return {!Promise<Array<[?[number, number], Array<Object>]>>} Result capture
+ *     resolution width, height and constraints-candidates for its preview.
  */
-cca.views.camera.Modes.prototype.getResolutionCandidatesV1 = function(
-    mode, deviceId) {
-  return this.allModes_[mode].v1Config(deviceId).map(
-      (constraints) => [null, [constraints]]);
+cca.views.camera.Modes.prototype.getResolutionCandidatesV1 =
+    async function(mode, deviceId) {
+  const v1Configs = await this.allModes_[mode].v1Config(deviceId);
+  return v1Configs.map((constraints) => [null, [constraints]]);
 };
 
 /**
@@ -307,14 +331,15 @@ cca.views.camera.Modes.prototype.getCaptureIntent = function(mode) {
 };
 
 /**
- * Gets supported modes for video device of the given stream.
- * @param {MediaStream} stream Stream of the video device.
- * @return {Array<string>} Names of all supported mode for the video device.
+ * Gets supported modes for video device of given device id.
+ * @param {?string} deviceId Device id of the video device.
+ * @return {!Promise<!Array<cca.views.camera.Mode>>} All supported mode for the
+ *     video device.
  */
-cca.views.camera.Modes.prototype.getSupportedModes = async function(stream) {
+cca.views.camera.Modes.prototype.getSupportedModes = async function(deviceId) {
   let supportedModes = [];
   for (const [mode, obj] of Object.entries(this.allModes_)) {
-    if (await obj.isSupported(stream)) {
+    if (await obj.isSupported(deviceId)) {
       supportedModes.push(mode);
     }
   }
@@ -322,17 +347,20 @@ cca.views.camera.Modes.prototype.getSupportedModes = async function(stream) {
 };
 
 /**
- * Updates mode selection UI according to given supported modes.
- * @param {Array<string>} supportedModes Supported mode names to be updated
- *     with.
+ * Updates mode selection UI according to given device id.
+ * @param {?string} deviceId
+ * @return {!Promise}
  */
-cca.views.camera.Modes.prototype.updateModeSelectionUI = function(
-    supportedModes) {
+cca.views.camera.Modes.prototype.updateModeSelectionUI =
+    async function(deviceId) {
+  const supportedModes = await this.getSupportedModes(deviceId);
   document.querySelectorAll('.mode-item').forEach((element) => {
     const radio = element.querySelector('input[type=radio]');
     element.classList.toggle(
         'hide', !supportedModes.includes(radio.dataset.mode));
   });
+  this.modesGroup_.classList.toggle('scrollable', supportedModes.length > 3);
+  this.modesGroup_.classList.remove('hide');
 };
 
 /**
@@ -402,7 +430,7 @@ cca.views.camera.Modes.prototype.disableSaveMetadata_ = async function() {
  *     height.
  * @constructor
  */
-cca.views.camera.Mode = function(stream, captureResolution) {
+cca.views.camera.ModeBase = function(stream, captureResolution) {
   /**
    * Stream of current mode.
    * @type {?Promise}
@@ -430,7 +458,7 @@ cca.views.camera.Mode = function(stream, captureResolution) {
  * Initiates video/photo capture operation.
  * @return {?Promise} Promise for ongoing capture operation.
  */
-cca.views.camera.Mode.prototype.startCapture = function() {
+cca.views.camera.ModeBase.prototype.startCapture = function() {
   if (!this.capture_) {
     this.capture_ = this.start_().finally(() => this.capture_ = null);
   }
@@ -442,7 +470,7 @@ cca.views.camera.Mode.prototype.startCapture = function() {
  * @async
  * @return {Promise} Promise for ongoing capture operation.
  */
-cca.views.camera.Mode.prototype.stopCapture = async function() {
+cca.views.camera.ModeBase.prototype.stopCapture = async function() {
   this.stop_();
   return await this.capture_;
 };
@@ -451,26 +479,27 @@ cca.views.camera.Mode.prototype.stopCapture = async function() {
  * Adds an observer to save image metadata.
  * @return {!Promise} Promise for the operation.
  */
-cca.views.camera.Mode.prototype.addMetadataObserver = async function() {};
+cca.views.camera.ModeBase.prototype.addMetadataObserver = async function() {};
 
 /**
  * Remove the observer that saves metadata.
  * @return {!Promise} Promise for the operation.
  */
-cca.views.camera.Mode.prototype.removeMetadataObserver = async function() {};
+cca.views.camera.ModeBase.prototype.removeMetadataObserver =
+    async function() {};
 
 /**
  * Initiates video/photo capture operation under this mode.
  * @async
  * @protected
  */
-cca.views.camera.Mode.prototype.start_ = async function() {};
+cca.views.camera.ModeBase.prototype.start_ = async function() {};
 
 /**
  * Stops the ongoing capture operation under this mode.
  * @protected
  */
-cca.views.camera.Mode.prototype.stop_ = function() {};
+cca.views.camera.ModeBase.prototype.stop_ = function() {};
 
 /**
  * Video mode capture controller.
@@ -480,7 +509,7 @@ cca.views.camera.Mode.prototype.stop_ = function() {};
  * @constructor
  */
 cca.views.camera.Video = function(stream, createVideoSaver, doSaveVideo) {
-  cca.views.camera.Mode.call(this, stream, null);
+  cca.views.camera.ModeBase.call(this, stream, null);
 
   /**
    * @type {!CreateVideoSaver}
@@ -520,7 +549,7 @@ cca.views.camera.Video = function(stream, createVideoSaver, doSaveVideo) {
 };
 
 cca.views.camera.Video.prototype = {
-  __proto__: cca.views.camera.Mode.prototype,
+  __proto__: cca.views.camera.ModeBase.prototype,
 };
 
 /**
@@ -628,7 +657,7 @@ cca.views.camera.Video.prototype.captureVideo_ = async function() {
  * @constructor
  */
 cca.views.camera.Photo = function(stream, doSavePhoto, captureResolution) {
-  cca.views.camera.Mode.call(this, stream, captureResolution);
+  cca.views.camera.ModeBase.call(this, stream, captureResolution);
 
   /**
    * Callback for saving picture.
@@ -660,7 +689,7 @@ cca.views.camera.Photo = function(stream, doSavePhoto, captureResolution) {
 };
 
 cca.views.camera.Photo.prototype = {
-  __proto__: cca.views.camera.Mode.prototype,
+  __proto__: cca.views.camera.ModeBase.prototype,
 };
 
 /**
@@ -731,7 +760,7 @@ cca.views.camera.Photo.prototype.addMetadataObserver = async function() {
   }
 
   const cameraMetadataTagInverseLookup = {};
-  Object.keys(cros.mojom.CameraMetadataTag).entries((key, value) => {
+  Object.entries(cros.mojom.CameraMetadataTag).forEach(([key, value]) => {
     if (key === 'MIN_VALUE' || key === 'MAX_VALUE') {
       return;
     }

@@ -7,22 +7,19 @@
 #include <utility>
 
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/net/delay_network_call.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chromeos/components/account_manager/account_manager.h"
 #include "chromeos/components/account_manager/account_manager_factory.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/tpm/install_attributes.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace chromeos {
 
 bool IsAccountManagerAvailable(const Profile* const profile) {
-  if (!features::IsAccountManagerEnabled())
-    return false;
-
   // Signin Profile does not have any accounts associated with it.
   if (chromeos::ProfileHelper::IsSigninProfile(profile))
     return false;

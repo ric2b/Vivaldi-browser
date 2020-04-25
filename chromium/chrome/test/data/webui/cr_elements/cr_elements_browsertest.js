@@ -133,7 +133,6 @@ CrElementsToolbarSearchFieldTest.prototype = {
 };
 
 TEST_F('CrElementsToolbarSearchFieldTest', 'All', function() {
-  cr_toolbar_search_field.registerTests();
   mocha.run();
 });
 
@@ -156,7 +155,14 @@ CrElementsDrawerTest.prototype = {
   ]),
 };
 
-TEST_F('CrElementsDrawerTest', 'All', function() {
+// https://crbug.com/1013656 - Flaky on Linux CFI.
+GEN('#if defined(OS_LINUX) && defined(IS_CFI)');
+GEN('#define MAYBE_Drawer DISABLED_Drawer');
+GEN('#else');
+GEN('#define MAYBE_Drawer Drawer');
+GEN('#endif');
+
+TEST_F('CrElementsDrawerTest', 'MAYBE_Drawer', function() {
   mocha.run();
 });
 
@@ -284,29 +290,6 @@ GEN('#if defined(OS_CHROMEOS)');
  * @constructor
  * @extends {CrElementsBrowserTest}
  */
-function CrPolicyNetworkBehaviorTest() {}
-
-CrPolicyNetworkBehaviorTest.prototype = {
-  __proto__: CrElementsBrowserTest.prototype,
-
-  /** @override */
-  browsePreload: 'chrome://settings/internet_page/internet_page.html',
-
-  /** @override */
-  extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
-    'cr_policy_strings.js',
-    'cr_policy_network_behavior_tests.js',
-  ]),
-};
-
-TEST_F('CrPolicyNetworkBehaviorTest', 'All', function() {
-  mocha.run();
-});
-
-/**
- * @constructor
- * @extends {CrElementsBrowserTest}
- */
 function CrPolicyNetworkBehaviorMojoTest() {}
 
 CrPolicyNetworkBehaviorMojoTest.prototype = {
@@ -330,23 +313,22 @@ TEST_F('CrPolicyNetworkBehaviorMojoTest', 'All', function() {
  * @constructor
  * @extends {CrElementsBrowserTest}
  */
-function CrElementsPolicyNetworkIndicatorTest() {}
+function CrElementsPolicyNetworkIndicatorMojoTest() {}
 
-CrElementsPolicyNetworkIndicatorTest.prototype = {
+CrElementsPolicyNetworkIndicatorMojoTest.prototype = {
   __proto__: CrElementsBrowserTest.prototype,
 
   /** @override */
-  browsePreload:
-      'chrome://resources/cr_elements/policy/cr_policy_network_indicator.html',
+  browsePreload: 'chrome://settings/internet_page/internet_page.html',
 
   /** @override */
   extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
     'cr_policy_strings.js',
-    'cr_policy_network_indicator_tests.js',
+    'cr_policy_network_indicator_mojo_tests.js',
   ]),
 };
 
-TEST_F('CrElementsPolicyNetworkIndicatorTest', 'All', function() {
+TEST_F('CrElementsPolicyNetworkIndicatorMojoTest', 'All', function() {
   mocha.run();
 });
 

@@ -40,15 +40,16 @@ RenderFrameMap* GetRenderFrameMap() {
 }  // namespace
 
 // static
-void MimeHandlerViewContainerManager::BindRequest(
+void MimeHandlerViewContainerManager::BindReceiver(
     int32_t routing_id,
-    mojom::MimeHandlerViewContainerManagerAssociatedRequest request) {
+    mojo::PendingAssociatedReceiver<mojom::MimeHandlerViewContainerManager>
+        receiver) {
   CHECK(content::MimeHandlerViewMode::UsesCrossProcessFrame());
   auto* render_frame = content::RenderFrame::FromRoutingID(routing_id);
   if (!render_frame)
     return;
   auto* manager = Get(render_frame, true /* create_if_does_not_exist */);
-  manager->bindings_.AddBinding(manager, std::move(request));
+  manager->receivers_.Add(manager, std::move(receiver));
 }
 
 // static
@@ -100,7 +101,8 @@ bool MimeHandlerViewContainerManager::CreateFrameContainer(
     }
     // If there is already a MHVFC for this |plugin_element|, destroy it.
     RemoveFrameContainerForReason(old_frame_container,
-                                  UMAType::kRemoveFrameContainerUpdatePlugin);
+                                  UMAType::kRemoveFrameContainerUpdatePlugin,
+                                  true /* retain_manager */);
   }
   RecordInteraction(UMAType::kCreateFrameContainer);
   auto frame_container = std::make_unique<MimeHandlerViewFrameContainer>(
@@ -136,8 +138,7 @@ v8::Local<v8::Object> MimeHandlerViewContainerManager::GetScriptableObject(
 
 MimeHandlerViewContainerManager::MimeHandlerViewContainerManager(
     content::RenderFrame* render_frame)
-    : content::RenderFrameObserver(render_frame),
-      before_unload_control_binding_(this) {}
+    : content::RenderFrameObserver(render_frame) {}
 
 MimeHandlerViewContainerManager::~MimeHandlerViewContainerManager() {}
 
@@ -153,7 +154,7 @@ void MimeHandlerViewContainerManager::ReadyToCommitNavigation(
 }
 
 void MimeHandlerViewContainerManager::OnDestruct() {
-  bindings_.CloseAllBindings();
+  receivers_.Clear();
   // This will delete the class.
   GetRenderFrameMap()->erase(routing_id());
 }
@@ -175,20 +176,16 @@ void MimeHandlerViewContainerManager::CreateBeforeUnloadControl(
     CreateBeforeUnloadControlCallback callback) {
   if (!post_message_support_)
     post_message_support_ = std::make_unique<PostMessageSupport>(this);
-  mime_handler::BeforeUnloadControlPtr before_unload_control;
-  if (before_unload_control_binding_.is_bound()) {
-    // Might happen when reloading the same page.
-    before_unload_control_binding_.Close();
-  }
-  before_unload_control_binding_.Bind(
-      mojo::MakeRequest(&before_unload_control));
-  std::move(callback).Run(std::move(before_unload_control));
+  // It might be bound when reloading the same page.
+  before_unload_control_receiver_.reset();
+  std::move(callback).Run(
+      before_unload_control_receiver_.BindNewPipeAndPassRemote());
 }
 
 void MimeHandlerViewContainerManager::DestroyFrameContainer(
     int32_t element_instance_id) {
   if (auto* frame_container = GetFrameContainer(element_instance_id))
-    RemoveFrameContainer(frame_container);
+    RemoveFrameContainer(frame_container, false /* retain manager */);
 }
 
 void MimeHandlerViewContainerManager::DidLoad(int32_t element_instance_id,
@@ -257,14 +254,16 @@ MimeHandlerViewContainerManager::GetFrameContainer(
 
 void MimeHandlerViewContainerManager::RemoveFrameContainerForReason(
     MimeHandlerViewFrameContainer* frame_container,
-    MimeHandlerViewUMATypes::Type event) {
-  if (!RemoveFrameContainer(frame_container))
+    MimeHandlerViewUMATypes::Type event,
+    bool retain_manager) {
+  if (!RemoveFrameContainer(frame_container, retain_manager))
     return;
   RecordInteraction(event);
 }
 
 bool MimeHandlerViewContainerManager::RemoveFrameContainer(
-    MimeHandlerViewFrameContainer* frame_container) {
+    MimeHandlerViewFrameContainer* frame_container,
+    bool retain_manager) {
   auto it = std::find_if(frame_containers_.cbegin(), frame_containers_.cend(),
                          [&frame_container](const auto& iter) {
                            return iter.get() == frame_container;
@@ -272,6 +271,15 @@ bool MimeHandlerViewContainerManager::RemoveFrameContainer(
   if (it == frame_containers_.cend())
     return false;
   frame_containers_.erase(it);
+
+  if (!frame_containers_.size() && internal_id_.empty() && !retain_manager) {
+    // There are no frame containers left, and we're not serving a full-page
+    // MimeHandlerView, so we remove ourselves from the map.
+    auto& map = *GetRenderFrameMap();
+    map.erase(std::remove_if(map.begin(), map.end(), [this](const auto& iter) {
+      return iter.second.get() == this;
+    }));
+  }
   return true;
 }
 

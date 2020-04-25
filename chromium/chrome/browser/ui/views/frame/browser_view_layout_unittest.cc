@@ -16,6 +16,11 @@
 #include "chrome/browser/ui/views/tabs/tab_strip_controller.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/views/controls/separator.h"
+
+namespace {
+
+static const int kToolbarHeight = 30 - views::Separator::kThickness;
 
 class MockBrowserViewLayoutDelegate : public BrowserViewLayoutDelegate {
  public:
@@ -34,6 +39,9 @@ class MockBrowserViewLayoutDelegate : public BrowserViewLayoutDelegate {
   void set_bookmark_bar_visible(bool visible) {
     bookmark_bar_visible_ = visible;
   }
+  void set_content_separator_enabled(bool visible) {
+    content_separator_enabled_ = visible;
+  }
   void set_top_controls_slide_enabled(bool enabled) {
     top_controls_slide_enabled_ = enabled;
   }
@@ -50,6 +58,9 @@ class MockBrowserViewLayoutDelegate : public BrowserViewLayoutDelegate {
   int GetThemeBackgroundXInset() const override { return 0; }
   bool IsToolbarVisible() const override { return toolbar_visible_; }
   bool IsBookmarkBarVisible() const override { return bookmark_bar_visible_; }
+  bool IsContentsSeparatorEnabled() const override {
+    return content_separator_enabled_;
+  }
   bool DownloadShelfNeedsLayout() const override {
     return download_shelf_needs_layout_;
   }
@@ -68,6 +79,7 @@ class MockBrowserViewLayoutDelegate : public BrowserViewLayoutDelegate {
   bool tab_strip_visible_ = true;
   bool toolbar_visible_ = true;
   bool bookmark_bar_visible_ = true;
+  bool content_separator_enabled_ = true;
   bool download_shelf_needs_layout_ = false;
   bool top_controls_slide_enabled_ = false;
   float top_controls_shown_ratio_ = 1.f;
@@ -108,6 +120,8 @@ class MockImmersiveModeController : public ImmersiveModeController {
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override {}
 };
 
+}  // anonymous namespace
+
 ///////////////////////////////////////////////////////////////////////////////
 // Tests of BrowserViewLayout. Runs tests without constructing a BrowserView.
 class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
@@ -129,6 +143,7 @@ class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
   views::View* top_container() { return top_container_; }
   TabStrip* tab_strip() { return tab_strip_; }
   views::View* toolbar() { return toolbar_; }
+  views::View* separator() { return separator_; }
   InfoBarContainerView* infobar_container() { return infobar_container_; }
   views::View* contents_container() { return contents_container_; }
 
@@ -146,8 +161,11 @@ class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
     tab_strip_ = new TabStrip(std::make_unique<FakeBaseTabStripController>());
     top_container_->AddChildView(tab_strip_region_view);
     tab_strip_region_view->AddChildView(tab_strip_);
-    toolbar_ = CreateFixedSizeView(gfx::Size(800, 30));
+    toolbar_ = CreateFixedSizeView(gfx::Size(800, kToolbarHeight));
     top_container_->AddChildView(toolbar_);
+    top_container_->AddChildView(toolbar_);
+    separator_ =
+        top_container_->AddChildView(std::make_unique<views::Separator>());
     root_view_->AddChildView(top_container_);
 
     infobar_container_ = new InfoBarContainerView(nullptr);
@@ -171,9 +189,9 @@ class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
     layout_ = std::make_unique<BrowserViewLayout>(
         std::unique_ptr<BrowserViewLayoutDelegate>(delegate_), browser(),
         nullptr,  // BrowserView.
-        top_container_, tab_strip_region_view, tab_strip_, nullptr, nullptr,
-        toolbar_, infobar_container_, contents_container_,
-        immersive_mode_controller_.get(), nullptr);
+        top_container_, tab_strip_region_view, tab_strip_, nullptr, toolbar_,
+        infobar_container_, contents_container_,
+        immersive_mode_controller_.get(), nullptr, separator_);
   }
 
  private:
@@ -185,6 +203,7 @@ class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
   views::View* top_container_;
   TabStrip* tab_strip_;
   views::View* toolbar_;
+  views::Separator* separator_;
   InfoBarContainerView* infobar_container_;
   views::View* contents_container_;
   views::View* contents_web_view_;
@@ -211,21 +230,34 @@ TEST_F(BrowserViewLayoutTest, Layout) {
   layout()->Layout(root_view());
 
   // Top views are zero-height.
-  EXPECT_EQ("0,0 0x0", tab_strip()->bounds().ToString());
-  EXPECT_EQ("0,0 800x0", toolbar()->bounds().ToString());
-  EXPECT_EQ("0,0 800x0", infobar_container()->bounds().ToString());
+  EXPECT_EQ(gfx::Rect(0, 0, 0, 0), tab_strip()->bounds());
+  EXPECT_EQ(gfx::Rect(0, 0, 800, 0), toolbar()->bounds());
+  EXPECT_EQ(gfx::Rect(0, 0, 800, 0), infobar_container()->bounds());
   // Contents split fills the window.
-  EXPECT_EQ("0,0 800x600", contents_container()->bounds().ToString());
+  EXPECT_EQ(gfx::Rect(0, 0, 800, 600), contents_container()->bounds());
 
   // Turn on the toolbar, like in a pop-up window.
   delegate()->set_toolbar_visible(true);
   layout()->Layout(root_view());
 
   // Now the toolbar has bounds and other views shift down.
-  EXPECT_EQ("0,0 0x0", tab_strip()->bounds().ToString());
-  EXPECT_EQ("0,0 800x30", toolbar()->bounds().ToString());
-  EXPECT_EQ("0,30 800x0", infobar_container()->bounds().ToString());
-  EXPECT_EQ("0,30 800x570", contents_container()->bounds().ToString());
+  EXPECT_EQ(gfx::Rect(0, 0, 0, 0), tab_strip()->bounds());
+  EXPECT_EQ(gfx::Rect(0, 0, 800, kToolbarHeight), toolbar()->bounds());
+  EXPECT_EQ(gfx::Rect(0, kToolbarHeight, 800, views::Separator::kThickness),
+            separator()->bounds());
+  EXPECT_EQ(gfx::Rect(0, 30, 800, 0), infobar_container()->bounds());
+  EXPECT_EQ(gfx::Rect(0, 30, 800, 570), contents_container()->bounds());
+
+  // Disable the contents separator.
+  delegate()->set_content_separator_enabled(false);
+  layout()->Layout(root_view());
+
+  // Now the separator is not visible and the content grows vertically.
+  EXPECT_EQ(gfx::Rect(0, 0, 0, 0), tab_strip()->bounds());
+  EXPECT_EQ(gfx::Rect(0, 0, 800, kToolbarHeight), toolbar()->bounds());
+  EXPECT_FALSE(separator()->GetVisible());
+  EXPECT_EQ(gfx::Rect(0, 29, 800, 0), infobar_container()->bounds());
+  EXPECT_EQ(gfx::Rect(0, 29, 800, 571), contents_container()->bounds());
 
   // TODO(jamescook): Tab strip and bookmark bar.
 }
@@ -245,7 +277,7 @@ TEST_F(BrowserViewLayoutTest, LayoutDownloadShelf) {
   download_shelf->SetVisible(false);
   EXPECT_EQ(450, layout()->LayoutDownloadShelf(kBottom));
   EXPECT_TRUE(download_shelf->GetVisible());
-  EXPECT_EQ("0,450 0x50", download_shelf->bounds().ToString());
+  EXPECT_EQ(gfx::Rect(0, 450, 0, 50), download_shelf->bounds());
 }
 
 TEST_F(BrowserViewLayoutTest, LayoutContentsWithTopControlsSlideBehavior) {
@@ -255,22 +287,28 @@ TEST_F(BrowserViewLayoutTest, LayoutContentsWithTopControlsSlideBehavior) {
   delegate()->set_top_controls_slide_enabled(true);
   delegate()->set_top_controls_shown_ratio(1.f);
   layout()->Layout(root_view());
-  EXPECT_EQ("0,0 800x30", top_container()->bounds().ToString());
-  EXPECT_EQ("0,0 800x30", toolbar()->bounds().ToString());
-  EXPECT_EQ("0,30 800x570", contents_container()->bounds().ToString());
+  EXPECT_EQ(gfx::Rect(0, 0, 800, 30), top_container()->bounds());
+  EXPECT_EQ(gfx::Rect(0, 0, 800, kToolbarHeight), toolbar()->bounds());
+  EXPECT_EQ(gfx::Rect(0, kToolbarHeight, 800, views::Separator::kThickness),
+            separator()->bounds());
+  EXPECT_EQ(gfx::Rect(0, 30, 800, 570), contents_container()->bounds());
 
   // Top controls are half shown, half hidden.
   delegate()->set_top_controls_shown_ratio(0.5f);
   layout()->Layout(root_view());
-  EXPECT_EQ("0,0 800x30", top_container()->bounds().ToString());
-  EXPECT_EQ("0,0 800x30", toolbar()->bounds().ToString());
-  EXPECT_EQ("0,30 800x570", contents_container()->bounds().ToString());
+  EXPECT_EQ(gfx::Rect(0, 0, 800, 30), top_container()->bounds());
+  EXPECT_EQ(gfx::Rect(0, 0, 800, kToolbarHeight), toolbar()->bounds());
+  EXPECT_EQ(gfx::Rect(0, kToolbarHeight, 800, views::Separator::kThickness),
+            separator()->bounds());
+  EXPECT_EQ(gfx::Rect(0, 30, 800, 570), contents_container()->bounds());
 
   // Top controls are fully hidden. the contents are expanded in height by an
   // amount equal to the top controls height.
   delegate()->set_top_controls_shown_ratio(0.f);
   layout()->Layout(root_view());
-  EXPECT_EQ("0,-30 800x30", top_container()->bounds().ToString());
-  EXPECT_EQ("0,0 800x30", toolbar()->bounds().ToString());
-  EXPECT_EQ("0,0 800x600", contents_container()->bounds().ToString());
+  EXPECT_EQ(gfx::Rect(0, -30, 800, 30), top_container()->bounds());
+  EXPECT_EQ(gfx::Rect(0, 0, 800, kToolbarHeight), toolbar()->bounds());
+  EXPECT_EQ(gfx::Rect(0, kToolbarHeight, 800, views::Separator::kThickness),
+            separator()->bounds());
+  EXPECT_EQ(gfx::Rect(0, 0, 800, 600), contents_container()->bounds());
 }

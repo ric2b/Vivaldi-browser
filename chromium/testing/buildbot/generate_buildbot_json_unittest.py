@@ -664,6 +664,33 @@ BAD_COMPOSITION_TEST_SUITES = """\
 }
 """
 
+CONFLICTING_COMPOSITION_TEST_SUITES = """\
+{
+  'basic_suites': {
+    'bar_tests': {
+      'baz_tests': {
+        'args': [
+          '--bar',
+        ],
+      }
+    },
+    'foo_tests': {
+      'baz_tests': {
+        'args': [
+          '--foo',
+        ],
+      }
+    },
+  },
+  'compound_suites': {
+    'foobar_tests': [
+      'foo_tests',
+      'bar_tests',
+    ],
+  },
+}
+"""
+
 DUPLICATES_COMPOSITION_TEST_SUITES = """\
 {
   'basic_suites': {
@@ -1256,6 +1283,7 @@ JUNIT_OUTPUT = """\
   "Fake Tester": {
     "junit_tests": [
       {
+        "name": "foo_test",
         "test": "foo_test"
       }
     ]
@@ -2039,6 +2067,17 @@ class UnitTest(unittest.TestCase):
                     LUCI_MILO_CFG)
     with self.assertRaisesRegexp(generate_buildbot_json.BBGenErr,
                                  'Composition test suites may not refer to.*'):
+      fbb.check_input_file_consistency(verbose=True)
+    self.assertFalse(fbb.printed_lines)
+
+  def test_composition_test_suites_no_conflicts(self):
+    fbb = FakeBBGen(COMPOSITION_GTEST_SUITE_WATERFALL,
+                    CONFLICTING_COMPOSITION_TEST_SUITES,
+                    EMPTY_PYL_FILE,
+                    EMPTY_PYL_FILE,
+                    LUCI_MILO_CFG)
+    with self.assertRaisesRegexp(generate_buildbot_json.BBGenErr,
+                                 'Conflicting test definitions.*'):
       fbb.check_input_file_consistency(verbose=True)
     self.assertFalse(fbb.printed_lines)
 

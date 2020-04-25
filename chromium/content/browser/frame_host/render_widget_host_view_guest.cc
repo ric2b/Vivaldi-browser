@@ -42,7 +42,6 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
-#include "renderer/vivaldi_render_messages.h"
 
 namespace content {
 namespace {
@@ -145,8 +144,7 @@ bool RenderWidgetHostViewGuest::OnMessageReceivedFromEmbedder(
     const IPC::Message& message,
     RenderWidgetHostImpl* embedder) {
   bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(RenderWidgetHostViewGuest, message,
-                                   embedder)
+  IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(RenderWidgetHostViewGuest, message, embedder)
     IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_HandleInputEvent,
                         OnHandleInputEvent)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -191,11 +189,8 @@ void RenderWidgetHostViewGuest::Hide() {
   host()->WasHidden();
 }
 
-void RenderWidgetHostViewGuest::SetSize(const gfx::Size& size) {
-}
-
-void RenderWidgetHostViewGuest::SetBounds(const gfx::Rect& rect) {
-}
+void RenderWidgetHostViewGuest::SetSize(const gfx::Size& size) {}
+void RenderWidgetHostViewGuest::SetBounds(const gfx::Rect& rect) {}
 
 void RenderWidgetHostViewGuest::Focus() {
   // InterstitialPageImpl focuses views directly, so we place focus logic here.
@@ -361,14 +356,14 @@ RenderWidgetHostViewBase* RenderWidgetHostViewGuest::GetRootView() {
   return GetRootView(this);
 }
 
-void RenderWidgetHostViewGuest::InitAsChild(
-    gfx::NativeView parent_view) {
+void RenderWidgetHostViewGuest::InitAsChild(gfx::NativeView parent_view) {
   // This should never get called.
   NOTREACHED();
 }
 
 void RenderWidgetHostViewGuest::InitAsPopup(
-    RenderWidgetHostView* parent_host_view, const gfx::Rect& bounds) {
+    RenderWidgetHostView* parent_host_view,
+    const gfx::Rect& bounds) {
   // This should never get called.
   NOTREACHED();
 }
@@ -461,9 +456,9 @@ void RenderWidgetHostViewGuest::ImeCompositionRangeChanged(
     return;
   std::vector<gfx::Rect> guest_character_bounds;
   for (size_t i = 0; i < character_bounds.size(); ++i) {
-    guest_character_bounds.push_back(gfx::Rect(
-        guest_->GetScreenCoordinates(character_bounds[i].origin()),
-        character_bounds[i].size()));
+    guest_character_bounds.push_back(
+        gfx::Rect(guest_->GetScreenCoordinates(character_bounds[i].origin()),
+                  character_bounds[i].size()));
   }
   // Forward the information to embedding RWHV.
   rwhv->ImeCompositionRangeChanged(range, guest_character_bounds);
@@ -730,10 +725,6 @@ RenderWidgetHostViewGuest::DidUpdateVisualProperties(
 
 bool RenderWidgetHostViewGuest::IsRenderWidgetHostViewGuest() {
   return true;
-}
-
-bool RenderWidgetHostViewGuest::IsInVR() const {
-  return false;
 }
 
 void RenderWidgetHostViewGuest::OnHandleInputEvent(

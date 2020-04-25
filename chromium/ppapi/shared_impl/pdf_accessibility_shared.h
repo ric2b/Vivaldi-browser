@@ -6,6 +6,7 @@
 #define PPAPI_SHARED_IMPL_PDF_ACCESSIBILITY_SHARED_H_
 
 #include <string>
+#include <vector>
 
 #include "ppapi/c/pp_rect.h"
 #include "ppapi/c/private/ppb_pdf.h"
@@ -13,10 +14,11 @@
 
 namespace ppapi {
 
+// Needs to stay in sync with PP_PrivateAccessibilityLinkInfo.
 struct PPAPI_SHARED_EXPORT PdfAccessibilityLinkInfo {
   PdfAccessibilityLinkInfo();
-  PdfAccessibilityLinkInfo(const PdfAccessibilityLinkInfo& other);
-  PdfAccessibilityLinkInfo(const PP_PrivateAccessibilityLinkInfo& link);
+  explicit PdfAccessibilityLinkInfo(
+      const PP_PrivateAccessibilityLinkInfo& link);
   ~PdfAccessibilityLinkInfo();
 
   std::string url;
@@ -26,15 +28,27 @@ struct PPAPI_SHARED_EXPORT PdfAccessibilityLinkInfo {
   PP_FloatRect bounds;
 };
 
+// Needs to stay in sync with PP_PrivateAccessibilityImageInfo.
 struct PPAPI_SHARED_EXPORT PdfAccessibilityImageInfo {
   PdfAccessibilityImageInfo();
-  PdfAccessibilityImageInfo(const PdfAccessibilityImageInfo& other);
-  PdfAccessibilityImageInfo(const PP_PrivateAccessibilityImageInfo& image);
+  explicit PdfAccessibilityImageInfo(
+      const PP_PrivateAccessibilityImageInfo& image);
   ~PdfAccessibilityImageInfo();
 
   std::string alt_text;
   uint32_t text_run_index;
   PP_FloatRect bounds;
+};
+
+// Needs to stay in sync with PP_PrivateAccessibilityPageObjects.
+struct PPAPI_SHARED_EXPORT PdfAccessibilityPageObjects {
+  PdfAccessibilityPageObjects();
+  explicit PdfAccessibilityPageObjects(
+      const PP_PrivateAccessibilityPageObjects& page_objects);
+  ~PdfAccessibilityPageObjects();
+
+  std::vector<PdfAccessibilityLinkInfo> links;
+  std::vector<PdfAccessibilityImageInfo> images;
 };
 
 }  // namespace ppapi

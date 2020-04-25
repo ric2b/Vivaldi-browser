@@ -70,9 +70,8 @@ void OperaBookmarkReader::AddBookmark(
   std::string temp;
   base::string16 name;
   base::string16 url;
-  base::string16 nickname;
-  base::string16 description;
-  base::string16 in_panel_s;
+  std::string nickname;
+  std::string description;
 
   double created_time = 0;
   double visited_time = 0;

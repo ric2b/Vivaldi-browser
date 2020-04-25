@@ -19,7 +19,9 @@
 #include "content/public/test/test_browser_context.h"
 #include "media/base/audio_parameters.h"
 #include "media/mojo/mojom/audio_data_pipe.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -29,25 +31,6 @@ namespace content {
 namespace {
 
 using testing::Test;
-using AudioOutputStreamFactory = mojom::RendererAudioOutputStreamFactory;
-using AudioOutputStreamFactoryPtr =
-    mojo::InterfacePtr<AudioOutputStreamFactory>;
-using AudioOutputStreamFactoryRequest =
-    mojo::InterfaceRequest<AudioOutputStreamFactory>;
-using AudioOutputStream = media::mojom::AudioOutputStream;
-using AudioOutputStreamPtr = mojo::InterfacePtr<AudioOutputStream>;
-using AudioOutputStreamRequest = mojo::InterfaceRequest<AudioOutputStream>;
-using AudioOutputStreamProviderClient =
-    media::mojom::AudioOutputStreamProviderClient;
-using AudioOutputStreamProviderClientPtr =
-    mojo::InterfacePtr<AudioOutputStreamProviderClient>;
-using AudioOutputStreamProviderClientRequest =
-    mojo::InterfaceRequest<AudioOutputStreamProviderClient>;
-using AudioOutputStreamProvider = media::mojom::AudioOutputStreamProvider;
-using AudioOutputStreamProviderPtr =
-    mojo::InterfacePtr<AudioOutputStreamProvider>;
-using AudioOutputStreamProviderRequest =
-    mojo::InterfaceRequest<AudioOutputStreamProvider>;
 
 const int kStreamId = 0;
 const int kRenderProcessId = 42;
@@ -134,7 +117,8 @@ class MockContext : public RendererAudioOutputStreamFactoryContext {
       int render_frame_id,
       int stream_id,
       const media::AudioParameters& params,
-      media::mojom::AudioOutputStreamObserverPtr stream_observer,
+      mojo::PendingRemote<media::mojom::AudioOutputStreamObserver>
+          stream_observer,
       media::AudioOutputDelegate::EventHandler* handler) override {
     EXPECT_NE(nullptr, delegate_);
     EXPECT_NE(nullptr, delegate_event_handler_location_);
@@ -143,23 +127,23 @@ class MockContext : public RendererAudioOutputStreamFactoryContext {
     return std::move(delegate_);
   }
 
-  AudioOutputStreamFactoryPtr CreateFactory() {
+  mojo::Remote<mojom::RendererAudioOutputStreamFactory> CreateFactory() {
     DCHECK(!factory_);
-    AudioOutputStreamFactoryPtr ret;
+    mojo::Remote<mojom::RendererAudioOutputStreamFactory> remote;
     factory_ = std::make_unique<OldRenderFrameAudioOutputStreamFactory>(
         kRenderFrameId, this);
-    factory_binding_ = std::make_unique<
-        mojo::Binding<mojom::RendererAudioOutputStreamFactory>>(
-        factory_.get(), mojo::MakeRequest(&ret));
-    return ret;
+    factory_receiver_ = std::make_unique<
+        mojo::Receiver<mojom::RendererAudioOutputStreamFactory>>(
+        factory_.get(), remote.BindNewPipeAndPassReceiver());
+    return remote;
   }
 
  private:
   const std::string salt_;
   const bool auth_ok_;
   std::unique_ptr<OldRenderFrameAudioOutputStreamFactory> factory_;
-  std::unique_ptr<mojo::Binding<mojom::RendererAudioOutputStreamFactory>>
-      factory_binding_;
+  std::unique_ptr<mojo::Receiver<mojom::RendererAudioOutputStreamFactory>>
+      factory_receiver_;
   std::unique_ptr<media::AudioOutputDelegate> delegate_;
   media::AudioOutputDelegate::EventHandler** delegate_event_handler_location_ =
       nullptr;
@@ -167,21 +151,21 @@ class MockContext : public RendererAudioOutputStreamFactoryContext {
   DISALLOW_COPY_AND_ASSIGN(MockContext);
 };
 
-class MockClient : public AudioOutputStreamProviderClient {
+class MockClient : public media::mojom::AudioOutputStreamProviderClient {
  public:
-  MockClient() : provider_client_binding_(this) {}
+  MockClient() = default;
   ~MockClient() override {}
 
-  AudioOutputStreamProviderClientPtr MakeProviderClientPtr() {
-    AudioOutputStreamProviderClientPtr p;
-    provider_client_binding_.Bind(mojo::MakeRequest(&p));
-    return p;
+  mojo::PendingRemote<media::mojom::AudioOutputStreamProviderClient>
+  MakeProviderClientPendingRemote() {
+    return provider_client_receiver_.BindNewPipeAndPassRemote();
   }
 
-  void Created(AudioOutputStreamPtr stream,
+  void Created(mojo::PendingRemote<media::mojom::AudioOutputStream> stream,
                media::mojom::ReadWriteAudioDataPipePtr data_pipe) override {
     was_called_ = true;
-    stream_ = std::move(stream);
+    stream_.reset();
+    stream_.Bind(std::move(stream));
   }
 
   bool was_called() { return was_called_; }
@@ -189,8 +173,9 @@ class MockClient : public AudioOutputStreamProviderClient {
   MOCK_METHOD0(OnError, void());
 
  private:
-  mojo::Binding<AudioOutputStreamProviderClient> provider_client_binding_;
-  AudioOutputStreamPtr stream_;
+  mojo::Receiver<media::mojom::AudioOutputStreamProviderClient>
+      provider_client_receiver_{this};
+  mojo::Remote<media::mojom::AudioOutputStream> stream_;
   bool was_called_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(MockClient);
@@ -215,19 +200,20 @@ void AuthCallback(media::OutputDeviceStatus* status_out,
 // 3. when the delegate calls OnStreamCreated, this is propagated to the client.
 TEST(OldRenderFrameAudioOutputStreamFactoryTest, CreateStream) {
   content::BrowserTaskEnvironment task_environment;
-  AudioOutputStreamProviderPtr provider;
+  mojo::Remote<media::mojom::AudioOutputStreamProvider> provider;
   MockClient client;
   media::AudioOutputDelegate::EventHandler* event_handler = nullptr;
   auto factory_context = std::make_unique<MockContext>(true);
   factory_context->PrepareDelegateForCreation(
       std::make_unique<MockAudioOutputDelegate>(), &event_handler);
-  AudioOutputStreamFactoryPtr factory_ptr = factory_context->CreateFactory();
+  mojo::Remote<mojom::RendererAudioOutputStreamFactory> factory_remote =
+      factory_context->CreateFactory();
 
   media::OutputDeviceStatus status;
   media::AudioParameters params;
   std::string id;
-  factory_ptr->RequestDeviceAuthorization(
-      mojo::MakeRequest(&provider), base::nullopt, "default",
+  factory_remote->RequestDeviceAuthorization(
+      provider.BindNewPipeAndPassReceiver(), base::nullopt, "default",
       base::BindOnce(&AuthCallback, base::Unretained(&status),
                      base::Unretained(&params), base::Unretained(&id)));
   base::RunLoop().RunUntilIdle();
@@ -239,7 +225,7 @@ TEST(OldRenderFrameAudioOutputStreamFactoryTest, CreateStream) {
   // Ensure that we don't blow up getting a processing ID, despite not using it.
   const base::UnguessableToken kUnusedProcessingId =
       base::UnguessableToken::Create();
-  provider->Acquire(params, client.MakeProviderClientPtr(),
+  provider->Acquire(params, client.MakeProviderClientPendingRemote(),
                     kUnusedProcessingId);
   base::RunLoop().RunUntilIdle();
   ASSERT_NE(event_handler, nullptr);
@@ -262,15 +248,16 @@ TEST(OldRenderFrameAudioOutputStreamFactoryTest, CreateStream) {
 
 TEST(OldRenderFrameAudioOutputStreamFactoryTest, NotAuthorized_Denied) {
   content::BrowserTaskEnvironment task_environment;
-  AudioOutputStreamProviderPtr output_provider;
+  mojo::Remote<media::mojom::AudioOutputStreamProvider> output_provider;
   auto factory_context = std::make_unique<MockContext>(false);
-  AudioOutputStreamFactoryPtr factory_ptr = factory_context->CreateFactory();
+  mojo::Remote<mojom::RendererAudioOutputStreamFactory> factory_remote =
+      factory_context->CreateFactory();
 
   media::OutputDeviceStatus status;
   media::AudioParameters params;
   std::string id;
-  factory_ptr->RequestDeviceAuthorization(
-      mojo::MakeRequest(&output_provider), base::nullopt, "default",
+  factory_remote->RequestDeviceAuthorization(
+      output_provider.BindNewPipeAndPassReceiver(), base::nullopt, "default",
       base::BindOnce(&AuthCallback, base::Unretained(&status),
                      base::Unretained(&params), base::Unretained(&id)));
   base::RunLoop().RunUntilIdle();
@@ -281,7 +268,7 @@ TEST(OldRenderFrameAudioOutputStreamFactoryTest, NotAuthorized_Denied) {
 TEST(OldRenderFrameAudioOutputStreamFactoryTest,
      ConnectionError_DeletesStream) {
   content::BrowserTaskEnvironment task_environment;
-  AudioOutputStreamProviderPtr provider;
+  mojo::Remote<media::mojom::AudioOutputStreamProvider> provider;
   MockClient client;
   bool delegate_is_destructed = false;
   media::AudioOutputDelegate::EventHandler* event_handler = nullptr;
@@ -291,17 +278,18 @@ TEST(OldRenderFrameAudioOutputStreamFactoryTest,
           base::BindOnce([](bool* destructed) { *destructed = true; },
                          &delegate_is_destructed)),
       &event_handler);
-  AudioOutputStreamFactoryPtr factory_ptr = factory_context->CreateFactory();
+  mojo::Remote<mojom::RendererAudioOutputStreamFactory> factory_remote =
+      factory_context->CreateFactory();
 
-  factory_ptr->RequestDeviceAuthorization(
-      mojo::MakeRequest(&provider), base::nullopt, "default",
+  factory_remote->RequestDeviceAuthorization(
+      provider.BindNewPipeAndPassReceiver(), base::nullopt, "default",
       base::BindOnce([](media::OutputDeviceStatus status,
                         const media::AudioParameters& params,
                         const std::string& id) {}));
   base::RunLoop().RunUntilIdle();
 
-  provider->Acquire(GetTestAudioParameters(), client.MakeProviderClientPtr(),
-                    base::nullopt);
+  provider->Acquire(GetTestAudioParameters(),
+                    client.MakeProviderClientPendingRemote(), base::nullopt);
   base::RunLoop().RunUntilIdle();
   ASSERT_NE(event_handler, nullptr);
   EXPECT_FALSE(delegate_is_destructed);
@@ -312,7 +300,7 @@ TEST(OldRenderFrameAudioOutputStreamFactoryTest,
 
 TEST(OldRenderFrameAudioOutputStreamFactoryTest, DelegateError_DeletesStream) {
   content::BrowserTaskEnvironment task_environment;
-  AudioOutputStreamProviderPtr provider;
+  mojo::Remote<media::mojom::AudioOutputStreamProvider> provider;
   MockClient client;
   bool delegate_is_destructed = false;
   media::AudioOutputDelegate::EventHandler* event_handler = nullptr;
@@ -322,17 +310,18 @@ TEST(OldRenderFrameAudioOutputStreamFactoryTest, DelegateError_DeletesStream) {
           base::BindOnce([](bool* destructed) { *destructed = true; },
                          &delegate_is_destructed)),
       &event_handler);
-  AudioOutputStreamFactoryPtr factory_ptr = factory_context->CreateFactory();
+  mojo::Remote<mojom::RendererAudioOutputStreamFactory> factory_remote =
+      factory_context->CreateFactory();
 
-  factory_ptr->RequestDeviceAuthorization(
-      mojo::MakeRequest(&provider), base::nullopt, "default",
+  factory_remote->RequestDeviceAuthorization(
+      provider.BindNewPipeAndPassReceiver(), base::nullopt, "default",
       base::BindOnce([](media::OutputDeviceStatus status,
                         const media::AudioParameters& params,
                         const std::string& id) {}));
   base::RunLoop().RunUntilIdle();
 
-  provider->Acquire(GetTestAudioParameters(), client.MakeProviderClientPtr(),
-                    base::nullopt);
+  provider->Acquire(GetTestAudioParameters(),
+                    client.MakeProviderClientPendingRemote(), base::nullopt);
   base::RunLoop().RunUntilIdle();
   ASSERT_NE(event_handler, nullptr);
   EXPECT_FALSE(delegate_is_destructed);

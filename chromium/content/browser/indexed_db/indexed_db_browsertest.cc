@@ -133,7 +133,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
 
     base::string16 expected_title16(ASCIIToUTF16(expected_string));
     TitleWatcher title_watcher(shell->web_contents(), expected_title16);
-    NavigateToURL(shell, url);
+    EXPECT_TRUE(NavigateToURL(shell, url));
     EXPECT_EQ(expected_title16, title_watcher.WaitAndGetTitle());
   }
 
@@ -897,9 +897,9 @@ IN_PROC_BROWSER_TEST_P(IndexedDBBrowserTest, OperationOnCorruptedOpenDatabase) {
   ASSERT_TRUE(embedded_test_server()->Started() ||
               embedded_test_server()->InitializeAndListen());
   const Origin origin = Origin::Create(embedded_test_server()->base_url());
-  embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&CorruptDBRequestHandler, base::Unretained(GetContext()),
-                 origin, s_corrupt_db_test_prefix, this));
+  embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
+      &CorruptDBRequestHandler, base::Unretained(GetContext()), origin,
+      s_corrupt_db_test_prefix, this));
   embedded_test_server()->StartAcceptingConnections();
 
   std::string test_file = std::string(s_corrupt_db_test_prefix) +
@@ -1021,7 +1021,7 @@ IN_PROC_BROWSER_TEST_F(
 
   // Start on a different URL to force a new renderer process.
   Shell* new_shell = CreateBrowser();
-  NavigateToURL(new_shell, GURL(url::kAboutBlankURL));
+  EXPECT_TRUE(NavigateToURL(new_shell, GURL(url::kAboutBlankURL)));
   NavigateAndWaitForTitle(new_shell, "version_change_blocked.html", "#tab2",
                           "setVersion(3) blocked");
 

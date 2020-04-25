@@ -36,8 +36,6 @@
 #include "ui/gfx/skbitmap_operations.h"
 #include "url/gurl.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace {
 
 class GetAttentionImageSource : public gfx::ImageSkiaSource {

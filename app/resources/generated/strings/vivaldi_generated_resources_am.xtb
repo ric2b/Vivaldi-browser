@@ -1,41 +1,29 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="am">
-<translation id="1049795001945932310">የ&amp;ቋንቋ ቅንብሮች...</translation>
 <translation id="1056898198331236512">ማስጠንቀቂያ</translation>
-<translation id="1084824384139382525">የአገናኝ አድ&amp;ራሻ ቅዳ</translation>
-<translation id="1163931534039071049">የፍሬም መነሻ &amp;አሳይ</translation>
 <translation id="1165039591588034296">ስህተት</translation>
 <translation id="1175364870820465910">&amp;አትም…</translation>
-<translation id="1187722533808055681">ከመቦዘን ማንቂያዎች</translation>
 <translation id="1244303850296295656">የቅጥያ ስህተት</translation>
 <translation id="1546280085599573572">ይህ ቅጥያ የመነሻ አዝራሩን ጠቅ ሲያደርጉ የሚታየውን ገጽ ቀይሮታል።</translation>
 <translation id="1588438908519853928">መደበኛ</translation>
 <translation id="1635033183663317347">በእርስዎ ኃላፊ የተጫነ።</translation>
-<translation id="1723824996674794290">&amp;አዲስ መስኮት</translation>
 <translation id="1729533290416704613">እንዲሁም ከኦምኒቦክሱ ሆነው ሲፈልጉ የሚታየውን ገጽ ይቆጣጠራል።</translation>
-<translation id="1850508293116537636">በ&amp;ሰዓት መዞሪያ አቅጣጫ አሽከርክር</translation>
-<translation id="1901303067676059328">&amp;ሁሉንም ምረጥ</translation>
 <translation id="2087822576218954668">አትም፦ <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">ማንነት የማያሳውቅ ትር፦ <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">የውስጥ ተገልጋይ ሞዱል፦ <ph name="NEXE_NAME" /></translation>
-<translation id="2218515861914035131">እንደ ስነጣ አልባ ጽሑፍ ለጥፍ</translation>
 <translation id="2282146716419988068">የጂፒዩ ሂደት</translation>
 <translation id="2301382460326681002">የቅጥያ ስርወ ማውጫ ልክ አይደለም።</translation>
-<translation id="2326931316514688470">&amp;መተግበሪያን ዳግም ጫን</translation>
 <translation id="2327492829706409234">መተግበሪያን አንቃ</translation>
 <translation id="2344028582131185878">የራስ ሰር ማውረዶች</translation>
 <translation id="2348176352564285430">መተግበሪያ፦ <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">የቅጥያውን ማውጫ ይምረጡ።</translation>
 <translation id="241082044617551207">ያልታወቀ ተሰኪ</translation>
-<translation id="2423578206845792524">ምስል አስ&amp;ቀምጥ እንደ…</translation>
 <translation id="2439110203301358333">በኮምፒውተርዎ ላይ ያለ ሌላ ፕሮግራም Vivaldi የሚሰራበት መንገድ ሊቀይር የሚችል አንድ ቅጥያ አክሏል።</translation>
 <translation id="2445081178310039857">የቅጥያ ስርወ ማውጫ ያስፈልጋል።</translation>
 <translation id="2470702053775288986">የማይደገፉ ቅጥያዎች ተሰናክለዋል</translation>
-<translation id="2550212893339833758">የተተካ ማህደረ ትውስታ</translation>
 <translation id="2662876636500006917">የVivaldi የድር ገበያ</translation>
 <translation id="2678063897982469759">እንደገና አንቃ</translation>
-<translation id="2785873697295365461">የፋይል ገላጮች</translation>
 <translation id="2809586584051668049">እና <ph name="NUMBER_ADDITIONAL_DISABLED" /> ተጨማሪ</translation>
 <translation id="2850541429955027218">ገጽታ አክል</translation>
 <translation id="2861941300086904918">ቤተኛ የደንበኛ ደህንነት አቀናባሪ</translation>
@@ -45,22 +33,16 @@
 <translation id="299483336428448530">በእርስዎ ወላጅ ተጭኗል።</translation>
 <translation id="3080207940057008665">በኮምፒውተርዎ ላይ ያለ ሌላ ፕሮግራም Vivaldi የሚሰራበት መንገድ ሊቀይር የሚችል አንድ ገጽታ አክሏል።</translation>
 <translation id="3122464029669770682">ሲፒዩ</translation>
-<translation id="3124111068741548686">የተጠቃሚ መያዣዎች</translation>
 <translation id="3222066309010235055">ቅድሚያ አሳይ፦ <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">ለመሸከፍ የቅጥያውን ስርወ ማውጫ ይምረጡ። ቅጥያውን ለማዘመን እንዲሁ የግል ቁልፍ ፋይልን እንደገና ለመጠቀም ይምረጡ።</translation>
-<translation id="3280237271814976245">አስቀምጥ &amp;እንደ…</translation>
 <translation id="3288047731229977326">በገንቢ ሁኔታ የሚሄዱ ጥያዎች የእርስዎን ኮምፒውተር ሊጎዱ ይችላሉ። እርስዎ ገንቢ ካልሆኑ ደህንነትዎን ለማረገገጥ በገንቢ ሁኔታ የሚሄዱ ቅጥያዎችን ማሰናከል አለብዎ።</translation>
-<translation id="3347086966102161372">የምስል አድራሻ &amp;ቅዳ</translation>
 <translation id="3378572629723696641">ይህ ቅጥያ ተበላሽቶ ሊሆን ይችላል።</translation>
-<translation id="345693547134384690">&amp;ምስል በአዲስ ትር ውስጥ ክፈት</translation>
 <translation id="3505030558724226696">የመሣሪያ መዳረሻ ሻር</translation>
-<translation id="3627588569887975815">አገናኙን ማን&amp;ነትን በማያሳውቅ መስኮት ክፈት</translation>
 <translation id="3678156199662914018">ቅጥያ፦ <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">መተግበሪያ ይጠግኑ</translation>
 <translation id="3908501907586732282">ቅጥያውን አንቃ</translation>
 <translation id="3909791450649380159">&amp;ቁረጥ</translation>
 <translation id="3927932062596804919">ከልክል</translation>
-<translation id="3936390757709632190">&amp;ተሰሚ/ኦዲዮ በአዲስ ትር ክፈት</translation>
 <translation id="3943582379552582368">&amp;ተመለስ</translation>
 <translation id="3979395879372752341">አዲስ ቅጥያ ታክሏል (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -69,23 +51,16 @@
 <translation id="4100839878934973028">በኮምፒውተርዎ ላይ ያለ ሌላ ፕሮግራም Vivaldi የሚሰራበት መንገድ ሊቀይር የሚችል አንድ መተግበሪያ አክሏል።</translation>
 <translation id="4130207949184424187">አንድ ቅጥያ ከኦምኒቦክሱ ሆነው ሲፈልጉ የሚታየውን ገጽ ቀይሮታል።</translation>
 <translation id="4176463684765177261">ተሰናክሏል</translation>
-<translation id="4200983522494130825">አዲስ &amp;ትር</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K በቀጥታ)</translation>
 <translation id="4384652540891215547">ቅጥያውን አግብር</translation>
 <translation id="4394049700291259645">አሰናክል</translation>
 <translation id="4593021220803146968">&amp;ወደዚህ ሂድ <ph name="URL" /></translation>
 <translation id="4595560905247879544">መተግበሪያዎች እና ቅጥያዎች በአስተዳዳሪው ብቻ ነው ሊቀየሩ የሚችሉት (<ph name="CUSTODIAN_NAME" />)።</translation>
 <translation id="4613271546271159013">አዲስ ትር ሲከፍቱ የሚኖረውን ገጽ አንድ ቅጥያ ለውጦታል።</translation>
-<translation id="4677772697204437347">የጂፒዩ ማህደረ ትውስታ</translation>
-<translation id="4711638718396952945">ቅንብሮችን ወደነበሩበት መልስ</translation>
-<translation id="4839303808932127586">ቪዲዮ አስ&amp;ቀምጥ እንደ…</translation>
 <translation id="488785315393301722">ዝርዝሮችን አሳይ</translation>
-<translation id="49896407730300355">በሰዓት መዞሪያ አቅጣጫ &amp;ተቃራኒ አሽከርክር</translation>
-<translation id="4989966318180235467">&amp;የጀርባ ገጽ ይመርምሩ</translation>
 <translation id="5027562294707732951">ቅጥያ ያክሉ</translation>
 <translation id="5039804452771397117">ፍቀድ</translation>
 <translation id="5143374789336132547">ይህ «<ph name="EXTENSION_NAME" />» ቅጥያ የመነሻ አዝራሩን ጠቅ ሲያደርጉ የሚታየውን ገጽ ቀይሮታል።</translation>
-<translation id="5233019165164992427">የNaCl ስህተት ማረሚያ ወደብ</translation>
 <translation id="5233231016133573565">የሂደት መለያ ቁጥር</translation>
 <translation id="52912272896845572">የግል ቁልፍ ፋይል ልክ አይደለም።</translation>
 <translation id="5301954838959518834">እሺ፣ ገባኝ</translation>
@@ -100,48 +75,31 @@
 <translation id="5575473780076478375">የማንነትን የማያሳውቅ ቅጥያ፦ <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">እንዲሁም የመነሻ አዝራሩን ጠቅ ሲያደርጉት ምን ገጽ እንደሚታይ ይቆጣጠራል።</translation>
 <translation id="5715711091495208045">የተሰኪ አስማሚ፦ <ph name="PLUGIN_NAME" /></translation>
-<translation id="5764483294734785780">ተሰሚ/ኦዲዮ አስ&amp;ቀምጥ እንደ…</translation>
-<translation id="5780973441651030252">የሂደት ቅድሚያ</translation>
 <translation id="583281660410589416">ያልታወቀ </translation>
 <translation id="5956585768868398362">የጠበቁት የፍለጋ ገጽ ይሄ ነው?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> ጫፍ)</translation>
 <translation id="5965661248935608907">እንዲሁም የመነሻ አዝራሩን ጠቅ ሲያደርጉ ወይም ከኦምኒቦክሱ ሆነው ሲፈልጉ ምን ገጽ እንደሚታይ ይቆጣጠራል።</translation>
 <translation id="6101226222197207147">አዲስ መተግበሪያ ታክሏል (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">የበይነመረብ ግንኙነትዎ ቁጥጥር እየተደረገበት ነው</translation>
-<translation id="6156863943908443225">የስክሪፕት መሸጎጫ</translation>
 <translation id="6196854373336333322">ይህ «<ph name="EXTENSION_NAME" />» ቅጥያ የተኪ ቅንብሮችዎን ተቆጣጥሯል፣ ይሄ ማለት መስመር ላይ የሚያደርጉት ማንኛውም ነገር ሊቀይር፣ ሊሰብር ወይም በድብቅ ሊከታተል ይችላል። ይሄ ለውጥ ለምን እንደተከሰተ እርግጠኛ ካልሆኑ የማይፈልጉት ነገር ሳይሆን አይቀርም።</translation>
-<translation id="6239558157302047471">&amp;ክፈፍን ዳግም ጫን</translation>
 <translation id="6247802389331535091">ሥርዓት፦ <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="6251870443722440887">የGDI መያዣዎች</translation>
-<translation id="6308937455967653460">አገ&amp;ናኝ አስቀምጥ እንደ…</translation>
-<translation id="6398765197997659313">ከሙሉ ማሳያ መስኮት ይውጡ</translation>
-<translation id="6406303162637086258">የአሳሽ ዳግም መጀመር አስመስለህ ስራ</translation>
 <translation id="6445450263907939268">እነዚህን ለውጦች ካልፈለጓቸው ቀዳሚዎቹ ቅንብሮችዎን ወደነበሩበት መመለስ ይችላሉ።</translation>
 <translation id="6447842834002726250">ኩኪዎች</translation>
 <translation id="6498249116389603658">&amp;ሁሉም የእርስዎ ቋንቋዎች</translation>
 <translation id="6503077044568424649">በይበልጥ የተጎበኙ</translation>
 <translation id="6508261954199872201">መተግበሪያ፦ <ph name="APP_NAME" /></translation>
-<translation id="6518014396551869914">ምስል ቅ&amp;ዳ</translation>
-<translation id="6639554308659482635">ኤስኪውላይት ማህደረ ትውስታ</translation>
 <translation id="6691936601825168937">&amp;ወደ ፊት</translation>
 <translation id="6798954102094737107">ተሰኪ፦ <ph name="PLUGIN_NAME" /></translation>
-<translation id="6812841287760418429">ለውጦችን አስቀምጥ</translation>
-<translation id="6886871292305414135">አገናኙን በአዲስ &amp;ትር ክፈት</translation>
 <translation id="6900284862687837908">የጀርባ መተግበሪያ፦ <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">የፋይል መዳረሻ ሻር</translation>
-<translation id="708060913198414444">የኦዲዮ አድራሻ &amp;ቅዳ</translation>
 <translation id="7287143125007575591">መዳረሻ ተክልክሏል።</translation>
-<translation id="7309257895202129721">&amp;ቁጥጥሮችን አሳይ</translation>
 <translation id="7427348830195639090">የጀርባው ገጽ፦ <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7564847347806291057">ሂደቱን ግታ</translation>
 <translation id="7629827748548208700">ትር፦ <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">ተቀባይ፦ <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7685049629764448582">ጃቫስክሪፕት ማህደረ ትውስታ</translation>
 <translation id="7704305437604973648">ተግባር</translation>
 <translation id="7760004034676677601">የጠበቁት የጅማሬ ገጽ ይሄ ነው?</translation>
 <translation id="7791543448312431591">አክል</translation>
 <translation id="7818135753970109980">አዲስ ገጽታ ታክሏል (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="782057141565633384">የቪዲዮ አድራሻ &amp;ቅዳ</translation>
 <translation id="7857949311770343000">የጠበቁት የአዲስ ትር ገጽ ይሄ ነው?</translation>
 <translation id="786073089922909430">አገልግሎት፦ <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">ፍጆታ፦ <ph name="UTILITY_TYPE" /></translation>
@@ -162,14 +120,9 @@ nil</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8261378640211443080">ይህ ቅጥያ በ<ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> ውስጥ ያልተጠቀሰ ሲሆን እርስዎ ሳያውቁት የታከለ ሊሆን ይችላል።</translation>
 <translation id="8351419472474436977">ይህ ቅጥያ የተኪ ቅንብሮችዎን ተቆጣጥሯል፣ ይህ ማለት መስመር ላይ የሚያደርጉትን ማንኛውም ነገር ሊቀይር፣ ሊሰብር ወይም በድብቅ ሊከታተል ይችላል። ይሄ ለምን እንደተከሰተ እርግጠኛ ካልሆኑ የማይፈልጉት ነገር ሳይሆን አይቀርም።</translation>
-<translation id="8546306075665861288">የምስል መሸጎጫ</translation>
-<translation id="8584280235376696778">&amp;ቪዲዮ በአዲስ ትር ክፈት</translation>
 <translation id="8615618338313291042">ማንነትን የማያሳውቅ መተግበሪያ፦ <ph name="APP_NAME" /></translation>
-<translation id="862750493060684461">የCSS መሸጎጫ</translation>
-<translation id="8664389313780386848">የፍሬም መነሻ  &amp;አሳይ</translation>
 <translation id="8808478386290700967">የድር  መደብር </translation>
 <translation id="8859174528519900719">ንዑስ ክፈፍ፦ <ph name="SUBFRAME_SITE" /></translation>
-<translation id="8899851313684471736">አገናኙን በአዲስ &amp;መስኮት ክፈት</translation>
 <translation id="8916476537757519021">ማንነት የማያሳውቅ ንዑስ ክፈፍ፦ <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">ዝርዝሮችን ደብቅ</translation>
 <translation id="9170848237812810038">&amp;ቀልብስ</translation>

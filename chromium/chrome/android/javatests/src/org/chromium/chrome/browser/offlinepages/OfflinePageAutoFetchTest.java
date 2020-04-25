@@ -23,7 +23,6 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.DeviceConditions;
@@ -36,7 +35,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.util.UrlConstants;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -58,9 +56,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /** Unit tests for auto-fetch-on-net-error-page. */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@Restriction({ChromeRestriction.RESTRICTION_TYPE_REQUIRES_TOUCH})
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        "enable-features=AutoFetchOnNetErrorPage", "disable-features=NewNetErrorPageUI"})
+@CommandLineFlags.
+Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "enable-features=AutoFetchOnNetErrorPage"})
 public class OfflinePageAutoFetchTest {
     private static final String TAG = "AutoFetchTest";
     private static final long WAIT_TIMEOUT_MS = 20000;
@@ -172,7 +169,7 @@ public class OfflinePageAutoFetchTest {
     }
 
     @After
-    public void tearDown() throws Exception {
+    public void tearDown() {
         OfflineTestUtil.clearIntercepts();
         if (mWebServer != null) {
             mWebServer.shutdown();
@@ -182,7 +179,7 @@ public class OfflinePageAutoFetchTest {
     @Test
     @MediumTest
     @Feature({"OfflineAutoFetch"})
-    public void testAutoFetchTriggersOnDNSErrorWhenOffline() throws Exception {
+    public void testAutoFetchTriggersOnDNSErrorWhenOffline() {
         attemptLoadPage("http://does.not.resolve.com");
         waitForRequestCount(1);
     }
@@ -190,7 +187,7 @@ public class OfflinePageAutoFetchTest {
     @Test
     @MediumTest
     @Feature({"OfflineAutoFetch"})
-    public void testAutoFetchDoesNotTriggerOnDNSErrorWhenOnline() throws Exception {
+    public void testAutoFetchDoesNotTriggerOnDNSErrorWhenOnline() {
         forceConnectivityState(true);
         attemptLoadPage("http://does.not.resolve.com");
         waitForRequestCount(0);
@@ -430,7 +427,7 @@ public class OfflinePageAutoFetchTest {
     }
 
     // Wait until at least one auto-fetch request has shown an in-progress notification.
-    private void waitForInProgressNotification() throws Exception {
+    private void waitForInProgressNotification() {
         waitForHistogram("OfflinePages.AutoFetch.InProgressNotificationAction:SHOWN", 1);
     }
 
@@ -562,7 +559,7 @@ public class OfflinePageAutoFetchTest {
         try {
             Log.d(TAG,
                     "Request Coordinator state:" + OfflineTestUtil.dumpRequestCoordinatorState());
-        } catch (TimeoutException | InterruptedException e) {
+        } catch (TimeoutException e) {
         }
     }
     private void pollInstrumentationThread(final Callable<Boolean> criteria) {

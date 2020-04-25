@@ -11,7 +11,6 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.download.home.list.ListItem;
 import org.chromium.chrome.browser.download.home.metrics.UmaUtils;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -23,6 +22,8 @@ import org.chromium.chrome.browser.widget.selection.SelectionDelegate.SelectionO
 import org.chromium.chrome.download.R;
 
 import java.util.List;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * A top level class to handle various toolbar related functionalities in download home.
@@ -92,44 +93,39 @@ public class ToolbarCoordinator implements SelectionObserver<ListItem> {
 
     public ToolbarCoordinator(Context context, ToolbarActionDelegate delegate,
             ToolbarListActionDelegate listActionDelegate,
-            SelectionDelegate<ListItem> selectionDelegate, boolean hasCloseButton,
-            Profile profile) {
+            SelectionDelegate<ListItem> selectionDelegate, boolean showOfflineHome,
+            boolean hasCloseButton, Profile profile) {
         mDelegate = delegate;
         mListActionDelegate = listActionDelegate;
-
-        final boolean isLocationEnabled =
-                ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOADS_LOCATION_CHANGE);
-
-        final int normalMenuGroupId =
-                isLocationEnabled ? R.id.with_settings_normal_menu_group : R.id.normal_menu_group;
-        final int searchMenuId =
-                isLocationEnabled ? R.id.with_settings_search_menu_id : R.id.search_menu_id;
-        final int closeMenuId =
-                isLocationEnabled ? R.id.with_settings_close_menu_id : R.id.close_menu_id;
-        final int infoMenuId = R.id.info_menu_id;
 
         mView = (ViewGroup) LayoutInflater.from(context).inflate(
                 R.layout.download_home_toolbar, null);
         mToolbar = mView.findViewById(R.id.download_toolbar);
         mShadow = mView.findViewById(R.id.shadow);
 
-        mToolbar.initialize(selectionDelegate, 0 /* titleResId */, normalMenuGroupId,
+        if (ChromeApplication.isVivaldi()) {
+            View bg = mView.findViewById(R.id.action_bar_bg);
+            bg.setBackgroundColor(ApiCompatibilityUtils.getColor(
+                    context.getResources(), android.R.color.transparent));
+        }
+
+        int titleResId =
+                showOfflineHome ? R.string.download_manager_offline_home : R.string.menu_downloads;
+        mToolbar.initialize(selectionDelegate, titleResId, R.id.normal_menu_group,
                 R.id.selection_mode_menu_group, hasCloseButton);
         mToolbar.setOnMenuItemClickListener(this ::onMenuItemClick);
 
         // TODO(crbug.com/881037): Pass the visible group to the toolbar during initialization.
-        mToolbar.getMenu().setGroupVisible(normalMenuGroupId, true);
         mToolbar.initializeSearchView(
-                mSearchDelegate, R.string.download_manager_search, searchMenuId);
+                mSearchDelegate, R.string.download_manager_search, R.id.search_menu_id);
 
-        if (isLocationEnabled) ToolbarUtils.setupTrackerForDownloadSettingsIPH(mToolbar, profile);
+        ToolbarUtils.setupTrackerForDownloadSettingsIPH(mToolbar, profile);
 
         mShadow.init(ApiCompatibilityUtils.getColor(
                              context.getResources(), R.color.toolbar_shadow_color),
                 FadingShadow.POSITION_TOP);
 
-        if (!hasCloseButton) mToolbar.removeMenuItem(closeMenuId);
-        mToolbar.removeMenuItem(infoMenuId);
+        if (!hasCloseButton) mToolbar.removeMenuItem(R.id.close_menu_id);
     }
 
     /**
@@ -186,8 +182,7 @@ public class ToolbarCoordinator implements SelectionObserver<ListItem> {
     private boolean onMenuItemClick(MenuItem item) {
         UmaUtils.recordTopMenuAction(item.getItemId());
 
-        if (item.getItemId() == R.id.close_menu_id
-                || item.getItemId() == R.id.with_settings_close_menu_id) {
+        if (item.getItemId() == R.id.close_menu_id) {
             mDelegate.close();
             return true;
         } else if (item.getItemId() == R.id.selection_mode_delete_menu_id) {
@@ -198,8 +193,7 @@ public class ToolbarCoordinator implements SelectionObserver<ListItem> {
             int itemsShared = mListActionDelegate.shareSelectedItems();
             UmaUtils.recordTopMenuShareCount(itemsShared);
             return true;
-        } else if (item.getItemId() == R.id.with_settings_search_menu_id
-                || item.getItemId() == R.id.search_menu_id) {
+        } else if (item.getItemId() == R.id.search_menu_id) {
             mToolbar.showSearchView();
             updateShadowVisibility();
             return true;
@@ -215,5 +209,11 @@ public class ToolbarCoordinator implements SelectionObserver<ListItem> {
     private void updateShadowVisibility() {
         boolean show = mShowToolbarShadow || mToolbar.isSearching();
         mShadow.setVisibility(show ? ViewGroup.VISIBLE : View.GONE);
+    }
+
+    /** Vivaldi **/
+    public void showSearchView() {
+        mToolbar.showSearchView();
+        updateShadowVisibility();
     }
 }

@@ -137,16 +137,6 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
   TransformNode* FindNodeFromElementId(ElementId id);
   bool OnTransformAnimated(ElementId element_id,
                            const gfx::Transform& transform);
-  // Computes the change of basis transform from node |source_id| to |dest_id|.
-  // This is used by scroll children to compute transform from their scroll
-  // parent space (source) to their parent space (destination) and it can atmost
-  // be a translation. This function assumes that the path from source to
-  // destination has only translations. So, it should not be called when there
-  // can be intermediate 3d transforms but the end result is a translation.
-  bool ComputeTranslation(int source_id,
-                          int dest_id,
-                          gfx::Transform* transform) const;
-
   void ResetChangeTracking();
   // Updates the parent, target, and screen space transforms and snapping.
   void UpdateTransforms(int id);
@@ -325,9 +315,6 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
   // surface.
   int LowestCommonAncestorWithRenderSurface(int id_1, int id_2) const;
 
-  void AddMaskLayerId(int id);
-  const std::vector<int>& mask_layer_ids() const { return mask_layer_ids_; }
-
   RenderSurfaceImpl* GetRenderSurface(int id) {
     return render_surfaces_[id].get();
   }
@@ -370,9 +357,6 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
   // Stores copy requests, keyed by node id.
   std::unordered_multimap<int, std::unique_ptr<viz::CopyOutputRequest>>
       copy_requests_;
-
-  // Unsorted list of all mask layer ids that effect nodes refer to.
-  std::vector<int> mask_layer_ids_;
 
   // Indexed by node id.
   std::vector<std::unique_ptr<RenderSurfaceImpl>> render_surfaces_;
@@ -644,7 +628,6 @@ class CC_EXPORT PropertyTrees final {
                               float starting_scale);
   void SetInnerViewportContainerBoundsDelta(gfx::Vector2dF bounds_delta);
   void SetOuterViewportContainerBoundsDelta(gfx::Vector2dF bounds_delta);
-  void SetInnerViewportScrollBoundsDelta(gfx::Vector2dF bounds_delta);
   void UpdateChangeTracking();
   void PushChangeTrackingTo(PropertyTrees* tree);
   void ResetAllChangeTracking();
@@ -652,13 +635,13 @@ class CC_EXPORT PropertyTrees final {
   gfx::Vector2dF inner_viewport_container_bounds_delta() const {
     return inner_viewport_container_bounds_delta_;
   }
-
-  gfx::Vector2dF outer_viewport_container_bounds_delta() const {
+  gfx::Vector2dF inner_viewport_scroll_bounds_delta() const {
+    // Inner viewport scroll bounds are always the same as outer viewport
+    // container bounds.
     return outer_viewport_container_bounds_delta_;
   }
-
-  gfx::Vector2dF inner_viewport_scroll_bounds_delta() const {
-    return inner_viewport_scroll_bounds_delta_;
+  gfx::Vector2dF outer_viewport_container_bounds_delta() const {
+    return outer_viewport_container_bounds_delta_;
   }
 
   std::unique_ptr<base::trace_event::TracedValue> AsTracedValue() const;
@@ -690,7 +673,6 @@ class CC_EXPORT PropertyTrees final {
  private:
   gfx::Vector2dF inner_viewport_container_bounds_delta_;
   gfx::Vector2dF outer_viewport_container_bounds_delta_;
-  gfx::Vector2dF inner_viewport_scroll_bounds_delta_;
 
   // GetDrawTransforms may change the value of cached_data_.
   DrawTransforms& GetDrawTransforms(int transform_id, int effect_id) const;

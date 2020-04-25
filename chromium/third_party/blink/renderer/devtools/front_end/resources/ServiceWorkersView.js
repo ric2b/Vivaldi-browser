@@ -37,13 +37,14 @@ Resources.ServiceWorkersView = class extends UI.VBox {
     this._otherSWFilter.setAttribute('aria-checked', false);
     const filterLabel = this._otherSWFilter.createChild('label', 'service-worker-filter-label');
     filterLabel.textContent = Common.UIString('Service workers from other origins');
-    onInvokeElement(this._otherSWFilter, event => {
-      if (event.target === this._otherSWFilter || event.target === filterLabel)
+    self.onInvokeElement(this._otherSWFilter, event => {
+      if (event.target === this._otherSWFilter || event.target === filterLabel) {
         this._toggleFilter();
+      }
     });
 
     const toolbar = new UI.Toolbar('service-worker-filter-toolbar', this._otherSWFilter);
-    this._filter = new UI.ToolbarInput(ls`Filter service worker`, 1);
+    this._filter = new UI.ToolbarInput(ls`Filter service worker`, '', 1);
     this._filter.addEventListener(UI.ToolbarInput.Event.TextChanged, () => this._filterChanged());
     toolbar.appendToolbarItem(this._filter);
 
@@ -77,13 +78,15 @@ Resources.ServiceWorkersView = class extends UI.VBox {
    * @param {!SDK.ServiceWorkerManager} serviceWorkerManager
    */
   modelAdded(serviceWorkerManager) {
-    if (this._manager)
+    if (this._manager) {
       return;
+    }
     this._manager = serviceWorkerManager;
     this._securityOriginManager = serviceWorkerManager.target().model(SDK.SecurityOriginManager);
 
-    for (const registration of this._manager.registrations().values())
+    for (const registration of this._manager.registrations().values()) {
       this._updateRegistration(registration);
+    }
 
     this._eventListeners.set(serviceWorkerManager, [
       this._manager.addEventListener(
@@ -102,8 +105,9 @@ Resources.ServiceWorkersView = class extends UI.VBox {
    * @param {!SDK.ServiceWorkerManager} serviceWorkerManager
    */
   modelRemoved(serviceWorkerManager) {
-    if (!this._manager || this._manager !== serviceWorkerManager)
+    if (!this._manager || this._manager !== serviceWorkerManager) {
       return;
+    }
 
     Common.EventTarget.removeEventListeners(this._eventListeners.get(serviceWorkerManager));
     this._eventListeners.delete(serviceWorkerManager);
@@ -126,14 +130,15 @@ Resources.ServiceWorkersView = class extends UI.VBox {
     const waiting = versions.get(SDK.ServiceWorkerVersion.Modes.Waiting);
     const redundant = versions.get(SDK.ServiceWorkerVersion.Modes.Redundant);
 
-    if (active)
+    if (active) {
       timestamp = active.scriptResponseTime;
-    else if (waiting)
+    } else if (waiting) {
       timestamp = waiting.scriptResponseTime;
-    else if (installing)
+    } else if (installing) {
       timestamp = installing.scriptResponseTime;
-    else if (redundant)
+    } else if (redundant) {
       timestamp = redundant.scriptResponseTime;
+    }
 
     return timestamp;
   }
@@ -146,8 +151,9 @@ Resources.ServiceWorkersView = class extends UI.VBox {
       const expectedView = this._getReportViewForOrigin(section._registration.securityOrigin);
       hasOthers |= expectedView === this._otherWorkersView;
       hasThis |= expectedView === this._currentWorkersView;
-      if (section._section.parentWidget() !== expectedView)
+      if (section._section.parentWidget() !== expectedView) {
         movedSections.push(section);
+      }
     }
 
     for (const section of movedSections) {
@@ -170,12 +176,13 @@ Resources.ServiceWorkersView = class extends UI.VBox {
     });
     for (const section of this._sections.values()) {
       if (section._section.parentWidget() === this._currentWorkersView ||
-          this._isRegistrationVisible(section._registration))
+          this._isRegistrationVisible(section._registration)) {
         section._section.showWidget();
-      else
+      } else {
         section._section.hideWidget();
+      }
     }
-    this.contentElement.classList.toggle('service-worker-has-current', hasThis);
+    this.contentElement.classList.toggle('service-worker-has-current', !!hasThis);
     this._otherWorkers.classList.toggle('hidden', !hasOthers);
     this._updateListVisibility();
   }
@@ -193,21 +200,24 @@ Resources.ServiceWorkersView = class extends UI.VBox {
     let hasNonDeletedRegistrations = false;
     const securityOrigins = new Set(this._securityOriginManager.securityOrigins());
     for (const registration of this._manager.registrations().values()) {
-      if (!securityOrigins.has(registration.securityOrigin) && !this._isRegistrationVisible(registration))
+      if (!securityOrigins.has(registration.securityOrigin) && !this._isRegistrationVisible(registration)) {
         continue;
+      }
       if (!registration.canBeRemoved()) {
         hasNonDeletedRegistrations = true;
         break;
       }
     }
 
-    if (!hasNonDeletedRegistrations)
+    if (!hasNonDeletedRegistrations) {
       return;
+    }
 
     for (const registration of this._manager.registrations().values()) {
       const visible = securityOrigins.has(registration.securityOrigin) || this._isRegistrationVisible(registration);
-      if (!visible && registration.canBeRemoved())
+      if (!visible && registration.canBeRemoved()) {
         this._removeRegistrationFromList(registration);
+      }
     }
   }
 
@@ -217,10 +227,11 @@ Resources.ServiceWorkersView = class extends UI.VBox {
    */
   _getReportViewForOrigin(origin) {
     if (this._securityOriginManager.securityOrigins().includes(origin) ||
-        this._securityOriginManager.unreachableMainSecurityOrigin() === origin)
+        this._securityOriginManager.unreachableMainSecurityOrigin() === origin) {
       return this._currentWorkersView;
-    else
+    } else {
       return this._otherWorkersView;
+    }
   }
 
   /**
@@ -232,13 +243,15 @@ Resources.ServiceWorkersView = class extends UI.VBox {
     if (!section) {
       const title = registration.scopeURL;
       const uiSection = this._getReportViewForOrigin(registration.securityOrigin).appendSection(title);
+      uiSection.setUiGroupTitle(ls`Service worker for ${title}`);
       uiSection[this._registrationSymbol] = registration;
       section = new Resources.ServiceWorkersView.Section(
           /** @type {!SDK.ServiceWorkerManager} */ (this._manager), uiSection, registration);
       this._sections.set(registration, section);
     }
-    if (skipUpdate)
+    if (skipUpdate) {
       return;
+    }
     this._updateSectionVisibility();
     section._scheduleUpdate();
   }
@@ -256,8 +269,9 @@ Resources.ServiceWorkersView = class extends UI.VBox {
    */
   _removeRegistrationFromList(registration) {
     const section = this._sections.get(registration);
-    if (section)
+    if (section) {
       section._section.detach();
+    }
     this._sections.delete(registration);
     this._updateSectionVisibility();
   }
@@ -268,8 +282,9 @@ Resources.ServiceWorkersView = class extends UI.VBox {
    */
   _isRegistrationVisible(registration) {
     const filterString = this._filter.value();
-    if (!filterString || !registration.scopeURL)
+    if (!filterString || !registration.scopeURL) {
       return true;
+    }
 
     const regex = String.filterRegex(filterString);
     return registration.scopeURL.match(regex);
@@ -283,10 +298,11 @@ Resources.ServiceWorkersView = class extends UI.VBox {
   _updateCollapsedStyle() {
     const expanded = this._otherSWFilter.getAttribute('aria-checked') === 'true';
     this._otherWorkers.classList.toggle('service-worker-filter-collapsed', !expanded);
-    if (expanded)
+    if (expanded) {
       this._otherWorkersView.showWidget();
-    else
+    } else {
       this._otherWorkersView.hideWidget();
+    }
     this._otherWorkersView.setHeaderVisible(false);
   }
 
@@ -338,7 +354,7 @@ Resources.ServiceWorkersView.Section = class {
         this._push.bind(this));
     this._createSyncNotificationField(
         Common.UIString('Sync'), this._syncTagNameSetting.get(), Common.UIString('Sync tag'), this._sync.bind(this));
-    if (Runtime.experiments.isEnabled('backgroundServicesPeriodicBackgroundSync')) {
+    if (Root.Runtime.experiments.isEnabled('backgroundServicesPeriodicBackgroundSync')) {
       this._createSyncNotificationField(
           ls`Periodic Sync`, this._periodicSyncTagNameSetting.get(), ls`Periodic Sync tag`,
           tag => this._periodicSync(tag));
@@ -388,8 +404,9 @@ Resources.ServiceWorkersView.Section = class {
    */
   _targetForVersionId(versionId) {
     const version = this._manager.findVersion(versionId);
-    if (!version || !version.targetId)
+    if (!version || !version.targetId) {
       return null;
+    }
     return SDK.targetManager.targetById(version.targetId);
   }
 
@@ -437,7 +454,7 @@ Resources.ServiceWorkersView.Section = class {
       errorsLabel.classList.add('link');
       errorsLabel.tabIndex = 0;
       UI.ARIAUtils.setAccessibleName(errorsLabel, ls`${this._registration.errors.length} registration errors`);
-      onInvokeElement(errorsLabel, () => Common.console.show());
+      self.onInvokeElement(errorsLabel, () => Common.console.show());
       name.appendChild(errorsLabel);
     }
     this._sourceField.createChild('div', 'report-field-value-subtitle').textContent =
@@ -449,8 +466,9 @@ Resources.ServiceWorkersView.Section = class {
    */
   _update() {
     const fingerprint = this._registration.fingerprint();
-    if (fingerprint === this._fingerprint)
+    if (fingerprint === this._fingerprint) {
       return Promise.resolve();
+    }
     this._fingerprint = fingerprint;
 
     this._toolbar.setEnabled(!this._registration.isDeleted);
@@ -471,14 +489,15 @@ Resources.ServiceWorkersView.Section = class {
 
     if (active) {
       this._updateSourceField(active);
+      const localizedRunningStatus = SDK.ServiceWorkerVersion.RunningStatus[active.runningStatus];
       const activeEntry = this._addVersion(
-          versionsStack, 'service-worker-active-circle',
-          Common.UIString('#%s activated and is %s', active.id, active.runningStatus));
+          versionsStack, 'service-worker-active-circle', ls`#${active.id} activated and is ${localizedRunningStatus}`);
 
       if (active.isRunning() || active.isStarting()) {
         this._createLink(activeEntry, Common.UIString('stop'), this._stopButtonClicked.bind(this, active.id));
-        if (!this._targetForVersionId(active.id))
+        if (!this._targetForVersionId(active.id)) {
           this._createLink(activeEntry, Common.UIString('inspect'), this._inspectButtonClicked.bind(this, active.id));
+        }
       } else if (active.isStartable()) {
         this._createLink(activeEntry, Common.UIString('start'), this._startButtonClicked.bind(this));
       }
@@ -496,8 +515,9 @@ Resources.ServiceWorkersView.Section = class {
       this._createLink(waitingEntry, Common.UIString('skipWaiting'), this._skipButtonClicked.bind(this));
       waitingEntry.createChild('div', 'service-worker-subtitle').textContent =
           Common.UIString('Received %s', new Date(waiting.scriptResponseTime * 1000).toLocaleString());
-      if (!this._targetForVersionId(waiting.id) && (waiting.isRunning() || waiting.isStarting()))
+      if (!this._targetForVersionId(waiting.id) && (waiting.isRunning() || waiting.isStarting())) {
         this._createLink(waitingEntry, Common.UIString('inspect'), this._inspectButtonClicked.bind(this, waiting.id));
+      }
     }
     if (installing) {
       const installingEntry = this._addVersion(
@@ -572,8 +592,9 @@ Resources.ServiceWorkersView.Section = class {
    * @param {?Protocol.Target.TargetInfo} targetInfo
    */
   _onClientInfo(element, targetInfo) {
-    if (!targetInfo)
+    if (!targetInfo) {
       return;
+    }
     this._clientInfoCache.set(targetInfo.targetId, targetInfo);
     this._updateClientInfo(element, targetInfo);
   }

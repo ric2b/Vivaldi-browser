@@ -264,6 +264,7 @@ class APIPermission {
     kLogin = 220,
     kLoginScreenStorage = 221,
     kLoginState = 222,
+    kPrintingMetrics = 223,
 
     // vivaldi permissions
 
@@ -451,8 +452,8 @@ class APIPermissionInfo {
 
   explicit APIPermissionInfo(const InitInfo& info);
 
-  const APIPermission::ID id_;
   const char* const name_;
+  const APIPermission::ID id_;
   const int flags_;
   const APIPermissionConstructor api_permission_constructor_;
 };

@@ -49,10 +49,6 @@
 #include "ui/views/view_targeter.h"
 #include "ui/views/views_export.h"
 
-#if defined(OS_WIN)
-#include <wrl/client.h>
-#endif
-
 using ui::OSExchangeData;
 
 namespace gfx {
@@ -876,7 +872,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   const ui::NativeTheme* GetNativeTheme() const;
 
   // Sets the native theme and informs descendants.
-  void SetNativeTheme(ui::NativeTheme* theme);
+  void SetNativeThemeForTesting(ui::NativeTheme* theme);
 
   // RTL painting --------------------------------------------------------------
 

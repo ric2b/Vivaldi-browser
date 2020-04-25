@@ -6,10 +6,10 @@ package org.chromium.chrome.browser.webapps;
 
 import android.content.Intent;
 import android.net.Uri;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 
-import org.chromium.blink_public.platform.WebDisplayMode;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.webapk.lib.common.WebApkConstants;
@@ -133,11 +133,14 @@ public class WebApkInfo extends WebappInfo {
      * @param canUseSplashFromContentProvider Whether the WebAPK's content provider can be
      *                                        queried for a screenshot of the splash screen.
      * @param shareData Shared information from the share intent.
+     * @param shareDataActivityClassName Name of WebAPK activity which received share intent.
      */
     public static WebApkInfo create(String webApkPackageName, String url, int source,
-            boolean forceNavigation, boolean canUseSplashFromContentProvider, ShareData shareData) {
-        return create(WebApkIntentDataProvider.create(webApkPackageName, url, source,
-                forceNavigation, canUseSplashFromContentProvider, shareData));
+            boolean forceNavigation, boolean canUseSplashFromContentProvider, ShareData shareData,
+            String shareDataActivityClassName) {
+        return create(
+                WebApkIntentDataProvider.create(webApkPackageName, url, source, forceNavigation,
+                        canUseSplashFromContentProvider, shareData, shareDataActivityClassName));
     }
 
     /**
@@ -166,9 +169,7 @@ public class WebApkInfo extends WebappInfo {
      * @param distributor              The source from where the WebAPK is installed.
      * @param iconUrlToMurmur2HashMap  Map of the WebAPK's icon URLs to Murmur2 hashes of the
      *                                 icon untransformed bytes.
-     * @param shareTarget              shareTarget data for {@link shareTargetActivityName}
-     * @param shareTargetActivityName  Name of activity or activity alias in WebAPK which handles
-     *                                 share intents
+     * @param shareTarget              Specifies what share data is supported by WebAPK.
      * @param forceNavigation          Whether the WebAPK should navigate to {@link url} if the
      *                                 WebAPK is already open.
      * @param isSplashProvidedByWebApk Whether the WebAPK (1) launches an internal activity to
@@ -184,15 +185,14 @@ public class WebApkInfo extends WebappInfo {
             boolean isSplashIconMaskable, String webApkPackageName, int shellApkVersion,
             String manifestUrl, String manifestStartUrl, @WebApkDistributor int distributor,
             Map<String, String> iconUrlToMurmur2HashMap, ShareTarget shareTarget,
-            String shareTargetActivityName, boolean forceNavigation,
-            boolean isSplashProvidedByWebApk, ShareData shareData, int webApkVersionCode) {
+            boolean forceNavigation, boolean isSplashProvidedByWebApk, ShareData shareData,
+            int webApkVersionCode) {
         return create(WebApkIntentDataProvider.create(url, scope, primaryIcon, badgeIcon,
                 splashIcon, name, shortName, displayMode, orientation, source, themeColor,
                 backgroundColor, defaultBackgroundColor, isPrimaryIconMaskable,
                 isSplashIconMaskable, webApkPackageName, shellApkVersion, manifestUrl,
                 manifestStartUrl, distributor, iconUrlToMurmur2HashMap, shareTarget,
-                shareTargetActivityName, forceNavigation, isSplashProvidedByWebApk, shareData,
-                webApkVersionCode));
+                forceNavigation, isSplashProvidedByWebApk, shareData, webApkVersionCode));
     }
 
     private static WebApkInfo create(@Nullable BrowserServicesIntentDataProvider provider) {
@@ -224,13 +224,6 @@ public class WebApkInfo extends WebappInfo {
     /** Returns data about the WebAPK's share intent handlers. */
     public ShareTarget shareTarget() {
         return getWebApkExtras().shareTarget;
-    }
-
-    /**
-     * Returns name of activity or activity alias in WebAPK which handles share intents.
-     */
-    public String shareTargetActivityName() {
-        return getWebApkExtras().shareTargetActivityName;
     }
 
     /**

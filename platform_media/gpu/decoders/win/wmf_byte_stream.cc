@@ -15,7 +15,10 @@ namespace media {
 
 namespace {
 
-class WMFReadRequest : public base::win::IUnknownImpl {
+class WMFReadRequest : public Microsoft::WRL::RuntimeClass<
+          Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>,
+          IUnknown>
+{
  public:
   WMFReadRequest(BYTE* buff, ULONG len) : buffer(buff), length(len), read(0) {}
 
@@ -71,29 +74,6 @@ void WMFByteStream::Stop() {
     result->SetStatus(E_INVALIDARG);
     MFInvokeCallback(result);
   }
-}
-
-HRESULT STDMETHODCALLTYPE
-WMFByteStream::QueryInterface(REFIID riid, void** object) {
-  if (riid == IID_IMFByteStream) {
-    *object = static_cast<IMFByteStream*>(this);
-    AddRef();
-    return S_OK;
-  } else if (riid == IID_IMFAttributes) {
-    *object = static_cast<IMFAttributes*>(this);
-    AddRef();
-    return S_OK;
-  }
-
-  return IUnknownImpl::QueryInterface(riid, object);
-}
-
-ULONG STDMETHODCALLTYPE WMFByteStream::AddRef() {
-  return IUnknownImpl::AddRef();
-}
-
-ULONG STDMETHODCALLTYPE WMFByteStream::Release() {
-  return IUnknownImpl::Release();
 }
 
 HRESULT STDMETHODCALLTYPE
@@ -234,7 +214,8 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::BeginRead(BYTE* buff,
     return E_ABORT;
   }
 
-  Microsoft::WRL::ComPtr<IUnknown> read_request(new WMFReadRequest(buff, len));
+  Microsoft::WRL::ComPtr<IUnknown> read_request(
+      Microsoft::WRL::Make<WMFReadRequest>(buff, len));
   HRESULT hresult =
       MFCreateAsyncResult(read_request.Get(), callback, state, &async_result_);
   if (FAILED(hresult)) {

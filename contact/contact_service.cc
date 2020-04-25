@@ -124,7 +124,7 @@ bool ContactService::Init(
     }
     backend_task_runner_ = thread_->task_runner();
   } else {
-    backend_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
+    backend_task_runner_ = base::CreateSequencedTaskRunner(
         base::TaskTraits(base::ThreadPool(), base::TaskPriority::USER_BLOCKING,
                          base::TaskShutdownBehavior::BLOCK_SHUTDOWN,
                          base::MayBlock(), base::WithBaseSyncPrimitives()));
@@ -322,6 +322,21 @@ base::CancelableTaskTracker::TaskId ContactService::UpdateEmailAddress(
       backend_task_runner_.get(), FROM_HERE,
       base::Bind(&ContactBackend::UpdateEmailAddress, contact_backend_, email,
                  query_results),
+      base::Bind(callback, query_results));
+}
+
+base::CancelableTaskTracker::TaskId ContactService::RemoveEmailAddress(
+    ContactID contact_id,
+    EmailAddressID email_id,
+    const ContactCallback& callback,
+    base::CancelableTaskTracker* tracker) {
+  std::shared_ptr<ContactResults> query_results =
+      std::shared_ptr<ContactResults>(new ContactResults());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&ContactBackend::RemoveEmailAddress, contact_backend_,
+                 contact_id, email_id, query_results),
       base::Bind(callback, query_results));
 }
 

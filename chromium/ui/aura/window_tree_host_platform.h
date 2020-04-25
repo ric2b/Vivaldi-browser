@@ -14,12 +14,11 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/gfx/native_widget_types.h"
-#include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_delegate.h"
 
 namespace ui {
 enum class DomCode;
-class ExternalBeginFrameClient;
+class PlatformWindowBase;
 class KeyboardHook;
 struct PlatformWindowInitProperties;
 }  // namespace ui
@@ -36,7 +35,7 @@ class AURA_EXPORT WindowTreeHostPlatform : public WindowTreeHost,
       ui::PlatformWindowInitProperties properties,
       std::unique_ptr<Window> = nullptr,
       const char* trace_environment_name = nullptr,
-      ui::ExternalBeginFrameClient* external_begin_frame_client = nullptr);
+      bool use_external_begin_frame_control = false);
   ~WindowTreeHostPlatform() override;
 
   // WindowTreeHost:
@@ -63,9 +62,9 @@ class AURA_EXPORT WindowTreeHostPlatform : public WindowTreeHost,
   // installs it at as the PlatformWindow for this WindowTreeHostPlatform.
   void CreateAndSetPlatformWindow(ui::PlatformWindowInitProperties properties);
 
-  void SetPlatformWindow(std::unique_ptr<ui::PlatformWindow> window);
-  ui::PlatformWindow* platform_window() { return platform_window_.get(); }
-  const ui::PlatformWindow* platform_window() const {
+  void SetPlatformWindow(std::unique_ptr<ui::PlatformWindowBase> window);
+  ui::PlatformWindowBase* platform_window() { return platform_window_.get(); }
+  const ui::PlatformWindowBase* platform_window() const {
     return platform_window_.get();
   }
 
@@ -80,6 +79,7 @@ class AURA_EXPORT WindowTreeHostPlatform : public WindowTreeHost,
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) override;
   void OnAcceleratedWidgetDestroyed() override;
   void OnActivationChanged(bool active) override;
+  void OnMouseEnter() override;
 
   // Overridden from aura::WindowTreeHost:
   bool CaptureSystemKeyEventsImpl(
@@ -88,12 +88,9 @@ class AURA_EXPORT WindowTreeHostPlatform : public WindowTreeHost,
   bool IsKeyLocked(ui::DomCode dom_code) override;
   base::flat_map<std::string, std::string> GetKeyboardLayoutMap() override;
 
-  // This function is only for test purpose.
-  gfx::NativeCursor* GetCursorNative() { return &current_cursor_; }
-
  private:
   gfx::AcceleratedWidget widget_;
-  std::unique_ptr<ui::PlatformWindow> platform_window_;
+  std::unique_ptr<ui::PlatformWindowBase> platform_window_;
   gfx::NativeCursor current_cursor_;
   gfx::Rect bounds_in_pixels_;
 

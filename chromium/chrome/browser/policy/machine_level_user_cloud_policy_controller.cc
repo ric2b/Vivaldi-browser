@@ -17,11 +17,16 @@
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/enterprise_reporting/report_generator.h"
+#include "chrome/browser/enterprise_reporting/report_scheduler.h"
+#include "chrome/browser/enterprise_reporting/request_timer.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/policy/browser_dm_token_storage.h"
+#include "chrome/browser/policy/chrome_browser_cloud_management_register_watcher.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
-#include "chrome/browser/policy/cloud/machine_level_user_cloud_policy_helper.h"
-#include "chrome/browser/policy/machine_level_user_cloud_policy_register_watcher.h"
+#include "chrome/browser/policy/cloud/chrome_browser_cloud_management_helper.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
 #include "components/policy/core/common/cloud/machine_level_user_cloud_policy_manager.h"
@@ -87,7 +92,7 @@ bool MachineLevelUserCloudPolicyController::
   return true;
 #else
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableMachineLevelUserCloudPolicy);
+      switches::kEnableChromeBrowserCloudManagement);
 #endif
 }
 
@@ -152,6 +157,14 @@ void MachineLevelUserCloudPolicyController::Init(
   if (!IsMachineLevelUserCloudPolicyEnabled())
     return;
 
+  base::PostTask(
+      FROM_HERE,
+      {base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN, base::ThreadPool()},
+      base::BindOnce(
+          &MachineLevelUserCloudPolicyController::CreateReportSchedulerAsync,
+          base::Unretained(this), base::ThreadTaskRunnerHandle::Get()));
+
   MachineLevelUserCloudPolicyManager* policy_manager =
       g_browser_process->browser_policy_connector()
           ->machine_level_user_cloud_policy_manager();
@@ -183,23 +196,24 @@ void MachineLevelUserCloudPolicyController::Init(
   DCHECK(!enrollment_token.empty());
   DCHECK(!client_id.empty());
 
-  policy_registrar_ = std::make_unique<MachineLevelUserCloudPolicyRegistrar>(
-      device_management_service, url_loader_factory);
+  cloud_management_registrar_ =
+      std::make_unique<ChromeBrowserCloudManagementRegistrar>(
+          device_management_service, url_loader_factory);
   policy_fetcher_ = std::make_unique<MachineLevelUserCloudPolicyFetcher>(
       policy_manager, local_state, device_management_service,
       url_loader_factory);
 
   if (dm_token.empty()) {
-    policy_register_watcher_ =
-        std::make_unique<MachineLevelUserCloudPolicyRegisterWatcher>(this);
+    cloud_management_register_watcher_ =
+        std::make_unique<ChromeBrowserCloudManagementRegisterWatcher>(this);
 
     enrollment_start_time_ = base::Time::Now();
 
     // Not registered already, so do it now.
-    policy_registrar_->RegisterForPolicyWithEnrollmentToken(
+    cloud_management_registrar_->RegisterForCloudManagementWithEnrollmentToken(
         enrollment_token, client_id,
         base::Bind(&MachineLevelUserCloudPolicyController::
-                       RegisterForPolicyWithEnrollmentTokenCallback,
+                       RegisterForCloudManagementWithEnrollmentTokenCallback,
                    base::Unretained(this)));
 #if defined(OS_WIN)
     // This metric is only published on Windows to indicate how many user level
@@ -216,9 +230,9 @@ void MachineLevelUserCloudPolicyController::Init(
 
 bool MachineLevelUserCloudPolicyController::
     WaitUntilPolicyEnrollmentFinished() {
-  if (policy_register_watcher_) {
-    switch (
-        policy_register_watcher_->WaitUntilCloudPolicyEnrollmentFinished()) {
+  if (cloud_management_register_watcher_) {
+    switch (cloud_management_register_watcher_
+                ->WaitUntilCloudPolicyEnrollmentFinished()) {
       case RegisterResult::kNoEnrollmentNeeded:
       case RegisterResult::kEnrollmentSuccessBeforeDialogDisplayed:
       case RegisterResult::kEnrollmentFailedSilentlyBeforeDialogDisplayed:
@@ -249,8 +263,8 @@ void MachineLevelUserCloudPolicyController::RemoveObserver(Observer* observer) {
 }
 
 bool MachineLevelUserCloudPolicyController::IsEnterpriseStartupDialogShowing() {
-  return policy_register_watcher_ &&
-         policy_register_watcher_->IsDialogShowing();
+  return cloud_management_register_watcher_ &&
+         cloud_management_register_watcher_->IsDialogShowing();
 }
 
 void MachineLevelUserCloudPolicyController::NotifyPolicyRegisterFinished(
@@ -272,8 +286,9 @@ bool MachineLevelUserCloudPolicyController::GetEnrollmentTokenAndClientId(
 }
 
 void MachineLevelUserCloudPolicyController::
-    RegisterForPolicyWithEnrollmentTokenCallback(const std::string& dm_token,
-                                                 const std::string& client_id) {
+    RegisterForCloudManagementWithEnrollmentTokenCallback(
+        const std::string& dm_token,
+        const std::string& client_id) {
   base::TimeDelta enrollment_time = base::Time::Now() - enrollment_start_time_;
 
   if (dm_token.empty()) {
@@ -315,7 +330,40 @@ void MachineLevelUserCloudPolicyController::
   // Start fetching policies.
   VLOG(1) << "Fetch policy after enrollment.";
   policy_fetcher_->SetupRegistrationAndFetchPolicy(dm_token, client_id);
+  if (report_scheduler_) {
+    report_scheduler_->OnDMTokenUpdated();
+  }
+
   NotifyPolicyRegisterFinished(true);
+}
+
+void MachineLevelUserCloudPolicyController::CreateReportSchedulerAsync(
+    scoped_refptr<base::SequencedTaskRunner> task_runner) {
+  task_runner->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &MachineLevelUserCloudPolicyController::CreateReportScheduler,
+          base::Unretained(this)));
+}
+
+void MachineLevelUserCloudPolicyController::CreateReportScheduler() {
+  if (!base::FeatureList::IsEnabled(features::kEnterpriseReportingInBrowser))
+    return;
+
+  auto policy_client = std::make_unique<CloudPolicyClient>(
+      std::string() /* machine_id */, std::string() /* machine_model */,
+      std::string() /* brand_code */, std::string() /* ethernet_mac_address */,
+      std::string() /* dock_mac_address */,
+      std::string() /* manufacture_date */,
+      g_browser_process->browser_policy_connector()
+          ->device_management_service(),
+      g_browser_process->system_network_context_manager()
+          ->GetSharedURLLoaderFactory(),
+      nullptr, CloudPolicyClient::DeviceDMTokenCallback());
+  auto timer = std::make_unique<enterprise_reporting::RequestTimer>();
+  auto generator = std::make_unique<enterprise_reporting::ReportGenerator>();
+  report_scheduler_ = std::make_unique<enterprise_reporting::ReportScheduler>(
+      std::move(policy_client), std::move(timer), std::move(generator));
 }
 
 }  // namespace policy

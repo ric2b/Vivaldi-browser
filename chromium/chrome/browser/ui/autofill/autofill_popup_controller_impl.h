@@ -19,13 +19,16 @@
 #include "chrome/browser/ui/autofill/autofill_popup_layout_model.h"
 #include "chrome/browser/ui/autofill/popup_controller_common.h"
 #include "components/autofill/core/browser/ui/popup_types.h"
-#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace content {
 struct NativeWebKeyboardEvent;
 class WebContents;
+}
+
+namespace ui {
+class AXPlatformNode;
 }
 
 namespace autofill {
@@ -68,9 +71,6 @@ class AutofillPopupControllerImpl : public AutofillPopupController {
 
   bool HandleKeyPressEvent(const content::NativeWebKeyboardEvent& event);
 
-  // Tells the view to capture mouse events. Must be called before |Show()|.
-  void set_hide_on_outside_click(bool hide_on_outside_click);
-
  protected:
   FRIEND_TEST_ALL_PREFIXES(AutofillPopupControllerUnitTest,
                            ProperlyResetController);
@@ -94,7 +94,6 @@ class AutofillPopupControllerImpl : public AutofillPopupController {
   bool IsRTL() const override;
   const std::vector<Suggestion> GetSuggestions() override;
 #if !defined(OS_ANDROID)
-  void SetTypesetter(gfx::Typesetter typesetter) override;
   int GetElidedValueWidthForRow(int row) override;
   int GetElidedLabelWidthForRow(int row) override;
 #endif
@@ -143,6 +142,10 @@ class AutofillPopupControllerImpl : public AutofillPopupController {
   // form control of the popup and popup itself has changed based on the popup's
   // show or hide action.
   void FireControlsChangedEvent(bool is_show);
+
+  // Gets the root AXPlatformNode for our web_contents_, which can be used
+  // to find the AXPlatformNode specifically for the autofill text field.
+  virtual ui::AXPlatformNode* GetRootAXPlatformNodeForWebContents();
 
  private:
 #if !defined(OS_ANDROID)

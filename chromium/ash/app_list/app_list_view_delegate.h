@@ -23,19 +23,16 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 
-namespace ash {
-enum class AppListViewState;
-}
-
 namespace ui {
 class GestureEvent;
 class ImplicitAnimationObserver;
 class SimpleMenuModel;
 }  // namespace ui
 
-namespace app_list {
+namespace ash {
 
 class AppListModel;
+enum class AppListViewState;
 struct AppLaunchedMetricParams;
 class SearchModel;
 
@@ -78,7 +75,7 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // window. For instance, the first launcher result item is index 0, regardless
   // of if there is an answer card above it.
   virtual void LogResultLaunchHistogram(
-      app_list::SearchResultLaunchLocation launch_location,
+      SearchResultLaunchLocation launch_location,
       int suggestion_index) = 0;
 
   // Logs the UMA histogram metrics for user's abandonment of launcher search.
@@ -92,7 +89,7 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
                                         int event_flags) = 0;
 
   // Returns the context menu model for a ChromeSearchResult with |result_id|,
-  // or NULL if there is currently no menu for the result.
+  // or nullptr if there is currently no menu for the result.
   // Note the returned menu model is owned by that result.
   using GetContextMenuModelCallback =
       base::OnceCallback<void(std::unique_ptr<ui::SimpleMenuModel>)>;
@@ -121,8 +118,8 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
                             int event_flags,
                             ash::AppListLaunchedFrom launched_from) = 0;
 
-  // Returns the context menu model for a ChromeAppListItem with |id|, or NULL
-  // if there is currently no menu for the item (e.g. during install).
+  // Returns the context menu model for a ChromeAppListItem with |id|, or
+  // nullptr if there is currently no menu for the item (e.g. during install).
   // Note the returned menu model is owned by that item.
   virtual void GetContextMenuModel(const std::string& id,
                                    GetContextMenuModelCallback callback) = 0;
@@ -209,8 +206,11 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // Adjusts the bounds by snapping it to the edge of the display in pixel
   // space. This prevents 1px gaps on displays with non-integer scale factors.
   virtual gfx::Rect SnapBoundsToDisplayEdge(const gfx::Rect& bounds) = 0;
+
+  // Gets the current shelf height from the ShelfConfig.
+  virtual int GetShelfHeight() = 0;
 };
 
-}  // namespace app_list
+}  // namespace ash
 
 #endif  // ASH_APP_LIST_APP_LIST_VIEW_DELEGATE_H_

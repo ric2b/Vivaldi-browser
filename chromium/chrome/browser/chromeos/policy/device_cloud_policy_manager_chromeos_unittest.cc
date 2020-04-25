@@ -641,7 +641,7 @@ class DeviceCloudPolicyManagerChromeOSEnrollmentTest
       test_url_loader_factory_.SimulateResponseForPendingRequest(
           GaiaUrls::GetInstance()->oauth2_token_url(),
           network::URLLoaderCompletionStatus(net::OK),
-          network::CreateResourceResponseHead(url_fetcher_response_code_),
+          network::CreateURLResponseHead(url_fetcher_response_code_),
           url_fetcher_response_string_);
     }
 
@@ -732,7 +732,8 @@ class DeviceCloudPolicyManagerChromeOSEnrollmentTest
   DISALLOW_COPY_AND_ASSIGN(DeviceCloudPolicyManagerChromeOSEnrollmentTest);
 };
 
-TEST_P(DeviceCloudPolicyManagerChromeOSEnrollmentTest, Success) {
+// Flaky. https://crbug.com/1014318
+TEST_P(DeviceCloudPolicyManagerChromeOSEnrollmentTest, DISABLED_Success) {
   RunTest();
   ExpectSuccessfulEnrollment();
 }
@@ -820,7 +821,9 @@ TEST_P(DeviceCloudPolicyManagerChromeOSEnrollmentTest, LoadError) {
   EXPECT_EQ(CloudPolicyStore::STATUS_LOAD_ERROR, status_.store_status());
 }
 
-TEST_P(DeviceCloudPolicyManagerChromeOSEnrollmentTest, UnregisterSucceeds) {
+// Flaky. https://crbug.com/1014318
+TEST_P(DeviceCloudPolicyManagerChromeOSEnrollmentTest,
+       DISABLED_UnregisterSucceeds) {
   // Enroll first.
   RunTest();
   ExpectSuccessfulEnrollment();
@@ -831,7 +834,7 @@ TEST_P(DeviceCloudPolicyManagerChromeOSEnrollmentTest, UnregisterSucceeds) {
   DeviceManagementService::JobConfiguration::JobType job_type;
   EXPECT_CALL(device_management_service_, StartJob(_))
       .WillOnce(DoAll(device_management_service_.CaptureJobType(&job_type),
-                      device_management_service_.StartJobOKSync(response)));
+                      device_management_service_.StartJobOKAsync(response)));
   EXPECT_CALL(*this, OnUnregistered(true));
 
   // Start unregistering.
@@ -853,7 +856,7 @@ TEST_P(DeviceCloudPolicyManagerChromeOSEnrollmentTest, UnregisterFails) {
   DeviceManagementService::JobConfiguration::JobType job_type;
   EXPECT_CALL(device_management_service_, StartJob(_))
       .WillOnce(DoAll(device_management_service_.CaptureJobType(&job_type),
-                      device_management_service_.StartJobSync(
+                      device_management_service_.StartJobAsync(
                           net::ERR_FAILED, DeviceManagementService::kSuccess)));
   EXPECT_CALL(*this, OnUnregistered(false));
 

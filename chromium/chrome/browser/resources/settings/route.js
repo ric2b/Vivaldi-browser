@@ -13,6 +13,8 @@
  *   ACCOUNT_MANAGER: (undefined|!settings.Route),
  *   ADVANCED: (undefined|!settings.Route),
  *   ADDRESSES: (undefined|!settings.Route),
+ *   APP_MANAGEMENT: (undefined|!settings.Route),
+ *   APP_MANAGEMENT_DETAIL: (undefined|!settings.Route),
  *   APPS: (undefined|!settings.Route),
  *   ANDROID_APPS: (undefined|!settings.Route),
  *   ANDROID_APPS_DETAILS: (undefined|!settings.Route),
@@ -58,6 +60,7 @@
  *   LANGUAGES_DETAILS: (undefined|!settings.Route),
  *   LOCK_SCREEN: (undefined|!settings.Route),
  *   MANAGE_ACCESSIBILITY: (undefined|!settings.Route),
+ *   MANAGE_CAPTION_SETTINGS: (undefined|!settings.Route),
  *   MANAGE_PROFILE: (undefined|!settings.Route),
  *   MANAGE_SWITCH_ACCESS_SETTINGS: (undefined|!settings.Route),
  *   MANAGE_TTS_SETTINGS: (undefined|!settings.Route),
@@ -95,6 +98,7 @@
  *   SITE_SETTINGS_FLASH: (undefined|!settings.Route),
  *   SITE_SETTINGS_HANDLERS: (undefined|!settings.Route),
  *   SITE_SETTINGS_IMAGES: (undefined|!settings.Route),
+ *   SITE_SETTINGS_MIXEDSCRIPT: (undefined|!settings.Route),
  *   SITE_SETTINGS_JAVASCRIPT: (undefined|!settings.Route),
  *   SITE_SETTINGS_SENSORS: (undefined|!settings.Route),
  *   SITE_SETTINGS_SOUND: (undefined|!settings.Route),
@@ -326,6 +330,10 @@ cr.define('settings', function() {
       r.SITE_SETTINGS_DATA_DETAILS =
           r.SITE_SETTINGS_SITE_DATA.createChild('/cookies/detail');
       r.SITE_SETTINGS_IMAGES = r.SITE_SETTINGS.createChild('images');
+      if (loadTimeData.getBoolean('enableInsecureContentContentSetting')) {
+        r.SITE_SETTINGS_MIXEDSCRIPT =
+            r.SITE_SETTINGS.createChild('insecureContent');
+      }
       r.SITE_SETTINGS_JAVASCRIPT = r.SITE_SETTINGS.createChild('javascript');
       r.SITE_SETTINGS_SOUND = r.SITE_SETTINGS.createChild('sound');
       r.SITE_SETTINGS_SENSORS = r.SITE_SETTINGS.createChild('sensors');
@@ -352,7 +360,7 @@ cr.define('settings', function() {
         r.SITE_SETTINGS_PAYMENT_HANDLER =
             r.SITE_SETTINGS.createChild('paymentHandler');
       }
-      if (loadTimeData.getBoolean('enableBluetoothScanningContentSetting')) {
+      if (loadTimeData.getBoolean('enableExperimentalWebPlatformFeatures')) {
         r.SITE_SETTINGS_BLUETOOTH_SCANNING =
             r.SITE_SETTINGS.createChild('bluetoothScanning');
       }
@@ -453,7 +461,10 @@ cr.define('settings', function() {
       r.FINGERPRINT = r.LOCK_SCREEN.createChild('/lockScreen/fingerprint');
     }
 
-    if (loadTimeData.valueExists('androidAppsVisible') &&
+    // Show Android Apps page in the browser if split settings is turned off.
+    if (!loadTimeData.getBoolean('isOSSettings') &&
+        loadTimeData.getBoolean('showOSSettings') &&
+        loadTimeData.valueExists('androidAppsVisible') &&
         loadTimeData.getBoolean('androidAppsVisible')) {
       r.ANDROID_APPS = r.BASIC.createSection('/androidApps', 'androidApps');
       r.ANDROID_APPS_DETAILS =
@@ -524,13 +535,21 @@ cr.define('settings', function() {
         r.RESET = r.ADVANCED.createSection('/reset', 'reset');
       }
 
+      const showAppManagement = loadTimeData.valueExists('showAppManagement') &&
+          loadTimeData.getBoolean('showAppManagement');
+      const showAndroidApps = loadTimeData.valueExists('androidAppsVisible') &&
+          loadTimeData.getBoolean('androidAppsVisible');
       // Apps
-      if (loadTimeData.valueExists('showApps') &&
-          loadTimeData.getBoolean('showApps')) {
+      if (showAppManagement || showAndroidApps) {
         r.APPS = r.BASIC.createSection('/apps', 'apps');
-        r.APP_MANAGEMENT = r.APPS.createChild('/app-management');
-        r.APP_MANAGEMENT_DETAIL =
-            r.APP_MANAGEMENT.createChild('/app-management/detail');
+        if (showAppManagement) {
+          r.APP_MANAGEMENT = r.APPS.createChild('/app-management');
+          r.APP_MANAGEMENT_DETAIL =
+              r.APP_MANAGEMENT.createChild('/app-management/detail');
+        }
+        if (showAndroidApps) {
+          r.ANDROID_APPS_DETAILS = r.APPS.createChild('/androidAppsDetails');
+        }
       }
     } else {
       assert(r.ADVANCED, 'ADVANCED route should exist');
@@ -573,6 +592,9 @@ cr.define('settings', function() {
     }
     r.MANAGE_TTS_SETTINGS =
         r.MANAGE_ACCESSIBILITY.createChild('/manageAccessibility/tts');
+
+    r.MANAGE_CAPTION_SETTINGS =
+        r.MANAGE_ACCESSIBILITY.createChild('/manageAccessibility/captions');
   }
   // </if>
 
@@ -727,12 +749,16 @@ cr.define('settings', function() {
      * Initialize the route and query params from the URL.
      */
     initializeRouteFromUrl() {
-      this.recordMetrics(window.location.pathname);
-
       assert(!this.initializeRouteFromUrlCalled_);
       this.initializeRouteFromUrlCalled_ = true;
 
       const route = this.getRouteForPath(window.location.pathname);
+
+      // Record all correct paths entered on the settings page, and
+      // as all incorrect paths are routed to the main settings page,
+      // record all incorrect paths as hitting the main settings page.
+      this.recordMetrics(route ? route.path : this.routes_.BASIC.path);
+
       // Never allow direct navigation to ADVANCED.
       if (route && route != this.routes_.ADVANCED) {
         this.currentRoute = route;
@@ -751,6 +777,7 @@ cr.define('settings', function() {
       assert(!urlPath.startsWith('chrome://'));
       assert(!urlPath.startsWith('settings'));
       assert(urlPath.startsWith('/'));
+      assert(!urlPath.match(/\?/g));
       chrome.metricsPrivate.recordSparseHashable(
           'WebUI.Settings.PathVisited', urlPath);
     }

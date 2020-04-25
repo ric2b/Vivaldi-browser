@@ -9,6 +9,8 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/metrics/subprocess_metrics_provider.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor.h"
+#include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service.h"
+#include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service_factory.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -73,6 +75,17 @@ void RetryForHistogramBucketUntilCountReached(
   }
 }
 
+// Verifies that all URLs specified in |expected_urls| are present in
+// |urls_from_observed_prediction|. Ordering of URLs is NOT verified.
+void VerifyURLsPresent(const std::vector<GURL>& urls_from_observed_prediction,
+                       const std::vector<std::string>& expected_urls) {
+  for (const auto& expected_url : expected_urls) {
+    EXPECT_NE(urls_from_observed_prediction.end(),
+              std::find(urls_from_observed_prediction.begin(),
+                        urls_from_observed_prediction.end(), expected_url));
+  }
+}
+
 }  // namespace
 
 class NavigationPredictorBrowserTest
@@ -133,6 +146,57 @@ class NavigationPredictorBrowserTest
   base::test::ScopedFeatureList feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationPredictorBrowserTest);
+};
+
+class TestObserver : public NavigationPredictorKeyedService::Observer {
+ public:
+  TestObserver() {}
+  ~TestObserver() override {}
+
+  base::Optional<NavigationPredictorKeyedService::Prediction> last_prediction()
+      const {
+    return last_prediction_;
+  }
+
+  size_t count_predictions() const { return count_predictions_; }
+
+  // Waits until the count if received notifications is at least
+  // |expected_notifications_count|.
+  void WaitUntilNotificationsCountReached(size_t expected_notifications_count) {
+    // Ensure that |wait_loop_| is null implying there is no ongoing wait.
+    ASSERT_FALSE(!!wait_loop_);
+
+    if (count_predictions_ >= expected_notifications_count)
+      return;
+    expected_notifications_count_ = expected_notifications_count;
+    wait_loop_ = std::make_unique<base::RunLoop>();
+    wait_loop_->Run();
+    wait_loop_.reset();
+  }
+
+ private:
+  void OnPredictionUpdated(
+      const base::Optional<NavigationPredictorKeyedService::Prediction>&
+          prediction) override {
+    ++count_predictions_;
+    last_prediction_ = prediction;
+    if (wait_loop_ && count_predictions_ >= expected_notifications_count_) {
+      wait_loop_->Quit();
+    }
+  }
+
+  // Count of prediction notifications received so far.
+  size_t count_predictions_ = 0u;
+
+  // last prediction received.
+  base::Optional<NavigationPredictorKeyedService::Prediction> last_prediction_;
+
+  // If |wait_loop_| is non-null, then it quits as soon as count of received
+  // notifications are at least |expected_notifications_count_|.
+  std::unique_ptr<base::RunLoop> wait_loop_;
+  base::Optional<size_t> expected_notifications_count_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestObserver);
 };
 
 IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest, Pipeline) {
@@ -258,8 +322,6 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest, ClickAnchorElement) {
   base::RunLoop().RunUntilIdle();
 
   histogram_tester.ExpectTotalCount(
-      "AnchorElementMetrics.Clicked.HrefEngagementScore2", 1);
-  histogram_tester.ExpectTotalCount(
       "AnchorElementMetrics.Clicked.DurationLoadToFirstClick", 1);
   histogram_tester.ExpectTotalCount(
       "AnchorElementMetrics.Clicked.NavigationScore", 1);
@@ -294,9 +356,6 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
   histogram_tester.ExpectUniqueSample(
       "NavigationPredictor.OnNonDSE.ActionTaken",
       NavigationPredictor::Action::kPrefetch, 1);
-
-  histogram_tester.ExpectTotalCount(
-      "AnchorElementMetrics.Clicked.HrefEngagementScore2", 1);
 
   histogram_tester.ExpectUniqueSample(
       "NavigationPredictor.OnNonDSE.AccuracyActionTaken",
@@ -341,9 +400,6 @@ IN_PROC_BROWSER_TEST_F(
       "NavigationPredictor.OnNonDSE.ActionTaken",
       NavigationPredictor::Action::kPrefetch, 1);
 
-  histogram_tester.ExpectTotalCount(
-      "AnchorElementMetrics.Clicked.HrefEngagementScore2", 1);
-
   histogram_tester.ExpectUniqueSample(
       "NavigationPredictor.OnNonDSE.AccuracyActionTaken",
       NavigationPredictor::ActionAccuracy::
@@ -376,16 +432,24 @@ IN_PROC_BROWSER_TEST_F(
                                     3);
 }
 
-// Test that we preconnect after the last preconnect timed out.
-IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
-                       DISABLE_ON_CHROMEOS(ActionAccuracy_timeout)) {
-  base::HistogramTester histogram_tester;
+class NavigationPredictorBrowserTestWithUnusedIdleSocketTimeout
+    : public NavigationPredictorBrowserTest {
+ public:
+  NavigationPredictorBrowserTestWithUnusedIdleSocketTimeout() {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        net::features::kNetUnusedIdleSocketTimeout,
+        {{"unused_idle_socket_timeout_seconds", "0"}});
+  }
 
-  base::test::ScopedFeatureList scoped_feature_list;
-  std::map<std::string, std::string> parameters;
-  parameters["unused_idle_socket_timeout_seconds"] = "0";
-  scoped_feature_list.InitAndEnableFeatureWithParameters(
-      net::features::kNetUnusedIdleSocketTimeout, parameters);
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// Test that we preconnect after the last preconnect timed out.
+IN_PROC_BROWSER_TEST_F(
+    NavigationPredictorBrowserTestWithUnusedIdleSocketTimeout,
+    DISABLE_ON_CHROMEOS(ActionAccuracy_timeout)) {
+  base::HistogramTester histogram_tester;
 
   const GURL& url = GetTestURL("/page_with_same_host_anchor_element.html");
   ui_test_utils::NavigateToURL(browser(), url);
@@ -403,22 +467,30 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
                        NavigationPredictor::Action::kPreconnectAfterTimeout)));
 }
 
+class NavigationPredictorBrowserTestWithNegativePredictorRetryPreconnect
+    : public NavigationPredictorBrowserTest {
+ public:
+  NavigationPredictorBrowserTestWithNegativePredictorRetryPreconnect() {
+    // -1 would force synchronous retries if retries were not disabled.
+    net_feature_list_.InitAndEnableFeatureWithParameters(
+        net::features::kNetUnusedIdleSocketTimeout,
+        {{"unused_idle_socket_timeout_seconds", "-1"}});
+    predictor_feature_list_.InitAndEnableFeatureWithParameters(
+        blink::features::kNavigationPredictor,
+        {{"retry_preconnect_wait_time_ms", "-1"}});
+  }
+
+ private:
+  base::test::ScopedFeatureList net_feature_list_;
+  base::test::ScopedFeatureList predictor_feature_list_;
+};
+
 // Test that we don't preconnect after the last preconnect timed out when
 // retry_preconnect_wait_time_ms is negative.
-IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
-                       DISABLE_ON_CHROMEOS(ActionAccuracy_timeout_no_retry)) {
+IN_PROC_BROWSER_TEST_F(
+    NavigationPredictorBrowserTestWithNegativePredictorRetryPreconnect,
+    DISABLE_ON_CHROMEOS(ActionAccuracy_timeout_no_retry)) {
   base::HistogramTester histogram_tester;
-
-  base::test::ScopedFeatureList scoped_feature_list_net;
-  // -1 would force synchronous retries if retries were not disabled.
-  scoped_feature_list_net.InitAndEnableFeatureWithParameters(
-      net::features::kNetUnusedIdleSocketTimeout,
-      {{"unused_idle_socket_timeout_seconds", "-1"}});
-
-  base::test::ScopedFeatureList scoped_feature_list_predictor;
-  scoped_feature_list_predictor.InitAndEnableFeatureWithParameters(
-      blink::features::kNavigationPredictor,
-      {{"retry_preconnect_wait_time_ms", "-1"}});
 
   const GURL& url = GetTestURL("/page_with_same_host_anchor_element.html");
   ui_test_utils::NavigateToURL(browser(), url);
@@ -430,18 +502,25 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
                        NavigationPredictor::Action::kPreconnectAfterTimeout)));
 }
 
+class NavigationPredictorBrowserTestWithDefaultPredictorEnabled
+    : public NavigationPredictorBrowserTest {
+ public:
+  NavigationPredictorBrowserTestWithDefaultPredictorEnabled() {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        blink::features::kNavigationPredictor, {});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
 // Test that the action accuracy is properly recorded and when same origin
 // preconnections are enabled, then navigation predictor initiates the
 // preconnection.
 IN_PROC_BROWSER_TEST_F(
-    NavigationPredictorBrowserTest,
+    NavigationPredictorBrowserTestWithDefaultPredictorEnabled,
     DISABLE_ON_CHROMEOS(
         ActionAccuracy_DifferentOrigin_VisibilityChangedPreconnectEnabled)) {
-  std::map<std::string, std::string> parameters;
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(
-      blink::features::kNavigationPredictor, parameters);
-
   base::HistogramTester histogram_tester;
 
   const GURL& url = GetTestURL("/page_with_same_host_anchor_element.html");
@@ -486,15 +565,22 @@ IN_PROC_BROWSER_TEST_F(
       NavigationPredictor::Action::kPreconnectOnVisibilityChange, 2);
 }
 
-IN_PROC_BROWSER_TEST_F(
-    NavigationPredictorBrowserTest,
-    DISABLE_ON_CHROMEOS(NoPreconnectNonSearchOnOtherHostLinks)) {
-  std::map<std::string, std::string> parameters;
-  base::test::ScopedFeatureList feature_list;
-  parameters["preconnect_skip_link_scores"] = "false";
-  feature_list.InitAndEnableFeatureWithParameters(
-      blink::features::kNavigationPredictor, parameters);
+class NavigationPredictorBrowserTestNoSkipLinkScores
+    : public NavigationPredictorBrowserTest {
+ public:
+  NavigationPredictorBrowserTestNoSkipLinkScores() {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        blink::features::kNavigationPredictor,
+        {{"preconnect_skip_link_scores", "false"}});
+  }
 
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(
+    NavigationPredictorBrowserTestNoSkipLinkScores,
+    DISABLE_ON_CHROMEOS(NoPreconnectNonSearchOnOtherHostLinks)) {
   base::HistogramTester histogram_tester;
 
   // This page only has non-same host links.
@@ -507,13 +593,9 @@ IN_PROC_BROWSER_TEST_F(
       NavigationPredictor::Action::kNone, 1);
 }
 
-IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
-                       DISABLE_ON_CHROMEOS(PreconnectNonSearch)) {
-  std::map<std::string, std::string> parameters;
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(
-      blink::features::kNavigationPredictor, parameters);
-
+IN_PROC_BROWSER_TEST_F(
+    NavigationPredictorBrowserTestWithDefaultPredictorEnabled,
+    DISABLE_ON_CHROMEOS(PreconnectNonSearch)) {
   base::HistogramTester histogram_tester;
 
   // This page only has non-same host links.
@@ -526,20 +608,28 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
       NavigationPredictor::Action::kPreconnect, 1);
 }
 
-IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
-                       DISABLE_ON_CHROMEOS(PrefetchAfterPreconnect)) {
+class NavigationPredictorBrowserTestWithPrefetchAfterPreconnect
+    : public NavigationPredictorBrowserTest {
+ public:
+  NavigationPredictorBrowserTestWithPrefetchAfterPreconnect() {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        blink::features::kNavigationPredictor,
+        {{"prefetch_after_preconnect", "true"}});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(
+    NavigationPredictorBrowserTestWithPrefetchAfterPreconnect,
+    DISABLE_ON_CHROMEOS(PrefetchAfterPreconnect)) {
   prerender::PrerenderManager::SetMode(
       prerender::PrerenderManager::PRERENDER_MODE_NOSTATE_PREFETCH);
 
   const GURL& url = GetTestURL("/page_with_same_host_anchor_element.html");
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> ukm_recorder =
       std::make_unique<ukm::TestAutoSetUkmRecorder>();
-
-  std::map<std::string, std::string> parameters;
-  base::test::ScopedFeatureList feature_list;
-  parameters["prefetch_after_preconnect"] = "true";
-  feature_list.InitAndEnableFeatureWithParameters(
-      blink::features::kNavigationPredictor, parameters);
 
   base::HistogramTester histogram_tester;
 
@@ -576,17 +666,12 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
-                       DISABLE_ON_CHROMEOS(NoPreconnectSearch)) {
+IN_PROC_BROWSER_TEST_F(
+    NavigationPredictorBrowserTestWithDefaultPredictorEnabled,
+    DISABLE_ON_CHROMEOS(NoPreconnectSearch)) {
   static const char kShortName[] = "test";
   static const char kSearchURL[] =
       "/anchors_different_area.html?q={searchTerms}";
-
-  // Force Preconnect on
-  std::map<std::string, std::string> parameters;
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(
-      blink::features::kNavigationPredictor, parameters);
 
   // Set up default search engine.
   TemplateURLService* model =
@@ -619,8 +704,14 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
 // Test that the action accuracy is properly recorded.
 // User clicks on an anchor element that points to same URL as the URL
 // prefetched.
+// https://crbug.com/1008307
+#if (defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_CHROMEOS))
+#define MAYBE_ActionAccuracy_SameOrigin DISABLED_ActionAccuracy_SameOrigin
+#else
+#define MAYBE_ActionAccuracy_SameOrigin ActionAccuracy_SameOrigin
+#endif
 IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
-                       ActionAccuracy_SameOrigin) {
+                       MAYBE_ActionAccuracy_SameOrigin) {
   base::HistogramTester histogram_tester;
 
   const GURL& url = GetTestURL("/page_with_same_host_anchor_element.html");
@@ -640,9 +731,6 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
   histogram_tester.ExpectUniqueSample(
       "NavigationPredictor.OnNonDSE.ActionTaken",
       NavigationPredictor::Action::kPrefetch, 1);
-
-  histogram_tester.ExpectTotalCount(
-      "AnchorElementMetrics.Clicked.HrefEngagementScore2", 1);
 
   histogram_tester.ExpectUniqueSample(
       "NavigationPredictor.OnNonDSE.AccuracyActionTaken",
@@ -664,10 +752,8 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
   EXPECT_TRUE(content::ExecuteScript(
       incognito->tab_strip_model()->GetActiveWebContents(),
       "document.getElementById('google').click();"));
-  base::RunLoop().RunUntilIdle();
-
   histogram_tester.ExpectTotalCount(
-      "AnchorElementMetrics.Clicked.HrefEngagementScore2", 0);
+      "AnchorElementMetrics.Visible.HighestNavigationScore", 0);
 }
 
 // Simulate click at the anchor element.
@@ -702,7 +788,7 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
   WaitForLayout();
 
   histogram_tester.ExpectTotalCount("AnchorElementMetrics.Visible.RatioArea",
-                                    1);
+                                    2);
 
   EXPECT_TRUE(content::ExecuteScript(
       browser()->tab_strip_model()->GetActiveWebContents(),
@@ -727,7 +813,7 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
   WaitForLayout();
 
   histogram_tester.ExpectTotalCount("AnchorElementMetrics.Visible.RatioArea",
-                                    1);
+                                    2);
 
   EXPECT_TRUE(content::ExecuteScript(
       browser()->tab_strip_model()->GetActiveWebContents(),
@@ -854,9 +940,7 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
       NavigationPredictor::Action::kPrefetch, 1);
 }
 
-// Tests that the browser only receives anchor elements that are in the
-// viewport, and from anchor elements whose target differ from document URL
-// by one digit.
+// Tests that the browser receives anchors from anywhere on the page.
 IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
                        ViewportOnlyAndUrlIncrementByOne) {
   base::HistogramTester histogram_tester;
@@ -866,8 +950,157 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
   WaitForLayout();
 
   histogram_tester.ExpectUniqueSample(
-      "AnchorElementMetrics.Visible.NumberOfAnchorElements", 2, 1);
-  // Same document anchor element should be removed after merge.
+      "AnchorElementMetrics.Visible.NumberOfAnchorElements", 3, 1);
   histogram_tester.ExpectUniqueSample(
-      "AnchorElementMetrics.Visible.NumberOfAnchorElementsAfterMerge", 2, 1);
+      "AnchorElementMetrics.Visible.NumberOfAnchorElementsAfterMerge", 3, 1);
+}
+
+// Test that navigation score of anchor elements can be calculated on page load
+// and the predicted URLs for the next navigation are dispatched to the single
+// observer.
+IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
+                       NavigationScoreSingleObserver) {
+  TestObserver observer;
+
+  NavigationPredictorKeyedService* service =
+      NavigationPredictorKeyedServiceFactory::GetForProfile(
+          browser()->profile());
+  EXPECT_NE(nullptr, service);
+  service->AddObserver(&observer);
+
+  base::HistogramTester histogram_tester;
+
+  const GURL& url = GetTestURL("/simple_page_with_anchors.html");
+  ui_test_utils::NavigateToURL(browser(), url);
+  WaitForLayout();
+  observer.WaitUntilNotificationsCountReached(1);
+
+  histogram_tester.ExpectTotalCount(
+      "AnchorElementMetrics.Visible.HighestNavigationScore", 1);
+  service->RemoveObserver(&observer);
+
+  EXPECT_EQ(1u, observer.count_predictions());
+  EXPECT_EQ(url, observer.last_prediction()->source_document_url());
+  EXPECT_EQ(2u, observer.last_prediction()->sorted_predicted_urls().size());
+  EXPECT_NE(
+      observer.last_prediction()->sorted_predicted_urls().end(),
+      std::find(observer.last_prediction()->sorted_predicted_urls().begin(),
+                observer.last_prediction()->sorted_predicted_urls().end(),
+                "https://google.com/"));
+  EXPECT_NE(
+      observer.last_prediction()->sorted_predicted_urls().end(),
+      std::find(observer.last_prediction()->sorted_predicted_urls().begin(),
+                observer.last_prediction()->sorted_predicted_urls().end(),
+                "https://example.com/"));
+
+  // Doing another navigation after removing the observer should not cause a
+  // crash.
+  ui_test_utils::NavigateToURL(browser(), url);
+  WaitForLayout();
+  EXPECT_EQ(1u, observer.count_predictions());
+}
+
+// Same as NavigationScoreSingleObserver test but with more than one observer.
+IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
+                       NavigationScore_TwoObservers) {
+  TestObserver observer_1;
+  TestObserver observer_2;
+
+  NavigationPredictorKeyedService* service =
+      NavigationPredictorKeyedServiceFactory::GetForProfile(
+          browser()->profile());
+  service->AddObserver(&observer_1);
+  service->AddObserver(&observer_2);
+
+  base::HistogramTester histogram_tester;
+
+  const GURL& url = GetTestURL("/simple_page_with_anchors.html");
+  ui_test_utils::NavigateToURL(browser(), url);
+  WaitForLayout();
+  observer_1.WaitUntilNotificationsCountReached(1);
+  observer_2.WaitUntilNotificationsCountReached(1);
+
+  histogram_tester.ExpectTotalCount(
+      "AnchorElementMetrics.Visible.HighestNavigationScore", 1);
+  service->RemoveObserver(&observer_1);
+
+  EXPECT_EQ(1u, observer_1.count_predictions());
+  EXPECT_EQ(url, observer_1.last_prediction()->source_document_url());
+  EXPECT_EQ(2u, observer_1.last_prediction()->sorted_predicted_urls().size());
+  VerifyURLsPresent(observer_1.last_prediction()->sorted_predicted_urls(),
+                    {"https://google.com/", "https://example.com/"});
+  EXPECT_EQ(1u, observer_2.count_predictions());
+  EXPECT_EQ(url, observer_2.last_prediction()->source_document_url());
+
+  // Only |observer_2| should get the notification since |observer_1| has
+  // been removed from receiving the notifications.
+  ui_test_utils::NavigateToURL(browser(), url);
+  WaitForLayout();
+  observer_2.WaitUntilNotificationsCountReached(2);
+  EXPECT_EQ(1u, observer_1.count_predictions());
+  EXPECT_EQ(2u, observer_2.count_predictions());
+  VerifyURLsPresent(observer_2.last_prediction()->sorted_predicted_urls(),
+                    {"https://google.com/", "https://example.com/"});
+}
+
+// Test that the navigation predictor keyed service is null for incognito
+// profiles.
+IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest, Incognito) {
+  Browser* incognito = CreateIncognitoBrowser();
+  NavigationPredictorKeyedService* incognito_service =
+      NavigationPredictorKeyedServiceFactory::GetForProfile(
+          incognito->profile());
+  EXPECT_EQ(nullptr, incognito_service);
+}
+
+// Verify that the observers are notified of predictions on search results page.
+IN_PROC_BROWSER_TEST_F(
+    NavigationPredictorBrowserTestWithDefaultPredictorEnabled,
+    DISABLE_ON_CHROMEOS(ObserverNotifiedOnSearchPage)) {
+  TestObserver observer;
+
+  NavigationPredictorKeyedService* service =
+      NavigationPredictorKeyedServiceFactory::GetForProfile(
+          browser()->profile());
+  service->AddObserver(&observer);
+
+  static const char kShortName[] = "test";
+  static const char kSearchURL[] =
+      "/anchors_different_area.html?q={searchTerms}";
+
+  // Set up default search engine.
+  TemplateURLService* model =
+      TemplateURLServiceFactory::GetForProfile(browser()->profile());
+  ASSERT_TRUE(model);
+  search_test_utils::WaitForTemplateURLServiceToLoad(model);
+  ASSERT_TRUE(model->loaded());
+
+  TemplateURLData data;
+  data.SetShortName(base::ASCIIToUTF16(kShortName));
+  data.SetKeyword(data.short_name());
+  data.SetURL(GetTestURL(kSearchURL).spec());
+
+  TemplateURL* template_url = model->Add(std::make_unique<TemplateURL>(data));
+  ASSERT_TRUE(template_url);
+  model->SetUserSelectedDefaultSearchProvider(template_url);
+
+  base::HistogramTester histogram_tester;
+
+  EXPECT_EQ(0u, observer.count_predictions());
+
+  // This page only has non-same host links.
+  const GURL& url = GetTestURL("/anchors_different_area.html?q=cats");
+  ui_test_utils::NavigateToURL(browser(), url);
+  WaitForLayout();
+  observer.WaitUntilNotificationsCountReached(1u);
+
+  histogram_tester.ExpectUniqueSample("NavigationPredictor.OnDSE.ActionTaken",
+                                      NavigationPredictor::Action::kNone, 1);
+  EXPECT_EQ(1u, observer.count_predictions());
+  EXPECT_EQ(url, observer.last_prediction()->source_document_url());
+  EXPECT_EQ(5u, observer.last_prediction()->sorted_predicted_urls().size());
+  VerifyURLsPresent(
+      observer.last_prediction()->sorted_predicted_urls(),
+      {"https://example.com/2", "https://google.com/", "https://example.com/1",
+       "https://example.com/", "https://dummy.com/"});
 }

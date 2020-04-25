@@ -41,10 +41,11 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
     std::string code;
     int key_code;  // only used by on-screen keyboards.
     std::string extension_id;
-    bool alt_key;
-    bool ctrl_key;
-    bool shift_key;
-    bool caps_lock;
+    bool alt_key = false;
+    bool altgr_key = false;
+    bool ctrl_key = false;
+    bool shift_key = false;
+    bool caps_lock = false;
   };
 
   enum SegmentStyle {
@@ -96,9 +97,6 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
     // Called when composition bounds are changed.
     virtual void OnCompositionBoundsChanged(
         const std::vector<gfx::Rect>& bounds) = 0;
-
-    // Returns whether the observer is interested in key events.
-    virtual bool IsInterestedInKeyEvent() const = 0;
 
     // Called when a surrounding text is changed.
     virtual void OnSurroundingTextChanged(const std::string& engine_id,
@@ -196,10 +194,10 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
                        const std::string& request_id,
                        bool handled);
 
-  // Adds unprocessed key event to |request_map_|.
-  std::string AddRequest(
+  // Returns the request ID for this key event.
+  std::string AddPendingKeyEvent(
       const std::string& component_id,
-      ui::IMEEngineHandlerInterface::KeyEventDoneCallback key_data);
+      ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback);
 
   int GetContextIdForTesting() const { return context_id_; }
 
@@ -209,6 +207,20 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
   }
 
  protected:
+  struct PendingKeyEvent {
+    PendingKeyEvent(
+        const std::string& component_id,
+        ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback);
+    PendingKeyEvent(PendingKeyEvent&& other);
+    ~PendingKeyEvent();
+
+    std::string component_id;
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(PendingKeyEvent);
+  };
+
   // Returns true if this IME is active, false if not.
   virtual bool IsActive() const = 0;
 
@@ -252,13 +264,8 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
 
   Profile* profile_;
 
-  using RequestMap =
-      std::map<std::string,
-               std::pair<std::string,
-                         ui::IMEEngineHandlerInterface::KeyEventDoneCallback>>;
-
-  unsigned int next_request_id_;
-  RequestMap request_map_;
+  unsigned int next_request_id_ = 1;
+  std::map<std::string, PendingKeyEvent> pending_key_events_;
 
   // The composition text to be set from calling input.ime.setComposition API.
   ui::CompositionText composition_;

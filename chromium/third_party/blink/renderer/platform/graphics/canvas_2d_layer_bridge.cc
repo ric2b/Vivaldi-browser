@@ -124,8 +124,6 @@ void Canvas2DLayerBridge::StartRecording() {
 
   if (resource_host_)
     resource_host_->RestoreCanvasMatrixClipStack(canvas);
-
-  recording_pixel_count_ = 0;
 }
 
 void Canvas2DLayerBridge::ResetResourceProvider() {
@@ -342,6 +340,8 @@ CanvasResourceProvider* Canvas2DLayerBridge::GetOrCreateResourceProvider(
   hibernation_image_.reset();
 
   if (resource_host_) {
+    // If deferral is enabled the recorder will play back the transform, so we
+    // should not do it here or else it will be applied twice
     if (!is_deferral_enabled_)
       resource_host_->RestoreCanvasMatrixClipStack(resource_provider->Canvas());
 
@@ -443,15 +443,19 @@ bool Canvas2DLayerBridge::WritePixels(const SkImageInfo& orig_info,
       return false;
   }
 
-  // WritePixels is not supported by deferral. Since we are directly rendering,
-  // we can't do deferral on top of the canvas. Disable deferral completely.
-  last_recording_ = nullptr;
-  is_deferral_enabled_ = false;
-  have_recorded_draw_commands_ = false;
-  recorder_.reset();
-  // install the current matrix/clip stack onto the immediate canvas
-  if (GetOrCreateResourceProvider()) {
-    resource_host_->RestoreCanvasMatrixClipStack(ResourceProvider()->Canvas());
+  if (is_deferral_enabled_) {
+    // WritePixels is not supported by deferral. Since we are directly
+    // rendering, we can't do deferral on top of the canvas. Disable deferral
+    // completely.
+    last_recording_ = nullptr;
+    is_deferral_enabled_ = false;
+    have_recorded_draw_commands_ = false;
+    recorder_.reset();
+    // install the current matrix/clip stack onto the immediate canvas
+    if (GetOrCreateResourceProvider()) {
+      resource_host_->RestoreCanvasMatrixClipStack(
+          ResourceProvider()->Canvas());
+    }
   }
 
   ResourceProvider()->WritePixels(orig_info, pixels, row_bytes, x, y);
@@ -730,9 +734,9 @@ void Canvas2DLayerBridge::FinalizeFrame() {
   if (!GetOrCreateResourceProvider(kPreferAcceleration))
     return;
 
+  FlushRecording();
   ++frames_since_last_commit_;
   if (frames_since_last_commit_ >= 2) {
-    ResourceProvider()->FlushSkia();
     if (IsAccelerated() && !rate_limiter_) {
       // Make sure the GPU is never more than two animation frames behind.
       constexpr unsigned kMaxCanvasAnimationBacklog = 2;

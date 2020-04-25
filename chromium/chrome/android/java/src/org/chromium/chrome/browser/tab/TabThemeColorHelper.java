@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser.tab;
 
 import android.graphics.Color;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.UserData;
 import org.chromium.base.VisibleForTesting;
@@ -14,6 +15,11 @@ import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.RenderWidgetHostView;
 import org.chromium.content_public.browser.WebContents;
+
+import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.support.v7.graphics.Palette;
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Manages theme color used for {@link Tab}. Destroyed together with the tab.
@@ -107,6 +113,32 @@ public class TabThemeColorHelper extends EmptyTabObserver implements UserData {
                 themeColor = TabState.UNSPECIFIED_THEME_COLOR;
             } else {
                 mIsDefaultColorUsed = false;
+            }
+        }
+
+        // NOTE(david@vivaldi.com): In Vivaldi we're fetching the favicon color in order to define
+        // it as the |themeColor|.
+        if (ChromeApplication.isVivaldi()) {
+            Bitmap favicon = TabFavicon.getBitmap(mTab);
+            if (favicon != null) {
+                // NOTE(david@vivaldi.com): We might need to do that asynchronously, if we
+                // experiencing any delays.
+                Palette palette = Palette.from(favicon).generate();
+                if (palette != null) {
+                    Palette.Swatch swatch = null;
+                    // This is the priority list for searching the most relevant color.
+                    if (palette.getDominantSwatch() != null)
+                        swatch = palette.getDominantSwatch();
+                    else if (palette.getVibrantSwatch() != null)
+                        swatch = palette.getVibrantSwatch();
+                    else if (palette.getDarkVibrantSwatch() != null)
+                        swatch = palette.getDarkVibrantSwatch();
+                    // Fetch color...
+                    if (swatch != null) {
+                        int color = swatch.getRgb();
+                        if (color != 0xFFe8e8e8) themeColor = color;
+                    }
+                }
             }
         }
 
@@ -226,5 +258,11 @@ public class TabThemeColorHelper extends EmptyTabObserver implements UserData {
     @Override
     public void onDestroyed(Tab tab) {
         tab.removeObserver(this);
+    }
+
+    /** Vivaldi **/
+    @Override
+    public void onFaviconUpdated(Tab tab, Bitmap icon) {
+        updateIfNeeded(false);
     }
 }

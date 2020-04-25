@@ -64,7 +64,6 @@ class HTMLButtonElement final : public HTMLFormControlElement {
   bool IsLabelable() const override { return true; }
   bool TypeShouldForceLegacyLayout() const final { return true; }
   bool IsInteractiveContent() const override;
-  bool SupportsAutofocus() const override;
   bool MatchesDefaultPseudoClass() const override;
 
   bool CanBeSuccessfulSubmitButton() const override;
@@ -78,6 +77,13 @@ class HTMLButtonElement final : public HTMLFormControlElement {
 
   bool IsOptionalFormControl() const override { return true; }
   bool RecalcWillValidate() const override;
+
+  // TODO(crbug.com/1013385): Remove PreDispatchEventHandler, DidPreventDefault,
+  //   and DefaultEventHandlerInternal. They are here to temporarily fix form
+  //   double-submit.
+  EventDispatchHandlingState* PreDispatchEventHandler(Event&) override;
+  void DidPreventDefault(const Event&) final;
+  void DefaultEventHandlerInternal(Event&);
 
   Type type_;
   bool is_activated_submit_;

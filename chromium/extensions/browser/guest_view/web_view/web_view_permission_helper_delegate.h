@@ -39,14 +39,6 @@ class WebViewPermissionHelperDelegate : public content::WebContentsObserver {
 
   virtual void CancelGeolocationPermissionRequest(int bridge_id) {}
 
-  virtual void RequestNotificationPermission(
-      int bridge_id,
-      const GURL& requesting_frame,
-      bool user_gesture,
-      const base::Callback<void(bool)>& callback) {}
-
-  virtual void CancelNotificationPermissionRequest(int bridge_id) {}
-
   virtual void RequestFileSystemPermission(
       const GURL& url,
       bool allowed_by_default,
@@ -73,6 +65,7 @@ class WebViewPermissionHelperDelegate : public content::WebContentsObserver {
     return web_view_permission_helper_;
   }
 
+  // Vivaldi
   void SetDownloadInformation(const content::DownloadInformation& info);
 
  protected:

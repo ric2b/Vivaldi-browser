@@ -41,32 +41,39 @@ public class MemoryMetricsLoggerTest {
     }
 
     @After
-    public void tearDown() throws Exception {}
+    public void tearDown() {}
 
     @Test
     @Feature({"AndroidWebView"})
     @OnlyRunIn(MULTI_PROCESS)
     @SmallTest
-    public void testMultiProcessHistograms() throws Throwable {
+    public void testMultiProcessHistograms() {
         Assert.assertNotEquals(0,
                 RecordHistogram.getHistogramTotalCountForTesting(
                         "Memory.Browser.PrivateMemoryFootprint"));
         Assert.assertNotEquals(0,
                 RecordHistogram.getHistogramTotalCountForTesting(
                         "Memory.Renderer.PrivateMemoryFootprint"));
+        Assert.assertNotEquals(0,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "Memory.Total.PrivateMemoryFootprint"));
     }
 
     @Test
     @Feature({"AndroidWebView"})
     @OnlyRunIn(SINGLE_PROCESS)
     @SmallTest
-    public void testSingleProcessHistograms() throws Throwable {
+    public void testSingleProcessHistograms() {
         Assert.assertNotEquals(0,
                 RecordHistogram.getHistogramTotalCountForTesting(
                         "Memory.Browser.PrivateMemoryFootprint"));
+        // Verify no renderer record in single process mode.
         Assert.assertEquals(0,
                 RecordHistogram.getHistogramTotalCountForTesting(
                         "Memory.Renderer.PrivateMemoryFootprint"));
+        Assert.assertNotEquals(0,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "Memory.Total.PrivateMemoryFootprint"));
     }
 
     /**

@@ -599,6 +599,8 @@ ChannelState WebSocketChannel::ReadFrames() {
     }
   }
 
+  // TODO(crbug.com/999235): Remove this CHECK.
+  CHECK(event_interface_);
   while (!event_interface_->HasPendingDataFrames()) {
     DCHECK(stream_);
     // This use of base::Unretained is safe because this object owns the
@@ -616,6 +618,8 @@ ChannelState WebSocketChannel::ReadFrames() {
       return CHANNEL_DELETED;
     }
     DCHECK_NE(CLOSED, state_);
+    // TODO(crbug.com/999235): Remove this CHECK.
+    CHECK(event_interface_);
   }
   return CHANNEL_ALIVE;
 }
@@ -705,7 +709,7 @@ ChannelState WebSocketChannel::HandleFrame(
   // Respond to the frame appropriately to its type.
   return HandleFrameByState(
       opcode, frame->header.final,
-      base::make_span(frame->data, frame->header.payload_length));
+      base::make_span(frame->payload, frame->header.payload_length));
 }
 
 ChannelState WebSocketChannel::HandleFrameByState(
@@ -904,7 +908,7 @@ ChannelState WebSocketChannel::SendFrameInternal(
   header.final = fin;
   header.masked = true;
   header.payload_length = buffer_size;
-  frame->data = buffer->data();
+  frame->payload = buffer->data();
 
   if (data_being_sent_) {
     // Either the link to the WebSocket server is saturated, or several messages

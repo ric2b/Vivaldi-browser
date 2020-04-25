@@ -16,10 +16,15 @@ import android.text.TextPaint;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ui.widget.TintedDrawable;
 import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.widget.TintedDrawable;
 
 import java.util.Locale;
+
+import android.graphics.drawable.Drawable;
+import android.os.Build;
+import android.support.v4.content.ContextCompat;
+import android.support.v4.graphics.drawable.DrawableCompat;
 
 /**
  * A drawable for the tab switcher icon.
@@ -125,5 +130,29 @@ public class TabSwitcherDrawable extends TintedDrawable {
     public void setTint(ColorStateList tint) {
         super.setTint(tint);
         if (mTextPaint != null) mTextPaint.setColor(getColorForState());
+    }
+
+    /**
+     * TODO(Vivaldi)
+     * Creates a {@link TabSwitcherDrawable}.
+     * @param context A {@link Context} instance.
+     * @param useLight  Whether or not to use light or dark textures and text colors.
+     * @return          A {@link TabSwitcherDrawable} instance.
+     */
+    public static TabSwitcherDrawable createTabSwitcherDrawableFromSVG(Context context,
+                                                                       boolean onBottomToolbar,
+                                                                       boolean useLight) {
+        Drawable drawable = ContextCompat.getDrawable(context,
+                onBottomToolbar ? R.drawable.vivaldi_bottom_nav_tab_counter_56dp
+                        : R.drawable.vivaldi_tab_switch_tab_counter_small);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            drawable = (DrawableCompat.wrap(drawable)).mutate();
+        }
+        Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(),
+                drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.draw(canvas);
+        return new TabSwitcherDrawable(context, useLight, bitmap);
     }
 }

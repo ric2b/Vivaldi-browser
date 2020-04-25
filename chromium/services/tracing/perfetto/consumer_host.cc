@@ -12,12 +12,16 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/numerics/ranges.h"
 #include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
+#include "base/trace_event/trace_log.h"
+#include "base/values.h"
 #include "build/build_config.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/wait.h"
 #include "services/tracing/perfetto/json_trace_exporter.h"
@@ -115,19 +119,19 @@ class ConsumerHost::StreamWriter {
 
 ConsumerHost::TracingSession::TracingSession(
     ConsumerHost* host,
-    mojom::TracingSessionHostRequest tracing_session_host,
-    mojom::TracingSessionClientPtr tracing_session_client,
+    mojo::PendingReceiver<mojom::TracingSessionHost> tracing_session_host,
+    mojo::PendingRemote<mojom::TracingSessionClient> tracing_session_client,
     const perfetto::TraceConfig& trace_config,
     mojom::TracingClientPriority priority)
     : host_(host),
       tracing_session_client_(std::move(tracing_session_client)),
-      binding_(this, std::move(tracing_session_host)),
+      receiver_(this, std::move(tracing_session_host)),
       tracing_priority_(priority) {
   host_->service()->RegisterTracingSession(this);
 
-  tracing_session_client_.set_connection_error_handler(base::BindOnce(
+  tracing_session_client_.set_disconnect_handler(base::BindOnce(
       &ConsumerHost::DestructTracingSession, base::Unretained(host)));
-  binding_.set_connection_error_handler(base::BindOnce(
+  receiver_.set_disconnect_handler(base::BindOnce(
       &ConsumerHost::DestructTracingSession, base::Unretained(host)));
 
   privacy_filtering_enabled_ = false;
@@ -192,8 +196,7 @@ void ConsumerHost::TracingSession::OnPerfettoEvents(
 
   for (const auto& state_change : events.instance_state_changes()) {
     if (state_change.state() !=
-        perfetto::ObservableEvents::DataSourceInstanceStateChange::
-            DATA_SOURCE_INSTANCE_STATE_STARTED) {
+        perfetto::ObservableEvents::DATA_SOURCE_INSTANCE_STATE_STARTED) {
       continue;
     }
 
@@ -342,6 +345,7 @@ void ConsumerHost::TracingSession::RequestBufferUsage(
 void ConsumerHost::TracingSession::DisableTracingAndEmitJson(
     const std::string& agent_label_filter,
     mojo::ScopedDataPipeProducerHandle stream,
+    bool privacy_filtering_enabled,
     DisableTracingAndEmitJsonCallback callback) {
   DCHECK(!read_buffers_stream_writer_);
 
@@ -366,7 +370,11 @@ void ConsumerHost::TracingSession::DisableTracingAndEmitJson(
 
   JSONTraceExporter::ArgumentFilterPredicate arg_filter_predicate;
   JSONTraceExporter::MetadataFilterPredicate metadata_filter_predicate;
-  if (privacy_filtering_enabled_) {
+  if (privacy_filtering_enabled) {
+    // For filtering/whitelisting to be possible at JSON export time,
+    // filtering must not have been enabled during proto emission time
+    // (or there's nothing to pass through the whitelist).
+    DCHECK(!privacy_filtering_enabled_);
     auto* trace_log = base::trace_event::TraceLog::GetInstance();
     arg_filter_predicate = trace_log->GetArgumentFilterPredicate();
     metadata_filter_predicate = trace_log->GetMetadataFilterPredicate();
@@ -445,7 +453,7 @@ void ConsumerHost::TracingSession::OnTraceStats(
                            buf_stats.padding_bytes_cleared();
   double percent_full =
       bytes_in_buffer / static_cast<double>(buf_stats.buffer_size());
-  percent_full = std::min(std::max(0.0, percent_full), 1.0);
+  percent_full = base::ClampToRange(percent_full, 0.0, 1.0);
   bool data_loss = buf_stats.chunks_overwritten() > 0 ||
                    buf_stats.chunks_discarded() > 0 ||
                    buf_stats.abi_violations() > 0 ||
@@ -471,12 +479,12 @@ void ConsumerHost::TracingSession::Flush(
 }
 
 // static
-void ConsumerHost::BindConsumerRequest(
+void ConsumerHost::BindConsumerReceiver(
     PerfettoService* service,
-    mojom::ConsumerHostRequest request,
+    mojo::PendingReceiver<mojom::ConsumerHost> receiver,
     const service_manager::BindSourceInfo& source_info) {
-  mojo::MakeStrongBinding(std::make_unique<ConsumerHost>(service),
-                          std::move(request));
+  mojo::MakeSelfOwnedReceiver(std::make_unique<ConsumerHost>(service),
+                              std::move(receiver));
 }
 
 ConsumerHost::ConsumerHost(PerfettoService* service) : service_(service) {
@@ -496,8 +504,8 @@ ConsumerHost::~ConsumerHost() {
 }
 
 void ConsumerHost::EnableTracing(
-    mojom::TracingSessionHostRequest tracing_session_host,
-    mojom::TracingSessionClientPtr tracing_session_client,
+    mojo::PendingReceiver<mojom::TracingSessionHost> tracing_session_host,
+    mojo::PendingRemote<mojom::TracingSessionClient> tracing_session_client,
     const perfetto::TraceConfig& trace_config,
     mojom::TracingClientPriority priority) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -507,23 +515,26 @@ void ConsumerHost::EnableTracing(
   // us to, after it's stopped any currently running lower or equal priority
   // tracing sessions.
   service_->RequestTracingSession(
-      priority,
-      base::BindOnce(
-          [](base::WeakPtr<ConsumerHost> weak_this,
-             mojom::TracingSessionHostRequest tracing_session_host,
-             mojom::TracingSessionClientPtr tracing_session_client,
-             const perfetto::TraceConfig& trace_config,
-             mojom::TracingClientPriority priority) {
-            if (!weak_this) {
-              return;
-            }
+      priority, base::BindOnce(
+                    [](base::WeakPtr<ConsumerHost> weak_this,
+                       mojo::PendingReceiver<mojom::TracingSessionHost>
+                           tracing_session_host,
+                       mojo::PendingRemote<mojom::TracingSessionClient>
+                           tracing_session_client,
+                       const perfetto::TraceConfig& trace_config,
+                       mojom::TracingClientPriority priority) {
+                      if (!weak_this) {
+                        return;
+                      }
 
-            weak_this->tracing_session_ = std::make_unique<TracingSession>(
-                weak_this.get(), std::move(tracing_session_host),
-                std::move(tracing_session_client), trace_config, priority);
-          },
-          weak_factory_.GetWeakPtr(), std::move(tracing_session_host),
-          std::move(tracing_session_client), trace_config, priority));
+                      weak_this->tracing_session_ =
+                          std::make_unique<TracingSession>(
+                              weak_this.get(), std::move(tracing_session_host),
+                              std::move(tracing_session_client), trace_config,
+                              priority);
+                    },
+                    weak_factory_.GetWeakPtr(), std::move(tracing_session_host),
+                    std::move(tracing_session_client), trace_config, priority));
 }
 
 void ConsumerHost::OnConnect() {}

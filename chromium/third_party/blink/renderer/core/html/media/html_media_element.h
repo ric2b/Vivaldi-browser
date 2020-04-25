@@ -144,6 +144,17 @@ class CORE_EXPORT HTMLMediaElement
   void SetSrc(const AtomicString&);
   void SetSrc(const USVStringOrTrustedURL&, ExceptionState&);
   const KURL& currentSrc() const { return current_src_; }
+
+  // Return the URL to be used for downloading the media.
+  const KURL& downloadURL() const {
+    // If we didn't get a redirected URL from the player, then use the original.
+    if (current_src_after_redirects_.IsNull() ||
+        current_src_after_redirects_.IsEmpty()) {
+      return currentSrc();
+    }
+    return current_src_after_redirects_;
+  }
+
   void SetSrcObject(MediaStreamDescriptor*);
   MediaStreamDescriptor* GetSrcObject() const { return src_object_.Get(); }
 
@@ -556,7 +567,7 @@ class CORE_EXPORT HTMLMediaElement
 
   void OnRemovedFromDocumentTimerFired(TimerBase*);
 
-  void DefaultEventHandler(Event&) override;
+  Features GetFeatures() override;
 
   TaskRunnerTimer<HTMLMediaElement> load_timer_;
   TaskRunnerTimer<HTMLMediaElement> progress_event_timer_;
@@ -573,6 +584,7 @@ class CORE_EXPORT HTMLMediaElement
   ReadyState ready_state_;
   ReadyState ready_state_maximum_;
   KURL current_src_;
+  KURL current_src_after_redirects_;
   Member<MediaStreamDescriptor> src_object_;
 
   Member<MediaError> error_;
@@ -686,9 +698,8 @@ class CORE_EXPORT HTMLMediaElement
 
   // AudioClientImpl wraps an AudioSourceProviderClient.
   // When the audio format is known, Chromium calls setFormat().
-  class AudioClientImpl final
-      : public GarbageCollectedFinalized<AudioClientImpl>,
-        public WebAudioSourceProviderClient {
+  class AudioClientImpl final : public GarbageCollected<AudioClientImpl>,
+                                public WebAudioSourceProviderClient {
    public:
     explicit AudioClientImpl(AudioSourceProviderClient* client)
         : client_(client) {}
@@ -735,7 +746,6 @@ class CORE_EXPORT HTMLMediaElement
   friend class Internals;
   friend class TrackDisplayUpdateScope;
   friend class MediaControlsImplTest;
-  friend class MediaControlsTouchlessImplTest;
   friend class HTMLMediaElementTest;
   friend class HTMLMediaElementEventListenersTest;
   friend class HTMLVideoElement;

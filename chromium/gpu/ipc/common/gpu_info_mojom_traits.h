@@ -27,6 +27,16 @@ struct StructTraits<gpu::mojom::GpuDeviceDataView, gpu::GPUInfo::GPUDevice> {
     return input.device_id;
   }
 
+#if defined(OS_WIN)
+  static uint32_t sub_sys_id(const gpu::GPUInfo::GPUDevice& input) {
+    return input.sub_sys_id;
+  }
+
+  static uint32_t revision(const gpu::GPUInfo::GPUDevice& input) {
+    return input.revision;
+  }
+#endif  // OS_WIN
+
   static bool active(const gpu::GPUInfo::GPUDevice& input) {
     return input.active;
   }
@@ -119,6 +129,11 @@ struct StructTraits<gpu::mojom::VideoEncodeAcceleratorSupportedProfileDataView,
   static gpu::VideoCodecProfile profile(
       const gpu::VideoEncodeAcceleratorSupportedProfile& input) {
     return input.profile;
+  }
+
+  static const gfx::Size& min_resolution(
+      const gpu::VideoEncodeAcceleratorSupportedProfile& input) {
+    return input.min_resolution;
   }
 
   static const gfx::Size& max_resolution(

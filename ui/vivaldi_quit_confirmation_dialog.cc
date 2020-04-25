@@ -103,10 +103,6 @@ ui::ModalType VivaldiQuitConfirmationDialog::GetModalType() const {
   return ui::MODAL_TYPE_SYSTEM;
 }
 
-bool VivaldiQuitConfirmationDialog::ShouldUseCustomFrame() const {
-  return true;
-}
-
 base::string16 VivaldiQuitConfirmationDialog::GetWindowTitle() const {
   return delegate_->GetWindowTitle();
 }

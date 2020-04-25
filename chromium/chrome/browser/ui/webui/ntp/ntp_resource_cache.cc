@@ -15,6 +15,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -25,6 +26,7 @@
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/webui/app_launcher_login_handler.h"
 #include "chrome/browser/ui/webui/ntp/app_launcher_handler.h"
+#include "chrome/browser/ui/webui/ntp/cookie_controls_handler.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
@@ -34,6 +36,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/content_settings/core/common/features.h"
+#include "components/content_settings/core/common/pref_names.h"
 #include "components/google/core/common/google_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -135,9 +139,7 @@ std::string GetNewTabBackgroundTilingCSS(
 }  // namespace
 
 NTPResourceCache::NTPResourceCache(Profile* profile)
-    : profile_(profile),
-      is_swipe_tracking_from_scroll_events_enabled_(false),
-      theme_observer_(this) {
+    : profile_(profile), is_swipe_tracking_from_scroll_events_enabled_(false) {
   registrar_.Add(this, chrome::NOTIFICATION_BROWSER_THEME_CHANGED,
                  content::Source<ThemeService>(
                      ThemeServiceFactory::GetForProfile(profile)));
@@ -276,6 +278,15 @@ void NTPResourceCache::CreateNewTabIncognitoHTML() {
       l10n_util::GetStringUTF8(IDS_NEW_TAB_OTR_NOT_SAVED);
   replacements["learnMoreLink"] = kLearnMoreIncognitoUrl;
   replacements["title"] = l10n_util::GetStringUTF8(IDS_NEW_TAB_TITLE);
+  replacements["hideCookieControls"] =
+      CookieControlsHandler::ShouldHideCookieControlsUI(profile_) ? "hidden"
+                                                                  : "";
+  replacements["cookieControlsTitle"] =
+      l10n_util::GetStringUTF8(IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE);
+  replacements["cookieControlsDescription"] = l10n_util::GetStringUTF8(
+      IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE_SUBLABEL);
+  replacements["cookieControlsToggleChecked"] =
+      CookieControlsHandler::GetToggleCheckedValue(profile_) ? "checked" : "";
 
   const ui::ThemeProvider& tp =
       ThemeService::GetThemeProviderForProfile(profile_);
@@ -451,7 +462,7 @@ void NTPResourceCache::CreateNewTabHTML() {
                             !prefs->GetBoolean(prefs::kHideWebStoreIcon));
 
   load_time_data.SetBoolean("canShowAppInfoDialog",
-                            CanShowAppInfoDialog());
+                            CanPlatformShowAppInfoDialog());
 
   AppLauncherHandler::GetLocalizedValues(profile_, &load_time_data);
 

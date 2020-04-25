@@ -82,6 +82,7 @@ class CONTENT_EXPORT BrowserAccessibilityDelegate {
 
   virtual void AccessibilityPerformAction(const ui::AXActionData& data) = 0;
   virtual bool AccessibilityViewHasFocus() const = 0;
+  virtual void AccessibilityViewSetFocus() = 0;
   virtual gfx::Rect AccessibilityGetViewBounds() const = 0;
   virtual float AccessibilityGetDeviceScaleFactor() const = 0;
   virtual void AccessibilityFatalError() = 0;
@@ -411,10 +412,6 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
   // AXTreeManager implementation.
   ui::AXNode* GetNodeFromTree(ui::AXTreeID tree_id,
                               int32_t node_id) const override;
-  ui::AXPlatformNodeDelegate* GetDelegate(const ui::AXTreeID tree_id,
-                                          const int32_t node_id) const override;
-  ui::AXPlatformNodeDelegate* GetRootDelegate(
-      const ui::AXTreeID tree_id) const override;
   AXTreeID GetTreeID() const override;
   AXTreeID GetParentTreeID() const override;
   ui::AXNode* GetRootAsAXNode() const override;

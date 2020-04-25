@@ -17,6 +17,9 @@
 #include "components/search_engines/template_url_data_util.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
+#if defined(VIVALDI_BUILD) && defined (OS_ANDROID)
+#include "app/vivaldi_apptools.h"
+#endif
 
 namespace TemplateURLPrepopulateData {
 
@@ -32,9 +35,20 @@ namespace {
 
 // Default (for countries with no better engine set)
 const PrepopulatedEngine* const engines_default[] = {
+#if defined (VIVALDI_BUILD) && defined(OS_ANDROID)
+    &bing_viv,
+    &yahoo_viv,
+    &startpage_viv,
+    &duckduckgo_viv,
+    &ecosia_viv,
+    &wikipedia_viv,
+    &google_viv,
+    &qwant_viv,
+#else
     &google,
     &bing,
     &yahoo,
+#endif
 };
 
 // Note, the below entries are sorted by country code, not the name in comment.
@@ -706,10 +720,22 @@ const PrepopulatedEngine* const engines_RS[] = {
 
 // Russia
 const PrepopulatedEngine* const engines_RU[] = {
+#if defined (VIVALDI_BUILD) && defined(OS_ANDROID)
+    &yandex_ru_viv,
+    &bing_viv,
+    &yahoo_viv,
+    &google_viv,
+    &startpage_viv,
+    &duckduckgo_viv,
+    &ecosia_viv,
+    &wikipedia_viv,
+    &qwant_viv,
+#else
     &yandex_ru,
     &google,
     &mail_ru,
     &bing,
+#endif
 };
 
 // Rwanda
@@ -888,96 +914,6 @@ const PrepopulatedEngine* const engines_ZW[] = {
     &baidu,
 };
 // ----------------------------------------------------------------------------
-
-// A list of all the engines that we know about.
-const PrepopulatedEngine* const kAllEngines[] = {
-    // Prepopulated engines:
-    &ask,
-    &baidu,
-    &bing,
-    &coccoc,
-    &daum,
-    &duckduckgo,
-    &google,
-    &mail_ru,
-    &naver,
-    &qwant,
-    &seznam,
-    &sogou,
-    &yahoo,
-    &yahoo_ar,
-    &yahoo_at,
-    &yahoo_au,
-    &yahoo_br,
-    &yahoo_ca,
-    &yahoo_ch,
-    &yahoo_cl,
-    &yahoo_co,
-    &yahoo_de,
-    &yahoo_dk,
-    &yahoo_es,
-    &yahoo_fi,
-    &yahoo_fr,
-    &yahoo_hk,
-    &yahoo_id,
-    &yahoo_in,
-    &yahoo_jp,
-    &yahoo_mx,
-    &yahoo_my,
-    &yahoo_nl,
-    &yahoo_nz,
-    &yahoo_pe,
-    &yahoo_ph,
-    &yahoo_qc,
-    &yahoo_se,
-    &yahoo_sg,
-    &yahoo_th,
-    &yahoo_tr,
-    &yahoo_tw,
-    &yahoo_uk,
-    &yahoo_ve,
-    &yahoo_vn,
-    &yandex_by,
-    &yandex_com,
-    &yandex_kz,
-    &yandex_ru,
-    &yandex_tr,
-    &yandex_ua,
-
-    // UMA-only engines:
-    &atlas_cz,
-    &atlas_sk,
-    &avg,
-    &babylon,
-    &conduit,
-    &delfi_lt,
-    &delfi_lv,
-    &delta,
-    &funmoods,
-    &goo,
-    &imesh,
-    &iminent,
-    &in,
-    &incredibar,
-    &libero,
-    &neti,
-    &nigma,
-    &ok,
-    &rambler,
-    &sapo,
-    &search_results,
-    &searchnu,
-    &snapdo,
-    &softonic,
-    &sweetim,
-    &sweetpacks,
-    &terra_ar,
-    &terra_es,
-    &tut,
-    &walla,
-    &wp,
-    &zoznam,
-};
 
 std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulationSetFromCountryID(
     int country_id) {
@@ -1359,6 +1295,17 @@ int GetDataVersion(PrefService* prefs) {
 std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
     PrefService* prefs,
     size_t* default_search_provider_index) {
+#if defined(VIVALDI_BUILD) && defined(OS_ANDROID)
+  std::vector<std::unique_ptr<TemplateURLData>> t_urls;
+  if (vivaldi::IsVivaldiRunning()) {
+    const int country_id_ru = country_codes::CountryCharsToCountryID('R', 'U');
+    if (country_codes::GetCurrentCountryID() == country_id_ru)
+        t_urls = GetPrepopulationSetFromCountryID(country_id_ru);
+    else
+        t_urls =
+            GetPrepopulationSetFromCountryID(country_codes::kCountryIDUnknown);
+  } else {
+#endif
   // If there is a set of search engines in the preferences file, it overrides
   // the built-in set.
   std::vector<std::unique_ptr<TemplateURLData>> t_urls =
@@ -1367,6 +1314,9 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
     t_urls = GetPrepopulationSetFromCountryID(
         country_codes::GetCountryIDFromPrefs(prefs));
   }
+#if defined(VIVALDI_BUILD) && defined(OS_ANDROID)
+  }
+#endif
   if (default_search_provider_index) {
     const auto itr = std::find_if(
         t_urls.begin(), t_urls.end(),
@@ -1404,8 +1354,8 @@ std::vector<std::unique_ptr<TemplateURLData>> GetLocalPrepopulatedEngines(
 #endif
 
 std::vector<const PrepopulatedEngine*> GetAllPrepopulatedEngines() {
-  return std::vector<const PrepopulatedEngine*>(std::begin(kAllEngines),
-                                                std::end(kAllEngines));
+  return std::vector<const PrepopulatedEngine*>(
+      &kAllEngines[0], &kAllEngines[0] + kAllEnginesLength);
 }
 
 void ClearPrepopulatedEnginesInPrefs(PrefService* prefs) {
@@ -1442,7 +1392,7 @@ SearchEngineType GetEngineType(const GURL& url) {
     return google.type;
 
   // Now check the rest of the prepopulate data.
-  for (size_t i = 0; i < base::size(kAllEngines); ++i) {
+  for (size_t i = 0; i < kAllEnginesLength; ++i) {
     // First check the main search URL.
     if (SameDomain(url, GURL(kAllEngines[i]->search_url)))
       return kAllEngines[i]->type;

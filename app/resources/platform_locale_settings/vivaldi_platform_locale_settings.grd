@@ -14,6 +14,7 @@
     <output filename="platform_locale_settings_hy.pak" type="data_package" lang="hy" />
     <output filename="platform_locale_settings_io.pak" type="data_package" lang="io" />
     <output filename="platform_locale_settings_is.pak" type="data_package" lang="is" />
+    <output filename="platform_locale_settings_ja-KS.pak" type="data_package" lang="ja-KS" />
     <output filename="platform_locale_settings_jbo.pak" type="data_package" lang="jbo" />
     <output filename="platform_locale_settings_ka.pak" type="data_package" lang="ka" />
     <output filename="platform_locale_settings_ku.pak" type="data_package" lang="ku" />
@@ -47,6 +48,7 @@
     <file path="strings/vivaldi_platform_locale_settings_id.xtb" lang="id" />
     <file path="strings/vivaldi_platform_locale_settings_it.xtb" lang="it" />
     <file path="strings/vivaldi_platform_locale_settings_ja.xtb" lang="ja" />
+    <file path="strings/vivaldi_platform_locale_settings_ja-KS.xtb" lang="ja-KS" />
     <file path="strings/vivaldi_platform_locale_settings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_platform_locale_settings_ko.xtb" lang="ko" />
     <file path="strings/vivaldi_platform_locale_settings_lt.xtb" lang="lt" />

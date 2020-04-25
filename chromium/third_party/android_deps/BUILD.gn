@@ -4,6 +4,13 @@
 
 import("//build/config/android/rules.gni")
 
+# Vivaldi Aliases
+java_group("android_support_v7_palette_java") {
+  deps = [
+    ":com_android_support_palette_v7_java",
+  ]
+}
+
 # Library groups
 java_group("android_support_v4_java") {
   deps = [
@@ -364,6 +371,9 @@ android_aar_prebuilt("androidx_mediarouter_mediarouter_java") {
     ":androidx_palette_palette_java",
     ":androidx_recyclerview_recyclerview_java",
   ]
+
+  # https://crbug.com/1000382
+  proguard_configs = [ "androidx_mediarouter.flags" ]
 }
 
 # This is generated, do not edit. Update BuildConfigGenerator.groovy instead.
@@ -465,6 +475,16 @@ android_aar_prebuilt("androidx_test_runner_java") {
     ":androidx_test_monitor_java",
     ":net_sf_kxml_kxml2_java",
     "//third_party/junit:junit",
+  ]
+}
+
+# This is generated, do not edit. Update BuildConfigGenerator.groovy instead.
+android_aar_prebuilt("androidx_test_uiautomator_uiautomator_java") {
+  aar_path = "libs/androidx_test_uiautomator_uiautomator/uiautomator-2.2.0.aar"
+  info_path = "libs/androidx_test_uiautomator_uiautomator/androidx_test_uiautomator_uiautomator.info"
+  testonly = true
+  deps = [
+    ":androidx_test_runner_java",
   ]
 }
 
@@ -618,6 +638,9 @@ android_aar_prebuilt("com_android_support_mediarouter_v7_java") {
     ":com_android_support_recyclerview_v7_java",
     ":com_android_support_support_media_compat_java",
   ]
+
+  # https://crbug.com/1000382
+  proguard_configs = [ "support_mediarouter.flags" ]
 }
 
 # This is generated, do not edit. Update BuildConfigGenerator.groovy instead.
@@ -722,6 +745,21 @@ android_aar_prebuilt("com_android_support_support_core_utils_java") {
     ":com_android_support_print_java",
     ":com_android_support_support_annotations_java",
     ":com_android_support_support_compat_java",
+  ]
+}
+
+# This is generated, do not edit. Update BuildConfigGenerator.groovy instead.
+android_aar_prebuilt("com_android_support_support_fragment_java") {
+  aar_path =
+      "libs/com_android_support_support_fragment/support-fragment-28.0.0.aar"
+  info_path = "libs/com_android_support_support_fragment/com_android_support_support_fragment.info"
+  deps = [
+    ":android_arch_lifecycle_viewmodel_java",
+    ":com_android_support_loader_java",
+    ":com_android_support_support_annotations_java",
+    ":com_android_support_support_compat_java",
+    ":com_android_support_support_core_ui_java",
+    ":com_android_support_support_core_utils_java",
   ]
 }
 
@@ -870,7 +908,8 @@ android_aar_prebuilt("google_play_services_cast_framework_java") {
   ]
 
   # Removing all resources from cast framework as they are unused bloat.
-  strip_resources = true
+  # Can only safely remove them when R8 will strip the path that accesses them.
+  strip_resources = !is_java_debug
 }
 
 # This is generated, do not edit. Update BuildConfigGenerator.groovy instead.
@@ -1344,6 +1383,7 @@ android_aar_prebuilt("androidx_vectordrawable_vectordrawable_java") {
     ":androidx_annotation_annotation_java",
     ":androidx_core_core_java",
   ]
+  create_srcjar = false
 }
 
 # This is generated, do not edit. Update BuildConfigGenerator.groovy instead.
@@ -1502,25 +1542,6 @@ android_aar_prebuilt("com_android_support_slidingpanelayout_java") {
     ":com_android_support_customview_java",
     ":com_android_support_support_annotations_java",
     ":com_android_support_support_compat_java",
-  ]
-}
-
-# This is generated, do not edit. Update BuildConfigGenerator.groovy instead.
-android_aar_prebuilt("com_android_support_support_fragment_java") {
-  aar_path =
-      "libs/com_android_support_support_fragment/support-fragment-28.0.0.aar"
-  info_path = "libs/com_android_support_support_fragment/com_android_support_support_fragment.info"
-
-  # To remove visibility constraint, add this dependency to
-  # //tools/android/roll/android_deps/build.gradle.
-  visibility = [ ":*" ]
-  deps = [
-    ":android_arch_lifecycle_viewmodel_java",
-    ":com_android_support_loader_java",
-    ":com_android_support_support_annotations_java",
-    ":com_android_support_support_compat_java",
-    ":com_android_support_support_core_ui_java",
-    ":com_android_support_support_core_utils_java",
   ]
 }
 

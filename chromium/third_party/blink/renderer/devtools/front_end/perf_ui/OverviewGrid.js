@@ -138,6 +138,8 @@ PerfUI.OverviewGrid.WindowScrollSpeedFactor = .3;
 
 PerfUI.OverviewGrid.ResizerOffset = 3.5;  // half pixel because offset values are not rounded but ceiled
 
+PerfUI.OverviewGrid.OffsetFromWindowEnds = 10;
+
 /**
  * @unrestricted
  */
@@ -172,9 +174,21 @@ PerfUI.OverviewGrid.Window = class extends Common.Object {
         this._rightResizeElement, this._resizerElementStartDragging.bind(this),
         this._rightResizeElementDragging.bind(this), null, 'ew-resize');
 
+    this._leftResizeElement.tabIndex = 0;
+    this._leftResizeElement.addEventListener('keydown', event => this._handleKeyboardResizing(event, false));
+
+    this._rightResizeElement.tabIndex = 0;
+    this._rightResizeElement.addEventListener('keydown', event => this._handleKeyboardResizing(event, true));
+    this._rightResizeElement.addEventListener('focus', this._onRightResizeElementFocused.bind(this));
+
     this._leftCurtainElement = parentElement.createChild('div', 'window-curtain-left');
     this._rightCurtainElement = parentElement.createChild('div', 'window-curtain-right');
     this.reset();
+  }
+
+  _onRightResizeElementFocused() {
+    // To prevent browser focus from scrolling the element into view and shifting the contents of the strip
+    this._parentElement.scrollLeft = 0;
   }
 
   reset() {
@@ -202,8 +216,9 @@ PerfUI.OverviewGrid.Window = class extends Common.Object {
    * @param {!Event} event
    */
   _resizerElementStartDragging(event) {
-    if (!this._enabled)
+    if (!this._enabled) {
       return false;
+    }
     this._resizerParentOffsetLeft = event.pageX - event.offsetX - event.target.offsetLeft;
     event.stopPropagation();
     return true;
@@ -227,11 +242,56 @@ PerfUI.OverviewGrid.Window = class extends Common.Object {
 
   /**
    * @param {!Event} event
+   * @param {boolean=} moveRightResizer
+   */
+  _handleKeyboardResizing(event, moveRightResizer) {
+    let increment = false;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      if (event.key === 'ArrowRight') {
+        increment = true;
+      }
+      const newPos = this._getNewResizerPosition(event.target.offsetLeft, increment, event.ctrlKey);
+      if (moveRightResizer) {
+        this._resizeWindowRight(newPos);
+      } else {
+        this._resizeWindowLeft(newPos);
+      }
+      event.consume(true);
+    }
+  }
+
+  /**
+   * @param {number} offset
+   * @param {boolean=} increment
+   * @param {boolean=} ctrlPressed
+   * @return {number}
+   */
+  _getNewResizerPosition(offset, increment, ctrlPressed) {
+    let newPos;
+    // We shift by 10px if the ctrlKey is pressed and 2 otherwise.  1px shifts result in noOp due to rounding in _updateCurtains
+    let pixelsToShift = ctrlPressed ? 10 : 2;
+    pixelsToShift = increment ? pixelsToShift : -Math.abs(pixelsToShift);
+    const offsetLeft = offset + PerfUI.OverviewGrid.ResizerOffset;
+    newPos = offsetLeft + pixelsToShift;
+    if (increment && newPos < PerfUI.OverviewGrid.OffsetFromWindowEnds) {
+      // When incrementing, snap to the window offset value (10px) if the new position is between 0px and 10px
+      newPos = PerfUI.OverviewGrid.OffsetFromWindowEnds;
+    } else if (!increment && newPos > this._parentElement.clientWidth - PerfUI.OverviewGrid.OffsetFromWindowEnds) {
+      // When decrementing, snap to the window offset value (10px) from the rightmost side if the new position is within 10px from the end.
+      newPos = this._parentElement.clientWidth - PerfUI.OverviewGrid.OffsetFromWindowEnds;
+    }
+
+    return newPos;
+  }
+
+  /**
+   * @param {!Event} event
    * @return {boolean}
    */
   _startWindowSelectorDragging(event) {
-    if (!this._enabled)
+    if (!this._enabled) {
       return false;
+    }
     this._offsetLeft = this._parentElement.totalOffsetLeft();
     const position = event.x - this._offsetLeft;
     this._overviewWindowSelector = new PerfUI.OverviewGrid.WindowSelector(this._parentElement, position);
@@ -254,16 +314,18 @@ PerfUI.OverviewGrid.Window = class extends Common.Object {
     delete this._overviewWindowSelector;
     const clickThreshold = 3;
     if (window.end - window.start < clickThreshold) {
-      if (this._clickHandler && this._clickHandler.call(null, event))
+      if (this._clickHandler && this._clickHandler.call(null, event)) {
         return;
+      }
       const middle = window.end;
       window.start = Math.max(0, middle - PerfUI.OverviewGrid.MinSelectableSize / 2);
       window.end = Math.min(this._parentElement.clientWidth, middle + PerfUI.OverviewGrid.MinSelectableSize / 2);
     } else if (window.end - window.start < PerfUI.OverviewGrid.MinSelectableSize) {
-      if (this._parentElement.clientWidth - window.end > PerfUI.OverviewGrid.MinSelectableSize)
+      if (this._parentElement.clientWidth - window.end > PerfUI.OverviewGrid.MinSelectableSize) {
         window.end = window.start + PerfUI.OverviewGrid.MinSelectableSize;
-      else
+      } else {
         window.start = window.end - PerfUI.OverviewGrid.MinSelectableSize;
+      }
     }
     this._setWindowPosition(window.start, window.end);
   }
@@ -286,11 +348,13 @@ PerfUI.OverviewGrid.Window = class extends Common.Object {
   _windowDragging(event) {
     event.preventDefault();
     let delta = (event.pageX - this._dragStartPoint) / this._parentElement.clientWidth;
-    if (this._dragStartLeft + delta < 0)
+    if (this._dragStartLeft + delta < 0) {
       delta = -this._dragStartLeft;
+    }
 
-    if (this._dragStartRight + delta > 1)
+    if (this._dragStartRight + delta > 1) {
       delta = 1 - this._dragStartRight;
+    }
 
     this._setWindow(this._dragStartLeft + delta, this._dragStartRight + delta);
   }
@@ -300,10 +364,11 @@ PerfUI.OverviewGrid.Window = class extends Common.Object {
    */
   _resizeWindowLeft(start) {
     // Glue to edge.
-    if (start < 10)
+    if (start < PerfUI.OverviewGrid.OffsetFromWindowEnds) {
       start = 0;
-    else if (start > this._rightResizeElement.offsetLeft - 4)
+    } else if (start > this._rightResizeElement.offsetLeft - 4) {
       start = this._rightResizeElement.offsetLeft - 4;
+    }
     this._setWindowPosition(start, null);
   }
 
@@ -312,10 +377,11 @@ PerfUI.OverviewGrid.Window = class extends Common.Object {
    */
   _resizeWindowRight(end) {
     // Glue to edge.
-    if (end > this._parentElement.clientWidth - 10)
+    if (end > this._parentElement.clientWidth - PerfUI.OverviewGrid.OffsetFromWindowEnds) {
       end = this._parentElement.clientWidth;
-    else if (end < this._leftResizeElement.offsetLeft + PerfUI.OverviewGrid.MinSelectableSize)
+    } else if (end < this._leftResizeElement.offsetLeft + PerfUI.OverviewGrid.MinSelectableSize) {
       end = this._leftResizeElement.offsetLeft + PerfUI.OverviewGrid.MinSelectableSize;
+    }
     this._setWindowPosition(null, end);
   }
 
@@ -339,13 +405,16 @@ PerfUI.OverviewGrid.Window = class extends Common.Object {
     let right = this.windowRight;
     const width = right - left;
 
-    // We allow actual time window to be arbitrarily small but don't want the UI window to be too small.
-    const widthInPixels = width * this._parentElement.clientWidth;
-    const minWidthInPixels = PerfUI.OverviewGrid.MinSelectableSize / 2;
-    if (widthInPixels < minWidthInPixels) {
-      const factor = minWidthInPixels / widthInPixels;
-      left = ((this.windowRight + this.windowLeft) - width * factor) / 2;
-      right = ((this.windowRight + this.windowLeft) + width * factor) / 2;
+    // OverviewGrids that are instantiated before the parentElement is shown will have a parent element client width of 0 which throws off the 'factor' calculation
+    if (this._parentElement.clientWidth !== 0) {
+      // We allow actual time window to be arbitrarily small but don't want the UI window to be too small.
+      const widthInPixels = width * this._parentElement.clientWidth;
+      const minWidthInPixels = PerfUI.OverviewGrid.MinSelectableSize / 2;
+      if (widthInPixels < minWidthInPixels) {
+        const factor = minWidthInPixels / widthInPixels;
+        left = ((this.windowRight + this.windowLeft) - width * factor) / 2;
+        right = ((this.windowRight + this.windowLeft) + width * factor) / 2;
+      }
     }
     this._leftResizeElement.style.left = (100 * left).toFixed(2) + '%';
     this._rightResizeElement.style.left = (100 * right).toFixed(2) + '%';
@@ -369,8 +438,9 @@ PerfUI.OverviewGrid.Window = class extends Common.Object {
    * @param {!Event} event
    */
   _onMouseWheel(event) {
-    if (!this._enabled)
+    if (!this._enabled) {
       return;
+    }
     if (typeof event.wheelDeltaY === 'number' && event.wheelDeltaY) {
       const zoomFactor = 1.1;
       const mouseWheelZoomSpeed = 1 / 120;
@@ -383,11 +453,13 @@ PerfUI.OverviewGrid.Window = class extends Common.Object {
       const windowLeft = this._leftResizeElement.offsetLeft + PerfUI.OverviewGrid.ResizerOffset;
       const windowRight = this._rightResizeElement.offsetLeft + PerfUI.OverviewGrid.ResizerOffset;
 
-      if (windowLeft - offset < 0)
+      if (windowLeft - offset < 0) {
         offset = windowLeft;
+      }
 
-      if (windowRight - offset > this._parentElement.clientWidth)
+      if (windowRight - offset > this._parentElement.clientWidth) {
         offset = windowRight - this._parentElement.clientWidth;
+      }
 
       this._setWindowPosition(windowLeft - offset, windowRight - offset);
 

@@ -860,6 +860,11 @@ void GLES2InterfaceStub::DispatchCompute(GLuint /* num_groups_x */,
                                          GLuint /* num_groups_y */,
                                          GLuint /* num_groups_z */) {}
 void GLES2InterfaceStub::DispatchComputeIndirect(GLintptr /* offset */) {}
+void GLES2InterfaceStub::DrawArraysIndirect(GLenum /* mode */,
+                                            const void* /* offset */) {}
+void GLES2InterfaceStub::DrawElementsIndirect(GLenum /* mode */,
+                                              GLenum /* type */,
+                                              const void* /* offset */) {}
 void GLES2InterfaceStub::GetProgramInterfaceiv(GLuint /* program */,
                                                GLenum /* program_interface */,
                                                GLenum /* pname */,
@@ -1231,6 +1236,8 @@ void GLES2InterfaceStub::ProgramPathFragmentInputGenCHROMIUM(
     GLenum /* genMode */,
     GLint /* components */,
     const GLfloat* /* coeffs */) {}
+void GLES2InterfaceStub::ContextVisibilityHintCHROMIUM(
+    GLboolean /* visibility */) {}
 void GLES2InterfaceStub::CoverageModulationCHROMIUM(GLenum /* components */) {}
 GLenum GLES2InterfaceStub::GetGraphicsResetStatusKHR() {
   return 0;

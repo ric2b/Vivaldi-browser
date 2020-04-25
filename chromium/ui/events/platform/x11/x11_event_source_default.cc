@@ -22,6 +22,43 @@ namespace ui {
 
 namespace {
 
+Event::Properties GetEventPropertiesFromXKeyEvent(const XKeyEvent& xev) {
+  using Values = std::vector<uint8_t>;
+  Event::Properties properties;
+
+  // Keyboard group
+  uint8_t group = XkbGroupForCoreState(xev.state);
+  properties.emplace(kPropertyKeyboardGroup, Values{group});
+
+  // IBus-gtk specific flags
+  uint8_t ibus_flags = (xev.state >> kPropertyKeyboardIBusFlagOffset) &
+                       kPropertyKeyboardIBusFlagMask;
+  properties.emplace(kPropertyKeyboardIBusFlag, Values{ibus_flags});
+
+  return properties;
+}
+
+std::unique_ptr<KeyEvent> CreateKeyEvent(const XEvent& xev) {
+  // In CrOS/Linux builds, keep DomCode/DomKey unset in KeyEvent translation,
+  // so they are extracted lazily in KeyEvent::ApplyLayout() which makes it
+  // possible for CrOS to support host system keyboard layouts.
+#if defined(OS_CHROMEOS)
+  auto key_event = std::make_unique<KeyEvent>(EventTypeFromXEvent(xev),
+                                              KeyboardCodeFromXKeyEvent(&xev),
+                                              EventFlagsFromXEvent(xev));
+#else
+  base::TimeTicks timestamp = EventTimeFromXEvent(xev);
+  ValidateEventTimeClock(&timestamp);
+  auto key_event = std::make_unique<KeyEvent>(
+      EventTypeFromXEvent(xev), KeyboardCodeFromXKeyEvent(&xev),
+      CodeFromXEvent(&xev), EventFlagsFromXEvent(xev),
+      GetDomKeyFromXEvent(&xev), timestamp);
+#endif
+  // Attach keyboard group to |key_event|'s properties
+  key_event->SetProperties(GetEventPropertiesFromXKeyEvent(xev.xkey));
+  return key_event;
+}
+
 std::unique_ptr<TouchEvent> CreateTouchEvent(EventType event_type,
                                              const XEvent& xev) {
   std::unique_ptr<TouchEvent> event = std::make_unique<TouchEvent>(
@@ -41,10 +78,12 @@ std::unique_ptr<ui::Event> TranslateXI2EventToEvent(const XEvent& xev) {
   EventType event_type = EventTypeFromXEvent(xev);
   switch (event_type) {
     case ET_KEY_PRESSED:
-    case ET_KEY_RELEASED:
-      return std::make_unique<KeyEvent>(event_type,
-                                        KeyboardCodeFromXKeyEvent(&xev),
-                                        EventFlagsFromXEvent(xev));
+    case ET_KEY_RELEASED: {
+      XEvent xkeyevent;
+      xkeyevent.xkey = {};
+      InitXKeyEventFromXIDeviceEvent(xev, &xkeyevent);
+      return CreateKeyEvent(xkeyevent);
+    }
     case ET_MOUSE_PRESSED:
     case ET_MOUSE_MOVED:
     case ET_MOUSE_DRAGGED:
@@ -109,9 +148,7 @@ std::unique_ptr<ui::Event> TranslateXEventToEvent(const XEvent& xev) {
 
     case KeyPress:
     case KeyRelease:
-      return std::make_unique<KeyEvent>(EventTypeFromXEvent(xev),
-                                        KeyboardCodeFromXKeyEvent(&xev), flags);
-
+      return CreateKeyEvent(xev);
     case ButtonPress:
     case ButtonRelease: {
       switch (EventTypeFromXEvent(xev)) {
@@ -174,6 +211,29 @@ void X11EventSourceDefault::RemoveXEventDispatcher(
     RemovePlatformEventDispatcher(event_dispatcher);
 }
 
+void X11EventSourceDefault::AddXEventObserver(XEventObserver* observer) {
+  CHECK(observer);
+  observers_.AddObserver(observer);
+}
+
+void X11EventSourceDefault::RemoveXEventObserver(XEventObserver* observer) {
+  CHECK(observer);
+  observers_.RemoveObserver(observer);
+}
+
+std::unique_ptr<ScopedXEventDispatcher>
+X11EventSourceDefault::OverrideXEventDispatcher(XEventDispatcher* dispatcher) {
+  CHECK(dispatcher);
+  overridden_dispatcher_restored_ = false;
+  return std::make_unique<ScopedXEventDispatcher>(&overridden_dispatcher_,
+                                                  dispatcher);
+}
+
+void X11EventSourceDefault::RestoreOverridenXEventDispatcher() {
+  CHECK(overridden_dispatcher_);
+  overridden_dispatcher_restored_ = true;
+}
+
 void X11EventSourceDefault::ProcessXEvent(XEvent* xevent) {
   std::unique_ptr<ui::Event> translated_event = TranslateXEventToEvent(*xevent);
   if (translated_event) {
@@ -205,13 +265,12 @@ void X11EventSourceDefault::AddEventWatcher() {
 
 void X11EventSourceDefault::DispatchPlatformEvent(const PlatformEvent& event,
                                                   XEvent* xevent) {
-  // First, tell the XEventDispatchers, which can have
-  // PlatformEventDispatcher, an ui::Event is going to be sent next.
-  // It must make a promise to handle next translated |event| sent by
-  // PlatformEventSource based on a XID in |xevent| tested in
-  // CheckCanDispatchNextPlatformEvent(). This is needed because it is not
-  // possible to access |event|'s associated NativeEvent* and check if it is the
-  // event's target window (XID).
+  // First, tell the XEventDispatchers, which can have PlatformEventDispatcher,
+  // an ui::Event is going to be sent next. It must make a promise to handle
+  // next translated |event| sent by PlatformEventSource based on a XID in
+  // |xevent| tested in CheckCanDispatchNextPlatformEvent(). This is needed
+  // because it is not possible to access |event|'s associated NativeEvent* and
+  // check if it is the event's target window (XID).
   for (XEventDispatcher& dispatcher : dispatchers_xevent_)
     dispatcher.CheckCanDispatchNextPlatformEvent(xevent);
 
@@ -223,10 +282,34 @@ void X11EventSourceDefault::DispatchPlatformEvent(const PlatformEvent& event,
 }
 
 void X11EventSourceDefault::DispatchXEventToXEventDispatchers(XEvent* xevent) {
-  for (XEventDispatcher& dispatcher : dispatchers_xevent_) {
-    if (dispatcher.DispatchXEvent(xevent))
-      break;
+  bool stop_dispatching = false;
+
+  for (auto& observer : observers_)
+    observer.WillProcessXEvent(xevent);
+
+  if (overridden_dispatcher_) {
+    stop_dispatching = overridden_dispatcher_->DispatchXEvent(xevent);
   }
+
+  if (!stop_dispatching) {
+    for (XEventDispatcher& dispatcher : dispatchers_xevent_) {
+      if (dispatcher.DispatchXEvent(xevent))
+        break;
+    }
+  }
+
+  for (auto& observer : observers_)
+    observer.DidProcessXEvent(xevent);
+
+  // If an overridden dispatcher has been destroyed, then the event source
+  // should halt dispatching the current stream of events, and wait until the
+  // next message-loop iteration for dispatching events. This lets any nested
+  // message-loop to unwind correctly and any new dispatchers to receive the
+  // correct sequence of events.
+  if (overridden_dispatcher_restored_)
+    StopCurrentEventStream();
+
+  overridden_dispatcher_restored_ = false;
 }
 
 void X11EventSourceDefault::StopCurrentEventStream() {

@@ -717,7 +717,6 @@ class SitePerProcessHitTestBrowserTest
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     SitePerProcessBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(switches::kAllowPreCommitInput);
     ui::PlatformEventSource::SetIgnoreNativePlatformEvents(true);
     if (std::get<0>(GetParam()) == HitTestType::kDrawQuad) {
       // Default enabled.
@@ -1148,10 +1147,11 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
       gfx::ToCeiledInt((bounds.y() - root_view->GetViewBounds().y() + 5) *
                        scale_factor));
   SetWebEventPositions(&scroll_event, position_in_widget, root_view);
+  scroll_event.delta_units =
+      ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
   scroll_event.delta_x = 0.0f;
   scroll_event.delta_y = 5.0f;
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
-  scroll_event.has_precise_scrolling_deltas = true;
   router->RouteMouseWheelEvent(root_view, &scroll_event, ui::LatencyInfo());
   scroll_begin_observer.Wait();
 
@@ -1674,10 +1674,11 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
       blink::WebInputEvent::kMouseWheel, blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   SetWebEventPositions(&scroll_event, position_in_root, root_rwhv);
+  scroll_event.delta_units =
+      ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
   scroll_event.delta_x = 0.0f;
   scroll_event.delta_y = 5.0f;
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
-  scroll_event.has_precise_scrolling_deltas = true;
 
   router->RouteMouseWheelEvent(root_rwhv, &scroll_event, ui::LatencyInfo());
 
@@ -2553,15 +2554,17 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessHighDPIHitTestBrowserTest,
   SurfaceHitTestTestHelper(shell(), embedded_test_server());
 }
 
+// TODO(crbug/1014602): NestedSurfaceHitTestTest is flaky.
+
 // Test that mouse events are being routed to the correct RenderWidgetHostView
 // when there are nested out-of-process iframes.
 IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
-                       NestedSurfaceHitTestTest) {
+                       DISABLED_NestedSurfaceHitTestTest) {
   NestedSurfaceHitTestTestHelper(shell(), embedded_test_server());
 }
 
 IN_PROC_BROWSER_TEST_P(SitePerProcessHighDPIHitTestBrowserTest,
-                       NestedSurfaceHitTestTest) {
+                       DISABLED_NestedSurfaceHitTestTest) {
   NestedSurfaceHitTestTestHelper(shell(), embedded_test_server());
 }
 
@@ -2718,9 +2721,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
 
 // This test tests that browser process hittesting ignores frames with
 // pointer-events: none.
-// crbug.com/968970: the test is flaky.
 IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
-                       DISABLED_SurfaceHitTestPointerEventsNoneChanged) {
+                       SurfaceHitTestPointerEventsNoneChanged) {
   GURL main_url(embedded_test_server()->GetURL(
       "/frame_tree/page_with_positioned_frame_pointer-events_none.html"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -2731,6 +2733,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
 
   FrameTreeNode* child_node1 = root->child_at(0);
   FrameTreeNode* child_node2 = root->child_at(1);
+
   GURL site_url(embedded_test_server()->GetURL("bar.com", "/title1.html"));
   EXPECT_EQ(site_url, child_node2->current_url());
   EXPECT_NE(shell()->web_contents()->GetSiteInstance(),
@@ -2748,6 +2751,9 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
   RenderWidgetHostViewBase* root_view = static_cast<RenderWidgetHostViewBase*>(
       root->current_frame_host()->GetRenderWidgetHost()->GetView());
 
+  // This is to make sure that the hit_test_data is clean before running the
+  // hit_test_data_change_observer below.
+  WaitForHitTestData(child_node1->current_frame_host());
   WaitForHitTestData(child_node2->current_frame_host());
 
   // Target input event to child1 frame.
@@ -2804,6 +2810,140 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
               kHitTestTolerance);
   EXPECT_NEAR(23, child_frame_monitor.event().PositionInWidget().y,
               kHitTestTolerance);
+}
+
+IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
+                       PointerEventsNoneWithNestedSameOriginIFrame) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "/frame_tree/page_with_same_origin_nested_frames.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+  ASSERT_EQ(1U, root->child_count());
+  RenderWidgetHostViewBase* root_view = static_cast<RenderWidgetHostViewBase*>(
+      root->current_frame_host()->GetRenderWidgetHost()->GetView());
+
+  EXPECT_EQ(
+      " Site A ------------ proxies for B\n"
+      "   +--Site A ------- proxies for B\n"
+      "        +--Site B -- proxies for A\n"
+      "Where A = http://127.0.0.1/\n"
+      "      B = http://baz.com/",
+      DepictFrameTree(root));
+
+  FrameTreeNode* child_node = root->child_at(0);
+  FrameTreeNode* grandchild_node = child_node->child_at(0);
+
+  // This is to make sure that the hit_test_data is clean before running the
+  // hit_test_data_change_observer.
+  WaitForHitTestData(child_node->current_frame_host());
+  WaitForHitTestData(grandchild_node->current_frame_host());
+
+  HitTestRegionObserver hit_test_data_change_observer(
+      root_view->GetRootFrameSinkId());
+  hit_test_data_change_observer.WaitForHitTestData();
+
+  EXPECT_TRUE(ExecuteScript(web_contents(),
+                            "document.getElementById('wrapper').style."
+                            "pointerEvents = 'none';"));
+
+  hit_test_data_change_observer.WaitForHitTestDataChange();
+
+  MainThreadFrameObserver observer(
+      root->current_frame_host()->GetRenderWidgetHost());
+  observer.Wait();
+
+  // ------------------------
+  // root    50px
+  //     ---------------------
+  //     |child  50px        |
+  // 50px|    -------------- |
+  //     |50px| grand_child ||
+  //     |    |             ||
+  //     |    |-------------||
+  //     ---------------------
+
+  // DispatchMouseEventAndWaitUntilDispatch will make sure the mouse event goes
+  // to the right frame. Create a listener for the grandchild to verify that it
+  // does not receive the event. No need to create one for the child because
+  // root and child are on the same process.
+  RenderWidgetHostMouseEventMonitor grandchild_frame_monitor(
+      grandchild_node->current_frame_host()->GetRenderWidgetHost());
+
+  // Since child has pointer-events: none, (125, 125) should be claimed by root.
+  DispatchMouseEventAndWaitUntilDispatch(web_contents(), root_view,
+                                         gfx::PointF(125, 125), root_view,
+                                         gfx::PointF(125, 125));
+  EXPECT_FALSE(grandchild_frame_monitor.EventWasReceived());
+}
+
+IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
+                       PointerEventsNoneWithNestedOOPIF) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "/frame_tree/page_with_positioned_nested_frames.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+  ASSERT_EQ(1U, root->child_count());
+  RenderWidgetHostViewBase* root_view = static_cast<RenderWidgetHostViewBase*>(
+      root->current_frame_host()->GetRenderWidgetHost()->GetView());
+
+  EXPECT_EQ(
+      " Site A ------------ proxies for B C\n"
+      "   +--Site B ------- proxies for A C\n"
+      "        +--Site C -- proxies for A B\n"
+      "Where A = http://127.0.0.1/\n"
+      "      B = http://a.com/\n"
+      "      C = http://baz.com/",
+      DepictFrameTree(root));
+
+  FrameTreeNode* child_node = root->child_at(0);
+  FrameTreeNode* grandchild_node = child_node->child_at(0);
+
+  // This is to make sure that the hit_test_data is clean before running the
+  // hit_test_data_change_observer.
+  WaitForHitTestData(child_node->current_frame_host());
+  WaitForHitTestData(grandchild_node->current_frame_host());
+
+  HitTestRegionObserver hit_test_data_change_observer(
+      root_view->GetRootFrameSinkId());
+  hit_test_data_change_observer.WaitForHitTestData();
+
+  EXPECT_TRUE(ExecuteScript(web_contents(),
+                            "document.getElementsByTagName('iframe')[0].style."
+                            "pointerEvents = 'none';"));
+
+  hit_test_data_change_observer.WaitForHitTestDataChange();
+
+  MainThreadFrameObserver observer(
+      root->current_frame_host()->GetRenderWidgetHost());
+  observer.Wait();
+
+  // ------------------------
+  // root    50px
+  //     ---------------------
+  //     |child  50px        |
+  // 50px|    -------------- |
+  //     |50px| grand_child ||
+  //     |    |             ||
+  //     |    |-------------||
+  //     ---------------------
+
+  // DispatchMouseEventAndWaitUntilDispatch will make sure the mouse event goes
+  // to the right frame. Create a listener for the child to verify that it does
+  // not receive the event.
+  RenderWidgetHostMouseEventMonitor child_frame_monitor(
+      child_node->current_frame_host()->GetRenderWidgetHost());
+
+  // Since child has pointer-events: none, (125, 125) should be claimed by root.
+  DispatchMouseEventAndWaitUntilDispatch(web_contents(), root_view,
+                                         gfx::PointF(125, 125), root_view,
+                                         gfx::PointF(125, 125));
+  EXPECT_FALSE(child_frame_monitor.EventWasReceived());
 }
 
 // This test tests that browser process can successfully hit test on nested
@@ -3201,8 +3341,9 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
 
 // This test verifies that MouseEnter and MouseLeave events fire correctly
 // when the mouse cursor moves between processes.
+// Flaky (timeout): https://crbug.com/1006635.
 IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
-                       CrossProcessMouseEnterAndLeaveTest) {
+                       DISABLED_CrossProcessMouseEnterAndLeaveTest) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b,c(d))"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -4359,10 +4500,11 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessMouseWheelHitTestBrowserTest,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   gfx::Point child_point_in_root(90, 90);
   SetWebEventPositions(&scroll_event, child_point_in_root, rwhv_root);
+  scroll_event.delta_units =
+      ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
   scroll_event.delta_x = 0.0f;
   scroll_event.delta_y = -20.0f;
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
-  scroll_event.has_precise_scrolling_deltas = true;
 
   {
     InputEventAckWaiter await_begin_in_child(
@@ -5596,6 +5738,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
   scoped_refptr<ShowWidgetMessageFilter> filter = new ShowWidgetMessageFilter();
   c_node->current_frame_host()->GetProcess()->AddFilter(filter.get());
 
+  WaitForHitTestData(c_node->current_frame_host());
+
   // Target left-click event to child frame.
   blink::WebMouseEvent click_event(
       blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
@@ -6137,7 +6281,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessNonIntegerScaleFactorHitTestBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_P(SitePerProcessNonIntegerScaleFactorHitTestBrowserTest,
-                       NestedSurfaceHitTestTest) {
+                       DISABLED_NestedSurfaceHitTestTest) {
   NestedSurfaceHitTestTestHelper(shell(), embedded_test_server());
 }
 
@@ -6408,6 +6552,18 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
   }
 }
 
+class SitePerProcessHitTestBrowserTestWithBrowserVerifiedUserActivation
+    : public SitePerProcessHitTestBrowserTest {
+ public:
+  SitePerProcessHitTestBrowserTestWithBrowserVerifiedUserActivation() {
+    feature_list_.InitAndEnableFeature(
+        features::kBrowserVerifiedUserActivation);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
 #if defined(OS_LINUX)
 // Test is flaky. See https://crbug.com/995285
 #define MAYBE_RenderWidgetUserActivationStateTest \
@@ -6416,12 +6572,9 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
 #define MAYBE_RenderWidgetUserActivationStateTest \
   RenderWidgetUserActivationStateTest
 #endif
-IN_PROC_BROWSER_TEST_P(SitePerProcessHitTestBrowserTest,
-                       MAYBE_RenderWidgetUserActivationStateTest) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kBrowserVerifiedUserActivation);
-
+IN_PROC_BROWSER_TEST_P(
+    SitePerProcessHitTestBrowserTestWithBrowserVerifiedUserActivation,
+    MAYBE_RenderWidgetUserActivationStateTest) {
   GURL main_url(embedded_test_server()->GetURL(
       "foo.com", "/frame_tree/page_with_positioned_frame.html"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));

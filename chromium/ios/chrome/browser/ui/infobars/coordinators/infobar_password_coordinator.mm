@@ -48,6 +48,7 @@
                                             passwordInfoBarDelegate
                                    type:(InfobarType)infobarType {
   self = [super initWithInfoBarDelegate:passwordInfoBarDelegate
+                           badgeSupport:YES
                                    type:infobarType];
   if (self) {
     _passwordInfoBarDelegate = passwordInfoBarDelegate;
@@ -66,6 +67,7 @@
     self.started = YES;
     self.bannerViewController = [[InfobarBannerViewController alloc]
         initWithDelegate:self
+           presentsModal:self.hasBadge
                     type:self.infobarBannerType];
     self.bannerViewController.titleText = base::SysUTF16ToNSString(
         self.passwordInfoBarDelegate->GetMessageText());
@@ -97,7 +99,7 @@
     // from memory.
     self.delegate->RemoveInfoBar();
     _passwordInfoBarDelegate = nil;
-    [self.infobarContainer childCoordinatorStopped:self.infobarType];
+    [self.infobarContainer childCoordinatorStopped:self];
   }
 }
 

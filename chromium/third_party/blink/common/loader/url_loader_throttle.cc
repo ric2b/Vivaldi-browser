@@ -5,6 +5,8 @@
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
 
 #include "base/logging.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 
 namespace blink {
 
@@ -13,7 +15,7 @@ void URLLoaderThrottle::Delegate::UpdateDeferredRequestHeaders(
     const net::HttpRequestHeaders& modified_request_headers,
     const net::HttpRequestHeaders& modified_cors_exempt_request_headers) {}
 void URLLoaderThrottle::Delegate::UpdateDeferredResponseHead(
-    const network::ResourceResponseHead& new_response_head) {}
+    network::mojom::URLResponseHeadPtr new_response_head) {}
 void URLLoaderThrottle::Delegate::PauseReadingBodyFromNet() {}
 void URLLoaderThrottle::Delegate::ResumeReadingBodyFromNet() {}
 

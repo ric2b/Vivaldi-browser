@@ -9,10 +9,10 @@
 
 #include "base/compiler_specific.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/ui/autofill/autofill_bubble_handler.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
-#include "chrome/browser/ui/page_action/page_action_icon_container.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
 #include "extensions/browser/app_window/app_delegate.h"
 #include "extensions/browser/app_window/app_web_contents_helper.h"
@@ -23,7 +23,6 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/infobar_container_web_proxy.h"
 #include "ui/vivaldi_location_bar.h"
-#include "ui/vivaldi_native_app_window.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -37,6 +36,11 @@ class JumpList;
 #endif
 
 class VivaldiBrowserWindow;
+class VivaldiNativeAppWindow;
+
+namespace autofill {
+class AutofillBubbleHandler;
+}
 
 namespace ui {
 class Accelerator;
@@ -51,6 +55,43 @@ class Extension;
 class NativeAppWindow;
 struct DraggableRegion;
 }
+
+namespace autofill {
+class SaveCardBubbleView;
+class LocalCardMigrationBubble;
+class SaveCardBubbleController;
+class LocalCardMigrationBubbleController;
+}
+
+class VivaldiAutofillBubbleHandler : public autofill::AutofillBubbleHandler {
+ public:
+  VivaldiAutofillBubbleHandler();
+  ~VivaldiAutofillBubbleHandler() override;
+
+  autofill::SaveCardBubbleView* ShowSaveCreditCardBubble(
+      content::WebContents* web_contents,
+      autofill::SaveCardBubbleController* controller,
+      bool is_user_gesture) override;
+
+  // Shows the sign in promo bubble from the avatar button.
+  autofill::SaveCardBubbleView* ShowSaveCardSignInPromoBubble(
+      content::WebContents* contents,
+      autofill::SaveCardBubbleController* controller) override;
+
+  autofill::LocalCardMigrationBubble* ShowLocalCardMigrationBubble(
+      content::WebContents* web_contents,
+      autofill::LocalCardMigrationBubbleController* controller,
+      bool is_user_gesture) override;
+
+  void OnPasswordSaved() override {}
+
+  void HideSignInPromo() override {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(VivaldiAutofillBubbleHandler);
+};
+
+class VivaldiNativeAppWindowViews;
 
 // AppWindowContents class specific to vivaldi app windows. It maintains a
 // WebContents instance and observes it for the purpose of passing
@@ -241,6 +282,9 @@ class VivaldiBrowserWindow
       const content::NativeWebKeyboardEvent& event) override;
   gfx::Size GetContentsSize() const override;
   void SetContentsSize(const gfx::Size& size) override {}
+  bool UpdatePageActionIcon(PageActionIconType type) override;
+  autofill::AutofillBubbleHandler* GetAutofillBubbleHandler() override;
+  void ExecutePageActionIconForTesting(PageActionIconType type) override {}
   void ShowEmojiPanel() override;
   bool IsBookmarkBarVisible() const override;
   bool IsBookmarkBarAnimating() const override;
@@ -248,6 +292,10 @@ class VivaldiBrowserWindow
   bool IsToolbarVisible() const override;
   void ShowUpdateChromeDialog() override {}
   void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) override {}
+  qrcode_generator::QRCodeGeneratorBubbleView* ShowQRCodeGeneratorBubble(
+      content::WebContents* contents,
+      qrcode_generator::QRCodeGeneratorBubbleController* controller,
+      const GURL& url) override;
   ShowTranslateBubbleResult ShowTranslateBubble(
       content::WebContents* contents,
       translate::TranslateStep step,
@@ -271,6 +319,7 @@ class VivaldiBrowserWindow
       const security_state::VisibleSecurityState& visible_security_state,
       gfx::Point pos) override;
   void CutCopyPaste(int command_id) override {}
+  bool IsOnCurrentWorkspace() const override;
   void SetTopControlsShownRatio(content::WebContents* web_contents,
                                 float ratio) override {}
   bool DoBrowserControlsShrinkRendererSize(
@@ -283,20 +332,10 @@ class VivaldiBrowserWindow
       override;
   void ExecuteExtensionCommand(const extensions::Extension* extension,
                                const extensions::Command& command) override;
-  autofill::SaveCardBubbleView* ShowSaveCreditCardBubble(
-      content::WebContents* contents,
-      autofill::SaveCardBubbleController* controller,
-      bool is_user_gesture) override;
   void ShowOneClickSigninConfirmation(
       const base::string16& email,
       base::OnceCallback<void(bool)> start_sync_callback) override {}
   void OnTabRestored(int command_id) override {}
-  PageActionIconContainer* GetOmniboxPageActionIconContainer() override;
-  PageActionIconContainer* GetToolbarPageActionIconContainer() override;
-  autofill::LocalCardMigrationBubble* ShowLocalCardMigrationBubble(
-    content::WebContents* contents,
-    autofill::LocalCardMigrationBubbleController* controller,
-    bool is_user_gesture) override;
   void OnTabDetached(content::WebContents* contents, bool was_active) override {
   }
   void TabDraggingStatusChanged(bool is_dragging) override {}
@@ -304,11 +343,13 @@ class VivaldiBrowserWindow
   void ShowInProductHelpPromo(InProductHelpFeature iph_feature) override {}
   void UpdateFrameColor() override {}
 #if !defined(OS_ANDROID)
-  void ShowIntentPickerBubble(std::vector<apps::IntentPickerAppInfo> app_info,
-                              bool show_stay_in_chrome,
-                              bool show_remember_selection,
-                              PageActionIconType icon_type,
-                              IntentPickerResponse callback) override {}
+  void ShowIntentPickerBubble(
+      std::vector<apps::IntentPickerAppInfo> app_info,
+      bool show_stay_in_chrome,
+      bool show_remember_selection,
+      PageActionIconType icon_type,
+      const base::Optional<url::Origin>& initiating_origin,
+      IntentPickerResponse callback) override {}
 #endif
   send_tab_to_self::SendTabToSelfBubbleView* ShowSendTabToSelfBubble(
     content::WebContents* contents,
@@ -317,7 +358,7 @@ class VivaldiBrowserWindow
   ExtensionsContainer* GetExtensionsContainer() override;
   void UpdateCustomTabBarVisibility(bool visible, bool animate) override {}
   SharingDialog* ShowSharingDialog(content::WebContents* contents,
-                                   SharingUiController* controller) override;
+                                   SharingDialogData data) override;
   void ShowHatsBubble(const std::string& site_id) override {}
   // BrowserWindow overrides end
 
@@ -423,29 +464,12 @@ class VivaldiBrowserWindow
     virtual ~VivaldiManagePasswordsIconView() = default;
 
     void SetState(password_manager::ui::State state) override;
-    void Update();
+    bool Update();
 
    private:
     Browser* browser_ = nullptr;
 
     DISALLOW_COPY_AND_ASSIGN(VivaldiManagePasswordsIconView);
-  };
-
-  class VivaldiPageActionIconContainer : public PageActionIconContainer {
-   public:
-    VivaldiPageActionIconContainer(Browser* browser);
-
-    ~VivaldiPageActionIconContainer() override;
-
-    void UpdatePageActionIcon(PageActionIconType type) override;
-
-    void ExecutePageActionIconForTesting(PageActionIconType type) override;
-
-   private:
-    Browser* browser_ = nullptr;
-    std::unique_ptr<VivaldiManagePasswordsIconView> icon_view_;
-
-    DISALLOW_COPY_AND_ASSIGN(VivaldiPageActionIconContainer);
   };
 
  private:
@@ -470,7 +494,8 @@ class VivaldiBrowserWindow
   void ForceShow();
 
   // From AppWindow:
-  std::unique_ptr<VivaldiNativeAppWindow> native_app_window_;
+  // TODO: rename VivaldiNativeAppWindowViews to VivaldiNativeAppWindow.
+  std::unique_ptr<VivaldiNativeAppWindowViews> native_app_window_;
   VivaldiAppWindowContentsImpl app_window_contents_;
   std::unique_ptr<extensions::AppDelegate> app_delegate_;
 
@@ -502,8 +527,6 @@ class VivaldiBrowserWindow
 
   std::unique_ptr<VivaldiLocationBar> location_bar_;
 
-  std::unique_ptr<VivaldiPageActionIconContainer> page_action_icon_container_;
-
 #if !defined(OS_MACOSX)
   // Last key code received in HandleKeyboardEvent(). For auto repeat detection.
   int last_key_code_ = -1;
@@ -513,6 +536,9 @@ class VivaldiBrowserWindow
 
   // Used to timeout the main document loading and force show the window.
   std::unique_ptr<base::OneShotTimer> show_delay_timeout_;
+
+  std::unique_ptr<VivaldiManagePasswordsIconView> icon_view_;
+  std::unique_ptr<autofill::AutofillBubbleHandler> autofill_bubble_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserWindow);
 };

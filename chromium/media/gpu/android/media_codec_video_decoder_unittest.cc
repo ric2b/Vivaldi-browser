@@ -12,12 +12,13 @@
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "gpu/command_buffer/service/mock_texture_owner.h"
 #include "gpu/config/gpu_preferences.h"
-#include "gpu/ipc/common/android/mock_texture_owner.h"
 #include "media/base/android/media_codec_util.h"
 #include "media/base/android/mock_android_overlay.h"
 #include "media/base/android/mock_media_crypto_context.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/media_util.h"
 #include "media/base/test_helpers.h"
 #include "media/base/video_frame.h"
 #include "media/gpu/android/android_video_surface_chooser_impl.h"
@@ -149,8 +150,8 @@ class MediaCodecVideoDecoderTest : public testing::TestWithParam<VideoCodec> {
         .WillByDefault(RunCallback<1>(texture_owner));
 
     auto* observable_mcvd = new DestructionObservableMCVD(
-        gpu_preferences_, gpu_feature_info_, device_info_.get(),
-        codec_allocator_.get(), std::move(surface_chooser),
+        gpu_preferences_, gpu_feature_info_, std::make_unique<NullMediaLog>(),
+        device_info_.get(), codec_allocator_.get(), std::move(surface_chooser),
         base::BindRepeating(&CreateAndroidOverlayCb),
         base::Bind(&MediaCodecVideoDecoderTest::RequestOverlayInfoCb,
                    base::Unretained(this)),
@@ -280,7 +281,7 @@ class MediaCodecVideoDecoderTest : public testing::TestWithParam<VideoCodec> {
 
  protected:
   const VideoCodec codec_;
-  base::test::TaskEnvironment task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
   base::android::ScopedJavaGlobalRef<jobject> java_surface_;
   scoped_refptr<DecoderBuffer> fake_decoder_buffer_;
   std::unique_ptr<MockDeviceInfo> device_info_;

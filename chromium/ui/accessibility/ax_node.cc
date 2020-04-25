@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "base/strings/string16.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_language_detection.h"
@@ -66,6 +67,11 @@ AXNode* AXNode::GetUnignoredParent() const {
 size_t AXNode::GetUnignoredIndexInParent() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
   return unignored_index_in_parent_;
+}
+
+size_t AXNode::GetIndexInParent() const {
+  DCHECK(!tree_->GetTreeUpdateInProgressState());
+  return index_in_parent_;
 }
 
 AXNode* AXNode::GetFirstUnignoredChild() const {

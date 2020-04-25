@@ -52,6 +52,7 @@
 
 namespace cc {
 class Layer;
+struct BeginMainFrameMetrics;
 }
 
 namespace blink {
@@ -89,6 +90,8 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   void EndCommitCompositorFrame() override;
   void RecordStartOfFrameMetrics() override;
   void RecordEndOfFrameMetrics(base::TimeTicks) override;
+  std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
+      override;
   void UpdateLifecycle(LifecycleUpdate requested_update,
                        LifecycleUpdateReason reason) override;
   void ThemeChanged() override;
@@ -158,7 +161,7 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   // PageWidgetEventHandler functions
   void HandleMouseLeave(LocalFrame&, const WebMouseEvent&) override;
   void HandleMouseDown(LocalFrame&, const WebMouseEvent&) override;
-  void HandleMouseUp(LocalFrame&, const WebMouseEvent&) override;
+  WebInputEventResult HandleMouseUp(LocalFrame&, const WebMouseEvent&) override;
   WebInputEventResult HandleMouseWheel(LocalFrame&,
                                        const WebMouseWheelEvent&) override;
   WebInputEventResult HandleGestureEvent(const WebGestureEvent&) override;

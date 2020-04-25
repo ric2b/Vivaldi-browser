@@ -190,8 +190,8 @@ void SpeechRecognitionDispatcherHost::StartSessionOnIO(
       SpeechRecognitionManager::GetInstance()->CreateSession(config);
   DCHECK_NE(session_id, SpeechRecognitionManager::kSessionIDInvalid);
   session->SetSessionId(session_id);
-  mojo::MakeStrongBinding(std::move(session),
-                          std::move(params->session_request));
+  mojo::MakeSelfOwnedReceiver(std::move(session),
+                              std::move(params->session_receiver));
 
   SpeechRecognitionManager::GetInstance()->StartSession(session_id);
 }
@@ -199,11 +199,11 @@ void SpeechRecognitionDispatcherHost::StartSessionOnIO(
 // ---------------------- SpeechRecognizerSession -----------------------------
 
 SpeechRecognitionSession::SpeechRecognitionSession(
-    blink::mojom::SpeechRecognitionSessionClientPtrInfo client_ptr_info)
+    mojo::PendingRemote<blink::mojom::SpeechRecognitionSessionClient> client)
     : session_id_(SpeechRecognitionManager::kSessionIDInvalid),
-      client_(std::move(client_ptr_info)),
+      client_(std::move(client)),
       stopped_(false) {
-  client_.set_connection_error_handler(
+  client_.set_disconnect_handler(
       base::BindOnce(&SpeechRecognitionSession::ConnectionErrorHandler,
                      base::Unretained(this)));
 }

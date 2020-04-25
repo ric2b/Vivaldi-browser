@@ -122,7 +122,7 @@ function setUp() {
  */
 function testDriveDirectoryEntry(callback) {
   driveFileSystem.entries['/test'] =
-      new MockDirectoryEntry(driveFileSystem, '/test');
+      MockDirectoryEntry.create(driveFileSystem, '/test');
 
   const metadataModel = new MockMetadataModel({
     canShare: true,
@@ -141,7 +141,7 @@ function testDriveDirectoryEntry(callback) {
       model.initialize()
           .then(() => {
             const actions = model.getActions();
-            assertEquals(3, Object.keys(actions).length);
+            assertEquals(5, Object.keys(actions).length);
 
             // 'Share' should be disabled in offline mode.
             const shareAction = actions[ActionsModel.CommonActionId.SHARE];
@@ -179,7 +179,7 @@ function testDriveDirectoryEntry(callback) {
           })
           .then(() => {
             const actions = model.getActions();
-            assertEquals(4, Object.keys(actions).length);
+            assertEquals(6, Object.keys(actions).length);
             assertTrue(!!actions[ActionsModel.CommonActionId.SHARE]);
             assertTrue(
                 !!actions[ActionsModel.InternalActionId.MANAGE_IN_DRIVE]);
@@ -201,7 +201,7 @@ function testDriveDirectoryEntry(callback) {
  */
 function testDriveFileEntry(callback) {
   driveFileSystem.entries['/test.txt'] =
-      new MockFileEntry(driveFileSystem, '/test.txt');
+      MockFileEntry.create(driveFileSystem, '/test.txt');
 
   const metadataModel = new MockMetadataModel({
     hosted: false,
@@ -304,7 +304,7 @@ function testDriveFileEntry(callback) {
  */
 function testTeamDriveRootEntry(callback) {
   driveFileSystem.entries['/team_drives/ABC Team'] =
-      new MockDirectoryEntry(driveFileSystem, '/team_drives/ABC Team');
+      MockDirectoryEntry.create(driveFileSystem, '/team_drives/ABC Team');
 
   const metadataModel = new MockMetadataModel({
     canShare: true,
@@ -317,18 +317,19 @@ function testTeamDriveRootEntry(callback) {
   return reportPromise(
       model.initialize().then(() => {
         const actions = model.getActions();
-        assertEquals(2, Object.keys(actions).length);
+        console.log(Object.keys(actions));
+        assertEquals(4, Object.keys(actions).length);
 
-        // "share" action is disabled for Team Drive Root entries.
+        // "share" action is enabled for Team Drive Root entries.
         const shareAction = actions[ActionsModel.CommonActionId.SHARE];
         assertTrue(!!shareAction);
-        assertFalse(shareAction.canExecute());
+        assertTrue(shareAction.canExecute());
 
         // "manage in drive" action is disabled for Team Drive Root entries.
         const manageAction =
             actions[ActionsModel.InternalActionId.MANAGE_IN_DRIVE];
         assertTrue(!!manageAction);
-        assertFalse(manageAction.canExecute());
+        assertTrue(manageAction.canExecute());
       }),
       callback);
 }
@@ -338,7 +339,8 @@ function testTeamDriveRootEntry(callback) {
  */
 function testTeamDriveDirectoryEntry(callback) {
   driveFileSystem.entries['/team_drives/ABC Team/Folder 1'] =
-      new MockDirectoryEntry(driveFileSystem, '/team_drives/ABC Team/Folder 1');
+      MockDirectoryEntry.create(
+          driveFileSystem, '/team_drives/ABC Team/Folder 1');
 
   const metadataModel = new MockMetadataModel({
     canShare: true,
@@ -351,12 +353,24 @@ function testTeamDriveDirectoryEntry(callback) {
   return reportPromise(
       model.initialize().then(() => {
         const actions = model.getActions();
-        assertEquals(3, Object.keys(actions).length);
+        assertEquals(5, Object.keys(actions).length);
 
         // "Share" is enabled for Team Drive directories.
         const shareAction = actions[ActionsModel.CommonActionId.SHARE];
         assertTrue(!!shareAction);
         assertTrue(shareAction.canExecute());
+
+        // "Available Offline" toggle is enabled for Team Drive directories.
+        const saveForOfflineAction =
+            actions[ActionsModel.CommonActionId.SAVE_FOR_OFFLINE];
+        assertTrue(!!saveForOfflineAction);
+        assertTrue(saveForOfflineAction.canExecute());
+
+        // "Available Offline" toggle is enabled for Team Drive directories.
+        const offlineNotNecessaryAction =
+            actions[ActionsModel.CommonActionId.OFFLINE_NOT_NECESSARY];
+        assertTrue(!!offlineNotNecessaryAction);
+        assertTrue(offlineNotNecessaryAction.canExecute());
 
         // "Manage in drive" is enabled for Team Drive directories.
         const manageAction =
@@ -378,7 +392,7 @@ function testTeamDriveDirectoryEntry(callback) {
  */
 function testTeamDriveFileEntry(callback) {
   driveFileSystem.entries['/team_drives/ABC Team/Folder 1/test.txt'] =
-      new MockFileEntry(
+      MockFileEntry.create(
           driveFileSystem, '/team_drives/ABC Team/Folder 1/test.txt');
 
   const metadataModel = new MockMetadataModel({
@@ -421,7 +435,7 @@ function testTeamDriveFileEntry(callback) {
  */
 function testProvidedEntry(callback) {
   providedFileSystem.entries['/test'] =
-      new MockDirectoryEntry(providedFileSystem, '/test');
+      MockDirectoryEntry.create(providedFileSystem, '/test');
 
   chrome.fileManagerPrivate.getCustomActions = (entries, callback) => {
     assertEquals(1, entries.length);
@@ -498,7 +512,7 @@ function testProvidedEntry(callback) {
  */
 function testProvidedEntryWithError(callback) {
   providedFileSystem.entries['/test'] =
-      new MockDirectoryEntry(providedFileSystem, '/test');
+      MockDirectoryEntry.create(providedFileSystem, '/test');
 
   chrome.fileManagerPrivate.getCustomActions = (entries, callback) => {
     chrome.runtime.lastError = {

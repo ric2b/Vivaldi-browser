@@ -120,7 +120,6 @@ class SyncerProtoUtilTest : public testing::Test {
         /*listeners=*/std::vector<SyncEngineEventListener*>(),
         /*debug_info_getter=*/nullptr,
         /*model_type_registry=*/nullptr,
-        /*keystore_encryption_enabled=*/false,
         /*invalidator_client_id=*/"",
         /*birthday=*/"",
         /*bag_of_chips=*/"",
@@ -140,7 +139,7 @@ class SyncerProtoUtilTest : public testing::Test {
   }
 
  protected:
-  base::test::TaskEnvironment task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
   TestDirectorySetterUpper dir_maker_;
   std::unique_ptr<SyncCycleContext> context_;
 };

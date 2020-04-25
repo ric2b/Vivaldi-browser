@@ -34,6 +34,8 @@ const char kVivaldiReservedApiError[] =
 
 const char kVivaldiUIScheme[] = "vivaldi";
 
+const char kVivaldiNativeScheme[] = "vivaldi-native";
+
 const char kVivaldiUIDataHost[] = VIVALDI_DATA_URL_HOST;
 const char kVivaldiWebUIHost[] = VIVALDI_WEBUI_URL_HOST;
 const char kVivaldiThumbDataHost[] = VIVALDI_THUMB_URL_HOST;

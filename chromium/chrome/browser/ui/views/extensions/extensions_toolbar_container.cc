@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/views/extensions/extensions_menu_view.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_actions_bar_bubble_views.h"
+#include "ui/views/layout/animating_layout_manager.h"
 #include "ui/views/widget/widget_observer.h"
 
 struct ExtensionsToolbarContainer::DropInfo {
@@ -36,6 +37,8 @@ ExtensionsToolbarContainer::ExtensionsToolbarContainer(Browser* browser)
       model_observer_(this),
       extensions_button_(new ExtensionsToolbarButton(browser_, this)) {
   model_observer_.Add(model_);
+  // Do not flip the Extensions icon in RTL.
+  extensions_button_->EnableCanvasFlippingForRTLUI(false);
   AddMainButton(extensions_button_);
   CreateActions();
 }
@@ -121,19 +124,17 @@ void ExtensionsToolbarContainer::PopOutAction(
     ToolbarActionViewController* action,
     bool is_sticky,
     const base::Closure& closure) {
-  // TODO(pbos): Animate popout.
   // TODO(pbos): Highlight popout differently.
   DCHECK(!popped_out_action_);
   popped_out_action_ = action;
   icons_[popped_out_action_->GetId()]->SetVisible(true);
   ReorderViews();
-  closure.Run();
+  static_cast<views::AnimatingLayoutManager*>(GetLayoutManager())
+      ->RunOrQueueAction(closure);
 }
 
 void ExtensionsToolbarContainer::ShowToolbarActionBubble(
     std::unique_ptr<ToolbarActionsBarBubbleDelegate> controller) {
-  // TODO(pbos): Make sure we finish animations before showing the bubble.
-
   auto iter = icons_.find(controller->GetAnchorActionId());
 
   views::View* const anchor_view = iter != icons_.end()
@@ -142,11 +143,11 @@ void ExtensionsToolbarContainer::ShowToolbarActionBubble(
 
   anchor_view->SetVisible(true);
 
-  active_bubble_ = new ToolbarActionsBarBubbleViews(
-      anchor_view, anchor_view != extensions_button_, std::move(controller));
-  views::BubbleDialogDelegateView::CreateBubble(active_bubble_)
-      ->AddObserver(this);
-  active_bubble_->Show();
+  static_cast<views::AnimatingLayoutManager*>(GetLayoutManager())
+      ->RunOrQueueAction(
+          base::BindOnce(&ExtensionsToolbarContainer::ShowActiveBubble,
+                         weak_ptr_factory_.GetWeakPtr(), anchor_view,
+                         base::Passed(std::move(controller))));
 }
 
 void ExtensionsToolbarContainer::ShowToolbarActionBubbleAsync(
@@ -333,14 +334,11 @@ int ExtensionsToolbarContainer::OnDragUpdated(
   // Figure out where to display the icon during dragging transition.
 
   // First, since we want to update the dragged extension's position from before
-  // an icon to after it when the event passes the midpoint of another icon, add
-  // (icon width / 2) and divide by the icon width. This will convert the
-  // event coordinate into the index of the icon we want to display the
-  // dragged extension before. We also mirror the event.x() so that our
-  // calculations are consistent with left-to-right.
-  const auto size = GetToolbarActionSize();
-  const int offset_into_icon_area =
-      GetMirroredXInView(event.x()) + (size.width() / 2);
+  // an icon to after it when the event passes the midpoint between two icons.
+  // This will convert the event coordinate into the index of the icon we want
+  // to display the dragged extension before. We also mirror the event.x() so
+  // that our calculations are consistent with left-to-right.
+  const int offset_into_icon_area = GetMirroredXInView(event.x());
   const int before_icon_unclamped = WidthToIconCount(offset_into_icon_area);
 
   int visible_icons = model_->pinned_action_ids().size();
@@ -353,11 +351,7 @@ int ExtensionsToolbarContainer::OnDragUpdated(
   before_icon = base::ClampToRange(before_icon_unclamped, 0, visible_icons);
 
   if (!drop_info_.get() || drop_info_->index != before_icon) {
-    size_t current_index = drop_info_.get() ? drop_info_->index : data.index();
-    // If the target drop position is past the current index we must account for
-    // this later being removed.
-    drop_info_ = std::make_unique<DropInfo>(
-        data.id(), before_icon > current_index ? before_icon - 1 : before_icon);
+    drop_info_ = std::make_unique<DropInfo>(data.id(), before_icon);
     ReorderViews();
   }
 
@@ -412,4 +406,14 @@ size_t ExtensionsToolbarContainer::WidthToIconCount(int x_offset) {
                    (GetToolbarActionSize().width() + element_padding),
                0);
   return std::min(unclamped_count, actions_.size());
+}
+
+void ExtensionsToolbarContainer::ShowActiveBubble(
+    views::View* anchor_view,
+    std::unique_ptr<ToolbarActionsBarBubbleDelegate> controller) {
+  active_bubble_ = new ToolbarActionsBarBubbleViews(
+      anchor_view, anchor_view != extensions_button_, std::move(controller));
+  views::BubbleDialogDelegateView::CreateBubble(active_bubble_)
+      ->AddObserver(this);
+  active_bubble_->Show();
 }

@@ -56,6 +56,8 @@ public class LanguagesPreferences
         translateSwitch.setManagedPreferenceDelegate(
                 preference -> PrefServiceBridge.getInstance().isTranslateManaged());
         LanguagesManager.recordImpression(LanguagesManager.LanguageSettingsPageType.PAGE_MAIN);
+        // Vivaldi
+        getPreferenceScreen().removePreference(translateSwitch);
     }
 
     @Override

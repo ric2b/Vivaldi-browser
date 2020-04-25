@@ -21,6 +21,7 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_member.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/net_buildflags.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 
@@ -45,7 +46,7 @@ class ProfileNetworkContextService
   // Creates a NetworkContext for the BrowserContext, using the specified
   // parameters. An empty |relative_partition_path| corresponds to the main
   // network context.
-  network::mojom::NetworkContextPtr CreateNetworkContext(
+  mojo::Remote<network::mojom::NetworkContext> CreateNetworkContext(
       bool in_memory,
       const base::FilePath& relative_partition_path);
 
@@ -74,6 +75,9 @@ class ProfileNetworkContextService
                            DefaultCacheSize);
   FRIEND_TEST_ALL_PREFIXES(ProfileNetworkContextServiceDiskCacheBrowsertest,
                            DiskCacheSize);
+  FRIEND_TEST_ALL_PREFIXES(
+      ProfileNetworkContextServiceCertVerifierBuiltinFeaturePolicyTest,
+      Test);
 
   // Checks |quic_allowed_|, and disables QUIC if needed.
   void DisableQuicIfNotAllowed();
@@ -99,6 +103,9 @@ class ProfileNetworkContextService
   void UpdateCTPolicy();
 
   void ScheduleUpdateCTPolicy();
+
+  // Update the CORS mitigation list for the all of profiles_'s NetworkContexts.
+  void UpdateCorsMitigationList();
 
   // Creates parameters for the NetworkContext. Use |in_memory| instead of
   // |profile_->IsOffTheRecord()| because sometimes normal profiles want off the
@@ -131,8 +138,9 @@ class ProfileNetworkContextService
   PrefChangeRegistrar pref_change_registrar_;
 
   scoped_refptr<content_settings::CookieSettings> cookie_settings_;
-  ScopedObserver<content_settings::CookieSettings, ProfileNetworkContextService>
-      cookie_settings_observer_;
+  ScopedObserver<content_settings::CookieSettings,
+                 content_settings::CookieSettings::Observer>
+      cookie_settings_observer_{this};
 
   // Used to post schedule CT policy updates
   base::OneShotTimer ct_policy_update_timer_;

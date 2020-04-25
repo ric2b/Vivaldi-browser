@@ -51,6 +51,7 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/extensions_api_client.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/blink/public/platform/web_gesture_event.h"
@@ -68,11 +69,12 @@
 #include "components/spellcheck/common/spellcheck.mojom.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #if BUILDFLAG(HAS_SPELLCHECK_PANEL)
 #include "chrome/browser/spellchecker/test/spellcheck_panel_browsertest_helper.h"
 #include "components/spellcheck/common/spellcheck_panel.mojom.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #endif  // BUILDFLAG(HAS_SPELLCHECK_PANEL)
 #endif
 
@@ -579,10 +581,12 @@ class MailtoExternalProtocolHandlerDelegate
 
   content::WebContents* web_contents() { return web_contents_; }
 
-  void RunExternalProtocolDialog(const GURL& url,
-                                 content::WebContents* web_contents,
-                                 ui::PageTransition page_transition,
-                                 bool has_user_gesture) override {}
+  void RunExternalProtocolDialog(
+      const GURL& url,
+      content::WebContents* web_contents,
+      ui::PageTransition page_transition,
+      bool has_user_gesture,
+      const base::Optional<url::Origin>& initiating_origin) override {}
 
   scoped_refptr<shell_integration::DefaultProtocolClientWorker>
   CreateShellWorker(
@@ -873,7 +877,7 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest,
 class MockSpellCheckHost : spellcheck::mojom::SpellCheckHost {
  public:
   explicit MockSpellCheckHost(content::RenderProcessHost* process_host)
-      : process_host_(process_host), binding_(this) {}
+      : process_host_(process_host) {}
   ~MockSpellCheckHost() override {}
 
   content::RenderProcessHost* process_host() const { return process_host_; }
@@ -907,16 +911,17 @@ class MockSpellCheckHost : spellcheck::mojom::SpellCheckHost {
     run_loop.Run();
   }
 
-  void SpellCheckHostRequest(spellcheck::mojom::SpellCheckHostRequest request) {
-    EXPECT_FALSE(binding_.is_bound());
-    binding_.Bind(std::move(request));
+  void SpellCheckHostReceiver(
+      mojo::PendingReceiver<spellcheck::mojom::SpellCheckHost> receiver) {
+    EXPECT_FALSE(receiver_.is_bound());
+    receiver_.Bind(std::move(receiver));
   }
 
  private:
   void TextReceived(const base::string16& text) {
     text_received_ = true;
     text_ = text;
-    binding_.Close();
+    receiver_.reset();
     if (quit_)
       std::move(quit_).Run();
   }
@@ -963,7 +968,7 @@ class MockSpellCheckHost : spellcheck::mojom::SpellCheckHost {
   content::RenderProcessHost* process_host_;
   bool text_received_ = false;
   base::string16 text_;
-  mojo::Binding<spellcheck::mojom::SpellCheckHost> binding_;
+  mojo::Receiver<spellcheck::mojom::SpellCheckHost> receiver_{this};
   base::OnceClosure quit_;
 
   DISALLOW_COPY_AND_ASSIGN(MockSpellCheckHost);
@@ -1027,7 +1032,7 @@ class SpellCheckBrowserTestHelper {
     content::RenderProcessHost* host =
         content::RenderProcessHost::FromID(render_process_id);
     auto spell_check_host = std::make_unique<MockSpellCheckHost>(host);
-    spell_check_host->SpellCheckHostRequest(std::move(receiver));
+    spell_check_host->SpellCheckHostReceiver(std::move(receiver));
     spell_check_hosts_.push_back(std::move(spell_check_host));
     if (quit_on_bind_closure_)
       std::move(quit_on_bind_closure_).Run();
@@ -1098,7 +1103,7 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest, OOPIFDisabledSpellCheckTest) {
       spell_check_helper.GetSpellCheckHostForProcess(
           cross_site_subframe->GetProcess());
 
-  // The renderer makes no SpellCheckHostRequest at all, in which case no
+  // The renderer makes no SpellCheckHostReceiver at all, in which case no
   // SpellCheckHost is bound and no spellchecking will be done.
   EXPECT_FALSE(spell_check_host);
 
@@ -1123,9 +1128,9 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest, OOPIFSpellCheckPanelTest) {
 
   EXPECT_TRUE(cross_site_subframe->IsCrossProcessSubframe());
 
-  spellcheck::mojom::SpellCheckPanelPtr spell_check_panel_client;
+  mojo::Remote<spellcheck::mojom::SpellCheckPanel> spell_check_panel_client;
   cross_site_subframe->GetRemoteInterfaces()->GetInterface(
-      &spell_check_panel_client);
+      spell_check_panel_client.BindNewPipeAndPassReceiver());
   spell_check_panel_client->ToggleSpellPanel(false);
   test_helper.RunUntilBind();
 
@@ -1665,6 +1670,57 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest,
   EXPECT_EQ(first_web_contents, tab_strip_model->GetActiveWebContents());
 }
 
+// Tests that a same-site iframe runs its beforeunload handler when closing a
+// tab.  Same as the test above, but for a same-site rather than cross-site
+// iframe.  See https://crbug.com/1010456.
+IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest,
+                       TabCloseWithSameSiteBeforeUnloadIframe) {
+  TabStripModel* tab_strip_model = browser()->tab_strip_model();
+  content::WebContents* first_web_contents =
+      tab_strip_model->GetActiveWebContents();
+
+  // Add a second tab and load a page with a same-site iframe.
+  GURL main_url(embedded_test_server()->GetURL("a.com", "/iframe.html"));
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), main_url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+  content::WebContents* second_web_contents =
+      tab_strip_model->GetActiveWebContents();
+  EXPECT_NE(first_web_contents, second_web_contents);
+  content::RenderFrameHost* child =
+      ChildFrameAt(second_web_contents->GetMainFrame(), 0);
+  EXPECT_EQ(child->GetSiteInstance(),
+            second_web_contents->GetMainFrame()->GetSiteInstance());
+
+  // Install a dialog-showing beforeunload handler in the iframe.
+  EXPECT_TRUE(
+      ExecuteScript(child, "window.onbeforeunload = () => { return 'x' };"));
+  content::PrepContentsForBeforeUnloadTest(second_web_contents);
+
+  // Close the second tab.  This should return false to indicate that we're
+  // waiting for the beforeunload dialog.
+  EXPECT_FALSE(
+      tab_strip_model->CloseWebContentsAt(tab_strip_model->active_index(), 0));
+
+  // Cancel the dialog and make sure the tab stays alive.
+  auto* dialog = ui_test_utils::WaitForAppModalDialog();
+  dialog->native_dialog()->CancelAppModalDialog();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(second_web_contents, tab_strip_model->GetActiveWebContents());
+  EXPECT_EQ(2, browser()->tab_strip_model()->count());
+
+  // Try closing the tab again.
+  EXPECT_FALSE(
+      tab_strip_model->CloseWebContentsAt(tab_strip_model->active_index(), 0));
+
+  // Accept the dialog and wait for tab close to complete.
+  content::WebContentsDestroyedWatcher destroyed_watcher(second_web_contents);
+  dialog = ui_test_utils::WaitForAppModalDialog();
+  dialog->native_dialog()->AcceptAppModalDialog();
+  destroyed_watcher.Wait();
+  EXPECT_EQ(first_web_contents, tab_strip_model->GetActiveWebContents());
+}
+
 // Test that there's no crash in the following scenario:
 // 1. a page opens a cross-site popup, where the popup has a cross-site iframe
 //    with a beforeunload handler.
@@ -1776,14 +1832,23 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest,
   EXPECT_EQ(first_web_contents, tab_strip_model->GetActiveWebContents());
 }
 
+class ChromeSitePerProcessTestWithVerifiedUserActivation
+    : public ChromeSitePerProcessTest {
+ public:
+  ChromeSitePerProcessTestWithVerifiedUserActivation() {
+    feature_list_.InitAndEnableFeature(
+        features::kBrowserVerifiedUserActivation);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
 // Test mouse down activation notification with browser verification.
-IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest,
+IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTestWithVerifiedUserActivation,
                        UserActivationBrowserVerificationSameOriginSite) {
   if (!base::FeatureList::IsEnabled(features::kUserActivationV2))
     return;
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kBrowserVerifiedUserActivation);
 
   // Start on a page a.com with same-origin iframe on a.com and cross-origin
   // iframe b.com.

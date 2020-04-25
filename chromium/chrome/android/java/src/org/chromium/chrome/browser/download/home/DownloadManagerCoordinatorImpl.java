@@ -32,6 +32,9 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import java.io.Closeable;
 
+import org.chromium.base.Log;
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * The top level coordinator for the download home UI.  This is currently an in progress class and
  * is not fully fleshed out yet.
@@ -64,7 +67,7 @@ class DownloadManagerCoordinatorImpl
                 mSelectionDelegate, this::notifyFilterChanged, createDateOrderedListObserver(),
                 modalDialogManager);
         mToolbarCoordinator = new ToolbarCoordinator(mActivity, this, mListCoordinator,
-                mSelectionDelegate, config.isSeparateActivity, profile);
+                mSelectionDelegate, config.showOfflineHome, config.isSeparateActivity, profile);
 
         initializeView();
         RecordUserAction.record("Android.DownloadManager.Open");
@@ -76,6 +79,7 @@ class DownloadManagerCoordinatorImpl
      */
     private void initializeView() {
         mMainView = new HistoryNavigationLayout(mActivity);
+        if (!ChromeApplication.isVivaldi())
         mMainView.setBackgroundColor(ApiCompatibilityUtils.getColor(
                 mActivity.getResources(), R.color.modern_primary_color));
 
@@ -141,11 +145,6 @@ class DownloadManagerCoordinatorImpl
     }
 
     @Override
-    public void showPrefetchSection() {
-        updateForUrl(Filters.toUrl(Filters.FilterType.PREFETCHED));
-    }
-
-    @Override
     public void addObserver(Observer observer) {
         mObservers.addObserver(observer);
     }
@@ -196,5 +195,16 @@ class DownloadManagerCoordinatorImpl
         public void close() {
             mMuteFilterChanges = mOriginalMuteFilterChanges;
         }
+    }
+
+    /** Vivaldi **/
+    @Override
+    public void showSettingsUI() {
+        openSettings();
+    }
+
+    @Override
+    public void showSearchUI() {
+        mToolbarCoordinator.showSearchView();
     }
 }

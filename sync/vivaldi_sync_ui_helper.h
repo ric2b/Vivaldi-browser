@@ -3,6 +3,7 @@
 #ifndef SYNC_VIVALDI_SYNC_UI_HELPER_H_
 #define SYNC_VIVALDI_SYNC_UI_HELPER_H_
 
+#include "base/time/time.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/sync/driver/sync_service_observer.h"
 
@@ -12,10 +13,32 @@ class VivaldiProfileSyncService;
 
 class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
  public:
+  enum CycleStatus {
+    NOT_SYNCED = 0,
+    SUCCESS,
+    IN_PROGRESS,
+    AUTH_ERROR,
+    SERVER_ERROR,
+    NETWORK_ERROR,
+    CLIENT_ERROR,
+    CONFLICT,
+    THROTTLED,
+    OTHER_ERROR
+  };
+
+  struct CycleData {
+    CycleStatus download_updates_status;
+    CycleStatus commit_status;
+    base::Time cycle_start_time;
+    base::Time next_retry_time;
+  };
+
   VivaldiSyncUIHelper(Profile* profile, VivaldiProfileSyncService* sync_manager);
   ~VivaldiSyncUIHelper() override;
 
   bool SetEncryptionPassword(const std::string& password);
+
+  CycleData GetCycleData();
 
   // syncer::SyncServiceObserver implementation.
   void OnStateChanged(syncer::SyncService* sync) override;

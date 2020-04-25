@@ -13,8 +13,6 @@ namespace app_list_features {
 
 const base::Feature kEnableAnswerCard{"EnableAnswerCard",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kEnableBackgroundBlur{"EnableBackgroundBlur",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kEnablePlayStoreAppSearch{
     "EnablePlayStoreAppSearch", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kEnableAppDataSearch{"EnableAppDataSearch",
@@ -46,17 +44,17 @@ const base::Feature kEnableSearchBoxSelection{"EnableSearchBoxSelection",
 const base::Feature kEnableAggregatedMlAppRanking{
     "EnableAggregatedMlAppRanking", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kScalableAppList{"ScalableAppList",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kEnableFuzzyAppSearch{"EnableFuzzyAppSearch",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kEnableAggregatedMlSearchRanking{
+    "EnableAggregatedMlSearchRanking", base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsAnswerCardEnabled() {
   // Not using local static variable to allow tests to change this value.
   // Do not show answer card if the embedded Assistant UI is enabled.
   return base::FeatureList::IsEnabled(kEnableAnswerCard) &&
          !IsEmbeddedAssistantUIEnabled();
-}
-
-bool IsBackgroundBlurEnabled() {
-  return base::FeatureList::IsEnabled(kEnableBackgroundBlur);
 }
 
 bool IsPlayStoreAppSearchEnabled() {
@@ -118,6 +116,14 @@ bool IsAggregatedMlAppRankingEnabled() {
 
 bool IsScalableAppListEnabled() {
   return base::FeatureList::IsEnabled(kScalableAppList);
+}
+
+bool IsFuzzyAppSearchEnabled() {
+  return base::FeatureList::IsEnabled(kEnableFuzzyAppSearch);
+}
+
+bool IsAggregatedMlSearchRankingEnabled() {
+  return base::FeatureList::IsEnabled(kEnableAggregatedMlSearchRanking);
 }
 
 std::string AnswerServerUrl() {

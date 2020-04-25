@@ -67,7 +67,6 @@
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
-#include "third_party/blink/renderer/platform/wtf/dtoa/utils.h"
 #include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_buffer.h"
@@ -518,7 +517,7 @@ bool SerializedScriptValue::ExtractTransferables(
   if (value.IsEmpty() || value->IsUndefined())
     return true;
 
-  const Vector<ScriptValue>& transferable_array =
+  const HeapVector<ScriptValue>& transferable_array =
       NativeValueTraits<IDLSequence<ScriptValue>>::NativeValue(isolate, value,
                                                                exception_state);
   if (exception_state.HadException())
@@ -530,7 +529,7 @@ bool SerializedScriptValue::ExtractTransferables(
 
 bool SerializedScriptValue::ExtractTransferables(
     v8::Isolate* isolate,
-    const Vector<ScriptValue>& object_sequence,
+    const HeapVector<ScriptValue>& object_sequence,
     Transferables& transferables,
     ExceptionState& exception_state) {
   // Validate the passed array of transferables.
@@ -705,6 +704,16 @@ SerializedScriptValue::TransferArrayBufferContents(
 
   contents.Grow(array_buffers.size());
   HeapHashSet<Member<DOMArrayBufferBase>> visited;
+  // The scope object to promptly free the backing store to avoid memory
+  // regressions.
+  // TODO(bikineev): Revisit after young generation is there.
+  struct PromptlyFreeSet {
+    // The void* is to avoid blink-gc-plugin error.
+    void* buffer;
+    ~PromptlyFreeSet() {
+      static_cast<HeapHashSet<Member<DOMArrayBufferBase>>*>(buffer)->clear();
+    }
+  } promptly_free_array_buffers{&visited};
   for (auto* it = array_buffers.begin(); it != array_buffers.end(); ++it) {
     DOMArrayBufferBase* array_buffer_base = *it;
     if (visited.Contains(array_buffer_base))

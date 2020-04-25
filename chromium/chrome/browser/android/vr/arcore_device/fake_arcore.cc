@@ -196,6 +196,10 @@ mojom::VRPosePtr FakeArCore::Update(bool* camera_updated) {
   return pose;
 }
 
+float FakeArCore::GetEstimatedFloorHeight() {
+  return 2.0;
+}
+
 bool FakeArCore::RequestHitTest(
     const mojom::XRRayPtr& ray,
     std::vector<mojom::XRHitResultPtr>* hit_results) {
@@ -205,6 +209,23 @@ bool FakeArCore::RequestHitTest(
   hit_results->push_back(std::move(hit));
 
   return true;
+}
+
+base::Optional<uint32_t> FakeArCore::SubscribeToHitTest(
+    mojom::XRNativeOriginInformationPtr nativeOriginInformation,
+    mojom::XRRayPtr ray) {
+  NOTREACHED();
+  return base::nullopt;
+}
+
+mojom::XRHitTestSubscriptionResultsDataPtr
+FakeArCore::GetHitTestSubscriptionResults(
+    const device::mojom::VRPosePtr& pose) {
+  return nullptr;
+}
+
+void FakeArCore::UnsubscribeFromHitTest(uint32_t subscription_id) {
+  NOTREACHED();
 }
 
 mojom::XRPlaneDetectionDataPtr FakeArCore::GetDetectedPlanesData() {
@@ -225,21 +246,59 @@ mojom::XRPlaneDetectionDataPtr FakeArCore::GetDetectedPlanesData() {
       mojom::XRPlaneData::New(1, device::mojom::XRPlaneOrientation::HORIZONTAL,
                               std::move(pose), std::move(vertices)));
 
-  return mojom::XRPlaneDetectionData::New(std::vector<int32_t>{1},
+  return mojom::XRPlaneDetectionData::New(std::vector<uint32_t>{1},
                                           std::move(result));
 }
 
 mojom::XRAnchorsDataPtr FakeArCore::GetAnchorsData() {
   std::vector<mojom::XRAnchorDataPtr> result;
+  std::vector<uint32_t> result_ids;
 
-  // 2m ahead of the origin, neutral orientation facing forward.
-  mojom::VRPosePtr pose = mojom::VRPose::New();
-  pose->position = gfx::Point3F(0.0, 0.0, -2.0);
-  pose->orientation = gfx::Quaternion();
+  for (auto& anchor_id_and_data : anchors_) {
+    mojom::VRPosePtr pose = mojom::VRPose::New();
+    pose->position = anchor_id_and_data.second.position;
+    pose->orientation = anchor_id_and_data.second.orientation;
 
-  result.push_back(mojom::XRAnchorData::New(2, std::move(pose)));
+    result.push_back(
+        mojom::XRAnchorData::New(anchor_id_and_data.first, std::move(pose)));
+    result_ids.push_back(anchor_id_and_data.first);
+  }
 
-  return mojom::XRAnchorsData::New(std::vector<int32_t>{2}, std::move(result));
+  return mojom::XRAnchorsData::New(std::move(result_ids), std::move(result));
+}
+
+base::Optional<uint32_t> FakeArCore::CreateAnchor(const mojom::VRPosePtr& pose,
+                                                  uint32_t plane_id) {
+  // TODO(992035): Fix this when implementing tests.
+  return CreateAnchor(pose);
+}
+
+base::Optional<uint32_t> FakeArCore::CreateAnchor(
+    const mojom::VRPosePtr& pose) {
+  DCHECK(pose);
+
+  gfx::Point3F position =
+      pose->position ? gfx::Point3F(pose->position->x(), pose->position->y(),
+                                    pose->position->z())
+                     : gfx::Point3F();
+
+  gfx::Quaternion orientation =
+      pose->orientation
+          ? gfx::Quaternion(pose->orientation->x(), pose->orientation->y(),
+                            pose->orientation->z(), pose->orientation->w())
+          : gfx::Quaternion(0, 0, 0, 1);
+
+  anchors_[next_id_] = {position, orientation};
+  int32_t anchor_id = next_id_;
+
+  next_id_++;
+
+  return anchor_id;
+}
+
+void FakeArCore::DetachAnchor(uint32_t anchor_id) {
+  auto count = anchors_.erase(anchor_id);
+  DCHECK_EQ(1u, count);
 }
 
 void FakeArCore::Pause() {

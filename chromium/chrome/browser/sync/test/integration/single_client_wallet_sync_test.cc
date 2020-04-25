@@ -4,16 +4,14 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
-#include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/sync/test/integration/autofill_helper.h"
 #include "chrome/browser/sync/test/integration/bookmarks_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/secondary_account_helper.h"
 #include "chrome/browser/sync/test/integration/single_client_status_change_checker.h"
-#include "chrome/browser/sync/test/integration/sync_datatype_helper.h"
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/sync/test/integration/wallet_helper.h"
@@ -33,12 +31,10 @@
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/driver/profile_sync_service.h"
-#include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/driver/sync_service.h"
 #include "components/sync/protocol/model_type_state.pb.h"
 #include "components/sync/test/fake_server/fake_server.h"
 #include "components/webdata/common/web_data_service_consumer.h"
-#include "content/public/browser/notification_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 using autofill::AutofillMetadata;
@@ -81,6 +77,8 @@ MATCHER(AddressHasConverted, "") {
 const char kLocalGuidA[] = "EDC609ED-7EEE-4F27-B00C-423242A9C44A";
 const char kDifferentBillingAddressId[] = "another address entity ID";
 const base::Time kArbitraryDefaultTime = base::Time::FromDoubleT(25);
+const syncer::SyncFirstSetupCompleteSource kSetSourceFromTest =
+    syncer::SyncFirstSetupCompleteSource::BASIC_FLOW;
 
 template <class T>
 class AutofillWebDataServiceConsumer : public WebDataServiceConsumer {
@@ -106,22 +104,11 @@ class AutofillWebDataServiceConsumer : public WebDataServiceConsumer {
   DISALLOW_COPY_AND_ASSIGN(AutofillWebDataServiceConsumer);
 };
 
-class PersonalDataLoadedObserverMock
-    : public autofill::PersonalDataManagerObserver {
- public:
-  PersonalDataLoadedObserverMock() {}
-  ~PersonalDataLoadedObserverMock() override {}
-
-  MOCK_METHOD0(OnPersonalDataChanged, void());
-};
-
 class WaitForNextWalletUpdateChecker : public StatusChangeChecker,
                                        public syncer::SyncServiceObserver {
  public:
-  explicit WaitForNextWalletUpdateChecker(syncer::ProfileSyncService* service)
-      : service_(service),
-        initial_marker_(GetInitialMarker(service)),
-        scoped_observer_(this) {
+  explicit WaitForNextWalletUpdateChecker(syncer::SyncService* service)
+      : service_(service), initial_marker_(GetInitialMarker(service)) {
     scoped_observer_.Add(service);
   }
 
@@ -149,8 +136,7 @@ class WaitForNextWalletUpdateChecker : public StatusChangeChecker,
   }
 
  private:
-  static std::string GetInitialMarker(
-      const syncer::ProfileSyncService* service) {
+  static std::string GetInitialMarker(const syncer::SyncService* service) {
     // GetLastCycleSnapshot() returns by value, so make sure to capture it for
     // iterator use.
     const syncer::SyncCycleSnapshot snap =
@@ -164,10 +150,10 @@ class WaitForNextWalletUpdateChecker : public StatusChangeChecker,
     return marker_it->second;
   }
 
-  const syncer::ProfileSyncService* service_;
+  const syncer::SyncService* service_;
   const std::string initial_marker_;
-  ScopedObserver<syncer::ProfileSyncService, WaitForNextWalletUpdateChecker>
-      scoped_observer_;
+  ScopedObserver<syncer::SyncService, syncer::SyncServiceObserver>
+      scoped_observer_{this};
 };
 
 std::vector<std::unique_ptr<CreditCard>> GetServerCards(
@@ -401,7 +387,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientWalletSyncTest, ClearOnDisableSync) {
   GetSyncService(0)->GetUserSettings()->SetSyncRequested(true);
   // StopAndClear() also clears the "first setup complete" flag, so set it
   // again.
-  GetSyncService(0)->GetUserSettings()->SetFirstSetupComplete();
+  GetSyncService(0)->GetUserSettings()->SetFirstSetupComplete(
+      kSetSourceFromTest);
   // Wait until Sync restores the card and it arrives at PDM.
   WaitForNumberOfCards(pdm, 1);
 
@@ -1261,7 +1248,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientWalletSecondaryAccountSyncTest,
   // set first-time setup to complete.
   secondary_account_helper::MakeAccountPrimary(profile(), "user@email.com");
   GetSyncService(0)->GetUserSettings()->SetSyncRequested(true);
-  GetSyncService(0)->GetUserSettings()->SetFirstSetupComplete();
+  GetSyncService(0)->GetUserSettings()->SetFirstSetupComplete(
+      kSetSourceFromTest);
 
   // Wait for Sync to get reconfigured into feature mode.
   ASSERT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());
@@ -1333,7 +1321,8 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_EQ(syncer::SyncService::TransportState::CONFIGURING,
             GetSyncService(0)->GetTransportState());
 
-  GetSyncService(0)->GetUserSettings()->SetFirstSetupComplete();
+  GetSyncService(0)->GetUserSettings()->SetFirstSetupComplete(
+      kSetSourceFromTest);
 
   // Wait for Sync to get reconfigured into feature mode.
   ASSERT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());
@@ -1466,7 +1455,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientWalletWithAccountStorageSyncTest,
 
   // STEP 5. Turn Sync-the-feature on again.
   GetSyncService(0)->GetUserSettings()->SetSyncRequested(true);
-  GetSyncService(0)->GetUserSettings()->SetFirstSetupComplete();
+  GetSyncService(0)->GetUserSettings()->SetFirstSetupComplete(
+      kSetSourceFromTest);
 
   // Wait for Sync to get reconfigured into full feature mode again.
   ASSERT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());

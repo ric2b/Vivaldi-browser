@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.autofill_assistant;
 
-import android.support.annotation.Nullable;
 import android.transition.ChangeBounds;
 import android.transition.Fade;
 import android.transition.TransitionManager;
@@ -14,6 +13,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
@@ -31,6 +32,7 @@ import org.chromium.chrome.browser.autofill_assistant.infobox.AssistantInfoBoxCo
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantCollectUserDataCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantCollectUserDataModel;
 import org.chromium.chrome.browser.compositor.CompositorViewResizer;
+import org.chromium.chrome.browser.tab.TabViewAndroidDelegate;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.chrome.browser.widget.bottomsheet.EmptyBottomSheetObserver;
@@ -403,7 +405,10 @@ class AssistantBottomBarCoordinator
         }
 
         mLastVisualViewportResizing = resizing;
-        mWebContents.getRenderWidgetHostView().insetViewportBottom(resizing);
+        TabViewAndroidDelegate chromeDelegate =
+                (TabViewAndroidDelegate) mWebContents.getViewAndroidDelegate();
+        assert chromeDelegate != null;
+        chromeDelegate.insetViewportBottom(resizing);
     }
 
     // Implementation of methods from AutofillAssistantSizeManager.

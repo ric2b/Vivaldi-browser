@@ -8,9 +8,6 @@ import android.animation.Animator;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.content.Context;
-import android.support.annotation.ColorRes;
-import android.support.annotation.DrawableRes;
-import android.support.annotation.StringRes;
 import android.support.v7.widget.AppCompatTextView;
 import android.text.Layout;
 import android.text.TextUtils;
@@ -25,13 +22,21 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.ColorRes;
+import androidx.annotation.DrawableRes;
+import androidx.annotation.StringRes;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.widget.TintedDrawable;
+import org.chromium.chrome.browser.ui.widget.TintedDrawable;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.util.UrlConstants;
+import org.vivaldi.browser.common.VivaldiUrlConstants;
 
 /**
  * Represents the view inside the page info popup.
@@ -226,6 +231,13 @@ public class PageInfoView extends FrameLayout implements OnClickListener, OnLong
         mSiteSettingsButton = (Button) findViewById(R.id.page_info_site_settings_button);
         mOpenOnlineButton = (Button) findViewById(R.id.page_info_open_online_button);
 
+        // NOTE(david@vivaldi.com): This is just a temporary url display fix as we're still using
+        // the chrome_scheme urls internally.
+        if (ChromeApplication.isVivaldi()) {
+            String url = params.url.toString().replace(
+                    UrlConstants.CHROME_SCHEME, VivaldiUrlConstants.VIVALDI_SCHEME);
+            mUrlTitle.setUrl(url, url.length());
+        } else
         mUrlTitle.setUrl(params.url, params.urlOriginLength);
         mUrlTitleLongClickCallback = params.urlTitleLongClickCallback;
         if (params.urlTitleLongClickCallback != null) {

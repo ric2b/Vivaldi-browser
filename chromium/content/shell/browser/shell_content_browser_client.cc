@@ -83,7 +83,8 @@
 #include "services/service_manager/sandbox/win/sandbox_win.h"
 #endif
 
-#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS) || \
+    BUILDFLAG(ENABLE_CAST_RENDERER)
 #include "media/mojo/mojom/constants.mojom.h"      // nogncheck
 #include "media/mojo/services/media_service_factory.h"  // nogncheck
 #endif
@@ -289,12 +290,24 @@ void ShellContentBrowserClient::BindInterfaceRequestFromFrame(
 void ShellContentBrowserClient::RunServiceInstance(
     const service_manager::Identity& identity,
     mojo::PendingReceiver<service_manager::mojom::Service>* receiver) {
+#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS) || \
+    BUILDFLAG(ENABLE_CAST_RENDERER)
+  bool is_media_service = false;
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  if (identity.name() == media::mojom::kMediaServiceName) {
+  if (identity.name() == media::mojom::kMediaServiceName)
+    is_media_service = true;
+#endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#if BUILDFLAG(ENABLE_CAST_RENDERER)
+  if (identity.name() == media::mojom::kMediaRendererServiceName)
+    is_media_service = true;
+#endif  // BUILDFLAG(ENABLE_CAST_RENDERER)
+
+  if (is_media_service) {
     service_manager::Service::RunAsyncUntilTermination(
         media::CreateMediaServiceForTesting(std::move(*receiver)));
   }
-#endif
+#endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS) ||
+        // BUILDFLAG(ENABLE_CAST_RENDERER)
 }
 
 bool ShellContentBrowserClient::ShouldTerminateOnServiceQuit(
@@ -413,10 +426,6 @@ void ShellContentBrowserClient::OverrideWebkitPrefs(
   } else {
     prefs->preferred_color_scheme = blink::PreferredColorScheme::kLight;
   }
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kForceHighContrast)) {
-    prefs->forced_colors = blink::ForcedColors::kActive;
-  }
 }
 
 base::FilePath ShellContentBrowserClient::GetFontLookupTableCacheDir() {
@@ -497,12 +506,12 @@ bool ShellContentBrowserClient::PreSpawnRenderer(sandbox::TargetPolicy* policy,
 }
 #endif  // OS_WIN
 
-network::mojom::NetworkContextPtr
+mojo::Remote<network::mojom::NetworkContext>
 ShellContentBrowserClient::CreateNetworkContext(
     BrowserContext* context,
     bool in_memory,
     const base::FilePath& relative_partition_path) {
-  network::mojom::NetworkContextPtr network_context;
+  mojo::Remote<network::mojom::NetworkContext> network_context;
   network::mojom::NetworkContextParamsPtr context_params =
       network::mojom::NetworkContextParams::New();
   UpdateCorsExemptHeader(context_params.get());
@@ -523,8 +532,8 @@ ShellContentBrowserClient::CreateNetworkContext(
   }
 #endif
 
-  GetNetworkService()->CreateNetworkContext(MakeRequest(&network_context),
-                                            std::move(context_params));
+  GetNetworkService()->CreateNetworkContext(
+      network_context.BindNewPipeAndPassReceiver(), std::move(context_params));
   return network_context;
 }
 

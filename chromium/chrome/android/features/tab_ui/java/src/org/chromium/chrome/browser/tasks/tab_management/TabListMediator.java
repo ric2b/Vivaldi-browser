@@ -12,13 +12,14 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
 import android.support.v7.content.res.AppCompatResources;
 import android.support.v7.widget.GridLayoutManager;
 import android.support.v7.widget.helper.ItemTouchHelper;
 import android.util.Pair;
 import android.view.View;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
@@ -42,6 +43,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.TabSelectionType;
+import org.chromium.chrome.browser.tasks.tab_groups.EmptyTabGroupModelFilterObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupUtils;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.UiType;
@@ -61,6 +63,9 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.tasks.tab_management.TabSwitcherView;
 
 /**
  * Mediator for business logic for the tab grid. This class should be initialized with a list of
@@ -234,6 +239,8 @@ class TabListMediator {
     private boolean mTabRestoreCompleted;
     private @UiType int mUiType;
 
+    private TabSwitcherView.TAB_VIEW mCurrentTabViewInstance;
+
     private final TabActionListener mTabSelectedListener = new TabActionListener() {
         @Override
         public void run(int tabId) {
@@ -327,7 +334,7 @@ class TabListMediator {
         public void onTitleUpdated(Tab updatedTab) {
             int index = mModel.indexFromId(updatedTab.getId());
             if (index == TabModel.INVALID_TAB_INDEX) return;
-            mModel.get(index).model.set(TabProperties.TITLE, mTitleProvider.getTitle(updatedTab));
+            mModel.get(index).model.set(TabProperties.TITLE, getLatestTitleForTab(updatedTab));
         }
 
         @Override
@@ -337,6 +344,8 @@ class TabListMediator {
     };
 
     private final TabModelObserver mTabModelObserver;
+
+    private TabGroupTitleEditor mTabGroupTitleEditor;
 
     private TabGroupModelFilter.Observer mTabGroupObserver;
 
@@ -389,6 +398,10 @@ class TabListMediator {
         mTabGridDialogHandler = dialogHandler;
         mActionsOnAllRelatedTabs = actionOnRelatedTabs;
         mUiType = uiType;
+
+        // NOTE (david@vivaldi.com): That is an indicator for the responsible tab view. This will be
+        // removed once we have our own mediator.
+        mCurrentTabViewInstance = TabSwitcherView.CurrentTabViewInstance;
 
         mTabModelObserver = new EmptyTabModelObserver() {
             @Override
@@ -483,7 +496,7 @@ class TabListMediator {
 
         if (mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter()
                         instanceof TabGroupModelFilter) {
-            mTabGroupObserver = new TabGroupModelFilter.Observer() {
+            mTabGroupObserver = new EmptyTabGroupModelFilterObserver() {
                 @Override
                 public void didMoveWithinGroup(
                         Tab movedTab, int tabModelOldIndex, int tabModelNewIndex) {
@@ -506,11 +519,15 @@ class TabListMediator {
                 @Override
                 public void didMoveTabOutOfGroup(Tab movedTab, int prevFilterIndex) {
                     assert !(mActionsOnAllRelatedTabs && mTabGridDialogHandler != null);
-
                     TabGroupModelFilter filter =
                             (TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
                                     .getCurrentTabModelFilter();
+                    boolean isUngroupingLastTabInGroup =
+                            filter.getTabAt(prevFilterIndex).getId() == movedTab.getId();
                     if (mActionsOnAllRelatedTabs) {
+                        if (isUngroupingLastTabInGroup) {
+                            return;
+                        }
                         Tab currentSelectedTab = mTabModelSelector.getCurrentTab();
                         int index = TabModelUtils.getTabIndexById(
                                 mTabModelSelector.getTabModelFilterProvider()
@@ -527,8 +544,9 @@ class TabListMediator {
                         if (!isValidMovePosition(curIndex)) return;
                         mModel.removeAt(curIndex);
                         if (mTabGridDialogHandler != null) {
-                            mTabGridDialogHandler.updateDialogContent(
-                                    filter.getTabAt(prevFilterIndex).getId());
+                            mTabGridDialogHandler.updateDialogContent(isUngroupingLastTabInGroup
+                                            ? Tab.INVALID_TAB_ID
+                                            : filter.getTabAt(prevFilterIndex).getId());
                         }
                     }
                 }
@@ -661,6 +679,35 @@ class TabListMediator {
             }
         };
 
+        if (FeatureUtilities.isTabGroupsAndroidUiImprovementsEnabled()) {
+            mTabGroupTitleEditor = new TabGroupTitleEditor(mTabModelSelector) {
+                @Override
+                protected void updateTabGroupTitle(Tab tab, String title) {
+                    // Only update title in PropertyModel for tab switcher.
+                    if (!mActionsOnAllRelatedTabs) return;
+                    Tab currentGroupSelectedTab =
+                            TabGroupUtils.getSelectedTabInGroupForTab(mTabModelSelector, tab);
+                    int index = mModel.indexFromId(currentGroupSelectedTab.getId());
+                    if (index == TabModel.INVALID_TAB_INDEX) return;
+                    mModel.get(index).model.set(TabProperties.TITLE, title);
+                }
+
+                @Override
+                protected void deleteTabGroupTitle(int tabRootId) {
+                    TabGroupUtils.deleteTabGroupTitle(tabRootId);
+                }
+
+                @Override
+                protected String getTabGroupTitle(int tabRootId) {
+                    return TabGroupUtils.getTabGroupTitle(tabRootId);
+                }
+
+                @Override
+                protected void storeTabGroupTitle(int tabRootId, String title) {
+                    TabGroupUtils.storeTabGroupTitle(tabRootId, title);
+                }
+            };
+        }
         mTabGridItemTouchHelperCallback =
                 new TabGridItemTouchHelperCallback(mModel, mTabModelSelector, mTabClosedListener,
                         mTabGridDialogHandler, mComponentName, mActionsOnAllRelatedTabs);
@@ -714,6 +761,15 @@ class TabListMediator {
     }
 
     private void onTabAdded(Tab tab, boolean onlyShowRelatedTabs) {
+        // TODO (david@vivaldi.com): This is a bit of a hack and we should implement our own
+        // TabListMediator.
+        if(ChromeApplication.isVivaldi())
+        if ((mCurrentTabViewInstance
+                    != (tab.isIncognito() ? TabSwitcherView.TAB_VIEW.PRIVATE
+                                          : TabSwitcherView.TAB_VIEW.NORMAL))
+                || (mCurrentTabViewInstance == TabSwitcherView.TAB_VIEW.PRIVATE))
+            return;
+
         int index = getIndexOfTab(tab, onlyShowRelatedTabs);
         if (index == TabList.INVALID_TAB_INDEX) return;
 
@@ -854,7 +910,7 @@ class TabListMediator {
         mModel.get(index).model.set(
                 TabProperties.CREATE_GROUP_LISTENER, getCreateGroupButtonListener(tab, isSelected));
         mModel.get(index).model.set(TabProperties.IS_SELECTED, isSelected);
-        mModel.get(index).model.set(TabProperties.TITLE, mTitleProvider.getTitle(tab));
+        mModel.get(index).model.set(TabProperties.TITLE, getLatestTitleForTab(tab));
 
         updateFaviconForTab(tab, null);
         boolean forceUpdate = isSelected && !quickMode;
@@ -909,6 +965,15 @@ class TabListMediator {
     }
 
     /**
+     * Exposes a {@link TabGroupTitleEditor} to modify the title of a tab group.
+     * @return The {@link TabGroupTitleEditor} used to modify the title of a tab group.
+     */
+    @Nullable
+    TabGroupTitleEditor getTabGroupTitleEditor() {
+        return mTabGroupTitleEditor;
+    }
+
+    /**
      * Destroy any members that needs clean up.
      */
     public void destroy() {
@@ -932,6 +997,9 @@ class TabListMediator {
         }
         if (mComponentCallbacks != null) {
             mContext.unregisterComponentCallbacks(mComponentCallbacks);
+        }
+        if (mTabGroupTitleEditor != null) {
+            mTabGroupTitleEditor.destroy();
         }
     }
 
@@ -963,7 +1031,7 @@ class TabListMediator {
         PropertyModel tabInfo =
                 new PropertyModel.Builder(TabProperties.ALL_KEYS_TAB_GRID)
                         .with(TabProperties.TAB_ID, tab.getId())
-                        .with(TabProperties.TITLE, mTitleProvider.getTitle(tab))
+                        .with(TabProperties.TITLE, getLatestTitleForTab(tab))
                         .with(TabProperties.FAVICON,
                                 mTabListFaviconProvider.getDefaultFaviconDrawable(
                                         tab.isIncognito()))
@@ -1042,6 +1110,18 @@ class TabListMediator {
                     mCreateGroupButtonProvider.getCreateGroupButtonOnClickListener(tab);
         }
         return createGroupButtonOnClickListener;
+    }
+
+    @VisibleForTesting
+    String getLatestTitleForTab(Tab tab) {
+        String originalTitle = mTitleProvider.getTitle(tab);
+        if (!mActionsOnAllRelatedTabs || mTabGroupTitleEditor == null) return originalTitle;
+        // If the group degrades to a single tab, delete the stored title.
+        if (getRelatedTabsForId(tab.getId()).size() <= 1) {
+            return originalTitle;
+        }
+        String storedTitle = mTabGroupTitleEditor.getTabGroupTitle(tab.getRootId());
+        return storedTitle == null ? originalTitle : storedTitle;
     }
 
     int selectedTabId() {

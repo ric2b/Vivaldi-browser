@@ -5,6 +5,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/profiles/profile.h"
@@ -36,7 +37,7 @@ bool CSSModsDataClassHandler::GetData(
   // If callback was OnceCallback, we could pass it directly as the result
   // argument to PostTask. But it is RepeatingCallback. Thus we use a helper
   // method to redirect to it.
-  return base::PostTaskWithTraitsAndReplyWithResult(
+  return base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},

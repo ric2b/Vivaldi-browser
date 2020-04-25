@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/stl_util.h"
 #include "base/timer/timer.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/service_manager/public/mojom/service_manager.mojom.h"
 #include "services/tracing/agent_registry.h"
 #include "services/tracing/coordinator.h"
@@ -70,10 +71,10 @@ class ServiceListener : public service_manager::mojom::ServiceManagerListener {
     // remains alive. Subsequent TracedProcess endpoints will be dropped and
     // their calls will never be processed.
 
-    mojom::TracedProcessPtr traced_process;
-    connector_->BindInterface(
+    mojo::Remote<mojom::TracedProcess> traced_process;
+    connector_->Connect(
         service_manager::ServiceFilter::ForExactIdentity(identity),
-        mojo::MakeRequest(&traced_process),
+        traced_process.BindNewPipeAndPassReceiver(),
         service_manager::mojom::BindInterfacePriority::kBestEffort);
 
     auto new_connection_request = mojom::ConnectToTracingRequest::New();
@@ -140,10 +141,11 @@ class ServiceListener : public service_manager::mojom::ServiceManagerListener {
       service_manager::mojom::RunningServiceInfoPtr service) override {}
 
  private:
-  void OnProcessConnected(mojom::TracedProcessPtr traced_process,
-                          uint32_t pid,
-                          mojom::PerfettoServiceRequest service_request,
-                          mojom::AgentRegistryRequest registry_request) {
+  void OnProcessConnected(
+      mojo::Remote<mojom::TracedProcess> traced_process,
+      uint32_t pid,
+      mojo::PendingReceiver<mojom::PerfettoService> service_receiver,
+      mojo::PendingReceiver<mojom::AgentRegistry> registry_receiver) {
     auto result = connected_pids_.insert(pid);
     if (!result.second) {
       // The PID was already connected. Nothing more to do.
@@ -151,9 +153,9 @@ class ServiceListener : public service_manager::mojom::ServiceManagerListener {
     }
 
     connected_pids_.insert(pid);
-    PerfettoService::GetInstance()->BindRequest(std::move(service_request),
-                                                pid);
-    agent_registry_->BindAgentRegistryRequest(std::move(registry_request));
+    PerfettoService::GetInstance()->BindReceiver(std::move(service_receiver),
+                                                 pid);
+    agent_registry_->BindAgentRegistryReceiver(std::move(registry_receiver));
   }
 
   mojo::Binding<service_manager::mojom::ServiceManagerListener> binding_{this};
@@ -178,28 +180,16 @@ void TracingService::OnDisconnected() {
 void TracingService::OnStart() {
   tracing_agent_registry_ = std::make_unique<AgentRegistry>();
 
-  if (TracingUsesPerfettoBackend()) {
-    auto perfetto_coordinator = std::make_unique<PerfettoTracingCoordinator>(
-        tracing_agent_registry_.get(),
-        base::BindRepeating(&TracingService::OnCoordinatorConnectionClosed,
-                            base::Unretained(this)));
-    registry_.AddInterface(
-        base::BindRepeating(&PerfettoTracingCoordinator::BindCoordinatorRequest,
-                            base::Unretained(perfetto_coordinator.get())));
-    tracing_coordinator_ = std::move(perfetto_coordinator);
-  } else {
-    auto tracing_coordinator = std::make_unique<Coordinator>(
-        tracing_agent_registry_.get(),
-        base::BindRepeating(&TracingService::OnCoordinatorConnectionClosed,
-                            base::Unretained(this)));
-    registry_.AddInterface(
-        base::BindRepeating(&Coordinator::BindCoordinatorRequest,
-                            base::Unretained(tracing_coordinator.get())));
-    tracing_coordinator_ = std::move(tracing_coordinator);
-  }
+  tracing_coordinator_ = std::make_unique<PerfettoTracingCoordinator>(
+      tracing_agent_registry_.get(),
+      base::BindRepeating(&TracingService::OnCoordinatorConnectionClosed,
+                          base::Unretained(this)));
+  registry_.AddInterface(
+      base::BindRepeating(&PerfettoTracingCoordinator::BindCoordinatorRequest,
+                          base::Unretained(tracing_coordinator_.get())));
 
   registry_.AddInterface(
-      base::BindRepeating(&ConsumerHost::BindConsumerRequest,
+      base::BindRepeating(&ConsumerHost::BindConsumerReceiver,
                           base::Unretained(PerfettoService::GetInstance())));
 
   service_listener_ = std::make_unique<ServiceListener>(

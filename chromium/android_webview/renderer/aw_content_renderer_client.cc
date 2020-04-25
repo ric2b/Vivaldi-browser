@@ -26,6 +26,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/page_load_metrics/renderer/metrics_render_frame_observer.h"
 #include "components/printing/renderer/print_render_frame_helper.h"
 #include "components/visitedlink/renderer/visitedlink_slave.h"
 #include "content/public/child/child_thread.h"
@@ -181,6 +182,9 @@ void AwContentRendererClient::RenderFrameCreated(
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   new SpellCheckProvider(render_frame, spellcheck_.get(), this);
 #endif
+
+  // Owned by |render_frame|.
+  new page_load_metrics::MetricsRenderFrameObserver(render_frame);
 }
 
 void AwContentRendererClient::RenderViewCreated(
@@ -209,7 +213,6 @@ void AwContentRendererClient::PrepareErrorPage(
     content::RenderFrame* render_frame,
     const blink::WebURLError& error,
     const std::string& http_method,
-    bool ignoring_cache,
     std::string* error_html) {
   std::string err;
   if (error.reason() == net::ERR_TEMPORARILY_THROTTLED)
@@ -247,7 +250,7 @@ void AwContentRendererClient::PrepareErrorPage(
   else
     replacements.push_back("");
   *error_html = base::ReplaceStringPlaceholders(
-      ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
+      ui::ResourceBundle::GetSharedInstance().DecompressDataResource(
           IDR_AW_LOAD_ERROR_HTML),
       replacements, nullptr);
 }

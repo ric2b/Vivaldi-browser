@@ -5,10 +5,12 @@
 #include "ui/accessibility/platform/ax_fragment_root_win.h"
 #include "ui/accessibility/platform/ax_platform_node_win.h"
 #include "ui/accessibility/platform/ax_platform_node_win_unittest.h"
+#include "ui/accessibility/platform/test_ax_node_wrapper.h"
 
 #include <UIAutomationClient.h>
 #include <UIAutomationCoreApi.h>
 
+#include "base/auto_reset.h"
 #include "base/win/scoped_safearray.h"
 #include "base/win/scoped_variant.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -33,22 +35,6 @@ TEST_F(AXFragmentRootTest, TestUIAGetFragmentRoot) {
   EXPECT_HRESULT_SUCCEEDED(
       fragment_provider->get_FragmentRoot(&actual_fragment_root));
   EXPECT_EQ(expected_fragment_root.Get(), actual_fragment_root.Get());
-}
-
-TEST_F(AXFragmentRootTest, TestUIAGetRuntimeId) {
-  AXNodeData root;
-  Init(root);
-  InitFragmentRoot();
-
-  ComPtr<IRawElementProviderFragmentRoot> fragment_root_provider =
-      GetFragmentRoot();
-  ComPtr<IRawElementProviderFragment> fragment_provider;
-  fragment_root_provider.As(&fragment_provider);
-
-  base::win::ScopedSafearray runtime_id;
-  EXPECT_HRESULT_SUCCEEDED(
-      fragment_provider->GetRuntimeId(runtime_id.Receive()));
-  EXPECT_EQ(runtime_id.Get(), nullptr);
 }
 
 TEST_F(AXFragmentRootTest, TestUIAElementProviderFromPoint) {
@@ -93,6 +79,13 @@ TEST_F(AXFragmentRootTest, TestUIAElementProviderFromPoint) {
   EXPECT_HRESULT_SUCCEEDED(fragment_root_prov->ElementProviderFromPoint(
       47, 67, &provider_from_point));
   EXPECT_EQ(root_provider.Get(), provider_from_point.Get());
+
+  // This is on node 1 with scale factor of 1.5.
+  std::unique_ptr<base::AutoReset<float>> scale_factor_reset =
+      TestAXNodeWrapper::SetScaleFactor(1.5);
+  EXPECT_HRESULT_SUCCEEDED(fragment_root_prov->ElementProviderFromPoint(
+      60, 60, &provider_from_point));
+  EXPECT_EQ(element1_provider.Get(), provider_from_point.Get());
 }
 
 TEST_F(AXFragmentRootTest, TestUIAGetFocus) {

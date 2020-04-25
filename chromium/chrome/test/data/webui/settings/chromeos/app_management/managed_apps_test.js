@@ -35,7 +35,7 @@ suite('<app-management-managed-apps>', () => {
     const app = await fakeHandler.addApp(null, policyAppOptions);
     // Select created app.
     app_management.Store.getInstance().dispatch(
-        app_management.actions.changePage(PageType.DETAIL, app.id));
+        app_management.actions.updateSelectedAppId(app.id));
     appDetailView =
         document.createElement('app-management-pwa-permission-view');
     replaceBody(appDetailView);
@@ -55,7 +55,9 @@ suite('<app-management-managed-apps>', () => {
       const permissionToggle =
           getPermissionToggleByType(appDetailView, permissionType);
       expectTrue(permissionToggle.$$('cr-toggle').disabled === policyAffected);
-      expectTrue(!!permissionToggle.$$('#policy-indicator') === policyAffected);
+      expectTrue(
+          !!permissionToggle.root.querySelector('#policyIndicator') ===
+          policyAffected);
     }
     checkToggle('CONTENT_SETTINGS_TYPE_NOTIFICATIONS', false);
     checkToggle('CONTENT_SETTINGS_TYPE_GEOLOCATION', true);
@@ -66,7 +68,7 @@ suite('<app-management-managed-apps>', () => {
   test('Pin to shelf toggle effected by policy', () => {
     const pinToShelfSetting = appDetailView.$$('#pin-to-shelf-setting')
                                   .$$('app-management-toggle-row');
-    expectTrue(!!pinToShelfSetting.$.policyIndicator);
+    expectTrue(!!pinToShelfSetting.root.querySelector('#policyIndicator'));
     expectTrue(pinToShelfSetting.$$('cr-toggle').disabled);
   });
 });

@@ -20,8 +20,7 @@ class SaveCardBubbleController;
 class SaveCardIconView : public PageActionIconView {
  public:
   SaveCardIconView(CommandUpdater* command_updater,
-                   PageActionIconView::Delegate* delegate,
-                   const gfx::FontList& font_list);
+                   PageActionIconView::Delegate* delegate);
   ~SaveCardIconView() override;
 
   // PageActionIconView:
@@ -33,10 +32,9 @@ class SaveCardIconView : public PageActionIconView {
   // PageActionIconView:
   void OnExecuting(PageActionIconView::ExecuteSource execute_source) override;
   const gfx::VectorIcon& GetVectorIcon() const override;
+  const gfx::VectorIcon& GetVectorIconBadge() const override;
 
  private:
-  friend class SaveCardBubbleViewsFullFormBrowserTest;
-
   SaveCardBubbleController* GetController() const;
 
   // gfx::AnimationDelegate:

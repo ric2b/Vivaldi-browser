@@ -13,6 +13,7 @@
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_source.h"
 #include "chrome/browser/resource_coordinator/time.h"
+#include "components/performance_manager/public/mojom/coordination_unit.mojom.h"
 #include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/page_importance_signals.h"
@@ -87,7 +88,15 @@ class TabLifecycleUnitSource::TabLifecycleUnit
 
   // Updates the tab's lifecycle state when changed outside the tab lifecycle
   // unit.
-  void UpdateLifecycleState(mojom::LifecycleState state);
+  void UpdateLifecycleState(performance_manager::mojom::LifecycleState state);
+
+  // Updates the tab's origin trial freeze policy.
+  void UpdateOriginTrialFreezePolicy(
+      performance_manager::mojom::InterventionPolicy policy);
+
+  // Setters for the WebLock and IndexedDB lock usage properties.
+  void SetIsHoldingWebLock(bool is_holding_weblock);
+  void SetIsHoldingIndexedDBLock(bool is_holding_indexeddb_lock);
 
   // LifecycleUnit:
   TabLifecycleUnitExternal* AsTabLifecycleUnitExternal() override;
@@ -177,12 +186,11 @@ class TabLifecycleUnitSource::TabLifecycleUnit
   // feature usage.
   void CanFreezeHeuristicsChecks(DecisionDetails* decision_details) const;
 
-  // Runs the discarding heuristics checks on this tab and store the decision
-  // details in |decision_details|. If |intervention_type| indicates that
-  // this is a proactive intervention then more heuristics will be
-  // applied. This doesn't check for potential background feature usage.
-  void CanDiscardHeuristicsChecks(DecisionDetails* decision_details,
-                                  LifecycleUnitDiscardReason reason) const;
+  // Runs the proactive discarding heuristics checks on this tab and store the
+  // decision details in |decision_details|. This doesn't check for potential
+  // background feature usage.
+  void CanProactivelyDiscardHeuristicsChecks(
+      DecisionDetails* decision_details) const;
 
   // List of observers to notify when the discarded state or the auto-
   // discardable state of this tab changes.
@@ -204,6 +212,11 @@ class TabLifecycleUnitSource::TabLifecycleUnit
   // When this is false, CanDiscard() always returns false.
   bool auto_discardable_ = true;
 
+  // The freeze policy set via origin trial. Initial value is kDefault to avoid
+  // affecting CanFreeze() before the policy is set for the first time.
+  performance_manager::mojom::InterventionPolicy origin_trial_freeze_policy_ =
+      performance_manager::mojom::InterventionPolicy::kDefault;
+
   // Maintains the most recent LifecycleUnitDiscardReason that was passed into
   // Discard().
   LifecycleUnitDiscardReason discard_reason_ =
@@ -217,6 +230,14 @@ class TabLifecycleUnitSource::TabLifecycleUnit
   // TimeTicks() if the tab was never "recently audible", last time at which the
   // tab was "recently audible" otherwise.
   base::TimeTicks recently_audible_time_;
+
+  // Indicates if at least one of the frames of this tab is currently holding
+  // at least one WebLock.
+  bool is_holding_weblock_ = false;
+
+  // Indicates if at least one of the frames of this tab is currently holding
+  // at least one IndexedDB Lock.
+  bool is_holding_indexeddb_lock_ = false;
 
   std::unique_ptr<TabLifecycleUnitExternalImpl> external_impl_;
 

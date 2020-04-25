@@ -60,23 +60,6 @@ TEST_F(LayoutShiftTrackerTest, SimpleBlockMovement) {
   EXPECT_FLOAT_EQ(60.0, GetLayoutShiftTracker().OverallMaxDistance());
 }
 
-TEST_F(LayoutShiftTrackerTest, GranularitySnapping) {
-  if (RuntimeEnabledFeatures::JankTrackingSweepLineEnabled())
-    return;
-
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      #j { position: relative; width: 304px; height: 104px; }
-    </style>
-    <div id='j'></div>
-  )HTML");
-  GetDocument().getElementById("j")->setAttribute(html_names::kStyleAttr,
-                                                  AtomicString("top: 58px"));
-  UpdateAllLifecyclePhases();
-  // Rect locations and sizes should snap to multiples of 600 / 60 = 10.
-  EXPECT_FLOAT_EQ(0.1, GetLayoutShiftTracker().Score());
-}
-
 TEST_F(LayoutShiftTrackerTest, Transform) {
   SetBodyInnerHTML(R"HTML(
     <style>
@@ -107,33 +90,6 @@ TEST_F(LayoutShiftTrackerTest, RtlDistance) {
       html_names::kStyleAttr, AtomicString("width: 70px; left: 10px"));
   UpdateAllLifecyclePhases();
   EXPECT_FLOAT_EQ(20.0, GetLayoutShiftTracker().OverallMaxDistance());
-}
-
-TEST_F(LayoutShiftTrackerTest, SmallMovementIgnored) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      #j { position: relative; width: 300px; height: 100px; }
-    </style>
-    <div id='j'></div>
-  )HTML");
-  GetDocument().getElementById("j")->setAttribute(html_names::kStyleAttr,
-                                                  AtomicString("top: 2px"));
-  UpdateAllLifecyclePhases();
-  EXPECT_EQ(0.0, GetLayoutShiftTracker().Score());
-}
-
-TEST_F(LayoutShiftTrackerTest, SmallMovementIgnoredWithZoom) {
-  GetDocument().GetFrame()->SetPageZoomFactor(2);
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      #j { position: relative; width: 300px; height: 100px; }
-    </style>
-    <div id='j'></div>
-  )HTML");
-  GetDocument().getElementById("j")->setAttribute(html_names::kStyleAttr,
-                                                  AtomicString("top: 2px"));
-  UpdateAllLifecyclePhases();
-  EXPECT_EQ(0.0, GetLayoutShiftTracker().Score());
 }
 
 TEST_F(LayoutShiftTrackerTest, IgnoreAfterInput) {

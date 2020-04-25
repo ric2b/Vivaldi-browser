@@ -22,6 +22,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/browsertest_util.h"
@@ -34,7 +35,6 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
@@ -71,6 +71,7 @@
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/browser/guest_view/mime_handler_view/test_mime_handler_view_guest.h"
 #include "media/base/media_switches.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "net/base/load_flags.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -1052,7 +1053,7 @@ IN_PROC_BROWSER_TEST_F(SearchByImageBrowserTest, ImageSearchWithCorruptImage) {
   RightClickImage();
   waiter.WaitForMenuOpenAndClose();
 
-  chrome::mojom::ChromeRenderFrameAssociatedPtr chrome_render_frame;
+  mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame> chrome_render_frame;
   browser()
       ->tab_strip_model()
       ->GetActiveWebContents()
@@ -1145,8 +1146,6 @@ class LoadImageBrowserTest : public InProcessBrowserTest {
   void SetupAndLoadImagePage(const std::string& page_path,
                              const std::string& image_path) {
     image_path_ = image_path;
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kLoadBrokenImagesFromContextMenu);
 
     embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
         &LoadImageBrowserTest::HandleRequest, base::Unretained(this)));
@@ -1198,7 +1197,6 @@ class LoadImageBrowserTest : public InProcessBrowserTest {
 
   std::string image_path_;
   size_t request_attempts_ = 0u;
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(LoadImageBrowserTest, LoadImage) {

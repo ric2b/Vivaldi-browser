@@ -22,8 +22,10 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/apps/platform_apps/app_load_service.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
@@ -59,6 +61,7 @@
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
 #include "chrome/browser/sharing/click_to_call/click_to_call_context_menu_observer.h"
 #include "chrome/browser/sharing/click_to_call/click_to_call_utils.h"
+#include "chrome/browser/sharing/features.h"
 #include "chrome/browser/sharing/shared_clipboard/shared_clipboard_context_menu_observer.h"
 #include "chrome/browser/sharing/shared_clipboard/shared_clipboard_utils.h"
 #include "chrome/browser/sharing/sharing_metrics.h"
@@ -73,6 +76,7 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/exclusive_access/keyboard_lock_controller.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
+#include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/foreign_session_handler.h"
@@ -134,16 +138,17 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/buildflags/buildflags.h"
 #include "media/base/media_switches.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "net/base/escape.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/plugin/plugin_action.h"
 #include "third_party/blink/public/public_buildflags.h"
 #include "third_party/blink/public/web/web_context_menu_data.h"
 #include "third_party/blink/public/web/web_media_player_action.h"
-#include "third_party/blink/public/web/web_plugin_action.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -183,7 +188,7 @@
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #endif  // BUILDFLAG(ENABLE_PRINTING)
 
-#if defined(GOOGLE_CHROME_BUILD)
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #include "chrome/grit/theme_resources.h"
 #include "ui/base/resource/resource_bundle.h"
 #endif
@@ -200,9 +205,9 @@
 #include "browser/vivaldi_browser_finder.h"
 
 using base::UserMetricsAction;
+using blink::PluginAction;
 using blink::WebContextMenuData;
 using blink::WebMediaPlayerAction;
-using blink::WebPluginAction;
 using blink::WebString;
 using blink::WebURL;
 using content::BrowserContext;
@@ -219,9 +224,6 @@ using extensions::ContextMenuMatcher;
 using extensions::Extension;
 using extensions::MenuItem;
 using extensions::MenuManager;
-using extensions::WebViewGuest;
-
-class Browser;
 
 namespace {
 
@@ -370,13 +372,14 @@ const std::map<int, int>& GetIdcToUmaMap(UmaEnumIdLookupType type) {
        {IDC_CONTENT_CONTEXT_SHARING_CLICK_TO_CALL_MULTIPLE_DEVICES, 107},
        {IDC_CONTENT_CONTEXT_SHARING_SHARED_CLIPBOARD_SINGLE_DEVICE, 108},
        {IDC_CONTENT_CONTEXT_SHARING_SHARED_CLIPBOARD_MULTIPLE_DEVICES, 109},
+       {IDC_CONTENT_CONTEXT_GENERATE_QR_CODE, 110},
        // To add new items:
        //   - Add one more line above this comment block, using the UMA value
        //     from the line below this comment block.
        //   - Increment the UMA value in that latter line.
        //   - Add the new item to the RenderViewContextMenuItem enum in
        //     tools/metrics/histograms/enums.xml.
-       {0, 110}});
+       {0, 111}});
 
   // These UMA values are for the the ContextMenuOptionDesktop enum, used for
   // the ContextMenu.SelectedOptionDesktop histograms.
@@ -544,13 +547,13 @@ void AddAvatarToLastMenuItem(const gfx::Image& icon,
 // Adds Google icon to the last added menu item. Used for Google-powered
 // services like translate and search.
 void AddGoogleIconToLastMenuItem(ui::SimpleMenuModel* menu) {
-#if defined(GOOGLE_CHROME_BUILD)
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   if (base::FeatureList::IsEnabled(features::kGoogleBrandedContextMenu)) {
     menu->SetIcon(
         menu->GetItemCount() - 1,
         ui::ResourceBundle::GetSharedInstance().GetImageNamed(IDR_GOOGLE_ICON));
   }
-#endif  // defined(GOOGLE_CHROME_BUILD)
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 
 void OnProfileCreated(const GURL& link_url,
@@ -849,8 +852,8 @@ void RenderViewContextMenu::InitMenu() {
     // twice when you highlight a link of the form <a
     // href="tel:+9876543210">+9876543210</a> and right click on it.
     MaybeAppendClickToCallItem();
+    AppendSharedClipboardItems();
   }
-
   bool media_image = content_type_->SupportsGroup(
       ContextMenuContentType::ITEM_GROUP_MEDIA_IMAGE);
   if (media_image)
@@ -888,13 +891,8 @@ void RenderViewContextMenu::InitMenu() {
   if (editable)
     AppendEditableItems();
 
-  // Add shared clipboard menu item and copy items.
   if (content_type_->SupportsGroup(ContextMenuContentType::ITEM_GROUP_COPY)) {
     DCHECK(!editable);
-    // If this is a link, shared clipboard will be shown along with link items
-    // (AppendLinkItems), otherwise show it here along with copy items.
-    if (params_.link_url.is_empty())
-      AppendSharedClipboardItems();
     AppendCopyItem();
   }
 
@@ -1299,14 +1297,11 @@ void RenderViewContextMenu::AppendLinkItems() {
       }
     }
 #endif  // !defined(OS_CHROMEOS)
-    AppendSharedClipboardItems();
     if (browser && send_tab_to_self::ShouldOfferFeatureForLink(
                        active_web_contents, params_.link_url)) {
       send_tab_to_self::RecordSendTabToSelfClickResult(
           send_tab_to_self::kLinkMenu, SendTabToSelfClickResult::kShowItem);
-      // If Shared Clipboard is available don't add the separator.
-      if (!ShouldOfferSharedClipboard(browser_context_, params_.selection_text))
-        menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+      menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
       if (send_tab_to_self::GetValidDeviceCount(GetBrowser()->profile()) == 1) {
 #if defined(OS_MACOSX)
         menu_model_.AddItem(IDC_CONTENT_LINK_SEND_TAB_TO_SELF_SINGLE_TARGET,
@@ -1321,7 +1316,7 @@ void RenderViewContextMenu::AppendLinkItems() {
                 IDS_LINK_MENU_SEND_TAB_TO_SELF_SINGLE_TARGET,
                 send_tab_to_self::GetSingleTargetDeviceName(
                     GetBrowser()->profile())),
-            *send_tab_to_self::GetImageSkia());
+            kSendTabToSelfIcon);
 #endif
         send_tab_to_self::RecordSendTabToSelfClickResult(
             send_tab_to_self::kLinkMenu,
@@ -1341,8 +1336,7 @@ void RenderViewContextMenu::AppendLinkItems() {
 #else
         menu_model_.AddSubMenuWithStringIdAndIcon(
             IDC_CONTENT_LINK_SEND_TAB_TO_SELF, IDS_LINK_MENU_SEND_TAB_TO_SELF,
-            send_tab_to_self_sub_menu_model_.get(),
-            *send_tab_to_self::GetImageSkia());
+            send_tab_to_self_sub_menu_model_.get(), kSendTabToSelfIcon);
 #endif
       }
     }
@@ -1417,9 +1411,7 @@ void RenderViewContextMenu::AppendOpenInBookmarkAppLinkItems() {
 }
 
 void RenderViewContextMenu::AppendImageItems() {
-  if (!params_.has_image_contents &&
-      base::FeatureList::IsEnabled(
-          features::kLoadBrokenImagesFromContextMenu)) {
+  if (!params_.has_image_contents) {
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_LOAD_IMAGE,
                                     IDS_CONTENT_CONTEXT_LOAD_IMAGE);
   }
@@ -1529,12 +1521,16 @@ void RenderViewContextMenu::AppendPageItems() {
                                   IDS_CONTENT_CONTEXT_SAVEPAGEAS);
   menu_model_.AddItemWithStringId(IDC_PRINT, IDS_CONTENT_CONTEXT_PRINT);
   AppendMediaRouterItem();
+
+  // Send-Tab-To-Self (user's other devices), page level.
+  bool send_tab_to_self_menu_present = false;
   if (GetBrowser() &&
       send_tab_to_self::ShouldOfferFeature(
           GetBrowser()->tab_strip_model()->GetActiveWebContents())) {
     send_tab_to_self::RecordSendTabToSelfClickResult(
         send_tab_to_self::kContentMenu, SendTabToSelfClickResult::kShowItem);
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+    send_tab_to_self_menu_present = true;
     if (send_tab_to_self::GetValidDeviceCount(GetBrowser()->profile()) == 1) {
 #if defined(OS_MACOSX)
       menu_model_.AddItem(IDC_SEND_TAB_TO_SELF_SINGLE_TARGET,
@@ -1549,7 +1545,7 @@ void RenderViewContextMenu::AppendPageItems() {
               IDS_CONTEXT_MENU_SEND_TAB_TO_SELF_SINGLE_TARGET,
               send_tab_to_self::GetSingleTargetDeviceName(
                   GetBrowser()->profile())),
-          *send_tab_to_self::GetImageSkia());
+          kSendTabToSelfIcon);
 #endif
       send_tab_to_self::RecordSendTabToSelfClickResult(
           send_tab_to_self::kContentMenu,
@@ -1568,11 +1564,26 @@ void RenderViewContextMenu::AppendPageItems() {
 #else
       menu_model_.AddSubMenuWithStringIdAndIcon(
           IDC_SEND_TAB_TO_SELF, IDS_CONTEXT_MENU_SEND_TAB_TO_SELF,
-          send_tab_to_self_sub_menu_model_.get(),
-          *send_tab_to_self::GetImageSkia());
+          send_tab_to_self_sub_menu_model_.get(), kSendTabToSelfIcon);
 #endif
     }
+  }
 
+  // Context menu item for QR Code Generator.
+  // This is presented alongside the send-tab-to-self items, though each may be
+  // present without the other due to feature experimentation. Therefore we
+  // may or may not need to create a new separator.
+  bool should_offer_qr_code_generator =
+      base::FeatureList::IsEnabled(kSharingQRCodeGenerator);
+  if (GetBrowser() && should_offer_qr_code_generator) {
+    if (!send_tab_to_self_menu_present)
+      menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_GENERATE_QR_CODE,
+                                    IDS_CONTEXT_MENU_GENERATE_QR_CODE_PAGE);
+    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+  } else if (send_tab_to_self_menu_present) {
+    // Close out sharing section if send-tab-to-self was present but QR
+    // generator was not.
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   }
 
@@ -1628,10 +1639,6 @@ void RenderViewContextMenu::AppendCopyItem() {
 // Context menu item for shared clipboard on selected text.
 void RenderViewContextMenu::AppendSharedClipboardItems() {
   if (!ShouldOfferSharedClipboard(browser_context_, params_.selection_text))
-    return;
-
-  // Do not show shared clipboard items for item that show click to call.
-  if (ShouldOfferClickToCallForURL(browser_context_, params_.link_url))
     return;
 
   if (!shared_clipboard_context_menu_observer_) {
@@ -2093,11 +2100,12 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     case IDC_CONTENT_CONTEXT_LANGUAGE_SETTINGS:
     case IDC_SEND_TAB_TO_SELF:
     case IDC_SEND_TAB_TO_SELF_SINGLE_TARGET:
+    case IDC_CONTENT_CONTEXT_GENERATE_QR_CODE:
       return true;
 
     case IDC_CONTENT_LINK_SEND_TAB_TO_SELF:
     case IDC_CONTENT_LINK_SEND_TAB_TO_SELF_SINGLE_TARGET:
-      return send_tab_to_self::IsContentRequirementsMet(
+      return send_tab_to_self::AreContentRequirementsMet(
           params_.link_url, GetBrowser()->profile());
 
     case IDC_CHECK_SPELLING_WHILE_TYPING:
@@ -2213,8 +2221,8 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
     case IDC_CONTENT_CONTEXT_OPENLINKNEWTAB:
       OpenURLWithExtraHeaders(params_.link_url, GetDocumentURL(params_),
                               vivaldi::IsVivaldiRunning()
-                                ? WindowOpenDisposition::NEW_FOREGROUND_TAB
-                                : WindowOpenDisposition::NEW_BACKGROUND_TAB,
+                                ? WindowOpenDisposition::NEW_FOREGROUND_TAB :
+                              WindowOpenDisposition::NEW_BACKGROUND_TAB,
                               ui::PAGE_TRANSITION_LINK, "" /* extra_headers */,
                               true /* started_from_context_menu */);
       break;
@@ -2336,6 +2344,16 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
           send_tab_to_self::kLinkMenu, SendTabToSelfClickResult::kClickItem);
       break;
 
+    case IDC_CONTENT_CONTEXT_GENERATE_QR_CODE: {
+      auto* web_contents =
+          GetBrowser()->tab_strip_model()->GetActiveWebContents();
+      auto* bubble_controller =
+          qrcode_generator::QRCodeGeneratorBubbleController::Get(web_contents);
+      bubble_controller->ShowBubble(params_.link_url);
+      // TODO(skare): Log a useraction here and in the page icon launch.
+      break;
+    }
+
     case IDC_RELOAD:
       embedder_web_contents_->GetController().Reload(
           content::ReloadType::NORMAL, true);
@@ -2378,10 +2396,7 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       break;
 
     case IDC_CONTENT_CONTEXT_RELOADFRAME:
-      // We always obey the cache here.
-      // TODO(evanm): Perhaps we could allow shift-clicking the menu item to do
-      // a cache-ignoring reload of the frame.
-      source_web_contents_->ReloadFocusedFrame(false);
+      source_web_contents_->ReloadFocusedFrame();
       break;
 
     case IDC_CONTENT_CONTEXT_VIEWFRAMESOURCE:
@@ -2742,9 +2757,8 @@ void RenderViewContextMenu::ExecOpenBookmarkApp() {
   if (!pwa)
     return;
 
-  AppLaunchParams launch_params(
-      GetProfile(), pwa->id(),
-      apps::mojom::LaunchContainer::kLaunchContainerWindow,
+  apps::AppLaunchParams launch_params(
+      pwa->id(), apps::mojom::LaunchContainer::kLaunchContainerWindow,
       WindowOpenDisposition::CURRENT_TAB,
       apps::mojom::AppLaunchSource::kSourceContextMenu);
   launch_params.override_url = params_.link_url;
@@ -2922,7 +2936,7 @@ void RenderViewContextMenu::ExecLoadImage() {
   RenderFrameHost* render_frame_host = GetRenderFrameHost();
   if (!render_frame_host)
     return;
-  chrome::mojom::ChromeRenderFrameAssociatedPtr chrome_render_frame;
+  mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame> chrome_render_frame;
   render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
       &chrome_render_frame);
   chrome_render_frame->RequestReloadImageForContextNode();
@@ -2971,15 +2985,14 @@ void RenderViewContextMenu::ExecControls() {
 void RenderViewContextMenu::ExecRotateCW() {
   base::RecordAction(UserMetricsAction("PluginContextMenu_RotateClockwise"));
   PluginActionAt(gfx::Point(params_.x, params_.y),
-                 WebPluginAction(WebPluginAction::kRotate90Clockwise, true));
+                 PluginAction(PluginAction::kRotate90Clockwise, true));
 }
 
 void RenderViewContextMenu::ExecRotateCCW() {
   base::RecordAction(
       UserMetricsAction("PluginContextMenu_RotateCounterclockwise"));
-  PluginActionAt(
-      gfx::Point(params_.x, params_.y),
-      WebPluginAction(WebPluginAction::kRotate90Counterclockwise, true));
+  PluginActionAt(gfx::Point(params_.x, params_.y),
+                 PluginAction(PluginAction::kRotate90Counterclockwise, true));
 }
 
 void RenderViewContextMenu::ExecReloadPackagedApp() {
@@ -3013,7 +3026,7 @@ void RenderViewContextMenu::ExecPrint() {
   }
 
   printing::StartPrint(
-      source_web_contents_,
+      source_web_contents_, nullptr,
       GetPrefs(browser_context_)->GetBoolean(prefs::kPrintPreviewDisabled),
       !params_.selection_text.empty());
 #endif  // BUILDFLAG(ENABLE_PRINTING)
@@ -3108,9 +3121,8 @@ void RenderViewContextMenu::MediaPlayerActionAt(
     frame_host->ExecuteMediaPlayerActionAtLocation(location, action);
 }
 
-void RenderViewContextMenu::PluginActionAt(
-    const gfx::Point& location,
-    const WebPluginAction& action) {
+void RenderViewContextMenu::PluginActionAt(const gfx::Point& location,
+                                           const PluginAction& action) {
   source_web_contents_->GetRenderViewHost()->
       ExecutePluginActionAtLocation(location, action);
 }
@@ -3120,14 +3132,4 @@ Browser* RenderViewContextMenu::GetBrowser() const {
     return vivaldi::FindBrowserWithWebContents(embedder_web_contents_);
   }
   return chrome::FindBrowserWithWebContents(embedder_web_contents_);
-}
-
-void RenderViewContextMenu::AppendInsertNoteSubMenu() {
-  if (!insert_note_submenu_observer_) {
-    insert_note_submenu_observer_.reset(
-      new NotesSubMenuObserver(this, this));
-  }
-
-  insert_note_submenu_observer_->InitMenu(params_);
-  observers_.AddObserver(insert_note_submenu_observer_.get());
 }

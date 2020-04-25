@@ -1,41 +1,29 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="kn">
-<translation id="1049795001945932310">&amp;ಭಾಷೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳು</translation>
 <translation id="1056898198331236512">ಎಚ್ಚರಿಕೆ</translation>
-<translation id="1084824384139382525">ಲಿಂಕ್ ವಿಳಾ&amp;ಸವನ್ನು ನಕಲಿಸಿ</translation>
-<translation id="1163931534039071049">ಫ್ರೇಮ್ ಮೂಲವನ್ನು &amp;ವೀಕ್ಷಿಸಿ</translation>
 <translation id="1165039591588034296">ದೋಷ</translation>
 <translation id="1175364870820465910">&amp;ಮುದ್ರಿಸಿ...</translation>
-<translation id="1187722533808055681">ತಟಸ್ಥದ ಎಚ್ಚರಿಸುವಿಕೆಗಳು</translation>
 <translation id="1244303850296295656">ವಿಸ್ತರಣೆ ದೋಷ</translation>
 <translation id="1546280085599573572">ನೀವು ಮುಖಪುಟದ ಬಟನ್ ಕ್ಲಿಕ್ ಮಾಡಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು ಈ ವಿಸ್ತರಣೆಯು ಬದಲಾಯಿಸಿದೆ.</translation>
 <translation id="1588438908519853928">ಸಾಮಾನ್ಯ</translation>
 <translation id="1635033183663317347">ನಿಮ್ಮ ಮೇಲ್ವಿಚಾರಕರು ಸ್ಥಾಪಿಸಿದ್ದಾರೆ.</translation>
-<translation id="1723824996674794290">&amp;ಹೊಸ ವಿಂಡೋ</translation>
 <translation id="1729533290416704613">ಓಮ್ನಿಬಾಕ್ಸ್‌ನಿಂದ ನೀವು ಹುಡುಕಾಟ ನಡೆಸಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು ಕೂಡಾ ಇದು ನಿಯಂತ್ರಿಸುತ್ತದೆ.</translation>
-<translation id="1850508293116537636">&amp;ಪ್ರದಕ್ಷಿಣೆಯಂತೆ ತಿರುಗಿಸಿ</translation>
-<translation id="1901303067676059328">&amp;ಎಲ್ಲ ಆಯ್ಕೆ ಮಾಡಿ</translation>
 <translation id="2087822576218954668">ಮುದ್ರಿಸು: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">ಅದೃಶ್ಯ ಟ್ಯಾಬ್: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">ಸ್ಥಳೀಯ ಕ್ಲೈಂಟ್ ಮಾಡ್ಯೂಲ್: <ph name="NEXE_NAME" /></translation>
-<translation id="2218515861914035131">ಸಾಮಾನ್ಯ ಪಠ್ಯವನ್ನಾಗಿ ಅಂಟಿಸು</translation>
 <translation id="2282146716419988068">GPU ಪ್ರಕ್ರಿಯೆ</translation>
 <translation id="2301382460326681002">ವಿಸ್ತರಣೆ ಮೂಲ ಡೈರೆಕ್ಟರಿ ಅಮಾನ್ಯವಾಗಿದೆ.</translation>
-<translation id="2326931316514688470">ಅಪ್ಲಿಕೇಶನ್ &amp;ಮರುಲೋಡ್ ಮಾಡಿ</translation>
 <translation id="2327492829706409234">ಅಪ್ಲಿಕೇಶನ್ ಸಕ್ರಿಯಗೊಳಿಸು</translation>
 <translation id="2344028582131185878">ಸ್ವಯಂಚಾಲಿತ ಡೌನ್‌ಲೋಡ್‌ಗಳು</translation>
 <translation id="2348176352564285430">ಅಪ್ಲಿಕೇಶನ್: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">ವಿಸ್ತರಣೆ ಡೈರೆಕ್ಟರಿಯನ್ನು ಆಯ್ಕೆಮಾಡಿ.</translation>
 <translation id="241082044617551207">ಅಪರಿಚಿತ ಪ್ಲಗ್-ಇನ್</translation>
-<translation id="2423578206845792524">ಇದರಂತೆ ಇಮೇಜ್ ಅನ್ನು ಉ&amp;ಳಿಸಿ...</translation>
 <translation id="2439110203301358333">ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿನ ಮತ್ತೊಂದು ಪ್ರೋಗ್ರಾಂ Vivaldi ಕಾರ್ಯನಿರ್ವಹಿಸುವ ವಿಧಾನವನ್ನು ಬದಲಿಸಬಹುದಾದಂತಹ ವಿಸ್ತರಣೆಯನ್ನು ಸೇರಿಸಿದೆ.</translation>
 <translation id="2445081178310039857">ವಿಸ್ತರಣೆ ಮೂಲ ಡೈರೆಕ್ಟರಿ ಅಗತ್ಯವಿದೆ.</translation>
 <translation id="2470702053775288986">ಬೆಂಬಲವಿರದ ವಿಸ್ತರಣೆಗಳನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ</translation>
-<translation id="2550212893339833758">ಬದಲಾಯಿಸಿದ ಮೆಮೊರಿ</translation>
 <translation id="2662876636500006917">Vivaldi ವೆಬ್ ಪೇಟೆ</translation>
 <translation id="2678063897982469759">ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಿ</translation>
-<translation id="2785873697295365461">ಫೈಲ್ ವಿವರಣೆಗಳು</translation>
 <translation id="2809586584051668049">ಮತ್ತು <ph name="NUMBER_ADDITIONAL_DISABLED" /> ಇನ್ನಷ್ಟು</translation>
 <translation id="2850541429955027218">ಥೀಮ್ ಸೇರಿಸು</translation>
 <translation id="2861941300086904918">ಮೂಲ ಕ್ಲೈಂಟ್ ಭದ್ರತೆ ನಿರ್ವಾಹಕ</translation>
@@ -45,22 +33,16 @@
 <translation id="299483336428448530">ನಿಮ್ಮ ಪೋಷಕರು ಸ್ಥಾಪಿಸಿದ್ದಾರೆ.</translation>
 <translation id="3080207940057008665">ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿನ ಮತ್ತೊಂದು ಪ್ರೋಗ್ರಾಂ Vivaldi ಕಾರ್ಯನಿರ್ವಹಿಸುವ ವಿಧಾನವನ್ನು ಬದಲಿಸಬಹುದಾದಂತಹ ಥೀಮ್ ಅನ್ನು ಸೇರಿಸಿದೆ.</translation>
 <translation id="3122464029669770682">CPU</translation>
-<translation id="3124111068741548686">ಬಳಕೆದಾರರ ನಿರ್ವಹಣೆಗಳು</translation>
 <translation id="3222066309010235055">ಪ್ರೀರೆಂಡರ್: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">ಪ್ಯಾಕ್ ಮಾಡಲು ವಿಸ್ತರಣೆಯ ಮೂಲ ಡೈರೆಕ್ಟರಿಯನ್ನು ಆಯ್ಕೆಮಾಡಿ. ವಿಸ್ತರಣೆಯನ್ನು ನವೀಕರಿಸಲು, ಮರುಬಳಸಲು ಖಾಸಗಿ ಕೀ ಫೈಲ್‌‌ ಅನ್ನು ಕೂಡ ಆಯ್ಕೆಮಾಡಿ.</translation>
-<translation id="3280237271814976245">&amp;ಇದರಂತೆ ಉಳಿಸು</translation>
 <translation id="3288047731229977326">ಡೆವಲಪರ್ ಮೋಡ್‌ನಲ್ಲಿ ಚಾಲನೆಯಾಗುವ ವಿಸ್ತರಣೆಗಳು ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ಗೆ ಹಾನಿಮಾಡಬಹುದು. ನೀವು ಡೆವಲಪರ್ ಆಗಿರದಿದ್ದರೇ, ಸುರಕ್ಷಿತವಾಗಿರಲು ಡೆವಲಪರ್ ಮೋಡ್‌ನಲ್ಲಿ ಈ ವಿಸ್ತರಣೆಗಳ ಚಾಲನೆಯನ್ನು ನೀವು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಬೇಕು.</translation>
-<translation id="3347086966102161372">ಚಿತ್ರದ ವಿಳಾಸ ನ&amp;ಕಲಿಸು</translation>
 <translation id="3378572629723696641">ಈ ವಿಸ್ತರಣೆಯು ದೋಷಪೂರಿತವಾಗಿರಬಹುದು.</translation>
-<translation id="345693547134384690">ಹೊಸ ಟ್ಯಾಬ್‌ನಲ್ಲಿ &amp;ಇಮೇಜ್ ಅನ್ನು ತೆರೆಯಿರಿ</translation>
 <translation id="3505030558724226696">ಸಾಧನ ಪ್ರವೇಶವನ್ನು ಹಿಂತೆಗೆದುಕೊಳ್ಳಿ</translation>
-<translation id="3627588569887975815">ಲಿಂಕ್‌ ಅನ್ನು ಅಜ್ಞಾ&amp;ತ ವಿಂಡೋದಲ್ಲಿ ತೆರೆಯಿರಿ</translation>
 <translation id="3678156199662914018">ವಿಸ್ತರಣೆ: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">ಅಪ್ಲಿಕೇಶನ್ ಸರಿಪಡಿಸು</translation>
 <translation id="3908501907586732282">ವಿಸ್ತರಣೆಯನ್ನು ಸಕ್ರಿಯಗೊಳಿಸು</translation>
 <translation id="3909791450649380159">ಕತ್ತರಿ&amp;ಸು</translation>
 <translation id="3927932062596804919">ನಿರಾಕರಿಸು</translation>
-<translation id="3936390757709632190">&amp;ಹೊಸ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ಆಡಿಯೋ ತೆರೆಯಿರಿ</translation>
 <translation id="3943582379552582368">&amp;ಹಿಂದೆ</translation>
 <translation id="3979395879372752341">ಹೊಸ ವಿಸ್ತರಣೆಯನ್ನು ಸೇರಿಸಲಾಗಿದೆ (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -72,23 +54,16 @@
 <translation id="4115080753528843955">ಸಂರಕ್ಷಿತ ವಿಷಯಕ್ಕೆ ಪ್ರವೇಶವನ್ನು ಅನುಮೋದಿಸುವ ಉದ್ದೇಶಕ್ಕಾಗಿ ಕೆಲವು ವಿಷಯ ಸೇವೆಗಳು ಅನನ್ಯ ಗುರುತಿಸುವಿಕೆಗಳನ್ನು ಬಳಸುತ್ತವೆ</translation>
 <translation id="4130207949184424187">ಆಮ್ನಿಬಾಕ್ಸ್‌ನಿಂದ ನೀವು ಹುಡುಕಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು ಈ ವಿಸ್ತರಣೆಯು ಬದಲಾಯಿಸಿದೆ.</translation>
 <translation id="4176463684765177261">ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ</translation>
-<translation id="4200983522494130825">ಹೊಸ &amp;ಟ್ಯಾಬ್</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K ಲೈವ್)</translation>
 <translation id="4384652540891215547">ವಿಸ್ತರಣೆಯನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ</translation>
 <translation id="4394049700291259645">ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಿ</translation>
 <translation id="4593021220803146968"><ph name="URL" /> ಗೆ &amp;ಹೋಗಿ</translation>
 <translation id="4595560905247879544">ಅಪ್ಲಿಕೇಶನ್‌ಗಳು ಮತ್ತು ವಿಸ್ತರಣೆಗಳನ್ನು ಮ್ಯಾನೇಜರ್ (<ph name="CUSTODIAN_NAME" />) ರಿಂದ ಮಾತ್ರ ಮಾರ್ಪಡಿಸಬಹುದು.</translation>
 <translation id="4613271546271159013">ನೀವು ಹೊಸ ಟ್ಯಾಬ್ ತೆರೆದಿರುವಾಗ ಯಾವ ಪುಟವನ್ನು ತೋರಿಸಲಾಗಿದೆ ಎಂಬುದರ ವಿಸ್ತರಣೆ ಬದಲಾಗಿದೆ.</translation>
-<translation id="4677772697204437347">GPU ಮೆಮೊರಿ</translation>
-<translation id="4711638718396952945">ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಪುನಃಸ್ಥಾಪಿಸು</translation>
-<translation id="4839303808932127586">ಇದರಂತೆ ವೀಡಿಯೊ ಉ&amp;ಳಿಸಿ...</translation>
 <translation id="488785315393301722">ವಿವರಗಳನ್ನು ತೋರಿಸಿ</translation>
-<translation id="49896407730300355">ಅಪ್ರ&amp;ದಕ್ಷಿಣೆಯಂತೆ ತಿರುಗಿಸಿ</translation>
-<translation id="4989966318180235467">&amp;ಹಿನ್ನಲೆ ಪುಟವನ್ನು ಪರಿಶೀಲಿಸಿ</translation>
 <translation id="5027562294707732951">ವಿಸ್ತರಣೆ ಸೇರಿಸು</translation>
 <translation id="5039804452771397117">ಅನುಮತಿಸು</translation>
 <translation id="5143374789336132547">ನೀವು ಮುಖಪುಟದ ಬಟನ್ ಕ್ಲಿಕ್ ಮಾಡಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು "<ph name="EXTENSION_NAME" />" ವಿಸ್ತರಣೆಯು ಬದಲಾಯಿಸಿದೆ.</translation>
-<translation id="5233019165164992427">NaCl ಡೀಬಗ್‌ ಪೋರ್ಟ್</translation>
 <translation id="5233231016133573565">ಪ್ರಗತಿ ID</translation>
 <translation id="52912272896845572">ಖಾಸಗಿ ಕೀಲಿ ಫೈಲ್ ಅಮಾನ್ಯವಾಗಿದೆ.</translation>
 <translation id="5301954838959518834">ಸರಿ, ಅರ್ಥವಾಯಿತು</translation>
@@ -103,50 +78,33 @@
 <translation id="5575473780076478375">ಅದೃಶ್ಯ ವಿಸ್ತರಣೆ: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">ನೀವು ಮುಖಪುಟ ಬಟನ್ ಕ್ಲಿಕ್ ಮಾಡಿದಾಗ ಕಾಣಿಸಿಕೊಳ್ಳುವ ಪುಟವನ್ನು ಕೂಡಾ ಇದು ನಿಯಂತ್ರಿಸುತ್ತದೆ.</translation>
 <translation id="5715711091495208045">ಪ್ಲಗಿನ್ ಬ್ರೋಕರ್: <ph name="PLUGIN_NAME" /></translation>
-<translation id="5764483294734785780">ಇದರಂತೆ ಆಡಿಯೋ ಉ&amp;ಳಿಸಿ...</translation>
-<translation id="5780973441651030252">ಪ್ರಕ್ರಿಯೆಯ ಆದ್ಯತೆ</translation>
 <translation id="583281660410589416">ಅಪರಿಚಿತ</translation>
 <translation id="5956585768868398362">ಇದು ನೀವು ನಿರೀಕ್ಷಿಸುತ್ತಿರುವ ಹುಡುಕಾಟ ಪುಟವೇ?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> ಪೀಕ್)</translation>
 <translation id="5965661248935608907">ನೀವು ಮುಖಪುಟ ಬಟನ್ ಕ್ಲಿಕ್ ಮಾಡಿದಾಗ ಅಥವಾ ಓಮ್ನಿಬಾಕ್ಸ್‌ನಿಂದ ಹುಡುಕಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು ಕೂಡಾ ಇದು ನಿಯಂತ್ರಿಸುತ್ತದೆ.</translation>
 <translation id="6101226222197207147">ಹೊಸ ಅಪ್ಲಿಕೇಶನ್ ಸೇರಿಸಲಾಗಿದೆ (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">ನಿಮ್ಮ ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕವನ್ನು ನಿಯಂತ್ರಿಸಲಾಗುತ್ತಿದೆ</translation>
-<translation id="6156863943908443225">ಲಿಪಿ ಸಂಗ್ರಹ</translation>
 <translation id="6196854373336333322">ನಿಮ್ಮ ಪ್ರಾಕ್ಸಿ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು "<ph name="EXTENSION_NAME" />" ವಿಸ್ತರಣೆಯು ನಿಯಂತ್ರಣಕ್ಕೆ ತೆಗೆದುಕೊಂಡಿದೆ. ಅಂದರೆ, ನೀವು ಆನ್‌ಲೈನ್‌ನಲ್ಲಿ ಮಾಡುವ ಯಾವುದೇ ಕಾರ್ಯವನ್ನು ಇದು ಬದಲಾಯಿಸಬಹುದು, ಒಳನುಸುಳಬಹುದು ಅಥವಾ ಕದ್ದಾಲಿಸಬಹುದು ಎಂದರ್ಥ. ಇದು ಹೇಗೆ ಸಂಭವಿಸಿದೆ ಎಂಬುದೇ ನಿಮಗೆ ಖಚಿತವಿಲ್ಲದಿದ್ದರೆ, ನಿಮಗೆ ಬಹುಶಃ ಇದು ಬೇಕಾಗಿಲ್ಲ.</translation>
-<translation id="6239558157302047471">ರೀಲೋಡ್ &amp;ಫ್ರೇಮ್</translation>
 <translation id="6247802389331535091">ಸಿಸ್ಟಮ್: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="6251870443722440887">GDI ನಿರ್ವಹಣೆಗಳು</translation>
-<translation id="6308937455967653460">ಇದರಂತೆ ಲಿಂ&amp;ಕ್ ಅನ್ನು ಉಳಿಸಿ...</translation>
-<translation id="6398765197997659313">ಪೂರ್ಣಪರದೆಯಿಂದ ನಿರ್ಗಮಿಸಿ</translation>
-<translation id="6406303162637086258">ಬ್ರೌಸರ್ ಮರುಪ್ರಾರಂಭ ಸಿಮ್ಯುಲೇಟ್‌ ಮಾಡು</translation>
 <translation id="6445450263907939268">ನಿಮಗೆ ಈ ಬದಲಾವಣೆಗಳು ಅಗತ್ಯವಿಲ್ಲದಿದ್ದರೆ, ನಿಮ್ಮ ಹಿಂದಿನ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ನೀವು ಪುನಃಸ್ಥಾಪಿಸಬಹುದು.</translation>
 <translation id="6447842834002726250">ಕುಕೀಸ್</translation>
 <translation id="6498249116389603658">&amp;ನಿಮ್ಮ ಎಲ್ಲಾ ಭಾಷೆಗಳು</translation>
 <translation id="6503077044568424649">ಅತಿಹೆಚ್ಚು ಬಾರಿ ಸಂದರ್ಶಿಸಿರುವುದು</translation>
 <translation id="6508261954199872201">ಅಪ್ಲಿಕೇಶನ್: <ph name="APP_NAME" /></translation>
-<translation id="6518014396551869914">ಇಮೇಜ್ ಅನ್ನು ನಕ&amp;ಲಿಸಿ</translation>
 <translation id="6612358246767739896">ಸಂರಕ್ಷಿತ ವಿಷಯ</translation>
-<translation id="6639554308659482635">SQLite ಮೆಮೊರಿ</translation>
 <translation id="6691936601825168937">&amp;ಮುಂದೆ ತನ್ನಿ</translation>
 <translation id="6798954102094737107">ಪ್ಲಗಿನ್: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6812841287760418429">ಬದಲಾವಣೆಗಳನ್ನು ಇರಿಸು</translation>
-<translation id="6886871292305414135">ಹೊಸ &amp;ಟ್ಯಾಬ್‌ನಲ್ಲಿ ಲಿಂಕ್ ತೆರೆಯಿರಿ</translation>
 <translation id="6900284862687837908">ಹಿನ್ನೆಲೆ ಅಪ್ಲಿಕೇಶನ್: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">ಫೈಲ್ ಪ್ರವೇಶವನ್ನು ಹಿಂತೆಗೆದುಕೊಳ್ಳಿ</translation>
-<translation id="708060913198414444">ಆಡಿಯೋ ವಿಳಾಸವನ್ನು ನ&amp;ಕಲಿಸಿ</translation>
 <translation id="7287143125007575591">ಪ್ರವೇಶ ನೀರಾಕರಿಸಲಾಗಿದೆ.</translation>
-<translation id="7309257895202129721">&amp;ನಿಯಂತ್ರಣಗಳನ್ನು ತೋರಿಸು</translation>
 <translation id="7427348830195639090">ಹಿನ್ನೆಲೆ ಪುಟ: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7521387064766892559">ಜಾವಾಸ್ಕ್ರಿಪ್ಟ್</translation>
-<translation id="7564847347806291057">ಪ್ರಕ್ರಿಯೆ ಕೊನೆಗೊಳಿಸಿ</translation>
 <translation id="7629827748548208700">ಟ್ಯಾಬ್: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">ರಿಸೀವರ್: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7685049629764448582">JavaScript ಸ್ಮರಣೆ</translation>
 <translation id="7704305437604973648">ಕಾರ್ಯ</translation>
 <translation id="7760004034676677601">ಇದು ನೀವು ನಿರೀಕ್ಷಿಸುತ್ತಿರುವ ಆರಂಭಿಕ ಪುಟವೇ?</translation>
 <translation id="7791543448312431591">ಸೇರಿಸು</translation>
 <translation id="7818135753970109980">ಹೊಸ ಥೀಮ್ ಸೇರಿಸಲಾಗಿದೆ (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="782057141565633384">ವೀಡಿಯೋ ವಿಳಾಸವನ್ನು ನ&amp;ಕಲಿಸಿ</translation>
 <translation id="7857949311770343000">ನೀವು ನಿರೀಕ್ಷಿಸುತ್ತಿರುವುದು ಈ ಹೊಸ ಟ್ಯಾಬ್ ಪುಟವೇ?</translation>
 <translation id="786073089922909430">ಸೇವೆ: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">ಉಪಯುಕ್ತತೆ: <ph name="UTILITY_TYPE" /></translation>
@@ -160,14 +118,9 @@
 <translation id="8261378640211443080">ಈ ವಿಸ್ತರಣೆಯನ್ನು <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> ನಲ್ಲಿ ಪಟ್ಟಿ ಮಾಡಲಾಗಿಲ್ಲ ಮತ್ತು ಇದು ನಿಮಗೆ ಅರಿವಿಲ್ಲದಂತೆ ಸೇರಿಸಿರಬಹುದು.</translation>
 <translation id="8270242299912238708">ಪಿಡಿಎಫ್ ದಾಖಲೆಗಳು</translation>
 <translation id="8351419472474436977">ನಿಮ್ಮ ಪ್ರಾಕ್ಸಿ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಈ ವಿಸ್ತರಣೆಯು ನಿಯಂತ್ರಣಕ್ಕೆ ತೆಗೆದುಕೊಂಡಿದೆ. ಅಂದರೆ, ನೀವು ಆನ್‌ಲೈನ್‌ನಲ್ಲಿ ಮಾಡುವ ಯಾವುದೇ ಕಾರ್ಯವನ್ನು ಇದು ಬದಲಾಯಿಸಬಹುದು, ಒಳನುಸುಳಬಹುದು ಅಥವಾ ಕದ್ದಾಲಿಸಬಹುದು ಎಂದರ್ಥ. ಇದು ಹೇಗೆ ಸಂಭವಿಸಿದೆ ಎಂಬುದೇ ನಿಮಗೆ ಖಚಿತವಿಲ್ಲದಿದ್ದರೆ, ನಿಮಗೆ ಬಹುಶಃ ಇದು ಬೇಕಾಗಿಲ್ಲ.</translation>
-<translation id="8546306075665861288">ಇಮೇಜ್ ಸಂಗ್ರಹ</translation>
-<translation id="8584280235376696778">&amp;ಹೊಸ ಟ್ಯಾಬ್‌ನಲ್ಲಿ ವೀಡಿಯೊ ತೆರೆಯಿರಿ</translation>
 <translation id="8615618338313291042">ಅದೃಶ್ಯ ಅಪ್ಲಿಕೇಶನ್: <ph name="APP_NAME" /></translation>
-<translation id="862750493060684461">CSS ಸಂಗ್ರಹ</translation>
-<translation id="8664389313780386848">ಫ್ರೇಮ್ ಮೂಲವನ್ನು &amp;ವೀಕ್ಷಿಸಿ</translation>
 <translation id="8808478386290700967">ವೆಬ್‌ ಸ್ಟೋರ್‌</translation>
 <translation id="8859174528519900719">ಉಪಫ್ರೇಮ್‌: <ph name="SUBFRAME_SITE" /></translation>
-<translation id="8899851313684471736">ಹೊಸ &amp;ವಿಂಡೋದಲ್ಲಿ ಲಿಂಕ್ ತೆರೆಯಿರಿ</translation>
 <translation id="8916476537757519021">ಅದೃಶ್ಯ ಉಪಫ್ರೇಮ್: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">ವಿವರಗಳನ್ನು ಮರೆಮಾಡಿ</translation>
 <translation id="9170848237812810038">&amp;ರದ್ದುಮಾಡು</translation>

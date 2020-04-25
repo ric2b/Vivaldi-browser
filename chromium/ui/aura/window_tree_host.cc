@@ -38,6 +38,7 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/icc_profile.h"
+#include "ui/gfx/switches.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 
 #if defined(OS_WIN)
@@ -81,7 +82,9 @@ class ScopedLocalSurfaceIdValidator {
 
 #if defined(OS_WIN)
 bool IsNativeWindowOcclusionEnabled() {
-  return base::FeatureList::IsEnabled(features::kCalculateNativeWinOcclusion);
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+             switches::kHeadless) &&
+         base::FeatureList::IsEnabled(features::kCalculateNativeWinOcclusion);
 }
 #endif  // OS_WIN
 
@@ -263,6 +266,11 @@ ui::EventDispatchDetails WindowTreeHost::DispatchKeyEventPostIME(
   // If dispatch to IME is already disabled we shouldn't reach here.
   DCHECK(!dispatcher_->should_skip_ime());
   dispatcher_->set_skip_ime(true);
+
+  // InputMethod::DispatchKeyEvent() is called in PRE_DISPATCH phase, so event
+  // target is reset here to avoid issues in subsequent processing phases.
+  ui::Event::DispatcherApi(event).set_target(nullptr);
+
   // We should bypass event rewriters here as they've been tried before.
   ui::EventDispatchDetails dispatch_details =
       event_sink()->OnEventFromSource(event);
@@ -385,12 +393,11 @@ void WindowTreeHost::DestroyDispatcher() {
   //window()->RemoveOrDestroyChildren();
 }
 
-void WindowTreeHost::CreateCompositor(
-    const viz::FrameSinkId& frame_sink_id,
-    bool force_software_compositor,
-    ui::ExternalBeginFrameClient* external_begin_frame_client,
-    bool are_events_in_pixels,
-    const char* trace_environment_name) {
+void WindowTreeHost::CreateCompositor(const viz::FrameSinkId& frame_sink_id,
+                                      bool force_software_compositor,
+                                      bool use_external_begin_frame_control,
+                                      bool are_events_in_pixels,
+                                      const char* trace_environment_name) {
   Env* env = Env::GetInstance();
   ui::ContextFactory* context_factory = env->context_factory();
   DCHECK(context_factory);
@@ -402,7 +409,7 @@ void WindowTreeHost::CreateCompositor(
           : context_factory_private->AllocateFrameSinkId(),
       context_factory, context_factory_private,
       base::ThreadTaskRunnerHandle::Get(), ui::IsPixelCanvasRecordingEnabled(),
-      external_begin_frame_client, force_software_compositor,
+      use_external_begin_frame_control, force_software_compositor,
       trace_environment_name);
 #if defined(OS_CHROMEOS)
   compositor_->AddObserver(this);

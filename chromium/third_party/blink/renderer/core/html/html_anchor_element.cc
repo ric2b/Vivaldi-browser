@@ -433,7 +433,7 @@ void HTMLAnchorElement::HandleClick(Event& event) {
     request.SetRequestContext(mojom::RequestContextType::DOWNLOAD);
     request.SetRequestorOrigin(GetDocument().GetSecurityOrigin());
     frame->Client()->DownloadURL(request,
-                                 DownloadCrossOriginRedirects::kNavigate);
+                                 network::mojom::RedirectMode::kManual);
     return;
   }
 
@@ -455,8 +455,8 @@ void HTMLAnchorElement::HandleClick(Event& event) {
                       WebFeature::kHTMLAnchorElementHrefTranslateAttribute);
   }
   frame_request.SetTriggeringEventInfo(
-      event.isTrusted() ? WebTriggeringEventInfo::kFromTrustedEvent
-                        : WebTriggeringEventInfo::kFromUntrustedEvent);
+      event.isTrusted() ? TriggeringEventInfo::kFromTrustedEvent
+                        : TriggeringEventInfo::kFromUntrustedEvent);
   frame_request.SetInputStartTime(event.PlatformTimeStamp());
 
   frame->MaybeLogAdClickNavigation();

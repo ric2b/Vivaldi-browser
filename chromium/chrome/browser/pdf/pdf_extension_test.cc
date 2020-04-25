@@ -81,6 +81,7 @@
 #include "pdf/pdf_features.h"
 #include "services/network/public/cpp/features.h"
 #include "ui/accessibility/ax_enum_util.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_tree.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -299,9 +300,12 @@ class PDFExtensionTest : public extensions::ExtensionApiTest {
         "var oldSendScriptingMessage = "
         "    PDFViewer.prototype.sendScriptingMessage_;"
         "PDFViewer.prototype.sendScriptingMessage_ = function(message) {"
-        "  oldSendScriptingMessage.bind(this)(message);"
-        "  if (message.type == 'getSelectedTextReply')"
-        "    this.parentWindow_.postMessage('flush', '*');"
+        "  try {"
+        "    oldSendScriptingMessage.bind(this)(message);"
+        "  } finally {"
+        "    if (message.type == 'getSelectedTextReply')"
+        "      this.parentWindow_.postMessage('flush', '*');"
+        "  }"
         "}"));
 
     // Add an event listener for flush messages and request the selected text.
@@ -622,8 +626,16 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, Viewport) {
   RunTestsInFile("viewport_test.js", "test.pdf");
 }
 
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, Layout3) {
+  RunTestsInFile("layout_test.js", "test-layout3.pdf");
+}
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, Layout4) {
+  RunTestsInFile("layout_test.js", "test-layout4.pdf");
+}
+
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, Bookmark) {
-  RunTestsInFile("bookmarks_test.js", "test-bookmarks.pdf");
+  RunTestsInFile("bookmarks_test.js", "test-bookmarks-with-zoom.pdf");
 }
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, Navigator) {
@@ -753,6 +765,12 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, EnsureCrossOriginRepliesBlocked) {
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, EnsureSameOriginRepliesAllowed) {
   TestGetSelectedTextReply(embedded_test_server()->GetURL("/pdf/test.pdf"),
                            true);
+}
+
+// TODO(crbug.com/1004425): Should be allowed?
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, EnsureOpaqueOriginRepliesBlocked) {
+  TestGetSelectedTextReply(
+      embedded_test_server()->GetURL("/pdf/data_url_rectangles.html"), false);
 }
 
 // Ensure that the PDF component extension cannot be loaded directly.
@@ -2381,6 +2399,26 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTextExtractionTest,
   RunTextExtractionTest(FILE_PATH_LITERAL("whitespace.pdf"));
 }
 
+// Test data of inline text boxes for PDF with weblinks.
+IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTextExtractionTest, WebLinks) {
+  RunTextExtractionTest(FILE_PATH_LITERAL("weblinks.pdf"));
+}
+
+// Test data of inline text boxes for PDF with multi-line and various font-sized
+// text.
+IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTextExtractionTest,
+                       ParagraphsAndHeadingUntagged) {
+  RunTextExtractionTest(
+      FILE_PATH_LITERAL("paragraphs-and-heading-untagged.pdf"));
+}
+
+// Test data of inline text boxes for PDF with text, weblinks, images and
+// annotation links.
+IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTextExtractionTest,
+                       LinksImagesAndText) {
+  RunTextExtractionTest(FILE_PATH_LITERAL("text-image-link.pdf"));
+}
+
 class PDFExtensionAccessibilityTreeDumpTest
     : public PDFExtensionTest,
       public ::testing::WithParamInterface<size_t> {
@@ -2574,4 +2612,17 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest,
 
 IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest, TextDirection) {
   RunPDFTest(FILE_PATH_LITERAL("text-direction.pdf"));
+}
+
+IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest, WebLinks) {
+  RunPDFTest(FILE_PATH_LITERAL("weblinks.pdf"));
+}
+
+IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest, Images) {
+  RunPDFTest(FILE_PATH_LITERAL("image_alt_text.pdf"));
+}
+
+IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest,
+                       LinksImagesAndText) {
+  RunPDFTest(FILE_PATH_LITERAL("text-image-link.pdf"));
 }

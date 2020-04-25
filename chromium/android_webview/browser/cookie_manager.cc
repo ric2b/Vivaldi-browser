@@ -12,7 +12,7 @@
 
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_cookie_access_policy.h"
-#include "android_webview/native_jni/AwCookieManager_jni.h"
+#include "android_webview/browser_jni_headers/AwCookieManager_jni.h"
 #include "base/android/callback_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/path_utils.h"
@@ -25,6 +25,7 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
@@ -36,12 +37,12 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_util.h"
 #include "net/cookies/parsed_cookie.h"
-#include "net/extras/sqlite/cookie_crypto_delegate.h"
 #include "net/url_request/url_request_context.h"
 #include "services/network/network_service.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
@@ -89,8 +90,19 @@ enum class SecureCookieAction {
   kMaxValue = kFixedUp,
 };
 
-GURL MaybeFixUpSchemeForSecureCookie(const GURL& host,
-                                     const std::string& value) {
+// Since this function parses the set-cookie line into a ParsedCookie, it is
+// convenient to hook into here to get the SameSite value from the parsed
+// cookie for histogramming.
+GURL MaybeFixUpSchemeForSecureCookieAndGetSameSite(
+    const GURL& host,
+    const std::string& value,
+    net::CookieSameSiteString* samesite_out) {
+  net::ParsedCookie parsed_cookie(value);
+
+  // Grab the SameSite value for histogramming.
+  DCHECK(samesite_out);
+  parsed_cookie.SameSite(samesite_out);
+
   // Log message for catching strict secure cookies related bugs.
   // TODO(ntfschr): try to remove this, based on UMA stats
   // (https://crbug.com/933981)
@@ -104,7 +116,6 @@ GURL MaybeFixUpSchemeForSecureCookie(const GURL& host,
                                   SecureCookieAction::kAlreadySecureScheme);
     return host;
   }
-  net::ParsedCookie parsed_cookie(value);
   if (!parsed_cookie.IsValid()) {
     base::UmaHistogramEnumeration(kSecureCookieHistogramName,
                                   SecureCookieAction::kInvalidCookie);
@@ -193,9 +204,18 @@ CookieManager::~CookieManager() {}
 
 void CookieManager::MigrateCookieStorePath() {
   base::FilePath old_cookie_store_path = GetPathInAppDirectory("Cookies");
+  base::FilePath old_cookie_journal_path =
+      GetPathInAppDirectory("Cookies-journal");
 
   if (base::PathExists(old_cookie_store_path)) {
     base::Move(old_cookie_store_path, cookie_store_path_);
+    base::Move(old_cookie_journal_path, cookie_store_path_);
+  } else {
+    // Some users got an incomplete version of this migration where the journal
+    // was not moved. Delete the old journal if it exists, as we can't merge
+    // them.
+    // TODO(torne): remove this in a future release (M81?)
+    base::DeleteFile(old_cookie_journal_path, false);
   }
 }
 
@@ -406,10 +426,12 @@ void CookieManager::SetCookieSync(JNIEnv* env,
 void CookieManager::SetCookieHelper(const GURL& host,
                                     const std::string& value,
                                     base::OnceCallback<void(bool)> callback) {
-  net::CookieOptions options;
-  options.set_include_httponly();
+  net::CookieSameSiteString samesite = net::CookieSameSiteString::kUnspecified;
+  const GURL& new_host =
+      MaybeFixUpSchemeForSecureCookieAndGetSameSite(host, value, &samesite);
 
-  const GURL& new_host = MaybeFixUpSchemeForSecureCookie(host, value);
+  UMA_HISTOGRAM_ENUMERATION(
+      "Android.WebView.CookieManager.SameSiteAttributeValue", samesite);
 
   net::CanonicalCookie::CookieInclusionStatus status;
   std::unique_ptr<net::CanonicalCookie> cc(
@@ -421,6 +443,11 @@ void CookieManager::SetCookieHelper(const GURL& host,
     return;
   }
 
+  if (cc->SameSite() == net::CookieSameSite::NO_RESTRICTION) {
+    UMA_HISTOGRAM_BOOLEAN("Android.WebView.CookieManager.SameSiteNoneIsSecure",
+                          cc->IsSecure());
+  }
+
   // Note: CookieStore and network::CookieManager have different signatures: one
   // accepts a boolean callback while the other (recently) changed to accept a
   // CookieInclusionStatus callback. WebView only cares about boolean success,
@@ -430,12 +457,13 @@ void CookieManager::SetCookieHelper(const GURL& host,
     // *cc.get() is safe, because network::CookieManager::SetCanonicalCookie
     // will make a copy before our smart pointer goes out of scope.
     GetMojoCookieManager()->SetCanonicalCookie(
-        *cc.get(), new_host.scheme(), options,
+        *cc.get(), new_host.scheme(), net::CookieOptions::MakeAllInclusive(),
         net::cookie_util::AdaptCookieInclusionStatusToBool(
             std::move(callback)));
   } else {
     GetCookieStore()->SetCanonicalCookieAsync(
-        std::move(cc), new_host.scheme(), options,
+        std::move(cc), new_host.scheme(),
+        net::CookieOptions::MakeAllInclusive(),
         net::cookie_util::AdaptCookieInclusionStatusToBool(
             std::move(callback)));
   }
@@ -459,10 +487,7 @@ ScopedJavaLocalRef<jstring> CookieManager::GetCookie(
 void CookieManager::GetCookieListAsyncHelper(const GURL& host,
                                              net::CookieList* result,
                                              base::OnceClosure complete) {
-  net::CookieOptions options;
-  options.set_include_httponly();
-  options.set_same_site_cookie_context(
-      net::CookieOptions::SameSiteCookieContext::SAME_SITE_STRICT);
+  net::CookieOptions options = net::CookieOptions::MakeAllInclusive();
 
   if (GetMojoCookieManager()) {
     GetMojoCookieManager()->GetCookieList(
@@ -628,41 +653,38 @@ jboolean CookieManager::AllowFileSchemeCookies(
 void CookieManager::SetAcceptFileSchemeCookies(JNIEnv* env,
                                                const JavaParamRef<jobject>& obj,
                                                jboolean accept) {
-  base::AutoLock lock(accept_file_scheme_cookies_lock_);
-  bool success;
   ExecCookieTaskSync(
       base::BindOnce(&CookieManager::AllowFileSchemeCookiesAsyncHelper,
-                     base::Unretained(this), accept, &success));
-  // Should only update |accept_file_scheme_cookies_| if
-  // AllowFileSchemeCookiesAsyncHelper says this is OK.
-  if (!success)
-    return;
-  accept_file_scheme_cookies_ = accept;
+                     base::Unretained(this), accept));
 }
 
 void CookieManager::AllowFileSchemeCookiesAsyncHelper(
     bool accept,
-    bool* result,
     base::OnceClosure complete) {
   DCHECK(cookie_store_task_runner_->RunsTasksInCurrentSequence());
   if (GetMojoCookieManager()) {
     GetMojoCookieManager()->AllowFileSchemeCookies(
         accept,
         base::BindOnce(&CookieManager::AllowFileSchemeCookiesCompleted,
-                       base::Unretained(this), std::move(complete), result));
+                       base::Unretained(this), std::move(complete), accept));
   } else {
     // If we have neither a Network Service CookieManager nor have created the
     // CookieStore, we may modify |accept_file_scheme_cookies_|.
-    bool can_change_cookieable_schemes = !cookie_store_created_;
-    *result = can_change_cookieable_schemes;
-    std::move(complete).Run();
+    bool can_change_schemes = !cookie_store_created_;
+    AllowFileSchemeCookiesCompleted(std::move(complete), accept,
+                                    can_change_schemes);
   }
 }
 
 void CookieManager::AllowFileSchemeCookiesCompleted(base::OnceClosure complete,
-                                                    bool* result,
-                                                    bool value) {
-  *result = value;
+                                                    bool accept,
+                                                    bool can_change_schemes) {
+  // Should only update |accept_file_scheme_cookies_| if
+  // AllowFileSchemeCookiesAsyncHelper said this is OK.
+  if (can_change_schemes) {
+    base::AutoLock lock(accept_file_scheme_cookies_lock_);
+    accept_file_scheme_cookies_ = accept;
+  }
   std::move(complete).Run();
 }
 

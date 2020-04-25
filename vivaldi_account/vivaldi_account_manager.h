@@ -29,10 +29,10 @@ class VivaldiAccountManager : public KeyedService,
                               VivaldiAccountPasswordHandler::Observer {
  public:
   enum FetchErrorType {
-    NONE,
-    NETWORK_ERROR,
-    SERVER_ERROR,
-    INVALID_CREDENTIALS
+    NONE = 0,
+    NETWORK_ERROR = 1,
+    SERVER_ERROR = 2,
+    INVALID_CREDENTIALS= 3
   };
 
   // Keeps data about errors encountered during an attempt to communicate with

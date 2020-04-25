@@ -16,6 +16,8 @@
     android:paddingStart="@dimen/bottom_toolbar_padding"
     android:paddingEnd="@dimen/bottom_toolbar_padding" >
 
+    <include layout="@layout/vivaldi_bottom_toolbar_buttons" />
+
     <LinearLayout
         android:id="@+id/home_button_wrapper"
         style="@style/BottomToolbarButtonWrapper"

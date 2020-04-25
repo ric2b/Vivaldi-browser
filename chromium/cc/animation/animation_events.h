@@ -12,9 +12,7 @@
 #include "cc/animation/animation_export.h"
 #include "cc/animation/keyframe_model.h"
 #include "cc/paint/element_id.h"
-#include "cc/paint/filter_operations.h"
 #include "cc/trees/mutator_host.h"
-#include "ui/gfx/transform.h"
 
 namespace cc {
 
@@ -38,9 +36,6 @@ struct CC_ANIMATION_EXPORT AnimationEvent {
   int target_property;
   base::TimeTicks monotonic_time;
   bool is_impl_only;
-  float opacity;
-  gfx::Transform transform;
-  FilterOperations filters;
 
   // For continuing a scroll offset animation on the main thread.
   base::TimeTicks animation_start_time;

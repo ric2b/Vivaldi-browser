@@ -9,6 +9,7 @@
 
 #include <map>
 #include <memory>
+#include <ostream>
 #include <set>
 #include <string>
 #include <utility>
@@ -129,6 +130,10 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
 
   // Returns true if this object can fire events.
   virtual bool CanFireEvents() const;
+
+  // Return the AXPlatformNode corresponding to this node, if applicable
+  // on this platform.
+  virtual ui::AXPlatformNode* GetAXPlatformNode() const;
 
   // Returns the number of children of this object, or 0 if PlatformIsLeaf()
   // returns true.
@@ -417,7 +422,7 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // Gets the text offsets where new lines start.
   std::vector<int> GetLineStartOffsets() const;
 
-  virtual gfx::NativeViewAccessible GetNativeViewAccessible();
+  gfx::NativeViewAccessible GetNativeViewAccessible() override;
 
   // AXPosition Support
 
@@ -469,6 +474,8 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   gfx::NativeViewAccessible HitTestSync(int x, int y) override;
   gfx::NativeViewAccessible GetFocus() override;
   ui::AXPlatformNode* GetFromNodeID(int32_t id) override;
+  ui::AXPlatformNode* GetFromTreeIDAndNodeID(const ui::AXTreeID& ax_tree_id,
+                                             int32_t id) override;
   int GetIndexInParent() override;
   gfx::AcceleratedWidget GetTargetForNativeAccessibilityEvent() override;
 
@@ -519,6 +526,9 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   base::string16 GetLocalizedStringForLandmarkType() const override;
   base::string16 GetLocalizedStringForRoleDescription() const override;
   base::string16 GetStyleNameAttributeAsLocalizedString() const override;
+  ui::TextAttributeMap ComputeTextAttributeMap(
+      const ui::TextAttributeList& default_attributes) const override;
+  std::string GetInheritedFontFamilyName() const override;
   bool ShouldIgnoreHoveredStateForTesting() override;
   bool IsOffscreen() const override;
   bool IsMinimized() const override;
@@ -536,6 +546,9 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   base::Optional<int> GetPosInSet() const override;
   base::Optional<int> GetSetSize() const override;
 
+  // Returns a string representation of this object for debugging purposes.
+  std::string ToString() const;
+
  protected:
   // The UIA tree formatter needs access to GetUniqueId() to identify the
   // starting point for tree dumps.
@@ -545,6 +558,8 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
       BrowserAccessibilityPosition::AXPositionInstance;
   using AXPlatformRange =
       ui::AXRange<BrowserAccessibilityPositionInstance::element_type>;
+
+  virtual ui::TextAttributeList ComputeTextAttributes() const;
 
   BrowserAccessibility();
 
@@ -605,11 +620,34 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // If the node has a child tree, get the root node.
   BrowserAccessibility* PlatformGetRootOfChildTree() const;
 
+  // Returns a text attribute map indicating the offsets in the text of a leaf
+  // object, such as a text field or static text, where spelling and grammar
+  // errors are present.
+  ui::TextAttributeMap GetSpellingAndGrammarAttributes() const;
+
+  // Given a set of map of spelling text attributes and a start offset, merge
+  // them into the given map of existing text attributes. Merges the given
+  // spelling attributes, i.e. document marker information, into the given text
+  // attributes starting at the given character offset. This is required
+  // because document markers that are present on text leaves need to be
+  // propagated to their parent object for compatibility with Firefox.
+  static void MergeSpellingAndGrammarIntoTextAttributes(
+      const ui::TextAttributeMap& spelling_attributes,
+      int start_offset,
+      ui::TextAttributeMap* text_attributes);
+
+  // Return true is the list of text attributes already includes an invalid
+  // attribute originating from ARIA.
+  static bool HasInvalidAttribute(const ui::TextAttributeList& attributes);
+
   // A unique ID, since node IDs are frame-local.
   ui::AXUniqueId unique_id_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserAccessibility);
 };
+
+CONTENT_EXPORT std::ostream& operator<<(std::ostream& stream,
+                                        const BrowserAccessibility& object);
 
 }  // namespace content
 

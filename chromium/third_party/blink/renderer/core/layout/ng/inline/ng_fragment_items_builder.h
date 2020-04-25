@@ -25,6 +25,9 @@ class CORE_EXPORT NGFragmentItemsBuilder {
  public:
   NGFragmentItemsBuilder(NGBoxFragmentBuilder* box_builder) {}
 
+  // Returns true if we have any floating descendants.
+  bool HasFloatingDescendants() const { return has_floating_descendants_; }
+
   const String& TextContent(bool first_line) const {
     return UNLIKELY(first_line && first_line_text_content_)
                ? first_line_text_content_
@@ -49,6 +52,10 @@ class CORE_EXPORT NGFragmentItemsBuilder {
   void AddLine(const NGPhysicalLineBoxFragment& line,
                const LogicalOffset& offset);
 
+  // Add a list marker to the current line.
+  void AddListMarker(const NGPhysicalBoxFragment& marker_fragment,
+                     const LogicalOffset& offset);
+
   // Build a |NGFragmentItems|. The builder cannot build twice because data set
   // to this builder may be cleared.
   void ToFragmentItems(WritingMode writing_mode,
@@ -70,6 +77,8 @@ class CORE_EXPORT NGFragmentItemsBuilder {
 
   // Keeps children of a line until the offset is determined. See |AddLine|.
   ChildList current_line_;
+
+  bool has_floating_descendants_ = false;
 
 #if DCHECK_IS_ON()
   const NGPhysicalLineBoxFragment* current_line_fragment_ = nullptr;

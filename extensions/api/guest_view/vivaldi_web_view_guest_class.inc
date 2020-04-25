@@ -72,6 +72,16 @@
 
   const std::string& sourceSpec() { return src_.spec(); }
 
+  blink::SecurityStyle GetSecurityStyle(
+      content::WebContents* web_contents,
+      content::SecurityStyleExplanations* security_style_explanations) override;
+
+  // Vivaldi WebContentsObserver implementation.
+  void OnVisibilityChanged(content::Visibility visibility) override;
+
+  // Used to expose the view to extensions, only popups now.
+  std::unique_ptr<::vivaldi::VivaldiExtensionHost> extension_host_;
+
  private:
   void VisibleSecurityStateChanged(content::WebContents* source) override;
 

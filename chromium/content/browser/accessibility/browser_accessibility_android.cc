@@ -6,14 +6,15 @@
 
 #include "base/i18n/break_iterator.h"
 #include "base/lazy_instance.h"
+#include "base/numerics/ranges.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "content/app/strings/grit/content_strings.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/common/accessibility_messages.h"
 #include "content/public/common/content_client.h"
+#include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_assistant_structure.h"
 #include "ui/accessibility/ax_role_properties.h"
@@ -220,10 +221,6 @@ bool BrowserAccessibilityAndroid::IsChecked() const {
 }
 
 bool BrowserAccessibilityAndroid::IsClickable() const {
-  // Explicitly disabled form controls shouldn't be clickable.
-  if (!IsEnabled())
-    return false;
-
   // If it has a custom default action verb except for
   // ax::mojom::DefaultActionVerb::kClickAncestor, it's definitely clickable.
   // ax::mojom::DefaultActionVerb::kClickAncestor is used when an element with a
@@ -234,9 +231,18 @@ bool BrowserAccessibilityAndroid::IsClickable() const {
     return true;
   }
 
-  // Otherwise return true if it's focusable, but skip web areas and iframes.
+  if (!IsEnabled()) {
+    // TalkBack won't announce a control as disabled unless it's also marked
+    // as clickable. In other words, Talkback wants to know if the control
+    // might be clickable, if it wasn't disabled.
+    return ui::IsControl(GetRole());
+  }
+
+  // Skip web areas and iframes, they're focusable but not clickable.
   if (IsIframe() || (GetRole() == ax::mojom::Role::kRootWebArea))
     return false;
+
+  // Otherwise it's clickable if it's focusable.
   return IsFocusable();
 }
 
@@ -290,7 +296,19 @@ bool BrowserAccessibilityAndroid::IsEditableText() const {
 }
 
 bool BrowserAccessibilityAndroid::IsEnabled() const {
-  return GetData().GetRestriction() != ax::mojom::Restriction::kDisabled;
+  switch (GetData().GetRestriction()) {
+    case ax::mojom::Restriction::kNone:
+      return true;
+    case ax::mojom::Restriction::kReadOnly:
+    case ax::mojom::Restriction::kDisabled:
+      // On Android, both Disabled and ReadOnly are treated the same.
+      // For both of them, we set AccessibilityNodeInfo.IsEnabled to false
+      // and we don't expose certain actions like SET_VALUE and PASTE.
+      return false;
+  }
+
+  NOTREACHED();
+  return true;
 }
 
 bool BrowserAccessibilityAndroid::IsExpanded() const {
@@ -564,8 +582,20 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ax::mojom::Role::kAnchor:
       // No role description.
       break;
-    case ax::mojom::Role::kAnnotation:
-      // No role description.
+    case ax::mojom::Role::kAnnotationAttribution:
+      message_id = IDS_AX_ROLE_ANNOTATION_ATTRIBUTION;
+      break;
+    case ax::mojom::Role::kAnnotationCommentary:
+      message_id = IDS_AX_ROLE_ANNOTATION_COMMENTARY;
+      break;
+    case ax::mojom::Role::kAnnotationPresence:
+      message_id = IDS_AX_ROLE_ANNOTATION_PRESENCE;
+      break;
+    case ax::mojom::Role::kAnnotationRevision:
+      message_id = IDS_AX_ROLE_ANNOTATION_REVISION;
+      break;
+    case ax::mojom::Role::kAnnotationSuggestion:
+      message_id = IDS_AX_ROLE_ANNOTATION_SUGGESTION;
       break;
     case ax::mojom::Role::kApplication:
       message_id = IDS_AX_ROLE_APPLICATION;
@@ -798,6 +828,9 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ax::mojom::Role::kFooter:
       message_id = IDS_AX_ROLE_FOOTER;
       break;
+    case ax::mojom::Role::kFooterAsNonLandmark:
+      // No role description.
+      break;
     case ax::mojom::Role::kForm:
       // No role description.
       break;
@@ -817,6 +850,12 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
       message_id = IDS_AX_ROLE_TABLE;
       break;
     case ax::mojom::Role::kGroup:
+      // No role description.
+      break;
+    case ax::mojom::Role::kHeader:
+      message_id = IDS_AX_ROLE_BANNER;
+      break;
+    case ax::mojom::Role::kHeaderAsNonLandmark:
       // No role description.
       break;
     case ax::mojom::Role::kHeading:
@@ -971,6 +1010,13 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ax::mojom::Role::kRuby:
       // No role description.
       break;
+    case ax::mojom::Role::kRubyAnnotation:
+      // No role description.
+      break;
+    case ax::mojom::Role::kSection:
+      // A <section> element uses the 'region' ARIA role mapping.
+      message_id = IDS_AX_ROLE_REGION;
+      break;
     case ax::mojom::Role::kSvgRoot:
       message_id = IDS_AX_ROLE_GRAPHIC;
       break;
@@ -1118,6 +1164,13 @@ int BrowserAccessibilityAndroid::GetItemCount() const {
 
 bool BrowserAccessibilityAndroid::CanScrollForward() const {
   if (IsSlider()) {
+    // If it's not a native INPUT element, then increment and decrement
+    // won't work.
+    std::string html_tag =
+        GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
+    if (html_tag != "input")
+      return false;
+
     float value = GetFloatAttribute(ax::mojom::FloatAttribute::kValueForRange);
     float max = GetFloatAttribute(ax::mojom::FloatAttribute::kMaxValueForRange);
     return value < max;
@@ -1128,6 +1181,13 @@ bool BrowserAccessibilityAndroid::CanScrollForward() const {
 
 bool BrowserAccessibilityAndroid::CanScrollBackward() const {
   if (IsSlider()) {
+    // If it's not a native INPUT element, then increment and decrement
+    // won't work.
+    std::string html_tag =
+        GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
+    if (html_tag != "input")
+      return false;
+
     float value = GetFloatAttribute(ax::mojom::FloatAttribute::kValueForRange);
     float min = GetFloatAttribute(ax::mojom::FloatAttribute::kMinValueForRange);
     return value > min;
@@ -1231,22 +1291,22 @@ bool BrowserAccessibilityAndroid::Scroll(int direction) const {
     case UP:
       if (y_initial == y_min)
         return false;
-      y = std::min(std::max(y_initial - page_y, y_min), y_max);
+      y = base::ClampToRange(y_initial - page_y, y_min, y_max);
       break;
     case DOWN:
       if (y_initial == y_max)
         return false;
-      y = std::min(std::max(y_initial + page_y, y_min), y_max);
+      y = base::ClampToRange(y_initial + page_y, y_min, y_max);
       break;
     case LEFT:
       if (x_initial == x_min)
         return false;
-      x = std::min(std::max(x_initial - page_x, x_min), x_max);
+      x = base::ClampToRange(x_initial - page_x, x_min, x_max);
       break;
     case RIGHT:
       if (x_initial == x_max)
         return false;
-      x = std::min(std::max(x_initial + page_x, x_min), x_max);
+      x = base::ClampToRange(x_initial + page_x, x_min, x_max);
       break;
     default:
       NOTREACHED();
@@ -1653,8 +1713,11 @@ bool BrowserAccessibilityAndroid::IsIframe() const {
 
 bool BrowserAccessibilityAndroid::ShouldExposeValueAsName() const {
   switch (GetRole()) {
+    case ax::mojom::Role::kDate:
+    case ax::mojom::Role::kDateTime:
     case ax::mojom::Role::kTextField:
     case ax::mojom::Role::kTextFieldWithComboBox:
+    case ax::mojom::Role::kTime:
       return true;
     default:
       break;

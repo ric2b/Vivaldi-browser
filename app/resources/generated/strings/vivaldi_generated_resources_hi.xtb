@@ -1,40 +1,29 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hi">
-<translation id="1049795001945932310">&amp;भाषा सेटिंग</translation>
 <translation id="1056898198331236512">चेतावनी</translation>
-<translation id="1084824384139382525">लिंक के &amp;पते की प्रतिलिपि बनाएं</translation>
-<translation id="1163931534039071049">फ़्रेम का स्रोत &amp;देखें</translation>
 <translation id="1165039591588034296">त्रुटि</translation>
 <translation id="1175364870820465910">&amp;प्रिंट करें...</translation>
-<translation id="1187722533808055681">निष्क्रिय प्रोसेसर का सक्रियण</translation>
 <translation id="1244303850296295656">एक्‍सटेंशन त्रुटि</translation>
 <translation id="1546280085599573572">इस एक्सटेंशन ने यह बदल दिया है कि जब आप होम बटन क्लिक करते हैं तब कौन सा पेज दिखाया जाए.</translation>
 <translation id="1588438908519853928">सामान्य</translation>
 <translation id="1635033183663317347">आपके संरक्षक द्वारा इंस्‍टॉल किया गया.</translation>
-<translation id="1723824996674794290">&amp;नई विंडो</translation>
 <translation id="1729533290416704613">इससे यह भी नियंत्रित होता है कि जब आप खोज वाली पट्टी से खोजते हैं तब कौन सा पेज दिखाया जाए.</translation>
-<translation id="1850508293116537636">&amp;घड़ी की दिशा में घुमाएं</translation>
-<translation id="1901303067676059328">&amp;सभी को चुनें</translation>
 <translation id="2087822576218954668">प्रिंट: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">गुप्त टैब: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">नेटिव क्लाइंट मॉड्यूल: <ph name="NEXE_NAME" /></translation>
 <translation id="2282146716419988068">GPU प्रक्रिया</translation>
 <translation id="2301382460326681002">एक्‍सटेंशन मूल निर्देशिका अमान्य है.</translation>
-<translation id="2326931316514688470">&amp;ऐप पुन: लोड करें</translation>
 <translation id="2327492829706409234">ऐप्स  सक्षम करें</translation>
 <translation id="2344028582131185878">स्वचालित डाउनलोड</translation>
 <translation id="2348176352564285430">ऐप्लिकेशन: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">विस्तार निर्देशिका को चुनें.</translation>
 <translation id="241082044617551207">अज्ञात प्लग इन</translation>
-<translation id="2423578206845792524">इस रूप में चित्र स&amp;हेजें...</translation>
 <translation id="2439110203301358333">आपके कंप्यूटर पर किसी अन्य प्रोग्राम ने एक्सटेंशन जोड़ा है, जो Vivaldi के काम करने के तरीके को बदल सकता है.</translation>
 <translation id="2445081178310039857">एक्‍सटेंशन मूल निर्देशिका आवश्यक है.</translation>
 <translation id="2470702053775288986">असमर्थित एक्‍सटेंशन अक्षम</translation>
-<translation id="2550212893339833758">स्वैप की गई मेमोरी</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">फिर से-सक्षम करें</translation>
-<translation id="2785873697295365461">फ़ाइल वर्णनकर्ता</translation>
 <translation id="2809586584051668049">तथा <ph name="NUMBER_ADDITIONAL_DISABLED" /> और</translation>
 <translation id="2850541429955027218">थीम जोड़ें</translation>
 <translation id="2861941300086904918">नेटिव क्लाइंट सुरक्षा प्रबंधक</translation>
@@ -44,22 +33,16 @@
 <translation id="299483336428448530">आपके अभिभावक द्वारा इंस्‍टॉल किया गया.</translation>
 <translation id="3080207940057008665">आपके कंप्यूटर पर किसी अन्य प्रोग्राम ने एक्सटेंशन जोड़ा है, जो Vivaldi के काम करने के तरीके को बदल सकता है.</translation>
 <translation id="3122464029669770682">CPU</translation>
-<translation id="3124111068741548686">उपयोगकर्ता हैंडल</translation>
 <translation id="3222066309010235055">प्रीरेंडर: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">पैक के एक्सटेंशनकी मूल निर्देशिका को चुनें. किसी एक्स्टेंशन को अपडेट करने के लिए, पुन: उपयोग के लिए निजी कुंजी फ़ाइल का भी चुनें.</translation>
-<translation id="3280237271814976245">इस &amp;रूप में सहेजें...</translation>
 <translation id="3288047731229977326">डेवलपर मोड में चलने वाले एक्सटेंशन आपके कंप्यूटर को नुकसान पहुंचा सकते हैं. यदि आप कोई डेवलपर नहीं हैं, तो सुरक्षित रहने के लिए आपको डेवलपर मोड मे चलने वाले इन एक्सटेंशन को अक्षम करना चाहिए.</translation>
-<translation id="3347086966102161372">चित्र के पते को कॉ&amp;पी करें</translation>
 <translation id="3378572629723696641">यह एक्‍सटेंशन दूषित हो सकता है.</translation>
-<translation id="345693547134384690">नए टैब में &amp;छवि खोलें</translation>
 <translation id="3505030558724226696">डिवाइस एक्सेस निरस्‍त करें</translation>
-<translation id="3627588569887975815">&amp;गुप्त विंडो में लिंक खोलें</translation>
 <translation id="3678156199662914018">एक्‍सटेंशन: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">ऐप को ठीक करें</translation>
 <translation id="3908501907586732282">एक्‍सटेंशन सक्षम करें</translation>
 <translation id="3909791450649380159">&amp;काटें</translation>
 <translation id="3927932062596804919">अस्वीकार करें</translation>
-<translation id="3936390757709632190">ऑडियो नए टैब में &amp;खोलें</translation>
 <translation id="3943582379552582368">&amp;वापस</translation>
 <translation id="3979395879372752341">नया एक्सटेंशन जोड़ा गया (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -70,25 +53,17 @@
 <translation id="4100839878934973028">आपके कंप्यूटर पर किसी अन्य प्रोग्राम ने ऐप्स  जोड़ा है, जो Vivaldi के काम करने के तरीके को बदल सकता है.</translation>
 <translation id="4130207949184424187">इस एक्सटेंशन ने यह बदल दिया है कि जब आप खोज वाली पट्टी से खोजते हैं तब कौन सा पृष्‍ठ दिखाया जाए.</translation>
 <translation id="4176463684765177261">अक्षम</translation>
-<translation id="4200983522494130825">नया &amp;टैब</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K लाइव)</translation>
 <translation id="4384652540891215547">एक्सटेंशन सक्रिय करें</translation>
 <translation id="4394049700291259645">अक्षम करें</translation>
 <translation id="4593021220803146968"><ph name="URL" /> पर &amp;जाएं</translation>
 <translation id="4595560905247879544">ऐप्स और एक्सटेंशन केवल प्रबंधक (<ph name="CUSTODIAN_NAME" />) के द्वारा बदले जा सकते हैं.</translation>
 <translation id="4613271546271159013">आपके द्वारा नया टैब खोले जाने पर, दिखाई देने वाले पेज का एक्सटेंशन बदल दिया गया है.</translation>
-<translation id="4677772697204437347">GPU मेमोरी</translation>
-<translation id="4711638718396952945">सेटिंग पुन: स्थापित करें</translation>
-<translation id="4839303808932127586">इस रूप में वीडियो स&amp;हेजें...</translation>
 <translation id="488785315393301722">विवरण दिखाएं</translation>
-<translation id="49896407730300355">घड़ी की &amp;विपरीत दिशा में घुमाएं</translation>
-<translation id="4989966318180235467">निरीक्षण और पेजभूमि पेज</translation>
 <translation id="5027562294707732951">एक्‍सटेंशन जोड़ें</translation>
 <translation id="5039804452771397117">अनुमति दें</translation>
 <translation id="5143374789336132547">एक्सटेंशन "<ph name="EXTENSION_NAME" />" ने यह बदल दिया है कि जब आप होम बटन क्लिक करते हैं तब कौन सा पेज दिखाया जाए.</translation>
-<translation id="5233019165164992427">NaCl डीबग पोर्ट</translation>
 <translation id="5233231016133573565">प्रक्रिया आईडी</translation>
-<translation id="5233736638227740678">&amp;चिपकाएं</translation>
 <translation id="52912272896845572">निजी कुंजी फ़ाइल अमान्य है.</translation>
 <translation id="5301954838959518834">ठीक है, समझ गया/गई</translation>
 <translation id="5355926466126177564">एक्सटेंशन "<ph name="EXTENSION_NAME" />" ने यह बदल दिया है कि जब आप खोज वाली पट्टी से खोजते हैं तब कौन सा पृष्‍ठ दिखाया जाए.</translation>
@@ -102,48 +77,31 @@
 <translation id="5575473780076478375">गुप्‍त एक्सटेंशन: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">इससे यह भी नियंत्रित होता है कि जब आप होम बटन क्लिक करते हैं तब कौन सा पृष्‍ठ दिखाया जाए.</translation>
 <translation id="5715711091495208045">प्‍लग इन ब्रोकर: <ph name="PLUGIN_NAME" /></translation>
-<translation id="5764483294734785780">इस रूप में ऑडियो स&amp;हेजें...</translation>
-<translation id="5780973441651030252">प्राथमिकता संसाधित करें</translation>
 <translation id="583281660410589416">अज्ञात</translation>
 <translation id="5956585768868398362">क्या यह वही खोज पेज है जिसकी आप अपेक्षा कर रहे थे?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> उच्चतम)</translation>
 <translation id="5965661248935608907">इससे यह भी नियंत्रित होता है कि जब आप होम बटन क्लिक करते हैं या खोज वाली पट्टी से खोजते हैं तब कौन सा पृष्‍ठ दिखाया जाए.</translation>
 <translation id="6101226222197207147">नया ऐप्स  जोड़ा गया (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">आपका इंटरनेट कनेक्शन नियंत्रित किया जा रहा है</translation>
-<translation id="6156863943908443225">स्क्रिप्ट संचय</translation>
 <translation id="6196854373336333322">एक्सटेंशन "<ph name="EXTENSION_NAME" />" ने आपकी प्रॉक्सी सेटिंग पर नियंत्रण कर लिया है, जिसका अर्थ है कि यह आपके द्वारा ऑनलाइन किए जाने वाले कार्यों को बदल सकता है, रोक सकता है या उसे छिप कर सुन सकता है. यदि आप सुनिश्चित नहीं हैं कि यह बदलाव क्यों हुआ है, तो संभवत: आप उसे नहीं चाहते हैं.</translation>
-<translation id="6239558157302047471">&amp;फ़्रेम पुन: लोड करें</translation>
 <translation id="6247802389331535091">सिस्टम: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="6251870443722440887">GDI हैंडल</translation>
-<translation id="6308937455967653460">इस रूप में लिं&amp;क सहेजें...</translation>
-<translation id="6398765197997659313">पूर्ण स्क्रीन से बाहर निकलें</translation>
-<translation id="6406303162637086258">ब्राउज़र पुनर्प्रारंभ को सिम्युलेट करें</translation>
 <translation id="6445450263907939268">यदि आप इन बदलावों को नहीं चाहते हैं, तो आप अपनी पिछली सेटिंग पुन: स्थापित कर सकते हैं.</translation>
 <translation id="6447842834002726250">कुकी</translation>
 <translation id="6498249116389603658">&amp;आपकी सभी भाषाएं</translation>
 <translation id="6503077044568424649">सबसे अधिक देखे गए</translation>
 <translation id="6508261954199872201">ऐप्‍लिकेशन: <ph name="APP_NAME" /></translation>
-<translation id="6518014396551869914">चित्र की प्र&amp;तिलिपि बनाएं</translation>
-<translation id="6639554308659482635">SQLite मेमोरी</translation>
 <translation id="6691936601825168937">&amp;अग्रेषित करें</translation>
 <translation id="6798954102094737107">प्‍लग इन: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6812841287760418429">बदलावों को बनाए रखें</translation>
-<translation id="6886871292305414135">नए &amp;टैब में लिंक खोलें</translation>
 <translation id="6900284862687837908">पृष्ठभूमि ऐप: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">फ़ाइल एक्सेस निरस्त करें</translation>
-<translation id="708060913198414444">ऑडियो के पते को कॉ&amp;पी करें</translation>
 <translation id="7287143125007575591">ऐक्सेस अस्वीकार कर द‍ी गई.</translation>
-<translation id="7309257895202129721">&amp;नियंत्रण दिखाएं</translation>
 <translation id="7427348830195639090">पेजभूमि पेज: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7564847347806291057">प्रक्रिया समाप्त करें</translation>
 <translation id="7629827748548208700">टैब: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">प्राप्तकर्ता: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7685049629764448582">JavaScript मेमोरी</translation>
 <translation id="7704305437604973648">कार्य</translation>
 <translation id="7760004034676677601">क्या यह वही शुरुआती पन्ना है जिसकी आप अपेक्षा कर रहे थे?</translation>
 <translation id="7791543448312431591">जोड़ें</translation>
 <translation id="7818135753970109980">नई थीम जोड़ी गई (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="782057141565633384">वीडियो के पते को कॉ&amp;पी करें</translation>
 <translation id="7857949311770343000">क्या यह वही नया टैब पेज है जिसकी आप अपेक्षा कर रहे थे?</translation>
 <translation id="786073089922909430">सेवा: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">उपयोगिता: <ph name="UTILITY_TYPE" /></translation>
@@ -159,14 +117,9 @@
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />k</translation>
 <translation id="8261378640211443080">यह एक्सटेंशन <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> में सूचीबद्ध नहीं है और यह आपकी जानकारी के बिना जोड़ा गया हो सकता है.</translation>
 <translation id="8351419472474436977">इस एक्सटेंशन ने आपकी प्रॉक्सी सेटिंग पर नियंत्रण कर लिया है, जिसका अर्थ है कि यह आपके द्वारा ऑनलाइन किए जाने वाले कार्यों को बदल सकता है, खंडित कर सकता है या उसे छिप कर सुन सकता है. यदि आप सुनिश्चित नहीं हैं कि यह बदलाव क्यों हुआ है, तो संभवत: आप उसे नहीं चाहते हैं.</translation>
-<translation id="8546306075665861288">चित्र संचय</translation>
-<translation id="8584280235376696778">वीडियो नए टैब में &amp;खोलें</translation>
 <translation id="8615618338313291042">गुप्‍त ऐप्स : <ph name="APP_NAME" /></translation>
-<translation id="862750493060684461">CSS संचय</translation>
-<translation id="8664389313780386848">पेज का स्रोत &amp;देखें</translation>
 <translation id="8808478386290700967">वेब स्टोर</translation>
 <translation id="8859174528519900719">सबफ़्रेम: <ph name="SUBFRAME_SITE" /></translation>
-<translation id="8899851313684471736">नई &amp;विंडो में लिंक खोलें</translation>
 <translation id="8916476537757519021">गुप्त सबफ़्रेम: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">विवरण छुपाएं</translation>
 <translation id="9170848237812810038">&amp;पूर्ववत् करें</translation>

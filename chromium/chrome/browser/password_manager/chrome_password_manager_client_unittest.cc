@@ -148,7 +148,7 @@ class FakePasswordAutofillAgent
         logging_state_active_(false),
         binding_(this) {}
 
-  ~FakePasswordAutofillAgent() override {}
+  ~FakePasswordAutofillAgent() override = default;
 
   void BindRequest(mojo::ScopedInterfaceEndpointHandle handle) {
     binding_.Bind(autofill::mojom::PasswordAutofillAgentAssociatedRequest(
@@ -171,14 +171,14 @@ class FakePasswordAutofillAgent
 
   void FillIntoFocusedField(bool is_password,
                             const base::string16& credential) override {}
+  void AnnotateFieldsWithParsingResult(
+      const autofill::ParsingResult& parsing_result) override {}
 
   void SetLoggingState(bool active) override {
     called_set_logging_state_ = true;
     logging_state_active_ = active;
   }
-
-  void AutofillUsernameAndPasswordDataReceived(
-      const autofill::FormsPredictionsMap& predictions) override {}
+  void TouchToFillClosed(bool show_virtual_keyboard) override {}
 
   // Records whether SetLoggingState() gets called.
   bool called_set_logging_state_;
@@ -784,7 +784,6 @@ void ChromePasswordManagerClientAndroidTest::CreateManualFillingController(
   ManualFillingControllerImpl::CreateForWebContentsForTesting(
       web_contents, favicon_service_.get(), mock_pwd_controller_.AsWeakPtr(),
       mock_address_controller_.AsWeakPtr(), mock_cc_controller_.AsWeakPtr(),
-      GetClient()->GetOrCreateTouchToFillController()->AsWeakPtr(),
       std::make_unique<NiceMock<MockManualFillingView>>());
 }
 

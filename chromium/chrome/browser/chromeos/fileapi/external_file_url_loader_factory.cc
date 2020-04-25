@@ -24,11 +24,13 @@
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/api/file_handlers/mime_util.h"
 #include "mojo/public/c/system/types.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
 #include "net/base/io_buffer.h"
 #include "net/http/http_byte_range.h"
 #include "net/http/http_util.h"
 #include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
 #include "storage/browser/fileapi/file_stream_reader.h"
 #include "storage/browser/fileapi/file_system_backend.h"
 #include "storage/browser/fileapi/file_system_context.h"
@@ -366,8 +368,8 @@ void ExternalFileURLLoaderFactory::CreateLoaderAndStart(
 }
 
 void ExternalFileURLLoaderFactory::Clone(
-    network::mojom::URLLoaderFactoryRequest loader) {
-  bindings_.AddBinding(this, std::move(loader));
+    mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader) {
+  receivers_.Add(this, std::move(loader));
 }
 
 }  // namespace chromeos

@@ -55,8 +55,6 @@ namespace ash {
 
 namespace {
 
-// Animation duration to collapse / expand the view in milliseconds.
-const int kExpandAnimationDurationMs = 500;
 // Threshold in pixel that fully collapses / expands the view through gesture.
 const int kDragThreshold = 200;
 
@@ -73,12 +71,12 @@ UnifiedSystemTrayController::UnifiedSystemTrayController(
       bubble_(bubble),
       animation_(std::make_unique<gfx::SlideAnimation>(this)) {
   animation_->Reset(model->IsExpandedOnOpen() ? 1.0 : 0.0);
-  animation_->SetSlideDuration(kExpandAnimationDurationMs);
+  animation_->SetSlideDuration(base::TimeDelta::FromMilliseconds(500));
   animation_->SetTweenType(gfx::Tween::EASE_IN_OUT);
 
   model_->pagination_model()->SetTransitionDurations(
-      kUnifiedSystemTrayPageTransitionDurationMs,
-      kUnifiedSystemTrayOverScrollPageTransitionDurationMs);
+      base::TimeDelta::FromMilliseconds(250),
+      base::TimeDelta::FromMilliseconds(50));
 
   pagination_controller_ = std::make_unique<PaginationController>(
       model_->pagination_model(), PaginationController::SCROLL_AXIS_HORIZONTAL,
@@ -104,6 +102,14 @@ UnifiedSystemTrayView* UnifiedSystemTrayController::CreateView() {
   brightness_slider_controller_ =
       std::make_unique<UnifiedBrightnessSliderController>(model_);
   unified_view_->AddSliderView(brightness_slider_controller_->CreateView());
+
+  // Collapse system tray if there isn't enough space to show notifications when
+  // it is first opened.
+  if (bubble_ && bubble_->CalculateMaxHeight() -
+                         unified_view_->GetExpandedSystemTrayHeight() <
+                     kUnifiedNotificationMinimumHeight) {
+    ResetToCollapsed();
+  }
 
   return unified_view_;
 }
@@ -160,10 +166,20 @@ void UnifiedSystemTrayController::ToggleExpanded() {
   UMA_HISTOGRAM_ENUMERATION("ChromeOS.SystemTray.ToggleExpanded",
                             TOGGLE_EXPANDED_TYPE_BY_BUTTON,
                             TOGGLE_EXPANDED_TYPE_COUNT);
-  if (IsExpanded())
+  if (IsExpanded()) {
     animation_->Hide();
-  else
+    // Expand message center when quick settings is collapsed.
+    if (bubble_)
+      bubble_->ExpandMessageCenter();
+  } else {
+    // Collapse the message center if screen height is limited.
+    if (bubble_ && bubble_->CalculateMaxHeight() -
+                           unified_view_->GetExpandedSystemTrayHeight() <=
+                       kMessageCenterCollapseThreshold) {
+      bubble_->CollapseMessageCenter();
+    }
     animation_->Show();
+  }
 }
 
 void UnifiedSystemTrayController::OnMessageCenterVisibilityUpdated() {
@@ -302,6 +318,16 @@ void UnifiedSystemTrayController::CloseBubble() {
     unified_view_->GetWidget()->CloseNow();
 }
 
+bool UnifiedSystemTrayController::FocusOut(bool reverse) {
+  return bubble_->FocusOut(reverse);
+}
+
+void UnifiedSystemTrayController::EnsureCollapsed() {
+  if (IsExpanded()) {
+    animation_->Hide();
+  }
+}
+
 void UnifiedSystemTrayController::EnsureExpanded() {
   if (detailed_view_controller_) {
     detailed_view_controller_.reset();
@@ -398,6 +424,11 @@ void UnifiedSystemTrayController::UpdateExpandedAmount() {
     bubble_->UpdateTransform();
   if (expanded_amount == 0.0 || expanded_amount == 1.0)
     model_->set_expanded_on_open(expanded_amount == 1.0);
+}
+
+void UnifiedSystemTrayController::ResetToCollapsed() {
+  unified_view_->SetExpandedAmount(0.0);
+  animation_->Reset(0);
 }
 
 double UnifiedSystemTrayController::GetDragExpandedAmount(

@@ -29,6 +29,12 @@ ContextMenuController::ContextMenuController(
 
   using Origin = extensions::vivaldi::context_menu::Origin;
 
+  // We set the height to zero depending on where we want chrome code to
+  // position the menu. Chrome does not support placing a menu to the right or
+  // left of the "forbidden zone" (the rect we set up here), so for those
+  // configuations eg, a stack menu from a tab stack in a vertical bar, we have
+  // SetPosition() below which is called from chrome after the menu size is
+  // known.
   gfx::Point point(params_->properties.rect.x, params_->properties.rect.y);
   int height = params_->properties.rect.height;
   if (params_->properties.origin == Origin::ORIGIN_TOPLEFT ||
@@ -36,10 +42,6 @@ ContextMenuController::ContextMenuController(
     height = 0;
   }
   int width = params_->properties.rect.width;
-  if (params_->properties.origin == Origin::ORIGIN_TOPLEFT ||
-      params_->properties.origin == Origin::ORIGIN_BOTTOMLEFT) {
-    width = 0;
-  }
 
   gfx::RectF rect(point.x(), point.y(), width, height);
   FromUICoordinates(web_contents_, &rect);
@@ -64,7 +66,8 @@ void ContextMenuController::Show() {
   bool force_views = params_->properties.origin != Origin::ORIGIN_POINTER;
 
   menu_.reset(CreateVivaldiContextMenu(web_contents_, menu_model_, rect_,
-                                       force_views));
+                                       force_views,
+                                       force_views ? this : nullptr));
   menu_->Show();
 }
 
@@ -140,6 +143,34 @@ void ContextMenuController::SanitizeModel(ui::SimpleMenuModel* menu_model) {
       break;
     }
   }
+}
+
+// Called from chrome when menu size is known.
+void ContextMenuController::SetPosition(gfx::Rect* menu_bounds,
+                                        const gfx::Rect& monitor_bounds,
+                                        const gfx::Rect& anchor_bounds) const {
+  using Origin = extensions::vivaldi::context_menu::Origin;
+
+  if (params_->properties.origin == Origin::ORIGIN_TOPRIGHT) {
+    // Place left edge of menu to the right of anchor area. If not enough room
+    // to fit inside monitor area move it to the left of the anchor area.
+    menu_bounds->set_x(anchor_bounds.right());
+    menu_bounds->set_y(anchor_bounds.bottom());
+    if (menu_bounds->right() > monitor_bounds.right()) {
+      menu_bounds->set_x(anchor_bounds.x() - menu_bounds->width());
+    }
+  } else if (params_->properties.origin == Origin::ORIGIN_TOPLEFT) {
+    // Place right edge of menu to the left of anchor area. If not enough room
+    // to fit inside monitor area move it to the right of the anchor area.
+    menu_bounds->set_x(anchor_bounds.x() - menu_bounds->width());
+    menu_bounds->set_y(anchor_bounds.bottom());
+    if (menu_bounds->x() < monitor_bounds.x()) {
+      menu_bounds->set_x(anchor_bounds.right());
+    }
+  }
+
+  // Fallback code in chrome will ensure the menu is within the monitor area so
+  // we do not test more than the last adjustment above.
 }
 
 void ContextMenuController::LoadFavicon(int command_id,

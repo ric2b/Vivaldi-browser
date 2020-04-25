@@ -17,7 +17,6 @@
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">Du ser på kjeldekoden til ei nettside</translation>
 <translation id="1734878702283171397">Prøv å kontakta systemadministratoren.</translation>
-<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Prøv å køyra Windows-nettverksdiagnostikk<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Denne nettstaden inneheld skadelege program</translation>
 <translation id="1916770123977586577">Du må lasta om att sida for å få oppdatert nettstadinninnstillingane</translation>
 <translation id="1919345977826869612">Reklame</translation>
@@ -37,7 +36,6 @@
 <translation id="2355395290879513365">Åtakarar kan vera i stand til å sjå bilda du ser på på denne nettstaden og lura deg ved å endra dei.</translation>
 <translation id="2356070529366658676">Spør</translation>
 <translation id="2359808026110333948">Hald fram</translation>
-<translation id="2467694685043708798"><ph name="BEGIN_LINK" />køyr nettverksdiagnostikk<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Varsel</translation>
 <translation id="2539524384386349900">Oppdag</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sende eit ugyldig svar.</translation>
@@ -74,7 +72,6 @@
 <translation id="3630155396527302611">Om ho allereie er ført opp som eit program med nettverkstilgang, prøv
     å fjerna ho frå lista og legg ho til att.</translation>
 <translation id="3658742229777143148">Utgåve</translation>
-<translation id="3681007416295224113">Sertifikatopplysningar</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />sjå over mellomtenar-, brannmur- ogDNS-innstillingane<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Om du nyttar ein mellomtenar …</translation>
 <translation id="3950820424414687140">Logg på</translation>
@@ -87,7 +84,6 @@
 <translation id="4151403195736952345">Bruk systemstandarden (oppdag)</translation>
 <translation id="4165986682804962316">Nettstadinnstillingar</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />sjå over brannmur- og antivirus-innstillingane<ph name="END_LINK" /></translation>
-<translation id="4226937834893929579"><ph name="BEGIN_LINK" />prøv å køyra nettverksdiagnostikk<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Gyldig</translation>
 <translation id="4250431568374086873">Tilkoplinga til denne nettstaden er ikkje heilt trygg</translation>
 <translation id="4265872034478892965">Tillate av administratoren din</translation>
@@ -100,14 +96,11 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Prøv å slå av utvidingane dine.</translation>
 <translation id="4592951414987517459">Tilkoplinga di til <ph name="DOMAIN" /> er kryptert med ein moderne krypteringspakke.</translation>
-<translation id="4690462567478992370">Slutt å bruka eit ugyldig sertifikat</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Sambandet ditt vart avbrote</translation>
-<translation id="4722547256916164131"><ph name="BEGIN_LINK" />køyr Windows-nettverksdiagnostikk<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Programsti</translation>
 <translation id="4750917950439032686">Opplysningane dine (t.d. passord eller kredittkortnummer) er private når dei vert sende til denne nettstaden.</translation>
 <translation id="4764776831041365478">Nettsida hos <ph name="URL" /> er kanskje mellombels nede eller er kan hende flytta permanent til ei ny adresse.</translation>
-<translation id="4974590756084640048">Slå på att åtvaringar</translation>
 <translation id="5023310440958281426">Sjå over administratoren sine reglar</translation>
 <translation id="5039804452771397117">Tillat</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />sjå over mellomtenaradressa<ph name="END_LINK" /></translation>
@@ -123,7 +116,6 @@
     Kontakt systemadministratoren din.</translation>
 <translation id="5510766032865166053">Er kanskje vorten flytta eller sletta.</translation>
 <translation id="5556459405103347317">Last på nytt</translation>
-<translation id="5571347317547569613">({NUM_COOKIES, plural, =1 {1 i bruk} other {# i bruk}})</translation>
 <translation id="5610142619324316209">Kontrollerer sambandet</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> vidaresende deg for mange gongar.</translation>
 <translation id="5675650730144413517">Denne sida fungerer ikkje</translation>
@@ -158,7 +150,6 @@
 <translation id="6657585470893396449">Passordet</translation>
 <translation id="6685834062052613830">Logg av og gjer ferdig oppsettet</translation>
 <translation id="6711464428925977395">Det er noko galt med mellomtenaren eller adressa er feil.</translation>
-<translation id="6757797048963528358">Eininga di er i kvilemodus.</translation>
 <translation id="6897140037006041989">Brukaragent</translation>
 <translation id="7053983685419859001">Blokker</translation>
 <translation id="7079718277001814089">Denne nettstaden inneheld skadeprogram</translation>
@@ -191,9 +182,7 @@
 <translation id="8025119109950072390">Åtakarar på denne nettstaden vil kanskje prøva å lura deg til å gjera noko farleg som å installera program eller avsløra opplysningane dine (t.d. passord, telefonnummer eller kredittkort).</translation>
 <translation id="8037357227543935929">Spør (standard)</translation>
 <translation id="8041940743680923270">Bruk systemstandarden (spør)</translation>
-<translation id="808894953321890993">Endra passordet</translation>
 <translation id="8142868475871995937">Besøk &lt;strong&gt;vivaldi://policy&lt;/strong&gt; for å sjå lista over blokkerte adresser og andre reglar frå systemadministratoren.</translation>
-<translation id="8149426793427495338">Datamaskina di er i kvilemodus.</translation>
 <translation id="8150722005171944719">Klarer ikkje å lesa fila hos <ph name="URL" /> .  Ho kan vera fjerna, flytta eller du manglar løyve til å få tilgang.</translation>
 <translation id="8184538546369750125">Bruk systemstandarden (tillat)</translation>
 <translation id="8211406090763984747">Sambandet er trygt</translation>
@@ -216,7 +205,6 @@
 <translation id="9169664750068251925">Blokker alltid på denne sida</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> bruker ein ikkje støtta protokoll.</translation>
 <translation id="9219103736887031265">Bilde</translation>
-<translation id="936602727769022409">Du kan koma til å missa tilgangen til Google-kontoen din. Vivaldi rår til at du endrar passordet ditt no. Du vil verta spurt om å logga deg på.</translation>
 <translation id="969892804517981540">Offisielt utgåvesteg</translation>
 <translation id="988159990683914416">Utviklar-utgåvesteg</translation>
 </translationbundle>

@@ -28,13 +28,15 @@ class MockPlatformChromeClient : public EmptyChromeClient {
 
   void SetIsPopup(bool is_popup) { is_popup_ = is_popup; }
 
-  float WindowToViewportScalar(const float) const override { return 0; }
+  float WindowToViewportScalar(LocalFrame*, const float) const override {
+    return 0;
+  }
 
  private:
   bool is_popup_;
 };
 
-class MockScrollableArea : public GarbageCollectedFinalized<MockScrollableArea>,
+class MockScrollableArea : public GarbageCollected<MockScrollableArea>,
                            public ScrollableArea {
   USING_GARBAGE_COLLECTED_MIXIN(MockScrollableArea);
 
@@ -65,7 +67,6 @@ class MockScrollableArea : public GarbageCollectedFinalized<MockScrollableArea>,
   MOCK_CONST_METHOD0(EnclosingScrollableArea, ScrollableArea*());
   MOCK_CONST_METHOD1(VisibleContentRect, IntRect(IncludeScrollbarsInRect));
   MOCK_CONST_METHOD0(ContentsSize, IntSize());
-  MOCK_CONST_METHOD0(ScrollableAreaBoundingBox, IntRect());
   MOCK_CONST_METHOD0(LayerForHorizontalScrollbar, GraphicsLayer*());
   MOCK_CONST_METHOD0(LayerForVerticalScrollbar, GraphicsLayer*());
   MOCK_CONST_METHOD0(HorizontalScrollbar, Scrollbar*());

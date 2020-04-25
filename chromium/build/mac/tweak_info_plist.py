@@ -110,10 +110,11 @@ def _AddVersionKeys(
     VERSION_TOOL = os.path.join(TOP, 'build/util/version.py')
     VERSION_FILE = os.path.join(TOP, 'chrome/VERSION')
     VIVALDI_VERSION_FILE = os.path.join(TOP, '../VIVALDI_VERSION')
-    (stdout, retval) = _GetOutput([VERSION_TOOL, '-f', VERSION_FILE,
-                                    '-f', VIVALDI_VERSION_FILE,
-                                    '-e', 'VIVALDI_BUILD='+(vivaldi_build or '1'),
-                                    '-t', '@VIVALDI_MAJOR@.@VIVALDI_MINOR@.@VIVALDI_NIGHTLY@.@VIVALDI_BUILD@'])
+    (stdout, retval) = _GetOutput([
+        VERSION_TOOL, '-f', VERSION_FILE,
+        '-f', VIVALDI_VERSION_FILE,
+        '-e', 'VIVALDI_BUILD='+(vivaldi_build or '1'),
+        '-t', '@VIVALDI_MAJOR@.@VIVALDI_MINOR@.@VIVALDI_NIGHTLY@.@VIVALDI_BUILD@'])
 
     # If the command finished with a non-zero return code, then report the
     # error up.

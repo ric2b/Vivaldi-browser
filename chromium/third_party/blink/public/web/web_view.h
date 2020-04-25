@@ -32,7 +32,7 @@
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_VIEW_H_
 
 #include "base/time/time.h"
-#include "third_party/blink/public/common/manifest/web_display_mode.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_focus_type.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -60,10 +60,10 @@ class WebSettings;
 class WebString;
 class WebViewClient;
 class WebWidget;
+struct PluginAction;
 struct WebDeviceEmulationParams;
 struct WebFloatPoint;
 struct WebFloatSize;
-struct WebPluginAction;
 struct WebRect;
 struct WebSize;
 struct WebTextAutosizerPageInfo;
@@ -201,15 +201,6 @@ class WebView {
   // change.
   virtual double SetZoomLevel(double) = 0;
 
-  // Updates the zoom limits for this view.
-  virtual void ZoomLimitsChanged(double minimum_zoom_level,
-                                 double maximum_zoom_level) = 0;
-
-  // Helper functions to convert between zoom level and zoom factor.  zoom
-  // factor is zoom percent / 100, so 300% = 3.0.
-  BLINK_EXPORT static double ZoomLevelToZoomFactor(double zoom_level);
-  BLINK_EXPORT static double ZoomFactorToZoomLevel(double factor);
-
   // Returns the current text zoom factor, where 1.0 is the normal size, > 1.0
   // is scaled up and < 1.0 is scaled down.
   virtual float TextZoomFactor() = 0;
@@ -278,6 +269,9 @@ class WebView {
   // mode (does not have <!doctype html>), the height will stretch to fill the
   // viewport. The returned size has the page zoom factor applied. The lifecycle
   // must be updated to at least layout before calling (see: |UpdateLifecycle|).
+  //
+  // This may only be called when there is a local main frame attached to this
+  // WebView.
   virtual WebSize ContentsPreferredMinimumSize() = 0;
 
   // Requests a page-scale animation based on the specified point/rect.
@@ -287,7 +281,7 @@ class WebView {
   virtual void ZoomToFindInPageRect(const WebRect&) = 0;
 
   // Sets the display mode of the web app.
-  virtual void SetDisplayMode(WebDisplayMode) = 0;
+  virtual void SetDisplayMode(blink::mojom::DisplayMode) = 0;
 
   // Sets the ratio as computed by computePageScaleConstraints.
   // TODO(oshima): Remove this once the device scale factor implementation is
@@ -314,6 +308,8 @@ class WebView {
   // settings.
   virtual void Resize(const WebSize&) = 0;
 
+  virtual WebSize GetSize() = 0;
+
   // Auto-Resize -----------------------------------------------------------
 
   // In auto-resize mode, the view is automatically adjusted to fit the html
@@ -327,7 +323,7 @@ class WebView {
   // Media ---------------------------------------------------------------
 
   // Performs the specified plugin action on the node at the given location.
-  virtual void PerformPluginAction(const WebPluginAction&,
+  virtual void PerformPluginAction(const PluginAction&,
                                    const gfx::Point& location) = 0;
 
   // Notifies WebView when audio is started or stopped.

@@ -94,6 +94,10 @@ void BookmarkModelObserverImpl::BookmarkNodeAdded(
   // https://cs.chromium.org/chromium/src/components/sync/syncable/mutable_entry.cc?l=237&gsn=CreateEntryKernel
   // Assign a temp server id for the entity. Will be overriden by the actual
   // server id upon receiving commit response.
+  DCHECK(base::IsValidGUID(node->guid()));
+  // TODO(crbug.com/978430): Consider using |node->guid()| instead of generating
+  // a new random GUID. However, currently that can lead to crashes due to
+  // duplicate server IDs, see crbug.com/1004205.
   const std::string sync_id = base::GenerateGUID();
   const int64_t server_version = syncer::kUncommittedVersion;
   const base::Time creation_time = base::Time::Now();

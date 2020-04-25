@@ -26,6 +26,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
@@ -405,9 +406,9 @@ bool UtilityProcessHost::StartProcess() {
       network::switches::kIgnoreUrlFetcherCertRequests,
       network::switches::kLogNetLog,
       network::switches::kNetLogCaptureMode,
-      network::switches::kNoReferrers,
       network::switches::kExplicitlyAllowedPorts,
       service_manager::switches::kNoSandbox,
+      service_manager::switches::kEnableAudioServiceSandbox,
 #if defined(OS_MACOSX)
       service_manager::switches::kEnableSandboxLogging,
       os_crypt::switches::kUseMockKeychain,
@@ -440,6 +441,7 @@ bool UtilityProcessHost::StartProcess() {
       switches::kAudioServiceQuitTimeoutMs,
       switches::kDisableAudioOutput,
       switches::kFailAudioStreamCreation,
+      switches::kForceDisableWebRtcApmInAudioService,
       switches::kMuteAudio,
       switches::kUseFileForFakeAudioCapture,
       switches::kAgcStartupMinVolume,
@@ -524,6 +526,12 @@ void UtilityProcessHost::OnProcessCrashed(int exit_code) {
   }
 #endif
   client->OnProcessCrashed();
+}
+
+base::Optional<std::string> UtilityProcessHost::GetServiceName() {
+  if (!service_identity_)
+    return metrics_name_;
+  return service_identity_->name();
 }
 
 void UtilityProcessHost::BindHostReceiver(

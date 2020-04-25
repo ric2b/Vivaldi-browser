@@ -172,10 +172,10 @@ bool DisplayResourceProvider::OnMemoryDump(
   return true;
 }
 
-#if defined(OS_ANDROID)
 void DisplayResourceProvider::SendPromotionHints(
-    const OverlayCandidateList::PromotionHintInfoMap& promotion_hints,
+    const std::map<ResourceId, gfx::RectF>& promotion_hints,
     const ResourceIdSet& requestor_set) {
+#if defined(OS_ANDROID)
   GLES2Interface* gl = ContextGL();
   if (!gl)
     return;
@@ -210,8 +210,10 @@ void DisplayResourceProvider::SendPromotionHints(
     }
     UnlockForRead(id);
   }
+#endif
 }
 
+#if defined(OS_ANDROID)
 bool DisplayResourceProvider::IsBackedBySurfaceTexture(ResourceId id) {
   ChildResource* resource = GetResource(id);
   return resource->transferable.is_backed_by_surface_texture;
@@ -219,6 +221,20 @@ bool DisplayResourceProvider::IsBackedBySurfaceTexture(ResourceId id) {
 
 size_t DisplayResourceProvider::CountPromotionHintRequestsForTesting() {
   return wants_promotion_hints_set_.size();
+}
+
+void DisplayResourceProvider::InitializePromotionHintRequest(ResourceId id) {
+  ChildResource* resource = TryGetResource(id);
+  // TODO(ericrk): We should never fail TryGetResource, but we appear to
+  // be doing so on Android in rare cases. Handle this gracefully until a
+  // better solution can be found. https://crbug.com/811858
+  if (!resource)
+    return;
+
+  // We could sync all |wants_promotion_hint| resources elsewhere, and send 'no'
+  // to all resources that weren't used.  However, there's no real advantage.
+  if (resource->transferable.wants_promotion_hint)
+    wants_promotion_hints_set_.insert(id);
 }
 #endif
 
@@ -277,13 +293,11 @@ void DisplayResourceProvider::WaitSyncToken(ResourceId id) {
   if (!resource)
     return;
   WaitSyncTokenInternal(resource);
+
 #if defined(OS_ANDROID)
-  // Now that the resource is synced, we may send it a promotion hint.  We could
-  // sync all |wants_promotion_hint| resources elsewhere, and send 'no' to all
-  // resources that weren't used.  However, there's no real advantage.
-  if (resource->transferable.wants_promotion_hint)
-    wants_promotion_hints_set_.insert(id);
-#endif  // OS_ANDROID
+  // Now that the resource is synced, we may send it a promotion hint.
+  InitializePromotionHintRequest(id);
+#endif
 }
 
 int DisplayResourceProvider::CreateChild(const ReturnCallback& return_callback,
@@ -546,7 +560,7 @@ void DisplayResourceProvider::UnlockForRead(ResourceId id) {
 void DisplayResourceProvider::TryReleaseResource(ResourceId id,
                                                  ChildResource* resource) {
   if (resource->marked_for_deletion && !resource->lock_for_read_count &&
-      !resource->locked_for_external_use) {
+      !resource->locked_for_external_use && !resource->lock_for_overlay_count) {
     auto child_it = children_.find(resource->child_id);
     DeleteAndReturnUnusedResourcesToChild(child_it, NORMAL, {id});
   }
@@ -885,6 +899,36 @@ DisplayResourceProvider::ScopedReadLockSkImage::~ScopedReadLockSkImage() {
   resource_provider_->UnlockForRead(resource_id_);
 }
 
+DisplayResourceProvider::ScopedReadLockSharedImage::ScopedReadLockSharedImage(
+    DisplayResourceProvider* resource_provider,
+    ResourceId resource_id)
+    : resource_provider_(resource_provider),
+      resource_id_(resource_id),
+      resource_(resource_provider_->GetResource(resource_id_)) {
+  DCHECK(resource_);
+  DCHECK(resource_->is_gpu_resource_type());
+  DCHECK(resource_->transferable.mailbox_holder.mailbox.IsSharedImage());
+
+  resource_->lock_for_overlay_count++;
+}
+
+gpu::Mailbox DisplayResourceProvider::ScopedReadLockSharedImage::mailbox()
+    const {
+  return resource_->transferable.mailbox_holder.mailbox;
+}
+
+gpu::SyncToken DisplayResourceProvider::ScopedReadLockSharedImage::sync_token()
+    const {
+  return resource_->transferable.mailbox_holder.sync_token;
+}
+
+DisplayResourceProvider::ScopedReadLockSharedImage::
+    ~ScopedReadLockSharedImage() {
+  DCHECK(resource_->lock_for_overlay_count);
+  resource_->lock_for_overlay_count--;
+  resource_provider_->TryReleaseResource(resource_id_, resource_);
+}
+
 DisplayResourceProvider::LockSetForExternalUse::LockSetForExternalUse(
     DisplayResourceProvider* resource_provider,
     ExternalUseClient* client)
@@ -915,7 +959,7 @@ DisplayResourceProvider::LockSetForExternalUse::LockResource(
       resource.image_context =
           resource_provider_->external_use_client_->CreateImageContext(
               resource.transferable.mailbox_holder, resource.transferable.size,
-              resource.transferable.format,
+              resource.transferable.format, resource.transferable.ycbcr_info,
               // The resource |color_space| is ignored by SkiaRenderer for video
               // planes and usually cannot be converted to SkColorSpace.
               is_video_plane

@@ -6,7 +6,9 @@
 
 #include <cstddef>
 #include <sstream>
+#include <utility>
 
+#include "base/command_line.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -26,9 +28,30 @@
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/sync/driver/about_sync_util.h"
 #include "components/sync/engine/sync_string_conversions.h"
+#include "components/sync/engine_impl/net/url_translator.h"
+#include "components/sync/engine_impl/traffic_logger.h"
+#include "components/sync/protocol/sync.pb.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/test/simple_url_loader_test_helper.h"
+#include "google_apis/google_api_keys.h"
+#include "net/base/net_errors.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/mojom/fetch_api.mojom-shared.h"
+#include "third_party/zlib/google/compression_utils.h"
 
 using syncer::ProfileSyncService;
 using syncer::SyncCycleSnapshot;
+
+#ifdef VIVALDI_PROFILE_SYNC_SERVICE_HARNESS_H_
+namespace {
+#endif
+const char* kSyncUrlClearServerDataKey = "sync-url-clear-server-data";
+#ifdef VIVALDI_PROFILE_SYNC_SERVICE_HARNESS_H_
+} // namespace
+#endif
 
 namespace {
 
@@ -82,8 +105,13 @@ class SyncSetupChecker : public SingleClientStatusChangeChecker {
     if (HasAuthError(service())) {
       return true;
     }
-    if (service()->GetPassphraseRequiredReasonForTest() ==
-        syncer::REASON_DECRYPTION) {
+    // TODO(crbug.com/1010397): The verification of INITIALIZING is only needed
+    // due to SyncEncryptionHandlerImpl issuing an unnecessary
+    // OnPassphraseRequired() during initialization.
+    if (service()
+            ->GetUserSettings()
+            ->IsPassphraseRequiredForPreferredDataTypes() &&
+        transport_state != syncer::SyncService::TransportState::INITIALIZING) {
       LOG(FATAL)
           << "A passphrase is required for decryption but was not provided. "
              "Waiting for sync to become available won't succeed. Make sure "
@@ -170,6 +198,79 @@ bool ProfileSyncServiceHarness::SignInPrimaryAccount() {
 
   NOTREACHED();
   return false;
+}
+
+#ifdef VIVALDI_PROFILE_SYNC_SERVICE_HARNESS_H_
+namespace {
+#endif
+// Same as reset on chrome.google.com/sync.
+// This function will wait until the reset is done. If error occurs,
+// it will log error messages.
+void ResetAccount(network::SharedURLLoaderFactory* url_loader_factory,
+                  const std::string& access_token,
+                  const GURL& url,
+                  const std::string& username,
+                  const std::string& birthday) {
+  // Generate https POST payload.
+  sync_pb::ClientToServerMessage message;
+  message.set_share(username);
+  message.set_message_contents(
+      sync_pb::ClientToServerMessage::CLEAR_SERVER_DATA);
+  message.set_store_birthday(birthday);
+  message.set_api_key(google_apis::GetAPIKey());
+  syncer::LogClientToServerMessage(message);
+  std::string payload;
+  message.SerializeToString(&payload);
+  std::string request_to_send;
+  compression::GzipCompress(payload, &request_to_send);
+
+  auto resource_request = std::make_unique<network::ResourceRequest>();
+  resource_request->url = url;
+  resource_request->method = "POST";
+  resource_request->headers.SetHeader("Authorization",
+                                      "Bearer " + access_token);
+  resource_request->headers.SetHeader("Content-Encoding", "gzip");
+  resource_request->headers.SetHeader("Accept-Language", "en-US,en");
+  resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  auto simple_loader = network::SimpleURLLoader::Create(
+      std::move(resource_request), TRAFFIC_ANNOTATION_FOR_TESTS);
+  simple_loader->AttachStringForUpload(request_to_send,
+                                       "application/octet-stream");
+  simple_loader->SetTimeoutDuration(base::TimeDelta::FromSeconds(10));
+  content::SimpleURLLoaderTestHelper url_loader_helper;
+  simple_loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
+      url_loader_factory, url_loader_helper.GetCallback());
+  url_loader_helper.WaitForCallback();
+  if (simple_loader->NetError() != 0) {
+    LOG(ERROR) << "Reset account failed with error "
+               << net::ErrorToString(simple_loader->NetError())
+               << ". The account will remain dirty and may cause test fail.";
+  }
+}
+#ifdef VIVALDI_PROFILE_SYNC_SERVICE_HARNESS_H_
+} // namespace
+#endif  // VIVALDI_PROFILE_SYNC_SERVICE_HARNESS_H_
+
+void ProfileSyncServiceHarness::ResetSyncForPrimaryAccount() {
+  syncer::SyncPrefs sync_prefs(profile_->GetPrefs());
+  // Generate the https url.
+  // CLEAR_SERVER_DATA isn't enabled on the prod Sync server,
+  // so --sync-url-clear-server-data can be used to specify an
+  // alternative endpoint.
+  // Note: Any OTA(Owned Test Account) tries to clear data need to be
+  // whitelisted.
+  auto* cmd_line = base::CommandLine::ForCurrentProcess();
+  DCHECK(cmd_line->HasSwitch(kSyncUrlClearServerDataKey))
+      << "Missing switch " << kSyncUrlClearServerDataKey;
+  std::string url =
+      cmd_line->GetSwitchValueASCII(kSyncUrlClearServerDataKey) + "/command/?";
+  url += syncer::MakeSyncQueryString(sync_prefs.GetCacheGuid());
+
+  // Call sync server to clear sync data.
+  std::string access_token = service()->GetAccessTokenForTest();
+  DCHECK(access_token.size()) << "Access token is not available.";
+  ResetAccount(profile_->GetURLLoaderFactory().get(), access_token, GURL(url),
+               username_, sync_prefs.GetBirthday());
 }
 
 #if !defined(OS_CHROMEOS)
@@ -299,7 +400,8 @@ bool ProfileSyncServiceHarness::SetupSyncImpl(
 
 void ProfileSyncServiceHarness::FinishSyncSetup() {
   sync_blocker_.reset();
-  service()->GetUserSettings()->SetFirstSetupComplete();
+  service()->GetUserSettings()->SetFirstSetupComplete(
+      syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
 }
 
 void ProfileSyncServiceHarness::StopSyncServiceAndClearData() {
@@ -332,7 +434,8 @@ bool ProfileSyncServiceHarness::StartSyncService() {
   DVLOG(1) << "Passphrase decryption success.";
 
   blocker.reset();
-  service()->GetUserSettings()->SetFirstSetupComplete();
+  service()->GetUserSettings()->SetFirstSetupComplete(
+      syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
 
   if (!AwaitSyncSetupCompletion()) {
     LOG(FATAL) << "AwaitSyncSetupCompletion failed.";
@@ -573,9 +676,8 @@ std::string ProfileSyncServiceHarness::GetClientInfoString(
        << ", server conflicts: " << snap.num_server_conflicts()
        << ", num_updates_downloaded : "
        << snap.model_neutral_state().num_updates_downloaded_total
-       << ", passphrase_required_reason: "
-       << syncer::PassphraseRequiredReasonToString(
-              service()->GetPassphraseRequiredReasonForTest())
+       << ", passphrase_required: "
+       << service()->GetUserSettings()->IsPassphraseRequired()
        << ", notifications_enabled: " << status.notifications_enabled
        << ", service_is_active: " << service()->IsSyncFeatureActive();
   } else {

@@ -134,12 +134,14 @@ std::unique_ptr<base::DictionaryValue> CreateCapabilities(
   caps->SetString("browserName", "chrome");
   caps->SetString(session->w3c_compliant ? "browserVersion" : "version",
                   session->chrome->GetBrowserInfo()->browser_version);
-  if (session->w3c_compliant)
-    caps->SetString(
-        "platformName",
-        base::ToLowerASCII(session->chrome->GetOperatingSystemName()));
-  else
-    caps->SetString("platform", session->chrome->GetOperatingSystemName());
+  std::string operatingSystemName = session->chrome->GetOperatingSystemName();
+  if (operatingSystemName.find("Windows") != std::string::npos)
+    operatingSystemName = "Windows";
+  if (session->w3c_compliant) {
+    caps->SetString("platformName", base::ToLowerASCII(operatingSystemName));
+  } else {
+    caps->SetString("platform", operatingSystemName);
+  }
   caps->SetString("pageLoadStrategy", session->chrome->page_load_strategy());
   caps->SetBoolean("acceptInsecureCerts", capabilities.accept_insecure_certs);
   const base::Value* proxy = desired_caps.FindKey("proxy");
@@ -235,46 +237,14 @@ Status InitSessionHelper(const InitSessionParams& bound_params,
                          Session* session,
                          const base::DictionaryValue& params,
                          std::unique_ptr<base::Value>* value) {
-  session->driver_log.reset(
-      new WebDriverLog(WebDriverLog::kDriverType, Log::kAll));
   const base::DictionaryValue* desired_caps;
   base::DictionaryValue merged_caps;
 
-  session->w3c_compliant = GetW3CSetting(params);
-  if (session->w3c_compliant) {
-    Status status = ProcessCapabilities(params, &merged_caps);
-    if (status.IsError())
-      return status;
-    desired_caps = &merged_caps;
-  } else if (!params.GetDictionary("desiredCapabilities", &desired_caps)) {
-    return Status(kSessionNotCreated,
-                  "Missing or invalid capabilities");
-  }
-
   Capabilities capabilities;
-  Status status = capabilities.Parse(*desired_caps, session->w3c_compliant);
+  Status status = internal::ConfigureSession(session, params, &desired_caps,
+                                             &merged_caps, &capabilities);
   if (status.IsError())
     return status;
-
-  if (capabilities.unhandled_prompt_behavior.length() > 0) {
-    session->unhandled_prompt_behavior = capabilities.unhandled_prompt_behavior;
-  } else {
-    // W3C spec (https://www.w3.org/TR/webdriver/#dfn-handle-any-user-prompts)
-    // shows the default behavior to be dismiss and notify. For backward
-    // compatibility, in legacy mode default behavior is not handling prompt.
-    session->unhandled_prompt_behavior =
-        session->w3c_compliant ? kDismissAndNotify : kIgnore;
-  }
-
-  session->implicit_wait = capabilities.implicit_wait_timeout;
-  session->page_load_timeout = capabilities.page_load_timeout;
-  session->script_timeout = capabilities.script_timeout;
-  session->strict_file_interactability =
-        capabilities.strict_file_interactability;
-  Log::Level driver_level = Log::kWarning;
-  if (capabilities.logging_prefs.count(WebDriverLog::kDriverType))
-    driver_level = capabilities.logging_prefs[WebDriverLog::kDriverType];
-  session->driver_log->set_min_level(driver_level);
 
   // Create Log's and DevToolsEventListener's for ones that are DevTools-based.
   // Session will own the Log's, Chrome will own the listeners.
@@ -314,24 +284,9 @@ Status InitSessionHelper(const InitSessionParams& bound_params,
   session->capabilities =
       CreateCapabilities(session, capabilities, *desired_caps);
 
-  if (session->chrome->GetBrowserInfo()->is_headless) {
-    std::string download_directory;
-    if (capabilities.prefs &&
-        (capabilities.prefs->GetString("download.default_directory",
-                                       &download_directory) ||
-         capabilities.prefs->GetStringWithoutPathExpansion(
-             "download.default_directory", &download_directory)))
-      session->headless_download_directory =
-          std::make_unique<std::string>(download_directory);
-    else
-      session->headless_download_directory = std::make_unique<std::string>(".");
-    WebView* first_view;
-    session->chrome->GetWebViewById(session->window, &first_view);
-    status = first_view->OverrideDownloadDirectoryIfNeeded(
-        *session->headless_download_directory);
-    if (status.IsError())
-      return status;
-  }
+  status = internal::ConfigureHeadlessSession(session, capabilities);
+  if (status.IsError())
+    return status;
 
   if (session->w3c_compliant) {
     std::unique_ptr<base::DictionaryValue> capabilities =
@@ -348,6 +303,79 @@ Status InitSessionHelper(const InitSessionParams& bound_params,
 }
 
 }  // namespace
+
+namespace internal {
+
+Status ConfigureSession(Session* session,
+                        const base::DictionaryValue& params,
+                        const base::DictionaryValue** desired_caps,
+                        base::DictionaryValue* merged_caps,
+                        Capabilities* capabilities) {
+  session->driver_log.reset(
+      new WebDriverLog(WebDriverLog::kDriverType, Log::kAll));
+
+  session->w3c_compliant = GetW3CSetting(params);
+  if (session->w3c_compliant) {
+    Status status = ProcessCapabilities(params, merged_caps);
+    if (status.IsError())
+      return status;
+    *desired_caps = merged_caps;
+  } else if (!params.GetDictionary("desiredCapabilities", desired_caps)) {
+    return Status(kSessionNotCreated, "Missing or invalid capabilities");
+  }
+
+  Status status = capabilities->Parse(**desired_caps, session->w3c_compliant);
+  if (status.IsError())
+    return status;
+
+  if (capabilities->unhandled_prompt_behavior.length() > 0) {
+    session->unhandled_prompt_behavior =
+        capabilities->unhandled_prompt_behavior;
+  } else {
+    // W3C spec (https://www.w3.org/TR/webdriver/#dfn-handle-any-user-prompts)
+    // shows the default behavior to be dismiss and notify. For backward
+    // compatibility, in legacy mode default behavior is not handling prompt.
+    session->unhandled_prompt_behavior =
+        session->w3c_compliant ? kDismissAndNotify : kIgnore;
+  }
+
+  session->implicit_wait = capabilities->implicit_wait_timeout;
+  session->page_load_timeout = capabilities->page_load_timeout;
+  session->script_timeout = capabilities->script_timeout;
+  session->strict_file_interactability =
+      capabilities->strict_file_interactability;
+  Log::Level driver_level = Log::kWarning;
+  if (capabilities->logging_prefs.count(WebDriverLog::kDriverType))
+    driver_level = capabilities->logging_prefs[WebDriverLog::kDriverType];
+  session->driver_log->set_min_level(driver_level);
+
+  return Status(kOk);
+}
+
+Status ConfigureHeadlessSession(Session* session,
+                                const Capabilities& capabilities) {
+  if (session->chrome->GetBrowserInfo()->is_headless) {
+    std::string download_directory;
+    if (capabilities.prefs &&
+        (capabilities.prefs->GetString("download.default_directory",
+                                       &download_directory) ||
+         capabilities.prefs->GetStringWithoutPathExpansion(
+             "download.default_directory", &download_directory)))
+      session->headless_download_directory =
+          std::make_unique<std::string>(download_directory);
+    else
+      session->headless_download_directory = std::make_unique<std::string>(".");
+    WebView* first_view;
+    session->chrome->GetWebViewById(session->window, &first_view);
+    Status status = first_view->OverrideDownloadDirectoryIfNeeded(
+        *session->headless_download_directory);
+    return status;
+  }
+  // session is not headless
+  return Status(kOk);
+}
+
+}  // namespace internal
 
 bool MergeCapabilities(const base::DictionaryValue* always_match,
                        const base::DictionaryValue* first_match,

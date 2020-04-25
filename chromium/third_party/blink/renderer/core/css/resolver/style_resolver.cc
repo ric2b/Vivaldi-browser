@@ -751,6 +751,14 @@ scoped_refptr<ComputedStyle> StyleResolver::StyleForElement(
                              : ComputedStyle::kNotAtShadowBoundary);
       state.SetStyle(std::move(style));
     } else {
+      // Strictly, we should only allow the root element to inherit from initial
+      // styles, but we allow getComputedStyle() for connected elements outside
+      // the flat tree rooted at an unassigned shadow host child, or Shadow DOM
+      // V0 insertion points.
+      DCHECK(element == GetDocument().documentElement() ||
+             element->IsV0InsertionPoint() ||
+             (IsShadowHost(element->parentNode()) &&
+              !LayoutTreeBuilderTraversal::ParentElement(*element)));
       state.SetStyle(InitialStyleForElement(GetDocument()));
       state.SetParentStyle(ComputedStyle::Clone(*state.Style()));
       state.SetLayoutParentStyle(state.ParentStyle());
@@ -894,7 +902,7 @@ CompositorKeyframeValue* StyleResolver::CreateCompositorKeyframeValueSnapshot(
 
 bool StyleResolver::PseudoStyleForElementInternal(
     Element& element,
-    const PseudoStyleRequest& pseudo_style_request,
+    const PseudoElementStyleRequest& pseudo_style_request,
     StyleResolverState& state) {
   DCHECK(GetDocument().GetFrame());
   DCHECK(GetDocument().GetSettings());
@@ -913,6 +921,10 @@ bool StyleResolver::PseudoStyleForElementInternal(
     style->InheritFrom(*state.ParentStyle());
     state.SetStyle(std::move(style));
   } else {
+    // ::backdrop inherits from initial styles. All other pseudo elements
+    // inherit from their originating element (::before/::after), or originating
+    // element descendants (::first-line/::first-letter).
+    DCHECK(pseudo_style_request.pseudo_id == kPseudoIdBackdrop);
     state.SetStyle(InitialStyleForElement(GetDocument()));
     state.SetParentStyle(ComputedStyle::Clone(*state.Style()));
   }
@@ -926,7 +938,7 @@ bool StyleResolver::PseudoStyleForElementInternal(
     // Check UA, user and author rules.
     ElementRuleCollector collector(state.ElementContext(), selector_filter_,
                                    state.Style());
-    collector.SetPseudoStyleRequest(pseudo_style_request);
+    collector.SetPseudoElementStyleRequest(pseudo_style_request);
 
     MatchUARules(collector);
     MatchUserRules(collector);
@@ -971,7 +983,7 @@ bool StyleResolver::PseudoStyleForElementInternal(
 
 scoped_refptr<ComputedStyle> StyleResolver::PseudoStyleForElement(
     Element* element,
-    const PseudoStyleRequest& pseudo_style_request,
+    const PseudoElementStyleRequest& pseudo_style_request,
     const ComputedStyle* parent_style,
     const ComputedStyle* parent_layout_object_style) {
   DCHECK(parent_style);
@@ -982,7 +994,7 @@ scoped_refptr<ComputedStyle> StyleResolver::PseudoStyleForElement(
                            pseudo_style_request.pseudo_id, parent_style,
                            parent_layout_object_style);
   if (!PseudoStyleForElementInternal(*element, pseudo_style_request, state)) {
-    if (pseudo_style_request.type == PseudoStyleRequest::kForRenderer)
+    if (pseudo_style_request.type == PseudoElementStyleRequest::kForRenderer)
       return nullptr;
     return state.TakeStyle();
   }
@@ -1136,7 +1148,7 @@ void StyleResolver::CollectPseudoRulesForElement(
     ElementRuleCollector& collector,
     PseudoId pseudo_id,
     unsigned rules_to_include) {
-  collector.SetPseudoStyleRequest(PseudoStyleRequest(pseudo_id));
+  collector.SetPseudoElementStyleRequest(PseudoElementStyleRequest(pseudo_id));
 
   if (rules_to_include & kUAAndUserCSSRules) {
     MatchUARules(collector);
@@ -1390,6 +1402,7 @@ static inline bool IsValidFirstLetterStyleProperty(CSSPropertyID id) {
     case CSSPropertyID::kFontFamily:
     case CSSPropertyID::kFontFeatureSettings:
     case CSSPropertyID::kFontKerning:
+    case CSSPropertyID::kFontOpticalSizing:
     case CSSPropertyID::kFontSize:
     case CSSPropertyID::kFontSizeAdjust:
     case CSSPropertyID::kFontStretch:
@@ -1687,6 +1700,8 @@ void StyleResolver::ApplyForcedColors(StyleResolverState& state,
   // https://drafts.csswg.org/css-color-adjust-1/#forced-colors-properties
   if (priority == kHighPropertyPriority) {
     ApplyProperty(GetCSSPropertyColor(), state, *unset, apply_mask);
+    ApplyUaForcedColors<priority>(state, match_result, apply_inherited_only,
+                                  needs_apply_pass);
   } else {
     DCHECK(priority == kLowPropertyPriority);
     ApplyProperty(GetCSSPropertyBorderBottomColor(), state, *unset, apply_mask);
@@ -1708,18 +1723,31 @@ void StyleResolver::ApplyForcedColors(StyleResolverState& state,
 
     // Background colors compute to the Window system color for all values
     // except for the alpha channel.
+    RGBA32 prev_bg_color = state.Style()->BackgroundColor().GetColor().Rgb();
     RGBA32 sys_bg_color =
         LayoutTheme::GetTheme()
             .SystemColor(CSSValueID::kWindow, WebColorScheme::kLight)
             .Rgb();
+    ApplyProperty(GetCSSPropertyBackgroundColor(), state,
+                  *cssvalue::CSSColorValue::Create(sys_bg_color), apply_mask);
+
+    ApplyUaForcedColors<priority>(state, match_result, apply_inherited_only,
+                                  needs_apply_pass);
+
     RGBA32 current_bg_color = state.Style()->BackgroundColor().GetColor().Rgb();
     RGBA32 bg_color =
-        MakeRGBA(RedChannel(sys_bg_color), GreenChannel(sys_bg_color),
-                 BlueChannel(sys_bg_color), AlphaChannel(current_bg_color));
+        MakeRGBA(RedChannel(current_bg_color), GreenChannel(current_bg_color),
+                 BlueChannel(current_bg_color), AlphaChannel(prev_bg_color));
     ApplyProperty(GetCSSPropertyBackgroundColor(), state,
                   *cssvalue::CSSColorValue::Create(bg_color), apply_mask);
   }
+}
 
+template <CSSPropertyPriority priority>
+void StyleResolver::ApplyUaForcedColors(StyleResolverState& state,
+                                        const MatchResult& match_result,
+                                        bool apply_inherited_only,
+                                        NeedsApplyPass& needs_apply_pass) {
   auto force_colors = ForcedColorFilter::kEnabled;
   ApplyMatchedProperties<priority, kCheckNeedsApplyPass>(
       state, match_result.UaRules(), false, apply_inherited_only,
@@ -2326,6 +2354,9 @@ void StyleResolver::ApplyCascadedColorValue(StyleResolverState& state) {
           break;
         case CSSValueID::kInitial:
           state.Style()->SetColor(ComputedStyleInitialValues::InitialColor());
+          break;
+        case CSSValueID::kInternalRootColor:
+          state.Style()->SetIsColorInternalText(true);
           break;
         default:
           identifier_value = nullptr;

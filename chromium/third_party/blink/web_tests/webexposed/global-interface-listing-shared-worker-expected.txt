@@ -67,8 +67,10 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     setter onmessage
 [Worker]     setter onmessageerror
 [Worker] interface ByteLengthQueuingStrategy
+[Worker]     attribute @@toStringTag
+[Worker]     getter highWaterMark
+[Worker]     getter size
 [Worker]     method constructor
-[Worker]     method size
 [Worker] interface CSSSkewX : CSSTransformComponent
 [Worker]     attribute @@toStringTag
 [Worker]     getter ax
@@ -111,15 +113,22 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter reason
 [Worker]     getter wasClean
 [Worker]     method constructor
+[Worker] interface CompressionStream
+[Worker]     attribute @@toStringTag
+[Worker]     getter readable
+[Worker]     getter writable
+[Worker]     method constructor
 [Worker] interface ContentIndex
 [Worker]     attribute @@toStringTag
 [Worker]     method add
 [Worker]     method constructor
 [Worker]     method delete
-[Worker]     method getDescriptions
+[Worker]     method getAll
 [Worker] interface CountQueuingStrategy
+[Worker]     attribute @@toStringTag
+[Worker]     getter highWaterMark
+[Worker]     getter size
 [Worker]     method constructor
-[Worker]     method size
 [Worker] interface Crypto
 [Worker]     attribute @@toStringTag
 [Worker]     getter subtle
@@ -336,6 +345,11 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method constructor
 [Worker]     method contains
 [Worker]     method item
+[Worker] interface DecompressionStream
+[Worker]     attribute @@toStringTag
+[Worker]     getter readable
+[Worker]     getter writable
+[Worker]     method constructor
 [Worker] interface DetectedBarcode
 [Worker]     attribute @@toStringTag
 [Worker]     getter boundingBox
@@ -669,6 +683,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker] interface IDBTransaction : EventTarget
 [Worker]     attribute @@toStringTag
 [Worker]     getter db
+[Worker]     getter durability
 [Worker]     getter error
 [Worker]     getter mode
 [Worker]     getter objectStoreNames
@@ -1000,6 +1015,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method getEntriesByType
 [Worker]     method mark
 [Worker]     method measure
+[Worker]     method measureMemory
 [Worker]     method now
 [Worker]     method profile
 [Worker]     method setResourceTimingBufferSize
@@ -2086,9 +2102,11 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method dispatchCompute
 [Worker]     method dispatchComputeIndirect
 [Worker]     method drawArrays
+[Worker]     method drawArraysIndirect
 [Worker]     method drawArraysInstanced
 [Worker]     method drawBuffers
 [Worker]     method drawElements
+[Worker]     method drawElementsIndirect
 [Worker]     method drawElementsInstanced
 [Worker]     method drawRangeElements
 [Worker]     method enable
@@ -3576,7 +3594,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter self
 [Worker]     method atob
 [Worker]     method btoa
-[Worker]     method cancelAnimationFrame
 [Worker]     method clearInterval
 [Worker]     method clearTimeout
 [Worker]     method constructor
@@ -3584,7 +3601,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method fetch
 [Worker]     method importScripts
 [Worker]     method queueMicrotask
-[Worker]     method requestAnimationFrame
 [Worker]     method setInterval
 [Worker]     method setTimeout
 [Worker]     setter onerror
@@ -3627,6 +3643,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter storage
 [Worker]     getter usb
 [Worker]     getter userAgent
+[Worker]     getter wakeLock
 [Worker]     method constructor
 [Worker] interface WritableStream
 [Worker]     attribute @@toStringTag
@@ -3699,9 +3716,9 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     attribute console
 [Worker]     attribute globalThis
 [Worker]     attribute internals
-[Worker]     getter TrustedTypesWorkers
 [Worker]     getter name
 [Worker]     getter onconnect
+[Worker]     getter trustedTypes
 [Worker]     method close
 [Worker]     method gc
 [Worker]     method webkitRequestFileSystem

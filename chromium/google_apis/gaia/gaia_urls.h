@@ -18,6 +18,7 @@ class GaiaUrls {
 
   // The URLs for different calls in the Google Accounts programmatic login API.
   const GURL& google_url() const;
+  const GURL& secure_google_url() const;
   const GURL& gaia_url() const;
   const GURL& captcha_base_url() const;
   const GURL& client_login_url() const;
@@ -61,12 +62,12 @@ class GaiaUrls {
   friend struct base::DefaultSingletonTraits<GaiaUrls>;
 
   GURL google_url_;
+  GURL secure_google_url_;
   GURL gaia_url_;
   GURL captcha_base_url_;
 
   GURL client_login_url_;
   GURL service_login_url_;
-  GURL embedded_setup_chromeos_url_v1_;
   GURL embedded_setup_chromeos_url_v2_;
   GURL embedded_setup_windows_url_;
   GURL signin_chrome_sync_dice_;

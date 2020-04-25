@@ -7,6 +7,12 @@
 #include <string>
 #include <utility>
 
+#include "base/logging.h"
+#include "base/memory/ref_counted_memory.h"
+#include "base/strings/string16.h"
+#include "base/strings/string_piece.h"
+#include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -15,16 +21,30 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
+#include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_ui_data_source.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/resource_bundle.h"
+#include "ui/base/template_expressions.h"
 #include "ui/display/types/display_constants.h"
 
 namespace web_app {
+
+base::Optional<SystemAppType> GetSystemWebAppTypeForAppId(
+    Profile* profile,
+    web_app::AppId app_id) {
+  auto* provider = WebAppProvider::Get(profile);
+  return provider ? provider->system_web_app_manager().GetSystemAppTypeForAppId(
+                        app_id)
+                  : base::Optional<SystemAppType>();
+}
 
 base::Optional<web_app::AppId> GetAppIdForSystemWebApp(Profile* profile,
                                                        SystemAppType app_type) {
@@ -63,7 +83,7 @@ Browser* LaunchSystemWebApp(Profile* profile,
   DCHECK(extension);
 
   // TODO(calamity): Plumb through better launch sources from callsites.
-  AppLaunchParams params = CreateAppLaunchParamsWithEventFlags(
+  apps::AppLaunchParams params = CreateAppLaunchParamsWithEventFlags(
       profile, extension, 0, extensions::AppLaunchSource::kSourceChromeInternal,
       display::kInvalidDisplayId);
   params.override_url = url;
@@ -71,10 +91,10 @@ Browser* LaunchSystemWebApp(Profile* profile,
   if (!browser) {
     if (did_create)
       *did_create = true;
-    browser = CreateApplicationWindow(params, url);
+    browser = CreateApplicationWindow(profile, params, url);
   }
 
-  ShowApplicationWindow(params, url, browser,
+  ShowApplicationWindow(profile, params, url, browser,
                         WindowOpenDisposition::CURRENT_TAB);
 
   return browser;
@@ -107,6 +127,57 @@ Browser* FindSystemWebAppBrowser(Profile* profile, SystemAppType app_type) {
   }
 
   return nullptr;
+}
+
+bool IsSystemWebApp(Browser* browser) {
+  DCHECK(browser);
+  return browser->app_controller() &&
+         browser->app_controller()->IsForSystemWebApp();
+}
+
+gfx::Size GetSystemWebAppMinimumWindowSize(Browser* browser) {
+  DCHECK(browser);
+  if (!browser->app_controller())
+    return gfx::Size();  // Not an app.
+
+  base::Optional<AppId> app_id = browser->app_controller()->GetAppId();
+  if (!app_id)
+    return gfx::Size();
+
+  auto* provider = WebAppProvider::Get(browser->profile());
+  if (!provider)
+    return gfx::Size();
+
+  return provider->system_web_app_manager().GetMinimumWindowSize(
+      app_id.value());
+}
+
+void SetManifestRequestFilter(content::WebUIDataSource* source,
+                              int manifest_idr,
+                              int name_ids) {
+  ui::TemplateReplacements replacements;
+  base::string16 name = l10n_util::GetStringUTF16(name_ids);
+  base::ReplaceChars(name, base::ASCIIToUTF16("\""), base::ASCIIToUTF16("\\\""),
+                     &name);
+  replacements["name"] = base::UTF16ToUTF8(name);
+
+  scoped_refptr<base::RefCountedMemory> bytes =
+      ui::ResourceBundle::GetSharedInstance().LoadDataResourceBytes(
+          manifest_idr);
+  base::StringPiece content(reinterpret_cast<const char*>(bytes->front()),
+                            bytes->size());
+  std::string response = ui::ReplaceTemplateExpressions(content, replacements);
+
+  source->SetRequestFilter(
+      base::BindRepeating(
+          [](const std::string& path) { return path == "manifest.json"; }),
+      base::BindRepeating(
+          [](const std::string& response, const std::string& path,
+             const content::WebUIDataSource::GotDataCallback& callback) {
+            std::string response_copy = response;
+            callback.Run(base::RefCountedString::TakeString(&response_copy));
+          },
+          std::move(response)));
 }
 
 }  // namespace web_app

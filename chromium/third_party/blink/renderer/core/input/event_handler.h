@@ -79,8 +79,7 @@ class WebMouseEvent;
 class WebMouseWheelEvent;
 
 // Handles events for Pointers (Mouse/Touch), HitTests, DragAndDrop, etc.
-class CORE_EXPORT EventHandler final
-    : public GarbageCollectedFinalized<EventHandler> {
+class CORE_EXPORT EventHandler final : public GarbageCollected<EventHandler> {
  public:
   explicit EventHandler(LocalFrame&);
   void Trace(blink::Visitor*);
@@ -299,6 +298,8 @@ class CORE_EXPORT EventHandler final
   // restart from the lock position.
   void ResetMousePositionForPointerUnlock();
 
+  bool LongTapShouldInvokeContextMenu();
+
  private:
   enum NoCursorChangeType { kNoCursorChange };
 
@@ -460,8 +461,6 @@ class CORE_EXPORT EventHandler final
   Member<FallbackCursorEventManager> fallback_cursor_event_manager_;
 
   double max_mouse_moved_duration_;
-
-  bool long_tap_should_invoke_context_menu_;
 
   TaskRunnerTimer<EventHandler> active_interval_timer_;
 

@@ -134,9 +134,8 @@ Polymer({
     }
     if (this.networkState.type ==
         chromeos.networkConfig.mojom.NetworkType.kCellular) {
-      assert(this.networkState.cellular);
-      const technology =
-          this.getTechnologyId_(this.networkState.cellular.networkTechnology);
+      const technology = this.getTechnologyId_(
+          this.networkState.typeState.cellular.networkTechnology);
       if (technology != '') {
         return 'network:' + technology;
       }
@@ -151,24 +150,24 @@ Polymer({
    */
   getTechnologyId_: function(networkTechnology) {
     switch (networkTechnology) {
-      case CrOnc.NetworkTechnology.CDMA1XRTT:
+      case 'CDMA1XRTT':
         return 'badge-1x';
-      case CrOnc.NetworkTechnology.EDGE:
+      case 'EDGE':
         return 'badge-edge';
-      case CrOnc.NetworkTechnology.EVDO:
+      case 'EVDO':
         return 'badge-evdo';
-      case CrOnc.NetworkTechnology.GPRS:
-      case CrOnc.NetworkTechnology.GSM:
+      case 'GPRS':
+      case 'GSM':
         return 'badge-gsm';
-      case CrOnc.NetworkTechnology.HSPA:
+      case 'HSPA':
         return 'badge-hspa';
-      case CrOnc.NetworkTechnology.HSPA_PLUS:
+      case 'HSPAPlus':
         return 'badge-hspa-plus';
-      case CrOnc.NetworkTechnology.LTE:
+      case 'LTE':
         return 'badge-lte';
-      case CrOnc.NetworkTechnology.LTE_ADVANCED:
+      case 'LTEAdvanced':
         return 'badge-lte-advanced';
-      case CrOnc.NetworkTechnology.UMTS:
+      case 'UMTS':
         return 'badge-3g';
     }
     return '';
@@ -189,6 +188,6 @@ Polymer({
       return false;
     }
     return this.networkState.type == mojom.NetworkType.kWiFi &&
-        this.networkState.wifi.security != mojom.SecurityType.kNone;
+        this.networkState.typeState.wifi.security != mojom.SecurityType.kNone;
   },
 });

@@ -304,12 +304,12 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        MAYBE_GetUserMediaWithMandatorySourceID) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
   std::vector<std::string> audio_ids;
   std::vector<std::string> video_ids;
   GetInputDevices(&audio_ids, &video_ids);
-
-  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
-  EXPECT_TRUE(NavigateToURL(shell(), url));
 
   // Test all combinations of mandatory sourceID;
   for (std::vector<std::string>::const_iterator video_it = video_ids.begin();
@@ -794,6 +794,15 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
+                       GetUserMediaEchoCancellationOnAndOffAndVideo) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+  ExecuteJavascriptAndWaitForOk(
+      "getUserMediaEchoCancellationOnAndOffAndVideo()");
+}
+
+IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
                        GetAudioStreamAndCheckMutingInitiallyUnmuted) {
   // Muting tests do not work with the out-of-process audio service.
   // https://crbug.com/843490.
@@ -866,9 +875,10 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetUserMediaBrowserTest,
   ExecuteJavascriptAndWaitForOk("setUpForAudioServiceCrash()");
 
   // Crash the audio service process.
-  audio::mojom::TestingApiPtr service_testing_api;
-  GetSystemConnector()->BindInterface(audio::mojom::kServiceName,
-                                      mojo::MakeRequest(&service_testing_api));
+  mojo::Remote<audio::mojom::TestingApi> service_testing_api;
+  GetSystemConnector()->Connect(
+      audio::mojom::kServiceName,
+      service_testing_api.BindNewPipeAndPassReceiver());
   service_testing_api->Crash();
 
   ExecuteJavascriptAndWaitForOk("verifyAfterAudioServiceCrash()");

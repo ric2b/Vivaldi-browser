@@ -4,8 +4,9 @@
 
 package org.chromium.chrome.browser.tab;
 
-import android.support.annotation.IntDef;
 import android.view.View;
+
+import androidx.annotation.IntDef;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationState;
@@ -21,6 +22,7 @@ import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.media.MediaCaptureNotificationService;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
 import org.chromium.chrome.browser.policy.PolicyAuditor.AuditEvent;
+import org.chromium.chrome.browser.policy.PolicyAuditorJni;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
@@ -298,7 +300,7 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
             TabBrowserControlsState.updateEnabledState(mTab);
             PolicyAuditor auditor = AppHooks.get().getPolicyAuditor();
             auditor.notifyCertificateFailure(
-                    PolicyAuditor.nativeGetCertificateFailure(mTab.getWebContents()),
+                    PolicyAuditorJni.get().getCertificateFailure(mTab.getWebContents()),
                     mTab.getApplicationContext());
         }
 
@@ -330,14 +332,6 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
         @Override
         public void viewportFitChanged(@WebContentsObserver.ViewportFitType int value) {
             DisplayCutoutController.from(mTab).setViewportFit(value);
-        }
-
-        @Override
-        public void didReloadLoFiImages() {
-            RewindableIterator<TabObserver> observers = mTab.getTabObservers();
-            while (observers.hasNext()) {
-                observers.next().didReloadLoFiImages(mTab);
-            }
         }
 
         @Override

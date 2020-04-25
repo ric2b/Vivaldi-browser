@@ -20,9 +20,11 @@ namespace media {
 namespace test {
 
 VideoFrameFileWriter::VideoFrameFileWriter(const base::FilePath& output_folder,
-                                           OutputFormat output_format)
+                                           OutputFormat output_format,
+                                           size_t output_limit)
     : output_folder_(output_folder),
       output_format_(output_format),
+      output_limit_(output_limit),
       num_frames_writing_(0),
       frame_writer_thread_("FrameWriterThread"),
       frame_writer_cv_(&frame_writer_lock_) {
@@ -40,7 +42,8 @@ VideoFrameFileWriter::~VideoFrameFileWriter() {
 // static
 std::unique_ptr<VideoFrameFileWriter> VideoFrameFileWriter::Create(
     const base::FilePath& output_folder,
-    OutputFormat output_format) {
+    OutputFormat output_format,
+    size_t output_limit) {
   // If the directory is not absolute, consider it relative to our working dir.
   base::FilePath resolved_output_folder(output_folder);
   if (!resolved_output_folder.IsAbsolute()) {
@@ -51,12 +54,15 @@ std::unique_ptr<VideoFrameFileWriter> VideoFrameFileWriter::Create(
   }
 
   // Create the directory tree if it doesn't exist yet.
-  if (!DirectoryExists(resolved_output_folder)) {
-    base::CreateDirectory(resolved_output_folder);
+  if (!DirectoryExists(resolved_output_folder) &&
+      !base::CreateDirectory(resolved_output_folder)) {
+    LOG(ERROR) << "Failed to create a output directory: "
+               << resolved_output_folder;
+    return nullptr;
   }
 
-  auto frame_file_writer = base::WrapUnique(
-      new VideoFrameFileWriter(resolved_output_folder, output_format));
+  auto frame_file_writer = base::WrapUnique(new VideoFrameFileWriter(
+      resolved_output_folder, output_format, output_limit));
   if (!frame_file_writer->Initialize()) {
     LOG(ERROR) << "Failed to initialize VideoFrameFileWriter";
     return nullptr;
@@ -77,6 +83,12 @@ bool VideoFrameFileWriter::Initialize() {
 void VideoFrameFileWriter::ProcessVideoFrame(
     scoped_refptr<const VideoFrame> video_frame,
     size_t frame_index) {
+  // Don't write more frames than the specified output limit.
+  if (num_frames_writes_requested_ >= output_limit_)
+    return;
+
+  num_frames_writes_requested_++;
+
   base::AutoLock auto_lock(frame_writer_lock_);
   num_frames_writing_++;
 
@@ -106,6 +118,7 @@ void VideoFrameFileWriter::ProcessVideoFrameTask(
   base::SStringPrintf(&filename, FILE_PATH_LITERAL("frame_%04zu_%dx%d"),
                       frame_index, visible_size.width(), visible_size.height());
 
+#if defined(OS_CHROMEOS)
   // Create VideoFrameMapper if not yet created. The decoder's output pixel
   // format is not known yet when creating the VideoFrameWriter. We can only
   // create the VideoFrameMapper upon receiving the first video frame.
@@ -114,6 +127,7 @@ void VideoFrameFileWriter::ProcessVideoFrameTask(
         VideoFrameMapperFactory::CreateMapper(video_frame->format());
     LOG_ASSERT(video_frame_mapper_) << "Failed to create VideoFrameMapper";
   }
+#endif
 
   switch (output_format_) {
     case OutputFormat::kPNG:
@@ -136,7 +150,7 @@ void VideoFrameFileWriter::WriteVideoFramePNG(
   DCHECK(video_frame_mapper_);
 
   auto mapped_frame = video_frame;
-#if defined(OS_LINUX)
+#if defined(OS_CHROMEOS)
   if (video_frame->storage_type() == VideoFrame::STORAGE_DMABUFS)
     mapped_frame = video_frame_mapper_->Map(std::move(video_frame));
 #endif
@@ -178,7 +192,7 @@ void VideoFrameFileWriter::WriteVideoFrameYUV(
   DCHECK(video_frame_mapper_);
 
   auto mapped_frame = video_frame;
-#if defined(OS_LINUX)
+#if defined(OS_CHROMEOS)
   if (video_frame->storage_type() == VideoFrame::STORAGE_DMABUFS)
     mapped_frame = video_frame_mapper_->Map(std::move(video_frame));
 #endif

@@ -399,6 +399,33 @@ void FakeShillDeviceClient::RemoveAllWakeOnPacketConnections(
   base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, callback);
 }
 
+void FakeShillDeviceClient::SetUsbEthernetMacAddressSource(
+    const dbus::ObjectPath& device_path,
+    const std::string& source,
+    const base::Closure& callback,
+    const ErrorCallback& error_callback) {
+  if (!stub_devices_.HasKey(device_path.value())) {
+    PostNotFoundError(error_callback);
+    return;
+  }
+
+  const auto error_name_iter =
+      set_usb_ethernet_mac_address_source_error_names_.find(
+          device_path.value());
+  if (error_name_iter !=
+          set_usb_ethernet_mac_address_source_error_names_.end() &&
+      !error_name_iter->second.empty()) {
+    PostError(error_name_iter->second, error_callback);
+    return;
+  }
+
+  SetDeviceProperty(device_path.value(),
+                    shill::kUsbEthernetMacAddressSourceProperty,
+                    base::Value(source), /*notify_changed=*/true);
+
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, callback);
+}
+
 ShillDeviceClient::TestInterface* FakeShillDeviceClient::GetTestInterface() {
   return this;
 }
@@ -506,13 +533,19 @@ void FakeShillDeviceClient::AddCellularFoundNetwork(
                     base::Value(base::StringPrintf("Network %d", idx)));
   new_result.SetKey(shill::kTechnologyProperty, base::Value("GSM"));
   new_result.SetKey(shill::kStatusProperty, base::Value("available"));
-  scan_results->GetList().push_back(std::move(new_result));
+  scan_results->Append(std::move(new_result));
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(&FakeShillDeviceClient::NotifyObserversPropertyChanged,
                      weak_ptr_factory_.GetWeakPtr(),
                      dbus::ObjectPath(device_path),
                      shill::kFoundNetworksProperty));
+}
+
+void FakeShillDeviceClient::SetUsbEthernetMacAddressSourceError(
+    const std::string& device_path,
+    const std::string& error_name) {
+  set_usb_ethernet_mac_address_source_error_names_[device_path] = error_name;
 }
 
 // Private Methods -------------------------------------------------------------

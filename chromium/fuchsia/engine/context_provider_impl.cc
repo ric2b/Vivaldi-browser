@@ -33,12 +33,16 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "components/viz/common/features.h"
 #include "content/public/common/content_switches.h"
-#include "fuchsia/engine/common.h"
+#include "fuchsia/engine/common/web_engine_content_client.h"
+#include "fuchsia/engine/switches.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "media/base/key_system_names.h"
 #include "net/http/http_util.h"
 #include "services/service_manager/sandbox/fuchsia/sandbox_policy_fuchsia.h"
+#include "third_party/widevine/cdm/widevine_cdm_common.h"
 #include "ui/gl/gl_switches.h"
 
 namespace {
@@ -94,13 +98,30 @@ bool SetContentDirectoriesInCommandLine(
                       base::NumberToString(directory_handle_id)}));
   }
 
-  command_line->AppendSwitchASCII(kContentDirectories,
+  command_line->AppendSwitchASCII(switches::kContentDirectories,
                                   base::JoinString(directory_pairs, ","));
 
   return true;
 }
 
+// Returns true if DRM is supported in current configuration. Currently we
+// assume that it is supported on ARM64, but not on x64.
+//
+// TODO(crbug.com/1013412): Detect support for all features required for
+// FuchsiaCdm. Specifically we need to verify that protected memory is supported
+// and that mediacodec API provides hardware video decoders.
+bool IsFuchsiaCdmSupported() {
+#if defined(ARCH_CPU_ARM64)
+  return true;
+#else
+  return false;
+#endif
+}
+
 }  // namespace
+
+const uint32_t ContextProviderImpl::kContextRequestHandleId =
+    PA_HND(PA_USER0, 0);
 
 ContextProviderImpl::ContextProviderImpl() = default;
 
@@ -192,7 +213,7 @@ void ContextProviderImpl::Create(
               &launch_options.handles_to_transfer,
               devtools_listener_channels.back().get())));
     }
-    launch_command.AppendSwitchNative(kRemoteDebuggerHandles,
+    launch_command.AppendSwitchNative(switches::kRemoteDebuggerHandles,
                                       base::JoinString(handles_ids, ","));
   }
 
@@ -203,6 +224,28 @@ void ContextProviderImpl::Create(
   bool enable_vulkan = (features & fuchsia::web::ContextFeatureFlags::VULKAN) ==
                        fuchsia::web::ContextFeatureFlags::VULKAN;
 
+  bool enable_widevine =
+      (features & fuchsia::web::ContextFeatureFlags::WIDEVINE_CDM) ==
+      fuchsia::web::ContextFeatureFlags::WIDEVINE_CDM;
+  if (enable_widevine && !IsFuchsiaCdmSupported()) {
+    LOG(WARNING) << "Widevine is not supported on this device.";
+    enable_widevine = false;
+  }
+
+  bool enable_playready = params.has_playready_key_system();
+  if (enable_playready && !IsFuchsiaCdmSupported()) {
+    LOG(WARNING) << "PlayReady is not supported on this device.";
+    enable_playready = false;
+  }
+
+  bool enable_protected_graphics = enable_widevine || enable_playready;
+
+  if (enable_protected_graphics && !enable_vulkan) {
+    DLOG(ERROR) << "WIDEVINE_CDM and PLAYREADY_CDM features require VULKAN.";
+    context_request.Close(ZX_ERR_INVALID_ARGS);
+    return;
+  }
+
   if (enable_vulkan) {
     launch_command.AppendSwitch(switches::kUseVulkan);
     launch_command.AppendSwitchASCII(switches::kEnableFeatures,
@@ -210,6 +253,41 @@ void ContextProviderImpl::Create(
     launch_command.AppendSwitch(switches::kEnableOopRasterization);
     launch_command.AppendSwitchASCII(switches::kUseGL,
                                      gl::kGLImplementationStubName);
+  }
+
+  if (enable_widevine) {
+    launch_command.AppendSwitch(switches::kEnableWidevine);
+  }
+
+  if (enable_playready) {
+    const std::string& key_system = params.playready_key_system();
+    if (key_system == kWidevineKeySystem || media::IsClearKey(key_system)) {
+      DLOG(ERROR)
+          << "Invalid value for CreateContextParams/playready_key_system: "
+          << key_system;
+      context_request.Close(ZX_ERR_INVALID_ARGS);
+      return;
+    }
+    launch_command.AppendSwitchNative(switches::kPlayreadyKeySystem,
+                                      key_system);
+  }
+
+  bool disable_software_video_decoder =
+      (features &
+       fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER_ONLY) ==
+      fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER_ONLY;
+  bool enable_hardware_video_decoder =
+      (features & fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER) ==
+      fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER;
+  if (disable_software_video_decoder) {
+    if (!enable_hardware_video_decoder) {
+      LOG(ERROR) << "Software video decoding may only be disabled if hardware "
+                    "video decoding is enabled.";
+      context_request.Close(ZX_ERR_INVALID_ARGS);
+      return;
+    }
+
+    launch_command.AppendSwitch(switches::kDisableSoftwareVideoDecoders);
   }
 
   // Validate embedder-supplied product, and optional version, and pass it to
@@ -229,7 +307,7 @@ void ContextProviderImpl::Create(
       }
       product_tag += "/" + params.user_agent_version();
     }
-    launch_command.AppendSwitchNative(kUserAgentProductAndVersion,
+    launch_command.AppendSwitchNative(switches::kUserAgentProductAndVersion,
                                       std::move(product_tag));
   } else if (params.has_user_agent_version()) {
     DLOG(ERROR) << "Embedder version without product.";

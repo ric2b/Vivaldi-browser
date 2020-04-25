@@ -19,6 +19,9 @@ import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsAccessibility;
 
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.VivaldiActionModeCallback;
+
 /**
  * Helper class that initializes various tab UserData objects.
  */
@@ -68,6 +71,13 @@ public final class TabHelpers {
 
         WebContents webContents = tab.getWebContents();
 
+        // NOTE(david@vivaldi.com: In Vivaldi we are using our own ActionModeCallback handler
+        if (ChromeApplication.isVivaldi()) {
+            VivaldiActionModeCallback callback = new VivaldiActionModeCallback(tab, webContents);
+            SelectionPopupController.fromWebContents(webContents).setActionModeCallback(callback);
+            SelectionPopupController.fromWebContents(webContents)
+                    .setNonSelectionActionModeCallback(callback);
+        } else
         // Initializes WebContents objects.
         SelectionPopupController.fromWebContents(webContents)
                 .setActionModeCallback(new ChromeActionModeCallback(tab, webContents));

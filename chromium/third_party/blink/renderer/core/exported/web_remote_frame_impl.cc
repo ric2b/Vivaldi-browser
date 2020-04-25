@@ -153,11 +153,6 @@ void WebRemoteFrameImpl::Close() {
   self_keep_alive_.Clear();
 }
 
-WebRect WebRemoteFrameImpl::VisibleContentRect() const {
-  NOTREACHED();
-  return WebRect();
-}
-
 WebView* WebRemoteFrameImpl::View() const {
   if (!GetFrame()) {
     return nullptr;
@@ -391,7 +386,7 @@ void WebRemoteFrameImpl::WillEnterFullscreen() {
   // PrefixedForCrossProcessDescendant is necessary because:
   //  - The fullscreen element ready check and other checks should be bypassed.
   //  - |ownerElement| will need :-webkit-full-screen-ancestor style in addition
-  //    to :-webkit-full-screen.
+  //    to :fullscreen.
   //
   // TODO(alexmos): currently, this assumes prefixed requests, but in the
   // future, this should plumb in information about which request type

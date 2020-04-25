@@ -138,6 +138,19 @@ const char* GetAsString(PointerType type) {
   }
 }
 
+std::unique_ptr<base::DictionaryValue> GenerateTouchPoint(
+    const TouchEvent& event) {
+  std::unique_ptr<base::DictionaryValue> point(new base::DictionaryValue());
+  point->SetInteger("x", event.x);
+  point->SetInteger("y", event.y);
+  point->SetDouble("radiusX", event.radiusX);
+  point->SetDouble("radiusY", event.radiusY);
+  point->SetDouble("rotationAngle", event.rotationAngle);
+  point->SetDouble("force", event.force);
+  point->SetInteger("id", event.id);
+  return point;
+}
+
 }  // namespace
 
 WebViewImpl::WebViewImpl(const std::string& id,
@@ -182,10 +195,14 @@ WebViewImpl::~WebViewImpl() {}
 
 WebViewImpl* WebViewImpl::CreateChild(const std::string& session_id,
                                       const std::string& target_id) const {
-  DevToolsClientImpl* parent_client =
-      static_cast<DevToolsClientImpl*>(client_.get());
+  // While there may be a deep hierarchy of WebViewImpl instances, the
+  // hierarchy for DevToolsClientImpl is flat - there's a root which
+  // sends/receives over the socket, and all child sessions are considered
+  // its children (one level deep at most).
+  DevToolsClientImpl* root_client =
+      static_cast<DevToolsClientImpl*>(client_.get())->GetRootClient();
   std::unique_ptr<DevToolsClient> child_client(
-      std::make_unique<DevToolsClientImpl>(parent_client, session_id));
+      std::make_unique<DevToolsClientImpl>(root_client, session_id));
   WebViewImpl* child = new WebViewImpl(target_id, w3c_compliant_, browser_info_,
                                        std::move(child_client), nullptr,
                                        navigation_tracker_->IsNonBlocking()
@@ -556,14 +573,7 @@ Status WebViewImpl::DispatchTouchEvent(const TouchEvent& event,
   std::unique_ptr<base::ListValue> point_list(new base::ListValue);
   Status status(kOk);
   if (type == "touchStart" || type == "touchMove") {
-    std::unique_ptr<base::DictionaryValue> point(new base::DictionaryValue());
-    point->SetInteger("x", event.x);
-    point->SetInteger("y", event.y);
-    point->SetDouble("radiusX", event.radiusX);
-    point->SetDouble("radiusY", event.radiusY);
-    point->SetDouble("rotationAngle", event.rotationAngle);
-    point->SetDouble("force", event.force);
-    point->SetInteger("id", event.id);
+    std::unique_ptr<base::DictionaryValue> point = GenerateTouchPoint(event);
     point_list->Append(std::move(point));
   }
   params.Set("touchPoints", std::move(point_list));
@@ -582,6 +592,33 @@ Status WebViewImpl::DispatchTouchEvents(const std::list<TouchEvent>& events,
     Status status = DispatchTouchEvent(*it, async_dispatch_events);
     if (status.IsError())
       return status;
+  }
+  return Status(kOk);
+}
+
+Status WebViewImpl::DispatchTouchEventWithMultiPoints(
+    const std::list<TouchEvent>& events,
+    bool async_dispatch_events) {
+  if (events.size() == 0)
+    return Status(kOk);
+
+  base::DictionaryValue params;
+  std::string type = GetAsString(events.front().type);
+  params.SetString("type", type);
+  std::unique_ptr<base::ListValue> point_list(new base::ListValue);
+  Status status(kOk);
+  for (auto it = events.begin(); it != events.end(); ++it) {
+    if (type == "touchStart" || type == "touchMove") {
+      std::unique_ptr<base::DictionaryValue> point = GenerateTouchPoint(*it);
+      point_list->Append(std::move(point));
+    }
+  }
+  params.Set("touchPoints", std::move(point_list));
+  if (async_dispatch_events) {
+    status = client_->SendCommandAndIgnoreResponse("Input.dispatchTouchEvent",
+                                                   params);
+  } else {
+    status = client_->SendCommand("Input.dispatchTouchEvent", params);
   }
   return Status(kOk);
 }
@@ -684,6 +721,7 @@ Status WebViewImpl::AddCookie(const std::string& name,
                               const std::string& value,
                               const std::string& domain,
                               const std::string& path,
+                              const std::string& sameSite,
                               bool secure,
                               bool httpOnly,
                               double expiry) {
@@ -695,6 +733,8 @@ Status WebViewImpl::AddCookie(const std::string& name,
   params.SetString("path", path);
   params.SetBoolean("secure", secure);
   params.SetBoolean("httpOnly", httpOnly);
+  if (!sameSite.empty())
+    params.SetString("sameSite", sameSite);
   if (expiry >= 0)
     params.SetDouble("expires", expiry);
 

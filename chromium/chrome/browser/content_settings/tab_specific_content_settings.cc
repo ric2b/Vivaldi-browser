@@ -34,7 +34,6 @@
 #include "components/content_settings/core/browser/content_settings_info.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
-#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
@@ -47,6 +46,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/content_constants.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cookies/canonical_cookie.h"
 #include "storage/common/fileapi/file_system_types.h"
@@ -116,8 +116,7 @@ TabSpecificContentSettings::TabSpecificContentSettings(WebContents* tab)
       previous_protocol_handler_(ProtocolHandler::EmptyProtocolHandler()),
       pending_protocol_handler_setting_(CONTENT_SETTING_DEFAULT),
       load_plugins_link_enabled_(true),
-      microphone_camera_state_(MICROPHONE_CAMERA_NOT_ACCESSED),
-      observer_(this) {
+      microphone_camera_state_(MICROPHONE_CAMERA_NOT_ACCESSED) {
   ClearContentSettingsExceptForNavigationRelatedSettings();
   ClearNavigationRelatedContentSettings();
 
@@ -652,6 +651,8 @@ ClearContentSettingsExceptForNavigationRelatedSettings() {
     status.second.allowed = false;
   }
   microphone_camera_state_ = MICROPHONE_CAMERA_NOT_ACCESSED;
+  camera_was_just_granted_on_site_level_ = false;
+  mic_was_just_granted_on_site_level_ = false;
   load_plugins_link_enabled_ = true;
   content_settings::UpdateLocationBarUiForWebContents(web_contents());
 }
@@ -713,6 +714,17 @@ void TabSpecificContentSettings::OnContentSettingChanged(
     ContentSetting setting = map_->GetContentSetting(
         media_origin, media_origin, content_type, std::string());
     ContentSettingsStatus& status = content_settings_status_[content_type];
+
+    if (content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC &&
+        setting == CONTENT_SETTING_ALLOW) {
+      mic_was_just_granted_on_site_level_ = true;
+    }
+
+    if (content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA &&
+        setting == CONTENT_SETTING_ALLOW) {
+      camera_was_just_granted_on_site_level_ = true;
+    }
+
     status.allowed = setting == CONTENT_SETTING_ALLOW;
     status.blocked = setting == CONTENT_SETTING_BLOCK;
   }
@@ -741,7 +753,7 @@ void TabSpecificContentSettings::MaybeSendRendererContentSettingsRules(
   RendererContentSettingRules rules;
   GetRendererContentSettingRules(map_, &rules);
 
-  chrome::mojom::RendererConfigurationAssociatedPtr rc_interface;
+  mojo::AssociatedRemote<chrome::mojom::RendererConfiguration> rc_interface;
   channel->GetRemoteAssociatedInterface(&rc_interface);
   rc_interface->SetContentSettingRules(rules);
 }
@@ -750,7 +762,8 @@ void TabSpecificContentSettings::RenderFrameForInterstitialPageCreated(
     content::RenderFrameHost* render_frame_host) {
   // We want to tell the renderer-side code to ignore content settings for this
   // page.
-  chrome::mojom::ContentSettingsRendererAssociatedPtr content_settings_renderer;
+  mojo::AssociatedRemote<chrome::mojom::ContentSettingsRenderer>
+      content_settings_renderer;
   render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
       &content_settings_renderer);
   content_settings_renderer->SetAsInterstitial();

@@ -14,14 +14,14 @@
 #include "chrome/browser/sharing/click_to_call/feature.h"
 #include "chrome/browser/sharing/shared_clipboard/feature_flags.h"
 #include "chrome/browser/sharing/sharing_constants.h"
-#include "chrome/browser/sharing/sharing_device_capability.h"
 #include "chrome/browser/sharing/sharing_device_registration_result.h"
 #include "chrome/browser/sharing/sharing_sync_preference.h"
 #include "chrome/browser/sharing/vapid_key_manager.h"
+#include "chrome/common/pref_names.h"
 #include "components/gcm_driver/crypto/p256_key_util.h"
 #include "components/gcm_driver/instance_id/instance_id_driver.h"
+#include "components/prefs/pref_service.h"
 #include "components/sync_device_info/device_info.h"
-#include "components/sync_device_info/local_device_info_provider.h"
 #include "crypto/ec_private_key.h"
 
 #if defined(OS_ANDROID)
@@ -29,16 +29,17 @@
 #endif
 
 using instance_id::InstanceID;
+using sync_pb::SharingSpecificFields;
 
 SharingDeviceRegistration::SharingDeviceRegistration(
+    PrefService* pref_service,
     SharingSyncPreference* sharing_sync_preference,
     instance_id::InstanceIDDriver* instance_id_driver,
-    VapidKeyManager* vapid_key_manager,
-    syncer::LocalDeviceInfoProvider* local_device_info_provider)
-    : sharing_sync_preference_(sharing_sync_preference),
+    VapidKeyManager* vapid_key_manager)
+    : pref_service_(pref_service),
+      sharing_sync_preference_(sharing_sync_preference),
       instance_id_driver_(instance_id_driver),
-      vapid_key_manager_(vapid_key_manager),
-      local_device_info_provider_(local_device_info_provider) {}
+      vapid_key_manager_(vapid_key_manager) {}
 
 SharingDeviceRegistration::~SharingDeviceRegistration() = default;
 
@@ -49,12 +50,16 @@ void SharingDeviceRegistration::RegisterDevice(RegistrationCallback callback) {
     return;
   }
 
-  auto registration = sharing_sync_preference_->GetFCMRegistration();
+  base::Optional<SharingSyncPreference::FCMRegistration> registration =
+      sharing_sync_preference_->GetFCMRegistration();
+  base::Optional<syncer::DeviceInfo::SharingInfo> sharing_info =
+      sharing_sync_preference_->GetLocalSharingInfo();
   if (registration && registration->authorized_entity == authorized_entity &&
-      (base::Time::Now() - registration->timestamp < kRegistrationExpiration)) {
+      (base::Time::Now() - registration->timestamp < kRegistrationExpiration) &&
+      sharing_info) {
     // Authorized entity hasn't changed nor has expired, skip to next step.
     RetrieveEncryptionInfo(std::move(callback), registration->authorized_entity,
-                           registration->fcm_token);
+                           sharing_info->fcm_token);
     return;
   }
 
@@ -111,21 +116,14 @@ void SharingDeviceRegistration::OnEncryptionInfoReceived(
     std::string auth_secret) {
   sharing_sync_preference_->SetFCMRegistration(
       SharingSyncPreference::FCMRegistration(authorized_entity,
-                                             fcm_registration_token, p256dh,
-                                             auth_secret, base::Time::Now()));
+                                             base::Time::Now()));
 
-  const syncer::DeviceInfo* local_device_info =
-      local_device_info_provider_->GetLocalDeviceInfo();
-  if (!local_device_info) {
-    std::move(callback).Run(SharingDeviceRegistrationResult::kSyncServiceError);
-    return;
-  }
-
-  int device_capabilities = GetDeviceCapabilities();
-  SharingSyncPreference::Device device(
+  std::set<SharingSpecificFields::EnabledFeatures> enabled_features =
+      GetEnabledFeatures();
+  syncer::DeviceInfo::SharingInfo sharing_info(
       fcm_registration_token, std::move(p256dh), std::move(auth_secret),
-      device_capabilities);
-  sharing_sync_preference_->SetSyncDevice(local_device_info->guid(), device);
+      enabled_features);
+  sharing_sync_preference_->SetLocalSharingInfo(std::move(sharing_info));
   std::move(callback).Run(SharingDeviceRegistrationResult::kSuccess);
 }
 
@@ -138,10 +136,7 @@ void SharingDeviceRegistration::UnregisterDevice(
     return;
   }
 
-  const syncer::DeviceInfo* local_device_info =
-      local_device_info_provider_->GetLocalDeviceInfo();
-  if (local_device_info)
-    sharing_sync_preference_->RemoveDevice(local_device_info->guid());
+  sharing_sync_preference_->ClearLocalSharingInfo();
 
   instance_id_driver_->GetInstanceID(kSharingFCMAppID)
       ->DeleteToken(
@@ -193,21 +188,19 @@ base::Optional<std::string> SharingDeviceRegistration::GetAuthorizationEntity()
   return base::make_optional(std::move(base64_public_key));
 }
 
-int SharingDeviceRegistration::GetDeviceCapabilities() const {
+std::set<SharingSpecificFields::EnabledFeatures>
+SharingDeviceRegistration::GetEnabledFeatures() const {
   // Used in tests
-  if (device_capabilities_testing_value_)
-    return device_capabilities_testing_value_.value();
+  if (enabled_features_testing_value_)
+    return enabled_features_testing_value_.value();
 
-  int device_capabilities = static_cast<int>(SharingDeviceCapability::kNone);
-  if (IsClickToCallSupported()) {
-    device_capabilities |=
-        static_cast<int>(SharingDeviceCapability::kClickToCall);
-  }
-  if (IsSharedClipboardSupported()) {
-    device_capabilities |=
-        static_cast<int>(SharingDeviceCapability::kSharedClipboard);
-  }
-  return device_capabilities;
+  std::set<SharingSpecificFields::EnabledFeatures> enabled_features;
+  if (IsClickToCallSupported())
+    enabled_features.insert(SharingSpecificFields::CLICK_TO_CALL);
+  if (IsSharedClipboardSupported())
+    enabled_features.insert(SharingSpecificFields::SHARED_CLIPBOARD);
+
+  return enabled_features;
 }
 
 bool SharingDeviceRegistration::IsClickToCallSupported() const {
@@ -222,10 +215,15 @@ bool SharingDeviceRegistration::IsClickToCallSupported() const {
 }
 
 bool SharingDeviceRegistration::IsSharedClipboardSupported() const {
+  // Check the enterprise policy for Shared Clipboard.
+  if (pref_service_ &&
+      !pref_service_->GetBoolean(prefs::kSharedClipboardEnabled)) {
+    return false;
+  }
   return base::FeatureList::IsEnabled(kSharedClipboardReceiver);
 }
 
-void SharingDeviceRegistration::SetDeviceCapabilityForTesting(
-    int device_capabilities) {
-  device_capabilities_testing_value_ = device_capabilities;
+void SharingDeviceRegistration::SetEnabledFeaturesForTesting(
+    std::set<SharingSpecificFields::EnabledFeatures> enabled_feautres) {
+  enabled_features_testing_value_ = std::move(enabled_feautres);
 }

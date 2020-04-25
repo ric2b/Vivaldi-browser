@@ -1,0 +1,23 @@
+// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+
+#ifndef BASE_VIVALDI_USER_AGENT_H_
+#define BASE_VIVALDI_USER_AGENT_H_
+
+#include "base/base_export.h"
+#include "base/strings/string_piece.h"
+
+class GURL;
+
+namespace vivaldi_user_agent {
+
+extern BASE_EXPORT const char kVivaldiSuffix[];
+
+// Couple of globals to pass GURL and KURL arguments through call chain without
+// patching multiple Chromium call sites.
+extern BASE_EXPORT const GURL* g_ui_thread_gurl;
+
+BASE_EXPORT bool IsWhiteListedHost(base::StringPiece host);
+
+}  // namespace vivaldi_user_agent
+
+#endif  // BASE_VIVALDI_USER_AGENT_H_

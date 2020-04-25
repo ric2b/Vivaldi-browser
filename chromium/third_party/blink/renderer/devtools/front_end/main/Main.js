@@ -44,8 +44,9 @@ Main.Main = class {
    * @param {string} label
    */
   static time(label) {
-    if (Host.isUnderTest())
+    if (Host.isUnderTest()) {
       return;
+    }
     console.time(label);
   }
 
@@ -53,17 +54,18 @@ Main.Main = class {
    * @param {string} label
    */
   static timeEnd(label) {
-    if (Host.isUnderTest())
+    if (Host.isUnderTest()) {
       return;
+    }
     console.timeEnd(label);
   }
 
   async _loaded() {
     console.timeStamp('Main._loaded');
-    await Runtime.appStarted();
-    Runtime.setPlatform(Host.platform());
-    Runtime.setL10nCallback(ls);
-    InspectorFrontendHost.getPreferences(this._gotPreferences.bind(this));
+    await Root.Runtime.appStarted();
+    Root.Runtime.setPlatform(Host.platform());
+    Root.Runtime.setL10nCallback(ls);
+    Host.InspectorFrontendHost.getPreferences(this._gotPreferences.bind(this));
   }
 
   /**
@@ -71,8 +73,9 @@ Main.Main = class {
    */
   _gotPreferences(prefs) {
     console.timeStamp('Main._gotPreferences');
-    if (Host.isUnderTest(prefs))
+    if (Host.isUnderTest(prefs)) {
       self.runtime.useTestBase();
+    }
     this._createSettings(prefs);
     this._createAppUI();
   }
@@ -84,10 +87,12 @@ Main.Main = class {
   _createSettings(prefs) {
     this._initializeExperiments();
     let storagePrefix = '';
-    if (Host.isCustomDevtoolsFrontend())
+    if (Host.isCustomDevtoolsFrontend()) {
       storagePrefix = '__custom__';
-    else if (!Runtime.queryParam('can_dock') && !!Runtime.queryParam('debugFrontend') && !Host.isUnderTest())
+    } else if (
+        !Root.Runtime.queryParam('can_dock') && !!Root.Runtime.queryParam('debugFrontend') && !Host.isUnderTest()) {
       storagePrefix = '__bundled__';
+    }
 
     let localStorage;
     if (!Host.isUnderTest() && window.localStorage) {
@@ -97,57 +102,67 @@ Main.Main = class {
       localStorage = new Common.SettingsStorage({}, undefined, undefined, undefined, storagePrefix);
     }
     const globalStorage = new Common.SettingsStorage(
-        prefs, InspectorFrontendHost.setPreference, InspectorFrontendHost.removePreference,
-        InspectorFrontendHost.clearPreferences, storagePrefix);
+        prefs, Host.InspectorFrontendHost.setPreference, Host.InspectorFrontendHost.removePreference,
+        Host.InspectorFrontendHost.clearPreferences, storagePrefix);
     Common.settings = new Common.Settings(globalStorage, localStorage);
-    if (!Host.isUnderTest())
+    if (!Host.isUnderTest()) {
       new Common.VersionController().updateVersion();
+    }
   }
 
   _initializeExperiments() {
     // Keep this sorted alphabetically: both keys and values.
-    Runtime.experiments.register('applyCustomStylesheet', 'Allow custom UI themes');
-    Runtime.experiments.register('captureNodeCreationStacks', 'Capture node creation stacks');
-    Runtime.experiments.register('sourcesPrettyPrint', 'Automatically pretty print in the Sources Panel');
-    Runtime.experiments.register('backgroundServices', 'Background web platform feature events', true);
-    Runtime.experiments.register('backgroundServicesNotifications', 'Background services section for Notifications');
-    Runtime.experiments.register('backgroundServicesPaymentHandler', 'Background services section for Payment Handler');
-    Runtime.experiments.register('backgroundServicesPushMessaging', 'Background services section for Push Messaging');
-    Runtime.experiments.register(
+    Root.Runtime.experiments.register('applyCustomStylesheet', 'Allow custom UI themes');
+    Root.Runtime.experiments.register('captureNodeCreationStacks', 'Capture node creation stacks');
+    Root.Runtime.experiments.register('sourcesPrettyPrint', 'Automatically pretty print in the Sources Panel');
+    Root.Runtime.experiments.register('backgroundServices', 'Background web platform feature events', true);
+    Root.Runtime.experiments.register(
+        'backgroundServicesNotifications', 'Background services section for Notifications');
+    Root.Runtime.experiments.register(
+        'backgroundServicesPaymentHandler', 'Background services section for Payment Handler');
+    Root.Runtime.experiments.register(
+        'backgroundServicesPushMessaging', 'Background services section for Push Messaging');
+    Root.Runtime.experiments.register(
         'backgroundServicesPeriodicBackgroundSync', 'Background services section for Periodic Background Sync');
-    Runtime.experiments.register('blackboxJSFramesOnTimeline', 'Blackbox JavaScript frames on Timeline', true);
-    Runtime.experiments.register('emptySourceMapAutoStepping', 'Empty sourcemap auto-stepping');
-    Runtime.experiments.register('inputEventsOnTimelineOverview', 'Input events on Timeline overview', true);
-    Runtime.experiments.register('liveHeapProfile', 'Live heap profile', true);
-    Runtime.experiments.register('nativeHeapProfiler', 'Native memory sampling heap profiler', true);
-    Runtime.experiments.register('protocolMonitor', 'Protocol Monitor');
-    Runtime.experiments.register('samplingHeapProfilerTimeline', 'Sampling heap profiler timeline', true);
-    Runtime.experiments.register('sourceDiff', 'Source diff');
-    Runtime.experiments.register('splitInDrawer', 'Split in drawer', true);
-    Runtime.experiments.register('spotlight', 'Spotlight', true);
-    Runtime.experiments.register('terminalInDrawer', 'Terminal in drawer', true);
+    Root.Runtime.experiments.register('blackboxJSFramesOnTimeline', 'Blackbox JavaScript frames on Timeline', true);
+    Root.Runtime.experiments.register('cssOverview', 'CSS Overview');
+    Root.Runtime.experiments.register('emptySourceMapAutoStepping', 'Empty sourcemap auto-stepping');
+    Root.Runtime.experiments.register('inputEventsOnTimelineOverview', 'Input events on Timeline overview', true);
+    Root.Runtime.experiments.register('liveHeapProfile', 'Live heap profile', true);
+    Root.Runtime.experiments.register('mediaInspector', 'Media Element Inspection');
+    Root.Runtime.experiments.register('nativeHeapProfiler', 'Native memory sampling heap profiler', true);
+    Root.Runtime.experiments.register('protocolMonitor', 'Protocol Monitor');
+    Root.Runtime.experiments.register(
+        'recordCoverageWithPerformanceTracing', 'Record coverage while performance tracing');
+    Root.Runtime.experiments.register('samplingHeapProfilerTimeline', 'Sampling heap profiler timeline', true);
+    Root.Runtime.experiments.register('sourceDiff', 'Source diff');
+    Root.Runtime.experiments.register('splitInDrawer', 'Split in drawer', true);
+    Root.Runtime.experiments.register('spotlight', 'Spotlight', true);
 
     // Timeline
-    Runtime.experiments.register('timelineEventInitiators', 'Timeline: event initiators');
-    Runtime.experiments.register('timelineFlowEvents', 'Timeline: flow events', true);
-    Runtime.experiments.register('timelineInvalidationTracking', 'Timeline: invalidation tracking', true);
-    Runtime.experiments.register('timelineShowAllEvents', 'Timeline: show all events', true);
-    Runtime.experiments.register('timelineV8RuntimeCallStats', 'Timeline: V8 Runtime Call Stats on Timeline', true);
-    Runtime.experiments.register('timelineWebGL', 'Timeline: WebGL-based flamechart');
+    Root.Runtime.experiments.register('timelineEventInitiators', 'Timeline: event initiators');
+    Root.Runtime.experiments.register('timelineFlowEvents', 'Timeline: flow events', true);
+    Root.Runtime.experiments.register('timelineInvalidationTracking', 'Timeline: invalidation tracking', true);
+    Root.Runtime.experiments.register('timelineShowAllEvents', 'Timeline: show all events', true);
+    Root.Runtime.experiments.register(
+        'timelineV8RuntimeCallStats', 'Timeline: V8 Runtime Call Stats on Timeline', true);
+    Root.Runtime.experiments.register('timelineWebGL', 'Timeline: WebGL-based flamechart');
 
-    Runtime.experiments.cleanUpStaleExperiments();
-    const enabledExperiments = Runtime.queryParam('enabledExperiments');
-    if (enabledExperiments)
-      Runtime.experiments.setServerEnabledExperiments(enabledExperiments.split(';'));
-    Runtime.experiments.setDefaultExperiments([
+    Root.Runtime.experiments.cleanUpStaleExperiments();
+    const enabledExperiments = Root.Runtime.queryParam('enabledExperiments');
+    if (enabledExperiments) {
+      Root.Runtime.experiments.setServerEnabledExperiments(enabledExperiments.split(';'));
+    }
+    Root.Runtime.experiments.setDefaultExperiments([
       'backgroundServices',
       'backgroundServicesNotifications',
       'backgroundServicesPushMessaging',
       'backgroundServicesPaymentHandler',
     ]);
 
-    if (Host.isUnderTest() && Runtime.queryParam('test').includes('live-line-level-heap-profile.js'))
-      Runtime.experiments.enableForTest('liveHeapProfile');
+    if (Host.isUnderTest() && Root.Runtime.queryParam('test').includes('live-line-level-heap-profile.js')) {
+      Root.Runtime.experiments.enableForTest('liveHeapProfile');
+    }
   }
 
   /**
@@ -169,8 +184,8 @@ Main.Main = class {
 
     this._addMainEventListeners(document);
 
-    const canDock = !!Runtime.queryParam('can_dock');
-    UI.zoomManager = new UI.ZoomManager(window, InspectorFrontendHost);
+    const canDock = !!Root.Runtime.queryParam('can_dock');
+    UI.zoomManager = new UI.ZoomManager(window, Host.InspectorFrontendHost);
     UI.inspectorView = UI.InspectorView.instance();
     UI.ContextMenu.initialize();
     UI.ContextMenu.installHandler(document);
@@ -234,21 +249,22 @@ Main.Main = class {
     const toggleSearchNodeAction = UI.actionRegistry.action('elements.toggle-element-search');
     // TODO: we should not access actions from other modules.
     if (toggleSearchNodeAction) {
-      InspectorFrontendHost.events.addEventListener(
-          InspectorFrontendHostAPI.Events.EnterInspectElementMode,
+      Host.InspectorFrontendHost.events.addEventListener(
+          Host.InspectorFrontendHostAPI.Events.EnterInspectElementMode,
           toggleSearchNodeAction.execute.bind(toggleSearchNodeAction), this);
     }
-    InspectorFrontendHost.events.addEventListener(
-        InspectorFrontendHostAPI.Events.RevealSourceLine, this._revealSourceLine, this);
+    Host.InspectorFrontendHost.events.addEventListener(
+        Host.InspectorFrontendHostAPI.Events.RevealSourceLine, this._revealSourceLine, this);
 
     UI.inspectorView.createToolbars();
-    InspectorFrontendHost.loadCompleted();
+    Host.InspectorFrontendHost.loadCompleted();
 
     const extensions = self.runtime.extensions(Common.QueryParamHandler);
     for (const extension of extensions) {
-      const value = Runtime.queryParam(extension.descriptor()['name']);
-      if (value !== null)
+      const value = Root.Runtime.queryParam(extension.descriptor()['name']);
+      if (value !== null) {
         extension.instance().then(handleQueryParam.bind(null, value));
+      }
     }
 
     /**
@@ -268,10 +284,11 @@ Main.Main = class {
     Main.Main.time('Main._initializeTarget');
     const instances =
         await Promise.all(self.runtime.extensions('early-initialization').map(extension => extension.instance()));
-    for (const instance of instances)
+    for (const instance of instances) {
       await /** @type {!Common.Runnable} */ (instance).run();
+    }
     // Used for browser tests.
-    InspectorFrontendHost.readyForTest();
+    Host.InspectorFrontendHost.readyForTest();
     // Asynchronously run the extensions.
     setTimeout(this._lateInitialization.bind(this), 100);
     Main.Main.timeEnd('Main._initializeTarget');
@@ -293,8 +310,9 @@ Main.Main = class {
        * @param {!Common.Event} event
        */
       async function changeListener(event) {
-        if (!event.data)
+        if (!event.data) {
           return;
+        }
         Common.settings.moduleSetting(setting).removeChangeListener(changeListener);
         (/** @type {!Common.Runnable} */ (await extension.instance())).run();
       }
@@ -318,7 +336,7 @@ Main.Main = class {
     ];
     const actionKeys =
         UI.shortcutRegistry.keysForActions(forwardedActions).map(UI.KeyboardShortcut.keyCodeAndModifiersFromKey);
-    InspectorFrontendHost.setWhitelistedShortcuts(JSON.stringify(actionKeys));
+    Host.InspectorFrontendHost.setWhitelistedShortcuts(JSON.stringify(actionKeys));
   }
 
   _registerMessageSinkListener() {
@@ -329,8 +347,9 @@ Main.Main = class {
      */
     function messageAdded(event) {
       const message = /** @type {!Common.Console.Message} */ (event.data);
-      if (message.show)
+      if (message.show) {
         Common.console.show();
+      }
     }
   }
 
@@ -392,8 +411,9 @@ Main.Main = class {
 
     const inspectElementModeShortcuts =
         UI.shortcutRegistry.shortcutDescriptorsForAction('elements.toggle-element-search');
-    if (inspectElementModeShortcuts.length)
+    if (inspectElementModeShortcuts.length) {
       section.addKey(inspectElementModeShortcuts[0], Common.UIString('Select node to inspect'));
+    }
 
     const openResourceShortcut = UI.KeyboardShortcut.makeDescriptor('p', UI.KeyboardShortcut.Modifiers.CtrlOrMeta);
     section.addKey(openResourceShortcut, Common.UIString('Go to source'));
@@ -408,8 +428,9 @@ Main.Main = class {
   }
 
   _postDocumentKeyDown(event) {
-    if (!event.handled)
+    if (!event.handled) {
       UI.shortcutRegistry.handleShortcut(event);
+    }
   }
 
   /**
@@ -420,15 +441,18 @@ Main.Main = class {
     eventCopy['original'] = event;
     const document = event.target && event.target.ownerDocument;
     const target = document ? document.deepActiveElement() : null;
-    if (target)
+    if (target) {
       target.dispatchEvent(eventCopy);
-    if (eventCopy.handled)
+    }
+    if (eventCopy.handled) {
       event.preventDefault();
+    }
   }
 
   _contextMenuEventFired(event) {
-    if (event.handled || event.target.classList.contains('popup-glasspane'))
+    if (event.handled || event.target.classList.contains('popup-glasspane')) {
       event.preventDefault();
+    }
   }
 
   /**
@@ -461,18 +485,19 @@ Main.Main.ZoomActionDelegate = class {
    * @return {boolean}
    */
   handleAction(context, actionId) {
-    if (InspectorFrontendHost.isHostedMode())
+    if (Host.InspectorFrontendHost.isHostedMode()) {
       return false;
+    }
 
     switch (actionId) {
       case 'main.zoom-in':
-        InspectorFrontendHost.zoomIn();
+        Host.InspectorFrontendHost.zoomIn();
         return true;
       case 'main.zoom-out':
-        InspectorFrontendHost.zoomOut();
+        Host.InspectorFrontendHost.zoomOut();
         return true;
       case 'main.zoom-reset':
-        InspectorFrontendHost.resetZoom();
+        Host.InspectorFrontendHost.resetZoom();
         return true;
     }
     return false;
@@ -494,8 +519,9 @@ Main.Main.SearchActionDelegate = class {
   handleAction(context, actionId) {
     const searchableView = UI.SearchableView.fromElement(document.deepActiveElement()) ||
         UI.inspectorView.currentPanelDeprecated().searchableView();
-    if (!searchableView)
+    if (!searchableView) {
       return false;
+    }
     switch (actionId) {
       case 'main.search-in-panel.find':
         return searchableView.handleFindShortcut();
@@ -541,8 +567,9 @@ Main.Main.MainMenuItem = class {
           'Placement of DevTools relative to the page. (%s to restore last position)', toggleDockSideShorcuts[0].name);
       dockItemElement.appendChild(titleElement);
       const dockItemToolbar = new UI.Toolbar('', dockItemElement);
-      if (Host.isMac() && !UI.themeSupport.hasTheme())
+      if (Host.isMac() && !UI.themeSupport.hasTheme()) {
         dockItemToolbar.makeBlueOnHover();
+      }
       const undock = new UI.ToolbarToggle(Common.UIString('Undock into separate window'), 'largeicon-undock');
       const bottom = new UI.ToolbarToggle(Common.UIString('Dock to bottom'), 'largeicon-dock-to-bottom');
       const right = new UI.ToolbarToggle(Common.UIString('Dock to right'), 'largeicon-dock-to-right');
@@ -569,12 +596,13 @@ Main.Main.MainMenuItem = class {
       dockItemToolbar.appendToolbarItem(right);
       dockItemElement.addEventListener('keydown', event => {
         let dir = 0;
-        if (event.key === 'ArrowLeft')
+        if (event.key === 'ArrowLeft') {
           dir = -1;
-        else if (event.key === 'ArrowRight')
+        } else if (event.key === 'ArrowRight') {
           dir = 1;
-        else
+        } else {
           return;
+        }
 
         const buttons = [undock, left, bottom, right];
         let index = buttons.findIndex(button => button.element.hasFocus());
@@ -586,17 +614,29 @@ Main.Main.MainMenuItem = class {
       contextMenu.headerSection().appendCustomItem(dockItemElement);
     }
 
+
+    const button = this._item.element;
+
     /**
      * @param {string} side
+     * @suppressGlobalPropertiesCheck
      */
     function setDockSide(side) {
+      const hadKeyboardFocus = document.deepActiveElement().hasAttribute('data-keyboard-focus');
+      Components.dockController.once(Components.DockController.Events.AfterDockSideChanged).then(() => {
+        button.focus();
+        if (hadKeyboardFocus) {
+          UI.markAsFocusedByKeyboard(button);
+        }
+      });
       Components.dockController.setDockSide(side);
       contextMenu.discard();
     }
 
     if (Components.dockController.dockSide() === Components.DockController.State.Undocked &&
-        SDK.targetManager.mainTarget() && SDK.targetManager.mainTarget().type() === SDK.Target.Type.Frame)
+        SDK.targetManager.mainTarget() && SDK.targetManager.mainTarget().type() === SDK.Target.Type.Frame) {
       contextMenu.defaultSection().appendAction('inspector_main.focus-debuggee', Common.UIString('Focus debuggee'));
+    }
 
     contextMenu.defaultSection().appendAction(
         'main.toggle-drawer',
@@ -607,10 +647,12 @@ Main.Main.MainMenuItem = class {
     const extensions = self.runtime.extensions('view', undefined, true);
     for (const extension of extensions) {
       const descriptor = extension.descriptor();
-      if (descriptor['persistence'] !== 'closeable')
+      if (descriptor['persistence'] !== 'closeable') {
         continue;
-      if (descriptor['location'] !== 'drawer-view' && descriptor['location'] !== 'panel')
+      }
+      if (descriptor['location'] !== 'drawer-view' && descriptor['location'] !== 'panel') {
         continue;
+      }
       moreTools.defaultSection().appendItem(
           extension.title(), UI.viewManager.showView.bind(UI.viewManager, descriptor['id']));
     }
@@ -650,8 +692,9 @@ Main.Main.PauseListener = class {
 Main.sendOverProtocol = function(method, params) {
   return new Promise((resolve, reject) => {
     Protocol.test.sendRawMessage(method, params, (err, ...results) => {
-      if (err)
+      if (err) {
         return reject(err);
+      }
       return resolve(results);
     });
   });

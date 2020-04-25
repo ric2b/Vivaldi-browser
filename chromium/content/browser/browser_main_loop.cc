@@ -21,6 +21,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/memory_pressure_monitor.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/metrics/field_trial.h"
@@ -79,6 +80,7 @@
 #include "content/browser/media/media_internals.h"
 #include "content/browser/media/media_keys_listener_manager_impl.h"
 #include "content/browser/net/browser_online_state_observer.h"
+#include "content/browser/network_service_instance_impl.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/scheduler/browser_task_executor.h"
@@ -102,6 +104,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/gpu_data_manager_observer.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/system_connector.h"
@@ -366,14 +369,20 @@ std::unique_ptr<base::MemoryPressureMonitor> CreateMemoryPressureMonitor(
   if (command_line.HasSwitch(switches::kBrowserTest))
     return nullptr;
 
+  std::unique_ptr<util::MultiSourceMemoryPressureMonitor> monitor;
+
 #if defined(OS_CHROMEOS)
   if (chromeos::switches::MemoryPressureHandlingEnabled())
-    return std::make_unique<util::MultiSourceMemoryPressureMonitor>();
+    monitor = std::make_unique<util::MultiSourceMemoryPressureMonitor>();
 #elif defined(OS_MACOSX) || defined(OS_WIN)
-  return std::make_unique<util::MultiSourceMemoryPressureMonitor>();
+  monitor = std::make_unique<util::MultiSourceMemoryPressureMonitor>();
 #endif
   // No memory monitor on other platforms...
-  return nullptr;
+
+  if (monitor)
+    monitor->Start();
+
+  return monitor;
 }
 
 #if defined(OS_CHROMEOS)
@@ -705,8 +714,7 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
     TRACE_EVENT0("startup", "BrowserMainLoop::Subsystem:NetworkChangeNotifier");
     // On Android if reduced mode started network service this would already be
     //  created.
-    if (!net::NetworkChangeNotifier::HasNetworkChangeNotifier())
-      network_change_notifier_ = net::NetworkChangeNotifier::Create();
+    network_change_notifier_ = net::NetworkChangeNotifier::CreateIfNeeded();
   }
   {
     TRACE_EVENT0("startup", "BrowserMainLoop::Subsystem:ScreenlockMonitor");
@@ -883,23 +891,23 @@ void BrowserMainLoop::CreateStartupTasks() {
   startup_task_runner_ = std::make_unique<StartupTaskRunner>(
       base::OnceCallback<void(int)>(), base::ThreadTaskRunnerHandle::Get());
 #endif
-  StartupTask pre_create_threads =
-      base::Bind(&BrowserMainLoop::PreCreateThreads, base::Unretained(this));
+  StartupTask pre_create_threads = base::BindOnce(
+      &BrowserMainLoop::PreCreateThreads, base::Unretained(this));
   startup_task_runner_->AddTask(std::move(pre_create_threads));
 
   StartupTask create_threads =
-      base::Bind(&BrowserMainLoop::CreateThreads, base::Unretained(this));
+      base::BindOnce(&BrowserMainLoop::CreateThreads, base::Unretained(this));
   startup_task_runner_->AddTask(std::move(create_threads));
 
-  StartupTask post_create_threads =
-      base::Bind(&BrowserMainLoop::PostCreateThreads, base::Unretained(this));
+  StartupTask post_create_threads = base::BindOnce(
+      &BrowserMainLoop::PostCreateThreads, base::Unretained(this));
   startup_task_runner_->AddTask(std::move(post_create_threads));
 
-  StartupTask browser_thread_started = base::Bind(
+  StartupTask browser_thread_started = base::BindOnce(
       &BrowserMainLoop::BrowserThreadsStarted, base::Unretained(this));
   startup_task_runner_->AddTask(std::move(browser_thread_started));
 
-  StartupTask pre_main_message_loop_run = base::Bind(
+  StartupTask pre_main_message_loop_run = base::BindOnce(
       &BrowserMainLoop::PreMainMessageLoopRun, base::Unretained(this));
   startup_task_runner_->AddTask(std::move(pre_main_message_loop_run));
 
@@ -1083,6 +1091,8 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
 
   memory_pressure_monitor_.reset();
 
+  ShutDownNetworkService();
+
 #if defined(OS_MACOSX)
   BrowserCompositorMac::DisableRecyclingForShutdown();
 #endif
@@ -1193,13 +1203,13 @@ viz::ServerSharedBitmapManager* BrowserMainLoop::GetServerSharedBitmapManager()
 #endif
 
 void BrowserMainLoop::GetCompositingModeReporter(
-    viz::mojom::CompositingModeReporterRequest request) {
+    mojo::PendingReceiver<viz::mojom::CompositingModeReporter> receiver) {
 #if defined(OS_ANDROID)
   // Android doesn't support non-gpu compositing modes, and doesn't make a
   // CompositingModeReporter.
   return;
 #else
-  compositing_mode_reporter_impl_->BindRequest(std::move(request));
+  compositing_mode_reporter_impl_->BindReceiver(std::move(receiver));
 #endif
 }
 
@@ -1416,8 +1426,8 @@ int BrowserMainLoop::BrowserThreadsStarted() {
     // The default is to delay the secondary GPU process for 120 seconds.
     bool delayed = !parsed_command_line_.HasSwitch(
         switches::kNoDelayForDX12VulkanInfoCollection);
-    GpuDataManagerImpl::GetInstance()->RequestGpuSupportedRuntimeVersion(
-        delayed);
+    GpuDataManagerImpl::GetInstance()->RequestDxdiagDx12VulkanGpuInfoIfNeeded(
+        kGpuInfoRequestDx12Vulkan, delayed);
   }
 
 #endif

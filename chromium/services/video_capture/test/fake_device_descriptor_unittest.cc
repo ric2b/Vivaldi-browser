@@ -5,6 +5,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/run_loop.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/video_capture/public/cpp/mock_receiver.h"
 #include "services/video_capture/public/mojom/device.mojom.h"
 #include "services/video_capture/test/fake_device_descriptor_test.h"
@@ -60,9 +61,9 @@ TEST_F(FakeVideoCaptureDeviceDescriptorTest, AccessIsRevokedOnSecondAccess) {
   factory_->CreateDevice(
       i420_fake_device_info_.descriptor.device_id,
       mojo::MakeRequest(&device_proxy_1),
-      base::Bind(&MockCreateDeviceProxyCallback::Run,
-                 base::Unretained(&create_device_proxy_callback_1)));
-  device_proxy_1.set_connection_error_handler(base::Bind(
+      base::BindOnce(&MockCreateDeviceProxyCallback::Run,
+                     base::Unretained(&create_device_proxy_callback_1)));
+  device_proxy_1.set_connection_error_handler(base::BindOnce(
       [](bool* access_revoked, base::RunLoop* wait_loop_1) {
         *access_revoked = true;
         wait_loop_1->Quit();
@@ -80,11 +81,11 @@ TEST_F(FakeVideoCaptureDeviceDescriptorTest, AccessIsRevokedOnSecondAccess) {
   factory_->CreateDevice(
       i420_fake_device_info_.descriptor.device_id,
       mojo::MakeRequest(&device_proxy_2),
-      base::Bind(&MockCreateDeviceProxyCallback::Run,
-                 base::Unretained(&create_device_proxy_callback_2)));
+      base::BindOnce(&MockCreateDeviceProxyCallback::Run,
+                     base::Unretained(&create_device_proxy_callback_2)));
   device_proxy_2.set_connection_error_handler(
-      base::Bind([](bool* access_revoked) { *access_revoked = true; },
-                 &device_access_2_revoked));
+      base::BindOnce([](bool* access_revoked) { *access_revoked = true; },
+                     &device_access_2_revoked));
   wait_loop_1.Run();
   wait_loop_2.Run();
   ASSERT_TRUE(device_access_1_revoked);
@@ -102,7 +103,7 @@ TEST_F(FakeVideoCaptureDeviceDescriptorTest, CanUseSecondRequestedProxy) {
   factory_->CreateDevice(
       i420_fake_device_info_.descriptor.device_id,
       mojo::MakeRequest(&device_proxy_2),
-      base::Bind(
+      base::BindOnce(
           [](base::RunLoop* wait_loop,
              mojom::DeviceAccessResultCode result_code) { wait_loop->Quit(); },
           &wait_loop));
@@ -117,15 +118,14 @@ TEST_F(FakeVideoCaptureDeviceDescriptorTest, CanUseSecondRequestedProxy) {
       media::PowerLineFrequency::FREQUENCY_DEFAULT;
 
   base::RunLoop wait_loop_2;
-  mojom::ReceiverPtr receiver_proxy;
-  MockReceiver receiver(mojo::MakeRequest(&receiver_proxy));
+  mojo::PendingRemote<mojom::Receiver> subscriber;
+  MockReceiver receiver(subscriber.InitWithNewPipeAndPassReceiver());
   EXPECT_CALL(receiver, DoOnNewBuffer(_, _)).Times(AtLeast(1));
   EXPECT_CALL(receiver, DoOnFrameReadyInBuffer(_, _, _, _))
       .WillRepeatedly(
           InvokeWithoutArgs([&wait_loop_2]() { wait_loop_2.Quit(); }));
 
-  device_proxy_2->Start(arbitrary_requested_settings,
-                        std::move(receiver_proxy));
+  device_proxy_2->Start(arbitrary_requested_settings, std::move(subscriber));
   wait_loop_2.Run();
 }
 

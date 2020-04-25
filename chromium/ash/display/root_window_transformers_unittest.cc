@@ -39,7 +39,7 @@
 namespace ash {
 namespace {
 
-const char kWallpaperView[] = "WallpaperView";
+const char kWallpaperView[] = "WallpaperViewWidget";
 
 class TestEventHandler : public ui::EventHandler {
  public:

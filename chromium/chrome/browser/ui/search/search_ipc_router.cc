@@ -440,6 +440,47 @@ void SearchIPCRouter::ConfirmThemeChanges() {
   delegate_->OnConfirmThemeChanges();
 }
 
+void SearchIPCRouter::QueryAutocomplete(
+    const base::string16& input,
+    chrome::mojom::EmbeddedSearch::QueryAutocompleteCallback callback) {
+  if (!policy_->ShouldProcessQueryAutocomplete(is_active_tab_)) {
+    std::move(callback).Run(chrome::mojom::AutocompleteResult::New(
+        input, std::vector<chrome::mojom::AutocompleteMatchPtr>(),
+        chrome::mojom::AutocompleteResultStatus::SKIPPED));
+    return;
+  }
+
+  delegate_->QueryAutocomplete(input, std::move(callback));
+}
+
+void SearchIPCRouter::StopAutocomplete(bool clear_result) {
+  if (!policy_->ShouldProcessStopAutocomplete(is_active_tab_)) {
+    return;
+  }
+
+  delegate_->StopAutocomplete(clear_result);
+}
+
+void SearchIPCRouter::BlocklistPromo(const std::string& promo_id) {
+  if (!policy_->ShouldProcessBlocklistPromo()) {
+    return;
+  }
+
+  delegate_->BlocklistPromo(promo_id);
+}
+
+void SearchIPCRouter::DeleteAutocompleteMatch(
+    uint8_t line,
+    chrome::mojom::EmbeddedSearch::DeleteAutocompleteMatchCallback callback) {
+  if (!policy_->ShouldProcessDeleteAutocompleteMatch()) {
+    std::move(callback).Run(chrome::mojom::DeleteAutocompleteMatchResult::New(
+        false, std::vector<chrome::mojom::AutocompleteMatchPtr>()));
+    return;
+  }
+
+  delegate_->DeleteAutocompleteMatch(line, std::move(callback));
+}
+
 void SearchIPCRouter::set_delegate_for_testing(Delegate* delegate) {
   DCHECK(delegate);
   delegate_ = delegate;

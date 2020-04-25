@@ -31,7 +31,7 @@
 /**
  * @unrestricted
  */
-UI.SyntaxHighlighter = class {
+export default class SyntaxHighlighter {
   /**
    * @param {string} mimeType
    * @param {boolean} stripExtraWhitespace
@@ -49,8 +49,9 @@ UI.SyntaxHighlighter = class {
   createSpan(content, className) {
     const span = createElement('span');
     span.className = className.replace(/\S+/g, 'cm-$&');
-    if (this._stripExtraWhitespace && className !== 'whitespace')
+    if (this._stripExtraWhitespace && className !== 'whitespace') {
       content = content.replace(/^[\n\r]*/, '').replace(/\s*$/, '');
+    }
     span.createTextChild(content);
     return span;
   }
@@ -68,7 +69,7 @@ UI.SyntaxHighlighter = class {
 
     /**
      * @param {!TextUtils.TokenizerFactory} tokenizerFactory
-     * @this {UI.SyntaxHighlighter}
+     * @this {SyntaxHighlighter}
      */
     function processTokens(tokenizerFactory) {
       node.removeChildren();
@@ -81,8 +82,9 @@ UI.SyntaxHighlighter = class {
           const plainText = line.substring(plainTextStart, line.length);
           node.createTextChild(plainText);
         }
-        if (i < lines.length - 1)
+        if (i < lines.length - 1) {
           node.createTextChild('\n');
+        }
       }
     }
 
@@ -91,11 +93,12 @@ UI.SyntaxHighlighter = class {
      * @param {?string} tokenType
      * @param {number} column
      * @param {number} newColumn
-     * @this {UI.SyntaxHighlighter}
+     * @this {SyntaxHighlighter}
      */
     function processToken(token, tokenType, column, newColumn) {
-      if (!tokenType)
+      if (!tokenType) {
         return;
+      }
 
       if (column > plainTextStart) {
         const plainText = line.substring(plainTextStart, column);
@@ -105,4 +108,13 @@ UI.SyntaxHighlighter = class {
       plainTextStart = newColumn;
     }
   }
-};
+}
+
+/* Legacy exported object*/
+self.UI = self.UI || {};
+
+/* Legacy exported object*/
+UI = UI || {};
+
+/** @constructor */
+UI.SyntaxHighlighter = SyntaxHighlighter;

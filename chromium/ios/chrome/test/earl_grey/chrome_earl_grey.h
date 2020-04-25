@@ -240,6 +240,18 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // exception if operation not succeeded.
 - (void)resetTabUsageRecorder;
 
+// Returns the tab title of the current tab.
+- (NSString*)currentTabTitle;
+
+// Returns the tab title of the next tab. Assumes that next tab exists.
+- (NSString*)nextTabTitle;
+
+// Returns a unique identifier for the current Tab.
+- (NSString*)currentTabID;
+
+// Returns a unique identifier for the next Tab.
+- (NSString*)nextTabID;
+
 #pragma mark - SignIn Utilities (EG2)
 
 // Signs the user out, clears the known accounts entirely and checks whether the
@@ -282,6 +294,11 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // not met within a timeout a GREYAssert is induced.
 - (void)waitForWebStateContainingText:(const std::string&)UTF8Text;
 
+// Waits for the current web state to contain |UTF8Text|. If the condition is
+// not met within the given |timeout| a GREYAssert is induced.
+- (void)waitForWebStateContainingText:(const std::string&)UTF8Text
+                              timeout:(NSTimeInterval)timeout;
+
 // Waits for there to be no web state containing |UTF8Text|.
 // If the condition is not met within a timeout a GREYAssert is induced.
 - (void)waitForWebStateNotContainingText:(const std::string&)UTF8Text;
@@ -301,6 +318,16 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Returns the current web state's VisibleURL.
 - (GURL)webStateVisibleURL;
 
+// Purges cached web view pages, so the next time back navigation will not use
+// a cached page. Browsers don't have to use a fresh version for back/forward
+// navigation for HTTP pages and may serve a version from the cache even if the
+// Cache-Control response header says otherwise.
+- (void)purgeCachedWebViewPages;
+
+// Simulators background, killing, and restoring the app within the limitations
+// of EG1, by simply doing a tab grid close all / undo / done.
+- (void)triggerRestoreViaTabGridRemoveAllUndo;
+
 #pragma mark - Bookmarks Utilities (EG2)
 
 // Waits for the bookmark internal state to be done loading.
@@ -310,6 +337,17 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Clears bookmarks if any bookmark still presents. A GREYAssert is induced if
 // bookmarks can not be cleared.
 - (void)clearBookmarks;
+
+#pragma mark - URL Utilities (EG2)
+
+// Returns the title string to be used for a page with |URL| if that page
+// doesn't specify a title.
+- (NSString*)displayTitleForURL:(const GURL&)URL;
+
+#pragma mark - Autofill Utilities (EG2)
+
+// Removes the stored credit cards.
+- (void)clearCreditCards;
 
 #pragma mark - JavaScript Utilities (EG2)
 
@@ -351,6 +389,17 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 
 // Returns YES if WebPaymentsModifiers feature is enabled.
 - (BOOL)isWebPaymentsModifiersEnabled WARN_UNUSED_RESULT;
+
+// Returns YES if SettingsAddPaymentMethod feature is enabled.
+- (BOOL)isSettingsAddPaymentMethodEnabled WARN_UNUSED_RESULT;
+
+// Returns YES if CreditCardScanner feature is enabled.
+- (BOOL)isCreditCardScannerEnabled WARN_UNUSED_RESULT;
+
+// Returns YES if custom WebKit frameworks were properly loaded, rather than
+// system frameworks. Always returns YES if the app was not requested to run
+// with custom WebKit frameworks.
+- (BOOL)isCustomWebKitLoadedIfRequested WARN_UNUSED_RESULT;
 
 #pragma mark - Popup Blocking
 

@@ -87,7 +87,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
           static_cast<HTMLCanvasElement*>(host), attrs);
     }
     CanvasRenderingContext::ContextType GetContextType() const override {
-      return CanvasRenderingContext::kContext2d;
+      return CanvasRenderingContext::kContext2D;
     }
 
    private:
@@ -182,7 +182,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   cc::PaintCanvas* ExistingDrawingCanvas() const final;
 
   void DidDraw(const SkIRect& dirty_rect) final;
-  scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint) const final;
+  scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint) final;
 
   bool StateHasFilter() final;
   sk_sp<PaintFilter> StateGetFilter() final;
@@ -190,7 +190,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   void ValidateStateStack() const final;
 
-  void FinalizeFrame() override { usage_counters_.num_frames_since_reset++; }
+  void FinalizeFrame() override;
 
   bool IsPaintable() const final { return canvas()->GetCanvas2DLayerBridge(); }
 
@@ -200,11 +200,9 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   CanvasColorParams ColorParamsForTest() const { return ColorParams(); }
 
- protected:
-  void NeedsFinalizeFrame() override {
-    CanvasRenderingContext::NeedsFinalizeFrame();
-  }
+  bool IsDeferralEnabled() const final;
 
+ protected:
   CanvasColorParams ColorParams() const override;
   bool WritePixels(const SkImageInfo& orig_info,
                    const void* pixels,
@@ -238,7 +236,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   void UpdateElementAccessibility(const Path&, Element*);
 
   CanvasRenderingContext::ContextType GetContextType() const override {
-    return CanvasRenderingContext::kContext2d;
+    return CanvasRenderingContext::kContext2D;
   }
 
   String ColorSpaceAsString() const override;

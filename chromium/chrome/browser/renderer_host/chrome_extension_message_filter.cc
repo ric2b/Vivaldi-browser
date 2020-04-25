@@ -22,7 +22,6 @@
 #include "chrome/browser/extensions/api/activity_log_private/activity_log_private_api.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/common/extensions/chrome_extension_messages.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_process_host.h"
 #include "extensions/browser/extension_registry.h"
@@ -39,7 +38,7 @@ using content::BrowserThread;
 namespace {
 
 const uint32_t kExtensionFilteredMessageClasses[] = {
-    ChromeExtensionMsgStart, ExtensionMsgStart,
+    ExtensionMsgStart,
 };
 
 // Logs an action to the extension activity log for the specified profile.
@@ -163,7 +162,7 @@ void ChromeExtensionMessageFilter::OnGetExtMessageBundle(
   }
 
   // This blocks tab loading. Priority is inherited from the calling context.
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE, {base::ThreadPool(), base::MayBlock()},
       base::BindOnce(&ChromeExtensionMessageFilter::OnGetExtMessageBundleAsync,
                      this, paths_to_load, extension_id, default_locale,

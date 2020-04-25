@@ -716,6 +716,29 @@ TEST_P(PaintPropertyTreeBuilderTest, Perspective3DTransformedDescendant) {
 }
 
 TEST_P(PaintPropertyTreeBuilderTest,
+       TransformPerspective3DTransformedDescendant) {
+  SetBodyInnerHTML(R"HTML(
+    <style> body { margin: 0 } </style>
+    <div id='perspective' style='transform: perspective(800px);'>
+      <div id='transform' style='margin-left: 50px; margin-top: 100px;
+          width: 400px; height: 300px;
+          transform: translate3d(123px, 456px, 789px)'>
+      </div>
+    </div>
+  )HTML");
+
+  Element* perspective = GetDocument().getElementById("perspective");
+  const ObjectPaintProperties* perspective_properties =
+      perspective->GetLayoutObject()->FirstFragment().PaintProperties();
+
+  EXPECT_TRUE(perspective_properties->Transform());
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
+    EXPECT_TRUE(
+        perspective_properties->Transform()->HasDirectCompositingReasons());
+  }
+}
+
+TEST_P(PaintPropertyTreeBuilderTest,
        TransformNodeWithActiveAnimationHasDirectCompositingReason) {
   LoadTestData("transform-animation.html");
   EXPECT_TRUE(PaintPropertiesForElement("target")
@@ -6624,6 +6647,37 @@ TEST_P(PaintPropertyTreeBuilderTest, SimpleScrollChangeDoesNotCausePacUpdate) {
   EXPECT_TRUE(cc_transform_node->transform_changed);
 
   UpdateAllLifecyclePhasesForTest();
+}
+
+TEST_P(PaintPropertyTreeBuilderTest,
+       NonCompositedTransformChangeCausesPacUpdate) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      #outer {
+        width: 100px;
+        height: 100px;
+        transform: translateY(0);
+      }
+      #inner {
+        width: 10px;
+        height: 10px;
+        will-change: transform;
+      }
+    </style>
+    <div id="outer">
+      <div id="inner"></div>
+    </div>
+  )HTML");
+
+  EXPECT_FALSE(
+      GetDocument().View()->GetPaintArtifactCompositor()->NeedsUpdate());
+
+  Element* outer = GetDocument().getElementById("outer");
+  outer->setAttribute(html_names::kStyleAttr, "transform: translateY(10px)");
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
+
+  EXPECT_TRUE(
+      GetDocument().View()->GetPaintArtifactCompositor()->NeedsUpdate());
 }
 
 TEST_P(PaintPropertyTreeBuilderTest,

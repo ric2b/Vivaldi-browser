@@ -12,11 +12,12 @@
 #include "services/service_manager/public/mojom/interface_provider.mojom-blink.h"
 #include "third_party/blink/public/common/blob/blob_utils.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
 #include "third_party/blink/public/mojom/script/script_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/worker/dedicated_worker_host_factory.mojom-blink.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
+#include "third_party/blink/public/platform/web_fetch_client_settings_object.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
-#include "third_party/blink/renderer/core/core_initializer.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -172,7 +173,7 @@ void DedicatedWorker::Dispose() {
 
 void DedicatedWorker::postMessage(ScriptState* script_state,
                                   const ScriptValue& message,
-                                  Vector<ScriptValue>& transfer,
+                                  HeapVector<ScriptValue>& transfer,
                                   ExceptionState& exception_state) {
   PostMessageOptions* options = PostMessageOptions::Create();
   if (!transfer.IsEmpty())
@@ -247,9 +248,7 @@ void DedicatedWorker::Start() {
         credentials_mode,
         WebSecurityOrigin(
             outside_fetch_client_settings_object_->GetSecurityOrigin()),
-        outside_fetch_client_settings_object_->GetReferrerPolicy(),
-        KURL(outside_fetch_client_settings_object_->GetOutgoingReferrer()),
-        outside_fetch_client_settings_object_->GetInsecureRequestsPolicy(),
+        WebFetchClientSettingsObject(*outside_fetch_client_settings_object_),
         blob_url_token.PassPipe());
     // Continue in OnScriptLoadStarted() or OnScriptLoadStartFailed().
     return;
@@ -362,13 +361,6 @@ void DedicatedWorker::DispatchErrorEventForScriptFetchFailure() {
   DispatchEvent(*Event::CreateCancelable(event_type_names::kError));
 }
 
-WorkerClients* DedicatedWorker::CreateWorkerClients() {
-  auto* worker_clients = MakeGarbageCollected<WorkerClients>();
-  CoreInitializer::GetInstance().ProvideLocalFileSystemToWorker(
-      *worker_clients);
-  return worker_clients;
-}
-
 std::unique_ptr<WebContentSettingsClient>
 DedicatedWorker::CreateWebContentSettingsClient() {
   std::unique_ptr<WebContentSettingsClient> content_settings_client;
@@ -466,8 +458,9 @@ DedicatedWorker::CreateGlobalScopeCreationParams(
       GetExecutionContext()->GetContentSecurityPolicy()->Headers(),
       referrer_policy, GetExecutionContext()->GetSecurityOrigin(),
       GetExecutionContext()->IsSecureContext(),
-      GetExecutionContext()->GetHttpsState(), CreateWorkerClients(),
-      CreateWebContentSettingsClient(), response_address_space,
+      GetExecutionContext()->GetHttpsState(),
+      MakeGarbageCollected<WorkerClients>(), CreateWebContentSettingsClient(),
+      response_address_space,
       OriginTrialContext::GetTokens(GetExecutionContext()).get(),
       parent_devtools_token, std::move(settings), kV8CacheOptionsDefault,
       nullptr /* worklet_module_responses_map */,

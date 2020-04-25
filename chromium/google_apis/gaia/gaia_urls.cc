@@ -9,6 +9,8 @@
 #include "base/strings/stringprintf.h"
 #include "google_apis/gaia/gaia_switches.h"
 #include "google_apis/google_api_keys.h"
+#include "url/url_canon.h"
+#include "url/url_constants.h"
 
 namespace {
 
@@ -22,7 +24,6 @@ const char kDefaultOAuthAccountManagerBaseUrl[] =
 // API calls from accounts.google.com
 const char kClientLoginUrlSuffix[] = "ClientLogin";
 const char kServiceLoginUrlSuffix[] = "ServiceLogin";
-const char kEmbeddedSetupChromeOsUrlSuffixV1[] = "embedded/setup/chromeos";
 const char kEmbeddedSetupChromeOsUrlSuffixV2[] = "embedded/setup/v2/chromeos";
 const char kEmbeddedSetupWindowsUrlSuffix[] = "embedded/setup/windows";
 // Parameter "ssp=1" is used to skip showing the password bubble when a user
@@ -89,6 +90,10 @@ GaiaUrls* GaiaUrls::GetInstance() {
 GaiaUrls::GaiaUrls() {
   google_url_ = GetURLSwitchValueWithDefault(switches::kGoogleUrl,
                                              kDefaultGoogleUrl);
+  url::Replacements<char> scheme_replacement;
+  scheme_replacement.SetScheme(url::kHttpsScheme,
+                               url::Component(0, strlen(url::kHttpsScheme)));
+  secure_google_url_ = google_url_.ReplaceComponents(scheme_replacement);
   gaia_url_ = GetURLSwitchValueWithDefault(switches::kGaiaUrl, kDefaultGaiaUrl);
   GURL lso_origin_url =
       GetURLSwitchValueWithDefault(switches::kLsoUrl, kDefaultGaiaUrl);
@@ -109,8 +114,6 @@ GaiaUrls::GaiaUrls() {
   // URLs from accounts.google.com.
   client_login_url_ = gaia_url_.Resolve(kClientLoginUrlSuffix);
   service_login_url_ = gaia_url_.Resolve(kServiceLoginUrlSuffix);
-  embedded_setup_chromeos_url_v1_ =
-      gaia_url_.Resolve(kEmbeddedSetupChromeOsUrlSuffixV1);
   embedded_setup_chromeos_url_v2_ =
       gaia_url_.Resolve(kEmbeddedSetupChromeOsUrlSuffixV2);
   embedded_setup_windows_url_ =
@@ -160,6 +163,10 @@ const GURL& GaiaUrls::google_url() const {
   return google_url_;
 }
 
+const GURL& GaiaUrls::secure_google_url() const {
+  return secure_google_url_;
+}
+
 const GURL& GaiaUrls::gaia_url() const {
   return gaia_url_;
 }
@@ -177,12 +184,8 @@ const GURL& GaiaUrls::service_login_url() const {
 }
 
 const GURL& GaiaUrls::embedded_setup_chromeos_url(unsigned version) const {
-  DCHECK_GT(version, 0U);
-  DCHECK_LE(version, 2U);
-  if (version == 2U)
-    return embedded_setup_chromeos_url_v2_;
-
-  return embedded_setup_chromeos_url_v1_;
+  DCHECK_EQ(version, 2U);
+  return embedded_setup_chromeos_url_v2_;
 }
 
 const GURL& GaiaUrls::embedded_setup_windows_url() const {

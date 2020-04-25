@@ -2,10 +2,15 @@
 @  using the ads2gas_apple.pl script.
 
 	.syntax unified
+.set VPX_ARCH_ARM ,  1
 .set ARCH_ARM ,  1
+.set VPX_ARCH_MIPS ,  0
 .set ARCH_MIPS ,  0
+.set VPX_ARCH_X86 ,  0
 .set ARCH_X86 ,  0
+.set VPX_ARCH_X86_64 ,  0
 .set ARCH_X86_64 ,  0
+.set VPX_ARCH_PPC ,  0
 .set ARCH_PPC ,  0
 .set HAVE_NEON ,  1
 .set HAVE_NEON_ASM ,  0
@@ -70,7 +75,7 @@
 .set CONFIG_OS_SUPPORT ,  1
 .set CONFIG_UNIT_TESTS ,  1
 .set CONFIG_WEBM_IO ,  1
-.set CONFIG_LIBYUV ,  1
+.set CONFIG_LIBYUV ,  0
 .set CONFIG_DECODE_PERF_TESTS ,  0
 .set CONFIG_ENCODE_PERF_TESTS ,  0
 .set CONFIG_MULTI_RES_ENCODING ,  1

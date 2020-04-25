@@ -10,7 +10,7 @@
 #include "components/remote_cocoa/app_shim/color_panel_bridge.h"
 #include "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
 #include "components/remote_cocoa/app_shim/native_widget_ns_window_host_helper.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #include "ui/base/cocoa/remote_accessibility_api.h"
 
@@ -116,15 +116,17 @@ void ApplicationBridge::SetContentNSViewCreateCallbacks(
   web_conents_create_callback_ = web_conents_create_callback;
 }
 
-void ApplicationBridge::CreateAlert(mojom::AlertBridgeRequest bridge_request) {
+void ApplicationBridge::CreateAlert(
+    mojo::PendingReceiver<mojom::AlertBridge> bridge_receiver) {
   // The resulting object manages its own lifetime.
-  ignore_result(new AlertBridge(std::move(bridge_request)));
+  ignore_result(new AlertBridge(std::move(bridge_receiver)));
 }
 
-void ApplicationBridge::ShowColorPanel(mojom::ColorPanelRequest request,
-                                       mojom::ColorPanelHostPtr host) {
-  mojo::MakeStrongBinding(std::make_unique<ColorPanelBridge>(std::move(host)),
-                          std::move(request));
+void ApplicationBridge::ShowColorPanel(
+    mojo::PendingReceiver<mojom::ColorPanel> receiver,
+    mojo::PendingRemote<mojom::ColorPanelHost> host) {
+  mojo::MakeSelfOwnedReceiver(
+      std::make_unique<ColorPanelBridge>(std::move(host)), std::move(receiver));
 }
 
 void ApplicationBridge::CreateNativeWidgetNSWindow(

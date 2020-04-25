@@ -16,8 +16,10 @@ import android.os.StrictMode;
 
 import org.chromium.android_webview.common.CommandLineUtil;
 import org.chromium.android_webview.common.PlatformServiceBridge;
+import org.chromium.android_webview.common.ServiceNames;
+import org.chromium.android_webview.metrics.AwMetricsServiceClient;
 import org.chromium.android_webview.policy.AwPolicyProvider;
-import org.chromium.android_webview.services.CrashReceiverService;
+import org.chromium.android_webview.safe_browsing.AwSafeBrowsingConfigHelper;
 import org.chromium.android_webview.services.ICrashReceiverService;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
@@ -28,7 +30,6 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
-import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.metrics.ScopedSysTraceEvent;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskRunner;
@@ -77,7 +78,7 @@ public final class AwBrowserProcess {
      */
     public static void loadLibrary(String processDataDirSuffix) {
         if (processDataDirSuffix == null) {
-            PathUtils.setPrivateDataDirectorySuffix(WEBVIEW_DIR_BASENAME, null);
+            PathUtils.setPrivateDataDirectorySuffix(WEBVIEW_DIR_BASENAME, "WebView");
         } else {
             String processDataDirName = WEBVIEW_DIR_BASENAME + "_" + processDataDirSuffix;
             PathUtils.setPrivateDataDirectorySuffix(processDataDirName, processDataDirName);
@@ -89,8 +90,6 @@ public final class AwBrowserProcess {
             // It's okay for the WebView to do this before initialization because we have
             // setup the JNI bindings by this point.
             LibraryLoader.getInstance().switchCommandLineForWebView();
-        } catch (ProcessInitException e) {
-            throw new RuntimeException("Cannot load WebView", e);
         } finally {
             StrictMode.setThreadPolicy(oldPolicy);
         }
@@ -106,7 +105,8 @@ public final class AwBrowserProcess {
         final boolean ignoreVisibilityForImportance = true;
         ChildProcessCreationParams.set(getWebViewPackageName(), isExternalService,
                 LibraryProcessType.PROCESS_WEBVIEW_CHILD, bindToCaller,
-                ignoreVisibilityForImportance);
+                ignoreVisibilityForImportance, null /* privilegedServicesName */,
+                null /* sandboxedServicesName */);
     }
 
     /**
@@ -142,8 +142,6 @@ public final class AwBrowserProcess {
                              "AwBrowserProcess.startBrowserProcessesSync")) {
                     BrowserStartupController.get(LibraryProcessType.PROCESS_WEBVIEW)
                             .startBrowserProcessesSync(!multiProcess);
-                } catch (ProcessInitException e) {
-                    throw new RuntimeException("Cannot initialize WebView", e);
                 }
             });
         }
@@ -297,7 +295,7 @@ public final class AwBrowserProcess {
             }
 
             final Intent intent = new Intent();
-            intent.setClassName(getWebViewPackageName(), CrashReceiverService.class.getName());
+            intent.setClassName(getWebViewPackageName(), ServiceNames.CRASH_RECEIVER_SERVICE);
 
             ServiceConnection connection = new ServiceConnection() {
                 @Override

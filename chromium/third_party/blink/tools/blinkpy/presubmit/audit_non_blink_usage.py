@@ -250,13 +250,14 @@ _CONFIG = [
             # cc::Layers.
             'cc::Layer',
             'cc::PictureLayer',
+            'cc::SurfaceLayer',
 
             # cc::Layer helper data structs.
             'cc::ElementId',
             'cc::LayerPositionConstraint',
             'cc::OverscrollBehavior',
             'cc::Scrollbar',
-            'cc::ScrollbarLayerInterface',
+            'cc::ScrollbarLayerBase',
             'cc::ScrollbarOrientation',
             'cc::ScrollbarPart',
             'cc::StickyPositionConstraint',
@@ -267,6 +268,7 @@ _CONFIG = [
             'cc::HORIZONTAL',
             'cc::VERTICAL',
             'cc::THUMB',
+            'cc::TRACK',
             'cc::TICKMARKS',
             'cc::BrowserControlsState',
             'cc::EventListenerClass',
@@ -376,7 +378,7 @@ _CONFIG = [
             # namespace.
             'frame_test_helpers::.+',
 
-            # Blink uses Mojo, so it needs mojo::Binding, mojo::InterfacePtr, et
+            # Blink uses Mojo, so it needs mojo::Receiver, mojo::Remote, et
             # cetera, as well as generated Mojo bindings.
             # Note that the Mojo callback helpers are explicitly forbidden:
             # Blink already has a signal for contexts being destroyed, and
@@ -459,8 +461,16 @@ _CONFIG = [
         ],
     },
     {
+        'paths': ['third_party/blink/renderer/core/animation_frame',
+                  'third_party/blink/renderer/core/offscreencanvas',
+                  'third_party/blink/renderer/core/html/canvas'],
+        'allowed': [
+            'viz::BeginFrameArgs',
+        ],
+    },
+    {
         'paths': ['third_party/blink/renderer/core/clipboard'],
-        'allowed': ['gfx::PNGCodec', 'net::EscapeForHTML'],
+        'allowed': ['net::EscapeForHTML'],
     },
     {
         'paths': ['third_party/blink/renderer/core/css'],
@@ -602,6 +612,16 @@ _CONFIG = [
     },
     {
         'paths': [
+            'third_party/blink/renderer/core/html/media/',
+        ],
+        # This module needs access to the following for media's base::Feature
+        # list.
+        'allowed': [
+            'media::.+',
+        ]
+    },
+    {
+        'paths': [
             'third_party/blink/renderer/modules/encryptedmedia/',
         ],
         'allowed': [
@@ -726,6 +746,7 @@ _CONFIG = [
         # The WebGPU Blink module needs access to the WebGPU control
         # command buffer interface.
         'allowed': [
+            'gpu::webgpu::PowerPreference',
             'gpu::webgpu::WebGPUInterface',
         ],
     },
@@ -823,14 +844,43 @@ _CONFIG = [
         ],
         'allowed': ['crypto::.+'],
     },
+
     {
         'paths': [
-            'third_party/blink/renderer/modules/peerconnection',
-            'third_party/blink/renderer/bindings/modules/v8/serialization',
+            'third_party/blink/renderer/modules/p2p',
         ],
         'allowed': [
+            # TODO(crbug.com/787254): Remove GURL usage.
+            'GURL',
             'cricket::.*',
+            'rtc::.+',
+        ]
+    },
+    {
+        'paths': [
+            # TODO(crbug.com/787254): Separate the two paths below and their own
+            # whitelist.
+            'third_party/blink/renderer/modules/peerconnection/',
+            'third_party/blink/renderer/bindings/modules/v8/serialization/',
+        ],
+        'allowed': [
+            'absl::.+',
+            'base::AutoLock',
+            'base::AutoUnlock',
+            'base::Lock',
+            # TODO(crbug.com/787254): Remove base::BindOnce, base::Unretained,
+            # base::MessageLoopCurrent.
+            'base::Bind.*',
+            "base::MessageLoopCurrent",
+            'base::Unretained',
+            'base::WrapRefCounted',
+            'cricket::.*',
+            'jingle_glue::JingleThreadWrapper',
+            # TODO(crbug.com/787254): Remove GURL usage.
+            'GURL',
             'media::.+',
+            'net::NetworkTrafficAnnotationTag',
+            'net::DefineNetworkTrafficAnnotation',
             'rtc::.+',
             'webrtc::.+',
             'quic::.+',
@@ -846,7 +896,6 @@ _CONFIG = [
         # AtomicString or HeapVector) are used cross thread. These Blink types
         # are converted to the STL/WebRTC counterparts in the parent directory.
         'allowed': [
-            'absl::.+',
             'base::OnTaskRunnerDeleter',
             'sigslot::.+',
         ],

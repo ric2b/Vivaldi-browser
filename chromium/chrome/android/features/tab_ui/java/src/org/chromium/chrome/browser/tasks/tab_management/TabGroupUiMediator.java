@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
@@ -32,6 +32,8 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.List;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * A mediator for the TabGroupUi. Responsible for managing the
@@ -252,6 +254,14 @@ public class TabGroupUiMediator {
             mResetHandler.resetStripWithListOfTabs(listOfTabs);
             mIsTabGroupUiVisible = true;
         }
+
+        if (ChromeApplication.isVivaldi()) {
+            mTabModelSelector.getCurrentTab()
+                    .getActivity()
+                    .getToolbarManager()
+                    .getBottomToolbarCoordinator()
+                    .setTabGroupUiVisibility(mIsTabGroupUiVisible);
+        } else
         mVisibilityController.setBottomControlsVisible(mIsTabGroupUiVisible);
     }
 

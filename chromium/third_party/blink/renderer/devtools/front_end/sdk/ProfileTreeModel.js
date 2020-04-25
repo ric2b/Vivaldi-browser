@@ -4,7 +4,7 @@
 /**
  * @unrestricted
  */
-SDK.ProfileNode = class {
+export class ProfileNode {
   /**
    * @param {!Protocol.Runtime.CallFrame} callFrame
    */
@@ -19,9 +19,9 @@ SDK.ProfileNode = class {
     this.total = 0;
     /** @type {number} */
     this.id = 0;
-    /** @type {?SDK.ProfileNode} */
+    /** @type {?ProfileNode} */
     this.parent = null;
-    /** @type {!Array<!SDK.ProfileNode>} */
+    /** @type {!Array<!ProfileNode>} */
     this.children = [];
   }
 
@@ -59,12 +59,12 @@ SDK.ProfileNode = class {
   get columnNumber() {
     return this.callFrame.columnNumber;
   }
-};
+}
 
 /**
  * @unrestricted
  */
-SDK.ProfileTreeModel = class {
+export default class ProfileTreeModel {
   /**
    * @param {?SDK.Target=} target
    */
@@ -73,7 +73,7 @@ SDK.ProfileTreeModel = class {
   }
 
   /**
-   * @param {!SDK.ProfileNode} root
+   * @param {!ProfileNode} root
    * @protected
    */
   initialize(root) {
@@ -91,22 +91,24 @@ SDK.ProfileTreeModel = class {
     while (nodesToTraverse.length) {
       const parent = nodesToTraverse.pop();
       const depth = parent.depth + 1;
-      if (depth > this.maxDepth)
+      if (depth > this.maxDepth) {
         this.maxDepth = depth;
+      }
       const children = parent.children;
       const length = children.length;
       for (let i = 0; i < length; ++i) {
         const child = children[i];
         child.depth = depth;
         child.parent = parent;
-        if (child.children.length)
+        if (child.children.length) {
           nodesToTraverse.push(child);
+        }
       }
     }
   }
 
   /**
-   * @param {!SDK.ProfileNode} root
+   * @param {!ProfileNode} root
    * @return {number}
    */
   _calculateTotals(root) {
@@ -131,4 +133,16 @@ SDK.ProfileTreeModel = class {
   target() {
     return this._target;
   }
-};
+}
+
+/* Legacy exported object */
+self.SDK = self.SDK || {};
+
+/* Legacy exported object */
+SDK = SDK || {};
+
+/** @constructor */
+SDK.ProfileTreeModel = ProfileTreeModel;
+
+/** @constructor */
+SDK.ProfileNode = ProfileNode;

@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_LOOKALIKES_SAFETY_TIPS_REPUTATION_SERVICE_H_
 #define CHROME_BROWSER_LOOKALIKES_SAFETY_TIPS_REPUTATION_SERVICE_H_
 
+#include <set>
+#include <vector>
+
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/lookalikes/safety_tips/safety_tip_ui.h"
@@ -21,11 +24,12 @@ struct DomainInfo;
 
 namespace safety_tips {
 
-// Callback type used for retrieving reputation status. |ignored| indicates
-// whether the user has dismissed the warning and thus should not be warned
-// again. |url| is the URL applicable for this result,
-using ReputationCheckCallback = base::OnceCallback<
-    void(security_state::SafetyTipStatus, bool ignored, const GURL& url)>;
+// Callback type used for retrieving reputation status.|url| is the URL
+// applicable for this result,
+using ReputationCheckCallback =
+    base::OnceCallback<void(security_state::SafetyTipStatus,
+                            const GURL& url,
+                            const GURL& suggested_url)>;
 
 // Provides reputation information on URLs for Safety Tips.
 class ReputationService : public KeyedService {
@@ -46,7 +50,9 @@ class ReputationService : public KeyedService {
   // Tells the service that the user has explicitly ignored the warning, and
   // records a histogram.
   // Exposed in subsequent results from GetReputationStatus.
-  void SetUserIgnore(content::WebContents* web_contents, const GURL& url);
+  void SetUserIgnore(content::WebContents* web_contents,
+                     const GURL& url,
+                     SafetyTipInteraction interaction);
 
  private:
   // Returns whether the warning should be shown on the given URL. This is
@@ -59,7 +65,6 @@ class ReputationService : public KeyedService {
   void GetReputationStatusWithEngagedSites(
       ReputationCheckCallback callback,
       const GURL& url,
-      const lookalikes::DomainInfo& navigated_domain,
       const std::vector<lookalikes::DomainInfo>& engaged_sites);
 
   // Set of origins that we've warned about, and the user has explicitly

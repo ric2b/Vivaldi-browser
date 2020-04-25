@@ -18,6 +18,8 @@
 
 namespace autofill {
 
+class LogBuffer;
+
 // Pair of a button title (e.g. "Register") and its type (e.g.
 // INPUT_ELEMENT_SUBMIT_TYPE).
 using ButtonTitleInfo = std::pair<base::string16, mojom::ButtonTitleType>;
@@ -27,11 +29,16 @@ using ButtonTitleList = std::vector<ButtonTitleInfo>;
 
 // Holds information about a form to be filled and/or submitted.
 struct FormData {
+  // TODO(https://crbug.com/875768): Rename this const to kNotSetRendererId, and
+  // use it also for not set renderer ids in FormFieldData.
   static constexpr uint32_t kNotSetFormRendererId =
       std::numeric_limits<uint32_t>::max();
 
   FormData();
-  FormData(const FormData& data);
+  FormData(const FormData&);
+  FormData& operator=(const FormData&);
+  FormData(FormData&&);
+  FormData& operator=(FormData&&);
   ~FormData();
 
   // Returns true if two forms are the same, not counting the values of the
@@ -71,15 +78,19 @@ struct FormData {
   GURL url;
   // The action target of the form.
   GURL action;
+  // If the form in the DOM has an empty action attribute, the |action| field in
+  // the FormData is set to the frame URL of the embedding document. This field
+  // indicates whether the action attribute is empty in the form in the DOM.
+  bool is_action_empty = false;
   // The URL of main frame containing this form.
   url::Origin main_frame_origin;
   // True if this form is a form tag.
-  bool is_form_tag;
+  bool is_form_tag = true;
   // True if the form is made of unowned fields (i.e., not within a <form> tag)
   // in what appears to be a checkout flow. This attribute is only calculated
   // and used if features::kAutofillRestrictUnownedFieldsToFormlessCheckout is
   // enabled, to prevent heuristics from running on formless non-checkout.
-  bool is_formless_checkout;
+  bool is_formless_checkout = false;
   //  Unique renderer id which is returned by function
   //  WebFormElement::UniqueRendererFormId(). It is not persistant between page
   //  loads, so it is not saved and not used in comparison in SameFormAs().
@@ -111,14 +122,7 @@ void SerializeFormData(const FormData& form_data, base::Pickle* pickle);
 // the part of a pickle created by SerializeFormData. Returns true on success.
 bool DeserializeFormData(base::PickleIterator* iter, FormData* form_data);
 
-// Serialize FormData. Used by the PasswordManager to persist FormData
-// pertaining to password forms in base64 string. It is useful since in some
-// cases we need to store C strings without embedded '\0' symbols.
-void SerializeFormDataToBase64String(const FormData& form_data,
-                                     std::string* output);
-// Deserialize FormData. Returns true on success.
-bool DeserializeFormDataFromBase64String(const base::StringPiece& input,
-                                         FormData* form_data);
+LogBuffer& operator<<(LogBuffer& buffer, const FormData& form);
 
 }  // namespace autofill
 

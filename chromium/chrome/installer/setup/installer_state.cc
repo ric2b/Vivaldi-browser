@@ -82,6 +82,12 @@ void InstallerState::Initialize(const base::CommandLine& command_line,
       msi_ = product_state->is_msi();
   }
 
+  const bool is_uninstall = command_line.HasSwitch(switches::kUninstall);
+
+  // TODO(grt): Infer target_path_ from an existing install in support of
+  // varying install locations; see https://crbug.com/380177.
+  target_path_ = GetChromeInstallPath(system_install());
+
   is_vivaldi_ = command_line.HasSwitch(vivaldi::constants::kVivaldi);
   is_vivaldi_update_ =
       command_line.HasSwitch(vivaldi::constants::kVivaldiUpdate);
@@ -91,11 +97,6 @@ void InstallerState::Initialize(const base::CommandLine& command_line,
       command_line.HasSwitch(vivaldi::constants::kVivaldiRegisterStandalone);
   const bool install_dir_supplied =
       command_line.HasSwitch(vivaldi::constants::kVivaldiInstallDir);
-  const bool is_uninstall = command_line.HasSwitch(switches::kUninstall);
-
-  // TODO(grt): Infer target_path_ from an existing install in support of
-  // varying install locations; see https://crbug.com/380177.
-  target_path_ = GetChromeInstallPath(system_install());
 
   if (is_vivaldi_ && !install_dir_supplied) {
     base::win::RegKey key;
@@ -216,10 +217,12 @@ void InstallerState::Clear() {
   level_ = UNKNOWN_LEVEL;
   root_key_ = NULL;
   msi_ = false;
+  verbose_logging_ = false;
+  is_migrating_to_single_ = false;
+
   is_vivaldi_ = false;
   is_standalone_ = false;
   register_standalone_ = false;
-  verbose_logging_ = false;
 }
 
 void InstallerState::SetStage(InstallerStage stage) const {

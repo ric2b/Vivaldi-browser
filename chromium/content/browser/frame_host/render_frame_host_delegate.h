@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/i18n/rtl.h"
+#include "base/optional.h"
 #include "build/build_config.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "content/browser/webui/web_ui_impl.h"
@@ -21,6 +22,7 @@
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/resource_load_info.mojom.h"
 #include "content/public/common/resource_type.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/http/http_response_headers.h"
@@ -30,6 +32,7 @@
 #include "third_party/blink/public/common/frame/blocked_navigation_types.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/base/window_open_disposition.h"
 
@@ -51,18 +54,18 @@ class Message;
 namespace gfx {
 class Rect;
 class Size;
-}
+}  // namespace gfx
 
 namespace url {
 class Origin;
 }
 
 namespace blink {
-struct WebFullscreenOptions;
 namespace mojom {
 class FileChooserParams;
+class FullscreenOptions;
 }
-}
+}  // namespace blink
 
 namespace content {
 class FileSelectListener;
@@ -192,6 +195,9 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void FrameSizeChanged(RenderFrameHost* render_frame_host,
                                 const gfx::Size& frame_size) {}
 
+  // The DOMContentLoaded handler in the frame has completed.
+  virtual void DOMContentLoaded(RenderFrameHost* render_frame_host) {}
+
   // The onload handler in the frame has completed. Only called for the top-
   // level frame.
   virtual void DocumentOnLoadCompleted(RenderFrameHost* render_frame_host) {}
@@ -205,11 +211,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void UpdateTitle(RenderFrameHost* render_frame_host,
                            const base::string16& title,
                            base::i18n::TextDirection title_direction) {}
-
-  // The page's encoding was changed and should be updated. Only called for the
-  // top-level frame.
-  virtual void UpdateEncoding(RenderFrameHost* render_frame_host,
-                              const std::string& encoding) {}
 
   // Return this object cast to a WebContents, if it is one. If the object is
   // not a WebContents, returns NULL.
@@ -260,14 +261,14 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
 #if defined(OS_ANDROID)
   // Gets an NFC implementation within the context of this delegate.
-  virtual void GetNFC(device::mojom::NFCRequest request);
+  virtual void GetNFC(mojo::PendingReceiver<device::mojom::NFC> receiver);
 #endif
 
   // Notification that the frame wants to go into fullscreen mode.
   // |origin| represents the origin of the frame that requests fullscreen.
-  virtual void EnterFullscreenMode(const GURL& origin,
-                                   const blink::WebFullscreenOptions& options) {
-  }
+  virtual void EnterFullscreenMode(
+      const GURL& origin,
+      const blink::mojom::FullscreenOptions& options) {}
 
   // Notification that the frame wants to go out of fullscreen mode.
   // |will_cause_resize| indicates whether the fullscreen change causes a
@@ -323,6 +324,9 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // WebContents is not live.
   virtual RenderFrameHost* GetFocusedFrameIncludingInnerWebContents();
 
+  // Returns the main frame for the delegate.
+  virtual RenderFrameHostImpl* GetMainFrame();
+
   // Called by when |source_rfh| advances focus to a RenderFrameProxyHost.
   virtual void OnAdvanceFocus(RenderFrameHostImpl* source_rfh) {}
 
@@ -340,12 +344,11 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       const gfx::Rect& bounds_in_root_view) {}
 
   // The page is trying to open a new page (e.g. a popup window). The window
-  // should be created associated with the given |main_frame_widget_route_id| in
-  // the process of |opener|, but it should not be shown yet. That should happen
-  // in response to ShowCreatedWindow. |params.window_container_type| describes
-  // the type of RenderViewHost container that is requested -- in particular,
-  // the window.open call may have specified 'background' and 'persistent' in
-  // the feature string.
+  // should be created associated the process of |opener|, but it should not
+  // be shown yet. That should happen in response to ShowCreatedWindow.
+  // |params.window_container_type| describes the type of RenderViewHost
+  // container that is requested -- in particular, the window.open call may
+  // have specified 'background' and 'persistent' in the feature string.
   //
   // The passed |opener| is the RenderFrameHost initiating the window creation.
   // It will never be null, even if the opener is suppressed via |params|.
@@ -356,17 +359,17 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Note: this is not called "CreateWindow" because that will clash with
   // the Windows function which is actually a #define.
   //
+  // On success, a non-owning pointer to the new RenderFrameHostDelegate is
+  // returned.
+  //
   // The caller is expected to handle cleanup if this operation fails or is
-  // suppressed, by looking for the existence of a RenderFrameHost in
-  // |opener|'s process with |main_frame_route_id| after this method returns.
-  virtual void CreateNewWindow(
+  // suppressed by checking if the return value is null.
+  virtual RenderFrameHostDelegate* CreateNewWindow(
       RenderFrameHost* opener,
-      int32_t render_view_route_id,
-      int32_t main_frame_route_id,
-      int32_t main_frame_widget_route_id,
       const mojom::CreateNewWindowParams& params,
+      bool is_new_browsing_instance,
       bool has_user_gesture,
-      SessionStorageNamespace* session_storage_namespace) {}
+      SessionStorageNamespace* session_storage_namespace);
 
   // Show a previously created page with the specified disposition and bounds.
   // The window is identified by the |main_frame_widget_route_id| passed to
@@ -448,6 +451,11 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // exists.
   virtual RenderFrameHostImpl* GetMainFrameForInnerDelegate(
       FrameTreeNode* frame_tree_node);
+
+  // Notifies that the given frame has changed theme color.
+  virtual void OnThemeColorChanged(RenderFrameHostImpl* source,
+                                   const base::Optional<SkColor>& theme_color) {
+  }
 
  protected:
   virtual ~RenderFrameHostDelegate() {}

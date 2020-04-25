@@ -34,6 +34,7 @@
 #include "chrome/test/chromedriver/util.h"
 #include "chrome/test/chromedriver/version.h"
 #include "chrome/test/chromedriver/webauthn_commands.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "net/server/http_server_request_info.h"
 #include "net/server/http_server_response_info.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -96,7 +97,8 @@ class WrapperURLLoaderFactory : public network::mojom::URLLoaderFactory {
                          traffic_annotation));
     }
   }
-  void Clone(network::mojom::URLLoaderFactoryRequest factory) override {
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory)
+      override {
     NOTIMPLEMENTED();
   }
 
@@ -745,8 +747,7 @@ HttpHandler::HttpHandler(
                         base::BindRepeating(&ExecuteSetNetworkConnection))),
 
       // Extension for WebAuthn API:
-      // TODO(nsatragno): Update the link to the official spec once it lands.
-      // https://github.com/w3c/webauthn/pull/1256
+      // https://w3c.github.io/webauthn/#sctn-automation
       CommandMapping(kPost, "session/:sessionId/webauthn/authenticator",
                      WrapToCommand("AddVirtualAuthenticator",
                                    base::BindRepeating(
@@ -760,7 +761,6 @@ HttpHandler::HttpHandler(
               base::BindRepeating(
                   &ExecuteWebAuthnCommand,
                   base::BindRepeating(&ExecuteRemoveVirtualAuthenticator)))),
-
       CommandMapping(
           kPost,
           "session/:sessionId/webauthn/authenticator/:authenticatorId/"
@@ -801,6 +801,7 @@ HttpHandler::HttpHandler(
                         base::BindRepeating(
                             &ExecuteWebAuthnCommand,
                             base::BindRepeating(&ExecuteSetUserVerified)))),
+
       // Extension for Permissions Standard Automation "set permission" command:
       // https://w3c.github.io/permissions/#set-permission-command
       CommandMapping(kPost, "session/:sessionId/permissions",
@@ -1237,11 +1238,15 @@ HttpHandler::PrepareStandardResponse(
     // error UnexpectedAlertOpen should contain 'data.text' with alert text
     if (status.code() == kUnexpectedAlertOpen) {
       const std::string& message = status.message();
-      unsigned first = message.find("{");
-      unsigned last = message.find_last_of("}");
-      std::string alertText = message.substr(first, last-first);
-      alertText = alertText.substr(alertText.find(":") + 2);
-      inner_params->SetString("data.text", alertText);
+      auto first = message.find("{");
+      auto last = message.find_last_of("}");
+      if (first == std::string::npos || last == std::string::npos) {
+        inner_params->SetString("data.text", "");
+      } else {
+        std::string alertText = message.substr(first, last - first);
+        alertText = alertText.substr(alertText.find(":") + 2);
+        inner_params->SetString("data.text", alertText);
+      }
     }
     body_params.SetDictionary("value", std::move(inner_params));
   } else {

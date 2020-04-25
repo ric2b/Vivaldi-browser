@@ -19,9 +19,9 @@
 #include <vector>
 
 #include <wrl/client.h>
+#include <wrl/implements.h>
 
 #include "base/threading/thread_checker.h"
-#include "base/win/iunknown_impl.h"
 
 namespace media {
 class DataSource;
@@ -31,21 +31,20 @@ namespace media {
 
 class ReadStream;
 
-class WMFByteStream : public ReadStreamListener,
-                      public IMFByteStream,
-                      public base::win::IUnknownImpl,
-                      public IMFAttributes {
+typedef Microsoft::WRL::RuntimeClass<
+    Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>,
+    IMFByteStream,
+    IMFAttributes>
+    WMFByteStream_UnknownBase;
+
+class WMFByteStream : public WMFByteStream_UnknownBase,
+      public ReadStreamListener {
  public:
   explicit WMFByteStream(DataSource* data_source);
   ~WMFByteStream() override;
 
   HRESULT Initialize(LPCWSTR mime_type);
   void Stop();
-
-  // Overrides from IUnknown
-  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** object) override;
-  ULONG STDMETHODCALLTYPE AddRef() override;
-  ULONG STDMETHODCALLTYPE Release() override;
 
   // Overrides from IMFByteStream
   HRESULT STDMETHODCALLTYPE GetCapabilities(DWORD* capabilities) override;

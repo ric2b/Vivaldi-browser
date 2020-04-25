@@ -11,9 +11,10 @@
 #include "ash/app_list/app_list_export.h"
 #include "ash/app_list/views/search_result_base_view.h"
 #include "ash/app_list/views/search_result_container_view.h"
+#include "base/callback.h"
 #include "base/macros.h"
 
-namespace app_list {
+namespace ash {
 
 class SearchResultContainerView;
 
@@ -77,8 +78,9 @@ class APP_LIST_EXPORT ResultSelectionController {
     kResultChanged,
   };
 
-  explicit ResultSelectionController(
-      const ResultSelectionModel* result_container_views);
+  ResultSelectionController(
+      const ResultSelectionModel* result_container_views,
+      const base::RepeatingClosure& selection_change_callback);
   ~ResultSelectionController();
 
   // Returns the currently selected result.
@@ -147,6 +149,10 @@ class APP_LIST_EXPORT ResultSelectionController {
   // |SearchResultContainerView|->|IsHorizontallyTraversable|.
   bool IsContainerAtIndexHorizontallyTraversable(int index) const;
 
+  // The callback run when the selected result changes (including when the
+  // selected result is cleared).
+  base::RepeatingClosure selection_change_callback_;
+
   // The currently selected result view
   SearchResultBaseView* selected_result_ = nullptr;
 
@@ -159,6 +165,6 @@ class APP_LIST_EXPORT ResultSelectionController {
   DISALLOW_COPY_AND_ASSIGN(ResultSelectionController);
 };
 
-}  // namespace app_list
+}  // namespace ash
 
 #endif  // ASH_APP_LIST_VIEWS_RESULT_SELECTION_CONTROLLER_H_

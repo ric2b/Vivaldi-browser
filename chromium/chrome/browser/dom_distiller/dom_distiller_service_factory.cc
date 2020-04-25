@@ -13,10 +13,7 @@
 #include "components/dom_distiller/content/browser/distiller_page_web_contents.h"
 #include "components/dom_distiller/core/article_entry.h"
 #include "components/dom_distiller/core/distiller.h"
-#include "components/dom_distiller/core/dom_distiller_store.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
-#include "components/leveldb_proto/public/proto_database.h"
-#include "components/leveldb_proto/public/proto_database_provider.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -24,12 +21,10 @@
 namespace dom_distiller {
 
 DomDistillerContextKeyedService::DomDistillerContextKeyedService(
-    std::unique_ptr<DomDistillerStoreInterface> store,
     std::unique_ptr<DistillerFactory> distiller_factory,
     std::unique_ptr<DistillerPageFactory> distiller_page_factory,
     std::unique_ptr<DistilledPagePrefs> distilled_page_prefs)
-    : DomDistillerService(std::move(store),
-                          std::move(distiller_factory),
+    : DomDistillerService(std::move(distiller_factory),
                           std::move(distiller_page_factory),
                           std::move(distilled_page_prefs)) {}
 
@@ -64,17 +59,6 @@ KeyedService* DomDistillerServiceFactory::BuildServiceInstanceFor(
   base::FilePath database_dir(
       context->GetPath().Append(FILE_PATH_LITERAL("Articles")));
 
-  leveldb_proto::ProtoDatabaseProvider* db_provider =
-      content::BrowserContext::GetDefaultStoragePartition(profile)
-          ->GetProtoDatabaseProvider();
-
-  auto db = db_provider->GetDB<ArticleEntry>(
-      leveldb_proto::ProtoDbType::DOM_DISTILLER_STORE, database_dir,
-      background_task_runner);
-
-  std::unique_ptr<DomDistillerStore> dom_distiller_store(
-      new DomDistillerStore(std::move(db)));
-
   std::unique_ptr<DistillerPageFactory> distiller_page_factory(
       new DistillerPageWebContentsFactory(context));
   std::unique_ptr<DistillerURLFetcherFactory> distiller_url_fetcher_factory(
@@ -98,9 +82,9 @@ KeyedService* DomDistillerServiceFactory::BuildServiceInstanceFor(
       new DistilledPagePrefs(profile->GetPrefs()));
 
   DomDistillerContextKeyedService* service =
-      new DomDistillerContextKeyedService(
-          std::move(dom_distiller_store), std::move(distiller_factory),
-          std::move(distiller_page_factory), std::move(distilled_page_prefs));
+      new DomDistillerContextKeyedService(std::move(distiller_factory),
+                                          std::move(distiller_page_factory),
+                                          std::move(distilled_page_prefs));
 
   return service;
 }

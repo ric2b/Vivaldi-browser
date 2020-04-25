@@ -54,7 +54,7 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_abstract_inline_text_box.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_item.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_fragment_traversal.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_offset_mapping.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_text_fragment.h"
@@ -297,6 +297,9 @@ Vector<LayoutText::TextBoxInfo> LayoutText::GetTextBoxInfo() const {
     for (const NGPaintFragment* fragment : fragments) {
       const auto& text_fragment =
           To<NGPhysicalTextFragment>(fragment->PhysicalFragment());
+      // TODO(yosin): We should introduce
+      // |NGPhysicalTextFragment::IsTruncated()| to skip them instead of using
+      // |IsHiddenForPaint()| with ordering of fragments.
       if (text_fragment.IsHiddenForPaint()) {
         in_hidden_for_paint = true;
       } else if (in_hidden_for_paint) {
@@ -304,6 +307,10 @@ Vector<LayoutText::TextBoxInfo> LayoutText::GetTextBoxInfo() const {
         // ignore truncated fragments (actually painted).
         break;
       }
+      // We don't put generated texts, e.g. ellipsis, hyphen, etc. not in text
+      // content, into results. Note: CSS "content" aren't categorized this.
+      if (text_fragment.TextType() == NGPhysicalTextFragment::kGeneratedText)
+        continue;
       // When the corresponding DOM range contains collapsed whitespaces, NG
       // produces one fragment but legacy produces multiple text boxes broken at
       // collapsed whitespaces. We break the fragment at collapsed whitespaces
@@ -311,6 +318,7 @@ Vector<LayoutText::TextBoxInfo> LayoutText::GetTextBoxInfo() const {
       for (const NGOffsetMappingUnit& unit :
            mapping->GetMappingUnitsForTextContentOffsetRange(
                text_fragment.StartOffset(), text_fragment.EndOffset())) {
+        DCHECK_EQ(unit.GetLayoutObject(), this);
         if (unit.GetType() == NGOffsetMappingUnitType::kCollapsed)
           continue;
         // [clamped_start, clamped_end] of |fragment| matches a legacy text box.
@@ -441,17 +449,16 @@ static IntRect EllipsisRectForBox(InlineTextBox* box,
 template <typename PhysicalRectCollector>
 void LayoutText::CollectLineBoxRects(const PhysicalRectCollector& yield,
                                      ClippingOption option) const {
-  if (const NGPhysicalBoxFragment* box_fragment =
-          ContainingBlockFlowFragment()) {
-    const auto children =
-        NGInlineFragmentTraversal::SelfFragmentsOf(*box_fragment, this);
-    for (const auto& child : children) {
+  if (IsInLayoutNGInlineFormattingContext()) {
+    NGInlineCursor cursor;
+    cursor.MoveTo(*this);
+    for (; cursor; cursor.MoveToNextForSameLayoutObject()) {
       if (UNLIKELY(option != ClippingOption::kNoClipping)) {
         DCHECK_EQ(option, ClippingOption::kClipToEllipsis);
-        if (child.fragment->IsHiddenForPaint())
+        if (cursor.IsHiddenForPaint())
           continue;
       }
-      yield(child.RectInContainerBox());
+      yield(cursor.CurrentRect());
     }
     return;
   }
@@ -2076,18 +2083,19 @@ PhysicalRect LayoutText::LocalSelectionVisualRect() const {
     return PhysicalRect();
 
   const FrameSelection& frame_selection = GetFrame()->Selection();
-  const auto fragments = NGPaintFragment::InlineFragmentsFor(this);
-  if (fragments.IsInLayoutNGInlineFormattingContext()) {
+  if (IsInLayoutNGInlineFormattingContext()) {
     PhysicalRect rect;
-    for (const NGPaintFragment* fragment : fragments) {
+    NGInlineCursor cursor(*RootInlineFormattingContext());
+    for (cursor.MoveTo(*this); cursor; cursor.MoveToNextForSameLayoutObject()) {
+      if (cursor.IsHiddenForPaint())
+        continue;
       const LayoutSelectionStatus status =
-          frame_selection.ComputeLayoutSelectionStatus(*fragment);
+          frame_selection.ComputeLayoutSelectionStatus(cursor);
       if (status.start == status.end)
         continue;
-      PhysicalRect fragment_rect =
-          fragment->ComputeLocalSelectionRectForText(status);
-      fragment_rect.offset += fragment->InlineOffsetToContainerBox();
-      rect.Unite(fragment_rect);
+      PhysicalRect item_rect = ComputeLocalSelectionRectForText(cursor, status);
+      item_rect.offset += cursor.CurrentOffset();
+      rect.Unite(item_rect);
     }
     return rect;
   }

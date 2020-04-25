@@ -31,7 +31,20 @@
 
 namespace blink {
 
-SMILAnimationSandwich::SMILAnimationSandwich() {}
+namespace {
+
+struct PriorityCompare {
+  PriorityCompare(SMILTime elapsed) : elapsed_(elapsed) {}
+  bool operator()(const Member<SVGSMILElement>& a,
+                  const Member<SVGSMILElement>& b) {
+    return b->IsHigherPriorityThan(a, elapsed_);
+  }
+  SMILTime elapsed_;
+};
+
+}  // namespace
+
+SMILAnimationSandwich::SMILAnimationSandwich() = default;
 
 void SMILAnimationSandwich::Schedule(SVGSMILElement* animation) {
   DCHECK(!sandwich_.Contains(animation));
@@ -42,90 +55,90 @@ void SMILAnimationSandwich::Unschedule(SVGSMILElement* animation) {
   auto* position = std::find(sandwich_.begin(), sandwich_.end(), animation);
   DCHECK(sandwich_.end() != position);
   sandwich_.erase(position);
+  if (animation == ResultElement())
+    animation->ClearAnimatedType();
 }
 
 void SMILAnimationSandwich::Reset() {
-  for (SVGSMILElement* animation : sandwich_) {
+  if (SVGSMILElement* result_element = ResultElement())
+    result_element->ClearAnimatedType();
+  for (SVGSMILElement* animation : sandwich_)
     animation->Reset();
-  }
 }
 
-void SMILAnimationSandwich::UpdateTiming(double elapsed) {
-  if (!std::is_sorted(sandwich_.begin(), sandwich_.end(),
-                      PriorityCompare(elapsed))) {
-    std::sort(sandwich_.begin(), sandwich_.end(), PriorityCompare(elapsed));
-  }
-
-  active_.Shrink(0);
-  active_.ReserveCapacity(sandwich_.size());
-  for (const auto& it_animation : sandwich_) {
-    SVGSMILElement* animation = it_animation.Get();
+void SMILAnimationSandwich::UpdateTiming(SMILTime elapsed) {
+  for (const auto& animation : sandwich_) {
     DCHECK(animation->HasValidTarget());
 
-    if (animation->NeedsToProgress(elapsed)) {
-      animation->Progress(elapsed);
-      active_.push_back(animation);
-    } else if (animation->IsContributing(elapsed)) {
-      active_.push_back(animation);
-    } else {
-      animation->ClearAnimatedType();
-    }
-  }
-}
-
-SMILTime SMILAnimationSandwich::NextInterestingTime(
-    SMILTime document_time) const {
-  SMILTime interesting_time = SMILTime::Indefinite();
-  for (const auto& it_animation : sandwich_) {
-    SVGSMILElement* animation = it_animation.Get();
-    interesting_time = std::min(interesting_time,
-                                animation->NextInterestingTime(document_time));
-  }
-  return interesting_time;
-}
-
-SMILTime SMILAnimationSandwich::GetNextFireTime() const {
-  SMILTime earliest_fire_time = SMILTime::Unresolved();
-  for (const auto& it_animation : sandwich_) {
-    SVGSMILElement* animation = it_animation.Get();
-
-    SMILTime next_fire_time = animation->NextProgressTime();
-    if (next_fire_time.IsFinite())
-      earliest_fire_time = std::min(next_fire_time, earliest_fire_time);
-  }
-  return earliest_fire_time;
-}
-
-void SMILAnimationSandwich::UpdateSyncBases(double elapsed) {
-  for (auto& animation : active_) {
-    animation->UpdateSyncBases();
-  }
-
-  for (auto& animation : active_) {
-    animation->UpdateNextProgressTime(elapsed);
-  }
-
-  auto* it = active_.begin();
-  while (it != active_.end()) {
-    auto* scheduled = it->Get();
-    if (scheduled->IsContributing(elapsed)) {
-      it++;
+    if (!animation->NeedsIntervalUpdate(elapsed))
       continue;
-    }
-    scheduled->ClearAnimatedType();
-    it = active_.erase(it);
+    animation->UpdateInterval(elapsed);
   }
+}
+
+SMILTime SMILAnimationSandwich::NextIntervalTime(
+    SMILTime presentation_time) const {
+  SMILTime interval_time = SMILTime::Indefinite();
+  for (const auto& animation : sandwich_) {
+    interval_time =
+        std::min(interval_time, animation->NextIntervalTime(presentation_time));
+  }
+  return interval_time;
+}
+
+SMILTime SMILAnimationSandwich::NextProgressTime(
+    SMILTime presentation_time) const {
+  SMILTime earliest_progress_time = SMILTime::Unresolved();
+  for (const auto& animation : sandwich_) {
+    earliest_progress_time = std::min(
+        earliest_progress_time, animation->NextProgressTime(presentation_time));
+    if (earliest_progress_time <= presentation_time)
+      break;
+  }
+  return earliest_progress_time;
+}
+
+void SMILAnimationSandwich::UpdateActiveStateAndOrder(
+    SMILTime presentation_time) {
+  for (auto& animation : sandwich_)
+    animation->UpdateActiveState(presentation_time);
+
+  if (!std::is_sorted(sandwich_.begin(), sandwich_.end(),
+                      PriorityCompare(presentation_time))) {
+    std::sort(sandwich_.begin(), sandwich_.end(),
+              PriorityCompare(presentation_time));
+  }
+}
+
+SVGSMILElement* SMILAnimationSandwich::ResultElement() const {
+  return !active_.IsEmpty() ? active_.front() : nullptr;
+}
+
+void SMILAnimationSandwich::UpdateActiveAnimationStack(
+    SMILTime presentation_time) {
+  SVGSMILElement* old_result_element = ResultElement();
+  active_.Shrink(0);
+  active_.ReserveCapacity(sandwich_.size());
+  // Build the contributing/active sandwich.
+  for (auto& animation : sandwich_) {
+    if (!animation->IsContributing(presentation_time))
+      continue;
+    animation->UpdateProgressState(presentation_time);
+    active_.push_back(animation);
+  }
+  // If we switched result element, clear the old one.
+  if (old_result_element && old_result_element != ResultElement())
+    old_result_element->ClearAnimatedType();
 }
 
 SVGSMILElement* SMILAnimationSandwich::ApplyAnimationValues() {
-  if (active_.IsEmpty())
+  SVGSMILElement* result_element = ResultElement();
+  if (!result_element)
     return nullptr;
-  // Results are accumulated to the first animation that animates and
-  // contributes to a particular element/attribute pair.
+
   // Only reset the animated type to the base value once for
   // the lowest priority animation that animates and
   // contributes to a particular element/attribute pair.
-  SVGSMILElement* result_element = active_.front();
   result_element->ResetAnimatedType();
 
   // Animations have to be applied lowest to highest prio.
@@ -144,10 +157,8 @@ SVGSMILElement* SMILAnimationSandwich::ApplyAnimationValues() {
        sandwich_it++) {
     (*sandwich_it)->UpdateAnimatedValue(result_element);
   }
-  active_.Shrink(0);
 
   result_element->ApplyResultsToTarget();
-
   return result_element;
 }
 

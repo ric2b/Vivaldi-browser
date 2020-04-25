@@ -27,8 +27,6 @@ static_library("test_config") {
 static_library("test_support") {
   testonly = true
   sources = [
-    "../memory/fake_memory_pressure_monitor.cc",
-    "../memory/fake_memory_pressure_monitor.h",
     "../task/sequence_manager/test/fake_task.cc",
     "../task/sequence_manager/test/fake_task.h",
     "../task/sequence_manager/test/mock_time_domain.cc",
@@ -228,6 +226,7 @@ static_library("test_support") {
     set_sources_assignment_filter([])
     sources += [ "test_file_util_mac.cc" ]
     set_sources_assignment_filter(sources_assignment_filter)
+    deps += [ ":google_test_runner_shared_headers" ]
   }
 
   if (is_mac) {
@@ -434,7 +433,7 @@ if (is_linux) {
       ]
       args = []
       outputs = [
-        "$root_out_dir/fontconfig_caches/df1acc8c-39d5-4a8b-8507-b1a7396ac3ac-le64.cache-7",
+        "$root_out_dir/fontconfig_caches/fb5c91b2895aa445d23aebf7f9e2189c-le64.cache-7",
         "$root_out_dir/test_fonts/.uuid",
       ]
     }
@@ -455,6 +454,7 @@ if (is_fuchsia || is_linux) {
 
 if (is_android) {
   generate_jni("base_unittests_jni_headers") {
+    testonly = true
     sources = [
       "android/java/src/org/chromium/base/ContentUriTestUtils.java",
       "android/java/src/org/chromium/base/JavaHandlerThreadHelpers.java",
@@ -462,6 +462,7 @@ if (is_android) {
   }
 
   generate_jni("test_support_jni_headers") {
+    testonly = true
     sources = [
       "android/java/src/org/chromium/base/MainReturnCodeResult.java",
       "android/java/src/org/chromium/base/MultiprocessTestClientLauncher.java",
@@ -477,7 +478,7 @@ if (is_android) {
       "//base:base_java",
       "//base:base_java_test_support",
       "//testing/android/native_test:native_main_runner_java",
-      "//third_party/android_deps:com_android_support_support_annotations_java",
+      "//third_party/android_deps:androidx_annotation_annotation_java",
       "//third_party/jsr-305:jsr_305_javalib",
     ]
     srcjar_deps = [ ":test_support_java_aidl" ]
@@ -509,6 +510,29 @@ if (is_android) {
     sources = [
       "android/java/src/org/chromium/base/ITestCallback.aidl",
       "android/java/src/org/chromium/base/ITestController.aidl",
+    ]
+  }
+}
+
+if (is_ios) {
+  source_set("google_test_runner_shared_headers") {
+    sources = [
+      "ios/google_test_runner_delegate.h",
+    ]
+  }
+
+  source_set("google_test_runner") {
+    sources = [
+      "ios/google_test_runner.mm",
+    ]
+    deps = [
+      ":google_test_runner_shared_headers",
+      "//base",
+    ]
+    libs = [ "UIKit.framework" ]
+    configs += [
+      "//build/config/compiler:enable_arc",
+      "//build/config/ios:xctest_config",
     ]
   }
 }

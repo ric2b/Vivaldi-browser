@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-PT">
 <translation id="1038842779957582377">nome desconhecido</translation>
+<translation id="1089439967362294234">Alterar senha</translation>
 <translation id="1110994991967754504">Selecionar autorização para <ph name="PERMISSION_NAME" /></translation>
 <translation id="1152921474424827756">Aceda a uma <ph name="BEGIN_LINK" />cópia em cache<ph name="END_LINK" /> de <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> fechou a ligação inesperadamente.</translation>
@@ -17,7 +18,7 @@
 <translation id="1710259589646384581">SO</translation>
 <translation id="1728677426644403582">Está a ver o código fonte de uma página Web</translation>
 <translation id="1734878702283171397">Experimente contactar o administrador do sistema.</translation>
-<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Experimente executar os diagnósticos de rede do Windows<ph name="END_LINK" />.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Tente executar os diagnósticos de rede do Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Este site contém programas prejudiciais</translation>
 <translation id="1916770123977586577">Para aplicar as definições atualizadas a este site, atualize esta página</translation>
 <translation id="1919345977826869612">Publicidade</translation>
@@ -47,15 +48,19 @@
 <translation id="2634124572758952069">Não foi possível encontrar o endereço IP do servidor de <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">O acesso ao ficheiro foi negado</translation>
-<translation id="2705137772291741111">A cópia guardada (em cache) deste site era ilegível.</translation>
+<translation id="2705137772291741111">A cópia gravada deste website (em cache) era ilegível.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />A executar o diagnóstico de conetividade<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">A ligação foi reposta.</translation>
 <translation id="2826760142808435982">A ligação é cifrada e autenticada com <ph name="CIPHER" /> e utiliza <ph name="KX" /> como mecanismo de troca de chaves.</translation>
 <translation id="2856444702002559011">Os atacantes poderão estar a tentar roubar as suas informações de <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (por exemplo, palavras-passe, mensagens ou cartões de crédito). <ph name="BEGIN_LEARN_MORE_LINK" />Saiba mais<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Foi detetada uma alteração de rede.</translation>
+<translation id="2948083400971632585">Pode desativar quaisquer proxies configurados para uma conexão na página de definições.</translation>
 <translation id="2991571918955627853">Não pode visitar <ph name="SITE" /> neste momento, porque o site utiliza HSTS. Os erros de rede e os ataques são geralmente temporários, pelo que esta página deverá funcionar mais tarde.</translation>
-<translation id="3005723025932146533">Mostrar cópia guardada</translation>
+<translation id="3005723025932146533">Mostrar cópia gravada</translation>
 <translation id="301521992641321250">Bloqueada automaticamente</translation>
+<translation id="3041612393474885105">Informações do certificado</translation>
 <translation id="3109728660330352905">Não tem autorização para ver esta página.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Tente executar o diagnóstico de conetividade<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Esta página inclui um formulário que pode não ser enviado em segurança. Os dados que enviar podem ser vistos por outros utilizadores em trânsito ou podem ser modificados por um utilizador mal intencionado para alterar o que é recebido pelo servidor.</translation>
 <translation id="3176929007561373547">Verifique as definições de proxy ou contacte o administrador de rede para
       se certificar de que o servidor proxy está a funcionar. Se achar que não deve
@@ -69,6 +74,7 @@
 <translation id="3447661539832366887">O proprietário deste dispositivo desativou o jogo do dinossauro.</translation>
 <translation id="3447884698081792621">Mostrar certificado (emitido por <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Ocultar avançadas</translation>
+<translation id="3484560055331845446">Pode perder o acesso à sua Conta Google. O Chrome recomenda que altere a senha agora. Ser-lhe-á pedido para iniciar sessão.</translation>
 <translation id="3566021033012934673">A sua ligação não é privada</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Ocultar detalhes</translation>
@@ -88,7 +94,7 @@
 <translation id="4151403195736952345">Utilizar pré-definição global (Detetar)</translation>
 <translation id="4165986682804962316">Definições de sites</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />A verificar as configurações da firewall e de antivírus<ph name="END_LINK" /></translation>
-<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Experimente executar diagnósticos de rede<ph name="END_LINK" />.</translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Tente executar diagnósticos de rede<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Válido</translation>
 <translation id="4250431568374086873">A ligação a este site não é totalmente segura</translation>
 <translation id="4265872034478892965">Permitida pelo administrador</translation>
@@ -101,16 +107,18 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Experimente desativar as extensões.</translation>
 <translation id="4592951414987517459">A sua ligação a <ph name="DOMAIN" /> está cifrada através de um conjunto de cifras moderno.</translation>
-<translation id="4690462567478992370">Parar de utilizar um certificado inválido</translation>
+<translation id="4690462567478992370">Deixar de usar um certificado inválido</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">A ligação foi interrompida</translation>
-<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Executar os diagnósticos de rede do Windows<ph name="END_LINK" /></translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />A executar os diagnósticos de rede do Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Caminho do Executável</translation>
 <translation id="4750917950439032686">As suas informações (por exemplo, senhas ou números de cartões de crédito) são privadas quando são enviadas para este site.</translation>
 <translation id="4764776831041365478">A página Web em <ph name="URL" /> poderá estar temporariamente inactiva ou poderá ter sido movida permanentemente para um novo endereço Web.</translation>
+<translation id="4943872375798546930">Sem resultados</translation>
 <translation id="4974590756084640048">Reativar avisos</translation>
 <translation id="5023310440958281426">Verificar as políticas do administrador</translation>
 <translation id="5039804452771397117">Permitir</translation>
+<translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 em utilização)} other {(# em utilização)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />A verificar o endereço proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bits)</translation>
 <translation id="5287240709317226393">Mostrar cookies</translation>
@@ -124,7 +132,6 @@
     Experimente contactar o administrador do sistema.</translation>
 <translation id="5510766032865166053">Pode ter sido movido ou eliminado.</translation>
 <translation id="5556459405103347317">Recarregar</translation>
-<translation id="5571347317547569613">({NUM_COOKIES,plural, =1 {1 em utilização} other {# em utilização}})</translation>
 <translation id="5610142619324316209">A verificar a ligação</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> redirecionou-o demasiadas vezes.</translation>
 <translation id="5675650730144413517">Esta página não está a funcionar</translation>
@@ -159,7 +166,7 @@
 <translation id="6657585470893396449">Senha</translation>
 <translation id="6685834062052613830">Termine sessão e conclua a configuração</translation>
 <translation id="6711464428925977395">Existe um problema com o servidor proxy ou o endereço está incorreto.</translation>
-<translation id="6757797048963528358">O seu diapositivo entrou em suspensão.</translation>
+<translation id="6757797048963528358">O seu equipamento entrou em suspensão.</translation>
 <translation id="6897140037006041989">Agente do utilizador</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7079718277001814089">Este site contém um software malicioso</translation>
@@ -201,6 +208,7 @@
 <translation id="8225771182978767009">A pessoa que configurou este computador optou por bloquear este site.</translation>
 <translation id="8241707690549784388">A página que procura utilizou informações introduzidas por si. Regressar a essa página poderá originar a repetição de qualquer ação que tenha efetuado. Pretende continuar?</translation>
 <translation id="8241712895048303527">Bloquear neste site</translation>
+<translation id="8286036467436129157">Iniciar Sessão</translation>
 <translation id="8288807391153049143">Mostrar certificado</translation>
 <translation id="8289355894181816810">Se não tiver a certeza do que isto significa, contacte o administrador de rede.</translation>
 <translation id="8332188693563227489">O acesso a <ph name="HOST_NAME" /> foi recusado</translation>
@@ -208,6 +216,7 @@
 <translation id="8503813439785031346">Nome de utilizador</translation>
 <translation id="8703575177326907206">A sua ligação a <ph name="DOMAIN" /> não está cifrada.</translation>
 <translation id="8740359287975076522">Não foi possível encontrar o &lt;abbr id="dnsDefinition"&gt;endereço DNS&lt;/abbr&gt; de <ph name="HOST_NAME" />. Estamos a diagnosticar o problema.</translation>
+<translation id="8820817407110198400">Favoritos</translation>
 <translation id="9001074447101275817">O proxy <ph name="DOMAIN" /> necessita de um nome de utilizador e de uma palavra-passe.</translation>
 <translation id="9008201768610948239">Ignorar</translation>
 <translation id="9011424611726486705">Abrir definições do site</translation>

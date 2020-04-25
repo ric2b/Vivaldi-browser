@@ -288,7 +288,9 @@ class ContentVerifier::HashHelper {
       const IsCancelledCallback& is_cancelled,
       ContentHash::CreatedCallback created_callback) {
     ContentHash::Create(
-        std::move(fetch_key), is_cancelled,
+        std::move(fetch_key),
+        ContentVerifierDelegate::VerifierSourceType::SIGNED_HASHES,
+        is_cancelled,
         base::BindOnce(&HashHelper::ForwardToIO, std::move(created_callback)));
   }
 
@@ -588,7 +590,7 @@ void ContentVerifier::OnFetchComplete(
   ExtensionId extension_id = content_hash->extension_id();
   if (g_content_verifier_test_observer) {
     g_content_verifier_test_observer->OnFetchComplete(
-        extension_id, content_hash->has_verified_contents());
+        extension_id, content_hash->succeeded());
   }
 
   VLOG(1) << "OnFetchComplete " << extension_id
@@ -614,7 +616,7 @@ ContentHash::FetchKey ContentVerifier::GetFetchKey(
   network::mojom::URLLoaderFactoryPtr url_loader_factory_ptr;
   base::PostTask(
       FROM_HERE, {content::BrowserThread::UI},
-      base::BindOnce(&ContentVerifier::BindURLLoaderFactoryRequestOnUIThread,
+      base::BindOnce(&ContentVerifier::BindURLLoaderFactoryReceiverOnUIThread,
                      this, mojo::MakeRequest(&url_loader_factory_ptr)));
   network::mojom::URLLoaderFactoryPtrInfo url_loader_factory_info =
       url_loader_factory_ptr.PassInterface();
@@ -633,15 +635,16 @@ void ContentVerifier::DidGetContentHash(
   std::move(original_callback).Run(content_hash);
 }
 
-void ContentVerifier::BindURLLoaderFactoryRequestOnUIThread(
-    network::mojom::URLLoaderFactoryRequest url_loader_factory_request) {
+void ContentVerifier::BindURLLoaderFactoryReceiverOnUIThread(
+    mojo::PendingReceiver<network::mojom::URLLoaderFactory>
+        url_loader_factory_receiver) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (shutdown_on_ui_)
     return;
 
   content::BrowserContext::GetDefaultStoragePartition(context_)
       ->GetURLLoaderFactoryForBrowserProcess()
-      ->Clone(std::move(url_loader_factory_request));
+      ->Clone(std::move(url_loader_factory_receiver));
 }
 
 bool ContentVerifier::ShouldVerifyAnyPaths(

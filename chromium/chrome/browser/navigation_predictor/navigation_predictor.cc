@@ -14,7 +14,8 @@
 #include "base/optional.h"
 #include "base/rand_util.h"
 #include "base/system/sys_info.h"
-#include "chrome/browser/engagement/site_engagement_service.h"
+#include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service.h"
+#include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service_factory.h"
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/prerender/prerender_handle.h"
@@ -73,7 +74,8 @@ struct NavigationPredictor::NavigationScore {
                   double score,
                   double ratio_distance_root_top,
                   bool contains_image,
-                  bool is_in_iframe)
+                  bool is_in_iframe,
+                  size_t index)
       : url(url),
         ratio_area(ratio_area),
         is_url_incremented_by_one(is_url_incremented_by_one),
@@ -81,7 +83,8 @@ struct NavigationPredictor::NavigationScore {
         score(score),
         ratio_distance_root_top(ratio_distance_root_top),
         contains_image(contains_image),
-        is_in_iframe(is_in_iframe) {}
+        is_in_iframe(is_in_iframe),
+        index(index) {}
   // URL of the target link.
   const GURL url;
 
@@ -93,7 +96,7 @@ struct NavigationPredictor::NavigationScore {
   const bool is_url_incremented_by_one;
 
   // Rank in terms of anchor element area. It starts at 0, a lower rank implies
-  // a larger area. Capped at 40.
+  // a larger area. Capped at 100.
   const size_t area_rank;
 
   // Calculated navigation score, based on |area_rank| and other metrics.
@@ -111,6 +114,9 @@ struct NavigationPredictor::NavigationScore {
   // |is_in_iframe| is true if at least one of the anchor elements point to
   // |url| is in an iframe.
   const bool is_in_iframe;
+
+  // An index reported to UKM.
+  const size_t index;
 
   // Rank of the |score| in this document. It starts at 0, a lower rank implies
   // a higher |score|.
@@ -141,14 +147,6 @@ NavigationPredictor::NavigationPredictor(
           blink::features::kNavigationPredictor,
           "is_url_incremented_scale",
           100)),
-      source_engagement_score_scale_(base::GetFieldTrialParamByFeatureAsInt(
-          blink::features::kNavigationPredictor,
-          "source_engagement_score_scale",
-          0)),
-      target_engagement_score_scale_(base::GetFieldTrialParamByFeatureAsInt(
-          blink::features::kNavigationPredictor,
-          "target_engagement_score_scale",
-          0)),
       area_rank_scale_(base::GetFieldTrialParamByFeatureAsInt(
           blink::features::kNavigationPredictor,
           "area_rank_scale",
@@ -193,11 +191,10 @@ NavigationPredictor::NavigationPredictor(
           blink::features::kNavigationPredictor,
           "viewport_width_scale",
           0)),
-      sum_link_scales_(
-          ratio_area_scale_ + is_in_iframe_scale_ + is_same_host_scale_ +
-          contains_image_scale_ + is_url_incremented_scale_ +
-          source_engagement_score_scale_ + target_engagement_score_scale_ +
-          area_rank_scale_ + ratio_distance_root_top_scale_),
+      sum_link_scales_(ratio_area_scale_ + is_in_iframe_scale_ +
+                       is_same_host_scale_ + contains_image_scale_ +
+                       is_url_incremented_scale_ + area_rank_scale_ +
+                       ratio_distance_root_top_scale_),
       sum_page_scales_(link_total_scale_ + iframe_link_total_scale_ +
                        increment_link_total_scale_ +
                        same_origin_link_total_scale_ + image_link_total_scale_ +
@@ -224,12 +221,17 @@ NavigationPredictor::NavigationPredictor(
       normalize_navigation_scores_(base::GetFieldTrialParamByFeatureAsBool(
           blink::features::kNavigationPredictor,
           "normalize_scores",
-          true)) {
+          true)),
+      render_frame_host_(render_frame_host) {
   DCHECK(browser_context_);
   DETACH_FROM_SEQUENCE(sequence_checker_);
   DCHECK_LE(0, preconnect_origin_score_threshold_);
+  DCHECK(render_frame_host_);
 
   if (!IsMainFrame(render_frame_host))
+    return;
+
+  if (browser_context_->IsOffTheRecord())
     return;
 
   ukm_recorder_ = ukm::UkmRecorder::Get();
@@ -250,8 +252,8 @@ NavigationPredictor::~NavigationPredictor() {
 }
 
 void NavigationPredictor::Create(
-    mojo::PendingReceiver<blink::mojom::AnchorElementMetricsHost> receiver,
-    content::RenderFrameHost* render_frame_host) {
+    content::RenderFrameHost* render_frame_host,
+    mojo::PendingReceiver<blink::mojom::AnchorElementMetricsHost> receiver) {
   DCHECK(base::FeatureList::IsEnabled(blink::features::kNavigationPredictor));
 
   // Only valid for the main frame.
@@ -470,35 +472,33 @@ void NavigationPredictor::MaybeSendMetricsToUkm() const {
 
   page_link_builder.Record(ukm_recorder_);
 
-  for (int i = 0; i < static_cast<int>(top_urls_.size()); i++) {
+  for (const auto& navigation_score_tuple : navigation_scores_map_) {
+    const auto& navigation_score = navigation_score_tuple.second;
     ukm::builders::NavigationPredictorAnchorElementMetrics
         anchor_element_builder(ukm_source_id_);
 
-    std::string url = top_urls_[i].spec();
-    auto iter = navigation_scores_map_.find(url);
+    // Offset index to be 1-based indexing.
+    anchor_element_builder.SetAnchorIndex(navigation_score->index);
+    anchor_element_builder.SetIsInIframe(navigation_score->is_in_iframe);
+    anchor_element_builder.SetIsURLIncrementedByOne(
+        navigation_score->is_url_incremented_by_one);
+    anchor_element_builder.SetContainsImage(navigation_score->contains_image);
+    anchor_element_builder.SetSameOrigin(
+        url::Origin::Create(navigation_score->url) ==
+        url::Origin::Create(document_url_));
 
-    if (iter != navigation_scores_map_.end()) {
-      // Offset index to be 1-based indexing.
-      anchor_element_builder.SetAnchorIndex(i + 1);
-      anchor_element_builder.SetIsInIframe(iter->second->is_in_iframe);
-      anchor_element_builder.SetIsURLIncrementedByOne(
-          iter->second->is_url_incremented_by_one);
-      anchor_element_builder.SetContainsImage(iter->second->contains_image);
-      anchor_element_builder.SetSameOrigin(iter->second->url.GetOrigin() ==
-                                           document_origin_.GetURL());
+    // Convert the ratio area and ratio distance from [0,1] to [0,100].
+    int percent_ratio_area =
+        static_cast<int>(navigation_score->ratio_area * 100);
+    int percent_ratio_distance_root_top =
+        static_cast<int>(navigation_score->ratio_distance_root_top * 100);
 
-      // Convert the ratio area and ratio distance from [0,1] to [0,100].
-      int percent_ratio_area = static_cast<int>(iter->second->ratio_area * 100);
-      int percent_ratio_distance_root_top =
-          static_cast<int>(iter->second->ratio_distance_root_top * 100);
+    anchor_element_builder.SetPercentClickableArea(
+        GetLinearBucketForRatioArea(percent_ratio_area));
+    anchor_element_builder.SetPercentVerticalDistance(
+        GetLinearBucketForLinkLocation(percent_ratio_distance_root_top));
 
-      anchor_element_builder.SetPercentClickableArea(
-          GetLinearBucketForRatioArea(percent_ratio_area));
-      anchor_element_builder.SetPercentVerticalDistance(
-          GetLinearBucketForLinkLocation(percent_ratio_distance_root_top));
-
-      anchor_element_builder.Record(ukm_recorder_);
-    }
+    anchor_element_builder.Record(ukm_recorder_);
   }
 }
 
@@ -520,20 +520,18 @@ void NavigationPredictor::MaybeSendClickMetricsToUkm(
     return;
   }
 
-  auto iter = std::find(top_urls_.begin(), top_urls_.end(), clicked_url);
-  int anchor_element_index =
-      (iter == top_urls_.end()) ? 0 : iter - top_urls_.begin() + 1;
+  if (clicked_count_ > 10)
+    return;
+
+  auto nav_score = navigation_scores_map_.find(clicked_url);
+
+  int anchor_element_index = (nav_score == navigation_scores_map_.end())
+                                 ? 0
+                                 : nav_score->second->index;
 
   ukm::builders::NavigationPredictorPageLinkClick builder(ukm_source_id_);
   builder.SetAnchorElementIndex(anchor_element_index);
   builder.Record(ukm_recorder_);
-}
-
-SiteEngagementService* NavigationPredictor::GetEngagementService() const {
-  Profile* profile = Profile::FromBrowserContext(browser_context_);
-  SiteEngagementService* service = SiteEngagementService::Get(profile);
-  DCHECK(service);
-  return service;
 }
 
 TemplateURLService* NavigationPredictor::GetTemplateURLService() const {
@@ -564,26 +562,7 @@ void NavigationPredictor::ReportAnchorElementMetricsOnClick(
   }
 
   RecordTimingOnClick();
-
-  SiteEngagementService* engagement_service = GetEngagementService();
-
-  UMA_HISTOGRAM_COUNTS_100(
-      "AnchorElementMetrics.Clicked.DocumentEngagementScore",
-      static_cast<int>(engagement_service->GetScore(metrics->source_url)));
-
-  double target_score = engagement_service->GetScore(metrics->target_url);
-  UMA_HISTOGRAM_COUNTS_100("AnchorElementMetrics.Clicked.HrefEngagementScore2",
-                           static_cast<int>(target_score));
-  if (target_score > 0) {
-    UMA_HISTOGRAM_COUNTS_100(
-        "AnchorElementMetrics.Clicked.HrefEngagementScorePositive",
-        static_cast<int>(target_score));
-  }
-  if (!metrics->is_same_host) {
-    UMA_HISTOGRAM_COUNTS_100(
-        "AnchorElementMetrics.Clicked.HrefEngagementScoreExternal",
-        static_cast<int>(target_score));
-  }
+  clicked_count_++;
 
   RecordActionAccuracyOnClick(metrics->target_url);
   MaybeSendClickMetricsToUkm(metrics->target_url.spec());
@@ -786,7 +765,7 @@ void NavigationPredictor::ReportAnchorElementMetricsOnLoad(
           metrics[0]->source_url);
   MergeMetricsSameTargetUrl(&metrics);
 
-  if (metrics.empty())
+  if (metrics.empty() || viewport_size.IsEmpty())
     return;
 
   number_of_anchors_ = metrics.size();
@@ -812,53 +791,27 @@ void NavigationPredictor::ReportAnchorElementMetricsOnLoad(
   median_link_location_ = link_locations[link_locations.size() / 2] * 100;
   double page_metrics_score = GetPageMetricsScore();
 
-  // Retrieve site engagement score of the document. |metrics| is guaranteed to
-  // be non-empty. All |metrics| have the same source_url.
-  SiteEngagementService* engagement_service = GetEngagementService();
-  double document_engagement_score =
-      engagement_service->GetScore(metrics[0]->source_url);
-  DCHECK(document_engagement_score >= 0 &&
-         document_engagement_score <= engagement_service->GetMaxPoints());
-  UMA_HISTOGRAM_COUNTS_100(
-      "AnchorElementMetrics.Visible.DocumentEngagementScore",
-      static_cast<int>(document_engagement_score));
-
   // Sort metric by area in descending order to get area rank, which is a
   // derived feature to calculate navigation score.
   std::sort(metrics.begin(), metrics.end(), [](const auto& a, const auto& b) {
     return a->ratio_area > b->ratio_area;
   });
 
-  // Store either the top 10 links (or all the links, if the page
-  // contains fewer than 10 links), in |top_urls_|. Then, shuffle the
-  // list to randomize data sent to the UKM.
-  int top_urls_size = std::min(10, static_cast<int>(metrics.size()));
-  top_urls_.reserve(top_urls_size);
-  for (int i = 0; i < top_urls_size; i++) {
-    top_urls_.push_back(metrics[i]->target_url);
-  }
-  base::RandomShuffle(top_urls_.begin(), top_urls_.end());
-
   // Loop |metrics| to compute navigation scores.
   std::vector<std::unique_ptr<NavigationScore>> navigation_scores;
   navigation_scores.reserve(metrics.size());
   double total_score = 0.0;
+
+  std::vector<int> indices(metrics.size());
+  std::generate(indices.begin(), indices.end(),
+                [n = 1]() mutable { return n++; });
+
+  // Shuffle the indices to keep metrics less identifiable in UKM.
+  base::RandomShuffle(indices.begin(), indices.end());
+
   for (size_t i = 0; i != metrics.size(); ++i) {
     const auto& metric = metrics[i];
     RecordMetricsOnLoad(*metric);
-
-    const double target_engagement_score =
-        engagement_service->GetScore(metric->target_url);
-    DCHECK(target_engagement_score >= 0 &&
-           target_engagement_score <= engagement_service->GetMaxPoints());
-    UMA_HISTOGRAM_COUNTS_100(
-        "AnchorElementMetrics.Visible.HrefEngagementScore2",
-        static_cast<int>(target_engagement_score));
-    if (!metric->is_same_host) {
-      UMA_HISTOGRAM_COUNTS_100(
-          "AnchorElementMetrics.Visible.HrefEngagementScoreExternal",
-          static_cast<int>(target_engagement_score));
-    }
 
     // Anchor elements with the same area are assigned with the same rank.
     size_t area_rank = i;
@@ -866,16 +819,14 @@ void NavigationPredictor::ReportAnchorElementMetricsOnLoad(
       area_rank = navigation_scores[navigation_scores.size() - 1]->area_rank;
 
     double score =
-        CalculateAnchorNavigationScore(*metric, document_engagement_score,
-                                       target_engagement_score, area_rank) +
-        page_metrics_score;
+        CalculateAnchorNavigationScore(*metric, area_rank) + page_metrics_score;
     total_score += score;
 
     navigation_scores.push_back(std::make_unique<NavigationScore>(
         metric->target_url, static_cast<double>(metric->ratio_area),
         metric->is_url_incremented_by_one, area_rank, score,
         metric->ratio_distance_root_top, metric->contains_image,
-        metric->is_in_iframe));
+        metric->is_in_iframe, indices[i]));
   }
 
   if (normalize_navigation_scores_) {
@@ -894,8 +845,8 @@ void NavigationPredictor::ReportAnchorElementMetricsOnLoad(
   std::sort(navigation_scores.begin(), navigation_scores.end(),
             [](const auto& a, const auto& b) { return a->score > b->score; });
 
-  document_origin_ = url::Origin::Create(metrics[0]->source_url);
-  MaybeTakeActionOnLoad(document_origin_, navigation_scores);
+  document_url_ = metrics[0]->source_url;
+  MaybeTakeActionOnLoad(document_url_, navigation_scores);
 
   // Store navigation scores in |navigation_scores_map_| for fast look up upon
   // clicks.
@@ -911,17 +862,11 @@ void NavigationPredictor::ReportAnchorElementMetricsOnLoad(
 
 double NavigationPredictor::CalculateAnchorNavigationScore(
     const blink::mojom::AnchorElementMetrics& metrics,
-    double document_engagement_score,
-    double target_engagement_score,
     int area_rank) const {
   DCHECK(!browser_context_->IsOffTheRecord());
 
   if (sum_link_scales_ == 0)
     return 0.0;
-
-  double max_engagement_points = GetEngagementService()->GetMaxPoints();
-  document_engagement_score /= max_engagement_points;
-  target_engagement_score /= max_engagement_points;
 
   double area_rank_score =
       (double)((number_of_anchors_ - area_rank)) / number_of_anchors_;
@@ -940,12 +885,6 @@ double NavigationPredictor::CalculateAnchorNavigationScore(
 
   DCHECK_LE(0, metrics.is_url_incremented_by_one);
   DCHECK_GE(1, metrics.is_url_incremented_by_one);
-
-  DCHECK_LE(0, document_engagement_score);
-  DCHECK_GE(1, document_engagement_score);
-
-  DCHECK_LE(0, target_engagement_score);
-  DCHECK_GE(1, target_engagement_score);
 
   DCHECK_LE(0, area_rank_score);
   DCHECK_GE(1, area_rank_score);
@@ -968,8 +907,6 @@ double NavigationPredictor::CalculateAnchorNavigationScore(
       (metrics.is_in_iframe ? is_in_iframe_scale_ : 0.0) +
       (metrics.contains_image ? contains_image_scale_ : 0.0) + host_score +
       (metrics.is_url_incremented_by_one ? is_url_incremented_scale_ : 0.0) +
-      (source_engagement_score_scale_ * document_engagement_score) +
-      (target_engagement_score_scale_ * target_engagement_score) +
       (area_rank_scale_ * area_rank_score) +
       (ratio_distance_root_top_scale_ *
        GetLinearBucketForLinkLocation(
@@ -1009,8 +946,23 @@ double NavigationPredictor::GetPageMetricsScore() const {
   }
 }
 
+void NavigationPredictor::NotifyPredictionUpdated(
+    const std::vector<std::unique_ptr<NavigationScore>>&
+        sorted_navigation_scores) {
+  NavigationPredictorKeyedService* service =
+      NavigationPredictorKeyedServiceFactory::GetForProfile(
+          Profile::FromBrowserContext(browser_context_));
+  DCHECK(service);
+  std::vector<GURL> top_urls;
+  top_urls.reserve(sorted_navigation_scores.size());
+  for (const auto& nav_score : sorted_navigation_scores) {
+    top_urls.push_back(nav_score->url);
+  }
+  service->OnPredictionUpdated(render_frame_host_, document_url_, top_urls);
+}
+
 void NavigationPredictor::MaybeTakeActionOnLoad(
-    const url::Origin& document_origin,
+    const GURL& document_url,
     const std::vector<std::unique_ptr<NavigationScore>>&
         sorted_navigation_scores) {
   DCHECK(!browser_context_->IsOffTheRecord());
@@ -1023,10 +975,12 @@ void NavigationPredictor::MaybeTakeActionOnLoad(
   DCHECK(!preconnect_origin_.has_value());
   DCHECK(!prefetch_url_.has_value());
 
+  NotifyPredictionUpdated(sorted_navigation_scores);
+
   // Try prefetch first.
-  prefetch_url_ = GetUrlToPrefetch(document_origin, sorted_navigation_scores);
+  prefetch_url_ = GetUrlToPrefetch(document_url, sorted_navigation_scores);
   if (prefetch_url_.has_value()) {
-    DCHECK_EQ(document_origin.host(), prefetch_url_->host());
+    DCHECK_EQ(document_url.host(), prefetch_url_->host());
     MaybePreconnectNow(Action::kPrefetch);
     MaybePrefetch();
     return;
@@ -1034,9 +988,9 @@ void NavigationPredictor::MaybeTakeActionOnLoad(
 
   // Compute preconnect origin only if there is no valid prefetch URL.
   preconnect_origin_ =
-      GetOriginToPreconnect(document_origin, sorted_navigation_scores);
+      GetOriginToPreconnect(document_url, sorted_navigation_scores);
   if (preconnect_origin_.has_value()) {
-    DCHECK_EQ(document_origin.host(), preconnect_origin_->host());
+    DCHECK_EQ(document_url.host(), preconnect_origin_->host());
     MaybePreconnectNow(Action::kPreconnect);
     return;
   }
@@ -1077,7 +1031,7 @@ void NavigationPredictor::Prefetch(
 }
 
 base::Optional<GURL> NavigationPredictor::GetUrlToPrefetch(
-    const url::Origin& document_origin,
+    const GURL& document_url,
     const std::vector<std::unique_ptr<NavigationScore>>&
         sorted_navigation_scores) const {
   // Currently, prefetch is disabled on low-end devices since prefetch may
@@ -1091,34 +1045,21 @@ base::Optional<GURL> NavigationPredictor::GetUrlToPrefetch(
   if (source_is_default_search_engine_page_)
     return base::nullopt;
 
-  if (sorted_navigation_scores.empty() || top_urls_.empty())
+  if (sorted_navigation_scores.empty())
     return base::nullopt;
 
-  // Find which URL in |top_urls_| has the highest navigation score.
-  double highest_navigation_score;
-  base::Optional<GURL> url_to_prefetch;
-
-  for (const auto& nav_score : sorted_navigation_scores) {
-    auto url_iter =
-        std::find(top_urls_.begin(), top_urls_.end(), nav_score->url);
-    if (url_iter != top_urls_.end()) {
-      url_to_prefetch = nav_score->url;
-      highest_navigation_score = nav_score->score;
-      break;
-    }
-  }
+  double highest_navigation_score = sorted_navigation_scores[0]->score;
+  GURL url_to_prefetch = sorted_navigation_scores[0]->url;
 
   UMA_HISTOGRAM_COUNTS_100(
       "AnchorElementMetrics.Visible.HighestNavigationScore",
       static_cast<int>(highest_navigation_score));
 
-  if (!url_to_prefetch)
-    return url_to_prefetch;
-
   // Only the same origin URLs are eligible for prefetching. If the URL with
   // the highest score is from a different origin, then we skip prefetching
   // since same origin URLs are not likely to be clicked.
-  if (url::Origin::Create(url_to_prefetch.value()) != document_origin) {
+  if (url::Origin::Create(url_to_prefetch) !=
+      url::Origin::Create(document_url)) {
     return base::nullopt;
   }
 
@@ -1131,7 +1072,7 @@ base::Optional<GURL> NavigationPredictor::GetUrlToPrefetch(
 }
 
 base::Optional<url::Origin> NavigationPredictor::GetOriginToPreconnect(
-    const url::Origin& document_origin,
+    const GURL& document_url,
     const std::vector<std::unique_ptr<NavigationScore>>&
         sorted_navigation_scores) const {
   // On search engine results page, next navigation is likely to be a different
@@ -1143,7 +1084,7 @@ base::Optional<url::Origin> NavigationPredictor::GetOriginToPreconnect(
   if (base::GetFieldTrialParamByFeatureAsBool(
           blink::features::kNavigationPredictor, "preconnect_skip_link_scores",
           true)) {
-    return document_origin;
+    return url::Origin::Create(document_url);
   }
 
   // Compute preconnect score for each origins: Multiple anchor elements on
@@ -1202,8 +1143,9 @@ base::Optional<url::Origin> NavigationPredictor::GetOriginToPreconnect(
 
   // Connect to the origin with highest score provided the origin is same
   // as the document origin.
-  if (sorted_preconnect_scores[0].origin != document_origin)
+  if (sorted_preconnect_scores[0].origin != url::Origin::Create(document_url)) {
     return base::nullopt;
+  }
 
   // If the prediction score of the highest scoring origin is less than the
   // threshold, then return.

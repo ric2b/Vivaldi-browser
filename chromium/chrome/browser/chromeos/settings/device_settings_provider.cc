@@ -80,6 +80,7 @@ const char* const kKnownSettings[] = {
     kDeviceLoginScreenExtensions,
     kDeviceLoginScreenInputMethods,
     kDeviceLoginScreenLocales,
+    kDeviceLoginScreenSystemInfoEnforced,
     kDeviceOffHours,
     kDeviceOwner,
     kDeviceNativePrintersAccessMode,
@@ -388,6 +389,13 @@ void DecodeLoginPolicies(const em::ChromeDeviceSettingsProto& policy,
       input_methods.push_back(base::Value(input_method));
     new_values_cache->SetValue(kDeviceLoginScreenInputMethods,
                                base::Value(std::move(input_methods)));
+  }
+
+  if (policy.has_device_login_screen_system_info_enforced() &&
+      policy.device_login_screen_system_info_enforced().has_value()) {
+    new_values_cache->SetBoolean(
+        kDeviceLoginScreenSystemInfoEnforced,
+        policy.device_login_screen_system_info_enforced().value());
   }
 
   if (policy.has_saml_login_authentication_type() &&
@@ -764,7 +772,7 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
     const em::DeviceNativePrintersBlacklistProto& proto(
         policy.native_device_printers_blacklist());
     for (const auto& id : proto.blacklist())
-      list.GetList().emplace_back(id);
+      list.Append(id);
     new_values_cache->SetValue(kDeviceNativePrintersBlacklist, std::move(list));
   }
 
@@ -773,7 +781,7 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
     const em::DeviceNativePrintersWhitelistProto& proto(
         policy.native_device_printers_whitelist());
     for (const auto& id : proto.whitelist())
-      list.GetList().emplace_back(id);
+      list.Append(id);
     new_values_cache->SetValue(kDeviceNativePrintersWhitelist, std::move(list));
   }
 

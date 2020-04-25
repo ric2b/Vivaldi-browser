@@ -137,12 +137,14 @@ Network.RequestHeadersView = class extends UI.VBox {
       }
     }
     const div = createElementWithClass('div', className);
-    if (value === '')
+    if (value === '') {
       div.classList.add('empty-value');
-    if (errorDecoding)
+    }
+    if (errorDecoding) {
       div.createChild('span', 'header-decode-error').textContent = Common.UIString('(unable to decode value)');
-    else
+    } else {
       div.textContent = value;
+    }
     return div;
   }
 
@@ -165,8 +167,9 @@ Network.RequestHeadersView = class extends UI.VBox {
     this._requestPayloadCategory.hidden = true;
 
     const formData = await this._request.requestFormData();
-    if (!formData)
+    if (!formData) {
       return;
+    }
 
     const formParameters = await this._request.formParameters();
     if (formParameters) {
@@ -199,8 +202,9 @@ Network.RequestHeadersView = class extends UI.VBox {
     sourceTreeElement.selectable = false;
     treeElement.removeChildren();
     treeElement.appendChild(sourceTreeElement);
-    if (!trim)
+    if (!trim) {
       return;
+    }
 
     const showMoreButton = createElementWithClass('button', 'request-headers-show-more-button');
     showMoreButton.textContent = Common.UIString('Show more');
@@ -224,7 +228,7 @@ Network.RequestHeadersView = class extends UI.VBox {
     paramsTreeElement.listItemElement.createTextChild(title);
 
     const headerCount = createElementWithClass('span', 'header-count');
-    headerCount.textContent = Common.UIString('\u00A0(%d)', params.length);
+    headerCount.textContent = Common.UIString('\xA0(%d)', params.length);
     paramsTreeElement.listItemElement.appendChild(headerCount);
 
     /**
@@ -337,10 +341,11 @@ Network.RequestHeadersView = class extends UI.VBox {
     });
     const headersText = this._request.requestHeadersText();
 
-    if (this._showRequestHeadersText && headersText)
+    if (this._showRequestHeadersText && headersText) {
       this._refreshHeadersText(Common.UIString('Request Headers'), headers.length, headersText, treeElement);
-    else
+    } else {
       this._refreshHeaders(Common.UIString('Request Headers'), headers, treeElement, headersText === undefined);
+    }
 
     if (headersText) {
       const toggleButton = this._createHeadersToggleButton(this._showRequestHeadersText);
@@ -356,10 +361,13 @@ Network.RequestHeadersView = class extends UI.VBox {
     const headers = this._request.sortedResponseHeaders.slice();
     const headersText = this._request.responseHeadersText;
 
-    if (this._showResponseHeadersText)
+    if (this._showResponseHeadersText) {
       this._refreshHeadersText(Common.UIString('Response Headers'), headers.length, headersText, treeElement);
-    else
-      this._refreshHeaders(Common.UIString('Response Headers'), headers, treeElement);
+    } else {
+      this._refreshHeaders(
+          Common.UIString('Response Headers'), headers, treeElement, /* provisional */ false,
+          this._request.blockedResponseCookies());
+    }
 
     if (headersText) {
       const toggleButton = this._createHeadersToggleButton(this._showResponseHeadersText);
@@ -383,12 +391,13 @@ Network.RequestHeadersView = class extends UI.VBox {
       const statusCodeImage = statusCodeFragment.createChild('span', 'resource-status-image', 'dt-icon-label');
       statusCodeImage.title = this._request.statusCode + ' ' + this._request.statusText;
 
-      if (this._request.statusCode < 300 || this._request.statusCode === 304)
+      if (this._request.statusCode < 300 || this._request.statusCode === 304) {
         statusCodeImage.type = 'smallicon-green-ball';
-      else if (this._request.statusCode < 400)
+      } else if (this._request.statusCode < 400) {
         statusCodeImage.type = 'smallicon-orange-ball';
-      else
+      } else {
         statusCodeImage.type = 'smallicon-red-ball';
+      }
 
       requestMethodElement.title = this._formatHeader(ls`Request Method`, this._request.requestMethod);
 
@@ -427,7 +436,7 @@ Network.RequestHeadersView = class extends UI.VBox {
     headersTreeElement.listItemElement.removeChildren();
     headersTreeElement.listItemElement.createTextChild(title);
 
-    const headerCount = Common.UIString('\u00A0(%d)', headersLength);
+    const headerCount = Common.UIString('\xA0(%d)', headersLength);
     headersTreeElement.listItemElement.createChild('span', 'header-count').textContent = headerCount;
   }
 
@@ -436,8 +445,9 @@ Network.RequestHeadersView = class extends UI.VBox {
    * @param {!Array.<!SDK.NetworkRequest.NameValue>} headers
    * @param {!UI.TreeElement} headersTreeElement
    * @param {boolean=} provisionalHeaders
+   * @param {!Array<!SDK.NetworkRequest.BlockedSetCookieWithReason>=} blockedResponseCookies
    */
-  _refreshHeaders(title, headers, headersTreeElement, provisionalHeaders) {
+  _refreshHeaders(title, headers, headersTreeElement, provisionalHeaders, blockedResponseCookies) {
     headersTreeElement.removeChildren();
 
     const length = headers.length;
@@ -453,12 +463,38 @@ Network.RequestHeadersView = class extends UI.VBox {
       headersTreeElement.appendChild(cautionTreeElement);
     }
 
+    /** @type {!Map<string, !Array<!Protocol.Network.SetCookieBlockedReason>>} */
+    const blockedCookieLineToReasons = new Map();
+    if (blockedResponseCookies) {
+      blockedResponseCookies.forEach(blockedCookie => {
+        blockedCookieLineToReasons.set(blockedCookie.cookieLine, blockedCookie.blockedReasons);
+      });
+    }
+
     headersTreeElement.hidden = !length && !provisionalHeaders;
     for (let i = 0; i < length; ++i) {
       const headerTreeElement = new UI.TreeElement(this._formatHeader(headers[i].name, headers[i].value));
       headerTreeElement.selectable = false;
-      headersTreeElement.appendChild(headerTreeElement);
       headerTreeElement[Network.RequestHeadersView._headerNameSymbol] = headers[i].name;
+
+      if (headers[i].name.toLowerCase() === 'set-cookie') {
+        const matchingBlockedReasons = blockedCookieLineToReasons.get(headers[i].value);
+        if (matchingBlockedReasons) {
+          const icon = UI.Icon.create('smallicon-warning', '');
+          headerTreeElement.listItemElement.appendChild(icon);
+
+          let titleText = '';
+          for (const blockedReason of matchingBlockedReasons) {
+            if (titleText) {
+              titleText += '\n';
+            }
+            titleText += SDK.NetworkRequest.setCookieBlockedReasonToUiString(blockedReason);
+          }
+          icon.title = titleText;
+        }
+      }
+
+      headersTreeElement.appendChild(headerTreeElement);
     }
   }
 
@@ -477,16 +513,18 @@ Network.RequestHeadersView = class extends UI.VBox {
     const remoteAddress = this._request.remoteAddress();
     const treeElement = this._remoteAddressItem;
     treeElement.hidden = !remoteAddress;
-    if (remoteAddress)
+    if (remoteAddress) {
       treeElement.title = this._formatHeader(Common.UIString('Remote Address'), remoteAddress);
+    }
   }
 
   _refreshReferrerPolicy() {
     const referrerPolicy = this._request.referrerPolicy();
     const treeElement = this._referrerPolicyItem;
     treeElement.hidden = !referrerPolicy;
-    if (referrerPolicy)
+    if (referrerPolicy) {
       treeElement.title = this._formatHeader(Common.UIString('Referrer Policy'), referrerPolicy);
+    }
   }
 
   /**
@@ -527,8 +565,9 @@ Network.RequestHeadersView = class extends UI.VBox {
   }
 
   _clearHighlight() {
-    if (this._highlightedElement)
+    if (this._highlightedElement) {
       this._highlightedElement.listItemElement.classList.remove('header-highlight');
+    }
     this._highlightedElement = null;
   }
 
@@ -540,8 +579,9 @@ Network.RequestHeadersView = class extends UI.VBox {
   _revealAndHighlight(category, name) {
     this._clearHighlight();
     for (const element of category.children()) {
-      if (element[Network.RequestHeadersView._headerNameSymbol] !== name)
+      if (element[Network.RequestHeadersView._headerNameSymbol] !== name) {
         continue;
+      }
       this._highlightedElement = element;
       element.reveal();
       element.listItemElement.classList.add('header-highlight');

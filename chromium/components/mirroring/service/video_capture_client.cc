@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/no_destructor.h"
+#include "base/trace_event/trace_event.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/video_frame.h"
 #include "media/capture/mojom/video_capture_types.mojom.h"
@@ -30,9 +31,10 @@ const base::UnguessableToken& SessionId() {
 
 }  // namespace
 
-VideoCaptureClient::VideoCaptureClient(const media::VideoCaptureParams& params,
-                                       media::mojom::VideoCaptureHostPtr host)
-    : params_(params), video_capture_host_(std::move(host)), binding_(this) {
+VideoCaptureClient::VideoCaptureClient(
+    const media::VideoCaptureParams& params,
+    mojo::PendingRemote<media::mojom::VideoCaptureHost> host)
+    : params_(params), video_capture_host_(std::move(host)) {
   DCHECK(video_capture_host_);
 }
 
@@ -49,10 +51,8 @@ void VideoCaptureClient::Start(FrameDeliverCallback deliver_callback,
   frame_deliver_callback_ = std::move(deliver_callback);
   error_callback_ = std::move(error_callback);
 
-  media::mojom::VideoCaptureObserverPtr observer;
-  binding_.Bind(mojo::MakeRequest(&observer));
   video_capture_host_->Start(DeviceId(), SessionId(), params_,
-                             std::move(observer));
+                             receiver_.BindNewPipeAndPassRemote());
 }
 
 void VideoCaptureClient::Stop() {
@@ -110,7 +110,7 @@ void VideoCaptureClient::OnStateChanged(media::mojom::VideoCaptureState state) {
       weak_factory_.InvalidateWeakPtrs();
       error_callback_.Reset();
       frame_deliver_callback_.Reset();
-      binding_.Close();
+      receiver_.reset();
       break;
   }
 }

@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.autofill_assistant;
 
 import android.content.Context;
-import android.support.annotation.Nullable;
 import android.text.SpannableString;
 import android.text.method.LinkMovementMethod;
 import android.view.LayoutInflater;
@@ -13,9 +12,12 @@ import android.view.View;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.Callback;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.autofill_assistant.R;
+import org.chromium.chrome.browser.autofill_assistant.metrics.DropOutReason;
 import org.chromium.chrome.browser.autofill_assistant.metrics.OnBoarding;
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayModel;
@@ -48,6 +50,8 @@ class AssistantOnboardingCoordinator {
     private AssistantBottomSheetContent mContent;
     private boolean mAnimate = true;
 
+    private boolean mOnboardingShown;
+
     AssistantOnboardingCoordinator(String experimentIds, Context context,
             BottomSheetController controller, @Nullable Tab tab) {
         mExperimentIds = experimentIds;
@@ -68,6 +72,7 @@ class AssistantOnboardingCoordinator {
      */
     void show(Callback<Boolean> callback) {
         AutofillAssistantMetrics.recordOnBoarding(OnBoarding.OB_SHOWN);
+        mOnboardingShown = true;
 
         if (mTab != null) {
             // If there's a tab, cover it with an overlay.
@@ -127,6 +132,14 @@ class AssistantOnboardingCoordinator {
     }
 
     /**
+     * Returns {@code true} if the onboarding has been shown at the beginning when this
+     * autofill assistant flow got triggered.
+     */
+    boolean getOnboardingShown() {
+        return mOnboardingShown;
+    }
+
+    /**
      * Set the content of the bottom sheet to be the Autofill Assistant onboarding.
      */
     private void initContent(Callback<Boolean> callback) {
@@ -173,6 +186,10 @@ class AssistantOnboardingCoordinator {
         AutofillAssistantPreferencesUtil.setInitialPreferences(accept);
         AutofillAssistantMetrics.recordOnBoarding(
                 accept ? OnBoarding.OB_ACCEPTED : OnBoarding.OB_CANCELLED);
+        if (!accept) {
+            AutofillAssistantMetrics.recordDropOut(DropOutReason.DECLINED);
+        }
+
         callback.onResult(accept);
         hide();
     }

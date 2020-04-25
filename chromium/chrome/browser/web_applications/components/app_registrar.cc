@@ -20,23 +20,20 @@ AppRegistrar::~AppRegistrar() {
     observer.OnAppRegistrarDestroyed();
 }
 
-WebAppRegistrar* AppRegistrar::AsWebAppRegistrar() {
-  return nullptr;
-}
-
-extensions::BookmarkAppRegistrar* AppRegistrar::AsBookmarkAppRegistrar() {
-  return nullptr;
-}
-
 bool AppRegistrar::IsLocallyInstalled(const GURL& start_url) const {
   return IsLocallyInstalled(GenerateAppIdFromURL(start_url));
+}
+
+bool AppRegistrar::IsPlaceholderApp(const AppId& app_id) const {
+  return ExternallyInstalledWebAppPrefs(profile_->GetPrefs())
+      .IsPlaceholderApp(app_id);
 }
 
 void AppRegistrar::AddObserver(AppRegistrarObserver* observer) {
   observers_.AddObserver(observer);
 }
 
-void AppRegistrar::RemoveObserver(const AppRegistrarObserver* observer) {
+void AppRegistrar::RemoveObserver(AppRegistrarObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
@@ -51,6 +48,11 @@ void AppRegistrar::NotifyWebAppUninstalled(const AppId& app_id) {
   for (AppRegistrarObserver& observer : observers_)
     observer.OnWebAppUninstalled(app_id);
   RecordWebAppUninstallation(profile()->GetPrefs(), app_id);
+}
+
+void AppRegistrar::NotifyWebAppProfileWillBeDeleted(const AppId& app_id) {
+  for (AppRegistrarObserver& observer : observers_)
+    observer.OnWebAppProfileWillBeDeleted(app_id);
 }
 
 void AppRegistrar::NotifyAppRegistrarShutdown() {

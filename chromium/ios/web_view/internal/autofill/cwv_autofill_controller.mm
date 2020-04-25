@@ -31,10 +31,11 @@
 #include "ios/web/public/js_messaging/web_frame_util.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/web_state.h"
-#import "ios/web/public/web_state/web_state_observer_bridge.h"
+#import "ios/web/public/web_state_observer_bridge.h"
 #include "ios/web_view/internal/app/application_context.h"
 #import "ios/web_view/internal/autofill/cwv_autofill_client_ios_bridge.h"
 #import "ios/web_view/internal/autofill/cwv_autofill_form_internal.h"
+#import "ios/web_view/internal/autofill/cwv_autofill_profile_internal.h"
 #import "ios/web_view/internal/autofill/cwv_autofill_suggestion_internal.h"
 #import "ios/web_view/internal/autofill/cwv_credit_card_internal.h"
 #import "ios/web_view/internal/autofill/cwv_credit_card_saver_internal.h"
@@ -420,6 +421,26 @@ fetchNonPasswordSuggestionsForFormWithName:(NSString*)formName
   [_autofillAgent hideAutofillPopup];
 }
 
+- (void)confirmSaveAutofillProfile:(const autofill::AutofillProfile&)profile
+                          callback:(base::OnceClosure)callback {
+  if (![_delegate respondsToSelector:@selector
+                  (autofillController:
+                      decideSavePolicyForAutofillProfile:decisionHandler:)]) {
+    return;
+  }
+
+  __block base::OnceClosure scopedCallback = std::move(callback);
+  CWVAutofillProfile* autofillProfile =
+      [[CWVAutofillProfile alloc] initWithProfile:profile];
+  [_delegate autofillController:self
+      decideSavePolicyForAutofillProfile:autofillProfile
+                         decisionHandler:^(BOOL save) {
+                           if (save) {
+                             std::move(scopedCallback).Run();
+                           }
+                         }];
+}
+
 - (void)confirmSaveCreditCardLocally:(const autofill::CreditCard&)creditCard
                saveCreditCardOptions:
                    (autofill::AutofillClient::SaveCreditCardOptions)
@@ -443,22 +464,16 @@ fetchNonPasswordSuggestionsForFormWithName:(NSString*)formName
   _saver = saver;
 }
 
-- (void)confirmSaveCreditCardToCloud:(const autofill::CreditCard&)creditCard
-                        legalMessage:
-                            (std::unique_ptr<base::DictionaryValue>)legalMessage
-               saveCreditCardOptions:
-                   (autofill::AutofillClient::SaveCreditCardOptions)
-                       saveCreditCardOptions
-                            callback:
-                                (autofill::AutofillClient::
-                                     UploadSaveCardPromptCallback)callback {
+- (void)
+    confirmSaveCreditCardToCloud:(const autofill::CreditCard&)creditCard
+               legalMessageLines:(autofill::LegalMessageLines)legalMessageLines
+           saveCreditCardOptions:
+               (autofill::AutofillClient::SaveCreditCardOptions)
+                   saveCreditCardOptions
+                        callback:(autofill::AutofillClient::
+                                      UploadSaveCardPromptCallback)callback {
   if (![_delegate respondsToSelector:@selector(autofillController:
                                           saveCreditCardWithSaver:)]) {
-    return;
-  }
-  autofill::LegalMessageLines legalMessageLines;
-  if (!autofill::LegalMessageLine::Parse(*legalMessage, &legalMessageLines,
-                                         /*escape_apostrophes=*/true)) {
     return;
   }
   CWVCreditCardSaver* saver = [[CWVCreditCardSaver alloc]
@@ -630,30 +645,28 @@ showUnmaskPromptForCard:(const autofill::CreditCard&)creditCard
 #pragma mark - CWVPasswordControllerDelegate
 
 - (void)passwordController:(CWVPasswordController*)passwordController
-    decidePasswordSavingPolicyForUsername:(NSString*)username
-                          decisionHandler:
-                              (void (^)(CWVPasswordUserDecision decision))
-                                  decisionHandler {
+    decideSavePolicyForPassword:(CWVPassword*)password
+                decisionHandler:(void (^)(CWVPasswordUserDecision decision))
+                                    decisionHandler {
   if ([self.delegate respondsToSelector:@selector
-                     (autofillController:decidePasswordSavingPolicyForUsername
-                                           :decisionHandler:)]) {
+                     (autofillController:
+                         decideSavePolicyForPassword:decisionHandler:)]) {
     [self.delegate autofillController:self
-        decidePasswordSavingPolicyForUsername:username
-                              decisionHandler:decisionHandler];
+          decideSavePolicyForPassword:password
+                      decisionHandler:decisionHandler];
   }
 }
 
 - (void)passwordController:(CWVPasswordController*)passwordController
-    decidePasswordUpdatingPolicyForUsername:(NSString*)username
-                            decisionHandler:
-                                (void (^)(CWVPasswordUserDecision decision))
-                                    decisionHandler {
+    decideUpdatePolicyForPassword:(CWVPassword*)password
+                  decisionHandler:(void (^)(CWVPasswordUserDecision decision))
+                                      decisionHandler {
   if ([self.delegate respondsToSelector:@selector
-                     (autofillController:decidePasswordUpdatingPolicyForUsername
-                                           :decisionHandler:)]) {
+                     (autofillController:
+                         decideUpdatePolicyForPassword:decisionHandler:)]) {
     [self.delegate autofillController:self
-        decidePasswordUpdatingPolicyForUsername:username
-                                decisionHandler:decisionHandler];
+        decideUpdatePolicyForPassword:password
+                      decisionHandler:decisionHandler];
   }
 }
 

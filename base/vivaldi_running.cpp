@@ -15,9 +15,9 @@ bool g_forced_vivaldi_status = false;
 bool g_tab_drag_in_progress = false;
 
 bool TestIsVivaldiRunning(const base::CommandLine& cmd_line) {
-  if (cmd_line.HasSwitch(switches::kDisableVivaldi) ||
-    cmd_line.HasSwitch("app"))  // so we don't load the Vivaldi app
+  if (cmd_line.HasSwitch(switches::kDisableVivaldi)) {
     return false;
+  }
   return true;
 }
 

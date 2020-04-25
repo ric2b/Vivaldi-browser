@@ -25,15 +25,11 @@ js_type_check("closure_compile") {
 js_library("internet_detail_dialog") {
   deps = [
     "//ui/webui/resources/cr_elements/chromeos/network:cr_network_listener_behavior",
-    "//ui/webui/resources/cr_elements/chromeos/network:cr_onc_types",
+    "//ui/webui/resources/cr_elements/chromeos/network:cr_onc_strings",
     "//ui/webui/resources/cr_elements/policy:cr_policy_network_behavior_mojo",
     "//ui/webui/resources/js:assert",
     "//ui/webui/resources/js:i18n_behavior",
     "//ui/webui/resources/js/chromeos:onc_mojo",
   ]
-  externs_list = [
-    "$externs_path/chrome_send.js",
-    "$externs_path/networking_private.js",
-  ]
-  extra_sources = [ "$interfaces_path/networking_private_interface.js" ]
+  externs_list = [ "$externs_path/chrome_send.js" ]
 }

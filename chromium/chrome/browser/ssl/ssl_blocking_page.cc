@@ -20,12 +20,13 @@
 #include "chrome/browser/ssl/cert_report_helper.h"
 #include "chrome/browser/ssl/chrome_ssl_host_state_delegate.h"
 #include "chrome/browser/ssl/chrome_ssl_host_state_delegate_factory.h"
-#include "chrome/browser/ssl/ssl_cert_reporter.h"
 #include "chrome/browser/ssl/ssl_error_controller_client.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/security_interstitials/content/ssl_cert_reporter.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "components/security_interstitials/core/metrics_helper.h"
+#include "components/security_interstitials/core/ssl_error_options_mask.h"
 #include "components/security_interstitials/core/ssl_error_ui.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/interstitial_page_delegate.h"
@@ -243,8 +244,11 @@ void SSLBlockingPage::NotifyDenyCertificate() {
 // static
 bool SSLBlockingPage::IsOverridable(int options_mask) {
   const bool is_overridable =
-      (options_mask & SSLErrorUI::SOFT_OVERRIDE_ENABLED) &&
-      !(options_mask & SSLErrorUI::STRICT_ENFORCEMENT) &&
-      !(options_mask & SSLErrorUI::HARD_OVERRIDE_DISABLED);
+      (options_mask &
+       security_interstitials::SSLErrorOptionsMask::SOFT_OVERRIDE_ENABLED) &&
+      !(options_mask &
+        security_interstitials::SSLErrorOptionsMask::STRICT_ENFORCEMENT) &&
+      !(options_mask &
+        security_interstitials::SSLErrorOptionsMask::HARD_OVERRIDE_DISABLED);
   return is_overridable;
 }

@@ -28,10 +28,11 @@
 
 class ExternalProcessImporterHost;
 struct ImportedBookmarkEntry;
-struct ImportedNotesEntry;
-struct ImportedFaviconUsage;
 class InProcessImporterBridge;
 
+// Vivaldi
+struct ImportedNotesEntry;
+struct ImportedFaviconUsage;
 struct ImportedSpeedDialEntry;
 
 namespace autofill {
@@ -67,8 +68,6 @@ class ExternalProcessImporterClient
   void OnImportFinished(bool succeeded, const std::string& error_msg) override;
   void OnImportItemStart(importer::ImportItem item) override;
   void OnImportItemFinished(importer::ImportItem item) override;
-  void OnImportItemFailed(importer::ImportItem item,
-                          const std::string& error_msg) override;
   void OnHistoryImportStart(uint32_t total_history_rows_count) override;
   void OnHistoryImportGroup(
       const std::vector<ImporterURLRow>& history_rows_group,
@@ -79,13 +78,6 @@ class ExternalProcessImporterClient
   void OnBookmarksImportGroup(
       const std::vector<ImportedBookmarkEntry>& bookmarks_group) override;
   void OnFaviconsImportStart(uint32_t total_favicons_count) override;
-  void OnNotesImportStart(const base::string16& first_folder_name,
-                          uint32_t total_notes_count) override;
-  void OnNotesImportGroup(
-      const std::vector<ImportedNotesEntry>& notes_group) override;
-  void OnSpeedDialImportStart(uint32_t total_count) override;
-  void OnSpeedDialImportGroup(
-      const std::vector<ImportedSpeedDialEntry>& group) override;
   void OnFaviconsImportGroup(
       const favicon_base::FaviconUsageDataList& favicons_group) override;
   void OnPasswordFormImportReady(const autofill::PasswordForm& form) override;
@@ -99,6 +91,17 @@ class ExternalProcessImporterClient
   void OnAutofillFormDataImportGroup(
       const std::vector<ImporterAutofillFormDataEntry>&
           autofill_form_data_entry_group) override;
+
+  // Vivaldi
+  void OnImportItemFailed(importer::ImportItem item,
+                          const std::string& error_msg) override;
+  void OnNotesImportStart(const base::string16& first_folder_name,
+                          uint32_t total_notes_count) override;
+  void OnNotesImportGroup(
+      const std::vector<ImportedNotesEntry>& notes_group) override;
+  void OnSpeedDialImportStart(uint32_t total_count) override;
+  void OnSpeedDialImportGroup(
+      const std::vector<ImportedSpeedDialEntry>& group) override;
 
  protected:
   ~ExternalProcessImporterClient() override;
@@ -122,10 +125,7 @@ class ExternalProcessImporterClient
   std::vector<ImporterURLRow> history_rows_;
   std::vector<ImportedBookmarkEntry> bookmarks_;
   favicon_base::FaviconUsageDataList favicons_;
-  std::vector<ImportedNotesEntry> notes_;
   std::vector<ImporterAutofillFormDataEntry> autofill_form_data_;
-
-  std::vector<ImportedSpeedDialEntry> speeddial_;
 
   // Usually some variation on IDS_BOOKMARK_GROUP_...; the name of the folder
   // under which imported bookmarks will be placed.
@@ -133,16 +133,6 @@ class ExternalProcessImporterClient
 
   // Total number of bookmarks to import.
   size_t total_bookmarks_count_;
-
-   // Usually some variation on IDS_NOTES_GROUP_...; the name of the folder
-  // under which imported notes will be placed.
-  base::string16 notes_first_folder_name_;
-
-  // Total number of notes to import.
-  size_t total_notes_count_;
-
-  // Total number of speed dial to import.
-  size_t total_speeddial_count_;
 
   // Total number of history items to import.
   size_t total_history_rows_count_;
@@ -177,6 +167,21 @@ class ExternalProcessImporterClient
 
   // Used to receive progress updates from the importer.
   mojo::Receiver<chrome::mojom::ProfileImportObserver> receiver_{this};
+
+  // Vivaldi
+  std::vector<ImportedNotesEntry> notes_;
+
+  std::vector<ImportedSpeedDialEntry> speeddial_;
+
+   // Usually some variation on IDS_NOTES_GROUP_...; the name of the folder
+  // under which imported notes will be placed.
+  base::string16 notes_first_folder_name_;
+
+  // Total number of notes to import.
+  size_t total_notes_count_;
+
+  // Total number of speed dial to import.
+  size_t total_speeddial_count_;
 
   DISALLOW_COPY_AND_ASSIGN(ExternalProcessImporterClient);
 };

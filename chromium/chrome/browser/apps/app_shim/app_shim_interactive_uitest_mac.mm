@@ -29,6 +29,7 @@
 #include "chrome/browser/apps/app_shim/extension_app_shim_handler_mac.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -121,6 +122,8 @@ class WindowedAppShimLaunchObserver : public apps::ExtensionAppShimHandler {
   void OnShimFocus(AppShimHost* host,
                    apps::AppShimFocusType focus_type,
                    const std::vector<base::FilePath>& files) override {}
+  void OnShimSelectedProfile(AppShimHost* host,
+                             const base::FilePath& profile_path) override {}
 
  private:
   std::string app_mode_id_;

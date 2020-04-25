@@ -191,27 +191,12 @@ bool ShouldEnableQuicProxiesForHttpsUrls(
       "true");
 }
 
-bool ShouldMarkQuicBrokenWhenNetworkBlackholes(
-    const VariationParameters& quic_trial_params) {
-  return base::LowerCaseEqualsASCII(
-      GetVariationParam(quic_trial_params,
-                        "mark_quic_broken_when_network_blackholes"),
-      "true");
-}
-
 bool ShouldRetryWithoutAltSvcOnQuicErrors(
     const VariationParameters& quic_trial_params) {
   return !base::LowerCaseEqualsASCII(
       GetVariationParam(quic_trial_params,
                         "retry_without_alt_svc_on_quic_errors"),
       "false");
-}
-
-bool ShouldSupportIetfFormatQuicAltSvc(
-    const VariationParameters& quic_trial_params) {
-  return base::LowerCaseEqualsASCII(
-      GetVariationParam(quic_trial_params, "support_ietf_format_quic_altsvc"),
-      "true");
 }
 
 quic::QuicTagVector GetQuicConnectionOptions(
@@ -329,6 +314,12 @@ bool ShouldQuicMigrateSessionsEarlyV2(
       "true");
 }
 
+bool ShouldQuicAllowPortMigration(
+    const VariationParameters& quic_trial_params) {
+  return base::LowerCaseEqualsASCII(
+      GetVariationParam(quic_trial_params, "allow_port_migration"), "true");
+}
+
 bool ShouldQuicRetryOnAlternateNetworkBeforeHandshake(
     const VariationParameters& quic_trial_params) {
   return base::LowerCaseEqualsASCII(
@@ -412,12 +403,6 @@ int GetQuicMaxNumMigrationsToNonDefaultNetworkOnPathDegrading(
   return 0;
 }
 
-bool ShouldQuicAllowServerMigration(
-    const VariationParameters& quic_trial_params) {
-  return base::LowerCaseEqualsASCII(
-      GetVariationParam(quic_trial_params, "allow_server_migration"), "true");
-}
-
 int GetQuicInitialRttForHandshakeMilliseconds(
     const VariationParameters& quic_trial_params) {
   int value;
@@ -483,17 +468,12 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
   params->enable_quic =
       ShouldEnableQuic(quic_trial_group, quic_trial_params,
                        is_quic_force_disabled, is_quic_force_enabled);
-  params->quic_params.mark_quic_broken_when_network_blackholes =
-      ShouldMarkQuicBrokenWhenNetworkBlackholes(quic_trial_params);
 
   params->enable_server_push_cancellation =
       ShouldEnableServerPushCancelation(quic_trial_params);
 
   params->quic_params.retry_without_alt_svc_on_quic_errors =
       ShouldRetryWithoutAltSvcOnQuicErrors(quic_trial_params);
-
-  params->quic_params.support_ietf_format_quic_altsvc =
-      ShouldSupportIetfFormatQuicAltSvc(quic_trial_params);
 
   if (params->enable_quic) {
     params->enable_quic_proxies_for_https_urls =
@@ -543,6 +523,8 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
         ShouldQuicMigrateSessionsOnNetworkChangeV2(quic_trial_params);
     params->quic_params.migrate_sessions_early_v2 =
         ShouldQuicMigrateSessionsEarlyV2(quic_trial_params);
+    params->quic_params.allow_port_migration =
+        ShouldQuicAllowPortMigration(quic_trial_params);
     params->quic_params.retry_on_alternate_network_before_handshake =
         ShouldQuicRetryOnAlternateNetworkBeforeHandshake(quic_trial_params);
     params->quic_params.go_away_on_path_degrading =
@@ -590,8 +572,6 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
           .max_migrations_to_non_default_network_on_path_degrading =
           max_migrations_to_non_default_network_on_path_degrading;
     }
-    params->quic_params.allow_server_migration =
-        ShouldQuicAllowServerMigration(quic_trial_params);
     params->quic_host_allowlist = GetQuicHostAllowlist(quic_trial_params);
 
     SetQuicFlags(quic_trial_params);

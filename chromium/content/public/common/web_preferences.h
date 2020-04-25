@@ -14,7 +14,6 @@
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "net/nqe/effective_connection_type.h"
-#include "third_party/blink/public/common/css/forced_colors.h"
 #include "third_party/blink/public/common/css/preferred_color_scheme.h"
 #include "third_party/blink/public/mojom/v8_cache_options.mojom.h"
 #include "ui/base/pointer/pointer_device.h"
@@ -320,12 +319,6 @@ struct CONTENT_EXPORT WebPreferences {
   blink::PreferredColorScheme preferred_color_scheme =
       blink::PreferredColorScheme::kNoPreference;
 
-  // Forced colors indicates whether forced color mode is active or not. Forced
-  // colors is used to evaluate the forced-colors and prefers-color-scheme
-  // media queries and is used to resolve the default color scheme as indicated
-  // by the preferred_color_scheme.
-  blink::ForcedColors forced_colors = blink::ForcedColors::kNone;
-
   // Network quality threshold below which resources from iframes are assigned
   // either kVeryLow or kVeryLow Blink priority.
   net::EffectiveConnectionType low_priority_iframes_threshold;
@@ -356,6 +349,7 @@ struct CONTENT_EXPORT WebPreferences {
       lazy_frame_loading_distance_thresholds_px;
   std::map<net::EffectiveConnectionType, int>
       lazy_image_loading_distance_thresholds_px;
+  std::map<net::EffectiveConnectionType, int> lazy_image_first_k_fully_load;
 
   // Vivaldi specific preferences:
   // Maps to the Cycle focus setting in Vivaldi.

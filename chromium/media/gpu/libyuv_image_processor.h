@@ -45,24 +45,16 @@ class MEDIA_GPU_EXPORT LibYUVImageProcessor : public ImageProcessor {
   static std::unique_ptr<LibYUVImageProcessor> Create(
       const ImageProcessor::PortConfig& input_config,
       const ImageProcessor::PortConfig& output_config,
-      const ImageProcessor::OutputMode output_mode,
+      ImageProcessor::OutputMode output_mode,
       ErrorCB error_cb);
 
  private:
-  LibYUVImageProcessor(const VideoFrameLayout& input_layout,
-                       const gfx::Size& input_visible_size,
-                       VideoFrame::StorageType input_storage_type,
-                       const VideoFrameLayout& output_layout,
-                       const gfx::Size& output_visible_size,
-                       VideoFrame::StorageType output_storage_type,
+  LibYUVImageProcessor(const ImageProcessor::PortConfig& input_config,
+                       const ImageProcessor::PortConfig& output_config,
                        std::unique_ptr<VideoFrameMapper> video_frame_mapper,
                        ErrorCB error_cb);
 
   // ImageProcessor override
-#if defined(OS_POSIX) || defined(OS_FUCHSIA)
-  bool ProcessInternal(scoped_refptr<VideoFrame> frame,
-                       LegacyFrameReadyCB cb) override;
-#endif
   bool ProcessInternal(scoped_refptr<VideoFrame> input_frame,
                        scoped_refptr<VideoFrame> output_frame,
                        FrameReadyCB cb) override;

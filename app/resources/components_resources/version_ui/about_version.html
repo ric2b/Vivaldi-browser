@@ -29,11 +29,19 @@ about:version template page
       <div id="logo">
 <if expr="not is_android and not is_ios">
         <!-- Version for themes. -->
-        <img src="chrome://theme/IDR_PRODUCT_LOGO">
+        <picture>
+          <source srcset="chrome://theme/IDR_PRODUCT_LOGO" media="(prefers-color-scheme: dark)">
+          <source srcset="chrome://theme/IDR_PRODUCT_LOGO" media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)">
+          <img src="chrome://theme/IDR_PRODUCT_LOGO">
+        </picture>
 </if>
 <if expr="is_ios or is_android">
-        <!-- TODO: make this dependant on build type. Using icon for final for now. -->
-        <img src="../../components_scaled/default_100_percent/vivaldi_final/product_icon_128.png">
+        <picture>
+          <source srcset="../../components_scaled/default_100_percent/vivaldi/product_logo_white.png" media="(prefers-color-scheme: dark)">
+          <source srcset="../../components_scaled/default_100_percent/vivaldi_final/product_icon_128.png" media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)">
+          <!-- TODO: make this dependant on build type. Using icon for final for now. -->
+          <img src="../../components_scaled/default_100_percent/vivaldi_final/product_icon_128.png">
+        </picture>
 </if>
         <div id="company">$i18n{company}</div>
         <div id="slogan">A Browser For Our Friends</div>

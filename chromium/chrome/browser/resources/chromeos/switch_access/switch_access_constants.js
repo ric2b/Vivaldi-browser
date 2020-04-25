@@ -48,20 +48,20 @@ SAConstants.Focus.CLASS = 'focus';
  * @enum {string}
  */
 SAConstants.Focus.ID = {
-  // The ID for the user's current focus.
+  // The ID for the ring showing the user's current focus.
   PRIMARY: 'primary',
-  // The ID for the group containing the user's focus.
-  SCOPE: 'scope',
+  // The ID for the ring showing the next focus.
+  NEXT: 'next',
   // The ID for the area where text is being input.
   TEXT: 'text'
 };
 
 /**
- * The buffer (in dip) between the primary focus ring and the scope focus ring.
+ * The buffer (in dip) between a child's focus ring and its parent's focus ring.
  * @type {number}
  * @const
  */
-SAConstants.Focus.SCOPE_BUFFER = 2;
+SAConstants.Focus.GROUP_BUFFER = 2;
 
 /**
  * The inner color of the focus rings.
@@ -90,7 +90,7 @@ SAConstants.Focus.BUFFER = 4;
  * @type {number}
  * @const
  */
-SAConstants.KEY_PRESS_DURATION_MS = 100;
+SAConstants.VK_KEY_PRESS_DURATION_MS = 100;
 
 /**
  * Preferences that are configurable in Switch Access.
@@ -155,44 +155,12 @@ SAConstants.MenuAction = {
   SCROLL_RIGHT: chrome.automation.ActionType.SCROLL_RIGHT,
   // Scroll the current element (or its ancestor) up.
   SCROLL_UP: chrome.automation.ActionType.SCROLL_UP,
-  // Either perform the default action or enter a new scope, as applicable.
+  // Either perform the default action or enter a new group, as applicable.
   SELECT: 'select',
   // Open and jump to the Switch Access settings.
   SETTINGS: 'settings',
-  // Show the system context menu for the current element.
-  SHOW_CONTEXT_MENU: chrome.automation.ActionType.SHOW_CONTEXT_MENU,
   // Set the end of a text selection.
   SELECT_END: 'selectEnd',
   // Set the beginning of a text selection.
   SELECT_START: 'selectStart'
-};
-
-/**
- * Empty location, used for hiding the menu.
- * @const
- */
-SAConstants.EMPTY_LOCATION = {
-  left: 0,
-  top: 0,
-  width: 0,
-  height: 0
-};
-
-/**
- * Defines the key codes of all key events to be sent.
- * Currently used for text navigation actions and cut/copy/paste.
- * @enum {number}
- * @const
- */
-SAConstants.KeyCode = {
-  END: 35,
-  HOME: 36,
-  LEFT_ARROW: 37,
-  UP_ARROW: 38,
-  RIGHT_ARROW: 39,
-  DOWN_ARROW: 40,
-  // Key codes for X, C, V used for cut, copy, and paste synthetic key events.
-  C: 67,
-  V: 86,
-  X: 88
 };

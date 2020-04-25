@@ -8,8 +8,8 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "components/zoom/zoom_controller.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/common/page_zoom.h"
 #include "extensions/browser/extension_zoom_request_client.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/vivaldi_browser_window.h"
 
 class Browser;
@@ -35,7 +35,7 @@ void SetUIZoomByWebContent(double zoom_level,
 void DefaultZoomChanged(content::BrowserContext* browser_context) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
   double zoom_level = profile->GetZoomLevelPrefs()->GetDefaultZoomLevelPref();
-  double zoom_factor = content::ZoomLevelToZoomFactor(zoom_level);
+  double zoom_factor = blink::PageZoomLevelToZoomFactor(zoom_level);
   ::vivaldi::BroadcastEvent(
       vivaldi::zoom::OnDefaultZoomChanged::kEventName,
       vivaldi::zoom::OnDefaultZoomChanged::Create(zoom_factor),
@@ -116,7 +116,7 @@ void ZoomAPI::RemoveZoomObserver(Browser* browser) {
 
 void ZoomAPI::OnZoomChanged(
     const zoom::ZoomController::ZoomChangedEventData& data) {
-  double zoom_factor = content::ZoomLevelToZoomFactor(data.new_zoom_level);
+  double zoom_factor = blink::PageZoomLevelToZoomFactor(data.new_zoom_level);
   ::vivaldi::BroadcastEvent(vivaldi::zoom::OnUIZoomChanged::kEventName,
                             vivaldi::zoom::OnUIZoomChanged::Create(zoom_factor),
                             data.web_contents->GetBrowserContext());
@@ -129,10 +129,11 @@ ExtensionFunction::ResponseAction ZoomSetVivaldiUIZoomFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  double zoom_level = content::ZoomFactorToZoomLevel(params->zoom_factor);
+  double zoom_level = blink::PageZoomFactorToZoomLevel(params->zoom_factor);
   for (auto* browser : *BrowserList::GetInstance()) {
-    // Avoid crash if we have a undocked devtools window open.
-    if (browser->type() != Browser::TYPE_POPUP) {
+    // Avoid crash if we have a non-Vivaldi window open (such as devtools for
+    // our UI).
+    if (browser->is_vivaldi()) {
       WebContents* web_contents =
         static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents();
       SetUIZoomByWebContent(zoom_level, web_contents, extension());
@@ -156,7 +157,7 @@ ExtensionFunction::ResponseAction ZoomGetVivaldiUIZoomFunction::Run() {
   DCHECK(zoom_controller);
 
   double zoom_Level = zoom_controller->GetZoomLevel();
-  double zoom_factor = content::ZoomLevelToZoomFactor(zoom_Level);
+  double zoom_factor = blink::PageZoomLevelToZoomFactor(zoom_Level);
 
   return RespondNow(ArgumentList(Results::Create(zoom_factor)));
 }
@@ -172,7 +173,7 @@ ExtensionFunction::ResponseAction ZoomSetDefaultZoomFunction::Run() {
   if (profile->IsOffTheRecord()) {
     profile = profile->GetOriginalProfile();
   }
-  double zoom_factor = content::ZoomFactorToZoomLevel(params->zoom_factor);
+  double zoom_factor = blink::PageZoomFactorToZoomLevel(params->zoom_factor);
 
   content::StoragePartition* partition =
       profile->GetDefaultStoragePartition(profile);
@@ -192,7 +193,7 @@ ExtensionFunction::ResponseAction ZoomGetDefaultZoomFunction::Run() {
     profile = profile->GetOriginalProfile();
   }
   double zoom_level = profile->GetDefaultZoomLevelForProfile();
-  double zoom_factor = content::ZoomLevelToZoomFactor(zoom_level);
+  double zoom_factor = blink::PageZoomLevelToZoomFactor(zoom_level);
 
   return RespondNow(ArgumentList(Results::Create(zoom_factor)));
 }

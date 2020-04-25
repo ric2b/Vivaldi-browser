@@ -197,6 +197,10 @@ HeadlessBrowserContextImpl::GetPushMessagingService() {
   return nullptr;
 }
 
+content::StorageNotificationService*
+HeadlessBrowserContextImpl::GetStorageNotificationService() {
+  return nullptr;
+}
 content::SSLHostStateDelegate*
 HeadlessBrowserContextImpl::GetSSLHostStateDelegate() {
   return nullptr;
@@ -281,7 +285,7 @@ const std::string& HeadlessBrowserContextImpl::Id() {
   return UniqueId();
 }
 
-::network::mojom::NetworkContextPtr
+mojo::Remote<::network::mojom::NetworkContext>
 HeadlessBrowserContextImpl::CreateNetworkContext(
     bool in_memory,
     const base::FilePath& relative_partition_path) {

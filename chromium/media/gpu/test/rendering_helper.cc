@@ -75,7 +75,6 @@ void RenderingHelper::InitializeOneOff(bool use_gl, base::WaitableEvent* done) {
   ui::OzonePlatform::InitParams params;
   params.single_process = true;
   ui::OzonePlatform::InitializeForGPU(params);
-  ui::OzonePlatform::GetInstance()->AfterSandboxEntry();
 #endif
 
   if (!use_gl_) {
@@ -107,6 +106,9 @@ void RenderingHelper::Initialize(const RenderingHelperParams& params,
     UnInitialize(&done);
     done.Wait();
   }
+
+  gpu_memory_buffer_factory_ =
+      gpu::GpuMemoryBufferFactory::CreateNativeType(nullptr);
 
   render_task_.Reset(
       base::Bind(&RenderingHelper::RenderContent, base::Unretained(this)));
@@ -309,7 +311,8 @@ scoped_refptr<media::test::TextureRef> RenderingHelper::CreateTexture(
       use_gl_ ? base::BindOnce(DeleteTexture, texture_id) : base::DoNothing();
   if (pre_allocate) {
     return media::test::TextureRef::CreatePreallocated(
-        texture_id, std::move(delete_texture_cb), pixel_format, size,
+        gpu_memory_buffer_factory_.get(), texture_id,
+        std::move(delete_texture_cb), pixel_format, size,
         gfx::BufferUsage::SCANOUT_VDA_WRITE);
   }
   return media::test::TextureRef::Create(texture_id,
@@ -462,6 +465,7 @@ gl::GLContext* RenderingHelper::GetGLContext() {
 }
 
 void RenderingHelper::Clear() {
+  gpu_memory_buffer_factory_.reset();
   videos_.clear();
   task_runner_ = nullptr;
   gl_context_ = NULL;

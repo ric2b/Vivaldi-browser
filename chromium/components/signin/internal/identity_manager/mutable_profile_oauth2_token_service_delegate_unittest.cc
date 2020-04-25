@@ -147,7 +147,6 @@ class MutableProfileOAuth2TokenServiceDelegateTest
         client_.get(), &account_tracker_service_,
         network::TestNetworkConnectionTracker::GetInstance(), token_web_data_,
         account_consistency, revoke_all_tokens_on_load_,
-        true /* can_revoke_credantials */,
         MutableProfileOAuth2TokenServiceDelegate::FixRequestErrorCallback());
   }
 
@@ -1599,11 +1598,12 @@ TEST_F(MutableProfileOAuth2TokenServiceDelegateTest,
   {
     base::HistogramTester h_tester;
     token_service.UpdateCredentials("account_id", "refresh_token",
-                                    Source::kSupervisedUser_InitSync);
-    EXPECT_EQ("SupervisedUser::InitSync", source_for_refresh_token_available_);
+                                    Source::kInlineLoginHandler_Signin);
+    EXPECT_EQ("InlineLoginHandler::Signin",
+              source_for_refresh_token_available_);
     h_tester.ExpectUniqueSample(
         "Signin.RefreshTokenUpdated.ToValidToken.Source",
-        Source::kSupervisedUser_InitSync, 1);
+        Source::kInlineLoginHandler_Signin, 1);
 
     token_service.RevokeCredentials(
         "account_id", Source::kAccountReconcilor_GaiaCookiesUpdated);

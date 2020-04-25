@@ -14,6 +14,7 @@
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
+#include "chrome/browser/chromeos/crostini/fake_crostini_features.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/profiles/profile.h"
@@ -50,6 +51,7 @@ class FileManagerBrowserTestBase : public extensions::ExtensionApiTest {
   void SetUpInProcessBrowserTestFixture() override;
   void SetUpOnMainThread() override;
   void TearDownOnMainThread() override;
+  void TearDown() override;
 
   // Mandatory overrides for each File Manager test extension type.
   virtual GuestMode GetGuestMode() const = 0;
@@ -59,10 +61,8 @@ class FileManagerBrowserTestBase : public extensions::ExtensionApiTest {
 
   // Optional overrides for each File Manager test extension type.
   virtual bool GetTabletMode() const;
-  virtual bool GetEnableDriveFs() const;
   virtual bool GetEnableDocumentsProvider() const;
   virtual bool GetEnableArc() const;
-  virtual bool GetEnableFormatDialog() const;
   virtual bool GetRequiresStartupBrowser() const;
   virtual bool GetNeedsZipSupport() const;
   virtual bool GetIsOffline() const;
@@ -87,14 +87,8 @@ class FileManagerBrowserTestBase : public extensions::ExtensionApiTest {
   // Returns true if the test runs in tablet mode.
   bool IsTabletModeTest() const { return GetTabletMode(); }
 
-  // Returns true if the test requires DriveFS.
-  bool IsDriveFsTest() const { return GetEnableDriveFs(); }
-
   // Returns true if the test requires Android documents providers.
   bool IsDocumentsProviderTest() const { return GetEnableDocumentsProvider(); }
-
-  // Returns true if the test requires the FormatDialog feature enabled.
-  bool IsFormatDialogTest() const { return GetEnableFormatDialog(); }
 
   // Returns true if the test requires ARC++.
   bool IsArcTest() const { return GetEnableArc(); }
@@ -149,7 +143,8 @@ class FileManagerBrowserTestBase : public extensions::ExtensionApiTest {
   // Called during tests to determine if SMB file shares is enabled.
   bool IsSmbEnabled() const;
 
-  base::test::ScopedFeatureList feature_list_;
+  std::unique_ptr<base::test::ScopedFeatureList> feature_list_;
+  crostini::FakeCrostiniFeatures crostini_features_;
 
   std::unique_ptr<DownloadsTestVolume> local_volume_;
   std::unique_ptr<CrostiniTestVolume> crostini_volume_;
@@ -160,6 +155,7 @@ class FileManagerBrowserTestBase : public extensions::ExtensionApiTest {
   std::unique_ptr<FakeTestVolume> mtp_volume_;
   std::unique_ptr<RemovableTestVolume> partition_1_;
   std::unique_ptr<RemovableTestVolume> partition_2_;
+  std::unique_ptr<RemovableTestVolume> partition_3_;
   std::unique_ptr<DocumentsProviderTestVolume> documents_provider_volume_;
   std::unique_ptr<MediaViewTestVolume> media_view_images_;
   std::unique_ptr<MediaViewTestVolume> media_view_videos_;

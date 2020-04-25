@@ -3,7 +3,9 @@
 <translationbundle lang="de">
 <translation id="1017280919048282932">&amp;Zum Wörterbuch hinzufügen</translation>
 <translation id="1031362278801463162">Vorschau wird geladen…</translation>
+<translation id="1047431265488717055">Linkte&amp;xt kopieren</translation>
 <translation id="1049795001945932310">&amp;Spracheinstellungen</translation>
+<translation id="1054153489933238809">&amp;Original in neuem Tab öffnen</translation>
 <translation id="1056898198331236512">Warnung</translation>
 <translation id="1084824384139382525">Adr&amp;esse des Links kopieren</translation>
 <translation id="1128109161498068552">Keinen Sites den Zugriff  mit systemexklusiven Nachrichten auf MIDI-Geräte erlauben</translation>
@@ -23,22 +25,30 @@
 <translation id="1430915738399379752">Drucken</translation>
 <translation id="1433811987160647649">Vor dem Zugriff nachfragen</translation>
 <translation id="1451375123200651445">Webseite, Einzeldatei (MHTML)</translation>
+<translation id="1465176863081977902">Audioadresse k&amp;opieren</translation>
 <translation id="1476607407192946488">&amp;Spracheinstellungen</translation>
 <translation id="150411034776756821"><ph name="SITE" /> entfernen</translation>
 <translation id="1546280085599573572">Durch diese Erweiterung wurde die Seite geändert, die beim Klick auf die Schaltfläche "Startseite" erscheint.</translation>
 <translation id="15662109988763471">Der ausgewählte Drucker ist entweder nicht verfügbar oder nicht ordnungsgemäß installiert. Überprüfen Sie den Drucker oder wählen Sie einen anderen Drucker aus.</translation>
 <translation id="1588438908519853928">Normal</translation>
+<translation id="1588870296199743671">Link öffnen mit...</translation>
+<translation id="159359590073980872">Bilder-Cache</translation>
 <translation id="1601560923496285236">Übernehmen</translation>
 <translation id="1603914832182249871">(Privat)</translation>
 <translation id="1620510694547887537">Kamera</translation>
+<translation id="1627276047960621195">Dateideskriptoren</translation>
 <translation id="1635033183663317347">Von Deinem Erziehungsberechtigten installiert.</translation>
 <translation id="1682548588986054654">Neues privates Fenster</translation>
 <translation id="1698122934742150150">Nur aktuelle private Sitzung</translation>
 <translation id="1706625117072057435">Zoomstufen</translation>
 <translation id="1708338024780164500">(Inaktiv)</translation>
 <translation id="1723824996674794290">Neues &amp;Fenster</translation>
+<translation id="1725149567830788547">&amp;Steuerelemente anzeigen</translation>
 <translation id="1729533290416704613">Die Erweiterung legt auch fest, welche Seite bei der Suche über die Adressleiste angezeigt wird.</translation>
 <translation id="1744108098763830590">Hintergrundseite</translation>
+<translation id="176587472219019965">Neues &amp;Fenster</translation>
+<translation id="1769104665586091481">Link in neuem &amp;Fenster öffnen</translation>
+<translation id="1815083418640426271">Als unformatierten Text einfügen</translation>
 <translation id="1828901632669367785">Über das Systemdialogfeld drucken…</translation>
 <translation id="1850508293116537636">Im &amp;Uhrzeigersinn drehen</translation>
 <translation id="1886996562706621347">Registrierung von Websites als Standard-Handler für Protokolle zulassen (empfohlen)</translation>
@@ -46,11 +56,15 @@
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Alle entfernen</translation>
 <translation id="1994173015038366702">Website-URL</translation>
+<translation id="2019718679933488176">&amp;Audio in neuem Tab öffnen</translation>
 <translation id="2050339315714019657">Hochformat</translation>
 <translation id="2076269580855484719">Dieses Plug-in ausblenden</translation>
 <translation id="2087822576218954668">Drucken: <ph name="PRINT_NAME" /></translation>
+<translation id="2114326799768592691">&amp;Frame neu laden</translation>
+<translation id="2142328300403846845">Link öffnen als</translation>
 <translation id="2148892889047469596">Tab streamen</translation>
 <translation id="2150139952286079145">Ziele suchen</translation>
+<translation id="215753907730220065">Vollbildmodus aus</translation>
 <translation id="2177950615300672361">Privater Tab: <ph name="TAB_NAME" /></translation>
 <translation id="218070003709087997">Geben Sie eine Zahl ein, um die Anzahl der zu druckenden Exemplare festzulegen (1 bis 999).</translation>
 <translation id="219008588003277019">Natives Client-Modul: <ph name="NEXE_NAME" /></translation>
@@ -85,6 +99,7 @@
 <translation id="253557089021624350">Keepalive-Zahl</translation>
 <translation id="2546283357679194313">Cookies und Websitedaten</translation>
 <translation id="2550212893339833758">Swap-Speicher</translation>
+<translation id="2553440850688409052">Dieses Plug-in ausblenden</translation>
 <translation id="2580924999637585241">Gesamt: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Verarbeitung von Protokollen für keine Website zulassen</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
@@ -95,17 +110,22 @@
 <translation id="2812989263793994277">Keine Bilder anzeigen</translation>
 <translation id="2850541429955027218">Design hinzufügen</translation>
 <translation id="2861941300086904918">Sicherheitsmanager für native Clients</translation>
+<translation id="2881076733170862447">Wenn die Erweiterung angeklickt wird</translation>
 <translation id="2889064240420137087">Link öffnen mit…</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> konnte nicht mit diesem Drucker kommunizieren. Vergewissern Sie sich, dass der Drucker angeschlossen ist, und versuchen Sie es dann erneut.</translation>
 <translation id="2904456025988372123">Nachfragen, wenn eine Website versucht, nach der ersten Datei weitere Dateien automatisch herunterzuladen</translation>
 <translation id="2913331724188855103">Websites dürfen Cookiedaten speichern und lesen (empfohlen)</translation>
+<translation id="2931157624143513983">An Druckbereich anpassen</translation>
+<translation id="2932085390869194046">Passwort vorschlagen…</translation>
 <translation id="2932883381142163287">Missbrauch melden</translation>
 <translation id="2941112035454246133">Niedrig</translation>
 <translation id="2972581237482394796">&amp;Wiederholen</translation>
 <translation id="299483336428448530">Von Deinen Eltern installiert.</translation>
+<translation id="3003623123441819449">CSS-Cache</translation>
+<translation id="3008272652534848354">Berechtigungen zurücksetzen</translation>
 <translation id="3012631534724231212">(Iframe)</translation>
 <translation id="3013291976881901233">MIDI-Geräte</translation>
-<translation id="302620147503052030">Schaltfläche anzeigen</translation>
+<translation id="3021678814754966447">Frame-Quelltext &amp;anzeigen</translation>
 <translation id="3036546437875325427">Flash aktivieren</translation>
 <translation id="3038675903128704560">Verwendung von Plug-ins für den Zugriff auf Ihren Computer für keine Website zulassen</translation>
 <translation id="3046910703532196514">Webseite, vollständig</translation>
@@ -122,10 +142,13 @@
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Wählen Sie das Stammverzeichnis der Erweiterung, die gepackt werden soll. Zur Aktualisierung einer Erweiterung wählen Sie eine private Schlüsseldatei zur Wiederverwendung.</translation>
 <translation id="3280237271814976245">Speichern &amp;unter...</translation>
+<translation id="3285322247471302225">Neuer &amp;Tab</translation>
 <translation id="3288047731229977326">Erweiterungen im Entwicklermodus können auf Ihrem Computer Schaden anrichten. Wenn Sie kein Entwickler sind, sollten Sie diese Erweiterungen im Entwicklermodus deaktivieren, um sicher zu sein.</translation>
 <translation id="329838636886466101">Reparieren</translation>
+<translation id="33022249435934718">GDI-Handles</translation>
 <translation id="3303818374450886607">Kopien</translation>
 <translation id="3305661444342691068">PDF-Vorschau</translation>
+<translation id="3308134619352333507">Schaltfläche ausblenden</translation>
 <translation id="3317459757438853210">Beidseitig</translation>
 <translation id="3341703758641437857">Zugriff auf Datei-URLs zulassen</translation>
 <translation id="3347086966102161372">Bildadresse k&amp;opieren</translation>
@@ -137,6 +160,7 @@
 <translation id="345693547134384690">Bil&amp;d in neuem Tab öffnen</translation>
 <translation id="3494769164076977169">Nachfragen, wenn eine Website versucht, Dateien nach der ersten Datei automatisch herunterzuladen (empfohlen)</translation>
 <translation id="3505030558724226696">Gerätezugriff aufheben</translation>
+<translation id="3511307672085573050">Adr&amp;esse des Links kopieren</translation>
 <translation id="3523642406908660543">Nachfragen, wenn eine Website ein Plug-in für den Zugriff auf Ihren Computer verwenden möchte (empfohlen)</translation>
 <translation id="354068948465830244">Kann Websitedaten lesen und ändern</translation>
 <translation id="3560034655160545939">&amp;Rechtschreibprüfung</translation>
@@ -147,9 +171,11 @@
 <translation id="3668823961463113931">Handler</translation>
 <translation id="3678156199662914018">Erweiterung: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Anfrage zur Bildschirmfreigabe durch <ph name="APP_NAME" /></translation>
+<translation id="3711931198657368127">Einfügen und <ph name="URL" /> aufrufen</translation>
 <translation id="3725367690636977613">Seiten</translation>
 <translation id="3727187387656390258">Pop-up prüfen</translation>
 <translation id="3744111561329211289">Hintergrundsynchronisation</translation>
+<translation id="3760460896538743390">&amp;Hintergrundseite prüfen</translation>
 <translation id="3797900183766075808">Mit <ph name="SEARCH_ENGINE" /> nach "<ph name="SEARCH_TERMS" />" suchen</translation>
 <translation id="3800806661949714323">Alle anzeigen (empfohlen)</translation>
 <translation id="3810973564298564668">Verwalten</translation>
@@ -163,10 +189,13 @@
 <translation id="3927932062596804919">Ablehnen</translation>
 <translation id="3936390757709632190">&amp;Audio in neuem Tab öffnen</translation>
 <translation id="3943582379552582368">&amp;Zurück</translation>
+<translation id="3948116654032448504">Mit <ph name="SEARCH_ENGINE" /> nach Bild &amp;suchen</translation>
 <translation id="3955193568934677022">Wiedergabe geschützter Inhalte auf Websites zulassen (empfohlen)</translation>
 <translation id="3979395879372752341">Neue Erweiterung hinzugefügt (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
+<translation id="4022426551683927403">&amp;Zum Wörterbuch hinzufügen</translation>
 <translation id="407520071244661467">Skalieren</translation>
+<translation id="4079140982534148664">Erweiterte Rechtschreibprüfung verwenden</translation>
 <translation id="4087089424473531098">Die folgende Erweiterung wurde erstellt:
 
 <ph name="EXTENSION_FILE" /></translation>
@@ -181,6 +210,7 @@
 <translation id="4176463684765177261">Deaktiviert</translation>
 <translation id="4200983522494130825">&amp;Neuer Tab</translation>
 <translation id="4225397296022057997">Auf allen Websites</translation>
+<translation id="4256316378292851214">Video &amp;speichern unter...</translation>
 <translation id="4278390842282768270">Zugelassen</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (<ph name="NUM_KILOBYTES_LIVE" /> KB live)</translation>
 <translation id="4345587454538109430">Konfigurieren...</translation>
@@ -189,23 +219,27 @@
 <translation id="4384652540891215547">Erweiterung aktivieren</translation>
 <translation id="4394049700291259645">Deaktivieren</translation>
 <translation id="4409697491990005945">Ränder</translation>
+<translation id="4423376891418188461">Einstellungen wiederherstellen</translation>
 <translation id="4434045419905280838">Pop-ups und Weiterleitungen</translation>
+<translation id="4478664379124702289">Lin&amp;k speichern unter...</translation>
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535"><ph name="HOST_NAME" /> kann nicht gestreamt werden.</translation>
 <translation id="4593021220803146968"><ph name="URL" /> öffnen</translation>
 <translation id="4595560905247879544">Apps und Erweiterungen können nur vom Administrator, <ph name="CUSTODIAN_NAME" />, geändert werden.</translation>
 <translation id="4613271546271159013">Die Seite, die beim Öffnen eines neuen Tabs angezeigt wird, wurde durch eine Erweiterung geändert.</translation>
+<translation id="4643612240819915418">&amp;Video in neuem Tab öffnen</translation>
 <translation id="4677772697204437347">GPU-Speicher</translation>
 <translation id="4681930562518940301">Bild in neuem Tab öffnen</translation>
 <translation id="4711638718396952945">Einstellungen wiederherstellen</translation>
 <translation id="4726710629007580002">Es gab Warnungen beim Versuch, diese Erweiterung zu installieren:</translation>
 <translation id="479536056609751218">Webseite, nur HTML</translation>
-<translation id="4816492930507672669">An Seite anpassen</translation>
 <translation id="4839303808932127586">Video &amp;speichern unter...</translation>
 <translation id="488785315393301722">Details anzeigen</translation>
 <translation id="4907306957610201395">Berechtigungskategorie</translation>
+<translation id="4912643508233590958">Inaktive Weckbefehle</translation>
 <translation id="4918086044614829423">Annehmen</translation>
 <translation id="4927753642311223124">Nichts zu sehen, alles OK.</translation>
+<translation id="4930714375720679147">Aktivieren</translation>
 <translation id="4988526792673242964">Seiten</translation>
 <translation id="49896407730300355">&amp;Gegen den Uhrzeigersinn drehen</translation>
 <translation id="4989966318180235467">&amp;Hintergrundseite prüfen</translation>
@@ -213,29 +247,39 @@
 <translation id="5000922062037820727">Blockiert (empfohlen)</translation>
 <translation id="5027562294707732951">Erweiterung hinzufügen</translation>
 <translation id="5036662165765606524">Keiner Website erlauben, automatisch mehrere Dateien herunterzuladen</translation>
-<translation id="5039804452771397117">Zulassen</translation>
+<translation id="5039804452771397117">Erlauben</translation>
 <translation id="5057110919553308744">Wenn die Erweiterung angeklickt wird</translation>
 <translation id="5063480226653192405">Verwendung</translation>
 <translation id="5068918910148307423">Kürzlich geschlossen Websites das Fertigstellen des Datenversands und -empfangs nicht erlauben</translation>
+<translation id="5116628073786783676">Audio &amp;speichern unter...</translation>
 <translation id="5143374789336132547">Durch die Erweiterung <ph name="EXTENSION_NAME" /> wurde die Seite geändert, die beim Klick auf die Schaltfläche "Startseite" erscheint.</translation>
 <translation id="5154108062446123722">Erweiterte Einstellungen für <ph name="PRINTING_DESTINATION" /></translation>
+<translation id="5171343362375269016">Swap-Speicher</translation>
 <translation id="5233019165164992427">NaCl-Debug-Port</translation>
 <translation id="5233231016133573565">Prozess-ID</translation>
 <translation id="5233736638227740678">&amp;Einfügen</translation>
+<translation id="5256861893479663409">Auf allen Websites</translation>
 <translation id="5265562206369321422">Seit über einer Woche offline</translation>
 <translation id="5269977353971873915">Fehler beim Drucken</translation>
+<translation id="5284445933715251131">Download fortsetzen</translation>
 <translation id="52912272896845572">Private Schlüsseldatei ist ungültig.</translation>
 <translation id="5301954838959518834">OK</translation>
 <translation id="5317780077021120954">Speichern</translation>
+<translation id="5334142896108694079">Skript-Cache</translation>
 <translation id="5355926466126177564">Die Erweiterung <ph name="EXTENSION_NAME" /> hat die Seite geändert, die bei der Suche über die Adressleiste angezeigt wird.</translation>
+<translation id="5360150013186312835">In Symbolleiste anzeigen</translation>
 <translation id="5362741141255528695">Private Schlüsseldatei auswählen.</translation>
 <translation id="5370819323174483825">&amp;Neu laden</translation>
 <translation id="5398572795982417028">Der Seitenbereich ist zu groß. Die maximale Seitenanzahl liegt bei <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Download fortsetzen</translation>
+<translation id="5427459444770871191">Im &amp;Uhrzeigersinn drehen</translation>
 <translation id="5431318178759467895">Farbe</translation>
+<translation id="5472133193607270166">Wenn die Funktion aktiviert ist, können Websites Ihre Browseraktivitäten auf anderen Websites nicht verwenden, um Werbung zu personalisieren. Einige Websites funktionieren dann eventuell nicht richtig.</translation>
 <translation id="5483785310822538350">Datei- und Gerätezugriff aufheben</translation>
 <translation id="5485102783864353244">App hinzufügen</translation>
+<translation id="5486561344817861625">Browser-Neustart simulieren</translation>
 <translation id="5487521232677179737">Daten löschen</translation>
+<translation id="5509693895992845810">Speichern &amp;unter...</translation>
 <translation id="5521078259930077036">Ist dies Ihre erwartete Startseite?</translation>
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Neu laden</translation>
@@ -260,7 +304,9 @@
 <translation id="583281660410589416">Unbekannt</translation>
 <translation id="5838456317242088717">Aktuelle private Sitzung</translation>
 <translation id="5860491529813859533">Aktivieren</translation>
+<translation id="5867841422488265304">Suche oder URL eingeben</translation>
 <translation id="5908769186679515905">Ausführen von Flash auf Websites blockieren</translation>
+<translation id="5910363049092958439">Bi&amp;ld speichern unter...</translation>
 <translation id="5956585768868398362">Ist dies Ihre erwartete Seite für die Suche?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (Spitzenwert <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Die Erweiterung legt auch fest, welche Seite bei der Suche über die Adressleiste angezeigt wird oder wenn Sie auf die Schaltfläche "Startseite" klicken.</translation>
@@ -269,7 +315,7 @@
 <translation id="6011449291337289699">Websitedaten löschen</translation>
 <translation id="6042308850641462728">Mehr</translation>
 <translation id="6059925163896151826">USB-Geräte</translation>
-<translation id="6082651258230788217">In der Symbolleiste anzeigen</translation>
+<translation id="6082651258230788217">In Symbolleiste anzeigen</translation>
 <translation id="6086846494333236931">Von Ihrem Administrator installiert</translation>
 <translation id="6101226222197207147">Neue App hinzugefügt (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Ihre Internetverbindung wird beeinflusst</translation>
@@ -278,15 +324,19 @@
 <translation id="6169666352732958425">Der Desktop kann nicht übertragen werden.</translation>
 <translation id="6196640612572343990">Drittanbieter-Cookies blockieren</translation>
 <translation id="6196854373336333322">Die Erweiterung <ph name="EXTENSION_NAME" /> hat die Kontrolle über Ihre Proxyeinstellungen übernommen. Das bedeutet, dass sie sämtliche Onlineaktivitäten ändern, stören oder überwachen kann. Wenn Sie nicht sicher sind, wie es zu dieser Änderung gekommen ist, war sie wahrscheinlich nicht gewollt.</translation>
+<translation id="6206311232642889873">Bild kop&amp;ieren</translation>
 <translation id="6239558157302047471">&amp;Frame neu laden</translation>
 <translation id="6247802389331535091">System: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6248988683584659830">In Einstellungen suchen</translation>
 <translation id="6251870443722440887">GDI-Objekte</translation>
+<translation id="6264365405983206840">&amp;Alles auswählen</translation>
 <translation id="6268252012308737255">Öffnen mit <ph name="APP" /></translation>
 <translation id="6273677812470008672">Qualität</translation>
 <translation id="6295158916970320988">Alle Websites</translation>
 <translation id="6295855836753816081">Wird gespeichert…</translation>
 <translation id="6308937455967653460">&amp;Link speichern unter...</translation>
+<translation id="6326855256003666642">Keepalive-Zahl</translation>
+<translation id="6374469231428023295">Erneut versuchen</translation>
 <translation id="6385543213911723544">Websites können Cookiedaten speichern und lesen.</translation>
 <translation id="6398765197997659313">Vollbildmodus beenden</translation>
 <translation id="6406303162637086258">Browser-Neustart simulieren</translation>
@@ -296,7 +346,6 @@
 <translation id="6498249116389603658">&amp;Alle Ihre Sprachen</translation>
 <translation id="6503077044568424649">Meistbesucht</translation>
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
-<translation id="6516243500644829484">Neues privates Fenster</translation>
 <translation id="6518014396551869914">Bild ko&amp;pieren</translation>
 <translation id="6550675742724504774">Optionen</translation>
 <translation id="6612358246767739896">Geschützte Inhalte</translation>
@@ -304,29 +353,36 @@
 <translation id="6686817083349815241">Passwort speichern</translation>
 <translation id="6691936601825168937">&amp;Vorwärts</translation>
 <translation id="6723354935081862304">Drucken Sie über Google Docs und andere Cloud-Ziele. <ph name="BEGIN_LINK" />Melden Sie sich an<ph name="END_LINK" />, um über Google Cloud Print zu drucken.</translation>
-<translation id="6782111308708962316">Websites von Drittanbietern am Speichern und Lesen von Cookiedaten hindern</translation>
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Änderungen beibehalten</translation>
 <translation id="6817174620439930047">Nachfragen wenn eine Seite über systemexklusive Nachrichten auf MIDI-Geräte zugreifen möchte (empfohlen)</translation>
 <translation id="682123305478866682">Desktop streamen</translation>
+<translation id="6824564591481349393">E-Mail-Adr&amp;esse kopieren</translation>
 <translation id="6840155290835956714">Vor dem Senden nachfragen</translation>
 <translation id="6886871292305414135">Link in neuem &amp;Tab öffnen</translation>
+<translation id="6892812721183419409">Link als <ph name="USER" /> öffnen</translation>
 <translation id="6900284862687837908">Hintergrund-App: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Dateizugriff aufheben</translation>
+<translation id="6916590542764765824">Erweiterungen verwalten</translation>
 <translation id="6945221475159498467">Auswählen</translation>
+<translation id="6955446738988643816">Pop-up prüfen</translation>
 <translation id="6970856801391541997">Bestimmte Seiten drucken</translation>
 <translation id="6991665348624301627">Druckziel auswählen</translation>
 <translation id="7005848115657603926">Ungültiger Seitenbereich, verwenden Sie <ph name="EXAMPLE_PAGE_RANGE" />.</translation>
 <translation id="7006634003215061422">Unterer Rand</translation>
 <translation id="7053983685419859001">Blockieren</translation>
+<translation id="7070484045139057854">Kann Websitedaten lesen und ändern</translation>
 <translation id="708060913198414444">Audioadresse k&amp;opieren</translation>
 <translation id="7175353351958621980">Geladen von:</translation>
+<translation id="7186088072322679094">In Symbolleiste behalten</translation>
 <translation id="7270858098575133036">Nachfragen, wenn eine Webseite mit systemexklusiven Nachrichten auf MIDI-Geräte zugreifen möchte</translation>
 <translation id="7287143125007575591">Zugriff verweigert.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">&amp;Steuerelemente anzeigen</translation>
 <translation id="7311079019872751559">Plug-in-Zugriff ohne Sandbox</translation>
 <translation id="7385854874724088939">Beim Drucken ist ein Fehler aufgetreten. Bitte überprüfen Sie Ihren Drucker und versuchen Sie es erneut.</translation>
+<translation id="7412226954991670867">GPU-Speicher</translation>
+<translation id="7421925624202799674">Seitenquelltext &amp;anzeigen</translation>
 <translation id="7423098979219808738">Nachfragen</translation>
 <translation id="7427348830195639090">Hintergrundseite: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Durch die Auswahl dieses Druckers berechtigen Sie die folgende Erweiterung, auf Ihren Drucker zuzugreifen:</translation>
@@ -338,8 +394,10 @@
 <translation id="7658239707568436148">Abbrechen</translation>
 <translation id="7661259717474717992">Speichern und Lesen von Cookiedaten zulassen</translation>
 <translation id="7663719505383602579">Empfänger: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="7684212569183643648">Von Ihrem Administrator installiert</translation>
 <translation id="7685049629764448582">JavaScript-Speicher</translation>
 <translation id="7701040980221191251">Keine</translation>
+<translation id="7701869757853594372">NUTZER-Handles</translation>
 <translation id="7704305437604973648">Aufgabe</translation>
 <translation id="7710568461918838723">&amp;Streamen…</translation>
 <translation id="7750228210027921155">Bild-in-Bild</translation>
@@ -347,18 +405,25 @@
 <translation id="7760004034676677601">Ist dies die Seite, die sie beim Start erwartet haben?</translation>
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7782102568078991263">Keine weiteren Vorschläge von Google</translation>
+<translation id="7786889348652477777">App &amp;neu laden</translation>
 <translation id="7791543448312431591">Hinzufügen</translation>
+<translation id="7800518121066352902">&amp;Gegen den Uhrzeigersinn drehen</translation>
 <translation id="7814458197256864873">&amp;Kopieren</translation>
 <translation id="7818135753970109980">Neues Design hinzugefügt (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">Videoadresse k&amp;opieren</translation>
+<translation id="7849264908733290972">B&amp;ild in neuem Tab öffnen</translation>
 <translation id="7857949311770343000">Ist dies die “Neuer Tab”-Seite, die Sie erwartet hatten?</translation>
 <translation id="786073089922909430">Dienst: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Letzte Ziele</translation>
 <translation id="7898627924844766532">In der Symbolleiste behalten</translation>
 <translation id="7903925330883316394">Dienstprogramm: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">Derzeit offline</translation>
+<translation id="7947962633355574091">Videoadresse k&amp;opieren</translation>
+<translation id="7966241909927244760">Bildadresse k&amp;opieren</translation>
+<translation id="7973394300052703468">Neues &amp;privates Fenster</translation>
 <translation id="7978412674231730200">Privater Schlüssel</translation>
 <translation id="7982789257301363584">Netzwerk</translation>
+<translation id="7997826902155442747">Prozesspriorität</translation>
 <translation id="7999229196265990314">Folgende Dateien wurden erstellt:
         
 Erweiterung: <ph name="EXTENSION_FILE" />
@@ -378,14 +443,21 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8270242299912238708">PDF-Dokumente</translation>
 <translation id="8339059274628563283">Für <ph name="SITE" /> lokal gespeicherte Daten</translation>
 <translation id="8351419472474436977">Diese Erweiterung hat die Kontrolle über Ihre Proxyeinstellungen übernommen. Das bedeutet, dass sie sämtliche Online-Aktivitäten ändern, stören oder überwachen kann. Wenn Sie nicht sicher sind, wie es zu dieser Änderung gekommen ist, war sie wahrscheinlich nicht gewollt.</translation>
-<translation id="8382913212082956454">E-Mail-Adresse kopieren</translation>
+<translation id="8382913212082956454">E-Mail-Adr&amp;esse kopieren</translation>
 <translation id="8413385045638830869">Nachfragen (empfohlen)</translation>
+<translation id="8434480141477525001">NaCl-Debug-Port</translation>
+<translation id="8449008133205184768">Einfügen und Formatvorlage anpassen</translation>
+<translation id="8496717697661868878">Dieses Plug-in ausführen</translation>
+<translation id="8512476990829870887">Prozess beenden</translation>
+<translation id="8523493869875972733">Änderungen beibehalten</translation>
 <translation id="8546306075665861288">Bilder-Cache</translation>
 <translation id="8569682776816196752">Keine Ziele gefunden</translation>
 <translation id="857943718398505171">Zugelassen (empfohlen)</translation>
 <translation id="8584280235376696778">&amp;Video in neuem Tab öffnen</translation>
+<translation id="8605428685123651449">SQLite-Speicher</translation>
 <translation id="8615618338313291042">Anonyme App: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">CSS-Cache</translation>
+<translation id="8661290697478713397">Link in Inko&amp;gnito-Fenster öffnen</translation>
 <translation id="8664389313780386848">Seitenquelltext &amp;anzeigen</translation>
 <translation id="8708000541097332489">Beim Beenden löschen</translation>
 <translation id="8714838604780058252">Hintergrundgrafiken</translation>
@@ -397,18 +469,20 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8800004011501252845">Ziele werden angezeigt für</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8813811964357448561">Blatt Papier</translation>
-<translation id="8823514049557262177">Linktext kopieren</translation>
+<translation id="8823514049557262177">Linkte&amp;xt kopieren</translation>
 <translation id="8823704566850948458">Passwort vorschlagen…</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Link in neuem &amp;Fenster öffnen</translation>
 <translation id="8910146161325739742">Bildschirm freigeben</translation>
 <translation id="8915370057835397490">Vorschläge werden geladen</translation>
 <translation id="8916476537757519021">Privater Subframe: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="895944840846194039">JavaScript-Speicher</translation>
 <translation id="8962083179518285172">Details ausblenden</translation>
 <translation id="8973557916016709913">Zoom zurücksetzen</translation>
 <translation id="897939795688207351">Auf <ph name="ORIGIN" /></translation>
 <translation id="8996526648899750015">Konto hinzufügen…</translation>
 <translation id="9003647077635673607">Auf allen Webseiten zulassen</translation>
+<translation id="9027459031423301635">Link in neuem Tab öffnen</translation>
 <translation id="9056810968620647706">Keine Übereinstimmungen gefunden.</translation>
 <translation id="9137916601698928395">Link als <ph name="USER" /> öffnen</translation>
 <translation id="916607977885256133">Bild-in-Bild</translation>

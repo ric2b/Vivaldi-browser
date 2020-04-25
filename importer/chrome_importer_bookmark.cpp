@@ -74,8 +74,8 @@ void ChromeBookmarkReader::AddBookmark(
   std::string temp;
   base::string16 name;
   base::string16 url;
-  base::string16 nickname;
-  base::string16 description;
+  std::string nickname;
+  std::string description;
 #if 0 /* current unused */
   base::string16 on_personal_bar_s;
   bool on_personal_bar = false;

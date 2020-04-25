@@ -11,8 +11,11 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.ntp.NewTabPage;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.UrlConstants;
+
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.common.VivaldiUrlConstants;
+
 
 /**
  * Provides information regarding homepage enabled states and URI.
@@ -83,11 +86,7 @@ public class HomepageManager {
      * @return Whether or not homepage is enabled.
      */
     public static boolean isHomepageEnabled() {
-        if (PartnerBrowserCustomizations.isHomepageProviderAvailableAndEnabled()
-                || FeatureUtilities.isHomePageButtonForceEnabled()) {
-            return getInstance().getPrefHomepageEnabled();
-        }
-        return false;
+        return getInstance().getPrefHomepageEnabled();
     }
 
     /**
@@ -96,14 +95,6 @@ public class HomepageManager {
     public static boolean shouldCloseAppWithZeroTabs() {
         return HomepageManager.isHomepageEnabled()
                 && !NewTabPage.isNTPUrl(HomepageManager.getHomepageUri());
-    }
-
-    /**
-     * @return Whether or not homepage setting should be shown.
-     */
-    public static boolean shouldShowHomepageSetting() {
-        return PartnerBrowserCustomizations.isHomepageProviderAvailableAndEnabled()
-                || FeatureUtilities.isHomePageButtonForceEnabled();
     }
 
     /**
@@ -124,6 +115,7 @@ public class HomepageManager {
      *         if the homepage button is force enabled via flag.
      */
     public static String getDefaultHomepageUri() {
+        if (ChromeApplication.isVivaldi()) return VivaldiUrlConstants.NTP_NON_NATIVE_URL;
         return PartnerBrowserCustomizations.isHomepageProviderAvailableAndEnabled()
                 ? PartnerBrowserCustomizations.getHomePageUrl()
                 : UrlConstants.NTP_NON_NATIVE_URL;

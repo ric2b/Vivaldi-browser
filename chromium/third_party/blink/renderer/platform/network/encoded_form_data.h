@@ -30,7 +30,6 @@
 #include <utility>
 
 #include "mojo/public/cpp/bindings/struct_traits.h"
-#include "third_party/blink/renderer/platform/blob/blob_data.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -62,12 +61,12 @@ class PLATFORM_EXPORT FormDataElement final {
   explicit FormDataElement(scoped_refptr<WrappedDataPipeGetter>);
 
   FormDataElement(const FormDataElement&);
-  FormDataElement(FormDataElement&&) noexcept;
+  FormDataElement(FormDataElement&&);
 
   ~FormDataElement();
 
   FormDataElement& operator=(const FormDataElement&);
-  FormDataElement& operator=(FormDataElement&&) noexcept;
+  FormDataElement& operator=(FormDataElement&&);
 
   bool IsSafeToSendToAnotherThread() const;
 

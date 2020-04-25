@@ -41,7 +41,6 @@
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
@@ -53,11 +52,11 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/origin_util.h"
-#include "content/public/common/page_zoom.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/text/bytes_formatting.h"
 
@@ -252,11 +251,11 @@ void ConvertSiteGroupMapToListValue(
       origin_object.SetKey(
           kHasPermissionSettings,
           base::Value(base::Contains(origin_permission_set, origin)));
-      origin_list.GetList().emplace_back(std::move(origin_object));
+      origin_list.Append(std::move(origin_object));
     }
     site_group.SetKey(kNumCookies, base::Value(0));
     site_group.SetKey(kOriginList, std::move(origin_list));
-    list_value->GetList().push_back(std::move(site_group));
+    list_value->Append(std::move(site_group));
   }
 }
 
@@ -311,8 +310,6 @@ void LogAllSitesAction(AllSitesAction action) {
 
 SiteSettingsHandler::SiteSettingsHandler(Profile* profile)
     : profile_(profile),
-      observer_(this),
-      chooser_observer_(this),
       pref_change_registrar_(nullptr) {}
 
 SiteSettingsHandler::~SiteSettingsHandler() {
@@ -1061,7 +1058,6 @@ void SiteSettingsHandler::HandleSetCategoryPermissionForPattern(
   CHECK_EQ(5U, args->GetSize());
   std::string primary_pattern_string;
   CHECK(args->GetString(0, &primary_pattern_string));
-  // TODO(dschuyler): Review whether |secondary_pattern_string| should be used.
   std::string secondary_pattern_string;
   CHECK(args->GetString(1, &secondary_pattern_string));
   std::string type;
@@ -1272,7 +1268,7 @@ void SiteSettingsHandler::SendZoomLevels() {
     // Calculate the zoom percent from the factor. Round up to the nearest whole
     // number.
     int zoom_percent = static_cast<int>(
-        content::ZoomLevelToZoomFactor(zoom_level.zoom_level) * 100 + 0.5);
+        blink::PageZoomLevelToZoomFactor(zoom_level.zoom_level) * 100 + 0.5);
     exception->SetString(kZoom, base::FormatPercent(zoom_percent));
     exception->SetString(site_settings::kSource,
                          site_settings::SiteSettingSourceToString(

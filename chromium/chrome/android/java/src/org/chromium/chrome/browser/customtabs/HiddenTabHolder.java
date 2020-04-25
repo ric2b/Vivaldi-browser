@@ -8,8 +8,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Rect;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
+
+import androidx.annotation.Nullable;
+import androidx.browser.customtabs.CustomTabsSessionToken;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.TraceEvent;
@@ -26,8 +28,6 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.network.mojom.ReferrerPolicy;
 import org.chromium.ui.base.WindowAndroid;
-
-import androidx.browser.customtabs.CustomTabsSessionToken;
 
 /**
  * Holds a hidden tab which may be used to preload pages before a CustomTabActivity is launched.
@@ -117,8 +117,9 @@ public class HiddenTabHolder {
         Tab tab = new TabBuilder()
                           .setWindow(new WindowAndroid(context))
                           .setLaunchType(TabLaunchType.FROM_SPECULATIVE_BACKGROUND_CREATION)
+                          .setDelegateFactory(CustomTabDelegateFactory.createDummy())
+                          .setInitiallyHidden(true)
                           .build();
-        tab.initialize(null, CustomTabDelegateFactory.createDummy(), true, null, false);
 
         // Resize the webContent to avoid expensive post load resize when attaching the tab.
         Rect bounds = ExternalPrerenderHandler.estimateContentSize(context, false);

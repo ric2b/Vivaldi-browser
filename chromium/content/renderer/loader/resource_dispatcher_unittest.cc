@@ -26,6 +26,7 @@
 #include "content/renderer/loader/navigation_response_override_parameters.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/loader/test_request_peer.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
@@ -95,7 +96,8 @@ class ResourceDispatcherTest : public testing::Test,
     loader_and_clients_.emplace_back(std::move(request), std::move(client));
   }
 
-  void Clone(network::mojom::URLLoaderFactoryRequest request) override {
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
+      override {
     NOTREACHED();
   }
 
@@ -158,7 +160,7 @@ class ResourceDispatcherTest : public testing::Test,
   std::vector<std::pair<network::mojom::URLLoaderRequest,
                         network::mojom::URLLoaderClientPtr>>
       loader_and_clients_;
-  base::test::TaskEnvironment task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
   std::unique_ptr<ResourceDispatcher> dispatcher_;
 };
 
@@ -193,15 +195,13 @@ class TestResourceDispatcherDelegate : public ResourceDispatcherDelegate {
 
     void OnUploadProgress(uint64_t position, uint64_t size) override {}
 
-    bool OnReceivedRedirect(
-        const net::RedirectInfo& redirect_info,
-        const network::ResourceResponseInfo& info) override {
+    bool OnReceivedRedirect(const net::RedirectInfo& redirect_info,
+                            network::mojom::URLResponseHeadPtr head) override {
       return false;
     }
 
-    void OnReceivedResponse(
-        const network::ResourceResponseInfo& info) override {
-      response_info_ = info;
+    void OnReceivedResponse(network::mojom::URLResponseHeadPtr head) override {
+      response_head_ = std::move(head);
     }
 
     void OnStartLoadingResponseBody(
@@ -213,7 +213,7 @@ class TestResourceDispatcherDelegate : public ResourceDispatcherDelegate {
 
     void OnCompletedRequest(
         const network::URLLoaderCompletionStatus& status) override {
-      original_peer_->OnReceivedResponse(response_info_);
+      original_peer_->OnReceivedResponse(std::move(response_head_));
       original_peer_->OnStartLoadingResponseBody(std::move(body_handle_));
       original_peer_->OnCompletedRequest(status);
     }
@@ -223,7 +223,7 @@ class TestResourceDispatcherDelegate : public ResourceDispatcherDelegate {
 
    private:
     std::unique_ptr<RequestPeer> original_peer_;
-    network::ResourceResponseInfo response_info_;
+    network::mojom::URLResponseHeadPtr response_head_;
     mojo::ScopedDataPipeConsumerHandle body_handle_;
 
     DISALLOW_COPY_AND_ASSIGN(WrapperPeer);

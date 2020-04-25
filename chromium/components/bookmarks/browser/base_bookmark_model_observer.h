@@ -43,6 +43,10 @@ class BaseBookmarkModelObserver : public BookmarkModelObserver {
   void BookmarkNodeChildrenReordered(BookmarkModel* model,
                                      const BookmarkNode* node) override;
 
+  /** Vivaldi */
+  void BookmarkSpeedDialNodeChanged(BookmarkModel* model,
+                                    const BookmarkNode* node) override;
+
  protected:
   ~BaseBookmarkModelObserver() override {}
 

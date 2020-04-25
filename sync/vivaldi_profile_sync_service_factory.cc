@@ -49,7 +49,7 @@ void UpdateNetworkTimeOnUIThread(base::Time network_time,
 void UpdateNetworkTime(const base::Time& network_time,
                        const base::TimeDelta& resolution,
                        const base::TimeDelta& latency) {
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE, {content::BrowserThread::UI},
       base::Bind(&UpdateNetworkTimeOnUIThread, network_time, resolution,
                  latency, base::TimeTicks::Now()));

@@ -51,10 +51,6 @@ import android.content.IntentFilter;
 import android.graphics.ColorFilter;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.support.annotation.IdRes;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
-import android.support.annotation.StringRes;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.espresso.Espresso;
 import android.support.test.espresso.intent.Intents;
@@ -68,6 +64,11 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+
+import androidx.annotation.IdRes;
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
@@ -204,14 +205,6 @@ public class SavePasswordsPreferencesTest {
         }
 
         @Override
-        public void changeSavedPasswordEntry(int index, String newUsername, String newPassword) {
-            mSavedPasswords.set(index,
-                    new SavedPasswordEntry(
-                            mSavedPasswords.get(index).getUrl(), newUsername, newPassword));
-            updatePasswordLists();
-        }
-
-        @Override
         public void removeSavedPasswordEntry(int index) {
             assert false : "Define this method before starting to use it in tests.";
         }
@@ -235,18 +228,22 @@ public class SavePasswordsPreferencesTest {
         }
     }
 
-    private final static SavedPasswordEntry ZEUS_ON_EARTH =
+    private static final SavedPasswordEntry ZEUS_ON_EARTH =
             new SavedPasswordEntry("http://www.phoenicia.gr", "Zeus", "Europa");
-    private final static SavedPasswordEntry ARES_AT_OLYMP =
+    private static final SavedPasswordEntry ARES_AT_OLYMP =
             new SavedPasswordEntry("https://1-of-12.olymp.gr", "Ares", "God-o'w@r");
-    private final static SavedPasswordEntry PHOBOS_AT_OLYMP =
+    private static final SavedPasswordEntry PHOBOS_AT_OLYMP =
             new SavedPasswordEntry("https://visitor.olymp.gr", "Phobos-son-of-ares", "G0d0fF34r");
-    private final static SavedPasswordEntry DEIMOS_AT_OLYMP =
+    private static final SavedPasswordEntry DEIMOS_AT_OLYMP =
             new SavedPasswordEntry("https://visitor.olymp.gr", "Deimops-Ares-son", "G0d0fT3rr0r");
-    private final static SavedPasswordEntry HADES_AT_UNDERWORLD =
+    private static final SavedPasswordEntry HADES_AT_UNDERWORLD =
             new SavedPasswordEntry("https://underworld.gr", "", "C3rb3rus");
-    private final static SavedPasswordEntry[] GREEK_GODS = {
-            ZEUS_ON_EARTH, ARES_AT_OLYMP, PHOBOS_AT_OLYMP, DEIMOS_AT_OLYMP, HADES_AT_UNDERWORLD,
+    private static final SavedPasswordEntry[] GREEK_GODS = {
+            ZEUS_ON_EARTH,
+            ARES_AT_OLYMP,
+            PHOBOS_AT_OLYMP,
+            DEIMOS_AT_OLYMP,
+            HADES_AT_UNDERWORLD,
     };
 
     // Used to provide fake lists of stored passwords. Tests which need it can use setPasswordSource
@@ -278,7 +275,7 @@ public class SavePasswordsPreferencesTest {
     }
 
     @After
-    public void tearDown() throws Exception {
+    public void tearDown() {
         TestThreadUtils.runOnUiThreadBlocking(() -> ProfileSyncService.resetForTests());
     }
 
@@ -286,7 +283,7 @@ public class SavePasswordsPreferencesTest {
      * Helper to set up a fake source of displayed passwords.
      * @param entry An entry to be added to saved passwords. Can be null.
      */
-    private void setPasswordSource(SavedPasswordEntry entry) throws Exception {
+    private void setPasswordSource(SavedPasswordEntry entry) {
         SavedPasswordEntry[] entries = {};
         if (entry != null) {
             entries = new SavedPasswordEntry[] {entry};
@@ -298,8 +295,7 @@ public class SavePasswordsPreferencesTest {
      * Helper to set up a fake source of displayed passwords with multiple initial passwords.
      * @param initialEntries All entries to be added to saved passwords. Can not be null.
      */
-    private void setPasswordSourceWithMultipleEntries(SavedPasswordEntry[] initialEntries)
-            throws Exception {
+    private void setPasswordSourceWithMultipleEntries(SavedPasswordEntry[] initialEntries) {
         if (mHandler == null) {
             mHandler = new FakePasswordManagerHandler(PasswordManagerHandlerProvider.getInstance());
         }
@@ -315,7 +311,7 @@ public class SavePasswordsPreferencesTest {
      * Helper to set up a fake source of displayed passwords without passwords but with exceptions.
      * @param exceptions All exceptions to be added to saved exceptions. Can not be null.
      */
-    private void setPasswordExceptions(String[] exceptions) throws Exception {
+    private void setPasswordExceptions(String[] exceptions) {
         if (mHandler == null) {
             mHandler = new FakePasswordManagerHandler(PasswordManagerHandlerProvider.getInstance());
         }
@@ -516,7 +512,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testResetListEmpty() throws Exception {
+    public void testResetListEmpty() {
         // Load the preferences, they should show the empty list.
         final Preferences preferences =
                 PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
@@ -537,7 +533,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testSavePasswordsSwitch() throws Exception {
+    public void testSavePasswordsSwitch() {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { PrefServiceBridge.getInstance().setRememberPasswordsEnabled(true); });
 
@@ -583,7 +579,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testManageAccountLinkNotSignedIn() throws Exception {
+    public void testManageAccountLinkNotSignedIn() {
         // Add a password entry, because the link is only displayed if the password list is not
         // empty.
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
@@ -603,7 +599,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testManageAccountLinkSignedInNotSyncing() throws Exception {
+    public void testManageAccountLinkSignedInNotSyncing() {
         // Add a password entry, because the link is only displayed if the password list is not
         // empty.
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
@@ -627,7 +623,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testManageAccountLinkSyncing() throws Exception {
+    public void testManageAccountLinkSyncing() {
         // Add a password entry, because the link is only displayed if the password list is not
         // empty.
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
@@ -651,7 +647,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testManageAccountLinkSyncingWithPassphrase() throws Exception {
+    public void testManageAccountLinkSyncingWithPassphrase() {
         // Add a password entry, because the link is only displayed if the password list is not
         // empty.
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
@@ -675,7 +671,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testAutoSignInCheckbox() throws Exception {
+    public void testAutoSignInCheckbox() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PrefServiceBridge.getInstance().setPasswordManagerAutoSigninEnabled(true);
         });
@@ -724,8 +720,7 @@ public class SavePasswordsPreferencesTest {
     @SmallTest
     @Feature({"Preferences"})
     @Features.EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
-    public void testSelectedStoredPasswordIndexIsSameAsInShowPasswordEntryEditingView()
-            throws Exception {
+    public void testSelectedStoredPasswordIndexIsSameAsInShowPasswordEntryEditingView() {
         setPasswordSourceWithMultipleEntries( // Initialize preferences
                 new SavedPasswordEntry[] {new SavedPasswordEntry("https://example.com",
                                                   "example user", "example password"),
@@ -748,7 +743,7 @@ public class SavePasswordsPreferencesTest {
     @SmallTest
     @Feature({"Preferences"})
     @Features.EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
-    public void testPasswordDataDisplayedInEditingActivity() throws Exception {
+    public void testPasswordDataDisplayedInEditingActivity() {
         Bundle fragmentArgs = new Bundle();
         fragmentArgs.putString(PasswordEntryEditor.CREDENTIAL_URL, "https://example.com");
         fragmentArgs.putString(PasswordEntryEditor.CREDENTIAL_NAME, "test user");
@@ -772,7 +767,7 @@ public class SavePasswordsPreferencesTest {
     @SmallTest
     @Feature({"Preferences"})
     @Features.EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
-    public void testChangeOfStoredPasswordDataIsPreserved() throws Exception {
+    public void testChangeOfStoredPasswordDataIsPreserved() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
@@ -802,7 +797,7 @@ public class SavePasswordsPreferencesTest {
     @SmallTest
     @Feature({"Preferences"})
     @Features.EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
-    public void testStoredPasswordCanBeUnmaskedAndMaskedAgain() throws Exception {
+    public void testStoredPasswordCanBeUnmaskedAndMaskedAgain() {
         Bundle fragmentArgs = new Bundle();
         fragmentArgs.putString(SavePasswordsPreferences.PASSWORD_LIST_NAME, "test user");
         fragmentArgs.putString(SavePasswordsPreferences.PASSWORD_LIST_URL, "https://example.com");
@@ -832,7 +827,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportMenuDisabled() throws Exception {
+    public void testExportMenuDisabled() {
         // Ensure there are no saved passwords reported to settings.
         setPasswordSource(null);
 
@@ -851,7 +846,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportMenuEnabled() throws Exception {
+    public void testExportMenuEnabled() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -869,7 +864,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportTriggersSerialization() throws Exception {
+    public void testExportTriggersSerialization() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -900,7 +895,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportMenuItem() throws Exception {
+    public void testExportMenuItem() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -925,7 +920,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportReauthAfterCancel() throws Exception {
+    public void testExportReauthAfterCancel() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -974,7 +969,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportMenuItemNoLock() throws Exception {
+    public void testExportMenuItemNoLock() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1002,7 +997,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportMenuItemReenabledNoLock() throws Exception {
+    public void testExportMenuItemReenabledNoLock() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1030,7 +1025,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportMenuItemReenabledReauthFailure() throws Exception {
+    public void testExportMenuItemReenabledReauthFailure() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1057,7 +1052,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportRequiresReauth() throws Exception {
+    public void testExportRequiresReauth() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1187,7 +1182,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportCancelOnWarning() throws Exception {
+    public void testExportCancelOnWarning() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1214,7 +1209,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportWarningOnResume() throws Exception {
+    public void testExportWarningOnResume() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1249,7 +1244,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportWarningTimeoutOnResume() throws Exception {
+    public void testExportWarningTimeoutOnResume() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1291,7 +1286,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportCancelOnWarningDismissal() throws Exception {
+    public void testExportCancelOnWarningDismissal() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1437,7 +1432,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportCancelOnProgress() throws Exception {
+    public void testExportCancelOnProgress() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1476,7 +1471,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportCancelOnError() throws Exception {
+    public void testExportCancelOnError() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1517,7 +1512,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportRetry() throws Exception {
+    public void testExportRetry() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1554,7 +1549,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportHelpSite() throws Exception {
+    public void testExportHelpSite() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1602,7 +1597,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testExportErrorUiAfterConfirmation() throws Exception {
+    public void testExportErrorUiAfterConfirmation() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1643,7 +1638,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testViewPasswordNoLock() throws Exception {
+    public void testViewPasswordNoLock() {
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
 
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);
@@ -1669,7 +1664,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testViewPassword() throws Exception {
+    public void testViewPassword() {
         setPasswordSource(
                 new SavedPasswordEntry("https://example.com", "test user", "test password"));
 
@@ -1699,7 +1694,7 @@ public class SavePasswordsPreferencesTest {
     @SmallTest
     @Feature({"Preferences"})
     @SuppressWarnings("AlwaysShowAction") // We need to ensure the icon is in the action bar.
-    public void testSearchIconVisibleInActionBarWithFeature() throws Exception {
+    public void testSearchIconVisibleInActionBarWithFeature() {
         setPasswordSource(null); // Initialize empty preferences.
         SavePasswordsPreferences f =
                 (SavePasswordsPreferences) PreferencesTest
@@ -1724,7 +1719,7 @@ public class SavePasswordsPreferencesTest {
     @SmallTest
     @Feature({"Preferences"})
     @Features.EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
-    public void testEditSavedPasswordIconVisibleInActionBarWithFeature() throws Exception {
+    public void testEditSavedPasswordIconVisibleInActionBarWithFeature() {
         setPasswordSource( // Initialize preferences
                 new SavedPasswordEntry("https://example.com", "test user", "test password"));
 
@@ -1742,7 +1737,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testSearchTextInOverflowMenuVisibleWithFeature() throws Exception {
+    public void testSearchTextInOverflowMenuVisibleWithFeature() {
         setPasswordSource(null); // Initialize empty preferences.
         SavePasswordsPreferences f =
                 (SavePasswordsPreferences) PreferencesTest
@@ -1771,7 +1766,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testTriggeringSearchRestoresHelpIcon() throws Exception {
+    public void testTriggeringSearchRestoresHelpIcon() {
         setPasswordSource(null);
         PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
                 SavePasswordsPreferences.class.getName());
@@ -1782,7 +1777,7 @@ public class SavePasswordsPreferencesTest {
 
         // Retrieve the initial status and ensure that the help option is there at all.
         final AtomicReference<Boolean> helpInOverflowMenu = new AtomicReference<>(false);
-        Espresso.onView(withId(R.id.menu_id_general_help)).check((helpMenuItem, e) -> {
+        Espresso.onView(withId(R.id.menu_id_targeted_help)).check((helpMenuItem, e) -> {
             ActionMenuItemView view = (ActionMenuItemView) helpMenuItem;
             helpInOverflowMenu.set(view == null || !view.showsIcon());
         });
@@ -1792,7 +1787,7 @@ public class SavePasswordsPreferencesTest {
             Espresso.onView(withText(R.string.menu_help)).check(matches(isDisplayed()));
             Espresso.pressBack(); // to close the Overflow menu.
         } else {
-            Espresso.onView(withId(R.id.menu_id_general_help)).check(matches(isDisplayed()));
+            Espresso.onView(withId(R.id.menu_id_targeted_help)).check(matches(isDisplayed()));
         }
 
         // Trigger the search, close it and wait for UI to be restored.
@@ -1809,10 +1804,10 @@ public class SavePasswordsPreferencesTest {
             openActionBarOverflowOrOptionsMenu(
                     InstrumentationRegistry.getInstrumentation().getTargetContext());
             Espresso.onView(withText(R.string.menu_help)).check(matches(isDisplayed()));
-            Espresso.onView(withId(R.id.menu_id_general_help)).check(doesNotExist());
+            Espresso.onView(withId(R.id.menu_id_targeted_help)).check(doesNotExist());
         } else {
             Espresso.onView(withText(R.string.menu_help)).check(doesNotExist());
-            Espresso.onView(withId(R.id.menu_id_general_help)).check(matches(isDisplayed()));
+            Espresso.onView(withId(R.id.menu_id_targeted_help)).check(matches(isDisplayed()));
         }
     }
 
@@ -1822,7 +1817,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testSearchFiltersByUserName() throws Exception {
+    public void testSearchFiltersByUserName() {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
         PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
                 SavePasswordsPreferences.class.getName());
@@ -1845,7 +1840,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testSearchFiltersByUrl() throws Exception {
+    public void testSearchFiltersByUrl() {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
         PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
                 SavePasswordsPreferences.class.getName());
@@ -1868,7 +1863,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testSearchDisplaysBlankPageIfSearchTurnsUpEmpty() throws Exception {
+    public void testSearchDisplaysBlankPageIfSearchTurnsUpEmpty() {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
         PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
                 SavePasswordsPreferences.class.getName());
@@ -1899,7 +1894,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testSearchIconClickedHidesExceptionsTemporarily() throws Exception {
+    public void testSearchIconClickedHidesExceptionsTemporarily() {
         setPasswordExceptions(new String[] {"http://exclu.de", "http://not-inclu.de"});
         final SavePasswordsPreferences savePasswordPreferences =
                 (SavePasswordsPreferences) PreferencesTest
@@ -1930,7 +1925,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testSearchIconClickedHidesGeneralPrefs() throws Exception {
+    public void testSearchIconClickedHidesGeneralPrefs() {
         setPasswordSource(ZEUS_ON_EARTH);
         final SavePasswordsPreferences prefs =
                 (SavePasswordsPreferences) PreferencesTest
@@ -1975,7 +1970,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testSearchBarBackButtonRestoresGeneralPrefs() throws Exception {
+    public void testSearchBarBackButtonRestoresGeneralPrefs() {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
         PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
                 SavePasswordsPreferences.class.getName());
@@ -2001,7 +1996,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testSearchViewCloseIconExistsOnlyToClearQueries() throws Exception {
+    public void testSearchViewCloseIconExistsOnlyToClearQueries() {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
         PreferencesTest.startPreferences(InstrumentationRegistry.getInstrumentation(),
                 SavePasswordsPreferences.class.getName());
@@ -2035,7 +2030,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testSearchIconColorAffectsOnlyLocalSearchDrawable() throws Exception {
+    public void testSearchIconColorAffectsOnlyLocalSearchDrawable() {
         // Open the password preferences and remember the applied color filter.
         final SavePasswordsPreferences f =
                 (SavePasswordsPreferences) PreferencesTest
@@ -2084,7 +2079,7 @@ public class SavePasswordsPreferencesTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    public void testSearchResultsPersistAfterEntryInspection() throws Exception {
+    public void testSearchResultsPersistAfterEntryInspection() {
         setPasswordSourceWithMultipleEntries(GREEK_GODS);
         setPasswordExceptions(new String[] {"http://exclu.de", "http://not-inclu.de"});
         ReauthenticationManager.setApiOverride(ReauthenticationManager.OverrideState.AVAILABLE);

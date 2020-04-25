@@ -3723,8 +3723,8 @@ TEST_F(DiskCacheTest, MultipleInstances) {
       nullptr, &cache[0], cb.callback());
   ASSERT_THAT(cb.GetResult(rv), IsOk());
   rv = disk_cache::CreateCacheBackend(
-      net::MEDIA_CACHE, net::CACHE_BACKEND_DEFAULT, store2.GetPath(), 0, false,
-      nullptr, &cache[1], cb.callback());
+      net::GENERATED_BYTE_CODE_CACHE, net::CACHE_BACKEND_DEFAULT,
+      store2.GetPath(), 0, false, nullptr, &cache[1], cb.callback());
   ASSERT_THAT(cb.GetResult(rv), IsOk());
 
   ASSERT_TRUE(cache[0].get() != nullptr && cache[1].get() != nullptr);
@@ -4345,14 +4345,14 @@ TEST_F(DiskCacheBackendTest, DISABLED_SimpleCachePrioritizedEntryOrder) {
   base::RunLoop read_run_loop;
 
   entry2->ReadData(2, 0, read_buf2.get(), kSize,
-                   base::BindRepeating(finished_callback, &finished_read_order,
-                                       2, read_run_loop.QuitClosure()));
+                   base::BindOnce(finished_callback, &finished_read_order, 2,
+                                  read_run_loop.QuitClosure()));
   entry3->ReadData(2, 0, read_buf3.get(), kSize,
-                   base::BindRepeating(finished_callback, &finished_read_order,
-                                       3, base::Passed(base::OnceClosure())));
+                   base::BindOnce(finished_callback, &finished_read_order, 3,
+                                  base::OnceClosure()));
   entry1->ReadData(2, 0, read_buf1.get(), kSize,
-                   base::BindRepeating(finished_callback, &finished_read_order,
-                                       1, base::Passed(base::OnceClosure())));
+                   base::BindOnce(finished_callback, &finished_read_order, 1,
+                                  base::OnceClosure()));
   EXPECT_EQ(0u, finished_read_order.size());
 
   read_run_loop.Run();
@@ -4437,14 +4437,14 @@ TEST_F(DiskCacheBackendTest, SimpleCacheFIFOEntryOrder) {
   base::RunLoop read_run_loop;
 
   entry2->ReadData(2, 0, read_buf2.get(), kSize,
-                   base::BindRepeating(finished_callback, &finished_read_order,
-                                       2, base::Passed(base::OnceClosure())));
+                   base::BindOnce(finished_callback, &finished_read_order, 2,
+                                  base::OnceClosure()));
   entry3->ReadData(2, 0, read_buf3.get(), kSize,
-                   base::BindRepeating(finished_callback, &finished_read_order,
-                                       3, base::Passed(base::OnceClosure())));
+                   base::BindOnce(finished_callback, &finished_read_order, 3,
+                                  base::OnceClosure()));
   entry1->ReadData(2, 0, read_buf1.get(), kSize,
-                   base::BindRepeating(finished_callback, &finished_read_order,
-                                       1, read_run_loop.QuitClosure()));
+                   base::BindOnce(finished_callback, &finished_read_order, 1,
+                                  read_run_loop.QuitClosure()));
   EXPECT_EQ(0u, finished_read_order.size());
 
   read_run_loop.Run();

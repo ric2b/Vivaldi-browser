@@ -18,6 +18,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_desktop_util.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
+#include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/omnibox/clipboard_utils.h"
 #include "chrome/browser/ui/omnibox/omnibox_theme.h"
 #include "chrome/browser/ui/view_ids.h"
@@ -25,7 +26,6 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
-#include "chrome/browser/ui/views/page_action/omnibox_page_action_icon_container_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feature_engagement/buildflags.h"
 #include "components/omnibox/browser/autocomplete_input.h"
@@ -37,10 +37,10 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/common/omnibox_features.h"
-#include "components/search_engines/template_url_service.h"
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/escape.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
@@ -142,10 +142,14 @@ class OmniboxViewViews::PathFadeAnimation
         starting_color_(starting_color),
         animation_(
             {
-                gfx::MultiAnimation::Part(4000, gfx::Tween::ZERO),
-                gfx::MultiAnimation::Part(300, gfx::Tween::FAST_OUT_SLOW_IN),
+                gfx::MultiAnimation::Part(
+                    base::TimeDelta::FromMilliseconds(4000),
+                    gfx::Tween::ZERO),
+                gfx::MultiAnimation::Part(
+                    base::TimeDelta::FromMilliseconds(300),
+                    gfx::Tween::FAST_OUT_SLOW_IN),
             },
-            gfx::MultiAnimation::GetDefaultTimerInterval()) {
+            gfx::MultiAnimation::kDefaultTimerInterval) {
     DCHECK(view_);
 
     animation_.set_delegate(this);
@@ -196,9 +200,7 @@ OmniboxViewViews::OmniboxViewViews(OmniboxEditController* controller,
       saved_selection_for_focus_change_(gfx::Range::InvalidRange()),
       location_bar_view_(location_bar),
       latency_histogram_state_(NOT_ACTIVE),
-      friendly_suggestion_text_prefix_length_(0),
-      scoped_compositor_observer_(this),
-      scoped_template_url_service_observer_(this) {
+      friendly_suggestion_text_prefix_length_(0) {
   SetID(VIEW_ID_OMNIBOX);
   SetFontList(font_list);
 
@@ -239,7 +241,9 @@ void OmniboxViewViews::Init() {
 
     // Initialize the popup view using the same font.
     popup_view_.reset(
-        new OmniboxPopupContentsView(this, model(), location_bar_view_));
+        new OmniboxPopupContentsView(this, model(), location_bar_view_,
+                                     &ThemeService::GetThemeProviderForProfile(
+                                         location_bar_view_->profile())));
   }
 
   // Override the default FocusableBorder from Textfield, since the
@@ -414,7 +418,7 @@ void OmniboxViewViews::RevertAll() {
   OmniboxView::RevertAll();
 }
 
-void OmniboxViewViews::SetFocus() {
+void OmniboxViewViews::SetFocus(bool is_user_initiated) {
   // Temporarily reveal the top-of-window views (if not already revealed) so
   // that the location bar view is visible and is considered focusable. When it
   // actually receives focus, ImmersiveFocusWatcher will add another lock to
@@ -427,7 +431,10 @@ void OmniboxViewViews::SetFocus() {
             ->GetRevealedLock(ImmersiveModeController::ANIMATE_REVEAL_YES));
   }
 
+  suppress_on_focus_suggestions_ = !is_user_initiated;
   RequestFocus();
+  suppress_on_focus_suggestions_ = false;
+
   // Restore caret visibility if focus is explicitly requested. This is
   // necessary because if we already have invisible focus, the RequestFocus()
   // call above will short-circuit, preventing us from reaching
@@ -661,7 +668,7 @@ bool OmniboxViewViews::HandleEarlyTabActions(const ui::KeyEvent& event) {
   // If we shift-tabbed (and actually moved) to a suggestion with a tab
   // switch button, select it.
   if (event.IsShiftDown() &&
-      model()->popup_model()->SelectedLineHasButton()) {
+      model()->popup_model()->SelectedLineHasTabMatch()) {
     model()->popup_model()->SetSelectedLineState(
         OmniboxPopupModel::BUTTON_FOCUSED);
     popup_view_->ProvideButtonFocusHint(
@@ -693,7 +700,7 @@ bool OmniboxViewViews::TextAndUIDirectionMatch() const {
 
 bool OmniboxViewViews::SelectedSuggestionHasTabMatch() const {
   return model()->popup_model() &&  // Can be null in tests.
-         model()->popup_model()->SelectedLineHasButton();
+         model()->popup_model()->SelectedLineHasTabMatch();
 }
 
 bool OmniboxViewViews::DirectionAwareSelectionAtEnd() const {
@@ -1010,10 +1017,10 @@ void OmniboxViewViews::UpdateSchemeStyle(const gfx::Range& range) {
 
   // Only SECURE and DANGEROUS levels (pages served over HTTPS or flagged by
   // SafeBrowsing) get a special scheme color treatment. If the security level
-  // is NONE or HTTP_SHOW_WARNING, we do not override the text style previously
-  // applied to the scheme text range by SetEmphasis().
+  // is NONE or WARNING, we do not override the text style
+  // previously applied to the scheme text range by SetEmphasis().
   if (security_level == security_state::NONE ||
-      security_level == security_state::HTTP_SHOW_WARNING)
+      security_level == security_state::WARNING)
     return;
   ApplyColor(location_bar_view_->GetSecurityChipColor(security_level), range);
   if (security_level == security_state::DANGEROUS)
@@ -1102,6 +1109,13 @@ bool OmniboxViewViews::OnMousePressed(const ui::MouseEvent& event) {
     filter_drag_events_for_unelision_ = true;
   }
 
+  // This is intended to cover the NTP case where the omnibox starts focused.
+  // The user can explicitly request on-focus suggestions by clicking or tapping
+  // the omnibox. Restricted to empty textfield to avoid disrupting selections.
+  if (HasFocus() && GetText().empty() && event.IsOnlyLeftMouseButton()) {
+    model()->ShowOnFocusSuggestionsIfAutocompleteIdle();
+  }
+
   return handled;
 }
 
@@ -1166,6 +1180,13 @@ void OmniboxViewViews::OnGestureEvent(ui::GestureEvent* event) {
       event->type() == ui::ET_GESTURE_LONG_PRESS ||
       event->type() == ui::ET_GESTURE_LONG_TAP) {
     select_all_on_gesture_tap_ = false;
+  }
+
+  // This is intended to cover the NTP case where the omnibox starts focused.
+  // The user can explicitly request on-focus suggestions by clicking or tapping
+  // the omnibox. Restricted to empty textfield to avoid disrupting selections.
+  if (HasFocus() && GetText().empty() && event->type() == ui::ET_GESTURE_TAP) {
+    model()->ShowOnFocusSuggestionsIfAutocompleteIdle();
   }
 }
 
@@ -1287,8 +1308,15 @@ void OmniboxViewViews::OnFocus() {
   // TODO(tommycli): This does not seem like it should be necessary.
   // Investigate why it's needed and see if we can remove it.
   model()->ResetDisplayTexts();
+
+  bool suppress = suppress_on_focus_suggestions_;
+  if (GetFocusManager() &&
+      GetFocusManager()->focus_change_reason() !=
+          views::FocusManager::FocusChangeReason::kDirectFocusChange) {
+    suppress = true;
+  }
   // TODO(oshima): Get control key state.
-  model()->OnSetFocus(false);
+  model()->OnSetFocus(false, suppress);
   // Don't call controller()->OnSetFocus, this view has already acquired focus.
 
   // Restore the selection we saved in OnBlur() if it's still valid.
@@ -1485,11 +1513,8 @@ void OmniboxViewViews::ExecuteTextEditCommand(ui::TextEditCommand command) {
 }
 
 bool OmniboxViewViews::ShouldShowPlaceholderText() const {
-  bool show_with_caret = base::FeatureList::IsEnabled(
-      omnibox::kUIExperimentShowPlaceholderWhenCaretShowing);
   return Textfield::ShouldShowPlaceholderText() &&
-         (show_with_caret || !model()->is_caret_visible()) &&
-         !model()->is_keyword_selected();
+         !model()->is_caret_visible() && !model()->is_keyword_selected();
 }
 
 #if defined(OS_CHROMEOS)
@@ -1531,14 +1556,8 @@ bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
     case ui::VKEY_RETURN:
       if (model()->popup_model()->selected_line_state() ==
           OmniboxPopupModel::BUTTON_FOCUSED) {
-        if (!(OmniboxFieldTrial::IsTabSwitchLogicReversed() &&
-              model()->popup_model()->SelectedLineHasTabMatch())) {
-          popup_view_->OpenMatch(WindowOpenDisposition::SWITCH_TO_TAB,
-                                 event.time_stamp());
-        } else {
-          popup_view_->OpenMatch(WindowOpenDisposition::CURRENT_TAB,
-                                 event.time_stamp());
-        }
+        popup_view_->OpenMatch(WindowOpenDisposition::SWITCH_TO_TAB,
+                               event.time_stamp());
       } else {
         if (alt || (shift && command)) {
           model()->AcceptInput(WindowOpenDisposition::NEW_FOREGROUND_TAB,
@@ -1550,9 +1569,7 @@ bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
           model()->AcceptInput(WindowOpenDisposition::NEW_WINDOW,
                                event.time_stamp());
         } else {
-          if ((OmniboxFieldTrial::IsTabSwitchLogicReversed() &&
-               model()->popup_model()->SelectedLineHasTabMatch()) ||
-              model()->popup_model()->SelectedLineIsTabSwitchSuggestion()) {
+          if (model()->popup_model()->SelectedLineIsTabSwitchSuggestion()) {
             model()->AcceptInput(WindowOpenDisposition::SWITCH_TO_TAB,
                                  event.time_stamp());
           } else {
@@ -1824,8 +1841,7 @@ void OmniboxViewViews::UpdateContextMenu(ui::SimpleMenuModel* menu_contents) {
           send_tab_to_self_sub_menu_model_.get());
     }
 #if !defined(OS_MACOSX)
-    menu_contents->SetIcon(index,
-                           gfx::Image(*send_tab_to_self::GetImageSkia()));
+    menu_contents->SetIcon(index, kSendTabToSelfIcon);
 #endif
     menu_contents->InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
   }

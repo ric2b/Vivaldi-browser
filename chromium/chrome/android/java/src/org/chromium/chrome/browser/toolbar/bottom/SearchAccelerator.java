@@ -25,6 +25,8 @@ import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.ui.widget.ChromeImageButton;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * The search accelerator.
  */
@@ -52,10 +54,11 @@ class SearchAccelerator extends ChromeImageButton
         super(context, attrs);
 
         mResources = context.getResources();
-
-        mBackground = ApiCompatibilityUtils.getDrawable(mResources, R.drawable.ntp_search_box);
-        mBackground.mutate();
-        setBackground(mBackground);
+        if (!ChromeApplication.isVivaldi()) {
+            mBackground = ApiCompatibilityUtils.getDrawable(mResources, R.drawable.ntp_search_box);
+            mBackground.mutate();
+            setBackground(mBackground);
+        } else mBackground = null; setBackground(null);
     }
 
     /**
@@ -64,7 +67,11 @@ class SearchAccelerator extends ChromeImageButton
     public void setWrapperView(ViewGroup wrapper) {
         mWrapper = wrapper;
         mLabel = mWrapper.findViewById(R.id.search_accelerator_label);
-        if (FeatureUtilities.isLabeledBottomToolbarEnabled()) mLabel.setVisibility(View.VISIBLE);
+        if (FeatureUtilities.isLabeledBottomToolbarEnabled()) {
+            mLabel.setVisibility(View.VISIBLE);
+        } else {
+            mWrapper.setBackground(null);
+        }
     }
 
     @Override
@@ -117,6 +124,7 @@ class SearchAccelerator extends ChromeImageButton
     }
 
     private void updateBackground() {
+        if (ChromeApplication.isVivaldi()) return;
         if (mThemeColorProvider == null || mIncognitoStateProvider == null) return;
 
         mBackground.setColorFilter(ColorUtils.getTextBoxColorForToolbarBackground(mResources, false,

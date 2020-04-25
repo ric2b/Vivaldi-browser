@@ -19,6 +19,7 @@
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/menu_button_controller.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/grid_layout.h"
@@ -80,6 +81,8 @@ HoverButton::HoverButton(views::ButtonListener* button_listener,
       this, listener_,
       std::make_unique<views::Button::DefaultButtonControllerDelegate>(this)));
 
+  views::InstallRectHighlightPathGenerator(this);
+
   SetInstallFocusRingOnFocus(false);
   SetFocusBehavior(FocusBehavior::ALWAYS);
 
@@ -92,7 +95,7 @@ HoverButton::HoverButton(views::ButtonListener* button_listener,
   set_triggerable_event_flags(ui::EF_LEFT_MOUSE_BUTTON |
                               ui::EF_RIGHT_MOUSE_BUTTON);
   button_controller()->set_notify_action(
-      views::ButtonController::NotifyAction::NOTIFY_ON_RELEASE);
+      views::ButtonController::NotifyAction::kOnRelease);
 }
 
 HoverButton::HoverButton(views::ButtonListener* button_listener,
@@ -233,6 +236,12 @@ HoverButton::HoverButton(views::ButtonListener* button_listener,
 
 HoverButton::~HoverButton() {}
 
+// static
+SkColor HoverButton::GetInkDropColor(const views::View* view) {
+  return views::style::GetColor(*view, views::style::CONTEXT_BUTTON,
+                                views::style::STYLE_SECONDARY);
+}
+
 void HoverButton::SetBorder(std::unique_ptr<views::Border> b) {
   LabelButton::SetBorder(std::move(b));
   // Make sure the minimum size is correct according to the layout (if any).
@@ -273,11 +282,10 @@ void HoverButton::SetTitleTextWithHintRange(const base::string16& title_text,
 views::Button::KeyClickAction HoverButton::GetKeyClickActionForEvent(
     const ui::KeyEvent& event) {
   if (event.key_code() == ui::VKEY_RETURN) {
-    // As the hover button is presented in the user menu, it triggers an
-    // |CLICK_ON_KEY_PRESS| action every time the user clicks on enter on all
-    // platforms (it ignores the value of
-    // |PlatformStyle::kReturnClicksFocusedControl|.
-    return CLICK_ON_KEY_PRESS;
+    // As the hover button is presented in the user menu, it triggers a
+    // kOnKeyPress action every time the user clicks on enter on all platforms.
+    // (it ignores the value of PlatformStyle::kReturnClicksFocusedControl)
+    return KeyClickAction::kOnKeyPress;
   }
   return LabelButton::GetKeyClickActionForEvent(event);
 }
@@ -295,8 +303,7 @@ void HoverButton::StateChanged(ButtonState old_state) {
 }
 
 SkColor HoverButton::GetInkDropBaseColor() const {
-  return views::style::GetColor(*this, views::style::CONTEXT_BUTTON,
-                                views::style::STYLE_SECONDARY);
+  return GetInkDropColor(this);
 }
 
 std::unique_ptr<views::InkDrop> HoverButton::CreateInkDrop() {
@@ -338,20 +345,10 @@ views::View* HoverButton::GetTooltipHandlerForPoint(const gfx::Point& point) {
     }
   }
 
-  // If possible, take advantage of the |views::Label| tooltip behavior, which
-  // only sets the tooltip when the text is too long.
-  if (title_)
-    return this;
-  return label();
+  return this;
 }
 
 void HoverButton::OnBoundsChanged(const gfx::Rect& previous_bounds) {
-  // HoverButtons use a rectangular highlight to encompass the full width of
-  // their parent.
-  auto path = std::make_unique<SkPath>();
-  path->addRect(RectToSkRect(GetLocalBounds()));
-  SetProperty(views::kHighlightPathKey, path.release());
-
   if (title_) {
     SetTooltipAndAccessibleName(this, title_, subtitle_, GetLocalBounds(),
                                 taken_width_, auto_compute_tooltip_);

@@ -63,7 +63,6 @@
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/mojo/interface_invalidator.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
@@ -92,7 +91,7 @@ void DocumentTest::SetHtmlInnerHTML(const char* html_content) {
 namespace {
 
 class TestSynchronousMutationObserver
-    : public GarbageCollectedFinalized<TestSynchronousMutationObserver>,
+    : public GarbageCollected<TestSynchronousMutationObserver>,
       public SynchronousMutationObserver {
   USING_GARBAGE_COLLECTED_MIXIN(TestSynchronousMutationObserver);
 
@@ -262,7 +261,7 @@ void TestSynchronousMutationObserver::Trace(Visitor* visitor) {
 }
 
 class TestDocumentShutdownObserver
-    : public GarbageCollectedFinalized<TestDocumentShutdownObserver>,
+    : public GarbageCollected<TestDocumentShutdownObserver>,
       public DocumentShutdownObserver {
   USING_GARBAGE_COLLECTED_MIXIN(TestDocumentShutdownObserver);
 
@@ -298,7 +297,7 @@ void TestDocumentShutdownObserver::Trace(Visitor* visitor) {
 }
 
 class MockDocumentValidationMessageClient
-    : public GarbageCollectedFinalized<MockDocumentValidationMessageClient>,
+    : public GarbageCollected<MockDocumentValidationMessageClient>,
       public ValidationMessageClient {
   USING_GARBAGE_COLLECTED_MIXIN(MockDocumentValidationMessageClient);
 
@@ -338,7 +337,8 @@ class MockApplicationCacheHost final : public ApplicationCacheHostForFrame {
   explicit MockApplicationCacheHost(DocumentLoader* loader)
       : ApplicationCacheHostForFrame(loader,
                                      GetEmptyBrowserInterfaceBroker(),
-                                     /*task_runner=*/nullptr) {}
+                                     /*task_runner=*/nullptr,
+                                     base::UnguessableToken()) {}
   ~MockApplicationCacheHost() override = default;
 
   void SelectCacheWithoutManifest() override {
@@ -971,27 +971,6 @@ TEST_F(DocumentTest, ViewportPropagationNoRecalc) {
   int new_element_count = GetDocument().GetStyleEngine().StyleForElementCount();
 
   EXPECT_EQ(1, new_element_count - old_element_count);
-}
-
-class InvalidatorObserver : public InterfaceInvalidator::Observer {
- public:
-  void OnInvalidate() override { ++invalidate_called_counter_; }
-
-  int CountInvalidateCalled() const { return invalidate_called_counter_; }
-
- private:
-  int invalidate_called_counter_ = 0;
-};
-
-TEST_F(DocumentTest, InterfaceInvalidatorDestruction) {
-  InvalidatorObserver obs;
-  InterfaceInvalidator* invalidator = GetDocument().GetInterfaceInvalidator();
-  invalidator->AddObserver(&obs);
-  EXPECT_EQ(obs.CountInvalidateCalled(), 0);
-
-  GetDocument().Shutdown();
-  EXPECT_FALSE(GetDocument().GetInterfaceInvalidator());
-  EXPECT_EQ(1, obs.CountInvalidateCalled());
 }
 
 // Test fixture parameterized on whether the "IsolatedWorldCSP" feature is

@@ -4,10 +4,12 @@
 
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
 
+#include <gtk-primary-selection-client-protocol.h>
 #include <linux-dmabuf-unstable-v1-client-protocol.h>
 #include <presentation-time-client-protocol.h>
 #include <text-input-unstable-v1-client-protocol.h>
 #include <wayland-client.h>
+#include <wayland-drm-client-protocol.h>
 #include <xdg-shell-unstable-v5-client-protocol.h>
 #include <xdg-shell-unstable-v6-client-protocol.h>
 
@@ -53,6 +55,28 @@ void delete_data_device(wl_data_device* data_device) {
 
 }  // namespace
 
+const wl_interface*
+    ObjectTraits<gtk_primary_selection_device_manager>::interface =
+        &gtk_primary_selection_device_manager_interface;
+void (*ObjectTraits<gtk_primary_selection_device_manager>::deleter)(
+    gtk_primary_selection_device_manager*) =
+    &gtk_primary_selection_device_manager_destroy;
+
+const wl_interface* ObjectTraits<gtk_primary_selection_device>::interface =
+    &gtk_primary_selection_device_interface;
+void (*ObjectTraits<gtk_primary_selection_device>::deleter)(
+    gtk_primary_selection_device*) = &gtk_primary_selection_device_destroy;
+
+const wl_interface* ObjectTraits<gtk_primary_selection_offer>::interface =
+    &gtk_primary_selection_offer_interface;
+void (*ObjectTraits<gtk_primary_selection_offer>::deleter)(
+    gtk_primary_selection_offer*) = &gtk_primary_selection_offer_destroy;
+
+const wl_interface* ObjectTraits<gtk_primary_selection_source>::interface =
+    &gtk_primary_selection_source_interface;
+void (*ObjectTraits<gtk_primary_selection_source>::deleter)(
+    gtk_primary_selection_source*) = &gtk_primary_selection_source_destroy;
+
 const wl_interface* ObjectTraits<wl_buffer>::interface = &wl_buffer_interface;
 void (*ObjectTraits<wl_buffer>::deleter)(wl_buffer*) = &wl_buffer_destroy;
 
@@ -84,6 +108,9 @@ const wl_interface* ObjectTraits<wl_data_source>::interface =
     &wl_data_source_interface;
 void (*ObjectTraits<wl_data_source>::deleter)(wl_data_source*) =
     &wl_data_source_destroy;
+
+const wl_interface* ObjectTraits<wl_drm>::interface = &wl_drm_interface;
+void (*ObjectTraits<wl_drm>::deleter)(wl_drm*) = &wl_drm_destroy;
 
 const wl_interface* ObjectTraits<wl_display>::interface = &wl_display_interface;
 void (*ObjectTraits<wl_display>::deleter)(wl_display*) = &wl_display_disconnect;

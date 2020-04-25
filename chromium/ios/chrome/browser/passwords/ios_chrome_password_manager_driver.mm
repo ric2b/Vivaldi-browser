@@ -23,6 +23,11 @@ IOSChromePasswordManagerDriver::IOSChromePasswordManagerDriver(
 
 IOSChromePasswordManagerDriver::~IOSChromePasswordManagerDriver() = default;
 
+int IOSChromePasswordManagerDriver::GetId() const {
+  // There is only one driver per tab on iOS so returning 0 is fine.
+  return 0;
+}
+
 void IOSChromePasswordManagerDriver::FillPasswordForm(
     const autofill::PasswordFormFillData& form_data) {
   [delegate_ fillPasswordForm:form_data completionHandler:nil];
@@ -57,12 +62,6 @@ void IOSChromePasswordManagerDriver::PreviewSuggestion(
     const base::string16& password) {
   NOTIMPLEMENTED();
 }
-
-// TODO(crbug.com/568713): This method should be given a non-trivial
-// implementation before launch of the fill-on-account password manager
-// experiment.
-void IOSChromePasswordManagerDriver::ShowInitialPasswordAccountSuggestions(
-    const autofill::PasswordFormFillData& form_data) {}
 
 void IOSChromePasswordManagerDriver::ClearPreviewedForm() {
   NOTIMPLEMENTED();

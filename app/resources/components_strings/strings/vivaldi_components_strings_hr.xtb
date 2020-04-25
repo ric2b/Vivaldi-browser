@@ -69,12 +69,11 @@
 <translation id="7758069387465995638">Vezu možda blokira vatrozid ili antivirusni softver.</translation>
 <translation id="7951415247503192394">(32-bitni)</translation>
 <translation id="8142868475871995937">Posjetite &lt;strong&gt;vivaldi://policy&lt;/strong&gt; da biste vidjeli popis nedopuštenih URL-ova i druga pravila koja je nametnuo vaš administrator sustava.</translation>
-<translation id="8149426793427495338">Računalo je u stanju mirovanja.</translation>
 <translation id="8150722005171944719">Datoteka na adresi <ph name="URL" /> nije čitljiva. Možda je uklonjena ili premještena ili dozvole datoteka sprječavaju pristup.</translation>
 <translation id="8225771182978767009">Osoba koja je postavila računalo blokirala je tu web-lokaciju.</translation>
 <translation id="8289355894181816810">Obratite se svojem mrežnom administratoru ako niste sigurni što to znači.</translation>
 <translation id="8332188693563227489">Pristup hostu <ph name="HOST_NAME" /> je odbijen</translation>
-<translation id="8498891568109133222">Hostu <ph name="HOST_NAME" /> bilo je potrebno previše vremena za odgovor.</translation>
+<translation id="8498891568109133222">Poslužitelju <ph name="HOST_NAME" /> bilo je potrebno previše vremena za odgovor.</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;DNS adresa poslužitelja&lt;/abbr&gt;<ph name="HOST_NAME" />nije pronađena. U tijeku je dijagnosticiranje problema.</translation>
 <translation id="9183425211371246419">Host <ph name="HOST_NAME" /> upotrebljava nepodržane protokole.</translation>
 <translation id="969892804517981540">Službeni sastavak</translation>

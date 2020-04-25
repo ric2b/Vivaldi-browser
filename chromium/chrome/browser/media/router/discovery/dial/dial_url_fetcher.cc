@@ -11,6 +11,7 @@
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
@@ -19,6 +20,7 @@
 #include "net/url_request/redirect_info.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 
 // The maximum number of retries allowed for GET requests.
 constexpr int kMaxRetries = 2;
@@ -61,12 +63,12 @@ constexpr net::NetworkTrafficAnnotationTag kDialUrlFetcherTrafficAnnotation =
           }
         })");
 
-void BindURLLoaderFactoryRequestOnUIThread(
-    network::mojom::URLLoaderFactoryRequest request) {
+void BindURLLoaderFactoryReceiverOnUIThread(
+    mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver) {
   network::mojom::URLLoaderFactory* factory =
       g_browser_process->system_network_context_manager()
           ->GetURLLoaderFactory();
-  factory->Clone(std::move(request));
+  factory->Clone(std::move(receiver));
 }
 
 }  // namespace
@@ -79,7 +81,7 @@ DialURLFetcher::~DialURLFetcher() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
-const network::ResourceResponseHead* DialURLFetcher::GetResponseHead() const {
+const network::mojom::URLResponseHead* DialURLFetcher::GetResponseHead() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return loader_ ? loader_->ResponseInfo() : nullptr;
 }
@@ -148,7 +150,7 @@ void DialURLFetcher::ReportError(int response_code,
 
 void DialURLFetcher::ReportRedirectError(
     const net::RedirectInfo& redirect_info,
-    const network::ResourceResponseHead& response_head,
+    const network::mojom::URLResponseHead& response_head,
     std::vector<std::string>* to_be_removed_headers) {
   // Cancel the request.
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -169,7 +171,7 @@ void DialURLFetcher::StartDownload() {
   auto mojo_request = mojo::MakeRequest(&loader_factory);
   if (content::BrowserThread::IsThreadInitialized(content::BrowserThread::UI)) {
     base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                   base::BindOnce(&BindURLLoaderFactoryRequestOnUIThread,
+                   base::BindOnce(&BindURLLoaderFactoryReceiverOnUIThread,
                                   std::move(mojo_request)));
   }
 

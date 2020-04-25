@@ -31,6 +31,7 @@
 #include "third_party/blink/public/common/blob/blob_utils.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/array_buffer_or_array_buffer_view_or_blob_or_document_or_string_or_form_data_or_url_search_params.h"
 #include "third_party/blink/renderer/bindings/core/v8/array_buffer_or_array_buffer_view_or_blob_or_usv_string.h"
@@ -231,7 +232,7 @@ bool ValidateOpenArguments(const AtomicString& method,
 }  // namespace
 
 class XMLHttpRequest::BlobLoader final
-    : public GarbageCollectedFinalized<XMLHttpRequest::BlobLoader>,
+    : public GarbageCollected<XMLHttpRequest::BlobLoader>,
       public FileReaderLoaderClient {
  public:
   BlobLoader(XMLHttpRequest* xhr, scoped_refptr<BlobDataHandle> handle)
@@ -302,18 +303,6 @@ XMLHttpRequest::~XMLHttpRequest() {
 
 Document* XMLHttpRequest::GetDocument() const {
   return To<Document>(GetExecutionContext());
-}
-
-const SecurityOrigin* XMLHttpRequest::GetSecurityOrigin() const {
-  return isolated_world_security_origin_
-             ? isolated_world_security_origin_.get()
-             : GetExecutionContext()->GetSecurityOrigin();
-}
-
-SecurityOrigin* XMLHttpRequest::GetMutableSecurityOrigin() {
-  return isolated_world_security_origin_
-             ? isolated_world_security_origin_.get()
-             : GetExecutionContext()->GetMutableSecurityOrigin();
 }
 
 XMLHttpRequest::State XMLHttpRequest::readyState() const {
@@ -708,7 +697,7 @@ void XMLHttpRequest::open(const AtomicString& method,
 
   if (url_.ProtocolIs("blob")) {
     GetExecutionContext()->GetPublicURLManager().Resolve(
-        url_, MakeRequest(&blob_url_loader_factory_));
+        url_, blob_url_loader_factory_.InitWithNewPipeAndPassReceiver());
   }
 
   async_ = async;
@@ -1047,12 +1036,15 @@ void XMLHttpRequest::CreateRequest(scoped_refptr<EncodedFormData> http_body,
   // We also remember whether upload events should be allowed for this request
   // in case the upload listeners are added after the request is started.
   upload_events_allowed_ =
-      GetSecurityOrigin()->CanRequest(url_) || upload_events ||
-      !cors::IsCorsSafelistedMethod(method_) ||
+      GetExecutionContext()->GetSecurityOrigin()->CanRequest(url_) ||
+      (isolated_world_security_origin_ &&
+       isolated_world_security_origin_->CanRequest(url_)) ||
+      upload_events || !cors::IsCorsSafelistedMethod(method_) ||
       !cors::ContainsOnlyCorsSafelistedHeaders(request_headers_);
 
   ResourceRequest request(url_);
-  request.SetRequestorOrigin(GetSecurityOrigin());
+  request.SetRequestorOrigin(GetExecutionContext()->GetSecurityOrigin());
+  request.SetIsolatedWorldOrigin(isolated_world_security_origin_);
   request.SetHttpMethod(method_);
   request.SetRequestContext(mojom::RequestContextType::XML_HTTP_REQUEST);
   request.SetMode(upload_events
@@ -1064,7 +1056,6 @@ void XMLHttpRequest::CreateRequest(scoped_refptr<EncodedFormData> http_body,
   request.SetSkipServiceWorker(is_isolated_world_);
   request.SetExternalRequestStateFromRequestorAddressSpace(
       execution_context.GetSecurityContext().AddressSpace());
-  request.SetShouldAlsoUseFactoryBoundOriginForCors(is_isolated_world_);
 
   probe::WillLoadXHR(&execution_context, method_, url_, async_, http_body.get(),
                      request_headers_, with_credentials_);
@@ -1082,9 +1073,10 @@ void XMLHttpRequest::CreateRequest(scoped_refptr<EncodedFormData> http_body,
   resource_loader_options.initiator_info.name =
       fetch_initiator_type_names::kXmlhttprequest;
   if (blob_url_loader_factory_) {
-    resource_loader_options.url_loader_factory = base::MakeRefCounted<
-        base::RefCountedData<network::mojom::blink::URLLoaderFactoryPtr>>(
-        std::move(blob_url_loader_factory_));
+    resource_loader_options.url_loader_factory =
+        base::MakeRefCounted<base::RefCountedData<
+            mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>>>(
+            std::move(blob_url_loader_factory_));
   }
 
   // When responseType is set to "blob", we redirect the downloaded data to a
@@ -1155,7 +1147,9 @@ void XMLHttpRequest::CreateRequest(scoped_refptr<EncodedFormData> http_body,
           forbidden_syncxhr_pagedismissal_histogram.Count(pagedismissal);
           HandleNetworkError();
           ThrowForLoadFailureIfNeeded(exception_state,
-                                      "Synchronous XHR in page dismissal.");
+                                      "Synchronous XHR in page dismissal. See "
+                                      "https://www.chromestatus.com/feature/"
+                                      "4664843055398912 for more details.");
           return;
         } else {
           UseCounter::Count(&execution_context,
@@ -1491,8 +1485,9 @@ String XMLHttpRequest::getAllResponseHeaders() const {
     // TODO: Consider removing canLoadLocalResources() call.
     // crbug.com/567527
     if (FetchUtils::IsForbiddenResponseHeaderName(it->key) &&
-        !GetSecurityOrigin()->CanLoadLocalResources())
+        !GetExecutionContext()->GetSecurityOrigin()->CanLoadLocalResources()) {
       continue;
+    }
 
     if (response_.GetType() == network::mojom::FetchResponseType::kCors &&
         !cors::IsCorsSafelistedResponseHeader(it->key) &&
@@ -1527,7 +1522,7 @@ const AtomicString& XMLHttpRequest::getResponseHeader(
 
   // See comment in getAllResponseHeaders above.
   if (FetchUtils::IsForbiddenResponseHeaderName(name) &&
-      !GetSecurityOrigin()->CanLoadLocalResources()) {
+      !GetExecutionContext()->GetSecurityOrigin()->CanLoadLocalResources()) {
     LogConsoleError(GetExecutionContext(),
                     "Refused to get unsafe header \"" + name + "\"");
     return g_null_atom;

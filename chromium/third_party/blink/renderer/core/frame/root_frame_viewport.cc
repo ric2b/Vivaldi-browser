@@ -311,7 +311,7 @@ PhysicalRect RootFrameViewport::ScrollIntoView(
     end_point = GetLayoutBox()
                     ->GetDocument()
                     .GetSnapCoordinator()
-                    ->GetSnapPosition(*GetLayoutBox(), *strategy)
+                    .GetSnapPosition(*GetLayoutBox(), *strategy)
                     .value_or(end_point);
     new_scroll_offset = ScrollPositionToOffset(end_point);
   }
@@ -445,10 +445,6 @@ bool RootFrameViewport::ScrollbarsCanBeActive() const {
   return LayoutViewport().ScrollbarsCanBeActive();
 }
 
-IntRect RootFrameViewport::ScrollableAreaBoundingBox() const {
-  return LayoutViewport().ScrollableAreaBoundingBox();
-}
-
 bool RootFrameViewport::UserInputScrollable(
     ScrollbarOrientation orientation) const {
   return VisualViewport().UserInputScrollable(orientation) ||
@@ -461,10 +457,6 @@ bool RootFrameViewport::ShouldPlaceVerticalScrollbarOnLeft() const {
 
 void RootFrameViewport::ScrollControlWasSetNeedsPaintInvalidation() {
   LayoutViewport().ScrollControlWasSetNeedsPaintInvalidation();
-}
-
-GraphicsLayer* RootFrameViewport::LayerForContainer() const {
-  return LayoutViewport().LayerForContainer();
 }
 
 GraphicsLayer* RootFrameViewport::LayerForScrolling() const {
@@ -612,6 +604,15 @@ void RootFrameViewport::ClearScrollableArea() {
 
 ScrollbarTheme& RootFrameViewport::GetPageScrollbarTheme() const {
   return LayoutViewport().GetPageScrollbarTheme();
+}
+
+const cc::SnapContainerData* RootFrameViewport::GetSnapContainerData() const {
+  return LayoutViewport().GetSnapContainerData();
+}
+
+void RootFrameViewport::SetSnapContainerData(
+    base::Optional<cc::SnapContainerData> data) {
+  LayoutViewport().SetSnapContainerData(data);
 }
 
 void RootFrameViewport::Trace(blink::Visitor* visitor) {

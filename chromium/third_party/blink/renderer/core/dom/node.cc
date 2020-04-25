@@ -54,6 +54,7 @@
 #include "third_party/blink/renderer/core/dom/get_root_node_options.h"
 #include "third_party/blink/renderer/core/dom/layout_tree_builder_traversal.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer_registration.h"
+#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/node_lists_node_data.h"
 #include "third_party/blink/renderer/core/dom/node_rare_data.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
@@ -87,6 +88,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/custom/custom_element.h"
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
@@ -101,7 +103,6 @@
 #include "third_party/blink/renderer/core/mathml_names.h"
 #include "third_party/blink/renderer/core/page/context_menu_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/core/page/scrolling/root_scroller_util.h"
 #include "third_party/blink/renderer/core/page/scrolling/scroll_customization_callbacks.h"
 #include "third_party/blink/renderer/core/page/scrolling/scroll_state.h"
 #include "third_party/blink/renderer/core/page/scrolling/scroll_state_callback.h"
@@ -546,12 +547,38 @@ void Node::NativeApplyScroll(ScrollState& scroll_state) {
   ScrollableArea* scrollable_area =
       box_to_scroll->EnclosingBox()->GetScrollableArea();
 
-  if (!scrollable_area)
+  // TODO(bokan): This is a hack to fix https://crbug.com/977954. If we have a
+  // non-default root scroller, scrolling from one of its siblings or a fixed
+  // element will chain up to the root node without passing through the root
+  // scroller. This should scroll the visual viewport (so we can still pan
+  // while zoomed) but not by using the RootFrameViewport, which would cause
+  // scrolling in the root scroller element. Implementing this on the main
+  // thread is awkward since we assume only Nodes are scrollable but the
+  // VisualViewport isn't a Node. See LTHI::ApplyScroll for the equivalent
+  // behavior in CC.
+  bool also_scroll_visual_viewport = GetDocument().GetFrame() &&
+                                     GetDocument().GetFrame()->IsMainFrame() &&
+                                     box_to_scroll->IsLayoutView();
+  DCHECK(!also_scroll_visual_viewport ||
+         !box_to_scroll->IsGlobalRootScroller());
+
+  if (!scrollable_area) {
+    // The LayoutView should always create a ScrollableArea.
+    DCHECK(!also_scroll_visual_viewport);
     return;
+  }
 
   ScrollResult result = scrollable_area->UserScroll(
       ScrollGranularity(static_cast<int>(scroll_state.deltaGranularity())),
       delta, ScrollableArea::ScrollCallback());
+
+  // Also try scrolling the visual viewport if we're at the end of the scroll
+  // chain.
+  if (!result.DidScroll() && also_scroll_visual_viewport) {
+    result = GetDocument().GetPage()->GetVisualViewport().UserScroll(
+        ScrollGranularity(static_cast<int>(scroll_state.deltaGranularity())),
+        delta, ScrollableArea::ScrollCallback());
+  }
 
   if (!result.DidScroll())
     return;
@@ -614,6 +641,7 @@ void Node::CallApplyScroll(ScrollState& scroll_state) {
   if (!GetDocument().GetPage()) {
     // We should always have a Page if we're scrolling. See
     // crbug.com/689074 for details.
+    NOTREACHED();
     return;
   }
 
@@ -1207,18 +1235,18 @@ void Node::MarkAncestorsWithChildNeedsDistributionRecalc() {
 }
 
 void Node::MarkAncestorsWithChildNeedsStyleRecalc() {
-  ContainerNode* ancestor = ParentOrShadowHostNode();
-  bool parent_dirty = ancestor && ancestor->NeedsStyleRecalc();
+  ContainerNode* ancestor = GetStyleRecalcParent();
+  bool parent_dirty = ancestor && ancestor->IsDirtyForStyleRecalc();
   for (; ancestor && !ancestor->ChildNeedsStyleRecalc();
-       ancestor = ancestor->ParentOrShadowHostNode()) {
+       ancestor = ancestor->GetStyleRecalcParent()) {
     if (!ancestor->isConnected())
       return;
     ancestor->SetChildNeedsStyleRecalc();
-    if (ancestor->NeedsStyleRecalc())
+    if (ancestor->IsDirtyForStyleRecalc())
       break;
     // If we reach a locked ancestor, we should abort since the ancestor marking
     // will be done when the lock is committed.
-    if (RuntimeEnabledFeatures::DisplayLockingEnabled()) {
+    if (RuntimeEnabledFeatures::DisplayLockingEnabled(GetExecutionContext())) {
       auto* ancestor_element = DynamicTo<Element>(ancestor);
       if (ancestor_element && ancestor_element->StyleRecalcBlockedByDisplayLock(
                                   DisplayLockLifecycleTarget::kChildren)) {
@@ -1237,10 +1265,10 @@ void Node::MarkAncestorsWithChildNeedsStyleRecalc() {
   // roots. These would be updated when we commit the lock. If we have locked
   // display locks somewhere in the document, we iterate up the ancestor chain
   // to check if we're in one such subtree.
-  if (RuntimeEnabledFeatures::DisplayLockingEnabled() &&
+  if (RuntimeEnabledFeatures::DisplayLockingEnabled(GetExecutionContext()) &&
       GetDocument().LockedDisplayLockCount() > 0) {
     for (auto* ancestor_copy = ancestor; ancestor_copy;
-         ancestor_copy = ancestor_copy->ParentOrShadowHostNode()) {
+         ancestor_copy = ancestor_copy->GetStyleRecalcParent()) {
       auto* ancestor_copy_element = DynamicTo<Element>(ancestor_copy);
       if (ancestor_copy_element &&
           ancestor_copy_element->StyleRecalcBlockedByDisplayLock(
@@ -1254,12 +1282,12 @@ void Node::MarkAncestorsWithChildNeedsStyleRecalc() {
   GetDocument().ScheduleLayoutTreeUpdateIfNeeded();
 }
 
-Element* Node::GetReattachParent() const {
+Element* Node::FlatTreeParentForChildDirty() const {
   if (IsPseudoElement())
     return ParentOrShadowHostElement();
   if (IsChildOfV1ShadowHost()) {
-    if (HTMLSlotElement* slot = AssignedSlot())
-      return slot;
+    if (auto* data = GetFlatTreeNodeData())
+      return data->AssignedSlot();
   }
   if (IsInV0ShadowTree() || IsChildOfV0ShadowHost()) {
     if (ShadowRootWhereNodeCanBeDistributedForV0(*this)) {
@@ -1270,6 +1298,12 @@ Element* Node::GetReattachParent() const {
     }
   }
   return ParentOrShadowHostElement();
+}
+
+ContainerNode* Node::GetStyleRecalcParent() const {
+  if (RuntimeEnabledFeatures::FlatTreeStyleRecalcEnabled())
+    return FlatTreeParentForChildDirty();
+  return ParentOrShadowHostNode();
 }
 
 void Node::MarkAncestorsWithChildNeedsReattachLayoutTree() {
@@ -1306,12 +1340,30 @@ void Node::SetNeedsStyleRecalc(StyleChangeType change_type,
   // RescheduleSiblingInvalidationsAsDescendants() for WholeSubtreeInvalid(). We
   // should instead mark the shadow host for subtree recalc when we traverse the
   // flat tree (and skip non-slotted host children).
-  DCHECK(IsElementNode() || IsTextNode() || IsShadowRoot());
+  DCHECK(IsElementNode() || IsTextNode() ||
+         (IsShadowRoot() &&
+          !RuntimeEnabledFeatures::FlatTreeStyleRecalcEnabled()));
 
   if (!InActiveDocument())
     return;
-  if (!IsContainerNode() && !IsTextNode())
-    return;
+  if (!GetComputedStyle()) {
+    // If we don't have a computed style, and our parent element does not have a
+    // computed style it's not necessary to mark this node for style recalc.
+    if (auto* parent = GetStyleRecalcParent()) {
+      while (parent && !parent->CanParticipateInFlatTree())
+        parent = parent->GetStyleRecalcParent();
+      DCHECK(parent);
+      if (!parent->GetComputedStyle())
+        return;
+    } else if (RuntimeEnabledFeatures::FlatTreeStyleRecalcEnabled() &&
+               GetDocument().documentElement() != this) {
+      // If this is the root element, and it does not have a computed style, we
+      // still need to mark it for style recalc since it may change from
+      // display:none. Otherwise, the node is not in the flat tree, and we can
+      // return here.
+      return;
+    }
+  }
 
   TRACE_EVENT_INSTANT1(
       TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking"),
@@ -1420,7 +1472,7 @@ void Node::ClearFlatTreeNodeData() {
 
 bool Node::IsDescendantOf(const Node* other) const {
   // Return true if other is an ancestor of this, otherwise false
-  if (!other || !other->hasChildren() || isConnected() != other->isConnected())
+  if (!other || isConnected() != other->isConnected())
     return false;
   if (other->GetTreeScope() != GetTreeScope())
     return false;
@@ -2758,7 +2810,7 @@ void Node::DispatchSimulatedClick(Event* underlying_event,
                                   SimulatedClickMouseEventOptions event_options,
                                   SimulatedClickCreationScope scope) {
   if (auto* element = IsElementNode() ? ToElement(this) : parentElement())
-    element->ActivateDisplayLockIfNeeded();
+    element->ActivateDisplayLockIfNeeded(DisplayLockActivationReason::kUser);
   EventDispatcher::DispatchSimulatedClick(*this, underlying_event,
                                           event_options, scope);
 }
@@ -2831,21 +2883,6 @@ void Node::DefaultEventHandler(Event& event) {
       if (layout_object) {
         if (LocalFrame* frame = GetDocument().GetFrame())
           frame->GetEventHandler().StartMiddleClickAutoscroll(layout_object);
-      }
-    }
-  } else if (event_type == event_type_names::kMouseup && event.IsMouseEvent()) {
-    auto& mouse_event = ToMouseEvent(event);
-    if (mouse_event.button() ==
-        static_cast<int16_t>(WebPointerProperties::Button::kBack)) {
-      if (LocalFrame* frame = GetDocument().GetFrame()) {
-        if (frame->Client()->NavigateBackForward(-1, false))
-          event.SetDefaultHandled();
-      }
-    } else if (mouse_event.button() ==
-               static_cast<int16_t>(WebPointerProperties::Button::kForward)) {
-      if (LocalFrame* frame = GetDocument().GetFrame()) {
-        if (frame->Client()->NavigateBackForward(1, false))
-          event.SetDefaultHandled();
       }
     }
   }
@@ -3109,7 +3146,7 @@ void Node::CheckSlotChange(SlotChangeType slot_change_type) {
       slot->DidSlotChange(slot_change_type);
   } else if (IsInV1ShadowTree()) {
     // Checking for fallback content if the node is in a v1 shadow tree.
-    if (auto* parent_slot = ToHTMLSlotElementOrNull(parentElement())) {
+    if (auto* parent_slot = DynamicTo<HTMLSlotElement>(parentElement())) {
       DCHECK(parent_slot->SupportsAssignment());
       // The parent_slot's assigned nodes might not be calculated because they
       // are lazy evaluated later at UpdateDistribution() so we have to check it

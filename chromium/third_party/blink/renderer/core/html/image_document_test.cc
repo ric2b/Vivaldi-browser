@@ -66,7 +66,7 @@ class WindowToViewportScalingChromeClient : public EmptyChromeClient {
       : EmptyChromeClient(), scale_factor_(1.f) {}
 
   void SetScalingFactor(float s) { scale_factor_ = s; }
-  float WindowToViewportScalar(const float s) const override {
+  float WindowToViewportScalar(LocalFrame*, const float s) const override {
     return s * scale_factor_;
   }
 
@@ -111,6 +111,7 @@ void ImageDocumentTest::CreateDocumentWithoutLoadingImage(int view_width,
   DocumentInit init = DocumentInit::Create().WithDocumentLoader(
       frame.Loader().GetDocumentLoader());
   frame.DomWindow()->InstallNewDocument("image/jpeg", init, false);
+  frame.GetDocument()->SetURL(KURL("http://www.example.com/image.jpg"));
 }
 
 void ImageDocumentTest::CreateDocument(int view_width, int view_height) {

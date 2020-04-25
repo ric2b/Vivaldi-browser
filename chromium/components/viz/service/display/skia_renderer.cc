@@ -13,6 +13,7 @@
 #include "base/optional.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "cc/base/math_util.h"
 #include "cc/paint/render_surface_filters.h"
 #include "components/viz/common/display/renderer_settings.h"
@@ -29,12 +30,14 @@
 #include "components/viz/common/resources/platform_color.h"
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/skia_helper.h"
+#include "components/viz/service/display/display_resource_provider.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/output_surface_frame.h"
 #include "components/viz/service/display/renderer_utils.h"
 #include "components/viz/service/display/resource_fence.h"
 #include "components/viz/service/display/skia_output_surface.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "skia/ext/opacity_filter_canvas.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -456,11 +459,6 @@ class SkiaRenderer::ScopedSkImageBuilder {
                        ResourceId resource_id,
                        SkAlphaType alpha_type = kPremul_SkAlphaType,
                        GrSurfaceOrigin origin = kTopLeft_GrSurfaceOrigin);
-  ScopedSkImageBuilder(SkiaRenderer* skia_renderer,
-                       ResourceId resource_id,
-                       base::Optional<gpu::VulkanYCbCrInfo> ycbcr_info,
-                       SkAlphaType alpha_type = kPremul_SkAlphaType,
-                       GrSurfaceOrigin origin = kTopLeft_GrSurfaceOrigin);
   ~ScopedSkImageBuilder() = default;
 
   const SkImage* sk_image() const { return sk_image_; }
@@ -475,18 +473,6 @@ class SkiaRenderer::ScopedSkImageBuilder {
 SkiaRenderer::ScopedSkImageBuilder::ScopedSkImageBuilder(
     SkiaRenderer* skia_renderer,
     ResourceId resource_id,
-    SkAlphaType alpha_type,
-    GrSurfaceOrigin origin)
-    : SkiaRenderer::ScopedSkImageBuilder(skia_renderer,
-                                         resource_id,
-                                         base::nullopt,
-                                         alpha_type,
-                                         origin) {}
-
-SkiaRenderer::ScopedSkImageBuilder::ScopedSkImageBuilder(
-    SkiaRenderer* skia_renderer,
-    ResourceId resource_id,
-    base::Optional<gpu::VulkanYCbCrInfo> ycbcr_info,
     SkAlphaType alpha_type,
     GrSurfaceOrigin origin) {
   if (!resource_id)
@@ -507,8 +493,6 @@ SkiaRenderer::ScopedSkImageBuilder::ScopedSkImageBuilder(
     if (!image_context->has_image()) {
       image_context->set_alpha_type(alpha_type);
       image_context->set_origin(origin);
-      if (ycbcr_info)
-        image_context->set_ycbcr_info(*ycbcr_info);
     }
     skia_renderer->skia_output_surface_->MakePromiseSkImage(image_context);
     LOG_IF(ERROR, !image_context->has_image())
@@ -666,6 +650,15 @@ void SkiaRenderer::BeginDrawingFrame() {
   }
   resource_provider_->SetReadLockFence(read_lock_fence.get());
 
+#if defined(OS_ANDROID)
+  for (const auto& pass : *current_frame()->render_passes_in_draw_order) {
+    for (auto* quad : pass->quad_list) {
+      for (ResourceId resource_id : quad->resources)
+        resource_provider_->InitializePromotionHintRequest(resource_id);
+    }
+  }
+#endif
+
   if (draw_mode_ != DrawMode::SKPRECORD)
     return;
 
@@ -694,10 +687,30 @@ void SkiaRenderer::FinishDrawingFrame() {
   if (use_swap_with_bounds_)
     swap_content_bounds_ = current_frame()->root_content_bounds;
 
+#if defined(OS_ANDROID)
+  if (!current_frame()->overlay_list.empty()) {
+    DCHECK_EQ(current_frame()->overlay_list.size(), 1u);
+    overlay_resource_locks_.emplace_back(
+        DisplayResourceProvider::ScopedReadLockSharedImage(
+            resource_provider_,
+            current_frame()->overlay_list.front().resource_id));
+    skia_output_surface_->RenderToOverlay(
+        overlay_resource_locks_.back()->sync_token(),
+        overlay_resource_locks_.back()->mailbox(),
+        ToNearestRect(current_frame()->overlay_list.front().display_rect));
+  } else {
+    overlay_resource_locks_.emplace_back(base::nullopt);
+  }
+#endif
+
   // TODO(weiliangc): Remove this once OverlayProcessor schedules overlays.
-  if (current_frame()->output_surface_plane)
+  if (current_frame()->output_surface_plane) {
     skia_output_surface_->ScheduleOutputSurfaceAsOverlay(
         current_frame()->output_surface_plane.value());
+  }
+
+  // Schedule overlay planes to be presented before SwapBuffers().
+  ScheduleDCLayers();
 }
 
 void SkiaRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
@@ -715,9 +728,17 @@ void SkiaRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
     output_frame.sub_buffer_rect = swap_buffer_rect_;
   }
 
+  // Unlock the overlay resource that was swapped last frame.
+  if (overlay_resource_locks_.size() > 1) {
+    overlay_resource_locks_.pop_front();
+  }
+
   switch (draw_mode_) {
     case DrawMode::DDL: {
-      skia_output_surface_->SkiaSwapBuffers(std::move(output_frame));
+      gpu::SyncToken sync_token = skia_output_surface_->SkiaSwapBuffers(
+          std::move(output_frame), has_locked_overlay_resources_);
+      if (has_locked_overlay_resources_)
+        lock_set_for_external_use_->UnlockResources(sync_token);
       break;
     }
     case DrawMode::SKPRECORD: {
@@ -1294,7 +1315,7 @@ void SkiaRenderer::DrawStreamVideoQuad(const StreamVideoDrawQuad* quad,
                                        DrawQuadParams* params) {
   DCHECK(!MustFlushBatchedQuads(quad, *params));
 
-  ScopedSkImageBuilder builder(this, quad->resource_id(), quad->ycbcr_info,
+  ScopedSkImageBuilder builder(this, quad->resource_id(),
                                kUnpremul_SkAlphaType);
   const SkImage* image = builder.sk_image();
   if (!image)
@@ -1513,6 +1534,29 @@ void SkiaRenderer::DrawUnsupportedQuad(const DrawQuad* quad,
 #endif
 }
 
+void SkiaRenderer::ScheduleDCLayers() {
+  if (current_frame()->dc_layer_overlay_list.empty())
+    return;
+
+  for (auto& dc_layer_overlay : current_frame()->dc_layer_overlay_list) {
+    for (size_t i = 0; i < DCLayerOverlay::kNumResources; ++i) {
+      ResourceId resource_id = dc_layer_overlay.resources[i];
+      if (resource_id == kInvalidResourceId)
+        break;
+
+      // Resources will be unlocked after the next call to SwapBuffers().
+      auto* image_context =
+          lock_set_for_external_use_->LockResource(resource_id, true);
+      dc_layer_overlay.mailbox[i] = image_context->mailbox_holder().mailbox;
+    }
+    DCHECK(!dc_layer_overlay.mailbox[0].IsZero());
+  }
+
+  has_locked_overlay_resources_ = true;
+  skia_output_surface_->ScheduleDCLayers(
+      std::move(current_frame()->dc_layer_overlay_list));
+}
+
 sk_sp<SkColorFilter> SkiaRenderer::GetColorFilter(const gfx::ColorSpace& src,
                                                   const gfx::ColorSpace& dst,
                                                   float resource_offset,
@@ -1529,8 +1573,8 @@ sk_sp<SkColorFilter> SkiaRenderer::GetColorFilter(const gfx::ColorSpace& src,
       return nullptr;
 
     const char* hdr = R"(
-layout(ctype=float) in uniform half offset;
-layout(ctype=float) in uniform half multiplier;
+layout(ctype=float) uniform half offset;
+layout(ctype=float) uniform half multiplier;
 
 void main(inout half4 color) {
   // un-premultiply alpha
@@ -1693,9 +1737,48 @@ SkiaRenderer::DrawRPDQParams SkiaRenderer::CalculateRPDQParams(
   return rpdq_params;
 }
 
-const TileDrawQuad* SkiaRenderer::CanPassBeDrawnDirectly(
-    const RenderPass* pass) {
-  return DirectRenderer::CanPassBeDrawnDirectly(pass, resource_provider_);
+const DrawQuad* SkiaRenderer::CanPassBeDrawnDirectly(const RenderPass* pass) {
+  // TODO(michaelludwig) - For now, this only supports layer-filling
+  // TileDrawQuads to match legacy bypass behavior. It will be updated to
+  // select more quad material types as their corresponding DrawXQuad()
+  // functions are updated to accept DrawRPDQParams as well.
+  // Can only collapse a single tile quad.
+  if (pass->quad_list.size() != 1)
+    return nullptr;
+  // If it there are supposed to be mipmaps, the renderpass must exist
+
+  if (pass->generate_mipmap)
+    return nullptr;
+
+  const DrawQuad* quad = *pass->quad_list.BackToFrontBegin();
+  // Hack: this could be supported by concatenating transforms, but
+  // in practice if there is one quad, it is at the origin of the render pass
+  // and has the same size as the pass.
+  if (!quad->shared_quad_state->quad_to_target_transform.IsIdentity() ||
+      quad->rect != pass->output_rect)
+    return nullptr;
+  // The quad is expected to be the entire layer so that AA edges are correct.
+  if (quad->shared_quad_state->quad_layer_rect != quad->rect)
+    return nullptr;
+  if (quad->material != DrawQuad::Material::kTiledContent)
+    return nullptr;
+
+  // TODO(chrishtr): support could be added for opacity, but care needs
+  // to be taken to make sure it is correct w.r.t. non-commutative filters etc.
+  if (quad->shared_quad_state->opacity != 1.0f)
+    return nullptr;
+
+  if (quad->shared_quad_state->blend_mode != SkBlendMode::kSrcOver)
+    return nullptr;
+
+  const TileDrawQuad* tile_quad = TileDrawQuad::MaterialCast(quad);
+  // Hack: this could be supported by passing in a subrectangle to draw
+  // render pass, although in practice if there is only one quad there
+  // will be no border texels on the input.
+  if (tile_quad->tex_coord_rect != gfx::RectF(tile_quad->rect))
+    return nullptr;
+
+  return tile_quad;
 }
 
 void SkiaRenderer::DrawRenderPassQuad(const RenderPassDrawQuad* quad,
@@ -1703,7 +1786,8 @@ void SkiaRenderer::DrawRenderPassQuad(const RenderPassDrawQuad* quad,
   auto bypass = render_pass_bypass_quads_.find(quad->render_pass_id);
   // When Render Pass has a single quad inside we would draw that directly.
   if (bypass != render_pass_bypass_quads_.end()) {
-    TileDrawQuad* tile_quad = &bypass->second;
+    DCHECK(bypass->second->material == DrawQuad::Material::kTiledContent);
+    const TileDrawQuad* tile_quad = TileDrawQuad::MaterialCast(bypass->second);
     ScopedSkImageBuilder builder(this, tile_quad->resource_id(),
                                  tile_quad->is_premultiplied
                                      ? kPremul_SkAlphaType
@@ -1904,8 +1988,7 @@ void SkiaRenderer::CopyDrawnRenderPass(
 }
 
 void SkiaRenderer::SetEnableDCLayers(bool enable) {
-  // TODO(crbug.com/678800): Part of surport overlay on Windows.
-  NOTIMPLEMENTED();
+  skia_output_surface_->SetEnableDCLayers(enable);
 }
 
 void SkiaRenderer::DidChangeVisibility() {

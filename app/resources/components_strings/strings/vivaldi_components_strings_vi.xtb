@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="vi">
 <translation id="1038842779957582377">tên không biết</translation>
+<translation id="1089439967362294234">Đổi Mật khẩu</translation>
 <translation id="1110994991967754504">Chọn quyền cho <ph name="PERMISSION_NAME" /></translation>
 <translation id="1152921474424827756">Truy cập <ph name="BEGIN_LINK" />bản sao được lưu trong bộ nhớ cache<ph name="END_LINK" /> của <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> đã bất ngờ đóng kết nối.</translation>
@@ -17,7 +18,7 @@
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">Bạn đang xem nguồn của trang web</translation>
 <translation id="1734878702283171397">Thử liên hệ với quản trị viên hệ thống.</translation>
-<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Thử chạy Chẩn đoán Mạng Windows<ph name="END_LINK" />.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Thử thực thi Chẩn đoán Mạng Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Trang web này có chứa các chương trình độc hại</translation>
 <translation id="1916770123977586577">Để áp dụng các cài đặt đã cập nhật cho trang web này, hãy tải lại trang</translation>
 <translation id="1919345977826869612">Quảng cáo</translation>
@@ -38,7 +39,7 @@
 <translation id="2355395290879513365">Kẻ tấn công có thể thấy những hình ảnh mà bạn đang xem trên trang web này và lừa bạn bằng cách sửa đổi những hình ảnh đó.</translation>
 <translation id="2356070529366658676">Yêu cầu</translation>
 <translation id="2359808026110333948">Tiếp tục</translation>
-<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Đang thực thi Công cụ Chuẩn đoán Mạng<ph name="END_LINK" /></translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Đang thực thi Chẩn đoán Mạng<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Thông báo</translation>
 <translation id="2539524384386349900">Phát hiện</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> đã gửi phản hồi không hợp lệ.</translation>
@@ -48,6 +49,7 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Truy cập vào tệp bị từ chối</translation>
 <translation id="2705137772291741111">Không thể đọc được bản sao đã lưu (đã lưu vào bộ nhớ cache) của trang web này.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Đang thực thi Chẩn đoán Kết nối<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Kết nối đã được đặt lại.</translation>
 <translation id="2826760142808435982">Kết nối được mã hóa và xác thực bằng <ph name="CIPHER" /> đồng thời sử dụng <ph name="KX" /> làm cơ chế trao đổi chính.</translation>
 <translation id="2856444702002559011">Những kẻ tấn công có thể đang cố gắng đánh cắp thông tin của bạn từ <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (ví dụ: mật khẩu, thư hoặc thẻ tín dụng). <ph name="BEGIN_LEARN_MORE_LINK" />Tìm hiểu thêm<ph name="END_LEARN_MORE_LINK" /></translation>
@@ -55,7 +57,9 @@
 <translation id="2991571918955627853">Bạn không thể truy cập vào <ph name="SITE" /> ngay bây giờ vì trang web sử dụng HSTS. Lỗi mạng và các cuộc tấn công mạng thường chỉ là tạm thời nên trang này có thể sẽ hoạt động lại sau.</translation>
 <translation id="3005723025932146533">Hiển thị bản sao đã lưu</translation>
 <translation id="301521992641321250">Tự động bị chặn</translation>
+<translation id="3041612393474885105">Thông tin Chứng chỉ</translation>
 <translation id="3109728660330352905">Bạn không có quyền xem trang này.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Thử thực thi Chẩn đoán Kết nối<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Trang này bao gồm biểu mẫu có thể được gửi không an toàn. Dữ liệu bạn gửi có thể bị người khác xem trong khi chuyển tuyến hoặc có thể bị kẻ tấn công sửa đổi nhằm thay đổi thông tin mà máy chủ nhận được.</translation>
 <translation id="3176929007561373547">Kiểm tra cài đặt proxy của bạn hoặc liên hệ với quản trị viên mạng để
       đảm bảo rằng máy chủ proxy đang hoạt động. Nếu bạn cho rằng mình không cần
@@ -88,7 +92,7 @@
 <translation id="4151403195736952345">Sử dụng cài đặt mặc định chung (Phát hiện)</translation>
 <translation id="4165986682804962316">Cài đặt trang web</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Kiểm tra tường lửa và cấu hình diệt vi-rút<ph name="END_LINK" /></translation>
-<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Thử chạy Chẩn đoán Mạng<ph name="END_LINK" />.</translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Thử thực thi Chẩn đoán Mạng<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Hợp lệ</translation>
 <translation id="4250431568374086873">Kết nối của bạn tới trang web này không đủ an toàn</translation>
 <translation id="4265872034478892965">Được quản trị viên của bạn cho phép</translation>
@@ -101,14 +105,13 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Thử tắt tiện ích.</translation>
 <translation id="4592951414987517459">Kết nối của bạn tới <ph name="DOMAIN" /> được mã hóa bằng bộ mã hoá hiện đại.</translation>
-<translation id="4690462567478992370">Ngừng sử dụng chứng thư không hợp lệ</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Kết nối của bạn bị gián đoạn</translation>
-<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Chạy Chẩn đoán Mạng Windows<ph name="END_LINK" /></translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Đang thực thi Chẩn đoán Mạng Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Đường dẫn thực thi</translation>
 <translation id="4750917950439032686">Thông tin của bạn (ví dụ: mật khẩu hoặc số thẻ tín dụng) sẽ được bảo mật khi được gửi tới trang web này.</translation>
 <translation id="4764776831041365478">Trang web tại <ph name="URL" /> có thể tạm thời không hoạt động hay được chuyển vĩnh viễn sang địa chỉ web mới.</translation>
-<translation id="4974590756084640048">Bật lại cảnh báo</translation>
+<translation id="4943872375798546930">Không tìm thấy kết quả nào</translation>
 <translation id="5023310440958281426">Kiểm tra chính sách của quản trị viên của bạn</translation>
 <translation id="5039804452771397117">Cho phép</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Kiểm tra địa chỉ proxy<ph name="END_LINK" /></translation>
@@ -124,7 +127,6 @@
     Hãy thử liên hệ với quản trị viên hệ thống của bạn.</translation>
 <translation id="5510766032865166053">Tệp này có thể đã bị di chuyển hoặc xóa.</translation>
 <translation id="5556459405103347317">Tải lại</translation>
-<translation id="5571347317547569613">({NUM_COOKIES,plural, =1{Đang sử dụng 1 cookie}other{Đang sử dụng # cookie}})</translation>
 <translation id="5610142619324316209">Kiểm tra kết nối</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> đã chuyển hướng bạn quá nhiều lần.</translation>
 <translation id="5675650730144413517">Trang này hiện không hoạt động</translation>
@@ -159,7 +161,6 @@
 <translation id="6657585470893396449">Mật khẩu</translation>
 <translation id="6685834062052613830">Đăng xuất và hoàn thành quá trình thiết lập</translation>
 <translation id="6711464428925977395">Đã xảy ra sự cố với máy chủ proxy hoặc địa chỉ không chính xác.</translation>
-<translation id="6757797048963528358">Máy tính của bạn đã chuyển sang chế độ ngủ.</translation>
 <translation id="6897140037006041989">Tác nhân Người dùng</translation>
 <translation id="7053983685419859001">Chặn</translation>
 <translation id="7079718277001814089">Trang web này có chứa phần mềm độc hại</translation>
@@ -194,7 +195,6 @@
 <translation id="8041940743680923270">Sử dụng cài đặt mặc định chung (Hỏi)</translation>
 <translation id="808894953321890993">Đổi mật khẩu</translation>
 <translation id="8142868475871995937">Truy cập &lt;strong&gt;vivaldi://policy&lt;/strong&gt; để xem danh sách các URL bị chặn quyền truy cập và các chính sách khác bị quản trị viên hệ thống buộc phải thực thi.</translation>
-<translation id="8149426793427495338">Máy tính của bạn đã chuyển sang chế độ ngủ.</translation>
 <translation id="8150722005171944719">Không thể đọc được tệp tại <ph name="URL" />.  Tệp này có thể đã bị xóa, di chuyển hoặc quyền tệp có thể đang chặn truy cập.</translation>
 <translation id="8184538546369750125">Sử dụng cài đặt mặc định chung (Cho phép)</translation>
 <translation id="8211406090763984747">Kết nối an toàn</translation>
@@ -208,6 +208,7 @@
 <translation id="8503813439785031346">Tên đăng nhập</translation>
 <translation id="8703575177326907206">Kết nối của bạn đến <ph name="DOMAIN" /> không được mã hóa.</translation>
 <translation id="8740359287975076522">Không thể tìm thấy &lt;abbr id="dnsDefinition"&gt;địa chỉ DNS&lt;/abbr&gt; của <ph name="HOST_NAME" />. Đang chẩn đoán sự cố.</translation>
+<translation id="8820817407110198400">Dấu trang</translation>
 <translation id="9001074447101275817">Proxy <ph name="DOMAIN" /> yêu cầu tên đăng nhập và mật khẩu.</translation>
 <translation id="9008201768610948239">Bỏ qua</translation>
 <translation id="9011424611726486705">Mở cài đặt trang web</translation>
@@ -217,7 +218,6 @@
 <translation id="9169664750068251925">Luôn chặn trên trang web này</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> sử dụng giao thức không được hỗ trợ.</translation>
 <translation id="9219103736887031265">Hình ảnh</translation>
-<translation id="936602727769022409">Bạn có thể mất quyền truy cập vào Tài khoản Google của mình. Chromium khuyên bạn nên đổi mật khẩu ngay bây giờ. Bạn sẽ được yêu cầu đăng nhập.</translation>
 <translation id="969892804517981540">Phiên bản Chính thức</translation>
 <translation id="988159990683914416">Phiên bản dành cho Nhà phát triển</translation>
 </translationbundle>

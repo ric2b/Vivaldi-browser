@@ -4730,6 +4730,18 @@ error::Error GLES2DecoderImpl::HandleDispatchComputeIndirect(
   return error::kUnknownCommand;
 }
 
+error::Error GLES2DecoderImpl::HandleDrawArraysIndirect(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  return error::kUnknownCommand;
+}
+
+error::Error GLES2DecoderImpl::HandleDrawElementsIndirect(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  return error::kUnknownCommand;
+}
+
 error::Error GLES2DecoderImpl::HandleGetProgramInterfaceiv(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
@@ -5347,6 +5359,17 @@ error::Error GLES2DecoderImpl::HandlePathStencilFuncCHROMIUM(
     state_.stencil_path_mask = mask;
     glPathStencilFuncNV(func, ref, mask);
   }
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleContextVisibilityHintCHROMIUM(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  const volatile gles2::cmds::ContextVisibilityHintCHROMIUM& c =
+      *static_cast<const volatile gles2::cmds::ContextVisibilityHintCHROMIUM*>(
+          cmd_data);
+  GLboolean visibility = static_cast<GLboolean>(c.visibility);
+  DoContextVisibilityHintCHROMIUM(visibility);
   return error::kNoError;
 }
 

@@ -775,7 +775,6 @@ _NAMED_TYPE_INFO = {
   },
   'SamplerParameter': {
     'type': 'GLenum',
-    'is_complete': True,
     'valid': [
       'GL_TEXTURE_MAG_FILTER',
       'GL_TEXTURE_MIN_FILTER',
@@ -1947,6 +1946,12 @@ _FUNCTION_INFO = {
     'no_gl': True,
     'expectation': False,
   },
+  'ContextVisibilityHintCHROMIUM': {
+    'decoder_func': 'DoContextVisibilityHintCHROMIUM',
+    'extension': 'CHROMIUM_context_visibility_hint',
+    'unit_test': False,
+    'client_test': False,
+  },
   'CopyBufferSubData': {
     'decoder_func': 'DoCopyBufferSubData',
     'impl_func': False,
@@ -2216,6 +2221,15 @@ _FUNCTION_INFO = {
     'defer_draws': True,
     'trace_level': 2,
   },
+  'DrawArraysIndirect': {
+    'type': 'Custom',
+    'impl_func': False,
+    'cmd_args': 'GLenumDrawMode mode, GLuint offset',
+    'trace_level': 2,
+    'es31': True,
+    'unit_test': False,
+    'client_test': False,
+  },
   'DrawElements': {
     'type': 'Custom',
     'impl_func': False,
@@ -2224,6 +2238,15 @@ _FUNCTION_INFO = {
     'client_test': False,
     'defer_draws': True,
     'trace_level': 2,
+  },
+  'DrawElementsIndirect': {
+    'type': 'Custom',
+    'impl_func': False,
+    'cmd_args': 'GLenumDrawMode mode, GLenumIndexType type, GLuint offset',
+    'trace_level': 2,
+    'es31': True,
+    'unit_test': False,
+    'client_test': False,
   },
   'DrawRangeElements': {
     'type': 'NoCommand',

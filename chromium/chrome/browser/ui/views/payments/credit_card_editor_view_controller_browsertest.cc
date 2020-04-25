@@ -9,6 +9,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/views/payments/editor_view_controller.h"
 #include "chrome/browser/ui/views/payments/payment_request_browsertest_base.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
@@ -224,11 +225,20 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest,
   EXPECT_TRUE(save_button->GetEnabled());
 }
 
-IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest, EditingMaskedCard) {
-  // Masked cards are from Google Pay.
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(features::kReturnGooglePayInBasicCard);
+class PaymentRequestCreditCardEditorTestWithGooglePayEnabled
+    : public PaymentRequestCreditCardEditorTest {
+ public:
+  PaymentRequestCreditCardEditorTestWithGooglePayEnabled() {
+    // Masked cards are from Google Pay.
+    feature_list_.InitAndEnableFeature(features::kReturnGooglePayInBasicCard);
+  }
 
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTestWithGooglePayEnabled,
+                       EditingMaskedCard) {
   NavigateTo("/payment_request_no_shipping_test.html");
   autofill::TestAutofillClock test_clock;
   test_clock.SetNow(kJune2017);
@@ -308,12 +318,8 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest, EditingMaskedCard) {
   EXPECT_EQ(additional_profile.guid(), selected->billing_address_id());
 }
 
-IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest,
+IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTestWithGooglePayEnabled,
                        EditingMaskedCard_ClickOnPaymentsLink) {
-  // Masked cards are from Google Pay.
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(features::kReturnGooglePayInBasicCard);
-
   NavigateTo("/payment_request_no_shipping_test.html");
   autofill::TestAutofillClock test_clock;
   test_clock.SetNow(kJune2017);
@@ -787,8 +793,14 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest,
             request->state()->selected_instrument()->GetSublabel());
 }
 
+// FLAKY on Windows: crbug.com/1001365
+#if defined(OS_WIN)
+#define MAYBE_CreateNewBillingAddress DISABLED_CreateNewBillingAddress
+#else
+#define MAYBE_CreateNewBillingAddress CreateNewBillingAddress
+#endif
 IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest,
-                       CreateNewBillingAddress) {
+                       MAYBE_CreateNewBillingAddress) {
   NavigateTo("/payment_request_no_shipping_test.html");
   autofill::CreditCard card = autofill::test::GetCreditCard();
   // Make sure to clear billing address and have none available.

@@ -5,10 +5,11 @@
 package org.chromium.chrome.browser.bookmarks;
 
 import android.content.Context;
-import android.support.annotation.IntDef;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.ImageView;
+
+import androidx.annotation.IntDef;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordUserAction;
@@ -26,6 +27,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Common logic for bookmark and folder rows.
@@ -121,6 +124,8 @@ abstract class BookmarkRow extends SelectableItemView<BookmarkId>
             mMoreIcon.setVisibility(bookmarkItem.isEditable() ? VISIBLE : GONE);
             mMoreIcon.setClickable(!isSelectionModeActive());
             mMoreIcon.setEnabled(mMoreIcon.isClickable());
+            if (ChromeApplication.isVivaldi())
+                mMoreIcon.setVisibility(View.GONE);
         }
     }
 
@@ -168,7 +173,7 @@ abstract class BookmarkRow extends SelectableItemView<BookmarkId>
                     menuItems.add(new Item(getContext(), R.string.bookmark_show_in_folder, true));
                 }
             } else if (mDelegate.getCurrentState() == BookmarkUIState.STATE_FOLDER
-                    && mLocation != Location.SOLO) {
+                    && mLocation != Location.SOLO && canMove) {
                 // Only add move up / move down buttons if there is more than 1 item
                 if (mLocation != Location.TOP) {
                     menuItems.add(new Item(getContext(), R.string.menu_item_move_up, true));
@@ -264,7 +269,8 @@ abstract class BookmarkRow extends SelectableItemView<BookmarkId>
     @Override
     public void onSearchStateSet() {}
 
-    boolean isItemSelected() {
+    @VisibleForTesting
+    public boolean isItemSelected() {
         return mDelegate.getSelectionDelegate().isItemSelected(mBookmarkId);
     }
 

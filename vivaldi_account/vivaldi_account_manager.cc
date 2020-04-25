@@ -140,7 +140,7 @@ VivaldiAccountManager::VivaldiAccountManager(Profile* profile)
     std::string refresh_token;
     if (OSCrypt::DecryptString(encrypted_refresh_token, &refresh_token)) {
       refresh_token_ = refresh_token;
-      base::PostTaskWithTraits(
+      base::PostTask(
           FROM_HERE, {content::BrowserThread::UI},
           base::Bind(&VivaldiAccountManager::RequestNewToken,
                      base::Unretained(this)));
@@ -312,7 +312,7 @@ void VivaldiAccountManager::OnTokenRequestDone(
     std::string server_message;
     ParseFailureResponse(std::move(response_body), &server_message);
     if (!using_password && !password_handler_.password().empty()) {
-      base::PostTaskWithTraits(
+      base::PostTask(
           FROM_HERE, {content::BrowserThread::UI},
           base::Bind(&VivaldiAccountManager::Login, base::Unretained(this),
                      account_info_.username, std::string(), false));

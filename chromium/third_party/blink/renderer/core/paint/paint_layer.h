@@ -343,8 +343,6 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   }
 
   void UpdateTransformationMatrix();
-  PaintLayer* RenderingContextRoot();
-  const PaintLayer* RenderingContextRoot() const;
 
   bool IsStackingContextWithNegativeZOrderChildren() const {
     DCHECK(!stacking_node_ || GetLayoutObject().StyleRef().IsStackingContext());
@@ -749,7 +747,6 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   }
 
   struct AncestorDependentCompositingInputs {
-   public:
     const PaintLayer* opacity_ancestor = nullptr;
     const PaintLayer* transform_ancestor = nullptr;
     const PaintLayer* filter_ancestor = nullptr;
@@ -776,6 +773,11 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
     // needs to know about clip parents in order to circumvent its normal
     // clipping logic.
     const PaintLayer* clip_parent = nullptr;
+
+    // Nearest layer that has layout containment applied to its LayoutObject.
+    // Squashing is disallowed across contain layout boundaries to provide
+    // better isolation.
+    const PaintLayer* nearest_contained_layout_layer = nullptr;
 
     // These two boxes do not include any applicable scroll offset of the
     // root PaintLayer.
@@ -853,6 +855,10 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   const PaintLayer* ClipParent() const {
     return GetAncestorDependentCompositingInputs().clip_parent;
   }
+  const PaintLayer* NearestContainedLayoutLayer() const {
+    return GetAncestorDependentCompositingInputs()
+        .nearest_contained_layout_layer;
+  }
   const PaintLayer* ClipPathAncestor() const {
     return GetAncestorDependentCompositingInputs().clip_path_ancestor;
   }
@@ -880,9 +886,10 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
     return has_self_painting_layer_descendant_;
   }
 
-  // See PaintLayerStackingNode::layer_to_overlay_scrollbars_painting_after_.
-  bool NeedsReorderOverlayScrollbars() const {
-    return needs_reorder_overlay_scrollbars_;
+  // See
+  // PaintLayerStackingNode::layer_to_overlay_overflow_controls_painting_after_.
+  bool NeedsReorderOverlayOverflowControls() const {
+    return needs_reorder_overlay_overflow_controls_;
   }
 
   // Returns true if there is a descendant with blend-mode that is
@@ -1277,8 +1284,8 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   // PaintLayerPaintOrderIterator.
   PaintLayerStackingNode* StackingNode() const { return stacking_node_.get(); }
 
-  void SetNeedsReorderOverlayScrollbars(bool b) {
-    needs_reorder_overlay_scrollbars_ = b;
+  void SetNeedsReorderOverlayOverflowControls(bool b) {
+    needs_reorder_overlay_overflow_controls_ = b;
   }
 
   // Self-painting layer is an optimization where we avoid the heavy Layer
@@ -1360,7 +1367,7 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
 
   unsigned has_self_painting_layer_descendant_ : 1;
 
-  unsigned needs_reorder_overlay_scrollbars_ : 1;
+  unsigned needs_reorder_overlay_overflow_controls_ : 1;
 
 #if DCHECK_IS_ON()
   mutable unsigned layer_list_mutation_allowed_ : 1;

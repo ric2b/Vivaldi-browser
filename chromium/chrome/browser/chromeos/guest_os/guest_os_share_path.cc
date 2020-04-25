@@ -20,7 +20,6 @@
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/components/drivefs/mojom/drivefs.mojom.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/concierge/service.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/seneschal_client.h"
@@ -211,11 +210,8 @@ void GuestOsSharePath::CallSeneschalSharePath(const std::string& vm_name,
   vm_tools::seneschal::SharePathRequest request;
   base::FilePath drivefs_path;
   base::FilePath relative_path;
-  drive::DriveIntegrationService* integration_service = nullptr;
-  if (base::FeatureList::IsEnabled(chromeos::features::kDriveFs)) {
-    integration_service =
-        drive::DriveIntegrationServiceFactory::GetForProfile(profile_);
-  }
+  drive::DriveIntegrationService* integration_service =
+      drive::DriveIntegrationServiceFactory::GetForProfile(profile_);
   base::FilePath drivefs_mount_point_path;
   base::FilePath drivefs_mount_name;
 
@@ -225,13 +221,14 @@ void GuestOsSharePath::CallSeneschalSharePath(const std::string& vm_name,
       file_manager::util::GetMyFilesFolderForProfile(profile_);
   base::FilePath android_files(file_manager::util::kAndroidFilesPath);
   base::FilePath removable_media(file_manager::util::kRemovableMediaPath);
+  base::FilePath linux_files =
+      file_manager::util::GetCrostiniMountDirectory(profile_);
   if (my_files == path || my_files.AppendRelativePath(path, &relative_path)) {
     allowed_path = true;
     request.set_storage_location(
         vm_tools::seneschal::SharePathRequest::MY_FILES);
     request.set_owner_id(crostini::CryptohomeIdForProfile(profile_));
-  } else if (base::FeatureList::IsEnabled(chromeos::features::kDriveFs) &&
-             integration_service &&
+  } else if (integration_service &&
              (drivefs_mount_point_path =
                   integration_service->GetMountPointPath())
                  .AppendRelativePath(path, &drivefs_path) &&
@@ -287,6 +284,13 @@ void GuestOsSharePath::CallSeneschalSharePath(const std::string& vm_name,
     allowed_path = true;
     request.set_storage_location(
         vm_tools::seneschal::SharePathRequest::REMOVABLE);
+  } else if (path == linux_files ||
+             linux_files.AppendRelativePath(path, &relative_path)) {
+    // Allow Linux files and subdirs.
+    allowed_path = true;
+    request.set_storage_location(
+        vm_tools::seneschal::SharePathRequest::LINUX_FILES);
+    request.set_owner_id(crostini::CryptohomeIdForProfile(profile_));
   }
 
   if (!allowed_path) {
@@ -448,7 +452,7 @@ std::vector<base::FilePath> GuestOsSharePath::GetPersistedSharedPaths(
       profile_->GetPrefs()->GetDictionary(prefs::kGuestOSPathsSharedToVms);
   for (const auto& it : shared_paths->DictItems()) {
     base::FilePath path(it.first);
-    auto& vms = it.second.GetList();
+    base::span<const base::Value> vms = it.second.GetList();
     for (const auto& vm : vms) {
       // Register all shared paths for all VMs since we want FilePathWatchers
       // to start immediately.
@@ -498,7 +502,7 @@ void GuestOsSharePath::RegisterPersistedPath(const std::string& vm_name,
   }
   if (!already_shared) {
     base::Value vms(base::Value::Type::LIST);
-    vms.GetList().emplace_back(base::Value(vm_name));
+    vms.Append(base::Value(vm_name));
     shared_paths->SetKey(path.value(), std::move(vms));
   }
 }
@@ -514,8 +518,7 @@ void GuestOsSharePath::MigratePersistedPathsToMultiVM(
   base::Value dict(base::Value::Type::DICTIONARY);
   for (const auto& shared_path : *shared_paths) {
     base::Value termina(base::Value::Type::LIST);
-    termina.GetList().emplace_back(
-        base::Value(crostini::kCrostiniDefaultVmName));
+    termina.Append(base::Value(crostini::kCrostiniDefaultVmName));
     dict.SetKey(shared_path.GetString(), std::move(termina));
   }
   profile_prefs->Set(prefs::kGuestOSPathsSharedToVms, std::move(dict));
@@ -649,9 +652,9 @@ void GuestOsSharePath::CheckIfVolumeMountRemoved(
                        path, path, true, ""));
     return;
   }
-  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
-                           base::BindOnce(&GuestOsSharePath::PathDeleted,
-                                          base::Unretained(this), path));
+  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
+                 base::BindOnce(&GuestOsSharePath::PathDeleted,
+                                base::Unretained(this), path));
 }
 
 void GuestOsSharePath::PathDeleted(const base::FilePath& path) {

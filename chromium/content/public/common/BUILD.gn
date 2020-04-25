@@ -176,6 +176,7 @@ jumbo_source_set("common_sources") {
     "pepper_plugin_info.cc",
     "pepper_plugin_info.h",
     "persistent_notification_status.h",
+    "previews_state.cc",
     "previews_state.h",
     "process_type.h",
     "profiling.cc",
@@ -216,8 +217,6 @@ jumbo_source_set("common_sources") {
     "webplugininfo.cc",
     "webplugininfo.h",
     "webplugininfo_param_traits.h",
-    "webrtc_ip_handling_policy.cc",
-    "webrtc_ip_handling_policy.h",
     "widget_type.h",
   ]
 
@@ -344,6 +343,7 @@ mojom("interfaces") {
   ]
 
   sources = [
+    "browser_controls_state.mojom",
     "drop_data.mojom",
     "fullscreen_video_element.mojom",
     "resource_load_info.mojom",

@@ -62,7 +62,8 @@ def env_extras(**kwargs):
 
 
 def env_options():
-    return {}
+    # allow the use of host-resolver-rules in lieu of modifying /etc/hosts file
+    return {"server_host": "127.0.0.1"}
 
 
 class ChromeAndroidBrowser(Browser):
@@ -104,7 +105,7 @@ class ChromeAndroidBrowser(Browser):
         # TODO(ato): This only indicates the driver is alive,
         # and doesn't say anything about whether a browser session
         # is active.
-        return self.server.is_alive()
+        return self.server.is_alive
 
     def cleanup(self):
         self.stop()

@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/input/synthetic_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_smooth_scroll_gesture.h"
@@ -61,8 +62,13 @@ namespace content {
 
 class CompositedScrollingBrowserTest : public ContentBrowserTest {
  public:
-  CompositedScrollingBrowserTest() {}
-  ~CompositedScrollingBrowserTest() override {}
+  CompositedScrollingBrowserTest() {
+    // Disable scroll resampling because this is checking scroll distance.
+    scoped_feature_list_.InitAndDisableFeature(
+        features::kResamplingScrollEvents);
+  }
+
+  ~CompositedScrollingBrowserTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* cmd) override {
     cmd->AppendSwitch(switches::kEnablePreferCompositingToLCDText);
@@ -148,6 +154,7 @@ class CompositedScrollingBrowserTest : public ContentBrowserTest {
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
   scoped_refptr<MessageLoopRunner> runner_;
 
   DISALLOW_COPY_AND_ASSIGN(CompositedScrollingBrowserTest);

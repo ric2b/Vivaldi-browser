@@ -16,6 +16,7 @@
 #include "base/strings/string_piece_forward.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/data_model/autofill_data_model.h"
+#include "components/sync/protocol/sync.pb.h"
 
 namespace autofill {
 
@@ -142,6 +143,13 @@ class CreditCard : public AutofillDataModel {
   const std::string& server_id() const { return server_id_; }
   void set_server_id(const std::string& server_id) { server_id_ = server_id; }
 
+  const sync_pb::CloudTokenData& cloud_token_data() const {
+    return cloud_token_data_;
+  }
+  void set_cloud_token_data(const sync_pb::CloudTokenData& cloud_token_data) {
+    cloud_token_data_ = cloud_token_data;
+  }
+
   // For use in STL containers.
   void operator=(const CreditCard& credit_card);
 
@@ -189,6 +197,9 @@ class CreditCard : public AutofillDataModel {
   // MASKED_SERVER_CARDs will never be valid because the number is
   // not complete.
   bool HasValidCardNumber() const;
+
+  // Returns true if credit card has valid expiration year.
+  bool HasValidExpirationYear() const;
 
   // Returns true if credit card has valid expiration date.
   bool HasValidExpirationDate() const;
@@ -351,6 +362,9 @@ class CreditCard : public AutofillDataModel {
   // since we only store the full name.
   base::string16 temp_card_first_name_;
   base::string16 temp_card_last_name_;
+
+  // Info of tokenizized credit card if available.
+  sync_pb::CloudTokenData cloud_token_data_;
 };
 
 // So we can compare CreditCards with EXPECT_EQ().

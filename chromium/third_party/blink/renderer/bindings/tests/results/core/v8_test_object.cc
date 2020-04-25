@@ -166,8 +166,10 @@ static void ReadonlyTestInterfaceEmptyAttributeAttributeGetter(const v8::Functio
   if (cpp_value && DOMDataStore::SetReturnValue(info.GetReturnValue(), cpp_value))
     return;
   v8::Local<v8::Value> v8_value(ToV8(cpp_value, holder, info.GetIsolate()));
+  // This key is used for uniquely identifying v8::Private.
+  static int private_property_key;
   V8PrivateProperty::GetSymbol(
-      info.GetIsolate(), "KeepAlive#TestObject#readonlyTestInterfaceEmptyAttribute")
+      info.GetIsolate(), &private_property_key, "KeepAlive#TestObject#readonlyTestInterfaceEmptyAttribute")
       .Set(holder, v8_value);
 
   V8SetReturnValue(info, v8_value);
@@ -914,7 +916,7 @@ static void AnyAttributeAttributeSetter(
   TestObject* impl = V8TestObject::ToImpl(holder);
 
   // Prepare the value to be set.
-  ScriptValue cpp_value = ScriptValue(ScriptState::Current(info.GetIsolate()), v8_value);
+  ScriptValue cpp_value = ScriptValue(info.GetIsolate(), v8_value);
 
   impl->setAnyAttribute(cpp_value);
 }
@@ -1548,7 +1550,7 @@ static void TestEnumAttributeAttributeSetter(
   // Returns undefined without setting the value if the value is invalid.
   DummyExceptionStateForTesting dummy_exception_state;
   {
-    const char* kValidValues[] = {
+    const char* const kValidValues[] = {
       "",
       "EnumValue1",
       "EnumValue2",
@@ -1596,7 +1598,7 @@ static void TestEnumOrNullAttributeAttributeSetter(
   // Returns undefined without setting the value if the value is invalid.
   DummyExceptionStateForTesting dummy_exception_state;
   {
-    const char* kValidValues[] = {
+    const char* const kValidValues[] = {
       nullptr,
       "",
       "EnumValue1",
@@ -2028,7 +2030,7 @@ static void CachedAttributeAnyAttributeAttributeSetter(
   TestObject* impl = V8TestObject::ToImpl(holder);
 
   // Prepare the value to be set.
-  ScriptValue cpp_value = ScriptValue(ScriptState::Current(info.GetIsolate()), v8_value);
+  ScriptValue cpp_value = ScriptValue(info.GetIsolate(), v8_value);
 
   impl->setCachedAttributeAnyAttribute(cpp_value);
 
@@ -2162,7 +2164,7 @@ static void CallWithExecutionContextAnyAttributeAttributeSetter(
   TestObject* impl = V8TestObject::ToImpl(holder);
 
   // Prepare the value to be set.
-  ScriptValue cpp_value = ScriptValue(ScriptState::Current(info.GetIsolate()), v8_value);
+  ScriptValue cpp_value = ScriptValue(info.GetIsolate(), v8_value);
 
   ExecutionContext* execution_context = ExecutionContext::ForRelevantRealm(info);
 
@@ -2190,7 +2192,7 @@ static void CallWithScriptStateAnyAttributeAttributeSetter(
   TestObject* impl = V8TestObject::ToImpl(holder);
 
   // Prepare the value to be set.
-  ScriptValue cpp_value = ScriptValue(ScriptState::Current(info.GetIsolate()), v8_value);
+  ScriptValue cpp_value = ScriptValue(info.GetIsolate(), v8_value);
 
   ScriptState* script_state = ScriptState::ForRelevantRealm(info);
 
@@ -2220,7 +2222,7 @@ static void CallWithExecutionContextAndScriptStateAndIsolateAnyAttributeAttribut
   TestObject* impl = V8TestObject::ToImpl(holder);
 
   // Prepare the value to be set.
-  ScriptValue cpp_value = ScriptValue(ScriptState::Current(info.GetIsolate()), v8_value);
+  ScriptValue cpp_value = ScriptValue(info.GetIsolate(), v8_value);
 
   ExecutionContext* execution_context = ExecutionContext::ForRelevantRealm(info);
 
@@ -2482,8 +2484,10 @@ static void PerWorldBindingsReadonlyTestInterfaceEmptyAttributeAttributeGetter(c
   if (cpp_value && DOMDataStore::SetReturnValue(info.GetReturnValue(), cpp_value))
     return;
   v8::Local<v8::Value> v8_value(ToV8(cpp_value, holder, info.GetIsolate()));
+  // This key is used for uniquely identifying v8::Private.
+  static int private_property_key;
   V8PrivateProperty::GetSymbol(
-      info.GetIsolate(), "KeepAlive#TestObject#perWorldBindingsReadonlyTestInterfaceEmptyAttribute")
+      info.GetIsolate(), &private_property_key, "KeepAlive#TestObject#perWorldBindingsReadonlyTestInterfaceEmptyAttribute")
       .Set(holder, v8_value);
 
   V8SetReturnValue(info, v8_value);
@@ -2501,8 +2505,10 @@ static void PerWorldBindingsReadonlyTestInterfaceEmptyAttributeAttributeGetterFo
   if (cpp_value && DOMDataStore::SetReturnValueForMainWorld(info.GetReturnValue(), cpp_value))
     return;
   v8::Local<v8::Value> v8_value(ToV8(cpp_value, holder, info.GetIsolate()));
+  // This key is used for uniquely identifying v8::Private.
+  static int private_property_key;
   V8PrivateProperty::GetSymbol(
-      info.GetIsolate(), "KeepAlive#TestObject#perWorldBindingsReadonlyTestInterfaceEmptyAttribute")
+      info.GetIsolate(), &private_property_key, "KeepAlive#TestObject#perWorldBindingsReadonlyTestInterfaceEmptyAttribute")
       .Set(holder, v8_value);
 
   V8SetReturnValue(info, v8_value);
@@ -3141,7 +3147,7 @@ static void CachedAttributeRaisesExceptionGetterAnyAttributeAttributeSetter(
   ExceptionState exception_state(isolate, ExceptionState::kSetterContext, "TestObject", "cachedAttributeRaisesExceptionGetterAnyAttribute");
 
   // Prepare the value to be set.
-  ScriptValue cpp_value = ScriptValue(ScriptState::Current(info.GetIsolate()), v8_value);
+  ScriptValue cpp_value = ScriptValue(info.GetIsolate(), v8_value);
 
   impl->setCachedAttributeRaisesExceptionGetterAnyAttribute(cpp_value, exception_state);
 
@@ -4061,8 +4067,10 @@ static void SameObjectAttributeAttributeGetter(const v8::FunctionCallbackInfo<v8
   if (cpp_value && DOMDataStore::SetReturnValue(info.GetReturnValue(), cpp_value))
     return;
   v8::Local<v8::Value> v8_value(ToV8(cpp_value, holder, info.GetIsolate()));
+  // This key is used for uniquely identifying v8::Private.
+  static int private_property_key;
   V8PrivateProperty::GetSymbol(
-      info.GetIsolate(), "KeepAlive#TestObject#sameObjectAttribute")
+      info.GetIsolate(), &private_property_key, "KeepAlive#TestObject#sameObjectAttribute")
       .Set(holder, v8_value);
 
   V8SetReturnValue(info, v8_value);
@@ -4095,8 +4103,10 @@ static void SaveSameObjectAttributeAttributeGetter(const v8::FunctionCallbackInf
   if (cpp_value && DOMDataStore::SetReturnValue(info.GetReturnValue(), cpp_value))
     return;
   v8::Local<v8::Value> v8_value(ToV8(cpp_value, holder, info.GetIsolate()));
+  // This key is used for uniquely identifying v8::Private.
+  static int private_property_key;
   V8PrivateProperty::GetSymbol(
-      info.GetIsolate(), "KeepAlive#TestObject#saveSameObjectAttribute")
+      info.GetIsolate(), &private_property_key, "KeepAlive#TestObject#saveSameObjectAttribute")
       .Set(holder, v8_value);
 
   V8SetReturnValue(info, v8_value);
@@ -4807,7 +4817,7 @@ static void VoidMethodAnyArgMethod(const v8::FunctionCallbackInfo<v8::Value>& in
   }
 
   ScriptValue any_arg;
-  any_arg = ScriptValue(ScriptState::Current(info.GetIsolate()), info[0]);
+  any_arg = ScriptValue(info.GetIsolate(), info[0]);
 
   impl->voidMethodAnyArg(any_arg);
 }
@@ -5603,7 +5613,7 @@ static void VoidMethodTestEnumArgMethod(const v8::FunctionCallbackInfo<v8::Value
   test_enum_type_arg = info[0];
   if (!test_enum_type_arg.Prepare())
     return;
-  const char* kValidTestEnumTypeArgValues[] = {
+  const char* const kValidTestEnumTypeArgValues[] = {
       "",
       "EnumValue1",
       "EnumValue2",
@@ -5631,7 +5641,7 @@ static void VoidMethodTestMultipleEnumArgMethod(const v8::FunctionCallbackInfo<v
   test_enum_type_arg = info[0];
   if (!test_enum_type_arg.Prepare())
     return;
-  const char* kValidTestEnumTypeArgValues[] = {
+  const char* const kValidTestEnumTypeArgValues[] = {
       "",
       "EnumValue1",
       "EnumValue2",
@@ -5644,7 +5654,7 @@ static void VoidMethodTestMultipleEnumArgMethod(const v8::FunctionCallbackInfo<v
   test_enum_type_arg_2 = info[1];
   if (!test_enum_type_arg_2.Prepare())
     return;
-  const char* kValidTestEnumTypeArg2Values[] = {
+  const char* const kValidTestEnumTypeArg2Values[] = {
       "",
       "EnumValue1",
       "EnumValue2",
@@ -7225,7 +7235,7 @@ static void OverloadedMethodL1Method(const v8::FunctionCallbackInfo<v8::Value>& 
   TestObject* impl = V8TestObject::ToImpl(info.Holder());
 
   int32_t long_arg;
-  Vector<ScriptValue> rest_args;
+  HeapVector<ScriptValue> rest_args;
   long_arg = NativeValueTraits<IDLLong>::NativeValue(info.GetIsolate(), info[0], exception_state);
   if (exception_state.HadException())
     return;
@@ -7243,7 +7253,7 @@ static void OverloadedMethodL2Method(const v8::FunctionCallbackInfo<v8::Value>& 
   TestObject* impl = V8TestObject::ToImpl(info.Holder());
 
   V8StringResource<> string_arg;
-  Vector<ScriptValue> rest_args;
+  HeapVector<ScriptValue> rest_args;
   string_arg = info[0];
   if (!string_arg.Prepare())
     return;
@@ -7797,9 +7807,7 @@ static void CallWithScriptStateExecutionContextIsolateVoidMethodMethod(const v8:
 static void CallWithThisValueMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   TestObject* impl = V8TestObject::ToImpl(info.Holder());
 
-  ScriptState* script_state = ScriptState::ForRelevantRealm(info);
-
-  impl->callWithThisValue(ScriptValue(script_state, info.Holder()));
+  impl->callWithThisValue(ScriptValue(info.GetIsolate(), info.Holder()));
 }
 
 static void CheckSecurityForNodeVoidMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -8978,9 +8986,9 @@ static void ForEachMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
     return;
   }
 
-  this_arg = ScriptValue(ScriptState::Current(info.GetIsolate()), info[1]);
+  this_arg = ScriptValue(info.GetIsolate(), info[1]);
 
-  impl->forEachForBinding(script_state, ScriptValue(script_state, info.Holder()), callback, this_arg, exception_state);
+  impl->forEachForBinding(script_state, ScriptValue(info.GetIsolate(), info.Holder()), callback, this_arg, exception_state);
   if (exception_state.HadException()) {
     return;
   }

@@ -13,7 +13,8 @@
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/test/fake_vr_device.h"
 #include "device/vr/vr_device_base.h"
-#include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -52,8 +53,8 @@ class VRDeviceBaseForTesting : public VRDeviceBase {
 
 class StubVRDeviceEventListener : public mojom::XRRuntimeEventListener {
  public:
-  StubVRDeviceEventListener() : binding_(this) {}
-  ~StubVRDeviceEventListener() override {}
+  StubVRDeviceEventListener() = default;
+  ~StubVRDeviceEventListener() override = default;
 
   MOCK_METHOD1(DoOnChanged, void(mojom::VRDisplayInfo* vr_device_info));
   void OnDisplayInfoChanged(mojom::VRDisplayInfoPtr vr_device_info) override {
@@ -71,18 +72,16 @@ class StubVRDeviceEventListener : public mojom::XRRuntimeEventListener {
   }
 
   MOCK_METHOD0(OnExitPresent, void());
-  MOCK_METHOD0(OnBlur, void());
-  MOCK_METHOD0(OnFocus, void());
+  MOCK_METHOD1(OnVisibilityStateChanged, void(mojom::XRVisibilityState));
   MOCK_METHOD1(OnDeviceIdle, void(mojom::VRDisplayEventReason));
   MOCK_METHOD0(OnInitialized, void());
 
-  mojom::XRRuntimeEventListenerAssociatedPtrInfo BindPtrInfo() {
-    mojom::XRRuntimeEventListenerAssociatedPtrInfo ret;
-    binding_.Bind(mojo::MakeRequest(&ret));
-    return ret;
+  mojo::PendingAssociatedRemote<mojom::XRRuntimeEventListener>
+  BindPendingRemote() {
+    return receiver_.BindNewEndpointAndPassRemote();
   }
 
-  mojo::AssociatedBinding<mojom::XRRuntimeEventListener> binding_;
+  mojo::AssociatedReceiver<mojom::XRRuntimeEventListener> receiver_{this};
 };
 
 }  // namespace
@@ -117,10 +116,10 @@ class VRDeviceTest : public testing::Test {
 // will receive the "vrdevicechanged" event.
 TEST_F(VRDeviceTest, DeviceChangedDispatched) {
   auto device = MakeVRDevice();
-  auto device_ptr = device->BindXRRuntimePtr();
+  mojo::Remote<mojom::XRRuntime> device_remote(device->BindXRRuntime());
   StubVRDeviceEventListener listener;
-  device_ptr->ListenToDeviceChanges(
-      listener.BindPtrInfo(),
+  device_remote->ListenToDeviceChanges(
+      listener.BindPendingRemote(),
       base::DoNothing());  // TODO: consider getting initial info
   base::RunLoop().RunUntilIdle();
   EXPECT_CALL(listener, DoOnChanged(testing::_)).Times(1);
@@ -132,10 +131,10 @@ TEST_F(VRDeviceTest, DisplayActivateRegsitered) {
   device::mojom::VRDisplayEventReason mounted =
       device::mojom::VRDisplayEventReason::MOUNTED;
   auto device = MakeVRDevice();
-  auto device_ptr = device->BindXRRuntimePtr();
+  mojo::Remote<mojom::XRRuntime> device_remote(device->BindXRRuntime());
   StubVRDeviceEventListener listener;
-  device_ptr->ListenToDeviceChanges(
-      listener.BindPtrInfo(),
+  device_remote->ListenToDeviceChanges(
+      listener.BindPendingRemote(),
       base::DoNothing());  // TODO: consider getting initial data
   base::RunLoop().RunUntilIdle();
 

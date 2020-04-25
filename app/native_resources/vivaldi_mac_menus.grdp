@@ -10,4 +10,7 @@
   <message name="IDS_VIV_NEW_PRIVATE_WINDOW" desc="The title of the new private window menu item.">
     New Private Window
   </message>
+  <message name="IDS_VIV_JAVASCRIPT_UNSUPPORTED_ERROR_APPLESCRIPT_MAC" desc="Error dialog title to be displayed when the user attempts to execute JavaScript via AppleScript. Mac-only.">
+    Executing JavaScript through AppleScript is turned off. To turn it on, from the menu bar, go to Tools > Allow JavaScript from Apple Events.
+  </message>
 </grit-part>

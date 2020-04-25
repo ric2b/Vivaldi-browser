@@ -160,6 +160,10 @@ bool ThemePainter::Paint(const LayoutObject& o,
       // -webkit-appearance:push-button by default.
       UseCounter::Count(doc,
                         WebFeature::kCSSValueAppearanceButtonForOtherButtons);
+    } else if (IsA<HTMLInputElement>(node) &&
+               To<HTMLInputElement>(node)->type() == input_type_names::kColor) {
+      //  'button' for input[type=color], of which default appearance is
+      // 'square-button', is not deprecated.
     } else {
       COUNT_APPEARANCE(doc, ButtonForNonButton);
       COUNT_APPEARANCE(doc, ButtonForOthers);
@@ -171,9 +175,9 @@ bool ThemePainter::Paint(const LayoutObject& o,
             To<Element>(node)->getAttribute(html_names::kTypeAttr);
         // https://github.com/twbs/bootstrap/pull/29053
         if (type == "button" || type == "reset" || type == "submit") {
-          COUNT_APPEARANCE(doc, ButtonForBootstrapLooseSelector);
+          DEPRECATE_APPEARANCE(doc, ButtonForBootstrapLooseSelector);
         } else {
-          COUNT_APPEARANCE(doc, ButtonForOthers2);
+          DEPRECATE_APPEARANCE(doc, ButtonForOthers2);
         }
       }
     }
@@ -220,7 +224,7 @@ bool ThemePainter::Paint(const LayoutObject& o,
     }
     case kMenulistPart:
       COUNT_APPEARANCE(doc, MenuList);
-      if (!IsHTMLSelectElement(node) && !IsMenulistInput(node))
+      if (!IsA<HTMLSelectElement>(node) && !IsMenulistInput(node))
         DEPRECATE_APPEARANCE(doc, MenuListForOthers);
       return PaintMenuList(node, o.GetDocument(), style, paint_info, r);
     case kMeterPart:
@@ -394,7 +398,7 @@ bool ThemePainter::PaintDecorations(const Node* node,
   switch (style.EffectiveAppearance()) {
     case kMenulistButtonPart:
       COUNT_APPEARANCE(document, MenuListButton);
-      if (!IsHTMLSelectElement(node) && !IsMenulistInput(node))
+      if (!IsA<HTMLSelectElement>(node) && !IsMenulistInput(node))
         DEPRECATE_APPEARANCE(document, MenuListButtonForOthers);
       return PaintMenuListButton(node, document, style, paint_info, r);
     case kTextFieldPart:

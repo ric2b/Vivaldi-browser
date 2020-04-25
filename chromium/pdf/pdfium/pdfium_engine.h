@@ -24,6 +24,7 @@
 #include "pdf/pdfium/pdfium_page.h"
 #include "pdf/pdfium/pdfium_print.h"
 #include "pdf/pdfium/pdfium_range.h"
+#include "ppapi/c/private/ppp_pdf.h"
 #include "ppapi/cpp/completion_callback.h"
 #include "ppapi/cpp/dev/buffer_dev.h"
 #include "ppapi/cpp/image_data.h"
@@ -104,7 +105,6 @@ class PDFiumEngine : public PDFEngine,
   base::Optional<PDFEngine::NamedDestination> GetNamedDestination(
       const std::string& destination) override;
   int GetMostVisiblePage() override;
-  pp::Rect GetPageRect(int index) override;
   pp::Rect GetPageBoundsRect(int index) override;
   pp::Rect GetPageContentsRect(int index) override;
   pp::Rect GetPageScreenRect(int page_index) const override;
@@ -116,6 +116,18 @@ class PDFiumEngine : public PDFEngine,
   base::Optional<PP_PrivateAccessibilityTextRunInfo> GetTextRunInfo(
       int page_index,
       int start_char_index) override;
+  uint32_t GetLinkCount(int page_index) override;
+  bool GetLinkInfo(int page_index,
+                   uint32_t link_index,
+                   std::string* out_url,
+                   int* out_start_char_index,
+                   int* out_char_count,
+                   pp::FloatRect* out_bounds) override;
+  uint32_t GetImageCount(int page_index) override;
+  bool GetImageInfo(int page_index,
+                    uint32_t image_index,
+                    std::string* out_alt_text,
+                    pp::FloatRect* out_bounds) override;
   bool GetPrintScaling() override;
   int GetCopiesToPrint() override;
   int GetDuplexType() override;
@@ -233,18 +245,18 @@ class PDFiumEngine : public PDFEngine,
   // If this has been run once, it will not notify the client again.
   void FinishLoadingDocument();
 
-  // Applies the current layout to the PDFiumPage objects. This primarily
-  // involves updating the PDFiumPage rectangles from the corresponding layout
-  // page rectangles.
-  //
-  // TODO(kmoon): Conceivably, the PDFiumPages wouldn't need to store page
-  // rectangles at all, and we could get rid of this step. This is a pretty
-  // involved change, however.
-  void ApplyCurrentLayoutToPages(bool reload);
-
-  // Loads information about the pages in the document and calculate the
-  // document size.
+  // Loads information about the pages in the document and performs layout.
   void LoadPageInfo(bool reload);
+
+  // Loads information about the pages in the document, calculating and
+  // returning the individual page sizes.
+  //
+  // Note that the page rects of any new pages will be left uninitialized, so
+  // layout must be performed immediately after calling this method.
+  //
+  // TODO(kmoon): LoadPageSizes() is a bit misnomer, but LoadPageInfo() is
+  // taken right now...
+  std::vector<pp::Size> LoadPageSizes(bool reload);
 
   void LoadBody();
 
@@ -513,8 +525,19 @@ class PDFiumEngine : public PDFEngine,
   pp::VarDictionary TraverseBookmarks(FPDF_BOOKMARK bookmark,
                                       unsigned int depth);
 
+  void ScrollBasedOnScrollAlignment(
+      const pp::Rect& scroll_rect,
+      const PP_PdfAccessibilityScrollAlignment& horizontal_scroll_alignment,
+      const PP_PdfAccessibilityScrollAlignment& vertical_scroll_alignment);
+
   // Set if the document has any local edits.
   void SetEditMode(bool edit_mode);
+
+  // Navigates to a link destination depending on the type of destination.
+  // Returns false if |area| is not a link.
+  bool NavigateToLinkDestination(PDFiumPage::Area area,
+                                 const PDFiumPage::LinkTarget& target,
+                                 WindowOpenDisposition disposition);
 
   // IFSDK_PAUSE callbacks
   static FPDF_BOOL Pause_NeedToPauseNow(IFSDK_PAUSE* param);

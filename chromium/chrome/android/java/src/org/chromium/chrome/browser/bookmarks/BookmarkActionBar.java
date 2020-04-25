@@ -15,11 +15,10 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
-import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
-import org.chromium.chrome.browser.widget.dragreorder.DragReorderableListAdapter;
+import org.chromium.chrome.browser.ui.widget.dragreorder.DragReorderableListAdapter;
 import org.chromium.chrome.browser.widget.selection.SelectableListToolbar;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
 import org.chromium.components.bookmarks.BookmarkId;
@@ -27,6 +26,8 @@ import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.content_public.browser.LoadUrlParams;
 
 import java.util.List;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Main action bar of bookmark UI. It is responsible for displaying title and buttons
@@ -37,13 +38,6 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
                    DragReorderableListAdapter.DragListener {
     private BookmarkItem mCurrentFolder;
     private BookmarkDelegate mDelegate;
-
-    private BookmarkModelObserver mBookmarkModelObserver = new BookmarkModelObserver() {
-        @Override
-        public void bookmarkModelChanged() {
-            onSelectionStateChange(mDelegate.getSelectionDelegate().getSelectedItemsAsList());
-        }
-    };
 
     public BookmarkActionBar(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -60,10 +54,14 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         getMenu()
                 .findItem(R.id.selection_open_in_incognito_tab_id)
                 .setTitle(R.string.contextmenu_open_in_incognito_tab);
-
         // Wait to enable the selection mode group until the BookmarkDelegate is set. The
         // SelectionDelegate is retrieved from the BookmarkDelegate.
         getMenu().setGroupEnabled(R.id.selection_mode_menu_group, false);
+
+        if (ChromeApplication.isVivaldi()) {
+            getMenu().removeItem(R.id.close_menu_id);
+            getMenu().removeItem(R.id.search_menu_id);
+        }
     }
 
     @Override
@@ -141,6 +139,7 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
     void showLoadingUi() {
         setTitle(null);
         setNavigationButton(NAVIGATION_BUTTON_NONE);
+        if (!ChromeApplication.isVivaldi())
         getMenu().findItem(R.id.search_menu_id).setVisible(false);
         getMenu().findItem(R.id.edit_menu_id).setVisible(false);
     }
@@ -150,6 +149,7 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         super.showNormalView();
 
         if (mDelegate == null) {
+            if (!ChromeApplication.isVivaldi())
             getMenu().findItem(R.id.search_menu_id).setVisible(false);
             getMenu().findItem(R.id.edit_menu_id).setVisible(false);
         }
@@ -162,8 +162,8 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
     public void onBookmarkDelegateInitialized(BookmarkDelegate delegate) {
         mDelegate = delegate;
         mDelegate.addUIObserver(this);
+        if (!ChromeApplication.isVivaldi())
         if (!delegate.isDialogUi()) getMenu().removeItem(R.id.close_menu_id);
-        delegate.getModel().addObserver(mBookmarkModelObserver);
 
         getMenu().setGroupEnabled(R.id.selection_mode_menu_group, true);
     }
@@ -175,13 +175,12 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         if (mDelegate == null) return;
 
         mDelegate.removeUIObserver(this);
-        mDelegate.getModel().removeObserver(mBookmarkModelObserver);
     }
 
     @Override
     public void onFolderStateSet(BookmarkId folder) {
         mCurrentFolder = mDelegate.getModel().getBookmarkById(folder);
-
+        if (!ChromeApplication.isVivaldi())
         getMenu().findItem(R.id.search_menu_id).setVisible(true);
         getMenu().findItem(R.id.edit_menu_id).setVisible(mCurrentFolder.isEditable());
 
@@ -200,6 +199,9 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         }
 
         setNavigationButton(NAVIGATION_BUTTON_BACK);
+
+        // Vivaldi needs this for adding new bookmarks
+        BookmarkUtils.setLastUsedParent(getContext(), mCurrentFolder.getId());
     }
 
     @Override

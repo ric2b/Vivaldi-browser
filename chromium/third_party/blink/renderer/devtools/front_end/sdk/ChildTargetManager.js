@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+export let _lastAnonymousTargetId = 0;
+
 /**
  * @implements {Protocol.TargetDispatcher}
  */
-SDK.ChildTargetManager = class extends SDK.SDKModel {
+export default class ChildTargetManager extends SDK.SDKModel {
   /**
    * @param {!SDK.Target} parentTarget
    */
@@ -63,8 +65,9 @@ SDK.ChildTargetManager = class extends SDK.SDKModel {
    * @override
    */
   dispose() {
-    for (const sessionId of this._childTargets.keys())
+    for (const sessionId of this._childTargets.keys()) {
       this.detachedFromTarget(sessionId, undefined);
+    }
   }
 
   /**
@@ -112,8 +115,9 @@ SDK.ChildTargetManager = class extends SDK.SDKModel {
    * @return {!Promise<string>}
    */
   async _getParentTargetId() {
-    if (!this._parentTargetId)
+    if (!this._parentTargetId) {
       this._parentTargetId = (await this._parentTarget.targetAgent().getTargetInfo()).targetId;
+    }
     return this._parentTargetId;
   }
 
@@ -124,28 +128,30 @@ SDK.ChildTargetManager = class extends SDK.SDKModel {
    * @param {boolean} waitingForDebugger
    */
   attachedToTarget(sessionId, targetInfo, waitingForDebugger) {
-    if (this._parentTargetId === targetInfo.targetId)
+    if (this._parentTargetId === targetInfo.targetId) {
       return;
+    }
 
     let targetName = '';
     if (targetInfo.type === 'worker' && targetInfo.title && targetInfo.title !== targetInfo.url) {
       targetName = targetInfo.title;
     } else if (targetInfo.type !== 'iframe') {
       const parsedURL = targetInfo.url.asParsedURL();
-      targetName = parsedURL ? parsedURL.lastPathComponentWithFragment() :
-                               '#' + (++SDK.ChildTargetManager._lastAnonymousTargetId);
+      targetName = parsedURL ? parsedURL.lastPathComponentWithFragment() : '#' + (++_lastAnonymousTargetId);
     }
 
     let type = SDK.Target.Type.Browser;
-    if (targetInfo.type === 'iframe')
+    if (targetInfo.type === 'iframe') {
       type = SDK.Target.Type.Frame;
+    }
     // TODO(lfg): ensure proper capabilities for child pages (e.g. portals).
-    else if (targetInfo.type === 'page')
+    else if (targetInfo.type === 'page') {
       type = SDK.Target.Type.Frame;
-    else if (targetInfo.type === 'worker')
+    } else if (targetInfo.type === 'worker') {
       type = SDK.Target.Type.Worker;
-    else if (targetInfo.type === 'service_worker')
+    } else if (targetInfo.type === 'service_worker') {
       type = SDK.Target.Type.ServiceWorker;
+    }
 
     const target =
         this._targetManager.createTarget(targetInfo.targetId, targetName, type, this._parentTarget, sessionId);
@@ -185,7 +191,7 @@ SDK.ChildTargetManager = class extends SDK.SDKModel {
   }
 
   /**
-   * @param {function(!Object)} onMessage
+   * @param {function((!Object|string))} onMessage
    * @return {!Promise<!Protocol.Connection>}
    */
   async createParallelConnection(onMessage) {
@@ -207,18 +213,27 @@ SDK.ChildTargetManager = class extends SDK.SDKModel {
   async _createParallelConnectionAndSessionForTarget(target, targetId) {
     const targetAgent = target.targetAgent();
     const targetRouter = target.router();
-    const sessionId = await targetAgent.attachToTarget(targetId, true /* flatten */);
+    const sessionId = /** @type {string} */ (await targetAgent.attachToTarget(targetId, true /* flatten */));
     const connection = new SDK.ParallelConnection(targetRouter.connection(), sessionId);
     targetRouter.registerSession(target, sessionId, connection);
-    connection.setOnDisconnect(async () => {
-      await targetAgent.detachFromTarget(sessionId);
+    connection.setOnDisconnect(() => {
+      targetAgent.detachFromTarget(sessionId);
       targetRouter.unregisterSession(sessionId);
     });
     return {connection, sessionId};
   }
-};
+}
 
-SDK.ChildTargetManager._lastAnonymousTargetId = 0;
+/* Legacy exported object */
+self.SDK = self.SDK || {};
+
+/* Legacy exported object */
+SDK = SDK || {};
+
+/** @constructor */
+SDK.ChildTargetManager = ChildTargetManager;
+
+SDK.ChildTargetManager._lastAnonymousTargetId = _lastAnonymousTargetId;
 
 /** @type {function({target: !SDK.Target, waitingForDebugger: boolean})|undefined} */
 SDK.ChildTargetManager._attachCallback;

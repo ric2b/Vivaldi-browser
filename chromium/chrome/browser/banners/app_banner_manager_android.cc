@@ -27,8 +27,8 @@
 #include "content/public/browser/web_contents.h"
 #include "net/base/url_util.h"
 
-using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertJavaStringToUTF16;
+using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
 
@@ -71,14 +71,6 @@ AppBannerManagerAndroid::~AppBannerManagerAndroid() {
 const base::android::ScopedJavaLocalRef<jobject>
 AppBannerManagerAndroid::GetJavaBannerManager() const {
   return base::android::ScopedJavaLocalRef<jobject>(java_banner_manager_);
-}
-
-base::android::ScopedJavaLocalRef<jobject>
-AppBannerManagerAndroid::GetAddToHomescreenDialogForTesting(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& jobj) {
-  return ui_delegate_ ? ui_delegate_->GetAddToHomescreenDialogForTesting()
-                      : nullptr;
 }
 
 bool AppBannerManagerAndroid::IsRunningForTesting(
@@ -147,16 +139,13 @@ std::string AppBannerManagerAndroid::GetBannerType() {
                                     : "play";
 }
 
-bool AppBannerManagerAndroid::IsWebAppConsideredInstalled(
-    content::WebContents* web_contents,
-    const GURL& validated_url,
-    const GURL& start_url,
-    const GURL& manifest_url) {
+bool AppBannerManagerAndroid::IsWebAppConsideredInstalled() {
   // Whether a WebAPK is installed or is being installed. IsWebApkInstalled
   // will still detect the presence of a WebAPK even if Chrome's data is
   // cleared.
-  return ShortcutHelper::IsWebApkInstalled(web_contents->GetBrowserContext(),
-                                           start_url, manifest_url);
+  DCHECK(!manifest_.IsEmpty());
+  return ShortcutHelper::IsWebApkInstalled(web_contents()->GetBrowserContext(),
+                                           manifest_.start_url, manifest_url_);
 }
 
 InstallableParams
@@ -164,6 +153,8 @@ AppBannerManagerAndroid::ParamsToPerformInstallableWebAppCheck() {
   InstallableParams params =
       AppBannerManager::ParamsToPerformInstallableWebAppCheck();
   params.valid_badge_icon = can_install_webapk_;
+  params.prefer_maskable_icon =
+      ShortcutHelper::DoesAndroidSupportMaskableIcons();
 
   return params;
 }
@@ -379,7 +370,7 @@ void AppBannerManagerAndroid::MaybeShowAmbientBadge() {
   if (GetVisibleAmbientBadgeInfoBar(infobar_service) == nullptr) {
     InstallableAmbientBadgeInfoBarDelegate::Create(
         web_contents(), weak_factory_.GetWeakPtr(), GetAppName(), primary_icon_,
-        manifest_.start_url);
+        has_maskable_primary_icon_, manifest_.start_url);
   }
 }
 
@@ -448,16 +439,13 @@ void JNI_AppBannerManager_SetDaysAfterDismissAndIgnoreToTrigger(
 }
 
 // static
-void JNI_AppBannerManager_SetTimeDeltaForTesting(
-    JNIEnv* env,
-    jint days) {
+void JNI_AppBannerManager_SetTimeDeltaForTesting(JNIEnv* env, jint days) {
   AppBannerManager::SetTimeDeltaForTesting(days);
 }
 
 // static
-void JNI_AppBannerManager_SetTotalEngagementToTrigger(
-    JNIEnv* env,
-    jdouble engagement) {
+void JNI_AppBannerManager_SetTotalEngagementToTrigger(JNIEnv* env,
+                                                      jdouble engagement) {
   AppBannerSettingsHelper::SetTotalEngagementToTrigger(engagement);
 }
 

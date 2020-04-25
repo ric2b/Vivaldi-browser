@@ -118,12 +118,111 @@ def _staple_chrome(paths, dist_config):
         notarize.staple(os.path.join(paths.work, part_path))
 
 
+def _productbuild_requirements_path(paths, dist_config):
+    """Creates a requirements file for use by `productbuild`. This specifies
+    that an x64 machine is required, and copies the OS requirement from the copy
+    of Chrome being packaged.
+
+    Args:
+        paths: A |model.Paths| object.
+        dist_config: The |config.CodeSignConfig| object.
+
+    Returns:
+        The path to the requirements file.
+    """
+    requirements_path = os.path.join(paths.work,
+                                     '{}.req'.format(dist_config.app_product))
+
+    app_plist_path = os.path.join(paths.work, dist_config.app_dir, 'Contents',
+                                  'Info.plist')
+    with commands.PlistContext(app_plist_path) as app_plist:
+        with commands.PlistContext(
+                requirements_path, rewrite=True,
+                create_new=True) as requirements:
+            requirements['os'] = [app_plist['LSMinimumSystemVersion']]
+            requirements['arch'] = ['x86_64']
+
+    return requirements_path
+
+
+def _package_and_sign_pkg(paths, dist_config):
+    """Packages, signs, and verifies a PKG for a signed build product.
+
+    Args:
+        paths: A |model.Paths| object.
+        dist_config: The |config.CodeSignConfig| object.
+
+    Returns:
+        The path to the signed PKG file.
+    """
+    assert dist_config.installer_identity
+
+    # There are two .pkg files to be built:
+    #   1. The inner component package (which is the one that can contain things
+    #      like postinstall scripts). This is built with `pkgbuild`.
+    #   2. The outer product archive (which is the installable thing that has
+    #      pre-install requirements). This is built with `productbuild`.
+
+    # The component package.
+
+    component_pkg_path = os.path.join(paths.work,
+                                      '{}.pkg'.format(dist_config.app_product))
+    app_path = os.path.join(paths.work, dist_config.app_dir)
+
+    commands.run_command([
+        'pkgbuild', '--identifier', dist_config.base_bundle_id, '--version',
+        dist_config.version, '--component', app_path, '--install-location',
+        '/Applications', component_pkg_path
+    ])
+
+    # The product archive.
+
+    # There are two steps here. The first is to create the "distribution file"
+    # which describes the product archive. `productbuild` has a mode to generate
+    # such a file, with the optional input of a "requirements file" that
+    # describes the desired installation requirements of the product archive.
+    # Use this mode to generate a distribution file. Note that if, in the
+    # future, it's desired that the product archive have UI customization, then
+    # this distribution file will need to be hand-crafted. With any luck, this
+    # auto-generated distribution file continue to suffice.
+
+    requirements_path = _productbuild_requirements_path(paths, dist_config)
+
+    distribution_path = os.path.join(paths.work,
+                                     '{}.dist'.format(dist_config.app_product))
+    commands.run_command([
+        'productbuild', '--synthesize', '--product', requirements_path,
+        '--package', component_pkg_path, distribution_path
+    ])
+
+    # The second step is to actually create the product archive using
+    # `productbuild`.
+
+    product_pkg_path = os.path.join(
+        paths.output, '{}.pkg'.format(dist_config.packaging_basename))
+
+    command = [
+        'productbuild', '--distribution', distribution_path, '--package-path',
+        paths.work, '--sign', dist_config.installer_identity
+    ]
+    if dist_config.notary_user:
+        # Assume if the config has notary authentication information that the
+        # products will be notarized, which requires a secure timestamp.
+        command.append('--timestamp')
+    if dist_config.keychain:
+        command.extend(['--keychain', dist_config.keychain])
+    command.append(product_pkg_path)
+    commands.run_command(command)
+
+    return product_pkg_path
+
+
 def _package_and_sign_dmg(paths, dist_config):
     """Packages, signs, and verifies a DMG for a signed build product.
 
     Args:
         paths: A |model.Paths| object.
-        dist_config: A |config.CodeSignConfig| for the |dist|.
+        dist_config: The |config.CodeSignConfig| object.
 
     Returns:
         The path to the signed DMG file.
@@ -132,10 +231,9 @@ def _package_and_sign_dmg(paths, dist_config):
 
     dmg_path = _package_dmg(paths, dist, dist_config)
 
-    # dmg_identifier is like dmg_name but without the .dmg suffix. If a
-    # brand code is in use, use the actual brand code instead of the
-    # name fragment, to avoid leaking the association between brand
-    # codes and their meanings.
+    # dmg_identifier is like dmg_name but without the file extension. If a brand
+    # code is in use, use the actual brand code instead of the name fragment, to
+    # avoid leaking the association between brand codes and their meanings.
     dmg_identifier = dist_config.packaging_basename
     if dist.branding_code:
         dmg_identifier = dist_config.packaging_basename.replace(
@@ -247,7 +345,27 @@ def _package_installer_tools(paths, config):
                              cwd=paths.work)
 
 
-def sign_all(orig_paths, config, disable_packaging=False, do_notarization=True):
+def _intermediate_work_dir_name(dist_config):
+    """Returns the name of an intermediate work directory for a distribution.
+
+    Args:
+        dist_config: A |config.CodeSignConfig| for the |model.Distribution|.
+
+    Returns:
+        The work directory name to use.
+    """
+    if dist_config.distribution.branding_code:
+        return '{}-{}'.format(dist_config.packaging_basename,
+                              dist_config.distribution.branding_code)
+
+    return dist_config.packaging_basename
+
+
+def sign_all(orig_paths,
+             config,
+             disable_packaging=False,
+             do_notarization=True,
+             skip_brands=[]):
     """For each distribution in |config|, performs customization, signing, and
     DMG packaging and places the resulting signed DMG in |orig_paths.output|.
     The |paths.input| must contain the products to customize and sign.
@@ -263,6 +381,8 @@ def sign_all(orig_paths, config, disable_packaging=False, do_notarization=True):
             be stapled. If |package_dmg| is also True, the stapled application
             will be packaged in the DMG and then the DMG itself will be
             notarized and stapled.
+        skip_brands: A list of brand code strings. If a distribution has a brand
+            code in this list, that distribution will be skipped.
     """
     with commands.WorkDirectory(orig_paths) as notary_paths:
         # First, sign all the distributions and optionally submit the
@@ -270,6 +390,9 @@ def sign_all(orig_paths, config, disable_packaging=False, do_notarization=True):
         uuids_to_config = {}
         signed_frameworks = {}
         for dist in config.distributions:
+            if dist.branding_code in skip_brands:
+                continue
+
             with commands.WorkDirectory(orig_paths) as paths:
                 dist_config = dist.to_config(config)
                 do_packaging = (dist.package_as_dmg or
@@ -282,8 +405,8 @@ def sign_all(orig_paths, config, disable_packaging=False, do_notarization=True):
                 else:
                     dest_dir = notary_paths.work
 
-                dest_dir = os.path.join(dest_dir,
-                                        dist_config.packaging_basename)
+                dest_dir = os.path.join(
+                    dest_dir, _intermediate_work_dir_name(dist_config))
                 _customize_and_sign_chrome(paths, dist_config, dest_dir,
                                            signed_frameworks)
 
@@ -306,8 +429,8 @@ def sign_all(orig_paths, config, disable_packaging=False, do_notarization=True):
             for result in notarize.wait_for_results(uuids_to_config.keys(),
                                                     config):
                 dist_config = uuids_to_config[result]
-                dest_dir = os.path.join(notary_paths.work,
-                                        dist_config.packaging_basename)
+                dest_dir = os.path.join(
+                    notary_paths.work, _intermediate_work_dir_name(dist_config))
                 _staple_chrome(notary_paths.replace_work(dest_dir), dist_config)
             if disable_packaging:
                 for dist in config.distributions:
@@ -326,13 +449,15 @@ def sign_all(orig_paths, config, disable_packaging=False, do_notarization=True):
         if not disable_packaging:
             uuids_to_package_path = {}
             for dist in config.distributions:
+                if dist.branding_code in skip_brands:
+                    continue
+
                 dist_config = dist.to_config(config)
+                paths = orig_paths.replace_work(
+                    os.path.join(notary_paths.work,
+                                 _intermediate_work_dir_name(dist_config)))
 
                 if dist.package_as_dmg:
-                    paths = orig_paths.replace_work(
-                        os.path.join(notary_paths.work,
-                                     dist_config.packaging_basename))
-
                     dmg_path = _package_and_sign_dmg(paths, dist_config)
 
                     if do_notarization:
@@ -340,8 +465,11 @@ def sign_all(orig_paths, config, disable_packaging=False, do_notarization=True):
                         uuids_to_package_path[uuid] = dmg_path
 
                 if dist.package_as_pkg:
-                    # TODO(avi): Do packaging as a pkg here.
-                    pass
+                    pkg_path = _package_and_sign_pkg(paths, dist_config)
+
+                    if do_notarization:
+                        uuid = notarize.submit(pkg_path, dist_config)
+                        uuids_to_package_path[uuid] = pkg_path
 
             # Wait for packaging notarization results to come back, stapling as
             # they do.

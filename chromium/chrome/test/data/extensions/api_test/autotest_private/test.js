@@ -17,10 +17,6 @@ var defaultTests = [
     chrome.autotestPrivate.shutdown(true);
     chrome.test.succeed();
   },
-  function lockScreen() {
-    chrome.autotestPrivate.lockScreen();
-    chrome.test.succeed();
-  },
   function simulateAsanMemoryBug() {
     chrome.autotestPrivate.simulateAsanMemoryBug();
     chrome.test.succeed();
@@ -243,6 +239,11 @@ var defaultTests = [
         chrome.test.callbackFail(
             'Assistant not allowed - state: 8'));
   },
+  function waitForAssistantQueryStatus() {
+    chrome.autotestPrivate.waitForAssistantQueryStatus(10 /* timeout_s */,
+        chrome.test.callbackFail(
+            'Assistant not allowed - state: 8'));
+  },
   function setWhitelistedPref() {
     chrome.autotestPrivate.setWhitelistedPref(
         'settings.voice_interaction.hotword.enabled' /* pref_name */,
@@ -423,6 +424,87 @@ var defaultTests = [
       chrome.test.succeed();
     });
   },
+
+  function waitForPrimaryDisplayRotation() {
+    var displayId = "-1";
+    chrome.system.display.getInfo(function(info) {
+      var l = info.length;
+      for (var i = 0; i < l; i++) {
+        if (info[i].isPrimary === true) {
+          displayId = info[i].id;
+          break;
+        }
+      }
+      chrome.test.assertTrue(displayId != "-1");
+      chrome.system.display.setDisplayProperties(displayId, {rotation: 90},
+        function() {
+          chrome.autotestPrivate.waitForDisplayRotation(displayId, 'Rotate90',
+              success => {
+                chrome.test.assertNoLastError();
+                chrome.test.assertTrue(success);
+                // Reset the rotation back to normal.
+                chrome.system.display.setDisplayProperties(
+                    displayId, {rotation: 0},
+                    function() {
+                      chrome.autotestPrivate.waitForDisplayRotation(
+                          displayId, 'Rotate0',
+                          success => {
+                            chrome.test.assertNoLastError();
+                            chrome.test.assertTrue(success);
+                            chrome.test.succeed();
+                          });
+                    });
+              });
+        });
+    });
+  },
+  function waitForPrimaryDisplayRotation2() {
+    var displayId = "-1";
+    chrome.system.display.getInfo(function(info) {
+      var l = info.length;
+      for (var i = 0; i < l; i++) {
+        if (info[i].isPrimary === true) {
+          displayId = info[i].id;
+          break;
+        }
+      }
+      chrome.test.assertTrue(displayId != "-1");
+      chrome.system.display.setDisplayProperties(
+          displayId, {rotation: 180},
+          function() {
+            chrome.autotestPrivate.waitForDisplayRotation(
+                displayId, 'Rotate180',
+                success => {
+                  chrome.test.assertNoLastError();
+                  chrome.test.assertTrue(success);
+                  // Reset the rotation back to normal.
+                  chrome.system.display.setDisplayProperties(
+                      displayId, {rotation: 0},
+                      function() {
+                        chrome.autotestPrivate.waitForDisplayRotation(
+                            displayId, 'Rotate0',
+                            success => {
+                              chrome.test.assertNoLastError();
+                              chrome.test.assertTrue(success);
+                              chrome.test.succeed();
+                            });
+                      });
+                });
+          });
+    });
+  },
+  function arcAppTracingNoArcWindow() {
+    chrome.autotestPrivate.arcAppTracingStart(chrome.test.callbackFail(
+        'Failed to start custom tracing.'));
+  },
+
+  // KEEP |lockScreen()| TESTS AT THE BOTTOM OF THE defaultTests AS IT WILL
+  // CHANGE THE SESSION STATE TO LOCKED STATE.
+  function lockScreen() {
+    chrome.autotestPrivate.lockScreen();
+    chrome.test.succeed();
+  },
+  // ADD YOUR TEST BEFORE |lockScreen()| UNLESS YOU WANT TO RUN TEST IN LOCKED
 ];
 
 var arcEnabledTests = [
@@ -550,11 +632,63 @@ var policyTests = [
   },
 ];
 
+var arcPerformanceTracingTests = [
+  function arcAppTracingNormal() {
+    chrome.autotestPrivate.arcAppTracingStart(async function() {
+      chrome.test.assertNoLastError();
+      function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+      }
+      // We generate 15 frames in test.
+      await sleep(250);
+      chrome.autotestPrivate.arcAppTracingStopAndAnalyze(
+          function(tracing) {
+            chrome.test.assertNoLastError();
+            chrome.test.assertTrue(tracing.success);
+            // FPS is based on real time. Make sure it is positive.
+            chrome.test.assertTrue(tracing.fps > 0);
+            chrome.test.assertTrue(tracing.fps <= 60.0);
+            chrome.test.assertEq(216, Math.trunc(tracing.commitDeviation));
+            chrome.test.assertEq(48, Math.trunc(100.0 * tracing.renderQuality));
+            chrome.test.succeed();
+        });
+    });
+  },
+  function arcAppTracingStopWithoutStart() {
+    chrome.autotestPrivate.arcAppTracingStopAndAnalyze(
+        function(tracing) {
+          chrome.test.assertNoLastError();
+          chrome.test.assertFalse(tracing.success);
+          chrome.test.assertEq(0, tracing.fps);
+          chrome.test.assertEq(0, tracing.commitDeviation);
+          chrome.test.assertEq(0, tracing.renderQuality);
+          chrome.test.succeed();
+        });
+  },
+  function arcAppTracingDoubleStop() {
+    chrome.autotestPrivate.arcAppTracingStart(function() {
+      chrome.test.assertNoLastError();
+      chrome.autotestPrivate.arcAppTracingStopAndAnalyze(
+          function(tracing) {
+            chrome.test.assertNoLastError();
+            chrome.test.assertTrue(tracing.success);
+            chrome.autotestPrivate.arcAppTracingStopAndAnalyze(
+                function(tracing) {
+                  chrome.test.assertNoLastError();
+                  chrome.test.assertFalse(tracing.success);
+                  chrome.test.succeed();
+              });
+        });
+    });
+  },
+];
+
 
 var test_suites = {
   'default': defaultTests,
   'arcEnabled': arcEnabledTests,
-  'enterprisePolicies': policyTests
+  'enterprisePolicies': policyTests,
+  'arcPerformanceTracing': arcPerformanceTracingTests
 };
 
 chrome.test.getConfig(function(config) {
@@ -565,4 +699,3 @@ chrome.test.getConfig(function(config) {
     chrome.test.fail('Invalid test suite');
   }
 });
-

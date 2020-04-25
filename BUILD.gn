@@ -15,6 +15,15 @@ import("//vivaldi/gn/deps_updates.gni")
 
 import("//vivaldi/app/resources/untranslated.gni")
 
+if (is_android) {
+  import("//build/config/android/rules.gni")
+  #import("//build/config/android/config.gni")
+
+  #import("//chrome/android/chrome_public_apk_tmpl.gni")
+  #import("//chrome/android/monochrome_android_manifest_jinja_variables.gni")
+  #import("//chrome/chrome_paks.gni")
+}
+
 group("All") {
   testonly = true
 
@@ -42,11 +51,18 @@ group("All") {
     "//ui/gfx:gfx_unittests",
     "//url:url_unittests",
     "//vivaldi/app:write_translation_xml_generation_script",
+    "//vivaldi/app:write_pakfile_xml_generation_script",
+    "//vivaldi/app:write_full_pakfile_xml_generation_script",
   ]
   if (is_linux) {
     deps += [
       #"//breakpad:breakpad_unittests",
       #"//breakpad:generate_test_dump",
+    ]
+  }
+  if (is_android) {
+    deps += [
+        "//vivaldi/notes"
     ]
   }
   if (!is_android) {

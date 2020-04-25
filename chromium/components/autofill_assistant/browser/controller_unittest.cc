@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/guid.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/test/gmock_callback_support.h"
+#include "base/test/gtest_util.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
@@ -82,11 +82,11 @@ struct MockCollectUserDataOptions : public CollectUserDataOptions {
   MockCollectUserDataOptions() {
     base::MockOnceCallback<void(std::unique_ptr<UserData>)>
         mock_confirm_callback;
-    confirm_callback = std::move(mock_confirm_callback.Get());
+    confirm_callback = mock_confirm_callback.Get();
     base::MockOnceCallback<void(int)> mock_actions_callback;
-    additional_actions_callback = std::move(mock_actions_callback.Get());
+    additional_actions_callback = mock_actions_callback.Get();
     base::MockOnceCallback<void(int)> mock_terms_callback;
-    terms_link_callback = std::move(mock_terms_callback.Get());
+    terms_link_callback = mock_terms_callback.Get();
   }
 };
 
@@ -127,7 +127,7 @@ class ControllerTest : public content::RenderViewHostTestHarness {
         .WillByDefault(RunOnceCallback<4>(true, ""));
 
     ON_CALL(*mock_web_controller_, OnElementCheck(_, _))
-        .WillByDefault(RunOnceCallback<1>(false));
+        .WillByDefault(RunOnceCallback<1>(ClientStatus()));
 
     ON_CALL(mock_observer_, OnStateChanged(_))
         .WillByDefault(Invoke([this](AutofillAssistantState state) {
@@ -522,6 +522,28 @@ TEST_F(ControllerTest, Stop) {
   EXPECT_TRUE(controller_->PerformUserAction(0));
 }
 
+TEST_F(ControllerTest, CloseCustomTab) {
+  SupportsScriptResponseProto script_response;
+  AddRunnableScript(&script_response, "stop");
+  SetNextScriptResponse(script_response);
+
+  ActionsResponseProto actions_response;
+  actions_response.add_actions()->mutable_stop()->set_close_cct(true);
+  std::string actions_response_str;
+  actions_response.SerializeToString(&actions_response_str);
+  EXPECT_CALL(*mock_service_, OnGetActions(StrEq("stop"), _, _, _, _, _))
+      .WillOnce(RunOnceCallback<5>(true, actions_response_str));
+
+  Start();
+  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+  EXPECT_CALL(mock_observer_, CloseCustomTab()).Times(1);
+
+  testing::InSequence seq;
+  EXPECT_CALL(fake_client_,
+              Shutdown(Metrics::DropOutReason::CUSTOM_TAB_CLOSED));
+  EXPECT_TRUE(controller_->PerformUserAction(0));
+}
+
 TEST_F(ControllerTest, Reset) {
   // 1. Fetch scripts for URL, which in contains a single "reset" script.
   SupportsScriptResponseProto script_response;
@@ -740,7 +762,7 @@ TEST_F(ControllerTest, KeepCheckingForElement) {
   }
 
   EXPECT_CALL(*mock_web_controller_, OnElementCheck(_, _))
-      .WillRepeatedly(RunOnceCallback<1>(true));
+      .WillRepeatedly(RunOnceCallback<1>(OkClientStatus()));
   task_environment()->FastForwardBy(base::TimeDelta::FromSeconds(1));
 
   EXPECT_EQ(AutofillAssistantState::AUTOSTART_FALLBACK_PROMPT,
@@ -1484,7 +1506,8 @@ TEST_F(ControllerTest, UserDataFormCreditCard) {
                                   Property(&UserAction::enabled, Eq(false)))))
       .Times(1);
   controller_->SetCreditCard(
-      std::make_unique<autofill::CreditCard>(*credit_card));
+      std::make_unique<autofill::CreditCard>(*credit_card),
+      /* billing_profile =*/nullptr);
 
   // Credit card with valid billing address is ok.
   auto billing_address = std::make_unique<autofill::AutofillProfile>(
@@ -1494,15 +1517,16 @@ TEST_F(ControllerTest, UserDataFormCreditCard) {
                                  "123 Zoo St.", "unit 5", "Hollywood", "CA",
                                  "91601", "US", "16505678910");
   credit_card->set_billing_address_id(billing_address->guid());
-  ON_CALL(*fake_client_.GetPersonalDataManager(),
-          GetProfileByGUID(billing_address->guid()))
-      .WillByDefault(Return(billing_address.get()));
   EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
                                   Property(&UserAction::enabled, Eq(true)))))
       .Times(1);
   controller_->SetCreditCard(
-      std::make_unique<autofill::CreditCard>(*credit_card));
+      std::make_unique<autofill::CreditCard>(*credit_card),
+      std::make_unique<autofill::AutofillProfile>(*billing_address));
   EXPECT_THAT(controller_->GetUserData()->card->Compare(*credit_card), Eq(0));
+  EXPECT_THAT(
+      controller_->GetUserData()->billing_address->Compare(*billing_address),
+      Eq(0));
 }
 
 TEST_F(ControllerTest, SetTermsAndConditions) {
@@ -1573,6 +1597,60 @@ TEST_F(ControllerTest, SetShippingAddress) {
   EXPECT_THAT(
       controller_->GetUserData()->shipping_address->Compare(*shipping_address),
       Eq(0));
+}
+
+TEST_F(ControllerTest, SetAdditionalValues) {
+  auto options = std::make_unique<MockCollectUserDataOptions>();
+  auto user_data = std::make_unique<UserData>();
+
+  user_data->additional_values_to_store["key1"] = "123456789";
+  user_data->additional_values_to_store["key2"] = "";
+  user_data->additional_values_to_store["key3"] = "";
+
+  testing::InSequence seq;
+  EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
+                                  Property(&UserAction::enabled, Eq(true)))))
+      .Times(1);
+  controller_->SetCollectUserDataOptions(std::move(options),
+                                         std::move(user_data));
+
+  EXPECT_CALL(mock_observer_, OnUserDataChanged(Not(nullptr))).Times(2);
+  controller_->SetAdditionalValue("key2", "value2");
+  controller_->SetAdditionalValue("key3", "value3");
+  EXPECT_EQ(controller_->GetUserData()->additional_values_to_store.at("key1"),
+            "123456789");
+  EXPECT_EQ(controller_->GetUserData()->additional_values_to_store.at("key2"),
+            "value2");
+  EXPECT_EQ(controller_->GetUserData()->additional_values_to_store.at("key3"),
+            "value3");
+  EXPECT_DCHECK_DEATH(controller_->SetAdditionalValue("key4", "someValue"));
+}
+
+TEST_F(ControllerTest, SetOverlayColors) {
+  EXPECT_CALL(
+      mock_observer_,
+      OnOverlayColorsChanged(AllOf(
+          Field(&Controller::OverlayColors::background, StrEq("#FF000000")),
+          Field(&Controller::OverlayColors::highlight_border,
+                StrEq("#FFFFFFFF")))));
+
+  std::map<std::string, std::string> parameters;
+  parameters["OVERLAY_COLORS"] = "#FF000000:#FFFFFFFF";
+  auto context = TriggerContext::Create(parameters, "exps");
+
+  GURL url("http://a.example.com/path");
+  controller_->Start(url, std::move(context));
+}
+
+TEST_F(ControllerTest, ChangeClientSettings) {
+  SupportsScriptResponseProto response;
+  response.mutable_client_settings()->set_periodic_script_check_interval_ms(1);
+  SetupScripts(response);
+  EXPECT_CALL(mock_observer_,
+              OnClientSettingsChanged(
+                  Field(&ClientSettings::periodic_script_check_interval,
+                        base::TimeDelta::FromMilliseconds(1))));
+  Start();
 }
 
 }  // namespace autofill_assistant

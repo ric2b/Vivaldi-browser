@@ -5,8 +5,9 @@
 package org.chromium.chrome.browser.infobar;
 
 import android.content.Context;
-import android.support.annotation.Nullable;
 import android.view.View;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.download.DownloadInfoBarController;
 import org.chromium.chrome.browser.download.DownloadManagerService;
@@ -14,7 +15,7 @@ import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.infobar.IPHInfoBarSupport.PopupState;
 import org.chromium.chrome.browser.infobar.IPHInfoBarSupport.TrackerParameters;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.widget.textbubble.TextBubble;
+import org.chromium.chrome.browser.ui.widget.textbubble.TextBubble;
 import org.chromium.components.feature_engagement.Tracker;
 
 /**

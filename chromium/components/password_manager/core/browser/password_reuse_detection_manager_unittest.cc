@@ -24,14 +24,14 @@ namespace password_manager {
 
 namespace {
 
-constexpr size_t kMaxNumberOfCharactersToStore = 30;
+constexpr size_t kMaxNumberOfCharactersToStore = 45;
 
 class MockPasswordManagerClient : public StubPasswordManagerClient {
  public:
   MockPasswordManagerClient() = default;
   ~MockPasswordManagerClient() override = default;
 
-  MOCK_CONST_METHOD0(GetPasswordStore, PasswordStore*());
+  MOCK_CONST_METHOD0(GetProfilePasswordStore, PasswordStore*());
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockPasswordManagerClient);
@@ -52,7 +52,7 @@ class PasswordReuseDetectionManagerTest : public ::testing::Test {
  protected:
   // It's needed for an initialisation of thread runners that are used in
   // MockPasswordStore.
-  base::test::TaskEnvironment task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
   MockPasswordManagerClient client_;
   scoped_refptr<MockPasswordStore> store_;
 
@@ -69,7 +69,7 @@ TEST_F(PasswordReuseDetectionManagerTest, CheckReuseCalled) {
           "1234567890abcdefghijklmnopqrstuvxyzABCDEFGHIJKLMNOPQRSTUVXYZ"),
       base::ASCIIToUTF16("?<>:'{}ABCDEF")};
 
-  EXPECT_CALL(client_, GetPasswordStore())
+  EXPECT_CALL(client_, GetProfilePasswordStore())
       .WillRepeatedly(testing::Return(store_.get()));
   PasswordReuseDetectionManager manager(&client_);
 
@@ -93,7 +93,7 @@ TEST_F(PasswordReuseDetectionManagerTest, CheckReuseCalled) {
 // inactivity.
 TEST_F(PasswordReuseDetectionManagerTest,
        CheckThatBufferClearedAfterInactivity) {
-  EXPECT_CALL(client_, GetPasswordStore())
+  EXPECT_CALL(client_, GetProfilePasswordStore())
       .WillRepeatedly(testing::Return(store_.get()));
   PasswordReuseDetectionManager manager(&client_);
 
@@ -114,7 +114,7 @@ TEST_F(PasswordReuseDetectionManagerTest,
 
 // Verify that the keystroke buffer is cleared after user presses enter.
 TEST_F(PasswordReuseDetectionManagerTest, CheckThatBufferClearedAfterEnter) {
-  EXPECT_CALL(client_, GetPasswordStore())
+  EXPECT_CALL(client_, GetProfilePasswordStore())
       .WillRepeatedly(testing::Return(store_.get()));
   PasswordReuseDetectionManager manager(&client_);
 
@@ -133,7 +133,7 @@ TEST_F(PasswordReuseDetectionManagerTest, CheckThatBufferClearedAfterEnter) {
 // Verify that after reuse found, no reuse checking happens till next main frame
 // navigation.
 TEST_F(PasswordReuseDetectionManagerTest, NoReuseCheckingAfterReuseFound) {
-  EXPECT_CALL(client_, GetPasswordStore())
+  EXPECT_CALL(client_, GetProfilePasswordStore())
       .WillRepeatedly(testing::Return(store_.get()));
   PasswordReuseDetectionManager manager(&client_);
 
@@ -152,7 +152,7 @@ TEST_F(PasswordReuseDetectionManagerTest, NoReuseCheckingAfterReuseFound) {
 
 // Verify that keystroke buffer is cleared only on cross host navigation.
 TEST_F(PasswordReuseDetectionManagerTest, DidNavigateMainFrame) {
-  EXPECT_CALL(client_, GetPasswordStore())
+  EXPECT_CALL(client_, GetProfilePasswordStore())
       .WillRepeatedly(testing::Return(store_.get()));
   PasswordReuseDetectionManager manager(&client_);
 
@@ -180,7 +180,7 @@ TEST_F(PasswordReuseDetectionManagerTest, CheckReuseCalledOnPaste) {
           "1234567890abcdefghijklmnopqrstuvxyzABCDEFGHIJKLMNOPQRSTUVXYZ"),
       base::ASCIIToUTF16("?<>:'{}ABCDEF")};
 
-  EXPECT_CALL(client_, GetPasswordStore())
+  EXPECT_CALL(client_, GetProfilePasswordStore())
       .WillRepeatedly(testing::Return(store_.get()));
   PasswordReuseDetectionManager manager(&client_);
 

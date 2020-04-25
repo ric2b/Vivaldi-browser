@@ -59,10 +59,6 @@ class UI_BASE_EXPORT SimpleMenuModel : public MenuModel {
     virtual const gfx::VectorIcon* GetVectorIconForCommandId(
         int command_id) const;
 
-    // Notifies the delegate that the item with the specified command id was
-    // visually highlighted within the menu.
-    virtual void VivaldiCommandIdHighlighted(int command_id);
-
     // Performs the action associates with the specified command id.
     // The passed |event_flags| are the flags from the event which issued this
     // command and they can be examined to find modifier keys.
@@ -82,6 +78,11 @@ class UI_BASE_EXPORT SimpleMenuModel : public MenuModel {
     bool GetAcceleratorForCommandId(
         int command_id,
         ui::Accelerator* accelerator) const override;
+
+    // Vivaldi
+    // Notifies the delegate that the item with the specified command id was
+    // visually highlighted within the menu.
+    virtual void VivaldiCommandIdHighlighted(int command_id);
   };
 
   // The Delegate can be NULL, though if it is items can't be checked or
@@ -111,6 +112,7 @@ class UI_BASE_EXPORT SimpleMenuModel : public MenuModel {
   void AddHighlightedItemWithIcon(int command_id,
                                   const base::string16& label,
                                   const gfx::ImageSkia& icon);
+  void AddTitle(const base::string16& label);
 
   // Adds a separator of the specified type to the model.
   // - Adding a separator after another separator is always invalid if they
@@ -216,12 +218,14 @@ class UI_BASE_EXPORT SimpleMenuModel : public MenuModel {
   ui::ButtonMenuItemModel* GetButtonMenuItemAt(int index) const override;
   bool IsEnabledAt(int index) const override;
   bool IsVisibleAt(int index) const override;
-  void VivaldiHighlightChangedTo(int index) override;
   void ActivatedAt(int index) override;
   void ActivatedAt(int index, int event_flags) override;
   MenuModel* GetSubmenuModelAt(int index) const override;
   void MenuWillShow() override;
   void MenuWillClose() override;
+
+  // Vivaldi
+  void VivaldiHighlightChangedTo(int index) override;
 
  protected:
   void set_delegate(Delegate* delegate) { delegate_ = delegate; }

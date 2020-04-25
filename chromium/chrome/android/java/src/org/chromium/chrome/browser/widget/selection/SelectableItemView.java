@@ -7,17 +7,20 @@ package org.chromium.chrome.browser.widget.selection;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.Nullable;
-import android.support.annotation.VisibleForTesting;
 import android.support.graphics.drawable.AnimatedVectorDrawableCompat;
 import android.support.v7.content.res.AppCompatResources;
 import android.util.AttributeSet;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.widget.TintedDrawable;
+import org.chromium.chrome.browser.ui.widget.TintedDrawable;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Default implementation of SelectableItemViewBase.
@@ -57,9 +60,13 @@ public abstract class SelectableItemView<E> extends SelectableItemViewBase<E> {
         mTitleView = findViewById(R.id.title);
         mDescriptionView = findViewById(R.id.description);
 
+        if (!ChromeApplication.isVivaldi())
         if (mIconView != null) {
             mIconView.setBackgroundResource(R.drawable.list_item_icon_modern_bg);
             ApiCompatibilityUtils.setImageTintList(mIconView, getDefaultIconTint());
+        }
+        if (ChromeApplication.isVivaldi() && mIconView != null) {
+            mIconView.setBackgroundColor(getResources().getColor(android.R.color.transparent));
         }
     }
 
@@ -90,7 +97,9 @@ public abstract class SelectableItemView<E> extends SelectableItemViewBase<E> {
         if (isChecked()) {
             mIconView.getBackground().setLevel(mSelectedLevel);
             mIconView.setImageDrawable(mCheckDrawable);
+            if (!ChromeApplication.isVivaldi())
             ApiCompatibilityUtils.setImageTintList(mIconView, mIconColorList);
+            if (!ChromeApplication.isVivaldi() || mCheckDrawable != null)
             if (animate) mCheckDrawable.start();
         } else {
             mIconView.getBackground().setLevel(mDefaultLevel);

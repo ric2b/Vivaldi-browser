@@ -25,12 +25,12 @@
 #include "content/public/common/previews_state.h"
 #include "content/public/common/window_container_type.mojom-forward.h"
 #include "third_party/blink/public/common/frame/blocked_navigation_types.h"
-#include "third_party/blink/public/common/manifest/web_display_mode.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
+#include "third_party/blink/public/common/security/security_style.h"
 #include "third_party/blink/public/mojom/choosers/color_chooser.mojom-forward.h"
+#include "third_party/blink/public/mojom/frame/fullscreen.mojom-forward.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
-#include "third_party/blink/public/platform/web_security_style.h"
-#include "third_party/blink/public/web/web_fullscreen_options.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -57,7 +57,6 @@ class ColorChooser;
 class FileSelectListener;
 class JavaScriptDialogManager;
 class RenderFrameHost;
-class RenderProcessHost;
 class RenderWidgetHost;
 class SessionStorageNamespace;
 class SiteInstance;
@@ -319,35 +318,30 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual bool OnGoToEntryOffset(int offset);
 
   // Allows delegate to control whether a new WebContents can be created by
-  // |web_contents|.
+  // the WebContents itself.
   //
-  // The route ID parameters passed to this method are associated with the
-  // |source_site_instance|'s RenderProcessHost. They may also be
-  // MSG_ROUTING_NONE. If they are valid, they correspond to a trio of
-  // RenderView, RenderFrame, and RenderWidget objects that have been created in
-  // the renderer, but not yet assigned a WebContents, RenderViewHost,
-  // RenderFrameHost, or RenderWidgetHost.
+  // If an delegate returns true, it can optionally also override
+  // CreateCustomWebContents() below to provide their own WebContents.
+  virtual bool IsWebContentsCreationOverridden(
+      SiteInstance* source_site_instance,
+      content::mojom::WindowContainerType window_container_type,
+      const GURL& opener_url,
+      const std::string& frame_name,
+      const GURL& target_url);
+
+  // Allow delegate to creates a custom WebContents when
+  // WebContents::CreateNewWindow() is called. This function is only called
+  // when IsWebContentsCreationOverridden() returns true.
   //
-  // The return value is interpreted as follows:
-  //
-  //   Return true: |web_contents| should create a WebContents.
-  //   Return false: |web_contents| should not create a WebContents. The
-  //       provisionally-created RenderView (if it exists) in the renderer
-  //       process will be destroyed, UNLESS the delegate, during this method,
-  //       itself creates a WebContents using |source_site_instance|,
-  //       |route_id|, |main_frame_route_id|, and |main_frame_widget_route_id|
-  //       as creation parameters. If this happens, the delegate assumes
-  //       ownership of the corresponding RenderView, etc. |web_contents| will
-  //       detect that this has happened by looking for the existence of a
-  //       RenderViewHost in |source_site_instance| with |route_id|.
-  virtual bool ShouldCreateWebContents(
-      WebContents* web_contents,
+  // In general, a delegate should return a pointer to a created WebContents
+  // so that the opener can be given a references to it as appropriate.
+  // Returning nullptr also makes sense if the delegate wishes to suppress
+  // all window creation, or if the delegate wants to ensure the opener
+  // cannot get a reference effectively creating a new browsing instance.
+  virtual WebContents* CreateCustomWebContents(
       RenderFrameHost* opener,
       SiteInstance* source_site_instance,
-      int32_t route_id,
-      int32_t main_frame_route_id,
-      int32_t main_frame_widget_route_id,
-      content::mojom::WindowContainerType window_container_type,
+      bool is_new_browsing_instance,
       const GURL& opener_url,
       const std::string& frame_name,
       const GURL& target_url,
@@ -455,7 +449,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual void EnterFullscreenModeForTab(
       WebContents* web_contents,
       const GURL& origin,
-      const blink::WebFullscreenOptions& options) {}
+      const blink::mojom::FullscreenOptions& options) {}
 
   // Called when the renderer puts a tab out of fullscreen mode.
   virtual void ExitFullscreenModeForTab(WebContents*) {}
@@ -463,11 +457,12 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual bool IsFullscreenForTabOrPending(const WebContents* web_contents);
 
   // Returns the actual display mode of the top-level browsing context.
-  // For example, it should return 'blink::WebDisplayModeFullscreen' whenever
-  // the browser window is put to fullscreen mode (either by the end user,
-  // or HTML API or from a web manifest setting).
-  // See http://w3c.github.io/manifest/#dfn-display-mode
-  virtual blink::WebDisplayMode GetDisplayMode(const WebContents* web_contents);
+  // For example, it should return 'blink::mojom::DisplayModeFullscreen'
+  // whenever the browser window is put to fullscreen mode (either by the end
+  // user, or HTML API or from a web manifest setting). See
+  // http://w3c.github.io/manifest/#dfn-display-mode
+  virtual blink::mojom::DisplayMode GetDisplayMode(
+      const WebContents* web_contents);
 
   // Register a new handler for URL requests with the given scheme.
   // |user_gesture| is true if the registration is made in the context of a user
@@ -606,8 +601,8 @@ class CONTENT_EXPORT WebContentsDelegate {
   // Can be overridden by a delegate to return the security style of the
   // given |web_contents|, populating |security_style_explanations| to
   // explain why the SecurityStyle was downgraded. Returns
-  // WebSecurityStyleUnknown if not overriden.
-  virtual blink::WebSecurityStyle GetSecurityStyle(
+  // SecurityStyleUnknown if not overriden.
+  virtual blink::SecurityStyle GetSecurityStyle(
       WebContents* web_contents,
       SecurityStyleExplanations* security_style_explanations);
 

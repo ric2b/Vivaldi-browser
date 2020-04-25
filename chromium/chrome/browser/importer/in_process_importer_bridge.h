@@ -19,6 +19,7 @@ class GURL;
 struct ImportedBookmarkEntry;
 class ExternalProcessImporterHost;
 
+// Vivaldi
 struct ImportedSpeedDialEntry;
 
 namespace importer {
@@ -33,13 +34,6 @@ class InProcessImporterBridge : public ImporterBridge {
   // Begin ImporterBridge implementation:
   void AddBookmarks(const std::vector<ImportedBookmarkEntry>& bookmarks,
                     const base::string16& first_folder_name) override;
-
-  void AddNotes(
-      const std::vector<ImportedNotesEntry>& notes,
-      const base::string16& first_folder_name) override;
-
-  void AddSpeedDial(
-      const std::vector<ImportedSpeedDialEntry>& speeddials) override;
 
   void AddHomePage(const GURL& home_page) override;
 
@@ -64,6 +58,15 @@ class InProcessImporterBridge : public ImporterBridge {
   void NotifyItemStarted(importer::ImportItem item) override;
   void NotifyItemEnded(importer::ImportItem item) override;
   void NotifyEnded() override;
+
+  // Vivaldi
+  void AddNotes(
+      const std::vector<ImportedNotesEntry>& notes,
+      const base::string16& first_folder_name) override;
+
+  void AddSpeedDial(
+      const std::vector<ImportedSpeedDialEntry>& speeddials) override;
+
   void NotifyItemFailed(importer::ImportItem item,
                         const std::string& error) override;
 

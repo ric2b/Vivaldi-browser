@@ -114,6 +114,7 @@ Polymer({
     this.$.pinKeyboard.value = '';
     this.processingCompletion_ = false;
     this.userEdited_ = false;
+    this.$.pinKeyboard.focusInput();
   },
 
   /**
@@ -160,5 +161,29 @@ Polymer({
    */
   isAttemptsLeftVisible_: function(parameters) {
     return parameters && parameters.attemptsLeft != -1;
+  },
+
+  /**
+   * Returns the aria label to be used for the PIN input field.
+   * @param {string} locale
+   * @param {OobeTypes.SecurityTokenPinDialogParameters} parameters
+   * @param {string} errorLabelId
+   * @param {boolean} userEdited
+   * @return {string}
+   * @private
+   */
+  getAriaLabel_: function(locale, parameters, errorLabelId, userEdited) {
+    var pieces = [];
+    if (this.isErrorLabelVisible_(errorLabelId, userEdited)) {
+      pieces.push(this.i18n(errorLabelId));
+      pieces.push(this.i18n('securityTokenPinDialogTryAgain'));
+    }
+    if (this.isAttemptsLeftVisible_(parameters)) {
+      pieces.push(this.i18n(
+          'securityTokenPinDialogAttemptsLeft', parameters.attemptsLeft));
+    }
+    // Note: The language direction is not taken into account here, since the
+    // order of pieces follows the reading order.
+    return pieces.join(' ');
   },
 });

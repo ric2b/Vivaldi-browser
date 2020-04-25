@@ -11,8 +11,7 @@
 
 namespace device {
 
-VRDeviceBase::VRDeviceBase(mojom::XRDeviceId id)
-    : id_(id), runtime_binding_(this) {}
+VRDeviceBase::VRDeviceBase(mojom::XRDeviceId id) : id_(id) {}
 
 VRDeviceBase::~VRDeviceBase() = default;
 
@@ -43,7 +42,7 @@ bool VRDeviceBase::HasExclusiveSession() {
 }
 
 void VRDeviceBase::ListenToDeviceChanges(
-    mojom::XRRuntimeEventListenerAssociatedPtrInfo listener_info,
+    mojo::PendingAssociatedRemote<mojom::XRRuntimeEventListener> listener_info,
     mojom::XRRuntime::ListenToDeviceChangesCallback callback) {
   listener_.Bind(std::move(listener_info));
   std::move(callback).Run(display_info_.Clone());
@@ -64,10 +63,14 @@ void VRDeviceBase::OnActivate(mojom::VRDisplayEventReason reason,
     listener_->OnDeviceActivated(reason, std::move(on_handled));
 }
 
-mojom::XRRuntimePtr VRDeviceBase::BindXRRuntimePtr() {
-  mojom::XRRuntimePtr runtime;
-  runtime_binding_.Bind(mojo::MakeRequest(&runtime));
-  return runtime;
+void VRDeviceBase::OnVisibilityStateChanged(
+    mojom::XRVisibilityState visibility_state) {
+  if (listener_)
+    listener_->OnVisibilityStateChanged(visibility_state);
+}
+
+mojo::PendingRemote<mojom::XRRuntime> VRDeviceBase::BindXRRuntime() {
+  return runtime_receiver_.BindNewPipeAndPassRemote();
 }
 
 void VRDeviceBase::OnListeningForActivate(bool listening) {}

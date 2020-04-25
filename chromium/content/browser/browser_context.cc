@@ -42,7 +42,6 @@
 #include "content/browser/media/browser_feature_provider.h"
 #include "content/browser/permissions/permission_controller_impl.h"
 #include "content/browser/push_messaging/push_messaging_router.h"
-#include "content/browser/service_manager/common_browser_interfaces.h"
 #include "content/browser/storage_partition_impl_map.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/public/browser/blob_handle.h"
@@ -54,12 +53,14 @@
 #include "content/public/browser/shared_cors_origin_access_list.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/system_connector.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
 #include "media/base/media_switches.h"
 #include "media/capabilities/in_memory_video_decode_stats_db_impl.h"
 #include "media/capabilities/video_decode_stats_db_impl.h"
+#include "media/learning/common/media_learning_tasks.h"
 #include "media/learning/impl/learning_session_impl.h"
 #include "media/mojo/services/video_decode_perf_history.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -67,9 +68,6 @@
 #include "net/url_request/url_request_context.h"
 #include "services/content/public/mojom/constants.mojom.h"
 #include "services/content/service.h"
-#include "services/file/file_service.h"
-#include "services/file/public/mojom/constants.mojom.h"
-#include "services/file/user_id_map.h"
 #include "services/network/public/cpp/features.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service.h"
@@ -104,52 +102,6 @@ class ServiceInstanceGroupHolder : public base::SupportsUserData::Data {
   DISALLOW_COPY_AND_ASSIGN(ServiceInstanceGroupHolder);
 };
 
-// The file service runs on the IO thread but we want to limit its lifetime to
-// that of the BrowserContext which creates it. This provides thread-safe access
-// to the relevant state on the IO thread.
-class FileServiceIOThreadState
-    : public base::RefCountedThreadSafe<FileServiceIOThreadState> {
- public:
-  explicit FileServiceIOThreadState(
-      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
-      : io_task_runner_(std::move(io_task_runner)) {}
-
-  void StartOnIOThread(service_manager::mojom::ServiceRequest request) {
-    DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
-    file_service_ = std::make_unique<file::FileService>(std::move(request));
-  }
-
-  void ShutDown() {
-    io_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&FileServiceIOThreadState::ShutDownOnIOThread, this));
-  }
-
- private:
-  friend class base::RefCountedThreadSafe<FileServiceIOThreadState>;
-
-  ~FileServiceIOThreadState() { DCHECK(!file_service_); }
-
-  void ShutDownOnIOThread() { file_service_.reset(); }
-
-  const scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
-  std::unique_ptr<file::FileService> file_service_;
-
-  DISALLOW_COPY_AND_ASSIGN(FileServiceIOThreadState);
-};
-
-class FileServiceHolder : public base::SupportsUserData::Data {
- public:
-  explicit FileServiceHolder(scoped_refptr<FileServiceIOThreadState> state)
-      : state_(std::move(state)) {}
-  ~FileServiceHolder() override { state_->ShutDown(); }
-
- private:
-  const scoped_refptr<FileServiceIOThreadState> state_;
-
-  DISALLOW_COPY_AND_ASSIGN(FileServiceHolder);
-};
-
 class ContentServiceDelegateHolder : public base::SupportsUserData::Data {
  public:
   explicit ContentServiceDelegateHolder(BrowserContext* browser_context)
@@ -167,7 +119,6 @@ class ContentServiceDelegateHolder : public base::SupportsUserData::Data {
 // Key names on BrowserContext.
 const char kBrowsingDataRemoverKey[] = "browsing-data-remover";
 const char kContentServiceDelegateKey[] = "content-service-delegate";
-const char kFileServiceKey[] = "file-service";
 const char kDownloadManagerKeyName[] = "download_manager";
 const char kPermissionControllerKey[] = "permission-controller";
 const char kServiceManagerConnection[] = "service-manager-connection";
@@ -498,11 +449,11 @@ BrowserContext::BlobContextGetter BrowserContext::GetBlobStorageContext(
 }
 
 // static
-blink::mojom::BlobPtr BrowserContext::GetBlobPtr(
+mojo::PendingRemote<blink::mojom::Blob> BrowserContext::GetBlobRemote(
     BrowserContext* browser_context,
     const std::string& uuid) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return ChromeBlobStorageContext::GetBlobPtr(browser_context, uuid);
+  return ChromeBlobStorageContext::GetBlobRemote(browser_context, uuid);
 }
 
 // static
@@ -635,13 +586,6 @@ void BrowserContext::SetDownloadManagerForTesting(
 void BrowserContext::Initialize(BrowserContext* browser_context,
                                 const base::FilePath& path) {
   const base::Token new_group = base::Token::CreateRandom();
-  ServiceInstanceGroupHolder* holder = static_cast<ServiceInstanceGroupHolder*>(
-      browser_context->GetUserData(kServiceInstanceGroup));
-  if (holder) {
-    file::ForgetServiceInstanceGroupUserDirAssociation(
-        holder->instance_group());
-  }
-  file::AssociateServiceInstanceGroupWithUserDir(new_group, path);
   RemoveBrowserContextFromInstanceGroupMap(browser_context);
   GetTokenToContextMap()[new_group] = browser_context;
   browser_context->SetUserData(
@@ -677,23 +621,6 @@ void BrowserContext::Initialize(BrowserContext* browser_context,
         kContentServiceDelegateKey,
         std::make_unique<ContentServiceDelegateHolder>(browser_context));
 
-    scoped_refptr<FileServiceIOThreadState> file_service_io_thread_state =
-        base::MakeRefCounted<FileServiceIOThreadState>(
-            base::CreateSingleThreadTaskRunner({BrowserThread::IO}));
-    connection->AddServiceRequestHandler(
-        file::mojom::kServiceName,
-        base::BindRepeating(
-            [](scoped_refptr<FileServiceIOThreadState> io_thread_state,
-               service_manager::mojom::ServiceRequest request) {
-              io_thread_state->StartOnIOThread(std::move(request));
-            },
-            file_service_io_thread_state));
-
-    browser_context->SetUserData(kFileServiceKey,
-                                 std::make_unique<FileServiceHolder>(
-                                     std::move(file_service_io_thread_state)));
-
-    RegisterCommonBrowserInterfaces(connection);
     connection->Start();
   }
 }
@@ -823,6 +750,15 @@ media::learning::LearningSession* BrowserContext::GetLearningSession() {
         std::make_unique<media::learning::LearningSessionImpl>(
             base::SequencedTaskRunnerHandle::Get());
 
+    // Register all the LearningTasks.
+    auto cb = base::BindRepeating(
+        [](media::learning::LearningSessionImpl* session,
+           const media::learning::LearningTask& task) {
+          session->RegisterTask(task);
+        },
+        new_learning_session.get());
+    media::learning::MediaLearningTasks::Register(std::move(cb));
+
     learning_session = new_learning_session.get();
 
     SetUserData(kLearningSession, std::move(new_learning_session));
@@ -850,6 +786,10 @@ SharedCorsOriginAccessList* BrowserContext::GetSharedCorsOriginAccessList() {
   static const base::NoDestructor<scoped_refptr<SharedCorsOriginAccessList>>
       empty_list(SharedCorsOriginAccessList::Create());
   return empty_list->get();
+}
+
+bool BrowserContext::ShouldEnableOutOfBlinkCors() {
+  return base::FeatureList::IsEnabled(network::features::kOutOfBlinkCors);
 }
 
 NativeFileSystemPermissionContext*

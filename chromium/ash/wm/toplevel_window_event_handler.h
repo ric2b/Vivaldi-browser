@@ -30,6 +30,7 @@ class GestureEvent;
 }  // namespace ui
 
 namespace ash {
+class BackGestureAffordance;
 namespace mojom {
 enum class WindowStateType;
 }
@@ -43,6 +44,13 @@ class ASH_EXPORT ToplevelWindowEventHandler
       public ui::EventHandler,
       public ::wm::WindowMoveClient {
  public:
+  // The distance for swiping from left edge to go previous page.
+  static constexpr int kSwipingDistanceForGoingBack = 80;
+
+  // The threshold of the fling velocity while fling from left edge to go
+  // previous page.
+  static constexpr int kFlingVelocityForGoingBack = 1000;
+
   // Describes what triggered ending the drag.
   enum class DragResult {
     // The drag successfully completed.
@@ -157,6 +165,9 @@ class ASH_EXPORT ToplevelWindowEventHandler
   void UpdateGestureTarget(aura::Window* window,
                            const gfx::Point& location = gfx::Point());
 
+  // True if the event is handled for swiping to previous page.
+  bool HandleGoingBackFromLeftEdge(ui::GestureEvent* event);
+
   // The hittest result for the first finger at the time that it initially
   // touched the screen. |first_finger_hittest_| is one of ui/base/hit_test.h
   int first_finger_hittest_;
@@ -177,6 +188,13 @@ class ASH_EXPORT ToplevelWindowEventHandler
 
   // Are we running a nested run loop from RunMoveLoop().
   bool in_move_loop_ = false;
+
+  // True if swiping from left edge to go to previous page is in progress.
+  bool going_back_started_ = false;
+
+  // Used to show the affordance while swiping from left edge to go to the
+  // previout page.
+  std::unique_ptr<BackGestureAffordance> back_gesture_affordance_;
 
   base::WeakPtrFactory<ToplevelWindowEventHandler> weak_factory_{this};
 

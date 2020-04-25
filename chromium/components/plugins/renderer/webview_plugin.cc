@@ -20,7 +20,9 @@
 #include "gin/converter.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "skia/ext/platform_canvas.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/mojom/frame/document_interface_broker.mojom.h"
+#include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_response.h"
@@ -123,7 +125,7 @@ bool WebViewPlugin::Initialize(WebPluginContainer* container) {
   // resources when images have a "srcset" attribute.
   web_view()->SetDeviceScaleFactor(container_->DeviceScaleFactor());
   web_view()->SetZoomLevel(
-      blink::WebView::ZoomFactorToZoomLevel(container_->PageZoomFactor()));
+      blink::PageZoomFactorToZoomLevel(container_->PageZoomFactor()));
 
   return true;
 }
@@ -192,10 +194,12 @@ void WebViewPlugin::UpdateGeometry(const WebRect& window_rect,
 
   // Plugin updates are forbidden during Blink layout. Therefore,
   // UpdatePluginForNewGeometry must be posted to a task to run asynchronously.
-  GetTaskRunner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&WebViewPlugin::UpdatePluginForNewGeometry,
-                     weak_factory_.GetWeakPtr(), window_rect, unobscured_rect));
+  blink::scheduler::WebThreadScheduler::MainThreadScheduler()
+      ->CompositorTaskRunner()
+      ->PostTask(FROM_HERE,
+                 base::BindOnce(&WebViewPlugin::UpdatePluginForNewGeometry,
+                                weak_factory_.GetWeakPtr(), window_rect,
+                                unobscured_rect));
 }
 
 void WebViewPlugin::UpdateFocus(bool focused, blink::WebFocusType focus_type) {
@@ -384,7 +388,7 @@ void WebViewPlugin::WebViewHelper::FrameDetached(DetachType type) {
 void WebViewPlugin::OnZoomLevelChanged() {
   if (container_) {
     web_view()->SetZoomLevel(
-        blink::WebView::ZoomFactorToZoomLevel(container_->PageZoomFactor()));
+        blink::PageZoomFactorToZoomLevel(container_->PageZoomFactor()));
   }
 }
 

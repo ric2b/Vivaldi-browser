@@ -66,7 +66,7 @@ class UiControllerAndroid : public ControllerObserver {
               Client* client,
               UiDelegate* ui_delegate);
 
-  // Detaches the UI from the its delegate. This guarantees the delegate is not
+  // Detaches the UI from its delegate. This guarantees the delegate is not
   // called anymore after the call.
   void Detach();
 
@@ -116,10 +116,25 @@ class UiControllerAndroid : public ControllerObserver {
   void OnShippingAddressChanged(
       std::unique_ptr<autofill::AutofillProfile> address);
   void OnContactInfoChanged(std::unique_ptr<autofill::AutofillProfile> profile);
-  void OnCreditCardChanged(std::unique_ptr<autofill::CreditCard> card);
+  void OnCreditCardChanged(
+      std::unique_ptr<autofill::CreditCard> card,
+      std::unique_ptr<autofill::AutofillProfile> billing_profile);
   void OnTermsAndConditionsChanged(TermsAndConditionsState state);
   void OnLoginChoiceChanged(std::string identifier);
   void OnTermsAndConditionsLinkClicked(int link);
+  void OnDateTimeRangeStartChanged(int year,
+                                   int month,
+                                   int day,
+                                   int hour,
+                                   int minute,
+                                   int second);
+  void OnDateTimeRangeEndChanged(int year,
+                                 int month,
+                                 int day,
+                                 int hour,
+                                 int minute,
+                                 int second);
+  void OnKeyValueChanged(const std::string& key, const std::string& value);
 
   // Called by AssistantFormDelegate:
   void OnCounterChanged(int input_index, int counter_index, int value);

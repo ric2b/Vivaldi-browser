@@ -225,6 +225,30 @@ std::vector<InteractionsStats> TestPasswordStore::GetAllSiteStatsImpl() {
   return std::vector<InteractionsStats>();
 }
 
+void TestPasswordStore::AddLeakedCredentialsImpl(
+    const LeakedCredentials& stats) {
+  NOTIMPLEMENTED();
+}
+
+void TestPasswordStore::RemoveLeakedCredentialsImpl(
+    const GURL& url,
+    const base::string16& username) {
+  NOTIMPLEMENTED();
+}
+
+std::vector<LeakedCredentials>
+TestPasswordStore::GetAllLeakedCredentialsImpl() {
+  NOTIMPLEMENTED();
+  return std::vector<LeakedCredentials>();
+}
+
+void TestPasswordStore::RemoveLeakedCredentialsByUrlAndTimeImpl(
+    const base::RepeatingCallback<bool(const GURL&)>& url_filter,
+    base::Time remove_begin,
+    base::Time remove_end) {
+  NOTIMPLEMENTED();
+}
+
 bool TestPasswordStore::BeginTransaction() {
   return true;
 }

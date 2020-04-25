@@ -110,11 +110,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
   mojom::MediaMetricsProviderPtr take_metrics_provider() {
     return std::move(metrics_provider_);
   }
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  media::IPCMediaPipelineHost::Creator ipc_media_pipeline_host_creator() const {
-    return ipc_media_pipeline_host_creator_;
-  }
-#endif
 
   const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner() const {
     return media_task_runner_;
@@ -182,6 +177,11 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
     return is_background_video_track_optimization_supported_;
   }
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  media::IPCMediaPipelineHost::Creator ipc_media_pipeline_host_creator() const {
+    return ipc_media_pipeline_host_creator_;
+  }
+#endif
  private:
   DeferLoadCB defer_load_cb_;
   scoped_refptr<SwitchableAudioRendererSink> audio_renderer_sink_;

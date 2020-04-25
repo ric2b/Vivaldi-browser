@@ -40,7 +40,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/page_zoom.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/stop_find_action.h"
 #include "content/public/common/url_constants.h"
@@ -68,6 +67,7 @@
 #include "net/cookies/canonical_cookie.h"
 #include "third_party/blink/public/common/logging/logging_utils.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "url/url_constants.h"
@@ -188,6 +188,10 @@ static std::string TerminationStatusToString(base::TerminationStatus status) {
       return "crashed";
     case base::TERMINATION_STATUS_LAUNCH_FAILED:
       return "failed to launch";
+#if defined(OS_WIN)
+    case base::TERMINATION_STATUS_INTEGRITY_FAILURE:
+      return "integrity failure";
+#endif
     case base::TERMINATION_STATUS_MAX_ENUM:
       break;
   }
@@ -232,7 +236,7 @@ void ParsePartitionParam(const base::DictionaryValue& create_params,
 }
 
 double ConvertZoomLevelToZoomFactor(double zoom_level) {
-  double zoom_factor = content::ZoomLevelToZoomFactor(zoom_level);
+  double zoom_factor = blink::PageZoomLevelToZoomFactor(zoom_level);
   // Because the conversion from zoom level to zoom factor isn't perfect, the
   // resulting zoom factor is rounded to the nearest 6th decimal place.
   zoom_factor = round(zoom_factor * 1000000) / 1000000;
@@ -379,7 +383,6 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
     return;
   }
   std::string partition_domain = GetOwnerSiteURL().host();
-
   GURL guest_site;
   std::string new_url;
   if (IsVivaldiApp(owner_host())) {
@@ -408,7 +411,6 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
   auto* guest_view_manager = GuestViewManager::FromBrowserContext(context);
   scoped_refptr<content::SiteInstance> guest_site_instance =
       guest_view_manager->GetGuestSiteInstance(guest_site);
-
   if (!guest_site_instance) {
     // Create the SiteInstance in a new BrowsingInstance, which will ensure
     // that webview tags are also not allowed to send messages across
@@ -567,11 +569,11 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
       }
     }
 
-    WebContents::CreateParams params =
-        GetWebContentsCreateParams(context, guest_site);
-    // TODO(erikchen): Fix ownership semantics for guest views.
-    // https://crbug.com/832879.
-    new_contents = WebContents::Create(params).release();
+  WebContents::CreateParams params =
+      GetWebContentsCreateParams(context, guest_site);
+  // TODO(erikchen): Fix ownership semantics for guest views.
+  // https://crbug.com/832879.
+  new_contents = WebContents::Create(params).release();
 
     if (IsVivaldiRunning()) {
       std::string view_name;
@@ -1154,10 +1156,10 @@ void WebViewGuest::ReadyToCommitNavigation(
   // factories are pushed slightly later - during the commit.
   constexpr bool kPushToRendererNow = false;
 
-  // |request_initiator| in fetches initiated by content scripts should use the
-  // origin of the <webview> embedder.
+  // Content scripts run in an isolated world associated with the origin of the
+  // <webview> embedder.
   navigation_handle->GetRenderFrameHost()
-      ->MarkInitiatorsAsRequiringSeparateURLLoaderFactory(
+      ->MarkIsolatedWorldsAsRequiringSeparateURLLoaderFactory(
           {owner_web_contents()->GetMainFrame()->GetLastCommittedOrigin()},
           kPushToRendererNow);
 }
@@ -1607,7 +1609,7 @@ void WebViewGuest::SetZoom(double zoom_factor) {
   did_set_explicit_zoom_ = true;
   auto* zoom_controller = ZoomController::FromWebContents(web_contents());
   DCHECK(zoom_controller);
-  double zoom_level = content::ZoomFactorToZoomLevel(zoom_factor);
+  double zoom_level = blink::PageZoomFactorToZoomLevel(zoom_factor);
   zoom_controller->SetZoomLevel(zoom_level);
 }
 
@@ -1746,6 +1748,7 @@ WebContents* WebViewGuest::OpenURLFromTab(
       return nullptr;
     }
   }
+
   if (IsVivaldiRunning()) {
     // NOTE(pettern@vivaldi.com): Fix for VB-43122. Let devtools handle opening
     // links from devtools.
@@ -1754,6 +1757,7 @@ WebContents* WebViewGuest::OpenURLFromTab(
       return window->OpenURLFromTab(source, params);
     }
   }
+
   // This code path is taken if RenderFrameImpl::DecidePolicyForNavigation
   // decides that a fork should happen. At the time of writing this comment,
   // the only way a well behaving guest could hit this code path is if it
@@ -1796,7 +1800,7 @@ void WebViewGuest::WebContentsCreated(WebContents* source_contents,
 void WebViewGuest::EnterFullscreenModeForTab(
     WebContents* web_contents,
     const GURL& origin,
-    const blink::WebFullscreenOptions& options) {
+    const blink::mojom::FullscreenOptions& options) {
   // Ask the embedder for permission.
   base::DictionaryValue request_info;
   request_info.SetString(webview::kOrigin, origin.spec());
@@ -1960,10 +1964,10 @@ void WebViewGuest::RequestNewWindowPermission(WindowOpenDisposition disposition,
       }
     }
   } else {
-    if (it == pending_new_windows_.end())
-      return;
+  if (it == pending_new_windows_.end())
+    return;
   }
-  const NewWindowInfo &new_window_info = it->second;
+  const NewWindowInfo& new_window_info = it->second;
 
   // Retrieve the opener partition info if we have it.
   const GURL& site_url = new_contents->GetSiteInstance()->GetSiteURL();

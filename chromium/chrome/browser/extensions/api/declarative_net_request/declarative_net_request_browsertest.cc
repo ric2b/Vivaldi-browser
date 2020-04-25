@@ -2798,6 +2798,110 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
   EXPECT_EQ(first_tab_badge_text, action->GetDisplayBadgeText(first_tab_id));
 }
 
+// Ensure web request events are still dispatched even if DNR blocks/redirects
+// the request. (Regression test for crbug.com/999744).
+IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest, WebRequestEvents) {
+  // Load the extension with a background script so scripts can be run from its
+  // generated background page.
+  set_has_background_script(true);
+
+  TestRule rule = CreateGenericRule();
+  rule.condition->url_filter = "||example.com";
+  rule.condition->resource_types = std::vector<std::string>({"main_frame"});
+  ASSERT_NO_FATAL_FAILURE(LoadExtensionWithRules(
+      {rule}, "test_extension", {URLPattern::kAllUrlsPattern}));
+
+  GURL url = embedded_test_server()->GetURL("example.com",
+                                            "/pages_with_script/index.html");
+
+  // Set up web request listeners listening to request to |url|.
+  const char kWebRequestListenerScript[] = R"(
+    let filter = {'urls' : ['%s'], 'types' : ['main_frame']};
+
+    let onBeforeRequestSeen = false;
+    chrome.webRequest.onBeforeRequest.addListener(() => {
+      onBeforeRequestSeen = true;
+    }, filter);
+
+    // The request will fail since it will be blocked by DNR.
+    chrome.webRequest.onErrorOccurred.addListener(() => {
+      if (onBeforeRequestSeen)
+        chrome.test.sendMessage('PASS');
+    }, filter);
+
+    chrome.test.sendMessage('INSTALLED');
+  )";
+
+  ExtensionTestMessageListener pass_listener("PASS", false /* will_reply */);
+  ExtensionTestMessageListener installed_listener("INSTALLED",
+                                                  false /* will_reply */);
+  ExecuteScriptInBackgroundPageNoWait(
+      last_loaded_extension_id(),
+      base::StringPrintf(kWebRequestListenerScript, url.spec().c_str()));
+
+  // Wait for the web request listeners to be installed before navigating.
+  ASSERT_TRUE(installed_listener.WaitUntilSatisfied());
+
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  ASSERT_FALSE(WasFrameWithScriptLoaded(GetMainFrame()));
+  EXPECT_TRUE(pass_listener.WaitUntilSatisfied());
+}
+
+// Ensure Declarative Net Request gets priority over the web request API.
+IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest, WebRequestPriority) {
+  // Load the extension with a background script so scripts can be run from its
+  // generated background page.
+  set_has_background_script(true);
+
+  GURL url = embedded_test_server()->GetURL("example.com",
+                                            "/pages_with_script/index.html");
+  GURL redirect_url = embedded_test_server()->GetURL(
+      "redirect.com", "/pages_with_script/index.html");
+
+  TestRule example_com_redirect_rule = CreateGenericRule();
+  example_com_redirect_rule.condition->url_filter = "||example.com";
+  example_com_redirect_rule.condition->resource_types =
+      std::vector<std::string>({"main_frame"});
+  example_com_redirect_rule.action->type = std::string("redirect");
+  example_com_redirect_rule.action->redirect.emplace();
+  example_com_redirect_rule.action->redirect->url = redirect_url.spec();
+  example_com_redirect_rule.priority = kMinValidPriority;
+
+  ASSERT_NO_FATAL_FAILURE(
+      LoadExtensionWithRules({example_com_redirect_rule}, "test_extension",
+                             {URLPattern::kAllUrlsPattern}));
+
+  // Set up a web request listener to block the request to example.com.
+  const char kWebRequestBlockScript[] = R"(
+    let filter = {'urls' : ['%s'], 'types' : ['main_frame']};
+    chrome.webRequest.onBeforeRequest.addListener((details) => {
+      chrome.test.sendMessage('SEEN')
+    }, filter, ['blocking']);
+    chrome.test.sendMessage('INSTALLED');
+  )";
+
+  ExtensionTestMessageListener seen_listener("SEEN", false /* will_reply */);
+  ExtensionTestMessageListener installed_listener("INSTALLED",
+                                                  false /* will_reply */);
+  ExecuteScriptInBackgroundPageNoWait(
+      last_loaded_extension_id(),
+      base::StringPrintf(kWebRequestBlockScript, url.spec().c_str()));
+
+  // Wait for the web request listeners to be installed before navigating.
+  ASSERT_TRUE(installed_listener.WaitUntilSatisfied());
+
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  // Ensure the response from the web request listener was ignored and the
+  // request was redirected.
+  ASSERT_TRUE(WasFrameWithScriptLoaded(GetMainFrame()));
+  EXPECT_EQ(web_contents()->GetLastCommittedURL(), redirect_url);
+
+  // Ensure onBeforeRequest is seen by the web request extension.
+  EXPECT_TRUE(seen_listener.WaitUntilSatisfied());
+}
+
 // Test that the extension cannot retrieve the number of actions matched
 // from the badge text by calling chrome.browserAction.getBadgeText.
 IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
@@ -3043,6 +3147,116 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
     ui_test_utils::NavigateToURL(browser(), url);
     EXPECT_EQ(test_case.expected_badge_text,
               action->GetDisplayBadgeText(first_tab_id));
+  }
+}
+
+// Test that the badge text for extensions will update correctly for
+// removeHeader rules.
+IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
+                       RemoveHeadersBadgeText) {
+  auto referer_url = embedded_test_server()->GetURL(
+      "example.com", "/set-header?referer: none");
+  auto set_cookie_url =
+      embedded_test_server()->GetURL("example.com", "/set-cookie?a=b");
+
+  // Navigates frame with name |frame_name| to |url|.
+  auto navigate_frame = [this](const std::string& frame_name, const GURL& url,
+                               bool use_frame_referrer) {
+    content::TestNavigationObserver navigation_observer(
+        web_contents(), 1 /*number_of_navigations*/);
+
+    const char* referrer_policy = use_frame_referrer ? "origin" : "no-referrer";
+
+    ASSERT_TRUE(content::ExecuteScript(
+        GetMainFrame(),
+        base::StringPrintf(R"(
+          document.getElementsByName('%s')[0].referrerPolicy = '%s';
+          document.getElementsByName('%s')[0].src = '%s';)",
+                           frame_name.c_str(), referrer_policy,
+                           frame_name.c_str(), url.spec().c_str())));
+    navigation_observer.Wait();
+  };
+
+  const std::string kFrameName1 = "frame1";
+  const GURL page_url = embedded_test_server()->GetURL(
+      "nomatch.com", "/page_with_two_frames.html");
+
+  // Create an extension with a rule to remove the Set-Cookie header, and get
+  // the ExtensionAction for it.
+  TestRule rule1 = CreateGenericRule();
+  rule1.id = kMinValidID;
+  rule1.condition->url_filter = "example.com";
+  rule1.condition->resource_types = std::vector<std::string>({"sub_frame"});
+  rule1.action->type = "removeHeaders";
+  rule1.action->remove_headers_list = std::vector<std::string>({"setCookie"});
+
+  ASSERT_NO_FATAL_FAILURE(LoadExtensionWithRules({rule1}, "extension_1", {}));
+
+  const ExtensionId remove_set_cookie_ext_id = last_loaded_extension_id();
+  ExtensionPrefs::Get(profile())->SetDNRUseActionCountAsBadgeText(
+      remove_set_cookie_ext_id, true);
+
+  ExtensionAction* remove_set_cookie_action =
+      ExtensionActionManager::Get(web_contents()->GetBrowserContext())
+          ->GetExtensionAction(*extension_registry()->GetExtensionById(
+              remove_set_cookie_ext_id,
+              extensions::ExtensionRegistry::ENABLED));
+
+  // Create an extension with a rule to remove the referer header, and get the
+  // ExtensionAction for it.
+  TestRule rule2 = CreateGenericRule();
+  rule2.id = kMinValidID;
+  rule2.condition->url_filter = "example.com";
+  rule2.condition->resource_types = std::vector<std::string>({"sub_frame"});
+  rule2.action->type = "removeHeaders";
+  rule2.action->remove_headers_list = std::vector<std::string>({"referer"});
+
+  ASSERT_NO_FATAL_FAILURE(LoadExtensionWithRules({rule2}, "extension_2", {}));
+
+  const ExtensionId remove_referer_ext_id = last_loaded_extension_id();
+  ExtensionPrefs::Get(profile())->SetDNRUseActionCountAsBadgeText(
+      remove_referer_ext_id, true);
+
+  ExtensionAction* remove_referer_action =
+      ExtensionActionManager::Get(web_contents()->GetBrowserContext())
+          ->GetExtensionAction(*extension_registry()->GetExtensionById(
+              remove_referer_ext_id, extensions::ExtensionRegistry::ENABLED));
+
+  struct {
+    GURL url;
+    bool use_referrer;
+    std::string expected_remove_referer_badge_text;
+    std::string expected_remove_set_cookie_badge_text;
+  } test_cases[] = {
+      // This request only has a Set-Cookie header. Only the badge text for the
+      // extension with a remove Set-Cookie header rule should be incremented.
+      {set_cookie_url, false, "0", "1"},
+      // This request only has a Referer header. Only the badge text for the
+      // extension with a remove Referer header rule should be incremented.
+      {referer_url, true, "1", "1"},
+      // This request has both a Referer and a Set-Cookie header. The badge text
+      // for both extensions should be incremented.
+      {set_cookie_url, true, "2", "2"},
+  };
+
+  ui_test_utils::NavigateToURL(browser(), page_url);
+  ASSERT_TRUE(WasFrameWithScriptLoaded(GetMainFrame()));
+
+  int first_tab_id = ExtensionTabUtil::GetTabId(web_contents());
+  EXPECT_EQ("0", remove_set_cookie_action->GetDisplayBadgeText(first_tab_id));
+  EXPECT_EQ("0", remove_referer_action->GetDisplayBadgeText(first_tab_id));
+
+  for (const auto& test_case : test_cases) {
+    SCOPED_TRACE(base::StringPrintf("Testing URL: %s, using referrer: %s",
+                                    test_case.url.spec().c_str(),
+                                    test_case.use_referrer ? "true" : "false"));
+
+    navigate_frame(kFrameName1, test_case.url, test_case.use_referrer);
+    EXPECT_EQ(test_case.expected_remove_set_cookie_badge_text,
+              remove_set_cookie_action->GetDisplayBadgeText(first_tab_id));
+
+    EXPECT_EQ(test_case.expected_remove_referer_badge_text,
+              remove_referer_action->GetDisplayBadgeText(first_tab_id));
   }
 }
 

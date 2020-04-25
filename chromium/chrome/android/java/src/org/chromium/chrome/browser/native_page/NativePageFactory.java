@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser.native_page;
 
 import android.net.Uri;
-import android.support.annotation.IntDef;
+
+import androidx.annotation.IntDef;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ActivityTabProvider;
@@ -27,13 +28,18 @@ import org.chromium.chrome.browser.ntp.RecentTabsPage;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.touchless.TouchlessDelegate;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.UrlConstants;
 import org.chromium.content_public.browser.LoadUrlParams;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.common.VivaldiUrlConstants;
+import org.vivaldi.browser.panels.PanelPage;
+import org.vivaldi.browser.ntp.VivaldiPrivateNewTabPage;
+import org.vivaldi.browser.panels.PanelUtils;
+import org.vivaldi.browser.speeddial.SpeedDialPage;
 
 /**
  * Creates NativePage objects to show chrome-native:// URLs using the native Android view system.
@@ -45,16 +51,16 @@ public class NativePageFactory {
     static class NativePageBuilder {
         protected NativePage buildNewTabPage(ChromeActivity activity, Tab tab,
                 TabModelSelector tabModelSelector) {
+            if (ChromeApplication.isVivaldi()) {
+                return buildSpeedDialPage(activity, tab);
+            }
+
             ActivityTabProvider activityTabProvider = activity.getActivityTabProvider();
             ActivityLifecycleDispatcher activityLifecycleDispatcher =
                     activity.getLifecycleDispatcher();
 
             if (tab.isIncognito()) {
                 return new IncognitoNewTabPage(activity, new TabShim(tab));
-            }
-
-            if (FeatureUtilities.isNoTouchModeEnabled()) {
-                return TouchlessDelegate.createTouchlessNewTabPage(activity, new TabShim(tab));
             }
 
             if (ChromeFeatureList.isEnabled(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS)) {
@@ -75,10 +81,6 @@ public class NativePageFactory {
         }
 
         protected NativePage buildExploreSitesPage(ChromeActivity activity, Tab tab) {
-            if (FeatureUtilities.isNoTouchModeEnabled()) {
-                return TouchlessDelegate.createTouchlessExploreSitesPage(
-                        activity, new TabShim(tab));
-            }
             return new ExploreSitesPage(activity, new TabShim(tab));
         }
 
@@ -91,11 +93,23 @@ public class NativePageFactory {
                     new RecentTabsManager(tab, tab.getProfile(), activity);
             return new RecentTabsPage(activity, recentTabsManager, new TabShim(tab));
         }
+
+        // Vivaldi
+        protected NativePage buildSpeedDialPage(ChromeActivity activity, Tab tab) {
+            if (tab.isIncognito())
+                return new VivaldiPrivateNewTabPage(activity, new TabShim(tab));
+            return new SpeedDialPage(activity, new TabShim(tab));
+        }
+
+        protected NativePage buildPanelsPage(ChromeActivity activity, Tab tab) {
+            return new PanelPage(activity, new TabShim(tab));
+        }
     }
 
     @IntDef({NativePageType.NONE, NativePageType.CANDIDATE, NativePageType.NTP,
             NativePageType.BOOKMARKS, NativePageType.RECENT_TABS, NativePageType.DOWNLOADS,
-            NativePageType.HISTORY, NativePageType.EXPLORE})
+            NativePageType.HISTORY, NativePageType.EXPLORE,
+            NativePageType.VIVALDI_NOTES})
     @Retention(RetentionPolicy.SOURCE)
     public @interface NativePageType {
         int NONE = 0;
@@ -106,6 +120,7 @@ public class NativePageFactory {
         int DOWNLOADS = 5;
         int HISTORY = 6;
         int EXPLORE = 7;
+        int VIVALDI_NOTES = 8;
     }
 
     private static @NativePageType int nativePageType(
@@ -113,7 +128,8 @@ public class NativePageFactory {
         if (url == null) return NativePageType.NONE;
 
         Uri uri = Uri.parse(url);
-        if (!UrlConstants.CHROME_NATIVE_SCHEME.equals(uri.getScheme())) {
+        if (!UrlConstants.CHROME_NATIVE_SCHEME.equals(uri.getScheme())
+                && !VivaldiUrlConstants.VIVALDI_NATIVE_SCHEME.equals(uri.getScheme())) {
             return NativePageType.NONE;
         }
 
@@ -134,6 +150,8 @@ public class NativePageFactory {
             return NativePageType.RECENT_TABS;
         } else if (ExploreSitesPage.isExploreSitesHost(host)) {
             return NativePageType.EXPLORE;
+        } else if (VivaldiUrlConstants.VIVALDI_NOTES_HOST.equals(host)) {
+            return NativePageType.VIVALDI_NOTES;
         } else {
             return NativePageType.NONE;
         }
@@ -158,6 +176,8 @@ public class NativePageFactory {
     @VisibleForTesting
     static NativePage createNativePageForURL(String url, NativePage candidatePage, Tab tab,
             ChromeActivity activity, boolean isIncognito) {
+        if (ChromeApplication.isVivaldi())
+            return createNativePageForURLVivaldi(url, candidatePage, tab, activity, isIncognito);
         NativePage page;
 
         switch (nativePageType(url, candidatePage, isIncognito)) {
@@ -254,5 +274,51 @@ public class NativePageFactory {
         public HistoryNavigationDelegate createHistoryNavigationDelegate() {
             return HistoryNavigationDelegateFactory.create(mTab);
         }
+    }
+
+    /** Vivaldi **/
+    public static boolean isNativeSpeedDialPageUrl(String url, boolean isIncognito) {
+        return nativePageType(url, null, isIncognito) == NativePageType.NTP;
+    }
+
+    @VisibleForTesting
+    static NativePage createNativePageForURLVivaldi(String url, NativePage candidatePage, Tab tab,
+            ChromeActivity activity, boolean isIncognito) {
+        NativePage page;
+
+        switch (nativePageType(url, candidatePage, isIncognito)) {
+            case NativePageType.NONE:
+                return null;
+            case NativePageType.CANDIDATE:
+                page = candidatePage;
+                break;
+            case NativePageType.NTP:
+                page = sNativePageBuilder.buildSpeedDialPage(activity, tab);
+                break;
+            case NativePageType.BOOKMARKS:
+                page = sNativePageBuilder.buildPanelsPage(activity, tab);
+                break;
+            case NativePageType.DOWNLOADS:
+                page = sNativePageBuilder.buildPanelsPage(activity, tab);
+                break;
+            case NativePageType.HISTORY:
+                PanelUtils.showPanel(activity, UrlConstants.NATIVE_HISTORY_URL, isIncognito);
+                page = null;
+                break;
+            case NativePageType.RECENT_TABS:
+                page = sNativePageBuilder.buildRecentTabsPage(activity, tab);
+                break;
+            case NativePageType.EXPLORE:
+                page = sNativePageBuilder.buildExploreSitesPage(activity, tab);
+                break;
+            case NativePageType.VIVALDI_NOTES:
+                page = sNativePageBuilder.buildPanelsPage(activity, tab);
+                break;
+            default:
+                assert false;
+                return null;
+        }
+        if (page != null) page.updateForUrl(url);
+        return page;
     }
 }

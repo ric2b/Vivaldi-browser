@@ -18,8 +18,6 @@
 #include "chrome/browser/banners/app_banner_metrics.h"
 #include "chrome/browser/banners/app_banner_settings_helper.h"
 #include "chrome/browser/browser_process.h"
-#include "components/rappor/public/rappor_utils.h"
-#include "components/rappor/rappor_service_impl.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/gfx/android/java_bitmap.h"
@@ -55,18 +53,6 @@ std::unique_ptr<AppBannerUiDelegateAndroid> AppBannerUiDelegateAndroid::Create(
 }
 
 AppBannerUiDelegateAndroid::~AppBannerUiDelegateAndroid() {
-  if (!has_user_interaction_) {
-    AppType type = GetType();
-    if (type == AppType::NATIVE) {
-      TrackUserResponse(USER_RESPONSE_NATIVE_APP_IGNORED);
-    } else {
-      TrackUserResponse(USER_RESPONSE_WEB_APP_IGNORED);
-      if (type == AppType::WEBAPK)
-        webapk::TrackInstallEvent(webapk::INFOBAR_IGNORED);
-    }
-  }
-
-  TrackDismissEvent(DISMISS_EVENT_DISMISSED);
   Java_AppBannerUiDelegateAndroid_destroy(base::android::AttachCurrentThread(),
                                           java_delegate_);
   java_delegate_.Reset();
@@ -102,22 +88,16 @@ const GURL& AppBannerUiDelegateAndroid::GetWebAppUrl() const {
 void AppBannerUiDelegateAndroid::AddToHomescreen(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
+  TrackDismissEvent(DISMISS_EVENT_DISMISSED);
+
   if (!weak_manager_.get())
     return;
 
   InstallApp(weak_manager_->web_contents());
 }
 
-const base::android::ScopedJavaLocalRef<jobject>
-AppBannerUiDelegateAndroid::GetAddToHomescreenDialogForTesting() const {
-  return Java_AppBannerUiDelegateAndroid_getDialogForTesting(
-      base::android::AttachCurrentThread(), java_delegate_);
-}
-
 bool AppBannerUiDelegateAndroid::InstallApp(
     content::WebContents* web_contents) {
-  has_user_interaction_ = true;
-
   if (!web_contents) {
     TrackDismissEvent(DISMISS_EVENT_ERROR);
     return true;
@@ -139,26 +119,6 @@ bool AppBannerUiDelegateAndroid::InstallApp(
   return should_close_banner;
 }
 
-void AppBannerUiDelegateAndroid::OnNativeAppInstallStarted(
-    content::WebContents* web_contents) {
-  AppBannerSettingsHelper::RecordBannerEvent(
-      web_contents, web_contents->GetVisibleURL(), package_name_,
-      AppBannerSettingsHelper::APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN,
-      AppBannerManager::GetCurrentTime());
-
-  TrackInstallEvent(INSTALL_EVENT_NATIVE_APP_INSTALL_STARTED);
-  rappor::SampleDomainAndRegistryFromGURL(g_browser_process->rappor_service(),
-                                          "AppBanner.NativeApp.Installed",
-                                          web_contents->GetURL());
-}
-
-void AppBannerUiDelegateAndroid::OnNativeAppInstallFinished(bool success) {
-  if (success)
-    TrackInstallEvent(INSTALL_EVENT_NATIVE_APP_INSTALL_COMPLETED);
-  else
-    TrackDismissEvent(DISMISS_EVENT_INSTALL_TIMEOUT);
-}
-
 void AppBannerUiDelegateAndroid::OnUiCancelled(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
@@ -166,11 +126,12 @@ void AppBannerUiDelegateAndroid::OnUiCancelled(
 }
 
 void AppBannerUiDelegateAndroid::OnUiCancelled() {
+  TrackDismissEvent(DISMISS_EVENT_DISMISSED);
+
   if (!weak_manager_.get())
     return;
 
   weak_manager_->SendBannerDismissed();
-  has_user_interaction_ = true;
   content::WebContents* web_contents = weak_manager_->web_contents();
 
   if (IsForNativeApp()) {
@@ -182,7 +143,8 @@ void AppBannerUiDelegateAndroid::OnUiCancelled() {
     DCHECK(GetType() == AppType::WEBAPK || GetType() == AppType::LEGACY_WEBAPP);
 
     if (GetType() == AppType::WEBAPK)
-      webapk::TrackInstallEvent(webapk::INFOBAR_DISMISSED_BEFORE_INSTALLATION);
+      webapk::TrackInstallEvent(
+          webapk::ADD_TO_HOMESCREEN_DIALOG_DISMISSED_BEFORE_INSTALLATION);
     TrackUserResponse(USER_RESPONSE_WEB_APP_DISMISSED);
     AppBannerSettingsHelper::RecordBannerDismissEvent(
         web_contents, shortcut_info_->url.spec(), AppBannerSettingsHelper::WEB);
@@ -215,23 +177,25 @@ bool AppBannerUiDelegateAndroid::ShowDialog() {
                    url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC));
 
   return Java_AppBannerUiDelegateAndroid_showWebAppDialog(
-      env, java_delegate_, java_app_title, java_bitmap, java_app_url);
+      env, java_delegate_, java_app_title, java_bitmap, java_app_url,
+      has_primary_maskable_icon_);
 }
 
-void AppBannerUiDelegateAndroid::ShowNativeAppDetails() {
+bool AppBannerUiDelegateAndroid::ShowNativeAppDetails() {
   if (native_app_data_.is_null())
-    return;
+    return false;
 
   Java_AppBannerUiDelegateAndroid_showAppDetails(
       base::android::AttachCurrentThread(), java_delegate_, native_app_data_);
 
   TrackDismissEvent(DISMISS_EVENT_BANNER_CLICK);
+  return true;
 }
 
-void AppBannerUiDelegateAndroid::ShowNativeAppDetails(
+bool AppBannerUiDelegateAndroid::ShowNativeAppDetails(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
-  ShowNativeAppDetails();
+  return ShowNativeAppDetails();
 }
 
 AppBannerUiDelegateAndroid::AppBannerUiDelegateAndroid(
@@ -249,8 +213,7 @@ AppBannerUiDelegateAndroid::AppBannerUiDelegateAndroid(
       badge_icon_(badge_icon),
       has_primary_maskable_icon_(has_primary_maskable_icon),
       type_(is_webapk ? AppType::WEBAPK : AppType::LEGACY_WEBAPP),
-      install_source_(install_source),
-      has_user_interaction_(false) {
+      install_source_(install_source) {
   if (is_webapk)
     shortcut_info_->UpdateSource(ShortcutInfo::SOURCE_APP_BANNER_WEBAPK);
   else
@@ -270,8 +233,7 @@ AppBannerUiDelegateAndroid::AppBannerUiDelegateAndroid(
       native_app_data_(native_app_data),
       primary_icon_(icon),
       package_name_(native_app_package_name),
-      type_(AppType::NATIVE),
-      has_user_interaction_(false) {
+      type_(AppType::NATIVE) {
   DCHECK(!native_app_data_.is_null());
   DCHECK(!package_name_.empty());
   CreateJavaDelegate();
@@ -321,10 +283,8 @@ void AppBannerUiDelegateAndroid::InstallLegacyWebApp(
   AppBannerSettingsHelper::RecordBannerInstallEvent(
       web_contents, shortcut_info_->url.spec(), AppBannerSettingsHelper::WEB);
 
-  // TODO(https://crbug.com/861643): Support maskable icons here.
-  ShortcutHelper::AddToLauncherWithSkBitmap(web_contents, *shortcut_info_,
-                                            primary_icon_,
-                                            /*is_icon_maskable=*/false);
+  ShortcutHelper::AddToLauncherWithSkBitmap(
+      web_contents, *shortcut_info_, primary_icon_, has_primary_maskable_icon_);
 }
 
 void AppBannerUiDelegateAndroid::SendBannerAccepted() {

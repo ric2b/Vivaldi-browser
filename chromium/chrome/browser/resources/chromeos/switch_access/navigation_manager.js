@@ -248,29 +248,6 @@ class NavigationManager {
   }
 
   /**
-   * Simulates a single key stroke with the given key code
-   * and keyboard modifiers (whether or not CTRL, ALT, SEARCH,
-   * SHIFT are being held).
-   *
-   * @param {number} keyCode
-   * @param {!chrome.accessibilityPrivate.SyntheticKeyboardModifiers} modifiers
-   * @public
-   */
-  simulateKeyPress(keyCode, modifiers) {
-    chrome.accessibilityPrivate.sendSyntheticKeyEvent({
-      type: chrome.accessibilityPrivate.SyntheticKeyboardEventType.KEYDOWN,
-      keyCode: keyCode,
-      modifiers: modifiers
-    });
-
-    chrome.accessibilityPrivate.sendSyntheticKeyEvent({
-      type: chrome.accessibilityPrivate.SyntheticKeyboardEventType.KEYUP,
-      keyCode: keyCode,
-      modifiers: modifiers
-    });
-  }
-
-  /**
    * Moves the text caret to the beginning of the current node.
    * @public
    */
@@ -461,15 +438,6 @@ class NavigationManager {
   }
 
   /**
-   * Checks if the current scope is in the virtual keyboard.
-   * @return {boolean}
-   * @public
-   */
-  inVirtualKeyboard() {
-    return this.textInputManager_.inVirtualKeyboard(this.scope_);
-  }
-
-  /**
    * Puts focus on the virtual keyboard, if the current node is a text input.
    * TODO(946190): Handle the case where the user has not enabled the onscreen
    *               keyboard.
@@ -477,6 +445,8 @@ class NavigationManager {
   openKeyboard() {
     if (!this.textInputManager_.enterKeyboard(this.node_))
       return;
+
+    this.switchAccess_.setInKeyboard(true);
 
     chrome.accessibilityPrivate.setVirtualKeyboardVisible(
         true /* is_visible */);
@@ -504,6 +474,7 @@ class NavigationManager {
     this.textInputManager_.returnToTextFocus();
     chrome.accessibilityPrivate.setVirtualKeyboardVisible(
         false /* isVisible */);
+    this.switchAccess_.setInKeyboard(false);
     return true;
   }
 
@@ -553,14 +524,7 @@ class NavigationManager {
    * Closes a system menu when the back button is pressed.
    */
   closeSystemMenu_() {
-    chrome.accessibilityPrivate.sendSyntheticKeyEvent({
-      type: chrome.accessibilityPrivate.SyntheticKeyboardEventType.KEYDOWN,
-      keyCode: 27  // Esc
-    });
-    chrome.accessibilityPrivate.sendSyntheticKeyEvent({
-      type: chrome.accessibilityPrivate.SyntheticKeyboardEventType.KEYUP,
-      keyCode: 27  // Esc
-    });
+    EventHelper.simulateKeyPress(EventHelper.KeyCode.ESC);
   }
 
   /**
@@ -653,8 +617,9 @@ class NavigationManager {
    * @private
    */
   init_() {
-    // TODO(anastasi): call this when it's actually ready
-    this.focusRingManager.onPrefsReady();
+    if (this.switchAccess_.prefsAreReady()) {
+      this.focusRingManager.onPrefsReady();
+    }
 
     this.desktop_.addEventListener(
         chrome.automation.EventType.FOCUS, this.onFocusChange_.bind(this),

@@ -33,8 +33,8 @@
 #include "gpu/config/gpu_mode.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "ipc/ipc_sender.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom.h"
 #include "services/viz/privileged/mojom/gl/gpu_host.mojom.h"
 #include "services/viz/privileged/mojom/gl/gpu_service.mojom.h"
@@ -71,9 +71,6 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   CONTENT_EXPORT static GpuProcessHost* Get(
       GpuProcessKind kind = GPU_PROCESS_KIND_SANDBOXED,
       bool force_create = true);
-
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  CONTENT_EXPORT static void SetForceAllowAccessToGpu(bool enable);
 
   // Returns whether there is an active GPU process or not.
   static void GetHasGpuProcess(base::OnceCallback<void(bool)> callback);
@@ -112,9 +109,10 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
 
   viz::GpuHostImpl* gpu_host() { return gpu_host_.get(); }
 
- private:
-  class ConnectionFilterImpl;
+  // FEATURE_FORCE_ACCESS_TO_GPU
+  CONTENT_EXPORT static void SetForceAllowAccessToGpu(bool enable);
 
+ private:
   enum class GpuTerminationOrigin {
     kUnknownOrigin = 0,
     kOzoneWaylandProxy = 1,
@@ -159,12 +157,13 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   void RecordLogMessage(int32_t severity,
                         const std::string& header,
                         const std::string& message) override;
-  void BindDiscardableMemoryRequest(
-      discardable_memory::mojom::DiscardableSharedMemoryManagerRequest request)
+  void BindDiscardableMemoryReceiver(
+      mojo::PendingReceiver<
+          discardable_memory::mojom::DiscardableSharedMemoryManager> receiver)
       override;
   void BindInterface(const std::string& interface_name,
                      mojo::ScopedMessagePipeHandle interface_pipe) override;
-  void BindHostReceiver(mojo::GenericPendingReceiver receiver) override;
+  void BindHostReceiver(mojo::GenericPendingReceiver generic_receiver) override;
   void RunService(
       const std::string& service_name,
       mojo::PendingReceiver<service_manager::mojom::Service> receiver) override;
@@ -213,8 +212,6 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
 
   // Time Init started.  Used to log total GPU process startup time to UMA.
   base::TimeTicks init_start_time_;
-
-  int connection_filter_id_;
 
   // The GPU process reported failure to initialize.
   bool did_fail_initialize_ = false;

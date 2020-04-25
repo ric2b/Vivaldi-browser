@@ -7,7 +7,6 @@
 #import "base/ios/block_types.h"
 #include "base/metrics/user_metrics.h"
 #include "components/signin/public/base/signin_metrics.h"
-#include "components/unified_consent/feature.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/first_run/first_run_configuration.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
@@ -22,7 +21,6 @@
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
-#import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -187,12 +185,8 @@ NSString* const kSignInSkipButtonAccessibilityIdentifier =
     __weak UIViewController* baseViewController = self.presentingViewController;
     __weak id<ApplicationCommands> dispatcher = self.dispatcher;
     completion = ^{
-      if (unified_consent::IsUnifiedConsentFeatureEnabled()) {
-        [dispatcher
-            showAdvancedSigninSettingsFromViewController:baseViewController];
-      } else {
-        [dispatcher showAccountsSettingsFromViewController:baseViewController];
-      }
+      [dispatcher
+          showAdvancedSigninSettingsFromViewController:baseViewController];
     };
   }
   [self finishFirstRunAndDismissWithCompletion:completion];

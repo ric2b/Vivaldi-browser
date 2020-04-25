@@ -145,10 +145,11 @@ void VivaldiProfileSyncService::OnEngineInitialized(
     const std::string& cache_guid,
     const std::string& birthday,
     const std::string& bag_of_chips,
+    const std::string& last_keystore_key,
     bool success) {
-  ProfileSyncService::OnEngineInitialized(initial_types, js_backend,
-                                          debug_info_listener, cache_guid,
-                                          birthday, bag_of_chips, success);
+  ProfileSyncService::OnEngineInitialized(
+      initial_types, js_backend, debug_info_listener, cache_guid, birthday,
+      bag_of_chips, last_keystore_key, success);
 
   if (!force_local_data_reset_)
     return;
@@ -157,7 +158,7 @@ void VivaldiProfileSyncService::OnEngineInitialized(
   error.error_type = syncer::CLIENT_DATA_OBSOLETE;
   error.action = syncer::RESET_LOCAL_SYNC_DATA;
 
-  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
                            base::Bind(&ProfileSyncService::OnActionableError,
                                       base::Unretained(this), error));
 }

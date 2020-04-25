@@ -39,6 +39,7 @@
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
@@ -673,9 +674,10 @@ class WebViewContextMenuBrowserPluginSpecificInteractiveTest
 // Disabled on Linux Aura because pointer lock does not work on Linux Aura.
 // crbug.com/341876
 
+// Timeouts flakily: crbug.com/1003345
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(WebViewPointerLockInteractiveTest,
-                       PointerLock) {
+                       DISABLED_PointerLock) {
   SetupTest("web_view/pointer_lock",
             "/extensions/platform_apps/web_view/pointer_lock/guest.html");
 
@@ -774,8 +776,9 @@ IN_PROC_BROWSER_TEST_F(WebViewPointerLockInteractiveTest,
 
 // Tests that if a <webview> is focused before navigation then the guest starts
 // off focused.
+// Flaky. https://crbug.com/1013552
 IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest,
-                       Focus_FocusBeforeNavigation) {
+                       DISABLED_Focus_FocusBeforeNavigation) {
   TestHelper("testFocusBeforeNavigation", "web_view/focus", NO_TEST_SERVER);
 }
 

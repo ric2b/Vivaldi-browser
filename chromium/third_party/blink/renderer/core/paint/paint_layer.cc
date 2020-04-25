@@ -177,7 +177,7 @@ PaintLayer::PaintLayer(LayoutBoxModelObject& layout_object)
       needs_compositing_layer_assignment_(false),
       descendant_needs_compositing_layer_assignment_(false),
       has_self_painting_layer_descendant_(false),
-      needs_reorder_overlay_scrollbars_(false),
+      needs_reorder_overlay_overflow_controls_(false),
 #if DCHECK_IS_ON()
       layer_list_mutation_allowed_(true),
 #endif
@@ -227,7 +227,7 @@ PaintLayer::~PaintLayer() {
   // PaintLayerScrollableArea::WillRemoveScrollbar() from dirtying the z-order
   // list of the stacking context. If this layer is removed from the parent,
   // the z-order list should have been invalidated in RemoveChild().
-  needs_reorder_overlay_scrollbars_ = false;
+  needs_reorder_overlay_overflow_controls_ = false;
 
   if (scrollable_area_)
     scrollable_area_->Dispose();
@@ -444,49 +444,6 @@ void PaintLayer::UpdateTransform(const ComputedStyle* old_style,
 
   if (LocalFrameView* frame_view = GetLayoutObject().GetDocument().View())
     frame_view->SetNeedsUpdateGeometries();
-}
-
-static PaintLayer* EnclosingLayerForContainingBlock(PaintLayer* layer) {
-  if (LayoutObject* containing_block =
-          layer->GetLayoutObject().ContainingBlock())
-    return containing_block->EnclosingLayer();
-  return nullptr;
-}
-
-static const PaintLayer* EnclosingLayerForContainingBlock(
-    const PaintLayer* layer) {
-  if (const LayoutObject* containing_block =
-          layer->GetLayoutObject().ContainingBlock())
-    return containing_block->EnclosingLayer();
-  return nullptr;
-}
-
-PaintLayer* PaintLayer::RenderingContextRoot() {
-  PaintLayer* rendering_context = nullptr;
-
-  if (ShouldPreserve3D())
-    rendering_context = this;
-
-  for (PaintLayer* current = EnclosingLayerForContainingBlock(this);
-       current && current->ShouldPreserve3D();
-       current = EnclosingLayerForContainingBlock(current))
-    rendering_context = current;
-
-  return rendering_context;
-}
-
-const PaintLayer* PaintLayer::RenderingContextRoot() const {
-  const PaintLayer* rendering_context = nullptr;
-
-  if (ShouldPreserve3D())
-    rendering_context = this;
-
-  for (const PaintLayer* current = EnclosingLayerForContainingBlock(this);
-       current && current->ShouldPreserve3D();
-       current = EnclosingLayerForContainingBlock(current))
-    rendering_context = current;
-
-  return rendering_context;
 }
 
 TransformationMatrix PaintLayer::CurrentTransform() const {
@@ -2987,12 +2944,9 @@ bool PaintLayer::ChildBackgroundIsKnownToBeOpaqueInRect(
 }
 
 bool PaintLayer::ShouldBeSelfPaintingLayer() const {
-  // TODO(crbug.com/839341): Remove ScrollTimeline check once we support
-  // main-thread AnimationWorklet and don't need to promote the scroll-source.
   return GetLayoutObject().LayerTypeRequired() == kNormalPaintLayer ||
-         (scrollable_area_ && scrollable_area_->HasOverlayScrollbars()) ||
-         ScrollsOverflow() ||
-         ScrollTimeline::HasActiveScrollTimeline(GetLayoutObject().GetNode());
+         (scrollable_area_ && scrollable_area_->HasOverlayOverflowControls()) ||
+         ScrollsOverflow();
 }
 
 void PaintLayer::UpdateSelfPaintingLayer() {

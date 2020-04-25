@@ -58,11 +58,9 @@ static void SetFocusForDialog(HTMLDialogElement* dialog) {
     auto* element = DynamicTo<Element>(node);
     if (!element)
       continue;
-    if (auto* control = DynamicTo<HTMLFormControlElement>(node)) {
-      if (control->IsAutofocusable() && control->IsFocusable()) {
-        control->focus();
-        return;
-      }
+    if (element->IsAutofocusable() && element->IsFocusable()) {
+      element->focus();
+      return;
     }
     if (!focusable_descendant && element->IsFocusable())
       focusable_descendant = element;
@@ -182,6 +180,13 @@ void HTMLDialogElement::showModal(ExceptionState& exception_state) {
 void HTMLDialogElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLElement::RemovedFrom(insertion_point);
   SetNotCentered();
+
+  // TODO(671907): Calling UpdateDistributionForFlatTreeTraversal here is a
+  // workaround for https://crbug.com/895511. This shouldn't be done during DOM
+  // mutation. However, Shadow DOM v0 will be removed, at which point this call
+  // can be removed.
+  GetDocument().UpdateDistributionForFlatTreeTraversal();
+
   InertSubtreesChanged(GetDocument());
 }
 

@@ -101,7 +101,7 @@ class TestOptimizationGuideService
 // A mock class implementation for unittesting previews_optimization_guide.
 class MockTopHostProvider : public optimization_guide::TopHostProvider {
  public:
-  MOCK_METHOD1(GetTopHosts, std::vector<std::string>(size_t max_sites));
+  MOCK_METHOD0(GetTopHosts, std::vector<std::string>());
 };
 
 std::unique_ptr<optimization_guide::proto::GetHintsResponse> BuildHintsResponse(
@@ -136,19 +136,22 @@ class TestHintsFetcher : public optimization_guide::HintsFetcher {
 
   bool FetchOptimizationGuideServiceHints(
       const std::vector<std::string>& hosts,
+      optimization_guide::proto::RequestContext request_context,
       optimization_guide::HintsFetchedCallback hints_fetched_callback)
       override {
     switch (fetch_state_) {
       case HintsFetcherEndState::kFetchFailed:
-        std::move(hints_fetched_callback).Run(base::nullopt);
+        std::move(hints_fetched_callback).Run(request_context, base::nullopt);
         return false;
       case HintsFetcherEndState::kFetchSuccessWithHints:
         hints_fetched_ = true;
-        std::move(hints_fetched_callback).Run(BuildHintsResponse({"host.com"}));
+        std::move(hints_fetched_callback)
+            .Run(request_context, BuildHintsResponse({"host.com"}));
         return true;
       case HintsFetcherEndState::kFetchSuccessWithNoHints:
         hints_fetched_ = true;
-        std::move(hints_fetched_callback).Run(BuildHintsResponse({}));
+        std::move(hints_fetched_callback)
+            .Run(request_context, BuildHintsResponse({}));
         return true;
     }
     return true;
@@ -189,11 +192,13 @@ class TestPreviewsOptimizationGuide : public PreviewsOptimizationGuideImpl {
 
  private:
   void OnHintsFetched(
+      optimization_guide::proto::RequestContext request_context,
       base::Optional<
           std::unique_ptr<optimization_guide::proto::GetHintsResponse>>
           get_hints_response) override {
     fetched_hints_stored_ = false;
     PreviewsOptimizationGuideImpl::OnHintsFetched(
+        optimization_guide::proto::CONTEXT_BATCH_UPDATE,
         std::move(get_hints_response));
   }
 
@@ -1885,7 +1890,7 @@ TEST_F(PreviewsOptimizationGuideImplTest, HintsFetcherEnabledNoHosts) {
   guide()->SetHintsFetcherForTesting(
       BuildTestHintsFetcher(HintsFetcherEndState::kFetchSuccessWithHints));
 
-  EXPECT_CALL(*top_host_provider(), GetTopHosts(testing::_)).Times(1);
+  EXPECT_CALL(*top_host_provider(), GetTopHosts()).Times(1);
 
   // Load hints so that OnHintsUpdated is called. This will force FetchHints to
   // be triggered if OptimizationHintsFetching is enabled.
@@ -1905,7 +1910,7 @@ TEST_F(PreviewsOptimizationGuideImplTest,
 
   // This should be called exactly once, confirming that hints are not fetched
   // again after |kTestFetchRetryDelaySecs|.
-  EXPECT_CALL(*top_host_provider(), GetTopHosts(testing::_))
+  EXPECT_CALL(*top_host_provider(), GetTopHosts())
       .Times(1)
       .WillRepeatedly(testing::Return(hosts));
 
@@ -1922,7 +1927,7 @@ TEST_F(PreviewsOptimizationGuideImplTest,
   // Check that hints should not be fetched again after the delay for a failed
   // hints fetch attempt.
   MoveClockForwardBy(base::TimeDelta::FromSeconds(kTestFetchRetryDelaySecs));
-  EXPECT_CALL(*top_host_provider(), GetTopHosts(testing::_)).Times(0);
+  EXPECT_CALL(*top_host_provider(), GetTopHosts()).Times(0);
 }
 
 TEST_F(PreviewsOptimizationGuideImplTest, HintsFetcherEnabledWithHosts) {
@@ -1935,7 +1940,7 @@ TEST_F(PreviewsOptimizationGuideImplTest, HintsFetcherEnabledWithHosts) {
       BuildTestHintsFetcher(HintsFetcherEndState::kFetchSuccessWithHints));
 
   std::vector<std::string> hosts = {"example1.com", "example2.com"};
-  EXPECT_CALL(*top_host_provider(), GetTopHosts(testing::_))
+  EXPECT_CALL(*top_host_provider(), GetTopHosts())
       .Times(1)
       .WillRepeatedly(testing::Return(hosts));
 
@@ -1959,7 +1964,7 @@ TEST_F(PreviewsOptimizationGuideImplTest, HintsFetcherTimerRetryDelay) {
       BuildTestHintsFetcher(HintsFetcherEndState::kFetchFailed));
 
   std::vector<std::string> hosts = {"example1.com", "example2.com"};
-  EXPECT_CALL(*top_host_provider(), GetTopHosts(testing::_))
+  EXPECT_CALL(*top_host_provider(), GetTopHosts())
       .Times(2)
       .WillRepeatedly(testing::Return(hosts));
 
@@ -1989,7 +1994,7 @@ TEST_F(PreviewsOptimizationGuideImplTest, HintsFetcherTimerFetchSucceeds) {
       BuildTestHintsFetcher(HintsFetcherEndState::kFetchSuccessWithHints));
 
   std::vector<std::string> hosts = {"example1.com", "example2.com"};
-  EXPECT_CALL(*top_host_provider(), GetTopHosts(testing::_))
+  EXPECT_CALL(*top_host_provider(), GetTopHosts())
       .WillRepeatedly(testing::Return(hosts));
 
   // Force hints fetch scheduling.
@@ -2017,7 +2022,7 @@ TEST_F(PreviewsOptimizationGuideImplTest, HintsFetcherDisabled) {
   scoped_list.InitAndDisableFeature(
       optimization_guide::features::kOptimizationHintsFetching);
 
-  EXPECT_CALL(*top_host_provider(), GetTopHosts(testing::_)).Times(0);
+  EXPECT_CALL(*top_host_provider(), GetTopHosts()).Times(0);
   CreateServiceAndGuide();
   // Load hints so that OnHintsUpdated is called. This will
   // check that FetcHints is not triggered by making sure that top_host_provider
@@ -2044,7 +2049,7 @@ TEST_F(PreviewsOptimizationGuideImplTest, HintsFetcherLastFetchAtttempt) {
       BuildTestHintsFetcher(HintsFetcherEndState::kFetchSuccessWithHints));
 
   std::vector<std::string> hosts = {"example1.com", "example2.com"};
-  EXPECT_CALL(*top_host_provider(), GetTopHosts(testing::_))
+  EXPECT_CALL(*top_host_provider(), GetTopHosts())
       .Times(1)
       .WillRepeatedly(testing::Return(hosts));
 
@@ -2091,7 +2096,7 @@ TEST_F(PreviewsOptimizationGuideDataSaverOffTest,
       BuildTestHintsFetcher(HintsFetcherEndState::kFetchSuccessWithHints));
 
   std::vector<std::string> hosts = {"example1.com", "example2.com"};
-  EXPECT_CALL(*top_host_provider(), GetTopHosts(testing::_)).Times(0);
+  EXPECT_CALL(*top_host_provider(), GetTopHosts()).Times(0);
 
   // Load hints so that OnHintsUpdated is called. This will force FetchHints to
   // be triggered if OptimizationHintsFetching is enabled.

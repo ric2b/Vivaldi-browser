@@ -249,11 +249,11 @@ float SVGAnimationElement::getStartTime(ExceptionState& exception_state) const {
                                       "No current interval.");
     return 0;
   }
-  return clampTo<float>(start_time.Value());
+  return clampTo<float>(start_time.InSecondsF());
 }
 
 float SVGAnimationElement::getCurrentTime() const {
-  return clampTo<float>(Elapsed().Value());
+  return clampTo<float>(Elapsed().InSecondsF());
 }
 
 float SVGAnimationElement::getSimpleDuration(
@@ -264,18 +264,19 @@ float SVGAnimationElement::getSimpleDuration(
                                       "No simple duration defined.");
     return 0;
   }
-  return clampTo<float>(duration.Value());
+  return clampTo<float>(duration.InSecondsF());
 }
 
 void SVGAnimationElement::beginElementAt(float offset) {
   DCHECK(std::isfinite(offset));
-  AddInstanceTime(kBegin, Elapsed() + offset,
-                  SMILTimeWithOrigin::kScriptOrigin);
+  AddInstanceTimeAndUpdate(kBegin, Elapsed() + SMILTime::FromSecondsD(offset),
+                           SMILTimeOrigin::kScript);
 }
 
 void SVGAnimationElement::endElementAt(float offset) {
   DCHECK(std::isfinite(offset));
-  AddInstanceTime(kEnd, Elapsed() + offset, SMILTimeWithOrigin::kScriptOrigin);
+  AddInstanceTimeAndUpdate(kEnd, Elapsed() + SMILTime::FromSecondsD(offset),
+                           SMILTimeOrigin::kScript);
 }
 
 void SVGAnimationElement::UpdateAnimationMode() {
@@ -329,7 +330,7 @@ String SVGAnimationElement::FromValue() const {
   return FastGetAttribute(svg_names::kFromAttr);
 }
 
-bool SVGAnimationElement::IsAdditive() {
+bool SVGAnimationElement::IsAdditive() const {
   DEFINE_STATIC_LOCAL(const AtomicString, sum, ("sum"));
   const AtomicString& value = FastGetAttribute(svg_names::kAdditiveAttr);
   return value == sum || GetAnimationMode() == kByAnimation;
@@ -408,9 +409,9 @@ float SVGAnimationElement::CalculatePercentForSpline(
   gfx::CubicBezier bezier = key_splines_[spline_index];
   SMILTime duration = SimpleDuration();
   if (!duration.IsFinite())
-    duration = 100.0;
+    duration = SMILTime::FromSecondsD(100.0);
   return clampTo<float>(
-      bezier.SolveWithEpsilon(percent, SolveEpsilon(duration.Value())));
+      bezier.SolveWithEpsilon(percent, SolveEpsilon(duration.InSecondsF())));
 }
 
 float SVGAnimationElement::CalculatePercentFromKeyPoints(float percent) const {
@@ -528,6 +529,8 @@ void SVGAnimationElement::CurrentValuesForValuesAnimation(
 }
 
 void SVGAnimationElement::StartedActiveInterval() {
+  SVGSMILElement::StartedActiveInterval();
+
   animation_valid_ = false;
 
   if (!IsValid() || !HasValidTarget())
@@ -640,7 +643,7 @@ void SVGAnimationElement::UpdateAnimation(float percent,
   CalculateAnimatedValue(effective_percent, repeat_count, result_element);
 }
 
-bool SVGAnimationElement::OverwritesUnderlyingAnimationValue() {
+bool SVGAnimationElement::OverwritesUnderlyingAnimationValue() const {
   return !IsAdditive() && !IsAccumulated() &&
          GetAnimationMode() != kToAnimation &&
          GetAnimationMode() != kByAnimation &&

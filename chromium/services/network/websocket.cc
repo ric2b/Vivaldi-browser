@@ -5,6 +5,7 @@
 #include "services/network/websocket.h"
 
 #include <inttypes.h>
+#include <string.h>
 
 #include <utility>
 
@@ -117,6 +118,8 @@ class WebSocket::WebSocketEventHandler final
  private:
   WebSocket* const impl_;
 
+  mojom::WebSocketHandshakeResponsePtr response_ = nullptr;
+
   DISALLOW_COPY_AND_ASSIGN(WebSocketEventHandler);
 };
 
@@ -181,7 +184,7 @@ void WebSocket::WebSocketEventHandler::OnAddChannelResponse(
   impl_->handshake_client_->OnConnectionEstablished(
       impl_->receiver_.BindNewPipeAndPassRemote(),
       impl_->client_.BindNewPipeAndPassReceiver(), selected_protocol,
-      extensions, std::move(readable));
+      extensions, std::move(response_), std::move(readable));
   impl_->receiver_.set_disconnect_handler(base::BindOnce(
       &WebSocket::OnConnectionError, base::Unretained(impl_), FROM_HERE));
   impl_->handshake_client_.reset();
@@ -309,7 +312,7 @@ void WebSocket::WebSocketEventHandler::OnFinishOpeningHandshake(
   headers_text.append("\r\n");
   response_to_pass->headers_text = headers_text;
 
-  impl_->handshake_client_->OnResponseReceived(std::move(response_to_pass));
+  response_ = std::move(response_to_pass);
 }
 
 void WebSocket::WebSocketEventHandler::OnSSLCertificateError(
@@ -419,7 +422,7 @@ const void* const WebSocket::kUserDataKey = &WebSocket::kUserDataKey;
 
 void WebSocket::SendFrame(bool fin,
                           mojom::WebSocketMessageType type,
-                          const std::vector<uint8_t>& data) {
+                          base::span<const uint8_t> data) {
   DVLOG(3) << "WebSocket::SendFrame @" << reinterpret_cast<void*>(this)
            << " fin=" << fin << " type=" << type << " data is " << data.size()
            << " bytes";
@@ -435,7 +438,7 @@ void WebSocket::SendFrame(bool fin,
 
   // TODO(darin): Avoid this copy.
   auto data_to_pass = base::MakeRefCounted<net::IOBuffer>(data.size());
-  std::copy(data.begin(), data.end(), data_to_pass->data());
+  memcpy(data_to_pass->data(), data.data(), data.size());
 
   channel_->SendFrame(fin, MessageTypeToOpCode(type), std::move(data_to_pass),
                       data.size());
@@ -492,7 +495,7 @@ int WebSocket::OnHeadersReceived(
     GURL* allowed_unsafe_redirect_url) {
   if (header_client_) {
     header_client_->OnHeadersReceived(
-        original_response_headers->raw_headers(),
+        original_response_headers->raw_headers(), net::IPEndPoint(),
         base::BindOnce(&WebSocket::OnHeadersReceivedComplete,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback),
                        override_response_headers, allowed_unsafe_redirect_url));

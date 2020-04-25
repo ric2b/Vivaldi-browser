@@ -4,14 +4,6 @@
 
 :root {
   color: #333;
-  font: 13px Roboto, sans-serif;
-  font-weight: 400; /* roboto-regular */
-  height: 640px;
-  width: 768px;
-}
-
-[slot='footer'] {
-  padding: 18px 64px 0;
 }
 
 .overview-list-item {
@@ -40,10 +32,6 @@ cr-checkbox {
   --cr-checkbox-label-padding-start: 12px;
 }
 
-#syncConsentOverviewDialog [slot='bottom-buttons'] {
-  padding: 0 6px; /* = 8px - 2px button border */
-}
-
 /* --------------- Sync Make Chrome ... --------------- */
 
 #syncConsentNewDialog [slot='oobe-icon'] {
@@ -61,10 +49,6 @@ cr-checkbox {
 
 #syncConsentNewDialog .sync-feature-item-icon {
   padding-inline-end: 16px;
-}
-
-#syncConsentNewDialog [slot='bottom-buttons'] {
-  padding: 0 24px;
 }
 
 /* ------------------ Sync options ------------- */
@@ -92,11 +76,10 @@ cr-radio-button {
 
 #syncConsentMakeChromeSyncOptionsDialog .sync-option-title {
   padding-bottom: 4px;
-  padding-left: 8px;
+  padding-inline-start: 8px;
 }
 
 #syncConsentMakeChromeSyncOptionsDialog .sync-option-subtitle {
   color: rgba(0, 0, 0, 0.54);
-  font: 13px Roboto, sans-serif;
-  padding-left: 8px;
+  padding-inline-start: 8px;
 }

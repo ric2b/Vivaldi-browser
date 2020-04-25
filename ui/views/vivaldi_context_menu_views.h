@@ -26,6 +26,10 @@ namespace ui {
 class SimpleMenuModel;
 }
 
+namespace vivaldi {
+class ContextMenuPostitionDelegate;
+}
+
 namespace views {
 class MenuItemView;
 class Widget;
@@ -40,7 +44,8 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
   ~VivaldiContextMenuViews() override;
   VivaldiContextMenuViews(content::WebContents* web_contents,
                           ui::SimpleMenuModel* menu_model,
-                          const gfx::Rect& rect);
+                          const gfx::Rect& rect,
+                          ContextMenuPostitionDelegate* delegate);
   void Show() override;
   void SetIcon(const gfx::Image& icon, int id) override;
   void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) override;

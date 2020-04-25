@@ -8,29 +8,84 @@
 #include <memory>
 
 #include "base/compiler_specific.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
+#include "components/performance_manager/process_node_source.h"
+#include "components/performance_manager/tab_helper_frame_node_source.h"
+#include "content/public/browser/notification_observer.h"
+#include "content/public/browser/notification_registrar.h"
+
+class Profile;
+
+namespace content {
+class LockObserver;
+}
 
 namespace performance_manager {
 class BrowserChildProcessWatcher;
-class PerformanceManager;
+class GraphImpl;
+class PerformanceManagerImpl;
+class SharedWorkerWatcher;
 }  // namespace performance_manager
 
+// Handles the initialization of the performance manager and a few dependent
+// classes that create/manage graph nodes.
 class ChromeBrowserMainExtraPartsPerformanceManager
-    : public ChromeBrowserMainExtraParts {
+    : public ChromeBrowserMainExtraParts,
+      public content::NotificationObserver {
  public:
   ChromeBrowserMainExtraPartsPerformanceManager();
   ~ChromeBrowserMainExtraPartsPerformanceManager() override;
+
+  // Returns the only instance of this class.
+  static ChromeBrowserMainExtraPartsPerformanceManager* GetInstance();
+
+  static void CreateDefaultPoliciesAndDecorators(
+      performance_manager::GraphImpl* graph);
+
+  // Returns the LockObserver that should be exposed to //content to allow the
+  // performance manager to track usage of locks in frames. Valid to call from
+  // any thread, but external synchronization is needed to make sure that the
+  // performance manager is available.
+  content::LockObserver* GetLockObserver();
 
  private:
   // ChromeBrowserMainExtraParts overrides.
   void PostCreateThreads() override;
   void PostMainMessageLoopRun() override;
 
-  std::unique_ptr<performance_manager::PerformanceManager> performance_manager_;
+  // content::NotificationObserver:
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override;
+
+  // Handlers for profile creation and destruction notifications.
+  void CreateSharedWorkerWatcher(Profile* profile);
+  void DeleteSharedWorkerWatcher(Profile* profile);
+
+  std::unique_ptr<performance_manager::PerformanceManagerImpl>
+      performance_manager_;
+
+  // This must be alive at least until the end of base::ThreadPool shutdown,
+  // because it can be accessed by IndexedDB which runs on a base::ThreadPool
+  // sequence.
+  const std::unique_ptr<content::LockObserver> lock_observer_;
 
   std::unique_ptr<performance_manager::BrowserChildProcessWatcher>
       browser_child_process_watcher_;
+
+  content::NotificationRegistrar notification_registrar_;
+
+  // Needed by the worker watchers to access existing process nodes and frame
+  // nodes.
+  performance_manager::ProcessNodeSource process_node_source_;
+  performance_manager::TabHelperFrameNodeSource frame_node_source_;
+
+  // Observes the lifetime of shared workers.
+  base::flat_map<Profile*,
+                 std::unique_ptr<performance_manager::SharedWorkerWatcher>>
+      shared_worker_watchers_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainExtraPartsPerformanceManager);
 };

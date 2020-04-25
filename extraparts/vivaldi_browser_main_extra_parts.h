@@ -24,11 +24,7 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
   void PostEarlyInitialization() override;
   void PreProfileInit() override;
 
-  // We cannot override PostProfileInit() as we need Profile instance. Instead
-  // the patched ChromeBrowserMainParts::PreMainMessageLoopRunImpl calls
-  // this static method below with the proper Profile*
-  // argument.
-  static void PostProfileInit(Profile* profile);
+  void PostProfileInit() override;
 
   static VivaldiBrowserMainExtraParts* Create();
 

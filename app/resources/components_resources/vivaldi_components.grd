@@ -9,8 +9,6 @@
                type="BINDATA" compress="gzip" />
       <include name="IDR_VERSION_UI_HTML" file="version_ui/about_version.html"
                flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
-      <include name="IDR_VIVALDI_VERSION_UI_JS"
-               file="version_ui/vivaldi_about_version.js" type="BINDATA" compress="gzip" />
     </includes>
   </release>
 </grit>

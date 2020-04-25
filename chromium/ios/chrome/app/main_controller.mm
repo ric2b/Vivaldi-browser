@@ -26,6 +26,7 @@
 #include "base/time/time.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/crl_set_remover.h"
+#include "components/component_updater/installer_policies/on_device_head_suggest_component_installer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/tracker.h"
@@ -72,8 +73,8 @@
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/chrome_url_util.h"
 #include "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "ios/chrome/browser/crash_loop_detection_util.h"
 #include "ios/chrome/browser/crash_report/breakpad_helper.h"
+#include "ios/chrome/browser/crash_report/crash_loop_detection_util.h"
 #import "ios/chrome/browser/crash_report/crash_restore_helper.h"
 #include "ios/chrome/browser/download/download_directory_util.h"
 #import "ios/chrome/browser/external_files/external_file_remover_factory.h"
@@ -85,6 +86,7 @@
 #include "ios/chrome/browser/geolocation/omnibox_geolocation_controller.h"
 #include "ios/chrome/browser/ios_chrome_io_thread.h"
 #include "ios/chrome/browser/mailto/features.h"
+#include "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/memory/memory_debugger_manager.h"
 #include "ios/chrome/browser/metrics/first_user_action_recorder.h"
 #import "ios/chrome/browser/metrics/previous_session_info.h"
@@ -241,6 +243,9 @@ void RegisterComponentsForUpdate() {
   // Clean up any legacy CRLSet on the local disk - CRLSet used to be shipped
   // as a component on iOS but is not anymore.
   component_updater::DeleteLegacyCRLSet(path);
+
+  RegisterOnDeviceHeadSuggestComponent(
+      cus, GetApplicationContext()->GetApplicationLocale());
 }
 
 // Used to update the current BVC mode if a new tab is added while the tab
@@ -413,6 +418,9 @@ enum class EnterTabSwitcherSnapshotResult {
   // The application level component for url loading. Is passed down to
   // browser state level UrlLoadingService instances.
   AppUrlLoadingService* _appURLLoadingService;
+
+  // If the animations were disabled.
+  BOOL _animationDisabled;
 }
 
 // The main coordinator, lazily created the first time it is accessed. Manages
@@ -964,6 +972,9 @@ enum class EnterTabSwitcherSnapshotResult {
 
 - (void)stopChromeMain {
   // The UI should be stopped before the models they observe are stopped.
+  [self.signinInteractionCoordinator cancel];
+  self.signinInteractionCoordinator = nil;
+
   [_mainCoordinator stop];
   _mainCoordinator = nil;
 
@@ -1026,6 +1037,34 @@ enum class EnterTabSwitcherSnapshotResult {
          selector:@selector(orientationDidChange:)
              name:UIApplicationDidChangeStatusBarOrientationNotification
            object:nil];
+}
+
+- (void)registerBatteryMonitoringNotifications {
+  if (base::FeatureList::IsEnabled(kDisableAnimationOnLowBattery)) {
+    [[UIDevice currentDevice] setBatteryMonitoringEnabled:YES];
+    [[NSNotificationCenter defaultCenter]
+        addObserver:self
+           selector:@selector(batteryLevelDidChange:)
+               name:UIDeviceBatteryLevelDidChangeNotification
+             object:nil];
+    [self batteryLevelDidChange:nil];
+  }
+}
+
+- (void)batteryLevelDidChange:(NSNotification*)notification {
+  if (![[UIDevice currentDevice] isBatteryMonitoringEnabled]) {
+    return;
+  }
+  CGFloat level = [UIDevice currentDevice].batteryLevel;
+  if (level < 0.2) {
+    if (!_animationDisabled) {
+      _animationDisabled = YES;
+      [UIView setAnimationsEnabled:NO];
+    }
+  } else if (_animationDisabled) {
+    _animationDisabled = NO;
+    [UIView setAnimationsEnabled:YES];
+  }
 }
 
 - (void)schedulePrefObserverInitialization {
@@ -1189,8 +1228,6 @@ enum class EnterTabSwitcherSnapshotResult {
 
   NSString* fieldTrialValueKey =
       base::SysUTF8ToNSString(app_group::kChromeExtensionFieldTrialPreference);
-  NSNumber* copiedContentBehaviorValue = [NSNumber
-      numberWithBool:base::FeatureList::IsEnabled(kCopiedContentBehavior)];
 
   // Add other field trial values here if they are needed by extensions.
   // The general format is
@@ -1201,10 +1238,6 @@ enum class EnterTabSwitcherSnapshotResult {
   //   }
   // }
   NSDictionary* fieldTrialValues = @{
-    base::SysUTF8ToNSString(kCopiedContentBehavior.name) : @{
-      kFieldTrialValueKey : copiedContentBehaviorValue,
-      kFieldTrialVersionKey : kCopiedContentBehaviorVersion
-    }
   };
   [sharedDefaults setObject:fieldTrialValues forKey:fieldTrialValueKey];
 }
@@ -1238,6 +1271,7 @@ enum class EnterTabSwitcherSnapshotResult {
   [_startupTasks donateIntents];
   [_startupTasks registerForApplicationWillResignActiveNotification];
   [self registerForOrientationChangeNotifications];
+  [self registerBatteryMonitoringNotifications];
 
   // Deferred tasks.
   [self schedulePrefObserverInitialization];
@@ -1566,9 +1600,10 @@ enum class EnterTabSwitcherSnapshotResult {
   DCHECK(!self.signinInteractionCoordinator.isSettingsViewPresented);
   if (_settingsNavigationController)
     return;
-  _settingsNavigationController = [SettingsNavigationController
-      newAutofillProfilleController:_mainBrowserState
-                           delegate:self];
+  Browser* browser = self.interfaceProvider.mainInterface.browser;
+  _settingsNavigationController =
+      [SettingsNavigationController autofillProfileControllerForBrowser:browser
+                                                               delegate:self];
   [baseViewController presentViewController:_settingsNavigationController
                                    animated:YES
                                  completion:nil];
@@ -1584,11 +1619,12 @@ enum class EnterTabSwitcherSnapshotResult {
     DCHECK(!self.signinInteractionCoordinator.isSettingsViewPresented);
     if (_settingsNavigationController)
       return;
-    _settingsNavigationController = [SettingsNavigationController
-        newUserFeedbackController:_mainBrowserState
-                         delegate:self
-               feedbackDataSource:self
-                       dispatcher:self];
+    Browser* browser = self.interfaceProvider.mainInterface.browser;
+    _settingsNavigationController =
+        [SettingsNavigationController userFeedbackControllerForBrowser:browser
+                                                              delegate:self
+                                                    feedbackDataSource:self
+                                                            dispatcher:self];
     [baseViewController presentViewController:_settingsNavigationController
                                      animated:YES
                                    completion:nil];
@@ -1677,7 +1713,7 @@ enum class EnterTabSwitcherSnapshotResult {
     DCHECK_EQ(self.currentBVC, self.mainCoordinator.activeViewController);
     baseViewController = self.currentBVC;
   }
-  DCHECK(![baseViewController presentedViewController]);
+
   if ([self currentBrowserState]->IsOffTheRecord()) {
     NOTREACHED();
     return;
@@ -1687,9 +1723,11 @@ enum class EnterTabSwitcherSnapshotResult {
         showAccountsSettingsFromViewController:baseViewController];
     return;
   }
-  _settingsNavigationController = [SettingsNavigationController
-      newAccountsController:self.currentBrowserState
-                   delegate:self];
+
+  Browser* browser = self.interfaceProvider.mainInterface.browser;
+  _settingsNavigationController =
+      [SettingsNavigationController accountsControllerForBrowser:browser
+                                                        delegate:self];
   [baseViewController presentViewController:_settingsNavigationController
                                    animated:YES
                                  completion:nil];
@@ -1703,7 +1741,7 @@ enum class EnterTabSwitcherSnapshotResult {
     DCHECK_EQ(self.currentBVC, self.mainCoordinator.activeViewController);
     baseViewController = self.currentBVC;
   }
-  DCHECK(![baseViewController presentedViewController]);
+
   if (_settingsNavigationController) {
     // Navigate to the Google services settings if the settings dialog is
     // already opened.
@@ -1712,11 +1750,10 @@ enum class EnterTabSwitcherSnapshotResult {
     return;
   }
 
-  ios::ChromeBrowserState* originalBrowserState =
-      self.currentBrowserState->GetOriginalChromeBrowserState();
-  _settingsNavigationController = [SettingsNavigationController
-      newGoogleServicesController:originalBrowserState
-                         delegate:self];
+  Browser* browser = self.interfaceProvider.mainInterface.browser;
+  _settingsNavigationController =
+      [SettingsNavigationController googleServicesControllerForBrowser:browser
+                                                              delegate:self];
   [baseViewController presentViewController:_settingsNavigationController
                                    animated:YES
                                  completion:nil];
@@ -1731,9 +1768,10 @@ enum class EnterTabSwitcherSnapshotResult {
         showSyncPassphraseSettingsFromViewController:baseViewController];
     return;
   }
-  _settingsNavigationController = [SettingsNavigationController
-      newSyncEncryptionPassphraseController:_mainBrowserState
-                                   delegate:self];
+  Browser* browser = self.interfaceProvider.mainInterface.browser;
+  _settingsNavigationController =
+      [SettingsNavigationController syncPassphraseControllerForBrowser:browser
+                                                              delegate:self];
   [baseViewController presentViewController:_settingsNavigationController
                                    animated:YES
                                  completion:nil];
@@ -1748,9 +1786,10 @@ enum class EnterTabSwitcherSnapshotResult {
         showSavedPasswordsSettingsFromViewController:baseViewController];
     return;
   }
+  Browser* browser = self.interfaceProvider.mainInterface.browser;
   _settingsNavigationController =
-      [SettingsNavigationController newSavePasswordsController:_mainBrowserState
-                                                      delegate:self];
+      [SettingsNavigationController savePasswordsControllerForBrowser:browser
+                                                             delegate:self];
   [baseViewController presentViewController:_settingsNavigationController
                                    animated:YES
                                  completion:nil];
@@ -1765,9 +1804,10 @@ enum class EnterTabSwitcherSnapshotResult {
         showProfileSettingsFromViewController:baseViewController];
     return;
   }
-  _settingsNavigationController = [SettingsNavigationController
-      newAutofillProfilleController:_mainBrowserState
-                           delegate:self];
+  Browser* browser = self.interfaceProvider.mainInterface.browser;
+  _settingsNavigationController =
+      [SettingsNavigationController autofillProfileControllerForBrowser:browser
+                                                               delegate:self];
   [baseViewController presentViewController:_settingsNavigationController
                                    animated:YES
                                  completion:nil];
@@ -1782,9 +1822,10 @@ enum class EnterTabSwitcherSnapshotResult {
         showCreditCardSettingsFromViewController:baseViewController];
     return;
   }
+  Browser* browser = self.interfaceProvider.mainInterface.browser;
   _settingsNavigationController = [SettingsNavigationController
-      newAutofillCreditCardController:_mainBrowserState
-                             delegate:self];
+      autofillCreditCardControllerForBrowser:browser
+                                    delegate:self];
   [baseViewController presentViewController:_settingsNavigationController
                                    animated:YES
                                  completion:nil];
@@ -2160,9 +2201,9 @@ enum class EnterTabSwitcherSnapshotResult {
   BOOL showActivityIndicator = NO;
 
   if (@available(iOS 13, *)) {
-    // TODO(crbug.com/632772): Visited links don't clearing doesn't require
-    // disabling web usage with iOS 13. Stop disabling web usage once iOS 12
-    // is not supported.
+    // TODO(crbug.com/632772): Visited links clearing doesn't require disabling
+    // web usage with iOS 13. Stop disabling web usage once iOS 12 is not
+    // supported.
     showActivityIndicator = disableWebUsageDuringRemoval;
     disableWebUsageDuringRemoval = NO;
   }
@@ -2225,9 +2266,10 @@ enum class EnterTabSwitcherSnapshotResult {
   [[DeferredInitializationRunner sharedInstance]
       runBlockIfNecessary:kPrefObserverInit];
   DCHECK(_localStatePrefObserverBridge);
-  _settingsNavigationController = [SettingsNavigationController
-      newSettingsMainControllerWithBrowserState:_mainBrowserState
-                                       delegate:self];
+  Browser* browser = self.interfaceProvider.mainInterface.browser;
+  _settingsNavigationController =
+      [SettingsNavigationController mainSettingsControllerForBrowser:browser
+                                                            delegate:self];
   [baseViewController presentViewController:_settingsNavigationController
                                    animated:YES
                                  completion:nil];
@@ -2252,6 +2294,11 @@ enum class EnterTabSwitcherSnapshotResult {
   // to be cloase, it is thus the responsibility of the main controller to
   // dismiss the the advanced sign-in settings by dismssing the settings
   // presented by |self.signinInteractionCoordinator|.
+  // To reproduce this case:
+  //  - open Bookmark view
+  //  - start sign-in
+  //  - tap on "Settings" to open the advanced sign-in settings
+  //  - tap on "Manage Your Google Account"
   DCHECK(self.signinInteractionCoordinator.isSettingsViewPresented);
   [self.signinInteractionCoordinator
       abortAndDismissSettingsViewAnimated:animated
@@ -2605,6 +2652,12 @@ enum class EnterTabSwitcherSnapshotResult {
   paymentAppLauncher->ReceiveResponseFromIOSPaymentInstrument(payment_response);
   [startupInformation setStartupParameters:nil];
   return YES;
+}
+
+- (BOOL)URLIsOpenedInRegularMode:(const GURL&)URL {
+  WebStateList* webStateList = self.mainTabModel.webStateList;
+  return webStateList && webStateList->GetIndexOfWebStateWithURL(URL) !=
+                             WebStateList::kInvalidIndex;
 }
 
 #pragma mark - SettingsNavigationControllerDelegate

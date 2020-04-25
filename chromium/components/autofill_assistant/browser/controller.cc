@@ -85,6 +85,22 @@ bool StateEndsFlow(AutofillAssistantState state) {
   return false;
 }
 
+// Convenience method to set all fields of a |DateTimeProto|.
+void SetDateTimeProto(DateTimeProto* proto,
+                      int year,
+                      int month,
+                      int day,
+                      int hour,
+                      int minute,
+                      int second) {
+  proto->mutable_date()->set_year(year);
+  proto->mutable_date()->set_month(month);
+  proto->mutable_date()->set_day(day);
+  proto->mutable_time()->set_hour(hour);
+  proto->mutable_time()->set_minute(minute);
+  proto->mutable_time()->set_second(second);
+}
+
 }  // namespace
 
 Controller::Controller(content::WebContents* web_contents,
@@ -968,6 +984,57 @@ void Controller::OnTermsAndConditionsLinkClicked(int link) {
   std::move(callback).Run(link);
 }
 
+void Controller::SetDateTimeRangeStart(int year,
+                                       int month,
+                                       int day,
+                                       int hour,
+                                       int minute,
+                                       int second) {
+  if (!user_data_)
+    return;
+
+  SetDateTimeProto(&user_data_->date_time_range_start, year, month, day, hour,
+                   minute, second);
+  for (ControllerObserver& observer : observers_) {
+    observer.OnUserDataChanged(user_data_.get());
+  }
+  UpdateCollectUserDataActions();
+}
+
+void Controller::SetDateTimeRangeEnd(int year,
+                                     int month,
+                                     int day,
+                                     int hour,
+                                     int minute,
+                                     int second) {
+  if (!user_data_)
+    return;
+
+  SetDateTimeProto(&user_data_->date_time_range_end, year, month, day, hour,
+                   minute, second);
+  for (ControllerObserver& observer : observers_) {
+    observer.OnUserDataChanged(user_data_.get());
+  }
+  UpdateCollectUserDataActions();
+}
+
+void Controller::SetAdditionalValue(const std::string& client_memory_key,
+                                    const std::string& value) {
+  if (!user_data_)
+    return;
+  auto it = user_data_->additional_values_to_store.find(client_memory_key);
+  if (it == user_data_->additional_values_to_store.end()) {
+    NOTREACHED() << client_memory_key << " not found";
+    return;
+  }
+  it->second.assign(value);
+  for (ControllerObserver& observer : observers_) {
+    observer.OnUserDataChanged(user_data_.get());
+  }
+  // It is currently not necessary to call |UpdateCollectUserDataActions|
+  // because all additional values are optional.
+}
+
 void Controller::SetShippingAddress(
     std::unique_ptr<autofill::AutofillProfile> address) {
   if (!user_data_)
@@ -992,23 +1059,13 @@ void Controller::SetContactInfo(
   UpdateCollectUserDataActions();
 }
 
-void Controller::SetCreditCard(std::unique_ptr<autofill::CreditCard> card) {
+void Controller::SetCreditCard(
+    std::unique_ptr<autofill::CreditCard> card,
+    std::unique_ptr<autofill::AutofillProfile> billing_profile) {
   if (!user_data_)
     return;
 
-  autofill::AutofillProfile* billing_profile =
-      !card || card->billing_address_id().empty()
-          ? nullptr
-          : GetPersonalDataManager()->GetProfileByGUID(
-                card->billing_address_id());
-  if (billing_profile) {
-    auto billing_address =
-        std::make_unique<autofill::AutofillProfile>(*billing_profile);
-    user_data_->billing_address = std::move(billing_address);
-  } else {
-    user_data_->billing_address.reset();
-  }
-
+  user_data_->billing_address = std::move(billing_profile);
   user_data_->card = std::move(card);
   for (ControllerObserver& observer : observers_) {
     observer.OnUserDataChanged(user_data_.get());
@@ -1050,7 +1107,7 @@ void Controller::UpdateCollectUserDataActions() {
   }
 
   bool confirm_button_enabled = CollectUserDataAction::IsUserDataComplete(
-      GetPersonalDataManager(), *user_data_, *collect_user_data_options_);
+      *user_data_, *collect_user_data_options_);
 
   UserAction confirm(collect_user_data_options_->confirm_action);
   confirm.SetEnabled(confirm_button_enabled);

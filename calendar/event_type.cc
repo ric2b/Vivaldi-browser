@@ -36,7 +36,6 @@ CalendarEvent::CalendarEvent(const CalendarEvent& event)
       end_recurring(event.end_recurring),
       location(event.location),
       url(event.url),
-      recurrence(event.recurrence),
       etag(event.etag),
       href(event.href),
       uid(event.uid),
@@ -47,11 +46,18 @@ CalendarEvent::CalendarEvent(const CalendarEvent& event)
       trash_time(event.trash_time),
       sequence(event.sequence),
       ical(event.ical),
+      rrule(event.rrule),
       updateFields(event.updateFields) {}
 
 CalendarEvent::~CalendarEvent() {}
 
-EventRow::EventRow() {}
+EventRow::EventRow() {
+  sequence_ = 0;
+  description_ = base::ASCIIToUTF16("");
+  all_day_ = false;
+  trash_ = false;
+  is_recurring_ = false;
+}
 
 EventRow::EventRow(EventID id,
                    CalendarID calendar_id,
@@ -66,7 +72,6 @@ EventRow::EventRow(EventID id,
                    base::Time end_recurring,
                    base::string16 location,
                    base::string16 url,
-                   EventRecurrence recurrence,
                    std::string etag,
                    std::string href,
                    std::string uid,
@@ -76,7 +81,8 @@ EventRow::EventRow(EventID id,
                    bool trash,
                    base::Time trash_time,
                    int sequence,
-                   base::string16 ical)
+                   base::string16 ical,
+                   std::string rrule)
     : id_(id),
       calendar_id_(calendar_id),
       alarm_id_(alarm_id),
@@ -90,7 +96,6 @@ EventRow::EventRow(EventID id,
       end_recurring_(end_recurring),
       location_(location),
       url_(url),
-      recurrence_(recurrence),
       etag_(etag),
       href_(href),
       uid_(uid),
@@ -100,7 +105,8 @@ EventRow::EventRow(EventID id,
       trash_(trash),
       trash_time_(trash_time),
       sequence_(sequence),
-      ical_(ical) {}
+      ical_(ical),
+      rrule_(rrule) {}
 
 EventRow::~EventRow() {}
 
@@ -117,7 +123,6 @@ void EventRow::Swap(EventRow* other) {
   std::swap(end_recurring_, other->end_recurring_);
   std::swap(location_, other->location_);
   std::swap(url_, other->url_);
-  std::swap(recurrence_, other->recurrence_);
   std::swap(recurrence_exceptions_, other->recurrence_exceptions_);
   std::swap(etag_, other->etag_);
   std::swap(href_, other->href_);
@@ -129,6 +134,8 @@ void EventRow::Swap(EventRow* other) {
   std::swap(trash_time_, other->trash_time_);
   std::swap(sequence_, other->sequence_);
   std::swap(ical_, other->ical_);
+  std::swap(event_exceptions_, other->event_exceptions_);
+  std::swap(rrule_, other->rrule_);
 }
 
 EventRow::EventRow(const EventRow& other) = default;
@@ -147,7 +154,6 @@ EventRow::EventRow(const EventRow&& other) noexcept
       start_recurring_(other.start_recurring_),
       end_recurring_(other.end_recurring_),
       location_(other.location_),
-      recurrence_(other.recurrence_),
       recurrence_exceptions_(other.recurrence_exceptions_),
       etag_(other.etag_),
       href_(other.href_),
@@ -158,7 +164,9 @@ EventRow::EventRow(const EventRow&& other) noexcept
       trash_(other.trash_),
       trash_time_(other.trash_time_),
       sequence_(other.sequence_),
-      ical_(other.ical_) {}
+      ical_(other.ical_),
+      event_exceptions_(other.event_exceptions_),
+      rrule_(other.rrule_) {}
 
 EventResult::EventResult() {}
 

@@ -40,8 +40,8 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 2;
-const int kCompatibleVersionNumber = 2;
+const int kCurrentVersionNumber = 4;
+const int kCompatibleVersionNumber = 4;
 
 sql::InitStatus LogMigrationFailure(int from_version) {
   LOG(ERROR) << "Calendar DB failed to migrate from version " << from_version
@@ -116,8 +116,7 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
     return sql::INIT_FAILURE;
 
   if (!CreateCalendarTable() || !CreateEventTable() ||
-      !CreateRecurringTable() || !CreateEventTypeTable() ||
-      !CreateRecurringExceptionTable())
+      !CreateEventTypeTable() || !CreateRecurringExceptionTable())
     return sql::INIT_FAILURE;
 
   // Version check.
@@ -192,7 +191,30 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
     // Version prior to adding sequence and ical columns to events
     // table.
     if (!MigrateEventsWithoutSequenceAndIcalColumns()) {
-      return LogMigrationFailure(1);
+      return LogMigrationFailure(cur_version);
+    }
+    ++cur_version;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 2) {
+    // Version prior to adding type, interval, last_checked columns
+    // to calendar table.
+    if (!MigrateCalendarToVersion3()) {
+      return LogMigrationFailure(cur_version);
+    }
+    ++cur_version;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 3) {
+    // Version prior to adding rrule to events table
+    if (!MigrateCalendarToVersion4()) {
+      return LogMigrationFailure(cur_version);
     }
     ++cur_version;
     meta_table_.SetVersionNumber(cur_version);

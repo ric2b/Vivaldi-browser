@@ -56,7 +56,7 @@ class MojoPageTimingSender : public PageTimingSender {
  private:
   // Use associated interface to make sure mojo messages are ordered with regard
   // to legacy IPC messages.
-  mojom::PageLoadMetricsAssociatedPtr page_load_metrics_;
+  mojo::AssociatedRemote<mojom::PageLoadMetrics> page_load_metrics_;
 };
 
 }  //  namespace
@@ -81,7 +81,7 @@ void MetricsRenderFrameObserver::DidChangeCpuTiming(base::TimeDelta time) {
 }
 
 void MetricsRenderFrameObserver::DidObserveLoadingBehavior(
-    blink::WebLoadingBehaviorFlag behavior) {
+    blink::LoadingBehaviorFlag behavior) {
   if (page_timing_metrics_sender_)
     page_timing_metrics_sender_->DidObserveLoadingBehavior(behavior);
 }
@@ -144,9 +144,8 @@ void MetricsRenderFrameObserver::DidCompleteResponse(
     provisional_frame_resource_data_use_->DidCompleteResponse(status);
   } else if (page_timing_metrics_sender_) {
     page_timing_metrics_sender_->DidCompleteResponse(request_id, status);
-    // The provisional frame can be flagged as an ad anytime during the load.
-    if (request_id == provisional_frame_resource_id)
-      UpdateResourceMetadata(request_id);
+    MaybeSetCompletedBeforeFCP(request_id);
+    UpdateResourceMetadata(request_id);
   }
 }
 
@@ -156,9 +155,7 @@ void MetricsRenderFrameObserver::DidCancelResponse(int request_id) {
     provisional_frame_resource_data_use_.reset();
   } else if (page_timing_metrics_sender_) {
     page_timing_metrics_sender_->DidCancelResponse(request_id);
-    // The provisional frame can be flagged as an ad anytime during the load.
-    if (request_id == provisional_frame_resource_id)
-      UpdateResourceMetadata(request_id);
+    UpdateResourceMetadata(request_id);
   }
 }
 
@@ -172,9 +169,7 @@ void MetricsRenderFrameObserver::DidReceiveTransferSizeUpdate(
   } else if (page_timing_metrics_sender_) {
     page_timing_metrics_sender_->DidReceiveTransferSizeUpdate(
         request_id, received_data_length);
-    // The provisional frame can be flagged as an ad anytime during the load.
-    if (request_id == provisional_frame_resource_id)
-      UpdateResourceMetadata(request_id);
+    UpdateResourceMetadata(request_id);
   }
 }
 
@@ -194,6 +189,8 @@ void MetricsRenderFrameObserver::DidLoadResourceFromMemoryCache(
   if (page_timing_metrics_sender_) {
     page_timing_metrics_sender_->DidLoadResourceFromMemoryCache(
         response_url, request_id, encoded_body_length, mime_type);
+    MaybeSetCompletedBeforeFCP(request_id);
+    UpdateResourceMetadata(request_id);
   }
 }
 
@@ -206,11 +203,10 @@ void MetricsRenderFrameObserver::ReadyToCommitNavigation(
   // Create a new data use tracker for the new document load.
   provisional_frame_resource_data_use_ =
       std::make_unique<PageResourceDataUse>();
-  provisional_frame_resource_id = 0;
+  provisional_frame_resource_id_ = 0;
 }
 
-void MetricsRenderFrameObserver::DidFailProvisionalLoad(
-    const blink::WebURLError& error) {
+void MetricsRenderFrameObserver::DidFailProvisionalLoad() {
   // Clear the data use tracker for the provisional navigation that started.
   provisional_frame_resource_data_use_.reset();
 }
@@ -238,7 +234,7 @@ void MetricsRenderFrameObserver::DidCommitProvisionalLoad(
   // Consumers may receive the correct ad information late.
   UpdateResourceMetadata(provisional_frame_resource_data_use_->resource_id());
 
-  provisional_frame_resource_id =
+  provisional_frame_resource_id_ =
       provisional_frame_resource_data_use_->resource_id();
 
   page_timing_metrics_sender_ = std::make_unique<PageTimingMetricsSender>(
@@ -261,16 +257,40 @@ void MetricsRenderFrameObserver::OnAdResourceObserved(int request_id) {
   ad_request_ids_.insert(request_id);
 }
 
+void MetricsRenderFrameObserver::MaybeSetCompletedBeforeFCP(int request_id) {
+  if (HasNoRenderFrame())
+    return;
+
+  const blink::WebPerformance& perf =
+      render_frame()->GetWebFrame()->Performance();
+
+  DCHECK_GT(base::Time::Now(), base::Time::FromDoubleT(perf.NavigationStart()));
+
+  if (perf.FirstContentfulPaint() == 0)
+    before_fcp_request_ids_.insert(request_id);
+}
+
 void MetricsRenderFrameObserver::UpdateResourceMetadata(int request_id) {
   if (!page_timing_metrics_sender_)
     return;
+
   // If the request is an ad, pop it off the list of known ad requests.
   auto ad_resource_it = ad_request_ids_.find(request_id);
   bool reported_as_ad_resource =
       ad_request_ids_.find(request_id) != ad_request_ids_.end();
   if (reported_as_ad_resource)
     ad_request_ids_.erase(ad_resource_it);
+
+  // If the request completed before fcp, pop it off the list of known
+  // before-fcp requests.
+  auto before_fcp_it = before_fcp_request_ids_.find(request_id);
+  bool completed_before_fcp = before_fcp_it != before_fcp_request_ids_.end();
+  if (completed_before_fcp) {
+    before_fcp_request_ids_.erase(before_fcp_it);
+  }
+
   bool is_main_frame_resource = render_frame()->IsMainFrame();
+
   if (provisional_frame_resource_data_use_ &&
       provisional_frame_resource_data_use_->resource_id() == request_id) {
     if (reported_as_ad_resource)
@@ -278,9 +298,11 @@ void MetricsRenderFrameObserver::UpdateResourceMetadata(int request_id) {
           reported_as_ad_resource);
     provisional_frame_resource_data_use_->SetIsMainFrameResource(
         is_main_frame_resource);
+    // Don't bother with before-fcp metrics for a provisional frame.
   } else {
     page_timing_metrics_sender_->UpdateResourceMetadata(
-        request_id, reported_as_ad_resource, is_main_frame_resource);
+        request_id, reported_as_ad_resource, is_main_frame_resource,
+        completed_before_fcp);
   }
 }
 
@@ -359,20 +381,24 @@ mojom::PageLoadTimingPtr MetricsRenderFrameObserver::GetTiming() const {
     timing->paint_timing->first_meaningful_paint =
         ClampDelta(perf.FirstMeaningfulPaint(), start);
   }
-  if (perf.LargestImagePaintSize() > 0) {
+  if (perf.LargestImagePaint() > 0.0) {
     timing->paint_timing->largest_image_paint =
-        perf.LargestImagePaint() == 0.0
-            ? base::TimeDelta()
-            : ClampDelta(perf.LargestImagePaint(), start);
+        ClampDelta(perf.LargestImagePaint(), start);
     timing->paint_timing->largest_image_paint_size =
         perf.LargestImagePaintSize();
+    // LargestImagePaintSize should be available if LargestImagePaint is
+    // available. Note that size can be nonzero while the time is 0 since a time
+    // of 0 is sent when the image is painting. We are intentionally ignoring
+    // these cases, as they should not be reported by the UMA/UKM histograms.
+    DCHECK(perf.LargestImagePaintSize());
   }
-  if (perf.LargestTextPaintSize() > 0) {
+  if (perf.LargestTextPaint() > 0.0) {
     timing->paint_timing->largest_text_paint =
-        perf.LargestTextPaint() == 0.0
-            ? base::TimeDelta()
-            : ClampDelta(perf.LargestTextPaint(), start);
+        ClampDelta(perf.LargestTextPaint(), start);
     timing->paint_timing->largest_text_paint_size = perf.LargestTextPaintSize();
+    // LargestTextPaint and LargestTextPaintSize should be available at the
+    // same time. This is a renderer side DCHECK to ensure this.
+    DCHECK(perf.LargestTextPaintSize());
   }
   if (perf.ParseStart() > 0.0)
     timing->parse_timing->parse_start = ClampDelta(perf.ParseStart(), start);

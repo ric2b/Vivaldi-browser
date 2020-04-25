@@ -55,28 +55,33 @@ SourceFrame.FontView = class extends UI.SimpleView {
 
   /**
    * @param {string} uniqueFontName
-   * @param {?string} content
+   * @param {!Common.DeferredContent} deferredContent
    */
-  _onFontContentLoaded(uniqueFontName, content) {
+  _onFontContentLoaded(uniqueFontName, deferredContent) {
+    const {content} = deferredContent;
     const url = content ? Common.ContentProvider.contentAsDataURL(content, this._mimeType, true) : this._url;
     this.fontStyleElement.textContent =
         String.sprintf('@font-face { font-family: "%s"; src: url(%s); }', uniqueFontName, url);
   }
 
   _createContentIfNeeded() {
-    if (this.fontPreviewElement)
+    if (this.fontPreviewElement) {
       return;
+    }
 
     const uniqueFontName = 'WebInspectorFontPreview' + (++SourceFrame.FontView._fontId);
 
     this.fontStyleElement = createElement('style');
-    this._contentProvider.requestContent().then(this._onFontContentLoaded.bind(this, uniqueFontName));
+    this._contentProvider.requestContent().then(deferredContent => {
+      this._onFontContentLoaded(uniqueFontName, deferredContent);
+    });
     this.element.appendChild(this.fontStyleElement);
 
     const fontPreview = createElement('div');
     for (let i = 0; i < SourceFrame.FontView._fontPreviewLines.length; ++i) {
-      if (i > 0)
+      if (i > 0) {
         fontPreview.createChild('br');
+      }
       fontPreview.createTextChild(SourceFrame.FontView._fontPreviewLines[i]);
     }
     this.fontPreviewElement = fontPreview.cloneNode(true);
@@ -109,8 +114,9 @@ SourceFrame.FontView = class extends UI.SimpleView {
    * @override
    */
   onResize() {
-    if (this._inResize)
+    if (this._inResize) {
       return;
+    }
 
     this._inResize = true;
     try {
@@ -129,8 +135,9 @@ SourceFrame.FontView = class extends UI.SimpleView {
   }
 
   updateFontPreviewSize() {
-    if (!this.fontPreviewElement || !this.isShowing())
+    if (!this.fontPreviewElement || !this.isShowing()) {
       return;
+    }
 
     this.fontPreviewElement.style.removeProperty('visibility');
     const dimension = this._measureElement();

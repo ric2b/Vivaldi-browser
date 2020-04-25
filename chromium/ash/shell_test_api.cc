@@ -10,7 +10,7 @@
 #include "ash/accelerators/accelerator_commands.h"
 #include "ash/accelerometer/accelerometer_reader.h"
 #include "ash/app_list/app_list_controller_impl.h"
-#include "ash/app_list/presenter/app_list_presenter_impl.h"
+#include "ash/app_list/app_list_presenter_impl.h"
 #include "ash/app_list/views/app_list_view.h"
 #include "ash/home_screen/home_launcher_gesture_handler.h"
 #include "ash/home_screen/home_launcher_gesture_handler_observer.h"
@@ -286,7 +286,7 @@ void ShellTestApi::WaitForLauncherAnimationState(
 }
 
 PaginationModel* ShellTestApi::GetAppListPaginationModel() {
-  app_list::AppListView* view =
+  AppListView* view =
       Shell::Get()->app_list_controller()->presenter()->GetView();
   if (!view)
     return nullptr;

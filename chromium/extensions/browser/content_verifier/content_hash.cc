@@ -83,9 +83,14 @@ ContentHash::FetchKey& ContentHash::FetchKey::operator=(
     ContentHash::FetchKey&& other) = default;
 
 // static
-void ContentHash::Create(FetchKey key,
-                         const IsCancelledCallback& is_cancelled,
-                         CreatedCallback created_callback) {
+void ContentHash::Create(
+    FetchKey key,
+    ContentVerifierDelegate::VerifierSourceType source_type,
+    const IsCancelledCallback& is_cancelled,
+    CreatedCallback created_callback) {
+  // TODO(https://crbug.com/958794): Add support for unsigned hashes.
+  DCHECK_EQ(ContentVerifierDelegate::VerifierSourceType::SIGNED_HASHES,
+            source_type);
   // Step 1/2: verified_contents.json:
   std::unique_ptr<VerifiedContents> verified_contents = GetVerifiedContents(
       key,
@@ -118,14 +123,30 @@ void ContentHash::ForceBuildComputedHashes(
   std::move(created_callback).Run(this, is_cancelled && is_cancelled.Run());
 }
 
-const VerifiedContents& ContentHash::verified_contents() const {
-  DCHECK(status_ >= Status::kHasVerifiedContents && verified_contents_);
-  return *verified_contents_;
+ContentHash::TreeHashVerificationResult ContentHash::VerifyTreeHashRoot(
+    const base::FilePath& relative_path,
+    const std::string* root) const {
+  DCHECK(verified_contents_);
+  if (!verified_contents_->HasTreeHashRoot(relative_path))
+    return TreeHashVerificationResult::NO_ENTRY;
+
+  if (!root || !verified_contents_->TreeHashRootEquals(relative_path, *root))
+    return TreeHashVerificationResult::HASH_MISMATCH;
+
+  return TreeHashVerificationResult::SUCCESS;
 }
 
 const ComputedHashes::Reader& ContentHash::computed_hashes() const {
-  DCHECK(status_ == Status::kSucceeded && computed_hashes_);
+  DCHECK(succeeded_ && computed_hashes_);
   return *computed_hashes_;
+}
+
+// static
+std::string ContentHash::ComputeTreeHashForContent(const std::string& contents,
+                                                   int block_size) {
+  std::vector<std::string> hashes;
+  ComputedHashes::ComputeHashesForContent(contents, block_size, &hashes);
+  return ComputeTreeHashRoot(hashes, block_size / crypto::kSHA256Length);
 }
 
 ContentHash::ContentHash(
@@ -137,12 +158,7 @@ ContentHash::ContentHash(
       extension_root_(root),
       verified_contents_(std::move(verified_contents)),
       computed_hashes_(std::move(computed_hashes)) {
-  if (!verified_contents_)
-    status_ = Status::kInvalid;
-  else if (!computed_hashes_)
-    status_ = Status::kHasVerifiedContents;
-  else
-    status_ = Status::kSucceeded;
+  succeeded_ = verified_contents_ != nullptr && computed_hashes_ != nullptr;
 }
 
 ContentHash::~ContentHash() = default;
@@ -301,7 +317,7 @@ bool ContentHash::CreateHashes(const base::FilePath& hashes_file,
                       timer.Elapsed());
 
   if (result)
-    status_ = Status::kSucceeded;
+    succeeded_ = true;
 
   return result;
 }
@@ -336,7 +352,7 @@ void ContentHash::BuildComputedHashes(bool attempted_fetching_verified_contents,
       // will_create = true;
     } else {
       // Read successful.
-      status_ = Status::kSucceeded;
+      succeeded_ = true;
       computed_hashes_ = std::move(computed_hashes);
       return;
     }
@@ -356,7 +372,7 @@ void ContentHash::BuildComputedHashes(bool attempted_fetching_verified_contents,
     return;
 
   // Read successful.
-  status_ = Status::kSucceeded;
+  succeeded_ = true;
   computed_hashes_ = std::move(computed_hashes);
 }
 

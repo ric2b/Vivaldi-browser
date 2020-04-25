@@ -65,7 +65,9 @@ class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationView
   MediaNotificationView(MediaNotificationContainer* container,
                         base::WeakPtr<MediaNotificationItem> item,
                         views::View* header_row_controls_view,
-                        const base::string16& default_app_name);
+                        const base::string16& default_app_name,
+                        int notification_width,
+                        bool should_show_icon);
   ~MediaNotificationView() override;
 
   void SetExpanded(bool expanded);
@@ -89,6 +91,12 @@ class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationView
   void UpdateWithMediaActions(
       const std::set<media_session::mojom::MediaSessionAction>& actions);
   void UpdateWithMediaArtwork(const gfx::ImageSkia& image);
+
+  const views::Label* title_label_for_testing() const { return title_label_; }
+
+  const views::Label* artist_label_for_testing() const { return artist_label_; }
+
+  views::Button* GetHeaderRowForTesting() const;
 
  private:
   friend class MediaNotificationViewTest;
@@ -122,6 +130,9 @@ class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationView
 
   // String to set as the app name of the header when there is no source title.
   base::string16 default_app_name_;
+
+  // Width of the notification in pixels. Used for calculating artwork bounds.
+  int notification_width_;
 
   bool has_artwork_ = false;
 

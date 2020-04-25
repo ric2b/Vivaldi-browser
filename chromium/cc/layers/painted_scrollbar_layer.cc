@@ -11,10 +11,6 @@
 #include "cc/trees/layer_tree_host.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
-namespace {
-static constexpr int kMaxScrollbarDimension = 8192;
-}
-
 namespace cc {
 
 std::unique_ptr<LayerImpl> PaintedScrollbarLayer::CreateLayerImpl(
@@ -25,50 +21,37 @@ std::unique_ptr<LayerImpl> PaintedScrollbarLayer::CreateLayerImpl(
 }
 
 scoped_refptr<PaintedScrollbarLayer> PaintedScrollbarLayer::Create(
-    std::unique_ptr<Scrollbar> scrollbar,
-    ElementId scroll_element_id) {
-  return base::WrapRefCounted(
-      new PaintedScrollbarLayer(std::move(scrollbar), scroll_element_id));
+    std::unique_ptr<Scrollbar> scrollbar) {
+  return base::WrapRefCounted(new PaintedScrollbarLayer(std::move(scrollbar)));
 }
 
 PaintedScrollbarLayer::PaintedScrollbarLayer(
-    std::unique_ptr<Scrollbar> scrollbar,
-    ElementId scroll_element_id)
+    std::unique_ptr<Scrollbar> scrollbar)
     : scrollbar_(std::move(scrollbar)),
-      scroll_element_id_(scroll_element_id),
       internal_contents_scale_(1.f),
+      supports_drag_snap_back_(false),
       thumb_thickness_(scrollbar_->ThumbThickness()),
       thumb_length_(scrollbar_->ThumbLength()),
       is_overlay_(scrollbar_->IsOverlay()),
       has_thumb_(scrollbar_->HasThumb()),
-      thumb_opacity_(scrollbar_->ThumbOpacity()) {
-  SetIsScrollbar(true);
-}
+      thumb_opacity_(scrollbar_->ThumbOpacity()) {}
 
 PaintedScrollbarLayer::~PaintedScrollbarLayer() = default;
-
-void PaintedScrollbarLayer::SetScrollElementId(ElementId element_id) {
-  if (element_id == scroll_element_id_)
-    return;
-
-  scroll_element_id_ = element_id;
-  SetNeedsCommit();
-}
 
 bool PaintedScrollbarLayer::OpacityCanAnimateOnImplThread() const {
   return scrollbar_->IsOverlay();
 }
 
 void PaintedScrollbarLayer::PushPropertiesTo(LayerImpl* layer) {
-  Layer::PushPropertiesTo(layer);
+  ScrollbarLayerBase::PushPropertiesTo(layer);
 
   PaintedScrollbarLayerImpl* scrollbar_layer =
       static_cast<PaintedScrollbarLayerImpl*>(layer);
 
-  scrollbar_layer->SetScrollElementId(scroll_element_id_);
   scrollbar_layer->set_internal_contents_scale_and_bounds(
       internal_contents_scale_, internal_content_bounds_);
 
+  scrollbar_layer->SetSupportsDragSnapBack(supports_drag_snap_back_);
   scrollbar_layer->SetThumbThickness(thumb_thickness_);
   scrollbar_layer->SetBackButtonRect(back_button_rect_);
   scrollbar_layer->SetForwardButtonRect(forward_button_rect_);
@@ -103,7 +86,7 @@ void PaintedScrollbarLayer::SetLayerTreeHost(LayerTreeHost* host) {
     thumb_resource_ = nullptr;
   }
 
-  Layer::SetLayerTreeHost(host);
+  ScrollbarLayerBase::SetLayerTreeHost(host);
 }
 
 gfx::Rect PaintedScrollbarLayer::ScrollbarLayerRectToContentRect(
@@ -132,6 +115,7 @@ gfx::Rect PaintedScrollbarLayer::OriginThumbRect() const {
 }
 
 void PaintedScrollbarLayer::UpdateThumbAndTrackGeometry() {
+  UpdateProperty(scrollbar_->SupportsDragSnapBack(), &supports_drag_snap_back_);
   UpdateProperty(scrollbar_->TrackRect(), &track_rect_);
   UpdateProperty(scrollbar_->BackButtonRect(), &back_button_rect_);
   UpdateProperty(scrollbar_->ForwardButtonRect(), &forward_button_rect_);
@@ -169,9 +153,8 @@ void PaintedScrollbarLayer::UpdateInternalContentScale() {
 
 bool PaintedScrollbarLayer::Update() {
   {
-    base::AutoReset<bool> ignore_set_needs_commit(&ignore_set_needs_commit_,
-                                                  true);
-    Layer::Update();
+    auto ignore_set_needs_commit = IgnoreSetNeedsCommit();
+    ScrollbarLayerBase::Update();
     UpdateInternalContentScale();
   }
 
@@ -240,13 +223,23 @@ UIResourceBitmap PaintedScrollbarLayer::RasterizeScrollbarPart(
   // Pages can end up requesting arbitrarily large scrollbars.  Prevent this
   // from crashing due to OOM and try something smaller.
   SkBitmap skbitmap;
-  if (!skbitmap.tryAllocN32Pixels(content_rect.width(),
-                                  content_rect.height())) {
-    content_rect.Intersect(
-        gfx::Rect(requested_content_rect.x(), requested_content_rect.y(),
-                  kMaxScrollbarDimension, kMaxScrollbarDimension));
-    skbitmap.allocN32Pixels(content_rect.width(), content_rect.height());
+  bool allocation_succeeded =
+      skbitmap.tryAllocN32Pixels(content_rect.width(), content_rect.height());
+  // Assuming 4bpp, caps at 4M.
+  constexpr int kMinScrollbarDimension = 1024;
+  int dimension = std::max(content_rect.width(), content_rect.height()) / 2;
+  while (!allocation_succeeded && dimension >= kMinScrollbarDimension) {
+    content_rect.Intersect(gfx::Rect(requested_content_rect.x(),
+                                     requested_content_rect.y(), dimension,
+                                     dimension));
+    allocation_succeeded =
+        skbitmap.tryAllocN32Pixels(content_rect.width(), content_rect.height());
+    if (!allocation_succeeded)
+      dimension = dimension / 2;
   }
+  CHECK(allocation_succeeded)
+      << "Failed to allocate memory for scrollbar at dimension : " << dimension;
+
   SkiaPaintCanvas canvas(skbitmap);
   canvas.clear(SK_ColorTRANSPARENT);
 
@@ -255,13 +248,8 @@ UIResourceBitmap PaintedScrollbarLayer::RasterizeScrollbarPart(
   float scale_y =
       content_rect.height() / static_cast<float>(layer_rect.height());
   canvas.scale(SkFloatToScalar(scale_x), SkFloatToScalar(scale_y));
-  // TODO(pdr): Scrollbars are painted with an offset (see Scrollbar::PaintPart)
-  // and the canvas is translated so that scrollbars are drawn at the origin.
-  // Refactor this code to not use an offset at all so Scrollbar::PaintPart
-  // paints at the origin and no translation is needed below.
-  canvas.translate(-layer_rect.x(), -layer_rect.y());
 
-  scrollbar_->PaintPart(&canvas, part, layer_rect);
+  scrollbar_->PaintPart(&canvas, part);
   // Make sure that the pixels are no longer mutable to unavoid unnecessary
   // allocation and copying.
   skbitmap.setImmutable();

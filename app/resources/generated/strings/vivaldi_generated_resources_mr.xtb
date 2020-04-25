@@ -1,41 +1,29 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="mr">
-<translation id="1049795001945932310">&amp;भाषा सेटिंग्ज</translation>
 <translation id="1056898198331236512">चेतावणी</translation>
-<translation id="1084824384139382525">दुवा प&amp;त्ता कॉपी करा</translation>
-<translation id="1163931534039071049">फ्रेम स्त्रोत &amp;पहा</translation>
 <translation id="1165039591588034296">त्रुटी</translation>
 <translation id="1175364870820465910">&amp;मुद्रण...</translation>
-<translation id="1187722533808055681">निष्क्रियता समाप्त करणे</translation>
 <translation id="1244303850296295656">विस्तार त्रुटी</translation>
 <translation id="1546280085599573572">आपण होम बटण क्लिक करता तेव्हा कोणते पृष्ठ दर्शविले जाते हे या विस्ताराने बदलले आहे.</translation>
 <translation id="1588438908519853928">सामान्य</translation>
 <translation id="1635033183663317347">आपल्‍या पालकाद्वारे स्थापित केले.</translation>
-<translation id="1723824996674794290">&amp;नवीन विंडो</translation>
 <translation id="1729533290416704613">आपण विविधोपयोगी क्षेत्रातून शोध घेता तेव्हा कोणते पृष्ठ दर्शविले जाते हे देखील हे नियंत्रित करते.</translation>
-<translation id="1850508293116537636">&amp;घड्याळाच्या दिशेने फिरवा</translation>
-<translation id="1901303067676059328">&amp;सर्व निवडा</translation>
 <translation id="2087822576218954668">मुद्रण: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">गुप्त टॅब: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">नेटिव्ह क्लायंट मॉड्यूल: <ph name="NEXE_NAME" /></translation>
-<translation id="2218515861914035131">साधा मजकूर म्हणून पेस्ट करा</translation>
 <translation id="2282146716419988068">GPU प्रक्रिया</translation>
 <translation id="2301382460326681002">विस्तार मूळ निर्देशिका अवैध आहे.</translation>
-<translation id="2326931316514688470">&amp;अ‍ॅप रीलोड करा</translation>
 <translation id="2327492829706409234">अ‍ॅप सक्षम करा</translation>
 <translation id="2344028582131185878">स्वयंचलित डाउनलोड</translation>
 <translation id="2348176352564285430">अॅप: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">विस्तार निर्देशिका निवडा.</translation>
 <translation id="241082044617551207">अज्ञात प्लगिन</translation>
-<translation id="2423578206845792524">म्हणून प्रतिमा ज&amp;तन करा...</translation>
 <translation id="2439110203301358333">आपल्या संगणकावरील दुसऱ्या प्रोग्रामने Vivaldi च्या कार्य करण्याचा मार्ग बदलू शकणारा विस्तार जोडला.</translation>
 <translation id="2445081178310039857">विस्तार मूळ निर्देशिका आवश्यक आहे.</translation>
 <translation id="2470702053775288986">असमर्थित विस्तार अक्षम</translation>
-<translation id="2550212893339833758">स्वॅप केलेली मेमरी</translation>
 <translation id="2662876636500006917">Vivaldi वेब बाजार</translation>
 <translation id="2678063897982469759">पुन्हा-सक्षम करा</translation>
-<translation id="2785873697295365461">फाईल वर्णनकर्ते</translation>
 <translation id="2809586584051668049">आणि <ph name="NUMBER_ADDITIONAL_DISABLED" /> अधिक</translation>
 <translation id="2850541429955027218">थीम जोडा</translation>
 <translation id="2861941300086904918">नेटिव्ह क्लायंट सुरक्षा व्यवस्थापक</translation>
@@ -45,22 +33,16 @@
 <translation id="299483336428448530">आपल्‍या पालकाद्वारे स्थापित केले.</translation>
 <translation id="3080207940057008665">आपल्या संगणकावरील दुसऱ्या प्रोग्रामने Vivaldi च्या कार्य करण्याचा मार्ग बदलू शकणारी थीम जोडली.</translation>
 <translation id="3122464029669770682">CPU</translation>
-<translation id="3124111068741548686">वापरकर्ता हँडल</translation>
 <translation id="3222066309010235055">पूर्वप्रस्तुती: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">पॅक करण्यासाठी विस्ताराची मूळ निर्देशिका निवडा. एक विस्तार अद्यतनित करण्याकरिता, पुनर्वापरासाठी खाजगी की फाइल देखील निवडा.</translation>
-<translation id="3280237271814976245">&amp;म्हणून जतन करा...</translation>
 <translation id="3288047731229977326">विकासक मोडमध्‍ये चालणारे विस्‍तार आपल्‍या संगणकास हानी पोहचवू शकतात. आपण विकासक नसल्‍यास, सुरक्षित राहाण्‍यासाठी विकासक मोडमध्‍ये चालणारे हे विस्‍तार आपण अक्षम करावे.</translation>
-<translation id="3347086966102161372">प्रतिमा पत्ता कॉपी करा</translation>
 <translation id="3378572629723696641">हा विस्तार दूषित झालेला असू शकतो.</translation>
-<translation id="345693547134384690">नवीन विंडोमध्ये &amp;प्रतिमा उघडा</translation>
 <translation id="3505030558724226696">डिव्‍हाइस प्रवेश रद्द करा</translation>
-<translation id="3627588569887975815">गु&amp;प्त विंडोमध्ये दुवा उघडा</translation>
 <translation id="3678156199662914018">विस्तारः <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">अ‍ॅप दुरुस्त करा</translation>
 <translation id="3908501907586732282">विस्तार सक्षम करा</translation>
 <translation id="3909791450649380159">क&amp;ट करा</translation>
 <translation id="3927932062596804919">नकार द्या</translation>
-<translation id="3936390757709632190">नवीन टॅबमध्ये ऑडिओ &amp;उघडा</translation>
 <translation id="3943582379552582368">&amp;मागील</translation>
 <translation id="3979395879372752341">नवीन विस्तार जोडला (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -69,23 +51,16 @@
 <translation id="4100839878934973028">आपल्या संगणकावरील दुसऱ्या प्रोग्रामने Vivaldi च्या कार्य करण्याचा मार्ग बदलू शकणारा अ‍ॅप जोडला.</translation>
 <translation id="4130207949184424187">आपण विविधोपयोगी क्षेत्रातून शोध घेता तेव्हा कोणते पृष्ठ दर्शविले जाते ते या विस्ताराने बदलले आहे.</translation>
 <translation id="4176463684765177261">अक्षम</translation>
-<translation id="4200983522494130825">नवीन &amp;टॅब</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K लाइव्ह)</translation>
 <translation id="4384652540891215547">विस्तार सक्रिय करा</translation>
 <translation id="4394049700291259645">अक्षम करा</translation>
 <translation id="4593021220803146968"><ph name="URL" /> &amp;येथे जा</translation>
 <translation id="4595560905247879544">अॅप्स आणि विस्तार केवळ (<ph name="CUSTODIAN_NAME" />) व्यवस्थापकाद्वारे सुधारित केले जाऊ शकतात.</translation>
 <translation id="4613271546271159013">आपण नवीन टॅब उघडता तेव्हा कोणते पृष्ठ दर्शविले जाते हे विस्ताराने बदलले आहे.</translation>
-<translation id="4677772697204437347">GPU मेमरी</translation>
-<translation id="4711638718396952945">सेटिंग्ज पुनर्संचयित करा</translation>
-<translation id="4839303808932127586">म्हणून व्हिडिओ ज&amp;तन करा...</translation>
 <translation id="488785315393301722">तपशील दर्शवा</translation>
-<translation id="49896407730300355">घड्याळाच्या वि&amp;रूद्ध दिशेने फिरवा</translation>
-<translation id="4989966318180235467">&amp;पार्श्वभूमी पृष्ठाचे निरीक्षण करा</translation>
 <translation id="5027562294707732951">विस्तार जोडा</translation>
 <translation id="5039804452771397117">परवानगी द्या</translation>
 <translation id="5143374789336132547">आपण होम बटण क्लिक करता तेव्हा कोणते पृष्ठ दर्शविले जाते हे "<ph name="EXTENSION_NAME" />" विस्ताराने बदलले आहे.</translation>
-<translation id="5233019165164992427">NaCl डीबग पोर्ट</translation>
 <translation id="5233231016133573565">प्रक्रिया आयडी</translation>
 <translation id="52912272896845572">खाजगी की फाइल अवैध आहे.</translation>
 <translation id="5301954838959518834">ठीक, मला समजले</translation>
@@ -100,48 +75,31 @@
 <translation id="5575473780076478375">गुप्त विस्तार: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">आपण होम बटण क्लिक करता तेव्हा कोणते पृष्ठ दर्शविले जाते हे देखील हे नियंत्रित करते.</translation>
 <translation id="5715711091495208045">प्लगिन ब्रोकर: <ph name="PLUGIN_NAME" /></translation>
-<translation id="5764483294734785780">म्हणून ऑडिओ ज&amp;तन करा...</translation>
-<translation id="5780973441651030252">प्रक्रिया प्राधान्य</translation>
 <translation id="583281660410589416">अज्ञात</translation>
 <translation id="5956585768868398362">आपण अपेक्षा करत होता हे तेच शोध पृष्ठ आहे?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> सर्वोच्च)</translation>
 <translation id="5965661248935608907">आपण होम बटण क्लिक करता किंवा विविधोपयोगी क्षेत्रातून शोध घेता तेव्हा कोणते पृष्ठ दर्शविले जाते हे देखील हे नियंत्रित करते.</translation>
 <translation id="6101226222197207147">नवीन अ‍ॅप जोडला (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">आपले इंटरनेट कनेक्शन नियंत्रित केले जात आहे</translation>
-<translation id="6156863943908443225">स्क्रिप्ट कॅश  </translation>
 <translation id="6196854373336333322">"<ph name="EXTENSION_NAME" />" विस्ताराने आपल्या प्रॉक्सी सेटिंग्जचे नियंत्रण घेतले आहे, याचा अर्थ हे आपण ऑनलाइन करता ती कोणतीही गोष्ट बदलू शकते, खंडित करू शकते किंवा चोरून ऐकू शकते. हा बदल का झाला, याबद्दल आपण सुनिश्चित नसल्यास, आपल्याला कदाचित तो नको आहे.</translation>
-<translation id="6239558157302047471">रीलोड आणि फ्रेम करा</translation>
 <translation id="6247802389331535091">सिस्टीम: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="6251870443722440887">GDI हँडल</translation>
-<translation id="6308937455967653460">म्हणून दु&amp;वा जतन करा...</translation>
-<translation id="6398765197997659313">पूर्ण स्क्रीनमधून निर्गमन करा</translation>
-<translation id="6406303162637086258">ब्राउझर रीस्टार्ट प्रतिकृती करा</translation>
 <translation id="6445450263907939268">आपल्याला हे बदल नको असल्यास, आपण आपल्या मागील सेटिंग्ज पुनर्संचयित करू शकता.</translation>
 <translation id="6447842834002726250">कुकीज</translation>
 <translation id="6498249116389603658">&amp;आपल्या सर्व भाषा</translation>
 <translation id="6503077044568424649">सर्वाधिक भेट दिलेले</translation>
 <translation id="6508261954199872201">अनुप्रयोग: <ph name="APP_NAME" /></translation>
-<translation id="6518014396551869914">प्रतिमा कॉ&amp;पी करा</translation>
-<translation id="6639554308659482635">SQLite मेमरी</translation>
 <translation id="6691936601825168937">&amp;पुढील</translation>
 <translation id="6798954102094737107">प्लगिन: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6812841287760418429">बदल ठेवा</translation>
-<translation id="6886871292305414135">नवीन &amp;टॅबमध्ये दुवा उघडा</translation>
 <translation id="6900284862687837908">पार्श्वभूमी अॅप: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">फाईल प्रवेश मागे घ्या</translation>
-<translation id="708060913198414444">ऑडिओ पत्ता कॉपी करा</translation>
 <translation id="7287143125007575591">प्रवेश नाकारला.</translation>
-<translation id="7309257895202129721">नियंत्रणे &amp;दर्शवा</translation>
 <translation id="7427348830195639090">पार्श्वभूमी पृष्ठ: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7564847347806291057">प्रक्रिया समाप्त करा</translation>
 <translation id="7629827748548208700">टॅब: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">प्राप्तकर्ता: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7685049629764448582">JavaScript मेमरी</translation>
 <translation id="7704305437604973648">कार्य</translation>
 <translation id="7760004034676677601">आपण अपेक्षा करत होता हे तेच प्रारंभ पृष्ठ आहे?</translation>
 <translation id="7791543448312431591">जोडा</translation>
 <translation id="7818135753970109980">नवीन थीम जोडली (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="782057141565633384">व्हिडिओ पत्ता कॉपी करा</translation>
 <translation id="7857949311770343000">आपण अपेक्षा करत होता ते हे नवीन पृष्ठ आहे?</translation>
 <translation id="786073089922909430">सेवा: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">उयुक्तता: <ph name="UTILITY_TYPE" /></translation>
@@ -157,14 +115,9 @@
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8261378640211443080"><ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> मध्ये हा विस्तार सूचीबद्ध केला नाही आणि कदाचित आपल्या माहिती शिवाय जोडला गेला आहे.</translation>
 <translation id="8351419472474436977">या विस्ताराने आपल्या प्रॉक्सी सेटिंग्जचे नियंत्रण घेतले आहे, याचा अर्थ ही बदलू शकते, खंडित होवू शकते किंवा आपण ऑनलाइन करता ती कोणतीहीगोष्ट चोरून एकू शकतो. हा बदल का झाला, याबद्दल आपण निश्चित नसल्यास, आपल्याला कदाचित तो नको आहे.</translation>
-<translation id="8546306075665861288">प्रतिमा कॅश  </translation>
-<translation id="8584280235376696778">नवीन टॅबमध्ये व्हिडिओ &amp;उघडा</translation>
 <translation id="8615618338313291042">गुप्त अनुप्रयोग: <ph name="APP_NAME" /></translation>
-<translation id="862750493060684461">CSS कॅश  </translation>
-<translation id="8664389313780386848">पृष्ठ स्त्रोत &amp;पहा</translation>
 <translation id="8808478386290700967">वेब स्टोअर</translation>
 <translation id="8859174528519900719">सबफ्रेम: <ph name="SUBFRAME_SITE" /></translation>
-<translation id="8899851313684471736">दुवा नवीन &amp;विंडोमध्ये उघडा</translation>
 <translation id="8916476537757519021">गुप्त सबफ्रेम: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">तपशील लपवा</translation>
 <translation id="9170848237812810038">&amp;पूर्ववत करा</translation>

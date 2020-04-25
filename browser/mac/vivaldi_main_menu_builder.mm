@@ -171,14 +171,17 @@ base::scoped_nsobject<NSMenuItem> BuildWindowMenu(
             Item(IDS_MINIMIZE_WINDOW_MAC)
                 .tag(IDC_MINIMIZE_WINDOW)
                 .action(@selector(performMiniaturize:)),
-                Item(IDS_ZOOM_WINDOW_MAC)
-                    .tag(IDC_MAXIMIZE_WINDOW)
-                    .action(@selector(performZoom:)),
-                Item().is_separator(),
-                Item(IDS_ALL_WINDOWS_FRONT_MAC)
-                    .tag(IDC_ALL_WINDOWS_FRONT)
-                    .action(@selector(arrangeInFront:)),
-                Item().is_separator(),
+            Item(IDS_ZOOM_WINDOW_MAC)
+                .tag(IDC_MAXIMIZE_WINDOW)
+                .action(@selector(performZoom:)),
+            Item().is_separator(),
+            Item(IDS_ALL_WINDOWS_FRONT_MAC)
+                .tag(IDC_ALL_WINDOWS_FRONT)
+                .action(@selector(arrangeInFront:)),
+            Item().is_separator()
+              .tag(55555), // 55555 defines start of dynamic tab list
+              //tabs go here
+            Item().is_separator(), // seperator before open window list
           })
           .Build();
   [nsapp setWindowsMenu:[item submenu]];

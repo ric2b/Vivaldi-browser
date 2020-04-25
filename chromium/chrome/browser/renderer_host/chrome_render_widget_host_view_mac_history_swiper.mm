@@ -38,7 +38,6 @@ const CGFloat kCancelEventVerticalLowerThreshold = 0.01;
 // expect NSTouch callbacks. We set this variable to YES and ignore NSTouch
 // callbacks.
 BOOL forceMagicMouse = NO;
-
 }  // namespace
 
 @interface HistorySwiper ()

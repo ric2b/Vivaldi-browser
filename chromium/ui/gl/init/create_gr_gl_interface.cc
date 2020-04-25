@@ -640,16 +640,29 @@ sk_sp<GrGLInterface> CreateGrGLInterface(
   //     gl->glFlushMappedNamedBufferRangeEXTFn;
   // functions->fTextureBuffer = gl->glTextureBufferEXTFn;
 
-  functions->fDebugMessageControl = gl->glDebugMessageControlFn;
-  functions->fDebugMessageInsert = gl->glDebugMessageInsertFn;
-  functions->fDebugMessageCallback = gl->glDebugMessageCallbackFn;
-  functions->fGetDebugMessageLog = gl->glGetDebugMessageLogFn;
-  functions->fPushDebugGroup = gl->glPushDebugGroupFn;
-  functions->fPopDebugGroup = gl->glPopDebugGroupFn;
-  functions->fObjectLabel = gl->glObjectLabelFn;
+  // Some drivers report GL_KHR_debug but do not provide functions. Validate and
+  // remove reported extension from the list if necessary
+  // See https://crbug.com/1008125
+  if (gl->glDebugMessageControlFn && gl->glDebugMessageInsertFn &&
+      gl->glDebugMessageCallbackFn && gl->glGetDebugMessageLogFn &&
+      gl->glPushDebugGroupFn && gl->glPopDebugGroupFn && gl->glObjectLabelFn) {
+    functions->fDebugMessageControl = gl->glDebugMessageControlFn;
+    functions->fDebugMessageInsert = gl->glDebugMessageInsertFn;
+    functions->fDebugMessageCallback = gl->glDebugMessageCallbackFn;
+    functions->fGetDebugMessageLog = gl->glGetDebugMessageLogFn;
+    functions->fPushDebugGroup = gl->glPushDebugGroupFn;
+    functions->fPopDebugGroup = gl->glPopDebugGroupFn;
+    functions->fObjectLabel = gl->glObjectLabelFn;
+  } else {
+    extensions.remove("GL_KHR_debug");
+  }
 
   // GL_EXT_window_rectangles
   functions->fWindowRectangles = gl->glWindowRectanglesEXTFn;
+
+  // GL_QCOM_tiled_rendering
+  functions->fStartTiling = gl->glStartTilingQCOMFn;
+  functions->fEndTiling = gl->glEndTilingQCOMFn;
 
   // EGL_KHR_image / EGL_KHR_image_base
   // functions->fCreateImage = nullptr;

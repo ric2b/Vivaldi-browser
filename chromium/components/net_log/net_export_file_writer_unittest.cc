@@ -21,7 +21,8 @@
 #include "base/test/task_environment.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/test_completion_callback.h"
 #include "net/log/net_log_capture_mode.h"
@@ -82,15 +83,15 @@ class FakeNetLogExporter : public network::mojom::NetLogExporter {
 class FakeNetworkContext : public network::TestNetworkContext {
  public:
   void CreateNetLogExporter(
-      network::mojom::NetLogExporterRequest request) override {
-    binding_ = mojo::StrongBinding<network::mojom::NetLogExporter>::Create(
-        std::make_unique<FakeNetLogExporter>(), std::move(request));
+      mojo::PendingReceiver<network::mojom::NetLogExporter> receiver) override {
+    receiver_ = mojo::MakeSelfOwnedReceiver<network::mojom::NetLogExporter>(
+        std::make_unique<FakeNetLogExporter>(), std::move(receiver));
   }
 
-  void Disconnect() { binding_->Close(); }
+  void Disconnect() { receiver_->Close(); }
 
  private:
-  mojo::StrongBindingPtr<network::mojom::NetLogExporter> binding_;
+  mojo::SelfOwnedReceiverRef<network::mojom::NetLogExporter> receiver_;
 };
 
 // Sets |path| to |path_to_return| and always returns true. This function is
@@ -255,7 +256,8 @@ class NetExportFileWriterTest : public ::testing::Test {
  public:
   NetExportFileWriterTest()
       : task_environment_(base::test::TaskEnvironment::MainThreadType::IO),
-        network_change_notifier_(net::NetworkChangeNotifier::CreateMock()),
+        network_change_notifier_(
+            net::NetworkChangeNotifier::CreateMockIfNeeded()),
         network_service_(network::NetworkService::CreateForTesting()) {}
 
   // ::testing::Test implementation
@@ -268,7 +270,8 @@ class NetExportFileWriterTest : public ::testing::Test {
     params->initial_proxy_config =
         net::ProxyConfigWithAnnotation::CreateDirect();
     network_context_ = std::make_unique<network::NetworkContext>(
-        network_service_.get(), mojo::MakeRequest(&network_context_ptr_),
+        network_service_.get(),
+        network_context_remote_.BindNewPipeAndPassReceiver(),
         std::move(params));
 
     // Override |file_writer_|'s default-log-base-directory-getter to
@@ -435,7 +438,7 @@ class NetExportFileWriterTest : public ::testing::Test {
   TestStateObserver* test_state_observer() { return &test_state_observer_; }
 
   network::mojom::NetworkContext* network_context() {
-    return network_context_ptr_.get();
+    return network_context_remote_.get();
   }
 
  private:
@@ -444,10 +447,10 @@ class NetExportFileWriterTest : public ::testing::Test {
   std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier_;
   std::unique_ptr<network::NetworkService> network_service_;
 
-  network::mojom::NetworkContextPtr network_context_ptr_;
+  mojo::Remote<network::mojom::NetworkContext> network_context_remote_;
   std::unique_ptr<network::NetworkContext> network_context_;
 
-  // |file_writer_| is initialized after |network_context_ptr_| since
+  // |file_writer_| is initialized after |network_context_remote_| since
   // |file_writer_| destructor can talk to mojo objects owned by
   // |network_context_|.
   NetExportFileWriter file_writer_;
@@ -736,7 +739,7 @@ TEST_F(NetExportFileWriterTest, StartWithNetworkContextActive) {
   simple_loader->SetOnRedirectCallback(base::BindRepeating(
       [](base::RepeatingClosure notify_log,
          const net::RedirectInfo& redirect_info,
-         const network::ResourceResponseHead& response_head,
+         const network::mojom::URLResponseHead& response_head,
          std::vector<std::string>* to_be_removed_headers) { notify_log.Run(); },
       run_loop.QuitClosure()));
   simple_loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(

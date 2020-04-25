@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.download.home.list.holder;
 
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.DrawableRes;
 import android.support.v4.graphics.drawable.RoundedBitmapDrawable;
 import android.support.v4.graphics.drawable.RoundedBitmapDrawableFactory;
 import android.view.LayoutInflater;
@@ -15,12 +14,16 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.DrawableRes;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.browser.download.home.list.ListItem;
 import org.chromium.chrome.browser.download.home.list.UiUtils;
 import org.chromium.chrome.download.R;
 import org.chromium.components.offline_items_collection.OfflineItemVisuals;
 import org.chromium.ui.modelutil.PropertyModel;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /** A {@link RecyclerView.ViewHolder} specifically meant to display a generic {@code OfflineItem}.
  */
@@ -34,6 +37,8 @@ public class GenericViewHolder extends OfflineItemViewHolder {
     public static GenericViewHolder create(ViewGroup parent) {
         View view = LayoutInflater.from(parent.getContext())
                             .inflate(R.layout.download_manager_generic_item, null);
+        if (ChromeApplication.isVivaldi())
+            view.setBackgroundColor(ApiCompatibilityUtils.getColor(view.getResources(), android.R.color.transparent));
         return new GenericViewHolder(view);
     }
 

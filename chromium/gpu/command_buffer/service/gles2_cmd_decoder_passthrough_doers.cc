@@ -6,7 +6,9 @@
 
 #include "base/bind_helpers.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/ranges.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/common/discardable_handle.h"
 #include "gpu/command_buffer/service/decoder_client.h"
 #include "gpu/command_buffer/service/gl_stream_texture_image.h"
@@ -125,7 +127,7 @@ GLuint GetTextureServiceID(gl::GLApi* api,
   }
 
   if (create_if_missing) {
-    GLuint service_id = 0;
+    service_id = 0;
     api->glGenTexturesFn(1, &service_id);
     resources->texture_id_map.SetIDMapping(client_id, service_id);
     return service_id;
@@ -707,7 +709,18 @@ error::Error GLES2DecoderPassthroughImpl::DoColorMask(GLboolean red,
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoCompileShader(GLuint shader) {
+#if defined(OS_MACOSX)
+  // On mac we need this extension to support IOSurface backbuffers, but we
+  // don't want it exposed to WebGL user shaders. Temporarily disable it during
+  // shader compilation.
+  if (feature_info_->IsWebGLContext())
+    api()->glDisableExtensionANGLEFn("GL_ANGLE_texture_rectangle");
+#endif
   api()->glCompileShaderFn(GetShaderServiceID(shader, resources_));
+#if defined(OS_MACOSX)
+  if (feature_info_->IsWebGLContext())
+    api()->glRequestExtensionANGLEFn("GL_ANGLE_texture_rectangle");
+#endif
   return error::kNoError;
 }
 
@@ -809,6 +822,13 @@ error::Error GLES2DecoderPassthroughImpl::DoCompressedTexSubImage3D(
   // context preemption and GPU watchdog checks.
   ExitCommandProcessingEarly();
 
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoContextVisibilityHintCHROMIUM(
+    GLboolean visibility) {
+  if (feature_info_->IsWebGLContext())
+    context_->SetVisibility(visibility == GL_TRUE);
   return error::kNoError;
 }
 
@@ -1144,12 +1164,33 @@ error::Error GLES2DecoderPassthroughImpl::DoDrawArrays(GLenum mode,
   return error::kNoError;
 }
 
+error::Error GLES2DecoderPassthroughImpl::DoDrawArraysIndirect(
+    GLenum mode,
+    const void* offset) {
+  BindPendingImagesForSamplersIfNeeded();
+  // TODO(jiajie.hu@intel.com): Use glDrawArraysIndirectRobustANGLEFn() when
+  // it's ready in ANGLE.
+  api()->glDrawArraysIndirectFn(mode, offset);
+  return error::kNoError;
+}
+
 error::Error GLES2DecoderPassthroughImpl::DoDrawElements(GLenum mode,
                                                          GLsizei count,
                                                          GLenum type,
                                                          const void* indices) {
   BindPendingImagesForSamplersIfNeeded();
   api()->glDrawElementsFn(mode, count, type, indices);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoDrawElementsIndirect(
+    GLenum mode,
+    GLenum type,
+    const void* offset) {
+  BindPendingImagesForSamplersIfNeeded();
+  // TODO(jiajie.hu@intel.com): Use glDrawElementsIndirectRobustANGLEFn() when
+  // it's ready in ANGLE.
+  api()->glDrawElementsIndirectFn(mode, type, offset);
   return error::kNoError;
 }
 
@@ -3808,8 +3849,8 @@ error::Error GLES2DecoderPassthroughImpl::DoResizeCHROMIUM(GLuint width,
   static_assert(sizeof(GLuint) >= sizeof(int), "Unexpected GLuint size.");
   static const GLuint kMaxDimension =
       static_cast<GLuint>(std::numeric_limits<int>::max());
-  gfx::Size safe_size(std::min(std::max(1U, width), kMaxDimension),
-                      std::min(std::max(1U, height), kMaxDimension));
+  gfx::Size safe_size(base::ClampToRange(width, 1U, kMaxDimension),
+                      base::ClampToRange(height, 1U, kMaxDimension));
   if (offscreen_) {
     if (!ResizeOffscreenFramebuffer(safe_size)) {
       LOG(ERROR) << "GLES2DecoderPassthroughImpl: Context lost because "

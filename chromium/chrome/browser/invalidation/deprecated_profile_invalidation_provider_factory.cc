@@ -11,6 +11,7 @@
 #include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/gcm/instance_id/instance_id_profile_service_factory.h"
@@ -35,6 +36,7 @@
 #include "content/public/common/service_manager_connection.h"
 #include "services/data_decoder/public/cpp/safe_json_parser.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 
 #if defined(OS_ANDROID)
 #include "components/invalidation/impl/invalidation_service_android.h"

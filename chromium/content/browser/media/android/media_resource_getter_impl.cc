@@ -22,6 +22,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/auth.h"
 #include "net/http/http_auth.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -36,6 +37,8 @@ namespace {
 mojo::PendingRemote<network::mojom::RestrictedCookieManager>
 GetRestrictedCookieManagerForContext(BrowserContext* browser_context,
                                      const GURL& url,
+                                     const GURL& site_for_cookies,
+                                     const url::Origin& top_frame_origin,
                                      int render_process_id,
                                      int render_frame_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -47,6 +50,7 @@ GetRestrictedCookieManagerForContext(BrowserContext* browser_context,
   mojo::PendingRemote<network::mojom::RestrictedCookieManager> pipe;
   storage_partition->CreateRestrictedCookieManager(
       network::mojom::RestrictedCookieManagerRole::NETWORK, origin,
+      site_for_cookies, top_frame_origin,
       /* is_service_worker = */ false, render_process_id, render_frame_id,
       pipe.InitWithNewPipeAndPassReceiver());
   return pipe;
@@ -144,7 +148,8 @@ void MediaResourceGetterImpl::GetCookies(const GURL& url,
 
   mojo::Remote<network::mojom::RestrictedCookieManager> cookie_manager(
       GetRestrictedCookieManagerForContext(
-          browser_context_, url, render_process_id_, render_frame_id_));
+          browser_context_, url, site_for_cookies, top_frame_origin,
+          render_process_id_, render_frame_id_));
   network::mojom::RestrictedCookieManager* cookie_manager_ptr =
       cookie_manager.get();
   cookie_manager_ptr->GetCookiesString(

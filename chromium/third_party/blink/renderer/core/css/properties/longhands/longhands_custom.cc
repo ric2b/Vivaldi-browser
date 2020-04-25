@@ -1899,8 +1899,7 @@ const CSSValue* Content::ParseSingleValue(CSSParserTokenRange& range,
       }
     }
     if (!parsed_value) {
-      if (RuntimeEnabledFeatures::CSSAltTextEnabled() &&
-          css_property_parser_helpers::ConsumeSlashIncludingWhitespace(range)) {
+      if (css_property_parser_helpers::ConsumeSlashIncludingWhitespace(range)) {
         // No values were parsed before the slash, so nothing to apply the
         // alternative text to.
         if (!values->length())
@@ -2558,6 +2557,15 @@ const CSSValue* FontKerning::CSSValueFromComputedStyleInternal(
     const LayoutObject*,
     bool allow_visited_style) const {
   return CSSIdentifierValue::Create(style.GetFontDescription().GetKerning());
+}
+
+const CSSValue* FontOpticalSizing::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const SVGComputedStyle&,
+    const LayoutObject*,
+    bool allow_visited_style) const {
+  return CSSIdentifierValue::Create(
+      style.GetFontDescription().FontOpticalSizing());
 }
 
 const CSSValue* FontSizeAdjust::ParseSingleValue(
@@ -3769,12 +3777,51 @@ const CSSValue* ListStylePosition::CSSValueFromComputedStyleInternal(
   return CSSIdentifierValue::Create(style.ListStylePosition());
 }
 
+const CSSValue* ListStyleType::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  // NOTE: All the keyword values for the list-style-type property are handled
+  // by the CSSParserFastPaths.
+  return css_property_parser_helpers::ConsumeString(range);
+}
+
 const CSSValue* ListStyleType::CSSValueFromComputedStyleInternal(
     const ComputedStyle& style,
     const SVGComputedStyle&,
     const LayoutObject*,
     bool allow_visited_style) const {
+  if (style.ListStyleType() == EListStyleType::kString)
+    return MakeGarbageCollected<CSSStringValue>(style.ListStyleStringValue());
   return CSSIdentifierValue::Create(style.ListStyleType());
+}
+
+void ListStyleType::ApplyInitial(StyleResolverState& state) const {
+  state.Style()->SetListStyleType(
+      ComputedStyleInitialValues::InitialListStyleType());
+  state.Style()->SetListStyleStringValue(
+      ComputedStyleInitialValues::InitialListStyleStringValue());
+}
+
+void ListStyleType::ApplyInherit(StyleResolverState& state) const {
+  state.Style()->SetListStyleType(state.ParentStyle()->ListStyleType());
+  state.Style()->SetListStyleStringValue(
+      state.ParentStyle()->ListStyleStringValue());
+}
+
+void ListStyleType::ApplyValue(StyleResolverState& state,
+                               const CSSValue& value) const {
+  if (auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
+    state.Style()->SetListStyleType(
+        identifier_value->ConvertTo<EListStyleType>());
+    state.Style()->SetListStyleStringValue(
+        ComputedStyleInitialValues::InitialListStyleStringValue());
+    return;
+  }
+
+  state.Style()->SetListStyleType(EListStyleType::kString);
+  state.Style()->SetListStyleStringValue(
+      AtomicString(To<CSSStringValue>(value).Value()));
 }
 
 bool MarginBlockEnd::IsLayoutDependent(const ComputedStyle* style,
@@ -5004,12 +5051,9 @@ const CSSValue* Rotate::CSSValueFromComputedStyleInternal(
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
   if (style.Rotate()->X() != 0 || style.Rotate()->Y() != 0 ||
       style.Rotate()->Z() != 1) {
-    list->Append(*CSSNumericLiteralValue::Create(
-        style.Rotate()->X(), CSSPrimitiveValue::UnitType::kNumber));
-    list->Append(*CSSNumericLiteralValue::Create(
-        style.Rotate()->Y(), CSSPrimitiveValue::UnitType::kNumber));
-    list->Append(*CSSNumericLiteralValue::Create(
-        style.Rotate()->Z(), CSSPrimitiveValue::UnitType::kNumber));
+    const CSSAxisValue* axis = MakeGarbageCollected<CSSAxisValue>(
+        style.Rotate()->X(), style.Rotate()->Y(), style.Rotate()->Z());
+    list->Append(*axis);
   }
   list->Append(*CSSNumericLiteralValue::Create(
       style.Rotate()->Angle(), CSSPrimitiveValue::UnitType::kDegrees));

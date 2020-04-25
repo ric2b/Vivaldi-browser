@@ -89,7 +89,6 @@ CorsURLLoader::CorsURLLoader(
     mojom::URLLoaderClientPtr client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
     mojom::URLLoaderFactory* network_loader_factory,
-    const base::Optional<url::Origin>& factory_bound_origin,
     const OriginAccessList* origin_access_list,
     const OriginAccessList* factory_bound_origin_access_list,
     PreflightController* preflight_controller)
@@ -103,7 +102,6 @@ CorsURLLoader::CorsURLLoader(
       request_(resource_request),
       forwarding_client_(std::move(client)),
       traffic_annotation_(traffic_annotation),
-      factory_bound_origin_(factory_bound_origin),
       origin_access_list_(origin_access_list),
       factory_bound_origin_access_list_(factory_bound_origin_access_list),
       preflight_controller_(preflight_controller) {
@@ -225,8 +223,9 @@ void CorsURLLoader::FollowRedirect(
   }
 
   response_tainting_ = CalculateResponseTainting(
-      request_.url, request_.mode, request_.request_initiator, fetch_cors_flag_,
-      tainted_, origin_access_list_);
+      request_.url, request_.mode, request_.request_initiator,
+      request_.isolated_world_origin, fetch_cors_flag_, tainted_,
+      origin_access_list_);
   network_loader_->FollowRedirect(removed_headers, modified_headers, new_url);
 }
 
@@ -448,8 +447,9 @@ void CorsURLLoader::StartRequest() {
   }
 
   response_tainting_ = CalculateResponseTainting(
-      request_.url, request_.mode, request_.request_initiator, fetch_cors_flag_,
-      tainted_, origin_access_list_);
+      request_.url, request_.mode, request_.request_initiator,
+      request_.isolated_world_origin, fetch_cors_flag_, tainted_,
+      origin_access_list_);
 
   // Note that even when |NeedsPreflight(request_)| holds we don't make a
   // preflight request when |fetch_cors_flag_| is false (e.g., when the origin
@@ -464,7 +464,10 @@ void CorsURLLoader::StartRequest() {
   preflight_controller_->PerformPreflightCheck(
       base::BindOnce(&CorsURLLoader::StartNetworkRequest,
                      weak_factory_.GetWeakPtr()),
-      request_, tainted_, net::NetworkTrafficAnnotationTag(traffic_annotation_),
+      request_,
+      PreflightController::WithTrustedHeaderClient(
+          options_ & mojom::kURLLoadOptionUseHeaderClient),
+      tainted_, net::NetworkTrafficAnnotationTag(traffic_annotation_),
       network_loader_factory_);
 }
 
@@ -522,28 +525,14 @@ void CorsURLLoader::SetCorsFlagIfNeeded() {
     return;
   }
 
-  // In some cases we want to use the origin attached to the URLLoaderFactory
-  // to check same-originness.
-  // TODO(lukasza): https://crbug.com/940068: Revert https://crrev.com/c/1642752
-  // once request_initiator is always set to the webpage (and never to the
-  // isolated world).
-  if (request_.should_also_use_factory_bound_origin_for_cors &&
-      factory_bound_origin_ &&
-      factory_bound_origin_->IsSameOriginWith(
-          url::Origin::Create(request_.url))) {
-    return;
-  }
-
   // The source origin and destination URL pair may be in the allow list.
-  switch (origin_access_list_->CheckAccessState(*request_.request_initiator,
-                                                request_.url)) {
+  switch (origin_access_list_->CheckAccessState(request_)) {
     case OriginAccessList::AccessState::kAllowed:
       return;
     case OriginAccessList::AccessState::kBlocked:
       break;
     case OriginAccessList::AccessState::kNotListed:
-      if (factory_bound_origin_access_list_->CheckAccessState(
-              *request_.request_initiator, request_.url) ==
+      if (factory_bound_origin_access_list_->CheckAccessState(request_) ==
           OriginAccessList::AccessState::kAllowed) {
         return;
       }
@@ -577,6 +566,7 @@ mojom::FetchResponseType CorsURLLoader::CalculateResponseTainting(
     const GURL& url,
     mojom::RequestMode request_mode,
     const base::Optional<url::Origin>& origin,
+    const base::Optional<url::Origin>& isolated_world_origin,
     bool cors_flag,
     bool tainted_origin,
     const OriginAccessList* origin_access_list) {
@@ -594,10 +584,26 @@ mojom::FetchResponseType CorsURLLoader::CalculateResponseTainting(
     return mojom::FetchResponseType::kBasic;
   }
 
+  // OriginAccessList is in practice used to disable CORS for Chrome Extensions.
+  // The extension origin can be found in either:
+  // 1) |isolated_world_origin| (if this is a request from a content
+  //    script;  in this case there is no point looking at (2) below.
+  // 2) |origin| (if this is a request from an extension
+  //    background page or from other extension frames).
+  //
+  // Note that similar code is present in OriginAccessList::CheckAccessState.
+  //
+  // TODO(lukasza): https://crbug.com/936310 and https://crbug.com/920638:
+  // Once 1) there is no global OriginAccessList and 2) per-factory
+  // OriginAccessList is only populated for URLLoaderFactory used by allowlisted
+  // content scripts, then 3) there should no longer be a need to use origins as
+  // a key in an OriginAccessList.
+  const url::Origin& source_origin = isolated_world_origin.value_or(*origin);
+
   if (request_mode == mojom::RequestMode::kNoCors) {
     if (tainted_origin ||
         (!origin->IsSameOriginWith(url::Origin::Create(url)) &&
-         origin_access_list->CheckAccessState(*origin, url) !=
+         origin_access_list->CheckAccessState(source_origin, url) !=
              OriginAccessList::AccessState::kAllowed)) {
       return mojom::FetchResponseType::kOpaque;
     }

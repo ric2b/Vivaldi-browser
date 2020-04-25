@@ -104,6 +104,8 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
 
   static AtomicString NormalizeSlotName(const AtomicString&);
 
+  void RecalcStyleForSlotChildren(const StyleRecalcChange);
+
   // For User-Agent Shadow DOM
   static const AtomicString& UserAgentCustomAssignSlotName();
   static const AtomicString& UserAgentDefaultSlotName();
@@ -200,7 +202,7 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
 
 inline const HTMLSlotElement* ToHTMLSlotElementIfSupportsAssignmentOrNull(
     const Node& node) {
-  if (auto* slot = ToHTMLSlotElementOrNull(node)) {
+  if (auto* slot = DynamicTo<HTMLSlotElement>(node)) {
     if (slot->SupportsAssignment())
       return slot;
   }

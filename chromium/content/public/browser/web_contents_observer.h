@@ -171,8 +171,12 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // Called when a navigation encountered a server redirect.
   virtual void DidRedirectNavigation(NavigationHandle* navigation_handle) {}
 
-  // Called when the navigation is ready to be committed in a renderer. Most
-  // observers should use DidFinishNavigation instead, which happens right
+  // Called when the navigation is ready to be committed in a renderer. This
+  // occurs when the response code isn't 204/205 (which tell the browser that
+  // the request is successful but there's no content that follows) or a
+  // download (either from a response header or based on mime sniffing the
+  // response). The browser then is ready to switch rendering the new document.
+  // Most observers should use DidFinishNavigation instead, which happens right
   // after the navigation commits. This method is for observers that want to
   // initialize renderer-side state just before the RenderFrame commits the
   // navigation.
@@ -234,7 +238,7 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // This method is invoked when the document in the given frame finished
   // loading. At this point, scripts marked as defer were executed, and
   // content scripts marked "document_end" get injected into the frame.
-  virtual void DocumentLoadedInFrame(RenderFrameHost* render_frame_host) {}
+  virtual void DOMContentLoaded(RenderFrameHost* render_frame_host) {}
 
   // This method is invoked when the load is done, i.e. the spinner of the tab
   // will stop spinning, and the onload event was dispatched.
@@ -341,12 +345,6 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // invokes this method. If there are ongoing navigations, their respective
   // failure methods will also be invoked.
   virtual void NavigationStopped() {}
-
-  // This method is invoked when the WebContents reloads all the LoFi images in
-  // the frame. LoFi is a type of Preview where Chrome shows gray boxes in place
-  // of the images on a webpage in order to conserve data for data-sensitive
-  // users. See http://bit.ly/LoFiPublicDoc.
-  virtual void DidReloadLoFiImages() {}
 
   // Called when there has been direct user interaction with the WebContents.
   // The type argument specifies the kind of interaction. Direct user input
@@ -570,11 +568,6 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
       RenderFrameHost* render_frame_host,
       const std::string& interface_name,
       mojo::ScopedMessagePipeHandle* interface_pipe) {}
-
-  // Notifies that the RenderWidgetCompositor has issued a draw command. An
-  // observer can use this method to detect when Chrome visually updated a
-  // tab.
-  virtual void DidCommitAndDrawCompositorFrame() {}
 
   // Called when "audible" playback starts or stops on a WebAudio AudioContext.
   using AudioContextId = std::pair<RenderFrameHost*, int>;

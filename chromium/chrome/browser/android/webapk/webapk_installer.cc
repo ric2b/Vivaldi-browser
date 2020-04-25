@@ -34,7 +34,7 @@
 #include "chrome/browser/android/webapk/webapk_icon_hasher.h"
 #include "chrome/browser/android/webapk/webapk_install_service.h"
 #include "chrome/browser/android/webapk/webapk_metrics.h"
-#include "chrome/browser/android/webapps/webapk_ukm_recorder.h"
+#include "chrome/browser/android/webapk/webapk_ukm_recorder.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
@@ -206,7 +206,7 @@ std::unique_ptr<std::string> BuildProtoInBackground(
   web_app_manifest->set_orientation(
       blink::WebScreenOrientationLockTypeToString(shortcut_info.orientation));
   web_app_manifest->set_display_mode(
-      blink::WebDisplayModeToString(shortcut_info.display));
+      blink::DisplayModeToString(shortcut_info.display));
   web_app_manifest->set_background_color(
       OptionalSkColorToString(shortcut_info.background_color));
   web_app_manifest->set_theme_color(

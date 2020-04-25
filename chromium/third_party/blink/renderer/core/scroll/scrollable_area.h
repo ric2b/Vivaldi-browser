@@ -26,6 +26,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_SCROLL_SCROLLABLE_AREA_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_SCROLL_SCROLLABLE_AREA_H_
 
+#include "cc/input/scroll_snap_data.h"
 #include "third_party/blink/public/platform/web_color_scheme.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
@@ -54,6 +55,7 @@ class Document;
 class GraphicsLayer;
 class LayoutBox;
 class LayoutObject;
+class LocalFrame;
 class PaintLayer;
 class ProgrammaticScrollAnimator;
 class ScrollAnchor;
@@ -76,7 +78,7 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
  public:
   using ScrollCallback = base::OnceClosure;
 
-  static int PixelsPerLineStep(ChromeClient*);
+  static int PixelsPerLineStep(LocalFrame*);
   static float MinFractionToStepWhenPaging();
   int MaxOverlapBetweenPages() const;
 
@@ -135,6 +137,10 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
   void ContentAreaDidShow() const;
   void ContentAreaDidHide() const;
 
+  virtual const cc::SnapContainerData* GetSnapContainerData() const {
+    return nullptr;
+  }
+  virtual void SetSnapContainerData(base::Optional<cc::SnapContainerData>) {}
   virtual void SnapAfterScrollbarScrolling(ScrollbarOrientation) {}
 
   void FinishCurrentScrollAnimations() const;
@@ -199,7 +205,8 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
   virtual bool IsScrollCornerVisible() const = 0;
   virtual IntRect ScrollCornerRect() const = 0;
   void SetScrollCornerNeedsPaintInvalidation();
-  virtual void GetTickmarks(Vector<IntRect>&) const {}
+  virtual bool HasTickmarks() const { return false; }
+  virtual Vector<IntRect> GetTickmarks() const { return Vector<IntRect>(); }
 
   // Convert points and rects between the scrollbar and its containing
   // EmbeddedContentView. The client needs to implement these in order to be
@@ -284,10 +291,6 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
   virtual void ScrollbarStyleChanged() {}
   virtual bool ScrollbarsCanBeActive() const = 0;
 
-  // Returns the bounding box of this scrollable area, in the coordinate system
-  // of the top-level FrameView's Document.
-  virtual IntRect ScrollableAreaBoundingBox() const = 0;
-
   virtual CompositorElementId GetCompositorElementId() const = 0;
 
   virtual CompositorElementId GetScrollbarElementId(
@@ -336,7 +339,6 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
                    MaximumScrollOffset(orientation));
   }
 
-  virtual GraphicsLayer* LayerForContainer() const;
   virtual GraphicsLayer* LayerForScrolling() const { return nullptr; }
   virtual GraphicsLayer* LayerForHorizontalScrollbar() const { return nullptr; }
   virtual GraphicsLayer* LayerForVerticalScrollbar() const { return nullptr; }

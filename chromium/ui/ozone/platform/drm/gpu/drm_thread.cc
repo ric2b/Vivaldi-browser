@@ -48,7 +48,7 @@ uint32_t BufferUsageToGbmFlags(gfx::BufferUsage usage) {
              GBM_BO_USE_TEXTURING;
       break;
     case gfx::BufferUsage::CAMERA_AND_CPU_READ_WRITE:
-      return GBM_BO_USE_LINEAR | GBM_BO_USE_CAMERA_WRITE | GBM_BO_USE_TEXTURING;
+      return GBM_BO_USE_LINEAR | GBM_BO_USE_CAMERA_WRITE;
     case gfx::BufferUsage::SCANOUT_CPU_READ_WRITE:
       return GBM_BO_USE_LINEAR | GBM_BO_USE_SCANOUT | GBM_BO_USE_TEXTURING;
     case gfx::BufferUsage::SCANOUT_VDA_WRITE:
@@ -56,6 +56,8 @@ uint32_t BufferUsageToGbmFlags(gfx::BufferUsage usage) {
              GBM_BO_USE_HW_VIDEO_DECODER;
     case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
       return GBM_BO_USE_LINEAR | GBM_BO_USE_TEXTURING;
+    case gfx::BufferUsage::SCANOUT_VEA_READ_CAMERA_AND_CPU_READ_WRITE:
+      return GBM_BO_USE_TEXTURING | GBM_BO_USE_HW_VIDEO_ENCODER;
   }
 }
 
@@ -74,7 +76,7 @@ void CreateBufferWithGbmFlags(const scoped_refptr<DrmDevice>& drm,
 
   scoped_refptr<DrmFramebuffer> framebuffer;
   if (flags & GBM_BO_USE_SCANOUT) {
-    framebuffer = DrmFramebuffer::AddFramebuffer(drm, buffer.get());
+    framebuffer = DrmFramebuffer::AddFramebuffer(drm, buffer.get(), modifiers);
     if (!framebuffer)
       return;
   }
@@ -301,11 +303,9 @@ void DrmThread::CheckOverlayCapabilities(
                             const OverlayStatusList&)> callback) {
   TRACE_EVENT0("drm,hwoverlays", "DrmThread::CheckOverlayCapabilities");
 
-  auto params = CreateParamsFromOverlaySurfaceCandidate(overlays);
   std::move(callback).Run(
       widget, overlays,
-      CreateOverlayStatusListFrom(
-          screen_manager_->GetWindow(widget)->TestPageFlip(params)));
+      screen_manager_->GetWindow(widget)->TestPageFlip(overlays));
 }
 
 void DrmThread::GetDeviceCursor(

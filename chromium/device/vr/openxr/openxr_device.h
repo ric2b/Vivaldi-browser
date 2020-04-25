@@ -10,6 +10,9 @@
 #include "base/macros.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/vr_device_base.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 
 namespace device {
 
@@ -32,8 +35,9 @@ class DEVICE_VR_EXPORT OpenXrDevice
       mojom::XRRuntimeSessionOptionsPtr options,
       mojom::XRRuntime::RequestSessionCallback callback) override;
 
-  mojom::IsolatedXRGamepadProviderFactoryPtr BindGamepadFactory();
-  mojom::XRCompositorHostPtr BindCompositorHost();
+  mojo::PendingRemote<mojom::IsolatedXRGamepadProviderFactory>
+  BindGamepadFactory();
+  mojo::PendingRemote<mojom::XRCompositorHost> BindCompositorHost();
 
  private:
   // XRSessionController
@@ -41,11 +45,12 @@ class DEVICE_VR_EXPORT OpenXrDevice
 
   // mojom::IsolatedXRGamepadProviderFactory
   void GetIsolatedXRGamepadProvider(
-      mojom::IsolatedXRGamepadProviderRequest provider_request) override;
+      mojo::PendingReceiver<mojom::IsolatedXRGamepadProvider> provider_receiver)
+      override;
 
   // XRCompositorHost
   void CreateImmersiveOverlay(
-      mojom::ImmersiveOverlayRequest overlay_request) override;
+      mojo::PendingReceiver<mojom::ImmersiveOverlay> overlay_receiver) override;
 
   void EnsureRenderLoop();
 
@@ -56,14 +61,15 @@ class DEVICE_VR_EXPORT OpenXrDevice
 
   std::unique_ptr<OpenXrRenderLoop> render_loop_;
 
-  mojo::Binding<mojom::XRSessionController> exclusive_controller_binding_;
+  mojo::Receiver<mojom::XRSessionController> exclusive_controller_receiver_{
+      this};
 
-  mojo::Binding<mojom::IsolatedXRGamepadProviderFactory>
-      gamepad_provider_factory_binding_;
-  mojom::IsolatedXRGamepadProviderRequest provider_request_;
+  mojo::Receiver<mojom::IsolatedXRGamepadProviderFactory>
+      gamepad_provider_factory_receiver_{this};
+  mojo::PendingReceiver<mojom::IsolatedXRGamepadProvider> provider_receiver_;
 
-  mojo::Binding<mojom::XRCompositorHost> compositor_host_binding_;
-  mojom::ImmersiveOverlayRequest overlay_request_;
+  mojo::Receiver<mojom::XRCompositorHost> compositor_host_receiver_{this};
+  mojo::PendingReceiver<mojom::ImmersiveOverlay> overlay_receiver_;
 
   base::WeakPtrFactory<OpenXrDevice> weak_ptr_factory_;
 

@@ -18,7 +18,6 @@ namespace {
 // was found.
 int GetSyncTransportOptInBitFieldForAccount(const PrefService* prefs,
                                             const std::string& account_hash) {
-
   auto* dictionary = prefs->GetDictionary(prefs::kAutofillSyncTransportOptIn);
 
   // If there is no dictionary it means the account didn't opt-in. Use 0 because
@@ -43,13 +42,17 @@ int GetSyncTransportOptInBitFieldForAccount(const PrefService* prefs,
 const char kAutofillAcceptSaveCreditCardPromptState[] =
     "autofill.accept_save_credit_card_prompt_state";
 
-// Boolean that is true if FIDO Authentication is enabled for card unmasking.
-const char kAutofillCreditCardFIDOAuthEnabled[] =
-    "autofill.credit_card_fido_auth_enabled";
-
 // Boolean that is true if Autofill is enabled and allowed to save credit card
 // data.
 const char kAutofillCreditCardEnabled[] = "autofill.credit_card_enabled";
+
+// Boolean that is true if FIDO Authentication is enabled for card unmasking.
+const char kAutofillCreditCardFidoAuthEnabled[] =
+    "autofill.credit_card_fido_auth_enabled";
+
+// Boolean that is true if FIDO Authentication is enabled for card unmasking.
+const char kAutofillCreditCardFidoAuthOfferCheckboxState[] =
+    "autofill.credit_card_fido_auth_offer_checkbox_state";
 
 // Number of times the credit card signin promo has been shown.
 const char kAutofillCreditCardSigninPromoImpressionCount[] =
@@ -58,9 +61,8 @@ const char kAutofillCreditCardSigninPromoImpressionCount[] =
 // Boolean that is true if Autofill is enabled and allowed to save data.
 const char kAutofillEnabledDeprecated[] = "autofill.enabled";
 
-// Boolean that is true if Japan address city field has been migrated to be a
-// part of the street field.
-const char kAutofillJapanCityFieldMigrated[] =
+// Deprecated 10/2019.
+const char kAutofillJapanCityFieldMigratedDeprecated[] =
     "autofill.japan_city_field_migrated_to_street_address";
 
 // Integer that is set to the last version where the profile deduping routine
@@ -157,11 +159,12 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
 
   // Non-synced prefs. Used for per-device choices, e.g., signin promo.
-  registry->RegisterBooleanPref(prefs::kAutofillCreditCardFIDOAuthEnabled,
+  registry->RegisterBooleanPref(prefs::kAutofillCreditCardFidoAuthEnabled,
                                 false);
+  registry->RegisterBooleanPref(
+      prefs::kAutofillCreditCardFidoAuthOfferCheckboxState, true);
   registry->RegisterIntegerPref(
       prefs::kAutofillCreditCardSigninPromoImpressionCount, 0);
-  registry->RegisterBooleanPref(prefs::kAutofillJapanCityFieldMigrated, false);
   registry->RegisterBooleanPref(prefs::kAutofillWalletImportEnabled, true);
   registry->RegisterBooleanPref(
       prefs::kAutofillWalletImportStorageCheckboxState, true);
@@ -180,6 +183,10 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterTimePref(prefs::kAutofillUploadEventsLastResetTimestamp,
                              base::Time());
   registry->RegisterDictionaryPref(prefs::kAutofillSyncTransportOptIn);
+
+  // Deprecated prefs registered for migration.
+  registry->RegisterBooleanPref(kAutofillJapanCityFieldMigratedDeprecated,
+                                false);
 }
 
 void MigrateDeprecatedAutofillPrefs(PrefService* prefs) {
@@ -210,6 +217,9 @@ void MigrateDeprecatedAutofillPrefs(PrefService* prefs) {
     prefs->SetBoolean(kAutofillProfileEnabled,
                       prefs->GetBoolean(kAutofillEnabledDeprecated));
   }
+
+  // Added 10/2019.
+  prefs->ClearPref(kAutofillJapanCityFieldMigratedDeprecated);
 }
 
 bool IsAutocompleteEnabled(const PrefService* prefs) {
@@ -226,11 +236,11 @@ void SetAutofillEnabled(PrefService* prefs, bool enabled) {
 }
 
 bool IsCreditCardFIDOAuthEnabled(PrefService* prefs) {
-  return prefs->GetBoolean(kAutofillCreditCardFIDOAuthEnabled);
+  return prefs->GetBoolean(kAutofillCreditCardFidoAuthEnabled);
 }
 
 void SetCreditCardFIDOAuthEnabled(PrefService* prefs, bool enabled) {
-  prefs->SetBoolean(kAutofillCreditCardFIDOAuthEnabled, enabled);
+  prefs->SetBoolean(kAutofillCreditCardFidoAuthEnabled, enabled);
 }
 
 bool IsCreditCardAutofillEnabled(const PrefService* prefs) {

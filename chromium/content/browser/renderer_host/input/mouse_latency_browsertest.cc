@@ -29,6 +29,7 @@
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace {
@@ -77,7 +78,7 @@ class TracingRenderWidgetHost : public RenderWidgetHostImpl {
   TracingRenderWidgetHost(RenderWidgetHostDelegate* delegate,
                           RenderProcessHost* process,
                           int32_t routing_id,
-                          mojom::WidgetPtr widget,
+                          mojo::PendingRemote<mojom::Widget> widget,
                           bool hidden)
       : RenderWidgetHostImpl(delegate,
                              process,
@@ -139,7 +140,7 @@ class TracingRenderWidgetHostFactory : public RenderWidgetHostFactory {
       RenderWidgetHostDelegate* delegate,
       RenderProcessHost* process,
       int32_t routing_id,
-      mojom::WidgetPtr widget_interface,
+      mojo::PendingRemote<mojom::Widget> widget_interface,
       bool hidden) override {
     return std::make_unique<TracingRenderWidgetHost>(
         delegate, process, routing_id, std::move(widget_interface), hidden);
@@ -164,11 +165,9 @@ class MouseLatencyBrowserTest : public ContentBrowserTest {
     runner_->Quit();
   }
 
-  void OnTraceDataCollected(
-      std::unique_ptr<const base::DictionaryValue> metadata,
-      base::RefCountedString* trace_data_string) {
+  void OnTraceDataCollected(std::unique_ptr<std::string> trace_data_string) {
     std::unique_ptr<base::Value> trace_data =
-        base::JSONReader::ReadDeprecated(trace_data_string->data());
+        base::JSONReader::ReadDeprecated(*trace_data_string);
     ASSERT_TRUE(trace_data);
     trace_data_ = trace_data->Clone();
     runner_->Quit();
@@ -263,8 +262,8 @@ class MouseLatencyBrowserTest : public ContentBrowserTest {
   const base::Value& StopTracing() {
     bool success = TracingController::GetInstance()->StopTracing(
         TracingController::CreateStringEndpoint(
-            base::Bind(&MouseLatencyBrowserTest::OnTraceDataCollected,
-                       base::Unretained(this))));
+            base::BindOnce(&MouseLatencyBrowserTest::OnTraceDataCollected,
+                           base::Unretained(this))));
     EXPECT_TRUE(success);
 
     // Runs until we get the OnTraceDataCollected callback, which populates
@@ -352,7 +351,7 @@ IN_PROC_BROWSER_TEST_F(MouseLatencyBrowserTest,
       GetWidgetHost(), blink::WebInputEvent::kMouseUp);
   StartTracing();
   DoSyncClick(gfx::PointF(100, 100));
-  EXPECT_EQ(INPUT_EVENT_ACK_STATE_CONSUMED,
+  EXPECT_EQ(INPUT_EVENT_ACK_STATE_NOT_CONSUMED,
             filter->GetAckStateWaitIfNecessary());
   const base::Value& trace_data = StopTracing();
 
@@ -416,8 +415,9 @@ IN_PROC_BROWSER_TEST_F(MouseLatencyBrowserTest,
   AssertTraceIdsBeginAndEnd(trace_data, "InputLatency::MouseMove");
 }
 
+// TODO(https://crbug.com/923627): This is flaky on multiple platforms.
 IN_PROC_BROWSER_TEST_F(MouseLatencyBrowserTest,
-                       CoalescedMouseWheelsCorrectlyTerminated) {
+                       DISABLED_CoalescedMouseWheelsCorrectlyTerminated) {
   LoadURL();
 
   StartTracing();

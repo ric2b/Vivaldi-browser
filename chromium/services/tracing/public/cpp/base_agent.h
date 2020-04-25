@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/component_export.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "services/tracing/public/mojom/tracing.mojom.h"
 
 // This class is a minimal implementation of mojom::Agent to reduce boilerplate
@@ -39,11 +39,12 @@ class COMPONENT_EXPORT(TRACING_CPP) BaseAgent : public mojom::Agent {
   void StartTracing(const std::string& config,
                     base::TimeTicks coordinator_time,
                     Agent::StartTracingCallback callback) override;
-  void StopAndFlush(tracing::mojom::RecorderPtr recorder) override;
+  void StopAndFlush(
+      mojo::PendingRemote<tracing::mojom::Recorder> recorder) override;
   void RequestBufferStatus(
       Agent::RequestBufferStatusCallback callback) override;
 
-  mojo::Binding<tracing::mojom::Agent> binding_;
+  mojo::Receiver<tracing::mojom::Agent> receiver_{this};
 
   const std::string label_;
   const mojom::TraceDataType type_;

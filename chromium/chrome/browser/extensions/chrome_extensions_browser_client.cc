@@ -47,6 +47,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/common/url_constants.h"
 #include "components/update_client/update_client.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
@@ -528,6 +529,25 @@ UserScriptListener* ChromeExtensionsBrowserClient::GetUserScriptListener() {
 
 std::string ChromeExtensionsBrowserClient::GetUserAgent() const {
   return ::GetUserAgent();
+}
+
+bool ChromeExtensionsBrowserClient::ShouldSchemeBypassNavigationChecks(
+    const std::string& scheme) const {
+  if (scheme == chrome::kChromeSearchScheme)
+    return true;
+
+  return ExtensionsBrowserClient::ShouldSchemeBypassNavigationChecks(scheme);
+}
+
+bool ChromeExtensionsBrowserClient::ShouldForceWebRequestExtraHeaders(
+    content::BrowserContext* context) const {
+  // If OOR-CORS is disabled, we never apply this enforcement.
+  if (!context->ShouldEnableOutOfBlinkCors())
+    return false;
+
+  // Enables the enforcement if the prefs is managed by the enterprise policy.
+  return Profile::FromBrowserContext(context)->GetPrefs()->IsManagedPreference(
+      prefs::kCorsMitigationList);
 }
 
 // static

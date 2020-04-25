@@ -66,6 +66,7 @@
 #include "base/win/windows_version.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/shell_integration_win.h"
+#include "printing/backend/win_helper.h"
 #endif  // defined(OS_WIN)
 
 namespace {
@@ -74,10 +75,9 @@ void RecordMemoryMetrics();
 
 // Records memory metrics after a delay.
 void RecordMemoryMetricsAfterDelay() {
-  base::PostDelayedTaskWithTraits(
-      FROM_HERE, {content::BrowserThread::UI},
-      base::BindOnce(&RecordMemoryMetrics),
-      memory_instrumentation::GetDelayForNextMemoryLog());
+  base::PostDelayedTask(FROM_HERE, {content::BrowserThread::UI},
+                        base::BindOnce(&RecordMemoryMetrics),
+                        memory_instrumentation::GetDelayForNextMemoryLog());
 }
 
 // Records memory metrics, and then triggers memory colleciton after a delay.
@@ -227,6 +227,10 @@ void RecordStartupMetrics() {
 
   UMA_HISTOGRAM_BOOLEAN("Windows.HasHighResolutionTimeTicks",
                         base::TimeTicks::IsHighResolution());
+
+  // Metric of interest specifically for Windows 7 printing.
+  UMA_HISTOGRAM_BOOLEAN("Windows.HasOpenXpsSupport",
+                        printing::XPSModule::IsOpenXpsCapable());
 #endif  // defined(OS_WIN)
 
   bluetooth_utility::ReportBluetoothAvailability();
@@ -303,18 +307,18 @@ void RecordLinuxDistro() {
         }
       }
     } else if (distro_tokens[0] == "Fedora") {
-      // Format: Fedora release RR (<codename>)
+      // Format: Fedora RR (<codename>)
       distro_result = UMA_LINUX_DISTRO_FEDORA_OTHER;
-      if (distro_tokens.size() >= 3) {
-        if (distro_tokens[2] == "24") {
+      if (distro_tokens.size() >= 2) {
+        if (distro_tokens[1] == "24") {
           distro_result = UMA_LINUX_DISTRO_FEDORA_24;
-        } else if (distro_tokens[2] == "25") {
+        } else if (distro_tokens[1] == "25") {
           distro_result = UMA_LINUX_DISTRO_FEDORA_25;
-        } else if (distro_tokens[2] == "26") {
+        } else if (distro_tokens[1] == "26") {
           distro_result = UMA_LINUX_DISTRO_FEDORA_26;
-        } else if (distro_tokens[2] == "27") {
+        } else if (distro_tokens[1] == "27") {
           distro_result = UMA_LINUX_DISTRO_FEDORA_27;
-        } else if (distro_tokens[2] == "28") {
+        } else if (distro_tokens[1] == "28") {
           distro_result = UMA_LINUX_DISTRO_FEDORA_28;
         }
       }
@@ -322,23 +326,23 @@ void RecordLinuxDistro() {
       // Format: Arch Linux
       distro_result = UMA_LINUX_DISTRO_ARCH;
     } else if (distro_tokens[0] == "CentOS") {
-      // Format: CentOS [Linux] release <version> (<codename>)
+      // Format: CentOS [Linux] <version> (<codename>)
       distro_result = UMA_LINUX_DISTRO_CENTOS;
     } else if (distro_tokens[0] == "elementary") {
       // Format: elementary OS <release name>
       distro_result = UMA_LINUX_DISTRO_ELEMENTARY;
     } else if (distro_tokens.size() >= 2 && distro_tokens[1] == "Mint") {
-      // Format: Linux Mint RR <codename>
+      // Format: Linux Mint RR
       distro_result = UMA_LINUX_DISTRO_MINT;
     } else if (distro_tokens.size() >= 4 && distro_tokens[0] == "Red" &&
                distro_tokens[1] == "Hat" && distro_tokens[2] == "Enterprise" &&
                distro_tokens[3] == "Linux") {
-      // Format: Red Hat Enterprise Linux <variant> [release] R.P (<codename>)
+      // Format: Red Hat Enterprise Linux <variant> R.P (<codename>)
       distro_result = UMA_LINUX_DISTRO_RHEL;
     } else if (distro_tokens.size() >= 3 && distro_tokens[0] == "SUSE" &&
                distro_tokens[1] == "Linux" &&
                distro_tokens[2] == "Enterprise") {
-      // Format: SUSE Linux Enterprise <variant> RR (<platform>)
+      // Format: SUSE Linux Enterprise <variant> RR
       distro_result = UMA_LINUX_DISTRO_SUSE_ENTERPRISE;
     }
   }
@@ -554,12 +558,19 @@ void ChromeBrowserMainExtraPartsMetrics::PreBrowserStart() {
                                                             "Disabled"
 #endif
                                                             );
+  // Log once here at browser start rather than at each renderer launch.
+  ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial("ChromeWinMultiDll",
+#if defined(CHROME_MULTIPLE_DLL_BROWSER)
+                                                            "Enabled"
+#else
+                                                            "Disabled"
 #endif
+                                                            );
+#endif  // defined(OS_WIN)
 }
 
 void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
-  if (!base::FeatureList::IsEnabled(kMemoryMetricsOldTiming))
-    RecordMemoryMetricsAfterDelay();
+  RecordMemoryMetricsAfterDelay();
   RecordLinuxGlibcVersion();
 #if defined(USE_X11)
   UMA_HISTOGRAM_ENUMERATION("Linux.WindowManager", GetLinuxWindowManager(),

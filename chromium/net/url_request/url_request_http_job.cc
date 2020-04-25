@@ -4,6 +4,8 @@
 
 #include "net/url_request/url_request_http_job.h"
 
+#include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "base/base_switches.h"
@@ -58,6 +60,7 @@
 #include "net/http/http_util.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
+#include "net/log/net_log_values.h"
 #include "net/log/net_log_with_source.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "net/proxy_resolution/proxy_info.h"
@@ -80,6 +83,20 @@
 #endif
 
 namespace {
+
+base::Value CookieExcludedNetLogParams(const std::string& operation,
+                                       const std::string& cookie_name,
+                                       const std::string& exclusion_reason,
+                                       net::NetLogCaptureMode capture_mode) {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetStringKey("operation", operation);
+  dict.SetStringKey("exclusion_reason", exclusion_reason);
+  if (net::NetLogCaptureIncludesSensitive(capture_mode) &&
+      !cookie_name.empty()) {
+    dict.SetStringKey("name", cookie_name);
+  }
+  return dict;
+}
 
 // Records details about the most-specific trust anchor in |spki_hashes|,
 // which is expected to be ordered with the leaf cert first and the root cert
@@ -284,10 +301,7 @@ URLRequestHttpJob::URLRequestHttpJob(
       server_auth_state_(AUTH_STATE_DONT_NEED_AUTH),
       read_in_progress_(false),
       throttling_entry_(nullptr),
-      is_cached_content_(false),
-      packet_timing_enabled_(false),
       done_(false),
-      bytes_observed_in_packets_(0),
       awaiting_callback_(false),
       http_user_agent_settings_(http_user_agent_settings),
       total_received_bytes_from_previous_transactions_(0),
@@ -323,6 +337,7 @@ void URLRequestHttpJob::Start() {
 
   request_info_.network_isolation_key = request_->network_isolation_key();
   request_info_.load_flags = request_->load_flags();
+  request_info_.disable_secure_dns = request_->disable_secure_dns();
   request_info_.traffic_annotation =
       net::MutableNetworkTrafficAnnotationTag(request_->traffic_annotation());
   request_info_.socket_tag = request_->socket_tag();
@@ -403,11 +418,7 @@ void URLRequestHttpJob::NotifyHeadersComplete() {
 
   response_info_ = transaction_->GetResponseInfo();
 
-  // Save boolean, as we'll need this info at destruction time, and filters may
-  // also need this info.
-  is_cached_content_ = response_info_->was_cached;
-
-  if (!is_cached_content_ && throttling_entry_.get())
+  if (!response_info_->was_cached && throttling_entry_.get())
     throttling_entry_->UpdateWithResponse(GetResponseCode());
 
   // The ordering of these calls is not important.
@@ -511,11 +522,6 @@ void URLRequestHttpJob::StartTransactionInternal() {
       request()->context()->network_quality_estimator();
   if (network_quality_estimator)
     network_quality_estimator->NotifyStartTransaction(*request_);
-
-  if (network_delegate()) {
-    network_delegate()->NotifyStartTransaction(request_,
-                                               request_info_.extra_headers);
-  }
 
   if (transaction_.get()) {
     rv = transaction_->RestartWithAuth(
@@ -686,6 +692,20 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
     maybe_sent_cookies.push_back({cookie_with_status.cookie, status});
   }
 
+  if (request_->net_log().IsCapturing()) {
+    for (const auto& cookie_and_status : maybe_sent_cookies) {
+      if (!cookie_and_status.status.IsInclude()) {
+        request_->net_log().AddEvent(
+            NetLogEventType::COOKIE_INCLUSION_STATUS,
+            [&](NetLogCaptureMode capture_mode) {
+              return CookieExcludedNetLogParams(
+                  "send", cookie_and_status.cookie.Name(),
+                  cookie_and_status.status.GetDebugString(), capture_mode);
+            });
+      }
+    }
+  }
+
   request_->set_maybe_sent_cookies(std::move(maybe_sent_cookies));
 
   StartTransaction();
@@ -720,8 +740,8 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
   options.set_include_httponly();
   options.set_same_site_cookie_context(
       net::cookie_util::ComputeSameSiteContextForResponse(
-          request_->url(), request_->site_for_cookies(),
-          request_->initiator()));
+          request_->url(), request_->site_for_cookies(), request_->initiator(),
+          request_->attach_same_site_cookies()));
 
   options.set_return_excluded_cookies();
 
@@ -785,6 +805,15 @@ void URLRequestHttpJob::OnSetCookieResult(
     base::Optional<CanonicalCookie> cookie,
     std::string cookie_string,
     CanonicalCookie::CookieInclusionStatus status) {
+  if (!status.IsInclude() && request_->net_log().IsCapturing()) {
+    request_->net_log().AddEvent(NetLogEventType::COOKIE_INCLUSION_STATUS,
+                                 [&](NetLogCaptureMode capture_mode) {
+                                   return CookieExcludedNetLogParams(
+                                       "store",
+                                       cookie ? cookie.value().Name() : "",
+                                       status.GetDebugString(), capture_mode);
+                                 });
+  }
   set_cookie_status_list_.emplace_back(std::move(cookie),
                                        std::move(cookie_string), status);
 
@@ -881,6 +910,9 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
       // |NetworkDelegate::URLRequestDestroyed()| has been called.
       OnCallToDelegate(NetLogEventType::NETWORK_DELEGATE_HEADERS_RECEIVED);
       allowed_unsafe_redirect_url_ = GURL();
+      IPEndPoint endpoint;
+      if (transaction_)
+        transaction_->GetRemoteEndpoint(&endpoint);
       // The NetworkDelegate must watch for OnRequestDestroyed and not modify
       // any of the arguments after it's called.
       // TODO(mattm): change the API to remove the out-params and take the
@@ -889,7 +921,7 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
           request_,
           base::BindOnce(&URLRequestHttpJob::OnHeadersReceivedCallback,
                          weak_factory_.GetWeakPtr()),
-          headers.get(), &override_response_headers_,
+          headers.get(), &override_response_headers_, endpoint,
           &allowed_unsafe_redirect_url_);
       if (error != OK) {
         if (error == ERR_IO_PENDING) {
@@ -1318,11 +1350,6 @@ int URLRequestHttpJob::ReadRawData(IOBuffer* buf, int buf_size) {
   return rv;
 }
 
-void URLRequestHttpJob::StopCaching() {
-  if (transaction_.get())
-    transaction_->StopCaching();
-}
-
 int64_t URLRequestHttpJob::GetTotalReceivedBytes() const {
   int64_t total_received_bytes =
       total_received_bytes_from_previous_transactions_;
@@ -1387,20 +1414,6 @@ void URLRequestHttpJob::ResetTimer() {
     return;
   }
   request_creation_time_ = base::Time::Now();
-}
-
-void URLRequestHttpJob::UpdatePacketReadTimes() {
-  if (!packet_timing_enabled_)
-    return;
-
-  DCHECK_GT(prefilter_bytes_read(), bytes_observed_in_packets_);
-
-  base::Time now(base::Time::Now());
-  if (!bytes_observed_in_packets_)
-    request_time_snapshot_ = now;
-  final_packet_time_ = now;
-
-  bytes_observed_in_packets_ = prefilter_bytes_read();
 }
 
 void URLRequestHttpJob::SetRequestHeadersCallback(

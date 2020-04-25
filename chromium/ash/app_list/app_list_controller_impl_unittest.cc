@@ -5,6 +5,7 @@
 #include "ash/app_list/app_list_controller_impl.h"
 
 #include "ash/app_list/app_list_metrics.h"
+#include "ash/app_list/test/app_list_test_helper.h"
 #include "ash/app_list/views/app_list_main_view.h"
 #include "ash/app_list/views/app_list_view.h"
 #include "ash/app_list/views/contents_view.h"
@@ -17,8 +18,10 @@
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/presentation_time_recorder.h"
+#include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/shelf/shelf.h"
+#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/system/unified/unified_system_tray_test_api.h"
@@ -39,15 +42,11 @@ namespace ash {
 
 namespace {
 
-using ::app_list::kAppListResultLaunchIndexAndQueryLength;
-using ::app_list::kAppListTileLaunchIndexAndQueryLength;
-using ::app_list::SearchResultLaunchLocation;
-
 bool IsTabletMode() {
   return Shell::Get()->tablet_mode_controller()->InTabletMode();
 }
 
-app_list::AppListView* GetAppListView() {
+AppListView* GetAppListView() {
   return Shell::Get()->app_list_controller()->presenter()->GetView();
 }
 
@@ -59,7 +58,7 @@ bool GetExpandArrowViewVisibility() {
       ->GetVisible();
 }
 
-app_list::SearchBoxView* GetSearchBoxView() {
+SearchBoxView* GetSearchBoxView() {
   return GetAppListView()
       ->app_list_main_view()
       ->contents_view()
@@ -119,7 +118,10 @@ TEST_F(AppListControllerImplTest, AppListHiddenWhenShelfAlignmentChanges) {
       {SHELF_ALIGNMENT_LEFT, SHELF_ALIGNMENT_RIGHT, SHELF_ALIGNMENT_BOTTOM});
   for (ash::ShelfAlignment alignment : alignments) {
     ShowAppListNow();
-    EXPECT_TRUE(Shell::Get()->app_list_controller()->presenter()->IsVisible());
+    EXPECT_TRUE(Shell::Get()
+                    ->app_list_controller()
+                    ->presenter()
+                    ->IsVisibleDeprecated());
     shelf->SetAlignment(alignment);
     EXPECT_EQ(AppListViewState::kClosed, GetAppListView()->app_list_state());
   }
@@ -184,8 +186,7 @@ TEST_F(AppListControllerImplTest, HideRoundingCorners) {
   EXPECT_EQ(0, app_list_screen_bounds.y());
   EXPECT_EQ(ash::AppListViewState::kHalf, GetAppListView()->app_list_state());
   gfx::Transform expected_transform;
-  expected_transform.Translate(
-      0, -app_list::AppListConfig::instance().background_radius());
+  expected_transform.Translate(0, -(ShelfConfig::Get()->shelf_size() / 2));
   EXPECT_EQ(
       expected_transform,
       GetAppListView()->GetAppListBackgroundShieldForTest()->GetTransform());
@@ -208,12 +209,12 @@ TEST_F(AppListControllerImplTest, HideRoundingCornersWhenEmojiShows) {
   // Set IME client. Otherwise the emoji panel is unable to show.
   ImeController* ime_controller = Shell::Get()->ime_controller();
   TestImeControllerClient client;
-  ime_controller->SetClient(client.CreateInterfacePtr());
+  ime_controller->SetClient(client.CreateRemote());
 
   // Show the app list view and right-click on the search box with mouse. So the
   // text field's context menu shows.
   ShowAppListNow();
-  app_list::SearchBoxView* search_box_view =
+  SearchBoxView* search_box_view =
       GetAppListView()->app_list_main_view()->search_box_view();
   gfx::Point center_point = search_box_view->GetBoundsInScreen().CenterPoint();
   ui::test::EventGenerator* event_generator = GetEventGenerator();
@@ -235,8 +236,7 @@ TEST_F(AppListControllerImplTest, HideRoundingCornersWhenEmojiShows) {
 
   // AppListBackgroundShield is translated to hide the rounded corners.
   gfx::Transform expected_transform;
-  expected_transform.Translate(
-      0, -app_list::AppListConfig::instance().background_radius());
+  expected_transform.Translate(0, -(ShelfConfig::Get()->shelf_size() / 2));
   EXPECT_EQ(
       expected_transform,
       GetAppListView()->GetAppListBackgroundShieldForTest()->GetTransform());
@@ -274,6 +274,46 @@ TEST_F(AppListControllerImplTest, CheckAppListViewBoundsWhenVKeyboardEnabled) {
   EXPECT_EQ(GetAppListView()->GetPreferredWidgetBoundsForState(
                 ash::AppListViewState::kPeeking),
             GetAppListViewNativeWindow()->bounds());
+}
+
+// Verifies that in clamshell mode the AppListView bounds remain in the
+// fullscreen size while the virtual keyboard is shown, even if the app list
+// view state changes.
+TEST_F(AppListControllerImplTest,
+       AppListViewBoundsRemainFullScreenWhenVKeyboardEnabled) {
+  Shell::Get()->keyboard_controller()->SetEnableFlag(
+      keyboard::KeyboardEnableFlag::kShelfEnabled);
+
+  // Show the AppListView in fullscreen state and click on the search box with
+  // the mouse. So the VirtualKeyboard is shown. Wait until the virtual keyboard
+  // shows.
+  ShowAppListNow();
+  GetSearchBoxView()->SetSearchBoxActive(true, ui::ET_MOUSE_PRESSED);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(ash::AppListViewState::kHalf, GetAppListView()->app_list_state());
+  EXPECT_TRUE(GetVirtualKeyboardWindow()->IsVisible());
+
+  EXPECT_EQ(0, GetAppListView()->GetBoundsInScreen().y());
+
+  // Simulate half state getting set again, and but verify the app list bounds
+  // remain at the top of the screen.
+  GetAppListView()->SetState(AppListViewState::kHalf);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(ash::AppListViewState::kHalf, GetAppListView()->app_list_state());
+
+  EXPECT_EQ(0, GetAppListView()->GetBoundsInScreen().y());
+
+  // Close the virtual keyboard. Wait until it is hidden.
+  Shell::Get()->keyboard_controller()->HideKeyboard(HideReason::kUser);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(nullptr, GetVirtualKeyboardWindow());
+
+  // Verify the app list bounds have been updated to match kHalf state.
+  EXPECT_EQ(ash::AppListViewState::kHalf, GetAppListView()->app_list_state());
+  const gfx::Rect shelf_bounds =
+      AshTestBase::GetPrimaryShelf()->shelf_widget()->GetWindowBoundsInScreen();
+  EXPECT_EQ(shelf_bounds.bottom() - 545 /*half app list height*/,
+            GetAppListView()->GetBoundsInScreen().y());
 }
 
 // Verifies that in tablet mode, the AppListView has correct bounds when the
@@ -443,7 +483,7 @@ class AppListAnimationTest : public AshTestBase,
   // The app list view y coordinate in peeking state.
   int PeekingHeightTop() const {
     return shown_shelf_bounds_.bottom() -
-           app_list::AppListConfig::instance().peeking_app_list_height();
+           AppListConfig::instance().peeking_app_list_height();
   }
 
  private:
@@ -730,6 +770,7 @@ TEST_F(AppListControllerImplMetricsTest,
   EXPECT_FALSE(IsTabletMode());
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(AppListViewState::kClosed, GetAppListView()->app_list_state());
+  GetAppListTestHelper()->CheckVisibility(false);
 
   // Check metrics initial values.
   histogram_tester_.ExpectTotalCount(
@@ -750,7 +791,6 @@ TEST_F(AppListControllerImplMetricsTest,
   ui::test::EventGenerator* generator = GetEventGenerator();
   generator->GestureScrollSequence(shelf_center, target_point,
                                    base::TimeDelta::FromMicroseconds(500), 1);
-  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(AppListViewState::kFullscreenAllApps,
             GetAppListView()->app_list_state());
   histogram_tester_.ExpectTotalCount(

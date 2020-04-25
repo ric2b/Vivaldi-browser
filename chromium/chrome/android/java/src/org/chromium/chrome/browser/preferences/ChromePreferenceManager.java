@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser.preferences;
 
 import android.content.SharedPreferences;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.StrictModeContext;
@@ -87,12 +88,6 @@ public class ChromePreferenceManager {
     public static final String CONTEXTUAL_SEARCH_QUICK_ACTIONS_IGNORED_COUNT =
             "contextual_search_quick_actions_ignored_count";
     /**
-     * The user's previous preference setting before Unified Consent took effect, as an int, for
-     * Contextual Search. This can be removed after the full rollout of Unified Consent.
-     */
-    public static final String CONTEXTUAL_SEARCH_PRE_UNIFIED_CONSENT_PREF =
-            "contextual_search_pre_unified_consent_pref";
-    /**
      * A user interaction event ID for interaction with Contextual Search, stored as a long.
      */
     public static final String CONTEXTUAL_SEARCH_PREVIOUS_INTERACTION_EVENT_ID =
@@ -108,13 +103,6 @@ public class ChromePreferenceManager {
      */
     public static final String CONTEXTUAL_SEARCH_PREVIOUS_INTERACTION_TIMESTAMP =
             "contextual_search_previous_interaction_timestamp";
-
-    /**
-     * Key to cache whether
-     * {@link ChromeFeatureList#SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT} is enabled.
-     */
-    public static final String SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT =
-            "swap_pixel_format_to_fix_convert_from_translucent";
 
     /**
      * Whether the promotion for data reduction has been skipped on first invocation.
@@ -157,6 +145,7 @@ public class ChromePreferenceManager {
      * Whether or not the home page button is force enabled.
      * Default value is false.
      */
+    @Deprecated
     public static final String HOME_PAGE_BUTTON_FORCE_ENABLED_KEY =
             "home_page_button_force_enabled";
 
@@ -164,12 +153,14 @@ public class ChromePreferenceManager {
      * Whether or not the homepage tile will be shown.
      * Default value is false.
      */
+    @Deprecated
     public static final String HOMEPAGE_TILE_ENABLED_KEY = "homepage_tile_enabled";
 
     /**
      * Whether or not the new tab page button is enabled.
      * Default value is false.
      */
+    @Deprecated
     public static final String NTP_BUTTON_ENABLED_KEY = "ntp_button_enabled";
 
     /**
@@ -194,43 +185,6 @@ public class ChromePreferenceManager {
             "inflate_toolbar_on_background_thread";
 
     /**
-     * Whether or not the bottom toolbar is enabled.
-     * Default value is false.
-     */
-    public static final String BOTTOM_TOOLBAR_ENABLED_KEY = "bottom_toolbar_enabled";
-
-    /**
-     * Whether or not the adaptive toolbar is enabled.
-     * Default value is true.
-     */
-    public static final String ADAPTIVE_TOOLBAR_ENABLED_KEY = "adaptive_toolbar_enabled";
-
-    /**
-     * Whether or not the labeled bottom toolbar is enabled.
-     * Default value is false.
-     */
-    public static final String LABELED_BOTTOM_TOOLBAR_ENABLED_KEY =
-            "labeled_bottom_toolbar_enabled";
-
-    /**
-     * Whether or not night mode is available.
-     * Default value is false.
-     */
-    public static final String NIGHT_MODE_AVAILABLE_KEY = "night_mode_available";
-
-    /**
-     * Whether or not night mode should set "light" as the default option.
-     * Default value is false.
-     */
-    public static final String NIGHT_MODE_DEFAULT_TO_LIGHT = "night_mode_default_to_light";
-
-    /**
-     * Whether or not night mode is available for custom tabs.
-     * Default value is false.
-     */
-    public static final String NIGHT_MODE_CCT_AVAILABLE_KEY = "night_mode_cct_available";
-
-    /**
      * The current theme setting in the user settings.
      * Default value is -1. Use NightModeUtils#getThemeSetting() to retrieve current setting or
      * default theme.
@@ -238,11 +192,10 @@ public class ChromePreferenceManager {
     public static final String UI_THEME_SETTING_KEY = "ui_theme_setting";
 
     /**
-     * Whether or not the download auto-resumption is enabled in native.
-     * Default value is true.
+     * Whether or not darken websites is enabled.
+     * Default value is false.
      */
-    public static final String DOWNLOAD_AUTO_RESUMPTION_IN_NATIVE_KEY =
-            "download_auto_resumption_in_native";
+    public static final String DARKEN_WEBSITES_ENABLED_KEY = "darken_websites_enabled";
 
     /**
      * Marks that the content suggestions surface has been shown.
@@ -274,13 +227,6 @@ public class ChromePreferenceManager {
      */
     @Deprecated
     public static final String SOLE_INTEGRATION_ENABLED_KEY = "sole_integration_enabled";
-
-    /**
-     * Whether or not command line on non-rooted devices is enabled.
-     * Default value is false.
-     */
-    public static final String COMMAND_LINE_ON_NON_ROOTED_ENABLED_KEY =
-            "command_line_on_non_rooted_enabled";
 
     private static final String VERIFIED_DIGITAL_ASSET_LINKS =
             "verified_digital_asset_links";
@@ -319,50 +265,11 @@ public class ChromePreferenceManager {
             "twa_dialog_number_of_dismissals_on_clear_data";
 
     /** Key for deferred recording of WebAPK uninstalls. */
+    @Deprecated
     public static final String WEBAPK_NUMBER_OF_UNINSTALLS = "webapk_number_of_uninstalls";
 
-    public static final String INTEREST_FEED_CONTENT_SUGGESTIONS_KEY =
-            "interest_feed_content_suggestions";
-
-    /**
-     * Whether or not the start surface is enabled.
-     * Default value is false.
-     */
-    public static final String START_SURFACE_ENABLED_KEY = "start_surface_enabled";
-
-    /**
-     * Whether or not the grid tab switcher is enabled.
-     * Default value is false.
-     */
-    public static final String GRID_TAB_SWITCHER_ENABLED_KEY = "grid_tab_switcher_enabled";
-
-    /**
-     * Whether or not the tab group is enabled.
-     * Default value is false.
-     */
-    public static final String TAB_GROUPS_ANDROID_ENABLED_KEY = "tab_group_android_enabled";
-
-    /**
-     * Whether or not the tab group UI improvement is enabled.
-     * Default value is false.
-     */
-    public static final String TAB_GROUPS_UI_IMPROVEMENTS_ANDROID_ENABLED_KEY =
-            "tab_group_ui_improvements_android_enabled";
-
-    /**
-     * Key for whether PrefetchBackgroundTask should load native in service manager only mode.
-     * Default value is false.
-     */
-    public static final String SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH_KEY =
-            "service_manager_for_background_prefetch";
-
-    /**
-     * Key for whether DownloadResumptionBackgroundTask should load native in service manager only
-     * mode.
-     * Default value is false.
-     */
-    public static final String SERVICE_MANAGER_FOR_DOWNLOAD_RESUMPTION_KEY =
-            "service_manager_for_download_resumption";
+    /** Key for deferred recording of list of uninstalled WebAPK packages. */
+    public static final String WEBAPK_UNINSTALLED_PACKAGES = "webapk_uninstalled_packages";
 
     /**
      * Key for whether it allows to start in service manager only mode.
@@ -381,41 +288,15 @@ public class ChromePreferenceManager {
     public static final String CHROME_HOME_SHARED_PREFERENCES_KEY = "chrome_home_enabled_date";
 
     /**
-     * Whether or not bootstrap tasks should be prioritized (i.e. bootstrap task prioritization
-     * experiment is enabled). Default value is true.
-     */
-    public static final String PRIORITIZE_BOOTSTRAP_TASKS_KEY = "prioritize_bootstrap_tasks";
-
-    /**
-     * Whether warming up network service is enabled.
-     * Default value is false.
-     */
-    public static final String NETWORK_SERVICE_WARM_UP_ENABLED_KEY =
-            "network_service_warm_up_enabled";
-
-    /**
      * Contains a trial group that was used to determine whether the reached code profiler should be
      * enabled.
      */
     public static final String REACHED_CODE_PROFILER_GROUP_KEY = "reached_code_profiler_group";
 
     /**
-     * Whether or not we should directly open the dialer when a click to call notification is
-     * received. Default value is false.
+     * Key to cache whether offline indicator v2 (persistent offline indicator) is enabled.
      */
-    public static final String CLICK_TO_CALL_OPEN_DIALER_DIRECTLY_KEY =
-            "click_to_call_open_dialer_directly";
-
-    /**
-     * Key to cache whether immersive ui mode is enabled.
-     */
-    public static final String IMMERSIVE_UI_MODE_ENABLED = "immersive_ui_mode_enabled";
-
-    /**
-     * The total number of browsing sessions in touchless mode.
-     */
-    public static final String TOUCHLESS_BROWSING_SESSION_COUNT =
-            "touchless_browsing_session_count";
+    public static final String OFFLINE_INDICATOR_V2_ENABLED_KEY = "offline_indicator_v2_enabled";
 
     private static class LazyHolder {
         static final ChromePreferenceManager INSTANCE = new ChromePreferenceManager();
@@ -563,8 +444,7 @@ public class ChromePreferenceManager {
      * Stores a set of account names on the device when signin promo is shown.
      */
     public void setSigninPromoLastAccountNames(Set<String> accountNames) {
-        SharedPreferences.Editor editor = mSharedPreferences.edit();
-        editor.putStringSet(SIGNIN_PROMO_LAST_SHOWN_ACCOUNT_NAMES, accountNames).apply();
+        writeStringSet(SIGNIN_PROMO_LAST_SHOWN_ACCOUNT_NAMES, accountNames);
     }
 
     /**
@@ -659,8 +539,7 @@ public class ChromePreferenceManager {
     public Set<String> getVerifiedDigitalAssetLinks() {
         // From the official docs, modifying the result of a SharedPreferences.getStringSet can
         // cause bad things to happen including exceptions or ruining the data.
-        return new HashSet<>(mSharedPreferences.getStringSet(VERIFIED_DIGITAL_ASSET_LINKS,
-                Collections.emptySet()));
+        return new HashSet<>(readStringSet(VERIFIED_DIGITAL_ASSET_LINKS));
     }
 
     /**
@@ -668,13 +547,12 @@ public class ChromePreferenceManager {
      * Can be retrieved by {@link #getVerifiedDigitalAssetLinks()}.
      */
     public void setVerifiedDigitalAssetLinks(Set<String> links) {
-        mSharedPreferences.edit().putStringSet(VERIFIED_DIGITAL_ASSET_LINKS, links).apply();
+        writeStringSet(VERIFIED_DIGITAL_ASSET_LINKS, links);
     }
 
     /** Do not modify the set returned by this method. */
     private Set<String> getTrustedWebActivityDisclosureAcceptedPackages() {
-        return mSharedPreferences.getStringSet(
-                TRUSTED_WEB_ACTIVITY_DISCLOSURE_ACCEPTED_PACKAGES, Collections.emptySet());
+        return readStringSet(TRUSTED_WEB_ACTIVITY_DISCLOSURE_ACCEPTED_PACKAGES);
     }
 
     /**
@@ -682,10 +560,7 @@ public class ChromePreferenceManager {
      * TWAs launched by the given package.
      */
     public void setUserAcceptedTwaDisclosureForPackage(String packageName) {
-        Set<String> packages = new HashSet<>(getTrustedWebActivityDisclosureAcceptedPackages());
-        packages.add(packageName);
-        mSharedPreferences.edit().putStringSet(
-                TRUSTED_WEB_ACTIVITY_DISCLOSURE_ACCEPTED_PACKAGES, packages).apply();
+        addToStringSet(TRUSTED_WEB_ACTIVITY_DISCLOSURE_ACCEPTED_PACKAGES, packageName);
     }
 
     /**
@@ -693,11 +568,7 @@ public class ChromePreferenceManager {
      * TWAs launched by the given package.
      */
     public void removeTwaDisclosureAcceptanceForPackage(String packageName) {
-        Set<String> packages = new HashSet<>(getTrustedWebActivityDisclosureAcceptedPackages());
-        if (packages.remove(packageName)) {
-            mSharedPreferences.edit().putStringSet(
-                    TRUSTED_WEB_ACTIVITY_DISCLOSURE_ACCEPTED_PACKAGES, packages).apply();
-        }
+        removeFromStringSet(TRUSTED_WEB_ACTIVITY_DISCLOSURE_ACCEPTED_PACKAGES, packageName);
     }
 
     /**
@@ -706,6 +577,41 @@ public class ChromePreferenceManager {
      */
     public boolean hasUserAcceptedTwaDisclosureForPackage(String packageName) {
         return getTrustedWebActivityDisclosureAcceptedPackages().contains(packageName);
+    }
+
+    /**
+     * Reads set of String values from preferences.
+     *
+     * Note that you must not modify the set instance returned by this call.
+     */
+    public Set<String> readStringSet(String key) {
+        return mSharedPreferences.getStringSet(key, Collections.emptySet());
+    }
+
+    /**
+     * Adds a value to string set in shared preferences.
+     */
+    public void addToStringSet(String key, String value) {
+        Set<String> values = new HashSet<>(readStringSet(key));
+        values.add(value);
+        writeStringSet(key, values);
+    }
+
+    /**
+     * Removes value from string set in shared preferences.
+     */
+    public void removeFromStringSet(String key, String value) {
+        Set<String> values = new HashSet<>(readStringSet(key));
+        if (values.remove(value)) {
+            writeStringSet(key, values);
+        }
+    }
+
+    /**
+     * Writes string set to shared preferences.
+     */
+    public void writeStringSet(String key, Set<String> values) {
+        mSharedPreferences.edit().putStringSet(key, values).apply();
     }
 
     /**

@@ -54,6 +54,7 @@
 
       #input::placeholder {
         color: var(--cr-input-placeholder-color);
+        letter-spacing: var(--cr-input-placeholder-letter-spacing);
       }
 
       :host([invalid]) #input {
@@ -120,6 +121,7 @@
               readonly$="[[readonly]]" maxlength$="[[maxlength]]"
               pattern$="[[pattern]]" required="[[required]]"
               minlength$="[[minlength]]"
+              aria-label$="[[getAriaLabel_(ariaLabel, label, placeholder)]]"
               max="[[max]]" min="[[min]]" on-focus="onInputFocus_"
               on-blur="onInputBlur_" on-change="onInputChange_"
               on-keydown="onInputKeydown_" part="input">
@@ -128,7 +130,7 @@
       </div>
       <slot name="suffix"></slot>
     </div>
-    <div id="error">[[errorMessage]]</div>
+    <div id="error" role="alert">[[errorMessage]]</div>
   </template>
   <script src="cr_input.js"></script>
 </dom-module>

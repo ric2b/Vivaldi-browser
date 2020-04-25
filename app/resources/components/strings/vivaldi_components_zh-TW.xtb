@@ -1,4 +1,32 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
+<translation id="3830627370375585318">允許 Vivaldi 存取受到防火牆或防毒軟體設定所阻擋的網路。</translation>
+<translation id="4200102020577305737">前往
+          Vivaldi 主選單 &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          區域網路設定
+          然後取消勾選「在你的區域網路使用代理伺服器」核取方塊。</translation>
+<translation id="4932161901409251843">前往
+          Vivaldi 主選單 &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          並確認你的設定為「不使用代理」或「直接連線」。</translation>
+<translation id="5248344925342018662">您正在瀏覽的是安全的 Vivaldi 網頁</translation>
+<translation id="7023871570427738255">前往
+        Vivaldi 主選單 &gt;
+        <ph name="SETTINGS_TITLE" />
+        &gt;
+        <ph name="ADVANCED_TITLE" />
+        然後取消勾選「<ph name="NO_PREFETCH_DESCRIPTION" />」。
+        如果仍然無法解決問題，建議你重新勾選這個選項以增進效能。</translation>
+<translation id="8187289872471304532">前往 Vivaldi 設定 &gt; 網路 &gt; 代理設定，取消勾選全部代理。</translation>
 </translationbundle>

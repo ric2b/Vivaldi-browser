@@ -1,4 +1,36 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="it">
+<translation id="3830627370375585318">Consenti a Vivaldi di accedere alla rete nelle impostazioni del firewall o del software
+        antivirus.</translation>
+<translation id="4200102020577305737">Seleziona
+          il menu Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Impostazioni LAN
+          e deseleziona la casella di controllo "Utilizza un server proxy per le connessioni LAN".</translation>
+<translation id="4932161901409251843">Seleziona
+          il menu Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          e verifica che la configurazione sia impostata su "nessun proxy" o "diretta."</translation>
+<translation id="5248344925342018662">Stai visualizzando una pagina protetta di Vivaldi</translation>
+<translation id="7023871570427738255">Seleziona
+          il menu Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          e deseleziona "<ph name="NO_PREFETCH_DESCRIPTION" />".
+          Se il problema non si risolve, prova a riselezionare questa opzione
+          per ottenere prestazioni migliori.</translation>
+<translation id="8187289872471304532">Seleziona
+          Applicazioni &gt; Preferenze di Sistema &gt; Rete &gt; Avanzate &gt; Proxy
+          e deseleziona i proxy selezionati.</translation>
 </translationbundle>

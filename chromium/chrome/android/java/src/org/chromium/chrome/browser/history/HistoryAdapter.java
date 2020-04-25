@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.history;
 
 import android.content.res.Resources;
-import android.support.annotation.Nullable;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.text.SpannableString;
@@ -16,6 +15,8 @@ import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
@@ -33,6 +34,11 @@ import org.chromium.ui.text.SpanApplier;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import android.view.Display;
+import android.widget.LinearLayout;
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * Bridges the user's browsing history and the UI used to display it.
@@ -298,6 +304,10 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
                 mHistoryManager.openClearBrowsingDataPreference();
             }
         });
+
+        if (ChromeApplication.isVivaldi()) {
+            clearBrowsingDataButtonContainer.setVisibility(View.GONE);
+        }
 
         mPrivacyDisclaimerHeaderItem = new HeaderItem(0, privacyDisclaimerContainer);
         mClearBrowsingDataButtonHeaderItem = new HeaderItem(1, clearBrowsingDataButtonContainer);

@@ -32,7 +32,6 @@
 #define THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_MEDIA_PLAYER_CLIENT_H_
 
 #include "third_party/blink/public/platform/web_common.h"
-#include "third_party/blink/public/platform/web_localized_string.h"
 #include "third_party/blink/public/platform/web_media_player.h"
 #include "ui/gfx/color_space.h"
 
@@ -67,6 +66,8 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerClient {
     kAudioTrackKindTranslation,
     kAudioTrackKindCommentary
   };
+
+  static const int kMediaRemotingStopNoText = -1;
 
   virtual void NetworkStateChanged() = 0;
   virtual void ReadyStateChanged() = 0;
@@ -120,9 +121,10 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerClient {
   virtual void MediaRemotingStarted(
       const WebString& remote_device_friendly_name) = 0;
 
-  // Informs that media stops being rendered remotely. |error_msg| corresponds
+  // Informs that media stops being rendered remotely. |error_code| corresponds
   // to a localized string that explains the reason as user-readable text.
-  virtual void MediaRemotingStopped(WebLocalizedString::Name error_msg) = 0;
+  // |error_code| should be IDS_FOO or kMediaRemotingStopNoText.
+  virtual void MediaRemotingStopped(int error_code) = 0;
 
   // Returns whether the media element has native controls. It does not mean
   // that the controls are currently visible.
@@ -174,6 +176,21 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerClient {
   //  - Surface ID;
   //  - Natural Size.
   virtual void OnPictureInPictureStateChange() = 0;
+
+  struct Features {
+    WebString id;
+    WebString width;
+    WebString parent_id;
+    WebString alt_text;
+    bool is_page_visible;
+    bool is_in_main_frame;
+    WebString url_host;
+    WebString url_path;
+  };
+
+  // Compute and return features for this media element for the media local
+  // learning experiment.
+  virtual Features GetFeatures() = 0;
 
  protected:
   ~WebMediaPlayerClient() = default;

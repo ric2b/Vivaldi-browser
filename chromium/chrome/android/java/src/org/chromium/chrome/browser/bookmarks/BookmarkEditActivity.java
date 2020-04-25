@@ -1,7 +1,6 @@
 // Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
 package org.chromium.chrome.browser.bookmarks;
 
 import android.content.Intent;
@@ -17,9 +16,11 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.SynchronousInitializationActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
-import org.chromium.chrome.browser.widget.TintedDrawable;
+import org.chromium.chrome.browser.ui.widget.TintedDrawable;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.url_formatter.UrlFormatter;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * The activity that enables the user to modify the title, url and parent folder of a bookmark.
@@ -46,6 +47,7 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
             } else {
                 // This happens either when the user clicks delete button or partner bookmark is
                 // removed in background.
+                if (ChromeApplication.isVivaldi() && !isFinishing()) // TODO
                 finish();
             }
         }
@@ -60,11 +62,12 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
                 getIntent().getStringExtra(INTENT_BOOKMARK_ID));
         mModel.addObserver(mBookmarkModelObserver);
         BookmarkItem item = mModel.getBookmarkById(mBookmarkId);
-        if (!mModel.doesBookmarkExist(mBookmarkId) || item == null) {
-            finish();
-            return;
+        if (!ChromeApplication.isVivaldi()) { // Vivaldi uses this activity also for adding new item
+            if (!mModel.doesBookmarkExist(mBookmarkId) || item == null) {
+                finish();
+                return;
+            }
         }
-
         setContentView(R.layout.bookmark_edit);
         mTitleEditText = findViewById(R.id.title_text);
         mFolderTextView = (TextView) findViewById(R.id.folder_text);
@@ -81,7 +84,7 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-
+        if (!ChromeApplication.isVivaldi())
         updateViewContent(false);
 
         View shadow = findViewById(R.id.shadow);
@@ -95,6 +98,7 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
      * @param modelChanged Whether this view update is due to a model change in background.
      */
     private void updateViewContent(boolean modelChanged) {
+        if (ChromeApplication.isVivaldi()) { updateViewContentForVivaldi(modelChanged); return; }
         BookmarkItem bookmarkItem = mModel.getBookmarkById(mBookmarkId);
         // While the user is editing the bookmark, do not override user's input.
         if (!modelChanged) {
@@ -109,11 +113,11 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        mDeleteButton = menu.add(R.string.bookmark_action_bar_delete)
+        if (!ChromeApplication.isVivaldi())
+            mDeleteButton = menu.add(R.string.bookmark_action_bar_delete)
                                 .setIcon(TintedDrawable.constructTintedDrawable(
                                         this, R.drawable.ic_delete_white_24dp))
                                 .setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_IF_ROOM);
-
         return super.onCreateOptionsMenu(menu);
     }
 
@@ -122,9 +126,14 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
         if (item == mDeleteButton) {
             // Log added for detecting delete button double clicking.
             Log.i(TAG, "Delete button pressed by user! isFinishing() == " + isFinishing());
-
+            if (ChromeApplication.isVivaldi()) {
+                mModel.deleteBookmarks(mBookmarkId);
+                if (!isFinishing())
+                    finish();
+            } else {
             mModel.deleteBookmark(mBookmarkId);
             finish();
+            }
             return true;
         } else if (item.getItemId() == android.R.id.home) {
             finish();
@@ -135,6 +144,7 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
 
     @Override
     protected void onStop() {
+        if (!ChromeApplication.isVivaldi())
         if (mModel.doesBookmarkExist(mBookmarkId)) {
             final String originalUrl =
                     mModel.getBookmarkById(mBookmarkId).getUrl();
@@ -179,4 +189,15 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
         }
         finish();
     }
+
+    // Vivaldi
+    protected BookmarkModel getModel() {
+        return mModel;
+    }
+
+    protected BookmarkId getBookmarkId() {
+        return mBookmarkId;
+    }
+
+    protected void updateViewContentForVivaldi(boolean modelChanged) { }
 }

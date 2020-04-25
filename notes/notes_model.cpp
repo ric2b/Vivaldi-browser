@@ -13,6 +13,7 @@
 
 #include "app/vivaldi_resources.h"
 #include "base/i18n/string_compare.h"
+#include "base/i18n/string_search.h"
 #include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -21,6 +22,7 @@
 #include "notes/notes_storage.h"
 #include "notes/notesnode.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/tree_node_iterator.h"
 
 using base::Time;
 
@@ -748,6 +750,35 @@ void Notes_Model::ReorderChildren(
 
   for (auto& observer : observers_)
     observer.NotesNodeChildrenReordered(this, parent);
+}
+
+void Notes_Model::GetNotesMatching(
+    const base::string16& text,
+    size_t max_count,
+    std::vector<std::pair<int, Notes_Node::Type>>* matches) {
+    if (!loaded_)
+        return;
+
+    std::vector<vivaldi::Notes_Node> search_result;
+    if (text.length() > 0) {
+      ui::TreeNodeIterator<Notes_Node> iterator(
+          &root_);
+
+      while (iterator.has_next()) {
+        Notes_Node* node = iterator.Next();
+        bool match = false;
+        match = base::i18n::StringSearchIgnoringCaseAndAccents(
+                text, node->GetContent(), NULL, NULL);
+        if (!match && node->GetURL().is_valid()) {
+         std::string value = node->GetURL().host() + node->GetURL().path();
+         match = base::i18n::StringSearchIgnoringCaseAndAccents(
+                text, base::UTF8ToUTF16(value), NULL, NULL);
+         }
+        if (match) {
+            matches->push_back(std::pair<int, Notes_Node::Type>(node->id(), node->type()));
+        }
+      }
+    }
 }
 
 }  // namespace vivaldi

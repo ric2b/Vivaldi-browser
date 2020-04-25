@@ -129,7 +129,7 @@ ExtensionFunction::ResponseAction MailPrivateGetPathsFunction::Run() {
         "Path must be absolute %s", file_path.AsUTF8Unsafe().c_str())));
   }
 
-  base::PostTaskWithTraitsAndReplyWithResult(
+  base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&FindMailFiles, file_path),
@@ -229,7 +229,7 @@ ExtensionFunction::ResponseAction MailPrivateSaveFunction::Run() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
   base::FilePath file_path = profile->GetPath();
 
-  base::PostTaskWithTraitsAndReplyWithResult(
+  base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&Save, file_path, string_paths, file_name, data),
@@ -259,7 +259,7 @@ ExtensionFunction::ResponseAction MailPrivateSaveBufferFunction::Run() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
   base::FilePath file_path = profile->GetPath();
 
-  base::PostTaskWithTraitsAndReplyWithResult(
+  base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&SaveBuffer, file_path, string_paths, file_name, params->raw),
@@ -298,7 +298,7 @@ ExtensionFunction::ResponseAction MailPrivateDeleteFunction::Run() {
     file_path = file_path.AppendASCII(string_paths[i]);
   }
 
-  base::PostTaskWithTraitsAndReplyWithResult(
+  base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&Delete, file_path, file_name),
@@ -357,7 +357,7 @@ ExtensionFunction::ResponseAction MailPrivateReadFunction::Run() {
     file_path = file_path.AppendASCII(file_name);
   }
 
-  base::PostTaskWithTraitsAndReplyWithResult(
+  base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&Read, file_path),
@@ -397,7 +397,7 @@ ExtensionFunction::ResponseAction MailPrivateReadBufferFunction::Run() {
     file_path = file_path.AppendASCII(file_name);
   }
 
-  base::PostTaskWithTraitsAndReplyWithResult(
+  base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&Read, file_path),
@@ -424,7 +424,7 @@ ExtensionFunction::ResponseAction MailPrivateReadFileFunction::Run() {
   base::FilePath base_path;
   base::FilePath file_path = base_path.AppendASCII(path);
 
-  base::PostTaskWithTraitsAndReplyWithResult(
+  base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&Read, file_path),
@@ -472,7 +472,7 @@ ExtensionFunction::ResponseAction MailPrivateGetDataDirectoryFunction::Run() {
   file_path = file_path.Append(kMailDirectory);
   file_path = file_path.Append(hashed_account_id);
 
-  base::PostTaskWithTraitsAndReplyWithResult(
+  base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&GetDataDirectory, file_path),
@@ -503,7 +503,7 @@ MailPrivateCreateDataDirectoryFunction::Run() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
   base::FilePath file_path = profile->GetPath();
 
-  base::PostTaskWithTraitsAndReplyWithResult(
+  base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&CreateDirectory, file_path, hashed_account_id),
@@ -548,7 +548,7 @@ ExtensionFunction::ResponseAction MailPrivateRenameFunction::Run() {
     file_path = file_path.Append(string_paths[i]);
   }
 
-  base::PostTaskWithTraitsAndReplyWithResult(
+  base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&Rename, file_path, file_name, new_file_name),

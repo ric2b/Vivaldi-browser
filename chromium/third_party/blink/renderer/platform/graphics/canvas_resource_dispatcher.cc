@@ -321,20 +321,31 @@ void CanvasResourceDispatcher::SetNeedsBeginFrameInternal() {
     sink_->SetNeedsBeginFrame(needs_begin_frame_ && !suspend_animation_);
 }
 
+bool CanvasResourceDispatcher::HasTooManyPendingFrames() const {
+  return pending_compositor_frames_ >= kMaxPendingCompositorFrames;
+}
+
 void CanvasResourceDispatcher::OnBeginFrame(
     const viz::BeginFrameArgs& begin_frame_args,
     WTF::HashMap<uint32_t, ::viz::mojom::blink::FrameTimingDetailsPtr>) {
   current_begin_frame_ack_ = viz::BeginFrameAck(begin_frame_args, false);
-  if (pending_compositor_frames_ >= kMaxPendingCompositorFrames ||
+  if (HasTooManyPendingFrames() ||
       (begin_frame_args.type == viz::BeginFrameArgs::MISSED &&
        base::TimeTicks::Now() > begin_frame_args.deadline)) {
     sink_->DidNotProduceFrame(current_begin_frame_ack_);
     return;
   }
 
-  if (Client())
-    Client()->BeginFrame();
-  // TODO(eseckler): Tell |sink_| if we did not draw during the BeginFrame.
+  // TODO(fserb): should EnqueueMicrotask BeginFrame().
+  // We usually never get to BeginFrame if we are on RAF mode. But it could
+  // still happen that begin frame gets requested and we don't have a frame
+  // anymore, so we shouldn't let the compositor wait.
+  bool submitted_frame = Client() && Client()->BeginFrame();
+  if (!submitted_frame) {
+    sink_->DidNotProduceFrame(current_begin_frame_ack_);
+  }
+
+  // TODO(fserb): Update this with the correct value if we are on RAF submit.
   current_begin_frame_ack_.sequence_number =
       viz::BeginFrameArgs::kInvalidFrameNumber;
 }

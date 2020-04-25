@@ -97,8 +97,9 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
   static createExclamationMark(property) {
     const exclamationElement = createElement('span', 'dt-icon-label');
     exclamationElement.className = 'exclamation-mark';
-    if (!Elements.StylesSidebarPane.ignoreErrorsForProperty(property))
+    if (!Elements.StylesSidebarPane.ignoreErrorsForProperty(property)) {
       exclamationElement.type = 'smallicon-warning';
+    }
     exclamationElement.title = SDK.cssMetadata().isCSSPropertyName(property.name) ?
         Common.UIString('Invalid property value') :
         Common.UIString('Unknown property name');
@@ -120,26 +121,32 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
     const name = property.name.toLowerCase();
 
     // IE hack.
-    if (name.charAt(0) === '_')
+    if (name.charAt(0) === '_') {
       return true;
+    }
 
     // IE has a different format for this.
-    if (name === 'filter')
+    if (name === 'filter') {
       return true;
+    }
 
     // Common IE-specific property prefix.
-    if (name.startsWith('scrollbar-'))
+    if (name.startsWith('scrollbar-')) {
       return true;
-    if (hasUnknownVendorPrefix(name))
+    }
+    if (hasUnknownVendorPrefix(name)) {
       return true;
+    }
 
     const value = property.value.toLowerCase();
 
     // IE hack.
-    if (value.endsWith('\\9'))
+    if (value.endsWith('\\9')) {
       return true;
-    if (hasUnknownVendorPrefix(value))
+    }
+    if (hasUnknownVendorPrefix(value)) {
       return true;
+    }
 
     return false;
   }
@@ -164,8 +171,9 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
      * @param {!Event} event
      */
     function keydownHandler(event) {
-      if (event.key !== 'Escape' || !input.value)
+      if (event.key !== 'Escape' || !input.value) {
         return;
+      }
       event.consume(true);
       input.value = '';
       searchHandler();
@@ -207,11 +215,13 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
    */
   _sectionsContainerKeyDown(event) {
     const activeElement = this._sectionsContainer.ownerDocument.deepActiveElement();
-    if (!activeElement)
+    if (!activeElement) {
       return;
+    }
     const section = activeElement._section;
-    if (!section)
+    if (!section) {
       return;
+    }
 
     switch (event.key) {
       case 'ArrowUp':
@@ -239,10 +249,15 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
   }
 
   _sectionsContainerFocusChanged() {
+    this.resetFocus();
+  }
+
+  resetFocus() {
     // When a styles section is focused, shift+tab should leave the section.
     // Leaving tabIndex = 0 on the first element would cause it to be focused instead.
-    if (this._sectionBlocks[0] && this._sectionBlocks[0].sections[0])
+    if (this._sectionBlocks[0] && this._sectionBlocks[0].sections[0]) {
       this._sectionBlocks[0].sections[0].element.tabIndex = this._sectionsContainer.hasFocus() ? -1 : 0;
+    }
   }
 
   /**
@@ -250,8 +265,9 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
    */
   _onAddButtonLongClick(event) {
     const cssModel = this.cssModel();
-    if (!cssModel)
+    if (!cssModel) {
       return;
+    }
     const headers = cssModel.styleSheetHeaders().filter(styleSheetResourceHeader);
 
     /** @type {!Array.<{text: string, handler: function()}>} */
@@ -306,26 +322,31 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
   _refreshUpdate(editedSection, editedTreeElement) {
     if (editedTreeElement) {
       for (const section of this.allSections()) {
-        if (section.isBlank)
+        if (section.isBlank) {
           continue;
+        }
         section._updateVarFunctions(editedTreeElement);
       }
     }
 
-    if (this._isEditingStyle)
+    if (this._isEditingStyle) {
       return;
+    }
     const node = this.node();
-    if (!node)
+    if (!node) {
       return;
+    }
 
     for (const section of this.allSections()) {
-      if (section.isBlank)
+      if (section.isBlank) {
         continue;
+      }
       section.update(section === editedSection);
     }
 
-    if (this._filterRegex)
+    if (this._filterRegex) {
       this._updateFilter();
+    }
     this._nodeStylesUpdatedForTest(node, false);
   }
 
@@ -354,8 +375,9 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
   }
 
   _resetCache() {
-    if (this.cssModel())
+    if (this.cssModel()) {
       this.cssModel().discardCachedMatchedCascade();
+    }
   }
 
   /**
@@ -363,8 +385,9 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
    */
   _fetchMatchedCascade() {
     const node = this.node();
-    if (!node || !this.cssModel())
+    if (!node || !this.cssModel()) {
       return Promise.resolve(/** @type {?SDK.CSSMatchedStyles} */ (null));
+    }
 
     return this.cssModel().cachedMatchedCascadeForNode(node).then(validateStyles.bind(this));
 
@@ -383,8 +406,9 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
    * @param {!Elements.StylePropertyTreeElement=} treeElement
    */
   setEditingStyle(editing, treeElement) {
-    if (this._isEditingStyle === editing)
+    if (this._isEditingStyle === editing) {
       return;
+    }
     this.contentElement.classList.toggle('is-editing-style', editing);
     this._isEditingStyle = editing;
     this._setActiveProperty(null);
@@ -394,21 +418,25 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
    * @param {?Elements.StylePropertyTreeElement} treeElement
    */
   _setActiveProperty(treeElement) {
-    if (this._isActivePropertyHighlighted)
+    if (this._isActivePropertyHighlighted) {
       SDK.OverlayModel.hideDOMNodeHighlight();
+    }
     this._isActivePropertyHighlighted = false;
 
-    if (!this.node())
+    if (!this.node()) {
       return;
+    }
 
-    if (!treeElement || treeElement.overloaded() || treeElement.inherited())
+    if (!treeElement || treeElement.overloaded() || treeElement.inherited()) {
       return;
+    }
 
     const rule = treeElement.property.ownerStyle.parentRule;
     const selectorList = rule ? rule.selectorText() : undefined;
     for (const mode of ['padding', 'border', 'margin']) {
-      if (!treeElement.name.startsWith(mode))
+      if (!treeElement.name.startsWith(mode)) {
         continue;
+      }
       this.node().domModel().overlayModel().highlightInOverlay(
           {node: /** @type {!SDK.DOMNode} */ (this.node()), selectorList}, mode);
       this._isActivePropertyHighlighted = true;
@@ -423,13 +451,15 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
   onCSSModelChanged(event) {
     const edit = event && event.data ? /** @type {?SDK.CSSModel.Edit} */ (event.data.edit) : null;
     if (edit) {
-      for (const section of this.allSections())
+      for (const section of this.allSections()) {
         section._styleSheetEdited(edit);
+      }
       return;
     }
 
-    if (this._userOperation || this._isEditingStyle)
+    if (this._userOperation || this._isEditingStyle) {
       return;
+    }
 
     this._resetCache();
     this.update();
@@ -442,8 +472,9 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
     let index = 0;
     for (const block of this._sectionBlocks) {
       for (const section of block.sections) {
-        if (section.element.hasFocus())
+        if (section.element.hasFocus()) {
           return index;
+        }
         index++;
       }
     }
@@ -456,8 +487,9 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
    */
   continueEditingElement(sectionIndex, propertyIndex) {
     const section = this.allSections()[sectionIndex];
-    if (section)
+    if (section) {
       section.propertiesTreeOutline.rootElement().childAt(propertyIndex).startEditing();
+    }
   }
 
   /**
@@ -468,10 +500,11 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
     // Elements.ElementsSidebarPane's throttler schedules this method. Usually,
     // rebuild is suppressed while editing (see onCSSModelChanged()), but we need a
     // 'force' flag since the currently running throttler process cannot be canceled.
-    if (this._needsForceUpdate)
+    if (this._needsForceUpdate) {
       this._needsForceUpdate = false;
-    else if (this._isEditingStyle || this._userOperation)
+    } else if (this._isEditingStyle || this._userOperation) {
       return;
+    }
     const focusedIndex = this.focusedSectionIndex();
 
     this._linkifier.reset();
@@ -488,8 +521,9 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
         await this._rebuildSectionsForMatchedStyleRules(/** @type {!SDK.CSSMatchedStyles} */ (matchedStyles));
     let pseudoTypes = [];
     const keys = matchedStyles.pseudoTypes();
-    if (keys.delete(Protocol.DOM.PseudoType.Before))
+    if (keys.delete(Protocol.DOM.PseudoType.Before)) {
       pseudoTypes.push(Protocol.DOM.PseudoType.Before);
+    }
     pseudoTypes = pseudoTypes.concat(keys.valuesArray().sort());
     for (const pseudoType of pseudoTypes) {
       const block = Elements.SectionBlock.createPseudoTypeBlock(pseudoType);
@@ -502,31 +536,36 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
 
     for (const keyframesRule of matchedStyles.keyframes()) {
       const block = Elements.SectionBlock.createKeyframesBlock(keyframesRule.name().text);
-      for (const keyframe of keyframesRule.keyframes())
+      for (const keyframe of keyframesRule.keyframes()) {
         block.sections.push(new Elements.KeyframePropertiesSection(this, matchedStyles, keyframe.style));
+      }
       this._sectionBlocks.push(block);
     }
     let index = 0;
     for (const block of this._sectionBlocks) {
       const titleElement = block.titleElement();
-      if (titleElement)
+      if (titleElement) {
         this._sectionsContainer.appendChild(titleElement);
+      }
       for (const section of block.sections) {
         this._sectionsContainer.appendChild(section.element);
-        if (index === focusedIndex)
+        if (index === focusedIndex) {
           section.element.focus();
+        }
         index++;
       }
     }
-    if (focusedIndex >= index)
+    if (focusedIndex >= index) {
       this._sectionBlocks[0].sections[0].element.focus();
+    }
 
     this._sectionsContainerFocusChanged();
 
-    if (this._filterRegex)
+    if (this._filterRegex) {
       this._updateFilter();
-    else
+    } else {
       this._noMatchesElement.classList.toggle('hidden', this._sectionBlocks.length > 0);
+    }
 
     this._nodeStylesUpdatedForTest(/** @type {!SDK.DOMNode} */ (node), true);
     if (this._decorator) {
@@ -566,8 +605,9 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
   async _createNewRuleInViaInspectorStyleSheet() {
     const cssModel = this.cssModel();
     const node = this.node();
-    if (!cssModel || !node)
+    if (!cssModel || !node) {
       return;
+    }
     this.setUserOperation(true);
 
     const styleSheetHeader = await cssModel.requestViaInspectorStylesheet(/** @type {!SDK.DOMNode} */ (node));
@@ -580,9 +620,11 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
    * @param {?SDK.CSSStyleSheetHeader} styleSheetHeader
    */
   async _createNewRuleInStyleSheet(styleSheetHeader) {
-    if (!styleSheetHeader)
+    if (!styleSheetHeader) {
       return;
-    const text = await styleSheetHeader.requestContent() || '';
+    }
+
+    const text = (await styleSheetHeader.requestContent()).content || '';
     const lines = text.split('\n');
     const range = TextUtils.TextRange.createFromLocation(lines.length - 1, lines[lines.length - 1].length);
     this._addBlankSection(this._sectionBlocks[0].sections[0], styleSheetHeader.id, range);
@@ -603,8 +645,9 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
 
     for (const block of this._sectionBlocks) {
       const index = block.sections.indexOf(insertAfterSection);
-      if (index === -1)
+      if (index === -1) {
         continue;
+      }
       block.sections.splice(index + 1, 0, blankSection);
       blankSection.startEditingSelector();
     }
@@ -616,8 +659,9 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
   removeSection(section) {
     for (const block of this._sectionBlocks) {
       const index = block.sections.indexOf(section);
-      if (index === -1)
+      if (index === -1) {
         continue;
+      }
       block.sections.splice(index, 1);
       section.element.remove();
     }
@@ -632,9 +676,10 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
 
   _updateFilter() {
     let hasAnyVisibleBlock = false;
-    for (const block of this._sectionBlocks)
+    for (const block of this._sectionBlocks) {
       hasAnyVisibleBlock |= block.updateFilter();
-    this._noMatchesElement.classList.toggle('hidden', hasAnyVisibleBlock);
+    }
+    this._noMatchesElement.classList.toggle('hidden', !!hasAnyVisibleBlock);
   }
 
   /**
@@ -650,8 +695,9 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
    */
   allSections() {
     let sections = [];
-    for (const block of this._sectionBlocks)
+    for (const block of this._sectionBlocks) {
       sections = sections.concat(block.sections);
+    }
     return sections;
   }
 
@@ -687,25 +733,29 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
    * @param {?UI.ToolbarToggle} toggle
    */
   showToolbarPane(widget, toggle) {
-    if (this._pendingWidgetToggle)
+    if (this._pendingWidgetToggle) {
       this._pendingWidgetToggle.setToggled(false);
+    }
     this._pendingWidgetToggle = toggle;
 
-    if (this._animatedToolbarPane)
+    if (this._animatedToolbarPane) {
       this._pendingWidget = widget;
-    else
+    } else {
       this._startToolbarPaneAnimation(widget);
+    }
 
-    if (widget && toggle)
+    if (widget && toggle) {
       toggle.setToggled(true);
+    }
   }
 
   /**
    * @param {?UI.Widget} widget
    */
   _startToolbarPaneAnimation(widget) {
-    if (widget === this._currentToolbarPane)
+    if (widget === this._currentToolbarPane) {
       return;
+    }
 
     if (widget && this._currentToolbarPane) {
       this._currentToolbarPane.detach();
@@ -717,13 +767,15 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
 
     this._animatedToolbarPane = widget;
 
-    if (this._currentToolbarPane)
+    if (this._currentToolbarPane) {
       this._toolbarPaneElement.style.animationName = 'styles-element-state-pane-slideout';
-    else if (widget)
+    } else if (widget) {
       this._toolbarPaneElement.style.animationName = 'styles-element-state-pane-slidein';
+    }
 
-    if (widget)
+    if (widget) {
       widget.show(this._toolbarPaneElement);
+    }
 
     const listener = onAnimationEnd.bind(this);
     this._toolbarPaneElement.addEventListener('animationend', listener, false);
@@ -735,12 +787,14 @@ Elements.StylesSidebarPane = class extends Elements.ElementsSidebarPane {
       this._toolbarPaneElement.style.removeProperty('animation-name');
       this._toolbarPaneElement.removeEventListener('animationend', listener, false);
 
-      if (this._currentToolbarPane)
+      if (this._currentToolbarPane) {
         this._currentToolbarPane.detach();
+      }
 
       this._currentToolbarPane = this._animatedToolbarPane;
-      if (this._currentToolbarPane)
+      if (this._currentToolbarPane) {
         this._currentToolbarPane.focus();
+      }
       this._animatedToolbarPane = null;
 
       if (this._pendingWidget) {
@@ -802,11 +856,13 @@ Elements.SectionBlock = class {
    */
   updateFilter() {
     let hasAnyVisibleSection = false;
-    for (const section of this.sections)
+    for (const section of this.sections) {
       hasAnyVisibleSection |= section._updateFilter();
-    if (this._titleElement)
+    }
+    if (this._titleElement) {
       this._titleElement.classList.toggle('hidden', !hasAnyVisibleSection);
-    return hasAnyVisibleSection;
+    }
+    return !!hasAnyVisibleSection;
   }
 
   /**
@@ -899,8 +955,9 @@ Elements.StylePropertiesSection = class {
     this._titleElement.appendChild(selectorContainer);
     this._selectorContainer = selectorContainer;
 
-    if (this.navigable)
+    if (this.navigable) {
       this.element.classList.add('navigable');
+    }
 
     if (!this.editable) {
       this.element.classList.add('read-only');
@@ -919,14 +976,11 @@ Elements.StylePropertiesSection = class {
    * @return {!Node}
    */
   static createRuleOriginNode(matchedStyles, linkifier, rule) {
-    if (!rule)
+    if (!rule) {
       return createTextNode('');
+    }
 
-    let ruleLocation;
-    if (rule instanceof SDK.CSSStyleRule)
-      ruleLocation = rule.style.range;
-    else if (rule instanceof SDK.CSSKeyframeRule)
-      ruleLocation = rule.key().range;
+    const ruleLocation = this._getRuleLocationFromCSSRule(rule);
 
     const header = rule.styleSheetId ? matchedStyles.cssModel().styleSheetHeaderForId(rule.styleSheetId) : null;
     if (ruleLocation && rule.styleSheetId && header && !header.isAnonymousInlineStyleSheet()) {
@@ -934,12 +988,15 @@ Elements.StylePropertiesSection = class {
           matchedStyles.cssModel(), linkifier, rule.styleSheetId, ruleLocation);
     }
 
-    if (rule.isUserAgent())
+    if (rule.isUserAgent()) {
       return createTextNode(Common.UIString('user agent stylesheet'));
-    if (rule.isInjected())
+    }
+    if (rule.isInjected()) {
       return createTextNode(Common.UIString('injected stylesheet'));
-    if (rule.isViaInspector())
+    }
+    if (rule.isViaInspector()) {
       return createTextNode(Common.UIString('via inspector'));
+    }
 
     if (header && header.ownerNode) {
       const link = Elements.DOMLinkifier.linkifyDeferredNodeReference(header.ownerNode, {preventKeyboardFocus: true});
@@ -951,6 +1008,39 @@ Elements.StylePropertiesSection = class {
   }
 
   /**
+   * @param {!SDK.CSSRule} rule
+   * @return {?TextUtils.TextRange}
+   */
+  static _getRuleLocationFromCSSRule(rule) {
+    let ruleLocation = null;
+    if (rule instanceof SDK.CSSStyleRule) {
+      ruleLocation = rule.style.range;
+    } else if (rule instanceof SDK.CSSKeyframeRule) {
+      ruleLocation = rule.key().range;
+    }
+    return ruleLocation;
+  }
+
+  /**
+   * @param {!SDK.CSSMatchedStyles} matchedStyles
+   * @param {?SDK.CSSRule} rule
+   */
+  static tryNavigateToRuleLocation(matchedStyles, rule) {
+    if (!rule) {
+      return;
+    }
+
+    const ruleLocation = this._getRuleLocationFromCSSRule(rule);
+    const header = rule.styleSheetId ? matchedStyles.cssModel().styleSheetHeaderForId(rule.styleSheetId) : null;
+
+    if (ruleLocation && rule.styleSheetId && header && !header.isAnonymousInlineStyleSheet()) {
+      const matchingSelectorLocation =
+          this._getCSSSelectorLocation(matchedStyles.cssModel(), rule.styleSheetId, ruleLocation);
+      this._revealSelectorSource(matchingSelectorLocation, true);
+    }
+  }
+
+  /**
    * @param {!SDK.CSSModel} cssModel
    * @param {!Components.Linkifier} linkifier
    * @param {string} styleSheetId
@@ -958,19 +1048,30 @@ Elements.StylePropertiesSection = class {
    * @return {!Node}
    */
   static _linkifyRuleLocation(cssModel, linkifier, styleSheetId, ruleLocation) {
+    const matchingSelectorLocation = this._getCSSSelectorLocation(cssModel, styleSheetId, ruleLocation);
+    return linkifier.linkifyCSSLocation(matchingSelectorLocation);
+  }
+
+  /**
+   * @param {!SDK.CSSModel} cssModel
+   * @param {string} styleSheetId
+   * @param {!TextUtils.TextRange} ruleLocation
+   * @return {!SDK.CSSLocation}
+   */
+  static _getCSSSelectorLocation(cssModel, styleSheetId, ruleLocation) {
     const styleSheetHeader = cssModel.styleSheetHeaderForId(styleSheetId);
     const lineNumber = styleSheetHeader.lineNumberInSource(ruleLocation.startLine);
     const columnNumber = styleSheetHeader.columnNumberInSource(ruleLocation.startLine, ruleLocation.startColumn);
-    const matchingSelectorLocation = new SDK.CSSLocation(styleSheetHeader, lineNumber, columnNumber);
-    return linkifier.linkifyCSSLocation(matchingSelectorLocation);
+    return new SDK.CSSLocation(styleSheetHeader, lineNumber, columnNumber);
   }
 
   /**
    * @param {!Event} event
    */
   _onKeyDown(event) {
-    if (UI.isEditing() || !this.editable || event.altKey || event.ctrlKey || event.metaKey)
+    if (UI.isEditing() || !this.editable || event.altKey || event.ctrlKey || event.metaKey) {
       return;
+    }
     switch (event.key) {
       case 'Enter':
       case ' ':
@@ -979,8 +1080,9 @@ Elements.StylePropertiesSection = class {
         break;
       default:
         // Filter out non-printable key strokes.
-        if (event.key.length === 1)
+        if (event.key.length === 1) {
           this.addNewBlankProperty(0).startEditing();
+        }
         break;
     }
   }
@@ -1013,20 +1115,23 @@ Elements.StylePropertiesSection = class {
     this._setSectionHovered(hasCtrlOrMeta);
 
     const treeElement = this.propertiesTreeOutline.treeElementFromEvent(event);
-    if (treeElement instanceof Elements.StylePropertyTreeElement)
+    if (treeElement instanceof Elements.StylePropertyTreeElement) {
       this._parentPane._setActiveProperty(/** @type {!Elements.StylePropertyTreeElement} */ (treeElement));
-    else
+    } else {
       this._parentPane._setActiveProperty(null);
-    if (!this._selectedSinceMouseDown && this.element.getComponentSelection().toString())
+    }
+    if (!this._selectedSinceMouseDown && this.element.getComponentSelection().toString()) {
       this._selectedSinceMouseDown = true;
+    }
   }
 
   /**
    * @param {!Element} container
    */
   _createHoverMenuToolbar(container) {
-    if (!this.editable)
+    if (!this.editable) {
       return;
+    }
     const items = [];
 
     const textShadowButton = new UI.ToolbarButton(Common.UIString('Add text-shadow'), 'largeicon-text-shadow');
@@ -1061,8 +1166,9 @@ Elements.StylePropertiesSection = class {
     }
 
     const sectionToolbar = new UI.Toolbar('sidebar-pane-section-toolbar', container);
-    for (let i = 0; i < items.length; ++i)
+    for (let i = 0; i < items.length; ++i) {
       sectionToolbar.appendToolbarItem(items[i]);
+    }
 
     const menuButton = new UI.ToolbarButton('', 'largeicon-menu');
     menuButton.element.tabIndex = -1;
@@ -1077,8 +1183,9 @@ Elements.StylePropertiesSection = class {
      * @param {boolean} value
      */
     function setItemsVisibility(items, value) {
-      for (let i = 0; i < items.length; ++i)
+      for (let i = 0; i < items.length; ++i) {
         items[i].setVisible(value);
+      }
       menuButton.setVisible(!value);
     }
   }
@@ -1095,22 +1202,26 @@ Elements.StylePropertiesSection = class {
    */
   _headerText() {
     const node = this._matchedStyles.nodeForStyle(this._style);
-    if (this._style.type === SDK.CSSStyleDeclaration.Type.Inline)
+    if (this._style.type === SDK.CSSStyleDeclaration.Type.Inline) {
       return this._matchedStyles.isInherited(this._style) ? Common.UIString('Style Attribute') : 'element.style';
-    if (this._style.type === SDK.CSSStyleDeclaration.Type.Attributes)
+    }
+    if (this._style.type === SDK.CSSStyleDeclaration.Type.Attributes) {
       return ls`${node.nodeNameInCorrectCase()}[Attributes Style]`;
+    }
     return this._style.parentRule.selectorText();
   }
 
   _onMouseOutSelector() {
-    if (this._hoverTimer)
+    if (this._hoverTimer) {
       clearTimeout(this._hoverTimer);
+    }
     SDK.OverlayModel.hideDOMNodeHighlight();
   }
 
   _onMouseEnterSelector() {
-    if (this._hoverTimer)
+    if (this._hoverTimer) {
       clearTimeout(this._hoverTimer);
+    }
     this._hoverTimer = setTimeout(this._highlight.bind(this), 300);
   }
 
@@ -1120,8 +1231,9 @@ Elements.StylePropertiesSection = class {
   _highlight(mode = 'all') {
     SDK.OverlayModel.hideDOMNodeHighlight();
     const node = this._parentPane.node();
-    if (!node)
+    if (!node) {
       return;
+    }
     const selectorList = this._style.parentRule ? this._style.parentRule.selectorText() : undefined;
     node.domModel().overlayModel().highlightInOverlay({node, selectorList}, mode);
   }
@@ -1131,13 +1243,15 @@ Elements.StylePropertiesSection = class {
    */
   firstSibling() {
     const parent = this.element.parentElement;
-    if (!parent)
+    if (!parent) {
       return null;
+    }
 
     let childElement = parent.firstChild;
     while (childElement) {
-      if (childElement._section)
+      if (childElement._section) {
         return childElement._section;
+      }
       childElement = childElement.nextSibling;
     }
 
@@ -1149,13 +1263,15 @@ Elements.StylePropertiesSection = class {
    */
   lastSibling() {
     const parent = this.element.parentElement;
-    if (!parent)
+    if (!parent) {
       return null;
+    }
 
     let childElement = parent.lastChild;
     while (childElement) {
-      if (childElement._section)
+      if (childElement._section) {
         return childElement._section;
+      }
       childElement = childElement.previousSibling;
     }
 
@@ -1167,9 +1283,9 @@ Elements.StylePropertiesSection = class {
    */
   nextSibling() {
     let curElement = this.element;
-    do
+    do {
       curElement = curElement.nextSibling;
-    while (curElement && !curElement._section);
+    } while (curElement && !curElement._section);
 
     return curElement ? curElement._section : null;
   }
@@ -1179,9 +1295,9 @@ Elements.StylePropertiesSection = class {
    */
   previousSibling() {
     let curElement = this.element;
-    do
+    do {
       curElement = curElement.previousSibling;
-    while (curElement && !curElement._section);
+    } while (curElement && !curElement._section);
 
     return curElement ? curElement._section : null;
   }
@@ -1207,8 +1323,9 @@ Elements.StylePropertiesSection = class {
     treeElement.property.value = '0 0 black';
     treeElement.updateTitle();
     const shadowSwatchPopoverHelper = Elements.ShadowSwatchPopoverHelper.forTreeElement(treeElement);
-    if (shadowSwatchPopoverHelper)
+    if (shadowSwatchPopoverHelper) {
       shadowSwatchPopoverHelper.showPopover();
+    }
   }
 
   /**
@@ -1221,8 +1338,9 @@ Elements.StylePropertiesSection = class {
     treeElement.property.value = 'black';
     treeElement.updateTitle();
     const colorSwatch = Elements.ColorSwatchPopoverIcon.forTreeElement(treeElement);
-    if (colorSwatch)
+    if (colorSwatch) {
       colorSwatch.showPopover();
+    }
   }
 
   /**
@@ -1235,8 +1353,9 @@ Elements.StylePropertiesSection = class {
     treeElement.property.value = 'white';
     treeElement.updateTitle();
     const colorSwatch = Elements.ColorSwatchPopoverIcon.forTreeElement(treeElement);
-    if (colorSwatch)
+    if (colorSwatch) {
       colorSwatch.showPopover();
+    }
   }
 
   /**
@@ -1244,10 +1363,11 @@ Elements.StylePropertiesSection = class {
    */
   _styleSheetEdited(edit) {
     const rule = this._style.parentRule;
-    if (rule)
+    if (rule) {
       rule.rebase(edit);
-    else
+    } else {
       this._style.rebase(edit);
+    }
 
     this._updateMediaList();
     this._updateRuleOrigin();
@@ -1260,8 +1380,9 @@ Elements.StylePropertiesSection = class {
     for (let i = mediaRules.length - 1; i >= 0; --i) {
       const media = mediaRules[i];
       // Don't display trivial non-print media types.
-      if (!media.text.includes('(') && media.text !== 'print')
+      if (!media.text.includes('(') && media.text !== 'print') {
         continue;
+      }
       const mediaDataElement = this._mediaListElement.createChild('div', 'media');
       const mediaContainerElement = mediaDataElement.createChild('span');
       const mediaTextElement = mediaContainerElement.createChild('span', 'media-text');
@@ -1290,8 +1411,9 @@ Elements.StylePropertiesSection = class {
 
   _updateMediaList() {
     this._mediaListElement.removeChildren();
-    if (this._style.parentRule && this._style.parentRule instanceof SDK.CSSStyleRule)
+    if (this._style.parentRule && this._style.parentRule instanceof SDK.CSSStyleRule) {
       this._createMediaList(this._style.parentRule.media);
+    }
   }
 
   /**
@@ -1312,14 +1434,15 @@ Elements.StylePropertiesSection = class {
    */
   nextEditableSibling() {
     let curSection = this;
-    do
+    do {
       curSection = curSection.nextSibling();
-    while (curSection && !curSection.editable);
+    } while (curSection && !curSection.editable);
 
     if (!curSection) {
       curSection = this.firstSibling();
-      while (curSection && !curSection.editable)
+      while (curSection && !curSection.editable) {
         curSection = curSection.nextSibling();
+      }
     }
 
     return (curSection && curSection.editable) ? curSection : null;
@@ -1330,14 +1453,15 @@ Elements.StylePropertiesSection = class {
    */
   previousEditableSibling() {
     let curSection = this;
-    do
+    do {
       curSection = curSection.previousSibling();
-    while (curSection && !curSection.editable);
+    } while (curSection && !curSection.editable);
 
     if (!curSection) {
       curSection = this.lastSibling();
-      while (curSection && !curSection.editable)
+      while (curSection && !curSection.editable) {
         curSection = curSection.previousSibling();
+      }
     }
 
     return (curSection && curSection.editable) ? curSection : null;
@@ -1356,8 +1480,9 @@ Elements.StylePropertiesSection = class {
   _updateVarFunctions(editedTreeElement) {
     let child = this.propertiesTreeOutline.firstChild();
     while (child) {
-      if (child !== editedTreeElement)
+      if (child !== editedTreeElement) {
         child.updateTitleIfComputedValueChanged();
+      }
       child = child.traverseNextTreeElement(false /* skipUnrevealed */, null /* stayWithin */, true /* dontPopulate */);
     }
   }
@@ -1384,10 +1509,12 @@ Elements.StylePropertiesSection = class {
    * @param {!Event=} event
    */
   _showAllItems(event) {
-    if (event)
+    if (event) {
       event.consume();
-    if (this._forceShowAll)
+    }
+    if (this._forceShowAll) {
       return;
+    }
     this._forceShowAll = true;
     this.onpopulate();
   }
@@ -1402,14 +1529,16 @@ Elements.StylePropertiesSection = class {
         Elements.StylePropertiesSection.MaxProperties + properties.length - this._originalPropertiesCount;
 
     for (const property of properties) {
-      if (!this._forceShowAll && count >= maxProperties)
+      if (!this._forceShowAll && count >= maxProperties) {
         break;
+      }
       count++;
       const isShorthand = !!style.longhandProperties(property.name).length;
       const inherited = this.isPropertyInherited(property.name);
       const overloaded = this._isPropertyOverloaded(property);
-      if (style.parentRule && style.parentRule.isUserAgent() && inherited)
+      if (style.parentRule && style.parentRule.isUserAgent() && inherited) {
         continue;
+      }
       const item = new Elements.StylePropertyTreeElement(
           this._parentPane, this._matchedStyles, property, isShorthand, inherited, overloaded, false);
       this.propertiesTreeOutline.appendChild(item);
@@ -1437,32 +1566,37 @@ Elements.StylePropertiesSection = class {
   _updateFilter() {
     let hasMatchingChild = false;
     this._showAllItems();
-    for (const child of this.propertiesTreeOutline.rootElement().children())
+    for (const child of this.propertiesTreeOutline.rootElement().children()) {
       hasMatchingChild |= child._updateFilter();
+    }
 
     const regex = this._parentPane.filterRegex();
     const hideRule = !hasMatchingChild && !!regex && !regex.test(this.element.deepTextContent());
     this.element.classList.toggle('hidden', hideRule);
-    if (!hideRule && this._style.parentRule)
+    if (!hideRule && this._style.parentRule) {
       this._markSelectorHighlights();
+    }
     return !hideRule;
   }
 
   _markSelectorMatches() {
     const rule = this._style.parentRule;
-    if (!rule)
+    if (!rule) {
       return;
+    }
 
     this._mediaListElement.classList.toggle('media-matches', this._matchedStyles.mediaMatches(this._style));
 
     const selectorTexts = rule.selectors.map(selector => selector.text);
     const matchingSelectorIndexes = this._matchedStyles.matchingSelectors(/** @type {!SDK.CSSStyleRule} */ (rule));
     const matchingSelectors = /** @type {!Array<boolean>} */ (new Array(selectorTexts.length).fill(false));
-    for (const matchingIndex of matchingSelectorIndexes)
+    for (const matchingIndex of matchingSelectorIndexes) {
       matchingSelectors[matchingIndex] = true;
+    }
 
-    if (this._parentPane._isEditingStyle)
+    if (this._parentPane._isEditingStyle) {
       return;
+    }
 
     const fragment = this._hoverableSelectorsMode ? this._renderHoverableSelectors(selectorTexts, matchingSelectors) :
                                                     this._renderSimplifiedSelectors(selectorTexts, matchingSelectors);
@@ -1479,8 +1613,9 @@ Elements.StylePropertiesSection = class {
   _renderHoverableSelectors(selectors, matchingSelectors) {
     const fragment = createDocumentFragment();
     for (let i = 0; i < selectors.length; ++i) {
-      if (i)
+      if (i) {
         fragment.createTextChild(', ');
+      }
       fragment.appendChild(this._createSelectorElement(selectors[i], matchingSelectors[i], i));
     }
     return fragment;
@@ -1495,8 +1630,9 @@ Elements.StylePropertiesSection = class {
   _createSelectorElement(text, isMatching, navigationIndex) {
     const element = createElementWithClass('span', 'simple-selector');
     element.classList.toggle('selector-matches', isMatching);
-    if (typeof navigationIndex === 'number')
+    if (typeof navigationIndex === 'number') {
       element._selectorIndex = navigationIndex;
+    }
     element.textContent = text;
     return element;
   }
@@ -1518,8 +1654,9 @@ Elements.StylePropertiesSection = class {
       currentMatching = matchingSelectors[i];
       text += selectors[i] + (i === selectors.length - 1 ? '' : ', ');
     }
-    if (text)
+    if (text) {
       fragment.appendChild(this._createSelectorElement(text, currentMatching));
+    }
     return fragment;
   }
 
@@ -1545,8 +1682,9 @@ Elements.StylePropertiesSection = class {
    * @param {!Event} event
    */
   _handleSelectorContainerClick(event) {
-    if (this._checkWillCancelEditing() || !this.editable)
+    if (this._checkWillCancelEditing() || !this.editable) {
       return;
+    }
     if (event.target === this._selectorContainer) {
       this.addNewBlankProperty(0).startEditing();
       event.consume(true);
@@ -1574,8 +1712,10 @@ Elements.StylePropertiesSection = class {
    * @param {!Event} event
    */
   _handleEmptySpaceClick(event) {
-    if (!this.editable || this.element.hasSelection() || this._checkWillCancelEditing() || this._selectedSinceMouseDown)
+    if (!this.editable || this.element.hasSelection() || this._checkWillCancelEditing() ||
+        this._selectedSinceMouseDown) {
       return;
+    }
 
     if (event.target.classList.contains('header') || this.element.classList.contains('read-only') ||
         event.target.enclosingNodeOrSelfWithClass('media')) {
@@ -1583,10 +1723,11 @@ Elements.StylePropertiesSection = class {
       return;
     }
     const deepTarget = event.deepElementFromPoint();
-    if (deepTarget.treeElement)
+    if (deepTarget.treeElement) {
       this.addNewBlankProperty(deepTarget.treeElement.property.index + 1).startEditing();
-    else
+    } else {
       this.addNewBlankProperty().startEditing();
+    }
     event.consume(true);
   }
 
@@ -1596,8 +1737,9 @@ Elements.StylePropertiesSection = class {
    * @param {!Event} event
    */
   _handleMediaRuleClick(media, element, event) {
-    if (UI.isBeingEdited(element))
+    if (UI.isBeingEdited(element)) {
       return;
+    }
 
     if (UI.KeyboardShortcut.eventHasCtrlOrMeta(/** @type {!MouseEvent} */ (event)) && this.navigable) {
       const location = media.rawLocation();
@@ -1606,14 +1748,16 @@ Elements.StylePropertiesSection = class {
         return;
       }
       const uiLocation = Bindings.cssWorkspaceBinding.rawLocationToUILocation(location);
-      if (uiLocation)
+      if (uiLocation) {
         Common.Revealer.reveal(uiLocation);
+      }
       event.consume(true);
       return;
     }
 
-    if (!this.editable)
+    if (!this.editable) {
       return;
+    }
 
     const config = new UI.InplaceEditor.Config(
         this._editingMediaCommitted.bind(this, media), this._editingMediaCancelled.bind(this, element), undefined,
@@ -1669,8 +1813,9 @@ Elements.StylePropertiesSection = class {
     this._parentPane.setEditingStyle(false);
     this._editingMediaFinished(element);
 
-    if (newContent)
+    if (newContent) {
       newContent = newContent.trim();
+    }
 
     /**
      * @param {boolean} success
@@ -1703,8 +1848,9 @@ Elements.StylePropertiesSection = class {
       event.consume(true);
       return;
     }
-    if (this.element.hasSelection())
+    if (this.element.hasSelection()) {
       return;
+    }
     this._startEditingAtFirstPosition();
     event.consume(true);
   }
@@ -1717,17 +1863,28 @@ Elements.StylePropertiesSection = class {
     const cssModel = this._parentPane.cssModel();
     const rule = this._style.parentRule;
     const header = cssModel.styleSheetHeaderForId(/** @type {string} */ (rule.styleSheetId));
-    if (!header)
+    if (!header) {
       return;
+    }
     const rawLocation = new SDK.CSSLocation(header, rule.lineNumberInSource(index), rule.columnNumberInSource(index));
+    Elements.StylePropertiesSection._revealSelectorSource(rawLocation, focus);
+  }
+
+  /**
+   * @param {!SDK.CSSLocation} rawLocation
+   * @param {boolean} focus
+   */
+  static _revealSelectorSource(rawLocation, focus) {
     const uiLocation = Bindings.cssWorkspaceBinding.rawLocationToUILocation(rawLocation);
-    if (uiLocation)
+    if (uiLocation) {
       Common.Revealer.reveal(uiLocation, !focus);
+    }
   }
 
   _startEditingAtFirstPosition() {
-    if (!this.editable)
+    if (!this.editable) {
       return;
+    }
 
     if (!this._style.parentRule) {
       this.moveEditorFromSelector('forward');
@@ -1739,8 +1896,9 @@ Elements.StylePropertiesSection = class {
 
   startEditingSelector() {
     const element = this._selectorElement;
-    if (UI.isBeingEdited(element))
+    if (UI.isBeingEdited(element)) {
       return;
+    }
 
     element.scrollIntoViewIfNeeded(false);
     // Reset selector marks in group, and normalize whitespace.
@@ -1752,8 +1910,9 @@ Elements.StylePropertiesSection = class {
 
     element.getComponentSelection().selectAllChildren(element);
     this._parentPane.setEditingStyle(true);
-    if (element.classList.contains('simple-selector'))
+    if (element.classList.contains('simple-selector')) {
       this._navigateToSelectorSource(0, false);
+    }
   }
 
   /**
@@ -1762,21 +1921,25 @@ Elements.StylePropertiesSection = class {
   moveEditorFromSelector(moveDirection) {
     this._markSelectorMatches();
 
-    if (!moveDirection)
+    if (!moveDirection) {
       return;
+    }
 
     if (moveDirection === 'forward') {
       let firstChild = this.propertiesTreeOutline.firstChild();
-      while (firstChild && firstChild.inherited())
+      while (firstChild && firstChild.inherited()) {
         firstChild = firstChild.nextSibling;
-      if (!firstChild)
+      }
+      if (!firstChild) {
         this.addNewBlankProperty().startEditing();
-      else
+      } else {
         firstChild.startEditing(firstChild.nameElement);
+      }
     } else {
       const previousSection = this.previousEditableSibling();
-      if (!previousSection)
+      if (!previousSection) {
         return;
+      }
 
       previousSection.addNewBlankProperty().startEditing();
     }
@@ -1791,8 +1954,9 @@ Elements.StylePropertiesSection = class {
    */
   editingSelectorCommitted(element, newContent, oldContent, context, moveDirection) {
     this._editingSelectorEnded();
-    if (newContent)
+    if (newContent) {
       newContent = newContent.trim();
+    }
     if (newContent === oldContent) {
       // Revert to a trimmed version of the selector if need be.
       this._selectorElement.textContent = newContent;
@@ -1800,8 +1964,9 @@ Elements.StylePropertiesSection = class {
       return;
     }
     const rule = this._style.parentRule;
-    if (!rule)
+    if (!rule) {
       return;
+    }
 
     /**
      * @this {Elements.StylePropertiesSection}
@@ -1830,8 +1995,9 @@ Elements.StylePropertiesSection = class {
      * @this {Elements.StylePropertiesSection}
      */
     function onSelectorsUpdated(rule, success) {
-      if (!success)
+      if (!success) {
         return Promise.resolve();
+      }
       return this._matchedStyles.recomputeMatchingSelectors(rule).then(updateSourceRanges.bind(this, rule));
     }
 
@@ -1848,8 +2014,9 @@ Elements.StylePropertiesSection = class {
 
     console.assert(rule instanceof SDK.CSSStyleRule);
     const oldSelectorRange = rule.selectorRange();
-    if (!oldSelectorRange)
+    if (!oldSelectorRange) {
       return Promise.resolve();
+    }
     return rule.setSelectorText(newContent)
         .then(onSelectorsUpdated.bind(this, /** @type {!SDK.CSSStyleRule} */ (rule), oldSelectorRange));
   }
@@ -1895,8 +2062,9 @@ Elements.BlankStylePropertiesSection = class extends Elements.StylePropertiesSec
     this._selectorRefElement.removeChildren();
     this._selectorRefElement.appendChild(Elements.StylePropertiesSection._linkifyRuleLocation(
         cssModel, this._parentPane._linkifier, styleSheetId, this._actualRuleLocation()));
-    if (insertAfterStyle && insertAfterStyle.parentRule)
+    if (insertAfterStyle && insertAfterStyle.parentRule) {
       this._createMediaList(insertAfterStyle.parentRule.media);
+    }
     this.element.classList.add('blank-section');
   }
 
@@ -1961,22 +2129,26 @@ Elements.BlankStylePropertiesSection = class extends Elements.StylePropertiesSec
       const doesSelectorAffectSelectedNode = this._matchedStyles.matchingSelectors(newRule).length > 0;
       this._makeNormal(newRule);
 
-      if (!doesSelectorAffectSelectedNode)
+      if (!doesSelectorAffectSelectedNode) {
         this.propertiesTreeOutline.element.classList.add('no-affect');
+      }
 
       this._updateRuleOrigin();
 
       this._parentPane.setUserOperation(false);
       this._editingSelectorEnded();
       if (this.element.parentElement)  // Might have been detached already.
+      {
         this.moveEditorFromSelector(moveDirection);
+      }
       this._markSelectorMatches();
 
       this._editingSelectorCommittedForTest();
     }
 
-    if (newContent)
+    if (newContent) {
       newContent = newContent.trim();
+    }
     this._parentPane.setUserOperation(true);
 
     const cssModel = this._parentPane.cssModel();
@@ -2041,15 +2213,17 @@ Elements.KeyframePropertiesSection = class extends Elements.StylePropertiesSecti
      * @this {Elements.KeyframePropertiesSection}
      */
     function updateSourceRanges(success) {
-      if (!success)
+      if (!success) {
         return;
+      }
       this._parentPane._refreshUpdate(this);
     }
 
     console.assert(rule instanceof SDK.CSSKeyframeRule);
     const oldRange = rule.key().range;
-    if (!oldRange)
+    if (!oldRange) {
       return Promise.resolve();
+    }
     return rule.setKeyText(newContent).then(updateSourceRanges.bind(this));
   }
 
@@ -2105,8 +2279,9 @@ Elements.StylesSidebarPane.CSSPropertyPrompt = class extends UI.TextPrompt {
     this._cssCompletions = [];
     if (isEditingName) {
       this._cssCompletions = SDK.cssMetadata().allProperties();
-      if (!treeElement.node().isSVGNode())
+      if (!treeElement.node().isSVGNode()) {
         this._cssCompletions = this._cssCompletions.filter(property => !SDK.cssMetadata().isSVGProperty(property));
+      }
     } else {
       this._cssCompletions = SDK.cssMetadata().propertyValues(treeElement.nameElement.textContent);
     }
@@ -2114,10 +2289,11 @@ Elements.StylesSidebarPane.CSSPropertyPrompt = class extends UI.TextPrompt {
     this._treeElement = treeElement;
     this._isEditingName = isEditingName;
     this._cssVariables = treeElement.matchedStyles().availableCSSVariables(treeElement.property.ownerStyle);
-    if (this._cssVariables.length < 1000)
+    if (this._cssVariables.length < 1000) {
       this._cssVariables.sort(String.naturalOrderComparator);
-    else
+    } else {
       this._cssVariables.sort();
+    }
 
     if (!isEditingName) {
       this.disableDefaultSuggestionForEmptyInput();
@@ -2153,8 +2329,9 @@ Elements.StylesSidebarPane.CSSPropertyPrompt = class extends UI.TextPrompt {
         }
         break;
       case 'Enter':
-        if (event.shiftKey)
+        if (event.shiftKey) {
           return;
+        }
         // Accept any available autocompletions and advance to the next field.
         this.tabKeyPressed();
         event.preventDefault();
@@ -2211,8 +2388,9 @@ Elements.StylesSidebarPane.CSSPropertyPrompt = class extends UI.TextPrompt {
      * @this {Elements.StylesSidebarPane.CSSPropertyPrompt}
      */
     function customNumberHandler(prefix, number, suffix) {
-      if (number !== 0 && !suffix.length && SDK.cssMetadata().isLengthProperty(this._treeElement.property.name))
+      if (number !== 0 && !suffix.length && SDK.cssMetadata().isLengthProperty(this._treeElement.property.name)) {
         suffix = 'px';
+      }
       return prefix + number + suffix;
     }
 
@@ -2220,8 +2398,9 @@ Elements.StylesSidebarPane.CSSPropertyPrompt = class extends UI.TextPrompt {
     if (!this._isEditingName && this._treeElement.valueElement &&
         UI.handleElementValueModifications(
             event, this._treeElement.valueElement, finishHandler.bind(this), this._isValueSuggestion.bind(this),
-            customNumberHandler.bind(this)))
+            customNumberHandler.bind(this))) {
       return true;
+    }
 
     return false;
   }
@@ -2231,8 +2410,9 @@ Elements.StylesSidebarPane.CSSPropertyPrompt = class extends UI.TextPrompt {
    * @return {boolean}
    */
   _isValueSuggestion(word) {
-    if (!word)
+    if (!word) {
       return false;
+    }
     word = word.toLowerCase();
     return this._cssCompletions.indexOf(word) !== -1 || word.startsWith('--');
   }
@@ -2246,29 +2426,34 @@ Elements.StylesSidebarPane.CSSPropertyPrompt = class extends UI.TextPrompt {
   _buildPropertyCompletions(expression, query, force) {
     const lowerQuery = query.toLowerCase();
     const editingVariable = !this._isEditingName && expression.trim().endsWith('var(');
-    if (!query && !force && !editingVariable && (this._isEditingName || expression))
+    if (!query && !force && !editingVariable && (this._isEditingName || expression)) {
       return Promise.resolve([]);
+    }
 
     const prefixResults = [];
     const anywhereResults = [];
-    if (!editingVariable)
+    if (!editingVariable) {
       this._cssCompletions.forEach(completion => filterCompletions.call(this, completion, false /* variable */));
+    }
     if (this._isEditingName) {
       const nameValuePresets = SDK.cssMetadata().nameValuePresets(this._treeElement.node().isSVGNode());
       nameValuePresets.forEach(
           preset => filterCompletions.call(this, preset, false /* variable */, true /* nameValue */));
     }
-    if (this._isEditingName || editingVariable)
+    if (this._isEditingName || editingVariable) {
       this._cssVariables.forEach(variable => filterCompletions.call(this, variable, true /* variable */));
+    }
 
     const results = prefixResults.concat(anywhereResults);
-    if (!this._isEditingName && !results.length && query.length > 1 && '!important'.startsWith(lowerQuery))
+    if (!this._isEditingName && !results.length && query.length > 1 && '!important'.startsWith(lowerQuery)) {
       results.push({text: '!important'});
+    }
     const userEnteredText = query.replace('-', '');
     if (userEnteredText && (userEnteredText === userEnteredText.toUpperCase())) {
       for (let i = 0; i < results.length; ++i) {
-        if (!results[i].text.startsWith('--'))
+        if (!results[i].text.startsWith('--')) {
           results[i].text = results[i].text.toUpperCase();
+        }
       }
     }
     results.forEach(result => {
@@ -2286,8 +2471,9 @@ Elements.StylesSidebarPane.CSSPropertyPrompt = class extends UI.TextPrompt {
     });
     if (this._isColorAware && !this._isEditingName) {
       results.sort((a, b) => {
-        if (!!a.subtitleRenderer === !!b.subtitleRenderer)
+        if (!!a.subtitleRenderer === !!b.subtitleRenderer) {
           return 0;
+        }
         return a.subtitleRenderer ? -1 : 1;
       });
     }
@@ -2307,12 +2493,14 @@ Elements.StylesSidebarPane.CSSPropertyPrompt = class extends UI.TextPrompt {
             this._treeElement.matchedStyles().computeCSSVariable(this._treeElement.property.ownerStyle, completion);
         if (computedValue) {
           const color = Common.Color.parse(computedValue);
-          if (color)
+          if (color) {
             result.subtitleRenderer = swatchRenderer.bind(null, color);
+          }
         }
       }
-      if (nameValue)
+      if (nameValue) {
         result.hideGhostText = true;
+      }
       if (index === 0) {
         result.priority = this._isEditingName ? SDK.cssMetadata().propertyUsageWeight(completion) : 1;
         prefixResults.push(result);
@@ -2411,8 +2599,9 @@ Elements.StylesSidebarPropertyRenderer = class {
   renderValue() {
     const valueElement = createElement('span');
     valueElement.className = 'value';
-    if (!this._propertyValue)
+    if (!this._propertyValue) {
       return valueElement;
+    }
 
     if (this._shadowHandler && (this._propertyName === 'box-shadow' || this._propertyName === 'text-shadow' ||
                                 this._propertyName === '-webkit-box-shadow') &&
@@ -2456,15 +2645,17 @@ Elements.StylesSidebarPropertyRenderer = class {
     // Strip "url(" and ")" along with whitespace.
     let url = text.substring(4, text.length - 1).trim();
     const isQuoted = /^'.*'$/.test(url) || /^".*"$/.test(url);
-    if (isQuoted)
+    if (isQuoted) {
       url = url.substring(1, url.length - 1);
+    }
     const container = createDocumentFragment();
     container.createTextChild('url(');
     let hrefUrl = null;
-    if (this._rule && this._rule.resourceURL())
+    if (this._rule && this._rule.resourceURL()) {
       hrefUrl = Common.ParsedURL.completeURL(this._rule.resourceURL(), url);
-    else if (this._node)
+    } else if (this._node) {
       hrefUrl = this._node.resolveURL(url);
+    }
     container.appendChild(Components.Linkifier.linkifyURL(hrefUrl || url, {text: url, preventClick: true}));
     container.createTextChild(')');
     return container;

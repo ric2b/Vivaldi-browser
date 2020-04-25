@@ -18,11 +18,14 @@
 #include "chrome/browser/sharing/ping_message_handler.h"
 #include "chrome/browser/sharing/proto/sharing_message.pb.h"
 #include "chrome/browser/sharing/sharing_device_registration.h"
-#include "chrome/browser/sharing/sharing_fcm_sender.h"
+#include "chrome/browser/sharing/sharing_send_message_result.h"
 #include "components/gcm_driver/web_push_common.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/driver/sync_service_observer.h"
+#include "components/sync/protocol/device_info_specifics.pb.h"
 #include "components/sync_device_info/device_info_tracker.h"
+#include "components/sync_device_info/local_device_info_provider.h"
 #include "net/base/backoff_entry.h"
 
 #if defined(OS_ANDROID)
@@ -38,12 +41,12 @@ class GCMDriver;
 
 namespace syncer {
 class DeviceInfo;
-class LocalDeviceInfoProvider;
 class SyncService;
 }  // namespace syncer
 
 class NotificationDisplayService;
 class SharingFCMHandler;
+class SharingFCMSender;
 class SharingMessageHandler;
 class SharingSyncPreference;
 class VapidKeyManager;
@@ -58,6 +61,7 @@ class SharingService : public KeyedService,
  public:
   using SendMessageCallback =
       base::OnceCallback<void(SharingSendMessageResult)>;
+  using SharingDeviceList = std::vector<std::unique_ptr<syncer::DeviceInfo>>;
 
   enum class State {
     // Device is unregistered with FCM and Sharing is unavailable.
@@ -88,10 +92,9 @@ class SharingService : public KeyedService,
       const std::string& guid) const;
 
   // Returns a list of DeviceInfo that is available to receive messages.
-  // All returned devices has the specified |required_capabilities| defined in
-  // SharingDeviceCapability enum.
-  virtual std::vector<std::unique_ptr<syncer::DeviceInfo>> GetDeviceCandidates(
-      int required_capabilities) const;
+  // All returned devices have the specified |required_feature|.
+  virtual SharingDeviceList GetDeviceCandidates(
+      sync_pb::SharingSpecificFields::EnabledFeatures required_feature) const;
 
   // Register |callback| so it will be invoked after all dependencies of
   // GetDeviceCandidates are ready.
@@ -116,7 +119,7 @@ class SharingService : public KeyedService,
 
   // Used to register devices with required capabilities in tests.
   void RegisterDeviceInTesting(
-      int capabilities,
+      std::set<sync_pb::SharingSpecificFields_EnabledFeatures> enabled_feautres,
       SharingDeviceRegistration::RegistrationCallback callback);
 
   SharingSyncPreference* GetSyncPreferences() const;
@@ -128,24 +131,32 @@ class SharingService : public KeyedService,
   // Overrides for syncer::SyncServiceObserver.
   void OnSyncShutdown(syncer::SyncService* sync) override;
   void OnStateChanged(syncer::SyncService* sync) override;
+  void OnSyncCycleCompleted(syncer::SyncService* sync) override;
 
   // AckMessageHandler::AckMessageObserver override.
-  void OnAckReceived(const std::string& message_id) override;
+  void OnAckReceived(chrome_browser_sharing::MessageType message_type,
+                     const std::string& message_id) override;
 
   // syncer::DeviceInfoTracker::Observer.
   void OnDeviceInfoChange() override;
 
-  void RegisterDevice();
+  void RefreshVapidKey();
 
+  void RegisterDevice();
   void UnregisterDevice();
+
   void OnDeviceRegistered(SharingDeviceRegistrationResult result);
   void OnDeviceUnregistered(SharingDeviceRegistrationResult result);
+
   void OnMessageSent(base::TimeTicks start_time,
                      const std::string& message_guid,
+                     chrome_browser_sharing::MessageType message_type,
                      SharingSendMessageResult result,
                      base::Optional<std::string> message_id);
-  void InvokeSendMessageCallback(const std::string& message_guid,
-                                 SharingSendMessageResult result);
+  void InvokeSendMessageCallback(
+      const std::string& message_guid,
+      chrome_browser_sharing::MessageType message_type,
+      SharingSendMessageResult result);
 
   // Returns true if required sync feature is enabled.
   bool IsSyncEnabled() const;
@@ -153,6 +164,27 @@ class SharingService : public KeyedService,
   // Returns true if required sync feature is disabled. Returns false if sync is
   // in transitioning state.
   bool IsSyncDisabled() const;
+
+  // Returns all required sync data types to enable Sharing feature.
+  syncer::ModelTypeSet GetRequiredSyncDataTypes() const;
+
+  // Returns list of devices that have |required_feature| enabled. Also
+  // filters out devices which have not been online for more than
+  // |SharingConstants::kDeviceExpiration| time.
+  SharingDeviceList FilterDeviceCandidates(
+      SharingDeviceList devices,
+      sync_pb::SharingSpecificFields::EnabledFeatures required_feature) const;
+
+  // Deduplicates devices based on client name. For devices with duplicate
+  // client names, only the most recently updated device is filtered in.
+  // Returned devices are renamed using the RenameDevice function
+  // and are sorted in (not strictly) descending order by
+  // last_updated_timestamp.
+  SharingDeviceList RenameAndDeduplicateDevices(
+      SharingDeviceList devices) const;
+
+  void InitPersonalizableLocalDeviceName(
+      std::string personalizable_local_device_name);
 
   std::unique_ptr<SharingSyncPreference> sync_prefs_;
   std::unique_ptr<VapidKeyManager> vapid_key_manager_;
@@ -170,6 +202,9 @@ class SharingService : public KeyedService,
   bool is_observing_device_info_tracker_;
   std::unique_ptr<syncer::LocalDeviceInfoProvider::Subscription>
       local_device_info_ready_subscription_;
+  // The personalized name is stored for deduplicating devices running older
+  // clients.
+  base::Optional<std::string> personalizable_local_device_name_;
 
   // Map of random GUID to SendMessageCallback.
   std::map<std::string, SendMessageCallback> send_message_callbacks_;

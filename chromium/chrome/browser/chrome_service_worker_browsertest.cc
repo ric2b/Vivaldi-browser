@@ -249,31 +249,6 @@ IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerTest,
   run_loop.Run();
 }
 
-IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerTest,
-                       StartServiceWorkerForLongRunningMessage) {
-  base::RunLoop run_loop;
-  blink::TransferableMessage msg;
-  const base::string16 message_data = base::UTF8ToUTF16("testMessage");
-
-  WriteFile(FILE_PATH_LITERAL("sw.js"), "self.onfetch = function(e) {};");
-  WriteFile(FILE_PATH_LITERAL("test.html"), kInstallAndWaitForActivatedPage);
-  InitializeServer();
-  NavigateToPageAndWaitForReadyTitle("/test.html");
-  msg.owned_encoded_message = blink::EncodeStringMessage(message_data);
-  msg.encoded_message = msg.owned_encoded_message;
-
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::IO},
-      base::BindOnce(&content::ServiceWorkerContext::
-                         StartServiceWorkerAndDispatchLongRunningMessage,
-                     base::Unretained(GetServiceWorkerContext()),
-                     embedded_test_server()->GetURL("/scope/"), std::move(msg),
-                     base::BindRepeating(&ExpectResultAndRun<bool>, true,
-                                         run_loop.QuitClosure())));
-
-  run_loop.Run();
-}
-
 class ChromeServiceWorkerFetchTest : public ChromeServiceWorkerTest {
  protected:
   ChromeServiceWorkerFetchTest() {}
@@ -380,11 +355,11 @@ class ChromeServiceWorkerFetchTest : public ChromeServiceWorkerTest {
 
 class FaviconUpdateWaiter : public favicon::FaviconDriverObserver {
  public:
-  explicit FaviconUpdateWaiter(content::WebContents* web_contents)
-      : updated_(false), scoped_observer_(this) {
+  explicit FaviconUpdateWaiter(content::WebContents* web_contents) {
     scoped_observer_.Add(
         favicon::ContentFaviconDriver::FromWebContents(web_contents));
   }
+  ~FaviconUpdateWaiter() override = default;
 
   void Wait() {
     if (updated_)
@@ -406,8 +381,9 @@ class FaviconUpdateWaiter : public favicon::FaviconDriverObserver {
       std::move(quit_closure_).Run();
   }
 
-  bool updated_;
-  ScopedObserver<favicon::FaviconDriver, FaviconUpdateWaiter> scoped_observer_;
+  bool updated_ = false;
+  ScopedObserver<favicon::FaviconDriver, favicon::FaviconDriverObserver>
+      scoped_observer_{this};
   base::OnceClosure quit_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(FaviconUpdateWaiter);

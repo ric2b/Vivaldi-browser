@@ -37,9 +37,8 @@ void AssistantAshTestBase::SetUp() {
   DCHECK(controller_);
 
   // At this point our Assistant service is ready for use.
-  // Indicate this by changing status from NOT_READY to STOPPED.
-  AssistantState::Get()->NotifyStatusChanged(
-      mojom::VoiceInteractionState::STOPPED);
+  // Indicate this by changing status from NOT_READY to READY.
+  AssistantState::Get()->NotifyStatusChanged(mojom::AssistantState::READY);
 
   DisableAnimations();
 }
@@ -49,15 +48,14 @@ void AssistantAshTestBase::TearDown() {
   ReenableAnimations();
 }
 
-const app_list::AssistantMainView* AssistantAshTestBase::main_view() const {
+const AssistantMainView* AssistantAshTestBase::main_view() const {
   return page_view()->GetMainViewForTest();
 }
 
-const app_list::AssistantPageView* AssistantAshTestBase::page_view() const {
+const AssistantPageView* AssistantAshTestBase::page_view() const {
   const int index = contents_view()->GetPageIndexForState(
-      ash::AppListState::kStateEmbeddedAssistant);
-  return static_cast<app_list::AssistantPageView*>(
-      contents_view()->GetPageView(index));
+      AppListState::kStateEmbeddedAssistant);
+  return static_cast<AssistantPageView*>(contents_view()->GetPageView(index));
 }
 
 void AssistantAshTestBase::MockAssistantInteractionWithResponse(
@@ -78,10 +76,12 @@ void AssistantAshTestBase::MockAssistantInteractionWithResponse(
 }
 
 void AssistantAshTestBase::ShowAssistantUi(AssistantEntryPoint entry_point) {
+  LOG(ERROR) << "Assistant ash test base, showing UI...";
   controller_->ui_controller()->ShowUi(entry_point);
+  LOG(ERROR) << "Assistant ash test base, done.";
 }
 
-const app_list::ContentsView* AssistantAshTestBase::contents_view() const {
+const ContentsView* AssistantAshTestBase::contents_view() const {
   auto* app_list_view =
       Shell::Get()->app_list_controller()->presenter()->GetView();
 
@@ -92,7 +92,7 @@ const app_list::ContentsView* AssistantAshTestBase::contents_view() const {
 }
 
 void AssistantAshTestBase::DisableAnimations() {
-  app_list::AppListView::SetShortAnimationForTesting(true);
+  AppListView::SetShortAnimationForTesting(true);
 
   // The |AssistantProcessIndicator| uses a cyclic animation,
   // which will go in an infinite loop if the animation has ZERO_DURATION.
@@ -104,7 +104,7 @@ void AssistantAshTestBase::DisableAnimations() {
 
 void AssistantAshTestBase::ReenableAnimations() {
   scoped_animation_duration_ = nullptr;
-  app_list::AppListView::SetShortAnimationForTesting(false);
+  AppListView::SetShortAnimationForTesting(false);
 }
 
 }  // namespace ash

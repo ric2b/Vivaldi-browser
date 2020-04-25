@@ -16,6 +16,7 @@
 #include "components/viz/service/display/ca_layer_overlay.h"
 #include "components/viz/service/display/dc_layer_overlay.h"
 #include "components/viz/service/display/display_resource_provider.h"
+#include "components/viz/service/display/overlay_candidate_list.h"
 #include "components/viz/service/display/overlay_processor.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
@@ -69,6 +70,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
 
   // Public interface implemented by subclasses.
   virtual void SwapBuffers(std::vector<ui::LatencyInfo> latency_info) = 0;
+  virtual void SwapBuffersSkipped() {}
   virtual void SwapBuffersComplete() {}
   virtual void DidReceiveTextureInUseResponses(
       const gpu::TextureInUseResponses& responses) {}
@@ -113,6 +115,10 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
     return !!overlay_processor_->GetOverlayCandidateValidator();
   }
   bool OverlayNeedsSurfaceOccludingDamageRect() const;
+
+  gfx::Rect GetLastRootScissorRectForTesting() const {
+    return last_root_render_pass_scissor_rect_;
+  }
 
  protected:
   friend class BspWalkActionDrawPolygon;
@@ -204,10 +210,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   // If a pass contains a single tile draw quad and can be drawn without
   // a render pass (e.g. applying a filter directly to the tile quad)
   // return that quad, otherwise return null.
-  static const TileDrawQuad* CanPassBeDrawnDirectly(
-      const RenderPass* pass,
-      DisplayResourceProvider* const resource_provider);
-  virtual const TileDrawQuad* CanPassBeDrawnDirectly(const RenderPass* pass);
+  virtual const DrawQuad* CanPassBeDrawnDirectly(const RenderPass* pass);
   virtual void FinishDrawingQuadList() {}
   virtual bool FlippedFramebuffer() const = 0;
   virtual void EnsureScissorTestEnabled() = 0;
@@ -248,8 +251,10 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   int frames_since_using_dc_layers_ = 0;
 
   // A map from RenderPass id to the single quad present in and replacing the
-  // RenderPass.
-  base::flat_map<RenderPassId, TileDrawQuad> render_pass_bypass_quads_;
+  // RenderPass. The DrawQuads are owned by their RenderPasses, which outlive
+  // the drawn frame, so it is safe to store these pointers until the end of
+  // DrawFrame().
+  base::flat_map<RenderPassId, const DrawQuad*> render_pass_bypass_quads_;
 
   // A map from RenderPass id to the filters used when drawing the RenderPass.
   base::flat_map<RenderPassId, cc::FilterOperations*> render_pass_filters_;
@@ -257,6 +262,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
       render_pass_backdrop_filters_;
   base::flat_map<RenderPassId, base::Optional<gfx::RRectF>>
       render_pass_backdrop_filter_bounds_;
+  base::flat_map<RenderPassId, gfx::Rect> backdrop_filter_output_rects_;
 
   bool visible_ = false;
   bool disable_color_checks_for_testing_ = false;
@@ -285,6 +291,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
 #if DCHECK_IS_ON()
   bool overdraw_feedback_support_missing_logged_once_ = false;
 #endif
+  gfx::Rect last_root_render_pass_scissor_rect_;
   gfx::Size enlarge_pass_texture_amount_;
 
   // The current drawing frame is valid only during the duration of the

@@ -42,6 +42,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/trace_event/trace_event.h"
 #include "components/discardable_memory/service/discardable_shared_memory_manager.h"
 #include "components/download/public/common/download_task_runner.h"
@@ -52,6 +53,7 @@
 #include "content/browser/scheduler/browser_task_executor.h"
 #include "content/browser/startup_data_impl.h"
 #include "content/browser/startup_helper.h"
+#include "content/browser/tracing/memory_instrumentation_util.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/url_schemes.h"
 #include "content/public/app/content_main_delegate.h"
@@ -69,9 +71,6 @@
 #include "media/media_buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/cpp/features.h"
-#include "services/resource_coordinator/public/cpp/memory_instrumentation/client_process_impl.h"
-#include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
-#include "services/resource_coordinator/public/mojom/service_constants.mojom.h"
 #include "services/service_manager/embedder/switches.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 #include "services/service_manager/sandbox/switches.h"
@@ -417,15 +416,6 @@ void PreSandboxInit() {
 
 #endif  // OS_LINUX
 
-#if !defined(CHROME_MULTIPLE_DLL_CHILD)
-void InitializeBrowserClientProcessImpl() {
-  memory_instrumentation::ClientProcessImpl::Config config(
-      GetSystemConnector(), resource_coordinator::mojom::kServiceName,
-      memory_instrumentation::mojom::ProcessType::BROWSER);
-  memory_instrumentation::ClientProcessImpl::CreateInstance(config);
-}
-#endif  // !defined(CHROME_MULTIPLE_DLL_CHILD)
-
 }  // namespace
 
 class ContentClientInitializer {
@@ -756,15 +746,41 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
     RegisterContentSchemes(delegate_->ShouldLockSchemeRegistry());
 
 #if defined(OS_ANDROID) && (ICU_UTIL_DATA_IMPL == ICU_UTIL_DATA_FILE)
-    int icudata_fd = g_fds->MaybeGet(kAndroidICUDataDescriptor);
-    if (icudata_fd != -1) {
-      auto icudata_region = g_fds->GetRegion(kAndroidICUDataDescriptor);
-      if (!base::i18n::InitializeICUWithFileDescriptor(icudata_fd,
-                                                       icudata_region))
+    // On Android, we have two ICU data files. A main one with most languages
+    // that is expected to always be available and an extra one that is
+    // installed separately via a dynamic feature module. If the extra ICU data
+    // file is available we have to apply it _before_ the main ICU data file.
+    // Otherwise, the languages of the extra ICU file will be overridden.
+    if (process_type.empty()) {
+      // In browser process load ICU data files from disk.
+      if (GetContentClient()->browser()->ShouldLoadExtraIcuDataFile()) {
+        if (!base::i18n::InitializeExtraICU()) {
+          return TerminateForFatalInitializationError();
+        }
+      }
+      if (!base::i18n::InitializeICU()) {
         return TerminateForFatalInitializationError();
+      }
     } else {
-      if (!base::i18n::InitializeICU())
+      // In child process map ICU data files loaded by browser process.
+      int icu_extra_data_fd = g_fds->MaybeGet(kAndroidICUExtraDataDescriptor);
+      if (icu_extra_data_fd != -1) {
+        auto icu_extra_data_region =
+            g_fds->GetRegion(kAndroidICUExtraDataDescriptor);
+        if (!base::i18n::InitializeExtraICUWithFileDescriptor(
+                icu_extra_data_fd, icu_extra_data_region)) {
+          return TerminateForFatalInitializationError();
+        }
+      }
+      int icu_data_fd = g_fds->MaybeGet(kAndroidICUDataDescriptor);
+      if (icu_data_fd == -1) {
         return TerminateForFatalInitializationError();
+      }
+      auto icu_data_region = g_fds->GetRegion(kAndroidICUDataDescriptor);
+      if (!base::i18n::InitializeICUWithFileDescriptor(icu_data_fd,
+                                                       icu_data_region)) {
+        return TerminateForFatalInitializationError();
+      }
     }
 #else
     if (!base::i18n::InitializeICU())
@@ -941,7 +957,7 @@ int ContentMainRunnerImpl::RunServiceManager(MainFunctionParams& main_params,
     download::SetIOTaskRunner(
         service_manager_environment_->ipc_thread()->task_runner());
 
-    InitializeBrowserClientProcessImpl();
+    InitializeBrowserMemoryInstrumentationClient();
 
 #if defined(OS_ANDROID)
     if (start_service_manager_only) {

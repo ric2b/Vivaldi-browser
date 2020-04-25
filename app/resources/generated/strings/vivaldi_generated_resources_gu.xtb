@@ -1,41 +1,29 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="gu">
-<translation id="1049795001945932310">&amp;ભાષા સેટિંગ્સ</translation>
 <translation id="1056898198331236512">ચેતવણી</translation>
-<translation id="1084824384139382525">લિંક સર&amp;નામાંની કૉપિ કરો</translation>
-<translation id="1163931534039071049">ફ્રેમ સ્રોત &amp;જુઓ</translation>
 <translation id="1165039591588034296">ભૂલ</translation>
 <translation id="1175364870820465910">&amp;છાપો...</translation>
-<translation id="1187722533808055681">નિષ્ક્રિય વેકઅપ્સ</translation>
 <translation id="1244303850296295656">એક્સટેંશન ભૂલ</translation>
 <translation id="1546280085599573572">જ્યારે તમે હોમ બટન ક્લિક કરો છો ત્યારે જે પૃષ્ઠ દર્શાવવામાં આવે છે તે આ એક્સટેન્શને બદલ્યું છે.</translation>
 <translation id="1588438908519853928">સામાન્ય</translation>
 <translation id="1635033183663317347">તમારા સંરક્ષક દ્વારા ઇન્સ્ટોલ કરાયું</translation>
-<translation id="1723824996674794290">&amp;નવી વિંડો</translation>
 <translation id="1729533290416704613">જ્યારે તમે ઑમ્નિબૉક્સ પરથી શોધ કરો ત્યારે કયું પૃષ્ઠ બતાવવામાં આવે તે તેનું પણ નિયંત્રણ કરે છે.</translation>
-<translation id="1850508293116537636">&amp;ઘડિયાળની દિશામાં ફેરવો</translation>
-<translation id="1901303067676059328">&amp;બધા પસંદ કરો</translation>
 <translation id="2087822576218954668">છાપો: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">છુપો ટેબ: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">મૂળ ક્લાયંટ મોડ્યુલ: <ph name="NEXE_NAME" /></translation>
-<translation id="2218515861914035131">સાદા ટેક્સ્ટ તરીકે પેસ્ટ કરો</translation>
 <translation id="2282146716419988068">GPU પ્રક્રિયા</translation>
 <translation id="2301382460326681002">એક્સ્ટેંશન રૂટ ડાયરેક્ટરી અમાન્ય છે.</translation>
-<translation id="2326931316514688470">ઍપ્લિકેશન &amp;ફરીથી લોડ કરો</translation>
 <translation id="2327492829706409234">ઍપ્લિકેશન સક્ષમ કરો</translation>
 <translation id="2344028582131185878">આપમેળે ડાઉનલોડ્સ</translation>
 <translation id="2348176352564285430">ઍપ્લિકેશન: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">એક્સ્ટેંશન ડાયરેક્ટરી પસંદ કરો.</translation>
 <translation id="241082044617551207">અજ્ઞાત પ્લગિન</translation>
-<translation id="2423578206845792524">છબીને આ રૂપે સા&amp;ચવો...</translation>
 <translation id="2439110203301358333">તમારા કમ્પ્યુટર પરના બીજા પ્રોગ્રામે એક એક્સ્ટેંશન ઉમેર્યું જે Vivaldi કાર્ય કરે છે તે રીતને બદલી શકે છે.</translation>
 <translation id="2445081178310039857">એક્સ્ટેંશન રૂટ ડાયરેક્ટરી આવશ્યક છે.</translation>
 <translation id="2470702053775288986">અસમર્થિત એક્સ્ટેન્શન્સ અક્ષમ કર્યાં</translation>
-<translation id="2550212893339833758">સ્વૅપ કરેલ મેમરી</translation>
 <translation id="2662876636500006917">Vivaldi વેબ બજાર</translation>
 <translation id="2678063897982469759">ફરી સક્ષમ કરો</translation>
-<translation id="2785873697295365461">ફાઇલ વર્ણનકર્તા</translation>
 <translation id="2809586584051668049">અને <ph name="NUMBER_ADDITIONAL_DISABLED" /> વધુ</translation>
 <translation id="2850541429955027218">થીમ ઉમેરો</translation>
 <translation id="2861941300086904918">નેટિવ ક્લાયન્ટ સિક્યુરિટી મેનેજર</translation>
@@ -45,22 +33,16 @@
 <translation id="299483336428448530">તમારા માતાપિતા દ્વારા ઇન્સ્ટોલ કરાયું.</translation>
 <translation id="3080207940057008665">તમારા કમ્પ્યુટર પરના બીજા પ્રોગ્રામે એક થીમ ઉમેરી જે Vivaldi કાર્ય કરે છે તે રીતને બદલી શકે છે.</translation>
 <translation id="3122464029669770682">CPU</translation>
-<translation id="3124111068741548686">વપરાશકર્તા હેન્ડલ કરે છે</translation>
 <translation id="3222066309010235055">પ્રીરેન્ડર: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">પૅક કરવા માટે એક્સ્ટેંશનની રૂટ ડાયરેક્ટરી પસંદ કરો. એક્સ્ટેંશનને અપડેટ કરવા માટે, ફરી ઉપયોગ કરવા ખાનગી કી ફાઇલ પણ પસંદ કરો.</translation>
-<translation id="3280237271814976245">આ &amp;રૂપમાં સાચવો...</translation>
 <translation id="3288047731229977326">વિકાસકર્તા મોડમાં ચાલી રહેલા એક્સટેન્શન્સ તમારા કમ્પ્યુટરને નુકસાન પહોંચાડી શકે છે. જો તમે વિકાસકર્તા નથી, તો તમે સુરક્ષિત રહેવા માટે વિકાસકર્તા મોડમાં ચાલી રહેલા આ એક્સ્ટેન્શન્સને અક્ષમ કરવા જોઈએ.</translation>
-<translation id="3347086966102161372">છબી સરનામું કૉ&amp;પિ કરો</translation>
 <translation id="3378572629723696641">આ એક્સ્ટેન્શન દૂષિત થયેલ હોઈ શકે છે.</translation>
-<translation id="345693547134384690">નવા ટૅબમાં &amp;છબી ખોલો</translation>
 <translation id="3505030558724226696">ઉપકરણ ઍક્સેસ રદબાતલ કરો</translation>
-<translation id="3627588569887975815">છુ&amp;પી વિંડોમાં લિંક ખોલો</translation>
 <translation id="3678156199662914018">એક્સ્ટેંશન: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">ઍપ્લિકેશન સુધારો</translation>
 <translation id="3908501907586732282">એક્સ્ટેંશન સક્ષમ કરો</translation>
 <translation id="3909791450649380159">કા&amp;પો</translation>
 <translation id="3927932062596804919">નકારો</translation>
-<translation id="3936390757709632190">નવા ટૅબમાં ઑડિયો &amp;ખોલો</translation>
 <translation id="3943582379552582368">&amp;પાછળ</translation>
 <translation id="3979395879372752341">નવું એક્સ્ટેંશન ઉમેરાયું (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -71,23 +53,16 @@
 <translation id="4100839878934973028">તમારા કમ્પ્યુટર પરના બીજા પ્રોગ્રામે એક ઍપ્લિકેશન ઉમેરી જે Vivaldi કાર્ય કરે છે તે રીતને બદલી શકે છે.</translation>
 <translation id="4130207949184424187">જ્યારે તમે ઑમ્નિબૉક્સથી શોધ કરો છો ત્યારે જે પૃષ્ઠ દર્શાવવામાં આવે છે તે આ એક્સટેન્શને બદલ્યું છે.</translation>
 <translation id="4176463684765177261">અક્ષમ કરેલું</translation>
-<translation id="4200983522494130825">નવું &amp;ટૅબ</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K લાઇવ)</translation>
 <translation id="4384652540891215547">એક્સટેન્શન સક્રિય કરો</translation>
 <translation id="4394049700291259645">અક્ષમ કરો</translation>
 <translation id="4593021220803146968"><ph name="URL" /> &amp;ના પર જાઓ</translation>
 <translation id="4595560905247879544">ઍપ્લિકેશન્સ અને એક્સટેન્શન્સને માત્ર સંચાલક (<ph name="CUSTODIAN_NAME" />) દ્વારા જ સંશોધિત કરી શકાય છે.</translation>
 <translation id="4613271546271159013">જ્યારે તમે કોઈ નવું ટેબ ખોલો છો ત્યારે જે પૃષ્ઠ બતાવવામાં આવે છે તેને એક્સ્ટેન્શને બદલ્યું છે.</translation>
-<translation id="4677772697204437347">GPU મેમરી</translation>
-<translation id="4711638718396952945">સેટિંગ્સ પુનઃસ્થાપિત કરો</translation>
-<translation id="4839303808932127586">વિડિઓને આ રૂપે સા&amp;ચવો...</translation>
 <translation id="488785315393301722">વિગતો બતાવો</translation>
-<translation id="49896407730300355">ઘ&amp;ડિયાળની વિપરિત દિશામાં ફેરવો</translation>
-<translation id="4989966318180235467">&amp;પૃષ્ઠભૂમિ પૃષ્ઠની તપાસ કરો</translation>
 <translation id="5027562294707732951">એક્સ્ટેન્શન ઉમેરો</translation>
 <translation id="5039804452771397117">મંજૂરી આપો</translation>
 <translation id="5143374789336132547">જ્યારે તમે હોમ બટન ક્લિક કરો છો ત્યારે જે પૃષ્ઠ દર્શાવવામાં આવે છે તે <ph name="EXTENSION_NAME" /> એક્સટેન્શને બદલ્યું છે.</translation>
-<translation id="5233019165164992427">NaCl ડીબગ પોર્ટ</translation>
 <translation id="5233231016133573565">પ્રક્રિયા ID</translation>
 <translation id="52912272896845572">ખાનગી કી ફાઇલ અમાન્ય છે.</translation>
 <translation id="5301954838959518834">બરાબર, સમજાઇ ગયું</translation>
@@ -102,48 +77,31 @@
 <translation id="5575473780076478375">છુપું એક્સ્ટેંશન: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">જ્યારે તમે હોમ બટન ક્લિક કરો ત્યારે કયું પૃષ્ઠ બતાવવામાં આવે તે તેનું પણ નિયંત્રણ કરે છે.</translation>
 <translation id="5715711091495208045">પ્લગિન બ્રોકર: <ph name="PLUGIN_NAME" /></translation>
-<translation id="5764483294734785780">ઑડિયો આ રૂપે સા&amp;ચવો...</translation>
-<translation id="5780973441651030252">પ્રાધાન્યતા પર પ્રક્રિયા કરો</translation>
 <translation id="583281660410589416">અજ્ઞાત</translation>
 <translation id="5956585768868398362">શું આ તમારી અપેક્ષા મુજબનું શોધ પૃષ્ઠ છે?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> પિક)</translation>
 <translation id="5965661248935608907">જ્યારે તમે હોમ બટન ક્લિક કરો અથવા ઑમ્નિબૉક્સ પરથી શોધ કરો ત્યારે કયું પૃષ્ઠ બતાવવામાં આવે તે તેનું પણ નિયંત્રણ કરે છે.</translation>
 <translation id="6101226222197207147">નવી ઍપ્લિકેશન ઉમેરાઈ (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">તમારું ઇન્ટરનેટ કનેક્શન નિયંત્રિત કરવામાં આવી રહ્યું છે</translation>
-<translation id="6156863943908443225">સ્ક્રિપ્ટ  કેશ</translation>
 <translation id="6196854373336333322"><ph name="EXTENSION_NAME" /> એક્સ્ટેન્શને તમારી પ્રોક્સી સેટિંગ્સનું નિયંત્રણ લઈ લીધું છે, એનો અર્થ છે કે તમે જે કંઈપણ ઓનલાઇન કરો છો તેને તે બદલી, ભંગ કરી કે છુપાઇને પારકી વાતો સાંભળી શકે છે. આ ફેરફાર કેમ થયો તે અંગે જો તમને ખાતરી નથી, તો સંભવિત રૂપે તે તમને જોઈતું નહીં હોય.</translation>
-<translation id="6239558157302047471">&amp;ફ્રેમ ફરીથી લોડ કરો</translation>
 <translation id="6247802389331535091">સિસ્ટમ: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="6251870443722440887">GDI હેન્ડલ્સ</translation>
-<translation id="6308937455967653460">લિં&amp;કને આ રીતે સાચવો...</translation>
-<translation id="6398765197997659313">પૂર્ણ સ્ક્રીનથી બહાર નીકળો</translation>
-<translation id="6406303162637086258">બ્રાઉઝર પુનઃપ્રારંભનું અનુકરણ કરો</translation>
 <translation id="6445450263907939268">જો તમે આ ફેરફારો ઇચ્છતા ન હોય, તો તમે તમારી પહેલાંની સેટિંગ્સ પુનઃસ્થાપિત કરી શકો છો.</translation>
 <translation id="6447842834002726250">કૂકીઝ</translation>
 <translation id="6498249116389603658">&amp;તમારી બધી ભાષાઓ</translation>
 <translation id="6503077044568424649">સૌથી વધુ જોવાયેલ</translation>
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
-<translation id="6518014396551869914">છબીની કૉ&amp;પિ બનાવો</translation>
-<translation id="6639554308659482635">SQLite મેમરી</translation>
 <translation id="6691936601825168937">&amp;ફોર્વર્ડ કરો</translation>
 <translation id="6798954102094737107">પ્લગિન: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6812841287760418429">ફેરફારો રાખો</translation>
-<translation id="6886871292305414135">લિંક નવા &amp;ટૅબમાં ખોલો</translation>
 <translation id="6900284862687837908">પૃષ્ઠભૂમિ ઍપ્લિકેશન: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">ફાઇલ ઍક્સેસને રદબાતલ કરો</translation>
-<translation id="708060913198414444">ઑડિઓ સરનામું કૉ&amp;પિ કરો</translation>
 <translation id="7287143125007575591">ઍક્સેસ નિષેધ.</translation>
-<translation id="7309257895202129721">&amp;નિયંત્રણો બતાવો</translation>
 <translation id="7427348830195639090">પૃષ્ઠભૂમિ પૃષ્ઠ: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7564847347806291057">પ્રક્રિયાનો અંત કરો</translation>
 <translation id="7629827748548208700">ટૅબ: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">પ્રાપ્તકર્તા: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7685049629764448582">JavaScript મેમરી</translation>
 <translation id="7704305437604973648">કાર્ય</translation>
 <translation id="7760004034676677601">શું આ તમારી અપેક્ષા મુજબનું સ્ટાર્ટઅપ પૃષ્ઠ છે?</translation>
 <translation id="7791543448312431591">ઉમેરો</translation>
 <translation id="7818135753970109980">નવી થીમ ઉમેરાઈ (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="782057141565633384">વિડિઓ સરનામું કૉ&amp;પિ કરો</translation>
 <translation id="7857949311770343000">શું આ તમારી અપેક્ષા મુજબનું નવું ટેબ પૃષ્ઠ છે?</translation>
 <translation id="786073089922909430">સેવા: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">ઉપયોગિતા: <ph name="UTILITY_TYPE" /></translation>
@@ -154,14 +112,9 @@
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8261378640211443080">આ એક્સટેન્શન <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> માં સૂચિબદ્ધ નથી અને તમારી જાણ વિના ઉમેરવામાં આવ્યું હોઈ શકે છે.</translation>
 <translation id="8351419472474436977">આ એક્સ્ટેન્શને તમારી પ્રોક્સી સેટિંગ્સનું નિયંત્રણ લઈ લીધું છે, એનો અર્થ છે કે તમે જે કંઈપણ ઓનલાઇન કરો છો તેને તે બદલી, ભંગ કરી કે છુપાઇને પારકી વાતો સાંભળી શકે છે. આ ફેરફાર કેમ થયો તે અંગે જો તમને ખાતરી નથી, તો સંભવિત રૂપે તે તમને જોઈતું નહીં હોય.</translation>
-<translation id="8546306075665861288">છબી કેશ</translation>
-<translation id="8584280235376696778">નવા ટૅબમાં વિડિઓ &amp;ખોલો</translation>
 <translation id="8615618338313291042">છૂપી ઍપ્લિકેશન: <ph name="APP_NAME" /></translation>
-<translation id="862750493060684461">CSS કેશ</translation>
-<translation id="8664389313780386848">પૃષ્ઠ સ્રોત &amp;જુઓ</translation>
 <translation id="8808478386290700967">વેબ બજાર</translation>
 <translation id="8859174528519900719">સબફ્રેમ: <ph name="SUBFRAME_SITE" /></translation>
-<translation id="8899851313684471736">નવી &amp;વિંડોમાં લિંક ખોલો</translation>
 <translation id="8916476537757519021">છુપો મોડ સબફ્રેમ: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">વિગતો છુપાવો</translation>
 <translation id="9170848237812810038">&amp;પૂર્વવત્ કરો</translation>

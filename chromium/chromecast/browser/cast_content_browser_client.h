@@ -19,8 +19,11 @@
 #include "chromecast/metrics/cast_metrics_service_client.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/content_browser_client.h"
+#include "media/mojo/mojom/renderer.mojom.h"
+#include "net/url_request/url_request_context.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom-forward.h"
+#include "storage/browser/quota/quota_settings.h"
 
 class PrefService;
 
@@ -47,6 +50,7 @@ class X509Certificate;
 
 namespace chromecast {
 class CastService;
+class CastSystemMemoryPressureEvaluatorAdjuster;
 class CastWindowManager;
 class CastFeatureListCreator;
 class GeneralAudienceBrowsingService;
@@ -86,6 +90,8 @@ class CastContentBrowserClient
   // Creates and returns the CastService instance for the current process.
   virtual std::unique_ptr<CastService> CreateCastService(
       content::BrowserContext* browser_context,
+      CastSystemMemoryPressureEvaluatorAdjuster*
+          cast_system_memory_pressure_evaluator_adjuster,
       PrefService* pref_service,
       media::VideoPlaneController* video_plane_controller,
       CastWindowManager* window_manager);
@@ -213,7 +219,7 @@ class CastContentBrowserClient
       NonNetworkURLLoaderFactoryMap* factories) override;
   void OnNetworkServiceCreated(
       network::mojom::NetworkService* network_service) override;
-  network::mojom::NetworkContextPtr CreateNetworkContext(
+  mojo::Remote<network::mojom::NetworkContext> CreateNetworkContext(
       content::BrowserContext* context,
       bool in_memory,
       const base::FilePath& relative_partition_path) override;
@@ -242,6 +248,9 @@ class CastContentBrowserClient
   URLRequestContextFactory* url_request_context_factory() const {
     return url_request_context_factory_.get();
   }
+
+  void BindMediaRenderer(
+      mojo::InterfaceRequest<::media::mojom::Renderer> request);
 
   // Internal implementation overwrites this function to inject real values.
   virtual void GetApplicationMediaInfo(

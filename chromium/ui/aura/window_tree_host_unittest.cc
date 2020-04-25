@@ -4,7 +4,6 @@
 
 #include "build/build_config.h"
 #include "ui/aura/test/aura_test_base.h"
-#include "ui/aura/test/test_cursor_client.h"
 #include "ui/aura/test/test_screen.h"
 #include "ui/aura/test/window_event_dispatcher_test_api.h"
 #include "ui/aura/window.h"
@@ -12,7 +11,6 @@
 #include "ui/base/ime/input_method.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/test/draw_waiter_for_test.h"
-#include "ui/events/base_event_utils.h"
 #include "ui/events/event_rewriter.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/test/test_event_rewriter.h"
@@ -20,26 +18,50 @@
 
 namespace aura {
 
+namespace {
+
+gfx::Rect ScaleRect(const gfx::Rect& rect_in_pixels, float scale) {
+  gfx::RectF rect_in_dip(rect_in_pixels);
+  gfx::Transform transform;
+  transform.Scale(scale, scale);
+  transform.TransformRectReverse(&rect_in_dip);
+  return gfx::ToEnclosingRect(rect_in_dip);
+}
+
+gfx::Rect TransformRect(const gfx::Rect& rect_in_pixels,
+                        const gfx::Transform& transform,
+                        float device_scale_factor) {
+  gfx::RectF new_bounds =
+      gfx::ScaleRect(gfx::RectF(rect_in_pixels), 1.0f / device_scale_factor);
+  transform.TransformRect(&new_bounds);
+  return gfx::ToEnclosingRect(new_bounds);
+}
+
+}  // namespace
+
 using WindowTreeHostTest = test::AuraTestBase;
 
 TEST_F(WindowTreeHostTest, DPIWindowSize) {
-  gfx::Rect starting_bounds(0, 0, 800, 600);
+  gfx::Rect starting_bounds = host()->GetBoundsInPixels();
   EXPECT_EQ(starting_bounds.size(), host()->compositor()->size());
-  EXPECT_EQ(starting_bounds, host()->GetBoundsInPixels());
   EXPECT_EQ(starting_bounds, root_window()->bounds());
 
-  test_screen()->SetDeviceScaleFactor(1.5f);
+  float device_scale_factor = 1.5;
+  test_screen()->SetDeviceScaleFactor(device_scale_factor);
   EXPECT_EQ(starting_bounds, host()->GetBoundsInPixels());
   // Size should be rounded up after scaling.
-  EXPECT_EQ(gfx::Rect(0, 0, 534, 400), root_window()->bounds());
+  gfx::Rect rect_in_dip = ScaleRect(starting_bounds, device_scale_factor);
+  EXPECT_EQ(rect_in_dip, root_window()->bounds());
 
   gfx::Transform transform;
   transform.Translate(0, 1.1f);
   host()->SetRootTransform(transform);
-  EXPECT_EQ(gfx::Rect(0, 1, 534, 401), root_window()->bounds());
+  gfx::Rect transformed_rect =
+      TransformRect(starting_bounds, transform, device_scale_factor);
+  EXPECT_EQ(transformed_rect, root_window()->bounds());
 
   EXPECT_EQ(starting_bounds, host()->GetBoundsInPixels());
-  EXPECT_EQ(gfx::Rect(0, 1, 534, 401), root_window()->bounds());
+  EXPECT_EQ(transformed_rect, root_window()->bounds());
 }
 
 #if defined(OS_CHROMEOS)
@@ -143,51 +165,12 @@ class TestWindowTreeHost : public WindowTreeHostPlatform {
     CreateCompositor();
   }
 
-  ui::CursorType GetCursorType() { return GetCursorNative()->native_type(); }
-  void DispatchEventForTest(ui::Event* event) { DispatchEvent(event); }
-
  private:
   DISALLOW_COPY_AND_ASSIGN(TestWindowTreeHost);
 };
 
-class TestCursorClient : public test::TestCursorClient {
- public:
-  explicit TestCursorClient(aura::Window* root_window)
-      : test::TestCursorClient(root_window) {
-    window_ = root_window;
-  }
-  ~TestCursorClient() override {}
-
-  // Overridden from test::TestCursorClient:
-  void SetCursor(gfx::NativeCursor cursor) override {
-    WindowTreeHost* host = window_->GetHost();
-    if (host)
-      host->SetCursor(cursor);
-  }
-
- private:
-  aura::Window* window_;
-  DISALLOW_COPY_AND_ASSIGN(TestCursorClient);
-};
-
 TEST_F(WindowTreeHostTest, LostCaptureDuringTearDown) {
   TestWindowTreeHost host;
-}
-
-// Tests if the cursor type is reset after ET_MOUSE_EXITED event.
-TEST_F(WindowTreeHostTest, ResetCursorOnExit) {
-  TestWindowTreeHost host;
-  aura::TestCursorClient cursor_client(host.window());
-
-  // Set the cursor with the specific type to check if it's reset after
-  // ET_MOUSE_EXITED event.
-  host.SetCursorNative(ui::CursorType::kCross);
-
-  ui::MouseEvent exit_event(ui::ET_MOUSE_EXITED, gfx::Point(), gfx::Point(),
-                            ui::EventTimeForNow(), 0, 0);
-
-  host.DispatchEventForTest(&exit_event);
-  EXPECT_EQ(host.GetCursorType(), ui::CursorType::kNone);
 }
 
 }  // namespace aura

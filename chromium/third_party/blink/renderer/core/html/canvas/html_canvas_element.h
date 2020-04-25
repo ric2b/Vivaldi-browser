@@ -185,11 +185,12 @@ class CORE_EXPORT HTMLCanvasElement final
 
   void DoDeferredPaintInvalidation();
 
-  void FinalizeFrame() override;
+  void PreFinalizeFrame() override;
+  void PostFinalizeFrame() override;
 
   CanvasResourceDispatcher* GetOrCreateResourceDispatcher() override;
 
-  void PushFrame(scoped_refptr<CanvasResource> image,
+  bool PushFrame(scoped_refptr<CanvasResource> image,
                  const SkIRect& damage_rect) override;
 
   // ContextLifecycleObserver and PageVisibilityObserver implementation

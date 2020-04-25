@@ -77,20 +77,23 @@ ThreadPoolImpl::ThreadPoolImpl(StringPiece histogram_label,
                                          &delayed_task_manager_),
       has_disable_best_effort_switch_(HasDisableBestEffortTasksSwitch()),
       tracked_ref_factory_(this) {
-  DCHECK(!histogram_label.empty());
-
   foreground_thread_group_ = std::make_unique<ThreadGroupImpl>(
-      JoinString(
-          {histogram_label, kForegroundPoolEnvironmentParams.name_suffix}, "."),
+      histogram_label.empty()
+          ? std::string()
+          : JoinString(
+                {histogram_label, kForegroundPoolEnvironmentParams.name_suffix},
+                "."),
       kForegroundPoolEnvironmentParams.name_suffix,
       kForegroundPoolEnvironmentParams.priority_hint,
       task_tracker_->GetTrackedRef(), tracked_ref_factory_.GetTrackedRef());
 
   if (CanUseBackgroundPriorityForWorkerThread()) {
     background_thread_group_ = std::make_unique<ThreadGroupImpl>(
-        JoinString(
-            {histogram_label, kBackgroundPoolEnvironmentParams.name_suffix},
-            "."),
+        histogram_label.empty()
+            ? std::string()
+            : JoinString({histogram_label,
+                          kBackgroundPoolEnvironmentParams.name_suffix},
+                         "."),
         kBackgroundPoolEnvironmentParams.name_suffix,
         kBackgroundPoolEnvironmentParams.priority_hint,
         task_tracker_->GetTrackedRef(), tracked_ref_factory_.GetTrackedRef());
@@ -423,6 +426,14 @@ bool ThreadPoolImpl::EnqueueJobTaskSource(
   return true;
 }
 
+void ThreadPoolImpl::RemoveJobTaskSource(
+    scoped_refptr<JobTaskSource> task_source) {
+  auto transaction = task_source->BeginTransaction();
+  ThreadGroup* const current_thread_group =
+      GetThreadGroupForTraits(transaction.traits());
+  current_thread_group->RemoveTaskSource(*task_source);
+}
+
 bool ThreadPoolImpl::IsRunningPoolWithTraits(const TaskTraits& traits) const {
   return GetThreadGroupForTraits(traits)->IsBoundToCurrentThread();
 }
@@ -455,7 +466,7 @@ void ThreadPoolImpl::UpdatePriority(scoped_refptr<TaskSource> task_source,
     // |task_source| is changing thread groups; remove it from its current
     // thread group and reenqueue it.
     auto registered_task_source =
-        current_thread_group->RemoveTaskSource(task_source);
+        current_thread_group->RemoveTaskSource(*task_source);
     if (registered_task_source) {
       DCHECK(task_source);
       new_thread_group->PushTaskSourceAndWakeUpWorkers(

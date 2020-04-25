@@ -26,9 +26,9 @@
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
 
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/renderer/core/animation_frame/worker_animation_frame_provider.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_image_source.h"
-#include "third_party/blink/renderer/core/workers/worker_animation_frame_provider.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -116,27 +116,23 @@ void CanvasRenderingContext::DidDraw() {
   StartListeningForDidProcessTask();
 }
 
-void CanvasRenderingContext::NeedsFinalizeFrame() {
-  StartListeningForDidProcessTask();
-}
-
 void CanvasRenderingContext::DidProcessTask(
     const base::PendingTask& /* pending_task */) {
   StopListeningForDidProcessTask();
 
-  // Call FinalizeFrame() on self first before informing host so that we can
-  // present swap chain before exporting it.
-  FinalizeFrame();
   // The end of a script task that drew content to the canvas is the point
   // at which the current frame may be considered complete.
   if (Host())
-    Host()->FinalizeFrame();
+    Host()->PreFinalizeFrame();
+  FinalizeFrame();
+  if (Host())
+    Host()->PostFinalizeFrame();
 }
 
 CanvasRenderingContext::ContextType CanvasRenderingContext::ContextTypeFromId(
     const String& id) {
   if (id == "2d")
-    return kContext2d;
+    return kContext2D;
   if (id == "experimental-webgl")
     return kContextExperimentalWebgl;
   if (id == "webgl")

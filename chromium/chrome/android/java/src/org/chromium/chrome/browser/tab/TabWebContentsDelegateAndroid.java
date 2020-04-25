@@ -7,18 +7,21 @@ package org.chromium.chrome.browser.tab;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Handler;
-import android.support.annotation.CallSuper;
+
+import androidx.annotation.CallSuper;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.base.annotations.CalledByNative;
-import org.chromium.blink_public.platform.WebDisplayMode;
+import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.findinpage.FindMatchRectsDetails;
 import org.chromium.chrome.browser.findinpage.FindNotificationDetails;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.media.MediaCaptureNotificationService;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
+import org.chromium.chrome.browser.policy.PolicyAuditorJni;
+import org.chromium.chrome.browser.webapps.WebDisplayMode;
 import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndroid;
 import org.chromium.content_public.browser.InvalidateTypes;
 import org.chromium.content_public.browser.WebContents;
@@ -151,7 +154,7 @@ public abstract class TabWebContentsDelegateAndroid extends WebContentsDelegateA
     public void visibleSSLStateChanged() {
         PolicyAuditor auditor = AppHooks.get().getPolicyAuditor();
         auditor.notifyCertificateFailure(
-                PolicyAuditor.nativeGetCertificateFailure(mTab.getWebContents()),
+                PolicyAuditorJni.get().getCertificateFailure(mTab.getWebContents()),
                 mTab.getApplicationContext());
         RewindableIterator<TabObserver> observers = mTab.getTabObservers();
         while (observers.hasNext()) {
@@ -175,7 +178,9 @@ public abstract class TabWebContentsDelegateAndroid extends WebContentsDelegateA
     @Override
     public void rendererUnresponsive() {
         super.rendererUnresponsive();
-        if (mTab.getWebContents() != null) nativeOnRendererUnresponsive(mTab.getWebContents());
+        if (mTab.getWebContents() != null) {
+            TabWebContentsDelegateAndroidJni.get().onRendererUnresponsive(mTab.getWebContents());
+        }
         mTab.handleRendererResponsiveStateChanged(false);
     }
 
@@ -183,7 +188,9 @@ public abstract class TabWebContentsDelegateAndroid extends WebContentsDelegateA
     @Override
     public void rendererResponsive() {
         super.rendererResponsive();
-        if (mTab.getWebContents() != null) nativeOnRendererResponsive(mTab.getWebContents());
+        if (mTab.getWebContents() != null) {
+            TabWebContentsDelegateAndroidJni.get().onRendererResponsive(mTab.getWebContents());
+        }
         mTab.handleRendererResponsiveStateChanged(true);
     }
 
@@ -238,7 +245,8 @@ public abstract class TabWebContentsDelegateAndroid extends WebContentsDelegateA
     }
 
     public void showFramebustBlockInfobarForTesting(String url) {
-        nativeShowFramebustBlockInfoBar(mTab.getWebContents(), url);
+        TabWebContentsDelegateAndroidJni.get().showFramebustBlockInfoBar(
+                mTab.getWebContents(), url);
     }
 
     /**
@@ -276,7 +284,10 @@ public abstract class TabWebContentsDelegateAndroid extends WebContentsDelegateA
         return null;
     }
 
-    private static native void nativeOnRendererUnresponsive(WebContents webContents);
-    private static native void nativeOnRendererResponsive(WebContents webContents);
-    private static native void nativeShowFramebustBlockInfoBar(WebContents webContents, String url);
+    @NativeMethods
+    interface Natives {
+        void onRendererUnresponsive(WebContents webContents);
+        void onRendererResponsive(WebContents webContents);
+        void showFramebustBlockInfoBar(WebContents webContents, String url);
+    }
 }

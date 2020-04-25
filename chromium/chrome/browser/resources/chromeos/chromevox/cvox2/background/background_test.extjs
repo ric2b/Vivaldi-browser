@@ -1990,7 +1990,6 @@ TEST_F('ChromeVoxBackgroundTest', 'DISABLED_PopUpButtonSetSize', function() {
       var button = document.getElementById('button');
       var expanded = false;
       button.addEventListener('click', function(e) {
-        console.error('Heelooo');
         if (expanded)
           button.setAttribute('aria-expanded', false);
         else
@@ -2016,5 +2015,107 @@ TEST_F('ChromeVoxBackgroundTest', 'DISABLED_PopUpButtonSetSize', function() {
       .expectSpeech('Expanded')
       .expectSpeech('Press Search+Space to activate.')
       .replay();
+  });
+});
+
+TEST_F('ChromeVoxBackgroundTest', 'ReadPhoneticPronunciationTest', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function() {/*!
+   <button>This is a button</button>
+   <input type="text"></input>
+  */}, function(root) {
+    root.find({role: RoleType.BUTTON}).focus();
+    mockFeedback.call(doCmd('readPhoneticPronunciation'))
+      .expectSpeech('T')
+      .expectSpeech('tango')
+      .expectSpeech('h')
+      .expectSpeech('hotel')
+      .expectSpeech('i')
+      .expectSpeech('india')
+      .expectSpeech('s')
+      .expectSpeech('sierra')
+      .call(doCmd('nextWord'))
+      .call(doCmd('readPhoneticPronunciation'))
+      .expectSpeech('i')
+      .expectSpeech('india')
+      .expectSpeech('s')
+      .expectSpeech('sierra')
+      .call(doCmd('nextWord'))
+      .call(doCmd('nextWord'))
+      .call(doCmd('readPhoneticPronunciation'))
+      .expectSpeech('b')
+      .expectSpeech('bravo')
+      .expectSpeech('u')
+      .expectSpeech('uniform')
+      .expectSpeech('t')
+      .expectSpeech('tango')
+      .expectSpeech('t')
+      .expectSpeech('tango')
+      .expectSpeech('o')
+      .expectSpeech('oscar')
+      .expectSpeech('n')
+      .expectSpeech('november')
+      .call(doCmd('nextEditText'))
+      .call(doCmd('readPhoneticPronunciation'))
+      .expectSpeech('No available text for this item');
+    mockFeedback.replay();
+  });
+});
+
+TEST_F('ChromeVoxBackgroundTest', 'SimilarItemNavigation', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function() {/*!
+    <h3><a href="#a">inner</a></h3>
+    <p>some text</p>
+    <button>some other text</button>
+    <a href="#b">outer1</a>
+    <h3>outer2</h3>
+  */}, function(root) {
+    assertEquals(RoleType.LINK, ChromeVoxState.instance.currentRange.start.node.role);
+    assertEquals('inner', ChromeVoxState.instance.currentRange.start.node.name);
+    mockFeedback.call(doCmd('nextSimilarItem'))
+        .expectSpeech('outer1', 'Link')
+        .call(doCmd('nextSimilarItem'))
+        .expectSpeech('inner', 'Link')
+        .call(doCmd('nextSimilarItem'))
+        .call(doCmd('previousSimilarItem'))
+        .expectSpeech('inner', 'Link')
+        .call(doCmd('nextHeading'))
+        .expectSpeech('outer2', 'Heading 3')
+        .call(doCmd('previousSimilarItem'))
+        .expectSpeech('inner', 'Heading 3');
+
+    mockFeedback.replay();
+  });
+});
+
+TEST_F('ChromeVoxBackgroundTest', 'TableWithAriaRowCol', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function() {/*!
+    <div role="table">
+      <div role="row" aria-rowindex=3>
+        <div role="cell">test</div>
+      </div>
+    </div>
+  */}, function(root) {
+    mockFeedback.call(doCmd('fullyDescribe'))
+        .expectSpeech('test', 'row 3 column 1', 'Table , 1 by 1')
+        .replay();
+  });
+});
+
+TEST_F('ChromeVoxBackgroundTest', 'NonModalDialogHeadingJump', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function() {/*!
+    <h2>Heading outside dialog</h2>
+    <div role="dialog">
+      <h2>Heading inside dialog</h2>
+    </div>
+  */}, function(root) {
+    mockFeedback.call(doCmd('nextHeading'))
+        .expectSpeech('Heading inside dialog')
+        .call(doCmd('previousHeading'))
+        .expectSpeech('Heading outside dialog')
+        .replay();
   });
 });

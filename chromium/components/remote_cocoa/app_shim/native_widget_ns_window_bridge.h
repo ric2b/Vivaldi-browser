@@ -18,6 +18,7 @@
 #include "components/remote_cocoa/common/native_widget_ns_window.mojom.h"
 #include "components/remote_cocoa/common/text_input_host.mojom.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "ui/accelerated_widget_mac/ca_transaction_observer.h"
 #include "ui/accelerated_widget_mac/display_ca_layer_tree.h"
 #include "ui/base/cocoa/command_dispatcher.h"
@@ -187,6 +188,8 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   bool RedispatchKeyEvent(NSEvent* event);
 
   // display::DisplayObserver:
+  void OnDisplayAdded(const display::Display& new_display) override;
+  void OnDisplayRemoved(const display::Display& old_display) override;
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t metrics) override;
 
@@ -197,7 +200,8 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   // remote_cocoa::mojom::NativeWidgetNSWindow:
   void CreateWindow(mojom::CreateWindowParamsPtr params) override;
   void SetParent(uint64_t parent_id) override;
-  void CreateSelectFileDialog(mojom::SelectFileDialogRequest request) override;
+  void CreateSelectFileDialog(
+      mojo::PendingReceiver<mojom::SelectFileDialog> receiver) override;
   void StackAbove(uint64_t sibling_id) override;
   void StackAtTop() override;
   void ShowEmojiPanel() override;
@@ -229,6 +233,7 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
                           bool is_resizable,
                           bool is_maximizable) override;
   void SetOpacity(float opacity) override;
+  void SetWindowLevel(int32_t level) override;
   void SetContentAspectRatio(const gfx::SizeF& aspect_ratio) override;
   void SetCALayerParams(const gfx::CALayerParams& ca_layer_params) override;
   void SetWindowTitle(const base::string16& title) override;
@@ -364,6 +369,10 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   // If true, the window has been made visible or changed shape and the window
   // shadow needs to be invalidated when a frame is received for the new shape.
   bool invalidate_shadow_on_frame_swap_ = false;
+
+  // A blob representing the window's saved state, which is applied and cleared
+  // the first time it's shown.
+  std::vector<uint8_t> pending_restoration_data_;
 
   mojo::AssociatedBinding<remote_cocoa::mojom::NativeWidgetNSWindow>
       bridge_mojo_binding_;

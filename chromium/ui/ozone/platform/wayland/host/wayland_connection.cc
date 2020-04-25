@@ -22,6 +22,7 @@
 #include "ui/gfx/swap_result.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
+#include "ui/ozone/platform/wayland/host/wayland_drm.h"
 #include "ui/ozone/platform/wayland/host/wayland_input_method_context.h"
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_shm.h"
@@ -34,6 +35,7 @@ namespace ui {
 
 namespace {
 constexpr uint32_t kMaxCompositorVersion = 4;
+constexpr uint32_t kMaxGtkPrimarySelectionDeviceManagerVersion = 1;
 constexpr uint32_t kMaxLinuxDmabufVersion = 3;
 constexpr uint32_t kMaxSeatVersion = 4;
 constexpr uint32_t kMaxShmVersion = 1;
@@ -41,6 +43,7 @@ constexpr uint32_t kMaxXdgShellVersion = 1;
 constexpr uint32_t kMaxDeviceManagerVersion = 3;
 constexpr uint32_t kMaxWpPresentationVersion = 1;
 constexpr uint32_t kMaxTextInputManagerVersion = 1;
+constexpr uint32_t kMinWlDrmVersion = 2;
 constexpr uint32_t kMinWlOutputVersion = 2;
 }  // namespace
 
@@ -144,12 +147,6 @@ int WaylandConnection::GetKeyboardModifiers() const {
   return modifiers;
 }
 
-std::vector<gfx::BufferFormat> WaylandConnection::GetSupportedBufferFormats() {
-  if (zwp_dmabuf_)
-    return zwp_dmabuf_->supported_buffer_formats();
-  return std::vector<gfx::BufferFormat>();
-}
-
 void WaylandConnection::StartDrag(const ui::OSExchangeData& data,
                                   int operation) {
   if (!dragdrop_data_source_)
@@ -174,7 +171,7 @@ void WaylandConnection::DeliverDragData(const std::string& mime_type,
 
 void WaylandConnection::RequestDragData(
     const std::string& mime_type,
-    base::OnceCallback<void(const std::string&)> callback) {
+    base::OnceCallback<void(const std::vector<uint8_t>&)> callback) {
   data_device_->RequestDragData(mime_type, std::move(callback));
 }
 
@@ -240,8 +237,15 @@ void WaylandConnection::EnsureDataDevice() {
   DCHECK(!data_device_);
   wl_data_device* data_device = data_device_manager_->GetDevice();
   data_device_ = std::make_unique<WaylandDataDevice>(this, data_device);
-  clipboard_ = std::make_unique<WaylandClipboard>(data_device_manager_.get(),
-                                                  data_device_.get());
+
+  if (primary_selection_device_manager_) {
+    primary_selection_device_ = std::make_unique<GtkPrimarySelectionDevice>(
+        this, primary_selection_device_manager_->GetDevice());
+  }
+
+  clipboard_ = std::make_unique<WaylandClipboard>(
+      data_device_manager_.get(), data_device_.get(),
+      primary_selection_device_manager_.get(), primary_selection_device_.get());
 }
 
 bool WaylandConnection::BeginWatchingFd(
@@ -358,6 +362,14 @@ void WaylandConnection::Global(void* data,
         std::make_unique<WaylandDataDeviceManager>(
             data_device_manager.release(), connection);
     connection->EnsureDataDevice();
+  } else if (!connection->primary_selection_device_manager_ &&
+             strcmp(interface, "gtk_primary_selection_device_manager") == 0) {
+    wl::Object<gtk_primary_selection_device_manager> manager =
+        wl::Bind<gtk_primary_selection_device_manager>(
+            registry, name, kMaxGtkPrimarySelectionDeviceManagerVersion);
+    connection->primary_selection_device_manager_ =
+        std::make_unique<GtkPrimarySelectionDeviceManager>(manager.release(),
+                                                           connection);
   } else if (!connection->zwp_dmabuf_ &&
              (strcmp(interface, "zwp_linux_dmabuf_v1") == 0)) {
     wl::Object<zwp_linux_dmabuf_v1> zwp_linux_dmabuf =
@@ -377,6 +389,11 @@ void WaylandConnection::Global(void* data,
       LOG(ERROR) << "Failed to bind to zwp_text_input_manager_v1 global";
       return;
     }
+  } else if (!connection->drm_ && (strcmp(interface, "wl_drm") == 0) &&
+             version >= kMinWlDrmVersion) {
+    auto wayland_drm = wl::Bind<struct wl_drm>(registry, name, version);
+    connection->drm_ =
+        std::make_unique<WaylandDrm>(wayland_drm.release(), connection);
   }
 
   connection->ScheduleFlush();

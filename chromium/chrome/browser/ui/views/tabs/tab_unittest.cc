@@ -56,6 +56,13 @@ class FakeTabController : public TabController {
   void ToggleSelected(Tab* tab) override {}
   void AddSelectionFromAnchorTo(Tab* tab) override {}
   void CloseTab(Tab* tab, CloseTabSource source) override {}
+  void MoveTabRight(Tab* tab) override {}
+  void MoveTabLeft(Tab* tab) override {}
+  void MoveTabFirst(Tab* tab) override {}
+  void MoveTabLast(Tab* tab) override {}
+  void ShowContextMenuForTab(Tab* tab,
+                             const gfx::Point& p,
+                             ui::MenuSourceType source_type) override {}
   bool IsActiveTab(const Tab* tab) const override { return active_tab_; }
   bool IsTabSelected(const Tab* tab) const override { return false; }
   bool IsTabPinned(const Tab* tab) const override { return false; }
@@ -88,7 +95,7 @@ class FakeTabController : public TabController {
   SkColor GetTabSeparatorColor() const override { return SK_ColorBLACK; }
   SkColor GetTabBackgroundColor(
       TabActive active,
-      BrowserNonClientFrameView::ActiveState active_state) const override {
+      BrowserFrameActiveState active_state) const override {
     return active == TabActive::kActive ? tab_bg_color_active_
                                         : tab_bg_color_inactive_;
   }
@@ -98,7 +105,7 @@ class FakeTabController : public TabController {
                                         : tab_fg_color_inactive_;
   }
   base::Optional<int> GetCustomBackgroundId(
-      BrowserNonClientFrameView::ActiveState active_state) const override {
+      BrowserFrameActiveState active_state) const override {
     return base::nullopt;
   }
   gfx::Rect GetTabAnimationTargetBounds(const Tab* tab) override {
@@ -181,7 +188,7 @@ class TabTest : public ChromeViewsTestBase {
     // Tab size and TabRendererData state.
     if (tab.data_.pinned) {
       EXPECT_EQ(1, VisibleIconCount(tab));
-      if (tab.data_.alert_state != TabAlertState::NONE) {
+      if (tab.data_.alert_state) {
         EXPECT_FALSE(tab.showing_icon_);
         EXPECT_TRUE(tab.showing_alert_indicator_);
       } else {
@@ -198,7 +205,7 @@ class TabTest : public ChromeViewsTestBase {
           EXPECT_FALSE(tab.showing_alert_indicator_);
           break;
         case 2:
-          if (tab.data_.alert_state != TabAlertState::NONE) {
+          if (tab.data_.alert_state) {
             EXPECT_FALSE(tab.showing_icon_);
             EXPECT_TRUE(tab.showing_alert_indicator_);
           } else {
@@ -208,14 +215,14 @@ class TabTest : public ChromeViewsTestBase {
           break;
         default:
           EXPECT_EQ(3, VisibleIconCount(tab));
-          EXPECT_TRUE(tab.data_.alert_state != TabAlertState::NONE);
+          EXPECT_TRUE(tab.data_.alert_state);
           break;
       }
     } else {  // Tab not active and not pinned tab.
       switch (VisibleIconCount(tab)) {
         case 1:
           EXPECT_FALSE(tab.showing_close_button_);
-          if (tab.data_.alert_state == TabAlertState::NONE) {
+          if (!tab.data_.alert_state) {
             EXPECT_FALSE(tab.showing_alert_indicator_);
             EXPECT_TRUE(tab.showing_icon_);
           } else {
@@ -225,14 +232,14 @@ class TabTest : public ChromeViewsTestBase {
           break;
         case 2:
           EXPECT_TRUE(tab.showing_icon_);
-          if (tab.data_.alert_state != TabAlertState::NONE)
+          if (tab.data_.alert_state)
             EXPECT_TRUE(tab.showing_alert_indicator_);
           else
             EXPECT_FALSE(tab.showing_alert_indicator_);
           break;
         default:
           EXPECT_EQ(3, VisibleIconCount(tab));
-          EXPECT_TRUE(tab.data_.alert_state != TabAlertState::NONE);
+          EXPECT_TRUE(tab.data_.alert_state);
       }
     }
 
@@ -421,9 +428,11 @@ TEST_F(TabTest, HitTestTopPixel) {
 }
 
 TEST_F(TabTest, LayoutAndVisibilityOfElements) {
-  static const TabAlertState kAlertStatesToTest[] = {
-      TabAlertState::NONE,          TabAlertState::TAB_CAPTURING,
-      TabAlertState::AUDIO_PLAYING, TabAlertState::AUDIO_MUTING,
+  static const base::Optional<TabAlertState> kAlertStatesToTest[] = {
+      base::nullopt,
+      TabAlertState::TAB_CAPTURING,
+      TabAlertState::AUDIO_PLAYING,
+      TabAlertState::AUDIO_MUTING,
       TabAlertState::PIP_PLAYING,
   };
 
@@ -443,12 +452,13 @@ TEST_F(TabTest, LayoutAndVisibilityOfElements) {
   // results.
   for (bool is_pinned_tab : {false, true}) {
     for (bool is_active_tab : {false, true}) {
-      for (TabAlertState alert_state : kAlertStatesToTest) {
-        SCOPED_TRACE(::testing::Message()
-                     << (is_active_tab ? "Active " : "Inactive ")
-                     << (is_pinned_tab ? "pinned " : "")
-                     << "tab with alert indicator state "
-                     << static_cast<int>(alert_state));
+      for (base::Optional<TabAlertState> alert_state : kAlertStatesToTest) {
+        SCOPED_TRACE(
+            ::testing::Message()
+            << (is_active_tab ? "Active " : "Inactive ")
+            << (is_pinned_tab ? "pinned " : "")
+            << "tab with alert indicator state "
+            << (alert_state ? static_cast<int>(alert_state.value()) : -1));
 
         data.pinned = is_pinned_tab;
         controller.set_active_tab(is_active_tab);
@@ -505,10 +515,13 @@ TEST_F(TabTest, TooltipProvidedByTab) {
   // should include a description of the alert state when the indicator is
   // present.
   for (int i = 0; i < 2; ++i) {
-    data.alert_state =
-        (i == 0 ? TabAlertState::NONE : TabAlertState::AUDIO_PLAYING);
-    SCOPED_TRACE(::testing::Message() << "Tab with alert indicator state "
-                                      << static_cast<int>(data.alert_state));
+    data.alert_state = (i == 0 ? base::Optional<TabAlertState>()
+                               : TabAlertState::AUDIO_PLAYING);
+    SCOPED_TRACE(::testing::Message()
+                 << "Tab with alert indicator state "
+                 << (data.alert_state
+                         ? static_cast<int>(data.alert_state.value())
+                         : -1));
     tab.SetData(data);
     const base::string16 expected_tooltip =
         Tab::GetTooltipText(data.title, data.alert_state);
@@ -828,7 +841,7 @@ TEST_F(TabTest, TitleTextHasSufficientContrast) {
       tab.UpdateForegroundColors();
       const SkColor fg_color = tab.title_->GetEnabledColor();
       const SkColor bg_color = controller.GetTabBackgroundColor(
-          active, BrowserNonClientFrameView::kUseCurrent);
+          active, BrowserFrameActiveState::kUseCurrent);
       const float contrast = color_utils::GetContrastRatio(fg_color, bg_color);
       EXPECT_GE(contrast, color_utils::kMinimumReadableContrastRatio);
     }
@@ -858,7 +871,7 @@ TEST_F(AlertIndicatorTest, ShowsAndHidesAlertIndicator) {
   EXPECT_FALSE(showing_close_button(media_tab));
 
   TabRendererData stop_media;
-  stop_media.alert_state = TabAlertState::NONE;
+  stop_media.alert_state = base::nullopt;
   stop_media.pinned = media_tab->data().pinned;
   media_tab->SetData(std::move(stop_media));
 

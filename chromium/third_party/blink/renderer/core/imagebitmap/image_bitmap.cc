@@ -191,35 +191,29 @@ SkImageInfo GetSkImageInfo(const scoped_refptr<StaticBitmapImage>& input) {
 // This function results in a readback due to using SkImage::readPixels().
 // Returns transparent black pixels if the input SkImageInfo.bounds() does
 // not intersect with the input image boundaries.
-scoped_refptr<Uint8Array> CopyImageData(
-    const scoped_refptr<StaticBitmapImage>& input,
-    const SkImageInfo& info,
-    const unsigned x = 0,
-    const unsigned y = 0) {
+Vector<uint8_t> CopyImageData(const scoped_refptr<StaticBitmapImage>& input,
+                              const SkImageInfo& info,
+                              const unsigned x = 0,
+                              const unsigned y = 0) {
   if (info.isEmpty())
-    return nullptr;
+    return {};
   sk_sp<SkImage> sk_image = input->PaintImageForCurrentFrame().GetSkImage();
   if (sk_image->bounds().isEmpty())
-    return nullptr;
-  scoped_refptr<ArrayBuffer> dst_buffer =
-      ArrayBuffer::CreateOrNull(info.computeMinByteSize(), 1);
-  if (!dst_buffer)
-    return nullptr;
-  unsigned byte_length = dst_buffer->ByteLength();
-  scoped_refptr<Uint8Array> dst_pixels =
-      Uint8Array::Create(std::move(dst_buffer), 0, byte_length);
-  if (!dst_pixels)
-    return nullptr;
+    return {};
+
+  wtf_size_t byte_length =
+      base::checked_cast<wtf_size_t>(info.computeMinByteSize());
+  Vector<uint8_t> dst_buffer(byte_length);
+
   bool read_pixels_successful =
-      sk_image->readPixels(info, dst_pixels->Data(), info.minRowBytes(), x, y);
+      sk_image->readPixels(info, dst_buffer.data(), info.minRowBytes(), x, y);
   DCHECK(read_pixels_successful);
   if (!read_pixels_successful)
-    return nullptr;
-  return dst_pixels;
+    return {};
+  return dst_buffer;
 }
 
-scoped_refptr<Uint8Array> CopyImageData(
-    const scoped_refptr<StaticBitmapImage>& input) {
+Vector<uint8_t> CopyImageData(const scoped_refptr<StaticBitmapImage>& input) {
   SkImageInfo info = GetSkImageInfo(input);
   return CopyImageData(std::move(input), info);
 }
@@ -238,18 +232,32 @@ scoped_refptr<StaticBitmapImage> FlipImageVertically(
     // Unpremul code path results in a GPU readback if |input| is texture
     // backed since CopyImageData() uses  SkImage::readPixels() to extract the
     // pixels from SkImage.
-    scoped_refptr<Uint8Array> image_pixels = CopyImageData(input);
+    SkImageInfo info = GetSkImageInfo(input);
+    if (info.isEmpty())
+      return nullptr;
+
+    sk_sp<SkImage> sk_image = input->PaintImageForCurrentFrame().GetSkImage();
+    if (sk_image->bounds().isEmpty())
+      return nullptr;
+
+    sk_sp<SkData> image_pixels = TryAllocateSkData(info.computeMinByteSize());
     if (!image_pixels)
       return nullptr;
-    SkImageInfo info = GetSkImageInfo(input);
-    unsigned image_row_bytes = info.width() * info.bytesPerPixel();
+
+    uint8_t* writable_pixels =
+        static_cast<uint8_t*>(image_pixels->writable_data());
+    size_t image_row_bytes = static_cast<size_t>(info.minRowBytes64());
+    bool read_successful =
+        sk_image->readPixels(info, writable_pixels, image_row_bytes, 0, 0);
+    DCHECK(read_successful);
+
     for (int i = 0; i < info.height() / 2; i++) {
-      unsigned top_first_element = i * image_row_bytes;
-      unsigned top_last_element = (i + 1) * image_row_bytes;
-      unsigned bottom_first_element = (info.height() - 1 - i) * image_row_bytes;
-      std::swap_ranges(image_pixels->Data() + top_first_element,
-                       image_pixels->Data() + top_last_element,
-                       image_pixels->Data() + bottom_first_element);
+      size_t top_first_element = i * image_row_bytes;
+      size_t top_last_element = (i + 1) * image_row_bytes;
+      size_t bottom_first_element = (info.height() - 1 - i) * image_row_bytes;
+      std::swap_ranges(&writable_pixels[top_first_element],
+                       &writable_pixels[top_last_element],
+                       &writable_pixels[bottom_first_element]);
     }
     return StaticBitmapImage::Create(std::move(image_pixels), info);
   }
@@ -315,10 +323,21 @@ scoped_refptr<StaticBitmapImage> GetImageWithAlphaDisposition(
     return StaticBitmapImage::Create(surface->makeImageSnapshot(),
                                      image->ContextProviderWrapper());
   }
+
   // To unpremul, read back the pixels.
-  auto dst_pixels = CopyImageData(image, info);
+
+  if (skia_image->bounds().isEmpty())
+    return nullptr;
+
+  sk_sp<SkData> dst_pixels = TryAllocateSkData(info.computeMinByteSize());
   if (!dst_pixels)
     return nullptr;
+
+  uint8_t* writable_pixels = static_cast<uint8_t*>(dst_pixels->writable_data());
+  size_t image_row_bytes = static_cast<size_t>(info.minRowBytes64());
+  bool read_successful =
+      skia_image->readPixels(info, writable_pixels, image_row_bytes, 0, 0);
+  DCHECK(read_successful);
   return StaticBitmapImage::Create(std::move(dst_pixels), info);
 }
 
@@ -712,19 +731,20 @@ ImageBitmap::ImageBitmap(ImageData* data,
   }
 
   // Copy / color convert the pixels
-  scoped_refptr<ArrayBuffer> pixels_buffer =
-      ArrayBuffer::CreateOrNull(SafeCast<uint32_t>(src_rect.Size().Area()),
-                                parsed_options.color_params.BytesPerPixel());
-  if (!pixels_buffer)
+  size_t image_pixels_size;
+  if (!base::CheckMul(parsed_options.color_params.BytesPerPixel(),
+                      static_cast<unsigned>(src_rect.Width()),
+                      static_cast<unsigned>(src_rect.Height()))
+           .AssignIfValid(&image_pixels_size)) {
     return;
-  unsigned byte_length = pixels_buffer->ByteLength();
-  scoped_refptr<Uint8Array> image_pixels =
-      Uint8Array::Create(std::move(pixels_buffer), 0, byte_length);
+  }
+  sk_sp<SkData> image_pixels = TryAllocateSkData(image_pixels_size);
   if (!image_pixels)
     return;
   if (!data->ImageDataInCanvasColorSettings(
           parsed_options.color_params.ColorSpace(),
-          parsed_options.color_params.PixelFormat(), image_pixels->Data(),
+          parsed_options.color_params.PixelFormat(),
+          static_cast<unsigned char*>(image_pixels->writable_data()),
           kN32ColorType, &src_rect,
           parsed_options.premultiply_alpha ? kPremultiplyAlpha
                                            : kUnpremultiplyAlpha))
@@ -911,12 +931,12 @@ ImageBitmap* ImageBitmap::Create(const void* pixel_data,
 
 void ImageBitmap::ResolvePromiseOnOriginalThread(
     ScriptPromiseResolver* resolver,
-    sk_sp<SkImage> skia_image,
     bool origin_clean,
-    std::unique_ptr<ParsedOptions> parsed_options) {
+    std::unique_ptr<ParsedOptions> parsed_options,
+    sk_sp<SkImage> skia_image) {
   if (!skia_image) {
     resolver->Reject(
-        ScriptValue(resolver->GetScriptState(),
+        ScriptValue(resolver->GetScriptState()->GetIsolate(),
                     v8::Null(resolver->GetScriptState()->GetIsolate())));
     return;
   }
@@ -928,14 +948,14 @@ void ImageBitmap::ResolvePromiseOnOriginalThread(
   }
   if (!image) {
     resolver->Reject(
-        ScriptValue(resolver->GetScriptState(),
+        ScriptValue(resolver->GetScriptState()->GetIsolate(),
                     v8::Null(resolver->GetScriptState()->GetIsolate())));
     return;
   }
   image = ApplyColorSpaceConversion(std::move(image), *(parsed_options.get()));
   if (!image) {
     resolver->Reject(
-        ScriptValue(resolver->GetScriptState(),
+        ScriptValue(resolver->GetScriptState()->GetIsolate(),
                     v8::Null(resolver->GetScriptState()->GetIsolate())));
     return;
   }
@@ -945,11 +965,10 @@ void ImageBitmap::ResolvePromiseOnOriginalThread(
 }
 
 void ImageBitmap::RasterizeImageOnBackgroundThread(
-    ScriptPromiseResolver* resolver,
     sk_sp<PaintRecord> paint_record,
     const IntRect& dst_rect,
-    bool origin_clean,
-    std::unique_ptr<ParsedOptions> parsed_options) {
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
+    WTF::CrossThreadOnceFunction<void(sk_sp<SkImage>)> callback) {
   DCHECK(!IsMainThread());
   SkImageInfo info =
       SkImageInfo::MakeN32Premul(dst_rect.Width(), dst_rect.Height());
@@ -959,14 +978,9 @@ void ImageBitmap::RasterizeImageOnBackgroundThread(
     paint_record->Playback(surface->getCanvas());
     skia_image = surface->makeImageSnapshot();
   }
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-      Thread::MainThread()->GetTaskRunner();
   PostCrossThreadTask(
       *task_runner, FROM_HERE,
-      CrossThreadBindOnce(&ResolvePromiseOnOriginalThread,
-                          WrapCrossThreadPersistent(resolver),
-                          std::move(skia_image), origin_clean,
-                          WTF::Passed(std::move(parsed_options))));
+      CrossThreadBindOnce(std::move(callback), std::move(skia_image)));
 }
 
 ScriptPromise ImageBitmap::CreateAsync(ImageElementBase* image,
@@ -1017,11 +1031,13 @@ ScriptPromise ImageBitmap::CreateAsync(ImageElementBase* image,
       std::make_unique<ParsedOptions>(parsed_options);
   worker_pool::PostTask(
       FROM_HERE,
-      CrossThreadBindOnce(&RasterizeImageOnBackgroundThread,
-                          WrapCrossThreadPersistent(resolver),
-                          std::move(paint_record), draw_dst_rect,
-                          !image->WouldTaintOrigin(),
-                          WTF::Passed(std::move(passed_parsed_options))));
+      CrossThreadBindOnce(
+          &RasterizeImageOnBackgroundThread, std::move(paint_record),
+          draw_dst_rect, Thread::MainThread()->GetTaskRunner(),
+          CrossThreadBindOnce(&ResolvePromiseOnOriginalThread,
+                              WrapCrossThreadPersistent(resolver),
+                              !image->WouldTaintOrigin(),
+                              WTF::Passed(std::move(passed_parsed_options)))));
   return promise;
 }
 
@@ -1041,9 +1057,8 @@ CanvasColorParams ImageBitmap::GetCanvasColorParams() {
   return CanvasColorParams(GetSkImageInfo(image_));
 }
 
-scoped_refptr<Uint8Array> ImageBitmap::CopyBitmapData(
-    AlphaDisposition alpha_op,
-    DataU8ColorType u8_color_type) {
+Vector<uint8_t> ImageBitmap::CopyBitmapData(AlphaDisposition alpha_op,
+                                            DataU8ColorType u8_color_type) {
   DCHECK(alpha_op != kDontChangeAlpha);
   SkImageInfo info = GetSkImageInfo(image_);
   auto color_type = info.colorType();
@@ -1057,7 +1072,7 @@ scoped_refptr<Uint8Array> ImageBitmap::CopyBitmapData(
   return CopyImageData(image_, info);
 }
 
-scoped_refptr<Uint8Array> ImageBitmap::CopyBitmapData() {
+Vector<uint8_t> ImageBitmap::CopyBitmapData() {
   return CopyImageData(image_);
 }
 

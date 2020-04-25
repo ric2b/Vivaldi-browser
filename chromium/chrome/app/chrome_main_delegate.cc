@@ -37,6 +37,7 @@
 #include "chrome/common/chrome_result_codes.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
+#include "chrome/common/heap_profiler_controller.h"
 #include "chrome/common/logging_chrome.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/gpu/chrome_content_gpu_client.h"
@@ -119,6 +120,7 @@
 #include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/crash/pure_java_exception_handler.h"
 #include "chrome/common/chrome_descriptors.h"
+#include "net/android/network_change_notifier_factory_android.h"
 #else  // defined(OS_ANDROID)
 // Diagnostics is only available on non-android platforms.
 #include "chrome/browser/diagnostics/diagnostics_controller.h"
@@ -141,7 +143,8 @@
 #include "base/environment.h"
 #endif
 
-#if defined(OS_MACOSX) || defined(OS_WIN) || defined(OS_ANDROID)
+#if defined(OS_MACOSX) || defined(OS_WIN) || defined(OS_ANDROID) || \
+    defined(OS_LINUX)
 #include "chrome/browser/policy/policy_path_parser.h"
 #include "components/crash/content/app/crashpad.h"
 #endif
@@ -578,6 +581,8 @@ void ChromeMainDelegate::PostEarlyInitialization(bool is_running_tests) {
 
 #if defined(OS_ANDROID)
   startup_data_->CreateProfilePrefService();
+  net::NetworkChangeNotifier::SetFactory(
+      new net::NetworkChangeNotifierFactoryAndroid());
 #endif
 
   if (base::FeatureList::IsEnabled(
@@ -600,16 +605,16 @@ bool ChromeMainDelegate::ShouldCreateFeatureList() {
 #endif
 
 void ChromeMainDelegate::PostFieldTrialInitialization() {
+  std::string process_type =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kProcessType);
+  bool is_browser_process = process_type.empty();
+
 #if BUILDFLAG(ENABLE_GWP_ASAN_MALLOC)
   {
     version_info::Channel channel = chrome::GetChannel();
     bool is_canary_dev = (channel == version_info::Channel::CANARY ||
                           channel == version_info::Channel::DEV);
-    const base::CommandLine& command_line =
-        *base::CommandLine::ForCurrentProcess();
-    std::string process_type =
-        command_line.GetSwitchValueASCII(switches::kProcessType);
-    bool is_browser_process = process_type.empty();
     gwp_asan::EnableForMalloc(is_canary_dev || is_browser_process,
                               process_type.c_str());
   }
@@ -620,13 +625,16 @@ void ChromeMainDelegate::PostFieldTrialInitialization() {
     version_info::Channel channel = chrome::GetChannel();
     bool is_canary_dev = (channel == version_info::Channel::CANARY ||
                           channel == version_info::Channel::DEV);
-    const base::CommandLine& command_line =
-        *base::CommandLine::ForCurrentProcess();
-    std::string process_type =
-        command_line.GetSwitchValueASCII(switches::kProcessType);
     gwp_asan::EnableForPartitionAlloc(is_canary_dev, process_type.c_str());
   }
 #endif
+
+  // Start heap profiling as early as possible so it can start recording
+  // memory allocations.
+  if (is_browser_process) {
+    heap_profiler_controller_ = std::make_unique<HeapProfilerController>();
+    heap_profiler_controller_->Start();
+  }
 }
 
 bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
@@ -678,8 +686,11 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
 #if defined(OS_WIN) && !defined(CHROME_MULTIPLE_DLL_BROWSER)
   v8_crashpad_support::SetUp();
 #endif
+
 #if defined(OS_LINUX)
-  breakpad::SetFirstChanceExceptionHandler(v8::TryHandleWebAssemblyTrapPosix);
+  if (!crash_reporter::IsCrashpadEnabled()) {
+    breakpad::SetFirstChanceExceptionHandler(v8::TryHandleWebAssemblyTrapPosix);
+  }
 #endif
 
 #if defined(OS_POSIX)
@@ -1041,7 +1052,13 @@ void ChromeMainDelegate::PreSandboxStartup() {
       base::android::InitJavaExceptionReporterForChildProcess();
     }
 #else  // !defined(OS_ANDROID)
-    breakpad::InitCrashReporter(process_type);
+    if (crash_reporter::IsCrashpadEnabled()) {
+      crash_reporter::InitializeCrashpad(process_type.empty(), process_type);
+      crash_reporter::SetFirstChanceExceptionHandler(
+          v8::TryHandleWebAssemblyTrapPosix);
+    } else {
+      breakpad::InitCrashReporter(process_type);
+    }
 #endif  // defined(OS_ANDROID)
   }
 #endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
@@ -1174,7 +1191,13 @@ void ChromeMainDelegate::ZygoteForked() {
       base::CommandLine::ForCurrentProcess();
   std::string process_type =
       command_line->GetSwitchValueASCII(switches::kProcessType);
-  breakpad::InitCrashReporter(process_type);
+  if (crash_reporter::IsCrashpadEnabled()) {
+    crash_reporter::InitializeCrashpad(false, process_type);
+    crash_reporter::SetFirstChanceExceptionHandler(
+        v8::TryHandleWebAssemblyTrapPosix);
+  } else {
+    breakpad::InitCrashReporter(process_type);
+  }
 
   // Reset the command line for the newly spawned process.
   crash_keys::SetCrashKeysFromCommandLine(*command_line);

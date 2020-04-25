@@ -32,6 +32,43 @@ interface EmbeddedSearchConnector {
           associated EmbeddedSearchClient client);
 };
 
+// See components/omnibox/browser/autocomplete_match.h.
+struct ACMatchClassification {
+  uint32 offset;
+  int32 style;
+};
+
+struct AutocompleteMatch {
+  bool allowed_to_be_default_match;
+  mojo_base.mojom.String16 contents;
+  array<ACMatchClassification> contents_class;
+  mojo_base.mojom.String16 description;
+  array<ACMatchClassification> description_class;
+  string destination_url;
+  mojo_base.mojom.String16 inline_autocompletion;
+  mojo_base.mojom.String16 fill_into_edit;
+  bool is_search_type;  // Result of AutocompleteMatch::IsSearchType().
+  string type;  // Result of AutocompleteMatchType::ToString().
+  bool swap_contents_and_description;
+  bool supports_deletion;
+};
+
+enum AutocompleteResultStatus {
+  SUCCESS = 0,
+  SKIPPED = 1,
+};
+
+struct AutocompleteResult {
+  mojo_base.mojom.String16 input;
+  array<AutocompleteMatch> matches;
+  AutocompleteResultStatus status;
+};
+
+struct DeleteAutocompleteMatchResult {
+  bool success;
+  array<AutocompleteMatch> matches;
+};
+
 // Browser interface to support embedded search. Render frames connect to this
 // interface to query browser data, such as the most visited pages.
 // See http://dev.chromium.org/embeddedsearch
@@ -142,6 +179,22 @@ interface EmbeddedSearch {
 
   // Confirms applied theme changes.
   ConfirmThemeChanges();
+
+  // Gets autocomplete matches from the browser.
+  QueryAutocomplete(mojo_base.mojom.String16 input) =>
+        (AutocompleteResult result);
+
+  // Deletes the AutocompleteMatch in the current results by |line| number if
+  // it is deletable. When a match is deleted, |matches| is populated with the
+  // updated result after deletion. Otherwise, |matches| is empty.
+  DeleteAutocompleteMatch(uint8 line) => (DeleteAutocompleteMatchResult result);
+
+  // Cancels the current autocomplete query. Clears the result set if
+  // |clear_result| is true.
+  StopAutocomplete(bool clear_result);
+
+  // Called when a user dismisses a promo.
+  BlocklistPromo(string promo_id);
 };
 
 [Native]

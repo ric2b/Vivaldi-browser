@@ -143,6 +143,8 @@ class ContentSettingMediaImageModel : public ContentSettingImageModel {
 #if defined(OS_MACOSX)
   bool DidCameraAccessFailBecauseOfSystemLevelBlock();
   bool DidMicAccessFailBecauseOfSystemLevelBlock();
+  bool IsCameraAccessPendingOnSystemLevelPrompt();
+  bool IsMicAccessPendingOnSystemLevelPrompt();
 #endif  // defined(OS_MACOSX)
 
   std::unique_ptr<ContentSettingBubbleModel> CreateBubbleModelImpl(
@@ -249,8 +251,11 @@ const ContentSettingsImageDetails* GetImageDetails(ContentSettingsType type) {
 
 ContentSettingSimpleImageModel::ContentSettingSimpleImageModel(
     ImageType image_type,
-    ContentSettingsType content_type)
-    : ContentSettingImageModel(image_type), content_type_(content_type) {}
+    ContentSettingsType content_type,
+    bool image_type_should_notify_accessibility)
+    : ContentSettingImageModel(image_type,
+                               image_type_should_notify_accessibility),
+      content_type_(content_type) {}
 
 std::unique_ptr<ContentSettingBubbleModel>
 ContentSettingSimpleImageModel::CreateBubbleModelImpl(
@@ -321,6 +326,10 @@ void ContentSettingImageModel::Update(content::WebContents* contents) {
   if (contents && !is_visible_) {
     ContentSettingImageModelStates::Get(contents)->SetAnimationHasRun(
         image_type(), false);
+    if (image_type_should_notify_accessibility_) {
+      ContentSettingImageModelStates::Get(contents)->SetAccessibilityNotified(
+          image_type(), false);
+    }
   }
 }
 
@@ -335,6 +344,19 @@ void ContentSettingImageModel::SetAnimationHasRun(
     content::WebContents* contents) {
   DCHECK(contents);
   ContentSettingImageModelStates::Get(contents)->SetAnimationHasRun(
+      image_type(), true);
+}
+
+bool ContentSettingImageModel::ShouldNotifyAccessibility(
+    content::WebContents* contents) const {
+  return image_type_should_notify_accessibility_ &&
+         !ContentSettingImageModelStates::Get(contents)
+              ->GetAccessibilityNotified(image_type());
+}
+
+void ContentSettingImageModel::AccessibilityWasNotified(
+    content::WebContents* contents) {
+  ContentSettingImageModelStates::Get(contents)->SetAccessibilityNotified(
       image_type(), true);
 }
 
@@ -572,21 +594,68 @@ bool ContentSettingMediaImageModel::UpdateAndGetVisibility(
 #if defined(OS_MACOSX)
   if (base::FeatureList::IsEnabled(
           ::features::kMacSystemMediaPermissionsInfoUi)) {
-    if (DidCameraAccessFailBecauseOfSystemLevelBlock() &&
-        DidMicAccessFailBecauseOfSystemLevelBlock()) {
-      set_icon(vector_icons::kVideocamIcon, kBlockedBadgeIcon);
-      set_explanatory_string_id(IDS_CAMERA_BLOCKED_TITLE);
-      set_tooltip(l10n_util::GetStringUTF16(IDS_MICROPHONE_CAMERA_BLOCKED));
+    // Don't show an icon when the user has not made a decision yet for
+    // the site level media permissions.
+    if (IsCameraAccessPendingOnSystemLevelPrompt() ||
+        IsMicAccessPendingOnSystemLevelPrompt()) {
+      return false;
+    }
+
+    set_explanatory_string_id(0);
+
+    if (IsCamAccessed() && IsMicAccessed()) {
+      if (IsCameraBlockedOnSiteLevel() || IsMicBlockedOnSiteLevel()) {
+        set_icon(vector_icons::kVideocamIcon, kBlockedBadgeIcon);
+        set_tooltip(l10n_util::GetStringUTF16(IDS_MICROPHONE_CAMERA_BLOCKED));
+      } else if (DidCameraAccessFailBecauseOfSystemLevelBlock() ||
+                 DidMicAccessFailBecauseOfSystemLevelBlock()) {
+        set_icon(vector_icons::kVideocamIcon, kBlockedBadgeIcon);
+        set_tooltip(l10n_util::GetStringUTF16(IDS_MICROPHONE_CAMERA_BLOCKED));
+        if (!content_settings->camera_was_just_granted_on_site_level() ||
+            !content_settings->mic_was_just_granted_on_site_level()) {
+          set_explanatory_string_id(IDS_CAMERA_TURNED_OFF);
+        }
+        // TODO(hkamila): Automatically trigger the new bubble, if the camera
+        // and/or mic was just granted on a site level, but blocked on a system
+        // level.
+      } else {
+        set_icon(vector_icons::kVideocamIcon, gfx::kNoneIcon);
+        set_tooltip(l10n_util::GetStringUTF16(IDS_MICROPHONE_CAMERA_ALLOWED));
+      }
       return true;
-    } else if (DidCameraAccessFailBecauseOfSystemLevelBlock()) {
-      set_icon(vector_icons::kVideocamIcon, kBlockedBadgeIcon);
-      set_explanatory_string_id(IDS_CAMERA_BLOCKED_TITLE);
-      set_tooltip(l10n_util::GetStringUTF16(IDS_CAMERA_BLOCKED));
+    }
+
+    if (IsCamAccessed()) {
+      if (IsCameraBlockedOnSiteLevel()) {
+        set_icon(vector_icons::kVideocamIcon, kBlockedBadgeIcon);
+        set_tooltip(l10n_util::GetStringUTF16(IDS_CAMERA_BLOCKED));
+      } else if (DidCameraAccessFailBecauseOfSystemLevelBlock()) {
+        set_icon(vector_icons::kVideocamIcon, kBlockedBadgeIcon);
+        set_tooltip(l10n_util::GetStringUTF16(IDS_CAMERA_BLOCKED));
+        if (!content_settings->camera_was_just_granted_on_site_level()) {
+          set_explanatory_string_id(IDS_CAMERA_TURNED_OFF);
+        }
+      } else {
+        set_icon(vector_icons::kVideocamIcon, gfx::kNoneIcon);
+        set_tooltip(l10n_util::GetStringUTF16(IDS_CAMERA_ACCESSED));
+      }
       return true;
-    } else if (DidMicAccessFailBecauseOfSystemLevelBlock()) {
-      set_icon(vector_icons::kMicIcon, kBlockedBadgeIcon);
-      set_explanatory_string_id(IDS_MICROPHONE_BLOCKED_TITLE);
-      set_tooltip(l10n_util::GetStringUTF16(IDS_MICROPHONE_BLOCKED));
+    }
+
+    if (IsMicAccessed()) {
+      if (IsMicBlockedOnSiteLevel()) {
+        set_icon(vector_icons::kMicIcon, kBlockedBadgeIcon);
+        set_tooltip(l10n_util::GetStringUTF16(IDS_MICROPHONE_BLOCKED));
+      } else if (DidMicAccessFailBecauseOfSystemLevelBlock()) {
+        set_icon(vector_icons::kMicIcon, kBlockedBadgeIcon);
+        set_tooltip(l10n_util::GetStringUTF16(IDS_MICROPHONE_BLOCKED));
+        if (!content_settings->mic_was_just_granted_on_site_level()) {
+          set_explanatory_string_id(IDS_MIC_TURNED_OFF);
+        }
+      } else {
+        set_icon(vector_icons::kMicIcon, gfx::kNoneIcon);
+        set_tooltip(l10n_util::GetStringUTF16(IDS_MICROPHONE_ACCESSED));
+      }
       return true;
     }
   }
@@ -642,6 +711,19 @@ bool ContentSettingMediaImageModel::
           system_media_permissions::CheckSystemAudioCapturePermission() ==
               system_media_permissions::SystemPermission::kDenied);
 }
+
+bool ContentSettingMediaImageModel::IsCameraAccessPendingOnSystemLevelPrompt() {
+  return (system_media_permissions::CheckSystemVideoCapturePermission() ==
+              system_media_permissions::SystemPermission::kNotDetermined &&
+          IsCamAccessed() && !IsCameraBlockedOnSiteLevel());
+}
+
+bool ContentSettingMediaImageModel::IsMicAccessPendingOnSystemLevelPrompt() {
+  return (system_media_permissions::CheckSystemAudioCapturePermission() ==
+              system_media_permissions::SystemPermission::kNotDetermined &&
+          IsMicAccessed() && !IsMicBlockedOnSiteLevel());
+}
+
 #endif  // defined(OS_MACOSX)
 
 std::unique_ptr<ContentSettingBubbleModel>
@@ -737,8 +819,10 @@ bool ContentSettingPopupImageModel::UpdateAndGetVisibility(
 // Notifications --------------------------------------------------------------
 
 ContentSettingNotificationsImageModel::ContentSettingNotificationsImageModel()
-    : ContentSettingSimpleImageModel(ImageType::NOTIFICATIONS_QUIET_PROMPT,
-                                     CONTENT_SETTINGS_TYPE_NOTIFICATIONS) {
+    : ContentSettingSimpleImageModel(
+          ImageType::NOTIFICATIONS_QUIET_PROMPT,
+          CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+          true /* image_type_should_notify_accessibility */) {
   set_icon(vector_icons::kNotificationsOffIcon, gfx::kNoneIcon);
   set_tooltip(
       l10n_util::GetStringUTF16(IDS_NOTIFICATIONS_OFF_EXPLANATORY_TEXT));
@@ -771,12 +855,14 @@ gfx::Image ContentSettingImageModel::GetIcon(SkColor icon_color) const {
                                                    icon_color, *icon_badge_));
 }
 
-ContentSettingImageModel::ContentSettingImageModel(ImageType image_type)
-    : is_visible_(false),
-      icon_(&gfx::kNoneIcon),
+ContentSettingImageModel::ContentSettingImageModel(
+    ImageType image_type,
+    bool image_type_should_notify_accessibility)
+    : icon_(&gfx::kNoneIcon),
       icon_badge_(&gfx::kNoneIcon),
-      explanatory_string_id_(0),
-      image_type_(image_type) {}
+      image_type_(image_type),
+      image_type_should_notify_accessibility_(
+          image_type_should_notify_accessibility) {}
 
 std::unique_ptr<ContentSettingBubbleModel>
 ContentSettingImageModel::CreateBubbleModel(

@@ -26,7 +26,7 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.preferences.ChromeBaseCheckBoxPreference;
 import org.chromium.chrome.browser.preferences.ChromeBasePreference;
 import org.chromium.chrome.browser.preferences.ChromeSwitchPreference;
@@ -34,9 +34,12 @@ import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
 import org.chromium.chrome.browser.preferences.SearchUtils;
 import org.chromium.chrome.browser.preferences.TextMessagePreference;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.ui.text.SpanApplier;
 
 import java.util.Locale;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * The "Save passwords" screen in Settings, which allows the user to enable or disable password
@@ -45,8 +48,6 @@ import java.util.Locale;
 public class SavePasswordsPreferences
         extends PreferenceFragmentCompat implements PasswordManagerHandler.PasswordListObserver,
                                                     Preference.OnPreferenceClickListener {
-    public static final String PASSWORD_LEAK_DETECTION_FEATURE = "PasswordLeakDetection";
-
     // Keys for name/password dictionaries.
     public static final String PASSWORD_LIST_URL = "url";
     public static final String PASSWORD_LIST_NAME = "name";
@@ -60,7 +61,6 @@ public class SavePasswordsPreferences
 
     public static final String PREF_SAVE_PASSWORDS_SWITCH = "save_passwords_switch";
     public static final String PREF_AUTOSIGNIN_SWITCH = "autosignin_switch";
-    public static final String PREF_LEAK_DETECTION_SWITCH = "leak_detection_switch";
     public static final String PREF_KEY_MANAGE_ACCOUNT_LINK = "manage_account_link";
 
     // A PasswordEntryViewer receives a boolean value with this key. If set true, the the entry was
@@ -72,12 +72,11 @@ public class SavePasswordsPreferences
     private static final String PREF_KEY_SAVED_PASSWORDS_NO_TEXT = "saved_passwords_no_text";
 
     private static final int ORDER_SWITCH = 0;
-    private static final int ORDER_AUTO_LEAK_DETECTION_SWITCH = 1;
-    private static final int ORDER_AUTO_SIGNIN_CHECKBOX = 2;
-    private static final int ORDER_MANAGE_ACCOUNT_LINK = 3;
-    private static final int ORDER_SAVED_PASSWORDS = 4;
-    private static final int ORDER_EXCEPTIONS = 5;
-    private static final int ORDER_SAVED_PASSWORDS_NO_TEXT = 6;
+    private static final int ORDER_AUTO_SIGNIN_CHECKBOX = 1;
+    private static final int ORDER_MANAGE_ACCOUNT_LINK = 2;
+    private static final int ORDER_SAVED_PASSWORDS = 3;
+    private static final int ORDER_EXCEPTIONS = 4;
+    private static final int ORDER_SAVED_PASSWORDS_NO_TEXT = 5;
 
     private boolean mNoPasswords;
     private boolean mNoPasswordExceptions;
@@ -89,7 +88,6 @@ public class SavePasswordsPreferences
     private Preference mLinkPref;
     private ChromeSwitchPreference mSavePasswordsSwitch;
     private ChromeBaseCheckBoxPreference mAutoSignInSwitch;
-    private ChromeSwitchPreference mAutoLeakDetectionSwitch;
     private TextMessagePreference mEmptyView;
     private boolean mSearchRecorded;
     private Menu mMenu;
@@ -152,7 +150,7 @@ public class SavePasswordsPreferences
         menu.findItem(R.id.export_passwords).setEnabled(false);
         mSearchItem = menu.findItem(R.id.menu_id_search);
         mSearchItem.setVisible(true);
-        mHelpItem = menu.findItem(R.id.menu_id_general_help);
+        mHelpItem = menu.findItem(R.id.menu_id_targeted_help);
         SearchUtils.initializeSearchView(
                 mSearchItem, mSearchQuery, getActivity(), this::filterPasswords);
     }
@@ -172,6 +170,11 @@ public class SavePasswordsPreferences
         }
         if (SearchUtils.handleSearchNavigation(item, mSearchItem, mSearchQuery, getActivity())) {
             filterPasswords(null);
+            return true;
+        }
+        if (id == R.id.menu_id_targeted_help) {
+            HelpAndFeedback.getInstance().show(getActivity(),
+                    getString(R.string.help_context_passwords), Profile.getLastUsedProfile(), null);
             return true;
         }
         return super.onOptionsItemSelected(item);
@@ -209,7 +212,6 @@ public class SavePasswordsPreferences
         getPreferenceScreen().removeAll();
         if (mSearchQuery == null) {
             createSavePasswordsSwitch();
-            createAutoLeakDetectionSwitch();
             createAutoSignInCheckbox();
         }
         PasswordManagerHandlerProvider.getInstance()
@@ -293,7 +295,7 @@ public class SavePasswordsPreferences
                 getPreferenceScreen().removePreference(passwordParent);
             } else {
                 getView().announceForAccessibility(
-                        getResources().getText(R.string.accessible_find_in_page_no_results));
+                        getString(R.string.accessible_find_in_page_no_results));
             }
         }
     }
@@ -435,42 +437,8 @@ public class SavePasswordsPreferences
                 PrefServiceBridge.getInstance().isPasswordManagerAutoSigninEnabled());
     }
 
-    private void createAutoLeakDetectionSwitch() {
-        if (!ChromeFeatureList.isEnabled(PASSWORD_LEAK_DETECTION_FEATURE)) return;
-
-        mAutoLeakDetectionSwitch = new ChromeSwitchPreference(getStyledContext(), null);
-        mAutoLeakDetectionSwitch.setKey(PREF_LEAK_DETECTION_SWITCH);
-        mAutoLeakDetectionSwitch.setTitle(R.string.passwords_leak_detection_switch_title);
-        mAutoLeakDetectionSwitch.setOrder(ORDER_AUTO_LEAK_DETECTION_SWITCH);
-        mAutoLeakDetectionSwitch.setManagedPreferenceDelegate(
-                preference -> PrefServiceBridge.getInstance().isPasswordLeakDetectionManaged());
-
-        getPreferenceScreen().addPreference(mAutoLeakDetectionSwitch);
-
-        if (PasswordUIView.hasAccountForLeakCheckRequest()) {
-            mAutoLeakDetectionSwitch.setChecked(
-                    PrefServiceBridge.getInstance().isPasswordLeakDetectionEnabled());
-            mAutoLeakDetectionSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
-                PrefServiceBridge.getInstance().setPasswordLeakDetectionEnabled((boolean) newValue);
-                return true;
-            });
-            mAutoLeakDetectionSwitch.setSummary(
-                    R.string.passwords_leak_detection_switch_signed_in_description);
-        } else {
-            mAutoLeakDetectionSwitch.setChecked(false);
-            mAutoLeakDetectionSwitch.setEnabled(false);
-            mAutoLeakDetectionSwitch.setOnPreferenceClickListener(null);
-            if (PrefServiceBridge.getInstance().isPasswordLeakDetectionEnabled()) {
-                mAutoLeakDetectionSwitch.setSummary(
-                        R.string.passwords_leak_detection_switch_signed_out_full_description);
-            } else {
-                mAutoLeakDetectionSwitch.setSummary(
-                        R.string.passwords_leak_detection_switch_signed_out_partial_description);
-            }
-        }
-    }
-
     private void displayManageAccountLink() {
+        if (ChromeApplication.isVivaldi()) return; // Vivaldi: Don't add the Manage Account link.
         if (!PreferencesLauncher.isSyncingPasswordsWithoutCustomPassphrase()) {
             return;
         }

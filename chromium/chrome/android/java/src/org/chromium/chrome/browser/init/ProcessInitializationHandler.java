@@ -9,15 +9,15 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.SystemClock;
-import android.support.annotation.WorkerThread;
 import android.text.format.DateUtils;
 import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.view.inputmethod.InputMethodSubtype;
 
+import androidx.annotation.WorkerThread;
+
 import com.google.ipc.invalidation.external.client.android.service.AndroidLogger;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -356,12 +356,10 @@ public class ProcessInitializationHandler {
         deferredStartupHandler.addDeferredTask(new Runnable() {
             @Override
             public void run() {
-                if (HomepageManager.shouldShowHomepageSetting()) {
-                    RecordHistogram.recordBooleanHistogram("Settings.ShowHomeButtonPreferenceState",
-                            HomepageManager.isHomepageEnabled());
-                    RecordHistogram.recordBooleanHistogram("Settings.HomePageIsCustomized",
-                            !HomepageManager.getInstance().getPrefHomepageUseDefaultUri());
-                }
+                RecordHistogram.recordBooleanHistogram("Settings.ShowHomeButtonPreferenceState",
+                        HomepageManager.isHomepageEnabled());
+                RecordHistogram.recordBooleanHistogram("Settings.HomePageIsCustomized",
+                        !HomepageManager.getInstance().getPrefHomepageUseDefaultUri());
             }
         });
 
@@ -424,7 +422,7 @@ public class ProcessInitializationHandler {
                             DownloadManagerService.getDownloadManagerService());
                 }
 
-                if (ApiCompatibilityUtils.isPrintingSupported()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
                     String errorText = ContextUtils.getApplicationContext().getString(
                             R.string.error_printing_failed);
                     PrintingControllerImpl.create(new PrintDocumentAdapterWrapper(), errorText);

@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="vi">
+<translation id="1029351048239796117">Vivaldi cần được cho phép truy cập mi-cờ-rô cho trang này.</translation>
+<translation id="1063227610401477317">Áp dụng những Thay đổi</translation>
+<translation id="1067048845568873861">Đã tạo</translation>
+<translation id="1151669774236491028">Vivaldi.net gặp sự cố: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="1193152013480891461">Tạo Tài khoản Vivaldi</translation>
+<translation id="119944043368869598">Xóa tất cả</translation>
+<translation id="1228311134236651326">Không có ghi chú nào được tìm thấy</translation>
+<translation id="1243314992276662751">Tải lên</translation>
+<translation id="1249276067323441352">Dữ liệu cần Đồng bộ hóa</translation>
+<translation id="1302932907222175914">Tìm ghi chú của bạn</translation>
+<translation id="1644574205037202324">Lịch sử</translation>
+<translation id="1689333818294560261">Tên hiệu</translation>
+<translation id="1799160781006135561">Mật khẩu Mã hoá Không được Chỉ định</translation>
+<translation id="1887193815546011584">Speed Dial Mới</translation>
+<translation id="1984391066297619717">Tự động Đồng bộ</translation>
+<translation id="2071726368047511075">Chụp ảnh trang</translation>
+<translation id="2199644148227291099">Bạn có chắc muốn sử dụng mật khẩu đăng nhập của bạn để mã hoá? Điều này làm suy giảm đáng kể tính bảo mật của dữ liệu đồng bộ trực tuyến.</translation>
+<translation id="2243210264130642074">Ghi chú đã lưu</translation>
+<translation id="2359808026110333948">Tiếp tục</translation>
+<translation id="2526968784648867272">Đang chụp ảnh Trang...</translation>
+<translation id="2709516037105925701">Tự động điền</translation>
+<translation id="271033894570825754">Tạo mới</translation>
+<translation id="2745324713975967671">Mật khẩu mã hoá</translation>
+<translation id="2818042133587341562">Vivaldi cần được cho phép truy cập máy ảnh cho trang này.</translation>
+<translation id="2842985007712546952">Thư mục cha</translation>
+<translation id="2850144663494818309">Đang khởi tạo đồng bộ hóa...</translation>
+<translation id="2873951654529031587">Sọt rác</translation>
+<translation id="2915527103487649658">Đồng bộ hoá Tất cả Dữ liệu</translation>
+<translation id="2953995378235516294">Dữ liệu trên tài khoản Sync của bạn đã được mã hóa. Vui lòng cung cấp mật khẩu mã hóa của bạn để giải mã.</translation>
+<translation id="2996809686854298943">Yêu cầu URL</translation>
+<translation id="3177673846235066154">Máy chủ từ chối thông tin đăng nhập của bạn.</translation>
+<translation id="3183006304368105350">Nhân bản tab</translation>
+<translation id="3271422135763022755">Bắt đầu ghi chú...</translation>
+<translation id="3335772982573114336">Ghi chú mới</translation>
+<translation id="33451081266695216">Kết nối điều chỉnh bởi máy chủ.</translation>
+<translation id="3377025655491224618">Tab Riêng tư</translation>
+<translation id="3513566764071045027">Đăng Xuất</translation>
+<translation id="3723593528923555236">Tiến hành Không có Mật khẩu Riêng</translation>
+<translation id="3838463869765243557">Tên thiết bị (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">Mô tả</translation>
+<translation id="3897711243931585177">CHUNG CHUNG</translation>
+<translation id="4014682279600355881">Chúng tôi khuyên bạn nên tạo một mật khẩu mã hóa riêng biệt mạnh mẽ. Tuy nhiên, bạn có thể để trống - trong trường hợp đó chúng tôi sẽ sử dụng lại mật khẩu tài khoản đã lưu của bạn.</translation>
+<translation id="4073968054795398875">Máy chủ đồng bộ hoá đang gặp sự cố. Đang thử lại khởi tạo đồng bộ hóa...</translation>
+<translation id="4082980568238151037">Thiết lập mật khẩu mã hoá.</translation>
+<translation id="4145489350420416595">Lỗi không mong đợi.</translation>
+<translation id="4268574628540273656">URL:</translation>
+<translation id="4304224509867189079">Đăng nhập</translation>
+<translation id="4435780204941264251">Xoá Dữ liệu Sync</translation>
+<translation id="4532845899244822526">Chọn thư mục</translation>
+<translation id="4579489600439872414">Sync bị tắt trong thiết lập Android.</translation>
+<translation id="4589558845651536280">Đang trong quá trình...</translation>
+<translation id="4752136117982598343">Ghi chú đã được lưu vào <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">Tải về</translation>
+<translation id="4833044618885331665">Bạn cần phải nâng cấp Vivaldi để có thể sử dụng chức năng đồng bộ hoá.</translation>
+<translation id="4847896847259487518">Đánh dấu trang</translation>
+<translation id="4890701585167892790">Không có ghi chú nào</translation>
+<translation id="4936710149174207991">Không được Đồng bộ hóa</translation>
+<translation id="4954427294703861104">Bạn mới biết đến Vivaldi? Tạo một tài khoản.</translation>
+<translation id="504986598654589766">Khi duyệt trong Tab Riêng tư, Vivaldi sẽ không lưu trữ lại những mục tìm kiếm, cookie và những tập tin tạm. Nó cũng không mã hoá hoặc điều chỉnh kết nối của bạn.</translation>
+<translation id="5161254044473106830">Yêu cầu tiêu đề</translation>
+<translation id="5186185447130319458">Riêng tư</translation>
+<translation id="5271549068863921519">Lưu mật khẩu</translation>
+<translation id="5286002386457946212">Lỗi máy khách.</translation>
+<translation id="5290452628447338707">Không có ghi chú</translation>
+<translation id="5351912500249789547">Vivaldi.net từ chối thông tin đăng nhập của bạn: Mã lỗi <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">Mở Hình ảnh</translation>
+<translation id="5421638721143596928">Không thể giải mã thông tin đăng nhập của bạn. Vui lòng đăng nhập lại.</translation>
+<translation id="5443210757369395869">Chụp ảnh Vùng Nhìn thấy</translation>
+<translation id="5448025735280530073">Vivaldi cần được cho phép truy cập vị trí cho trang này.</translation>
+<translation id="5510723066938954312">Dấu trang và Speed Dial</translation>
+<translation id="5525981542754785361">Ghi chú đã lưu trong <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">Sao chép vào ghi chú</translation>
+<translation id="5765833063161370062">Di chuyển ghi chú</translation>
+<translation id="5790085346892983794">Thành công</translation>
+<translation id="5803562371819294631">Thao tác này sẽ xóa tất cả dữ liệu đồng bộ hóa được lưu trữ trên máy chủ Sync, đặt lại mật khẩu mã hóa của bạn và đăng xuất. Bạn có chắc không?</translation>
+<translation id="5823830882692559950">Vivaldi.net từ chối thông tin đăng nhập của bạn: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5841317974325635710">Ghi chú Mới Đã được tạo</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> ghi chú}
+          other {<ph name="NOTES_COUNT_MANY" /> ghi chú khác}}</translation>
+<translation id="6012194412768958291">Không thể kết nối vào vivaldi.net.</translation>
+<translation id="6027204815015935175">Mật khẩu giải mã.</translation>
+<translation id="6059232451013891645">Thư mục:</translation>
+<translation id="6077943432358741146">Speed Dial</translation>
+<translation id="6091125352818749975">Đang xoá Dữ liệu Đồng bộ hoá Từ xa.</translation>
+<translation id="6179463181009746489">Xoá ghi chú</translation>
+<translation id="6231148928368101651">Bảng điều khiển</translation>
+<translation id="6406506848690869874">Đồng bộ</translation>
+<translation id="6657585470893396449">Mật khẩu</translation>
+<translation id="6682232524697939870">Vivaldi cần được cho phép truy cập máy ảnh và mi-cờ-rô cho trang này.</translation>
+<translation id="6698381487523150993">Ngày tạo:</translation>
+<translation id="6786747875388722282">Phần mở rộng</translation>
+<translation id="6887143077297974801">Sync Không thể Khởi động.</translation>
+<translation id="6945221475159498467">Chọn</translation>
+<translation id="6960734555676205519">Đồng bộ hóa Lần cuối</translation>
+<translation id="7029809446516969842">Mật khẩu</translation>
+<translation id="7075547914712055886">Khởi động lại Sync</translation>
+<translation id="7222342267839079597">Vui lòng chọn mật khẩu mã hóa mạnh để bảo vệ dữ liệu của bạn.</translation>
+<translation id="7492794630657957996">Xác nhận Đồng bộ hóa Dữ liệu để hoàn tất việc thiết lập</translation>
+<translation id="7514365320538308">Tải xuống</translation>
+<translation id="7547490097772831952">Chụp ảnh Toàn Trang</translation>
+<translation id="7725641807765767506">Không tìm thấy speed dial</translation>
+<translation id="7765158879357617694">Di chuyển</translation>
+<translation id="7822864833609233785">NÂNG CAO</translation>
+<translation id="798930073512159071">
+
+Tạo Ghi chú Đầu tiên của bạn
+
+Để bắt đầu, chạm vào biểu tượng Ghi chú Mới hoặc chọn văn bản trong trang web bất kỳ và tạo ghi chú từ trình đơn cảm ngữ cảnh.</translation>
+<translation id="8028021641083150097">Để lấy lại quyền truy cập vào tài khoản của bạn, tất cả dữ liệu Sync từ xa phải được đặt lại. Sau đó, bạn có thể bắt đầu quá trình đồng bộ hóa mới bằng dữ liệu trình duyệt hiện tại của mình.</translation>
+<translation id="8035133914807600019">Thư mục mới…</translation>
+<translation id="8066170816074394954">Lỗi máy chủ.</translation>
+<translation id="8123787473700925741">Vivaldi.net gặp sự cố: Mã lỗi <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">Bắt đầu Đồng bộ</translation>
+<translation id="8206267832882844324">Hiệu chỉnh ghi chú</translation>
+<translation id="8225478925744929238">Xoá dấu trang</translation>
+<translation id="8233521945095997439">Không có speed dial</translation>
+<translation id="8257908958623224237">Xung đột với một bộ dữ liệu khách khác.</translation>
+<translation id="8261506727792406068">Xoá</translation>
+<translation id="8305137170060620165">Lịch sử Gõ và Phiên Từ xa</translation>
+<translation id="8414685983518053656">Ghi chú</translation>
+<translation id="8422778094137438683">Bạn cần phải sử dụng một tài khoản người dùng vivaldi.net để đăng nhập.</translation>
+<translation id="8428213095426709021">Thiết lập</translation>
+<translation id="8462396943848220200">Đang thử lại lần <ph name="TIME" /></translation>
+<translation id="8480556999740355963">Đã đăng nhập như <ph name="USERNAME" /> trên <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">Đang đăng nhập vào Vivaldi.net như <ph name="USERNAME" />. Vui lòng đợi.</translation>
+<translation id="8503813439785031346">Tên đăng nhập</translation>
+<translation id="8661216209723599816">Thiết lập lại Dữ liệu Từ xa</translation>
+<translation id="8721244337025311110">Dấu trang mới</translation>
+<translation id="8724114686743788114">Không thể Hiển thị Hình ảnh</translation>
+<translation id="8730621377337864115">Hoàn thành</translation>
+<translation id="8738958257180686306">Ngày tạo: <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Vivaldi cần được cho phép truy cập không gian lưu trữ để tải tập tin.</translation>
+<translation id="8808060551076378370">Tạo ghi chú không thành công.</translation>
+<translation id="8817201557520703060">Đã chụp ảnh Trang</translation>
+<translation id="8820817407110198400">Dấu trang</translation>
+<translation id="895749247724466293">Tìm kiếm speed dial của bạn</translation>
+<translation id="8959245489304000426">Tôi Quên Mật khẩu</translation>
+<translation id="8979401359137062629">Ghi chú:</translation>
+<translation id="9028089729841356743">Lỗi kết nối mạng.</translation>
+<translation id="9065203028668620118">Hiệu chỉnh</translation>
+<translation id="9148058034647219655">Thoát</translation>
+<translation id="9173575361559252669">Chụp ảnh Trang Thất bại</translation>
+</translationbundle>

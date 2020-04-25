@@ -57,7 +57,13 @@ XML below will generate the following five histograms:
 
 import copy
 import datetime
-import HTMLParser
+
+try:
+  import HTMLParser
+  html = HTMLParser.HTMLParser()
+except ImportError:  # For Py3 compatibility
+  import html
+
 import logging
 import re
 import xml.dom.minidom
@@ -142,7 +148,7 @@ def NormalizeString(text):
 
   # Unescape using default ASCII encoding. Unescapes any HTML escaped character
   # like &quot; etc.
-  return HTMLParser.HTMLParser().unescape(line)
+  return html.unescape(line)
 
 
 def _NormalizeAllAttributeValues(node):
@@ -404,6 +410,12 @@ def _ExtractHistogramsFromXmlTree(tree, enums):
       logging.error('histogram %s should specify <owner>s', name)
       have_errors = True
 
+    # Histograms should have either units or enum.
+    if (not histogram.hasAttribute('units') and
+        not histogram.hasAttribute('enum')):
+      logging.error('histogram %s should have either units or enum', name)
+      have_errors = True
+
     # Handle units.
     if histogram.hasAttribute('units'):
       histogram_entry['units'] = histogram.getAttribute('units')
@@ -515,7 +527,12 @@ def _UpdateHistogramsWithSuffixes(tree, histograms):
     suffix_nodes = histogram_suffixes.getElementsByTagName(suffix_tag)
     suffix_labels = {}
     for suffix in suffix_nodes:
-      suffix_labels[suffix.getAttribute('name')] = suffix.getAttribute('label')
+      suffix_name = suffix.getAttribute('name')
+      if not suffix.hasAttribute('label'):
+        logging.error('suffix %s in histogram_suffixes %s should have a label',
+                      suffix_name, name)
+        have_errors = True
+      suffix_labels[suffix_name] = suffix.getAttribute('label')
     # Find owners list under current histogram_suffixes tag.
     owners, _ = _ExtractOwners(histogram_suffixes)
 

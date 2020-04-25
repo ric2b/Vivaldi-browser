@@ -468,6 +468,21 @@ void NightLightControllerImpl::OnHostInitialized(aura::WindowTreeHost* host) {
 
 void NightLightControllerImpl::OnActiveUserPrefServiceChanged(
     PrefService* pref_service) {
+  // TODO(afakhry|yjliu): Remove this VLOG when https://crbug.com/1015474 is
+  // fixed.
+  auto vlog_helper = [](const PrefService* pref_service) -> std::string {
+    if (!pref_service)
+      return "None";
+    return base::StringPrintf(
+        "{State %s, Schedule Type: %d}",
+        pref_service->GetBoolean(prefs::kNightLightEnabled) ? "enabled"
+                                                            : "disabled",
+        pref_service->GetInteger(prefs::kNightLightScheduleType));
+  };
+  VLOG(1) << "Switching user pref service from "
+          << vlog_helper(active_user_pref_service_) << " to "
+          << vlog_helper(pref_service) << ".";
+
   // Initial login and user switching in multi profiles.
   active_user_pref_service_ = pref_service;
   InitFromUserPrefs();
@@ -481,10 +496,10 @@ void NightLightControllerImpl::SetCurrentGeoposition(
   StoreCachedGeoposition(position);
   delegate_->SetGeoposition(position);
 
-  // If the schedule type is sunset to sunrise, then a potential change in the
-  // geoposition might mean a change in the start and end times. In this case,
-  // we must trigger a refresh.
-  if (GetScheduleType() == ScheduleType::kSunsetToSunrise)
+  // If the schedule type is sunset to sunrise or custom, a potential change in
+  // the geoposition might mean timezone change as well as a change in the start
+  // and end times. In these cases, we must trigger a refresh.
+  if (GetScheduleType() != ScheduleType::kNone)
     Refresh(true /* did_schedule_change */);
 }
 
@@ -612,6 +627,7 @@ void NightLightControllerImpl::NotifyClientWithScheduleChange() {
 }
 
 void NightLightControllerImpl::OnEnabledPrefChanged() {
+  VLOG(1) << "Enable state changed. New state: " << GetEnabled() << ".";
   DCHECK(active_user_pref_service_);
   Refresh(false /* did_schedule_change */);
   NotifyStatusChanged();
@@ -627,6 +643,7 @@ void NightLightControllerImpl::OnColorTemperaturePrefChanged() {
 }
 
 void NightLightControllerImpl::OnScheduleTypePrefChanged() {
+  VLOG(1) << "Schedule type changed. New type: " << GetScheduleType() << ".";
   DCHECK(active_user_pref_service_);
   NotifyClientWithScheduleChange();
   Refresh(true /* did_schedule_change */);

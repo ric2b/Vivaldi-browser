@@ -41,16 +41,27 @@ extern const base::Feature kCaptureSafetyNetId;
 // navigations instead of overlays.
 extern const base::Feature kCommittedSBInterstitials;
 
+// Controls whether to do deep scanning of downloads. If both this feature and
+// the enterprise policies are enabled, the downloaded file is sent for
+// scanning.
+extern const base::Feature kDeepScanningOfDownloads;
+
 // Controls whether the user has forcibly enabled AP download protection. This
 // flag will enable AP downloads protections even for users not enrolled in
-// APP. See also |kUseAPDownloadProtection|.
+// APP.
 extern const base::Feature kForceUseAPDownloadProtection;
+
+// Enable password protection for non-Google accounts.
+extern const base::Feature kPasswordProtectionForSavedPasswords;
 
 // Enable GAIA password protection for signed-in users.
 extern const base::Feature kPasswordProtectionForSignedInUsers;
 
 // Controls whether Chrome sends on focus ping.
 extern const base::Feature kSendOnFocusPing;
+
+// Controls whether Chrome sends password reuse ping.
+extern const base::Feature kSendPasswordReusePing;
 
 // Controls the daily quota for the suspicious site trigger.
 extern const base::Feature kSuspiciousSiteTriggerQuotaFeature;
@@ -62,6 +73,10 @@ extern const base::Feature kRealTimeUrlLookupEnabled;
 // Controls whether the high confidence allowlist for real time URL lookup be
 // fetched.
 extern const base::Feature kRealTimeUrlLookupFetchAllowlist;
+
+// Controls whether to send sample pings of allowlist domains on
+// the allowlist to Safe Browsing.
+extern const base::Feature kSendSampledPingsForAllowlistDomains;
 
 // Specifies which non-resource HTML Elements to collect based on their tag and
 // attributes. It's a single param containing a comma-separated list of pairs.
@@ -81,21 +96,12 @@ extern const base::Feature kThreatDomDetailsTagAndAttributeFeature;
 // trials simultaneously.
 extern const base::Feature kTriggerThrottlerDailyQuotaFeature;
 
-// Controls whether we use AP download protection. This flag only has any effect
-// for users enrolled in APP. See also |kForceUseAPDownloadProtection|.
-extern const base::Feature kUseAPDownloadProtection;
-
 // Controls whether Chrome on Android uses locally cached blacklists.
 extern const base::Feature kUseLocalBlacklistsV2;
 
 // Controls whether we are uploading files to Safe Browsing for malware
 // scanning.
 extern const base::Feature kUploadForMalwareCheck;
-
-// Controls whether to do deep scanning of downloads. If both this feature and
-// the enterprise policies are enabled, the downloaded file is sent for
-// scanning.
-extern const base::Feature kDeepScanningOfDownloads;
 
 base::ListValue GetFeatureStatusList();
 

@@ -26,7 +26,6 @@
 #include "cc/trees/clip_node.h"
 #include "cc/trees/draw_property_utils.h"
 #include "cc/trees/effect_node.h"
-#include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "cc/trees/mutator_host.h"
@@ -51,9 +50,7 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl,
     : layer_id_(id),
       layer_tree_impl_(tree_impl),
       will_always_push_properties_(will_always_push_properties),
-      test_properties_(nullptr),
       scrollable_(false),
-      should_flatten_screen_space_transform_from_property_tree_(false),
       layer_property_changed_not_from_property_trees_(false),
       layer_property_changed_from_property_trees_(false),
       may_contain_video_(false),
@@ -64,8 +61,7 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl,
       draws_content_(false),
       contributes_to_drawn_render_surface_(false),
       hit_testable_(false),
-      is_resized_by_browser_controls_(false),
-      viewport_layer_type_(NOT_VIEWPORT_LAYER),
+      is_inner_viewport_scroll_layer_(false),
       background_color_(0),
       safe_opaque_background_color_(0),
       transform_tree_index_(TransformTree::kInvalidNodeId),
@@ -356,8 +352,6 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
 
   layer->has_transform_node_ = has_transform_node_;
   layer->offset_to_transform_parent_ = offset_to_transform_parent_;
-  layer->should_flatten_screen_space_transform_from_property_tree_ =
-      should_flatten_screen_space_transform_from_property_tree_;
   layer->masks_to_bounds_ = masks_to_bounds_;
   layer->contents_opaque_ = contents_opaque_;
   layer->may_contain_video_ = may_contain_video_;
@@ -422,14 +416,6 @@ bool LayerImpl::IsAffectedByPageScale() const {
       ->in_subtree_of_page_scale_layer;
 }
 
-bool LayerImpl::IsResizedByBrowserControls() const {
-  return is_resized_by_browser_controls_;
-}
-
-void LayerImpl::SetIsResizedByBrowserControls(bool resized) {
-  is_resized_by_browser_controls_ = resized;
-}
-
 std::unique_ptr<base::DictionaryValue> LayerImpl::LayerAsJson() const {
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue);
   result->SetInteger("LayerId", id());
@@ -446,15 +432,6 @@ std::unique_ptr<base::DictionaryValue> LayerImpl::LayerAsJson() const {
   list->AppendInteger(offset_to_transform_parent().x());
   list->AppendInteger(offset_to_transform_parent().y());
   result->Set("OffsetToTransformParent", std::move(list));
-
-  const gfx::Transform& gfx_transform =
-      const_cast<LayerImpl*>(this)->test_properties()->transform;
-  double transform[16];
-  gfx_transform.matrix().asColMajord(transform);
-  list = std::make_unique<base::ListValue>();
-  for (int i = 0; i < 16; ++i)
-    list->AppendDouble(transform[i]);
-  result->Set("Transform", std::move(list));
 
   result->SetBoolean("DrawsContent", draws_content_);
   result->SetBoolean("HitTestable", hit_testable_);
@@ -484,17 +461,6 @@ std::unique_ptr<base::DictionaryValue> LayerImpl::LayerAsJson() const {
     std::unique_ptr<base::Value> region = non_fast_scrollable_region_.AsValue();
     result->Set("NonFastScrollableRegion", std::move(region));
   }
-
-  return result;
-}
-
-std::unique_ptr<base::DictionaryValue> LayerImpl::LayerTreeAsJson() {
-  std::unique_ptr<base::DictionaryValue> result = LayerAsJson();
-
-  auto list = std::make_unique<base::ListValue>();
-  for (size_t i = 0; i < test_properties()->children.size(); ++i)
-    list->Append(test_properties()->children[i]->LayerTreeAsJson());
-  result->Set("Children", std::move(list));
 
   return result;
 }
@@ -562,21 +528,13 @@ bool LayerImpl::IsActive() const {
 }
 
 gfx::Size LayerImpl::bounds() const {
-  // As an optimization, we do not need to include the viewport bounds delta if
-  // the layer is not a viewport layer.
-  if (viewport_layer_type_ == NOT_VIEWPORT_LAYER) {
-    DCHECK(ViewportBoundsDelta().IsZero());
+  if (!is_inner_viewport_scroll_layer_)
     return bounds_;
-  }
-  auto viewport_bounds_delta = gfx::ToCeiledVector2d(ViewportBoundsDelta());
+
+  auto viewport_bounds_delta = gfx::ToCeiledVector2d(
+      GetPropertyTrees()->inner_viewport_scroll_bounds_delta());
   return gfx::Size(bounds_.width() + viewport_bounds_delta.x(),
                    bounds_.height() + viewport_bounds_delta.y());
-}
-
-gfx::SizeF LayerImpl::BoundsForScrolling() const {
-  auto viewport_bounds_delta = ViewportBoundsDelta();
-  return gfx::SizeF(bounds_.width() + viewport_bounds_delta.x(),
-                    bounds_.height() + viewport_bounds_delta.y());
 }
 
 void LayerImpl::SetBounds(const gfx::Size& bounds) {
@@ -590,61 +548,6 @@ void LayerImpl::SetBounds(const gfx::Size& bounds) {
     layer_tree_impl()->SetScrollbarGeometriesNeedUpdate();
 
   NoteLayerPropertyChanged();
-}
-
-void LayerImpl::SetViewportBoundsDelta(const gfx::Vector2dF& bounds_delta) {
-  DCHECK(IsActive());
-
-  if (bounds_delta == ViewportBoundsDelta())
-    return;
-
-  PropertyTrees* property_trees = GetPropertyTrees();
-  switch (viewport_layer_type_) {
-    case (INNER_VIEWPORT_CONTAINER):
-      property_trees->SetInnerViewportContainerBoundsDelta(bounds_delta);
-      break;
-    case (OUTER_VIEWPORT_CONTAINER):
-      property_trees->SetOuterViewportContainerBoundsDelta(bounds_delta);
-      break;
-    case (INNER_VIEWPORT_SCROLL):
-      property_trees->SetInnerViewportScrollBoundsDelta(bounds_delta);
-      break;
-    case (OUTER_VIEWPORT_SCROLL):
-      // OUTER_VIEWPORT_SCROLL should not have viewport bounds deltas.
-      NOTREACHED();
-  }
-
-  // Viewport scrollbar positions are determined using the viewport bounds
-  // delta.
-  layer_tree_impl()->SetScrollbarGeometriesNeedUpdate();
-
-  if (masks_to_bounds()) {
-    // If layer is clipping, then update the clip node using the new bounds.
-    ClipNode* clip_node = property_trees->clip_tree.Node(clip_tree_index());
-    CHECK(clip_node);
-    DCHECK_EQ(clip_node->id, clip_tree_index());
-    clip_node->clip = gfx::RectF(gfx::PointF() + offset_to_transform_parent(),
-                                 gfx::SizeF(bounds()));
-    property_trees->clip_tree.set_needs_update(true);
-
-    property_trees->full_tree_damaged = true;
-    layer_tree_impl()->set_needs_update_draw_properties();
-  } else {
-    NoteLayerPropertyChanged();
-  }
-}
-
-gfx::Vector2dF LayerImpl::ViewportBoundsDelta() const {
-  switch (viewport_layer_type_) {
-    case (INNER_VIEWPORT_CONTAINER):
-      return GetPropertyTrees()->inner_viewport_container_bounds_delta();
-    case (OUTER_VIEWPORT_CONTAINER):
-      return GetPropertyTrees()->outer_viewport_container_bounds_delta();
-    case (INNER_VIEWPORT_SCROLL):
-      return GetPropertyTrees()->inner_viewport_scroll_bounds_delta();
-    default:
-      return gfx::Vector2dF();
-  }
 }
 
 ScrollbarLayerImplBase* LayerImpl::ToScrollbarLayer() {
@@ -1001,7 +904,11 @@ float LayerImpl::GetIdealContentsScale() const {
 
   gfx::Vector2dF transform_scales =
       MathUtil::ComputeTransform2dScaleComponents(transform, default_scale);
-  return std::max(transform_scales.x(), transform_scales.y());
+
+  constexpr float kMaxScaleRatio = 5.f;
+  float lower_scale = std::min(transform_scales.x(), transform_scales.y());
+  float higher_scale = std::max(transform_scales.x(), transform_scales.y());
+  return std::min(kMaxScaleRatio * lower_scale, higher_scale);
 }
 
 PropertyTrees* LayerImpl::GetPropertyTrees() const {
@@ -1033,6 +940,64 @@ void LayerImpl::EnsureValidPropertyTreeIndices() const {
 
 bool LayerImpl::is_surface_layer() const {
   return false;
+}
+
+static float TranslationFromActiveTreeLayerScreenSpaceTransform(
+    LayerImpl* pending_tree_layer) {
+  LayerTreeImpl* layer_tree_impl = pending_tree_layer->layer_tree_impl();
+  if (layer_tree_impl) {
+    LayerImpl* active_tree_layer =
+        layer_tree_impl->FindActiveTreeLayerById(pending_tree_layer->id());
+    if (active_tree_layer) {
+      gfx::Transform active_tree_screen_space_transform =
+          active_tree_layer->draw_properties().screen_space_transform;
+      if (active_tree_screen_space_transform.IsIdentity())
+        return 0.f;
+      if (active_tree_screen_space_transform.ApproximatelyEqual(
+              pending_tree_layer->draw_properties().screen_space_transform))
+        return 0.f;
+      return (active_tree_layer->draw_properties()
+                  .screen_space_transform.To2dTranslation() -
+              pending_tree_layer->draw_properties()
+                  .screen_space_transform.To2dTranslation())
+          .Length();
+    }
+  }
+  return 0.f;
+}
+
+// A layer jitters if its screen space transform is same on two successive
+// commits, but has changed in between the commits. CalculateLayerJitter
+// computes the jitter for the layer.
+int LayerImpl::CalculateJitter() {
+  float jitter = 0.f;
+  performance_properties().translation_from_last_frame = 0.f;
+  performance_properties().last_commit_screen_space_transform =
+      draw_properties().screen_space_transform;
+
+  if (!visible_layer_rect().IsEmpty()) {
+    if (draw_properties().screen_space_transform.ApproximatelyEqual(
+            performance_properties().last_commit_screen_space_transform)) {
+      float translation_from_last_commit =
+          TranslationFromActiveTreeLayerScreenSpaceTransform(this);
+      if (translation_from_last_commit > 0.f) {
+        performance_properties().num_fixed_point_hits++;
+        performance_properties().translation_from_last_frame =
+            translation_from_last_commit;
+        if (performance_properties().num_fixed_point_hits >
+            LayerTreeImpl::kFixedPointHitsThreshold) {
+          // Jitter = Translation from fixed point * sqrt(Area of the layer).
+          // The square root of the area is used instead of the area to match
+          // the dimensions of both terms on the rhs.
+          jitter += translation_from_last_commit *
+                    sqrt(visible_layer_rect().size().GetArea());
+        }
+      } else {
+        performance_properties().num_fixed_point_hits = 0;
+      }
+    }
+  }
+  return jitter;
 }
 
 }  // namespace cc

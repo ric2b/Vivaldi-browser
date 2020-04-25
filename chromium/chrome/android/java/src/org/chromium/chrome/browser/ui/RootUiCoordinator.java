@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.ui;
 
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.VisibleForTesting;
@@ -20,12 +20,12 @@ import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
+import org.chromium.chrome.browser.findinpage.FindToolbarManager;
+import org.chromium.chrome.browser.findinpage.FindToolbarObserver;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.lifecycle.InflationObserver;
 import org.chromium.chrome.browser.vr.VrModeObserver;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
-import org.chromium.chrome.browser.widget.findinpage.FindToolbarManager;
-import org.chromium.chrome.browser.widget.findinpage.FindToolbarObserver;
 import org.chromium.ui.base.DeviceFormFactor;
 
 /**
@@ -67,7 +67,9 @@ public class RootUiCoordinator
         mMenuOrKeyboardActionController = mActivity.getMenuOrKeyboardActionController();
         mMenuOrKeyboardActionController.registerMenuOrKeyboardActionHandler(this);
 
-        initLayoutManagerSupplierObserver();
+        mLayoutManagerSupplierCallback = this::onLayoutManagerAvailable;
+        mActivity.getLayoutManagerSupplier().addObserver(mLayoutManagerSupplierCallback);
+
         initOverviewModeSupplierObserver();
     }
 
@@ -76,6 +78,7 @@ public class RootUiCoordinator
         mMenuOrKeyboardActionController.unregisterMenuOrKeyboardActionHandler(this);
 
         mActivity.getLayoutManagerSupplier().removeObserver(mLayoutManagerSupplierCallback);
+
         if (mOverlayPanelManager != null) {
             mOverlayPanelManager.removeObserver(mOverlayPanelManagerObserver);
         }
@@ -171,34 +174,32 @@ public class RootUiCoordinator
         return true;
     }
 
-    // Private class methods
+    // Protected class methods
 
-    private void initLayoutManagerSupplierObserver() {
-        mLayoutManagerSupplierCallback = layoutManager -> {
-            if (mOverlayPanelManager != null) {
-                mOverlayPanelManager.removeObserver(mOverlayPanelManagerObserver);
-            }
-            mOverlayPanelManager = layoutManager.getOverlayPanelManager();
+    protected void onLayoutManagerAvailable(LayoutManager layoutManager) {
+        if (mOverlayPanelManager != null) {
+            mOverlayPanelManager.removeObserver(mOverlayPanelManagerObserver);
+        }
+        mOverlayPanelManager = layoutManager.getOverlayPanelManager();
 
-            if (mOverlayPanelManagerObserver == null) {
-                mOverlayPanelManagerObserver =
-                        new OverlayPanelManager.OverlayPanelManagerObserver() {
-                            @Override
-                            public void onOverlayPanelShown() {
-                                if (mFindToolbarManager != null) {
-                                    mFindToolbarManager.hideToolbar(false);
-                                }
-                            }
+        if (mOverlayPanelManagerObserver == null) {
+            mOverlayPanelManagerObserver = new OverlayPanelManager.OverlayPanelManagerObserver() {
+                @Override
+                public void onOverlayPanelShown() {
+                    if (mFindToolbarManager != null) {
+                        mFindToolbarManager.hideToolbar(false);
+                    }
+                }
 
-                            @Override
-                            public void onOverlayPanelHidden() {}
-                        };
-            }
+                @Override
+                public void onOverlayPanelHidden() {}
+            };
+        }
 
-            mOverlayPanelManager.addObserver(mOverlayPanelManagerObserver);
-        };
-        mActivity.getLayoutManagerSupplier().addObserver(mLayoutManagerSupplierCallback);
+        mOverlayPanelManager.addObserver(mOverlayPanelManagerObserver);
     }
+
+    // Private class methods
 
     private void initOverviewModeSupplierObserver() {
         if (mActivity.getOverviewModeBehaviorSupplier() != null) {
@@ -214,6 +215,30 @@ public class RootUiCoordinator
                         @Override
                         public void onOverviewModeStartedShowing(boolean showToolbar) {
                             if (mFindToolbarManager != null) mFindToolbarManager.hideToolbar();
+                            hideAppMenu();
+                        }
+
+                        @Override
+                        public void onOverviewModeFinishedShowing() {
+                            // Ideally we wouldn't allow the app menu to show while animating the
+                            // overview mode. This is hard to track, however, because in some
+                            // instances #onOverviewModeStartedShowing is called after
+                            // #onOverviewModeFinishedShowing (see https://crbug.com/969047).
+                            // Once that bug is fixed, we can remove this call to hide in favor of
+                            // disallowing app menu shows during animation. Alternatively, we
+                            // could expose a way to query whether an animation is in progress.
+                            hideAppMenu();
+                        }
+
+                        @Override
+                        public void onOverviewModeStartedHiding(
+                                boolean showToolbar, boolean delayAnimation) {
+                            hideAppMenu();
+                        }
+
+                        @Override
+                        public void onOverviewModeFinishedHiding() {
+                            hideAppMenu();
                         }
                     };
                 }
@@ -230,8 +255,7 @@ public class RootUiCoordinator
         if (mActivity.supportsAppMenu()) {
             mAppMenuCoordinator = AppMenuCoordinatorFactory.createAppMenuCoordinator(mActivity,
                     mActivity.getLifecycleDispatcher(), mActivity.getToolbarManager(), mActivity,
-                    mActivity.getWindow().getDecorView(),
-                    mActivity.getOverviewModeBehaviorSupplier());
+                    mActivity.getWindow().getDecorView());
             mActivity.getToolbarManager().onAppMenuInitialized(
                     mAppMenuCoordinator.getAppMenuHandler(),
                     mAppMenuCoordinator.getAppMenuPropertiesDelegate());
@@ -240,6 +264,10 @@ public class RootUiCoordinator
         } else if (mActivity.getToolbarManager() != null) {
             mActivity.getToolbarManager().getToolbar().disableMenuButton();
         }
+    }
+
+    private void hideAppMenu() {
+        if (mAppMenuCoordinator != null) mAppMenuCoordinator.getAppMenuHandler().hideAppMenu();
     }
 
     private void initFindToolbarManager() {

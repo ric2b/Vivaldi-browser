@@ -20,7 +20,6 @@
 #include "chrome/browser/image_fetcher/image_decoder_impl.h"
 #include "chrome/browser/ntp_tiles/chrome_most_visited_sites_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search/background/ntp_background_service.h"
 #include "chrome/browser/search/background/ntp_background_service_factory.h"
 #include "chrome/browser/search/chrome_colors/chrome_colors_service.h"
 #include "chrome/browser/search/instant_io_context.h"
@@ -55,7 +54,9 @@
 #include "content/public/browser/url_data_source.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "ui/gfx/color_analysis.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
 
 namespace {
@@ -178,8 +179,6 @@ InstantService::InstantService(Profile* profile)
     : profile_(profile),
       most_visited_info_(std::make_unique<InstantMostVisitedInfo>()),
       pref_service_(profile_->GetPrefs()),
-      theme_observer_(this),
-      background_service_observer_(this),
       native_theme_(ui::NativeTheme::GetInstanceForNativeUi()),
       background_updated_timestamp_(base::TimeTicks::Now()),
       clock_(base::DefaultClock::GetInstance()) {
@@ -411,6 +410,7 @@ bool InstantService::ToggleShortcutsVisibility(bool do_notify) {
 
 void InstantService::UpdateThemeInfo() {
   ApplyOrResetCustomBackgroundThemeInfo();
+  SetNtpElementsThemeInfo();
 
   NotifyAboutThemeInfo();
 }
@@ -429,7 +429,7 @@ void InstantService::UpdateMostVisitedInfo() {
 void InstantService::SendNewTabPageURLToRenderer(
     content::RenderProcessHost* rph) {
   if (auto* channel = rph->GetChannel()) {
-    chrome::mojom::SearchBouncerAssociatedPtr client;
+    mojo::AssociatedRemote<chrome::mojom::SearchBouncer> client;
     channel->GetRemoteAssociatedInterface(&client);
     client->SetNewTabPageURL(search::GetNewTabPageURL(profile_));
   }
@@ -665,20 +665,13 @@ void InstantService::BuildThemeInfo() {
   // Get theme colors.
   const ui::ThemeProvider& theme_provider =
       ThemeService::GetThemeProviderForProfile(profile_);
-  SkColor background_color =
-      theme_provider.GetColor(ThemeProperties::COLOR_NTP_BACKGROUND);
-  SkColor text_color = theme_provider.GetColor(ThemeProperties::COLOR_NTP_TEXT);
-  SkColor text_color_light =
-      theme_provider.GetColor(ThemeProperties::COLOR_NTP_TEXT_LIGHT);
 
   // Set colors.
-  theme_info_->background_color = background_color;
-  theme_info_->text_color = text_color;
-  theme_info_->text_color_light = text_color_light;
-
-  int logo_alternate =
-      theme_provider.GetDisplayProperty(ThemeProperties::NTP_LOGO_ALTERNATE);
-  theme_info_->logo_alternate = logo_alternate == 1;
+  theme_info_->background_color =
+      theme_provider.GetColor(ThemeProperties::COLOR_NTP_BACKGROUND);
+  theme_info_->text_color_light =
+      theme_provider.GetColor(ThemeProperties::COLOR_NTP_TEXT_LIGHT);
+  SetNtpElementsThemeInfo();
 
   if (theme_service->UsingExtensionTheme()) {
     const extensions::Extension* extension =
@@ -1014,4 +1007,34 @@ void InstantService::SetImageFetcherForTesting(
 
 void InstantService::SetClockForTesting(base::Clock* clock) {
   clock_ = clock;
+}
+
+void InstantService::SetNtpElementsThemeInfo() {
+  ThemeBackgroundInfo* theme_info = GetInitializedThemeInfo();
+  if (IsCustomBackgroundSet()) {
+    theme_info->text_color = gfx::kGoogleGrey050;
+    theme_info->logo_alternate = true;
+    theme_info->logo_color = ThemeProperties::GetDefaultColor(
+        ThemeProperties::COLOR_NTP_LOGO, false);
+    theme_info->shortcut_color = ThemeProperties::GetDefaultColor(
+        ThemeProperties::COLOR_NTP_SHORTCUT, false);
+  } else {
+    const ui::ThemeProvider& theme_provider =
+        ThemeService::GetThemeProviderForProfile(profile_);
+    theme_info->text_color =
+        theme_provider.GetColor(ThemeProperties::COLOR_NTP_TEXT);
+    theme_info->logo_alternate = theme_provider.GetDisplayProperty(
+                                     ThemeProperties::NTP_LOGO_ALTERNATE) == 1;
+    theme_info->logo_color =
+        theme_provider.GetColor(ThemeProperties::COLOR_NTP_LOGO);
+
+    // For default theme in dark mode use dark shortcuts.
+    if (native_theme_->ShouldUseDarkColors() &&
+        ThemeServiceFactory::GetForProfile(profile_)->UsingDefaultTheme()) {
+      theme_info->shortcut_color = gfx::kGoogleGrey900;
+    } else {
+      theme_info->shortcut_color =
+          theme_provider.GetColor(ThemeProperties::COLOR_NTP_SHORTCUT);
+    }
+  }
 }

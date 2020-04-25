@@ -19,6 +19,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "net/base/filename_util.h"
 #include "services/data_decoder/public/mojom/bundled_exchanges_parser.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -148,7 +149,7 @@ class MockBundledExchangesReaderFactoryImpl final
       : MockBundledExchangesReaderFactory() {}
   ~MockBundledExchangesReaderFactoryImpl() override = default;
 
-  std::unique_ptr<BundledExchangesReader> CreateReader(
+  scoped_refptr<BundledExchangesReader> CreateReader(
       const std::string& test_file_data) override {
     if (!temp_dir_.CreateUniqueTempDir() ||
         !CreateTemporaryFileInDir(temp_dir_.GetPath(), &temp_file_path_) ||
@@ -158,8 +159,9 @@ class MockBundledExchangesReaderFactoryImpl final
       return nullptr;
     }
 
-    BundledExchangesSource source(temp_file_path_);
-    auto reader = std::make_unique<BundledExchangesReader>(source);
+    auto reader = base::MakeRefCounted<BundledExchangesReader>(
+        BundledExchangesSource::MaybeCreateFromTrustedFileUrl(
+            net::FilePathToFileURL(temp_file_path_)));
 
     std::unique_ptr<MockParserFactory> factory =
         std::make_unique<MockParserFactory>();
@@ -205,8 +207,10 @@ class MockBundledExchangesReaderFactoryImpl final
         url, base::BindOnce(
                  [](base::Closure quit_closure,
                     BundledExchangesReader::ResponseCallback callback,
-                    data_decoder::mojom::BundleResponsePtr response) {
-                   std::move(callback).Run(std::move(response));
+                    data_decoder::mojom::BundleResponsePtr response,
+                    data_decoder::mojom::BundleResponseParseErrorPtr error) {
+                   std::move(callback).Run(std::move(response),
+                                           std::move(error));
                    std::move(quit_closure).Run();
                  },
                  run_loop.QuitClosure(), std::move(callback)));

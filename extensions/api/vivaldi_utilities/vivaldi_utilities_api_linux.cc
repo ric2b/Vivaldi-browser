@@ -14,27 +14,7 @@
 #include "base/nix/xdg_util.h"
 #include "base/path_service.h"
 
-namespace {
-const char vivaldi_uuid_file_name[] = ".vivaldi_user_id";
-
-base::FilePath GetUserIdFilePath() {
-  return base::nix::GetXDGDirectory(base::Environment::Create().get(),
-                                    "XDG_DATA_HOME", ".local/share")
-      .AppendASCII(vivaldi_uuid_file_name);
-}
-}  // anonymous namespace
-
 namespace extensions {
-bool UtilitiesGetUniqueUserIdFunction::ReadUserIdFromOSProfile(
-    std::string* user_id) {
-  return base::ReadFileToString(GetUserIdFilePath(), user_id);
-}
-
-void UtilitiesGetUniqueUserIdFunction::WriteUserIdToOSProfile(
-    const std::string& user_id) {
-  base::WriteFile(GetUserIdFilePath(), user_id.c_str(), user_id.length());
-}
-
 void reduce_spaces(std::string& s) {
   // strip leading spaces.
   unsigned i;
@@ -135,4 +115,10 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
 
   return true;
 }
+
+std::string UtilitiesGetSystemCountryFunction::ReadCountry() {
+  // TODO(igor@vivaldi.com): Implement this.
+  return std::string();
+}
+
 }  // namespace extensions

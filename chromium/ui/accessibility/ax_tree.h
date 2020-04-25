@@ -55,6 +55,10 @@ class AX_EXPORT AXTree : public AXNode::OwnerTree {
   const AXTreeData& data() const { return data_; }
 
   // AXNode::OwnerTree override.
+  // Returns the globally unique ID of this accessibility tree.
+  AXTreeID GetAXTreeID() const override;
+
+  // AXNode::OwnerTree override.
   // Returns the AXNode with the given |id| if it is part of this AXTree.
   AXNode* GetFromId(int32_t id) const override;
 
@@ -270,6 +274,14 @@ class AX_EXPORT AXTree : public AXNode::OwnerTree {
                             const std::vector<int32_t>& new_child_ids,
                             std::vector<AXNode*>* new_children,
                             AXTreeUpdateState* update_state);
+
+  // Internal implementation of RelativeToTreeBounds. It calls itself
+  // recursively but ensures that it can only do so exactly once!
+  gfx::RectF RelativeToTreeBoundsInternal(const AXNode* node,
+                                          gfx::RectF node_bounds,
+                                          bool* offscreen,
+                                          bool clip_bounds,
+                                          bool allow_recursion) const;
 
   base::ObserverList<AXTreeObserver> observers_;
   AXNode* root_ = nullptr;

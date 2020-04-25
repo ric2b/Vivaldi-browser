@@ -117,6 +117,9 @@ const int kTrackingIdForUnusedSlot = -1;
 
 namespace ui {
 
+const base::Feature kEnableSingleCancelTouch{"EnableSingleTouchCancel",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
 TouchEventConverterEvdev::TouchEventConverterEvdev(
     base::ScopedFD fd,
     base::FilePath path,
@@ -227,16 +230,17 @@ void TouchEventConverterEvdev::Initialize(const EventDeviceInfo& info) {
       // Optional bits.
       int touch_major =
           info.GetAbsMtSlotValueWithDefault(ABS_MT_TOUCH_MAJOR, i, 0);
+      int touch_minor =
+          info.GetAbsMtSlotValueWithDefault(ABS_MT_TOUCH_MINOR, i, 0);
       events_[i].radius_x = touch_major * touch_major_scale_ / 2.0f;
-      events_[i].radius_y =
-          info.GetAbsMtSlotValueWithDefault(ABS_MT_TOUCH_MINOR, i, 0) *
-          touch_minor_scale_ / 2.0f;
+      events_[i].radius_y = touch_minor * touch_minor_scale_ / 2.0f;
       events_[i].pressure = ScalePressure(
           info.GetAbsMtSlotValueWithDefault(ABS_MT_PRESSURE, i, 0));
       int tool_type = info.GetAbsMtSlotValueWithDefault(ABS_MT_TOOL_TYPE, i,
                                                         MT_TOOL_FINGER);
       events_[i].tool_type = tool_type;
       events_[i].major = touch_major;
+      events_[i].minor = touch_minor;
       events_[i].stylus_button = false;
       if (events_[i].cancelled)
         cancelled_state = true;
@@ -421,6 +425,7 @@ void TouchEventConverterEvdev::ProcessAbs(const input_event& input) {
       break;
     case ABS_MT_TOUCH_MINOR:
       events_[current_slot_].radius_y = input.value * touch_minor_scale_ / 2.0f;
+      events_[current_slot_].minor = input.value;
       break;
     case ABS_MT_POSITION_X:
       events_[current_slot_].x = input.value;
@@ -526,7 +531,8 @@ bool TouchEventConverterEvdev::MaybeCancelAllTouches() {
   // TODO(denniskempin): Remove once upper layers properly handle single
   // cancelled touches.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableCancelAllTouches)) {
+          switches::kDisableCancelAllTouches) ||
+      base::FeatureList::IsEnabled(kEnableSingleCancelTouch)) {
     return false;
   }
   for (size_t i = 0; i < events_.size(); i++) {
@@ -553,7 +559,10 @@ void TouchEventConverterEvdev::ReportEvents(base::TimeTicks timestamp) {
   if (false_touch_finder_)
     false_touch_finder_->HandleTouches(events_, timestamp);
   std::bitset<kNumTouchEvdevSlots> hold, suppress;
-  palm_detection_filter_->Filter(events_, timestamp, &hold, &suppress);
+  {
+    SCOPED_UMA_HISTOGRAM_TIMER(kPalmFilterTimerEventName);
+    palm_detection_filter_->Filter(events_, timestamp, &hold, &suppress);
+  }
   for (size_t i = 0; i < events_.size(); i++) {
     InProgressTouchEvdev* event = &events_[i];
     if (IsPalm(*event)) {
@@ -683,4 +692,6 @@ const char TouchEventConverterEvdev::kHoldCountAtReleaseEventName[] =
     "Ozone.TouchEventConverterEvdev.HoldCountAtRelease";
 const char TouchEventConverterEvdev::kHoldCountAtCancelEventName[] =
     "Ozone.TouchEventConverterEvdev.HoldCountAtCancel";
+const char TouchEventConverterEvdev::kPalmFilterTimerEventName[] =
+    "Ozone.TouchEventConverterEvdev.PalmDetectionFilterTime";
 }  // namespace ui

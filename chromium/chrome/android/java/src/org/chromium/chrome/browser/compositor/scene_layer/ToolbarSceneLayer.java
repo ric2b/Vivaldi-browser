@@ -21,13 +21,15 @@ import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.toolbar.ControlContainer;
+import org.chromium.chrome.browser.ui.widget.ClipDrawableProgressBar.DrawingInfo;
 import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.widget.ClipDrawableProgressBar.DrawingInfo;
-import org.chromium.chrome.browser.widget.ControlContainer;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.resources.ResourceManager;
 
 import java.util.List;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * A SceneLayer to render layers for the toolbar.
@@ -49,6 +51,9 @@ public class ToolbarSceneLayer extends SceneOverlayLayer implements SceneOverlay
     /** A LayoutRenderHost for accessing drawing information about the toolbar. */
     private LayoutRenderHost mRenderHost;
 
+    /** The static Y offset for the cases where there is a another cc layer above the toolbar. */
+    private int mStaticYOffset;
+
     /**
      * @param context An Android context to use.
      * @param provider A LayoutProvider for accessing the current layout.
@@ -59,6 +64,14 @@ public class ToolbarSceneLayer extends SceneOverlayLayer implements SceneOverlay
         mContext = context;
         mLayoutProvider = provider;
         mRenderHost = renderHost;
+    }
+
+    /**
+     * Set a static Y offset for the toolbar.
+     * @param staticYOffset The Y offset in pixels.
+     */
+    public void setStaticYOffset(int staticYOffset) {
+        mStaticYOffset = staticYOffset;
     }
 
     /**
@@ -111,10 +124,13 @@ public class ToolbarSceneLayer extends SceneOverlayLayer implements SceneOverlay
                 isLocationBarShownInNtp, browserControlsBackgroundColor, isIncognito);
         int textBoxResourceId = R.drawable.modern_location_bar;
 
+        if (ChromeApplication.isVivaldi()) textBoxResourceId = R.drawable.vivaldi_location_bar;
+
         ToolbarSceneLayerJni.get().updateToolbarLayer(mNativePtr, ToolbarSceneLayer.this,
                 resourceManager, R.id.control_container, browserControlsBackgroundColor,
                 textBoxResourceId, browserControlsUrlBarAlpha, textBoxColor,
-                fullscreenManager.getTopControlOffset(), windowHeight, useTexture, showShadow);
+                fullscreenManager.getTopControlOffset() + mStaticYOffset, windowHeight, useTexture,
+                showShadow);
 
         if (mProgressBarDrawingInfo == null) return;
         ToolbarSceneLayerJni.get().updateProgressBar(mNativePtr, ToolbarSceneLayer.this,

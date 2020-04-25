@@ -5,6 +5,7 @@
 #include "ui/accessibility/ax_table_info.h"
 
 #include "ui/accessibility/ax_constants.mojom.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/ax_tree.h"
@@ -52,7 +53,7 @@ void FindRowsAndThenCells(AXNode* node,
         child->data().role == ax::mojom::Role::kGroup) {
       FindRowsAndThenCells(child, row_nodes, cell_nodes_per_row,
                            caption_node_id);
-    } else if (child->data().role == ax::mojom::Role::kRow) {
+    } else if (IsTableRow(child->data().role)) {
       row_nodes->push_back(child);
       cell_nodes_per_row->push_back(std::vector<AXNode*>());
       FindCellsInRow(child, &cell_nodes_per_row->back());
@@ -341,11 +342,15 @@ void AXTableInfo::UpdateExtraMacNodes() {
   // The table header container is just a node with all of the headers in the
   // table as indirect children.
 
-  // Delete old extra nodes.
-  ClearExtraMacNodes();
+  if (!extra_mac_nodes.empty()) {
+    // Delete old extra nodes.
+    ClearExtraMacNodes();
+  }
 
+  // One node for each column, and one more for the table header container.
+  size_t extra_node_count = col_count + 1;
   // Resize.
-  extra_mac_nodes.resize(col_count + 1);
+  extra_mac_nodes.resize(extra_node_count);
 
   // Create column nodes.
   for (size_t i = 0; i < col_count; i++)

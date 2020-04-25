@@ -18,6 +18,8 @@ import org.chromium.chrome.browser.widget.selection.SelectableListToolbar;
 
 import java.util.List;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * The SelectionToolbar for the browsing history UI.
  */
@@ -41,7 +43,7 @@ public class HistoryManagerToolbar extends SelectableListToolbar<HistoryItem> {
     public void setManager(HistoryManager manager) {
         mManager = manager;
 
-        if (!mManager.isDisplayedInSeparateActivity()) {
+        if (!mManager.isDisplayedInSeparateActivity() && !ChromeApplication.isVivaldi()) {
             getMenu().removeItem(R.id.close_menu_id);
         }
     }
@@ -81,6 +83,7 @@ public class HistoryManagerToolbar extends SelectableListToolbar<HistoryItem> {
 
     @Override
     public void setSearchEnabled(boolean searchEnabled) {
+        if (ChromeApplication.isVivaldi()) return;
         super.setSearchEnabled(searchEnabled);
         updateInfoMenuItem(
                 mManager.shouldShowInfoButton(), mManager.shouldShowInfoHeaderIfAvailable());
@@ -106,6 +109,9 @@ public class HistoryManagerToolbar extends SelectableListToolbar<HistoryItem> {
         if (!PrefServiceBridge.getInstance().isIncognitoModeEnabled()) {
             getMenu().removeItem(R.id.selection_mode_open_in_incognito);
         }
+        if (ChromeApplication.isVivaldi()) {
+            getMenu().removeItem(R.id.close_menu_id);
+       }
     }
 
     @VisibleForTesting

@@ -5,14 +5,11 @@
 #include "chrome/browser/chromeos/arc/intent_helper/arc_external_protocol_dialog.h"
 
 #include <map>
-#include <memory>
-#include <string>
 
 #include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_functions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
-#include "chrome/browser/apps/intent_helper/apps_navigation_types.h"
 #include "chrome/browser/apps/intent_helper/page_transition_util.h"
 #include "chrome/browser/chromeos/apps/intent_helper/chromeos_apps_navigation_throttle.h"
 #include "chrome/browser/chromeos/arc/arc_web_contents_data.h"
@@ -28,6 +25,7 @@
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/session/arc_bridge_service.h"
 #include "components/sync/protocol/sync.pb.h"
+#include "components/sync_device_info/device_info.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/page_navigator.h"
@@ -57,6 +55,13 @@ constexpr char kActivityForOpeningArcImeSettingsPage[] =
 // Size of device icons in DIPs.
 constexpr int kDeviceIconSize = 16;
 
+using IntentPickerResponseWithDevices = base::OnceCallback<void(
+    std::vector<std::unique_ptr<syncer::DeviceInfo>> devices,
+    const std::string& launch_name,
+    apps::PickerEntryType entry_type,
+    apps::IntentPickerCloseReason close_reason,
+    bool should_persist)>;
+
 // Creates an icon for a specific |device_type|.
 gfx::Image CreateDeviceIcon(const sync_pb::SyncEnums::DeviceType device_type) {
   SkColor color = ui::NativeTheme::GetInstanceForNativeUi()->GetSystemColor(
@@ -67,27 +72,16 @@ gfx::Image CreateDeviceIcon(const sync_pb::SyncEnums::DeviceType device_type) {
   return gfx::Image(gfx::CreateVectorIcon(icon, kDeviceIconSize, color));
 }
 
-// Adds remote devices to |picker_entries| and returns the new list. The devices
-// are added to the beginning of the list.
-std::vector<apps::IntentPickerAppInfo> MaybeAddDevices(
-    const GURL& url,
-    WebContents* web_contents,
+// Adds |devices| to |picker_entries| and returns the new list. The devices are
+// added to the beginning of the list.
+std::vector<apps::IntentPickerAppInfo> AddDevices(
+    const std::vector<std::unique_ptr<syncer::DeviceInfo>>& devices,
     std::vector<apps::IntentPickerAppInfo> picker_entries) {
-  if (!ShouldOfferClickToCallForURL(web_contents->GetBrowserContext(), url))
-    return picker_entries;
-
-  ClickToCallUiController* controller =
-      ClickToCallUiController::GetOrCreateFromWebContents(web_contents);
-  if (!controller)
-    return picker_entries;
-
-  controller->UpdateDevices();
-  if (controller->devices().empty())
-    return picker_entries;
+  DCHECK(!devices.empty());
 
   // First add all devices to the list.
   std::vector<apps::IntentPickerAppInfo> all_entries;
-  for (const auto& device : controller->devices()) {
+  for (const auto& device : devices) {
     all_entries.emplace_back(apps::PickerEntryType::kDevice,
                              CreateDeviceIcon(device->device_type()),
                              device->guid(), device->client_name());
@@ -104,31 +98,46 @@ std::vector<apps::IntentPickerAppInfo> MaybeAddDevices(
 // is at least one app or device to choose from.
 bool MaybeAddDevicesAndShowPicker(
     const GURL& url,
+    const base::Optional<url::Origin>& initiating_origin,
     WebContents* web_contents,
     std::vector<apps::IntentPickerAppInfo> app_info,
     bool stay_in_chrome,
     bool show_remember_selection,
-    IntentPickerResponse callback) {
+    IntentPickerResponseWithDevices callback) {
   Browser* browser =
       web_contents ? chrome::FindBrowserWithWebContents(web_contents) : nullptr;
   if (!browser)
     return false;
 
-  std::vector<apps::IntentPickerAppInfo> all_apps =
-      MaybeAddDevices(url, web_contents, std::move(app_info));
+  bool has_apps = !app_info.empty();
+  bool has_devices = false;
 
-  if (all_apps.empty())
+  PageActionIconType icon_type = PageActionIconType::kIntentPicker;
+  ClickToCallUiController* controller = nullptr;
+  std::vector<std::unique_ptr<syncer::DeviceInfo>> devices;
+
+  if (ShouldOfferClickToCallForURL(web_contents->GetBrowserContext(), url)) {
+    icon_type = PageActionIconType::kClickToCall;
+    controller =
+        ClickToCallUiController::GetOrCreateFromWebContents(web_contents);
+    devices = controller->GetDevices();
+    has_devices = !devices.empty();
+    if (has_devices)
+      app_info = AddDevices(devices, std::move(app_info));
+  }
+
+  if (app_info.empty())
     return false;
 
-  PageActionIconType icon_type =
-      ShouldOfferClickToCallForURL(web_contents->GetBrowserContext(), url)
-          ? PageActionIconType::kClickToCall
-          : PageActionIconType::kIntentPicker;
   IntentPickerTabHelper::SetShouldShowIcon(
       web_contents, icon_type == PageActionIconType::kIntentPicker);
-  browser->window()->ShowIntentPickerBubble(std::move(all_apps), stay_in_chrome,
-                                            show_remember_selection, icon_type,
-                                            std::move(callback));
+  browser->window()->ShowIntentPickerBubble(
+      std::move(app_info), stay_in_chrome, show_remember_selection, icon_type,
+      initiating_origin,
+      base::BindOnce(std::move(callback), std::move(devices)));
+
+  if (controller)
+    controller->OnDialogShown(has_devices, has_apps);
 
   return true;
 }
@@ -367,24 +376,24 @@ bool GetAndResetSafeToRedirectToArcWithoutUserConfirmationFlag(
   return true;
 }
 
-void HandleDeviceSelection(WebContents* web_contents,
-                           const std::string& device_guid,
-                           const GURL& url) {
+void HandleDeviceSelection(
+    WebContents* web_contents,
+    const std::vector<std::unique_ptr<syncer::DeviceInfo>>& devices,
+    const std::string& device_guid,
+    const GURL& url) {
   if (!web_contents)
     return;
-  ClickToCallUiController* controller =
-      ClickToCallUiController::GetOrCreateFromWebContents(web_contents);
-  if (!controller)
-    return;
 
-  for (const auto& device : controller->devices()) {
-    if (device->guid() == device_guid) {
-      controller->OnDeviceSelected(
-          GetUnescapedURLContent(url), *device,
-          SharingClickToCallEntryPoint::kLeftClickLink);
-      break;
-    }
-  }
+  const auto it = std::find_if(devices.begin(), devices.end(),
+                               [&device_guid](const auto& device) {
+                                 return device->guid() == device_guid;
+                               });
+  DCHECK(it != devices.end());
+  auto* device = it->get();
+
+  ClickToCallUiController::GetOrCreateFromWebContents(web_contents)
+      ->OnDeviceSelected(GetUnescapedURLContent(url), *device,
+                         SharingClickToCallEntryPoint::kLeftClickLink);
 }
 
 // Handles |url| if possible. Returns true if it is actually handled.
@@ -459,15 +468,17 @@ void OnIntentPickerDialogDeactivated(
 
 // Called when the dialog is closed. Note that once we show the UI, we should
 // never show the Chrome OS' fallback dialog.
-void OnIntentPickerClosed(int render_process_host_id,
-                          int routing_id,
-                          const GURL& url,
-                          bool safe_to_bypass_ui,
-                          std::vector<mojom::IntentHandlerInfoPtr> handlers,
-                          const std::string& selected_app_package,
-                          apps::PickerEntryType entry_type,
-                          apps::IntentPickerCloseReason reason,
-                          bool should_persist) {
+void OnIntentPickerClosed(
+    int render_process_host_id,
+    int routing_id,
+    const GURL& url,
+    bool safe_to_bypass_ui,
+    std::vector<mojom::IntentHandlerInfoPtr> handlers,
+    std::vector<std::unique_ptr<syncer::DeviceInfo>> devices,
+    const std::string& selected_app_package,
+    apps::PickerEntryType entry_type,
+    apps::IntentPickerCloseReason reason,
+    bool should_persist) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // Even if ArcExternalProtocolDialog shares the same icon on the omnibox as an
@@ -481,10 +492,14 @@ void OnIntentPickerClosed(int render_process_host_id,
     IntentPickerTabHelper::SetShouldShowIcon(web_contents, false);
 
   if (entry_type == apps::PickerEntryType::kDevice) {
-    HandleDeviceSelection(web_contents, selected_app_package, url);
-    bool protocol_accepted =
-        (reason == apps::IntentPickerCloseReason::OPEN_APP) ? true : false;
-    RecordUmaDialogAction(Scheme::TEL, protocol_accepted, should_persist);
+    DCHECK_EQ(apps::IntentPickerCloseReason::OPEN_APP, reason);
+    DCHECK(!should_persist);
+    HandleDeviceSelection(web_contents, devices, selected_app_package, url);
+    RecordUmaDialogAction(Scheme::TEL, entry_type, /*accepted=*/true,
+                          should_persist);
+    chromeos::ChromeOsAppsNavigationThrottle::RecordUma(
+        selected_app_package, entry_type, reason,
+        apps::Source::kExternalProtocol, should_persist);
     return;
   }
 
@@ -575,7 +590,8 @@ void OnIntentPickerClosed(int render_process_host_id,
   auto scheme_it = string_to_scheme.find(scheme);
   if (scheme_it != string_to_scheme.end())
     url_scheme = scheme_it->second;
-  RecordUmaDialogAction(url_scheme, protocol_accepted, should_persist);
+  RecordUmaDialogAction(url_scheme, entry_type, protocol_accepted,
+                        should_persist);
 
   chromeos::ChromeOsAppsNavigationThrottle::RecordUma(
       selected_app_package, entry_type, reason, apps::Source::kExternalProtocol,
@@ -587,6 +603,7 @@ void OnAppIconsReceived(
     int render_process_host_id,
     int routing_id,
     const GURL& url,
+    const base::Optional<url::Origin>& initiating_origin,
     bool safe_to_bypass_ui,
     std::vector<mojom::IntentHandlerInfoPtr> handlers,
     std::unique_ptr<ArcIntentHelperBridge::ActivityToIconsMap> icons) {
@@ -615,18 +632,21 @@ void OnAppIconsReceived(
 
   const bool stay_in_chrome = IsChromeAnAppCandidate(handlers);
   MaybeAddDevicesAndShowPicker(
-      url, web_contents, std::move(app_info), stay_in_chrome,
+      url, initiating_origin, web_contents, std::move(app_info), stay_in_chrome,
       /*show_remember_selection=*/true,
       base::BindOnce(OnIntentPickerClosed, render_process_host_id, routing_id,
                      url, safe_to_bypass_ui, std::move(handlers)));
 }
 
-void ShowExternalProtocolDialogWithoutApps(int render_process_host_id,
-                                           int routing_id,
-                                           const GURL& url) {
+void ShowExternalProtocolDialogWithoutApps(
+    int render_process_host_id,
+    int routing_id,
+    const GURL& url,
+    const base::Optional<url::Origin>& initiating_origin) {
   // Try to show the device picker and fallback to the default dialog otherwise.
   if (MaybeAddDevicesAndShowPicker(
-          url, tab_util::GetWebContentsByID(render_process_host_id, routing_id),
+          url, initiating_origin,
+          tab_util::GetWebContentsByID(render_process_host_id, routing_id),
           /*app_info=*/{}, /*stay_in_chrome=*/false,
           /*show_remember_selection=*/false,
           base::BindOnce(OnIntentPickerClosed, render_process_host_id,
@@ -642,6 +662,7 @@ void ShowExternalProtocolDialogWithoutApps(int render_process_host_id,
 void OnUrlHandlerList(int render_process_host_id,
                       int routing_id,
                       const GURL& url,
+                      const base::Optional<url::Origin>& initiating_origin,
                       bool safe_to_bypass_ui,
                       std::vector<mojom::IntentHandlerInfoPtr> handlers) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -650,7 +671,7 @@ void OnUrlHandlerList(int render_process_host_id,
   if (!arc_service_manager) {
     // ARC is not running anymore. Show the Chrome OS dialog.
     ShowExternalProtocolDialogWithoutApps(render_process_host_id, routing_id,
-                                          url);
+                                          url, initiating_origin);
     return;
   }
 
@@ -670,7 +691,7 @@ void OnUrlHandlerList(int render_process_host_id,
   if (!instance || !intent_helper_bridge ||
       IsChromeOnlyAppCandidate(handlers)) {
     ShowExternalProtocolDialogWithoutApps(render_process_host_id, routing_id,
-                                          url);
+                                          url, initiating_origin);
     return;
   }
 
@@ -696,18 +717,20 @@ void OnUrlHandlerList(int render_process_host_id,
     activities.emplace_back(handler->package_name, handler->activity_name);
   }
   intent_helper_bridge->GetActivityIcons(
-      activities,
-      base::BindOnce(OnAppIconsReceived, render_process_host_id, routing_id,
-                     url, safe_to_bypass_ui, std::move(handlers)));
+      activities, base::BindOnce(OnAppIconsReceived, render_process_host_id,
+                                 routing_id, url, initiating_origin,
+                                 safe_to_bypass_ui, std::move(handlers)));
 }
 
 }  // namespace
 
-bool RunArcExternalProtocolDialog(const GURL& url,
-                                  int render_process_host_id,
-                                  int routing_id,
-                                  ui::PageTransition page_transition,
-                                  bool has_user_gesture) {
+bool RunArcExternalProtocolDialog(
+    const GURL& url,
+    const base::Optional<url::Origin>& initiating_origin,
+    int render_process_host_id,
+    int routing_id,
+    ui::PageTransition page_transition,
+    bool has_user_gesture) {
   // This function is for external protocols that Chrome cannot handle.
   DCHECK(!url.SchemeIsHTTPOrHTTPS()) << url;
 
@@ -727,7 +750,7 @@ bool RunArcExternalProtocolDialog(const GURL& url,
   if (!arc_service_manager) {
     // ARC is either not supported or not yet ready.
     ShowExternalProtocolDialogWithoutApps(render_process_host_id, routing_id,
-                                          url);
+                                          url, initiating_origin);
     return true;
   }
 
@@ -737,7 +760,7 @@ bool RunArcExternalProtocolDialog(const GURL& url,
   if (!instance) {
     // ARC is either not supported or not yet ready.
     ShowExternalProtocolDialogWithoutApps(render_process_host_id, routing_id,
-                                          url);
+                                          url, initiating_origin);
     return true;
   }
 
@@ -754,8 +777,9 @@ bool RunArcExternalProtocolDialog(const GURL& url,
   // Show ARC version of the dialog, which is IntentPickerBubbleView. To show
   // the bubble view, we need to ask ARC for a handler list first.
   instance->RequestUrlHandlerList(
-      url.spec(), base::BindOnce(OnUrlHandlerList, render_process_host_id,
-                                 routing_id, url, safe_to_bypass_ui));
+      url.spec(),
+      base::BindOnce(OnUrlHandlerList, render_process_host_id, routing_id, url,
+                     initiating_origin, safe_to_bypass_ui));
   return true;
 }
 
@@ -785,20 +809,48 @@ bool IsChromeAnAppCandidateForTesting(
   return IsChromeAnAppCandidate(handlers);
 }
 
-void RecordUmaDialogAction(Scheme scheme, bool accepted, bool persisted) {
-  ProtocolAction action = GetProtocolAction(scheme, accepted, persisted);
+void OnIntentPickerClosedForTesting(
+    int render_process_host_id,
+    int routing_id,
+    const GURL& url,
+    bool safe_to_bypass_ui,
+    std::vector<mojom::IntentHandlerInfoPtr> handlers,
+    std::vector<std::unique_ptr<syncer::DeviceInfo>> devices,
+    const std::string& selected_app_package,
+    apps::PickerEntryType entry_type,
+    apps::IntentPickerCloseReason reason,
+    bool should_persist) {
+  OnIntentPickerClosed(render_process_host_id, routing_id, url,
+                       safe_to_bypass_ui, std::move(handlers),
+                       std::move(devices), selected_app_package, entry_type,
+                       reason, should_persist);
+}
+
+void RecordUmaDialogAction(Scheme scheme,
+                           apps::PickerEntryType entry_type,
+                           bool accepted,
+                           bool persisted) {
+  ProtocolAction action =
+      GetProtocolAction(scheme, entry_type, accepted, persisted);
   if (accepted) {
     base::UmaHistogramEnumeration(
-        "ChromeOS.Apps.ExternalProtocolDialog.Accepted", action,
-        ProtocolAction::kMaxValue);
+        "ChromeOS.Apps.ExternalProtocolDialog.Accepted", action);
   } else {
     base::UmaHistogramEnumeration(
-        "ChromeOS.Apps.ExternalProtocolDialog.Rejected", action,
-        ProtocolAction::kMaxValue);
+        "ChromeOS.Apps.ExternalProtocolDialog.Rejected", action);
   }
 }
 
-ProtocolAction GetProtocolAction(Scheme scheme, bool accepted, bool persisted) {
+ProtocolAction GetProtocolAction(Scheme scheme,
+                                 apps::PickerEntryType entry_type,
+                                 bool accepted,
+                                 bool persisted) {
+  if (entry_type == apps::PickerEntryType::kDevice) {
+    DCHECK_EQ(Scheme::TEL, scheme);
+    DCHECK(accepted);
+    DCHECK(!persisted);
+    return ProtocolAction::TEL_DEVICE_SELECTED;
+  }
   switch (scheme) {
     case Scheme::OTHER:
       if (!accepted)

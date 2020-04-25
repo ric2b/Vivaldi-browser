@@ -16,10 +16,11 @@ import android.graphics.PorterDuffColorFilter;
 import android.graphics.Shader;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.ColorInt;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.view.View;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordHistogram;
@@ -27,7 +28,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.favicon.IconType;
 import org.chromium.chrome.browser.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.widget.RoundedIconGenerator;
+import org.chromium.chrome.browser.ui.widget.RoundedIconGenerator;
 import org.chromium.ui.modelutil.PropertyModel;
 
 class RevampedContextMenuHeaderMediator implements View.OnClickListener {

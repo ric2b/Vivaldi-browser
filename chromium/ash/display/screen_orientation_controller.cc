@@ -45,7 +45,7 @@ OrientationLockType GetDisplayNaturalOrientation() {
   display::ManagedDisplayInfo info =
       Shell::Get()->display_manager()->GetDisplayInfo(
           display::Display::InternalDisplayId());
-  gfx::Size size = info.bounds_in_native().size();
+  gfx::Size size = info.GetSizeInPixelWithPanelOrientation();
   return size.width() > size.height() ? OrientationLockType::kLandscape
                                       : OrientationLockType::kPortrait;
 }
@@ -162,7 +162,8 @@ bool IsPortraitOrientation(OrientationLockType type) {
 OrientationLockType GetCurrentScreenOrientation() {
   // ScreenOrientationController might be nullptr during shutdown.
   // TODO(xdai|sammiequon): See if we can reorder so that users of the function
-  // (split_view_controller) get shutddown before screen orientation controller.
+  // |SplitViewController::Get| get shutdown before screen orientation
+  // controller.
   if (!Shell::Get()->screen_orientation_controller())
     return OrientationLockType::kAny;
   return Shell::Get()->screen_orientation_controller()->GetCurrentOrientation();
@@ -217,11 +218,11 @@ ScreenOrientationController::ScreenOrientationController()
       user_rotation_(display::Display::ROTATE_0),
       current_rotation_(display::Display::ROTATE_0) {
   Shell::Get()->tablet_mode_controller()->AddObserver(this);
-  Shell::Get()->AddShellObserver(this);
+  SplitViewController::Get(Shell::GetPrimaryRootWindow())->AddObserver(this);
 }
 
 ScreenOrientationController::~ScreenOrientationController() {
-  Shell::Get()->RemoveShellObserver(this);
+  SplitViewController::Get(Shell::GetPrimaryRootWindow())->RemoveObserver(this);
   Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
   AccelerometerReader::GetInstance()->RemoveObserver(this);
   Shell::Get()->window_tree_host_manager()->RemoveObserver(this);
@@ -416,12 +417,13 @@ void ScreenOrientationController::OnTabletModeEnded() {
   UnlockAll();
 }
 
-void ScreenOrientationController::OnSplitViewModeStarted() {
-  ApplyLockForActiveWindow();
-}
-
-void ScreenOrientationController::OnSplitViewModeEnded() {
-  ApplyLockForActiveWindow();
+void ScreenOrientationController::OnSplitViewStateChanged(
+    SplitViewController::State previous_state,
+    SplitViewController::State state) {
+  if (previous_state == SplitViewController::State::kNoSnap ||
+      state == SplitViewController::State::kNoSnap) {
+    ApplyLockForActiveWindow();
+  }
 }
 
 void ScreenOrientationController::SetDisplayRotation(
@@ -544,7 +546,7 @@ void ScreenOrientationController::HandleScreenRotation(
   // The reference vector is the angle of gravity when the device is rotated
   // clockwise by 45 degrees. Computing the angle between this vector and
   // gravity we can easily determine the expected display rotation.
-  static const gfx::Vector3dF rotation_reference(-1.0f, 1.0f, 0.0f);
+  static constexpr gfx::Vector3dF rotation_reference(-1.0f, 1.0f, 0.0f);
 
   // Set the down vector to match the expected direction of gravity given the
   // last configured rotation. This is used to enforce a stickiness that the
@@ -597,16 +599,15 @@ void ScreenOrientationController::ApplyLockForActiveWindow() {
   if (!ScreenOrientationProviderSupported())
     return;
 
-  Shell* shell = Shell::Get();
-
-  if (shell->split_view_controller()->InTabletSplitViewMode()) {
+  if (SplitViewController::Get(Shell::GetPrimaryRootWindow())
+          ->InTabletSplitViewMode()) {
     // While split view is enabled, ignore rotation lock set by windows.
     LockRotationToOrientation(user_locked_orientation_);
     return;
   }
 
   MruWindowTracker::WindowList mru_windows(
-      shell->mru_window_tracker()->BuildMruWindowList(kActiveDesk));
+      Shell::Get()->mru_window_tracker()->BuildMruWindowList(kActiveDesk));
 
   for (auto* window : mru_windows) {
     if (!window->TargetVisibility())

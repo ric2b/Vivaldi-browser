@@ -21,8 +21,6 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
-#include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
@@ -331,8 +329,8 @@ AppCacheSubresourceURLFactory::AppCacheSubresourceURLFactory(
     base::WeakPtr<AppCacheHost> host)
     : network_loader_factory_(std::move(network_loader_factory)),
       appcache_host_(host) {
-  bindings_.set_connection_error_handler(
-      base::BindRepeating(&AppCacheSubresourceURLFactory::OnConnectionError,
+  receivers_.set_disconnect_handler(
+      base::BindRepeating(&AppCacheSubresourceURLFactory::OnMojoDisconnect,
                           base::Unretained(this)));
 }
 
@@ -341,7 +339,7 @@ AppCacheSubresourceURLFactory::~AppCacheSubresourceURLFactory() {}
 // static
 void AppCacheSubresourceURLFactory::CreateURLLoaderFactory(
     base::WeakPtr<AppCacheHost> host,
-    network::mojom::URLLoaderFactoryPtr* loader_factory) {
+    mojo::PendingRemote<network::mojom::URLLoaderFactory>* loader_factory) {
   DCHECK(host.get());
   scoped_refptr<network::SharedURLLoaderFactory> network_loader_factory;
   // The partition has shutdown, return without binding |loader_factory|.
@@ -356,7 +354,7 @@ void AppCacheSubresourceURLFactory::CreateURLLoaderFactory(
   // Please see OnConnectionError() for details.
   auto* impl = new AppCacheSubresourceURLFactory(
       std::move(network_loader_factory), host);
-  impl->Clone(mojo::MakeRequest(loader_factory));
+  impl->Clone(loader_factory->InitWithNewPipeAndPassReceiver());
 
   // Save the factory in the host to ensure that we don't create it again when
   // the cache is selected, etc.
@@ -416,8 +414,8 @@ void AppCacheSubresourceURLFactory::CreateLoaderAndStart(
 }
 
 void AppCacheSubresourceURLFactory::Clone(
-    network::mojom::URLLoaderFactoryRequest request) {
-  bindings_.AddBinding(this, std::move(request));
+    mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver) {
+  receivers_.Add(this, std::move(receiver));
 }
 
 base::WeakPtr<AppCacheSubresourceURLFactory>
@@ -425,8 +423,8 @@ AppCacheSubresourceURLFactory::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
-void AppCacheSubresourceURLFactory::OnConnectionError() {
-  if (bindings_.empty())
+void AppCacheSubresourceURLFactory::OnMojoDisconnect() {
+  if (receivers_.empty())
     delete this;
 }
 

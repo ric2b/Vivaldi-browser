@@ -257,9 +257,9 @@ CacheStorageCacheEntryHandler::DiskCacheBlobEntry::~DiskCacheBlobEntry() {
 
 PutContext::PutContext(blink::mojom::FetchAPIRequestPtr request,
                        blink::mojom::FetchAPIResponsePtr response,
-                       blink::mojom::BlobPtr blob,
+                       mojo::PendingRemote<blink::mojom::Blob> blob,
                        uint64_t blob_size,
-                       blink::mojom::BlobPtr side_data_blob,
+                       mojo::PendingRemote<blink::mojom::Blob> side_data_blob,
                        uint64_t side_data_blob_size,
                        int64_t trace_id)
     : request(std::move(request)),
@@ -285,18 +285,18 @@ class CacheStorageCacheEntryHandlerImpl : public CacheStorageCacheEntryHandler {
       blink::mojom::FetchAPIResponsePtr response,
       int64_t trace_id) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    blink::mojom::BlobPtr blob;
+    mojo::PendingRemote<blink::mojom::Blob> blob;
     uint64_t blob_size = blink::BlobUtils::kUnknownSize;
-    blink::mojom::BlobPtr side_data_blob;
+    mojo::PendingRemote<blink::mojom::Blob> side_data_blob;
     uint64_t side_data_blob_size = blink::BlobUtils::kUnknownSize;
 
     if (response->blob) {
-      blob.Bind(std::move(response->blob->blob));
+      blob = std::move(response->blob->blob);
       blob_size = response->blob->size;
     }
-    if (response->side_data_blob) {
-      side_data_blob.Bind(std::move(response->side_data_blob->blob));
-      side_data_blob_size = response->side_data_blob->size;
+    if (response->side_data_blob_for_cache_put) {
+      side_data_blob = std::move(response->side_data_blob_for_cache_put->blob);
+      side_data_blob_size = response->side_data_blob_for_cache_put->size;
     }
 
     return std::make_unique<PutContext>(
@@ -307,9 +307,20 @@ class CacheStorageCacheEntryHandlerImpl : public CacheStorageCacheEntryHandler {
   void PopulateResponseBody(scoped_refptr<DiskCacheBlobEntry> blob_entry,
                             blink::mojom::FetchAPIResponse* response) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+    // First create the blob and store it in the field for the main body
+    // loading.
     response->blob = CreateBlobWithSideData(
         std::move(blob_entry), CacheStorageCache::INDEX_RESPONSE_BODY,
         CacheStorageCache::INDEX_SIDE_DATA);
+
+    // Then clone the blob to the |side_data_blob| field for loading code_cache.
+    mojo::Remote<blink::mojom::Blob> blob_remote(
+        std::move(response->blob->blob));
+    blob_remote->Clone(response->blob->blob.InitWithNewPipeAndPassReceiver());
+    response->side_data_blob = blink::mojom::SerializedBlob::New(
+        response->blob->uuid, response->blob->content_type,
+        response->blob->size, blob_remote.Unbind());
   }
 
   void PopulateRequestBody(scoped_refptr<DiskCacheBlobEntry> blob_entry,
@@ -397,13 +408,14 @@ CacheStorageCacheEntryHandler::CreateBlobWithSideData(
   if (BrowserThread::CurrentlyOn(BrowserThread::IO)) {
     FinalizeBlobOnIOThread(blob_context_, std::move(blob_entry),
                            disk_cache_index, side_data_disk_cache_index,
-                           blob->uuid, MakeRequest(&blob->blob));
+                           blob->uuid,
+                           blob->blob.InitWithNewPipeAndPassReceiver());
   } else {
     base::PostTask(FROM_HERE, {BrowserThread::IO},
                    base::BindOnce(&FinalizeBlobOnIOThread, blob_context_,
                                   std::move(blob_entry), disk_cache_index,
                                   side_data_disk_cache_index, blob->uuid,
-                                  MakeRequest(&blob->blob)));
+                                  blob->blob.InitWithNewPipeAndPassReceiver()));
   }
 
   return blob;

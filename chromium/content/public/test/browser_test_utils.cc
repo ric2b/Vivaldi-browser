@@ -25,6 +25,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/post_task.h"
+#include "base/test/test_switches.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -41,7 +42,7 @@
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
-#include "content/browser/frame_host/navigation_handle_impl.h"
+#include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/frame_host/render_widget_host_view_guest.h"
 #include "content/browser/renderer_host/input/synthetic_touchscreen_pinch_gesture.h"
@@ -88,9 +89,11 @@
 #include "content/public/test/test_fileapi_operation_waiter.h"
 #include "content/public/test/test_launcher.h"
 #include "content/public/test/test_navigation_observer.h"
-#include "content/public/test/test_utils.h"
 #include "content/test/did_commit_navigation_interceptor.h"
 #include "ipc/ipc_security_test_util.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/filename_util.h"
 #include "net/base/io_buffer.h"
@@ -699,6 +702,33 @@ void RunUntilInputProcessed(RenderWidgetHost* host) {
   run_loop.Run();
 }
 
+std::string ReferrerPolicyToString(
+    network::mojom::ReferrerPolicy referrer_policy) {
+  switch (referrer_policy) {
+    case network::mojom::ReferrerPolicy::kDefault:
+      return "no-meta";
+    case network::mojom::ReferrerPolicy::kNoReferrerWhenDowngrade:
+      return "no-referrer-when-downgrade";
+    case network::mojom::ReferrerPolicy::kOrigin:
+      return "origin";
+    case network::mojom::ReferrerPolicy::kOriginWhenCrossOrigin:
+      return "origin-when-crossorigin";
+    case network::mojom::ReferrerPolicy::kSameOrigin:
+      return "same-origin";
+    case network::mojom::ReferrerPolicy::kStrictOrigin:
+      return "strict-origin";
+    case network::mojom::ReferrerPolicy::kAlways:
+      return "always";
+    case network::mojom::ReferrerPolicy::kNever:
+      return "never";
+    case network::mojom::ReferrerPolicy::
+        kNoReferrerWhenDowngradeOriginWhenCrossOrigin:
+      return "strict-origin-when-cross-origin";
+  }
+  NOTREACHED();
+  return "";
+}
+
 void WaitForLoadStopWithoutSuccessCheck(WebContents* web_contents) {
   // In many cases, the load may have finished before we get here.  Only wait if
   // the tab still has a pending navigation.
@@ -720,11 +750,11 @@ bool WaitForLoadStop(WebContents* web_contents) {
   return IsLastCommittedEntryOfPageType(web_contents, PAGE_TYPE_NORMAL);
 }
 
-void PrepContentsForBeforeUnloadTest(WebContents* web_contents) {
+void PrepContentsForBeforeUnloadTest(WebContents* web_contents,
+                                     bool trigger_user_activation) {
   for (auto* frame : web_contents->GetAllFrames()) {
-    // JavaScript onbeforeunload dialogs are ignored unless the frame received a
-    // user gesture. Make sure the frames have user gestures.
-    frame->ExecuteJavaScriptWithUserGestureForTests(base::string16());
+    if (trigger_user_activation)
+      frame->ExecuteJavaScriptWithUserGestureForTests(base::string16());
 
     // Disable the hang monitor, otherwise there will be a race between the
     // beforeunload dialog and the beforeunload hang timer.
@@ -945,10 +975,11 @@ void SimulateMouseWheelCtrlZoomEvent(WebContents* web_contents,
                                         ui::EventTimeForNow());
 
   wheel_event.SetPositionInWidget(point.x(), point.y());
+  wheel_event.delta_units =
+      ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
   wheel_event.delta_y =
       (zoom_in ? 1.0 : -1.0) * ui::MouseWheelEvent::kWheelDelta;
   wheel_event.wheel_ticks_y = (zoom_in ? 1.0 : -1.0);
-  wheel_event.has_precise_scrolling_deltas = false;
   wheel_event.phase = phase;
   RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
       web_contents->GetRenderViewHost()->GetWidget());
@@ -1737,8 +1768,8 @@ bool ExecuteWebUIResourceTest(WebContents* web_contents,
 
   DOMMessageQueue message_queue;
 
-  bool should_wait_flag =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(kWaitForDebuggerWebUI);
+  bool should_wait_flag = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kWaitForDebuggerWebUI);
 
   if (should_wait_flag) {
     ExecuteScriptAsync(
@@ -1844,6 +1875,19 @@ bool SetCookie(BrowserContext* browser_context,
 }
 
 void FetchHistogramsFromChildProcesses() {
+  // Wait for all the renderer processes to be initialized before fetching
+  // histograms for the first time.
+  for (RenderProcessHost::iterator it(RenderProcessHost::AllHostsIterator());
+       !it.IsAtEnd(); it.Advance()) {
+    if (!it.GetCurrentValue()->IsReady()) {
+      RenderProcessHost* render_process_host = it.GetCurrentValue();
+      RenderProcessHostWatcher ready_watcher(
+          render_process_host,
+          RenderProcessHostWatcher::WATCH_FOR_PROCESS_READY);
+      ready_watcher.Wait();
+    }
+  }
+
   base::RunLoop run_loop;
 
   FetchHistogramsAsynchronously(
@@ -2303,6 +2347,11 @@ RenderProcessHostWatcher::~RenderProcessHostWatcher() {
 
 void RenderProcessHostWatcher::Wait() {
   run_loop_.Run();
+}
+
+void RenderProcessHostWatcher::RenderProcessReady(RenderProcessHost* host) {
+  if (type_ == WATCH_FOR_PROCESS_READY)
+    std::move(quit_closure_).Run();
 }
 
 void RenderProcessHostWatcher::RenderProcessExited(
@@ -2801,14 +2850,14 @@ TestNavigationManager::TestNavigationManager(WebContents* web_contents,
                                              const GURL& url)
     : WebContentsObserver(web_contents),
       url_(url),
-      handle_(nullptr),
+      request_(nullptr),
       navigation_paused_(false),
       current_state_(NavigationState::INITIAL),
       desired_state_(NavigationState::STARTED) {}
 
 TestNavigationManager::~TestNavigationManager() {
   if (navigation_paused_)
-    handle_->CallResumeForTesting();
+    request_->CallResumeForTesting();
 }
 
 bool TestNavigationManager::WaitForRequestStart() {
@@ -2826,11 +2875,11 @@ void TestNavigationManager::ResumeNavigation() {
   DCHECK_EQ(current_state_, desired_state_);
   DCHECK(navigation_paused_);
   navigation_paused_ = false;
-  handle_->CallResumeForTesting();
+  request_->CallResumeForTesting();
 }
 
 NavigationHandle* TestNavigationManager::GetNavigationHandle() {
-  return handle_;
+  return request_;
 }
 
 bool TestNavigationManager::WaitForResponse() {
@@ -2847,23 +2896,24 @@ void TestNavigationManager::DidStartNavigation(NavigationHandle* handle) {
   if (!ShouldMonitorNavigation(handle))
     return;
 
-  handle_ = static_cast<NavigationHandleImpl*>(handle);
+  request_ = NavigationRequest::From(handle);
   std::unique_ptr<NavigationThrottle> throttle(
       new TestNavigationManagerThrottle(
-          handle_, base::Bind(&TestNavigationManager::OnWillStartRequest,
-                              weak_factory_.GetWeakPtr()),
+          request_,
+          base::Bind(&TestNavigationManager::OnWillStartRequest,
+                     weak_factory_.GetWeakPtr()),
           base::Bind(&TestNavigationManager::OnWillProcessResponse,
                      weak_factory_.GetWeakPtr())));
-  handle_->RegisterThrottleForTesting(std::move(throttle));
+  request_->RegisterThrottleForTesting(std::move(throttle));
 }
 
 void TestNavigationManager::DidFinishNavigation(NavigationHandle* handle) {
-  if (handle != handle_)
+  if (handle != request_)
     return;
   was_successful_ = handle->HasCommitted() && !handle->IsErrorPage();
   current_state_ = NavigationState::FINISHED;
   navigation_paused_ = false;
-  handle_ = nullptr;
+  request_ = nullptr;
   OnNavigationStateChanged();
 }
 
@@ -2888,7 +2938,7 @@ bool TestNavigationManager::WaitForDesiredState() {
 
   // Resume the navigation if it was paused.
   if (navigation_paused_)
-    handle_->CallResumeForTesting();
+    request_->CallResumeForTesting();
 
   // Wait for the desired state if needed.
   if (current_state_ < desired_state_) {
@@ -2914,11 +2964,11 @@ void TestNavigationManager::OnNavigationStateChanged() {
 
   // Otherwise, the navigation should be resumed if it was previously paused.
   if (navigation_paused_)
-    handle_->CallResumeForTesting();
+    request_->CallResumeForTesting();
 }
 
 bool TestNavigationManager::ShouldMonitorNavigation(NavigationHandle* handle) {
-  if (handle_ || handle->GetURL() != url_)
+  if (request_ || handle->GetURL() != url_)
     return false;
   if (current_state_ != NavigationState::INITIAL)
     return false;
@@ -2980,16 +3030,17 @@ std::string ConsoleObserverDelegate::message() {
 }
 
 namespace {
-blink::mojom::FileSystemManagerPtr GetFileSystemManager(
+mojo::Remote<blink::mojom::FileSystemManager> GetFileSystemManager(
     RenderProcessHost* rph) {
   FileSystemManagerImpl* file_system = static_cast<RenderProcessHostImpl*>(rph)
                                            ->GetFileSystemManagerForTesting();
-  blink::mojom::FileSystemManagerPtr file_system_manager_ptr;
-  base::PostTask(FROM_HERE, {BrowserThread::IO},
-                 base::BindOnce(&FileSystemManagerImpl::BindRequest,
-                                base::Unretained(file_system),
-                                mojo::MakeRequest(&file_system_manager_ptr)));
-  return file_system_manager_ptr;
+  mojo::Remote<blink::mojom::FileSystemManager> file_system_manager_remote;
+  base::PostTask(
+      FROM_HERE, {BrowserThread::IO},
+      base::BindOnce(&FileSystemManagerImpl::BindReceiver,
+                     base::Unretained(file_system),
+                     file_system_manager_remote.BindNewPipeAndPassReceiver()));
+  return file_system_manager_remote;
 }
 }  // namespace
 
@@ -3001,9 +3052,9 @@ void PwnMessageHelper::FileSystemCreate(RenderProcessHost* process,
                                         bool is_directory,
                                         bool recursive) {
   TestFileapiOperationWaiter waiter;
-  blink::mojom::FileSystemManagerPtr file_system_manager_ptr =
+  mojo::Remote<blink::mojom::FileSystemManager> file_system_manager =
       GetFileSystemManager(process);
-  file_system_manager_ptr->Create(
+  file_system_manager->Create(
       path, exclusive, is_directory, recursive,
       base::BindOnce(&TestFileapiOperationWaiter::DidCreate,
                      base::Unretained(&waiter)));
@@ -3017,16 +3068,16 @@ void PwnMessageHelper::FileSystemWrite(RenderProcessHost* process,
                                        std::string blob_uuid,
                                        int64_t position) {
   TestFileapiOperationWaiter waiter;
-  blink::mojom::FileSystemManagerPtr file_system_manager_ptr =
+  mojo::Remote<blink::mojom::FileSystemManager> file_system_manager =
       GetFileSystemManager(process);
-  blink::mojom::FileSystemOperationListenerPtr listener_ptr;
-  mojo::Binding<blink::mojom::FileSystemOperationListener> binding(
-      &waiter, mojo::MakeRequest(&listener_ptr));
-  blink::mojom::FileSystemCancellableOperationPtr op_ptr;
+  mojo::PendingRemote<blink::mojom::FileSystemOperationListener> listener;
+  mojo::Receiver<blink::mojom::FileSystemOperationListener> receiver(
+      &waiter, listener.InitWithNewPipeAndPassReceiver());
+  mojo::Remote<blink::mojom::FileSystemCancellableOperation> op;
 
-  file_system_manager_ptr->Write(file_path, blob_uuid, position,
-                                 mojo::MakeRequest(&op_ptr),
-                                 std::move(listener_ptr));
+  file_system_manager->Write(file_path, blob_uuid, position,
+                             op.BindNewPipeAndPassReceiver(),
+                             std::move(listener));
   waiter.WaitForOperationToFinish();
 }
 
@@ -3129,6 +3180,26 @@ void ContextMenuFilter::OnContextMenu(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   last_params_ = params;
   std::move(quit_closure_).Run();
+}
+
+bool UpdateUserActivationStateMsgWaiter::OnMessageReceived(
+    const IPC::Message& message) {
+  IPC_BEGIN_MESSAGE_MAP(UpdateUserActivationStateMsgWaiter, message)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_UpdateUserActivationState,
+                        OnUpdateUserActivationState)
+  IPC_END_MESSAGE_MAP()
+  return false;
+}
+
+void UpdateUserActivationStateMsgWaiter::Wait() {
+  if (!received_)
+    run_loop_.Run();
+}
+
+void UpdateUserActivationStateMsgWaiter::OnUpdateUserActivationState(
+    blink::UserActivationUpdateType) {
+  received_ = true;
+  run_loop_.Quit();
 }
 
 WebContents* GetEmbedderForGuest(content::WebContents* guest) {

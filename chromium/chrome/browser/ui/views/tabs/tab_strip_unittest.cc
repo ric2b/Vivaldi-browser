@@ -12,14 +12,15 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_group_id.h"
+#include "chrome/browser/ui/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/tabs/tab_style.h"
 #include "chrome/browser/ui/views/tabs/fake_base_tab_strip_controller.h"
 #include "chrome/browser/ui/views/tabs/new_tab_button.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_animation.h"
 #include "chrome/browser/ui/views/tabs/tab_group_header.h"
+#include "chrome/browser/ui/views/tabs/tab_group_underline.h"
 #include "chrome/browser/ui/views/tabs/tab_icon.h"
-#include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_observer.h"
 #include "chrome/browser/ui/views/tabs/tab_style_views.h"
@@ -220,6 +221,13 @@ class TabStripTest : public ChromeViewsTestBase,
     std::vector<TabGroupHeader*> result;
     for (auto const& header_pair : tab_strip_->group_headers_)
       result.push_back(header_pair.second.get());
+    return result;
+  }
+
+  std::vector<TabGroupUnderline*> ListGroupUnderlines() const {
+    std::vector<TabGroupUnderline*> result;
+    for (auto const& underline_pair : tab_strip_->group_underlines_)
+      result.push_back(underline_pair.second.get());
     return result;
   }
 
@@ -900,8 +908,7 @@ TEST_P(TabStripTest, ResetBoundsForDraggedTabs) {
   // Once the animation completes, the dragged tab should have animated to
   // the new ideal bounds (computed with this as an inactive tab) rather
   // than the original ones (where it's an active tab).
-  const auto duration = base::TimeDelta::FromMilliseconds(
-      bounds_animator()->GetAnimationDuration());
+  const base::TimeDelta duration = bounds_animator()->GetAnimationDuration();
   test_api.IncrementTime(duration);
 
   EXPECT_FALSE(dragged_tab->dragging());
@@ -1001,7 +1008,7 @@ TEST_P(TabStripTest, AnimationOnTabAdd) {
 
 TEST_P(TabStripTest, GroupHeaderBasics) {
   tab_strip_->SetBounds(0, 0, 1000, 100);
-  bounds_animator()->SetAnimationDuration(0);
+  bounds_animator()->SetAnimationDuration(base::TimeDelta());
   tab_strip_->AddTabAt(0, TabRendererData(), false);
 
   Tab* tab = tab_strip_->tab_at(0);
@@ -1022,7 +1029,7 @@ TEST_P(TabStripTest, GroupHeaderBasics) {
 
 TEST_P(TabStripTest, GroupHeaderBetweenTabs) {
   tab_strip_->SetBounds(0, 0, 1000, 100);
-  bounds_animator()->SetAnimationDuration(0);
+  bounds_animator()->SetAnimationDuration(base::TimeDelta());
 
   tab_strip_->AddTabAt(0, TabRendererData(), false);
   tab_strip_->AddTabAt(1, TabRendererData(), false);
@@ -1142,7 +1149,7 @@ TEST_P(TabStripTest, UngroupedTabMovesLeftOfHeader) {
 // This can happen when a tab in the middle of a group starts to close.
 TEST_P(TabStripTest, DiscontinuousGroup) {
   tab_strip_->SetBounds(0, 0, 1000, 100);
-  bounds_animator()->SetAnimationDuration(0);
+  bounds_animator()->SetAnimationDuration(base::TimeDelta());
 
   tab_strip_->AddTabAt(0, TabRendererData(), false);
   tab_strip_->AddTabAt(1, TabRendererData(), false);
@@ -1159,7 +1166,7 @@ TEST_P(TabStripTest, DiscontinuousGroup) {
   EXPECT_EQ(first_slot_x, headers[0]->x());
 }
 
-TEST_P(TabStripTest, DeleteTabGroupHeaderWhenEmpty) {
+TEST_P(TabStripTest, DeleteTabGroupHeaderAndUnderlineWhenEmpty) {
   tab_strip_->AddTabAt(0, TabRendererData(), false);
   tab_strip_->AddTabAt(1, TabRendererData(), false);
   base::Optional<TabGroupId> group = TabGroupId::GenerateNew();
@@ -1168,8 +1175,44 @@ TEST_P(TabStripTest, DeleteTabGroupHeaderWhenEmpty) {
   controller_->MoveTabIntoGroup(0, base::nullopt);
 
   EXPECT_EQ(1u, ListGroupHeaders().size());
+  EXPECT_EQ(1u, ListGroupUnderlines().size());
   controller_->MoveTabIntoGroup(1, base::nullopt);
   EXPECT_EQ(0u, ListGroupHeaders().size());
+  EXPECT_EQ(0u, ListGroupUnderlines().size());
+}
+
+TEST_P(TabStripTest, GroupUnderlineBasics) {
+  tab_strip_->SetBounds(0, 0, 1000, 100);
+  bounds_animator()->SetAnimationDuration(base::TimeDelta());
+  controller_->AddTab(0, false);
+
+  base::Optional<TabGroupId> group = TabGroupId::GenerateNew();
+  controller_->MoveTabIntoGroup(0, group);
+  CompleteAnimationAndLayout();
+
+  std::vector<TabGroupUnderline*> underlines = ListGroupUnderlines();
+  EXPECT_EQ(1u, underlines.size());
+  TabGroupUnderline* underline = underlines[0];
+  // Update underline manually in the absence of a real Paint cycle.
+  underline->UpdateBounds();
+
+  constexpr int kInset = 20;
+
+  EXPECT_EQ(underline->x(), kInset);
+  EXPECT_GT(underline->width(), 0);
+  EXPECT_EQ(underline->bounds().right(),
+            tab_strip_->tab_at(0)->bounds().right() - kInset);
+  EXPECT_EQ(underline->height(), TabGroupUnderline::kStrokeThickness);
+
+  // Endpoints are different if the last grouped tab is active.
+  controller_->AddTab(1, true);
+  controller_->MoveTabIntoGroup(1, group);
+  underline->UpdateBounds();
+
+  EXPECT_EQ(underline->x(), kInset);
+  EXPECT_EQ(underline->bounds().right(),
+            tab_strip_->tab_at(1)->bounds().right() +
+                TabGroupUnderline::kStrokeThickness);
 }
 
 TEST_P(TabStripTest, ChangingLayoutTypeResizesTabs) {

@@ -15,7 +15,7 @@
 #include "third_party/blink/public/platform/web_drag_operation.h"
 
 namespace blink {
-struct WebPluginAction;
+struct PluginAction;
 }
 
 namespace gfx {
@@ -85,7 +85,8 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
   // Tells the renderer to perform the given action on the plugin located at
   // the given point.
   virtual void ExecutePluginActionAtLocation(
-      const gfx::Point& location, const blink::WebPluginAction& action) = 0;
+      const gfx::Point& location,
+      const blink::PluginAction& action) = 0;
 
   virtual RenderViewHostDelegate* GetDelegate() = 0;
 
@@ -102,10 +103,6 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
   // Must call AllowWebUIBindings() on this renderer first.
   virtual void SetWebUIProperty(const std::string& name,
                                 const std::string& value) = 0;
-
-  // Sends the renderer process the current preferences supplied by the
-  // RenderViewHostDelegate.
-  virtual void SyncRendererPrefs() = 0;
 
   // TODO(mustaq): Replace "Webkit" from the following three method names.
   //

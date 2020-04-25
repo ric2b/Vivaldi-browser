@@ -3,7 +3,7 @@
 #include "ui/views/vivaldi_context_menu_views.h"
 
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 #include "content/public/browser/web_contents.h"
@@ -21,8 +21,9 @@ VivaldiContextMenu* CreateVivaldiContextMenu(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
     const gfx::Rect& rect,
-    bool force_views /* ignored here*/)  {
-  return new VivaldiContextMenuViews(web_contents, menu_model, rect);
+    bool force_views /* ignored here*/,
+    ContextMenuPostitionDelegate* delegate) {
+  return new VivaldiContextMenuViews(web_contents, menu_model, rect, delegate);
 }
 
 #endif
@@ -30,12 +31,13 @@ VivaldiContextMenu* CreateVivaldiContextMenu(
 VivaldiContextMenuViews::VivaldiContextMenuViews(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
-    const gfx::Rect& rect)
+    const gfx::Rect& rect,
+    ContextMenuPostitionDelegate* delegate)
     : web_contents_(web_contents),
       menu_model_(menu_model),
       rect_(rect) {
   toolkit_delegate_.reset(new ToolkitDelegateViews);
-  menu_view_ = toolkit_delegate_->VivaldiInit(menu_model_);
+  menu_view_ = toolkit_delegate_->VivaldiInit(menu_model_, delegate);
 }
 
 VivaldiContextMenuViews::~VivaldiContextMenuViews() {}

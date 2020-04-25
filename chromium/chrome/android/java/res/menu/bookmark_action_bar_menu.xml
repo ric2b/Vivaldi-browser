@@ -13,20 +13,20 @@
             android:title="@string/bookmark_action_bar_edit_folder"
             android:visible="false"
             app:showAsAction="ifRoom"
-            app:iconTint="@color/standard_mode_tint" />
+            app:iconTint="?attr/vivaldiIconTint" />
         <item
             android:id="@+id/search_menu_id"
             android:icon="@drawable/ic_search"
             android:title="@string/search"
             android:visible="false"
             app:showAsAction="ifRoom"
-            app:iconTint="@color/standard_mode_tint" />
+            app:iconTint="?attr/vivaldiIconTint" />
         <item
             android:id="@+id/close_menu_id"
             android:icon="@drawable/btn_close"
             android:title="@string/bookmark_action_bar_close"
             app:showAsAction="ifRoom"
-            app:iconTint="@color/standard_mode_tint" />
+            app:iconTint="?attr/vivaldiIconTint" />
     </group>
     <group
         android:id="@+id/selection_mode_menu_group"
@@ -45,10 +45,10 @@
             app:iconTint="@color/default_icon_color_inverse" />
         <item
             android:id="@+id/selection_mode_delete_menu_id"
-            android:icon="@drawable/ic_delete_white_24dp"
+            android:icon="@drawable/vivaldi_mobile_trash_24dp"
+            app:iconTint="@color/default_icon_color_inverse"
             android:title="@null"
-            app:showAsAction="ifRoom"
-            app:iconTint="@color/default_icon_color_inverse" />
+            app:showAsAction="ifRoom" />
         <item
             android:id="@+id/selection_open_in_new_tab_id"
             android:title="@string/contextmenu_open_in_new_tab"

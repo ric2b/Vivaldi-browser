@@ -325,8 +325,9 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
               if (!ReadUint32(&is_premultiplied) || is_premultiplied > 1)
                 return nullptr;
               break;
-            default:
-              NOTREACHED();
+            case ImageSerializationTag::kImageDataStorageFormatTag:
+              // Does not apply to ImageBitmap.
+              return nullptr;
           }
         } while (!is_done);
       } else if (!ReadUint32(&origin_clean) || origin_clean > 1 ||
@@ -384,8 +385,12 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
                       &image_data_storage_format))
                 return nullptr;
               break;
-            default:
-              NOTREACHED();
+            case ImageSerializationTag::kCanvasPixelFormatTag:
+            case ImageSerializationTag::kOriginCleanTag:
+            case ImageSerializationTag::kIsPremultipliedTag:
+            case ImageSerializationTag::kCanvasOpacityModeTag:
+              // Does not apply to ImageData.
+              return nullptr;
           }
         } while (!is_done);
       }
@@ -509,7 +514,8 @@ ScriptWrappable* V8ScriptValueDeserializer::ReadDOMObject(
           !ReadUint32(&canvas_id) || !ReadUint32(&client_id) ||
           !ReadUint32(&sink_id))
         return nullptr;
-      OffscreenCanvas* canvas = OffscreenCanvas::Create(width, height);
+      OffscreenCanvas* canvas = OffscreenCanvas::Create(
+          ExecutionContext::From(GetScriptState()), width, height);
       canvas->SetPlaceholderCanvasId(canvas_id);
       canvas->SetFrameSinkId(client_id, sink_id);
       return canvas;
@@ -692,7 +698,7 @@ v8::MaybeLocal<v8::WasmModuleObject>
 V8ScriptValueDeserializer::GetWasmModuleFromId(v8::Isolate* isolate,
                                                uint32_t id) {
   if (id < serialized_script_value_->WasmModules().size()) {
-    return v8::WasmModuleObject::FromTransferrableModule(
+    return v8::WasmModuleObject::FromCompiledModule(
         isolate, serialized_script_value_->WasmModules()[id]);
   }
   CHECK(serialized_script_value_->WasmModules().IsEmpty());

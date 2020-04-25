@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/numerics/ranges.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_log.h"
@@ -188,7 +189,7 @@ class PerfettoTracingCoordinator::TracingSession : public perfetto::Consumer {
         buf_stats.padding_bytes_cleared();
     double percent_full =
         bytes_in_buffer / static_cast<double>(buf_stats.buffer_size());
-    percent_full = std::min(std::max(0.0, percent_full), 1.0);
+    percent_full = base::ClampToRange(percent_full, 0.0, 1.0);
     // We know the size of data in the buffer, but not the number of events.
     std::move(request_buffer_usage_callback_)
         .Run(true, percent_full, 0 /*approx_event_count*/);
@@ -197,8 +198,7 @@ class PerfettoTracingCoordinator::TracingSession : public perfetto::Consumer {
   void OnObservableEvents(const perfetto::ObservableEvents& events) override {
     for (const auto& state_change : events.instance_state_changes()) {
       if (state_change.state() !=
-          perfetto::ObservableEvents::DataSourceInstanceStateChange::
-              DATA_SOURCE_INSTANCE_STATE_STARTED) {
+          perfetto::ObservableEvents::DATA_SOURCE_INSTANCE_STATE_STARTED) {
         continue;
       }
 
@@ -239,8 +239,7 @@ class PerfettoTracingCoordinator::TracingSession : public perfetto::Consumer {
 PerfettoTracingCoordinator::PerfettoTracingCoordinator(
     AgentRegistry* agent_registry,
     base::RepeatingClosure on_disconnect_callback)
-    : Coordinator(agent_registry, std::move(on_disconnect_callback)),
-      binding_(this) {
+    : Coordinator(agent_registry, std::move(on_disconnect_callback)) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
@@ -251,15 +250,15 @@ PerfettoTracingCoordinator::~PerfettoTracingCoordinator() {
 void PerfettoTracingCoordinator::OnClientConnectionError() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   tracing_session_.reset();
-  binding_.Close();
+  receiver_.reset();
   Coordinator::OnClientConnectionError();
 }
 
-void PerfettoTracingCoordinator::BindCoordinatorRequest(
-    mojom::CoordinatorRequest request,
+void PerfettoTracingCoordinator::BindCoordinatorReceiver(
+    mojo::PendingReceiver<mojom::Coordinator> receiver,
     const service_manager::BindSourceInfo& source_info) {
-  binding_.Bind(std::move(request));
-  binding_.set_connection_error_handler(
+  receiver_.Bind(std::move(receiver));
+  receiver_.set_disconnect_handler(
       base::BindOnce(&PerfettoTracingCoordinator::OnClientConnectionError,
                      base::Unretained(this)));
 }

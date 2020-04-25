@@ -43,6 +43,19 @@ class PageInfoUI {
     GREEN,
   };
 
+  enum class SecurityDescriptionType {
+    // The UI describes whether the connection is secure, e.g. secure
+    // HTTPS, non-secure HTTP.
+    CONNECTION,
+    // The UI describes e.g. an internal (chrome://) page or extension page.
+    INTERNAL,
+    // The UI describes a Safe Browsing warning, e.g. site deceptive or contains
+    // malware.
+    SAFE_BROWSING,
+    // The UI shows a Safety Tip.
+    SAFETY_TIP,
+  };
+
   struct SecurityDescription {
     // The text style for |summary| used to color it. This provides an
     // opinionated guide to the user on the overall security state of the site.
@@ -52,6 +65,9 @@ class PageInfoUI {
     // A short paragraph with more details about the state, and how
     // the user should treat it.
     base::string16 details;
+    // The category of the security description, used to determine which help
+    // center article to link to.
+    SecurityDescriptionType type;
   };
 
   // |CookieInfo| contains information about the cookies from a specific source.
@@ -112,9 +128,9 @@ class PageInfoUI {
     PageInfo::SiteIdentityStatus identity_status;
     // Site's Safe Browsing status.
     PageInfo::SafeBrowsingStatus safe_browsing_status;
-    // Site's safety tip status. Only set if the feature is enabled to show the
+    // Site's safety tip info. Only set if the feature is enabled to show the
     // Safety Tip UI.
-    security_state::SafetyTipStatus safety_tip_status;
+    security_state::SafetyTipInfo safety_tip_info;
     // Textual description of the site's identity status that is displayed to
     // the user.
     std::string identity_status_description;
@@ -213,6 +229,9 @@ class PageInfoUI {
   // Return true if the given ContentSettingsType is in PageInfoUI.
   static bool ContentSettingsTypeInPageInfo(ContentSettingsType type);
 
+  static std::unique_ptr<SecurityDescription>
+  CreateSafetyTipSecurityDescription(const security_state::SafetyTipInfo& info);
+
   // Sets cookie information.
   virtual void SetCookieInfo(const CookieInfoList& cookie_info_list) = 0;
 
@@ -227,12 +246,12 @@ class PageInfoUI {
   virtual void SetPageFeatureInfo(const PageFeatureInfo& page_feature_info) = 0;
 
   // Helper to get security description info to display to the user.
-  std::unique_ptr<PageInfoUI::SecurityDescription> GetSecurityDescription(
+  std::unique_ptr<SecurityDescription> GetSecurityDescription(
       const IdentityInfo& identity_info) const;
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   // Creates security description for password reuse case.
-  virtual std::unique_ptr<PageInfoUI::SecurityDescription>
+  virtual std::unique_ptr<SecurityDescription>
   CreateSecurityDescriptionForPasswordReuse() const = 0;
 #endif
 };

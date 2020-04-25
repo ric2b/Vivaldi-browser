@@ -142,7 +142,7 @@ class Section {
     result.SetKey("title", base::Value(title_));
     base::Value stats(base::Value::Type::LIST);
     for (const std::unique_ptr<StatBase>& stat : stats_)
-      stats.GetList().push_back(stat->ToValue());
+      stats.Append(stat->ToValue());
     result.SetKey("data", std::move(stats));
     result.SetKey("is_sensitive", base::Value(is_sensitive_));
     return result;
@@ -174,7 +174,7 @@ class SectionList {
   base::Value ToValue() const {
     base::Value result(base::Value::Type::LIST);
     for (const std::unique_ptr<Section>& section : sections_)
-      result.GetList().push_back(section->ToValue());
+      result.Append(section->ToValue());
     return result;
   }
 
@@ -367,8 +367,8 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
       section_encryption->AddBoolStat("Explicit Passphrase");
   Stat<bool>* is_passphrase_required =
       section_encryption->AddBoolStat("Passphrase Required");
-  Stat<bool>* is_cryptographer_ready =
-      section_encryption->AddBoolStat("Cryptographer Ready");
+  Stat<bool>* cryptographer_can_encrypt =
+      section_encryption->AddBoolStat("Cryptographer Ready To Encrypt");
   Stat<bool>* has_pending_keys =
       section_encryption->AddBoolStat("Cryptographer Has Pending Keys");
   Stat<std::string>* encrypted_types =
@@ -427,15 +427,6 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
   Stat<int>* committed_count =
       section_that_cycle->AddIntStat("Committed Count");
   Stat<int>* entries = section_that_cycle->AddIntStat("Entries");
-
-  Section* section_nudge_info =
-      section_list.AddSection("Nudge Source Counters");
-  Stat<int>* nudge_source_notification =
-      section_nudge_info->AddIntStat("Server Invalidations");
-  Stat<int>* nudge_source_local =
-      section_nudge_info->AddIntStat("Local Changes");
-  Stat<int>* nudge_source_local_refresh =
-      section_nudge_info->AddIntStat("Local Refreshes");
 
   // Populate all the fields we declared above.
   client_version->Set(GetVersionString(channel));
@@ -517,7 +508,7 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
                    "No Passphrase Time"));
   }
   if (is_status_valid) {
-    is_cryptographer_ready->Set(full_status.cryptographer_ready);
+    cryptographer_can_encrypt->Set(full_status.cryptographer_can_encrypt);
     has_pending_keys->Set(full_status.crypto_has_pending_keys);
     encrypted_types->Set(ModelTypeSetToString(full_status.encrypted_types));
     has_keystore_key->Set(full_status.has_keystore_key);
@@ -566,13 +557,6 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
     entries->Set(static_cast<int>(snapshot.num_entries()));
   }
 
-  // Nudge Source Counters.
-  if (is_status_valid) {
-    nudge_source_notification->Set(full_status.nudge_source_notification);
-    nudge_source_local->Set(full_status.nudge_source_local);
-    nudge_source_local_refresh->Set(full_status.nudge_source_local_refresh);
-  }
-
   // This list of sections belongs in the 'details' field of the returned
   // message.
   about_info->SetKey(kDetailsKey, section_list.ToValue());
@@ -607,10 +591,10 @@ std::unique_ptr<base::DictionaryValue> ConstructAboutInformation(
     description.Set(full_status.sync_protocol_error.error_description);
   }
 
-  actionable_error.GetList().push_back(error_type.ToValue());
-  actionable_error.GetList().push_back(action.ToValue());
-  actionable_error.GetList().push_back(url.ToValue());
-  actionable_error.GetList().push_back(description.ToValue());
+  actionable_error.Append(error_type.ToValue());
+  actionable_error.Append(action.ToValue());
+  actionable_error.Append(url.ToValue());
+  actionable_error.Append(description.ToValue());
   about_info->SetKey("actionable_error", std::move(actionable_error));
 
   about_info->SetKey("unrecoverable_error_detected",

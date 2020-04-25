@@ -222,6 +222,38 @@ std::vector<InteractionsStats> PasswordStoreDefault::GetSiteStatsImpl(
                    : std::vector<InteractionsStats>();
 }
 
+void PasswordStoreDefault::AddLeakedCredentialsImpl(
+    const LeakedCredentials& leaked_credentials) {
+  DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
+  if (login_db_)
+    login_db_->leaked_credentials_table().AddRow(leaked_credentials);
+}
+
+void PasswordStoreDefault::RemoveLeakedCredentialsImpl(
+    const GURL& url,
+    const base::string16& username) {
+  DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
+  if (login_db_)
+    login_db_->leaked_credentials_table().RemoveRow(url, username);
+}
+
+std::vector<LeakedCredentials>
+PasswordStoreDefault::GetAllLeakedCredentialsImpl() {
+  DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
+  return login_db_ ? login_db_->leaked_credentials_table().GetAllRows()
+                   : std::vector<LeakedCredentials>();
+}
+
+void PasswordStoreDefault::RemoveLeakedCredentialsByUrlAndTimeImpl(
+    const base::RepeatingCallback<bool(const GURL&)>& url_filter,
+    base::Time remove_begin,
+    base::Time remove_end) {
+  if (login_db_) {
+    login_db_->leaked_credentials_table().RemoveRowsByUrlAndTime(
+        url_filter, remove_begin, remove_end);
+  }
+}
+
 bool PasswordStoreDefault::BeginTransaction() {
   if (login_db_)
     return login_db_->BeginTransaction();
@@ -273,12 +305,5 @@ void PasswordStoreDefault::ResetLoginDB() {
   DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
   login_db_.reset();
 }
-
-#if defined(USE_X11)
-void PasswordStoreDefault::SetLoginDB(std::unique_ptr<LoginDatabase> login_db) {
-  DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
-  login_db_ = std::move(login_db);
-}
-#endif  // defined(USE_X11)
 
 }  // namespace password_manager

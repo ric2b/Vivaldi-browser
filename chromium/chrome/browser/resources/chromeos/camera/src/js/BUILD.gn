@@ -17,12 +17,27 @@ group("closure_compile") {
 
 js_type_check("compile_resources") {
   deps = [
+    ":background",
+    ":intent",
+    ":metrics",
     ":nav",
     ":resolution_event_broker",
     ":state",
     ":toast",
     ":tooltip",
     ":util",
+  ]
+}
+
+js_library("intent") {
+  deps = [
+    "mojo:chrome_helper",
+  ]
+}
+
+js_library("metrics") {
+  deps = [
+    "externs:chrome_platform_analytics",
   ]
 }
 
@@ -39,6 +54,12 @@ js_library("nav") {
 js_library("state") {
 }
 
+js_library("background") {
+  deps = [
+    ":intent",
+  ]
+}
+
 js_library("toast") {
   deps = [
     ":util",
@@ -52,6 +73,7 @@ js_library("util") {
   deps = [
     ":tooltip",
     "browser_proxy:browser_proxy",
+    "mojo:chrome_helper",
   ]
   externs_list = [ "$externs_path/chrome_extensions.js" ]
 }

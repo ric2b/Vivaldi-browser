@@ -50,7 +50,7 @@ class WebContentsObserverProxy : public WebContentsObserver {
 
   void DidFinishLoad(RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
-  void DocumentLoadedInFrame(RenderFrameHost* render_frame_host) override;
+  void DOMContentLoaded(RenderFrameHost* render_frame_host) override;
   void NavigationEntryCommitted(
       const LoadCommittedDetails& load_details) override;
   void NavigationEntriesDeleted() override;
@@ -63,7 +63,6 @@ class WebContentsObserverProxy : public WebContentsObserver {
   void MediaEffectivelyFullscreenChanged(bool is_fullscreen) override;
   void SetToBaseURLForDataURLIfNeeded(std::string* url);
   void ViewportFitChanged(blink::mojom::ViewportFit value) override;
-  void DidReloadLoFiImages() override;
   void OnWebContentsFocused(RenderWidgetHost*) override;
   void OnWebContentsLostFocus(RenderWidgetHost*) override;
 

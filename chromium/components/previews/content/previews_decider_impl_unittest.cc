@@ -161,7 +161,7 @@ class TestTopHostProvider : public optimization_guide::TopHostProvider {
   TestTopHostProvider() {}
   ~TestTopHostProvider() override {}
 
-  std::vector<std::string> GetTopHosts(size_t max_sites) override {
+  std::vector<std::string> GetTopHosts() override {
     return std::vector<std::string>();
   }
 };
@@ -1159,6 +1159,23 @@ TEST_F(PreviewsDeciderImplTest, NoScriptCommitTimeWhitelistCheck) {
 
     histogram_tester.ExpectTotalCount("Previews.EligibilityReason.NoScript", 0);
   }
+
+  // Verify preview not allowed when blacklist is unavailable.
+  {
+    ReportEffectiveConnectionType(net::EFFECTIVE_CONNECTION_TYPE_2G);
+    base::HistogramTester histogram_tester;
+    previews_decider_impl()->InjectTestBlacklist(nullptr /* blacklist */);
+    PreviewsUserData user_data(kDefaultPageId);
+    user_data.set_navigation_ect(net::EFFECTIVE_CONNECTION_TYPE_2G);
+    content::MockNavigationHandle navigation_handle;
+    navigation_handle.set_url(GURL("https://whitelisted.example.com"));
+    EXPECT_FALSE(previews_decider_impl()->ShouldCommitPreview(
+        &user_data, &navigation_handle, PreviewsType::NOSCRIPT));
+
+    histogram_tester.ExpectUniqueSample(
+        "Previews.EligibilityReason.NoScript",
+        static_cast<int>(PreviewsEligibilityReason::BLACKLIST_UNAVAILABLE), 1);
+  }
 }
 
 TEST_F(PreviewsDeciderImplTest,
@@ -1771,7 +1788,9 @@ TEST_F(PreviewsDeciderImplTest, LogPreviewDecisionMadePassInCorrectParams) {
   }
 }  // namespace
 
-TEST_F(PreviewsDeciderImplTest, LogDecisionMadeBlacklistNotAvailable) {
+TEST_F(
+    PreviewsDeciderImplTest,
+    LogDecisionMadeBlacklistUnavailableAtNavigationStartForNonCommitTimePreview) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
       {features::kPreviews, features::kOfflinePreviews}, {});
@@ -1779,6 +1798,33 @@ TEST_F(PreviewsDeciderImplTest, LogDecisionMadeBlacklistNotAvailable) {
   InitializeUIService();
   auto expected_reason = PreviewsEligibilityReason::BLACKLIST_UNAVAILABLE;
   auto expected_type = PreviewsType::OFFLINE;
+
+  previews_decider_impl()->InjectTestBlacklist(nullptr /* blacklist */);
+  PreviewsUserData user_data(kDefaultPageId);
+  content::MockNavigationHandle navigation_handle;
+  navigation_handle.set_url(GURL("https://www.google.com"));
+  previews_decider_impl()->ShouldAllowPreviewAtNavigationStart(
+      &user_data, &navigation_handle, false, expected_type);
+  base::RunLoop().RunUntilIdle();
+  // Testing correct log method is called.
+  EXPECT_THAT(ui_service()->decision_reasons(),
+              ::testing::Contains(expected_reason));
+  EXPECT_THAT(ui_service()->decision_types(),
+              ::testing::Contains(expected_type));
+}
+
+TEST_F(
+    PreviewsDeciderImplTest,
+    LogDecisionMadeBlacklistUnavailableAtNavigationStartForCommitTimePreview) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {features::kPreviews, features::kNoScriptPreviews,
+       optimization_guide::features::kOptimizationHints},
+      {});
+
+  InitializeUIService();
+  auto expected_reason = PreviewsEligibilityReason::ALLOWED;
+  auto expected_type = PreviewsType::NOSCRIPT;
 
   previews_decider_impl()->InjectTestBlacklist(nullptr /* blacklist */);
   PreviewsUserData user_data(kDefaultPageId);
@@ -2027,11 +2073,6 @@ TEST_F(PreviewsDeciderImplTest,
   std::vector<PreviewsEligibilityReason> checked_decisions = {
       PreviewsEligibilityReason::URL_HAS_BASIC_AUTH,
       PreviewsEligibilityReason::EXCLUDED_BY_MEDIA_SUFFIX,
-      PreviewsEligibilityReason::BLACKLIST_UNAVAILABLE,
-      PreviewsEligibilityReason::BLACKLIST_DATA_NOT_LOADED,
-      PreviewsEligibilityReason::USER_RECENTLY_OPTED_OUT,
-      PreviewsEligibilityReason::USER_BLACKLISTED,
-      PreviewsEligibilityReason::HOST_BLACKLISTED,
       PreviewsEligibilityReason::RELOAD_DISALLOWED,
   };
 
@@ -2076,11 +2117,6 @@ TEST_F(PreviewsDeciderImplTest, LogDecisionMadeNetworkNotSlow) {
   std::vector<PreviewsEligibilityReason> checked_decisions = {
       PreviewsEligibilityReason::URL_HAS_BASIC_AUTH,
       PreviewsEligibilityReason::EXCLUDED_BY_MEDIA_SUFFIX,
-      PreviewsEligibilityReason::BLACKLIST_UNAVAILABLE,
-      PreviewsEligibilityReason::BLACKLIST_DATA_NOT_LOADED,
-      PreviewsEligibilityReason::USER_RECENTLY_OPTED_OUT,
-      PreviewsEligibilityReason::USER_BLACKLISTED,
-      PreviewsEligibilityReason::HOST_BLACKLISTED,
       PreviewsEligibilityReason::NETWORK_QUALITY_UNAVAILABLE,
       PreviewsEligibilityReason::DEVICE_OFFLINE,
   };
@@ -2124,11 +2160,6 @@ TEST_F(PreviewsDeciderImplTest, LogDecisionMadeReloadDisallowed) {
   std::vector<PreviewsEligibilityReason> checked_decisions = {
       PreviewsEligibilityReason::URL_HAS_BASIC_AUTH,
       PreviewsEligibilityReason::EXCLUDED_BY_MEDIA_SUFFIX,
-      PreviewsEligibilityReason::BLACKLIST_UNAVAILABLE,
-      PreviewsEligibilityReason::BLACKLIST_DATA_NOT_LOADED,
-      PreviewsEligibilityReason::USER_RECENTLY_OPTED_OUT,
-      PreviewsEligibilityReason::USER_BLACKLISTED,
-      PreviewsEligibilityReason::HOST_BLACKLISTED,
       PreviewsEligibilityReason::NETWORK_QUALITY_UNAVAILABLE,
       PreviewsEligibilityReason::DEVICE_OFFLINE,
       PreviewsEligibilityReason::NETWORK_NOT_SLOW,
@@ -2201,16 +2232,16 @@ TEST_F(PreviewsDeciderImplTest, LogDecisionMadeAllowClientPreviewsWithECT) {
   std::vector<PreviewsEligibilityReason> checked_decisions = {
       PreviewsEligibilityReason::URL_HAS_BASIC_AUTH,
       PreviewsEligibilityReason::EXCLUDED_BY_MEDIA_SUFFIX,
-      PreviewsEligibilityReason::BLACKLIST_UNAVAILABLE,
-      PreviewsEligibilityReason::BLACKLIST_DATA_NOT_LOADED,
-      PreviewsEligibilityReason::USER_RECENTLY_OPTED_OUT,
-      PreviewsEligibilityReason::USER_BLACKLISTED,
-      PreviewsEligibilityReason::HOST_BLACKLISTED,
       PreviewsEligibilityReason::NETWORK_QUALITY_UNAVAILABLE,
       PreviewsEligibilityReason::DEVICE_OFFLINE,
       PreviewsEligibilityReason::NETWORK_NOT_SLOW,
       PreviewsEligibilityReason::NETWORK_NOT_SLOW_FOR_SESSION,
       PreviewsEligibilityReason::RELOAD_DISALLOWED,
+      PreviewsEligibilityReason::BLACKLIST_UNAVAILABLE,
+      PreviewsEligibilityReason::BLACKLIST_DATA_NOT_LOADED,
+      PreviewsEligibilityReason::USER_RECENTLY_OPTED_OUT,
+      PreviewsEligibilityReason::USER_BLACKLISTED,
+      PreviewsEligibilityReason::HOST_BLACKLISTED,
   };
   PreviewsUserData user_data(kDefaultPageId);
   content::MockNavigationHandle navigation_handle;
@@ -2255,11 +2286,6 @@ TEST_F(PreviewsDeciderImplTest, LogDecisionMadeAllowHintPreviewWithoutECT) {
   std::vector<PreviewsEligibilityReason> checked_decisions = {
       PreviewsEligibilityReason::URL_HAS_BASIC_AUTH,
       PreviewsEligibilityReason::EXCLUDED_BY_MEDIA_SUFFIX,
-      PreviewsEligibilityReason::BLACKLIST_UNAVAILABLE,
-      PreviewsEligibilityReason::BLACKLIST_DATA_NOT_LOADED,
-      PreviewsEligibilityReason::USER_RECENTLY_OPTED_OUT,
-      PreviewsEligibilityReason::USER_BLACKLISTED,
-      PreviewsEligibilityReason::HOST_BLACKLISTED,
       PreviewsEligibilityReason::RELOAD_DISALLOWED,
   };
   PreviewsUserData user_data(kDefaultPageId);

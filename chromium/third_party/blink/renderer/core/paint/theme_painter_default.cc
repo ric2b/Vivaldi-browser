@@ -226,7 +226,8 @@ bool ThemePainterDefault::PaintTextField(const Node* node,
   // incorrectly (e.g. https://crbug.com/937872).
   // TODO(gilmanmh): Implement a more permanent solution that allows use of
   // native dark themes.
-  if (paint_info.context.dark_mode_settings().mode != DarkMode::kOff)
+  if (paint_info.context.dark_mode_settings().mode !=
+      DarkModeInversionAlgorithm::kOff)
     return true;
 
   ControlPart part = style.EffectiveAppearance();
@@ -310,8 +311,8 @@ void ThemePainterDefault::SetupMenuListArrow(
   const int middle = rect.Y() + rect.Height() / 2;
 
   extra_params.menu_list.arrow_y = middle;
-  float arrow_box_width = theme_.ClampedMenuListArrowPaddingSize(
-      document.View()->GetChromeClient(), style);
+  float arrow_box_width =
+      theme_.ClampedMenuListArrowPaddingSize(document.GetFrame(), style);
   float arrow_scale_factor = arrow_box_width / theme_.MenuListArrowWidthInDIP();
   if (UseMockTheme()) {
     // The size and position of the drop-down button is different between
@@ -333,7 +334,7 @@ void ThemePainterDefault::SetupMenuListArrow(
   } else {
     // TODO(tkent): This should be 7.0 to match scroll bar buttons.
     float arrow_size =
-        (RuntimeEnabledFeatures::FormControlsRefreshEnabled() ? 12.0 : 6.0) *
+        (RuntimeEnabledFeatures::FormControlsRefreshEnabled() ? 8.0 : 6.0) *
         arrow_scale_factor;
     // Put the arrow at the center of paddingForArrow area.
     // |arrowX| is the left position for Aura theme engine.

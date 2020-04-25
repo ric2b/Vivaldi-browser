@@ -9,7 +9,7 @@
     },
     "types": [
       {
-        "id": "MediaType",
+        "id": "TabAlertState",
         "type": "string",
         "description": "The active media type.",
         "enum": [ "empty", "recording", "capturing", "playing", "muting", "bluetooth", "usb",
@@ -44,6 +44,11 @@
             "type": "boolean",
             "optional": true,
             "description": "If the tab should be quiet."
+          },
+          "hasBeforeUnloadHandler":  {
+            "type": "boolean",
+            "optional": true,
+            "description": "(read only) This tab has a before unload handler."
           }
         }
       },
@@ -114,6 +119,18 @@
           {
             "name": "tabInfo",
             "$ref": "UpdateTabInfo"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "tabInfo",
+                "$ref": "UpdateTabInfo",
+                "description": "Return value with the updated tab info."
+              }
+            ]
           }
         ]
       },
@@ -205,8 +222,13 @@
             "minimum": 0
           },
           {
-            "name": "activeMediaType",
-            "$ref": "MediaType"
+            "type": "integer",
+            "name": "windowId",
+            "minimum": 0
+          },
+          {
+            "name": "tabState",
+            "$ref": "TabAlertState"
           }
         ]
       },
@@ -375,8 +397,8 @@
             "description": "WindowId of the embedder."
           },
           {
-            "name": "activeMediaType",
-            "$ref": "MediaType"
+            "name": "tabState",
+            "$ref": "TabAlertState"
           }
         ]
       },
@@ -504,6 +526,30 @@
             "type": "number",
             "name": "clientY",
             "description": "Y-coordinates of the pointer position"
+          }
+        ]
+      },
+      {
+        "name": "onBeforeUnloadDialogClosed",
+        "type": "function",
+        "description": "Fired when a beforeunload dialog has been closed.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId",
+            "minimum": 0,
+            "description": "Window Id containg the tab Id."
+          },
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0,
+            "description": "Tab id for the beforeunload dialog."
+          },
+          {
+            "type": "boolean",
+            "name": "proceed",
+            "description": "If true, the tab operation that triggered the dialog has been allowed to proceed."
           }
         ]
       }

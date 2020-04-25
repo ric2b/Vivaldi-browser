@@ -17,6 +17,7 @@
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/simple_connection_filter.h"
 #include "content/public/test/test_service.mojom.h"
+#include "content/shell/common/power_monitor_test.mojom.h"
 #include "content/shell/common/power_monitor_test_impl.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/renderer/shell_render_view_observer.h"
@@ -119,7 +120,7 @@ void ShellContentRendererClient::RenderThreadStarted() {
       base::BindRepeating(&CreateRendererTestService),
       base::ThreadTaskRunnerHandle::Get());
   registry->AddInterface<mojom::PowerMonitorTest>(
-      base::BindRepeating(&PowerMonitorTestImpl::MakeStrongBinding),
+      base::BindRepeating(&PowerMonitorTestImpl::MakeSelfOwnedReceiver),
       base::ThreadTaskRunnerHandle::Get());
   content::ChildThread::Get()
       ->GetServiceManagerConnection()
@@ -139,7 +140,6 @@ void ShellContentRendererClient::PrepareErrorPage(
     RenderFrame* render_frame,
     const blink::WebURLError& error,
     const std::string& http_method,
-    bool ignoring_cache,
     std::string* error_html) {
   if (error_html && error_html->empty()) {
     *error_html =
@@ -156,7 +156,6 @@ void ShellContentRendererClient::PrepareErrorPageForHttpStatusError(
     content::RenderFrame* render_frame,
     const GURL& unreachable_url,
     const std::string& http_method,
-    bool ignoring_cache,
     int http_status,
     std::string* error_html) {
   if (error_html) {

@@ -9,12 +9,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "extensions/common/manifest_constants.h"
-#include "content/public/common/page_zoom.h"
 #include "components/zoom/zoom_controller.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/extensions/command.h"
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/browser/event_router.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -223,7 +223,7 @@ blink::WebFloatPoint FromUICoordinates(content::WebContents* web_contents,
   if (!zoom_controller)
     return p;
   double zoom_factor =
-      content::ZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
+      blink::PageZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
   return blink::WebFloatPoint(p.x * zoom_factor, p.y * zoom_factor);
 }
 
@@ -234,7 +234,7 @@ void FromUICoordinates(content::WebContents* web_contents, gfx::RectF* rect) {
   if (!zoom_controller)
     return;
   double zoom_factor =
-      content::ZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
+      blink::PageZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
   rect->Scale(zoom_factor);
 }
 
@@ -246,7 +246,7 @@ blink::WebFloatPoint ToUICoordinates(content::WebContents* web_contents,
   if (!zoom_controller)
     return p;
   double zoom_factor =
-      content::ZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
+      blink::PageZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
   return blink::WebFloatPoint(p.x / zoom_factor, p.y / zoom_factor);
 }
 

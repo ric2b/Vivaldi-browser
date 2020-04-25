@@ -18,9 +18,11 @@
 
 class GURL;
 struct ImportedBookmarkEntry;
+struct ImporterAutofillFormDataEntry;
+
+// Vivaldi
 struct ImportedNotesEntry;
 struct ImportedSpeedDialEntry;
-struct ImporterAutofillFormDataEntry;
 
 namespace autofill {
 struct PasswordForm;
@@ -37,13 +39,6 @@ class ImporterBridge : public base::RefCountedThreadSafe<ImporterBridge> {
   virtual void AddBookmarks(
       const std::vector<ImportedBookmarkEntry>& bookmarks,
       const base::string16& first_folder_name) = 0;
-
-  virtual void AddNotes(
-      const std::vector<ImportedNotesEntry>& bookmarks,
-      const base::string16& first_folder_name) {}
-
-  virtual void AddSpeedDial(
-      const std::vector<ImportedSpeedDialEntry>& speeddials) {}
 
   virtual void AddHomePage(const GURL& home_page) = 0;
 
@@ -78,9 +73,6 @@ class ImporterBridge : public base::RefCountedThreadSafe<ImporterBridge> {
   // item has completed.
   virtual void NotifyItemEnded(importer::ImportItem item) = 0;
 
-  virtual void NotifyItemFailed(importer::ImportItem item,
-                                const std::string& error) {}
-
   // Notifies the coordinator that the entire import operation has completed.
   virtual void NotifyEnded() = 0;
 
@@ -89,6 +81,16 @@ class ImporterBridge : public base::RefCountedThreadSafe<ImporterBridge> {
   // It's good to avoid having to create a separate ResourceBundle for the
   // external import process, since the importer only needs a few strings.
   virtual base::string16 GetLocalizedString(int message_id) = 0;
+
+  // Vivaldi
+  virtual void AddNotes(const std::vector<ImportedNotesEntry>& bookmarks,
+                        const base::string16& first_folder_name) {}
+
+  virtual void AddSpeedDial(
+      const std::vector<ImportedSpeedDialEntry>& speeddials) {}
+
+  virtual void NotifyItemFailed(importer::ImportItem item,
+                                const std::string& error) {}
 
  protected:
   friend class base::RefCountedThreadSafe<ImporterBridge>;

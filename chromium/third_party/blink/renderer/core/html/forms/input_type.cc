@@ -32,6 +32,7 @@
 #include <memory>
 #include <utility>
 
+#include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
@@ -75,7 +76,6 @@
 
 namespace blink {
 
-using blink::WebLocalizedString;
 using namespace html_names;
 
 using InputTypeFactoryFunction = InputType* (*)(HTMLInputElement&);
@@ -377,7 +377,7 @@ bool InputType::StepMismatch(const String& value) const {
 
 String InputType::BadInputText() const {
   NOTREACHED();
-  return GetLocale().QueryString(WebLocalizedString::kValidationTypeMismatch);
+  return GetLocale().QueryString(IDS_FORM_VALIDATION_TYPE_MISMATCH);
 }
 
 String InputType::RangeOverflowText(const Decimal&) const {
@@ -391,11 +391,11 @@ String InputType::RangeUnderflowText(const Decimal&) const {
 }
 
 String InputType::TypeMismatchText() const {
-  return GetLocale().QueryString(WebLocalizedString::kValidationTypeMismatch);
+  return GetLocale().QueryString(IDS_FORM_VALIDATION_TYPE_MISMATCH);
 }
 
 String InputType::ValueMissingText() const {
-  return GetLocale().QueryString(WebLocalizedString::kValidationValueMissing);
+  return GetLocale().QueryString(IDS_FORM_VALIDATION_VALUE_MISSING);
 }
 
 std::pair<String, String> InputType::ValidationMessage(
@@ -420,7 +420,7 @@ std::pair<String, String> InputType::ValidationMessage(
     //   pattern. User agents may use the contents of this attribute, if it
     //   is present, when informing the user that the pattern is not matched
     return std::make_pair(
-        GetLocale().QueryString(WebLocalizedString::kValidationPatternMismatch),
+        GetLocale().QueryString(IDS_FORM_VALIDATION_PATTERN_MISMATCH),
         GetElement().FastGetAttribute(kTitleAttr).GetString());
   }
 
@@ -464,19 +464,19 @@ std::pair<String, String> InputType::ValidationMessage(
         candidate2 > step_range.Maximum()) {
       return std::make_pair(
           GetLocale().QueryString(
-              WebLocalizedString::kValidationStepMismatchCloseToLimit,
+              IDS_FORM_VALIDATION_STEP_MISMATCH_CLOSE_TO_LIMIT,
               localized_candidate1),
           g_empty_string);
     }
     String localized_candidate2 = LocalizeValue(Serialize(candidate2));
     if (candidate1 < candidate2) {
       return std::make_pair(
-          GetLocale().QueryString(WebLocalizedString::kValidationStepMismatch,
+          GetLocale().QueryString(IDS_FORM_VALIDATION_STEP_MISMATCH,
                                   localized_candidate1, localized_candidate2),
           g_empty_string);
     }
     return std::make_pair(
-        GetLocale().QueryString(WebLocalizedString::kValidationStepMismatch,
+        GetLocale().QueryString(IDS_FORM_VALIDATION_STEP_MISMATCH,
                                 localized_candidate2, localized_candidate1),
         g_empty_string);
   }

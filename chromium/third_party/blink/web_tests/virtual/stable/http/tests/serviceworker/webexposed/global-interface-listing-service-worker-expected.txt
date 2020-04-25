@@ -69,8 +69,10 @@ interface BroadcastChannel : EventTarget
     setter onmessage
     setter onmessageerror
 interface ByteLengthQueuingStrategy
+    attribute @@toStringTag
+    getter highWaterMark
+    getter size
     method constructor
-    method size
 interface CSSSkewX : CSSTransformComponent
     attribute @@toStringTag
     getter ax
@@ -137,8 +139,10 @@ interface CloseEvent : Event
     getter wasClean
     method constructor
 interface CountQueuingStrategy
+    attribute @@toStringTag
+    getter highWaterMark
+    getter size
     method constructor
-    method size
 interface Crypto
     attribute @@toStringTag
     getter subtle
@@ -1947,6 +1951,7 @@ interface WebGL2RenderingContext
     method isVertexArray
     method lineWidth
     method linkProgram
+    method makeXRCompatible
     method pauseTransformFeedback
     method pixelStorei
     method polygonOffset
@@ -2439,6 +2444,7 @@ interface WebGLRenderingContext
     method isTexture
     method lineWidth
     method linkProgram
+    method makeXRCompatible
     method pixelStorei
     method polygonOffset
     method readPixels
@@ -2563,7 +2569,6 @@ interface WorkerGlobalScope : EventTarget
     getter self
     method atob
     method btoa
-    method cancelAnimationFrame
     method clearInterval
     method clearTimeout
     method constructor
@@ -2571,7 +2576,6 @@ interface WorkerGlobalScope : EventTarget
     method fetch
     method importScripts
     method queueMicrotask
-    method requestAnimationFrame
     method setInterval
     method setTimeout
     setter onerror
@@ -2650,6 +2654,7 @@ interface WritableStreamDefaultWriter
     getter onpush
     getter onsync
     getter registration
+    getter serviceWorker
     method gc
     method skipWaiting
     setter onabortpayment

@@ -18,9 +18,7 @@
 namespace cc {
 
 LayerTreeHostPixelResourceTest::LayerTreeHostPixelResourceTest(
-    PixelResourceTestCase test_case,
-    Layer::LayerMaskType mask_type)
-    : mask_type_(mask_type) {
+    PixelResourceTestCase test_case) {
   InitializeFromTestCase(test_case);
 }
 
@@ -43,6 +41,15 @@ const char* LayerTreeHostPixelResourceTest::GetRendererSuffix() const {
       return "skia_vk";
     case RENDERER_SOFTWARE:
       return "sw";
+  }
+}
+
+void LayerTreeHostPixelResourceTest::InitializeSettings(
+    LayerTreeSettings* settings) {
+  LayerTreePixelTest::InitializeSettings(settings);
+  if (raster_type() != GPU) {
+    settings->gpu_rasterization_disabled = true;
+    settings->gpu_rasterization_forced = false;
   }
 }
 
@@ -133,7 +140,6 @@ void LayerTreeHostPixelResourceTest::RunPixelResourceTestWithLayerList(
 }
 
 ParameterizedPixelResourceTest::ParameterizedPixelResourceTest()
-    : LayerTreeHostPixelResourceTest(::testing::get<0>(GetParam()),
-                                     ::testing::get<1>(GetParam())) {}
+    : LayerTreeHostPixelResourceTest(GetParam()) {}
 
 }  // namespace cc

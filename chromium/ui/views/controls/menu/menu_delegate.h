@@ -193,9 +193,6 @@ class VIEWS_EXPORT MenuDelegate {
   // Views that are not MenuItemViews.
   virtual bool ShouldCloseOnDragComplete();
 
-  // Notification that the user has highlighted the specified item.
-  virtual void VivaldiSelectionChanged(MenuItemView* menu) {}
-
   // Notification the menu has closed. This will not be called if MenuRunner is
   // deleted during calls to ExecuteCommand().
   virtual void OnMenuClosed(MenuItemView* menu) {}
@@ -210,11 +207,7 @@ class VIEWS_EXPORT MenuDelegate {
                                        MenuAnchorPosition* anchor,
                                        bool* has_mnemonics,
                                        MenuButton** button);
-  virtual MenuItemView* GetVivaldiSiblingMenu(views::MenuItemView* menu,
-                                              const gfx::Point& screen_point,
-                                              gfx::Rect* rect);
-  virtual MenuItemView* GetNextSiblingMenu(bool next, bool* has_mnemonics,
-                                           gfx::Rect* rect);
+
   // Returns the max width menus can grow to be.
   virtual int GetMaxWidthForMenu(MenuItemView* menu);
 
@@ -241,9 +234,26 @@ class VIEWS_EXPORT MenuDelegate {
   // within the screen.
   virtual bool ShouldTryPositioningBesideAnchor() const;
 
+  // Vivaldi
+  // Notification that the user has highlighted the specified item.
+  virtual void VivaldiSelectionChanged(MenuItemView* menu) {}
+
+  virtual MenuItemView* GetVivaldiSiblingMenu(views::MenuItemView* menu,
+                                              const gfx::Point& screen_point,
+                                              gfx::Rect* rect);
+  virtual MenuItemView* GetNextSiblingMenu(bool next,
+                                           bool* has_mnemonics,
+                                           gfx::Rect* rect);
   // Added by Vivaldi. To be used when menu does not fit the screen or would
   // overlap the menu bar button.
   virtual bool VivaldiShouldTryPositioningInMenuBar() const;
+
+  // Added by Vivaldi. To be used when opening a context menu.
+  virtual bool VivaldiShouldTryPositioningContextMenu() const;
+
+  virtual void VivaldiGetContextMenuPosition(gfx::Rect* menu_bounds,
+    const gfx::Rect& monitor_bounds,
+    const gfx::Rect& anchor_bounds) const;
 };
 
 }  // namespace views

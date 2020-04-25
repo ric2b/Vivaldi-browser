@@ -6,6 +6,8 @@
 #define SERVICES_NETWORK_TEST_TEST_SHARED_URL_LOADER_FACTORY_H_
 
 #include "base/macros.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace net {
@@ -36,7 +38,7 @@ class TestSharedURLLoaderFactory : public SharedURLLoaderFactory {
                             mojom::URLLoaderClientPtr client,
                             const net::MutableNetworkTrafficAnnotationTag&
                                 traffic_annotation) override;
-  void Clone(mojom::URLLoaderFactoryRequest request) override;
+  void Clone(mojo::PendingReceiver<mojom::URLLoaderFactory> receiver) override;
 
   // SharedURLLoaderFactoryInfo implementation
   std::unique_ptr<SharedURLLoaderFactoryInfo> Clone() override;
@@ -49,7 +51,7 @@ class TestSharedURLLoaderFactory : public SharedURLLoaderFactory {
 
   std::unique_ptr<net::TestURLRequestContext> url_request_context_;
   std::unique_ptr<NetworkContext> network_context_;
-  mojom::URLLoaderFactoryPtr url_loader_factory_;
+  mojo::Remote<mojom::URLLoaderFactory> url_loader_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(TestSharedURLLoaderFactory);
 };

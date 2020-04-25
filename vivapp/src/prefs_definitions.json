@@ -13,6 +13,18 @@
           "default": "com",
           "syncable": true
         },
+        "suffix_expansion": {
+          "value": {
+            "type": "string",
+            "default": "com",
+            "syncable": true
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": false,
+            "syncable": true
+          }
+        },
         "prefer_bookmarks": {
           "type": "boolean",
           "default": true,
@@ -22,6 +34,24 @@
       "extensions": {
         "show_toggle": {
           "description": "Whether to display a toggle to show/hide extension buttons on the address bar.",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
+        "show_hidden_toggle": {
+          "description": "Whether to activate toggle hidden extension icons",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "show_all_toggle": {
+          "description": "Whether to activate toggle all extension icons",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
+        "render_in_dropdown": {
+          "description": "Whether to display the extension icons in the extension popup menu",
           "type": "boolean",
           "default": false,
           "syncable": true
@@ -344,6 +374,13 @@
           "type": "dictionary",
           "default": {"sortOrder": 1, "sortField": "manually"},
           "syncable": true
+        },
+        "editor": {
+          "height": {
+            "type": "integer",
+            "default": 230,
+            "syncable": false
+          }
         }
       }
     },
@@ -546,6 +583,18 @@
         "default": "",
         "syncable": false
       },
+      "delete_in_other_locations": {
+        "description": "Whether Vivaldi should propagate permanent message deletion to other accounts and folders",
+        "type": "enum",
+        "enum_values": {
+          "ask": 0,
+          "selected": 1,
+          "folders": 2,
+          "accounts": 3
+        },
+        "default": "ask",
+        "syncable": false
+      },
       "imap_logs_on": {
         "description": "Are imap actions logged in debug console or not?",
         "type": "boolean",
@@ -562,6 +611,18 @@
         "description": "The mail account that was most recently used to send from",
         "type": "string",
         "default": "",
+        "syncable": false
+      },
+      "mark_delete_in_other_locations": {
+        "description": "Whether Vivaldi should propagate marking message as deleted to other accounts and folders",
+        "type": "enum",
+        "enum_values": {
+          "ask": 0,
+          "selected": 1,
+          "folders": 2,
+          "accounts": 3
+        },
+        "default": "ask",
         "syncable": false
       },
       "notifications": {
@@ -726,6 +787,16 @@
           "default": false,
           "syncable": true
         }
+      },
+      "image_loading": {
+        "type": "enum",
+        "enum_values": {
+          "always": 0,
+          "cache": 1,
+          "never": 2
+        },
+        "default": "always",
+        "syncable": true
       }
     },
     "panels": {
@@ -867,6 +938,12 @@
         "default": true,
         "syncable": true
       },
+      "keep_value": {
+        "description": "Keep value in QC search between open and close",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
       "limit_results": {
         "description": "Limit number of QC search results to 20 per category",
         "type": "boolean",
@@ -928,13 +1005,13 @@
         "path": {
           "description": "Start page image path, 'user_defined', or 'desktop_image' reference",
           "type": "file_path",
-          "default": "./../resources/bg.jpg",
+          "default": "/resources/bg.jpg",
           "syncable": false
         },
         "path_custom": {
           "description": "User-defined start page image path",
           "type": "file_path",
-          "default": "./../resources/bg.jpg",
+          "default": "/resources/bg.jpg",
           "syncable": false
         },
         "repeat": {
@@ -1410,6 +1487,49 @@
         "default_mac": true,
         "syncable": true
       },
+      "schedule": {
+        "enabled": {
+          "description": "Theme scheduling mechanism",
+          "type": "enum",
+          "enum_values": {
+            "off": 0,
+            "system": 1,
+            "timeline": 2
+          },
+          "default": "off",
+          "syncable": false
+        },
+        "timeline": {
+          "description": "Timeline theme schedule",
+          "type": "list",
+          "default": [
+            {
+              "id": 0,
+              "minutes": 30,
+              "hours": 7,
+              "themeName": "Vivaldi",
+              "undeletable": true
+            },
+            {
+              "id": 1,
+              "minutes": 0,
+              "hours": 20,
+              "themeName": "Dark",
+              "undeletable": true
+            }
+          ],
+          "syncable": false
+        },
+        "o_s": {
+          "description": "Operating System-based theme schedule",
+          "type": "dictionary",
+          "default": {
+            "light": "Vivaldi",
+            "dark": "Dark"
+          },
+          "syncable": false
+        }
+      },
       "window_background_accent_color_blend": {
         "type": "boolean",
         "default": true,
@@ -1418,7 +1538,7 @@
       "window_background_image_url": {
         "type": "string",
         "syncable": false,
-        "default": "../resources/triangles_pattern_vivaldi.png"
+        "default": "/resources/triangles_pattern_vivaldi.png"
       },
       "window_background_image_scaling": {
         "type": "enum",

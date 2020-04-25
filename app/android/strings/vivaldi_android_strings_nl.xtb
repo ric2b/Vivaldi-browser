@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="nl">
+<translation id="1029351048239796117">Vivaldi heeft toestemming nodig om toegang te krijgen tot de microfoon voor deze website.</translation>
+<translation id="1063227610401477317">Wijzigingen toepassen</translation>
+<translation id="1067048845568873861">Aangemaakt</translation>
+<translation id="1151669774236491028">Vivaldi.net ondervindt problemen:  <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="1193152013480891461">Vivaldi-account aanmaken</translation>
+<translation id="119944043368869598">Alles wissen</translation>
+<translation id="1228311134236651326">Geen notities gevonden</translation>
+<translation id="1243314992276662751">Uploaden</translation>
+<translation id="1249276067323441352">Synchronisatiegegevens</translation>
+<translation id="1302932907222175914">Notities zoeken</translation>
+<translation id="1644574205037202324">Geschiedenis</translation>
+<translation id="1689333818294560261">Bijnaam</translation>
+<translation id="1721552494230946796">Nieuwe snelkiezermap</translation>
+<translation id="1799160781006135561">Geen versleutelingswachtwoord opgegeven</translation>
+<translation id="1887193815546011584">Nieuwe Snelkiezer</translation>
+<translation id="1984391066297619717">Automatische synchronisatie</translation>
+<translation id="2030706494969937066">Je aanmeldgegevens konden niet achterhaald worden. Meld je opnieuw aan.</translation>
+<translation id="2034405583989639424">Snelkiezer bewerken</translation>
+<translation id="2071726368047511075">Schermopname maken</translation>
+<translation id="2199644148227291099">Weet je zeker dat je je inlogwachtwoord wilt gebruiken voor de versleuteling van je gegevens? Dit vermindert de veiligheid van je gesynchroniseerde gegevens aanzienlijk.</translation>
+<translation id="2243210264130642074">Notitie opgeslagen</translation>
+<translation id="2336309953058658733">Prullenbak legen</translation>
+<translation id="2359808026110333948">Doorgaan</translation>
+<translation id="2526968784648867272">Schermopname maken...</translation>
+<translation id="2709516037105925701">Automatische formulierinvoer</translation>
+<translation id="271033894570825754">Nieuw</translation>
+<translation id="2745324713975967671">Versleutelingswachtwoord</translation>
+<translation id="2818042133587341562">Vivaldi heeft toestemming nodig om toegang te krijgen tot de camera voor deze website.</translation>
+<translation id="2842985007712546952">Bovenliggende map</translation>
+<translation id="2850144663494818309">Synchronisatie initialiseren...</translation>
+<translation id="2873951654529031587">Prullenbak</translation>
+<translation id="2915527103487649658">Alle gegevens synchroniseren</translation>
+<translation id="2953995378235516294">De gegevens op het Sync-account zijn versleuteld. Voer je versleutelingswachtwoord in om ze te decoderen.</translation>
+<translation id="2996809686854298943">URL vereist</translation>
+<translation id="3177673846235066154">De server heeft je aanmelding afgewezen.</translation>
+<translation id="3183006304368105350">Tabblad dupliceren</translation>
+<translation id="3271422135763022755">Begin met typen...</translation>
+<translation id="3335772982573114336">Nieuwe notitie</translation>
+<translation id="33451081266695216">Verbinding wordt gereguleerd door de server.</translation>
+<translation id="3377025655491224618">Privétab</translation>
+<translation id="3513566764071045027">Afmelden</translation>
+<translation id="3596285013654573099">Aanmelden voor synchronisatie</translation>
+<translation id="3611176835527015865">Betreft alleen interne Vivaldi-pagina's, geen websites</translation>
+<translation id="3723593528923555236">Verdergaan zonder extra wachtwoord</translation>
+<translation id="3838463869765243557">Apparaatnaam  (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">Beschrijving</translation>
+<translation id="3897711243931585177">ALGEMEEN</translation>
+<translation id="4014682279600355881">We raden je aan een sterk afzonderlijk versleutelingswachtwoord aan te maken. Als je dit echter blanco laat, wordt het opgeslagen accountwachtwoord gebruikt.</translation>
+<translation id="4073968054795398875">De synchronisatieserver ondervindt problemen. De synchronisatie wordt snel weer opgevat...</translation>
+<translation id="4082980568238151037">Versleutelingswachtwoord instellen.</translation>
+<translation id="4145489350420416595">Onverwachte fout.</translation>
+<translation id="4268574628540273656">URL:</translation>
+<translation id="4304224509867189079">Aanmelden</translation>
+<translation id="4435780204941264251">Synchronisatiegegevens wissen</translation>
+<translation id="4532845899244822526">Kies een map</translation>
+<translation id="4579489600439872414">Synchronisatie is uitgeschakeld in Android-instellingen.</translation>
+<translation id="4589558845651536280">Bezig...</translation>
+<translation id="4752136117982598343">Notitie opgeslagen in <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">Downloads</translation>
+<translation id="4833044618885331665">Vivaldi moet worden vernieuwd om te kunnen synchroniseren.</translation>
+<translation id="4847896847259487518">Bladwijzer toevoegen</translation>
+<translation id="4890701585167892790">Geen notities</translation>
+<translation id="4892521078757281695">Vegen om tab te sluiten</translation>
+<translation id="4936710149174207991">Niet gesynchroniseerd</translation>
+<translation id="4954427294703861104">Nieuw bij Vivaldi? Maak een account aan.</translation>
+<translation id="504986598654589766">Webbrowsen op een privé-tabblad betekent dat zoekopdrachten, bezochte websites, cookies en tijdelijke bestanden niet door Vivaldi worden opgeslagen. Het brengt geen beveiligde of anderszins aangepaste verbinding tot stand.</translation>
+<translation id="5161254044473106830">Titel vereist</translation>
+<translation id="5186185447130319458">Privé</translation>
+<translation id="5271549068863921519">Wachtwoord opslaan</translation>
+<translation id="5286002386457946212">Clientfout.</translation>
+<translation id="5290452628447338707">Geen notities</translation>
+<translation id="5351912500249789547">Vivaldi.net heeft je aanmeldgegevens afgewezen: Foutcode <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">Afbeelding openen</translation>
+<translation id="5421638721143596928">Het is niet gelukt om je aanmeldgegevens te decoderen. Meld je nogmaals aan.</translation>
+<translation id="5443210757369395869">Schermopname van zichtbaar deel</translation>
+<translation id="5448025735280530073">Vivaldi heeft toegang nodig tot je locatie om deze te delen met deze website.</translation>
+<translation id="5510723066938954312">Bladwijzers en snelkiezers</translation>
+<translation id="5525981542754785361">Notitie opgeslagen in <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">Naar notitie kopiëren</translation>
+<translation id="5754087700864822036">WEBPAGINA'S</translation>
+<translation id="5765833063161370062">Notities verplaatsen</translation>
+<translation id="5790085346892983794">Geslaagd</translation>
+<translation id="5803562371819294631">Hiermee worden alle synchronisatiegegevens van de Sync-server verwijderd, het versleutelingswachtwoord wordt opnieuw ingesteld en je wordt afgemeld. Weet je het zeker?</translation>
+<translation id="5823830882692559950">Vivaldi.net heeft je aanmeldgegevens afgewezen: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5841317974325635710">Nieuwe notitie aangemaakt</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> notitie}
+          other {<ph name="NOTES_COUNT_MANY" /> notities}}</translation>
+<translation id="6012194412768958291">Kan geen contact maken met vivaldi.net.</translation>
+<translation id="6027204815015935175">Wachtwoord vereist voor decoderen.</translation>
+<translation id="6059232451013891645">Map:</translation>
+<translation id="6077943432358741146">Snelkiezer</translation>
+<translation id="6091125352818749975">Gesynchroniseerde gegevens van de server wissen.</translation>
+<translation id="6135798666968342262">Schuifbalken weergeven</translation>
+<translation id="6179463181009746489">Notities verwijderen</translation>
+<translation id="6231148928368101651">Panelen</translation>
+<translation id="6406506848690869874">Synchronisatie</translation>
+<translation id="6657585470893396449">Wachtwoord</translation>
+<translation id="6682232524697939870">Vivaldi heeft toestemming nodig voor toegang tot de camera en microfoon voor deze website.</translation>
+<translation id="6698381487523150993">Aangemaakt:</translation>
+<translation id="6786747875388722282">Extensies</translation>
+<translation id="6887143077297974801">Synchronisatie heeft niet kunnen starten.</translation>
+<translation id="6945221475159498467">Selecteren</translation>
+<translation id="6960734555676205519">Jongste synchronisatie</translation>
+<translation id="7029809446516969842">Wachtwoorden</translation>
+<translation id="7075547914712055886">Synchronisatie opnieuw starten</translation>
+<translation id="7222342267839079597">Kies een sterk versleutelingswachtwoord om uw gegevens te beschermen.</translation>
+<translation id="7228660378238874411">Altijd website voor desktop weergeven</translation>
+<translation id="7390295729483215958">Synchronisatie wordt uitgevoerd...</translation>
+<translation id="7492794630657957996">Bevestig de gegevenssynchronisatie om de instellingen te voltooien</translation>
+<translation id="7514365320538308">Downloaden</translation>
+<translation id="7547490097772831952">Schermopname van hele pagina</translation>
+<translation id="7725641807765767506">Geen snelkiezers gevonden</translation>
+<translation id="7765158879357617694">Verplaatsen</translation>
+<translation id="7822864833609233785">GEAVANCEERD</translation>
+<translation id="798930073512159071">
+
+Schrijf je eerste notitie
+
+Om te beginnen tik je op het icoon Nieuwe notitie, of selecteer je tekst op een webpagina en maak je een notitie vanuit het contextmenu.</translation>
+<translation id="8004991133350335392">Het wachtwoord moet uit minstens 12 tekens bestaan.</translation>
+<translation id="8028021641083150097">Om weer toegang te krijgen tot je account, moeten alle synchronisatiegegevens van de server worden gewist. Je kunt vervolgens een nieuwe synchronisatie starten met de huidige browsergegevens.</translation>
+<translation id="8035133914807600019">Nieuwe map…</translation>
+<translation id="8066170816074394954">Serverfout.</translation>
+<translation id="8123787473700925741">Vivaldi.net ondervindt problemen: Foutcode <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">Synchronisatie starten</translation>
+<translation id="8206267832882844324">Notitie bewerken</translation>
+<translation id="8225478925744929238">Bladwijzer verwijderen</translation>
+<translation id="8233521945095997439">Geen snelkiezers</translation>
+<translation id="8257908958623224237">Conflict met de gegevens van een andere client.</translation>
+<translation id="8261506727792406068">Verwijderen</translation>
+<translation id="8305137170060620165">Ingetikte geschiedenis en sessies-op-afstand</translation>
+<translation id="8414685983518053656">Notities</translation>
+<translation id="8422778094137438683">Je moet aanmelden met een vivaldi.net-account.</translation>
+<translation id="8428213095426709021">Instellingen</translation>
+<translation id="8462396943848220200">Opnieuw proberen na <ph name="TIME" /></translation>
+<translation id="8480556999740355963">Aangemeld als <ph name="USERNAME" /> op <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">Aanmelden als  <ph name="USERNAME" /> bij vivaldi.net. Een ogenblik.</translation>
+<translation id="8503813439785031346">Gebruikersnaam</translation>
+<translation id="8661216209723599816">Gegevens op de server opnieuw instellen</translation>
+<translation id="8721244337025311110">Nieuwe bladwijzer</translation>
+<translation id="8724114686743788114">Kan afbeelding niet weergeven</translation>
+<translation id="8730621377337864115">Voltooid</translation>
+<translation id="8738958257180686306">Aangemaakt: <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Vivaldi heeft opslagtoegang nodig om bestanden te downloaden.</translation>
+<translation id="8808060551076378370">Geen notitie toegevoegd.</translation>
+<translation id="8817201557520703060">Schermopname gemaakt</translation>
+<translation id="8820817407110198400">Bladwijzers</translation>
+<translation id="8884751487662988673">Om gesynchroniseerde tabs te zien, meld je je aan voor synchronisatie via de instellingen.</translation>
+<translation id="895749247724466293">Snelkiezer zoeken</translation>
+<translation id="8959245489304000426">Ik ben mijn wachtwoord kwijt</translation>
+<translation id="8979401359137062629">Notitie:</translation>
+<translation id="9028089729841356743">Netwerkfout.</translation>
+<translation id="9065203028668620118">Bewerken</translation>
+<translation id="9148058034647219655">Afsluiten</translation>
+<translation id="9173575361559252669">Schermopname mislukt</translation>
+</translationbundle>

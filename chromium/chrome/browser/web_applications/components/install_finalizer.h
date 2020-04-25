@@ -44,6 +44,10 @@ class InstallFinalizer {
                                const FinalizeOptions& options,
                                InstallFinalizedCallback callback) = 0;
 
+  // Write the new WebApp data to disk and update the app.
+  virtual void FinalizeUpdate(const WebApplicationInfo& web_app_info,
+                              InstallFinalizedCallback callback) = 0;
+
   // Removes the external app for |app_url| from disk and registrar. Fails if
   // there is no installed external app for |app_url|.
   virtual void UninstallExternalWebApp(const GURL& app_url,
@@ -71,17 +75,9 @@ class InstallFinalizer {
   virtual bool CanRevealAppShim() const = 0;
   virtual void RevealAppShim(const AppId& app_id) = 0;
 
-  virtual bool CanSkipAppUpdateForSync(
-      const AppId& app_id,
-      const WebApplicationInfo& web_app_info) const = 0;
-
   virtual bool CanUserUninstallFromSync(const AppId& app_id) const = 0;
 
-  // TODO(loyso): This method should be protected and subclasses should call it
-  // (upcasting their final registrar type). Subclassing WebAppProvider will fix
-  // this.
-  virtual void SetSubsystems(AppRegistrar* registrar,
-                             WebAppUiManager* ui_manager);
+  void SetSubsystems(AppRegistrar* registrar, WebAppUiManager* ui_manager);
 
   virtual ~InstallFinalizer() = default;
 

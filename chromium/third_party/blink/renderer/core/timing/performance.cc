@@ -37,6 +37,7 @@
 #include "base/time/default_tick_clock.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/string_or_performance_measure_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -50,6 +51,7 @@
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/timing/largest_contentful_paint.h"
 #include "third_party/blink/renderer/core/timing/layout_shift.h"
+#include "third_party/blink/renderer/core/timing/measure_memory/measure_memory_options.h"
 #include "third_party/blink/renderer/core/timing/performance_element_timing.h"
 #include "third_party/blink/renderer/core/timing/performance_event_timing.h"
 #include "third_party/blink/renderer/core/timing/performance_long_task_timing.h"
@@ -65,6 +67,7 @@
 #include "third_party/blink/renderer/core/timing/profiler_init_options.h"
 #include "third_party/blink/renderer/core/timing/time_clamper.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_load_timing.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_timing_info.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -138,6 +141,21 @@ PerformanceNavigation* Performance::navigation() const {
 
 MemoryInfo* Performance::memory() const {
   return nullptr;
+}
+
+ScriptPromise Performance::measureMemory(ScriptState* script_state,
+                                         MeasureMemoryOptions* options) const {
+  v8::Isolate* isolate = script_state->GetIsolate();
+  v8::Local<v8::Context> context = script_state->GetContext();
+  v8::Local<v8::Promise> promise;
+  v8::MaybeLocal<v8::Promise> maybe_promise = isolate->MeasureMemory(
+      context, options && options->hasDetailed() && options->detailed()
+                   ? v8::MeasureMemoryMode::kDetailed
+                   : v8::MeasureMemoryMode::kSummary);
+  if (!maybe_promise.ToLocal(&promise)) {
+    return ScriptPromise();
+  }
+  return ScriptPromise(script_state, promise);
 }
 
 DOMHighResTimeStamp Performance::timeOrigin() const {
@@ -335,12 +353,16 @@ void Performance::setResourceTimingBufferSize(unsigned size) {
 bool Performance::PassesTimingAllowCheck(
     const ResourceResponse& response,
     const SecurityOrigin& initiator_security_origin,
-    ExecutionContext* context) {
+    ExecutionContext* context,
+    bool* tainted) {
+  DCHECK(tainted);
   const KURL& response_url = response.ResponseUrl();
   scoped_refptr<const SecurityOrigin> resource_origin =
       SecurityOrigin::Create(response_url);
-  if (resource_origin->IsSameSchemeHostPort(&initiator_security_origin))
+  if (!*tainted &&
+      resource_origin->IsSameSchemeHostPort(&initiator_security_origin))
     return true;
+  *tainted = true;
 
   const AtomicString& timing_allow_origin_string =
       response.HttpHeaderField(http_names::kTimingAllowOrigin);
@@ -380,13 +402,16 @@ bool Performance::AllowsTimingRedirect(
     const ResourceResponse& final_response,
     const SecurityOrigin& initiator_security_origin,
     ExecutionContext* context) {
-  if (!PassesTimingAllowCheck(final_response, initiator_security_origin,
-                              context))
-    return false;
+  bool tainted = false;
 
   for (const ResourceResponse& response : redirect_chain) {
-    if (!PassesTimingAllowCheck(response, initiator_security_origin, context))
+    if (!PassesTimingAllowCheck(response, initiator_security_origin, context,
+                                &tainted))
       return false;
+  }
+  if (!PassesTimingAllowCheck(final_response, initiator_security_origin,
+                              context, &tainted)) {
+    return false;
   }
 
   return true;
@@ -419,8 +444,9 @@ WebResourceTimingInfo Performance::GenerateResourceTiming(
   result.timing = final_response.GetResourceLoadTiming();
   result.response_end = info.LoadResponseEnd();
 
+  bool tainted = false;
   result.allow_timing_details = PassesTimingAllowCheck(
-      final_response, destination_origin, &context_for_use_counter);
+      final_response, destination_origin, &context_for_use_counter, &tainted);
 
   const Vector<ResourceResponse>& redirect_chain = info.RedirectChain();
   if (!redirect_chain.IsEmpty()) {
@@ -618,23 +644,19 @@ UserTiming& Performance::GetUserTiming() {
 
 PerformanceMark* Performance::mark(ScriptState* script_state,
                                    const AtomicString& mark_name,
-                                   ExceptionState& exception_state) {
-  return mark(script_state, mark_name, nullptr, exception_state);
-}
-
-PerformanceMark* Performance::mark(ScriptState* script_state,
-                                   const AtomicString& mark_name,
                                    PerformanceMarkOptions* mark_options,
                                    ExceptionState& exception_state) {
+  if (mark_options &&
+      (mark_options->hasStartTime() || mark_options->hasDetail())) {
+    UseCounter::Count(GetExecutionContext(), WebFeature::kUserTimingL3);
+  }
   PerformanceMark* performance_mark = GetUserTiming().CreatePerformanceMark(
       script_state, mark_name, mark_options, exception_state);
   if (performance_mark) {
     GetUserTiming().AddMarkToPerformanceTimeline(*performance_mark);
     NotifyObserversOfEntry(*performance_mark);
   }
-  if (RuntimeEnabledFeatures::CustomUserTimingEnabled())
-    return performance_mark;
-  return nullptr;
+  return performance_mark;
 }
 
 void Performance::clearMarks(const AtomicString& mark_name) {
@@ -695,77 +717,58 @@ PerformanceMeasure* Performance::MeasureInternal(
     base::Optional<String> end_mark,
     ExceptionState& exception_state) {
   DCHECK(!start_or_options.IsNull());
-  if (RuntimeEnabledFeatures::CustomUserTimingEnabled()) {
-    // An empty option is treated with no difference as null, undefined.
-    if (start_or_options.IsPerformanceMeasureOptions() &&
-        !IsMeasureOptionsEmpty(
-            *start_or_options.GetAsPerformanceMeasureOptions())) {
-      // measure("name", { start, end }, *)
-      if (end_mark) {
-        exception_state.ThrowTypeError(
-            "If a non-empty PerformanceMeasureOptions object was passed, "
-            "|end_mark| must not be passed.");
-        return nullptr;
-      }
-      const PerformanceMeasureOptions* options =
-          start_or_options.GetAsPerformanceMeasureOptions();
-      if (!options->hasStart() && !options->hasEnd()) {
-        exception_state.ThrowTypeError(
-            "If a non-empty PerformanceMeasureOptions object was passed, at "
-            "least one of its 'start' or 'end' properties must be present.");
-        return nullptr;
-      }
-
-      if (options->hasStart() && options->hasDuration() && options->hasEnd()) {
-        exception_state.ThrowTypeError(
-            "If a non-empty PerformanceMeasureOptions object was passed, it "
-            "must not have all of its 'start', 'duration', and 'end' "
-            "properties defined");
-        return nullptr;
-      }
-
-      base::Optional<double> duration = base::nullopt;
-      if (options->hasDuration()) {
-        duration = options->duration();
-      }
-
-      return MeasureWithDetail(script_state, measure_name, options->start(),
-                               std::move(duration), options->end(),
-                               options->detail(), exception_state);
+  // An empty option is treated with no difference as null, undefined.
+  if (start_or_options.IsPerformanceMeasureOptions() &&
+      !IsMeasureOptionsEmpty(
+          *start_or_options.GetAsPerformanceMeasureOptions())) {
+    UseCounter::Count(GetExecutionContext(), WebFeature::kUserTimingL3);
+    // measure("name", { start, end }, *)
+    if (end_mark) {
+      exception_state.ThrowTypeError(
+          "If a non-empty PerformanceMeasureOptions object was passed, "
+          "|end_mark| must not be passed.");
+      return nullptr;
     }
-    // measure("name", "mark1", *)
-    StringOrDouble converted_start;
-    if (start_or_options.IsString()) {
-      converted_start =
-          StringOrDouble::FromString(start_or_options.GetAsString());
+    const PerformanceMeasureOptions* options =
+        start_or_options.GetAsPerformanceMeasureOptions();
+    if (!options->hasStart() && !options->hasEnd()) {
+      exception_state.ThrowTypeError(
+          "If a non-empty PerformanceMeasureOptions object was passed, at "
+          "least one of its 'start' or 'end' properties must be present.");
+      return nullptr;
     }
-    // We let |end_mark| behave the same whether it's empty, undefined or null
-    // in JS, as long as |end_mark| is null in C++.
-    return MeasureWithDetail(
-        script_state, measure_name, converted_start,
-        /* duration = */ base::nullopt,
-        end_mark ? StringOrDouble::FromString(*end_mark)
-                 : NativeValueTraits<StringOrDouble>::NullValue(),
-        ScriptValue::CreateNull(script_state), exception_state);
+
+    if (options->hasStart() && options->hasDuration() && options->hasEnd()) {
+      exception_state.ThrowTypeError(
+          "If a non-empty PerformanceMeasureOptions object was passed, it "
+          "must not have all of its 'start', 'duration', and 'end' "
+          "properties defined");
+      return nullptr;
+    }
+
+    base::Optional<double> duration = base::nullopt;
+    if (options->hasDuration()) {
+      duration = options->duration();
+    }
+
+    return MeasureWithDetail(script_state, measure_name, options->start(),
+                             std::move(duration), options->end(),
+                             options->detail(), exception_state);
   }
-  // For consistency with UserTimingL2: the L2 API took |start| as a string,
-  // so any object passed in became a string '[object, object]', null became
-  // string 'null'.
+  // measure("name", "mark1", *)
   StringOrDouble converted_start;
-  if (!start_or_options.IsPerformanceMeasureOptions()) {
-    // |start_or_options| is not nullable.
-    DCHECK(start_or_options.IsString());
+  if (start_or_options.IsString()) {
     converted_start =
         StringOrDouble::FromString(start_or_options.GetAsString());
   }
-
-  MeasureWithDetail(script_state, measure_name, converted_start,
-                    /* duration = */ base::nullopt,
-                    end_mark ? StringOrDouble::FromString(*end_mark)
-                             : NativeValueTraits<StringOrDouble>::NullValue(),
-                    ScriptValue::CreateNull(script_state), exception_state);
-  // Return nullptr to distinguish from L3.
-  return nullptr;
+  // We let |end_mark| behave the same whether it's empty, undefined or null
+  // in JS, as long as |end_mark| is null in C++.
+  return MeasureWithDetail(
+      script_state, measure_name, converted_start,
+      /* duration = */ base::nullopt,
+      end_mark ? StringOrDouble::FromString(*end_mark)
+               : NativeValueTraits<StringOrDouble>::NullValue(),
+      ScriptValue::CreateNull(script_state->GetIsolate()), exception_state);
 }
 
 PerformanceMeasure* Performance::MeasureWithDetail(

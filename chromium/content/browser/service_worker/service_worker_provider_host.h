@@ -25,6 +25,7 @@
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/common/content_export.h"
 #include "content/public/common/resource_type.h"
+#include "media/mojo/mojom/video_decode_perf_history.mojom.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -35,11 +36,16 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-forward.h"
+#include "third_party/blink/public/mojom/locks/lock_manager.mojom-forward.h"
+#include "third_party/blink/public/mojom/payments/payment_app.mojom-forward.h"
+#include "third_party/blink/public/mojom/permissions/permission.mojom-forward.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_container.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_provider_type.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
+#include "url/origin.h"
 
 namespace service_worker_object_host_unittest {
 class ServiceWorkerObjectHostTest;
@@ -98,8 +104,8 @@ class WebContents;
 // pre-created by the browser process and the provider info is sent in the
 // navigation commit IPC.
 //
-// 2) For shared workers and for service workers, the provider host is
-// pre-created by the browser process and the provider info is sent in the start
+// 2) For web workers and for service workers, the provider host is
+// created by the browser process and the provider info is sent in the start
 // worker IPC message.
 class CONTENT_EXPORT ServiceWorkerProviderHost
     : public ServiceWorkerRegistration::Listener,
@@ -135,7 +141,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // |out_provider_info->host_remote| stays alive).
   // CompleteStartWorkerPreparation() must be called later to get a full info to
   // send to the renderer.
-  static base::WeakPtr<ServiceWorkerProviderHost> PreCreateForController(
+  static base::WeakPtr<ServiceWorkerProviderHost> CreateForServiceWorker(
       base::WeakPtr<ServiceWorkerContextCore> context,
       scoped_refptr<ServiceWorkerVersion> version,
       blink::mojom::ServiceWorkerProviderInfoForStartWorkerPtr*
@@ -144,7 +150,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // Used for starting a web worker (dedicated worker or shared worker). Returns
   // a provider host for the worker. The host stays alive as long as the
   // corresponding host for |host_receiver| stays alive.
-  static base::WeakPtr<ServiceWorkerProviderHost> PreCreateForWebWorker(
+  static base::WeakPtr<ServiceWorkerProviderHost> CreateForWebWorker(
       base::WeakPtr<ServiceWorkerContextCore> context,
       int process_id,
       blink::mojom::ServiceWorkerProviderType provider_type,
@@ -242,9 +248,12 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   mojo::Remote<blink::mojom::ControllerServiceWorker>
   GetRemoteControllerServiceWorker();
 
-  // For service worker clients. Sets |url_| and |site_for_cookies_| and updates
-  // the client uuid if it's a cross-origin transition.
-  void UpdateUrls(const GURL& url, const GURL& site_for_cookies);
+  // For service worker clients. Sets |url_|, |site_for_cookies_| and
+  // |top_frame_origin_| and updates the client uuid if it's a cross-origin
+  // transition.
+  void UpdateUrls(const GURL& url,
+                  const GURL& site_for_cookies,
+                  const base::Optional<url::Origin>& top_frame_origin);
 
   // The URL of this context. For service worker clients, this is the document
   // URL (for documents) or script URL (for workers). For service worker
@@ -259,11 +268,19 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // is_response_committed() is true, the URL should no longer change.
   const GURL& url() const;
 
-  // The URL representing the first-party site for this context. See
-  // |network::ResourceRequest::site_for_cookies| for details.
+  // The URL representing the site_for_cookies for this context. See
+  // |URLRequest::site_for_cookies()| for details.
   // For service worker execution contexts, site_for_cookies() always
   // returns the service worker script URL.
   const GURL& site_for_cookies() const;
+
+  // The URL representing the first-party site for this context.
+  // For service worker execution contexts, top_frame_origin() always
+  // returns the origin of the service worker script URL.
+  // For shared worker it is the origin of the document that created the worker.
+  // For dedicated worker it is the top-frame origin of the document that owns
+  // the worker.
+  base::Optional<url::Origin> top_frame_origin() const;
 
   blink::mojom::ServiceWorkerProviderType provider_type() const {
     return type_;
@@ -295,6 +312,14 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
   CreateServiceWorkerRegistrationObjectInfo(
       scoped_refptr<ServiceWorkerRegistration> registration);
+
+  // For service worker execution contexts.
+  // Returns an object info representing |self.serviceWorker|. The object
+  // info holds a Mojo connection to the ServiceWorkerObjectHost for the
+  // |serviceWorker| to ensure the host stays alive while the object info is
+  // alive. See documentation.
+  blink::mojom::ServiceWorkerObjectInfoPtr CreateServiceWorkerObjectInfoToSend(
+      scoped_refptr<ServiceWorkerVersion> version);
 
   // Returns a ServiceWorkerObjectHost instance for |version| for this provider
   // host. A new instance is created if one does not already exist.
@@ -406,6 +431,19 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // committed.
   // https://html.spec.whatwg.org/multipage/webappapis.html#concept-environment-execution-ready-flag
   bool is_execution_ready() const;
+
+  // For service worker execution contexts. Forwards |receiver| to the process
+  // host on the UI thread.
+  void CreateLockManager(
+      mojo::PendingReceiver<blink::mojom::LockManager> receiver);
+  void CreateIDBFactory(
+      mojo::PendingReceiver<blink::mojom::IDBFactory> receiver);
+  void BindVideoDecodePerfHistory(
+      mojo::PendingReceiver<media::mojom::VideoDecodePerfHistory> receiver);
+  void CreatePermissionService(
+      mojo::PendingReceiver<blink::mojom::PermissionService> receiver);
+  void CreatePaymentManager(
+      mojo::PendingReceiver<payments::mojom::PaymentManager> receiver);
 
  private:
   // For service worker clients. The flow is kInitial -> kResponseCommitted ->
@@ -625,6 +663,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // For service worker clients. See comments for the getter functions.
   GURL url_;
   GURL site_for_cookies_;
+  base::Optional<url::Origin> top_frame_origin_;
 
   // Keyed by registration scope URL length.
   using ServiceWorkerRegistrationMap =

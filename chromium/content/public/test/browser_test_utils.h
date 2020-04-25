@@ -41,6 +41,7 @@
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "storage/common/fileapi/file_system_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/frame/user_activation_update_type.h"
 #include "third_party/blink/public/platform/web_input_event.h"
 #include "third_party/blink/public/platform/web_mouse_event.h"
 #include "third_party/blink/public/platform/web_mouse_wheel_event.h"
@@ -95,7 +96,7 @@ struct FrameVisualProperties;
 class FrameTreeNode;
 class InterstitialPage;
 class NavigationHandle;
-class NavigationHandleImpl;
+class NavigationRequest;
 class RenderFrameMetadataProviderImpl;
 class RenderWidgetHost;
 class RenderWidgetHostView;
@@ -154,8 +155,12 @@ void WaitForLoadStopWithoutSuccessCheck(WebContents* web_contents);
 bool WaitForLoadStop(WebContents* web_contents);
 
 // If a test uses a beforeunload dialog, it must be prepared to avoid flakes.
-// This function collects everything that needs to be done.
-void PrepContentsForBeforeUnloadTest(WebContents* web_contents);
+// This function collects everything that needs to be done, except for user
+// activation which is triggered only when |trigger_user_activation| is true.
+// Note that beforeunload dialog attempts are ignored unless the frame has
+// received a user activation.
+void PrepContentsForBeforeUnloadTest(WebContents* web_contents,
+                                     bool trigger_user_activation = true);
 
 #if defined(USE_AURA) || defined(OS_ANDROID)
 // If WebContent's view is currently being resized, this will wait for the ack
@@ -332,6 +337,12 @@ void MaybeSendSyntheticTapGesture(WebContents* guest_web_contents);
 // Spins a run loop until effects of previously forwarded input are fully
 // realized.
 void RunUntilInputProcessed(RenderWidgetHost* host);
+
+// Returns a string representation of a given |referrer_policy|. This is used to
+// setup <meta name=referrer> tags in documents used for referrer-policy-based
+// tests. The value `no-meta` indicates no tag should be created.
+std::string ReferrerPolicyToString(
+    network::mojom::ReferrerPolicy referrer_policy);
 
 // Holds down modifier keys for the duration of its lifetime and releases them
 // upon destruction. This allows simulating multiple input events without
@@ -1024,10 +1035,11 @@ class TitleWatcher : public WebContentsObserver {
   DISALLOW_COPY_AND_ASSIGN(TitleWatcher);
 };
 
-// Watches a RenderProcessHost and waits for specified destruction events.
+// Watches a RenderProcessHost and waits for a specified lifecycle event.
 class RenderProcessHostWatcher : public RenderProcessHostObserver {
  public:
   enum WatchType {
+    WATCH_FOR_PROCESS_READY,
     WATCH_FOR_PROCESS_EXIT,
     WATCH_FOR_HOST_DESTRUCTION
   };
@@ -1038,7 +1050,7 @@ class RenderProcessHostWatcher : public RenderProcessHostObserver {
   RenderProcessHostWatcher(WebContents* web_contents, WatchType type);
   ~RenderProcessHostWatcher() override;
 
-  // Waits until the renderer process exits.
+  // Waits until the expected event is triggered.
   void Wait();
 
   // Returns true if a renderer process exited cleanly (without hitting
@@ -1048,6 +1060,7 @@ class RenderProcessHostWatcher : public RenderProcessHostObserver {
 
  private:
   // Overridden RenderProcessHost::LifecycleObserver methods.
+  void RenderProcessReady(RenderProcessHost* host) override;
   void RenderProcessExited(RenderProcessHost* host,
                            const ChildProcessTerminationInfo& info) override;
   void RenderProcessHostDestroyed(RenderProcessHost* host) override;
@@ -1482,7 +1495,7 @@ class TestNavigationManager : public WebContentsObserver {
   void OnNavigationStateChanged();
 
   const GURL url_;
-  NavigationHandleImpl* handle_;
+  NavigationRequest* request_;
   bool navigation_paused_;
   NavigationState current_state_;
   NavigationState desired_state_;
@@ -1619,6 +1632,24 @@ class ContextMenuFilter : public content::BrowserMessageFilter {
   content::ContextMenuParams last_params_;
 
   DISALLOW_COPY_AND_ASSIGN(ContextMenuFilter);
+};
+
+// This class allows tests to wait until FrameHostMsg_UpdateUserActivationState
+// IPC reaches the browser process from a renderer.
+class UpdateUserActivationStateMsgWaiter : public BrowserMessageFilter {
+ public:
+  UpdateUserActivationStateMsgWaiter() : BrowserMessageFilter(FrameMsgStart) {}
+
+  bool OnMessageReceived(const IPC::Message& message) override;
+  void Wait();
+
+ private:
+  ~UpdateUserActivationStateMsgWaiter() override = default;
+
+  void OnUpdateUserActivationState(blink::UserActivationUpdateType);
+
+  bool received_ = false;
+  base::RunLoop run_loop_;
 };
 
 WebContents* GetEmbedderForGuest(content::WebContents* guest);

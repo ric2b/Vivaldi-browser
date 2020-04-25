@@ -16,9 +16,6 @@ extern const base::Feature kIgnoresViewportScaleLimits;
 // Used to enable the WKBackForwardList based navigation manager.
 extern const base::Feature kSlimNavigationManager;
 
-// Used to enable using WKHTTPSystemCookieStore in main context URL requests.
-extern const base::Feature kWKHTTPSystemCookieStore;
-
 // Used to crash the browser if unexpected URL change is detected.
 // https://crbug.com/841105.
 extern const base::Feature kCrashOnUnexpectedURLChange;
@@ -33,6 +30,11 @@ extern const base::Feature kBlockUniversalLinksInOffTheRecordMode;
 
 // Used to ensure that the render is not suspended.
 extern const base::Feature kKeepsRenderProcessAlive;
+
+// Used to enable the workaround for a WKWebView WKNavigation leak.
+// (crbug.com/1010765).  Clear older pending navigation records when a
+// navigation finishes.
+extern const base::Feature kClearOldNavigationRecordsWorkaround;
 
 // Used to enable committed interstitials for SSL errors.
 extern const base::Feature kSSLCommittedInterstitials;

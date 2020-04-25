@@ -27,7 +27,11 @@ void ReadFile(const base::FilePath& path,
               const content::URLDataSource::GotDataCallback& callback) {
   std::string content;
   bool result = base::ReadFileToString(path, &content);
-  DCHECK(result) << path;
+  // Allow missing files in <root>/_locales only.
+  DCHECK(result || base::FilePath(kTerminalRoot)
+                       .Append("_locales")
+                       .AppendRelativePath(path, nullptr))
+      << path;
   scoped_refptr<base::RefCountedString> response =
       base::RefCountedString::TakeString(&content);
   callback.Run(response.get());
@@ -37,6 +41,12 @@ void ReadFile(const base::FilePath& path,
 std::string TerminalSource::GetSource() {
   return chrome::kChromeUITerminalHost;
 }
+
+#if !BUILDFLAG(OPTIMIZE_WEBUI)
+bool TerminalSource::AllowCaching() {
+  return false;
+}
+#endif
 
 void TerminalSource::StartDataRequest(
     const std::string& path,
@@ -60,4 +70,9 @@ std::string TerminalSource::GetMimeType(const std::string& path) {
   if (!ext.empty())
     net::GetWellKnownMimeTypeFromExtension(ext.substr(1), &mime_type);
   return mime_type;
+}
+
+bool TerminalSource::ShouldServeMimeTypeAsContentTypeHeader() {
+  // TerminalSource pages include js modules which require an explicit MimeType.
+  return true;
 }

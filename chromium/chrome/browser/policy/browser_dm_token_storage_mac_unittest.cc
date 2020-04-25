@@ -29,7 +29,7 @@ namespace policy {
 namespace {
 
 const char kDmTokenBaseDir[] =
-    FILE_PATH_LITERAL("Policy/Enrollment/");
+    FILE_PATH_LITERAL("Google/Chrome Cloud Enrollment");
 
 constexpr char kDMToken[] = "fake-dm-token";
 
@@ -90,7 +90,7 @@ TEST_F(BrowserDMTokenStorageMacTest, SaveDMToken) {
   ASSERT_TRUE(delegate.success());
 
   base::FilePath app_data_dir_path;
-  ASSERT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &app_data_dir_path));
+  ASSERT_TRUE(base::PathService::Get(base::DIR_APP_DATA, &app_data_dir_path));
   base::FilePath dm_token_dir_path = app_data_dir_path.Append(kDmTokenBaseDir);
 
   std::string filename;

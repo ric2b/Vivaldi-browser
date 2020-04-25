@@ -8,8 +8,10 @@ import static org.chromium.chrome.browser.autofill_assistant.AssistantTagsForTes
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.findViewsWithTag;
 import static org.chromium.chrome.browser.autofill_assistant.user_data.AssistantCollectUserDataCoordinator.DIVIDER_TAG;
 
-import android.support.annotation.Nullable;
 import android.view.View;
+import android.widget.LinearLayout;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.chrome.browser.autofill.CardType;
@@ -19,6 +21,7 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantChoiceList;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantCollectUserDataCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantCollectUserDataDelegate;
+import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantDateTime;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantLoginChoice;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantTermsAndConditionsState;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantVerticalExpander;
@@ -28,7 +31,9 @@ import org.chromium.chrome.browser.payments.AutofillContact;
 import org.chromium.chrome.browser.payments.AutofillPaymentInstrument;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -45,6 +50,9 @@ public class AutofillAssistantCollectUserDataTestHelper {
         final AssistantVerticalExpander mPaymentSection;
         final AssistantVerticalExpander mShippingSection;
         final AssistantVerticalExpander mLoginsSection;
+        final AssistantVerticalExpander mDateRangeStartSection;
+        final AssistantVerticalExpander mDateRangeEndSection;
+        final LinearLayout mTermsSection;
         final AssistantChoiceList mContactList;
         final AssistantChoiceList mPaymentMethodList;
         final AssistantChoiceList mShippingAddressList;
@@ -62,6 +70,12 @@ public class AutofillAssistantCollectUserDataTestHelper {
                     AssistantTagsForTesting.COLLECT_USER_DATA_SHIPPING_ADDRESS_SECTION_TAG);
             mLoginsSection = coordinator.getView().findViewWithTag(
                     AssistantTagsForTesting.COLLECT_USER_DATA_LOGIN_SECTION_TAG);
+            mDateRangeStartSection = coordinator.getView().findViewWithTag(
+                    AssistantTagsForTesting.COLLECT_USER_DATA_DATE_RANGE_START_TAG);
+            mDateRangeEndSection = coordinator.getView().findViewWithTag(
+                    AssistantTagsForTesting.COLLECT_USER_DATA_DATE_RANGE_END_TAG);
+            mTermsSection = coordinator.getView().findViewWithTag(
+                    AssistantTagsForTesting.COLLECT_USER_DATA_TERMS_SECTION_TAG);
             mDividers = findViewsWithTag(coordinator.getView(), DIVIDER_TAG);
             mContactList = (AssistantChoiceList) (findViewsWithTag(
                     mContactSection, COLLECT_USER_DATA_CHOICE_LIST)
@@ -88,10 +102,13 @@ public class AutofillAssistantCollectUserDataTestHelper {
         AutofillAddress mAddress;
         AutofillPaymentInstrument mPaymentMethod;
         AssistantLoginChoice mLoginChoice;
+        AssistantDateTime mDateRangeStart;
+        AssistantDateTime mDateRangeEnd;
         @AssistantTermsAndConditionsState
         int mTermsStatus;
         @Nullable
         Integer mLastLinkClicked;
+        Map<String, String> mAdditionalValues = new HashMap<>();
 
         @Override
         public void onContactInfoChanged(@Nullable AutofillContact contact) {
@@ -122,10 +139,26 @@ public class AutofillAssistantCollectUserDataTestHelper {
         public void onTermsAndConditionsLinkClicked(int link) {
             mLastLinkClicked = link;
         }
+
+        @Override
+        public void onDateTimeRangeStartChanged(
+                int year, int month, int day, int hour, int minute, int second) {
+            mDateRangeStart = new AssistantDateTime(year, month, day, hour, minute, second);
+        }
+
+        @Override
+        public void onDateTimeRangeEndChanged(
+                int year, int month, int day, int hour, int minute, int second) {
+            mDateRangeEnd = new AssistantDateTime(year, month, day, hour, minute, second);
+        }
+
+        @Override
+        public void onKeyValueChanged(String key, String value) {
+            mAdditionalValues.put(key, value);
+        }
     }
 
-    public AutofillAssistantCollectUserDataTestHelper()
-            throws TimeoutException, InterruptedException {
+    public AutofillAssistantCollectUserDataTestHelper() throws TimeoutException {
         registerDataObserver();
         setRequestTimeoutForTesting();
         setSyncServiceForTesting();
@@ -141,8 +174,7 @@ public class AutofillAssistantCollectUserDataTestHelper {
                 () -> PersonalDataManager.getInstance().setSyncServiceForTesting());
     }
 
-    public String setProfile(final AutofillProfile profile)
-            throws TimeoutException, InterruptedException {
+    public String setProfile(final AutofillProfile profile) throws TimeoutException {
         int callCount = mOnPersonalDataChangedHelper.getCallCount();
         String guid = TestThreadUtils.runOnUiThreadBlockingNoException(
                 () -> PersonalDataManager.getInstance().setProfile(profile));
@@ -159,7 +191,7 @@ public class AutofillAssistantCollectUserDataTestHelper {
      * @return the GUID of the created profile.
      */
     public String addDummyProfile(String fullName, String email, String postcode)
-            throws TimeoutException, InterruptedException {
+            throws TimeoutException {
         PersonalDataManager.AutofillProfile profile = new PersonalDataManager.AutofillProfile(
                 "" /* guid */, "https://www.example.com" /* origin */, fullName, "Acme Inc.",
                 "123 Main", "California", "Los Angeles", "", postcode, "", "Uzbekistan",
@@ -167,8 +199,7 @@ public class AutofillAssistantCollectUserDataTestHelper {
         return setProfile(profile);
     }
 
-    public String addDummyProfile(String fullName, String email)
-            throws TimeoutException, InterruptedException {
+    public String addDummyProfile(String fullName, String email) throws TimeoutException {
         return addDummyProfile(fullName, email, "90210");
     }
 
@@ -192,8 +223,7 @@ public class AutofillAssistantCollectUserDataTestHelper {
                                    .getShippingAddressLabelWithCountryForPaymentRequest(profile));
     }
 
-    public String setCreditCard(final CreditCard card)
-            throws TimeoutException, InterruptedException {
+    public String setCreditCard(final CreditCard card) throws TimeoutException {
         int callCount = mOnPersonalDataChangedHelper.getCallCount();
         String guid = TestThreadUtils.runOnUiThreadBlockingNoException(
                 () -> PersonalDataManager.getInstance().setCreditCard(card));
@@ -207,8 +237,7 @@ public class AutofillAssistantCollectUserDataTestHelper {
      * @param billingAddressId The billing address profile GUID.
      * @return the GUID of the created credit card
      */
-    public String addDummyCreditCard(String billingAddressId)
-            throws TimeoutException, InterruptedException {
+    public String addDummyCreditCard(String billingAddressId) throws TimeoutException {
         String profileName = TestThreadUtils.runOnUiThreadBlockingNoException(
                 () -> PersonalDataManager.getInstance().getProfile(billingAddressId).getFullName());
 
@@ -219,21 +248,21 @@ public class AutofillAssistantCollectUserDataTestHelper {
         return setCreditCard(creditCard);
     }
 
-    public void deleteProfile(final String guid) throws InterruptedException, TimeoutException {
+    public void deleteProfile(final String guid) throws TimeoutException {
         int callCount = mOnPersonalDataChangedHelper.getCallCount();
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> PersonalDataManager.getInstance().deleteProfile(guid));
         mOnPersonalDataChangedHelper.waitForCallback(callCount);
     }
 
-    public void deleteCreditCard(final String guid) throws InterruptedException, TimeoutException {
+    public void deleteCreditCard(final String guid) throws TimeoutException {
         int callCount = mOnPersonalDataChangedHelper.getCallCount();
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> PersonalDataManager.getInstance().deleteCreditCard(guid));
         mOnPersonalDataChangedHelper.waitForCallback(callCount);
     }
 
-    private void registerDataObserver() throws TimeoutException, InterruptedException {
+    private void registerDataObserver() throws TimeoutException {
         int callCount = mOnPersonalDataChangedHelper.getCallCount();
         boolean isDataLoaded = TestThreadUtils.runOnUiThreadBlockingNoException(
                 ()

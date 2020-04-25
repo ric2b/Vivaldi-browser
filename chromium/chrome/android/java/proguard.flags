@@ -26,6 +26,10 @@
     public <init>(android.content.Context, android.util.AttributeSet);
 }
 
+-keep public class org.vivaldi.browser.** extends android.app.Fragment {
+  public <init>();
+}
+
 # These classes aren't themselves referenced, but __ProcessService[0,1,2...] are
 # referenced, and we look up these services by appending a number onto the name
 # of the base class. Thus, we need to keep the base class name around so that
@@ -49,10 +53,6 @@
 -keepclassmembers class android.support.design.internal.BottomNavigationMenuView {
     boolean mShiftingMode;
 }
-
-# Trichrome builds don't include a native library list in the main APK; it's
-# picked up from the library APK at runtime.
--dontwarn org.chromium.base.library_loader.NativeLibraries
 
 # Let proguard know CastMediaOptions in CastOptions is always null, so it can
 # trim unused MediaNotificationService methods. This saves about 170 methods in
@@ -81,3 +81,7 @@
   public int getMinApkVersion();
   public boolean requiresSignIn();
 }
+
+# Vivaldi. Needed for design support library
+-keep class android.support.design.widget.** { *; }
+-keep interface android.support.design.widget.** { *; }

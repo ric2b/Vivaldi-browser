@@ -11,6 +11,7 @@
 
 #include "base/debug/crash_logging.h"
 #include "base/logging.h"
+#include "base/metrics/user_metrics.h"
 #include "base/no_destructor.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/browser_accessibility.h"
@@ -185,6 +186,7 @@ BrowserAccessibilityManager::BrowserAccessibilityManager(
 }
 
 BrowserAccessibilityManager::~BrowserAccessibilityManager() {
+  delegate_ = nullptr;  // Guard against reentrancy by screen reader.
   if (last_focused_node_tree_id_ &&
       ax_tree_id_ == *last_focused_node_tree_id_) {
     SetLastFocusedNode(nullptr);
@@ -634,9 +636,14 @@ void BrowserAccessibilityManager::SetFocus(const BrowserAccessibility& node) {
   if (!delegate_)
     return;
 
+  base::RecordAction(
+      base::UserMetricsAction("Accessibility.NativeApi.SetFocus"));
+
   ui::AXActionData action_data;
   action_data.action = ax::mojom::Action::kFocus;
   action_data.target_node_id = node.GetId();
+  if (!delegate_->AccessibilityViewHasFocus())
+    delegate_->AccessibilityViewSetFocus();
   delegate_->AccessibilityPerformAction(action_data);
 }
 
@@ -689,6 +696,9 @@ void BrowserAccessibilityManager::DoDefaultAction(
     const BrowserAccessibility& node) {
   if (!delegate_)
     return;
+
+  base::RecordAction(
+      base::UserMetricsAction("Accessibility.NativeApi.DoDefault"));
 
   ui::AXActionData action_data;
   action_data.action = ax::mojom::Action::kDoDefault;
@@ -745,6 +755,9 @@ void BrowserAccessibilityManager::ScrollToMakeVisible(
     ax::mojom::ScrollAlignment vertical_scroll_alignment) {
   if (!delegate_)
     return;
+
+  base::RecordAction(
+      base::UserMetricsAction("Accessibility.NativeApi.ScrollToMakeVisible"));
 
   ui::AXActionData action_data;
   action_data.target_node_id = node.GetId();
@@ -851,6 +864,9 @@ void BrowserAccessibilityManager::HitTest(const gfx::Point& point) {
   if (!delegate_)
     return;
 
+  base::RecordAction(
+      base::UserMetricsAction("Accessibility.NativeApi.HitTest"));
+
   ui::AXActionData action_data;
   action_data.action = ax::mojom::Action::kHitTest;
   action_data.target_point = point;
@@ -896,8 +912,7 @@ BrowserAccessibility* BrowserAccessibilityManager::PreviousInTreeOrder(
 
   // For android, this needs to be handled carefully. If not, there is a chance
   // of getting into infinite loop.
-  if (can_wrap_to_last_element &&
-      object->GetRole() == ax::mojom::Role::kRootWebArea &&
+  if (can_wrap_to_last_element && object->manager()->GetRoot() == object &&
       object->PlatformChildCount() != 0) {
     return object->PlatformDeepestLastChild();
   }
@@ -1282,20 +1297,6 @@ ui::AXNode* BrowserAccessibilityManager::GetNodeFromTree(
   return nullptr;
 }
 
-ui::AXPlatformNodeDelegate* BrowserAccessibilityManager::GetDelegate(
-    const ui::AXTreeID tree_id,
-    const int32_t node_id) const {
-  auto* manager = BrowserAccessibilityManager::FromID(tree_id);
-  if (!manager)
-    return nullptr;
-
-  BrowserAccessibility* wrapper = manager->GetFromID(node_id);
-  if (wrapper)
-    return wrapper;
-
-  return nullptr;
-}
-
 AXTreeID BrowserAccessibilityManager::GetTreeID() const {
   return ax_tree_id();
 }
@@ -1344,15 +1345,6 @@ ui::AXNode* BrowserAccessibilityManager::GetParentNodeFromParentTreeAsAXNode()
   }
 
   return nullptr;
-}
-
-ui::AXPlatformNodeDelegate* BrowserAccessibilityManager::GetRootDelegate(
-    const ui::AXTreeID tree_id) const {
-  auto* manager = BrowserAccessibilityManager::FromID(tree_id);
-  if (!manager)
-    return nullptr;
-
-  return manager->GetRoot();
 }
 
 BrowserAccessibilityManager* BrowserAccessibilityManager::GetRootManager()

@@ -290,7 +290,13 @@ CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContextInternal(
     return nullptr;
   }
 
-  context_ = factory->Create(this, attributes);
+  // If this context is cross-origin, it should prefer to use the low-power GPU
+  LocalFrame* frame = GetDocument().GetFrame();
+  CanvasContextCreationAttributesCore recomputed_attributes = attributes;
+  if (frame && frame->IsCrossOriginSubframe())
+    recomputed_attributes.power_preference = "low-power";
+
+  context_ = factory->Create(this, recomputed_attributes);
   if (!context_)
     return nullptr;
 
@@ -387,41 +393,35 @@ void HTMLCanvasElement::DidDraw() {
   DidDraw(FloatRect(0, 0, Size().Width(), Size().Height()));
 }
 
-void HTMLCanvasElement::FinalizeFrame() {
-  TRACE_EVENT0("blink", "HTMLCanvasElement::FinalizeFrame");
+void HTMLCanvasElement::PreFinalizeFrame() {
   RecordCanvasSizeToUMA(size_);
 
-  // FinalizeFrame indicates the end of a script task that may have rendered
+  // PreFinalizeFrame indicates the end of a script task that may have rendered
   // into the canvas, now is a good time to unlock cache entries.
   auto* resource_provider = ResourceProvider();
   if (resource_provider)
     resource_provider->ReleaseLockedImages();
 
-  if (canvas2d_bridge_) {
-    if (!LowLatencyEnabled())
-      canvas2d_bridge_->FinalizeFrame();
-  }
-
+  // Low-latency 2d canvases produce their frames after the resource gets
+  // single buffered.
   if (LowLatencyEnabled() && !dirty_rect_.IsEmpty()) {
     if (GetOrCreateCanvasResourceProvider(kPreferAcceleration)) {
       const bool webgl_overlay_enabled =
           RuntimeEnabledFeatures::WebGLImageChromiumEnabled() ||
           context_->UsingSwapChain();
-      // TryEnableSingleBuffering() the first time we FinalizeFrame().
+      // TryEnableSingleBuffering() the first time we finalize a frame.
       if (!ResourceProvider()->IsSingleBuffered()) {
         ResourceProvider()->TryEnableSingleBuffering();
         if (Is3d() && webgl_overlay_enabled)
           context_->ProvideBackBufferToResourceProvider();
       }
+    }
+  }
+}
 
-      if (canvas2d_bridge_) {
-        canvas2d_bridge_->FlushRecording();
-      } else {
-        DCHECK(Is3d());
-        if (!webgl_overlay_enabled)
-          context_->PaintRenderingResultsToCanvas(kBackBuffer);
-      }
-
+void HTMLCanvasElement::PostFinalizeFrame() {
+  if (LowLatencyEnabled() && !dirty_rect_.IsEmpty()) {
+    if (GetOrCreateCanvasResourceProvider(kPreferAcceleration)) {
       const base::TimeTicks start_time = base::TimeTicks::Now();
       const scoped_refptr<CanvasResource> canvas_resource =
           ResourceProvider()->ProduceCanvasResource();
@@ -733,6 +733,7 @@ void HTMLCanvasElement::PaintInternal(GraphicsContext& context,
   context_->PaintRenderingResultsToCanvas(kFrontBuffer);
   if (HasResourceProvider()) {
     if (!context.ContextDisabled()) {
+      const ComputedStyle* style = GetComputedStyle();
       // For 2D Canvas, there are two ways of render Canvas for printing:
       // display list or image snapshot. Display list allows better PDF printing
       // and we prefer this method.
@@ -746,7 +747,6 @@ void HTMLCanvasElement::PaintInternal(GraphicsContext& context,
       if (IsPrinting() && !Is3d() && canvas2d_bridge_) {
         canvas2d_bridge_->FlushRecording();
         if (canvas2d_bridge_->getLastRecord()) {
-          const ComputedStyle* style = GetComputedStyle();
           if (style && style->ImageRendering() != EImageRendering::kPixelated) {
             context.Canvas()->save();
             context.Canvas()->translate(r.X(), r.Y());
@@ -776,6 +776,7 @@ void HTMLCanvasElement::PaintInternal(GraphicsContext& context,
         DCHECK(!snapshot->IsTextureBacked());
         context.DrawImage(snapshot.get(), Image::kSyncDecode,
                           FloatRect(PixelSnappedIntRect(r)), &src_rect,
+                          style && style->HasFilterInducingProperty(),
                           composite_operator);
       }
     }
@@ -824,9 +825,9 @@ scoped_refptr<StaticBitmapImage> HTMLCanvasElement::Snapshot(
       if (ResourceProvider())
         image_bitmap = ResourceProvider()->Snapshot();
     } else {
-      scoped_refptr<Uint8Array> data_array =
+      sk_sp<SkData> pixel_data =
           context_->PaintRenderingResultsToDataArray(source_buffer);
-      if (data_array) {
+      if (pixel_data) {
         // If the accelerated canvas is too big, there is a logic in WebGL code
         // path that scales down the drawing buffer to the maximum supported
         // size. Hence, we need to query the adjusted size of DrawingBuffer.
@@ -837,7 +838,7 @@ scoped_refptr<StaticBitmapImage> HTMLCanvasElement::Snapshot(
         info = info.makeColorSpace(ColorParams().GetSkColorSpace());
         if (ColorParams().GetSkColorType() != kN32_SkColorType)
           info = info.makeColorType(kRGBA_F16_SkColorType);
-        image_bitmap = StaticBitmapImage::Create(std::move(data_array), info);
+        image_bitmap = StaticBitmapImage::Create(std::move(pixel_data), info);
       }
     }
   } else if (canvas2d_bridge_) {  // 2D Canvas
@@ -1004,9 +1005,10 @@ CanvasResourceDispatcher* HTMLCanvasElement::GetOrCreateResourceDispatcher() {
   return frame_dispatcher_.get();
 }
 
-void HTMLCanvasElement::PushFrame(scoped_refptr<CanvasResource> image,
+bool HTMLCanvasElement::PushFrame(scoped_refptr<CanvasResource> image,
                                   const SkIRect& damage_rect) {
   NOTIMPLEMENTED();
+  return false;
 }
 
 bool HTMLCanvasElement::ShouldAccelerate(AccelerationCriteria criteria) const {
@@ -1331,20 +1333,21 @@ bool HTMLCanvasElement::IsSupportedInteractiveCanvasFallback(
 
   // A select element with a "multiple" attribute or with a display size greater
   // than 1.
-  if (auto* select_element = ToHTMLSelectElementOrNull(element)) {
+  if (auto* select_element = DynamicTo<HTMLSelectElement>(element)) {
     if (select_element->IsMultiple() || select_element->size() > 1)
       return true;
   }
 
   // An option element that is in a list of options of a select element with a
   // "multiple" attribute or with a display size greater than 1.
-  if (IsHTMLOptionElement(element) && element.parentNode() &&
-      IsHTMLSelectElement(*element.parentNode())) {
-    const HTMLSelectElement& select_element =
-        ToHTMLSelectElement(*element.parentNode());
-    if (select_element.IsMultiple() || select_element.size() > 1)
-      return true;
-  }
+  const auto* parent_select =
+      IsA<HTMLOptionElement>(element)
+          ? DynamicTo<HTMLSelectElement>(element.parentNode())
+          : nullptr;
+
+  if (parent_select &&
+      (parent_select->IsMultiple() || parent_select->size() > 1))
+    return true;
 
   // An element that would not be interactive content except for having the
   // tabindex attribute specified.
@@ -1389,6 +1392,8 @@ void HTMLCanvasElement::CreateLayer() {
         base::DoNothing());
     // Creates a placeholder layer first before Surface is created.
     surface_layer_bridge_->CreateSolidColorLayer();
+    // This may cause the canvas to be composited.
+    SetNeedsCompositingUpdate();
   }
 }
 

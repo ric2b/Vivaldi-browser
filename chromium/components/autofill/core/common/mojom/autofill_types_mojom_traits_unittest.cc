@@ -9,13 +9,15 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/mojom/test_autofill_types.mojom.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/autofill/core/common/signatures_util.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace autofill {
@@ -90,8 +92,8 @@ void CreateTestPasswordForm(PasswordForm* form) {
   form->new_password_marked_by_site = false;
   form->new_password_element = base::ASCIIToUTF16("confirmation_password");
   form->preferred = false;
-  form->date_created = base::Time::Now();
-  form->date_synced = base::Time::Now();
+  form->date_created = AutofillClock::Now();
+  form->date_synced = AutofillClock::Now();
   form->blacklisted_by_user = false;
   form->type = PasswordForm::Type::kGenerated;
   form->times_used = 999;
@@ -109,45 +111,13 @@ void CreateTestPasswordForm(PasswordForm* form) {
       mojom::SubmissionIndicatorEvent::SAME_DOCUMENT_NAVIGATION;
 }
 
-void CreateTestFormsPredictionsMap(FormsPredictionsMap* predictions) {
-  FormsPredictionsMap& result_map = *predictions;
-  // 1st element.
-  FormData form_data;
-  test::CreateTestAddressFormData(&form_data);
-  ASSERT_TRUE(form_data.fields.size() >= 4);
-  result_map[form_data][form_data.fields[0]] =
-      PasswordFormFieldPredictionType::kUsername;
-  result_map[form_data][form_data.fields[1]] =
-      PasswordFormFieldPredictionType::kCurrentPassword;
-  result_map[form_data][form_data.fields[2]] =
-      PasswordFormFieldPredictionType::kNewPassword;
-  result_map[form_data][form_data.fields[3]] =
-      PasswordFormFieldPredictionType::kNotPassword;
-
-  // 2nd element.
-  form_data.fields.clear();
-  result_map[form_data] = {};
-
-  // 3rd element.
-  FormFieldData field_data;
-  test::CreateTestSelectField("TestLabel1", "TestName1", "TestValue1", kOptions,
-                              kOptions, 4, &field_data);
-  form_data.fields.push_back(field_data);
-  test::CreateTestSelectField("TestLabel2", "TestName2", "TestValue2", kOptions,
-                              kOptions, 4, &field_data);
-  form_data.fields.push_back(field_data);
-  result_map[form_data][form_data.fields[0]] =
-      PasswordFormFieldPredictionType::kNewPassword;
-  result_map[form_data][form_data.fields[1]] =
-      PasswordFormFieldPredictionType::kCurrentPassword;
-}
-
 void CreatePasswordGenerationUIData(
     password_generation::PasswordGenerationUIData* data) {
   data->bounds = gfx::RectF(1, 1, 200, 100);
   data->max_length = 20;
   data->generation_element = base::ASCIIToUTF16("generation_element");
   data->text_direction = base::i18n::RIGHT_TO_LEFT;
+  data->is_generation_element_password_type = false;
   CreateTestPasswordForm(&data->password_form);
 }
 
@@ -185,6 +155,8 @@ void CheckEqualPassPasswordGenerationUIData(
   EXPECT_EQ(expected.bounds, actual.bounds);
   EXPECT_EQ(expected.max_length, actual.max_length);
   EXPECT_EQ(expected.generation_element, actual.generation_element);
+  EXPECT_EQ(expected.is_generation_element_password_type,
+            actual.is_generation_element_password_type);
   EXPECT_EQ(expected.text_direction, actual.text_direction);
   EXPECT_EQ(expected.password_form, actual.password_form);
 }
@@ -196,10 +168,10 @@ class AutofillTypeTraitsTestImpl : public testing::Test,
  public:
   AutofillTypeTraitsTestImpl() {}
 
-  mojom::TypeTraitsTestPtr GetTypeTraitsTestProxy() {
-    mojom::TypeTraitsTestPtr proxy;
-    bindings_.AddBinding(this, mojo::MakeRequest(&proxy));
-    return proxy;
+  mojo::PendingRemote<mojom::TypeTraitsTest> GetTypeTraitsTestRemote() {
+    mojo::PendingRemote<mojom::TypeTraitsTest> remote;
+    receivers_.Add(this, remote.InitWithNewPipeAndPassReceiver());
+    return remote;
   }
 
   // mojom::TypeTraitsTest:
@@ -247,16 +219,10 @@ class AutofillTypeTraitsTestImpl : public testing::Test,
     std::move(callback).Run(s);
   }
 
-  void PassFormsPredictionsMap(
-      const FormsPredictionsMap& s,
-      PassFormsPredictionsMapCallback callback) override {
-    std::move(callback).Run(s);
-  }
-
  private:
   base::test::TaskEnvironment task_environment_;
 
-  mojo::BindingSet<TypeTraitsTest> bindings_;
+  mojo::ReceiverSet<TypeTraitsTest> receivers_;
 };
 
 void ExpectFormFieldData(const FormFieldData& expected,
@@ -321,13 +287,6 @@ void ExpectPasswordForm(const PasswordForm& expected,
   std::move(closure).Run();
 }
 
-void ExpectFormsPredictionsMap(const FormsPredictionsMap& expected,
-                               base::OnceClosure closure,
-                               const FormsPredictionsMap& passed) {
-  EXPECT_EQ(expected, passed);
-  std::move(closure).Run();
-}
-
 TEST_F(AutofillTypeTraitsTestImpl, PassFormFieldData) {
   FormFieldData input;
   test::CreateTestSelectField("TestLabel", "TestName", "TestValue", kOptions,
@@ -350,8 +309,8 @@ TEST_F(AutofillTypeTraitsTestImpl, PassFormFieldData) {
   input.typed_value = base::ASCIIToUTF16("TestTypedValue");
 
   base::RunLoop loop;
-  mojom::TypeTraitsTestPtr proxy = GetTypeTraitsTestProxy();
-  proxy->PassFormFieldData(
+  mojo::Remote<mojom::TypeTraitsTest> remote(GetTypeTraitsTestRemote());
+  remote->PassFormFieldData(
       input, base::BindOnce(&ExpectFormFieldData, input, loop.QuitClosure()));
   loop.Run();
 }
@@ -365,8 +324,8 @@ TEST_F(AutofillTypeTraitsTestImpl, PassFormData) {
                      mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE));
 
   base::RunLoop loop;
-  mojom::TypeTraitsTestPtr proxy = GetTypeTraitsTestProxy();
-  proxy->PassFormData(
+  mojo::Remote<mojom::TypeTraitsTest> remote(GetTypeTraitsTestRemote());
+  remote->PassFormData(
       input, base::BindOnce(&ExpectFormData, input, loop.QuitClosure()));
   loop.Run();
 }
@@ -376,8 +335,8 @@ TEST_F(AutofillTypeTraitsTestImpl, PassFormFieldDataPredictions) {
   CreateTestFieldDataPredictions("TestSignature", &input);
 
   base::RunLoop loop;
-  mojom::TypeTraitsTestPtr proxy = GetTypeTraitsTestProxy();
-  proxy->PassFormFieldDataPredictions(
+  mojo::Remote<mojom::TypeTraitsTest> remote(GetTypeTraitsTestRemote());
+  remote->PassFormFieldDataPredictions(
       input, base::BindOnce(&ExpectFormFieldDataPredictions, input,
                             loop.QuitClosure()));
   loop.Run();
@@ -397,8 +356,8 @@ TEST_F(AutofillTypeTraitsTestImpl, PassFormDataPredictions) {
   input.fields.push_back(field_predict);
 
   base::RunLoop loop;
-  mojom::TypeTraitsTestPtr proxy = GetTypeTraitsTestProxy();
-  proxy->PassFormDataPredictions(
+  mojo::Remote<mojom::TypeTraitsTest> remote(GetTypeTraitsTestRemote());
+  remote->PassFormDataPredictions(
       input,
       base::BindOnce(&ExpectFormDataPredictions, input, loop.QuitClosure()));
   loop.Run();
@@ -409,8 +368,8 @@ TEST_F(AutofillTypeTraitsTestImpl, PassPasswordFormFillData) {
   CreateTestPasswordFormFillData(&input);
 
   base::RunLoop loop;
-  mojom::TypeTraitsTestPtr proxy = GetTypeTraitsTestProxy();
-  proxy->PassPasswordFormFillData(
+  mojo::Remote<mojom::TypeTraitsTest> remote(GetTypeTraitsTestRemote());
+  remote->PassPasswordFormFillData(
       input,
       base::BindOnce(&ExpectPasswordFormFillData, input, loop.QuitClosure()));
   loop.Run();
@@ -422,8 +381,8 @@ TEST_F(AutofillTypeTraitsTestImpl, PasswordFormGenerationData) {
   input.confirmation_password_renderer_id = 5789u;
 
   base::RunLoop loop;
-  mojom::TypeTraitsTestPtr proxy = GetTypeTraitsTestProxy();
-  proxy->PassPasswordFormGenerationData(
+  mojo::Remote<mojom::TypeTraitsTest> remote(GetTypeTraitsTestRemote());
+  remote->PassPasswordFormGenerationData(
       input, base::BindOnce(&ExpectPasswordFormGenerationData, input,
                             loop.QuitClosure()));
   loop.Run();
@@ -434,8 +393,8 @@ TEST_F(AutofillTypeTraitsTestImpl, PassPasswordGenerationUIData) {
   CreatePasswordGenerationUIData(&input);
 
   base::RunLoop loop;
-  mojom::TypeTraitsTestPtr proxy = GetTypeTraitsTestProxy();
-  proxy->PassPasswordGenerationUIData(
+  mojo::Remote<mojom::TypeTraitsTest> remote(GetTypeTraitsTestRemote());
+  remote->PassPasswordGenerationUIData(
       input, base::BindOnce(&ExpectPasswordGenerationUIData, input,
                             loop.QuitClosure()));
   loop.Run();
@@ -446,21 +405,9 @@ TEST_F(AutofillTypeTraitsTestImpl, PassPasswordForm) {
   CreateTestPasswordForm(&input);
 
   base::RunLoop loop;
-  mojom::TypeTraitsTestPtr proxy = GetTypeTraitsTestProxy();
-  proxy->PassPasswordForm(
+  mojo::Remote<mojom::TypeTraitsTest> remote(GetTypeTraitsTestRemote());
+  remote->PassPasswordForm(
       input, base::BindOnce(&ExpectPasswordForm, input, loop.QuitClosure()));
-  loop.Run();
-}
-
-TEST_F(AutofillTypeTraitsTestImpl, PassFormsPredictionsMap) {
-  FormsPredictionsMap input;
-  CreateTestFormsPredictionsMap(&input);
-
-  base::RunLoop loop;
-  mojom::TypeTraitsTestPtr proxy = GetTypeTraitsTestProxy();
-  proxy->PassFormsPredictionsMap(
-      input,
-      base::BindOnce(&ExpectFormsPredictionsMap, input, loop.QuitClosure()));
   loop.Run();
 }
 

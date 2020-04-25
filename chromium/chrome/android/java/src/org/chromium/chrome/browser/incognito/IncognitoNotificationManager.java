@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.incognito;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.content.Context;
+import android.os.Build;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.R;
@@ -19,6 +20,8 @@ import org.chromium.chrome.browser.notifications.NotificationManagerProxyImpl;
 import org.chromium.chrome.browser.notifications.NotificationMetadata;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Manages the notification indicating that there are incognito tabs opened in Document mode.
@@ -34,7 +37,12 @@ public class IncognitoNotificationManager {
         Context context = ContextUtils.getApplicationContext();
         String actionMessage =
                 context.getResources().getString(R.string.close_all_incognito_notification);
-        String title = context.getResources().getString(R.string.app_name);
+
+        // From Android N, notification by default has the app name and title should not be the same
+        // as app name.
+        String title = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
+                ? context.getResources().getString(R.string.close_all_incognito_notification_title)
+                : context.getResources().getString(R.string.app_name);
 
         ChromeNotificationBuilder builder =
                 NotificationBuilderFactory
@@ -56,6 +64,8 @@ public class IncognitoNotificationManager {
                         .setShowWhen(false)
                         .setLocalOnly(true)
                         .setGroup(NotificationConstants.GROUP_INCOGNITO);
+        if (ChromeApplication.isVivaldi())
+            builder.setSmallIcon(R.drawable.vivaldi_private_page_favicon_small);
         NotificationManagerProxy nm = new NotificationManagerProxyImpl(context);
         ChromeNotification notification = builder.buildChromeNotification();
         nm.notify(notification);

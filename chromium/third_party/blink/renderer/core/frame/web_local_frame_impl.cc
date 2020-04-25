@@ -94,7 +94,10 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_double_size.h"
@@ -171,7 +174,6 @@
 #include "third_party/blink/renderer/core/editing/writing_direction.h"
 #include "third_party/blink/renderer/core/events/after_print_event.h"
 #include "third_party/blink/renderer/core/events/before_print_event.h"
-#include "third_party/blink/renderer/core/events/portal_activate_event.h"
 #include "third_party/blink/renderer/core/exported/local_frame_client_impl.h"
 #include "third_party/blink/renderer/core/exported/web_dev_tools_agent_impl.h"
 #include "third_party/blink/renderer/core/exported/web_document_loader_impl.h"
@@ -212,6 +214,7 @@
 #include "third_party/blink/renderer/core/html/portal/document_portals.h"
 #include "third_party/blink/renderer/core/html/portal/dom_window_portal_host.h"
 #include "third_party/blink/renderer/core/html/portal/html_portal_element.h"
+#include "third_party/blink/renderer/core/html/portal/portal_activate_event.h"
 #include "third_party/blink/renderer/core/html/portal/portal_host.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input/context_menu_allowed_scope.h"
@@ -416,7 +419,7 @@ class ChromePrintContext : public PrintContext {
     frame_view->PaintContentsOutsideOfLifecycle(
         builder.Context(),
         kGlobalPaintNormalPhase | kGlobalPaintFlattenCompositingLayers |
-            kGlobalPaintPrinting,
+            kGlobalPaintPrinting | kGlobalPaintAddUrlMetadata,
         CullRect(page_rect));
     {
       ScopedPaintChunkProperties scoped_paint_chunk_properties(
@@ -628,7 +631,8 @@ WebSize WebLocalFrameImpl::DocumentSize() const {
   if (!GetFrameView() || !GetFrameView()->GetLayoutView())
     return WebSize();
 
-  return GetFrameView()->GetLayoutView()->DocumentRect().Size();
+  return PixelSnappedIntRect(GetFrameView()->GetLayoutView()->DocumentRect())
+      .Size();
 }
 
 bool WebLocalFrameImpl::HasVisibleContent() const {
@@ -686,7 +690,7 @@ void WebLocalFrameImpl::DispatchUnloadEvent() {
   // when unloading itself.
   IgnoreOpensDuringUnloadCountIncrementer ignore_opens_during_unload(
       GetFrame()->GetDocument());
-  GetFrame()->Loader().DispatchUnloadEvent();
+  GetFrame()->Loader().DispatchUnloadEvent(nullptr, nullptr);
 }
 
 void WebLocalFrameImpl::ExecuteScript(const WebScriptSource& source) {
@@ -908,10 +912,6 @@ void WebLocalFrameImpl::ReloadImage(const WebNode& web_node) {
   node = hit_test_result.InnerNodeOrImageMapImage();
   if (auto* image_element = ToHTMLImageElementOrNull(*node))
     image_element->ForceReload();
-}
-
-void WebLocalFrameImpl::ReloadLoFiImages() {
-  GetFrame()->GetDocument()->Fetcher()->ReloadLoFiImages();
 }
 
 void WebLocalFrameImpl::StartNavigation(const WebURLRequest& request) {
@@ -1932,17 +1932,6 @@ void WebLocalFrameImpl::DidFailLoad(const ResourceError& error,
   Client()->DidFailLoad(web_error, web_commit_type);
 }
 
-void WebLocalFrameImpl::DidFailProvisionalLoad(
-    const ResourceError& error,
-    const AtomicString& http_method) {
-  if (!Client())
-    return;
-  WebURLError web_error = error;
-  if (WebPluginContainerImpl* plugin = GetFrame()->GetWebPluginContainer())
-    plugin->DidFailLoading(error);
-  Client()->DidFailProvisionalLoad(web_error, http_method);
-}
-
 void WebLocalFrameImpl::DidFinish() {
   if (!Client())
     return;
@@ -2651,16 +2640,17 @@ WebDevToolsAgentImpl* WebLocalFrameImpl::DevToolsAgentImpl() {
 }
 
 void WebLocalFrameImpl::BindDevToolsAgent(
-    mojo::ScopedInterfaceEndpointHandle devtools_agent_host_ptr_info,
-    mojo::ScopedInterfaceEndpointHandle devtools_agent_request) {
+    mojo::ScopedInterfaceEndpointHandle devtools_agent_host_remote,
+    mojo::ScopedInterfaceEndpointHandle devtools_agent_receiver) {
   WebDevToolsAgentImpl* agent = DevToolsAgentImpl();
   if (!agent)
     return;
-  agent->BindRequest(mojom::blink::DevToolsAgentHostAssociatedPtrInfo(
-                         std::move(devtools_agent_host_ptr_info),
-                         mojom::blink::DevToolsAgentHost::Version_),
-                     mojom::blink::DevToolsAgentAssociatedRequest(
-                         std::move(devtools_agent_request)));
+  agent->BindReceiver(
+      mojo::PendingAssociatedRemote<mojom::blink::DevToolsAgentHost>(
+          std::move(devtools_agent_host_remote),
+          mojom::blink::DevToolsAgentHost::Version_),
+      mojo::PendingAssociatedReceiver<mojom::blink::DevToolsAgent>(
+          std::move(devtools_agent_receiver)));
 }
 
 void WebLocalFrameImpl::SetLifecycleState(mojom::FrameLifecycleState state) {

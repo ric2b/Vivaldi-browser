@@ -98,17 +98,6 @@ Polymer({
       },
     },
 
-    /**
-     * Whether to show experimental accessibility features.
-     * @private {boolean}
-     */
-    showExperimentalFeatures_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('showExperimentalA11yFeatures');
-      },
-    },
-
     showExperimentalSwitchAccess_: {
       type: Boolean,
       value: function() {
@@ -203,6 +192,11 @@ Polymer({
   /** @private */
   onChromeVoxSettingsTap_: function() {
     chrome.send('showChromeVoxSettings');
+  },
+
+  /** @private */
+  onCaptionsClick_: function() {
+    settings.navigateTo(settings.routes.MANAGE_CAPTION_SETTINGS);
   },
 
   /** @private */

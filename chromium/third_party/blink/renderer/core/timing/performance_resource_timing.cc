@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/core/performance_entry_names.h"
 #include "third_party/blink/renderer/core/timing/performance.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_load_timing.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_timing_info.h"
@@ -358,7 +359,7 @@ void PerformanceResourceTiming::BuildJSONValue(V8ObjectBuilder& builder) const {
   builder.AddNumber("encodedBodySize", encodedBodySize());
   builder.AddNumber("decodedBodySize", decodedBodySize());
 
-  Vector<ScriptValue> server_timing;
+  HeapVector<ScriptValue> server_timing;
   server_timing.ReserveCapacity(server_timing_.size());
   for (unsigned i = 0; i < server_timing_.size(); i++) {
     server_timing.push_back(

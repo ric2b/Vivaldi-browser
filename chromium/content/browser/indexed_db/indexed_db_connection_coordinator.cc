@@ -123,15 +123,14 @@ class IndexedDBConnectionCoordinator::OpenRequest
               IndexedDBDatabase* db,
               std::unique_ptr<IndexedDBPendingConnection> pending_connection,
               IndexedDBConnectionCoordinator* connection_coordinator,
-
               TasksAvailableCallback tasks_available_callback)
       : ConnectionRequest(std::move(origin_state_handle),
                           db,
                           connection_coordinator,
-
                           std::move(tasks_available_callback)),
         pending_(std::move(pending_connection)) {
     db_->metadata_.was_cold_open = pending_->was_cold_open;
+    DCHECK(!pending_->execution_context_connection_handle.is_null());
   }
 
   // Note: the |tasks_available_callback_| is NOT called here because the state
@@ -171,9 +170,9 @@ class IndexedDBConnectionCoordinator::OpenRequest
       // DEFAULT_VERSION throws exception.)
       DCHECK(is_new_database);
       pending_->callbacks->OnSuccess(
-          db_->CreateConnection(std::move(origin_state_handle_),
-                                pending_->database_callbacks,
-                                pending_->child_process_id),
+          db_->CreateConnection(
+              std::move(origin_state_handle_), pending_->database_callbacks,
+              std::move(pending_->execution_context_connection_handle)),
           db_->metadata_);
       state_ = RequestState::kDone;
       return;
@@ -183,9 +182,9 @@ class IndexedDBConnectionCoordinator::OpenRequest
         (new_version == old_version ||
          new_version == IndexedDBDatabaseMetadata::NO_VERSION)) {
       pending_->callbacks->OnSuccess(
-          db_->CreateConnection(std::move(origin_state_handle_),
-                                pending_->database_callbacks,
-                                pending_->child_process_id),
+          db_->CreateConnection(
+              std::move(origin_state_handle_), pending_->database_callbacks,
+              std::move(pending_->execution_context_connection_handle)),
           db_->metadata_);
       state_ = RequestState::kDone;
       return;
@@ -278,9 +277,9 @@ class IndexedDBConnectionCoordinator::OpenRequest
     DCHECK(state_ == RequestState::kPendingLocks);
 
     DCHECK(!lock_receiver_.locks.empty());
-    connection_ = db_->CreateConnection(std::move(origin_state_handle_),
-                                        pending_->database_callbacks,
-                                        pending_->child_process_id);
+    connection_ = db_->CreateConnection(
+        std::move(origin_state_handle_), pending_->database_callbacks,
+        std::move(pending_->execution_context_connection_handle));
     DCHECK(!connection_ptr_for_close_comparision_);
     connection_ptr_for_close_comparision_ = connection_.get();
     DCHECK_EQ(db_->connections().count(connection_.get()), 1UL);
@@ -288,12 +287,13 @@ class IndexedDBConnectionCoordinator::OpenRequest
     std::vector<int64_t> object_store_ids;
 
     state_ = RequestState::kPendingTransactionComplete;
-    bool relaxed_durability = false;
     IndexedDBTransaction* transaction = connection_->CreateTransaction(
         pending_->transaction_id,
         std::set<int64_t>(object_store_ids.begin(), object_store_ids.end()),
         blink::mojom::IDBTransactionMode::VersionChange,
-        db_->backing_store()->CreateTransaction(relaxed_durability).release());
+        db_->backing_store()
+            ->CreateTransaction(blink::mojom::IDBTransactionDurability::Strict)
+            .release());
 
     // Save a WeakPtr<IndexedDBTransaction> for the CreateAndBindTransaction
     // function to use later.
@@ -475,8 +475,7 @@ class IndexedDBConnectionCoordinator::DeleteRequest
     int64_t old_version = db_->metadata_.version;
     db_->metadata_.id = kInvalidDatabaseId;
     db_->metadata_.version = IndexedDBDatabaseMetadata::NO_VERSION;
-    db_->metadata_.max_object_store_id =
-        blink::IndexedDBObjectStoreMetadata::kInvalidId;
+    db_->metadata_.max_object_store_id = 0;
     db_->metadata_.object_stores.clear();
     // Unittests (specifically the IndexedDBDatabase unittests) can have the
     // backing store be a nullptr, so report deleted here.

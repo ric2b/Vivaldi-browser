@@ -167,9 +167,9 @@ bool StructTraits<
                                     network::ResourceRequest* out) {
   if (!data.ReadMethod(&out->method) || !data.ReadUrl(&out->url) ||
       !data.ReadSiteForCookies(&out->site_for_cookies) ||
-      !data.ReadTopFrameOrigin(&out->top_frame_origin) ||
       !data.ReadTrustedParams(&out->trusted_params) ||
       !data.ReadRequestInitiator(&out->request_initiator) ||
+      !data.ReadIsolatedWorldOrigin(&out->isolated_world_origin) ||
       !data.ReadReferrer(&out->referrer) ||
       !data.ReadReferrerPolicy(&out->referrer_policy) ||
       !data.ReadHeaders(&out->headers) ||
@@ -187,7 +187,8 @@ bool StructTraits<
       !data.ReadCustomProxyPostCacheHeaders(
           &out->custom_proxy_post_cache_headers) ||
       !data.ReadFetchWindowId(&out->fetch_window_id) ||
-      !data.ReadDevtoolsRequestId(&out->devtools_request_id)) {
+      !data.ReadDevtoolsRequestId(&out->devtools_request_id) ||
+      !data.ReadRecursivePrefetchToken(&out->recursive_prefetch_token)) {
     return false;
   }
 
@@ -215,8 +216,6 @@ bool StructTraits<
   out->previews_state = data.previews_state();
   out->upgrade_if_insecure = data.upgrade_if_insecure();
   out->is_revalidating = data.is_revalidating();
-  out->should_also_use_factory_bound_origin_for_cors =
-      data.should_also_use_factory_bound_origin_for_cors();
   out->is_signed_exchange_prefetch_cache_enabled =
       data.is_signed_exchange_prefetch_cache_enabled();
   out->obey_origin_policy = data.obey_origin_policy();
@@ -248,10 +247,10 @@ bool StructTraits<network::mojom::DataElementDataView, network::DataElement>::
       return false;
   }
   out->type_ = data.type();
-  out->data_pipe_getter_ =
-      data.TakeDataPipeGetter<network::mojom::DataPipeGetterPtrInfo>();
+  out->data_pipe_getter_ = data.TakeDataPipeGetter<
+      mojo::PendingRemote<network::mojom::DataPipeGetter>>();
   out->chunked_data_pipe_getter_ = data.TakeChunkedDataPipeGetter<
-      network::mojom::ChunkedDataPipeGetterPtrInfo>();
+      mojo::PendingRemote<network::mojom::ChunkedDataPipeGetter>>();
   out->offset_ = data.offset();
   out->length_ = data.length();
   return true;

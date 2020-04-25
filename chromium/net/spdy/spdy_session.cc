@@ -865,7 +865,6 @@ SpdySession::SpdySession(
     bool enable_ping_based_connection_checking,
     bool is_http2_enabled,
     bool is_quic_enabled,
-    bool support_ietf_format_quic_altsvc,
     bool is_trusted_proxy,
     size_t session_max_recv_window_size,
     int session_max_queued_capped_frames,
@@ -929,7 +928,6 @@ SpdySession::SpdySession(
           enable_ping_based_connection_checking),
       is_http2_enabled_(is_http2_enabled),
       is_quic_enabled_(is_quic_enabled),
-      support_ietf_format_quic_altsvc_(support_ietf_format_quic_altsvc),
       is_trusted_proxy_(is_trusted_proxy),
       enable_push_(IsPushEnabled(initial_settings)),
       support_websocket_(false),
@@ -1427,7 +1425,7 @@ base::Value SpdySession::GetInfoAsValue() const {
   if (!pooled_aliases_.empty()) {
     base::Value alias_list(base::Value::Type::LIST);
     for (const auto& alias : pooled_aliases_) {
-      alias_list.GetList().emplace_back(alias.host_port_pair().ToString());
+      alias_list.Append(alias.host_port_pair().ToString());
     }
     dict.SetKey("aliases", std::move(alias_list));
   }
@@ -1628,7 +1626,8 @@ bool SpdySession::ChangeSocketTag(const SocketTag& new_tag) {
   SpdySessionKey new_key(
       spdy_session_key_.host_port_pair(), spdy_session_key_.proxy_server(),
       spdy_session_key_.privacy_mode(), spdy_session_key_.is_proxy_session(),
-      new_tag, spdy_session_key_.network_isolation_key());
+      new_tag, spdy_session_key_.network_isolation_key(),
+      spdy_session_key_.disable_secure_dns());
   spdy_session_key_ = new_key;
 
   return true;
@@ -2803,12 +2802,6 @@ void SpdySession::DeleteStream(std::unique_ptr<SpdyStream> stream, int status) {
   }
 }
 
-void SpdySession::RecordPingRTTHistogram(base::TimeDelta duration) {
-  UMA_HISTOGRAM_CUSTOM_TIMES("Net.SpdyPing.RTT", duration,
-                             base::TimeDelta::FromMilliseconds(1),
-                             base::TimeDelta::FromMinutes(10), 100);
-}
-
 void SpdySession::RecordHistograms() {
   UMA_HISTOGRAM_CUSTOM_COUNTS("Net.SpdyStreamsPerSession",
                               streams_initiated_count_, 1, 300, 50);
@@ -3026,7 +3019,6 @@ void SpdySession::OnPing(spdy::SpdyPingId unique_id, bool is_ack) {
 
   // Record RTT in histogram when there are no more pings in flight.
   base::TimeDelta ping_duration = time_func_() - last_ping_sent_time_;
-  RecordPingRTTHistogram(ping_duration);
   if (network_quality_estimator_) {
     network_quality_estimator_->RecordSpdyPingLatency(host_port_pair(),
                                                       ping_duration);
@@ -3390,8 +3382,7 @@ void SpdySession::OnAltSvc(
   http_server_properties_->SetAlternativeServices(
       scheme_host_port, spdy_session_key_.network_isolation_key(),
       ProcessAlternativeServices(altsvc_vector, is_http2_enabled_,
-                                 is_quic_enabled_, quic_supported_versions_,
-                                 support_ietf_format_quic_altsvc_));
+                                 is_quic_enabled_, quic_supported_versions_));
 }
 
 bool SpdySession::OnUnknownFrame(spdy::SpdyStreamId stream_id,

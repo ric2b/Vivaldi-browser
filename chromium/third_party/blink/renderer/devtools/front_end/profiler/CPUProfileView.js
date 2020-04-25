@@ -113,6 +113,9 @@ Profiler.CPUProfileType = class extends Profiler.ProfileType {
     return '.cpuprofile';
   }
 
+  /**
+   * @override
+   */
   get buttonTooltip() {
     return this._recording ? Common.UIString('Stop CPU profiling') : Common.UIString('Start CPU profiling');
   }
@@ -131,10 +134,16 @@ Profiler.CPUProfileType = class extends Profiler.ProfileType {
     }
   }
 
+  /**
+   * @override
+   */
   get treeItemTitle() {
     return Common.UIString('CPU PROFILES');
   }
 
+  /**
+   * @override
+   */
   get description() {
     return Common.UIString('CPU profiles show where the execution time is spent in your page\'s JavaScript functions.');
   }
@@ -152,8 +161,9 @@ Profiler.CPUProfileType = class extends Profiler.ProfileType {
 
   _startRecordingProfile() {
     const cpuProfilerModel = UI.context.flavor(SDK.CPUProfilerModel);
-    if (this.profileBeingRecorded() || !cpuProfilerModel)
+    if (this.profileBeingRecorded() || !cpuProfilerModel) {
       return;
+    }
     const profile = new Profiler.CPUProfileHeader(cpuProfilerModel, this);
     this.setProfileBeingRecorded(profile);
     SDK.targetManager.suspendAllTargets();
@@ -166,8 +176,9 @@ Profiler.CPUProfileType = class extends Profiler.ProfileType {
 
   async _stopRecordingProfile() {
     this._recording = false;
-    if (!this.profileBeingRecorded() || !this.profileBeingRecorded()._cpuProfilerModel)
+    if (!this.profileBeingRecorded() || !this.profileBeingRecorded()._cpuProfilerModel) {
       return;
+    }
 
     const profile = await this.profileBeingRecorded()._cpuProfilerModel.stopRecording();
     const recordedProfile = this.profileBeingRecorded();
@@ -266,6 +277,15 @@ Profiler.CPUProfileView.NodeFormatter = class {
    */
   formatValue(value) {
     return Common.UIString('%.1f\xa0ms', value);
+  }
+
+  /**
+   * @override
+   * @param {number} value
+   * @return {string}
+   */
+  formatValueAccessibleText(value) {
+    return this.formatValue(value);
   }
 
   /**
@@ -370,8 +390,9 @@ Profiler.CPUFlameChartDataProvider = class extends Profiler.ProfileFlameChartDat
   prepareHighlightedEntryInfo(entryIndex) {
     const timelineData = this._timelineData;
     const node = this._entryNodes[entryIndex];
-    if (!node)
+    if (!node) {
       return null;
+    }
 
     const entryInfo = [];
     /**
@@ -386,10 +407,12 @@ Profiler.CPUFlameChartDataProvider = class extends Profiler.ProfileFlameChartDat
      * @return {string}
      */
     function millisecondsToString(ms) {
-      if (ms === 0)
+      if (ms === 0) {
         return '0';
-      if (ms < 1000)
+      }
+      if (ms < 1000) {
         return Common.UIString('%.1f\xa0ms', ms);
+      }
       return Number.secondsToString(ms / 1000, true);
     }
     const name = UI.beautifyFunctionName(node.functionName);
@@ -401,13 +424,15 @@ Profiler.CPUFlameChartDataProvider = class extends Profiler.ProfileFlameChartDat
     const linkifier = new Components.Linkifier();
     const link = linkifier.maybeLinkifyConsoleCallFrame(
         this._cpuProfilerModel && this._cpuProfilerModel.target(), node.callFrame);
-    if (link)
+    if (link) {
       pushEntryInfoRow(ls`URL`, link.textContent);
+    }
     linkifier.dispose();
     pushEntryInfoRow(ls`Aggregated self time`, Number.secondsToString(node.self / 1000, true));
     pushEntryInfoRow(ls`Aggregated total time`, Number.secondsToString(node.total / 1000, true));
-    if (node.deoptReason)
+    if (node.deoptReason) {
       pushEntryInfoRow(ls`Not optimized`, node.deoptReason);
+    }
 
     return Profiler.ProfileView.buildPopoverTable(entryInfo);
   }

@@ -6,12 +6,14 @@ package org.chromium.chrome.browser.autofill_assistant.user_data;
 
 import android.content.Context;
 import android.content.res.Resources;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
+
+import androidx.annotation.DrawableRes;
+import androidx.annotation.Nullable;
 
 import org.chromium.chrome.autofill_assistant.R;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
@@ -37,7 +39,7 @@ public class AssistantPaymentMethodSection
                 context.getResources().getDimensionPixelSize(
                         R.dimen.autofill_assistant_payment_request_payment_method_title_padding),
                 context.getString(R.string.payments_add_card),
-                context.getString(R.string.payments_add_card), /*canEditItems=*/true);
+                context.getString(R.string.payments_add_card));
         setTitle(context.getString(R.string.payments_method_of_payment_label));
     }
 
@@ -119,6 +121,21 @@ public class AssistantPaymentMethodSection
         hideIfEmpty(methodIncompleteView);
     }
 
+    @Override
+    protected boolean canEditOption(AutofillPaymentInstrument method) {
+        return true;
+    }
+
+    @Override
+    protected @DrawableRes int getEditButtonDrawable(AutofillPaymentInstrument method) {
+        return R.drawable.ic_edit_24dp;
+    }
+
+    @Override
+    protected String getEditButtonContentDescription(AutofillPaymentInstrument method) {
+        return mContext.getString(R.string.autofill_edit_credit_card);
+    }
+
     void onProfilesChanged(List<PersonalDataManager.AutofillProfile> profiles) {
         // TODO(crbug.com/806868): replace suggested billing addresses (remove if necessary).
         for (PersonalDataManager.AutofillProfile profile : profiles) {
@@ -173,12 +190,8 @@ public class AssistantPaymentMethodSection
             return true;
         }
 
-        // TODO: Inject the PersonalDataManager instance.
-        PersonalDataManager personalDataManager = PersonalDataManager.getInstance();
-        String billingAddressId = method.getCard().getBillingAddressId();
-        PersonalDataManager.AutofillProfile profile =
-                personalDataManager.getProfile(billingAddressId);
-        if (profile == null || TextUtils.isEmpty(profile.getPostalCode())) {
+        if (method.getBillingProfile() == null
+                || TextUtils.isEmpty(method.getBillingProfile().getPostalCode())) {
             return false;
         }
 

@@ -64,8 +64,6 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_request_status.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -816,25 +814,6 @@ IN_PROC_BROWSER_TEST_F(InlineLoginUISafeIframeBrowserTest,
 
   content::NavigationController& controller = contents->GetController();
   EXPECT_TRUE(controller.GetPendingEntry() == NULL);
-}
-
-// Flaky on CrOS, http://crbug.com/364759.
-// Also flaky on Mac, http://crbug.com/442674.
-// Also flaky on Linux which is just too flaky
-IN_PROC_BROWSER_TEST_F(InlineLoginUISafeIframeBrowserTest,
-                       DISABLED_NavigationToOtherChromeURLDisallowed) {
-  ui_test_utils::NavigateToURL(browser(), GetSigninPromoURL());
-  WaitUntilUIReady(browser());
-
-  content::WebContents* contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(content::ExecuteScript(contents,
-                                     "window.location.href = 'chrome://foo'"));
-
-  content::TestNavigationObserver navigation_observer(contents, 1);
-  navigation_observer.Wait();
-
-  EXPECT_EQ(GURL("about:blank"), contents->GetVisibleURL());
 }
 
 // Tracks the URLs requested while running a browser test and returns a default

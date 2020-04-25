@@ -24,12 +24,16 @@
 
 <dom-module id="oobe-update-md">
   <template>
+    <link rel="stylesheet" href="oobe_dialog_host.css">
     <link rel="stylesheet" href="oobe_flex_layout.css">
     <link rel="stylesheet" href="oobe_update.css">
     <oobe-dialog hidden="[[!checkingForUpdate]]" tabindex="0"
         aria-live="polite" id="checking-for-updates-dialog">
       <iron-icon icon="oobe-update:googleg" slot="oobe-icon"></iron-icon>
       <h1 slot="title" i18n-content="checkingForUpdates"></h1>
+      <div slot="subtitle" class="update-subtitle" id="checkingForUpdatesMsg"
+          i18n-content="checkingForUpdatesMsg">
+      </div>
       <div slot="subtitle" class="update-subtitle" id="checkingForUpdateCancelHint"
           i18n-content="cancelUpdateHint" hidden="[[!cancelAllowed]]">
       </div>

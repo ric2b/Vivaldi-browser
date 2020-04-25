@@ -9,11 +9,13 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.os.Handler;
 import android.os.SystemClock;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.TextView;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
@@ -23,6 +25,8 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ActivityTabProvider.ActivityTabTabObserver;
 import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.init.AsyncInitializationActivity;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.StartStopWithNativeObserver;
@@ -101,6 +105,9 @@ class AutocompleteMediator
     private final EntitySuggestionProcessor mEntitySuggestionProcessor;
 
     private ToolbarDataProvider mDataProvider;
+    private OverviewModeBehavior mOverviewModeBehavior;
+    private OverviewModeBehavior.OverviewModeObserver mOverviewModeObserver;
+
     private boolean mNativeInitialized;
     private AutocompleteController mAutocomplete;
     private long mUrlFocusTime;
@@ -171,6 +178,10 @@ class AutocompleteMediator
         if (mTabObserver != null) {
             mTabObserver.destroy();
         }
+        if (mOverviewModeObserver != null) {
+            mOverviewModeBehavior.removeOverviewModeObserver(mOverviewModeObserver);
+            mOverviewModeObserver = null;
+        }
     }
 
     @Override
@@ -188,6 +199,18 @@ class AutocompleteMediator
     private void clearSuggestions() {
         mCurrentModels.clear();
         notifyPropertyModelsChanged();
+    }
+
+    /**
+     * Check if the suggestion is created from clipboard.
+     *
+     * @param suggestion The OmniboxSuggestion to check.
+     * @return Whether or not the suggestion is from clipboard.
+     */
+    private boolean isSuggestionFromClipboard(OmniboxSuggestion suggestion) {
+        return suggestion.getType() == OmniboxSuggestionType.CLIPBOARD_URL
+                || suggestion.getType() == OmniboxSuggestionType.CLIPBOARD_TEXT
+                || suggestion.getType() == OmniboxSuggestionType.CLIPBOARD_IMAGE;
     }
 
     /**
@@ -245,11 +268,30 @@ class AutocompleteMediator
         return mDataProvider != null ? mDataProvider.getProfile() : null;
     }
 
-    /**m
+    /**
      * Sets the data provider for the toolbar.
      */
     void setToolbarDataProvider(ToolbarDataProvider provider) {
         mDataProvider = provider;
+    }
+
+    /**
+     * @param overviewModeBehavior A means of accessing the current OverviewModeState and a way to
+     *         listen to state changes.
+     */
+    public void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior) {
+        assert overviewModeBehavior != null;
+
+        mOverviewModeBehavior = overviewModeBehavior;
+        mOverviewModeObserver = new EmptyOverviewModeObserver() {
+            @Override
+            public void onOverviewModeStartedShowing(boolean showToolbar) {
+                if (mDataProvider.shouldShowLocationBarInOverviewMode()) {
+                    AutocompleteController.nativePrefetchZeroSuggestResults();
+                }
+            }
+        };
+        mOverviewModeBehavior.addOverviewModeObserver(mOverviewModeObserver);
     }
 
     /** Set the WindowAndroid instance associated with the containing Activity. */
@@ -276,6 +318,7 @@ class AutocompleteMediator
      * @see View#setLayoutDirection(int)
      */
     void setLayoutDirection(int layoutDirection) {
+        if (mLayoutDirection == layoutDirection) return;
         mLayoutDirection = layoutDirection;
         for (int i = 0; i < mCurrentModels.size(); i++) {
             PropertyModel model = mCurrentModels.get(i).model;
@@ -551,7 +594,8 @@ class AutocompleteMediator
         if (!isUrlSuggestion) refineText = TextUtils.concat(refineText, " ").toString();
 
         mDelegate.setOmniboxEditingText(refineText);
-        onTextChangedForAutocomplete();
+        onTextChanged(mUrlBarEditingTextProvider.getTextWithoutAutocomplete(),
+                mUrlBarEditingTextProvider.getTextWithAutocomplete());
         if (isUrlSuggestion) {
             RecordUserAction.record("MobileOmniboxRefineSuggestion.Url");
         } else {
@@ -595,12 +639,16 @@ class AutocompleteMediator
         };
 
         Resources resources = mContext.getResources();
+        @StringRes int dialogMessageId = R.string.omnibox_confirm_delete;
+        if (isSuggestionFromClipboard(suggestion)) {
+            dialogMessageId = R.string.omnibox_confirm_delete_from_clipboard;
+        }
+
         PropertyModel model =
                 new PropertyModel.Builder(ModalDialogProperties.ALL_KEYS)
                         .with(ModalDialogProperties.CONTROLLER, dialogController)
                         .with(ModalDialogProperties.TITLE, suggestion.getDisplayText())
-                        .with(ModalDialogProperties.MESSAGE, resources,
-                                R.string.omnibox_confirm_delete)
+                        .with(ModalDialogProperties.MESSAGE, resources, dialogMessageId)
                         .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT, resources, R.string.ok)
                         .with(ModalDialogProperties.NEGATIVE_BUTTON_TEXT, resources,
                                 R.string.cancel)
@@ -711,7 +759,7 @@ class AutocompleteMediator
      * Notifies the autocomplete system that the text has changed that drives autocomplete and the
      * autocomplete suggestions should be updated.
      */
-    public void onTextChangedForAutocomplete() {
+    public void onTextChanged(String textWithoutAutocomplete, String textWithAutocomplete) {
         // crbug.com/764749
         Log.w(TAG, "onTextChangedForAutocomplete");
 
@@ -727,7 +775,7 @@ class AutocompleteMediator
         }
 
         stopAutocomplete(false);
-        if (TextUtils.isEmpty(mUrlBarEditingTextProvider.getTextWithoutAutocomplete())) {
+        if (TextUtils.isEmpty(textWithoutAutocomplete)) {
             // crbug.com/764749
             Log.w(TAG, "onTextChangedForAutocomplete: url is empty");
             hideSuggestions();
@@ -735,12 +783,12 @@ class AutocompleteMediator
         } else {
             assert mRequestSuggestions == null : "Multiple omnibox requests in flight.";
             mRequestSuggestions = () -> {
-                String textWithoutAutocomplete =
-                        mUrlBarEditingTextProvider.getTextWithoutAutocomplete();
                 boolean preventAutocomplete = !mUrlBarEditingTextProvider.shouldAutocomplete();
                 mRequestSuggestions = null;
 
-                if (!mDataProvider.hasTab()) {
+                // There may be no tabs when searching form omnibox in overview mode. In that case,
+                // ToolbarDataProvider.getCurrentUrl() returns NTP url.
+                if (!mDataProvider.hasTab() && !mDataProvider.isInOverviewAndShowingOmnibox()) {
                     // crbug.com/764749
                     Log.w(TAG, "onTextChangedForAutocomplete: no tab");
                     return;
@@ -968,14 +1016,16 @@ class AutocompleteMediator
      * Make a zero suggest request if:
      * - Native is loaded.
      * - The URL bar has focus.
-     * - The current tab is not incognito.
+     * - The the tab/overview is not incognito.
      */
     private void startZeroSuggest() {
         // Reset "edited" state in the omnibox if zero suggest is triggered -- new edits
         // now count as a new session.
         mHasStartedNewOmniboxEditSession = false;
         mNewOmniboxEditSessionTimestamp = -1;
-        if (mNativeInitialized && mDelegate.isUrlBarFocused() && mDataProvider.hasTab()) {
+
+        if (mNativeInitialized && mDelegate.isUrlBarFocused()
+                && (mDataProvider.hasTab() || mDataProvider.isInOverviewAndShowingOmnibox())) {
             int pageClassification =
                     mDataProvider.getPageClassification(mDelegate.didFocusUrlFromFakebox());
             mAutocomplete.startZeroSuggest(mDataProvider.getProfile(),
@@ -1063,7 +1113,7 @@ class AutocompleteMediator
         mAutocomplete = controller;
     }
 
-    private static abstract class DeferredOnSelectionRunnable implements Runnable {
+    private abstract static class DeferredOnSelectionRunnable implements Runnable {
         protected final OmniboxSuggestion mSuggestion;
         protected final int mPosition;
         protected boolean mShouldLog;

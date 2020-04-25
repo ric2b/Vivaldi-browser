@@ -27,6 +27,15 @@
                 android:icon="@drawable/btn_reload_stop"/>
             </menu>
         </item>
+        <item android:id="@+id/vivaldi_reload_menu_id"
+            android:icon="@drawable/btn_reload_stop"
+            android:title="@string/accessibility_btn_refresh"/>
+        <item android:id="@+id/vivaldi_bookmark_page_menu_id"
+            android:icon="@drawable/btn_star"
+            android:title="@string/bookmark_page"/>
+        <item android:id="@+id/vivaldi_offline_page_id"
+            android:icon="@drawable/ic_file_download_white_24dp"
+            android:title="@string/download_page"/>
         <item android:id="@+id/update_menu_id"
             android:title="@string/menu_update"
             android:icon="@drawable/menu_update" />
@@ -38,6 +47,8 @@
             android:title="@string/menu_new_incognito_tab" />
         <item android:id="@+id/all_bookmarks_menu_id"
             android:title="@null" />
+        <item android:id="@+id/vivaldi_clone_tab_menu_id"
+            android:title="@string/clone_tab"/>
         <item android:id="@+id/recent_tabs_menu_id"
             android:title="@string/menu_recent_tabs" />
         <item android:id="@+id/open_history_menu_id"
@@ -57,6 +68,8 @@
         </item>
         <item android:id="@+id/find_in_page_id"
             android:title="@string/menu_find_in_page" />
+        <item android:id="@+id/capture_page_id"
+            android:title="@string/menu_capture_page" />
         <item android:id="@+id/add_to_homescreen_id"
             android:title="@string/menu_add_to_homescreen" />
         <item android:id="@+id/open_webapk_id"
@@ -80,6 +93,8 @@
             android:title="@string/menu_help" />
         <item android:id="@+id/enter_vr_id"
             android:title="@string/enter_vr" />
+        <item android:id="@+id/vivaldi_exit_id"
+            android:title="@string/menu_vivaldi_exit" />
     </group>
 
     <!-- Items shown only in the tab switcher -->

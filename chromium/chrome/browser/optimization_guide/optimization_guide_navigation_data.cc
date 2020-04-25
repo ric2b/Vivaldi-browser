@@ -20,11 +20,11 @@ namespace {
 // Also add the string to OptimizationGuide.OptimizationTargets histogram
 // suffixes in histograms.xml.
 std::string GetStringNameForOptimizationTarget(
-    optimization_guide::OptimizationTarget optimization_target) {
+    optimization_guide::proto::OptimizationTarget optimization_target) {
   switch (optimization_target) {
-    case optimization_guide::OptimizationTarget::kUnknown:
+    case optimization_guide::proto::OPTIMIZATION_TARGET_UNKNOWN:
       return "Unknown";
-    case optimization_guide::OptimizationTarget::kPainfulPageLoad:
+    case optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD:
       return "PainfulPageLoad";
   }
   NOTREACHED();
@@ -46,7 +46,9 @@ OptimizationGuideNavigationData::OptimizationGuideNavigationData(
       optimization_type_decisions_(other.optimization_type_decisions_),
       optimization_target_decisions_(other.optimization_target_decisions_),
       has_hint_before_commit_(other.has_hint_before_commit_),
-      has_hint_after_commit_(other.has_hint_after_commit_) {
+      has_hint_after_commit_(other.has_hint_after_commit_),
+      was_host_covered_by_fetch_at_navigation_start_(
+          other.was_host_covered_by_fetch_at_navigation_start_) {
   if (other.has_page_hint_value()) {
     page_hint_ = std::make_unique<optimization_guide::proto::PageHint>(
         *other.page_hint());
@@ -61,9 +63,15 @@ void OptimizationGuideNavigationData::RecordMetrics(bool has_committed) const {
 
 void OptimizationGuideNavigationData::RecordHintCacheMatch(
     bool has_committed) const {
+  bool has_hint_before_commit = false;
   if (has_hint_before_commit_.has_value()) {
+    has_hint_before_commit = has_hint_before_commit_.value();
     UMA_HISTOGRAM_BOOLEAN("OptimizationGuide.HintCache.HasHint.BeforeCommit",
-                          has_hint_before_commit_.value());
+                          has_hint_before_commit);
+    UMA_HISTOGRAM_BOOLEAN(
+        "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit",
+        has_hint_before_commit ||
+            was_host_covered_by_fetch_at_navigation_start_.value_or(false));
   }
   // If the navigation didn't commit, then don't proceed to record any of the
   // remaining metrics.
@@ -107,7 +115,7 @@ void OptimizationGuideNavigationData::RecordOptimizationTypeAndTargetDecisions()
   // Record optimization target decisions.
   for (const auto& optimization_target_decision :
        optimization_target_decisions_) {
-    optimization_guide::OptimizationTarget optimization_target =
+    optimization_guide::proto::OptimizationTarget optimization_target =
         optimization_target_decision.first;
     optimization_guide::OptimizationTargetDecision decision =
         optimization_target_decision.second;
@@ -178,7 +186,7 @@ void OptimizationGuideNavigationData::SetDecisionForOptimizationType(
 
 base::Optional<optimization_guide::OptimizationTargetDecision>
 OptimizationGuideNavigationData::GetDecisionForOptimizationTarget(
-    optimization_guide::OptimizationTarget optimization_target) const {
+    optimization_guide::proto::OptimizationTarget optimization_target) const {
   auto optimization_target_decision_iter =
       optimization_target_decisions_.find(optimization_target);
   if (optimization_target_decision_iter == optimization_target_decisions_.end())
@@ -187,7 +195,7 @@ OptimizationGuideNavigationData::GetDecisionForOptimizationTarget(
 }
 
 void OptimizationGuideNavigationData::SetDecisionForOptimizationTarget(
-    optimization_guide::OptimizationTarget optimization_target,
+    optimization_guide::proto::OptimizationTarget optimization_target,
     optimization_guide::OptimizationTargetDecision decision) {
   optimization_target_decisions_[optimization_target] = decision;
 }

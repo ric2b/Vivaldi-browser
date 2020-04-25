@@ -42,39 +42,15 @@ chrome_ios_eg2_test("ios_chrome_ui_eg2tests_module") {
     "//ios/chrome/browser/ui/activity_services:eg2_tests",
     "//ios/chrome/browser/ui/download:eg2_tests",
     "//ios/chrome/browser/ui/integration_tests:eg2_tests",
+    "//ios/chrome/browser/ui/ntp:eg2_tests",
     "//ios/chrome/browser/ui/omnibox/popup:eg2_tests",
     "//ios/chrome/browser/ui/omnibox/popup/shortcuts:eg2_tests",
     "//ios/chrome/browser/ui/open_in:eg2_tests",
     "//ios/chrome/browser/ui/page_info:eg2_tests",
+    "//ios/chrome/browser/ui/sad_tab:eg2_tests",
+    "//ios/chrome/browser/ui/settings/autofill:eg2_tests",
+    "//ios/chrome/browser/ui/tabs:eg2_tests",
     "//ios/chrome/browser/ui/toolbar:eg2_tests",
-  ]
-}
-
-source_set("shared_helper_headers") {
-  testonly = true
-  sources = [
-    "//ios/chrome/test/earl_grey2/chrome_earl_grey_edo.h",
-  ]
-}
-
-source_set("eg_app_support+eg2") {
-  testonly = true
-  configs += [ "//build/config/compiler:enable_arc" ]
-
-  sources = [
-    "chrome_earl_grey_edo.mm",
-  ]
-
-  deps = [
-    "//base",
-    "//base/test:test_support",
-    "//ios/chrome/test/app:test_support",
-    "//ios/testing/earl_grey:eg_app_support+eg2",
-    "//ios/third_party/earl_grey2:app_framework+link",
-  ]
-
-  public_deps = [
-    ":shared_helper_headers",
   ]
 }
 
@@ -91,7 +67,6 @@ source_set("eg2_tests") {
   ]
 
   deps = [
-    ":shared_helper_headers",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",

@@ -211,9 +211,9 @@ class CalendarService : public KeyedService {
   void NotifyCalendarServiceLoaded();
   void NotifyCalendarServiceBeingDeleted();
 
-  void OnEventCreated(const EventRow& row);
-  void OnEventDeleted(const EventRow& row);
-  void OnEventChanged(const EventRow& row);
+  void OnEventCreated(const EventResult& event);
+  void OnEventDeleted(const EventResult& event);
+  void OnEventChanged(const EventResult& event);
 
   void OnCalendarCreated(const CalendarRow& row);
   void OnCalendarDeleted(const CalendarRow& row);

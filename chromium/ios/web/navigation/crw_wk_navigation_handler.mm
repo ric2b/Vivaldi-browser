@@ -211,7 +211,12 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
 
   // If this is a placeholder navigation, pass through.
   if (IsPlaceholderUrl(requestURL)) {
-    decisionHandler(WKNavigationActionPolicyAllow);
+    if (action.sourceFrame.mainFrame) {
+      // Disallow renderer initiated navigations to placeholder URLs.
+      decisionHandler(WKNavigationActionPolicyCancel);
+    } else {
+      decisionHandler(WKNavigationActionPolicyAllow);
+    }
     return;
   }
 
@@ -790,7 +795,35 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
   // |context| will be nil if this navigation has been already committed and
   // finished.
   if (context) {
+    web::NavigationManager* navigationManager =
+        self.webStateImpl->GetNavigationManager();
+    GURL pendingURL;
+    if (navigationManager->GetPendingItemIndex() == -1) {
+      if (context->GetItem()) {
+        // Item may not exist if navigation was stopped (see
+        // crbug.com/969915).
+        pendingURL = context->GetItem()->GetURL();
+      }
+    } else {
+      if (navigationManager->GetPendingItem()) {
+        pendingURL = navigationManager->GetPendingItem()->GetURL();
+      }
+    }
+    if ((pendingURL == webViewURL) || (context->IsLoadingHtmlString()) ||
+        (!web::GetWebClient()->IsSlimNavigationManagerEnabled() &&
+         ui::PageTransitionCoreTypeIs(context->GetPageTransition(),
+                                      ui::PAGE_TRANSITION_RELOAD) &&
+         navigationManager->GetLastCommittedItem())) {
+      // Commit navigation if at least one of these is true:
+      //  - Navigation has pending item (this should always be true, but
+      //    pending item may not exist due to crbug.com/925304).
+      //  - Navigation is loadHTMLString:baseURL: navigation, which does not
+      //    create a pending item, but modifies committed item instead.
+      //  - Transition type is reload with Legacy Navigation Manager (Legacy
+      //    Navigation Manager does not create pending item for reload due to
+      //    crbug.com/676129)
       context->SetHasCommitted(true);
+    }
     self.webStateImpl->SetContentsMimeType(
         base::SysNSStringToUTF8(context->GetMimeType()));
   }
@@ -1580,7 +1613,7 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
   // Ask web client if this cert error should be allowed.
   web::GetWebClient()->AllowCertificateError(
       self.webStateImpl, net::MapCertStatusToNetError(info.cert_status), info,
-      net::GURLWithNSURL(requestURL), recoverable,
+      net::GURLWithNSURL(requestURL), recoverable, context->GetNavigationId(),
       base::BindRepeating(^(bool proceed) {
         if (proceed) {
           DCHECK(recoverable);
@@ -1783,19 +1816,19 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
 - (void)handleCancelledError:(NSError*)error
                forNavigation:(WKNavigation*)navigation
              provisionalLoad:(BOOL)provisionalLoad {
-  web::NavigationContextImpl* navigationContext =
-      [self.navigationStates contextForNavigation:navigation];
   if ([self shouldCancelLoadForCancelledError:error
                               provisionalLoad:provisionalLoad]) {
+    std::unique_ptr<web::NavigationContextImpl> navigationContext =
+        [self.navigationStates removeNavigation:navigation];
     [self loadCancelled];
-    web::NavigationItemImpl* item =
-        web::GetItemWithUniqueID(self.navigationManagerImpl, navigationContext);
+    web::NavigationItemImpl* item = web::GetItemWithUniqueID(
+        self.navigationManagerImpl, navigationContext.get());
     if (self.navigationManagerImpl->GetPendingItem() == item) {
       self.navigationManagerImpl->DiscardNonCommittedItems();
     }
 
     [self.legacyNativeContentController
-        handleCancelledErrorForContext:navigationContext];
+        handleCancelledErrorForContext:navigationContext.get()];
 
     if (provisionalLoad) {
       if (!navigationContext &&
@@ -1808,10 +1841,12 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
         UMA_HISTOGRAM_BOOLEAN(
             "Navigation.IOSNullContextInDidFailProvisionalNavigation", true);
       } else {
-        self.webStateImpl->OnNavigationFinished(navigationContext);
+        self.webStateImpl->OnNavigationFinished(navigationContext.get());
       }
     }
   } else if (!provisionalLoad) {
+    web::NavigationContextImpl* navigationContext =
+        [self.navigationStates contextForNavigation:navigation];
     web::NavigationItemImpl* item =
         web::GetItemWithUniqueID(self.navigationManagerImpl, navigationContext);
     if (item) {
@@ -2096,6 +2131,12 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
 
 // Updates the WKBackForwardListItemHolder navigation item.
 - (void)updateCurrentBackForwardListItemHolderInWebView:(WKWebView*)webView {
+  if (!self.currentNavItem) {
+    // TODO(crbug.com/925304): Pending item (which stores the holder) should be
+    // owned by NavigationContext object. Pending item should never be null.
+    return;
+  }
+
   web::WKBackForwardListItemHolder* holder =
       self.currentBackForwardListItemHolder;
 
@@ -2237,7 +2278,9 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
   // be extracted from the landing page.)
   web::NavigationItem* currentItem = self.currentNavItem;
 
-  if (!currentItem->GetReferrer().url.is_valid()) {
+  // TODO(crbug.com/925304): Pending item (which should be used here) should be
+  // owned by NavigationContext object. Pending item should never be null.
+  if (currentItem && !currentItem->GetReferrer().url.is_valid()) {
     currentItem->SetReferrer(referrer);
   }
 

@@ -1,5 +1,8 @@
 # These tests currently fail when run with --enable-features=BackForwardCache.
 
+# WebLock  (deadlock)
+-LockManagerBrowserTest.*
+
 # Same-document navigation pointing to a URL that would cause a redirect if it
 # was reloaded. It never happen, because the document is restored directly.
 -NavigationControllerBrowserTest.SiteInstanceChangeOnHistoryNavigation
@@ -13,30 +16,10 @@
 
 # Create a URLLoaderInterceptor. It should cause the navigation to fail, but it
 # isn't using an URLLoader anymore.
--RenderFrameHostManagerTest.ErrorPageNavigationHistoryNavigationSuccess
 -RenderFrameHostManagerTest.ErrorPageNavigationHistoryNavigationFailure
 
 # Document expects javascript to run again from the beginning.
 -WebContentsImplBrowserTest.JavaScriptDialogsInMainAndSubframes
-
-# Histogram not recorded. It will probably be fixed by https://crbug.com/976697.
--NavigationHandleImplBrowserTest.StartToCommitMetrics
-
-# render_view_impl.cc. Check failed: !frame_widget_.
-# https://crbug.com/999846
--NavigationControllerBrowserTest.PageStateAfterForwardInCompetingFrames
--NavigationControllerBrowserTest.PageStateWithIframeAfterForwardInCompetingFrames
--NavigationControllerHistoryInterventionBrowserTest.NoUserActivationSetSkipOnBackForwardCrossSite
--NavigationControllerHistoryInterventionBrowserTest.NoUserActivationSetSkipOnBackForwardCrossSite
--RenderFrameHostManagerTest.BackForwardNotStale
-
-# Javascript dialog is shown from a page in the BackForwardCache.
-# https://crbug.com/999847
--NavigationControllerBrowserTest.NoDialogsFromSwappedOutFrames
-
-# history.back(); history.back() causes the tab to go back twice instead of
-# once. The navigations are now committing synchronously, which is too fast.
--NavigationControllerBrowserTest.HistoryBackTwiceFromRendererWithoutUserGesture
 
 # Page with no-cache, no-store, must-revalidate shouldn't be cached.
 -NavigationControllerBrowserTest.UncacheablePost
@@ -61,13 +44,10 @@
 -NavigationControllerBrowserTest.UtilizationOfSpareRenderProcessHost
 -RenderFrameHostManagerTest.DontSelectInvalidFiles
 -RenderFrameHostManagerTest.NavigateWithUnassignedSiteInstance
--RenderFrameHostManagerTest.PostMessageFromSubframeUnloadHandler
 -RenderFrameHostManagerTest.RestoreFileAccessForHistoryNavigation
 -RenderFrameHostManagerTest.RestoreSubframeFileAccessForHistoryNavigation
 -RenderFrameHostManagerTest.UnloadPushStateOnCrossProcessNavigation
--RenderFrameHostManagerTest.WebUIJavascriptDisallowedAfterSwapOut
 -RenderProcessHostTest.KeepAliveRendererProcess
--SitePerProcessBrowserTest.RenderViewHostIsNotReusedAfterDelayedSwapOutACK
 -SitePerProcessBrowserTest.SubframePendingAndBackToSameSiteInstance
 -SitePerProcessBrowserTest.SwapOutACKArrivesPriorToProcessShutdownRequest
 
@@ -75,27 +55,49 @@
 # happen when the BackForwardCache is used to store the old document.
 -RenderFrameHostManagerTest.RenderViewInitAfterNewProxyAndProcessKill
 
-# Waiting for unload handler, but they aren't executed.
--SitePerProcessBrowserTest.PartialUnloadHandler
--SitePerProcessBrowserTest.Unload_ABAB
--WebContentsImplBrowserTest.SetTitleOnUnload
-
-# FATAL:casting.h Security DCHECK failed: IsA<Derived>(from).
-# In content::RenderFrameProxy::OnSetFrameOwnerProperties()
-# https://crbug.com/999849
--WebContentsSplitCacheBrowserTestEnabled.SplitCacheDedicatedWorkers/0
--WebContentsSplitCacheBrowserTestEnabled.SplitCacheDedicatedWorkers/1
--WebContentsSplitCacheWithFrameOriginBrowserTest.SplitCache
--WebContentsSplitCacheWithFrameOriginBrowserTest.SplitCacheDedicatedWorkers
-
-# Check failed: popup_ || pepper_fullscreen_ in RenderWidget::OnClose()
-# https://crbug.com/992891
--WebContentsSplitCacheBrowserTestEnabled.SplitCacheDedicatedWorkerScripts/1
--WebContentsSplitCacheBrowserTestEnabled.SplitCacheDedicatedWorkerScripts/0
-
 # Histogram "PrefetchedSignedExchangeCache.Count" is recorded when the document
 # in the RenderFrameHost is replaced, or when the RenderFrameHost is deleted.
 # With the BackForwardCache, the RenderFrameHost is not deleted, so the
 # histogram is not recorded before the end of the test.
 -SignedExchangeRequestHandlerBrowserTest.Simple/3
 -SignedExchangeRequestHandlerBrowserTest.VariantMatch/3
+
+# Check failed: !is_active().
+# https://crbug.com/1003744
+-NavigationBaseBrowserTest.BackForwardInOldDocumentCancelPendingNavigation/1
+-NavigationBaseBrowserTest.BackForwardInOldDocumentCancelPendingNavigation/0
+
+# The BackForwardCache evicts page asynchronously. The test expects the
+# RenderFrameHostImpl to be removed immediately.
+-SitePerProcessBrowserTest.RenderViewHostIsNotReusedAfterDelayedSwapOutACK
+
+# Android-only test. Timeout.
+# https://crbug.com/1004786
+-SitePerProcessBrowserTest.TestChildProcessImportance
+
+# NOTREACHED() is hit in RenderFrameHostManager::GetFrameHostForNavigation,
+# because, "A frame that's pending deletion should never be navigated.".
+-NavigationControllerBrowserTest.PageStateWithIframeAfterForwardInCompetingFrames
+-SitePerProcessBrowserTest.TwoCrossSitePendingNavigationsAndMainFrameWins
+
+# Failing on android only, need to be triaged, see https://crbug.com/1006267.
+-BackForwardCacheMetricsBrowserTest.Fetch
+-BackForwardCacheMetricsBrowserTest.XHR
+-WebContentsSplitCacheBrowserTestEnabled.SplitCache*
+-WebRtcBrowserTest.CanSetupH264VideoCallOnSupportedDevice
+-WithoutCORBProtectionSniffing/CrossSiteDocumentBlockingTest.*
+-WithCORBProtectionSniffing/CrossSiteDocumentBlockingTest.*
+
+# Flaky on android only, need to be triaged, see https://crbug.com/1006267.
+-IndexedDBBrowserTest*
+-MHTMLGenerationTest/MHTMLGenerationTest.*
+-MSE_ClearKey/EncryptedMediaTest.*
+-MSE_ExternalClearKey/EncryptedMediaTest.*
+-NavigationControllerBrowserTest.BackOnBrowserInitiatedErrorPageNavigation
+-NavigationControllerBrowserTest.BackSameDocumentAfterBlockedSubframe
+-NavigationControllerBrowserTest.BrowserInitiatedLoadPostCommitErrorPageForSubframe
+-NavigationControllerBrowserTest.PageStateAfterForwardInCompetingFrames
+-NavigationControllerBrowserTest.ReplacedNavigationEntryData_Back
+-RenderViewHostTest.IsFocusedElementEditable
+-TouchInputBrowserTest.*
+-TouchpadPinchBrowserTest.*

@@ -54,6 +54,7 @@ Portal::~Portal() {
       portal_contents_impl_->GetOuterDelegateFrameTreeNodeId());
   if (outer_node)
     outer_node->RemoveObserver(this);
+  portal_contents_impl_->set_portal(nullptr);
 
   g_portal_token_map.Get().erase(portal_token_);
 }
@@ -77,6 +78,13 @@ Portal* Portal::Create(
     RenderFrameHostImpl* owner_render_frame_host,
     mojo::PendingAssociatedReceiver<blink::mojom::Portal> receiver,
     mojo::PendingAssociatedRemote<blink::mojom::PortalClient> client) {
+  if (!IsEnabled()) {
+    mojo::ReportBadMessage(
+        "blink.mojom.Portal can only be used if the Portals feature is "
+        "enabled.");
+    return nullptr;
+  }
+
   auto portal_ptr = base::WrapUnique(new Portal(owner_render_frame_host));
   Portal* portal = portal_ptr.get();
   portal->binding_ = mojo::MakeStrongAssociatedBinding<blink::mojom::Portal>(
@@ -96,6 +104,13 @@ void Portal::BindPortalHostReceiver(
     RenderFrameHostImpl* frame,
     mojo::PendingAssociatedReceiver<blink::mojom::PortalHost>
         pending_receiver) {
+  if (!IsEnabled()) {
+    mojo::ReportBadMessage(
+        "blink.mojom.PortalHost can only be used if the Portals feature is "
+        "enabled.");
+    return;
+  }
+
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(WebContents::FromRenderFrameHost(frame));
 
@@ -174,7 +189,9 @@ RenderFrameProxyHost* Portal::CreateProxyAndAttachPortal() {
   return proxy_host;
 }
 
-void Portal::Navigate(const GURL& url, blink::mojom::ReferrerPtr referrer) {
+void Portal::Navigate(const GURL& url,
+                      blink::mojom::ReferrerPtr referrer,
+                      NavigateCallback callback) {
   if (!url.SchemeIsHTTPOrHTTPS()) {
     mojo::ReportBadMessage("Portal::Navigate tried to use non-HTTP protocol.");
     binding_->Close();  // Also deletes |this|.
@@ -197,6 +214,8 @@ void Portal::Navigate(const GURL& url, blink::mojom::ReferrerPtr referrer) {
       owner_render_frame_host_->GetSiteInstance(),
       mojo::ConvertTo<Referrer>(referrer), ui::PAGE_TRANSITION_LINK, false,
       download_policy, "GET", nullptr, "", nullptr, false);
+
+  std::move(callback).Run();
 }
 
 namespace {
@@ -246,25 +265,36 @@ void Portal::Activate(blink::TransferableMessage data,
 
   auto* outer_contents_main_frame_view = static_cast<RenderWidgetHostViewBase*>(
       outer_contents->GetMainFrame()->GetView());
+  auto* portal_contents_main_frame_view =
+      static_cast<RenderWidgetHostViewBase*>(
+          portal_contents_impl_->GetMainFrame()->GetView());
+
+  std::vector<std::unique_ptr<ui::TouchEvent>> touch_events;
+
   if (outer_contents_main_frame_view) {
     // Take fallback contents from previous WebContents so that the activation
     // is smooth without flashes.
-    auto* portal_contents_main_frame_view =
-        static_cast<RenderWidgetHostViewBase*>(
-            portal_contents_impl_->GetMainFrame()->GetView());
     portal_contents_main_frame_view->TakeFallbackContentFrom(
         outer_contents_main_frame_view);
-
-    outer_contents_main_frame_view->CancelActiveTouches();
+    touch_events =
+        outer_contents_main_frame_view->ExtractAndCancelActiveTouches();
     FlushTouchEventQueues(outer_contents_main_frame_view->host());
-
-    outer_contents_main_frame_view->Destroy();
   }
 
   std::unique_ptr<WebContents> predecessor_web_contents =
       delegate->SwapWebContents(outer_contents, std::move(portal_contents),
                                 true, is_loading);
   CHECK_EQ(predecessor_web_contents.get(), outer_contents);
+
+  if (outer_contents_main_frame_view) {
+    portal_contents_main_frame_view->TransferTouches(touch_events);
+    // Takes ownership of SyntheticGestureController from the predecessor's
+    // RenderWidgetHost. This allows the controller to continue sending events
+    // to the new RenderWidgetHostView.
+    portal_contents_main_frame_view->host()->TakeSyntheticGestureController(
+        outer_contents_main_frame_view->host());
+    outer_contents_main_frame_view->Destroy();
+  }
 
   portal_contents_impl_->set_portal(nullptr);
 

@@ -338,6 +338,27 @@ void ContactBackend::UpdateEmailAddress(
   }
 }
 
+void ContactBackend::RemoveEmailAddress(
+    ContactID contact_id,
+    EmailAddressID email_id,
+    std::shared_ptr<ContactResults> result) {
+  if (!db_->DoesEmailAddressIdExist(email_id, contact_id)) {
+    result->success = false;
+    return;
+  }
+
+  if (db_->DeleteEmail(email_id, contact_id)) {
+    ContactRow contact_row;
+    db_->GetRowForContact(contact_id, &contact_row);
+    FillUpdatedContact(contact_id, contact_row);
+    result->success = true;
+    result->contact = contact_row;
+    NotifyContactModified(contact_row);
+  } else {
+    result->success = false;
+  }
+}
+
 void ContactBackend::DeleteEmail(RemovePropertyObject row,
                                  std::shared_ptr<ContactResults> result) {
   bool deleteResult = db_->DeleteEmail(row.property_id, row.contact_id);

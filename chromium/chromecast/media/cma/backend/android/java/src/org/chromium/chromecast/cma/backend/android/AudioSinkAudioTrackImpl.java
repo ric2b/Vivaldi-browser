@@ -20,6 +20,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chromecast.media.AudioContentType;
 
 import java.lang.annotation.Retention;
@@ -132,7 +133,7 @@ class AudioSinkAudioTrackImpl {
     private static final long MAX_TIME_IGNORING_TSTAMPS_NSECS = SEC_IN_NSEC;
 
     // Additional padding for minimum buffer time, determined experimentally.
-    private static final long MIN_BUFFERED_TIME_PADDING_US = ANDROID_AUDIO_PERIOD_SIZE_US;
+    private static final long MIN_BUFFERED_TIME_PADDING_US = 120000;
 
     // Max retries for AudioTrackBuilder
     private static final int MAX_RETRIES_FOR_AUDIO_TRACKS = 1;
@@ -383,8 +384,8 @@ class AudioSinkAudioTrackImpl {
         mRenderingDelayBuffer = ByteBuffer.allocateDirect(2 * 8); // 2 long
         mRenderingDelayBuffer.order(ByteOrder.nativeOrder());
 
-        nativeCacheDirectBufferAddress(
-                mNativeAudioSinkAudioTrackImpl, mPcmBuffer, mRenderingDelayBuffer);
+        AudioSinkAudioTrackImplJni.get().cacheDirectBufferAddress(mNativeAudioSinkAudioTrackImpl,
+                AudioSinkAudioTrackImpl.this, mPcmBuffer, mRenderingDelayBuffer);
 
         mIsInitialized = true;
     }
@@ -818,9 +819,10 @@ class AudioSinkAudioTrackImpl {
         mTriggerTimestampUpdateNow = false;
     }
 
-    //
-    // JNI functions in native land.
-    //
-    private native void nativeCacheDirectBufferAddress(long nativeAudioSinkAndroidAudioTrackImpl,
-            ByteBuffer mPcmBuffer, ByteBuffer mRenderingDelayBuffer);
+    @NativeMethods
+    interface Natives {
+        void cacheDirectBufferAddress(long nativeAudioSinkAndroidAudioTrackImpl,
+                AudioSinkAudioTrackImpl caller, ByteBuffer mPcmBuffer,
+                ByteBuffer mRenderingDelayBuffer);
+    }
 }

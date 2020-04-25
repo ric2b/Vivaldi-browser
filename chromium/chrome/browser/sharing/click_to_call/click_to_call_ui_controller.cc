@@ -11,23 +11,18 @@
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/sharing/click_to_call/click_to_call_utils.h"
 #include "chrome/browser/sharing/sharing_constants.h"
-#include "chrome/browser/sharing/sharing_device_capability.h"
 #include "chrome/browser/sharing/sharing_dialog.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_window.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/sync_device_info/device_info.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/native_theme/native_theme.h"
 #include "ui/strings/grit/ui_strings.h"
 
 using SharingMessage = chrome_browser_sharing::SharingMessage;
-using App = ClickToCallUiController::App;
 
 // static
 ClickToCallUiController* ClickToCallUiController::GetOrCreateFromWebContents(
@@ -37,13 +32,15 @@ ClickToCallUiController* ClickToCallUiController::GetOrCreateFromWebContents(
 }
 
 // static
-void ClickToCallUiController::ShowDialog(content::WebContents* web_contents,
-                                         const GURL& url,
-                                         bool hide_default_handler) {
+void ClickToCallUiController::ShowDialog(
+    content::WebContents* web_contents,
+    const base::Optional<url::Origin>& initiating_origin,
+    const GURL& url,
+    bool hide_default_handler) {
   auto* controller = GetOrCreateFromWebContents(web_contents);
   controller->phone_url_ = url;
   controller->hide_default_handler_ = hide_default_handler;
-  controller->UpdateAndShowDialog();
+  controller->UpdateAndShowDialog(initiating_origin);
 }
 
 ClickToCallUiController::ClickToCallUiController(
@@ -71,21 +68,32 @@ void ClickToCallUiController::OnDialogClosed(SharingDialog* dialog) {
   SharingUiController::OnDialogClosed(dialog);
 }
 
-base::string16 ClickToCallUiController::GetTitle() {
-  return l10n_util::GetStringUTF16(
-      IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_TITLE_LABEL);
+base::string16 ClickToCallUiController::GetTitle(
+    SharingDialogType dialog_type) {
+  switch (dialog_type) {
+    case SharingDialogType::kErrorDialog:
+      return SharingUiController::GetTitle(dialog_type);
+    case SharingDialogType::kEducationalDialog:
+      return l10n_util::GetStringUTF16(
+          IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_TITLE_NO_DEVICES);
+    case SharingDialogType::kDialogWithoutDevicesWithApp:
+    case SharingDialogType::kDialogWithDevicesMaybeApps:
+      return l10n_util::GetStringUTF16(
+          IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_TITLE_LABEL);
+  }
 }
 
 PageActionIconType ClickToCallUiController::GetIconType() {
   return PageActionIconType::kClickToCall;
 }
 
-int ClickToCallUiController::GetRequiredDeviceCapabilities() {
-  return static_cast<int>(SharingDeviceCapability::kClickToCall);
+sync_pb::SharingSpecificFields::EnabledFeatures
+ClickToCallUiController::GetRequiredFeature() {
+  return sync_pb::SharingSpecificFields::CLICK_TO_CALL;
 }
 
 void ClickToCallUiController::DoUpdateApps(UpdateAppsCallback callback) {
-  std::vector<App> apps;
+  std::vector<SharingApp> apps;
   if (hide_default_handler_) {
     std::move(callback).Run(std::move(apps));
     return;
@@ -118,7 +126,7 @@ void ClickToCallUiController::SendNumberToDevice(
   SendMessageToDevice(device, std::move(sharing_message));
 }
 
-void ClickToCallUiController::OnAppChosen(const App& app) {
+void ClickToCallUiController::OnAppChosen(const SharingApp& app) {
   if (ukm_recorder_)
     std::move(ukm_recorder_).Run(SharingClickToCallSelection::kApp);
 
@@ -126,14 +134,14 @@ void ClickToCallUiController::OnAppChosen(const App& app) {
                                                          web_contents());
 }
 
-SharingDialog* ClickToCallUiController::DoShowDialog(BrowserWindow* window) {
+void ClickToCallUiController::OnDialogShown(bool has_devices, bool has_apps) {
   if (!HasSendFailed()) {
     // Only left clicks open a dialog.
     ukm_recorder_ = base::BindOnce(&LogClickToCallUKM, web_contents(),
                                    SharingClickToCallEntryPoint::kLeftClickLink,
-                                   !devices().empty(), !apps().empty());
+                                   has_devices, has_apps);
   }
-  return window->ShowSharingDialog(web_contents(), this);
+  SharingUiController::OnDialogShown(has_devices, has_apps);
 }
 
 base::string16 ClickToCallUiController::GetContentType() const {
@@ -154,27 +162,29 @@ SharingFeatureName ClickToCallUiController::GetFeatureMetricsPrefix() const {
   return SharingFeatureName::kClickToCall;
 }
 
-base::string16 ClickToCallUiController::GetEducationWindowTitleText() const {
-  return l10n_util::GetStringUTF16(
-      IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_TITLE_NO_DEVICES);
-}
-
 void ClickToCallUiController::OnHelpTextClicked(SharingDialogType dialog_type) {
   LogClickToCallHelpTextClicked(dialog_type);
   SharingUiController::OnHelpTextClicked(dialog_type);
 }
 
-int ClickToCallUiController::GetHeaderImageId() const {
+SharingDialogData ClickToCallUiController::CreateDialogData(
+    SharingDialogType dialog_type) {
+  SharingDialogData data = SharingUiController::CreateDialogData(dialog_type);
+
   // Do not add the header image for error dialogs.
-  if (HasSendFailed())
-    return 0;
+  if (dialog_type != SharingDialogType::kErrorDialog) {
+    data.header_image_light = IDR_CLICK_TO_CALL_ILLUSTRATION_LIGHT;
+    data.header_image_dark = IDR_CLICK_TO_CALL_ILLUSTRATION_DARK;
+  }
 
-  const ui::NativeTheme* native_theme =
-      ui::NativeTheme::GetInstanceForNativeUi();
-  bool is_dark = native_theme && native_theme->ShouldUseDarkColors();
+  data.help_text_id =
+      IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_HELP_TEXT_NO_DEVICES;
+  data.help_link_text_id =
+      IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_TROUBLESHOOT_LINK;
+  data.origin_text_id =
+      IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_INITIATING_ORIGIN;
 
-  return is_dark ? IDR_CLICK_TO_CALL_ILLUSTRATION_DARK
-                 : IDR_CLICK_TO_CALL_ILLUSTRATION_LIGHT;
+  return data;
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(ClickToCallUiController)

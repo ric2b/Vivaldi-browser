@@ -8,10 +8,11 @@
 #include <string>
 #include <utility>
 
-#include "ash/public/mojom/voice_interaction_controller.mojom.h"
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/buildflag.h"
+#include "chrome/browser/chromeos/assistant/assistant_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/ash_util.h"
@@ -19,7 +20,9 @@
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
+#include "chromeos/assistant/buildflags.h"
 #include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
+#include "chromeos/services/assistant/public/features.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -80,7 +83,6 @@ AssistantOptInUI::AssistantOptInUI(content::WebUI* web_ui)
   source->UseStringsJs();
   source->AddResourcePath("assistant_optin.js", IDR_ASSISTANT_OPTIN_JS);
   source->AddResourcePath("assistant_logo.png", IDR_ASSISTANT_LOGO_PNG);
-  source->AddBoolean("hotwordDspAvailable", chromeos::IsHotwordDspAvailable());
   source->SetDefaultResource(IDR_ASSISTANT_OPTIN_HTML);
   source->AddResourcePath("voice_match_animation.json",
                           IDR_ASSISTANT_VOICE_MATCH_ANIMATION);
@@ -123,10 +125,24 @@ void AssistantOptInUI::Initialize() {
 void AssistantOptInDialog::Show(
     ash::FlowType type,
     ash::AssistantSetup::StartAssistantOptInFlowCallback callback) {
+#if !BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
+  std::move(callback).Run(false);
+  return;
+#endif
+
+  // Check Assistant allowed state.
+  if (::assistant::IsAssistantAllowedForProfile(
+          ProfileManager::GetActiveUserProfile()) !=
+      ash::mojom::AssistantAllowedState::ALLOWED) {
+    std::move(callback).Run(false);
+    return;
+  }
+
   // Check session state here to prevent timing issue -- session state might
   // have changed during the mojom calls to launch the opt-in dalog.
   if (session_manager::SessionManager::Get()->session_state() !=
       session_manager::SessionState::ACTIVE) {
+    std::move(callback).Run(false);
     return;
   }
   if (g_dialog) {

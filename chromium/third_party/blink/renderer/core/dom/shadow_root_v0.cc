@@ -65,7 +65,7 @@ inline void DistributionPool::PopulateChildren(const ContainerNode& parent) {
   Clear();
   for (Node* child = parent.firstChild(); child; child = child->nextSibling()) {
     // Re-distribution across v0 and v1 shadow trees is not supported
-    if (IsHTMLSlotElement(child))
+    if (IsA<HTMLSlotElement>(child))
       continue;
 
     if (IsActiveV0InsertionPoint(*child)) {
@@ -168,7 +168,7 @@ void ShadowRootV0::Distribute() {
   for (const auto& point : DescendantInsertionPoints()) {
     if (!point->IsActive())
       continue;
-    if (auto* shadow = ToHTMLShadowElementOrNull(*point)) {
+    if (auto* shadow = DynamicTo<HTMLShadowElement>(*point)) {
       DCHECK(!shadow_insertion_point);
       shadow_insertion_point = shadow;
     } else {

@@ -19,6 +19,8 @@ import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * The coordinator for the tab switcher mode bottom toolbar. This class handles all interactions
  * that the tab switcher bottom toolbar has with the outside world.
@@ -83,14 +85,18 @@ public class TabSwitcherBottomToolbarCoordinator {
         mCloseAllTabsButton.setVisibility(View.INVISIBLE);
 
         mNewTabButton = root.findViewById(R.id.tab_switcher_new_tab_button);
+        if (!ChromeApplication.isVivaldi()) {
         mNewTabButton.setWrapperView(root.findViewById(R.id.new_tab_button_wrapper));
+        }
         mNewTabButton.setOnClickListener(newTabClickListener);
         mNewTabButton.setIncognitoStateProvider(incognitoStateProvider);
         mNewTabButton.setThemeColorProvider(themeColorProvider);
 
         assert menuButtonHelper != null;
         mMenuButton = root.findViewById(R.id.menu_button_wrapper);
+        if (!ChromeApplication.isVivaldi()) {
         mMenuButton.setWrapperView(root.findViewById(R.id.labeled_menu_button_wrapper));
+        }
         mMenuButton.setThemeColorProvider(themeColorProvider);
         mMenuButton.setAppMenuButtonHelper(menuButtonHelper);
     }

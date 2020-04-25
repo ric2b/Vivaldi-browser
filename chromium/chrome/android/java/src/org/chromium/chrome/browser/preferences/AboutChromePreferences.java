@@ -20,6 +20,8 @@ import org.chromium.ui.widget.Toast;
 
 import java.util.Calendar;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * Settings fragment that displays information about Chrome.
  */
@@ -54,6 +56,8 @@ public class AboutChromePreferences
         AboutVersionStrings versionStrings = prefServiceBridge.getAboutVersionStrings();
         Preference p = findPreference(PREF_APPLICATION_VERSION);
         p.setSummary(getApplicationVersion(getActivity(), versionStrings.getApplicationVersion()));
+        // Vivaldi (ref. VB-59279)
+        if (!ChromeApplication.isVivaldi())
         p.setOnPreferenceClickListener(this);
         p = findPreference(PREF_OS_VERSION);
         p.setSummary(versionStrings.getOSVersion());

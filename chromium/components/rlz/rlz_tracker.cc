@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/numerics/ranges.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -21,6 +22,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/rlz/rlz_tracker_delegate.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 
@@ -194,7 +196,8 @@ class RLZTracker::WrapperURLLoaderFactory
                          traffic_annotation));
     }
   }
-  void Clone(network::mojom::URLLoaderFactoryRequest factory) override {
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory)
+      override {
     NOTIMPLEMENTED();
   }
 
@@ -278,7 +281,7 @@ bool RLZTracker::Init(bool first_run,
   if (delegate_->ShouldEnableZeroDelayForTesting())
     EnableZeroDelayForTesting();
 
-  delay = std::min(kMaxInitDelay, std::max(min_init_delay_, delay));
+  delay = base::ClampToRange(delay, min_init_delay_, kMaxInitDelay);
 
   if (delegate_->GetBrand(&brand_) && !delegate_->IsBrandOrganic(brand_)) {
     // Register for notifications from the omnibox so that we can record when

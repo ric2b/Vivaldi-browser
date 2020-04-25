@@ -11,6 +11,7 @@
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_switches.h"
+#include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
@@ -22,13 +23,14 @@
 #include "ash/shelf/overflow_bubble_view.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_background_animator_observer.h"
-#include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_navigation_widget.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
+#include "ash/style/ash_color_provider.h"
 #include "ash/system/status_area_layout_manager.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "ui/compositor/layer.h"
@@ -47,8 +49,10 @@ namespace {
 constexpr int kShelfBlurRadius = 30;
 // The maximum size of the opaque layer during an "overshoot" (drag away from
 // the screen edge).
-constexpr int kShelfMaxOvershootHeight = 32;
+constexpr int kShelfMaxOvershootHeight = 40;
 constexpr float kShelfBlurQuality = 0.33f;
+constexpr gfx::Size kDragHandleSize(80, 4);
+constexpr int kDragHandleCornerRadius = 2;
 
 // Return the first or last focusable child of |root|.
 views::View* FindFirstOrLastFocusableChild(views::View* root,
@@ -100,6 +104,8 @@ class ShelfWidget::DelegateView : public views::WidgetDelegate,
   void ReorderChildLayers(ui::Layer* parent_layer) override;
   void UpdateBackgroundBlur();
   void UpdateOpaqueBackground();
+  void UpdateDragHandle();
+
   // This will be called when the parent local bounds change.
   void OnBoundsChanged(const gfx::Rect& old_bounds) override;
 
@@ -117,6 +123,10 @@ class ShelfWidget::DelegateView : public views::WidgetDelegate,
   // A background layer that may be visible depending on a
   // ShelfBackgroundAnimator.
   ui::Layer opaque_background_;
+
+  // A drag handle shown in tablet mode when we are not on the home screen.
+  // Owned by the view hierarchy.
+  views::View* drag_handle_ = nullptr;
 
   // When true, the default focus of the shelf is the last focusable child.
   bool default_last_focusable_child_ = false;
@@ -137,6 +147,22 @@ ShelfWidget::DelegateView::DelegateView(ShelfWidget* shelf_widget)
 
   SetLayoutManager(std::make_unique<views::FillLayout>());
   set_allow_deactivate_on_esc(true);
+
+  std::unique_ptr<views::View> drag_handle_ptr =
+      std::make_unique<views::View>();
+  const int radius = kDragHandleCornerRadius;
+  const AshColorProvider::RippleAttributes ripple_attributes =
+      AshColorProvider::Get()->GetRippleAttributes(
+          ShelfConfig::Get()->GetDefaultShelfColor());
+  drag_handle_ = AddChildView(std::move(drag_handle_ptr));
+  drag_handle_->SetPaintToLayer(ui::LAYER_SOLID_COLOR);
+  drag_handle_->layer()->SetColor(ripple_attributes.base_color);
+  // TODO(manucornet): Figure out why we need a manual opacity adjustment
+  // to make this color look the same as the status area highlight.
+  drag_handle_->layer()->SetOpacity(ripple_attributes.inkdrop_opacity + 0.075);
+  drag_handle_->layer()->SetRoundedCornerRadius(
+      {radius, radius, radius, radius});
+  drag_handle_->SetSize(kDragHandleSize);
 
   UpdateOpaqueBackground();
 }
@@ -195,15 +221,24 @@ void ShelfWidget::DelegateView::UpdateBackgroundBlur() {
 }
 
 void ShelfWidget::DelegateView::UpdateOpaqueBackground() {
-  const gfx::Rect local_bounds = GetLocalBounds();
-  gfx::Rect opaque_background_bounds = local_bounds;
+  // Shell could be destroying.
+  if (!Shell::Get()->tablet_mode_controller())
+    return;
+
+  gfx::Rect opaque_background_bounds = GetLocalBounds();
 
   const Shelf* shelf = shelf_widget_->shelf();
   const ShelfBackgroundType background_type =
       shelf_widget_->GetBackgroundType();
+  const bool tablet_mode =
+      Shell::Get()->tablet_mode_controller() &&
+      Shell::Get()->tablet_mode_controller()->InTabletMode();
+  const bool in_app = ShelfConfig::Get()->is_in_app();
 
-  if (!opaque_background_.visible())
-    opaque_background_.SetVisible(true);
+  bool show_opaque_background =
+      !tablet_mode || in_app || !chromeos::switches::ShouldShowShelfHotseat();
+  if (show_opaque_background != opaque_background_.visible())
+    opaque_background_.SetVisible(show_opaque_background);
 
   // Extend the opaque layer a little bit to handle "overshoot" gestures
   // gracefully (the user drags the shelf further than it can actually go).
@@ -213,7 +248,7 @@ void ShelfWidget::DelegateView::UpdateOpaqueBackground() {
   // when dragged away.
   // To achieve this, we extend the layer in the same direction where the shelf
   // is aligned (downwards for a bottom shelf, etc.).
-  const int radius = ShelfConstants::shelf_size() / 2;
+  const int radius = ShelfConfig::Get()->shelf_size() / 2;
   // We can easily round only 2 corners out of 4 which means we don't need as
   // much extra shelf height.
   const int safety_margin = kShelfMaxOvershootHeight;
@@ -222,8 +257,10 @@ void ShelfWidget::DelegateView::UpdateOpaqueBackground() {
       -shelf->SelectValueForShelfAlignment(0, 0, safety_margin),
       -shelf->SelectValueForShelfAlignment(safety_margin, 0, 0));
 
-  // Show rounded corners except in maximized (which includes split view) mode.
-  if (background_type == SHELF_BACKGROUND_MAXIMIZED) {
+  // Show rounded corners except in maximized (which includes split view) mode,
+  // or whenever we are "in app".
+  if (background_type == SHELF_BACKGROUND_MAXIMIZED ||
+      (tablet_mode && in_app)) {
     opaque_background_.SetRoundedCornerRadius({0, 0, 0, 0});
   } else {
     opaque_background_.SetRoundedCornerRadius({
@@ -232,11 +269,30 @@ void ShelfWidget::DelegateView::UpdateOpaqueBackground() {
         shelf->SelectValueForShelfAlignment(0, radius, 0),
         shelf->SelectValueForShelfAlignment(0, 0, radius),
     });
-    opaque_background_.AddCacheRenderSurfaceRequest();
   }
   opaque_background_.SetBounds(opaque_background_bounds);
+  UpdateDragHandle();
   UpdateBackgroundBlur();
   SchedulePaint();
+}
+
+void ShelfWidget::DelegateView::UpdateDragHandle() {
+  if (!Shell::Get()->tablet_mode_controller()->InTabletMode() ||
+      !ShelfConfig::Get()->is_in_app() ||
+      !chromeos::switches::ShouldShowShelfHotseat()) {
+    drag_handle_->SetVisible(false);
+    return;
+  }
+  drag_handle_->SetVisible(true);
+
+  const int x = (shelf_widget_->GetClientAreaBoundsInScreen().width() -
+                 kDragHandleSize.width()) /
+                2;
+  const int y = (shelf_widget_->GetClientAreaBoundsInScreen().height() -
+                 kDragHandleSize.height()) /
+                2;
+  drag_handle_->SetBounds(x, y, kDragHandleSize.width(),
+                          kDragHandleSize.height());
 }
 
 void ShelfWidget::DelegateView::OnBoundsChanged(const gfx::Rect& old_bounds) {
@@ -287,9 +343,7 @@ bool ShelfWidget::GetHitTestRects(aura::Window* target,
 
 ShelfWidget::ShelfWidget(Shelf* shelf)
     : shelf_(shelf),
-      background_animator_(SHELF_BACKGROUND_DEFAULT,
-                           shelf_,
-                           Shell::Get()->wallpaper_controller()),
+      background_animator_(shelf_, Shell::Get()->wallpaper_controller()),
       shelf_layout_manager_(new ShelfLayoutManager(this, shelf)),
       delegate_view_(new DelegateView(this)),
       scoped_session_observer_(this) {
@@ -328,6 +382,7 @@ void ShelfWidget::Initialize(aura::Window* shelf_container) {
   shelf_layout_manager_->AddObserver(this);
   shelf_container->SetLayoutManager(shelf_layout_manager_);
   shelf_layout_manager_->InitObservers();
+  background_animator_.Init(SHELF_BACKGROUND_DEFAULT);
   background_animator_.PaintBackground(
       shelf_layout_manager_->GetShelfBackgroundType(),
       AnimationChangeType::IMMEDIATE);
@@ -348,7 +403,6 @@ void ShelfWidget::Shutdown() {
   shelf_layout_manager_->PrepareForShutdown();
 
   Shell::Get()->focus_cycler()->RemoveWidget(status_area_widget_.get());
-  status_area_widget_.reset();
 
   Shell::Get()->focus_cycler()->RemoveWidget(navigation_widget_.get());
   Shell::Get()->focus_cycler()->RemoveWidget(hotseat_widget_.get());
@@ -360,6 +414,11 @@ void ShelfWidget::Shutdown() {
   // Don't need to observe focus/activation during shutdown.
   Shell::Get()->focus_cycler()->RemoveWidget(this);
   SetFocusCycler(nullptr);
+
+  // The contents view of |hotseat_widget_| may rely on |status_area_widget_|.
+  // So do explicit destruction here.
+  hotseat_widget_.reset();
+  status_area_widget_.reset();
 }
 
 void ShelfWidget::CreateNavigationWidget(aura::Window* container) {
@@ -397,7 +456,7 @@ ShelfBackgroundType ShelfWidget::GetBackgroundType() const {
 
 int ShelfWidget::GetBackgroundAlphaValue(
     ShelfBackgroundType background_type) const {
-  return background_animator_.GetBackgroundAlphaValue(background_type);
+  return SkColorGetA(background_animator_.GetBackgroundColor(background_type));
 }
 
 void ShelfWidget::OnShelfAlignmentChanged() {
@@ -409,7 +468,9 @@ void ShelfWidget::OnShelfAlignmentChanged() {
 }
 
 void ShelfWidget::OnTabletModeChanged() {
-  hotseat_widget()->GetShelfView()->OnTabletModeChanged();
+  delegate_view_->UpdateOpaqueBackground();
+  hotseat_widget()->OnTabletModeChanged();
+  shelf_layout_manager()->UpdateVisibilityState();
 }
 
 void ShelfWidget::PostCreateShelf() {
@@ -463,8 +524,7 @@ BackButton* ShelfWidget::GetBackButton() const {
   return navigation_widget_.get()->GetBackButton();
 }
 
-app_list::ApplicationDragAndDropHost*
-ShelfWidget::GetDragAndDropHostForAppList() {
+ApplicationDragAndDropHost* ShelfWidget::GetDragAndDropHostForAppList() {
   return hotseat_widget()->GetShelfView();
 }
 
@@ -520,29 +580,17 @@ void ShelfWidget::OnSessionStateChanged(session_manager::SessionState state) {
   if (!using_views_shelf || unknown_state || hide_on_secondary_screen) {
     HideIfShown();
   } else {
-    switch (state) {
-      case session_manager::SessionState::ACTIVE:
-        login_shelf_view_->SetVisible(false);
-        hotseat_widget()->GetShelfView()->SetVisible(true);
-        break;
-      case session_manager::SessionState::LOCKED:
-      case session_manager::SessionState::LOGIN_SECONDARY:
-        hotseat_widget()->GetShelfView()->SetVisible(false);
-        login_shelf_view_->SetVisible(true);
-        break;
-      case session_manager::SessionState::OOBE:
-        login_shelf_view_->SetVisible(true);
-        hotseat_widget()->GetShelfView()->SetVisible(false);
-        break;
-      case session_manager::SessionState::LOGIN_PRIMARY:
-      case session_manager::SessionState::LOGGED_IN_NOT_ACTIVE:
-        login_shelf_view_->SetVisible(true);
-        hotseat_widget()->GetShelfView()->SetVisible(false);
-        break;
-      default:
-        // session_manager::SessionState::UNKNOWN handled in if statement above.
-        NOTREACHED();
-    }
+    bool show_hotseat = (state == session_manager::SessionState::ACTIVE);
+    hotseat_widget()->GetShelfView()->SetVisible(show_hotseat);
+    login_shelf_view()->SetVisible(!show_hotseat);
+    delegate_view_->SetLayoutManager(
+        show_hotseat ? nullptr : std::make_unique<views::FillLayout>());
+
+    // When FillLayout is no longer the layout manager, ensure the correct size
+    // for the drag handle is set.
+    if (show_hotseat)
+      delegate_view_->UpdateDragHandle();
+
     ShowIfHidden();
   }
   login_shelf_view_->UpdateAfterSessionChange();
@@ -583,7 +631,13 @@ void ShelfWidget::OnMouseEvent(ui::MouseEvent* event) {
 void ShelfWidget::OnGestureEvent(ui::GestureEvent* event) {
   if (event->type() == ui::ET_GESTURE_TAP_DOWN)
     keyboard::KeyboardUIController::Get()->HideKeyboardImplicitlyByUser();
-  views::Widget::OnGestureEvent(event);
+  ui::GestureEvent event_in_screen(*event);
+  gfx::Point location_in_screen(event->location());
+  ::wm::ConvertPointToScreen(GetNativeWindow(), &location_in_screen);
+  event_in_screen.set_location(location_in_screen);
+  shelf_layout_manager()->ProcessGestureEventFromShelfWidget(&event_in_screen);
+  if (!event->handled())
+    views::Widget::OnGestureEvent(event);
 }
 
 }  // namespace ash

@@ -432,7 +432,8 @@ void DeviceCloudPolicyManagerChromeOS::CreateStatusUploader() {
           DeviceStatusCollector::AndroidStatusFetcher(),
           DeviceStatusCollector::TpmStatusFetcher(),
           DeviceStatusCollector::EMMCLifetimeFetcher(),
-          true /* is_enterprise_device */),
+          DeviceStatusCollector::StatefulPartitionInfoFetcher(),
+          DeviceStatusCollector::CrosHealthdDataFetcher()),
       task_runner_, kDeviceStatusUploadFrequency));
 }
 

@@ -10,6 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "components/services/filesystem/public/mojom/types.mojom.h"
 #include "content/browser/native_file_system/native_file_system_handle_base.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "storage/browser/fileapi/file_system_url.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_directory_handle.mojom.h"
 
@@ -19,8 +20,8 @@ namespace content {
 // owned by the NativeFileSystemManagerImpl instance passed in to the
 // constructor.
 //
-// This class is not thread safe, all methods should be called on the same
-// sequence as storage::FileSystemContext, which today always is the IO thread.
+// This class is not thread safe, all methods must be called from the same
+// sequence.
 class NativeFileSystemDirectoryHandleImpl
     : public NativeFileSystemHandleBase,
       public blink::mojom::NativeFileSystemDirectoryHandle {
@@ -47,7 +48,8 @@ class NativeFileSystemDirectoryHandleImpl
                    bool recurse,
                    RemoveEntryCallback callback) override;
   void Transfer(
-      blink::mojom::NativeFileSystemTransferTokenRequest token) override;
+      mojo::PendingReceiver<blink::mojom::NativeFileSystemTransferToken> token)
+      override;
 
  private:
   // State that is kept for the duration of a GetEntries/ReadDirectory call.

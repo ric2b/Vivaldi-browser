@@ -65,7 +65,11 @@ bool SyncUserSettingsImpl::IsFirstSetupComplete() const {
   return prefs_->IsFirstSetupComplete();
 }
 
-void SyncUserSettingsImpl::SetFirstSetupComplete() {
+void SyncUserSettingsImpl::SetFirstSetupComplete(
+    SyncFirstSetupCompleteSource source) {
+  if (IsFirstSetupComplete())
+    return;
+  UMA_HISTOGRAM_ENUMERATION("Signin.SyncFirstSetupCompleteSource", source);
   prefs_->SetFirstSetupComplete();
 }
 
@@ -121,15 +125,19 @@ void SyncUserSettingsImpl::EnableEncryptEverything() {
 }
 
 bool SyncUserSettingsImpl::IsPassphraseRequired() const {
-  return crypto_->passphrase_required_reason() !=
-         REASON_PASSPHRASE_NOT_REQUIRED;
+  return crypto_->IsPassphraseRequired();
 }
 
-bool SyncUserSettingsImpl::IsPassphraseRequiredForDecryption() const {
+bool SyncUserSettingsImpl::IsPassphraseRequiredForPreferredDataTypes() const {
   // If there is an encrypted datatype enabled and we don't have the proper
   // passphrase, we must prompt the user for a passphrase. The only way for the
   // user to avoid entering their passphrase is to disable the encrypted types.
   return IsEncryptedDatatypeEnabled() && IsPassphraseRequired();
+}
+
+bool SyncUserSettingsImpl::IsTrustedVaultKeyRequiredForPreferredDataTypes()
+    const {
+  return IsEncryptedDatatypeEnabled() && crypto_->IsTrustedVaultKeyRequired();
 }
 
 bool SyncUserSettingsImpl::IsUsingSecondaryPassphrase() const {
@@ -162,6 +170,13 @@ bool SyncUserSettingsImpl::SetDecryptionPassphrase(
   return result;
 }
 
+void SyncUserSettingsImpl::AddTrustedVaultDecryptionKeys(
+    const std::string& gaia_id,
+    const std::vector<std::string>& keys) {
+  DVLOG(1) << "Adding trusted vault decryption keys.";
+  crypto_->AddTrustedVaultDecryptionKeys(gaia_id, keys);
+}
+
 void SyncUserSettingsImpl::SetSyncRequestedIfNotSetExplicitly() {
   prefs_->SetSyncRequestedIfNotSetExplicitly();
 }
@@ -182,7 +197,7 @@ ModelTypeSet SyncUserSettingsImpl::GetPreferredDataTypes() const {
     types.RetainAll(registered_model_types_);
   }
 
-  static_assert(46 + 1 /* notes */ == ModelType::NUM_ENTRIES,
+  static_assert(41 + 1 /* notes */ == ModelType::NUM_ENTRIES,
                 "If adding a new sync data type, update the list below below if"
                 " you want to disable the new data type for local sync.");
   types.PutAll(ControlTypes());

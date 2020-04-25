@@ -10,13 +10,14 @@
 
 #include "base/callback.h"
 #include "base/optional.h"
-#include "content/browser/frame_host/navigation_handle_impl.h"
+#include "content/browser/frame_host/navigation_request.h"
 #include "content/common/content_security_policy/csp_disposition_enum.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/navigation_simulator.h"
-#include "mojo/public/cpp/bindings/associated_interface_request.h"
+#include "content/test/test_render_frame_host.h"
+#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_endpoint.h"
@@ -30,7 +31,6 @@ struct FrameHostMsg_DidCommitProvisionalLoad_Params;
 namespace content {
 
 class FrameTreeNode;
-class NavigationHandleImpl;
 class NavigationRequest;
 class TestRenderFrameHost;
 class WebContentsImpl;
@@ -98,7 +98,7 @@ class NavigationSimulatorImpl : public NavigationSimulator,
   void SetSSLInfo(const net::SSLInfo& ssl_info) override;
 
   NavigationThrottle::ThrottleCheckResult GetLastThrottleCheckResult() override;
-  NavigationHandleImpl* GetNavigationHandle() override;
+  NavigationRequest* GetNavigationHandle() override;
   content::GlobalRequestID GetGlobalRequestID() override;
 
   void SetKeepLoading(bool keep_loading) override;
@@ -171,9 +171,9 @@ class NavigationSimulatorImpl : public NavigationSimulator,
                           WebContentsImpl* web_contents,
                           TestRenderFrameHost* render_frame_host);
 
-  // Adds a test navigation throttle to |handle| which sanity checks various
+  // Adds a test navigation throttle to |request| which sanity checks various
   // callbacks have been properly called.
-  void RegisterTestThrottle(NavigationHandle* handle);
+  void RegisterTestThrottle(NavigationRequest* request);
 
   // Initializes a NavigationSimulator from an existing NavigationRequest. This
   // should only be needed if a navigation was started without a valid
@@ -275,6 +275,8 @@ class NavigationSimulatorImpl : public NavigationSimulator,
   bool was_initiated_by_link_click_ = false;
   bool browser_initiated_;
   bool same_document_ = false;
+  TestRenderFrameHost::LoadingScenario loading_scenario_ =
+      TestRenderFrameHost::LoadingScenario::kOther;
   blink::mojom::ReferrerPtr referrer_;
   ui::PageTransition transition_;
   ReloadType reload_type_ = ReloadType::NONE;
@@ -344,8 +346,8 @@ class NavigationSimulatorImpl : public NavigationSimulator,
   // cancellation coming from the renderer process side. This member interface
   // will never be bound.
   // Only used when PerNavigationMojoInterface is enabled.
-  mojo::AssociatedInterfaceRequest<mojom::NavigationClient>
-      navigation_client_request_;
+  mojo::PendingAssociatedReceiver<mojom::NavigationClient>
+      navigation_client_receiver_;
 
   base::WeakPtrFactory<NavigationSimulatorImpl> weak_factory_{this};
 };

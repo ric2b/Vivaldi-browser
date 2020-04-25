@@ -15,11 +15,11 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
+#include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -232,10 +232,10 @@ void OnSqliteError(const base::Closure& catastrophic_error_handler,
   // An error has been detected. Ignore unless it is catastrophic.
   if (sql::IsErrorCatastrophic(err)) {
     // At this point sql::* and DirectoryBackingStore may be on the callstack so
-    // don't invoke the error handler directly. Instead, PostTask to this thread
-    // to avoid potential reentrancy issues.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  catastrophic_error_handler);
+    // don't invoke the error handler directly. Instead, PostTask to this
+    // sequence to avoid potential reentrancy issues.
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, catastrophic_error_handler);
   }
 }
 
@@ -287,7 +287,7 @@ DirectoryBackingStore::DirectoryBackingStore(
       database_page_size_(kCurrentPageSizeKB),
       needs_metas_column_refresh_(false),
       needs_share_info_column_refresh_(false) {
-  DCHECK(base::ThreadTaskRunnerHandle::IsSet());
+  DCHECK(base::SequencedTaskRunnerHandle::IsSet());
   ResetAndCreateConnection();
 }
 
@@ -301,7 +301,7 @@ DirectoryBackingStore::DirectoryBackingStore(
       db_(db),
       needs_metas_column_refresh_(false),
       needs_share_info_column_refresh_(false) {
-  DCHECK(base::ThreadTaskRunnerHandle::IsSet());
+  DCHECK(base::SequencedTaskRunnerHandle::IsSet());
 }
 
 DirectoryBackingStore::~DirectoryBackingStore() {
@@ -883,30 +883,6 @@ int DirectoryBackingStore::GetVersion() {
 
   sql::Statement statement(db_->GetUniqueStatement(
           "SELECT data FROM share_version"));
-  if (statement.Step()) {
-    return statement.ColumnInt(0);
-  } else {
-    return 0;
-  }
-}
-
-bool DirectoryBackingStore::SetVivaldiVersion(int version) {
-  sql::Statement s(db_->GetCachedStatement(
-          SQL_FROM_HERE, "UPDATE share_version SET vivaldi_version = ?"));
-  s.BindInt(0, version);
-
-  return s.Run();
-}
-
-int DirectoryBackingStore::GetVivaldiVersion() {
-  if (!db_->DoesTableExist("share_version"))
-    return 0;
-
-  if (!db_->DoesColumnExist("share_version", "vivaldi_version"))
-    return 0;
-
-  sql::Statement statement(db_->GetUniqueStatement(
-          "SELECT vivaldi_version FROM share_version"));
   if (statement.Step()) {
     return statement.ColumnInt(0);
   } else {
@@ -1860,22 +1836,6 @@ void DirectoryBackingStore::SetCatastrophicErrorHandler(
   sql::Database::ErrorCallback error_callback =
       base::Bind(&OnSqliteError, catastrophic_error_handler_);
   db_->set_error_callback(error_callback);
-}
-
-bool DirectoryBackingStore::MigrateVivaldiVersion0To1() {
-  // Vivaldi Version 1 adds the vivalid_version to the share_version table.
-  if (!db_->Execute("ALTER TABLE share_version ADD COLUMN vivaldi_version int"))
-    return false;
-
-  if (!db_->Execute("ALTER TABLE metas ADD COLUMN "
-                    "unique_notes_tag VARCHAR")) {
-    return false;
-  }
-
-  SetVivaldiVersion(1);
-  needs_metas_column_refresh_ = true;
-  return true;
-
 }
 
 }  // namespace syncable

@@ -9,7 +9,6 @@ import("//build/config/features.gni")
 import("//build/config/jumbo.gni")
 import("//build/config/linux/gtk/gtk.gni")
 import("//build/config/ui.gni")
-import("//build/split_static_library.gni")
 import("//chrome/common/features.gni")
 import("//chromeos/assistant/assistant.gni")
 import("//components/feature_engagement/features.gni")
@@ -28,23 +27,14 @@ import("//ui/views/features.gni")
 
 # Use a static library here because many test binaries depend on this but don't
 # require many files from it. This makes linking more efficient.
-jumbo_split_static_library("ui") {
-  # Split into multiple static libraries on Windows builds. We have hit size
-  # limits on Windows official builds and on goma builds when symbol_level = 2
-  # is selected. Always splitting on Windows builds is simpler than trying to
-  # perfectly calculate the scenarios where it is required.
-  if (is_win) {
-    split_count = 5
-  } else {
-    split_count = 1
-  }
-
+jumbo_static_library("ui") {
   sources = [
     "accelerator_utils.h",
     "app_list/app_list_util.cc",
     "app_list/app_list_util.h",
 
     # All other browser/ui/app_list files go under enable_app_list below.
+    "autofill/autofill_bubble_handler.h",
     "autofill/autofill_popup_controller.h",
     "autofill/autofill_popup_controller_impl.cc",
     "autofill/autofill_popup_controller_impl.h",
@@ -58,8 +48,6 @@ jumbo_split_static_library("ui") {
     "autofill/chrome_autofill_client.h",
     "autofill/payments/autofill_dialog_models.cc",
     "autofill/payments/autofill_dialog_models.h",
-    "autofill/payments/autofill_ui_util.cc",
-    "autofill/payments/autofill_ui_util.h",
     "autofill/payments/create_card_unmask_prompt_view.h",
     "autofill/payments/credit_card_scanner_controller.cc",
     "autofill/payments/credit_card_scanner_controller.h",
@@ -72,6 +60,8 @@ jumbo_split_static_library("ui") {
     "autofill/popup_controller_common.h",
     "autofill/popup_view_common.cc",
     "autofill/popup_view_common.h",
+    "autofill/test/test_autofill_bubble_handler.cc",
+    "autofill/test/test_autofill_bubble_handler.h",
     "blocked_content/blocked_window_params.cc",
     "blocked_content/blocked_window_params.h",
     "blocked_content/list_item_position.cc",
@@ -137,8 +127,6 @@ jumbo_split_static_library("ui") {
     "page_info/page_info_ui.h",
     "passwords/account_avatar_fetcher.cc",
     "passwords/account_avatar_fetcher.h",
-    "passwords/credential_leak_dialog_utils.cc",
-    "passwords/credential_leak_dialog_utils.h",
     "passwords/manage_passwords_state.cc",
     "passwords/manage_passwords_state.h",
     "passwords/manage_passwords_view_utils.cc",
@@ -382,11 +370,13 @@ jumbo_split_static_library("ui") {
     "//components/sync_user_events",
     "//components/translate/content/browser",
     "//content/public/browser",
+    "//mojo/public/cpp/bindings",
   ]
   deps = [
     "//base",
     "//base:i18n",
     "//base/allocator:buildflags",
+    "//build:branding_buildflags",
     "//cc/paint",
     "//chrome:extra_resources",
     "//chrome:resources",
@@ -403,6 +393,8 @@ jumbo_split_static_library("ui") {
     "//chrome/browser/media:mojo_bindings",
     "//chrome/browser/notifications/scheduler/public",
     "//chrome/browser/profiling_host",
+    "//chrome/browser/resources/omnibox:resources",
+    "//chrome/browser/resources/usb_internals:resources",
     "//chrome/browser/safe_browsing",
     "//chrome/browser/ssl:proto",
     "//chrome/browser/ui/webui/bluetooth_internals",
@@ -430,7 +422,6 @@ jumbo_split_static_library("ui") {
     "//components/data_reduction_proxy/core/browser",
     "//components/device_event_log",
     "//components/dom_distiller/content/browser",
-    "//components/dom_distiller/webui",
     "//components/domain_reliability",
     "//components/download/content/factory",
     "//components/download/content/public",
@@ -473,6 +464,7 @@ jumbo_split_static_library("ui") {
     "//components/payments/content/icon",
     "//components/payments/core:error_strings",
     "//components/pdf/browser",
+    "//components/performance_manager",
     "//components/policy/core/browser",
     "//components/pref_registry",
     "//components/previews/content",
@@ -511,6 +503,7 @@ jumbo_split_static_library("ui") {
     "//components/subresource_filter/content/browser",
     "//components/subresource_filter/core/browser",
     "//components/sync",
+    "//components/sync/driver:resources",
     "//components/sync_preferences",
     "//components/sync_sessions",
     "//components/tracing:startup_tracing",
@@ -615,10 +608,17 @@ jumbo_split_static_library("ui") {
     ]
   }
 
-  if (is_android || is_linux) {
+  if (is_win || is_android || is_linux) {
     sources += [
-      "webui/sandbox_internals_ui.cc",
-      "webui/sandbox_internals_ui.h",
+      "webui/sandbox/sandbox_internals_ui.cc",
+      "webui/sandbox/sandbox_internals_ui.h",
+    ]
+  }
+
+  if (is_win) {
+    sources += [
+      "webui/sandbox/sandbox_handler.cc",
+      "webui/sandbox/sandbox_handler.h",
     ]
   }
 
@@ -930,10 +930,13 @@ jumbo_split_static_library("ui") {
       "global_error/global_error_service_factory.h",
       "global_media_controls/media_dialog_delegate.cc",
       "global_media_controls/media_dialog_delegate.h",
+      "global_media_controls/media_notification_container_impl.h",
+      "global_media_controls/media_notification_container_observer.h",
       "global_media_controls/media_toolbar_button_controller.cc",
       "global_media_controls/media_toolbar_button_controller.h",
       "global_media_controls/media_toolbar_button_controller_delegate.cc",
       "global_media_controls/media_toolbar_button_controller_delegate.h",
+      "global_media_controls/media_toolbar_button_observer.h",
       "hats/hats_helper.cc",
       "hats/hats_helper.h",
       "hats/hats_service.cc",
@@ -963,7 +966,6 @@ jumbo_split_static_library("ui") {
       "intent_picker_tab_helper.h",
       "layout_constants.cc",
       "layout_constants.h",
-      "location_bar/location_bar.cc",
       "location_bar/location_bar.h",
       "managed_ui.cc",
       "managed_ui.h",
@@ -1006,7 +1008,7 @@ jumbo_split_static_library("ui") {
       "omnibox/clipboard_utils.h",
       "omnibox/omnibox_theme.cc",
       "omnibox/omnibox_theme.h",
-      "page_action/page_action_icon_container.h",
+      "page_action/page_action_icon_type.h",
       "page_info/page_info_dialog.cc",
       "page_info/page_info_dialog.h",
       "page_info/page_info_infobar_delegate.cc",
@@ -1119,6 +1121,8 @@ jumbo_split_static_library("ui") {
       "tabs/tab_menu_model.h",
       "tabs/tab_network_state.cc",
       "tabs/tab_network_state.h",
+      "tabs/tab_renderer_data.cc",
+      "tabs/tab_renderer_data.h",
       "tabs/tab_strip_model.cc",
       "tabs/tab_strip_model.h",
       "tabs/tab_strip_model_delegate.cc",
@@ -1187,8 +1191,6 @@ jumbo_split_static_library("ui") {
       "webui/app_management/app_management_page_handler.h",
       "webui/app_management/app_management_shelf_delegate_chromeos.cc",
       "webui/app_management/app_management_shelf_delegate_chromeos.h",
-      "webui/app_management/app_management_ui.cc",
-      "webui/app_management/app_management_ui.h",
       "webui/bookmarks/bookmarks_message_handler.cc",
       "webui/bookmarks/bookmarks_message_handler.h",
       "webui/bookmarks/bookmarks_ui.cc",
@@ -1245,6 +1247,8 @@ jumbo_split_static_library("ui") {
       "webui/ntp/app_launcher_handler.h",
       "webui/ntp/app_resource_cache_factory.cc",
       "webui/ntp/app_resource_cache_factory.h",
+      "webui/ntp/cookie_controls_handler.cc",
+      "webui/ntp/cookie_controls_handler.h",
       "webui/ntp/core_app_launcher_handler.cc",
       "webui/ntp/core_app_launcher_handler.h",
       "webui/ntp/new_tab_ui.cc",
@@ -1352,7 +1356,6 @@ jumbo_split_static_library("ui") {
     ]
     deps += [
       "//base/util/values:values_util",
-      "//build:branding_buildflags",
       "//chrome/app/vector_icons",
       "//chrome/browser:theme_properties",
       "//chrome/browser/media/router",
@@ -1368,6 +1371,7 @@ jumbo_split_static_library("ui") {
       "//components/feedback/proto",
       "//components/keep_alive_registry",
       "//components/network_session_configurator/common",
+      "//components/page_load_metrics/browser",
       "//components/profile_metrics",
       "//components/ui_metrics",
       "//components/url_formatter",
@@ -1602,6 +1606,8 @@ jumbo_split_static_library("ui") {
       "views/touch_selection_menu_chromeos.h",
       "views/touch_selection_menu_runner_chromeos.cc",
       "views/touch_selection_menu_runner_chromeos.h",
+      "webui/chromeos/account_manager_error_ui.cc",
+      "webui/chromeos/account_manager_error_ui.h",
       "webui/chromeos/account_manager_welcome_dialog.cc",
       "webui/chromeos/account_manager_welcome_dialog.h",
       "webui/chromeos/account_manager_welcome_ui.cc",
@@ -1646,6 +1652,12 @@ jumbo_split_static_library("ui") {
       "webui/chromeos/cellular_setup/mobile_setup_ui.h",
       "webui/chromeos/certificate_manager_dialog_ui.cc",
       "webui/chromeos/certificate_manager_dialog_ui.h",
+      "webui/chromeos/crostini_installer/crostini_installer_dialog.cc",
+      "webui/chromeos/crostini_installer/crostini_installer_dialog.h",
+      "webui/chromeos/crostini_installer/crostini_installer_page_handler.cc",
+      "webui/chromeos/crostini_installer/crostini_installer_page_handler.h",
+      "webui/chromeos/crostini_installer/crostini_installer_ui.cc",
+      "webui/chromeos/crostini_installer/crostini_installer_ui.h",
       "webui/chromeos/cryptohome_ui.cc",
       "webui/chromeos/cryptohome_ui.h",
       "webui/chromeos/cryptohome_web_ui_handler.cc",
@@ -1890,6 +1902,7 @@ jumbo_split_static_library("ui") {
       "webui/version_handler_chromeos.h",
       "window_sizer/window_sizer_ash.cc",
     ]
+
     deps += [
       "//ash",
       "//ash/components/shortcut_viewer",
@@ -1902,12 +1915,14 @@ jumbo_split_static_library("ui") {
       "//chrome/browser/resources/chromeos:camera_resources",
       "//chrome/browser/ui/webui/app_management:mojo_bindings",
       "//chrome/browser/ui/webui/chromeos/add_supervision:mojo_bindings",
+      "//chrome/browser/ui/webui/chromeos/crostini_installer:mojo_bindings",
       "//chrome/browser/ui/webui/chromeos/machine_learning:mojo_bindings",
       "//chrome/services/file_util/public/cpp",
       "//chromeos",
       "//chromeos/assistant:buildflags",
       "//chromeos/audio",
       "//chromeos/components/account_manager",
+      "//chromeos/components/media_app_ui",
       "//chromeos/components/multidevice",
       "//chromeos/components/multidevice/debug_webui",
       "//chromeos/components/multidevice/logging",
@@ -1947,7 +1962,6 @@ jumbo_split_static_library("ui") {
       "//components/arc",
       "//components/captive_portal",
       "//components/consent_auditor:consent_auditor",
-      "//components/drive:drive_chromeos",
       "//components/exo",
       "//components/login",
       "//components/session_manager/core",
@@ -1980,13 +1994,25 @@ jumbo_split_static_library("ui") {
 
   if (is_win || is_mac || is_desktop_linux || is_chromeos) {
     sources += [
-      "autofill/payments/webauthn_offer_dialog.h",
-      "autofill/payments/webauthn_offer_dialog_controller.cc",
+      "autofill/payments/verify_pending_dialog_controller.h",
+      "autofill/payments/verify_pending_dialog_controller_impl.cc",
+      "autofill/payments/verify_pending_dialog_controller_impl.h",
+      "autofill/payments/verify_pending_dialog_view.h",
       "autofill/payments/webauthn_offer_dialog_controller.h",
+      "autofill/payments/webauthn_offer_dialog_controller_impl.cc",
+      "autofill/payments/webauthn_offer_dialog_controller_impl.h",
+      "autofill/payments/webauthn_offer_dialog_model.cc",
+      "autofill/payments/webauthn_offer_dialog_model.h",
+      "autofill/payments/webauthn_offer_dialog_model_observer.h",
+      "autofill/payments/webauthn_offer_dialog_view.h",
       "frame/window_frame_util.cc",
       "frame/window_frame_util.h",
-      "views/autofill/payments/webauthn_offer_dialog_view.cc",
-      "views/autofill/payments/webauthn_offer_dialog_view.h",
+      "tab_contents/chrome_web_contents_view_handle_drop.cc",
+      "tab_contents/chrome_web_contents_view_handle_drop.h",
+      "views/autofill/payments/verify_pending_dialog_view_impl.cc",
+      "views/autofill/payments/verify_pending_dialog_view_impl.h",
+      "views/autofill/payments/webauthn_offer_dialog_view_impl.cc",
+      "views/autofill/payments/webauthn_offer_dialog_view_impl.h",
       "views/close_bubble_on_tab_activation_helper.cc",
       "views/close_bubble_on_tab_activation_helper.h",
       "views/hats/hats_bubble_view.cc",
@@ -1999,6 +2025,8 @@ jumbo_split_static_library("ui") {
       "views/profiles/profile_menu_view_base.h",
       "webui/discards/discards_ui.cc",
       "webui/discards/discards_ui.h",
+      "webui/discards/graph_dump_impl.cc",
+      "webui/discards/graph_dump_impl.h",
       "webui/signin/inline_login_handler.cc",
       "webui/signin/inline_login_handler.h",
       "webui/signin/inline_login_ui.cc",
@@ -2268,6 +2296,8 @@ jumbo_split_static_library("ui") {
       "cocoa/touchbar/web_textfield_touch_bar_controller.mm",
       "cocoa/window_size_autosaver.h",
       "cocoa/window_size_autosaver.mm",
+      "content_settings/media_authorization_wrapper_test.h",
+      "content_settings/media_authorization_wrapper_test.mm",
       "views/apps/chrome_app_window_client_views_mac.mm",
       "views/certificate_viewer_mac_views.mm",
       "views/dropdown_bar_host_mac.mm",
@@ -2455,8 +2485,6 @@ jumbo_split_static_library("ui") {
 
     if (use_x11) {
       sources += [
-        "views/frame/browser_desktop_window_tree_host_x11.cc",
-        "views/frame/browser_desktop_window_tree_host_x11.h",
         "views/frame/global_menu_bar_registrar_x11.cc",
         "views/frame/global_menu_bar_registrar_x11.h",
         "views/frame/global_menu_bar_x11.cc",
@@ -2478,12 +2506,20 @@ jumbo_split_static_library("ui") {
       ]
     }
     if (use_ozone) {
-      sources += [
-        "views/frame/browser_desktop_window_tree_host_platform.cc",
-        "views/frame/browser_desktop_window_tree_host_platform.h",
-        "views/frame/native_browser_frame_factory_ozone.cc",
-      ]
+      if (!is_desktop_linux) {
+        sources += [
+          "views/frame/browser_desktop_window_tree_host_platform.cc",
+          "views/frame/browser_desktop_window_tree_host_platform.h",
+        ]
+      }
+      sources += [ "views/frame/native_browser_frame_factory_ozone.cc" ]
       deps += [ "//ui/platform_window" ]
+    }
+    if (is_desktop_linux) {
+      sources += [
+        "views/frame/browser_desktop_window_tree_host_linux.cc",
+        "views/frame/browser_desktop_window_tree_host_linux.h",
+      ]
     }
     if (use_gtk) {
       # This is the only component that can interact with gtk.
@@ -2541,6 +2577,9 @@ jumbo_split_static_library("ui") {
       "cookie_controls/cookie_controls_view.h",
       "manifest_web_app_browser_controller.cc",
       "manifest_web_app_browser_controller.h",
+      "qrcode_generator/qrcode_generator_bubble_controller.cc",
+      "qrcode_generator/qrcode_generator_bubble_controller.h",
+      "qrcode_generator/qrcode_generator_bubble_view.h",
       "send_tab_to_self/send_tab_to_self_bubble_controller.cc",
       "send_tab_to_self/send_tab_to_self_bubble_controller.h",
       "send_tab_to_self/send_tab_to_self_bubble_view.h",
@@ -2566,8 +2605,12 @@ jumbo_split_static_library("ui") {
       "views/apps/app_info_dialog/app_info_permissions_panel.h",
       "views/apps/app_info_dialog/app_info_summary_panel.cc",
       "views/apps/app_info_dialog/app_info_summary_panel.h",
+      "views/apps/app_uninstall_dialog_view.cc",
+      "views/apps/app_uninstall_dialog_view.h",
       "views/apps/chrome_native_app_window_views.cc",
       "views/apps/chrome_native_app_window_views.h",
+      "views/autofill/autofill_bubble_handler_impl.cc",
+      "views/autofill/autofill_bubble_handler_impl.h",
       "views/autofill/autofill_popup_base_view.cc",
       "views/autofill/autofill_popup_base_view.h",
       "views/autofill/autofill_popup_view_native_views.cc",
@@ -2616,6 +2659,7 @@ jumbo_split_static_library("ui") {
       "views/bookmarks/bookmark_menu_controller_views.h",
       "views/bookmarks/bookmark_menu_delegate.cc",
       "views/bookmarks/bookmark_menu_delegate.h",
+      "views/browser_commands_views.cc",
       "views/browser_dialogs_views.cc",
       "views/bubble_anchor_util_views.cc",
       "views/bubble_anchor_util_views.h",
@@ -2742,12 +2786,6 @@ jumbo_split_static_library("ui") {
       "views/frame/contents_layout_manager.h",
       "views/frame/contents_web_view.cc",
       "views/frame/contents_web_view.h",
-      "views/frame/hosted_app_button_container.cc",
-      "views/frame/hosted_app_button_container.h",
-      "views/frame/hosted_app_menu_button.cc",
-      "views/frame/hosted_app_menu_button.h",
-      "views/frame/hosted_app_origin_text.cc",
-      "views/frame/hosted_app_origin_text.h",
       "views/frame/immersive_mode_controller.cc",
       "views/frame/immersive_mode_controller.h",
       "views/frame/immersive_mode_controller_factory_views.cc",
@@ -2765,6 +2803,8 @@ jumbo_split_static_library("ui") {
       "views/frame/terminal_system_app_menu_button_chromeos.cc",
       "views/frame/terminal_system_app_menu_button_chromeos.h",
       "views/frame/toolbar_button_provider.h",
+      "views/frame/top_container_background.cc",
+      "views/frame/top_container_background.h",
       "views/frame/top_container_view.cc",
       "views/frame/top_container_view.h",
       "views/frame/top_controls_slide_controller.h",
@@ -2785,8 +2825,9 @@ jumbo_split_static_library("ui") {
       "views/global_error_bubble_view.h",
       "views/global_media_controls/media_dialog_view.cc",
       "views/global_media_controls/media_dialog_view.h",
-      "views/global_media_controls/media_notification_container_impl.cc",
-      "views/global_media_controls/media_notification_container_impl.h",
+      "views/global_media_controls/media_dialog_view_observer.h",
+      "views/global_media_controls/media_notification_container_impl_view.cc",
+      "views/global_media_controls/media_notification_container_impl_view.h",
       "views/global_media_controls/media_notification_list_view.cc",
       "views/global_media_controls/media_notification_list_view.h",
       "views/global_media_controls/media_toolbar_button_view.cc",
@@ -2811,8 +2852,6 @@ jumbo_split_static_library("ui") {
       "views/infobars/infobar_view.h",
       "views/javascript_dialog_views.cc",
       "views/javascript_dialog_views.h",
-      "views/layout/animating_layout_manager.cc",
-      "views/layout/animating_layout_manager.h",
       "views/layout/interpolating_layout_manager.cc",
       "views/layout/interpolating_layout_manager.h",
       "views/load_complete_listener.cc",
@@ -2919,8 +2958,10 @@ jumbo_split_static_library("ui") {
       "views/overlay/skip_ad_label_button.h",
       "views/overlay/track_image_button.cc",
       "views/overlay/track_image_button.h",
-      "views/page_action/omnibox_page_action_icon_container_view.cc",
-      "views/page_action/omnibox_page_action_icon_container_view.h",
+      "views/page_action/page_action_icon_container_view.cc",
+      "views/page_action/page_action_icon_container_view.h",
+      "views/page_action/page_action_icon_loading_indicator_view.cc",
+      "views/page_action/page_action_icon_loading_indicator_view.h",
       "views/page_action/page_action_icon_view.cc",
       "views/page_action/page_action_icon_view.h",
       "views/page_action/pwa_install_view.cc",
@@ -3018,6 +3059,10 @@ jumbo_split_static_library("ui") {
       "views/permission_bubble/permission_prompt_impl_views.cc",
       "views/profiles/avatar_toolbar_button.cc",
       "views/profiles/avatar_toolbar_button.h",
+      "views/qrcode_generator/qrcode_generator_bubble.cc",
+      "views/qrcode_generator/qrcode_generator_bubble.h",
+      "views/qrcode_generator/qrcode_generator_icon_view.cc",
+      "views/qrcode_generator/qrcode_generator_icon_view.h",
       "views/reader_mode/reader_mode_icon_view.cc",
       "views/reader_mode/reader_mode_icon_view.h",
       "views/relaunch_notification/relaunch_notification_controller.cc",
@@ -3032,6 +3077,8 @@ jumbo_split_static_library("ui") {
       "views/relaunch_notification/wall_clock_timer.h",
       "views/sad_tab_view.cc",
       "views/sad_tab_view.h",
+      "views/safe_browsing/deep_scanning_modal_dialog.cc",
+      "views/safe_browsing/deep_scanning_modal_dialog.h",
       "views/safe_browsing/password_reuse_modal_warning_dialog.cc",
       "views/safe_browsing/password_reuse_modal_warning_dialog.h",
       "views/send_tab_to_self/send_tab_to_self_bubble_device_button.cc",
@@ -3092,12 +3139,12 @@ jumbo_split_static_library("ui") {
       "views/tabs/tab_group_editor_bubble_view.h",
       "views/tabs/tab_group_header.cc",
       "views/tabs/tab_group_header.h",
+      "views/tabs/tab_group_underline.cc",
+      "views/tabs/tab_group_underline.h",
       "views/tabs/tab_hover_card_bubble_view.cc",
       "views/tabs/tab_hover_card_bubble_view.h",
       "views/tabs/tab_icon.cc",
       "views/tabs/tab_icon.h",
-      "views/tabs/tab_renderer_data.cc",
-      "views/tabs/tab_renderer_data.h",
       "views/tabs/tab_slot_view.h",
       "views/tabs/tab_strip.cc",
       "views/tabs/tab_strip.h",
@@ -3130,6 +3177,8 @@ jumbo_split_static_library("ui") {
       "views/toolbar/home_button.h",
       "views/toolbar/reload_button.cc",
       "views/toolbar/reload_button.h",
+      "views/toolbar/toolbar_account_icon_container_view.cc",
+      "views/toolbar/toolbar_account_icon_container_view.h",
       "views/toolbar/toolbar_action_view.cc",
       "views/toolbar/toolbar_action_view.h",
       "views/toolbar/toolbar_action_view_delegate_views.h",
@@ -3141,8 +3190,6 @@ jumbo_split_static_library("ui") {
       "views/toolbar/toolbar_icon_container_view.h",
       "views/toolbar/toolbar_ink_drop_util.cc",
       "views/toolbar/toolbar_ink_drop_util.h",
-      "views/toolbar/toolbar_page_action_icon_container_view.cc",
-      "views/toolbar/toolbar_page_action_icon_container_view.h",
       "views/toolbar/toolbar_view.cc",
       "views/toolbar/toolbar_view.h",
       "views/touch_uma/touch_uma.cc",
@@ -3153,6 +3200,12 @@ jumbo_split_static_library("ui") {
       "views/translate/translate_icon_view.h",
       "views/update_recommended_message_box.cc",
       "views/update_recommended_message_box.h",
+      "views/web_apps/web_app_frame_toolbar_view.cc",
+      "views/web_apps/web_app_frame_toolbar_view.h",
+      "views/web_apps/web_app_menu_button.cc",
+      "views/web_apps/web_app_menu_button.h",
+      "views/web_apps/web_app_origin_text.cc",
+      "views/web_apps/web_app_origin_text.h",
       "views/webauthn/authenticator_ble_pin_entry_sheet_view.cc",
       "views/webauthn/authenticator_ble_pin_entry_sheet_view.h",
       "views/webauthn/authenticator_client_pin_entry_sheet_view.cc",
@@ -3197,7 +3250,6 @@ jumbo_split_static_library("ui") {
       "webauthn/transport_utils.h",
     ]
     deps += [
-      "//build:branding_buildflags",
       "//chrome/browser/ui/views",
       "//components/constrained_window",
       "//components/media_message_center",
@@ -3465,14 +3517,14 @@ jumbo_split_static_library("ui") {
       "app_list/search/common/file_icon_util.h",
       "app_list/search/common/url_icon_source.cc",
       "app_list/search/common/url_icon_source.h",
+      "app_list/search/cros_action_history/cros_action_recorder.cc",
+      "app_list/search/cros_action_history/cros_action_recorder.h",
       "app_list/search/drive_quick_access_provider.cc",
       "app_list/search/drive_quick_access_provider.h",
       "app_list/search/drive_quick_access_result.cc",
       "app_list/search/drive_quick_access_result.h",
       "app_list/search/extension_app_result.cc",
       "app_list/search/extension_app_result.h",
-      "app_list/search/logging/search_ranking_event_logger.cc",
-      "app_list/search/logging/search_ranking_event_logger.h",
       "app_list/search/mixer.cc",
       "app_list/search/mixer.h",
       "app_list/search/omnibox_provider.cc",
@@ -3517,8 +3569,12 @@ jumbo_split_static_library("ui") {
       "app_list/search/search_result_ranker/recurrence_ranker.h",
       "app_list/search/search_result_ranker/recurrence_ranker_util.cc",
       "app_list/search/search_result_ranker/recurrence_ranker_util.h",
+      "app_list/search/search_result_ranker/search_ranking_event_logger.cc",
+      "app_list/search/search_result_ranker/search_ranking_event_logger.h",
       "app_list/search/search_result_ranker/search_result_ranker.cc",
       "app_list/search/search_result_ranker/search_result_ranker.h",
+      "app_list/search/search_utils/fuzzy_tokenized_string_match.cc",
+      "app_list/search/search_utils/fuzzy_tokenized_string_match.h",
       "app_list/search/search_utils/sequence_matcher.cc",
       "app_list/search/search_utils/sequence_matcher.h",
       "app_list/search/settings_shortcut/settings_shortcut_metadata.cc",
@@ -3538,11 +3594,12 @@ jumbo_split_static_library("ui") {
       "//ash/app_list",
       "//ash/public/cpp/app_list/vector_icons",
       "//ash/resources/vector_icons",
-      "//chrome/browser/ui/app_list/search/logging:search_ranking_event_proto",
+      "//chrome/browser/ui/app_list/search/cros_action_history:cros_action_proto",
       "//chrome/browser/ui/app_list/search/search_result_ranker:app_launch_event_logger_proto",
       "//chrome/browser/ui/app_list/search/search_result_ranker:app_launch_predictor_proto",
       "//chrome/browser/ui/app_list/search/search_result_ranker:app_list_launch_recorder_proto",
       "//chrome/browser/ui/app_list/search/search_result_ranker:recurrence_ranker_proto",
+      "//chrome/browser/ui/app_list/search/search_result_ranker:search_ranking_event_proto",
       "//components/assist_ranker",
       "//components/assist_ranker/proto",
       "//ui/file_manager:file_manager",
@@ -3551,12 +3608,12 @@ jumbo_split_static_library("ui") {
     if (is_chromeos) {
       sources += [
         "app_icon_loader_delegate.h",
-        "app_list/app_service_app_icon_loader.cc",
-        "app_list/app_service_app_icon_loader.h",
-        "app_list/app_service_app_item.cc",
-        "app_list/app_service_app_item.h",
-        "app_list/app_service_app_model_builder.cc",
-        "app_list/app_service_app_model_builder.h",
+        "app_list/app_service/app_service_app_icon_loader.cc",
+        "app_list/app_service/app_service_app_icon_loader.h",
+        "app_list/app_service/app_service_app_item.cc",
+        "app_list/app_service/app_service_app_item.h",
+        "app_list/app_service/app_service_app_model_builder.cc",
+        "app_list/app_service/app_service_app_model_builder.h",
         "app_list/arc/arc_app_context_menu.cc",
         "app_list/arc/arc_app_context_menu.h",
         "app_list/arc/arc_app_dialog.h",
@@ -3633,8 +3690,6 @@ jumbo_split_static_library("ui") {
         "app_list/search/arc_app_result.h",
         "app_list/search/crostini_app_result.cc",
         "app_list/search/crostini_app_result.h",
-        "app_list/search/internal_app_result.cc",
-        "app_list/search/internal_app_result.h",
         "ash/launcher/app_window_base.cc",
         "ash/launcher/app_window_base.h",
         "ash/launcher/arc_app_shelf_id.cc",
@@ -3671,10 +3726,14 @@ jumbo_split_static_library("ui") {
         "ash/launcher/shelf_spinner_item_controller.h",
         "views/arc_app_dialog_view.cc",
         "views/arc_data_removal_dialog_view.cc",
+        "views/crostini/crostini_ansible_software_config_view.cc",
+        "views/crostini/crostini_ansible_software_config_view.h",
         "views/crostini/crostini_app_restart_view.cc",
         "views/crostini/crostini_app_restart_view.h",
         "views/crostini/crostini_app_uninstaller_view.cc",
         "views/crostini/crostini_app_uninstaller_view.h",
+        "views/crostini/crostini_force_close_view.cc",
+        "views/crostini/crostini_force_close_view.h",
         "views/crostini/crostini_installer_view.cc",
         "views/crostini/crostini_installer_view.h",
         "views/crostini/crostini_uninstaller_view.cc",
@@ -3687,6 +3746,7 @@ jumbo_split_static_library("ui") {
         "views/plugin_vm/plugin_vm_launcher_view.h",
       ]
       deps += [
+        "//chrome/browser/chromeos/crostini:crostini_installer_types_mojom",
         "//chrome/services/app_service/public/cpp:app_update",
         "//chrome/services/app_service/public/cpp:icon_loader",
         "//components/services/app_service/public/cpp:app_file_handling",
@@ -3694,7 +3754,7 @@ jumbo_split_static_library("ui") {
     }
   }
 
-  if (enable_cros_assistant) {
+  if (is_chromeos) {
     deps += [
       "//ash/public/cpp",
       "//chromeos/services/assistant:lib",
@@ -3718,6 +3778,8 @@ jumbo_split_static_library("ui") {
       "ash/assistant/assistant_service_connection.h",
       "ash/assistant/assistant_setup.cc",
       "ash/assistant/assistant_setup.h",
+      "ash/assistant/assistant_state_client.cc",
+      "ash/assistant/assistant_state_client.h",
       "ash/assistant/device_actions.cc",
       "ash/assistant/device_actions.h",
       "ash/assistant/proactive_suggestions_client_impl.cc",

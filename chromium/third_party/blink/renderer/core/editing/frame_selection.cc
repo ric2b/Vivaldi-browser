@@ -337,9 +337,6 @@ void FrameSelection::NodeWillBeRemoved(Node& node) {
 }
 
 void FrameSelection::DidChangeFocus() {
-  // Hits in
-  // virtual/gpu/compositedscrolling/scrollbars/scrollbar-miss-mousemove-disabled.html
-  DisableCompositingQueryAsserts disabler;
   UpdateAppearance();
 }
 
@@ -694,7 +691,7 @@ static Node* NonBoundaryShadowTreeRootNode(const Position& position) {
 
 void FrameSelection::SelectAll(SetSelectionBy set_selection_by) {
   if (auto* select_element =
-          ToHTMLSelectElementOrNull(GetDocument().FocusedElement())) {
+          DynamicTo<HTMLSelectElement>(GetDocument().FocusedElement())) {
     if (select_element->CanSelectAll()) {
       select_element->SelectAll();
       return;
@@ -1246,8 +1243,8 @@ void FrameSelection::ClearDocumentCachedRange() {
 }
 
 LayoutSelectionStatus FrameSelection::ComputeLayoutSelectionStatus(
-    const NGPaintFragment& text_fragment) const {
-  return layout_selection_->ComputeSelectionStatus(text_fragment);
+    const NGInlineCursor& cursor) const {
+  return layout_selection_->ComputeSelectionStatus(cursor);
 }
 
 bool FrameSelection::IsDirectional() const {

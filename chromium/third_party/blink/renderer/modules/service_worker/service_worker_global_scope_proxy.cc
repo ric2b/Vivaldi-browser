@@ -165,14 +165,6 @@ void ServiceWorkerGlobalScopeProxy::DidLoadClassicScript() {
   Client().WorkerScriptLoadedOnWorkerThread();
 }
 
-void ServiceWorkerGlobalScopeProxy::DidFailToLoadClassicScript() {
-  DCHECK_CALLED_ON_VALID_THREAD(worker_thread_checker_);
-  // Tell ServiceWorkerContextClient about the failure. The generic
-  // WorkerContextFailedToStart() wouldn't make sense because
-  // WorkerContextStarted() was already called.
-  Client().FailedToLoadClassicScript();
-}
-
 void ServiceWorkerGlobalScopeProxy::DidFetchScript() {
   DCHECK_CALLED_ON_VALID_THREAD(worker_thread_checker_);
   Client().WorkerScriptLoadedOnWorkerThread();
@@ -180,7 +172,7 @@ void ServiceWorkerGlobalScopeProxy::DidFetchScript() {
 
 void ServiceWorkerGlobalScopeProxy::DidFailToFetchClassicScript() {
   DCHECK_CALLED_ON_VALID_THREAD(worker_thread_checker_);
-  Client().FailedToLoadClassicScript();
+  Client().FailedToFetchClassicScript();
 }
 
 void ServiceWorkerGlobalScopeProxy::DidFailToFetchModuleScript() {
@@ -322,6 +314,14 @@ void ServiceWorkerGlobalScopeProxy::TerminateWorkerContext() {
 
 bool ServiceWorkerGlobalScopeProxy::IsWindowInteractionAllowed() {
   return WorkerGlobalScope()->IsWindowInteractionAllowed();
+}
+
+void ServiceWorkerGlobalScopeProxy::PauseEvaluation() {
+  WorkerGlobalScope()->PauseEvaluation();
+}
+
+void ServiceWorkerGlobalScopeProxy::ResumeEvaluation() {
+  WorkerGlobalScope()->ResumeEvaluation();
 }
 
 WebServiceWorkerContextClient& ServiceWorkerGlobalScopeProxy::Client() const {

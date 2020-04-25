@@ -34,10 +34,7 @@ class OverviewGridTest : public AshTestBase {
   void InitializeGrid(const std::vector<aura::Window*>& windows) {
     ASSERT_FALSE(grid_);
     aura::Window* root = Shell::GetPrimaryRootWindow();
-    grid_ = std::make_unique<OverviewGrid>(
-        root, windows, nullptr,
-        screen_util::GetDisplayWorkAreaBoundsInParentForActiveDeskContainer(
-            root));
+    grid_ = std::make_unique<OverviewGrid>(root, windows, nullptr);
   }
 
   void CheckAnimationStates(
@@ -81,6 +78,10 @@ class OverviewGridTest : public AshTestBase {
       EXPECT_EQ(expected_end_animations[i],
                 grid_->window_list()[i]->should_animate_when_exiting());
     }
+  }
+
+  SplitViewController* split_view_controller() {
+    return SplitViewController::Get(Shell::GetPrimaryRootWindow());
   }
 
  private:
@@ -222,19 +223,18 @@ TEST_F(OverviewGridTest, WindowWithBackdrop) {
 
 // Tests that only one window animates when entering overview from splitview
 // double snapped.
-TEST_F(OverviewGridTest, SnappedWindow) {
+TEST_F(OverviewGridTest, DISABLED_SnappedWindow) {
   auto window1 = CreateTestWindow(gfx::Rect(100, 100));
   auto window2 = CreateTestWindow(gfx::Rect(100, 100));
   auto window3 = CreateTestWindow(gfx::Rect(100, 100));
   wm::ActivateWindow(window1.get());
 
   Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
-  Shell::Get()->split_view_controller()->SnapWindow(window1.get(),
-                                                    SplitViewController::LEFT);
+  split_view_controller()->SnapWindow(window1.get(), SplitViewController::LEFT);
 
   // Snap |window2| and check that |window3| is maximized.
-  Shell::Get()->split_view_controller()->SnapWindow(window2.get(),
-                                                    SplitViewController::RIGHT);
+  split_view_controller()->SnapWindow(window2.get(),
+                                      SplitViewController::RIGHT);
   EXPECT_TRUE(WindowState::Get(window3.get())->IsMaximized());
 
   // Tests that |window3| is not animated even though its bounds are larger than

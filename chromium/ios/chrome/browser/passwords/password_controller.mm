@@ -55,6 +55,7 @@
 #include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/password_breach_commands.h"
 #import "ios/chrome/browser/ui/infobars/coordinators/infobar_password_coordinator.h"
 #import "ios/chrome/browser/ui/infobars/infobar_feature.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
@@ -185,8 +186,7 @@ NSString* const kSuggestionSuffix = @" ••••••••";
 }
 
 - (instancetype)initWithWebState:(web::WebState*)webState {
-  self = [self initWithWebState:webState
-                         client:nullptr];
+  self = [self initWithWebState:webState client:nullptr];
   return self;
 }
 
@@ -335,6 +335,8 @@ NSString* const kSuggestionSuffix = @" ••••••••";
                                   webState:(web::WebState*)webState
                          completionHandler:
                              (SuggestionsAvailableCompletion)completion {
+  if (!GetPageURLAndCheckTrustLevel(webState, nullptr))
+    return;
   [self.suggestionHelper
       checkIfSuggestionsAvailableForForm:formName
                          fieldIdentifier:fieldIdentifier
@@ -385,7 +387,8 @@ NSString* const kSuggestionSuffix = @" ••••••••";
                            frameID:(NSString*)frameID
                           webState:(web::WebState*)webState
                  completionHandler:(SuggestionsReadyCompletion)completion {
-  DCHECK(GetPageURLAndCheckTrustLevel(webState, nullptr));
+  if (!GetPageURLAndCheckTrustLevel(webState, nullptr))
+    return;
   NSArray<FormSuggestion*>* rawSuggestions =
       [self.suggestionHelper retrieveSuggestionsWithFormName:formName
                                              fieldIdentifier:fieldIdentifier
@@ -555,6 +558,11 @@ NSString* const kSuggestionSuffix = @" ••••••••";
       }));
 }
 
+- (void)showPasswordBreachForLeakType:(CredentialLeakType)leakType
+                                  URL:(const GURL&)URL {
+  [self.dispatcher showPasswordBreachForLeakType:leakType URL:URL];
+}
+
 #pragma mark - PasswordManagerDriverDelegate
 
 - (void)fillPasswordForm:(const autofill::PasswordFormFillData&)formData
@@ -591,7 +599,7 @@ NSString* const kSuggestionSuffix = @" ••••••••";
   } else {
     // Show a save prompt immediately because for iframes it is very hard to
     // figure out correctness of password forms submission.
-    self.passwordManager->OnPasswordFormSubmittedNoChecks(
+    self.passwordManager->OnPasswordFormSubmittedNoChecksForiOS(
         self.passwordManagerDriver, password_form);
   }
 }

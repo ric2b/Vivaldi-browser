@@ -8,9 +8,12 @@ import json
 import os.path
 from licenses_vivaldi_texts import onlineLicenses
 
-f = open("gen/vivaldi/vivapp/module_list", 'r')
-maindeps = f.read()
-f.close()
+try:
+  f = open("gen/vivaldi/vivapp/module_list", 'r')
+  maindeps = f.read()
+  f.close()
+except:
+  maindeps = ""
 
 modules = {}
 
@@ -66,6 +69,8 @@ for m in re.findall(r"(.*node_modules/((@[^/]+)?[^@][^/]+))", maindeps):
     else:
       entry["licensetype"] = pjson[preferred]
   if "licensetype" in entry and entry["licensetype"] not in [
+    "SEE LICENSE IN LICENSE", # Current license is "SEE LICENSE IN LICENSE" for rrule, but should be: BSD-3-Clause. 
+                              # Pull request has been issued with this change. To be removed. VB-60638 arnar
     "(MIT AND Zlib)",
     "Apache 2.0",
     "Apache License, Version 2.0",

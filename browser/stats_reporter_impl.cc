@@ -1,10 +1,13 @@
 #include "browser/stats_reporter_impl.h"
 
+#include <inttypes.h>
+
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
@@ -37,18 +40,17 @@ enum class InstallationStatus {
 };
 
 #ifdef NDEBUG
-// Note: As long as the JS reporting code exist, we want this to execute after
-// it on startup, to pick up its user id.
-constexpr int kInitDelay = 10;       // minutes
 constexpr int kLockDelay = 2;        // minutes
 constexpr int kMatomoId = 36;        // Browser Usage - New implementation.
 constexpr int kScheduleJitter = 15;  // minutes
 #else
-constexpr int kInitDelay = 2;       // minute
 constexpr int kLockDelay = 0;       // minutes
 constexpr int kMatomoId = 13;       // Blackhole
 constexpr int kScheduleJitter = 1;  // minutes
 #endif
+
+constexpr int kExtraPingCount = 2;
+constexpr int kExtraPingDelays[kExtraPingCount] = {10, 50};  // minutes
 
 constexpr base::FilePath::CharType kReportingDataFileName[] =
     FILE_PATH_LITERAL(".vivaldi_reporting_data");
@@ -58,6 +60,11 @@ constexpr char kNextDailyPingKey[] = "next_daily_ping";
 constexpr char kNextWeeklyPingKey[] = "next_weekly_ping";
 constexpr char kNextMonthlyPingKey[] = "next_monthly_ping";
 constexpr char kInstallationTimeKey[] = "installation_time";
+constexpr char kDescriptionKey[] = "description";
+constexpr char kDescriptionText[] =
+    "This file contains data used for counting users. If you are worried about "
+    "privacy implications, please see "
+    "https://help.vivaldi.com/article/how-we-count-our-users/";
 
 constexpr char kMatomoUrl[] =
     "https://update.vivaldi.com/rep/rep?installation_status=";
@@ -68,6 +75,7 @@ constexpr char kNormal[] = "normal";
 constexpr char kWeekly[] = "&weekly";
 constexpr char kMonthly[] = "&monthly";
 constexpr char kDelayDays[] = "&delay_days=";
+constexpr char kExtraPing[] = "&extra_ping";
 constexpr char kActionUrl[] = "http://localhost/";
 
 constexpr char kReportRequest[] =
@@ -221,20 +229,14 @@ bool IsValidUserId(const std::string& user_id) {
 
 StatsReporterImpl::StatsReporterImpl()
     : report_backoff_(&kBackoffPolicy), weak_factory_(this) {
-  next_report_timer_.Start(
-      FROM_HERE, base::TimeDelta::FromMinutes(kInitDelay),
-      base::BindOnce(&StatsReporterImpl::Init, base::Unretained(this)));
-}
-
-StatsReporterImpl::~StatsReporterImpl() = default;
-
-void StatsReporterImpl::Init() {
-  base::PostTaskWithTraitsAndReplyWithResult(
+  base::PostTaskAndReplyWithResult(
       FROM_HERE, {base::ThreadPool(), base::MayBlock()},
       base::BindOnce(&GetUserIdFromLegacyStorage),
       base::BindOnce(&StatsReporterImpl::OnLegacyUserIdGot,
                      weak_factory_.GetWeakPtr()));
 }
+
+StatsReporterImpl::~StatsReporterImpl() = default;
 
 void StatsReporterImpl::OnLegacyUserIdGot(const std::string& legacy_user_id) {
   legacy_user_id_ = IsValidUserId(legacy_user_id) ? legacy_user_id : "";
@@ -264,6 +266,11 @@ void StatsReporterImpl::StartReporting() {
   local_reporting_data.installation_time =
       base::Time::FromTimeT(prefs->GetInt64(metrics::prefs::kInstallDate));
 
+  local_reporting_data.next_extra_ping =
+      prefs->GetInteger(vivaldiprefs::kVivaldiStatsExtraPing);
+  local_reporting_data.next_extra_ping_time =
+      prefs->GetTime(vivaldiprefs::kVivaldiStatsExtraPingTime);
+
   Worker::Start(GetReportingDataFileDir().Append(kReportingDataFileName),
                 legacy_user_id_, local_reporting_data,
                 weak_factory_.GetWeakPtr());
@@ -281,7 +288,10 @@ void StatsReporterImpl::OnWorkerFailed(base::TimeDelta delay) {
 }
 
 void StatsReporterImpl::OnWorkerDone(const std::string& user_id,
-                                     NextPingTimes next_pings) {
+                                     NextPingTimes next_pings,
+                                     int next_extra_ping) {
+  DCHECK_GE(next_extra_ping, 0);
+  DCHECK_LE(next_extra_ping, kExtraPingCount);
   // We just reset it here, because we won't be sending anything new before
   // another day.
   report_backoff_.Reset();
@@ -293,12 +303,24 @@ void StatsReporterImpl::OnWorkerDone(const std::string& user_id,
   prefs->SetTime(vivaldiprefs::kVivaldiStatsNextMonthlyPing,
                  next_pings.monthly);
 
+  base::Time next_report_time = next_pings.daily;
+  if (next_extra_ping) {
+    next_report_time =
+        base::Time::Now() +
+        base::TimeDelta::FromMinutes(kExtraPingDelays[next_extra_ping - 1]);
+    prefs->SetInteger(vivaldiprefs::kVivaldiStatsExtraPing, next_extra_ping);
+    prefs->SetTime(vivaldiprefs::kVivaldiStatsExtraPingTime, next_report_time);
+  } else {
+    prefs->ClearPref(vivaldiprefs::kVivaldiStatsExtraPing);
+    prefs->ClearPref(vivaldiprefs::kVivaldiStatsExtraPingTime);
+  }
+
   if (!IsValidUserId(prefs->GetString(vivaldiprefs::kVivaldiUniqueUserId)))
     prefs->SetString(vivaldiprefs::kVivaldiUniqueUserId, user_id);
 
   next_report_timer_.Start(
       FROM_HERE,
-      (next_pings.daily - base::Time::Now()) +
+      (next_report_time - base::Time::Now()) +
           base::TimeDelta::FromMicroseconds(
               base::RandDouble() *
               (kScheduleJitter * base::Time::kMicrosecondsPerMinute)),
@@ -316,7 +338,7 @@ void StatsReporterImpl::Worker::Start(
   // The worker is in charge of cleaning itself up when done. If for any reason
   // the worker does not complete, due to a task not firing or other issues,
   // it will leak (small leak), but no new worker will be started.
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::LOWEST},
       base::BindOnce(&StatsReporterImpl::Worker::Run, base::Unretained(worker),
@@ -491,9 +513,22 @@ void StatsReporterImpl::Worker::Run(
 
   base::Time now = base::Time::Now();
 
-  // Only report if we would report a daily ping. We want the weekly and monthly
-  // pings to be done alongside with a daily ping.
-  if (next_pings.daily > now) {
+  // If it's time for the next daily ping, drop any pending extra pings.
+  bool do_extra_ping = local_state_reporting_data.next_extra_ping != 0 &&
+                       local_state_reporting_data.next_extra_ping_time <= now &&
+                       next_pings.daily > now;
+
+  if (installation_status == InstallationStatus::NEW_USER) {
+    next_extra_ping_ = 1;
+  } else if (do_extra_ping) {
+    next_extra_ping_ = local_state_reporting_data.next_extra_ping + 1;
+    if (next_extra_ping_ > kExtraPingCount)
+      next_extra_ping_ = 0;
+  }
+
+  // Only report if we would report a daily ping. We want the weekly and
+  // monthly pings to be done alongside with a daily ping.
+  if (next_pings.daily > now && !do_extra_ping) {
     original_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(
@@ -526,7 +561,8 @@ void StatsReporterImpl::Worker::Run(
   }
 
   new_next_pings_ = next_pings;
-  new_next_pings_.daily = now + base::TimeDelta::FromDays(1);
+  if (!do_extra_ping)
+    new_next_pings_.daily = now + base::TimeDelta::FromDays(1);
 
   if (next_pings.weekly <= now) {
     request_url += kWeekly;
@@ -536,7 +572,12 @@ void StatsReporterImpl::Worker::Run(
     request_url += kMonthly;
     base::Time::Exploded time_exploded;
     now.LocalExplode(&time_exploded);
-    time_exploded.month += 1;
+    if (time_exploded.month != 12) {
+      time_exploded.month += 1;
+    } else {
+      time_exploded.month = 1;
+      time_exploded.year += 1;
+    }
     if (time_exploded.day_of_month > 28)
       time_exploded.day_of_month = 28;
     if (!base::Time::FromLocalExploded(time_exploded, &new_next_pings_.monthly))
@@ -545,9 +586,23 @@ void StatsReporterImpl::Worker::Run(
   if (report_delay > 1) {
     request_url += kDelayDays + base::NumberToString(report_delay);
   };
+  if (do_extra_ping) {
+    request_url += kExtraPing + base::NumberToString(
+                                    local_state_reporting_data.next_extra_ping);
+  }
 
-  std::string action_name =
-      installation_status == InstallationStatus::NEW_USER ? "FirstRun" : "Ping";
+  std::string action_name;
+  if (installation_status == InstallationStatus::NEW_USER) {
+    action_name = "FirstRun";
+  } else if (do_extra_ping) {
+    int total_extra_ping_delay = 0;
+    for (int i = 0; i < local_state_reporting_data.next_extra_ping; i++)
+      total_extra_ping_delay += kExtraPingDelays[i];
+    action_name =
+        "FirstRun_" + base::NumberToString(total_extra_ping_delay) + "_min";
+  } else {
+    action_name = "Ping";
+  }
   gfx::Size size =
       display::Screen::GetScreen()->GetPrimaryDisplay().GetSizeInPixel();
 
@@ -593,17 +648,19 @@ void StatsReporterImpl::Worker::LoadUrlOnUIThread() {
 
 void StatsReporterImpl::Worker::OnURLLoadComplete(
     std::unique_ptr<std::string> response_body) {
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::LOWEST},
-      base::BindOnce(&StatsReporterImpl::Worker::Finish,
-                     base::Unretained(this)));
+      base::BindOnce(&StatsReporterImpl::Worker::Finish, base::Unretained(this),
+                     url_loader_->NetError() == net::OK));
+  // The URL Loader must be deleted on the same thread it was started.
+  url_loader_.reset();
 }
 
-void StatsReporterImpl::Worker::Finish() {
+void StatsReporterImpl::Worker::Finish(bool success) {
   std::unique_ptr<StatsReporterImpl::Worker> self_deleter(this);
 
-  if (url_loader_->NetError() != net::OK) {
+  if (!success) {
     original_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&StatsReporterImpl::OnWorkerFailed,
                                   stats_reporter_, base::TimeDelta()));
@@ -615,6 +672,9 @@ void StatsReporterImpl::Worker::Finish() {
     if (!os_profile_reporting_data_json_.GetAsDictionary(
             &os_profile_reporting_data_dict))
       NOTREACHED();
+
+    os_profile_reporting_data_dict->SetStringKey(kDescriptionKey,
+                                                 kDescriptionText);
 
     os_profile_reporting_data_dict->SetStringKey(
         kNextDailyPingKey,
@@ -641,8 +701,9 @@ void StatsReporterImpl::Worker::Finish() {
   }
 
   original_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&StatsReporterImpl::OnWorkerDone,
-                                stats_reporter_, user_id_, new_next_pings_));
+      FROM_HERE,
+      base::BindOnce(&StatsReporterImpl::OnWorkerDone, stats_reporter_,
+                     user_id_, new_next_pings_, next_extra_ping_));
 }
 
 }  // namespace vivaldi

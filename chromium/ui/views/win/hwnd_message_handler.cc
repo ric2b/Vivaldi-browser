@@ -336,7 +336,8 @@ int GetFlagsFromRawInputMessage(RAWINPUT* input) {
   return ui::GetModifiersFromKeyState() | flags;
 }
 
-constexpr int kTouchDownContextResetTimeout = 500;
+constexpr auto kTouchDownContextResetTimeout =
+    base::TimeDelta::FromMilliseconds(500);
 
 // Windows does not flag synthesized mouse messages from touch or pen in all
 // cases. This causes us grief as we don't want to process touch and mouse
@@ -607,7 +608,7 @@ void HWNDMessageHandler::GetWindowPlacement(
     ui::WindowShowState* show_state) const {
   WINDOWPLACEMENT wp;
   wp.length = sizeof(wp);
-  const bool succeeded = !!::GetWindowPlacement(hwnd(), &wp);
+  bool succeeded = !!::GetWindowPlacement(hwnd(), &wp);
   DCHECK(succeeded);
 
   if (bounds != nullptr) {
@@ -615,15 +616,16 @@ void HWNDMessageHandler::GetWindowPlacement(
       // GetWindowPlacement can return misleading position if a normalized
       // window was resized using Aero Snap feature (see comment 9 in bug
       // 36421). As a workaround, using GetWindowRect for normalized windows.
-      const bool succeeded = GetWindowRect(hwnd(), &wp.rcNormalPosition) != 0;
+      succeeded = GetWindowRect(hwnd(), &wp.rcNormalPosition) != 0;
       DCHECK(succeeded);
 
       *bounds = gfx::Rect(wp.rcNormalPosition);
     } else {
       MONITORINFO mi;
       mi.cbSize = sizeof(mi);
-      const bool succeeded = GetMonitorInfo(
-          MonitorFromWindow(hwnd(), MONITOR_DEFAULTTONEAREST), &mi) != 0;
+      succeeded =
+          GetMonitorInfo(MonitorFromWindow(hwnd(), MONITOR_DEFAULTTONEAREST),
+                         &mi) != 0;
       DCHECK(succeeded);
 
       *bounds = gfx::Rect(wp.rcNormalPosition);
@@ -1194,8 +1196,7 @@ void HWNDMessageHandler::HandleParentChanged() {
 }
 
 void HWNDMessageHandler::ApplyPinchZoomScale(float scale) {
-  POINT cursor_pos = {0};
-  ::GetCursorPos(&cursor_pos);
+  POINT cursor_pos = GetCursorPos();
   ScreenToClient(hwnd(), &cursor_pos);
 
   ui::GestureEventDetails event_details(ui::ET_GESTURE_PINCH_UPDATE);
@@ -1208,8 +1209,7 @@ void HWNDMessageHandler::ApplyPinchZoomScale(float scale) {
 }
 
 void HWNDMessageHandler::ApplyPinchZoomBegin() {
-  POINT cursor_pos = {0};
-  ::GetCursorPos(&cursor_pos);
+  POINT cursor_pos = GetCursorPos();
   ScreenToClient(hwnd(), &cursor_pos);
 
   ui::GestureEventDetails event_details(ui::ET_GESTURE_PINCH_BEGIN);
@@ -1221,8 +1221,7 @@ void HWNDMessageHandler::ApplyPinchZoomBegin() {
 }
 
 void HWNDMessageHandler::ApplyPinchZoomEnd() {
-  POINT cursor_pos = {0};
-  ::GetCursorPos(&cursor_pos);
+  POINT cursor_pos = GetCursorPos();
   ScreenToClient(hwnd(), &cursor_pos);
 
   ui::GestureEventDetails event_details(ui::ET_GESTURE_PINCH_END);
@@ -1240,8 +1239,7 @@ void HWNDMessageHandler::ApplyPanGestureEvent(
     ui::ScrollEventPhase phase) {
   gfx::Vector2d offset{scroll_x, scroll_y};
 
-  POINT root_location = {0};
-  ::GetCursorPos(&root_location);
+  POINT root_location = GetCursorPos();
 
   POINT location = {root_location.x, root_location.y};
   ScreenToClient(hwnd(), &location);
@@ -2717,7 +2715,7 @@ LRESULT HWNDMessageHandler::OnTouchEvent(UINT message,
             FROM_HERE,
             base::BindOnce(&HWNDMessageHandler::ResetTouchDownContext,
                            msg_handler_weak_factory_.GetWeakPtr()),
-            base::TimeDelta::FromMilliseconds(kTouchDownContextResetTimeout));
+            kTouchDownContextResetTimeout);
       } else {
         if (input[i].dwFlags & TOUCHEVENTF_MOVE) {
           GenerateTouchEvent(ui::ET_TOUCH_MOVED, touch_point, touch_id,
@@ -3134,7 +3132,7 @@ LRESULT HWNDMessageHandler::HandlePointerEventTypeTouch(UINT message,
         FROM_HERE,
         base::BindOnce(&HWNDMessageHandler::ResetTouchDownContext,
                        msg_handler_weak_factory_.GetWeakPtr()),
-        base::TimeDelta::FromMilliseconds(kTouchDownContextResetTimeout));
+        kTouchDownContextResetTimeout);
   }
 
   POINTER_INFO pointer_info = pointer_touch_info.pointerInfo;
@@ -3501,6 +3499,16 @@ void HWNDMessageHandler::SizeRectToAspectRatio(UINT param,
   WindowResizeUtils::SizeRectToAspectRatio(
       GetWindowResizeHitTest(param), aspect_ratio_.value(), min_window_size,
       max_window_size, window_rect);
+}
+
+POINT HWNDMessageHandler::GetCursorPos() const {
+  if (mock_cursor_position_.has_value())
+    return mock_cursor_position_.value().ToPOINT();
+
+  POINT cursor_pos = {};
+  ::GetCursorPos(&cursor_pos);
+
+  return cursor_pos;
 }
 
 }  // namespace views

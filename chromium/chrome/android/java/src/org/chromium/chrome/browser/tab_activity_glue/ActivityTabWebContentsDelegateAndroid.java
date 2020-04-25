@@ -11,10 +11,11 @@ import android.content.res.Resources;
 import android.graphics.Rect;
 import android.media.AudioManager;
 import android.os.Build;
-import android.support.annotation.Nullable;
 import android.support.v4.util.ArrayMap;
 import android.view.KeyEvent;
 import android.view.View;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
@@ -38,7 +39,7 @@ import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.util.IntentUtils;
+import org.chromium.chrome.browser.util.ChromeIntentUtil;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -215,7 +216,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
         // Note that calling only the intent in order to activate the tab is slightly slower
         // because it will change the tab when the intent is handled, which happens after
         // Chrome gets back to the foreground.
-        Intent newIntent = IntentUtils.createBringTabToFrontIntent(mTab.getId());
+        Intent newIntent = ChromeIntentUtil.createBringTabToFrontIntent(mTab.getId());
         if (newIntent != null) {
             newIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             mTab.getApplicationContext().startActivity(newIntent);

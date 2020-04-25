@@ -26,12 +26,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
-#include "content/app/strings/grit/content_strings.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/builtin_service_manifests.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/gpu/gpu_process_host.h"
-#include "content/browser/service_manager/common_browser_interfaces.h"
 #include "content/browser/system_connector_impl.h"
 #include "content/browser/utility_process_host.h"
 #include "content/browser/wake_lock/wake_lock_context_host.h"
@@ -47,7 +45,6 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/network_service_util.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
 #include "media/audio/audio_manager.h"
@@ -68,11 +65,9 @@
 #include "services/media_session/public/mojom/constants.mojom.h"
 #include "services/metrics/metrics_mojo_service.h"
 #include "services/metrics/public/mojom/constants.mojom.h"
-#include "services/network/network_service.h"
 #include "services/network/public/cpp/cross_thread_shared_url_loader_factory_info.h"
 #include "services/network/public/mojom/network_service_test.mojom.h"
-#include "services/resource_coordinator/public/mojom/service_constants.mojom.h"
-#include "services/resource_coordinator/resource_coordinator_service.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/constants.h"
 #include "services/service_manager/public/cpp/manifest.h"
@@ -85,6 +80,7 @@
 #include "services/tracing/public/cpp/tracing_features.h"
 #include "services/tracing/public/mojom/constants.mojom.h"
 #include "services/tracing/tracing_service.h"
+#include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "ui/base/buildflags.h"
 #include "ui/base/ui_base_features.h"
 
@@ -103,20 +99,6 @@ base::LazyInstance<std::unique_ptr<service_manager::Connector>>::Leaky
 
 base::LazyInstance<std::map<std::string, base::WeakPtr<UtilityProcessHost>>>::
     Leaky g_active_process_groups;
-
-// If enabled, network service will run in it's own thread when running
-// in-process, otherwise it is run on the IO thread.
-// On ChromeOS the network service has to run on the IO thread because
-// ProfileIOData and NetworkContext both try to set up NSS, which has has to be
-// called from the IO thread.
-const base::Feature kNetworkServiceDedicatedThread{
-  "NetworkServiceDedicatedThread",
-#if defined(OS_CHROMEOS)
-      base::FEATURE_DISABLED_BY_DEFAULT
-#else
-      base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-};
 
 service_manager::Manifest GetContentSystemManifest() {
   // TODO(https://crbug.com/961869): This is a bit of a temporary hack so that
@@ -231,9 +213,10 @@ class DeviceServiceURLLoaderFactory : public network::SharedURLLoaderFactory {
   }
 
   // SharedURLLoaderFactory implementation:
-  void Clone(network::mojom::URLLoaderFactoryRequest request) override {
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
+      override {
     GetContentClient()->browser()->GetSystemSharedURLLoaderFactory()->Clone(
-        std::move(request));
+        std::move(receiver));
   }
 
   std::unique_ptr<network::SharedURLLoaderFactoryInfo> Clone() override {
@@ -247,16 +230,6 @@ class DeviceServiceURLLoaderFactory : public network::SharedURLLoaderFactory {
 
   DISALLOW_COPY_AND_ASSIGN(DeviceServiceURLLoaderFactory);
 };
-
-std::unique_ptr<service_manager::Service> CreateNetworkService(
-    service_manager::mojom::ServiceRequest service_request) {
-  // The test interface doesn't need to be implemented in the in-process case.
-  auto registry = std::make_unique<service_manager::BinderRegistry>();
-  registry->AddInterface(base::BindRepeating(
-      [](network::mojom::NetworkServiceTestRequest request) {}));
-  return std::make_unique<network::NetworkService>(
-      std::move(registry), nullptr /* request */, std::move(service_request));
-}
 
 bool AudioServiceOutOfProcess() {
   // Returns true iff kAudioServiceOutOfProcess feature is enabled and if the
@@ -316,12 +289,6 @@ void CreateInProcessAudioService(
                                                         std::move(request)));
                      },
                      BrowserMainLoop::GetAudioManager(), std::move(request)));
-}
-
-std::unique_ptr<service_manager::Service> CreateResourceCoordinatorService(
-    service_manager::mojom::ServiceRequest request) {
-  return std::make_unique<resource_coordinator::ResourceCoordinatorService>(
-      std::move(request));
 }
 
 std::unique_ptr<service_manager::Service> CreateTracingService(
@@ -592,11 +559,6 @@ ServiceManagerContext::ServiceManagerContext(
   auto* system_connection = ServiceManagerConnection::GetForProcess();
   SetSystemConnector(system_connection->GetConnector()->Clone());
 
-  RegisterInProcessService(
-      resource_coordinator::mojom::kServiceName,
-      service_manager_thread_task_runner_,
-      base::BindRepeating(&CreateResourceCoordinatorService));
-
   RegisterInProcessService(metrics::mojom::kMetricsServiceName,
                            service_manager_thread_task_runner_,
                            base::BindRepeating(&metrics::CreateMetricsService));
@@ -623,20 +585,6 @@ ServiceManagerContext::ServiceManagerContext(
                                   base::WithBaseSyncPrimitives(),
                                   base::TaskPriority::USER_BLOCKING}),
                              base::BindRepeating(&CreateTracingService));
-  }
-
-  if (IsInProcessNetworkService()) {
-    scoped_refptr<base::SequencedTaskRunner> task_runner =
-        service_manager_thread_task_runner_;
-    if (base::FeatureList::IsEnabled(kNetworkServiceDedicatedThread)) {
-      base::Thread::Options options(base::MessagePumpType::IO, 0);
-      network_service_thread_.StartWithOptions(options);
-      task_runner = network_service_thread_.task_runner();
-    }
-
-    GetNetworkTaskRunner()->StartWithTaskRunner(task_runner);
-    RegisterInProcessService(mojom::kNetworkServiceName, task_runner,
-                             base::BindRepeating(&CreateNetworkService));
   }
 
   in_process_context_->Start(

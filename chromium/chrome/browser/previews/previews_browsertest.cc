@@ -175,7 +175,6 @@ class PreviewsBrowserTest : public InProcessBrowserTest,
         FROM_HERE, {content::BrowserThread::UI},
         base::BindOnce(&PreviewsBrowserTest::MonitorResourceRequestOnUIThread,
                        base::Unretained(this), request));
-    base::RunLoop().RunUntilIdle();
   }
 
   void MonitorResourceRequestOnUIThread(

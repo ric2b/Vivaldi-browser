@@ -26,6 +26,7 @@
 #include "content/public/common/webplugininfo.h"
 #include "ipc/ipc_message_macros.h"
 #include "printing/buildflags/buildflags.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 
 using content::BrowserThread;
 
@@ -87,9 +88,13 @@ bool PrintViewManager::PrintForSystemDialogNow(
   is_switching_to_system_dialog_ = true;
 
   SetPrintingRFH(print_preview_rfh_);
-  int32_t id = print_preview_rfh_->GetRoutingID();
-  return PrintNowInternal(print_preview_rfh_,
-                          std::make_unique<PrintMsg_PrintForSystemDialog>(id));
+
+  // Don't print / print preview interstitials or crashed tabs.
+  if (IsInterstitialOrCrashed())
+    return false;
+
+  GetPrintRenderFrame(print_preview_rfh_)->PrintForSystemDialog();
+  return true;
 }
 
 bool PrintViewManager::BasicPrint(content::RenderFrameHost* rfh) {
@@ -108,21 +113,13 @@ bool PrintViewManager::BasicPrint(content::RenderFrameHost* rfh) {
 
 bool PrintViewManager::PrintPreviewNow(content::RenderFrameHost* rfh,
                                        bool has_selection) {
-  // Users can send print commands all they want and it is beyond
-  // PrintViewManager's control. Just ignore the extra commands.
-  // See http://crbug.com/136842 for example.
-  if (print_preview_state_ != NOT_PREVIEWING)
-    return false;
+  return PrintPreview(rfh, nullptr, has_selection);
+}
 
-  auto message = std::make_unique<PrintMsg_InitiatePrintPreview>(
-      rfh->GetRoutingID(), has_selection);
-  if (!PrintNowInternal(rfh, std::move(message)))
-    return false;
-
-  DCHECK(!print_preview_rfh_);
-  print_preview_rfh_ = rfh;
-  print_preview_state_ = USER_INITIATED_PREVIEW;
-  return true;
+bool PrintViewManager::PrintPreviewWithPrintRenderer(
+    content::RenderFrameHost* rfh,
+    mojom::PrintRendererAssociatedPtrInfo print_renderer) {
+  return PrintPreview(rfh, std::move(print_renderer), false);
 }
 
 void PrintViewManager::PrintPreviewForWebNode(content::RenderFrameHost* rfh) {
@@ -148,22 +145,20 @@ void PrintViewManager::PrintPreviewDone() {
   if (print_preview_state_ == NOT_PREVIEWING)
     return;
 
-// Send ClosePrintPreview message for 'afterprint' event.
+// Send OnPrintPreviewDialogClosed message for 'afterprint' event.
 #if defined(OS_WIN)
-  // On Windows, we always send ClosePrintPreviewDialog. It's ok to dispatch
+  // On Windows, we always send OnPrintPreviewDialogClosed. It's ok to dispatch
   // 'afterprint' at this timing because system dialog printing on
   // Windows doesn't need the original frame.
   bool send_message = true;
 #else
-  // On non-Windows, we don't need to send ClosePrintPreviewDialog when we are
-  // switching to system dialog. PrintRenderFrameHelper is responsible to
+  // On non-Windows, we don't need to send OnPrintPreviewDialogClosed when we
+  // are switching to system dialog. PrintRenderFrameHelper is responsible to
   // dispatch 'afterprint' event.
   bool send_message = !is_switching_to_system_dialog_;
 #endif
-  if (send_message) {
-    print_preview_rfh_->Send(new PrintMsg_ClosePrintPreviewDialog(
-        print_preview_rfh_->GetRoutingID()));
-  }
+  if (send_message)
+    GetPrintRenderFrame(print_preview_rfh_)->OnPrintPreviewDialogClosed();
   is_switching_to_system_dialog_ = false;
 
   if (print_preview_state_ == SCRIPTED_PREVIEW) {
@@ -196,6 +191,47 @@ void PrintViewManager::RenderFrameDeleted(
   if (render_frame_host == print_preview_rfh_)
     PrintPreviewDone();
   PrintViewManagerBase::RenderFrameDeleted(render_frame_host);
+  print_render_frames_.erase(render_frame_host);
+}
+
+const mojo::AssociatedRemote<printing::mojom::PrintRenderFrame>&
+PrintViewManager::GetPrintRenderFrame(content::RenderFrameHost* rfh) {
+  auto it = print_render_frames_.find(rfh);
+  if (it == print_render_frames_.end()) {
+    mojo::AssociatedRemote<printing::mojom::PrintRenderFrame> remote;
+    rfh->GetRemoteAssociatedInterfaces()->GetInterface(&remote);
+    it = print_render_frames_.insert({rfh, std::move(remote)}).first;
+  } else if (it->second.is_bound() && !it->second.is_connected()) {
+    // When print preview is closed, the remote is disconnected from the
+    // receiver. Reset and bind the remote before using it again.
+    it->second.reset();
+    rfh->GetRemoteAssociatedInterfaces()->GetInterface(&it->second);
+  }
+
+  return it->second;
+}
+
+bool PrintViewManager::PrintPreview(
+    content::RenderFrameHost* rfh,
+    mojom::PrintRendererAssociatedPtrInfo print_renderer,
+    bool has_selection) {
+  // Users can send print commands all they want and it is beyond
+  // PrintViewManager's control. Just ignore the extra commands.
+  // See http://crbug.com/136842 for example.
+  if (print_preview_state_ != NOT_PREVIEWING)
+    return false;
+
+  // Don't print / print preview interstitials or crashed tabs.
+  if (IsInterstitialOrCrashed())
+    return false;
+
+  GetPrintRenderFrame(rfh)->InitiatePrintPreview(std::move(print_renderer),
+                                                 has_selection);
+
+  DCHECK(!print_preview_rfh_);
+  print_preview_rfh_ = rfh;
+  print_preview_state_ = USER_INITIATED_PREVIEW;
+  return true;
 }
 
 void PrintViewManager::OnDidShowPrintDialog(content::RenderFrameHost* rfh) {

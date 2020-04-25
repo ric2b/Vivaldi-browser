@@ -15,11 +15,13 @@ namespace calendar {
 
 CreateCalendarResult::CreateCalendarResult() {}
 
-CalendarRow::CalendarRow() :
-  orderindex_(0),
-  hidden_(0),
-  active_(0),
-  iconindex_(0) {}
+CalendarRow::CalendarRow()
+    : orderindex_(0),
+      hidden_(0),
+      active_(0),
+      iconindex_(0),
+      type_(0),
+      interval_(0) {}
 
 CalendarRow::~CalendarRow() {}
 
@@ -34,6 +36,9 @@ CalendarRow::CalendarRow(CalendarID id,
                          bool active,
                          int iconindex,
                          base::string16 username,
+                         int type,
+                         int interval,
+                         base::Time last_checked,
                          base::Time created,
                          base::Time lastmodified)
     : name_(name),
@@ -46,6 +51,9 @@ CalendarRow::CalendarRow(CalendarID id,
       active_(active),
       iconindex_(iconindex),
       username_(username),
+      type_(type),
+      interval_(interval),
+      last_checked_(last_checked),
       created_(created),
       lastmodified_(lastmodified) {}
 
@@ -60,6 +68,9 @@ void CalendarRow::Swap(CalendarRow* other) {
   std::swap(active_, other->active_);
   std::swap(iconindex_, other->iconindex_);
   std::swap(username_, other->username_);
+  std::swap(type_, other->type_);
+  std::swap(interval_, other->interval_);
+  std::swap(last_checked_, other->last_checked_);
 }
 
 CalendarRow::CalendarRow(const CalendarRow& other)
@@ -74,6 +85,9 @@ CalendarRow::CalendarRow(const CalendarRow& other)
       active_(other.active_),
       iconindex_(other.iconindex_),
       username_(other.username_),
+      type_(other.type_),
+      interval_(other.interval_),
+      last_checked_(other.last_checked_),
       created_(other.created_),
       lastmodified_(other.lastmodified_) {}
 
@@ -94,6 +108,9 @@ Calendar::Calendar(const Calendar& calendar)
       active(calendar.active),
       iconindex(calendar.iconindex),
       username(calendar.username),
+      type(calendar.type),
+      interval(calendar.interval),
+      last_checked(calendar.last_checked),
       updateFields(calendar.updateFields) {}
 
 Calendar::~Calendar() {}

@@ -25,9 +25,14 @@ namespace ash {
 AcceleratorConfirmationDialog::AcceleratorConfirmationDialog(
     int window_title_text_id,
     int dialog_text_id,
-    base::OnceClosure on_accept_callback)
+    base::OnceClosure on_accept_callback,
+    base::OnceClosure on_cancel_callback)
     : window_title_(l10n_util::GetStringUTF16(window_title_text_id)),
-      on_accept_callback_(std::move(on_accept_callback)) {
+      on_accept_callback_(std::move(on_accept_callback)),
+      on_cancel_callback_(std::move(on_cancel_callback)) {
+  DialogDelegate::set_button_label(
+      ui::DIALOG_BUTTON_OK, l10n_util::GetStringUTF16(IDS_ASH_CONTINUE_BUTTON));
+
   SetLayoutManager(std::make_unique<views::FillLayout>());
   SetBorder(views::CreateEmptyBorder(
       views::LayoutProvider::Get()->GetDialogInsetsForContentType(
@@ -61,19 +66,17 @@ bool AcceleratorConfirmationDialog::Accept() {
   return true;
 }
 
+bool AcceleratorConfirmationDialog::Cancel() {
+  std::move(on_cancel_callback_).Run();
+  return true;
+}
+
 ui::ModalType AcceleratorConfirmationDialog::GetModalType() const {
   return ui::MODAL_TYPE_SYSTEM;
 }
 
 base::string16 AcceleratorConfirmationDialog::GetWindowTitle() const {
   return window_title_;
-}
-
-base::string16 AcceleratorConfirmationDialog::GetDialogButtonLabel(
-    ui::DialogButton button) const {
-  if (button == ui::DIALOG_BUTTON_OK)
-    return l10n_util::GetStringUTF16(IDS_ASH_CONTINUE_BUTTON);
-  return views::DialogDelegateView::GetDialogButtonLabel(button);
 }
 
 base::WeakPtr<AcceleratorConfirmationDialog>

@@ -1256,7 +1256,11 @@ void DrawImageRectOp::RasterWithFlags(const DrawImageRectOp* op,
   // TODO(crbug.com/931704): make sure to support the case where paint worklet
   // generated images are used in other raster work such as canvas2d.
   if (op->image.IsPaintWorklet()) {
-    DCHECK(params.image_provider);
+    // When rasterizing on the main thread (e.g. paint invalidation checking,
+    // see https://crbug.com/990382), an image provider may not be available, so
+    // we should draw nothing.
+    if (!params.image_provider)
+      return;
     ImageProvider::ScopedResult result =
         params.image_provider->GetRasterContent(DrawImage(op->image));
 
@@ -2373,7 +2377,11 @@ void PaintOpBuffer::PlaybackFoldingIterator::FindNextOp() {
       third = NextUnfoldedOp();
       if (third && third->GetType() == PaintOpType::Restore) {
         auto* save_op = static_cast<const SaveLayerAlphaOp*>(current_op_);
-        if (draw_op->IsPaintOpWithFlags()) {
+        if (draw_op->IsPaintOpWithFlags() &&
+            // SkPaint::drawTextBlob() applies alpha on each glyph so we don't
+            // fold SaveLayerAlpha into DrwaTextBlob to ensure correct alpha
+            // even if some glyphs overlap.
+            draw_op->GetType() != PaintOpType::DrawTextBlob) {
           auto* flags_op = static_cast<const PaintOpWithFlags*>(draw_op);
           if (flags_op->flags.SupportsFoldingAlpha()) {
             current_alpha_ = save_op->alpha;

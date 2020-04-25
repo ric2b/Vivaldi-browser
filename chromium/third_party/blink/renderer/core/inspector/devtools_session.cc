@@ -56,20 +56,6 @@ Vector<uint8_t> UnwrapMessage(const mojom::blink::DevToolsMessagePtr& message) {
   return unwrap_message;
 }
 
-mojom::blink::DevToolsMessagePtr WrapMessage(
-    protocol::ProtocolMessage message) {
-  auto result = mojom::blink::DevToolsMessage::New();
-
-  if (message.json.IsEmpty()) {
-    result->data = message.binary.ReleaseVector();
-  } else {
-    WTF::StringUTF8Adaptor adaptor(message.json);
-    result->data =
-        mojo_base::BigBuffer(base::as_bytes(base::make_span(adaptor)));
-  }
-  return result;
-}
-
 protocol::ProtocolMessage ToProtocolMessage(
     std::unique_ptr<v8_inspector::StringBuffer> buffer) {
   protocol::ProtocolMessage message;
@@ -159,13 +145,15 @@ class DevToolsSession::IOSession : public mojom::blink::DevToolsSession {
 
 DevToolsSession::DevToolsSession(
     DevToolsAgent* agent,
-    mojom::blink::DevToolsSessionHostAssociatedPtrInfo host_ptr_info,
-    mojom::blink::DevToolsSessionAssociatedRequest main_request,
+    mojo::PendingAssociatedRemote<mojom::blink::DevToolsSessionHost>
+        host_remote,
+    mojo::PendingAssociatedReceiver<mojom::blink::DevToolsSession>
+        main_receiver,
     mojo::PendingReceiver<mojom::blink::DevToolsSession> io_receiver,
     mojom::blink::DevToolsSessionStatePtr reattach_session_state,
     bool client_expects_binary_responses)
     : agent_(agent),
-      binding_(this, std::move(main_request)),
+      receiver_(this, std::move(main_receiver)),
       inspector_backend_dispatcher_(new protocol::UberDispatcher(this)),
       session_state_(std::move(reattach_session_state)),
       client_expects_binary_responses_(client_expects_binary_responses),
@@ -176,8 +164,8 @@ DevToolsSession::DevToolsSession(
       agent_->io_task_runner_, agent_->inspector_task_runner_,
       WrapCrossThreadWeakPersistent(this), std::move(io_receiver));
 
-  host_ptr_.Bind(std::move(host_ptr_info));
-  host_ptr_.set_connection_error_handler(
+  host_remote_.Bind(std::move(host_remote));
+  host_remote_.set_disconnect_handler(
       WTF::Bind(&DevToolsSession::Detach, WrapWeakPersistent(this)));
 
   bool restore = !!session_state_.ReattachState();
@@ -203,7 +191,7 @@ void DevToolsSession::ConnectToV8(v8_inspector::V8Inspector* inspector,
 }
 
 bool DevToolsSession::IsDetached() {
-  return !host_ptr_.is_bound();
+  return !host_remote_.is_bound();
 }
 
 void DevToolsSession::Append(InspectorAgent* agent) {
@@ -216,8 +204,9 @@ void DevToolsSession::Detach() {
   agent_->client_->DebuggerTaskStarted();
   agent_->client_->DetachSession(this);
   agent_->sessions_.erase(this);
-  binding_.Close();
-  host_ptr_.reset();
+  receiver_.reset();
+  host_remote_.reset();
+  CHECK(io_session_);
   io_session_->DeleteSoon();
   io_session_ = nullptr;
   agent_->probe_sink_->RemoveDevToolsSession(this);
@@ -328,16 +317,8 @@ void DevToolsSession::SendProtocolResponse(
   if (WebTestSupport::IsRunningWebTest())
     agent_->FlushProtocolNotifications();
 
-  mojom::blink::DevToolsMessagePtr serialized = WrapMessage(message);
-  if (!client_expects_binary_responses_) {
-    std::vector<uint8_t> json;
-    IPEStatus status = ConvertCBORToJSON(
-        span<uint8_t>(serialized->data.data(), serialized->data.size()), &json);
-    CHECK(status.ok()) << status.ToASCIIString();
-    serialized->data = mojo_base::BigBuffer(json);
-  }
-  host_ptr_->DispatchProtocolResponse(std::move(serialized), call_id,
-                                      session_state_.TakeUpdates());
+  host_remote_->DispatchProtocolResponse(FinalizeMessage(message), call_id,
+                                         session_state_.TakeUpdates());
 }
 
 class DevToolsSession::Notification {
@@ -361,16 +342,16 @@ class DevToolsSession::Notification {
       std::unique_ptr<v8_inspector::StringBuffer> notification)
       : v8_notification_(std::move(notification)) {}
 
-  mojom::blink::DevToolsMessagePtr Serialize() {
-    protocol::ProtocolMessage serialized;
+  protocol::ProtocolMessage Serialize() {
+    protocol::ProtocolMessage result;
     if (blink_notification_) {
-      serialized = blink_notification_->serialize(/*binary=*/true);
+      result = blink_notification_->serialize(/*binary=*/true);
       blink_notification_.reset();
     } else if (v8_notification_) {
-      serialized = ToProtocolMessage(std::move(v8_notification_));
+      result = ToProtocolMessage(std::move(v8_notification_));
       v8_notification_.reset();
     }
-    return WrapMessage(std::move(serialized));
+    return result;
   }
 
  private:
@@ -404,18 +385,9 @@ void DevToolsSession::flushProtocolNotifications() {
   if (v8_session_)
     v8_session_state_cbor_.Set(v8_session_->state());
   for (wtf_size_t i = 0; i < notification_queue_.size(); ++i) {
-    mojom::blink::DevToolsMessagePtr serialized =
-        notification_queue_[i]->Serialize();
-    if (!client_expects_binary_responses_) {
-      std::vector<uint8_t> json;
-      IPEStatus status = ConvertCBORToJSON(
-          span<uint8_t>(serialized->data.data(), serialized->data.size()),
-          &json);
-      CHECK(status.ok()) << status.ToASCIIString();
-      serialized->data = mojo_base::BigBuffer(json);
-    }
-    host_ptr_->DispatchProtocolNotification(std::move(serialized),
-                                            session_state_.TakeUpdates());
+    host_remote_->DispatchProtocolNotification(
+        FinalizeMessage(notification_queue_[i]->Serialize()),
+        session_state_.TakeUpdates());
   }
   notification_queue_.clear();
 }
@@ -423,6 +395,20 @@ void DevToolsSession::flushProtocolNotifications() {
 void DevToolsSession::Trace(blink::Visitor* visitor) {
   visitor->Trace(agent_);
   visitor->Trace(agents_);
+}
+
+blink::mojom::blink::DevToolsMessagePtr DevToolsSession::FinalizeMessage(
+    protocol::ProtocolMessage message) {
+  std::vector<uint8_t> message_to_send = message.binary.ReleaseVector();
+  if (!client_expects_binary_responses_) {
+    std::vector<uint8_t> json;
+    IPEStatus status = ConvertCBORToJSON(SpanFrom(message_to_send), &json);
+    CHECK(status.ok()) << status.ToASCIIString();
+    message_to_send = std::move(json);
+  }
+  auto mojo_msg = mojom::blink::DevToolsMessage::New();
+  mojo_msg->data = std::move(message_to_send);
+  return mojo_msg;
 }
 
 }  // namespace blink

@@ -20,6 +20,7 @@
 <translation id="1087788677726983142">이벤트 스트림 필터 숨기기</translation>
 <translation id="1088219014394087294">제목이 없습니다.</translation>
 <translation id="1106741348836243114">음성 피드백(이어콘)을 사용 또는 사용 안함으로 설정합니다.</translation>
+<translation id="1114836634143403764">추천</translation>
 <translation id="1120743664840974483">{"a": "alpha", "b": "bravo", "c": "charlie", "d": "delta", "e": "echo", "f": "fox", "g": "golf", "h": "hotel", "i": "india", "j": "juliet","k": "kilo", "l": "lima", "m": "mike", "n": "november", "o": "oscar","p": "papa", "q": "quebec", "r": "romeo", "s": "sierra", "t": "tango", "u": "uniform", "v": "victor", "w": "whiskey","x": "xray", "y": "yankee", "z": "zulu"}</translation>
 <translation id="1120938014254001895">손가락 두 개를 사용하여 위로 스와이프</translation>
 <translation id="1124771028211010580">현재 디스플레이 스타일은 병렬식입니다.</translation>
@@ -126,6 +127,7 @@
 <translation id="1845944666972354496">활성화하려면 두 번 탭하세요.</translation>
 <translation id="1846771122725914429">블루투스 점자 디스플레이</translation>
 <translation id="1865601187525349519">텍스트의 끝</translation>
+<translation id="1875375785454778375">실시간 공동작업자</translation>
 <translation id="1876229593313240038">doc</translation>
 <translation id="188130072164734898">현재 날짜와 시간을 말합니다.</translation>
 <translation id="1902396333223336119">셀</translation>
@@ -146,6 +148,7 @@
 <translation id="2009187674653301682">위 첨자 아님</translation>
 <translation id="2010555995361223825">ChromeVox 메뉴</translation>
 <translation id="2045490512405922022">선택 안함</translation>
+<translation id="2049107626739254612">저자 정보</translation>
 <translation id="20601713649439366">이전 수식이 없습니다.</translation>
 <translation id="2063539687800151747">제명</translation>
 <translation id="207477615537953741">의미 해석 사용 안함</translation>
@@ -156,6 +159,7 @@
 <translation id="2110480898214777136">페이지, 대화 또는 기타 컨테이너 내부에서 처음부터 끝 또는 끝부터 처음에 래핑합니다.</translation>
 <translation id="2119965627982867824">spnbtn</translation>
 <translation id="2121067395472282800">액세스 키:<ph name="KEY" /></translation>
+<translation id="2126597928985245619">이 항목에 사용 가능한 텍스트가 없습니다</translation>
 <translation id="2127747486437921899">기울임꼴</translation>
 <translation id="2138345533858834403">화면 상단의 ChromeVox 패널에서
         새로고침할 수 있는 점자 디스플레이의 출력을 시뮬레이션합니다.</translation>
@@ -168,6 +172,7 @@
 <translation id="2203046366315513658">값 줄이기</translation>
 <translation id="2220529011494928058">문제 신고</translation>
 <translation id="2223693656926968778">현재 항목에서 작업 수행</translation>
+<translation id="224426591676115802"><ph name="LANGUAGE" />에 사용 가능한 음성 없음</translation>
 <translation id="225732394367814946">말하기 속도 증가</translation>
 <translation id="2267538686624070261">맞춤법 오류 남아 있음</translation>
 <translation id="2267945578749931355">다음 문자</translation>
@@ -209,7 +214,6 @@
 <translation id="2582407057977008361">사이드 바</translation>
 <translation id="2592212930811759050">수정하려면 두 번 탭하세요.</translation>
 <translation id="2598495320872286378">문법 오류</translation>
-<translation id="2606210917827248971">에{COUNT,plural, =1{항목 #개 포함}other{항목 #개 포함}}</translation>
 <translation id="2614981083756825552">Math ML 레이아웃</translation>
 <translation id="2624431853467395961">학습 모드 열기</translation>
 <translation id="2626530649491650971">clickable</translation>
@@ -236,6 +240,7 @@
 <translation id="27527859628328957">다음 초점 가능 항목으로 이동</translation>
 <translation id="2770781857296573485">그룹 탐색 입력</translation>
 <translation id="2777845298774924149">종료함</translation>
+<translation id="2783001728278437613">{COUNT,plural, =1{#개 이상}other{#개 이상}}</translation>
 <translation id="2784959586797362050">언제나 그렇듯 Search+a를 누른 다음 i를 누르면 바로 Google에 의견을 보낼 수 있습니다. 여러분의 의견을 기다립니다.</translation>
 <translation id="2800204403141299078">더 이상 다른 요소가 없습니다.</translation>
 <translation id="2800780099804980316">이전 수준 1 제목이 없습니다.</translation>
@@ -261,6 +266,7 @@
 <translation id="2911433807131383493">ChromeVox 가이드 열기</translation>
 <translation id="2912405967290226587">손가락 세 개를 사용하여 오른쪽으로 스와이프</translation>
 <translation id="2932083475399492303">구조 선/레이아웃 선 간의 선 유형 전환</translation>
+<translation id="293796669683825859">댓글</translation>
 <translation id="2942710183375260152">다크 슬레이트 블루</translation>
 <translation id="2943596527105977722">다크 골든로드</translation>
 <translation id="2944762337049891859">로드가 끝나면 자동으로 페이지를 읽습니다.</translation>
@@ -322,6 +328,7 @@
 <translation id="3241052487511142956">이전 방문한 링크</translation>
 <translation id="3241638166094654466">각 행의 셀 수:</translation>
 <translation id="3244209481693235975"><ph name="LANGUAGE" />: <ph name="CONTENT" /></translation>
+<translation id="3260949043575829030">이전 유사한 항목</translation>
 <translation id="3286372614333682499">세로 모드</translation>
 <translation id="3286390186030710347">슬라이더</translation>
 <translation id="3299925995433437805">다음 방문한 링크가 없습니다.</translation>
@@ -337,6 +344,7 @@
 <translation id="3324983252691184275">진홍색</translation>
 <translation id="3338224621010291843"><ph name="VALUE" /> <ph name="NAME" /> 슬라이더</translation>
 <translation id="335581015389089642">음성</translation>
+<translation id="3356951775008366684">단어의 발음을 음성으로 안내합니다.</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{더하기 기호}other{더하기 기호 #개}}</translation>
 <translation id="338583716107319301">구분자</translation>
@@ -375,6 +383,7 @@
 <translation id="3646890046000188562">{COUNT,plural, =1{백틱 기호}other{백틱 기호 #개}}</translation>
 <translation id="3650317109285159359">chkmnuitm</translation>
 <translation id="3655855170848725876">{COUNT,plural, =1{달러 기호}other{달러 기호 #개}}</translation>
+<translation id="3658742229777143148">개정</translation>
 <translation id="3659787053479271466">alrt</translation>
 <translation id="3665563998540286755"><ph name="VALUE" />, 목록 상자</translation>
 <translation id="3681531118904532409">파파야 윕</translation>
@@ -393,7 +402,6 @@
 <translation id="3781428340399460090">진한 분홍색</translation>
 <translation id="3783725005098956899">로그 표시</translation>
 <translation id="3793710123303304873">대화상자를 종료했습니다.</translation>
-<translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">자동완성 목록</translation>
 <translation id="3810838688059735925">동영상</translation>
 <translation id="3813387282697781382">라이트 코럴</translation>
@@ -503,6 +511,7 @@
 <translation id="4517854969512651305">값 늘리기</translation>
 <translation id="4529987814483543472">기본 키맵</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{슬래시}other{슬래시 #개}}</translation>
+<translation id="4537277403911487429">다음 유사한 항목</translation>
 <translation id="4547556996012970016">다음 수준 5 제목</translation>
 <translation id="4562381607973973258">머리글</translation>
 <translation id="4569941707103739422">이동하려면 위쪽 또는 아래쪽 화살표를 누르고, 활성화하려면 Enter를 누르세요.</translation>
@@ -533,6 +542,7 @@
 <translation id="4763480195061959176">동영상</translation>
 <translation id="4764692524839457597">기본값</translation>
 <translation id="4772771694153161212">밑줄 아님</translation>
+<translation id="4787577491510559358">현재 항목의 서식을 음성으로 안내합니다.</translation>
 <translation id="479989351350248267">검색</translation>
 <translation id="4804818685124855865">연결 해제</translation>
 <translation id="481165870889056555">현재 페이지의 제목 알림</translation>
@@ -569,6 +579,7 @@
 <translation id="4983588134362688868">페이지 처음으로 이동</translation>
 <translation id="4986606102545753256"><ph name="NAME" />, 창</translation>
 <translation id="4993152509206108683">속도: <ph name="PERCENT" />퍼센트</translation>
+<translation id="4994420463726586413">현재 배터리 상태를 음성으로 안내합니다.</translation>
 <translation id="4996716799442435517">시각적</translation>
 <translation id="4997282455736854877"><ph name="NAME" />, 라디오 버튼이 선택됨</translation>
 <translation id="4997475792277222884">링크가 아닌 다음 항목이 없습니다.</translation>
@@ -717,6 +728,7 @@
 <translation id="5956928062748260866">대화상자</translation>
 <translation id="5963413905009737549">섹션</translation>
 <translation id="5968607524793740041">컨텍스트 메뉴 표시</translation>
+<translation id="597121107011153418">{COUNT,plural, =1{#개 항목 포함}other{#개 항목 포함}}</translation>
 <translation id="5981446804259161541">라이트 시안</translation>
 <translation id="5983179082906765664">탐색 세밀도 높이기</translation>
 <translation id="5992285135956208197">그래픽 문서</translation>

@@ -52,7 +52,7 @@
 
 namespace content {
 namespace {
- 
+
 void CheckFetchHandlerOfInstalledServiceWorker(
     ServiceWorkerContext::CheckHasServiceWorkerCallback callback,
     scoped_refptr<ServiceWorkerRegistration> registration) {
@@ -258,6 +258,12 @@ ServiceWorkerContextCore::ServiceWorkerContextCore(
     : wrapper_(wrapper),
       providers_(std::make_unique<ProviderByIdMap>()),
       provider_by_uuid_(std::make_unique<ProviderByClientUUIDMap>()),
+      storage_(ServiceWorkerStorage::Create(user_data_directory,
+                                            this,
+                                            std::move(database_task_runner),
+                                            quota_manager_proxy,
+                                            special_storage_policy)),
+      job_coordinator_(std::make_unique<ServiceWorkerJobCoordinator>(this)),
       loader_factory_getter_(url_loader_factory_getter),
       force_update_on_page_load_(false),
       was_service_worker_registered_(false),
@@ -268,12 +274,6 @@ ServiceWorkerContextCore::ServiceWorkerContextCore(
         base::MakeRefCounted<blink::URLLoaderFactoryBundle>(
             std::move(non_network_loader_factory_bundle_info_for_update_check));
   }
-  // These get a WeakPtr from |weak_factory_|, so must be set after
-  // |weak_factory_| is initialized.
-  storage_ = ServiceWorkerStorage::Create(
-      user_data_directory, AsWeakPtr(), std::move(database_task_runner),
-      quota_manager_proxy, special_storage_policy);
-  job_coordinator_ = std::make_unique<ServiceWorkerJobCoordinator>(AsWeakPtr());
 }
 
 ServiceWorkerContextCore::ServiceWorkerContextCore(
@@ -282,26 +282,22 @@ ServiceWorkerContextCore::ServiceWorkerContextCore(
     : wrapper_(wrapper),
       providers_(old_context->providers_.release()),
       provider_by_uuid_(old_context->provider_by_uuid_.release()),
+      storage_(ServiceWorkerStorage::Create(this, old_context->storage())),
+      job_coordinator_(std::make_unique<ServiceWorkerJobCoordinator>(this)),
       loader_factory_getter_(old_context->loader_factory_getter()),
       loader_factory_bundle_for_update_check_(
           std::move(old_context->loader_factory_bundle_for_update_check_)),
       was_service_worker_registered_(
           old_context->was_service_worker_registered_),
       observer_list_(old_context->observer_list_),
-      next_embedded_worker_id_(old_context->next_embedded_worker_id_) {
-  DCHECK(observer_list_);
-
-  // These get a WeakPtr from |weak_factory_|, so must be set after
-  // |weak_factory_| is initialized.
-  storage_ = ServiceWorkerStorage::Create(AsWeakPtr(), old_context->storage());
-  job_coordinator_ = std::make_unique<ServiceWorkerJobCoordinator>(AsWeakPtr());
-}
+      next_embedded_worker_id_(old_context->next_embedded_worker_id_) {}
 
 ServiceWorkerContextCore::~ServiceWorkerContextCore() {
   DCHECK(storage_);
   for (const auto& it : live_versions_)
     it.second->RemoveObserver(this);
-  weak_factory_.InvalidateWeakPtrs();
+
+  job_coordinator_->ClearForShutdown();
 }
 
 void ServiceWorkerContextCore::AddProviderHost(
@@ -610,15 +606,18 @@ void ServiceWorkerContextCore::AddLiveVersion(ServiceWorkerVersion* version) {
 }
 
 void ServiceWorkerContextCore::RemoveLiveVersion(int64_t id) {
-  if (live_versions_[id]->running_status() != EmbeddedWorkerStatus::STOPPED) {
+  auto it = live_versions_.find(id);
+  DCHECK(it != live_versions_.end());
+  ServiceWorkerVersion* version = it->second;
+
+  if (version->running_status() != EmbeddedWorkerStatus::STOPPED) {
     // Notify all observers that this live version is stopped, as it will
     // be removed from |live_versions_|.
-    observer_list_->Notify(
-        FROM_HERE, &ServiceWorkerContextCoreObserver::OnRunningStateChanged, id,
-        EmbeddedWorkerStatus::STOPPED);
+    observer_list_->Notify(FROM_HERE,
+                           &ServiceWorkerContextCoreObserver::OnStopped, id);
   }
 
-  live_versions_.erase(id);
+  live_versions_.erase(it);
 }
 
 std::vector<ServiceWorkerRegistrationInfo>
@@ -665,6 +664,10 @@ void ServiceWorkerContextCore::ScheduleDeleteAndStartOver() const {
 
 void ServiceWorkerContextCore::DeleteAndStartOver(StatusCallback callback) {
   job_coordinator_->AbortAll();
+
+  observer_list_->Notify(
+      FROM_HERE, &ServiceWorkerContextCoreObserver::OnDeleteAndStartOver);
+
   storage_->DeleteAndStartOver(std::move(callback));
 }
 
@@ -747,9 +750,32 @@ void ServiceWorkerContextCore::OnStorageWiped() {
 
 void ServiceWorkerContextCore::OnRunningStateChanged(
     ServiceWorkerVersion* version) {
-  observer_list_->Notify(
-      FROM_HERE, &ServiceWorkerContextCoreObserver::OnRunningStateChanged,
-      version->version_id(), version->running_status());
+  if (!version->context())
+    return;
+
+  switch (version->running_status()) {
+    case EmbeddedWorkerStatus::STOPPED:
+      observer_list_->Notify(FROM_HERE,
+                             &ServiceWorkerContextCoreObserver::OnStopped,
+                             version->version_id());
+      break;
+    case EmbeddedWorkerStatus::STARTING:
+      observer_list_->Notify(FROM_HERE,
+                             &ServiceWorkerContextCoreObserver::OnStarting,
+                             version->version_id());
+      break;
+    case EmbeddedWorkerStatus::RUNNING:
+      observer_list_->Notify(
+          FROM_HERE, &ServiceWorkerContextCoreObserver::OnStarted,
+          version->version_id(), version->scope(),
+          version->embedded_worker()->process_id(), version->script_url());
+      break;
+    case EmbeddedWorkerStatus::STOPPING:
+      observer_list_->Notify(FROM_HERE,
+                             &ServiceWorkerContextCoreObserver::OnStopping,
+                             version->version_id());
+      break;
+  }
 }
 
 void ServiceWorkerContextCore::OnVersionStateChanged(

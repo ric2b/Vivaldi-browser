@@ -11,6 +11,11 @@
       "chromiumos_preflight"
     ]
   },
+  "chromeos-amd64-generic-dbg": {
+    "additional_compile_targets": [
+      "chromiumos_preflight"
+    ]
+  },
   "chromeos-amd64-generic-rel": {
     "additional_compile_targets": [
       "chromiumos_preflight"
@@ -125,6 +130,23 @@
           "idempotent": false
         },
         "test": "chrome_all_tast_tests"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "kvm": "1",
+              "os": "Ubuntu-16.04",
+              "pool": "Chrome-CrOS-VM"
+            }
+          ]
+        },
+        "test": "color_unittests"
       },
       {
         "merge": {
@@ -435,6 +457,23 @@
             }
           ]
         },
+        "test": "profile_provider_unittest"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "kvm": "1",
+              "os": "Ubuntu-16.04",
+              "pool": "Chrome-CrOS-VM"
+            }
+          ]
+        },
         "test": "sandbox_linux_unittests"
       },
       {
@@ -532,7 +571,7 @@
           "--browser=cros-chrome",
           "--passthrough",
           "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --force_high_performance_gpu",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --force_high_performance_gpu --use-cmd-decoder=validating",
           "--remote=127.0.0.1",
           "--remote-ssh-port=9222"
         ],
@@ -556,6 +595,11 @@
           "shards": 6
         }
       }
+    ]
+  },
+  "chromeos-arm-generic-dbg": {
+    "additional_compile_targets": [
+      "chromiumos_preflight"
     ]
   },
   "chromeos-arm-generic-rel": {
@@ -688,1621 +732,6 @@
         "trigger_script": {
           "script": "//testing/trigger_scripts/chromeos_device_trigger.py"
         }
-      }
-    ]
-  },
-  "linux-chromeos-coverage-rel-dummy": {
-    "additional_compile_targets": [
-      "gn_all"
-    ],
-    "gtest_tests": [
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "accessibility_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "angle_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "app_list_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "app_shell_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "ash_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "aura_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "base_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "base_util_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "blink_common_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "blink_fuzzer_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "blink_heap_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "blink_platform_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "webkit_unit_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "blink_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "boringssl_crypto_tests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "boringssl_ssl_tests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "shards": 10
-        },
-        "test": "browser_tests"
-      },
-      {
-        "args": [
-          "--disable-features=VizDisplayCompositor"
-        ],
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "non_viz_browser_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "shards": 10
-        },
-        "test": "browser_tests"
-      },
-      {
-        "args": [
-          "--disable-blink-features=HTMLImports,ShadowDOMV0,CustomElementsV0",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_html_imports_polyfill_browser_tests.filter"
-        ],
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "webui_html_imports_polyfill_browser_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "browser_tests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "cacheinvalidation_unittests"
-      },
-      {
-        "args": [
-          "--gtest_filter=-*UsingRealWebcam*"
-        ],
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "capture_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "cast_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "cc_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "chrome_app_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "chromedriver_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "chromeos_components_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "chromeos_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "components_browsertests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "components_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "compositor_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "shards": 6
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--disable-features=VizDisplayCompositor"
-        ],
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "non_viz_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "shards": 10
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--disable-perfetto",
-          "--gtest_filter=TracingControllerTest.*:BackgroundTracingManagerBrowserTest.*"
-        ],
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "nonperfetto_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "content_unittests"
-      },
-      {
-        "args": [
-          "--disable-features=VizDisplayCompositor"
-        ],
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "non_viz_content_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "content_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "crypto_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "dbus_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "device_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "display_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "events_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "exo_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "extensions_browsertests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "extensions_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "filesystem_service_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "gcm_unit_tests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "gfx_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "gin_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "gl_unittests_ozone"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "google_apis_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "gpu_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "gwp_asan_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "shards": 3
-        },
-        "test": "interactive_ui_tests"
-      },
-      {
-        "args": [
-          "--disable-blink-features=HTMLImports,ShadowDOMV0,CustomElementsV0",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/webui_html_imports_polyfill_interactive_ui_tests.filter"
-        ],
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "webui_html_imports_polyfill_interactive_ui_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "interactive_ui_tests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "ipc_tests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "jingle_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "keyboard_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "latency_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "leveldb_service_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "libjingle_xmpp_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "media_blink_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "media_service_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "media_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "message_center_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "midi_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "mojo_core_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "mojo_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "nacl_helper_nonsfi_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "nacl_loader_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "native_theme_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "net_unittests"
-      },
-      {
-        "args": [
-          "--ozone-platform=headless"
-        ],
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "ozone_gl_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "ozone_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "ozone_x11_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "pdf_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "perfetto_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "ppapi_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "printing_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "remoting_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "sandbox_linux_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "service_manager_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "services_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "shell_dialogs_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "skia_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "snapshot_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "sql_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "storage_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "sync_integration_tests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "traffic_annotation_auditor_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "ui_base_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "ui_chromeos_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "ui_touch_selection_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "unit_tests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "url_unittests"
-      },
-      {
-        "experiment_percentage": 100,
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "usage_time_limit_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "views_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "viz_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "wayland_client_perftests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "wm_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "wtf_unittests"
       }
     ]
   },
@@ -2726,6 +1155,21 @@
             }
           ]
         },
+        "test": "color_unittests"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ]
+        },
         "test": "components_browsertests"
       },
       {
@@ -2791,26 +1235,6 @@
             }
           ],
           "shards": 10
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--disable-perfetto",
-          "--gtest_filter=TracingControllerTest.*:BackgroundTracingManagerBrowserTest.*"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "nonperfetto_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
         },
         "test": "content_browsertests"
       },
@@ -3183,21 +1607,6 @@
           ]
         },
         "test": "latency_unittests"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "leveldb_service_unittests"
       },
       {
         "merge": {
@@ -3812,6 +2221,7 @@
     ],
     "gtest_tests": [
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3827,6 +2237,7 @@
         "test": "accessibility_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3842,6 +2253,7 @@
         "test": "angle_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3857,6 +2269,7 @@
         "test": "app_list_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3872,6 +2285,7 @@
         "test": "app_shell_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3887,6 +2301,7 @@
         "test": "ash_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3902,6 +2317,7 @@
         "test": "aura_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3917,6 +2333,7 @@
         "test": "base_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3932,6 +2349,7 @@
         "test": "base_util_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3947,6 +2365,7 @@
         "test": "blink_common_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3962,6 +2381,7 @@
         "test": "blink_fuzzer_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3977,6 +2397,7 @@
         "test": "blink_heap_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3992,6 +2413,7 @@
         "test": "blink_platform_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4008,6 +2430,7 @@
         "test": "blink_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4023,6 +2446,7 @@
         "test": "boringssl_crypto_tests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4038,6 +2462,7 @@
         "test": "boringssl_ssl_tests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4057,6 +2482,7 @@
         "args": [
           "--disable-features=VizDisplayCompositor"
         ],
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4078,6 +2504,7 @@
           "--disable-blink-features=HTMLImports,ShadowDOMV0,CustomElementsV0",
           "--test-launcher-filter-file=../../testing/buildbot/filters/webui_html_imports_polyfill_browser_tests.filter"
         ],
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4094,6 +2521,7 @@
         "test": "browser_tests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4112,6 +2540,7 @@
         "args": [
           "--gtest_filter=-*UsingRealWebcam*"
         ],
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4127,6 +2556,7 @@
         "test": "capture_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4142,6 +2572,7 @@
         "test": "cast_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4157,6 +2588,7 @@
         "test": "cc_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4172,6 +2604,7 @@
         "test": "chrome_app_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4187,6 +2620,7 @@
         "test": "chromedriver_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4202,6 +2636,7 @@
         "test": "chromeos_components_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4217,6 +2652,23 @@
         "test": "chromeos_unittests"
       },
       {
+        "isolate_coverage_data": true,
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ]
+        },
+        "test": "color_unittests"
+      },
+      {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4232,6 +2684,7 @@
         "test": "components_browsertests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4247,6 +2700,7 @@
         "test": "components_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4262,6 +2716,7 @@
         "test": "compositor_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4281,6 +2736,7 @@
         "args": [
           "--disable-features=VizDisplayCompositor"
         ],
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4298,26 +2754,7 @@
         "test": "content_browsertests"
       },
       {
-        "args": [
-          "--disable-perfetto",
-          "--gtest_filter=TracingControllerTest.*:BackgroundTracingManagerBrowserTest.*"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "nonperfetto_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "content_browsertests"
-      },
-      {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4336,6 +2773,7 @@
         "args": [
           "--disable-features=VizDisplayCompositor"
         ],
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4352,6 +2790,7 @@
         "test": "content_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4367,6 +2806,7 @@
         "test": "crypto_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4382,6 +2822,7 @@
         "test": "dbus_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4397,6 +2838,7 @@
         "test": "device_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4412,6 +2854,7 @@
         "test": "display_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4427,6 +2870,7 @@
         "test": "events_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4442,6 +2886,7 @@
         "test": "exo_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4457,6 +2902,7 @@
         "test": "extensions_browsertests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4472,6 +2918,7 @@
         "test": "extensions_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4487,6 +2934,7 @@
         "test": "filesystem_service_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4502,6 +2950,7 @@
         "test": "gcm_unit_tests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4517,6 +2966,7 @@
         "test": "gfx_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4532,6 +2982,7 @@
         "test": "gin_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4547,6 +2998,7 @@
         "test": "gl_unittests_ozone"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4562,6 +3014,7 @@
         "test": "google_apis_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4577,6 +3030,7 @@
         "test": "gpu_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4592,6 +3046,7 @@
         "test": "gwp_asan_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4612,6 +3067,7 @@
           "--disable-blink-features=HTMLImports,ShadowDOMV0,CustomElementsV0",
           "--test-launcher-filter-file=../../testing/buildbot/filters/webui_html_imports_polyfill_interactive_ui_tests.filter"
         ],
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4628,6 +3084,7 @@
         "test": "interactive_ui_tests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4643,6 +3100,7 @@
         "test": "ipc_tests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4658,6 +3116,7 @@
         "test": "jingle_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4673,6 +3132,7 @@
         "test": "keyboard_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4688,21 +3148,7 @@
         "test": "latency_unittests"
       },
       {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "leveldb_service_unittests"
-      },
-      {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4718,6 +3164,7 @@
         "test": "libjingle_xmpp_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4733,6 +3180,7 @@
         "test": "media_blink_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4748,6 +3196,7 @@
         "test": "media_service_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4763,6 +3212,7 @@
         "test": "media_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4778,6 +3228,7 @@
         "test": "message_center_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4793,6 +3244,7 @@
         "test": "midi_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4808,6 +3260,7 @@
         "test": "mojo_core_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4823,6 +3276,7 @@
         "test": "mojo_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4838,6 +3292,7 @@
         "test": "nacl_helper_nonsfi_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4853,6 +3308,7 @@
         "test": "nacl_loader_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4868,6 +3324,7 @@
         "test": "native_theme_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4886,6 +3343,7 @@
         "args": [
           "--ozone-platform=headless"
         ],
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4901,6 +3359,7 @@
         "test": "ozone_gl_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4916,6 +3375,7 @@
         "test": "ozone_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4931,6 +3391,7 @@
         "test": "ozone_x11_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4946,6 +3407,7 @@
         "test": "pdf_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4961,6 +3423,7 @@
         "test": "perfetto_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4976,6 +3439,7 @@
         "test": "ppapi_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4991,6 +3455,7 @@
         "test": "printing_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5006,6 +3471,7 @@
         "test": "remoting_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5021,6 +3487,7 @@
         "test": "sandbox_linux_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5036,6 +3503,7 @@
         "test": "service_manager_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5051,6 +3519,7 @@
         "test": "services_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5066,6 +3535,7 @@
         "test": "shell_dialogs_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5081,6 +3551,7 @@
         "test": "skia_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5096,6 +3567,7 @@
         "test": "snapshot_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5111,6 +3583,7 @@
         "test": "sql_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5126,6 +3599,7 @@
         "test": "storage_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5141,6 +3615,7 @@
         "test": "sync_integration_tests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5156,6 +3631,7 @@
         "test": "traffic_annotation_auditor_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5171,6 +3647,7 @@
         "test": "ui_base_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5186,6 +3663,7 @@
         "test": "ui_chromeos_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5201,6 +3679,7 @@
         "test": "ui_touch_selection_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5216,6 +3695,7 @@
         "test": "unit_tests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5232,6 +3712,7 @@
       },
       {
         "experiment_percentage": 100,
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5247,6 +3728,7 @@
         "test": "usage_time_limit_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5262,6 +3744,7 @@
         "test": "views_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5277,6 +3760,7 @@
         "test": "viz_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5292,6 +3776,7 @@
         "test": "wayland_client_perftests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5307,6 +3792,7 @@
         "test": "wm_unittests"
       },
       {
+        "isolate_coverage_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"

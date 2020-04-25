@@ -14,14 +14,15 @@ import android.content.res.Resources;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.Pair;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
-import org.chromium.blink_public.platform.WebDisplayMode;
+import org.chromium.base.PackageManagerUtils;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.ShortcutSource;
@@ -80,13 +81,12 @@ public class WebApkIntentDataProvider extends BrowserServicesIntentDataProvider 
 
         ShareData shareData = null;
 
-        String shareActivityClassName = IntentUtils.safeGetStringExtra(
+        String shareDataActivityClassName = IntentUtils.safeGetStringExtra(
                 intent, WebApkConstants.EXTRA_WEBAPK_SELECTED_SHARE_TARGET_ACTIVITY_CLASS_NAME);
 
-        // Share Target when shareActivityClassName is present.
-        if (!TextUtils.isEmpty(shareActivityClassName)) {
+        // Presence of {@link shareDataActivityClassName} indicates that this is a share.
+        if (!TextUtils.isEmpty(shareDataActivityClassName)) {
             shareData = new ShareData();
-            shareData.shareActivityClassName = shareActivityClassName;
             shareData.subject = IntentUtils.safeGetStringExtra(intent, Intent.EXTRA_SUBJECT);
             shareData.text = IntentUtils.safeGetStringExtra(intent, Intent.EXTRA_TEXT);
             shareData.files = IntentUtils.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM);
@@ -106,7 +106,7 @@ public class WebApkIntentDataProvider extends BrowserServicesIntentDataProvider 
                 intent, WebApkConstants.EXTRA_SPLASH_PROVIDED_BY_WEBAPK, false);
 
         return create(webApkPackageName, url, source, forceNavigation,
-                canUseSplashFromContentProvider, shareData);
+                canUseSplashFromContentProvider, shareData, shareDataActivityClassName);
     }
 
     /**
@@ -149,9 +149,11 @@ public class WebApkIntentDataProvider extends BrowserServicesIntentDataProvider 
      * @param canUseSplashFromContentProvider Whether the WebAPK's content provider can be
      *                                        queried for a screenshot of the splash screen.
      * @param shareData Shared information from the share intent.
+     * @param shareDataActivityClassName Name of WebAPK activity which received share intent.
      */
     public static WebApkIntentDataProvider create(String webApkPackageName, String url, int source,
-            boolean forceNavigation, boolean canUseSplashFromContentProvider, ShareData shareData) {
+            boolean forceNavigation, boolean canUseSplashFromContentProvider, ShareData shareData,
+            String shareDataActivityClassName) {
         // Unlike non-WebAPK web apps, WebAPK ids are predictable. A malicious actor may send an
         // intent with a valid start URL and arbitrary other data. Only use the start URL, the
         // package name and the ShortcutSource from the launch intent and extract the remaining data
@@ -240,8 +242,11 @@ public class WebApkIntentDataProvider extends BrowserServicesIntentDataProvider 
 
         Pair<String, ShareTarget> shareTargetActivityNameAndData =
                 extractFirstShareTarget(webApkPackageName);
-        String shareTargetActivityName = shareTargetActivityNameAndData.first;
         ShareTarget shareTarget = shareTargetActivityNameAndData.second;
+        if (shareDataActivityClassName != null
+                && !shareDataActivityClassName.equals(shareTargetActivityNameAndData.first)) {
+            shareData = null;
+        }
 
         boolean isSplashProvidedByWebApk =
                 (canUseSplashFromContentProvider && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
@@ -255,8 +260,7 @@ public class WebApkIntentDataProvider extends BrowserServicesIntentDataProvider 
                 orientation, source, themeColor, backgroundColor, defaultBackgroundColor,
                 isPrimaryIconMaskable, isSplashIconMaskable, webApkPackageName, shellApkVersion,
                 manifestUrl, manifestStartUrl, distributor, iconUrlToMurmur2HashMap, shareTarget,
-                shareTargetActivityName, forceNavigation, isSplashProvidedByWebApk, shareData,
-                apkVersion);
+                forceNavigation, isSplashProvidedByWebApk, shareData, apkVersion);
     }
 
     /**
@@ -286,9 +290,7 @@ public class WebApkIntentDataProvider extends BrowserServicesIntentDataProvider 
      * @param distributor              The source from where the WebAPK is installed.
      * @param iconUrlToMurmur2HashMap  Map of the WebAPK's icon URLs to Murmur2 hashes of the
      *                                 icon untransformed bytes.
-     * @param shareTarget              shareTarget data for {@link shareTargetActivityName}
-     * @param shareTargetActivityName  Name of activity or activity alias in WebAPK which handles
-     *                                 share intents
+     * @param shareTarget              Specifies what share data is supported by WebAPK.
      * @param forceNavigation          Whether the WebAPK should navigate to {@link url} if the
      *                                 WebAPK is already open.
      * @param isSplashProvidedByWebApk Whether the WebAPK (1) launches an internal activity to
@@ -304,13 +306,15 @@ public class WebApkIntentDataProvider extends BrowserServicesIntentDataProvider 
             boolean isSplashIconMaskable, String webApkPackageName, int shellApkVersion,
             String manifestUrl, String manifestStartUrl, @WebApkDistributor int distributor,
             Map<String, String> iconUrlToMurmur2HashMap, ShareTarget shareTarget,
-            String shareTargetActivityName, boolean forceNavigation,
-            boolean isSplashProvidedByWebApk, ShareData shareData, int webApkVersionCode) {
-        if (url == null || manifestStartUrl == null || webApkPackageName == null) {
-            Log.e(TAG,
-                    "Incomplete data provided: " + url + ", " + manifestStartUrl + ", "
-                            + webApkPackageName);
+            boolean forceNavigation, boolean isSplashProvidedByWebApk, ShareData shareData,
+            int webApkVersionCode) {
+        if (manifestStartUrl == null || webApkPackageName == null) {
+            Log.e(TAG, "Incomplete data provided: " + manifestStartUrl + ", " + webApkPackageName);
             return null;
+        }
+
+        if (TextUtils.isEmpty(url)) {
+            url = manifestStartUrl;
         }
 
         // The default scope should be computed from the Web Manifest start URL. If the WebAPK was
@@ -345,8 +349,8 @@ public class WebApkIntentDataProvider extends BrowserServicesIntentDataProvider 
                         forceNavigation);
         WebApkExtras webApkExtras = new WebApkExtras(webApkPackageName, badgeIcon, splashIcon,
                 isSplashIconMaskable, shellApkVersion, manifestUrl, manifestStartUrl, distributor,
-                iconUrlToMurmur2HashMap, shareTarget, shareTargetActivityName,
-                isSplashProvidedByWebApk, shareData, webApkVersionCode);
+                iconUrlToMurmur2HashMap, shareTarget, isSplashProvidedByWebApk, shareData,
+                webApkVersionCode);
         return new WebApkIntentDataProvider(webappExtras, webApkExtras);
     }
 
@@ -481,9 +485,8 @@ public class WebApkIntentDataProvider extends BrowserServicesIntentDataProvider 
         shareIntent.setAction(Intent.ACTION_SEND);
         shareIntent.setPackage(webApkPackageName);
         shareIntent.setType("*/*");
-        List<ResolveInfo> resolveInfos =
-                ContextUtils.getApplicationContext().getPackageManager().queryIntentActivities(
-                        shareIntent, PackageManager.GET_META_DATA);
+        List<ResolveInfo> resolveInfos = PackageManagerUtils.queryIntentActivities(
+                shareIntent, PackageManager.GET_META_DATA);
 
         for (ResolveInfo resolveInfo : resolveInfos) {
             Bundle shareTargetMetaData = resolveInfo.activityInfo.metaData;

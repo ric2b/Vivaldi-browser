@@ -22,6 +22,7 @@
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/cdm_context.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/scoped_async_trace.h"
 #include "media/base/video_codecs.h"
@@ -164,7 +165,7 @@ std::vector<SupportedVideoDecoderConfig> GetSupportedConfigsInternal(
                                  true,    // allow_encrypted
                                  false);  // require_encrypted
 
-#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
   supported_configs.emplace_back(HEVCPROFILE_MIN, HEVCPROFILE_MAX,
                                  gfx::Size(0, 0), gfx::Size(3840, 2160),
                                  true,    // allow_encrypted
@@ -204,13 +205,15 @@ MediaCodecVideoDecoder::GetSupportedConfigs() {
 MediaCodecVideoDecoder::MediaCodecVideoDecoder(
     const gpu::GpuPreferences& gpu_preferences,
     const gpu::GpuFeatureInfo& gpu_feature_info,
+    std::unique_ptr<MediaLog> media_log,
     DeviceInfo* device_info,
     CodecAllocator* codec_allocator,
     std::unique_ptr<AndroidVideoSurfaceChooser> surface_chooser,
     AndroidOverlayMojoFactoryCB overlay_factory_cb,
     RequestOverlayInfoCB request_overlay_info_cb,
     std::unique_ptr<VideoFrameFactory> video_frame_factory)
-    : codec_allocator_(codec_allocator),
+    : media_log_(std::move(media_log)),
+      codec_allocator_(codec_allocator),
       request_overlay_info_cb_(std::move(request_overlay_info_cb)),
       is_surface_control_enabled_(IsSurfaceControlEnabled(gpu_feature_info)),
       surface_chooser_helper_(
@@ -279,6 +282,12 @@ void MediaCodecVideoDecoder::Initialize(const VideoDecoderConfig& config,
            << ", cdm_context = " << cdm_context;
 
   if (!config.IsValidConfig()) {
+    media_log_->AddEvent(media_log_->CreateStringEvent(
+        MediaLogEvent::MEDIA_INFO_LOG_ENTRY, "info",
+        "Video configuration is not valid"));
+    media_log_->AddEvent(
+        media_log_->CreateStringEvent(MediaLogEvent::MEDIA_INFO_LOG_ENTRY,
+                                      "info", config.AsHumanReadableString()));
     DVLOG(1) << "Invalid configuration.";
     BindToCurrentLoop(std::move(init_cb)).Run(false);
     return;
@@ -292,6 +301,12 @@ void MediaCodecVideoDecoder::Initialize(const VideoDecoderConfig& config,
                            : GetSupportedConfigsInternal(device_info_);
   if (!IsVideoDecoderConfigSupported(configs, config)) {
     DVLOG(1) << "Unsupported configuration.";
+    media_log_->AddEvent(media_log_->CreateStringEvent(
+        MediaLogEvent::MEDIA_INFO_LOG_ENTRY, "info",
+        "Video configuration is not supported"));
+    media_log_->AddEvent(
+        media_log_->CreateStringEvent(MediaLogEvent::MEDIA_INFO_LOG_ENTRY,
+                                      "info", config.AsHumanReadableString()));
     BindToCurrentLoop(std::move(init_cb)).Run(false);
     return;
   }
@@ -299,6 +314,15 @@ void MediaCodecVideoDecoder::Initialize(const VideoDecoderConfig& config,
   // Disallow codec changes when reinitializing.
   if (!first_init && decoder_config_.codec() != config.codec()) {
     DVLOG(1) << "Codec changed: cannot reinitialize";
+    media_log_->AddEvent(media_log_->CreateStringEvent(
+        MediaLogEvent::MEDIA_INFO_LOG_ENTRY, "info",
+        "Cannot change codec during re-init"));
+    media_log_->AddEvent(
+        media_log_->CreateStringEvent(MediaLogEvent::MEDIA_INFO_LOG_ENTRY,
+                                      "info", config.AsHumanReadableString()));
+    media_log_->AddEvent(media_log_->CreateStringEvent(
+        MediaLogEvent::MEDIA_INFO_LOG_ENTRY, "info",
+        decoder_config_.AsHumanReadableString()));
     BindToCurrentLoop(std::move(init_cb)).Run(false);
     return;
   }
@@ -326,6 +350,9 @@ void MediaCodecVideoDecoder::Initialize(const VideoDecoderConfig& config,
 
   if (config.is_encrypted() && media_crypto_.is_null()) {
     DVLOG(1) << "No MediaCrypto to handle encrypted config";
+    media_log_->AddEvent(media_log_->CreateStringEvent(
+        MediaLogEvent::MEDIA_INFO_LOG_ENTRY, "info",
+        "No MediaCrypto to handle encrypted config"));
     BindToCurrentLoop(std::move(init_cb)).Run(false);
     return;
   }
@@ -383,7 +410,7 @@ void MediaCodecVideoDecoder::OnMediaCryptoReady(
 
     if (decoder_config_.is_encrypted()) {
       LOG(ERROR) << "MediaCrypto is not available";
-      EnterTerminalState(State::kError);
+      EnterTerminalState(State::kError, "MediaCrypto is not available");
       std::move(init_cb).Run(false);
       return;
     }
@@ -460,7 +487,7 @@ void MediaCodecVideoDecoder::OnVideoFrameFactoryInitialized(
   TRACE_EVENT0("media",
                "MediaCodecVideoDecoder::OnVideoFrameFactoryInitialized");
   if (!texture_owner) {
-    EnterTerminalState(State::kError);
+    EnterTerminalState(State::kError, "Could not allocated TextureOwner");
     return;
   }
   texture_owner_bundle_ = new CodecSurfaceBundle(std::move(texture_owner));
@@ -536,7 +563,7 @@ void MediaCodecVideoDecoder::OnSurfaceDestroyed(AndroidOverlay* overlay) {
   // no idea that this has happened.  We should unback the frames here.  This
   // might work now that we have CodecImageGroup -- verify this.
   if (!device_info_->IsSetOutputSurfaceSupported()) {
-    EnterTerminalState(State::kSurfaceDestroyed);
+    EnterTerminalState(State::kSurfaceDestroyed, "Surface destroyed");
     return;
   }
 
@@ -560,7 +587,7 @@ void MediaCodecVideoDecoder::TransitionToTargetSurface() {
 
   if (!codec_->SetSurface(target_surface_bundle_)) {
     video_frame_factory_->SetSurfaceBundle(nullptr);
-    EnterTerminalState(State::kError);
+    EnterTerminalState(State::kError, "Could not switch codec output surface");
     return;
   }
 
@@ -630,7 +657,7 @@ void MediaCodecVideoDecoder::OnCodecConfigured(
   DCHECK_EQ(state_, State::kRunning);
 
   if (!codec) {
-    EnterTerminalState(State::kError);
+    EnterTerminalState(State::kError, "Unable to allocate codec");
     return;
   }
 
@@ -707,7 +734,7 @@ void MediaCodecVideoDecoder::FlushCodec() {
   if (codec_->SupportsFlush(device_info_)) {
     DVLOG(2) << "Flushing codec";
     if (!codec_->Flush())
-      EnterTerminalState(State::kError);
+      EnterTerminalState(State::kError, "Codec flush failed");
   } else {
     DVLOG(2) << "flush() workaround: creating a new codec";
     // Release the codec and create a new one.
@@ -824,7 +851,7 @@ bool MediaCodecVideoDecoder::QueueInput() {
       waiting_cb_.Run(WaitingReason::kNoDecryptionKey);
       return false;
     case CodecWrapper::QueueStatus::kError:
-      EnterTerminalState(State::kError);
+      EnterTerminalState(State::kError, "QueueInputBuffer failed");
       return false;
   }
 
@@ -871,7 +898,7 @@ bool MediaCodecVideoDecoder::DequeueOutput() {
       return false;
     case CodecWrapper::DequeueStatus::kError:
       DVLOG(1) << "DequeueOutputBuffer() error";
-      EnterTerminalState(State::kError);
+      EnterTerminalState(State::kError, "DequeueOutputBuffer failed");
       return false;
   }
   DVLOG(3) << "DequeueOutputBuffer(): pts="
@@ -915,7 +942,7 @@ bool MediaCodecVideoDecoder::DequeueOutput() {
       CreatePromotionHintCB(),
       base::BindOnce(&MediaCodecVideoDecoder::ForwardVideoFrame,
                      weak_factory_.GetWeakPtr(), reset_generation_,
-                     std::move(async_trace)));
+                     std::move(async_trace), base::TimeTicks::Now()));
   return true;
 }
 
@@ -932,14 +959,21 @@ void MediaCodecVideoDecoder::RunEosDecodeCb(int reset_generation) {
 void MediaCodecVideoDecoder::ForwardVideoFrame(
     int reset_generation,
     std::unique_ptr<ScopedAsyncTrace> async_trace,
+    base::TimeTicks started_at,
     scoped_refptr<VideoFrame> frame) {
   DVLOG(3) << __func__ << " : "
            << (frame ? frame->AsHumanReadableString() : "null");
 
+  // Record how long this frame was pending.
+  const base::TimeDelta duration = base::TimeTicks::Now() - started_at;
+  UMA_HISTOGRAM_CUSTOM_TIMES("Media.MCVD.ForwardVideoFrameTiming", duration,
+                             base::TimeDelta::FromMilliseconds(1),
+                             base::TimeDelta::FromMilliseconds(100), 25);
+
   // No |frame| indicates an error creating it.
   if (!frame) {
     DLOG(ERROR) << __func__ << " |frame| is null";
-    EnterTerminalState(State::kError);
+    EnterTerminalState(State::kError, "Could not create VideoFrame");
     return;
   }
 
@@ -1028,8 +1062,12 @@ void MediaCodecVideoDecoder::OnCodecDrained() {
   }
 }
 
-void MediaCodecVideoDecoder::EnterTerminalState(State state) {
-  DVLOG(2) << __func__ << " " << static_cast<int>(state);
+void MediaCodecVideoDecoder::EnterTerminalState(State state,
+                                                const char* reason) {
+  DVLOG(2) << __func__ << " " << static_cast<int>(state) << " " << reason;
+
+  media_log_->AddEvent(media_log_->CreateStringEvent(
+      MediaLogEvent::MEDIA_INFO_LOG_ENTRY, "info", reason));
 
   state_ = state;
   DCHECK(InTerminalState());

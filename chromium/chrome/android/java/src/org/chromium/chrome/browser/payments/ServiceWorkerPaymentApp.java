@@ -6,8 +6,9 @@ package org.chromium.chrome.browser.payments;
 
 import android.graphics.drawable.BitmapDrawable;
 import android.os.Handler;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.components.payments.PaymentHandlerHost;
@@ -213,6 +214,10 @@ public class ServiceWorkerPaymentApp extends PaymentInstrument implements Paymen
         mPaymentHandlerHost = host;
     }
 
+    /*package*/ URI getScope() {
+        return mScope;
+    }
+
     @Override
     public void getInstruments(String id, Map<String, PaymentMethodData> methodDataMap,
             String origin, String iframeOrigin, byte[][] unusedCertificateChain,
@@ -352,6 +357,7 @@ public class ServiceWorkerPaymentApp extends PaymentInstrument implements Paymen
             Map<String, PaymentDetailsModifier> modifiers, InstrumentDetailsCallback callback) {
         assert mPaymentHandlerHost != null;
         if (mNeedsInstallation) {
+            assert !mIsMicrotransaction;
             BitmapDrawable icon = (BitmapDrawable) getDrawableIcon();
             ServiceWorkerPaymentAppBridge.installAndInvokePaymentApp(mWebContents, origin,
                     iframeOrigin, id, new HashSet<>(methodData.values()), total,
@@ -361,7 +367,8 @@ public class ServiceWorkerPaymentApp extends PaymentInstrument implements Paymen
         } else {
             ServiceWorkerPaymentAppBridge.invokePaymentApp(mWebContents, mRegistrationId,
                     mScope.toString(), origin, iframeOrigin, id, new HashSet<>(methodData.values()),
-                    total, new HashSet<>(modifiers.values()), mPaymentHandlerHost, callback);
+                    total, new HashSet<>(modifiers.values()), mPaymentHandlerHost,
+                    mIsMicrotransaction, callback);
         }
     }
 
@@ -394,5 +401,16 @@ public class ServiceWorkerPaymentApp extends PaymentInstrument implements Paymen
     @Override
     public boolean canPreselect() {
         return mCanPreselect;
+    }
+
+    @Override
+    public boolean isReadyForMicrotransaction() {
+        return true; // TODO(https://crbug.com/1000432): Implement microtransactions.
+    }
+
+    @Override
+    @Nullable
+    public String accountBalance() {
+        return "18.00"; // TODO(https://crbug.com/1000432): Implement microtransactions.
     }
 }

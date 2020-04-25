@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 #include "chrome/browser/ui/ash/launcher/crostini_app_window_shelf_controller.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -13,6 +14,7 @@
 #include "ash/public/cpp/window_properties.h"
 #include "base/bind.h"
 #include "base/strings/string_util.h"
+#include "chrome/browser/chromeos/crostini/crostini_force_close_watcher.h"
 #include "chrome/browser/chromeos/crostini/crostini_registry_service.h"
 #include "chrome/browser/chromeos/crostini/crostini_registry_service_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
@@ -28,6 +30,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/common/chrome_features.h"
 #include "components/arc/arc_util.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/user_manager/user_manager.h"
@@ -208,6 +211,16 @@ void CrostiniAppWindowShelfController::OnWindowVisibilityChanging(
   if (shelf_app_id.empty())
     return;
 
+  // At this point, all remaining windows are Crostini windows. Firstly, we add
+  // support for forcibly closing it. We use the registration to retrieve the
+  // app's name, but this may be null in the case of apps with no associated
+  // launcher entry (i.e. no .desktop file), in which case the app's name is
+  // unknown.
+  base::Optional<crostini::CrostiniRegistryService::Registration> registration =
+      registry_service->GetRegistration(shelf_app_id);
+  RegisterCrostiniWindowForForceClose(
+      window, registration.has_value() ? registration->Name() : "");
+
   // Failed to uniquely identify the Crostini app that this window is for.
   // The spinners on the shelf have internal app IDs which are valid
   // extensions IDs. If the ID here starts with "crostini:" then it implies
@@ -319,6 +332,19 @@ void CrostiniAppWindowShelfController::UnregisterAppWindow(
   if (controller)
     controller->RemoveWindow(app_window);
   app_window->SetController(nullptr);
+}
+
+void CrostiniAppWindowShelfController::RegisterCrostiniWindowForForceClose(
+    aura::Window* window,
+    const std::string& app_name) {
+  if (!base::FeatureList::IsEnabled(features::kCrostiniForceClose))
+    return;
+  exo::ShellSurfaceBase* surface = exo::GetShellSurfaceBaseForWindow(window);
+  if (!surface)
+    return;
+  crostini::ForceCloseWatcher::Watch(
+      std::make_unique<crostini::ShellSurfaceForceCloseDelegate>(surface,
+                                                                 app_name));
 }
 
 void CrostiniAppWindowShelfController::OnItemDelegateDiscarded(

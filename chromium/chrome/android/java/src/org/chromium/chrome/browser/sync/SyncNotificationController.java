@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.sync;
 
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.util.Log;
 
 import org.chromium.base.ContextUtils;
@@ -61,7 +62,7 @@ public class SyncNotificationController implements ProfileSyncService.SyncStateC
                     GoogleServiceAuthError.getMessageID(mProfileSyncService.getAuthError()),
                     createSettingsIntent());
         } else if (mProfileSyncService.isEngineInitialized()
-                && mProfileSyncService.isPassphraseRequiredForDecryption()) {
+                && mProfileSyncService.isPassphraseRequiredForPreferredDataTypes()) {
             if (mProfileSyncService.isPassphrasePrompted()) {
                 return;
             }
@@ -90,9 +91,17 @@ public class SyncNotificationController implements ProfileSyncService.SyncStateC
      */
     private void showSyncNotification(int message, Intent intent) {
         Context applicationContext = ContextUtils.getApplicationContext();
-        String title = applicationContext.getString(R.string.app_name);
-        String text = applicationContext.getString(R.string.sign_in_sync) + ": "
-                + applicationContext.getString(message);
+        String title = null, text = null;
+        // From Android N, notification by default has the app name and title should not be the same
+        // as app name.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            title = applicationContext.getString(R.string.sign_in_sync);
+            text = applicationContext.getString(message);
+        } else {
+            title = applicationContext.getString(R.string.app_name);
+            text = applicationContext.getString(R.string.sign_in_sync) + ": "
+                    + applicationContext.getString(message);
+        }
 
         PendingIntentProvider contentIntent =
                 PendingIntentProvider.getActivity(applicationContext, 0, intent, 0);

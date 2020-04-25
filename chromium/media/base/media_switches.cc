@@ -167,6 +167,10 @@ const char kOverrideEnabledCdmInterfaceVersion[] =
 const char kOverrideHardwareSecureCodecsForTesting[] =
     "override-hardware-secure-codecs-for-testing";
 
+// Enables GpuMemoryBuffer-based buffer pool.
+const char kVideoCaptureUseGpuMemoryBuffer[] =
+    "video-capture-use-gpu-memory-buffer";
+
 namespace autoplay {
 
 // Autoplay policy that requires a document user activation.
@@ -246,10 +250,37 @@ const base::Feature kBackgroundVideoPauseOptimization{
 const base::Feature kMemoryPressureBasedSourceBufferGC{
     "MemoryPressureBasedSourceBufferGC", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Approach original pre-REC MSE object URL autorevoking behavior, though await
+// actual attempt to use the object URL for attachment to perform revocation.
+// This will hopefully reduce runtime memory bloat for pages that do not
+// explicitly detach their HTMLME+MSE object collections nor explicitly revoke
+// the object URLs used to attach HTMLME+MSE. When disabled, revocation only
+// occurs when application explicitly revokes the object URL, or upon the
+// execution context teardown for the MediaSource object. When enabled,
+// revocation occurs upon successful start of attachment of HTMLME to the object
+// URL. Note, rather than immediately scheduling a task to revoke upon the URL's
+// creation, as at least one other browser does and the original File API
+// pattern used to follow, this delay until attachment start enables new
+// scenarios that could use the object URL for attaching HTMLME+MSE cross-thread
+// (MSE-in-workers), where there could be significant delay between the worker
+// thread creation of the object URL and the main thread usage of the object URL
+// for starting attachment to HTMLME.
+const base::Feature kRevokeMediaSourceObjectURLOnAttach{
+    "RevokeMediaSourceObjectURLOnAttach", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enable the instance from ChromeosVideoDecoderFactory in
 // MojoVideoDecoderService, replacing VdaVideoDecoder at Chrome OS platform.
 const base::Feature kChromeosVideoDecoder{"ChromeosVideoDecoder",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Don't allow use of 11.1 devices, even if supported. They might be more crashy
+const base::Feature kD3D11LimitTo11_0{"D3D11VideoDecoderLimitTo11_0",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable saving playback information in a crash trace, to see if some codecs
+// are crashier than others.
+const base::Feature kD3D11PrintCodecOnCrash{"D3D11PrintCodecOnCrash",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable The D3D11 Video decoder.
 const base::Feature kD3D11VideoDecoder{"D3D11VideoDecoder",
@@ -260,9 +291,14 @@ const base::Feature kD3D11VideoDecoder{"D3D11VideoDecoder",
 const base::Feature kD3D11VideoDecoderIgnoreWorkarounds{
     "D3D11VideoDecoderIgnoreWorkarounds", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Don't allow use of 11.1 devices, even if supported. They might be more crashy
-const base::Feature kD3D11LimitTo11_0{"D3D11VideoDecoderLimitTo11_0",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+// Enable D3D11VideoDecoder to decode VP9 profile 2 (10 bit) video.
+const base::Feature kD3D11VideoDecoderVP9Profile2{
+    "D3D11VideoDecoderEnableVP9Profile2", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable D3D11VideoDecoder to copy pictures based on workarounds, rather
+// than binding them.
+const base::Feature kD3D11VideoDecoderCopyPictures{
+    "D3D11VideoDecoderCopyPictures", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Falls back to other decoders after audio/video decode error happens. The
 // implementation may choose different strategies on when to fallback. See
@@ -324,7 +360,7 @@ const base::Feature kVaapiVP9Encoder{"VaapiVP9Encoder",
 #if defined(ARCH_CPU_X86_FAMILY) && defined(OS_CHROMEOS)
 // Enable VP9 k-SVC decoding with HW decoder for webrtc use case on ChromeOS.
 const base::Feature kVp9kSVCHWDecoding{"Vp9kSVCHWDecoding",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  //  defined(ARCH_CPU_X86_FAMILY) && defined(OS_CHROMEOS)
 
 // Inform video blitter of video color space.
@@ -446,6 +482,11 @@ const base::Feature kHlsPlayer{"HlsPlayer", base::FEATURE_ENABLED_BY_DEFAULT};
 // needed, except for some Android TV devices.
 const base::Feature kUseAudioLatencyFromHAL{"UseAudioLatencyFromHAL",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable pooling of SharedImageVideo objects for use by MCVD, to save a hop to
+// the GPU main thread during VideoFrame construction.
+const base::Feature kUsePooledSharedImageVideoProvider{
+    "UsePooledSharedImageVideoProvider", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #endif  // defined(OS_ANDROID)
 

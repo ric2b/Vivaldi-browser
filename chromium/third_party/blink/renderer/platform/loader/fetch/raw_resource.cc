@@ -111,7 +111,7 @@ void RawResource::AppendData(const char* data, size_t length) {
 }
 
 class RawResource::PreloadBytesConsumerClient final
-    : public GarbageCollectedFinalized<PreloadBytesConsumerClient>,
+    : public GarbageCollected<PreloadBytesConsumerClient>,
       public BytesConsumer::Client {
   USING_GARBAGE_COLLECTED_MIXIN(PreloadBytesConsumerClient);
 
@@ -234,6 +234,10 @@ void RawResource::WillNotFollowRedirect() {
 SingleCachedMetadataHandler* RawResource::ScriptCacheHandler() {
   DCHECK_EQ(ResourceType::kRaw, GetType());
   return static_cast<SingleCachedMetadataHandler*>(Resource::CacheHandler());
+}
+
+scoped_refptr<BlobDataHandle> RawResource::DownloadedBlob() const {
+  return downloaded_blob_;
 }
 
 void RawResource::Trace(Visitor* visitor) {
@@ -402,6 +406,9 @@ Resource::MatchStatus RawResource::CanReuse(
 
   return Resource::CanReuse(new_fetch_parameters);
 }
+
+void RawResourceClient::DidDownloadToBlob(Resource*,
+                                          scoped_refptr<BlobDataHandle>) {}
 
 RawResourceClientStateChecker::RawResourceClientStateChecker()
     : state_(kNotAddedAsClient) {}

@@ -12,6 +12,9 @@
 #include "components/mirroring/service/message_dispatcher.h"
 #include "components/mirroring/service/mirror_settings.h"
 #include "media/cast/cast_environment.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -69,9 +72,8 @@ class MediaRemoterTest : public mojom::CastMessageChannel,
                          public ::testing::Test {
  public:
   MediaRemoterTest()
-      : binding_(this),
-        message_dispatcher_(CreateInterfacePtrAndBind(),
-                            mojo::MakeRequest(&inbound_channel_),
+      : message_dispatcher_(receiver_.BindNewPipeAndPassRemote(),
+                            inbound_channel_.BindNewPipeAndPassReceiver(),
                             error_callback_.Get()),
         sink_metadata_(DefaultSinkMetadata()) {}
   ~MediaRemoterTest() override { task_environment_.RunUntilIdle(); }
@@ -84,10 +86,11 @@ class MediaRemoterTest : public mojom::CastMessageChannel,
 
   // MediaRemoter::Client implementation.
   void ConnectToRemotingSource(
-      media::mojom::RemoterPtr remoter,
-      media::mojom::RemotingSourceRequest source_request) override {
-    remoter_ = std::move(remoter);
-    remoting_source_.Bind(std::move(source_request));
+      mojo::PendingRemote<media::mojom::Remoter> remoter,
+      mojo::PendingReceiver<media::mojom::RemotingSource> source_receiver)
+      override {
+    remoter_.Bind(std::move(remoter));
+    remoting_source_.Bind(std::move(source_receiver));
     OnConnectToRemotingSource();
   }
 
@@ -163,20 +166,14 @@ class MediaRemoterTest : public mojom::CastMessageChannel,
   }
 
  private:
-  mojom::CastMessageChannelPtr CreateInterfacePtrAndBind() {
-    mojom::CastMessageChannelPtr outbound_channel_ptr;
-    binding_.Bind(mojo::MakeRequest(&outbound_channel_ptr));
-    return outbound_channel_ptr;
-  }
-
   base::test::TaskEnvironment task_environment_;
-  mojo::Binding<mojom::CastMessageChannel> binding_;
+  mojo::Receiver<mojom::CastMessageChannel> receiver_{this};
   base::MockCallback<MessageDispatcher::ErrorCallback> error_callback_;
-  mojom::CastMessageChannelPtr inbound_channel_;
+  mojo::Remote<mojom::CastMessageChannel> inbound_channel_;
   MessageDispatcher message_dispatcher_;
   const media::mojom::RemotingSinkMetadata sink_metadata_;
   MockRemotingSource remoting_source_;
-  media::mojom::RemoterPtr remoter_;
+  mojo::Remote<media::mojom::Remoter> remoter_;
   std::unique_ptr<MediaRemoter> media_remoter_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaRemoterTest);

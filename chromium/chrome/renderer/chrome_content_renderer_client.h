@@ -28,7 +28,9 @@
 #include "extensions/buildflags/buildflags.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "media/media_buildflags.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
@@ -115,12 +117,10 @@ class ChromeContentRendererClient
   void PrepareErrorPage(content::RenderFrame* render_frame,
                         const blink::WebURLError& error,
                         const std::string& http_method,
-                        bool ignoring_cache,
                         std::string* error_html) override;
   void PrepareErrorPageForHttpStatusError(content::RenderFrame* render_frame,
                                           const GURL& unreachable_url,
                                           const std::string& http_method,
-                                          bool ignoring_cache,
                                           int http_status,
                                           std::string* error_html) override;
 
@@ -181,6 +181,10 @@ class ChromeContentRendererClient
   void RunScriptsAtDocumentIdle(content::RenderFrame* render_frame) override;
   void SetRuntimeFeaturesDefaultsBeforeBlinkInitialization() override;
   void WillInitializeServiceWorkerContextOnWorkerThread() override;
+  void DidInitializeServiceWorkerContextOnWorkerThread(
+      blink::WebServiceWorkerContextProxy* context_proxy,
+      const GURL& service_worker_scope,
+      const GURL& script_url) override;
   void WillEvaluateServiceWorkerOnWorkerThread(
       blink::WebServiceWorkerContextProxy* context_proxy,
       v8::Local<v8::Context> v8_context,
@@ -211,7 +215,8 @@ class ChromeContentRendererClient
   void BindReceiverOnMainThread(mojo::GenericPendingReceiver receiver) override;
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-  static chrome::mojom::PluginInfoHostAssociatedPtr& GetPluginInfoHost();
+  static mojo::AssociatedRemote<chrome::mojom::PluginInfoHost>&
+  GetPluginInfoHost();
 
   static blink::WebPlugin* CreatePlugin(
       content::RenderFrame* render_frame,
@@ -269,7 +274,7 @@ class ChromeContentRendererClient
   // Used to profile main thread.
   std::unique_ptr<ThreadProfiler> main_thread_profiler_;
 
-  rappor::mojom::RapporRecorderPtr rappor_recorder_;
+  mojo::Remote<rappor::mojom::RapporRecorder> rappor_recorder_;
 
   std::unique_ptr<ChromeRenderThreadObserver> chrome_observer_;
   std::unique_ptr<web_cache::WebCacheImpl> web_cache_impl_;

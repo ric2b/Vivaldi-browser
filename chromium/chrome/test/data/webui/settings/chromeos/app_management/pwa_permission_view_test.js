@@ -8,27 +8,19 @@ suite('<app-management-pwa-permission-view>', function() {
   let pwaPermissionView;
   let fakeHandler;
 
-  function getPermissionToggleByType(permissionType) {
-    return pwaPermissionView.root
-        .querySelector('[permission-type=' + permissionType + ']')
-        .root.querySelector('app-management-permission-toggle')
-        .root.querySelector('cr-toggle');
-  }
-
   function getPermissionBoolByType(permissionType) {
     return app_management.util.getPermissionValueBool(
         pwaPermissionView.app_, permissionType);
   }
 
   async function clickToggle(permissionType) {
-    getPermissionToggleByType(permissionType).click();
+    getPermissionToggleByType(pwaPermissionView, permissionType).click();
     await fakeHandler.flushPipesForTesting();
   }
 
   function getSelectedAppFromStore() {
     const storeData = app_management.Store.getInstance().data;
-    const selectedAppId = storeData.currentPage.selectedAppId;
-    return storeData.apps[selectedAppId];
+    return storeData.apps[storeData.selectedAppId];
   }
 
   setup(async function() {
@@ -38,7 +30,7 @@ suite('<app-management-pwa-permission-view>', function() {
     // Add an app, and make it the currently selected app.
     const app = await fakeHandler.addApp();
     app_management.Store.getInstance().dispatch(
-        app_management.actions.changePage(PageType.DETAIL, app.id));
+        app_management.actions.updateSelectedAppId(app.id));
 
     pwaPermissionView =
         document.createElement('app-management-pwa-permission-view');
@@ -47,24 +39,27 @@ suite('<app-management-pwa-permission-view>', function() {
 
   test('App is rendered correctly', function() {
     assertEquals(
-        app_management.Store.getInstance().data.currentPage.selectedAppId,
+        app_management.Store.getInstance().data.selectedAppId,
         pwaPermissionView.app_.id);
   });
 
   test('toggle permissions', async function() {
     const checkToggle = async (permissionType) => {
       assertTrue(getPermissionBoolByType(permissionType));
-      assertTrue(getPermissionToggleByType(permissionType).checked);
+      assertTrue(getPermissionCrToggleByType(pwaPermissionView, permissionType)
+                     .checked);
 
       // Toggle off.
       await clickToggle(permissionType);
       assertFalse(getPermissionBoolByType(permissionType));
-      assertFalse(getPermissionToggleByType(permissionType).checked);
+      assertFalse(getPermissionCrToggleByType(pwaPermissionView, permissionType)
+                      .checked);
 
       // Toggle on.
       await clickToggle(permissionType);
       assertTrue(getPermissionBoolByType(permissionType));
-      assertTrue(getPermissionToggleByType(permissionType).checked);
+      assertTrue(getPermissionCrToggleByType(pwaPermissionView, permissionType)
+                     .checked);
     };
 
     await checkToggle('CONTENT_SETTINGS_TYPE_NOTIFICATIONS');

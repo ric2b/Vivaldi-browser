@@ -5,9 +5,11 @@
 package org.chromium.chrome.browser.browserservices.trustedwebactivityui.controller;
 
 import android.os.Bundle;
-import android.support.annotation.IntDef;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.browser.customtabs.CustomTabsService;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
@@ -32,6 +34,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabObserverRegistrar;
 import org.chromium.content_public.browser.NavigationHandle;
+import org.chromium.content_public.browser.WebContents;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -41,7 +44,6 @@ import java.util.Set;
 
 import javax.inject.Inject;
 
-import androidx.browser.customtabs.CustomTabsService;
 import dagger.Lazy;
 
 /**
@@ -52,7 +54,7 @@ import dagger.Lazy;
 public class TrustedWebActivityVerifier implements NativeInitObserver, Destroyable,
         SaveInstanceStateObserver {
     /** The Digital Asset Link relationship used for Trusted Web Activities. */
-    private final static int RELATIONSHIP = CustomTabsService.RELATION_HANDLE_ALL_URLS;
+    private static final int RELATIONSHIP = CustomTabsService.RELATION_HANDLE_ALL_URLS;
 
     /** Used in activity instance state */
     private static final String KEY_CLIENT_PACKAGE = "twaClientPackageName";
@@ -144,7 +146,10 @@ public class TrustedWebActivityVerifier implements NativeInitObserver, Destroyab
         }
         assert mClientPackageName != null;
 
-        mOriginVerifier = originVerifierFactory.create(mClientPackageName, RELATIONSHIP);
+        WebContents webContents =
+                tabProvider.getTab() != null ? tabProvider.getTab().getWebContents() : null;
+        mOriginVerifier =
+                originVerifierFactory.create(mClientPackageName, RELATIONSHIP, webContents);
 
         tabObserverRegistrar.registerTabObserver(mVerifyOnPageLoadObserver);
         tabProvider.addObserver(mVerifyOnTabSwitchObserver);

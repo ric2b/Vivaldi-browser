@@ -224,7 +224,7 @@ cca.views.camera.Options.prototype.updateVideoDeviceId_ = function(
 cca.views.camera.Options.prototype.updateMirroring_ = function(facingMode) {
   // Update mirroring by detected facing-mode. Enable mirroring by default if
   // facing-mode isn't available.
-  var enabled = facingMode ? facingMode == 'user' : true;
+  var enabled = facingMode ? facingMode != 'environment' : true;
 
   // Override mirroring only if mirroring was toggled manually.
   if (this.videoDeviceId_ in this.mirroringToggles_) {
@@ -275,15 +275,18 @@ cca.views.camera.Options.prototype.videoDeviceIds = async function() {
   } else {
     devices = await this.infoUpdater_.getDevicesInfo();
   }
+
+  const defaultFacing =
+      await cca.mojo.ChromeHelper.getInstance().isTabletMode() ?
+      cros.mojom.CameraFacing.CAMERA_FACING_BACK :
+      cros.mojom.CameraFacing.CAMERA_FACING_FRONT;
   // Put the selected video device id first.
   var sorted = devices.map((device) => device.deviceId).sort((a, b) => {
     if (a == b) {
       return 0;
     }
-    if (this.videoDeviceId_ ?
-            a === this.videoDeviceId_ :
-            (facings &&
-             facings[a] === cros.mojom.CameraFacing.CAMERA_FACING_FRONT)) {
+    if (this.videoDeviceId_ ? a === this.videoDeviceId_ :
+                              (facings && facings[a] === defaultFacing)) {
       return -1;
     }
     return 1;

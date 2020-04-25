@@ -1,41 +1,29 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fil">
-<translation id="1049795001945932310">&amp;Mga setting ng wika</translation>
 <translation id="1056898198331236512">Babala</translation>
-<translation id="1084824384139382525">Kopyahin ang addr&amp;ess ng link</translation>
-<translation id="1163931534039071049">&amp;View frame source</translation>
 <translation id="1165039591588034296">Error</translation>
 <translation id="1175364870820465910">&amp;I-print...</translation>
-<translation id="1187722533808055681">Mga idle na pag-wake up</translation>
 <translation id="1244303850296295656">Error sa extension</translation>
 <translation id="1546280085599573572">Binago ng extension na ito ang ipinapakitang page kapag na-click mo ang button ng Home.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1635033183663317347">Na-install ng iyong tagapangalaga.</translation>
-<translation id="1723824996674794290">&amp;Bagong window</translation>
 <translation id="1729533290416704613">Kinokontrol din nito kung anong pahina ang ipinapakita kapag naghanap ka mula sa Omnibox.</translation>
-<translation id="1850508293116537636">I-rotate &amp;pakanan</translation>
-<translation id="1901303067676059328">Piliin ang &amp;lahat</translation>
 <translation id="2087822576218954668">Print: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">Tab na Incognito: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Module ng Native Client: <ph name="NEXE_NAME" /></translation>
-<translation id="2218515861914035131">I-paste bilang plain text</translation>
 <translation id="2282146716419988068">Proseso ng GPU</translation>
 <translation id="2301382460326681002">Hindi wasto ang pinagmulang direktoryo ng extension.</translation>
-<translation id="2326931316514688470">I-&amp;reload ang app</translation>
 <translation id="2327492829706409234">Paganahin ang app</translation>
 <translation id="2344028582131185878">Mga Awtomatikong Pagda-download</translation>
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Piliin ang direktoryo ng extension.</translation>
 <translation id="241082044617551207">Hindi kilalang plugin</translation>
-<translation id="2423578206845792524">I-sa&amp;ve ang larawan bilang...</translation>
 <translation id="2439110203301358333">Ang isa pang program sa iyong computer ay nagdagdag ng extension na maaaring magpabago sa paraan ng paggana ng Vivaldi.</translation>
 <translation id="2445081178310039857">Kinakailangan ang pinagmulang direktoryo ng extension.</translation>
 <translation id="2470702053775288986">Na-disable ang mga hindi sinusuportahang extension</translation>
-<translation id="2550212893339833758">Na-swap na memory</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Muling paganahin</translation>
-<translation id="2785873697295365461">Mga descriptor ng file</translation>
 <translation id="2809586584051668049">at <ph name="NUMBER_ADDITIONAL_DISABLED" /> pa</translation>
 <translation id="2850541429955027218">Magdagdag ng tema</translation>
 <translation id="2861941300086904918">Tagapamahala ng seguridad ng Native Client</translation>
@@ -45,22 +33,16 @@
 <translation id="299483336428448530">Na-install ng iyong magulang.</translation>
 <translation id="3080207940057008665">Ang isa pang program sa iyong computer ay nagdagdag ng tema na maaaring magpabago sa paraan ng paggana ng Vivaldi.</translation>
 <translation id="3122464029669770682">CPU</translation>
-<translation id="3124111068741548686">Mga USER handle</translation>
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Piliin ang pinagmulang direktoryo ng extension sa pack. Upang mai-update ang extension, piliin rin ang file ng private na key na muling gagamitin.</translation>
-<translation id="3280237271814976245">I-save &amp;bilang...</translation>
 <translation id="3288047731229977326">Ang mga extension na tumatakbo sa developer mode ay maaaring makapinsala sa iyong computer. Kung hindi ka isang developer, dapat mong i-disable ang mga extension na tumatakbo sa developer mode upang manatiling ligtas.</translation>
-<translation id="3347086966102161372">K&amp;opyahin ang address ng larawan</translation>
 <translation id="3378572629723696641">Maaaring nasira ang extension na ito.</translation>
-<translation id="345693547134384690">Buksan ang &amp;imahe sa bagong tab</translation>
 <translation id="3505030558724226696">Bawiin ang access sa device</translation>
-<translation id="3627588569887975815">Buksan ang link sa inco&amp;gnito window</translation>
 <translation id="3678156199662914018">Extension: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">Ayusin ang app</translation>
 <translation id="3908501907586732282">Paganahin ang extension</translation>
 <translation id="3909791450649380159">Al&amp;isin</translation>
 <translation id="3927932062596804919">Tanggihan</translation>
-<translation id="3936390757709632190">&amp;Buksan ang audio sa bagong tab</translation>
 <translation id="3943582379552582368">&amp;Bumalik</translation>
 <translation id="3979395879372752341">Nagdagdag ng bagong extension (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">-</translation>
@@ -71,23 +53,16 @@
 <translation id="4100839878934973028">Ang isa pang program sa iyong computer ay nagdagdag ng app na maaaring magpabago sa paraan ng paggana ng Vivaldi.</translation>
 <translation id="4130207949184424187">Binago ng extension na ito ang ipinapakitang page kapag naghahanap ka sa Omnibox.</translation>
 <translation id="4176463684765177261">Hindi Pinagana</translation>
-<translation id="4200983522494130825">Bagong &amp;tab</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K live)</translation>
 <translation id="4384652540891215547">I-activate ang extension</translation>
 <translation id="4394049700291259645">Huwag paganahin</translation>
 <translation id="4593021220803146968">&amp;Pumunta sa <ph name="URL" /></translation>
 <translation id="4595560905247879544">Ang manager (<ph name="CUSTODIAN_NAME" />) lang ang may kakayahang magbago sa mga app at extension.</translation>
 <translation id="4613271546271159013">Binago ng isang extension ang ipinapakitang page kapag nagbukas ka ng bagong tab.</translation>
-<translation id="4677772697204437347">GPU memory</translation>
-<translation id="4711638718396952945">Ipanumbalik ang mga setting</translation>
-<translation id="4839303808932127586">I-sa&amp;ve ang video bilang...</translation>
 <translation id="488785315393301722">Ipakita ang Mga Detalye</translation>
-<translation id="49896407730300355">I-rotate p&amp;akaliwa</translation>
-<translation id="4989966318180235467">Siyasatin ang pahina ng &amp;background</translation>
 <translation id="5027562294707732951">Idagdag ang extension</translation>
 <translation id="5039804452771397117">Payagan</translation>
 <translation id="5143374789336132547">Binago ng extension na "<ph name="EXTENSION_NAME" />" ang ipinapakitang page kapag na-click mo ang button ng Home.</translation>
-<translation id="5233019165164992427">NaCl debug port</translation>
 <translation id="5233231016133573565">ID ng proseso</translation>
 <translation id="52912272896845572">Hindi wasto ang file ng private na key.</translation>
 <translation id="5301954838959518834">OK, nakuha ko na</translation>
@@ -102,48 +77,31 @@
 <translation id="5575473780076478375">Extension ng Incognito: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">Kinokontrol din nito kung anong pahina ang ipinapakita kapag na-click mo ang button ng Home.</translation>
 <translation id="5715711091495208045">Broker ng plugin: <ph name="PLUGIN_NAME" /></translation>
-<translation id="5764483294734785780">I-sa&amp;ve ang audio bilang...</translation>
-<translation id="5780973441651030252">Priority ng proseso</translation>
 <translation id="583281660410589416">Hindi-alam</translation>
 <translation id="5956585768868398362">Ito ba ang inaasahan mong pahina sa paghahanap?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> ang pinakamataas)</translation>
 <translation id="5965661248935608907">Kinokontrol din nito kung anong pahina ang ipinapakita kapag na-click mo ang button ng Home o naghanap mula sa Omnibox.</translation>
 <translation id="6101226222197207147">Nagdagdag ng bagong app (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Kinokontrol ang iyong koneksyon sa Internet</translation>
-<translation id="6156863943908443225">Script cache</translation>
 <translation id="6196854373336333322">Kinokontrol na ng extension na "<ph name="EXTENSION_NAME" />" ang iyong mga setting ng proxy, na ang ibig sabihin ay maaari nitong baguhin, sirain o alamin ang anumang bagay na gagawin mo online. Kung hindi ka sigurado kung bakit naganap ang pagbabagong ito, malamang ay hindi mo ito ginustong mangyari.</translation>
-<translation id="6239558157302047471">I-reload ang &amp;frame</translation>
 <translation id="6247802389331535091">System: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="6251870443722440887">Mga GDI handle</translation>
-<translation id="6308937455967653460">I-save ang lin&amp;k bilang...</translation>
-<translation id="6398765197997659313">Lumabas sa buong screen</translation>
-<translation id="6406303162637086258">I-simulate ang pag-restart ng browser</translation>
 <translation id="6445450263907939268">Kung hindi mo gusto ang mga pagbabagong ito, maaari mong ipanumbalik ang mga dati mong setting.</translation>
 <translation id="6447842834002726250">Cookies</translation>
 <translation id="6498249116389603658">&amp;Lahat ng iyong wika</translation>
 <translation id="6503077044568424649">Pinaka-nabisita</translation>
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
-<translation id="6518014396551869914">Kop&amp;yahin ang imahe</translation>
-<translation id="6639554308659482635">Memorya sa SQLite</translation>
 <translation id="6691936601825168937">&amp;Sumulong</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6812841287760418429">Panatilihin ang mga pagbabago</translation>
-<translation id="6886871292305414135">Buksan ang link sa bagong &amp;tab</translation>
 <translation id="6900284862687837908">Background App: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Bawiin ang access sa file</translation>
-<translation id="708060913198414444">K&amp;opyahin ang address ng audio</translation>
 <translation id="7287143125007575591">Tinanggihan ang access.</translation>
-<translation id="7309257895202129721">Ipakita ang &amp;mga control</translation>
 <translation id="7427348830195639090">Pahina ng Background: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7564847347806291057">Tapusin ang proseso</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">Tatanggap: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7685049629764448582">Memorya sa JavaScript</translation>
 <translation id="7704305437604973648">Gawain</translation>
 <translation id="7760004034676677601">Ito ba ang inaasahan mong pahina sa pagsisimula?</translation>
 <translation id="7791543448312431591">Magdagdag</translation>
 <translation id="7818135753970109980">Nagdagdag ng bagong tema (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="782057141565633384">K&amp;opyahin ang address ng video</translation>
 <translation id="7857949311770343000">Ito ba ang page ng bagong tab na inaasahan mo?</translation>
 <translation id="786073089922909430">Serbisyo: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">Utility: <ph name="UTILITY_TYPE" /></translation>
@@ -159,14 +117,9 @@ Ilagay ang iyong key file sa ligtas na lugar. Kailangan mo ito upang lumikha ng 
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8261378640211443080">Hindi nakalista ang extension na ito sa <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> at maaaring naidagdag nang hindi mo nalalaman.</translation>
 <translation id="8351419472474436977">Kinokontrol na ng extension na ito ang iyong mga setting ng proxy, na nangangahulugang maaari nitong baguhin, sirain o alamin ang anumang bagay na gagawin mo online. Kung hindi ka sigurado kung bakit naganap ang pagbabagong ito, malamang na hindi mo ito ginustong mangyari.</translation>
-<translation id="8546306075665861288">Cache ng Larawan</translation>
-<translation id="8584280235376696778">&amp;Buksan ang video sa bagong tab</translation>
 <translation id="8615618338313291042">Incognito App: <ph name="APP_NAME" /></translation>
-<translation id="862750493060684461">CSS cache</translation>
-<translation id="8664389313780386848">&amp;Tingnan ang page source</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>
-<translation id="8899851313684471736">Buksan ang link sa bagong &amp;window</translation>
 <translation id="8916476537757519021">Incognito na Subframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Itago ang Mga Detalye</translation>
 <translation id="9170848237812810038">&amp;I-undo</translation>

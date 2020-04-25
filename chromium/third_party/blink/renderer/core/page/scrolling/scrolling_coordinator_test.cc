@@ -66,14 +66,10 @@
 
 namespace blink {
 
-class ScrollingCoordinatorTest
-    : public testing::Test,
-      public testing::WithParamInterface<bool>,
-      private ScopedPaintNonFastScrollableRegionsForTest {
+class ScrollingCoordinatorTest : public testing::Test,
+                                 public testing::WithParamInterface<bool> {
  public:
-  ScrollingCoordinatorTest()
-      : ScopedPaintNonFastScrollableRegionsForTest(GetParam()),
-        base_url_("http://www.test.com/") {
+  ScrollingCoordinatorTest() : base_url_("http://www.test.com/") {
     helper_.Initialize(nullptr, nullptr, nullptr, &ConfigureSettings);
     GetWebView()->MainFrameWidget()->Resize(IntSize(320, 240));
 
@@ -118,12 +114,6 @@ class ScrollingCoordinatorTest
         WebString::FromUTF8(file_name));
   }
 
-  cc::Layer* GetRootScrollLayer() {
-    GraphicsLayer* layer =
-        GetFrame()->View()->LayoutViewport()->LayerForScrolling();
-    return layer ? layer->CcLayer() : nullptr;
-  }
-
   WebViewImpl* GetWebView() const { return helper_.GetWebView(); }
   LocalFrame* GetFrame() const { return helper_.LocalMainFrame()->GetFrame(); }
   frame_test_helpers::TestWebWidgetClient* GetWidgetClient() const {
@@ -131,6 +121,14 @@ class ScrollingCoordinatorTest
   }
 
   void LoadAhem() { helper_.LoadAhem(); }
+
+  bool HasMainThreadScrollingReasons(const GraphicsLayer& layer) const {
+    const auto* scroll = layer.GetPropertyTreeState()
+                             .Transform()
+                             .NearestScrollTranslationNode()
+                             .ScrollNode();
+    return scroll->GetMainThreadScrollingReasons();
+  }
 
  protected:
   std::string base_url_;
@@ -158,10 +156,11 @@ TEST_P(ScrollingCoordinatorTest, fastScrollingByDefault) {
       frame_view));
 
   // Fast scrolling should be enabled by default.
-  cc::Layer* root_scroll_layer = GetRootScrollLayer();
-  ASSERT_TRUE(root_scroll_layer);
-  ASSERT_TRUE(root_scroll_layer->scrollable());
-  ASSERT_FALSE(root_scroll_layer->GetMainThreadScrollingReasons());
+  const auto& root_scroll_graphics_layer =
+      *GetFrame()->View()->LayoutViewport()->LayerForScrolling();
+  EXPECT_FALSE(HasMainThreadScrollingReasons(root_scroll_graphics_layer));
+  EXPECT_TRUE(root_scroll_graphics_layer.CcLayer()->scrollable());
+
   ASSERT_EQ(cc::EventListenerProperties::kNone,
             GetWidgetClient()->EventListenerProperties(
                 cc::EventListenerClass::kTouchStartOrMove));
@@ -169,10 +168,11 @@ TEST_P(ScrollingCoordinatorTest, fastScrollingByDefault) {
             GetWidgetClient()->EventListenerProperties(
                 cc::EventListenerClass::kMouseWheel));
 
-  cc::Layer* inner_viewport_scroll_layer =
-      page->GetVisualViewport().ScrollLayer()->CcLayer();
-  ASSERT_TRUE(inner_viewport_scroll_layer->scrollable());
-  ASSERT_FALSE(inner_viewport_scroll_layer->GetMainThreadScrollingReasons());
+  const auto& inner_viewport_scroll_graphics_layer =
+      *page->GetVisualViewport().ScrollLayer();
+  EXPECT_FALSE(
+      HasMainThreadScrollingReasons(inner_viewport_scroll_graphics_layer));
+  EXPECT_TRUE(inner_viewport_scroll_graphics_layer.CcLayer()->scrollable());
 }
 
 TEST_P(ScrollingCoordinatorTest, fastFractionalScrollingDiv) {
@@ -214,10 +214,9 @@ TEST_P(ScrollingCoordinatorTest, fastScrollingForFixedPosition) {
   NavigateTo(base_url_ + "fixed-position.html");
   ForceFullCompositingUpdate();
 
-  // Fixed position should not fall back to main thread scrolling.
-  cc::Layer* root_scroll_layer = GetRootScrollLayer();
-  ASSERT_TRUE(root_scroll_layer);
-  ASSERT_FALSE(root_scroll_layer->GetMainThreadScrollingReasons());
+  const auto& root_scroll_layer =
+      *GetFrame()->View()->LayoutViewport()->LayerForScrolling();
+  EXPECT_FALSE(HasMainThreadScrollingReasons(root_scroll_layer));
 }
 
 // Sticky constraints are stored on transform property tree nodes.
@@ -234,9 +233,9 @@ TEST_P(ScrollingCoordinatorTest, fastScrollingForStickyPosition) {
   ForceFullCompositingUpdate();
 
   // Sticky position should not fall back to main thread scrolling.
-  cc::Layer* root_scroll_layer = GetRootScrollLayer();
-  ASSERT_TRUE(root_scroll_layer);
-  EXPECT_FALSE(root_scroll_layer->GetMainThreadScrollingReasons());
+  const auto& root_scroll_layer =
+      *GetFrame()->View()->LayoutViewport()->LayerForScrolling();
+  EXPECT_FALSE(HasMainThreadScrollingReasons(root_scroll_layer));
 
   Document* document = GetFrame()->GetDocument();
   {
@@ -455,9 +454,10 @@ TEST_P(ScrollingCoordinatorTest, clippedBodyTest) {
   NavigateTo(base_url_ + "clipped-body.html");
   ForceFullCompositingUpdate();
 
-  cc::Layer* root_scroll_layer = GetRootScrollLayer();
-  ASSERT_TRUE(root_scroll_layer);
-  EXPECT_TRUE(root_scroll_layer->non_fast_scrollable_region().IsEmpty());
+  const auto* root_scroll_layer =
+      GetFrame()->View()->LayoutViewport()->LayerForScrolling();
+  EXPECT_TRUE(
+      root_scroll_layer->CcLayer()->non_fast_scrollable_region().IsEmpty());
 }
 
 TEST_P(ScrollingCoordinatorTest, touchAction) {
@@ -956,20 +956,6 @@ TEST_P(ScrollingCoordinatorTest, NonFastScrollableRegionsForPlugins) {
 
   ForceFullCompositingUpdate();
 
-  if (!RuntimeEnabledFeatures::PaintNonFastScrollableRegionsEnabled()) {
-    Region scrolling;
-    Region fixed;
-    Page* page = GetFrame()->GetPage();
-    page->GetScrollingCoordinator()
-        ->ComputeShouldHandleScrollGestureOnMainThreadRegion(
-            To<LocalFrame>(page->MainFrame()), &scrolling, &fixed);
-
-    EXPECT_TRUE(scrolling.IsRect());
-    EXPECT_TRUE(fixed.IsRect());
-    EXPECT_EQ(scrolling.Rects().at(0), IntRect(0, 0, 300, 300));
-    EXPECT_EQ(fixed.Rects().at(0), IntRect(0, 500, 200, 200));
-  }
-
   // The non-fixed plugin should create a non-fast scrollable region in the
   // scrolling contents layer of the LayoutView.
   auto* layout_viewport = GetFrame()->View()->LayoutViewport();
@@ -980,23 +966,13 @@ TEST_P(ScrollingCoordinatorTest, NonFastScrollableRegionsForPlugins) {
 
   // The fixed plugin should create a non-fast scrollable region in a fixed
   // cc::Layer.
-  if (!RuntimeEnabledFeatures::PaintNonFastScrollableRegionsEnabled()) {
-    // The fixed non-fast region should be on the visual viewport's scrolling
-    // layer. This is not correct in all cases and is a restriction of the
-    // pre-PaintNonFsatScrollableRegions code.
-    auto* non_fast_layer =
-        GetFrame()->GetPage()->GetVisualViewport().ScrollLayer()->CcLayer();
-    EXPECT_EQ(non_fast_layer->non_fast_scrollable_region().bounds(),
-              gfx::Rect(0, 500, 200, 200));
-  } else {
-    auto* fixed = GetFrame()->GetDocument()->getElementById("fixed");
-    auto* fixed_object = ToLayoutBox(fixed->GetLayoutObject());
-    auto* fixed_graphics_layer =
-        fixed_object->EnclosingLayer()->GraphicsLayerBacking(fixed_object);
-    EXPECT_EQ(
-        fixed_graphics_layer->CcLayer()->non_fast_scrollable_region().bounds(),
-        gfx::Rect(0, 0, 200, 200));
-  }
+  auto* fixed = GetFrame()->GetDocument()->getElementById("fixed");
+  auto* fixed_object = ToLayoutBox(fixed->GetLayoutObject());
+  auto* fixed_graphics_layer =
+      fixed_object->EnclosingLayer()->GraphicsLayerBacking(fixed_object);
+  EXPECT_EQ(
+      fixed_graphics_layer->CcLayer()->non_fast_scrollable_region().bounds(),
+      gfx::Rect(0, 0, 200, 200));
 }
 
 TEST_P(ScrollingCoordinatorTest, NonFastScrollableRegionWithBorder) {
@@ -1019,18 +995,8 @@ TEST_P(ScrollingCoordinatorTest, NonFastScrollableRegionWithBorder) {
       )HTML");
   ForceFullCompositingUpdate();
 
-  // The non-fast scrollable regions are stored on different layers with and
-  // without PaintNonFastScrollableRegions. This test is only interested in
-  // the dimensions of the non-fast region generated.
-  cc::Layer* non_fast_layer = nullptr;
-  if (!RuntimeEnabledFeatures::PaintNonFastScrollableRegionsEnabled()) {
-    Page* page = GetFrame()->GetPage();
-    non_fast_layer = page->GetVisualViewport().ScrollLayer()->CcLayer();
-  } else {
-    non_fast_layer =
-        GetFrame()->View()->LayoutViewport()->LayerForScrolling()->CcLayer();
-  }
-
+  auto* non_fast_layer =
+      GetFrame()->View()->LayoutViewport()->LayerForScrolling()->CcLayer();
   EXPECT_EQ(non_fast_layer->non_fast_scrollable_region().bounds(),
             gfx::Rect(0, 0, 120, 120));
 }
@@ -1351,23 +1317,6 @@ TEST_P(ScrollingCoordinatorTest, NestedIFramesMainThreadScrollingRegion) {
 
   ForceFullCompositingUpdate();
 
-  if (!RuntimeEnabledFeatures::PaintNonFastScrollableRegionsEnabled()) {
-    Region scrolling;
-    Region fixed;
-    Page* page = GetFrame()->GetPage();
-    page->GetScrollingCoordinator()
-        ->ComputeShouldHandleScrollGestureOnMainThreadRegion(
-            To<LocalFrame>(page->MainFrame()), &scrolling, &fixed);
-
-    EXPECT_TRUE(fixed.IsEmpty())
-        << "Since the DIV will move when the main frame is scrolled, it should"
-           " not be placed in the fixed region.";
-
-    EXPECT_EQ(scrolling.Bounds(), IntRect(0, 1200, 65, 65))
-        << "Since the DIV will move when the main frame is scrolled, it should "
-           "be placed in the scrolling region.";
-  }
-
   auto* layout_viewport = GetFrame()->View()->LayoutViewport();
   auto* mapping = layout_viewport->Layer()->GetCompositedLayerMapping();
   auto* non_fast_layer = mapping->ScrollingContentsLayer()->CcLayer();
@@ -1432,46 +1381,12 @@ TEST_P(ScrollingCoordinatorTest, NestedFixedIFramesMainThreadScrollingRegion) {
       ScrollOffset(0, 1000), kProgrammaticScroll);
 
   ForceFullCompositingUpdate();
-
-  if (!RuntimeEnabledFeatures::PaintNonFastScrollableRegionsEnabled()) {
-    Region scrolling;
-    Region fixed;
-    Page* page = GetFrame()->GetPage();
-    page->GetScrollingCoordinator()
-        ->ComputeShouldHandleScrollGestureOnMainThreadRegion(
-            To<LocalFrame>(page->MainFrame()), &scrolling, &fixed);
-
-    EXPECT_TRUE(scrolling.IsEmpty())
-        << "Since the DIV will not move when the "
-           "main frame is scrolled, it should "
-           "not be placed in the scrolling region.";
-
-    EXPECT_EQ(fixed.Bounds(), IntRect(0, 20, 75, 75))
-        << "Since the DIV not move when the main frame is scrolled, it should "
-           "be placed in the scrolling region.";
-  }
-
-  if (!RuntimeEnabledFeatures::PaintNonFastScrollableRegionsEnabled()) {
-    // Since the main frame isn't scrollable, the NonFastScrollableRegions
-    // should be stored on the visual viewport's scrolling layer, rather than
-    // the main frame's scrolling contents layer. This is a restriction of the
-    // pre-PaintNonFastScrollableRegions code which only stored non-fast regions
-    // on one scrolling layer, and required using the visual viewport's
-    // scrolling layer to correctly handle some fixed-position cases.
-    auto* non_fast_layer =
-        GetFrame()->GetPage()->GetVisualViewport().ScrollLayer()->CcLayer();
-    EXPECT_EQ(non_fast_layer->non_fast_scrollable_region().bounds(),
-              gfx::Rect(0, 20, 75, 75));
-  } else {
-    // PaintNonFastScrollableRegions can put the non-fast scrollable region on
-    // the fixed-position layer.
-    auto* outer_iframe = GetFrame()->GetDocument()->getElementById("iframe");
-    auto* outer_iframe_box = ToLayoutBox(outer_iframe->GetLayoutObject());
-    auto* mapping = outer_iframe_box->Layer()->GetCompositedLayerMapping();
-    auto* non_fast_layer = mapping->MainGraphicsLayer()->CcLayer();
-    EXPECT_EQ(non_fast_layer->non_fast_scrollable_region().bounds(),
-              gfx::Rect(0, 0, 75, 75));
-  }
+  auto* outer_iframe = GetFrame()->GetDocument()->getElementById("iframe");
+  auto* outer_iframe_box = ToLayoutBox(outer_iframe->GetLayoutObject());
+  auto* mapping = outer_iframe_box->Layer()->GetCompositedLayerMapping();
+  auto* non_fast_layer = mapping->MainGraphicsLayer()->CcLayer();
+  EXPECT_EQ(non_fast_layer->non_fast_scrollable_region().bounds(),
+            gfx::Rect(0, 0, 75, 75));
 }
 
 TEST_P(ScrollingCoordinatorTest, IframeCompositedScrollingHideAndShow) {
@@ -1497,20 +1412,8 @@ TEST_P(ScrollingCoordinatorTest, IframeCompositedScrollingHideAndShow) {
 
   ForceFullCompositingUpdate();
 
-  cc::Layer* non_fast_layer = nullptr;
-  if (!RuntimeEnabledFeatures::PaintNonFastScrollableRegionsEnabled()) {
-    // Since the main frame isn't scrollable, the NonFastScrollableRegions
-    // should be stored on the visual viewport's scrolling layer, rather than
-    // the main frame's scrolling contents layer. This is a restriction of the
-    // pre-PaintNonFastScrollableRegions code which only stored non-fast regions
-    // on one scrolling layer, and required using the visual viewport's
-    // scrolling layer to correctly handle some fixed-position cases.
-    Page* page = GetFrame()->GetPage();
-    non_fast_layer = page->GetVisualViewport().ScrollLayer()->CcLayer();
-  } else {
-    non_fast_layer =
-        GetFrame()->View()->LayoutViewport()->LayerForScrolling()->CcLayer();
-  }
+  cc::Layer* non_fast_layer =
+      GetFrame()->View()->LayoutViewport()->LayerForScrolling()->CcLayer();
 
   // Should have a NFSR initially.
   EXPECT_EQ(non_fast_layer->non_fast_scrollable_region().bounds(),
@@ -1685,29 +1588,22 @@ TEST_P(ScrollingCoordinatorTest, UpdateUMAMetricUpdated) {
   ForceFullCompositingUpdate();
   histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 1);
 
-  // A change to background color should not cause a scrolling update.
+  // A change to background color does not need to cause a scrolling update but,
+  // because hit test display items paint, we also cause a scrolling coordinator
+  // update when the background paints.
   auto* background = GetFrame()->GetDocument()->getElementById("bg");
   background->removeAttribute(html_names::kStyleAttr);
   ForceFullCompositingUpdate();
-  histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 1);
+  histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 2);
 
   // Removing a scrollable area should cause a scrolling update.
   auto* scroller = GetFrame()->GetDocument()->getElementById("scroller");
   scroller->removeAttribute(html_names::kStyleAttr);
   ForceFullCompositingUpdate();
-  histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 2);
+  histogram_tester.ExpectTotalCount("Blink.ScrollingCoordinator.UpdateTime", 3);
 }
 
-// TODO(pdr): Replace this with ScrollingCoordinatorTest when
-// PaintNonFastScrollableRegions is launched.
-using PaintNonFastScrollableRegionsScrollingCoordinatorTest =
-    ScrollingCoordinatorTest;
-INSTANTIATE_TEST_SUITE_P(All,
-                         PaintNonFastScrollableRegionsScrollingCoordinatorTest,
-                         ::testing::Values(true));
-
-TEST_P(PaintNonFastScrollableRegionsScrollingCoordinatorTest,
-       NonCompositedNonFastScrollableRegion) {
+TEST_P(ScrollingCoordinatorTest, NonCompositedNonFastScrollableRegion) {
   GetWebView()->GetPage()->GetSettings().SetPreferCompositingToLCDTextEnabled(
       false);
   LoadHTML(R"HTML(
@@ -1744,8 +1640,7 @@ TEST_P(PaintNonFastScrollableRegionsScrollingCoordinatorTest,
   EXPECT_EQ(region.bounds(), gfx::Rect(0, 0, 200, 200));
 }
 
-TEST_P(PaintNonFastScrollableRegionsScrollingCoordinatorTest,
-       NonCompositedResizerNonFastScrollableRegion) {
+TEST_P(ScrollingCoordinatorTest, NonCompositedResizerNonFastScrollableRegion) {
   GetWebView()->GetPage()->GetSettings().SetPreferCompositingToLCDTextEnabled(
       false);
   LoadHTML(R"HTML(
@@ -1778,8 +1673,7 @@ TEST_P(PaintNonFastScrollableRegionsScrollingCoordinatorTest,
   EXPECT_EQ(region.bounds(), gfx::Rect(66, 101, 14, 14));
 }
 
-TEST_P(PaintNonFastScrollableRegionsScrollingCoordinatorTest,
-       CompositedResizerNonFastScrollableRegion) {
+TEST_P(ScrollingCoordinatorTest, CompositedResizerNonFastScrollableRegion) {
   LoadHTML(R"HTML(
     <style>
       #container { will-change: transform; }
@@ -1806,6 +1700,55 @@ TEST_P(PaintNonFastScrollableRegionsScrollingCoordinatorTest,
   auto region =
       scroll_corner_graphics_layer->CcLayer()->non_fast_scrollable_region();
   EXPECT_EQ(region.bounds(), gfx::Rect(-7, -7, 14, 14));
+}
+
+TEST_P(ScrollingCoordinatorTest, TouchActionUpdatesOutsideInterestRect) {
+  LoadHTML(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      #scroller {
+        will-change: transform;
+        width: 200px;
+        height: 200px;
+        overflow-y: scroll;
+      }
+      .spacer {
+        height: 1000px;
+      }
+      #touchaction {
+        height: 100px;
+        background: yellow;
+      }
+    </style>
+    <div id="scroller">
+      <div class="spacer"></div>
+      <div class="spacer"></div>
+      <div class="spacer"></div>
+      <div class="spacer"></div>
+      <div class="spacer"></div>
+      <div id="touchaction">This should not scroll via touch.</div>
+    </div>
+  )HTML");
+
+  ForceFullCompositingUpdate();
+
+  auto* touch_action = GetFrame()->GetDocument()->getElementById("touchaction");
+  touch_action->setAttribute(html_names::kStyleAttr, "touch-action: none;");
+
+  ForceFullCompositingUpdate();
+
+  auto* scroller = GetFrame()->GetDocument()->getElementById("scroller");
+  scroller->GetScrollableArea()->SetScrollOffset(ScrollOffset(0, 5100),
+                                                 kProgrammaticScroll);
+
+  ForceFullCompositingUpdate();
+
+  auto* scroller_box = ToLayoutBox(scroller->GetLayoutObject());
+  auto* mapping = scroller_box->Layer()->GetCompositedLayerMapping();
+  auto* cc_layer = mapping->ScrollingContentsLayer()->CcLayer();
+  cc::Region region = cc_layer->touch_action_region().GetRegionForTouchAction(
+      TouchAction::kTouchActionNone);
+  EXPECT_EQ(region.bounds(), gfx::Rect(0, 5000, 200, 100));
 }
 
 class ScrollingCoordinatorTestWithAcceleratedContext

@@ -4,7 +4,7 @@
 
 #include "chrome/browser/web_applications/components/manifest_update_manager.h"
 
-#include "chrome/browser/web_applications/components/app_registrar.h"
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/common/chrome_features.h"
 
@@ -36,13 +36,17 @@ void ManifestUpdateManager::MaybeUpdate(const GURL& url,
   if (!base::FeatureList::IsEnabled(features::kDesktopPWAsLocalUpdating))
     return;
 
-  if (app_id.empty()) {
+  if (app_id.empty() || !registrar_->IsLocallyInstalled(app_id)) {
     NotifyResult(url, ManifestUpdateResult::kNoAppInScope);
     return;
   }
 
-  std::unique_ptr<ManifestUpdateTask>& current_task = tasks_[app_id];
-  if (current_task)
+  if (registrar_->IsPlaceholderApp(app_id)) {
+    NotifyResult(url, ManifestUpdateResult::kAppIsPlaceholder);
+    return;
+  }
+
+  if (base::Contains(tasks_, app_id))
     return;
 
   if (!MaybeConsumeUpdateCheck(app_id)) {
@@ -50,12 +54,13 @@ void ManifestUpdateManager::MaybeUpdate(const GURL& url,
     return;
   }
 
-  current_task = std::make_unique<ManifestUpdateTask>(
-      url, app_id, web_contents,
-      base::Bind(&ManifestUpdateManager::OnUpdateStopped,
-                 base::Unretained(this)),
-      hang_update_checks_for_testing_, *registrar_, ui_manager_,
-      install_manager_);
+  tasks_.insert_or_assign(
+      app_id, std::make_unique<ManifestUpdateTask>(
+                  url, app_id, web_contents,
+                  base::Bind(&ManifestUpdateManager::OnUpdateStopped,
+                             base::Unretained(this)),
+                  hang_update_checks_for_testing_, *registrar_, ui_manager_,
+                  install_manager_));
 }
 
 // AppRegistrarObserver:
@@ -97,6 +102,11 @@ void ManifestUpdateManager::SetResultCallbackForTesting(
 
 void ManifestUpdateManager::NotifyResult(const GURL& url,
                                          ManifestUpdateResult result) {
+  // Don't log kNoAppInScope because it will be far too noisy (most page loads
+  // will hit it).
+  if (result != ManifestUpdateResult::kNoAppInScope) {
+    UMA_HISTOGRAM_ENUMERATION("Webapp.Update.ManifestUpdateResult", result);
+  }
   if (result_callback_for_testing_)
     std::move(result_callback_for_testing_).Run(url, result);
 }

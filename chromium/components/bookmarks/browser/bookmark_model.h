@@ -126,7 +126,8 @@ class BookmarkModel : public BookmarkUndoProvider,
   bool IsDoingExtensiveChanges() const { return extensive_changes_ > 0; }
 
   // Removes |node| from the model and deletes it. Removing a folder node
-  // recursively removes all nodes. Observers are notified immediately.
+  // recursively removes all nodes. Observers are notified immediately. |node|
+  // must not be a permanent node.
   void Remove(const BookmarkNode* node);
 
   // Removes all the non-permanent bookmark nodes that are editable by the user.
@@ -161,6 +162,18 @@ class BookmarkModel : public BookmarkUndoProvider,
   // Sets the URL of |node|.
   void SetURL(const BookmarkNode* node, const GURL& url);
 
+  // Vivaldi (Android):
+  // Sets the description of |node|.
+  void SetDescription(const BookmarkNode* node, const base::string16& desc);
+
+  // Vivaldi (Android):
+  // Sets the nickname of |node|.
+  void SetNickName(const BookmarkNode* node, const base::string16& nick_name);
+
+  // Vivaldi (Android):
+  // Sets the folder |node| as a speed dial folder.
+  void SetFolderAsSpeedDial(const BookmarkNode* node, bool is_speeddial);
+
   // Sets the date added time of |node|.
   void SetDateAdded(const BookmarkNode* node, base::Time date_added);
 
@@ -192,54 +205,27 @@ class BookmarkModel : public BookmarkUndoProvider,
   // If not on the main thread you *must* invoke BlockTillLoaded first.
   void GetBookmarks(std::vector<UrlAndTitle>* urls);
 
-  // Adds a new folder node at the specified position.
-  const BookmarkNode* AddFolder(const BookmarkNode* parent,
-                                size_t index,
-                                const base::string16& title,
-                                const base::string16& nickname = {},
-                                const base::string16& description = {},
-                                const base::string16& partner = {},
-                                bool speeddial = false,
-                                bool bookmarkbar = false);
-
-  // Adds a new folder with meta info.
-  // --- VIVALDI --- changed by Daniel Sig. @ 10-02-2015
-  const BookmarkNode* AddFolderWithMetaInfo(
+  // Adds a new folder node at the specified position with the given |guid| and
+  // |meta_info|. If a GUID is provided, it must be a valid version 4 GUID,
+  // otherwise a new one is generated to replace it.
+  const BookmarkNode* AddFolder(
       const BookmarkNode* parent,
       size_t index,
       const base::string16& title,
-      const BookmarkNode::MetaInfoMap* meta_info,
-      const base::string16& nickname = {},
-      const base::string16& description = {},
-      const base::string16& partner = {},
-      const bool speeddial = false,
-      const bool bookmarkbar = false);
+      const BookmarkNode::MetaInfoMap* meta_info = nullptr,
+      base::Optional<std::string> guid = base::nullopt);
 
-    // Adds a url at the specified position.
-  const BookmarkNode* AddURL(const BookmarkNode* parent,
-                             size_t index,
-                             const base::string16& title,
-                             const GURL& url,
-                             const base::string16& nickname = {},
-                             const base::string16& description = {},
-                             const base::string16& thumbnail = {},
-                             const base::string16& partner = {},
-                             const bool speeddial = false);
-
-  // Adds a url with a specific creation date and meta info.
-  const BookmarkNode* AddURLWithCreationTimeAndMetaInfo(
+  // Adds a url at the specified position with the given |creation_time|,
+  // |meta_info| and |guid|. If a GUID is provided, it must be a valid version 4
+  // GUID, otherwise a new one is generated to replace it.
+  const BookmarkNode* AddURL(
       const BookmarkNode* parent,
       size_t index,
       const base::string16& title,
       const GURL& url,
-      const base::Time& creation_time,
-      const BookmarkNode::MetaInfoMap* meta_info,
-      const base::string16& nickname = {},
-      const base::string16& description = {},
-      const base::string16 &thumbnail = {},
-      const base::string16& partner = {},
-      const bool speeddial = false,
-      const base::Time *visited_time = nullptr);
+      const BookmarkNode::MetaInfoMap* meta_info = nullptr,
+      base::Optional<base::Time> creation_time = base::nullopt,
+      base::Optional<std::string> guid = base::nullopt);
 
   // Sorts the children of |parent|, notifying observers by way of the
   // BookmarkNodeChildrenReordered method.

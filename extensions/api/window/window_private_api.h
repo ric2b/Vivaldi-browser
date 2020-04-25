@@ -24,7 +24,6 @@ based on that.
 */
 class VivaldiWindowsAPI : public BrowserListObserver,
                           public content::NotificationObserver,
-                          public app_modal::AppModalDialogObserver,
                           public BrowserContextKeyedAPI {
  public:
   explicit VivaldiWindowsAPI(content::BrowserContext* context);
@@ -40,9 +39,6 @@ class VivaldiWindowsAPI : public BrowserListObserver,
   void Observe(int type,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
-
-  // AppModalDialogObserver implementation.
-  void Notify(app_modal::JavaScriptAppModalDialog* dialog) override;
 
   // Call when all windows for a given profile is being closed.
   static void WindowsForProfileClosing(Profile* profile);

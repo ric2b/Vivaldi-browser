@@ -16,6 +16,7 @@
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/progress_bar.h"
 #include "ui/views/input_event_activation_protector.h"
 #include "ui/views/window/non_client_view.h"
 
@@ -59,6 +60,10 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   // Sets a custom view to be the dialog title instead of the |default_title_|
   // label. If there is an existing title view it will be deleted.
   void SetTitleView(std::unique_ptr<View> title_view);
+
+  // Updates the current progress value of |progress_indicator_|. If progress is
+  // absent, hides |the progress_indicator|.
+  void SetProgress(base::Optional<double> progress);
 
   // View:
   const char* GetClassName() const override;
@@ -111,6 +116,9 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
     preferred_arrow_adjustment_ = adjustment;
   }
 
+  // TODO(crbug.com/1007604): remove this in favor of using
+  // Widget::InitParams::accept_events. In the mean time, don't add new uses of
+  // this flag.
   bool hit_test_transparent() const { return hit_test_transparent_; }
   void set_hit_test_transparent(bool hit_test_transparent) {
     hit_test_transparent_ = hit_test_transparent;
@@ -127,6 +135,7 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
 
   // Set the background color of the bubble border.
   void SetBackgroundColor(SkColor color);
+  SkColor GetBackgroundColor() const;
 
   // Given the size of the contents and the rect to point at, returns the bounds
   // of the bubble window. The bubble's arrow location may change if the bubble
@@ -137,7 +146,9 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
                                    const gfx::Size& client_size,
                                    bool adjust_to_fit_available_bounds);
 
-  Button* GetCloseButtonForTest() { return close_; }
+  Button* GetCloseButtonForTesting() { return close_; }
+
+  View* GetHeaderViewForTesting() const { return header_view_; }
 
   // Resets the time when view has been shown. Tests may need to call this
   // method if they use events that could be otherwise treated as unintended.
@@ -164,6 +175,7 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
  private:
   FRIEND_TEST_ALL_PREFIXES(BubbleFrameViewTest, RemoveFootnoteView);
   FRIEND_TEST_ALL_PREFIXES(BubbleFrameViewTest, LayoutWithIcon);
+  FRIEND_TEST_ALL_PREFIXES(BubbleFrameViewTest, LayoutWithProgressIndicator);
   FRIEND_TEST_ALL_PREFIXES(BubbleFrameViewTest, IgnorePossiblyUnintendedClicks);
   FRIEND_TEST_ALL_PREFIXES(BubbleDelegateTest, CloseReasons);
   FRIEND_TEST_ALL_PREFIXES(BubbleDialogDelegateViewTest, CloseMethods);
@@ -203,9 +215,9 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   // The client_view insets (from the frame view) for the given |frame_width|.
   gfx::Insets GetClientInsetsForFrameWidth(int frame_width) const;
 
-  // Gets the size of the |header_view_| or an empty size if there is no header
-  // view or if it is not visible.
-  gfx::Size GetHeaderSize() const;
+  // Gets the height of the |header_view_| given a |frame_width|. Returns zero
+  // if there is no header view or if it is not visible.
+  int GetHeaderHeightForFrameWidth(int frame_width) const;
 
   // The bubble border.
   BubbleBorder* bubble_border_ = nullptr;
@@ -231,6 +243,10 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   // The optional close button (the X).
   Button* close_ = nullptr;
 
+  // The optional progress bar. Used to indicate bubble pending state. By
+  // default it is invisible.
+  ProgressBar* progress_indicator_ = nullptr;
+
   // The optional header view.
   View* header_view_ = nullptr;
 
@@ -242,8 +258,8 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   PreferredArrowAdjustment preferred_arrow_adjustment_ =
       PreferredArrowAdjustment::kMirror;
 
-  // If true the view is transparent to all  hit tested events (i.e. click and
-  // hover).
+  // If true the view is transparent to all hit tested events (i.e. click and
+  // hover). DEPRECATED: See note above set_hit_test_transparent().
   bool hit_test_transparent_ = false;
 
   InputEventActivationProtector input_protector_;

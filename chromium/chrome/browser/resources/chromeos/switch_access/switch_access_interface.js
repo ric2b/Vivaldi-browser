@@ -33,10 +33,11 @@ class SwitchAccessInterface {
   restartAutoScan() {}
 
   /**
-   * Check if the current node is in the virtual keyboard.
-   * @return {boolean}
+   * Sets whether the current node is in the virtual keyboard.
+   * @param {boolean} inKeyboard
    */
-  inVirtualKeyboard() {}
+  setInKeyboard(inKeyboard) {}
+
 
   /**
    * Check whether or not the feature flag
@@ -50,6 +51,12 @@ class SwitchAccessInterface {
    * @param {!Object} changes
    */
   onPreferencesChanged(changes) {}
+
+  /**
+   * Returns whether prefs have initially loaded or not.
+   * @return {boolean}
+   */
+  prefsAreReady() {}
 
   /**
    * Set the value of the preference |name| to |value| in chrome.storage.sync.

@@ -32,7 +32,6 @@
 #include "chrome/browser/chromeos/base/locale_util.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
-#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/drive/drivefs_test_support.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
@@ -53,6 +52,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
+#include "chrome/common/pref_names.h"
 #include "chromeos/components/drivefs/drivefs_host.h"
 #include "chromeos/components/drivefs/fake_drivefs.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -1520,25 +1520,12 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
   std::vector<base::Feature> enabled_features;
   std::vector<base::Feature> disabled_features;
 
-  enabled_features.emplace_back(features::kCrostiniAdvancedAccessControls);
-  enabled_features.emplace_back(chromeos::features::kCrostiniBackup);
-
-  if (!IsGuestModeTest()) {
-    enabled_features.emplace_back(features::kCrostini);
-  }
-
   if (IsFilesNgTest()) {
     enabled_features.emplace_back(chromeos::features::kFilesNG);
   }
 
   if (!IsNativeSmbTest()) {
     disabled_features.emplace_back(features::kNativeSmb);
-  }
-
-  if (IsDriveFsTest()) {
-    enabled_features.emplace_back(chromeos::features::kDriveFs);
-  } else {
-    disabled_features.emplace_back(chromeos::features::kDriveFs);
   }
 
   if (IsArcTest()) {
@@ -1555,12 +1542,15 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
         arc::kEnableDocumentsProviderInFilesAppFeature);
   }
 
-  if (IsFormatDialogTest()) {
-    enabled_features.emplace_back(
-        chromeos::features::kEnableFileManagerFormatDialog);
-  }
-
-  feature_list_.InitWithFeatures(enabled_features, disabled_features);
+  // This is destroyed in |TearDown()|. We cannot initialize this in the
+  // constructor due to this feature values' above dependence on virtual
+  // method calls, but by convention subclasses of this fixture may initialize
+  // ScopedFeatureList instances in their own constructor. Ensuring construction
+  // here and destruction in |TearDown()| ensures that we preserve an acceptable
+  // relative lifetime ordering between this ScopedFeatureList and those of any
+  // subclasses.
+  feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
+  feature_list_->InitWithFeatures(enabled_features, disabled_features);
 
   extensions::ExtensionApiTest::SetUpCommandLine(command_line);
 }
@@ -1614,16 +1604,15 @@ void FileManagerBrowserTestBase::SetUpOnMainThread() {
       test_util::WaitUntilDriveMountPointIsAdded(profile());
     }
 
-    // Init crostini.  Set prefs to enable crostini, set VM and container
-    // running for testing, and register CustomMountPointCallback.
-    // TODO(joelhockey): It would be better if the crostini interface allowed
-    // for testing without such tight coupling.
+    // Init crostini.  Set VM and container running for testing, and register
+    // CustomMountPointCallback.
     crostini_volume_ = std::make_unique<CrostiniTestVolume>();
-    profile()->GetPrefs()->SetBoolean(crostini::prefs::kCrostiniEnabled, true);
-    profile()->GetPrefs()->SetBoolean(
-        crostini::prefs::kUserCrostiniRootAccessAllowedByPolicy, true);
-    profile()->GetPrefs()->SetBoolean(
-        crostini::prefs::kUserCrostiniExportImportUIAllowedByPolicy, true);
+    if (!IsIncognitoModeTest()) {
+      crostini_features_.set_ui_allowed(true);
+      crostini_features_.set_enabled(true);
+      crostini_features_.set_root_access_allowed(true);
+      crostini_features_.set_export_import_ui_allowed(true);
+    }
     crostini::CrostiniManager* crostini_manager =
         crostini::CrostiniManager::GetForProfile(
             profile()->GetOriginalProfile());
@@ -1711,19 +1700,16 @@ void FileManagerBrowserTestBase::TearDownOnMainThread() {
   ui::SelectFileDialog::SetFactory(nullptr);
 }
 
+void FileManagerBrowserTestBase::TearDown() {
+  extensions::ExtensionApiTest::TearDown();
+  feature_list_.reset();
+}
+
 bool FileManagerBrowserTestBase::GetTabletMode() const {
   return false;
 }
 
-bool FileManagerBrowserTestBase::GetEnableDriveFs() const {
-  return true;
-}
-
 bool FileManagerBrowserTestBase::GetEnableDocumentsProvider() const {
-  return false;
-}
-
-bool FileManagerBrowserTestBase::GetEnableFormatDialog() const {
   return false;
 }
 
@@ -1827,11 +1813,6 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
       *output = "false";
     }
 
-    return;
-  }
-
-  if (name == "getDriveFsEnabled") {
-    *output = IsDriveFsTest() ? "true" : "false";
     return;
   }
 
@@ -2019,6 +2000,35 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     return;
   }
 
+  if (name == "mountUsbWithMultiplePartitionTypes") {
+    // Create a device path to mimic a realistic device path.
+    constexpr char kDevicePath[] =
+        "sys/devices/pci0000:00/0000:00:14.0/usb1/1-2/1-2.2/1-2.2:1.0/host0/"
+        "target0:0:0/0:0:0:0";
+    const base::FilePath device_path(kDevicePath);
+
+    // Create partition volumes with the same device path.
+    partition_1_ = std::make_unique<RemovableTestVolume>(
+        "partition-1", VOLUME_TYPE_REMOVABLE_DISK_PARTITION,
+        chromeos::DEVICE_TYPE_USB, device_path, "Drive Label", "ntfs");
+    partition_2_ = std::make_unique<RemovableTestVolume>(
+        "partition-2", VOLUME_TYPE_REMOVABLE_DISK_PARTITION,
+        chromeos::DEVICE_TYPE_USB, device_path, "Drive Label", "ext4");
+    partition_3_ = std::make_unique<RemovableTestVolume>(
+        "partition-3", VOLUME_TYPE_REMOVABLE_DISK_PARTITION,
+        chromeos::DEVICE_TYPE_USB, device_path, "Drive Label", "vfat");
+
+    // Create fake entries on partitions.
+    ASSERT_TRUE(partition_1_->PrepareTestEntries(profile()));
+    ASSERT_TRUE(partition_2_->PrepareTestEntries(profile()));
+    ASSERT_TRUE(partition_3_->PrepareTestEntries(profile()));
+
+    ASSERT_TRUE(partition_1_->Mount(profile()));
+    ASSERT_TRUE(partition_2_->Mount(profile()));
+    ASSERT_TRUE(partition_3_->Mount(profile()));
+    return;
+  }
+
   if (name == "unmountPartitions") {
     DCHECK(partition_1_);
     DCHECK(partition_2_);
@@ -2097,6 +2107,14 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     return;
   }
 
+  if (name == "setPdfPreviewEnabled") {
+    bool enabled;
+    ASSERT_TRUE(value.GetBoolean("enabled", &enabled));
+    profile()->GetPrefs()->SetBoolean(prefs::kPluginsAlwaysOpenPdfExternally,
+                                      !enabled);
+    return;
+  }
+
   if (name == "setCrostiniEnabled") {
     bool enabled;
     ASSERT_TRUE(value.GetBoolean("enabled", &enabled));
@@ -2108,16 +2126,14 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
   if (name == "setCrostiniRootAccessAllowed") {
     bool enabled;
     ASSERT_TRUE(value.GetBoolean("enabled", &enabled));
-    profile()->GetPrefs()->SetBoolean(
-        crostini::prefs::kUserCrostiniRootAccessAllowedByPolicy, enabled);
+    crostini_features_.set_root_access_allowed(enabled);
     return;
   }
 
   if (name == "setCrostiniExportImportAllowed") {
     bool enabled;
     ASSERT_TRUE(value.GetBoolean("enabled", &enabled));
-    profile()->GetPrefs()->SetBoolean(
-        crostini::prefs::kUserCrostiniExportImportUIAllowedByPolicy, enabled);
+    crostini_features_.set_export_import_ui_allowed(enabled);
     return;
   }
 
@@ -2383,19 +2399,14 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
 
 drive::DriveIntegrationService*
 FileManagerBrowserTestBase::CreateDriveIntegrationService(Profile* profile) {
-  if (base::FeatureList::IsEnabled(chromeos::features::kDriveFs)) {
-    drive_volumes_[profile->GetOriginalProfile()] =
-        std::make_unique<DriveFsTestVolume>(profile->GetOriginalProfile());
-    if (!IsIncognitoModeTest() && !DoesTestStartWithNoVolumesMounted() &&
-        profile->GetPath().BaseName().value() == "user") {
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE,
-          base::BindOnce(base::IgnoreResult(&LocalTestVolume::Mount),
-                         base::Unretained(local_volume_.get()), profile));
-    }
-  } else {
-    drive_volumes_[profile->GetOriginalProfile()] =
-        std::make_unique<DriveTestVolume>();
+  drive_volumes_[profile->GetOriginalProfile()] =
+      std::make_unique<DriveFsTestVolume>(profile->GetOriginalProfile());
+  if (!IsIncognitoModeTest() && !DoesTestStartWithNoVolumesMounted() &&
+      profile->GetPath().BaseName().value() == "user") {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::BindOnce(base::IgnoreResult(&LocalTestVolume::Mount),
+                       base::Unretained(local_volume_.get()), profile));
   }
   if (DoesTestStartWithNoVolumesMounted()) {
     profile->GetPrefs()->SetBoolean(drive::prefs::kDriveFsPinnedMigrated, true);

@@ -97,7 +97,6 @@ void TestRunnerForSpecificView::Reset() {
   if (web_view()->MainFrame()->IsWebLocalFrame()) {
     web_view()->MainFrame()->ToWebLocalFrame()->EnableViewSourceMode(false);
     web_view()->SetTextZoomFactor(1);
-    web_view()->SetZoomLevel(0);
     // As would the browser via IPC, set visibility on the RenderWidget then on
     // the Page.
     // TODO(danakj): This should set visibility on all RenderWidgets not just
@@ -660,15 +659,6 @@ void TestRunnerForSpecificView::SetIsolatedWorldInfo(
   web_view()->FocusedFrame()->ClearIsolatedWorldCSPForTesting(world_id);
 
   web_view()->FocusedFrame()->SetIsolatedWorldInfo(world_id, info);
-
-  if (!info.security_origin.IsNull()) {
-    // Isolated world's origin may differ from the main world origin and trigger
-    // security checks when it doesn't match request_initiator_site_lock.  To
-    // avoid this, we need to explicitly exclude the isolated world's scheme
-    // from these security checks.
-    delegate()->ExcludeSchemeFromRequestInitiatorSiteLockChecks(
-        info.security_origin.Protocol().Utf8());
-  }
 }
 
 void TestRunner::InsertStyleSheet(const std::string& source_code) {

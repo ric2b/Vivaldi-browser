@@ -14,8 +14,9 @@ import android.os.Message;
 import android.os.Parcel;
 import android.os.ParcelUuid;
 import android.os.Parcelable;
-import android.support.annotation.Nullable;
 import android.view.Surface;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
@@ -339,8 +340,9 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
             throw new IllegalStateException("Attempting to destroy WebContents on non-UI thread");
         }
 
-        if (mNativeWebContentsAndroid != 0)
+        if (mNativeWebContentsAndroid != 0) {
             WebContentsImplJni.get().destroyWebContents(mNativeWebContentsAndroid);
+        }
     }
 
     @Override
@@ -352,9 +354,10 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
 
     @Override
     public void clearNativeReference() {
-        if (mNativeWebContentsAndroid != 0)
+        if (mNativeWebContentsAndroid != 0) {
             WebContentsImplJni.get().clearNativeReference(
                     mNativeWebContentsAndroid, WebContentsImpl.this);
+        }
     }
 
     @Override
@@ -786,12 +789,6 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     }
 
     @Override
-    public void reloadLoFiImages() {
-        checkNotDestroyed();
-        WebContentsImplJni.get().reloadLoFiImages(mNativeWebContentsAndroid, WebContentsImpl.this);
-    }
-
-    @Override
     public int downloadImage(String url, boolean isFavicon, int maxBitmapSize,
             boolean bypassCache, ImageDownloadCallback callback) {
         checkNotDestroyed();
@@ -1061,7 +1058,6 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
                 OverscrollRefreshHandler nativeOverscrollRefreshHandler);
         void setSpatialNavigationDisabled(
                 long nativeWebContentsAndroid, WebContentsImpl caller, boolean disabled);
-        void reloadLoFiImages(long nativeWebContentsAndroid, WebContentsImpl caller);
         int downloadImage(long nativeWebContentsAndroid, WebContentsImpl caller, String url,
                 boolean isFavicon, int maxBitmapSize, boolean bypassCache,
                 ImageDownloadCallback callback);

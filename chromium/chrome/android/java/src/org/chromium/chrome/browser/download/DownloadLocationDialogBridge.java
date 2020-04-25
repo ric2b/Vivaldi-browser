@@ -24,6 +24,10 @@ import org.chromium.ui.modelutil.PropertyModel;
 import java.io.File;
 import java.util.ArrayList;
 
+import android.os.Build;
+import org.chromium.base.ContextUtils;
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * Helper class to handle communication between download location dialog and native.
  */
@@ -119,6 +123,20 @@ public class DownloadLocationDialogBridge implements ModalDialogProperties.Contr
                 assert(!TextUtils.isEmpty(dir.location));
                 PrefServiceBridge.getInstance().setDownloadAndSaveFileDefaultDirectory(
                         dir.location);
+                // NOTE(david@vivaldi.com): On Android 10 it can happen that the download path
+                // differs from the path in the download settings. The |mSuggestedPath| will get
+                // its value from the c++ side of the |download_target_determiner.cc| which
+                // generates a generic paths for different platforms. Since we are only facing the
+                // problem of wrong download paths in android 10 we will just fix the issue here
+                // without touching the c++ site in order to prevent regressions. We're setting up
+                // the correct |mSuggestedPath| which needs to be in line with the |dir.location|.
+                if (ChromeApplication.isVivaldi()
+                        && Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                    final String packageName =
+                            ContextUtils.getApplicationContext().getPackageName();
+                    if (mSuggestedPath.contains(packageName) && !dir.location.contains(packageName))
+                        mSuggestedPath = dir.location + "/" + new File(mSuggestedPath).getName();
+                }
                 DownloadLocationDialogBridgeJni.get().onComplete(
                         mNativeDownloadLocationDialogBridge, DownloadLocationDialogBridge.this,
                         mSuggestedPath);

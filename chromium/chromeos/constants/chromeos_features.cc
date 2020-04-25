@@ -16,11 +16,6 @@ const base::Feature kInstantTetheringBackgroundAdvertisementSupport{
 
 }  // namespace
 
-// Controls whether to enable Chrome OS Account Manager.
-// Rollout controlled by Finch.
-const base::Feature kAccountManager{"ChromeOSAccountManager",
-                                    base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Controls whether to enable Ambient mode feature.
 const base::Feature kAmbientModeFeature{"ChromeOSAmbientMode",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
@@ -34,6 +29,10 @@ const base::Feature kAutoScreenBrightness{"AutoScreenBrightness",
 // "appearances" that are less likely to be pairable or useful.
 const base::Feature kBluetoothAggressiveAppearanceFilter{
     "BluetoothAggressiveAppearanceFilter", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables or disables more filtering out of phones from the Bluetooth UI.
+const base::Feature kBluetoothPhoneFilter{"BluetoothPhoneFilter",
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Feature containing param to block provided long term keys.
 const base::Feature kBlueZLongTermKeyBlocklist{
@@ -60,9 +59,19 @@ const base::Feature kCrostiniUsbAllowUnsupported{
 const base::Feature kCrostiniWebUIInstaller{"CrostiniWebUIInstaller",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables or disables the CryptAuth v2 DeviceSync flow.
+const base::Feature kCryptAuthV2DeviceSync{"CryptAuthV2DeviceSync",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables or disables the CryptAuth v2 Enrollment flow.
 const base::Feature kCryptAuthV2Enrollment{"CryptAuthV2Enrollment",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Disables "Office Editing for Docs, Sheets & Slides" component app so handlers
+// won't be registered, making it possible to install another version for
+// testing.
+const base::Feature kDisableOfficeEditingComponentApp{
+    "DisableOfficeEditingComponentApp", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables or disables Discover Application on Chrome OS.
 // If enabled, Discover App will be shown in launcher.
@@ -80,19 +89,17 @@ const base::Feature kDriveFsMirroring{"DriveFsMirroring",
 const base::Feature kEnableFileManagerFeedbackPanel{
     "EnableFeedbackPanel", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables the enhanced external media formatting dialog in the file manager,
-// with support for labelling and also NTFS/exFAT filesystems.
-const base::Feature kEnableFileManagerFormatDialog{
-    "EnableFileManagerFormatDialog", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Enable the piex-wasm module for raw image preview image extraction.
 const base::Feature kEnableFileManagerPiexWasm{
     "PiexWasm", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables or disables web push for background notifications in
-// Android Messages Integration on Chrome OS.
-const base::Feature kEnableMessagesWebPush{"EnableMessagesWebPush",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
+// Enables Device End Of Lifetime warning notifications.
+const base::Feature kEolWarningNotifications{"EolWarningNotifications",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enable or disable pointer lock for exo windows.
+const base::Feature kExoPointerLock{"ExoPointerLock",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the next generation file manager.
 const base::Feature kFilesNG{"FilesNG", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -120,6 +127,9 @@ const base::Feature kGesturePropertiesDBusService{
 const base::Feature kGaiaActionButtons{"GaiaActionButtons",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
+// The new ChromeOS Help App. https://crbug.com/1012578.
+const base::Feature kHelpAppV2{"HelpAppV2", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enable or disable Unified Input Logic for HMM decoder in the IME extension
 // on Chrome OS.
 const base::Feature kImeInputLogicHmm{"ImeInputLogicHmm",
@@ -135,21 +145,57 @@ const base::Feature kImeInputLogicFst{"ImeInputLogicFst",
 const base::Feature kImeInputLogicFstNonEnglish{
     "ImeInputLogicFstNonEnglish", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enable or disable Unified Input Logic for Mozc decoder in the IME extension
+// on Chrome OS.
+const base::Feature kImeInputLogicMozc{"ImeInputLogicMozc",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enable or disable IME service decoder engine and 'ime' sandbox on Chrome OS.
 const base::Feature kImeDecoderWithSandbox{"ImeDecoderWithSandbox",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable or disable using the floating virtual keyboard as the default option
+// on Chrome OS.
+const base::Feature kVirtualKeyboardFloatingDefault{
+    "VirtualKeyboardFloatingDefault", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables or disables Instant Tethering on Chrome OS.
 const base::Feature kInstantTethering{"InstantTethering",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
+// ChromeOS Media App. https://crbug.com/996088.
+const base::Feature kMediaApp{"MediaApp", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether to enable the Parental Controls section of settings.
 const base::Feature kParentalControlsSettings{
-    "ChromeOSParentalControlsSettings", base::FEATURE_DISABLED_BY_DEFAULT};
+    "ChromeOSParentalControlsSettings", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables Release Notes on Chrome OS.
 const base::Feature kReleaseNotes{"ReleaseNotes",
                                   base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables or disables Release Notes notifications on Chrome OS.
+const base::Feature kReleaseNotesNotification{"ReleaseNotesNotification",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables or disables long kill timeout for session manager daemon. When
+// enabled, session manager daemon waits for a longer time (e.g. 12s) for chrome
+// to exit before sending SIGABRT. Otherwise, it uses the default time out
+// (currently 3s).
+const base::Feature kSessionManagerLongKillTimeout{
+    "SessionManagerLongKillTimeout", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables or disables the scrollable shelf.
+const base::Feature kShelfScrollable{"ShelfScrollable",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables or disables the shelf hotseat.
+const base::Feature kShelfHotseat{"ShelfHotseat",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables or disables a toggle to enable Bluetooth debug logs.
+const base::Feature kShowBluetoothDebugLogToggle{
+    "ShowBluetoothDebugLogToggle", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables or disables showing the battery level in the System Tray and Settings
 // UI for supported Bluetooth Devices.
@@ -169,6 +215,12 @@ const base::Feature kSmartDimModelV3{"SmartDimModelV3",
 // into a separate window.
 const base::Feature kSplitSettings{"SplitSettings",
                                    base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables separate sync controls for OS settings (display, keyboard, etc.).
+// For example, the user could choose to sync OS settings but not browser
+// settings.
+const base::Feature kSplitSettingsSync{"SplitSettingsSync",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the updated cellular activation UI; see go/cros-cellular-design.
 const base::Feature kUpdatedCellularActivationUi{
@@ -202,10 +254,6 @@ const base::Feature kVideoPlayerNativeControls{
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool IsAccountManagerEnabled() {
-  return base::FeatureList::IsEnabled(kAccountManager);
-}
-
 bool IsAmbientModeEnabled() {
   return base::FeatureList::IsEnabled(kAmbientModeFeature);
 }
@@ -225,6 +273,10 @@ bool IsParentalControlsSettingsEnabled() {
 
 bool IsSplitSettingsEnabled() {
   return base::FeatureList::IsEnabled(kSplitSettings);
+}
+
+bool IsSplitSettingsSyncEnabled() {
+  return base::FeatureList::IsEnabled(kSplitSettingsSync);
 }
 
 bool ShouldShowPlayStoreInDemoMode() {

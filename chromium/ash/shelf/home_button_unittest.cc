@@ -16,7 +16,6 @@
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_navigation_widget.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_view_test_api.h"
@@ -86,7 +85,7 @@ TEST_F(HomeButtonTest, SwipeUpToOpenFullscreenAppList) {
   // Swiping up less than the threshold should trigger a peeking app list.
   gfx::Point end = start;
   end.set_y(shelf->GetIdealBounds().bottom() -
-            app_list::AppListView::kDragSnapToPeekingThreshold + 10);
+            AppListView::kDragSnapToPeekingThreshold + 10);
   GetEventGenerator()->GestureScrollSequence(
       start, end, base::TimeDelta::FromMilliseconds(100), 4 /* steps */);
   GetAppListTestHelper()->WaitUntilIdle();
@@ -100,7 +99,7 @@ TEST_F(HomeButtonTest, SwipeUpToOpenFullscreenAppList) {
 
   // Swiping above the threshold should trigger a fullscreen app list.
   end.set_y(shelf->GetIdealBounds().bottom() -
-            app_list::AppListView::kDragSnapToPeekingThreshold - 10);
+            AppListView::kDragSnapToPeekingThreshold - 10);
   GetEventGenerator()->GestureScrollSequence(
       start, end, base::TimeDelta::FromMilliseconds(100), 4 /* steps */);
   base::RunLoop().RunUntilIdle();
@@ -167,6 +166,7 @@ TEST_F(HomeButtonTest, ButtonPositionInTabletMode) {
           ->shelf_widget()
           ->navigation_widget()
           ->get_bounds_animator_for_testing());
+
   // Visual space around the home button is set at the widget level.
   EXPECT_EQ(0, home_button()->bounds().x());
 }
@@ -177,11 +177,11 @@ TEST_F(HomeButtonTest, LongPressGesture) {
   // Simulate two user with primary user as active.
   CreateUserSessions(2);
 
-  // Enable voice interaction in system settings.
+  // Enable the Assistant in system settings.
   prefs()->SetBoolean(chromeos::assistant::prefs::kAssistantEnabled, true);
   assistant_state()->NotifyFeatureAllowed(
       mojom::AssistantAllowedState::ALLOWED);
-  assistant_state()->NotifyStatusChanged(mojom::VoiceInteractionState::STOPPED);
+  assistant_state()->NotifyStatusChanged(mojom::AssistantState::READY);
 
   ui::GestureEvent long_press =
       CreateGestureEvent(ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
@@ -210,13 +210,13 @@ TEST_F(HomeButtonTest, LongPressGestureWithSecondaryUser) {
   assistant_state()->NotifyFeatureAllowed(
       mojom::AssistantAllowedState::DISALLOWED_BY_NONPRIMARY_USER);
 
-  // Enable voice interaction in system settings.
+  // Enable the Assistant in system settings.
   prefs()->SetBoolean(chromeos::assistant::prefs::kAssistantEnabled, true);
 
   ui::GestureEvent long_press =
       CreateGestureEvent(ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
   SendGestureEvent(&long_press);
-  // Voice interaction is disabled for secondary user.
+  // The Assistant is disabled for secondary user.
   EXPECT_NE(AssistantVisibility::kVisible, Shell::Get()
                                                ->assistant_controller()
                                                ->ui_controller()
@@ -236,8 +236,8 @@ TEST_F(HomeButtonTest, LongPressGestureWithSettingsDisabled) {
   // Simulate two user with primary user as active.
   CreateUserSessions(2);
 
-  // Simulate a user who has already completed setup flow, but disabled voice
-  // interaction in settings.
+  // Simulate a user who has already completed setup flow, but disabled the
+  // Assistant in settings.
   prefs()->SetBoolean(chromeos::assistant::prefs::kAssistantEnabled, false);
   assistant_state()->NotifyFeatureAllowed(
       mojom::AssistantAllowedState::ALLOWED);

@@ -18,10 +18,12 @@ DawnBindGroupLayoutBinding AsDawnType(
   dawn_binding.type = AsDawnEnum<DawnBindingType>(webgpu_binding->type());
   dawn_binding.visibility =
       AsDawnEnum<DawnShaderStage>(webgpu_binding->visibility());
+  dawn_binding.textureDimension =
+      AsDawnEnum<DawnTextureViewDimension>(webgpu_binding->textureDimension());
   dawn_binding.textureComponentType = AsDawnEnum<DawnTextureComponentType>(
       webgpu_binding->textureComponentType());
   dawn_binding.multisampled = webgpu_binding->multisampled();
-  dawn_binding.dynamic = webgpu_binding->dynamic();
+  dawn_binding.hasDynamicOffset = webgpu_binding->hasDynamicOffset();
 
   return dawn_binding;
 }
@@ -43,6 +45,9 @@ GPUBindGroupLayout* GPUBindGroupLayout::Create(
   dawn_desc.nextInChain = nullptr;
   dawn_desc.bindingCount = binding_count;
   dawn_desc.bindings = bindings.get();
+  if (webgpu_desc->hasLabel()) {
+    dawn_desc.label = webgpu_desc->label().Utf8().data();
+  }
 
   return MakeGarbageCollected<GPUBindGroupLayout>(
       device, device->GetProcs().deviceCreateBindGroupLayout(

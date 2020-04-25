@@ -29,6 +29,7 @@
 
 #include "base/bind_helpers.h"
 #include "cc/paint/paint_canvas.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/web_fullscreen_video_status.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
@@ -356,6 +357,7 @@ void HTMLVideoElement::ActivateViewportIntersectionMonitoring(bool activate) {
         {}, {kMostlyFillViewportThreshold}, &(GetDocument()),
         WTF::BindRepeating(&HTMLVideoElement::OnViewportIntersectionChanged,
                            WrapWeakPersistent(this)),
+        IntersectionObserver::kDeliverDuringPostLifecycleSteps,
         IntersectionObserver::kFractionOfRoot);
     viewport_intersection_observer_->observe(this);
   } else if (!activate && viewport_intersection_observer_) {
@@ -701,10 +703,9 @@ void HTMLVideoElement::MediaRemotingStarted(
   remoting_interstitial_->Show(remote_device_friendly_name);
 }
 
-void HTMLVideoElement::MediaRemotingStopped(
-    WebLocalizedString::Name error_msg) {
+void HTMLVideoElement::MediaRemotingStopped(int error_code) {
   if (remoting_interstitial_)
-    remoting_interstitial_->Hide(error_msg);
+    remoting_interstitial_->Hide(error_code);
 }
 
 bool HTMLVideoElement::SupportsPictureInPicture() const {

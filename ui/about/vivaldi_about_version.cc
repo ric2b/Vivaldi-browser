@@ -15,6 +15,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "app/vivaldi_resources.h"
 
 namespace vivaldi {
 

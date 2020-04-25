@@ -11,6 +11,7 @@
 #include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/ranges.h"
 #include "content/browser/accessibility/browser_accessibility_android.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
@@ -195,16 +196,17 @@ base::LazyInstance<base::string16>::Leaky g_all_search_keys =
 
 bool SectionPredicate(BrowserAccessibility* start, BrowserAccessibility* node) {
   switch (node->GetRole()) {
-    case ax::mojom::Role::kArticle:
     case ax::mojom::Role::kApplication:
+    case ax::mojom::Role::kArticle:
     case ax::mojom::Role::kBanner:
     case ax::mojom::Role::kComplementary:
     case ax::mojom::Role::kContentInfo:
     case ax::mojom::Role::kHeading:
     case ax::mojom::Role::kMain:
     case ax::mojom::Role::kNavigation:
-    case ax::mojom::Role::kSearch:
     case ax::mojom::Role::kRegion:
+    case ax::mojom::Role::kSearch:
+    case ax::mojom::Role::kSection:
       return true;
     default:
       return false;
@@ -691,7 +693,7 @@ jboolean WebContentsAccessibilityAndroid::PopulateAccessibilityNodeInfo(
       node->CanScrollLeft(), node->CanScrollRight(), node->IsClickable(),
       node->IsEditableText(), node->IsEnabled(), node->IsFocusable(),
       node->IsFocused(), node->IsCollapsed(), node->IsExpanded(),
-      node->HasNonEmptyValue());
+      node->HasNonEmptyValue(), !node->GetInnerText().empty());
   Java_WebContentsAccessibilityImpl_setAccessibilityNodeInfoClassName(
       env, obj, info,
       base::android::ConvertUTF8ToJavaString(env, node->GetClassName()));
@@ -932,7 +934,7 @@ jboolean WebContentsAccessibilityAndroid::AdjustSlider(
   // Slider does not move if the delta value is less than 1.
   delta = ((delta < 1) ? 1 : delta);
   value += (increment ? delta : -delta);
-  value = std::max(std::min(value, max), min);
+  value = base::ClampToRange(value, min, max);
   if (value != original_value) {
     node->manager()->SetValue(*node, base::NumberToString(value));
     return true;
@@ -979,7 +981,7 @@ jint WebContentsAccessibilityAndroid::FindElementType(
   // SetCanWrapToLastElement needs to be set as true after talkback pushes its
   // corresponding change for b/29103330.
   tree_search.SetCanWrapToLastElement(false);
-  tree_search.SetVisibleOnly(false);
+  tree_search.SetOnscreenOnly(false);
   tree_search.AddPredicate(predicate);
 
   if (tree_search.CountMatches() == 0)

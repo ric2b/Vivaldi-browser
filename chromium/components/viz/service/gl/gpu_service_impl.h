@@ -5,6 +5,9 @@
 #ifndef COMPONENTS_VIZ_SERVICE_GL_GPU_SERVICE_IMPL_H_
 #define COMPONENTS_VIZ_SERVICE_GL_GPU_SERVICE_IMPL_H_
 
+#include <memory>
+#include <string>
+
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/memory/scoped_refptr.h"
@@ -117,24 +120,28 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
   void CloseChannel(int32_t client_id) override;
 #if defined(OS_CHROMEOS)
   void CreateArcVideoDecodeAccelerator(
-      arc::mojom::VideoDecodeAcceleratorRequest vda_request) override;
+      mojo::PendingReceiver<arc::mojom::VideoDecodeAccelerator> vda_receiver)
+      override;
   void CreateArcVideoEncodeAccelerator(
-      arc::mojom::VideoEncodeAcceleratorRequest vea_request) override;
+      mojo::PendingReceiver<arc::mojom::VideoEncodeAccelerator> vea_receiver)
+      override;
   void CreateArcVideoProtectedBufferAllocator(
-      arc::mojom::VideoProtectedBufferAllocatorRequest pba_request) override;
+      mojo::PendingReceiver<arc::mojom::VideoProtectedBufferAllocator>
+          pba_receiver) override;
   void CreateArcProtectedBufferManager(
-      arc::mojom::ProtectedBufferManagerRequest pbm_request) override;
+      mojo::PendingReceiver<arc::mojom::ProtectedBufferManager> pbm_receiver)
+      override;
   void CreateJpegDecodeAccelerator(
-      chromeos_camera::mojom::MjpegDecodeAcceleratorRequest jda_request)
-      override;
+      mojo::PendingReceiver<chromeos_camera::mojom::MjpegDecodeAccelerator>
+          jda_receiver) override;
   void CreateJpegEncodeAccelerator(
-      chromeos_camera::mojom::JpegEncodeAcceleratorRequest jea_request)
-      override;
+      mojo::PendingReceiver<chromeos_camera::mojom::JpegEncodeAccelerator>
+          jea_receiver) override;
 #endif  // defined(OS_CHROMEOS)
 
   void CreateVideoEncodeAcceleratorProvider(
-      media::mojom::VideoEncodeAcceleratorProviderRequest vea_provider_request)
-      override;
+      mojo::PendingReceiver<media::mojom::VideoEncodeAcceleratorProvider>
+          vea_provider_receiver) override;
   void CreateGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                              const gfx::Size& size,
                              gfx::BufferFormat format,
@@ -147,6 +154,10 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
                               const gpu::SyncToken& sync_token) override;
   void GetVideoMemoryUsageStats(
       GetVideoMemoryUsageStatsCallback callback) override;
+  void StartPeakMemoryMonitor(uint32_t sequence_num) override;
+  void GetPeakMemoryUsage(uint32_t sequence_num,
+                          GetPeakMemoryUsageCallback callback) override;
+
 #if defined(OS_WIN)
   void RequestCompleteGpuInfo(RequestCompleteGpuInfoCallback callback) override;
   void GetGpuSupportedRuntimeVersion(
@@ -228,6 +239,8 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
   }
   gpu::Scheduler* scheduler() { return scheduler_.get(); }
 
+  base::TaskRunner* main_runner() { return main_runner_.get(); }
+
   gpu::GpuWatchdogThread* watchdog_thread() { return watchdog_thread_.get(); }
 
   const gpu::GpuFeatureInfo& gpu_feature_info() const {
@@ -264,18 +277,26 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
 
 #if defined(OS_CHROMEOS)
   void CreateArcVideoDecodeAcceleratorOnMainThread(
-      arc::mojom::VideoDecodeAcceleratorRequest vda_request);
+      mojo::PendingReceiver<arc::mojom::VideoDecodeAccelerator> vda_receiver);
   void CreateArcVideoEncodeAcceleratorOnMainThread(
-      arc::mojom::VideoEncodeAcceleratorRequest vea_request);
+      mojo::PendingReceiver<arc::mojom::VideoEncodeAccelerator> vea_receiver);
   void CreateArcVideoProtectedBufferAllocatorOnMainThread(
-      arc::mojom::VideoProtectedBufferAllocatorRequest pba_request);
+      mojo::PendingReceiver<arc::mojom::VideoProtectedBufferAllocator>
+          pba_receiver);
   void CreateArcProtectedBufferManagerOnMainThread(
-      arc::mojom::ProtectedBufferManagerRequest pbm_request);
+      mojo::PendingReceiver<arc::mojom::ProtectedBufferManager> pbm_receiver);
 #endif  // defined(OS_CHROMEOS)
 
   void RequestHDRStatusOnMainThread(RequestHDRStatusCallback callback);
 
   void OnBackgroundedOnMainThread();
+
+  // Ensure that all peak memory tracking occurs on the main thread as all
+  // MemoryTracker are created on that thread. All requests made before
+  // GpuServiceImpl::InitializeWithHost will be enqueued.
+  void StartPeakMemoryMonitorOnMainThread(uint32_t sequence_num);
+  void GetPeakMemoryUsageOnMainThread(uint32_t sequence_num,
+                                      GetPeakMemoryUsageCallback callback);
 
   // Attempts to cleanly exit the process but only if not running in host
   // process. If |for_context_loss| is true an error message will be logged.
@@ -348,6 +369,12 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl : public gpu::GpuChannelManagerDelegate,
   // Used to track the task to bind a GpuServiceRequest on the io thread.
   base::CancelableTaskTracker bind_task_tracker_;
   std::unique_ptr<mojo::BindingSet<mojom::GpuService>> bindings_;
+
+#if defined(OS_WIN)
+  // Used to track if the Dx Diag task on a different thread is still running.
+  // The status is checked before exiting the unsandboxed GPU process.
+  bool long_dx_task_different_thread_in_progress_ = false;
+#endif
 
 #if defined(OS_CHROMEOS)
   scoped_refptr<arc::ProtectedBufferManager> protected_buffer_manager_;

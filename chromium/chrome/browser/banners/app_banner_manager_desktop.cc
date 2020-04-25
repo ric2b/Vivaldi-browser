@@ -13,13 +13,14 @@
 #include "chrome/browser/banners/app_banner_settings_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
-#include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/arc/arc_util.h"
@@ -54,7 +55,7 @@ void AppBannerManagerDesktop::DisableTriggeringForTesting() {
 
 AppBannerManagerDesktop::AppBannerManagerDesktop(
     content::WebContents* web_contents)
-    : AppBannerManager(web_contents), registrar_observer_(this) {
+    : AppBannerManager(web_contents) {
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   extension_registry_ = extensions::ExtensionRegistry::Get(profile);
@@ -114,15 +115,23 @@ bool AppBannerManagerDesktop::IsRelatedAppInstalled(
   return false;
 }
 
-bool AppBannerManagerDesktop::IsWebAppConsideredInstalled(
-    content::WebContents* web_contents,
-    const GURL& validated_url,
-    const GURL& start_url,
-    const GURL& manifest_url) {
-  return web_app::WebAppProvider::Get(
-             Profile::FromBrowserContext(web_contents->GetBrowserContext()))
-      ->registrar()
-      .IsLocallyInstalled(start_url);
+web_app::AppRegistrar& AppBannerManagerDesktop::registrar() {
+  auto* provider = web_app::WebAppProviderBase::GetProviderBase(
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
+  DCHECK(provider);
+  return provider->registrar();
+}
+
+bool AppBannerManagerDesktop::IsWebAppConsideredInstalled() {
+  DCHECK(!manifest_.IsEmpty());
+  return registrar().IsLocallyInstalled(manifest_.start_url);
+}
+
+bool AppBannerManagerDesktop::ShouldAllowWebAppReplacementInstall() {
+  web_app::AppId app_id = web_app::GenerateAppIdFromURL(manifest_.start_url);
+  DCHECK(registrar().IsLocallyInstalled(app_id));
+  auto display_mode = registrar().GetAppDisplayMode(app_id);
+  return display_mode == blink::mojom::DisplayMode::kBrowser;
 }
 
 void AppBannerManagerDesktop::ShowBannerUi(WebappInstallSource install_source) {
@@ -154,16 +163,12 @@ void AppBannerManagerDesktop::OnEngagementEvent(
 
 void AppBannerManagerDesktop::OnWebAppInstalled(
     const web_app::AppId& installed_app_id) {
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  auto* provider = web_app::WebAppProviderBase::GetProviderBase(profile);
-  DCHECK(provider);
   base::Optional<web_app::AppId> app_id =
-      provider->registrar().FindAppWithUrlInScope(validated_url_);
+      registrar().FindAppWithUrlInScope(validated_url_);
   if (app_id.has_value() && *app_id == installed_app_id &&
-      provider->registrar().GetAppLaunchContainer(*app_id) ==
-          web_app::LaunchContainer::kWindow) {
-    OnInstall(blink::kWebDisplayModeStandalone);
+      registrar().GetAppDisplayMode(*app_id) ==
+          blink::mojom::DisplayMode::kStandalone) {
+    OnInstall(blink::mojom::DisplayMode::kStandalone);
   }
 }
 

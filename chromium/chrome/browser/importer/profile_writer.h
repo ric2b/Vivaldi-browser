@@ -18,9 +18,11 @@
 #include "url/gurl.h"
 
 struct ImportedBookmarkEntry;
+class Profile;
+
+// Vivaldi
 struct ImportedNotesEntry;
 struct ImportedSpeedDialEntry;
-class Profile;
 
 namespace autofill {
 struct PasswordForm;
@@ -69,14 +71,6 @@ class ProfileWriter : public base::RefCountedThreadSafe<ProfileWriter> {
       const std::vector<ImportedBookmarkEntry>& bookmarks,
       const base::string16& top_level_folder_name);
 
-  // Adds the |notes| to the notes model.
-  virtual void AddNotes(
-      const std::vector<ImportedNotesEntry>& notes,
-      const base::string16& top_level_folder_name);
-
-  virtual void AddSpeedDial(
-      const std::vector<ImportedSpeedDialEntry>& speeddial);
-
   virtual void AddFavicons(const favicon_base::FaviconUsageDataList& favicons);
 
   // Adds the TemplateURLs in |template_urls| to the local store.
@@ -93,6 +87,15 @@ class ProfileWriter : public base::RefCountedThreadSafe<ProfileWriter> {
   // Adds the imported autofill entries to the autofill database.
   virtual void AddAutofillFormDataEntries(
       const std::vector<autofill::AutofillEntry>& autofill_entries);
+
+  // Vivaldi
+  // Adds the |notes| to the notes model.
+  virtual void AddNotes(
+      const std::vector<ImportedNotesEntry>& notes,
+      const base::string16& top_level_folder_name);
+
+  virtual void AddSpeedDial(
+      const std::vector<ImportedSpeedDialEntry>& speeddial);
 
  protected:
   friend class base::RefCountedThreadSafe<ProfileWriter>;

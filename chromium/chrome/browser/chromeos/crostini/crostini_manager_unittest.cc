@@ -13,9 +13,12 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
+#include "chrome/browser/chromeos/crostini/fake_crostini_features.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/dbus/cicerone/cicerone_service.pb.h"
+#include "chromeos/dbus/concierge/service.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_cicerone_client.h"
 #include "chromeos/dbus/fake_concierge_client.h"
@@ -168,8 +171,7 @@ class CrostiniManagerTest : public testing::Test {
   ~CrostiniManagerTest() override { chromeos::DBusThreadManager::Shutdown(); }
 
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kCrostini, features::kCrostiniAdvancedAccessControls}, {});
+    scoped_feature_list_.InitWithFeatures({features::kCrostini}, {});
     run_loop_ = std::make_unique<base::RunLoop>();
     profile_ = std::make_unique<TestingProfile>();
     crostini_manager_ = CrostiniManager::GetForProfile(profile_.get());
@@ -205,6 +207,17 @@ class CrostiniManagerTest : public testing::Test {
         vm_tools::cicerone::InstallLinuxPackageProgressSignal::SUCCEEDED);
 
     fake_cicerone_client_->InstallLinuxPackageProgress(signal);
+  }
+
+  void SendSucceededApplySignal() {
+    vm_tools::cicerone::ApplyAnsiblePlaybookProgressSignal signal;
+    signal.set_owner_id(CryptohomeIdForProfile(profile()));
+    signal.set_vm_name(kCrostiniDefaultVmName);
+    signal.set_container_name(kCrostiniDefaultContainerName);
+    signal.set_status(
+        vm_tools::cicerone::ApplyAnsiblePlaybookProgressSignal::SUCCEEDED);
+
+    fake_cicerone_client_->NotifyApplyAnsiblePlaybookProgress(signal);
   }
 
   base::RunLoop* run_loop() { return run_loop_.get(); }
@@ -346,8 +359,8 @@ TEST_F(CrostiniManagerTest, StopVmSuccess) {
 }
 
 TEST_F(CrostiniManagerTest, InstallLinuxPackageRootAccessError) {
-  profile()->GetPrefs()->SetBoolean(
-      crostini::prefs::kUserCrostiniRootAccessAllowedByPolicy, false);
+  FakeCrostiniFeatures crostini_features;
+  crostini_features.set_root_access_allowed(false);
   crostini_manager()->InstallLinuxPackage(
       kVmName, kContainerName, "/tmp/package.deb",
       base::BindOnce(&ExpectCrostiniResult, run_loop()->QuitClosure(),
@@ -674,9 +687,11 @@ class CrostiniManagerRestartTest : public CrostiniManagerTest,
                   const std::vector<std::string>& mount_options,
                   chromeos::MountType type,
                   chromeos::MountAccessMode access_mode) {
+    if (abort_on_mount_event_) {
+      Abort();
+    }
     disk_mount_manager_mock_->NotifyMountEvent(
-        chromeos::disks::DiskMountManager::MountEvent::MOUNTING,
-        chromeos::MountError::MOUNT_ERROR_NONE,
+        chromeos::disks::DiskMountManager::MountEvent::MOUNTING, mount_error_,
         chromeos::disks::DiskMountManager::MountPointInfo(
             source_path, "/media/fuse/" + mount_label,
             chromeos::MountType::MOUNT_TYPE_NETWORK_STORAGE,
@@ -695,6 +710,11 @@ class CrostiniManagerRestartTest : public CrostiniManagerTest,
   bool abort_on_container_started_ = false;
   bool abort_on_container_setup_ = false;
   bool abort_on_ssh_keys_fetched_ = false;
+
+  // Used by SshfsMount().
+  bool abort_on_mount_event_ = false;
+  chromeos::MountError mount_error_ = chromeos::MountError::MOUNT_ERROR_NONE;
+
   int restart_crostini_callback_count_ = 0;
   int remove_crostini_callback_count_ = 0;
   chromeos::disks::MockDiskMountManager* disk_mount_manager_mock_;
@@ -833,6 +853,74 @@ TEST_F(CrostiniManagerRestartTest, AbortOnContainerSetup) {
   EXPECT_TRUE(fake_concierge_client_->start_termina_vm_called());
   EXPECT_FALSE(fake_concierge_client_->get_container_ssh_keys_called());
   EXPECT_EQ(0, restart_crostini_callback_count_);
+}
+
+TEST_F(CrostiniManagerRestartTest, AbortOnSshKeysFetched) {
+  abort_on_ssh_keys_fetched_ = true;
+  // Use termina/penguin names to allow fetch ssh keys.
+  restart_id_ = crostini_manager()->RestartCrostini(
+      kCrostiniDefaultVmName, kCrostiniDefaultContainerName,
+      base::BindOnce(&CrostiniManagerRestartTest::RestartCrostiniCallback,
+                     base::Unretained(this), run_loop()->QuitClosure()),
+      this);
+  run_loop()->Run();
+  EXPECT_TRUE(fake_concierge_client_->create_disk_image_called());
+  EXPECT_TRUE(fake_concierge_client_->start_termina_vm_called());
+  EXPECT_TRUE(fake_concierge_client_->get_container_ssh_keys_called());
+  EXPECT_EQ(0, restart_crostini_callback_count_);
+}
+
+TEST_F(CrostiniManagerRestartTest, AbortOnMountEvent) {
+  abort_on_mount_event_ = true;
+
+  disk_mount_manager_mock_ = new chromeos::disks::MockDiskMountManager;
+  chromeos::disks::DiskMountManager::InitializeForTesting(
+      disk_mount_manager_mock_);
+  EXPECT_CALL(*disk_mount_manager_mock_, MountPath)
+      .WillOnce(Invoke(
+          this,
+          &CrostiniManagerRestartTest_AbortOnMountEvent_Test::SshfsMount));
+
+  // Use termina/penguin names to allow fetch ssh keys.
+  restart_id_ = crostini_manager()->RestartCrostini(
+      kCrostiniDefaultVmName, kCrostiniDefaultContainerName,
+      base::BindOnce(&CrostiniManagerRestartTest::RestartCrostiniCallback,
+                     base::Unretained(this), run_loop()->QuitClosure()),
+      this);
+  run_loop()->Run();
+  EXPECT_TRUE(fake_concierge_client_->create_disk_image_called());
+  EXPECT_TRUE(fake_concierge_client_->start_termina_vm_called());
+  EXPECT_TRUE(fake_concierge_client_->get_container_ssh_keys_called());
+  EXPECT_EQ(0, restart_crostini_callback_count_);
+
+  chromeos::disks::DiskMountManager::Shutdown();
+}
+
+TEST_F(CrostiniManagerRestartTest, AbortOnMountEventWithError) {
+  mount_error_ = chromeos::MountError::MOUNT_ERROR_INSUFFICIENT_PERMISSIONS;
+  abort_on_mount_event_ = true;
+
+  disk_mount_manager_mock_ = new chromeos::disks::MockDiskMountManager;
+  chromeos::disks::DiskMountManager::InitializeForTesting(
+      disk_mount_manager_mock_);
+  EXPECT_CALL(*disk_mount_manager_mock_, MountPath)
+      .WillOnce(Invoke(
+          this, &CrostiniManagerRestartTest_AbortOnMountEventWithError_Test::
+                    SshfsMount));
+
+  // Use termina/penguin names to allow fetch ssh keys.
+  restart_id_ = crostini_manager()->RestartCrostini(
+      kCrostiniDefaultVmName, kCrostiniDefaultContainerName,
+      base::BindOnce(&CrostiniManagerRestartTest::RestartCrostiniCallback,
+                     base::Unretained(this), run_loop()->QuitClosure()),
+      this);
+  run_loop()->Run();
+  EXPECT_TRUE(fake_concierge_client_->create_disk_image_called());
+  EXPECT_TRUE(fake_concierge_client_->start_termina_vm_called());
+  EXPECT_TRUE(fake_concierge_client_->get_container_ssh_keys_called());
+  EXPECT_EQ(0, restart_crostini_callback_count_);
+
+  chromeos::disks::DiskMountManager::Shutdown();
 }
 
 TEST_F(CrostiniManagerRestartTest, OnlyMountTerminaPenguin) {
@@ -1068,6 +1156,24 @@ TEST_F(CrostiniManagerRestartTest, UninstallThenRestart) {
 
   EXPECT_EQ(2, restart_crostini_callback_count_);
   EXPECT_EQ(1, remove_crostini_callback_count_);
+}
+
+TEST_F(CrostiniManagerRestartTest, VmStoppedDuringRestart) {
+  fake_cicerone_client_->set_send_container_started_signal(false);
+  restart_id_ = crostini_manager()->RestartCrostini(
+      kVmName, kContainerName,
+      base::BindOnce(&CrostiniManagerRestartTest::RestartCrostiniCallback,
+                     base::Unretained(this), run_loop()->QuitClosure()),
+      this);
+  run_loop()->RunUntilIdle();
+  EXPECT_TRUE(crostini_manager()->IsRestartPending(restart_id_));
+  EXPECT_EQ(0, restart_crostini_callback_count_);
+  vm_tools::concierge::VmStoppedSignal vm_stopped_signal;
+  vm_stopped_signal.set_owner_id(CryptohomeIdForProfile(profile()));
+  vm_stopped_signal.set_name(kVmName);
+  crostini_manager()->OnVmStopped(vm_stopped_signal);
+  EXPECT_FALSE(crostini_manager()->IsRestartPending(restart_id_));
+  EXPECT_EQ(1, restart_crostini_callback_count_);
 }
 
 class CrostiniManagerEnterpriseReportingTest
@@ -1399,33 +1505,71 @@ TEST_F(CrostiniManagerTest, StartContainerSuccess) {
   run_loop()->Run();
 }
 
-TEST_F(CrostiniManagerTest, StartContainerWithAnsibleInfrastructureFailure) {
+TEST_F(CrostiniManagerTest, StartContainerWithAnsibleInfraInstallFailure) {
   scoped_feature_list_.Reset();
   scoped_feature_list_.InitAndEnableFeature(
       features::kCrostiniAnsibleInfrastructure);
 
   // Response for failed Ansible installation.
-  vm_tools::cicerone::InstallLinuxPackageResponse response;
-  response.set_status(vm_tools::cicerone::InstallLinuxPackageResponse::FAILED);
-  fake_cicerone_client_->set_install_linux_package_response(response);
+  vm_tools::cicerone::InstallLinuxPackageResponse install_response;
+  install_response.set_status(
+      vm_tools::cicerone::InstallLinuxPackageResponse::FAILED);
+  fake_cicerone_client_->set_install_linux_package_response(install_response);
 
   crostini_manager()->StartLxdContainer(
       kCrostiniDefaultVmName, kCrostiniDefaultContainerName,
       base::BindOnce(&ExpectCrostiniResult, run_loop()->QuitClosure(),
-                     CrostiniResult::CONTAINER_START_FAILED));
+                     CrostiniResult::UNKNOWN_ERROR));
 
   run_loop()->Run();
 }
 
-TEST_F(CrostiniManagerTest, StartContainerWithAnsibleInfrastructureSuccess) {
+TEST_F(CrostiniManagerTest, StartContainerWithAnsibleInfraApplicationFailure) {
   scoped_feature_list_.Reset();
   scoped_feature_list_.InitAndEnableFeature(
       features::kCrostiniAnsibleInfrastructure);
 
   // Response for successful Ansible installation.
-  vm_tools::cicerone::InstallLinuxPackageResponse response;
-  response.set_status(vm_tools::cicerone::InstallLinuxPackageResponse::STARTED);
-  fake_cicerone_client_->set_install_linux_package_response(response);
+  vm_tools::cicerone::InstallLinuxPackageResponse install_response;
+  install_response.set_status(
+      vm_tools::cicerone::InstallLinuxPackageResponse::STARTED);
+  fake_cicerone_client_->set_install_linux_package_response(install_response);
+
+  // Response for failed Ansible playbook application.
+  vm_tools::cicerone::ApplyAnsiblePlaybookResponse apply_response;
+  apply_response.set_status(
+      vm_tools::cicerone::ApplyAnsiblePlaybookResponse::FAILED);
+  fake_cicerone_client_->set_apply_ansible_playbook_response(apply_response);
+
+  crostini_manager()->StartLxdContainer(
+      kCrostiniDefaultVmName, kCrostiniDefaultContainerName,
+      base::BindOnce(&ExpectCrostiniResult, run_loop()->QuitClosure(),
+                     CrostiniResult::UNKNOWN_ERROR));
+
+  base::RunLoop().RunUntilIdle();
+
+  // Finish successful Ansible installation.
+  SendSucceededInstallSignal();
+
+  run_loop()->Run();
+}
+
+TEST_F(CrostiniManagerTest, StartContainerWithAnsibleInfraSuccess) {
+  scoped_feature_list_.Reset();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kCrostiniAnsibleInfrastructure);
+
+  // Response for successful Ansible installation.
+  vm_tools::cicerone::InstallLinuxPackageResponse install_response;
+  install_response.set_status(
+      vm_tools::cicerone::InstallLinuxPackageResponse::STARTED);
+  fake_cicerone_client_->set_install_linux_package_response(install_response);
+
+  // Response for successful Ansible playbook application.
+  vm_tools::cicerone::ApplyAnsiblePlaybookResponse apply_response;
+  apply_response.set_status(
+      vm_tools::cicerone::ApplyAnsiblePlaybookResponse::STARTED);
+  fake_cicerone_client_->set_apply_ansible_playbook_response(apply_response);
 
   crostini_manager()->StartLxdContainer(
       kCrostiniDefaultVmName, kCrostiniDefaultContainerName,
@@ -1437,7 +1581,98 @@ TEST_F(CrostiniManagerTest, StartContainerWithAnsibleInfrastructureSuccess) {
   // Finish successful Ansible installation.
   SendSucceededInstallSignal();
 
+  // Finish successful Ansible playbook application.
+  SendSucceededApplySignal();
+
   run_loop()->Run();
+}
+
+class CrostiniManagerUpgradeContainerTest
+    : public CrostiniManagerTest,
+      public UpgradeContainerProgressObserver {
+ public:
+  void SetUp() override {
+    CrostiniManagerTest::SetUp();
+    progress_signal_.set_owner_id(CryptohomeIdForProfile(profile()));
+    progress_signal_.set_vm_name(kVmName);
+    progress_signal_.set_container_name(kContainerName);
+    progress_run_loop_ = std::make_unique<base::RunLoop>();
+    crostini_manager()->AddUpgradeContainerProgressObserver(this);
+  }
+
+  void TearDown() override {
+    crostini_manager()->RemoveUpgradeContainerProgressObserver(this);
+    progress_run_loop_.reset();
+    CrostiniManagerTest::TearDown();
+  }
+
+  void RunUntilUpgradeDone(UpgradeContainerProgressStatus final_status) {
+    final_status_ = final_status;
+    progress_run_loop_->Run();
+  }
+
+  void SendProgressSignal() {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &chromeos::FakeCiceroneClient::NotifyUpgradeContainerProgress,
+            base::Unretained(fake_cicerone_client_), progress_signal_));
+  }
+
+ protected:
+  // UpgradeContainerProgressObserver
+  void OnUpgradeContainerProgress(
+      const ContainerId& container_id,
+      UpgradeContainerProgressStatus status,
+      const std::vector<std::string>& messages) override {
+    if (status == final_status_) {
+      progress_run_loop_->Quit();
+    }
+  }
+
+  ContainerId container_id_ = ContainerId(kVmName, kContainerName);
+
+  UpgradeContainerProgressStatus final_status_ =
+      UpgradeContainerProgressStatus::FAILED;
+
+  vm_tools::cicerone::UpgradeContainerProgressSignal progress_signal_;
+  // must be created on UI thread
+  std::unique_ptr<base::RunLoop> progress_run_loop_;
+};
+
+TEST_F(CrostiniManagerUpgradeContainerTest, UpgradeContainerSuccess) {
+  crostini_manager()->UpgradeContainer(
+      container_id_, ContainerVersion::STRETCH, ContainerVersion::BUSTER,
+      base::BindOnce(&ExpectCrostiniResult, run_loop()->QuitClosure(),
+                     CrostiniResult::SUCCESS));
+
+  run_loop()->Run();
+
+  progress_signal_.set_status(
+      vm_tools::cicerone::UpgradeContainerProgressSignal::SUCCEEDED);
+
+  SendProgressSignal();
+  RunUntilUpgradeDone(UpgradeContainerProgressStatus::SUCCEEDED);
+}
+
+TEST_F(CrostiniManagerUpgradeContainerTest, CancelUpgradeContainerSuccess) {
+  crostini_manager()->UpgradeContainer(
+      container_id_, ContainerVersion::STRETCH, ContainerVersion::BUSTER,
+      base::BindOnce(&ExpectCrostiniResult, run_loop()->QuitClosure(),
+                     CrostiniResult::SUCCESS));
+
+  progress_signal_.set_status(
+      vm_tools::cicerone::UpgradeContainerProgressSignal::IN_PROGRESS);
+
+  SendProgressSignal();
+  run_loop()->Run();
+
+  base::RunLoop run_loop2;
+  crostini_manager()->CancelUpgradeContainer(
+      container_id_,
+      base::BindOnce(&ExpectCrostiniResult, run_loop2.QuitClosure(),
+                     CrostiniResult::SUCCESS));
+  run_loop2.Run();
 }
 
 }  // namespace crostini

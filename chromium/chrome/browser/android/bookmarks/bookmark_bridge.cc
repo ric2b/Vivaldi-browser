@@ -34,12 +34,16 @@
 #include "components/bookmarks/common/android/bookmark_type.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
+#include "components/dom_distiller/core/url_utils.h"
 #include "components/prefs/pref_service.h"
 #include "components/query_parser/query_parser.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/undo/bookmark_undo_service.h"
 #include "components/undo/undo_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/web_contents.h"
+
+#include "app/vivaldi_apptools.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
@@ -59,6 +63,8 @@ using bookmarks::BookmarkType;
 using content::BrowserThread;
 
 namespace {
+
+const int kInvalidId = -1;
 
 class BookmarkTitleComparer {
  public:
@@ -145,6 +151,39 @@ static jlong JNI_BookmarkBridge_Init(JNIEnv* env,
                                      const JavaParamRef<jobject>& j_profile) {
   BookmarkBridge* delegate = new BookmarkBridge(env, obj, j_profile);
   return reinterpret_cast<intptr_t>(delegate);
+}
+
+static jlong JNI_BookmarkBridge_GetBookmarkIdForWebContents(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jweb_contents,
+    jboolean only_editable) {
+  auto* web_contents = content::WebContents::FromJavaWebContents(jweb_contents);
+  if (!web_contents)
+    return kInvalidId;
+
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  GURL url = dom_distiller::url_utils::GetOriginalUrlFromDistillerUrl(
+      web_contents->GetURL());
+
+  // Get all the nodes for |url| and sort them by date added.
+  std::vector<const bookmarks::BookmarkNode*> nodes;
+  bookmarks::ManagedBookmarkService* managed =
+      ManagedBookmarkServiceFactory::GetForProfile(profile);
+  bookmarks::BookmarkModel* model =
+      BookmarkModelFactory::GetForBrowserContext(profile);
+
+  model->GetNodesByURL(url, &nodes);
+  std::sort(nodes.begin(), nodes.end(), &bookmarks::MoreRecentlyAdded);
+
+  // Return the first node matching the search criteria.
+  for (const auto* node : nodes) {
+    if (only_editable && !managed->CanBeEditedByUser(node))
+      continue;
+    return node->id();
+  }
+
+  return kInvalidId;
 }
 
 jboolean BookmarkBridge::IsEditBookmarksEnabled(JNIEnv* env) {
@@ -262,7 +301,7 @@ void BookmarkBridge::GetTopLevelFolderIDs(
   std::size_t special_count = top_level_folders.size();
 
   if (get_normal) {
-    DCHECK_EQ(5u + 1 /* trash */, bookmark_model_->root_node()->children().size());
+    DCHECK_EQ(5u, bookmark_model_->root_node()->children().size());
 
     for (const auto& node : bookmark_model_->mobile_node()->children()) {
       if (node->is_folder())
@@ -375,6 +414,18 @@ ScopedJavaLocalRef<jobject> BookmarkBridge::GetDesktopFolderId(
   ScopedJavaLocalRef<jobject> folder_id_obj =
       JavaBookmarkIdCreateBookmarkId(
           env, desktop_node->id(), GetBookmarkType(desktop_node));
+  return folder_id_obj;
+}
+
+ScopedJavaLocalRef<jobject> BookmarkBridge::GetPartnerFolderId(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  DCHECK(partner_bookmarks_shim_->IsLoaded());
+
+  const BookmarkNode* partner_node =
+      partner_bookmarks_shim_->GetPartnerBookmarksRoot();
+  ScopedJavaLocalRef<jobject> folder_id_obj = JavaBookmarkIdCreateBookmarkId(
+      env, partner_node->id(), GetBookmarkType(partner_node));
   return folder_id_obj;
 }
 
@@ -567,6 +618,7 @@ jboolean BookmarkBridge::IsFolderVisible(JNIEnv* env,
   if (type == BookmarkType::BOOKMARK_TYPE_NORMAL) {
     const BookmarkNode* node = bookmarks::GetBookmarkNodeByID(
         bookmark_model_, static_cast<int64_t>(id));
+    if (!node) return false; // Vivaldi
     return node->IsVisible();
   }
   DCHECK_EQ(BookmarkType::BOOKMARK_TYPE_PARTNER, type);
@@ -709,7 +761,14 @@ void BookmarkBridge::MoveBookmark(
   bookmark_id = JavaBookmarkIdGetId(env, j_parent_id_obj);
   type = JavaBookmarkIdGetType(env, j_parent_id_obj);
   const BookmarkNode* new_parent_node = GetNodeByID(bookmark_id, type);
-  bookmark_model_->Move(node, new_parent_node, size_t{index});
+  // Bookmark should not be moved to its own parent folder
+  if (node->parent() != new_parent_node) {
+    bookmark_model_->Move(node, new_parent_node, size_t{index});
+  }
+  // VIVALDI: This is currently used for drag-drop of Speed Dials
+  else if (vivaldi::IsVivaldiRunning()) {
+    bookmark_model_->Move(node, new_parent_node, size_t{index});
+  }
 }
 
 ScopedJavaLocalRef<jobject> BookmarkBridge::AddBookmark(
@@ -778,6 +837,18 @@ ScopedJavaLocalRef<jobject> BookmarkBridge::CreateJavaBookmark(
   std::string url;
   if (node->is_url())
     url = node->url().spec();
+
+  if (vivaldi::IsVivaldiRunning()) {
+    return Java_BookmarkBridge_createVivaldiBookmarkItem(
+        env, node->id(), GetBookmarkType(node),
+        ConvertUTF16ToJavaString(env, GetTitle(node)),
+        ConvertUTF8ToJavaString(env, url), node->is_folder(), parent_id,
+        GetBookmarkType(parent), IsEditable(node), IsManaged(node),
+        node->GetSpeeddial(), ConvertUTF16ToJavaString(env, node->GetNickName()),
+        ConvertUTF16ToJavaString(env, node->GetDescription()),
+        ConvertUTF16ToJavaString(env, node->GetDefaultFaviconUri()),
+        ConvertUTF16ToJavaString(env, node->GetThumbnail()));
+  }
 
   return Java_BookmarkBridge_createBookmarkItem(
       env, node->id(), GetBookmarkType(node),
@@ -1039,6 +1110,20 @@ void BookmarkBridge::ExtensiveBookmarkChangesEnded(BookmarkModel* model) {
   Java_BookmarkBridge_extensiveBookmarkChangesEnded(env, obj);
 }
 
+/** Vivaldi */
+void BookmarkBridge::BookmarkSpeedDialNodeChanged(BookmarkModel* model,
+                                                  const BookmarkNode* node) {
+  if (!IsLoaded())
+    return;
+
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
+  if (obj.is_null())
+    return;
+  Java_BookmarkBridge_bookmarkSpeedDialNodeChanged(env, obj,
+                                                   CreateJavaBookmark(node));
+}
+
 void BookmarkBridge::PartnerShimChanged(PartnerBookmarksShim* shim) {
   if (!IsLoaded())
     return;
@@ -1077,4 +1162,87 @@ void BookmarkBridge::ReorderChildren(
   }
 
   bookmark_model_->ReorderChildren(bookmark_node, ordered_nodes);
+}
+
+// Vivaldi
+ScopedJavaLocalRef<jobject> BookmarkBridge::GetTrashFolderId(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  const BookmarkNode* trash_node = bookmark_model_->trash_node();
+  ScopedJavaLocalRef<jobject> folder_id_obj =
+      JavaBookmarkIdCreateBookmarkId(
+          env, trash_node->id(), GetBookmarkType(trash_node));
+  return folder_id_obj;
+}
+
+void BookmarkBridge::GetSpeedDialFolders(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& j_folders_obj) {
+  DCHECK(IsLoaded());
+
+  std::vector<const BookmarkNode*> bookmarkList;
+
+  // Stack for Depth-First Search of bookmark model.
+  base::stack<const BookmarkNode*> stk;
+
+  bookmarkList.push_back(bookmark_model_->mobile_node());
+  bookmarkList.push_back(bookmark_model_->bookmark_bar_node());
+  bookmarkList.push_back(bookmark_model_->other_node());
+
+  // Push all top folders in stack and give them depth of 0.
+  // Note the order to push folders to stack should be opposite to the order in
+  // output.
+  for (std::vector<const BookmarkNode*>::reverse_iterator it =
+           bookmarkList.rbegin();
+       it != bookmarkList.rend();
+       ++it) {
+    stk.push(*it);
+  }
+
+  while (!stk.empty()) {
+    const BookmarkNode* node = stk.top();
+    stk.pop();
+    if (node->GetSpeeddial())
+    Java_BookmarkBridge_addToBookmarkIdList(env,
+                                          j_folders_obj,
+                                          node->id(),
+                                          GetBookmarkType(node));
+    bookmarkList.clear();
+    for (const auto& child : node->children()) {
+      if (child->is_folder() &&
+          managed_bookmark_service_->CanBeEditedByUser(child.get())) {
+        bookmarkList.push_back(child.get());
+      }
+    }
+    for (std::vector<const BookmarkNode*>::reverse_iterator it =
+             bookmarkList.rbegin();
+         it != bookmarkList.rend();
+         ++it) {
+      stk.push(*it);
+    }
+  }
+}
+
+void BookmarkBridge::GetChildIDsVivaldi(JNIEnv* env,
+                            const JavaParamRef<jobject>& obj,
+                            jlong id,
+                            jint type,
+                            jboolean get_folders,
+                            jboolean get_bookmarks,
+                            jboolean get_separators,
+                            const JavaParamRef<jobject>& j_result_obj) {
+    DCHECK(IsLoaded());
+    const BookmarkNode* parent = GetNodeByID(id, type);
+    if (!parent->is_folder() || !IsReachable(parent))
+      return;
+
+    // Get the folder contents
+    for (const auto& child : parent->children()) {
+      if (IsFolderAvailable(child.get()) && IsReachable(child.get()) &&
+          (child->is_folder() ? get_folders : (child->is_separator() ? get_separators : get_bookmarks) )) {
+        Java_BookmarkBridge_addToBookmarkIdList(env, j_result_obj, child->id(),
+                                         GetBookmarkType(child.get()));
+      }
+    }
 }

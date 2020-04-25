@@ -1115,6 +1115,12 @@ void GL_BINDING_CALL MockGLInterface::Mock_glDisable(GLenum cap) {
 }
 
 void GL_BINDING_CALL
+MockGLInterface::Mock_glDisableExtensionANGLE(const char* name) {
+  MakeGlMockFunctionUnique("glDisableExtensionANGLE");
+  interface_->DisableExtensionANGLE(name);
+}
+
+void GL_BINDING_CALL
 MockGLInterface::Mock_glDisableVertexAttribArray(GLuint index) {
   MakeGlMockFunctionUnique("glDisableVertexAttribArray");
   interface_->DisableVertexAttribArray(index);
@@ -1303,6 +1309,12 @@ void GL_BINDING_CALL MockGLInterface::Mock_glEndQueryEXT(GLenum target) {
   interface_->EndQuery(target);
 }
 
+void GL_BINDING_CALL
+MockGLInterface::Mock_glEndTilingQCOM(GLbitfield preserveMask) {
+  MakeGlMockFunctionUnique("glEndTilingQCOM");
+  interface_->EndTilingQCOM(preserveMask);
+}
+
 void GL_BINDING_CALL MockGLInterface::Mock_glEndTransformFeedback(void) {
   MakeGlMockFunctionUnique("glEndTransformFeedback");
   interface_->EndTransformFeedback();
@@ -1366,6 +1378,14 @@ MockGLInterface::Mock_glFramebufferParameteri(GLenum target,
                                               GLenum pname,
                                               GLint param) {
   MakeGlMockFunctionUnique("glFramebufferParameteri");
+  interface_->FramebufferParameteri(target, pname, param);
+}
+
+void GL_BINDING_CALL
+MockGLInterface::Mock_glFramebufferParameteriMESA(GLenum target,
+                                                  GLenum pname,
+                                                  GLint param) {
+  MakeGlMockFunctionUnique("glFramebufferParameteriMESA");
   interface_->FramebufferParameteri(target, pname, param);
 }
 
@@ -3948,6 +3968,16 @@ MockGLInterface::Mock_glSignalSemaphoreEXT(GLuint semaphore,
 }
 
 void GL_BINDING_CALL
+MockGLInterface::Mock_glStartTilingQCOM(GLuint x,
+                                        GLuint y,
+                                        GLuint width,
+                                        GLuint height,
+                                        GLbitfield preserveMask) {
+  MakeGlMockFunctionUnique("glStartTilingQCOM");
+  interface_->StartTilingQCOM(x, y, width, height, preserveMask);
+}
+
+void GL_BINDING_CALL
 MockGLInterface::Mock_glStencilFillPathCHROMIUM(GLuint path,
                                                 GLenum fillMode,
                                                 GLuint mask) {
@@ -5333,6 +5363,9 @@ MockGLInterface::GetGLProcAddress(const char* name) {
     return reinterpret_cast<GLFunctionPointerType>(Mock_glDetachShader);
   if (strcmp(name, "glDisable") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glDisable);
+  if (strcmp(name, "glDisableExtensionANGLE") == 0)
+    return reinterpret_cast<GLFunctionPointerType>(
+        Mock_glDisableExtensionANGLE);
   if (strcmp(name, "glDisableVertexAttribArray") == 0)
     return reinterpret_cast<GLFunctionPointerType>(
         Mock_glDisableVertexAttribArray);
@@ -5396,6 +5429,8 @@ MockGLInterface::GetGLProcAddress(const char* name) {
     return reinterpret_cast<GLFunctionPointerType>(Mock_glEndQueryARB);
   if (strcmp(name, "glEndQueryEXT") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glEndQueryEXT);
+  if (strcmp(name, "glEndTilingQCOM") == 0)
+    return reinterpret_cast<GLFunctionPointerType>(Mock_glEndTilingQCOM);
   if (strcmp(name, "glEndTransformFeedback") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glEndTransformFeedback);
   if (strcmp(name, "glEndTransformFeedbackEXT") == 0)
@@ -5422,6 +5457,9 @@ MockGLInterface::GetGLProcAddress(const char* name) {
   if (strcmp(name, "glFramebufferParameteri") == 0)
     return reinterpret_cast<GLFunctionPointerType>(
         Mock_glFramebufferParameteri);
+  if (strcmp(name, "glFramebufferParameteriMESA") == 0)
+    return reinterpret_cast<GLFunctionPointerType>(
+        Mock_glFramebufferParameteriMESA);
   if (strcmp(name, "glFramebufferRenderbuffer") == 0)
     return reinterpret_cast<GLFunctionPointerType>(
         Mock_glFramebufferRenderbuffer);
@@ -6165,6 +6203,8 @@ MockGLInterface::GetGLProcAddress(const char* name) {
     return reinterpret_cast<GLFunctionPointerType>(Mock_glShaderSource);
   if (strcmp(name, "glSignalSemaphoreEXT") == 0)
     return reinterpret_cast<GLFunctionPointerType>(Mock_glSignalSemaphoreEXT);
+  if (strcmp(name, "glStartTilingQCOM") == 0)
+    return reinterpret_cast<GLFunctionPointerType>(Mock_glStartTilingQCOM);
   if (strcmp(name, "glStencilFillPathCHROMIUM") == 0)
     return reinterpret_cast<GLFunctionPointerType>(
         Mock_glStencilFillPathCHROMIUM);

@@ -7,6 +7,7 @@
 <translation id="1156623771253174079">{SECONDS,plural, =1{před minutou}few{před # minutami}many{před # minuty}other{před # minutami}}</translation>
 <translation id="1169783199079129864">{MINUTES,plural, =1{1 min}few{# min}many{# min}other{# min}}</translation>
 <translation id="1181037720776840403">Odebrat</translation>
+<translation id="1201402288615127009">Další</translation>
 <translation id="1243314992276662751">Nahrát</translation>
 <translation id="1266864766717917324">Sdílení obsahu typu <ph name="CONTENT_TYPE" /> se nezdařilo</translation>
 <translation id="1269641567813814718">Win</translation>
@@ -51,6 +52,7 @@
 <translation id="2289052229480071835">Klepněte na cíle klepnutí na obrazovce.</translation>
 <translation id="2295140143284145483">Průzkum</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="2353636109065292463">Kontrola připojení k internetu</translation>
 <translation id="2388990488038464401">Zavolat toto číslo z vašeho telefonu?</translation>
 <translation id="24452542372838207">Rozbalit oznámení</translation>
 <translation id="2445449901874883781">Použít vysokou hustotu</translation>
@@ -81,7 +83,6 @@
 <translation id="3295886253693811851">Zavolat pomocí služby</translation>
 <translation id="335581015389089642">Řeč</translation>
 <translation id="3389286852084373014">Text je příliš dlouhý</translation>
-<translation id="3443810440409579745">Byla přijata karta.</translation>
 <translation id="3479552764303398839">Teď ne</translation>
 <translation id="348799646910989694">Polička byla automaticky skryta</translation>
 <translation id="3600566671520689681">{DAYS,plural, =1{Zbývá 1 den}few{Zbývají # dny}many{Zbývá # dne}other{Zbývá # dnů}}</translation>
@@ -111,14 +112,11 @@
 <translation id="4724120544754982507">Centrum oznámení – nepřečtená oznámení: <ph name="UNREAD_NOTIFICATION_COUNT" /></translation>
 <translation id="4730374152663651037">ČASTO POUŽÍVANÉ</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{zbývá 1 měsíc}few{zbývají # měsíce}many{zbývá # měsíce}other{zbývá # měsíců}}</translation>
-<translation id="4841881773802181781">Vložení</translation>
-<translation id="4881695831933465202">Otevřít</translation>
 <translation id="4888938634149558681">Volat</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 sekunda}few{# sekundy}many{# sekundy}other{# sekund}}</translation>
 <translation id="4971687151119236543">Média – předchozí skladba</translation>
 <translation id="5046499563572181734">Klepněte sem</translation>
 <translation id="5076340679995252485">Vložit</translation>
-<translation id="5137751499640340777">Spustit Asistenta Google</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">Tlačítko k zobrazení skrytého obsahu</translation>
 <translation id="5278860589123563674">Odeslání se nezdařilo</translation>
@@ -155,6 +153,7 @@
 <translation id="6394627529324717982">Čárka</translation>
 <translation id="6397363302884558537">Přestat mluvit</translation>
 <translation id="6404817160109697034">{SECONDS,plural, =1{Před 1 s}few{Před # s}many{Před # s}other{Před # s}}</translation>
+<translation id="6417265370957905582">Asistent Google</translation>
 <translation id="6430678249303439055">Blokovat všechna oznámení z této aplikace</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{před sekundou}few{před # sekundami}many{před # sekundy}other{před # sekundami}}</translation>
 <translation id="6539092367496845964">Něco se pokazilo. Zkuste to později.</translation>
@@ -165,7 +164,7 @@
 <translation id="6620110761915583480">Uložit soubor</translation>
 <translation id="6656912866303152668">Zkontrolujte, zda je v Chromu na zařízení <ph name="TARGET_DEVICE_NAME" /> zapnutá synchronizace, a poté zkuste odeslání opakovat.</translation>
 <translation id="6699343763173986273">Média – další skladba</translation>
-<translation id="673773751041746814">Smazání</translation>
+<translation id="6710213216561001401">Předchozí</translation>
 <translation id="6779314412797872738">Chcete-li si odsud poslat číslo na telefon Android, v nastavení obou zařízení <ph name="TROUBLESHOOT_LINK" />.</translation>
 <translation id="6786750046913594791">Zavřít složku</translation>
 <translation id="6808150112686056157">Média – zastavit</translation>
@@ -183,6 +182,7 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{Zbývá 1 min}few{Zbývají # min}many{Zbývá # min}other{Zbývá # min}}</translation>
 <translation id="7319740667687257810">Spouštěč, částečné zobrazení</translation>
+<translation id="7352651011704765696">Něco se pokazilo</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{Před 1 min}few{Před # min}many{Před # min}other{Před # min}}</translation>
 <translation id="7389409599945284130">– <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{Zbývá 1 minuta}few{Zbývají # minuty}many{Zbývá # minuty}other{Zbývá # minut}}</translation>
@@ -198,9 +198,10 @@
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{Víc než 1 nepřečtené oznámení}few{Víc než # nepřečtená oznámení}many{Víc než # nepřečteného oznámení}other{Víc než # nepřečtených oznámení}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{za 1 min}few{za # min}many{za # min}other{za # min}}</translation>
 <translation id="8087772101393322318"><ph name="KEY_MODIFIER_NAME" />+<ph name="KEY_COMBO_NAME" /></translation>
-<translation id="8098075892845277643">Spustit hlasový dotaz Asistenta Google</translation>
+<translation id="8090736967111090568">Číslo z webu <ph name="ORIGIN" /></translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{Před 1 hodinou}few{Před # hodinami}many{Před # hodiny}other{Před # hodinami}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{Zbývá 1 s}few{Zbývají # s}many{Zbývá # s}other{Zbývá # s}}</translation>
+<translation id="8134065097954893699">Načíst tuto stránku znovu</translation>
 <translation id="8144660977431427332">Pro vaše vyhledávání se používá technologie Asistenta Google. <ph name="LEARN_MORE" /></translation>
 <translation id="8152264887680882389"><ph name="TEXT" />, automatické doplnění</translation>
 <translation id="815598010540052116">Posuv dolů</translation>

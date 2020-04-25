@@ -14,7 +14,9 @@ std::string StatsReporterImpl::GetUserIdFromLegacyStorage() {
 
 // static
 base::FilePath StatsReporterImpl::GetReportingDataFileDir() {
-  NOTIMPLEMENTED();
+  // We can't easily have a shared folder between multiple vivaldi installations
+  // on Android as it would require extra permissions, so just don't try to
+  // keep track of multiple installations on the same system.
   return base::FilePath();
 }
 

@@ -5,6 +5,7 @@
 #include "chrome/browser/devtools/devtools_window.h"
 
 #include <algorithm>
+#include <set>
 #include <utility>
 
 #include "base/base64.h"
@@ -21,7 +22,6 @@
 #include "chrome/browser/devtools/devtools_eye_dropper.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/performance_manager/performance_manager_tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/task_manager/web_contents_tags.h"
@@ -38,6 +38,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/app_modal/javascript_dialog_manager.h"
+#include "components/performance_manager/performance_manager_tab_helper.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/sync_preferences/pref_service_syncable.h"
@@ -182,8 +183,8 @@ content::WebContents* DevToolsToolboxDelegate::OpenURLFromTab(
   DCHECK(source == web_contents());
   if (!params.url.SchemeIs(content::kChromeDevToolsScheme))
     return NULL;
-  content::NavigationController::LoadURLParams load_url_params(params.url);
-  source->GetController().LoadURLWithParams(load_url_params);
+  source->GetController().LoadURLWithParams(
+      content::NavigationController::LoadURLParams(params));
   return source;
 }
 
@@ -230,7 +231,7 @@ GURL DecorateFrontendURL(const GURL& base_url) {
   std::string url_string(
       frontend_url +
       ((frontend_url.find("?") == std::string::npos) ? "?" : "&") +
-      "dockSide=undocked"); // TODO(dgozman): remove this support in M38.
+      "dockSide=undocked");  // TODO(dgozman): remove this support in M38.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kEnableDevToolsExperiments))
     url_string += "&experiments=true";
@@ -782,6 +783,16 @@ DevToolsWindow::MaybeCreateNavigationThrottle(
   return std::make_unique<Throttle>(handle, window);
 }
 
+void DevToolsWindow::UpdateInspectedWebContents(
+    content::WebContents* new_web_contents) {
+  inspected_contents_observer_ =
+      std::make_unique<ObserverWithAccessor>(new_web_contents);
+  bindings_->AttachTo(
+      content::DevToolsAgentHost::GetOrCreateFor(new_web_contents));
+  bindings_->CallClientFunction("DevToolsAPI.reattachMainTarget", nullptr,
+                                nullptr, nullptr);
+}
+
 void DevToolsWindow::ScheduleShow(const DevToolsToggleAction& action) {
   if (life_stage_ == kLoadCompleted) {
     Show(action);
@@ -812,7 +823,7 @@ void DevToolsWindow::Show(const DevToolsToggleAction& action) {
                                     &inspected_browser,
                                     &inspected_tab_index);
     DCHECK(inspected_browser);
-    DCHECK(inspected_tab_index != -1);
+    DCHECK_NE(-1, inspected_tab_index);
 
     RegisterModalDialogManager(inspected_browser);
 
@@ -850,7 +861,7 @@ void DevToolsWindow::Show(const DevToolsToggleAction& action) {
     main_web_contents_->SetInitialFocus();
 
     PrefsTabHelper::CreateForWebContents(main_web_contents_);
-    main_web_contents_->GetRenderViewHost()->SyncRendererPrefs();
+    main_web_contents_->SyncRendererPrefs();
 
     DoAction(action);
     return;
@@ -1667,7 +1678,7 @@ void DevToolsWindow::CreateDevToolsBrowser() {
   browser_->tab_strip_model()->AddWebContents(
       std::move(owned_main_web_contents_), -1,
       ui::PAGE_TRANSITION_AUTO_TOPLEVEL, TabStripModel::ADD_ACTIVE);
-  main_web_contents_->GetRenderViewHost()->SyncRendererPrefs();
+  main_web_contents_->SyncRendererPrefs();
 }
 
 // static

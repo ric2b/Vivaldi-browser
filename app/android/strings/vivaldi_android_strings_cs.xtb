@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="cs">
+<translation id="1029351048239796117">Vivaldi potřebuje udělit přístup k mikrofonu pro tuto stránku.</translation>
+<translation id="1063227610401477317">Uložit změny</translation>
+<translation id="1067048845568873861">Napsána</translation>
+<translation id="1151669774236491028">Server Vivaldi.net má potíže: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="1193152013480891461">Založte si účet Vivaldi</translation>
+<translation id="119944043368869598">Vymazat vše</translation>
+<translation id="1228311134236651326">Nenalezena odpovídající záložka</translation>
+<translation id="1243314992276662751">Odchozí</translation>
+<translation id="1249276067323441352">Částečná synchronizace</translation>
+<translation id="1302932907222175914">Prohledat poznámky</translation>
+<translation id="1644574205037202324">Historie</translation>
+<translation id="1689333818294560261">Přezdívka</translation>
+<translation id="1721552494230946796">Nová složka rychlého přístupu</translation>
+<translation id="1799160781006135561">Neurčili jste šifrovací klíč</translation>
+<translation id="1887193815546011584">Nový rychlý přístup</translation>
+<translation id="1984391066297619717">Úplná synchronizace</translation>
+<translation id="2030706494969937066">Přihlašovací údaje se nepodařilo získat. Znovu se přihlaste.</translation>
+<translation id="2034405583989639424">Upravit rychlý přístup</translation>
+<translation id="2071726368047511075">Zachytit stránku</translation>
+<translation id="2199644148227291099">Určitě chcete pokračovat bez nastavení šifrovacího klíče? Bezpečnost synchronizovaných údajů tím bude snížena.</translation>
+<translation id="2243210264130642074">Poznámka uložena</translation>
+<translation id="2336309953058658733">Vysypat koš</translation>
+<translation id="2359808026110333948">Pokračovat</translation>
+<translation id="2526968784648867272">Zachycování stránky…</translation>
+<translation id="2709516037105925701">Vyplněné údaje formulářů</translation>
+<translation id="271033894570825754">Nová</translation>
+<translation id="2745324713975967671">Šifrovací klíč</translation>
+<translation id="2818042133587341562">Vivaldi potřebuje udělit přístup k fotoaparátu pro tuto stránku.</translation>
+<translation id="2842985007712546952">Nadřazená složka</translation>
+<translation id="2850144663494818309">Spouštění synchronizace…</translation>
+<translation id="2873951654529031587">Koš</translation>
+<translation id="2915527103487649658">Všechny údaje</translation>
+<translation id="2953995378235516294">Vaše synchronizované údaje jsou zabezpečené. Předložte prosím svůj šifrovací klíč.</translation>
+<translation id="2996809686854298943">Zadejte odkaz</translation>
+<translation id="3177673846235066154">Server odmítl vaše přihlašovací údaje.</translation>
+<translation id="3183006304368105350">Duplikovat list</translation>
+<translation id="3271422135763022755">Začněte psát…</translation>
+<translation id="3335772982573114336">Nová poznámka</translation>
+<translation id="33451081266695216">Spojení omezeno serverem.</translation>
+<translation id="3377025655491224618">Soukromý list</translation>
+<translation id="3513566764071045027">Odhlásit se</translation>
+<translation id="3596285013654573099">Přihlášení k synchronizaci</translation>
+<translation id="3611176835527015865">Ovlivňuje jen interní Vivaldi stránky, nikoliv webové stránky</translation>
+<translation id="3723593528923555236">Pokračovat bez přídavného klíče</translation>
+<translation id="3838463869765243557">Název zařízení (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">Popis</translation>
+<translation id="3897711243931585177">ZÁKLADNÍ</translation>
+<translation id="4014682279600355881">Doporučujeme vytvoření přídavného šifrovacího klíče. Neučiníte-li tak, veškeré údaje budou zabezpečeny pouze heslem k vašemu účtu, jenž může být odcizen.</translation>
+<translation id="4073968054795398875">Synchronizační server se potýká s potíži. Zanedlouho to zkusíme znovu…</translation>
+<translation id="4082980568238151037">Nastavte šifrovací klíč.</translation>
+<translation id="4145489350420416595">Neznámá chyba.</translation>
+<translation id="4268574628540273656">Adresa:</translation>
+<translation id="4304224509867189079">Přihlásit se</translation>
+<translation id="4435780204941264251">Vymazat synchronizované údaje</translation>
+<translation id="4532845899244822526">Vybrat složku</translation>
+<translation id="4579489600439872414">Synchronizace zakázána v nastaveních Androidu.</translation>
+<translation id="4589558845651536280">⏳ probíhá…</translation>
+<translation id="4752136117982598343">Poznámka zapsána do <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">Stahování</translation>
+<translation id="4833044618885331665">Pro možnost synchronizace je nutné aktualizovat prohlížeč.</translation>
+<translation id="4847896847259487518">Přidat do záložek</translation>
+<translation id="4890701585167892790">Žádné poznámky</translation>
+<translation id="4892521078757281695">Přejetím zavřít list</translation>
+<translation id="4936710149174207991">zatím nesynchronizováno</translation>
+<translation id="4954427294703861104">Nováček u Vivaldi? Založte si účet.</translation>
+<translation id="504986598654589766">Prohlížení v soukromém listu znamená, že údaje vyhledávání, navštívených stránek, soubory cookies a dočasné soubory nebudou prohlížečem Vivaldi uloženy. Připojení není šifrováno nebo jinak upraveno.</translation>
+<translation id="5161254044473106830">Zadejte název</translation>
+<translation id="5186185447130319458">Soukromí</translation>
+<translation id="5271549068863921519">Uložit heslo</translation>
+<translation id="5286002386457946212">Chyba přijímače.</translation>
+<translation id="5290452628447338707">Žádné poznámky</translation>
+<translation id="5351912500249789547">Vivaldi.net odmítlo vaše přihlašovací údaje: chyba č. <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">Ukázat snímek</translation>
+<translation id="5421638721143596928">Dešifrování vašich přihlašovacích údajů selhalo. Zkuste to prosím znovu.</translation>
+<translation id="5443210757369395869">Zachycení výběru</translation>
+<translation id="5448025735280530073">Vivaldi potřebuje udělit přístup k vaší poloze, aby ji mohl sdělit této stránce.</translation>
+<translation id="5510723066938954312">Záložky a rychlý přístup</translation>
+<translation id="5525981542754785361">Poznámka zapsána v <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">Přiložit k poznámce</translation>
+<translation id="5754087700864822036">WEBOVÉ STRÁNKY</translation>
+<translation id="5765833063161370062">Přesunout poznámky</translation>
+<translation id="5790085346892983794">✔ v pořádku</translation>
+<translation id="5803562371819294631">Tímto budou odstraněny všechny synchronizované údaje uložené na synchronizačním serveru a poté budete odhlášeni. Odstranit údaje?</translation>
+<translation id="5823830882692559950">Vivaldi.net odmítlo vaše přihlašovací údaje: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5841317974325635710">Nová poznámka zapsána</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> poznámka}
+          few {<ph name="NOTES_COUNT_MANY" />  poznámky}
+          many {<ph name="NOTES_COUNT_MANY" />  poznámek}
+          other {<ph name="NOTES_COUNT_MANY" /> poznámek}}</translation>
+<translation id="6012194412768958291">Spojení s Vivaldi.net selhalo.</translation>
+<translation id="6027204815015935175">Předložte svůj šifrovací klíč.</translation>
+<translation id="6059232451013891645">Složka:</translation>
+<translation id="6077943432358741146">Rychlý přístup</translation>
+<translation id="6091125352818749975">Probíhá výmaz vzdálených synchronizovaných údajů.</translation>
+<translation id="6135798666968342262">Zobrazit posuvníky</translation>
+<translation id="6179463181009746489">Odstranit poznámky</translation>
+<translation id="6231148928368101651">Panely</translation>
+<translation id="6406506848690869874">Synchronizace</translation>
+<translation id="6657585470893396449">Heslo</translation>
+<translation id="6682232524697939870">Vivaldi potřebuje udělit přístup k fotoaparátu a mikrofonu pro tuto stránku.</translation>
+<translation id="6698381487523150993">Napsáno:</translation>
+<translation id="6786747875388722282">Rozšíření</translation>
+<translation id="6887143077297974801">Spuštění synchronizace selhalo.</translation>
+<translation id="6945221475159498467">Vybrat</translation>
+<translation id="6960734555676205519">Poslední přenos</translation>
+<translation id="7029809446516969842">Hesla</translation>
+<translation id="7075547914712055886">Znovu spustit synchronizaci</translation>
+<translation id="7222342267839079597">Prosíme, dbejte zvýšené péče při tvorbě nového šifrovacího klíče.</translation>
+<translation id="7228660378238874411">Vždy zobrazit stránku pro počítač</translation>
+<translation id="7390295729483215958">Probíhá synchronizace…</translation>
+<translation id="7492794630657957996">Potvrďte, zda souhlasíte s tímto nastavením</translation>
+<translation id="7514365320538308">Příchozí</translation>
+<translation id="7547490097772831952">Zachycení celé stránky</translation>
+<translation id="7725641807765767506">Nic tu není</translation>
+<translation id="7765158879357617694">Přesunout</translation>
+<translation id="7822864833609233785">POKROČILÉ</translation>
+<translation id="798930073512159071">
+
+Napište první poznámku
+
+Dotkněte se tlačítka Nová poznámka nebo označte text na libovolné stránce. V kontextové nabídce můžete vybraný text přenést do poznámky.</translation>
+<translation id="8004991133350335392">Minimální požadovaná délka hesla je 12 znaků.</translation>
+<translation id="8028021641083150097">Abyste získali přístup ke svému účtu, musí být veškeré údaje na synchronizačním serveru zničeny. Poté můžete zahájit novou synchronizaci, kde základem budou nynější údaje vašeho prohlížeče.</translation>
+<translation id="8035133914807600019">Nová složka…</translation>
+<translation id="8066170816074394954">Chyba serveru.</translation>
+<translation id="8123787473700925741">Server Vivaldi.net má potíže: chyba č. <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">Spustit synchronizaci</translation>
+<translation id="8206267832882844324">Upravit poznámku</translation>
+<translation id="8225478925744929238">Odebrat ze záložek</translation>
+<translation id="8233521945095997439">Nic tu není</translation>
+<translation id="8257908958623224237">Nesoulad údajů u vašich zařízení.</translation>
+<translation id="8261506727792406068">Odstranit</translation>
+<translation id="8305137170060620165">Historie psaní a vzdálené relace</translation>
+<translation id="8414685983518053656">Poznámky</translation>
+<translation id="8422778094137438683">K přihlášení potřebujete účet u Vivaldi.net.</translation>
+<translation id="8428213095426709021">Nastavení</translation>
+<translation id="8462396943848220200">Další pokus za <ph name="TIME" /></translation>
+<translation id="8480556999740355963">Uživatel <ph name="USERNAME" /> na <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">Přihlašování k Vivaldi.net jako <ph name="USERNAME" />. Čekejte prosím.</translation>
+<translation id="8503813439785031346">Uživatelské jméno</translation>
+<translation id="8661216209723599816">Obnovit vzdálené údaje</translation>
+<translation id="8721244337025311110">Nová záložka</translation>
+<translation id="8724114686743788114">Zobrazení snímku selhalo</translation>
+<translation id="8730621377337864115">Hotovo</translation>
+<translation id="8738958257180686306">Napsáno: <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Vivaldi potřebuje udělit přístup k úložišti, aby bylo možné stahovat soubory.</translation>
+<translation id="8808060551076378370">Přidání poznámky selhalo.</translation>
+<translation id="8817201557520703060">Stránka zachycena</translation>
+<translation id="8820817407110198400">Záložky</translation>
+<translation id="8884751487662988673">Pro zobrazení synchronizovaných listů se přihlaste skrze Nastavení.</translation>
+<translation id="895749247724466293">Prohledat rychlý přístup</translation>
+<translation id="8959245489304000426">Ztratil jsem heslo</translation>
+<translation id="8979401359137062629">Poznámka:</translation>
+<translation id="9028089729841356743">Chyba spojení.</translation>
+<translation id="9065203028668620118">Upravit</translation>
+<translation id="9148058034647219655">Ukončit</translation>
+<translation id="9173575361559252669">Zachycení stránky selhalo</translation>
+</translationbundle>

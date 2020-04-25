@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "device/vr/public/mojom/vr_service.mojom-blink.h"
+#include "device/vr/public/mojom/vr_service.mojom-blink-forward.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -22,7 +22,7 @@ namespace blink {
 
 class NavigatorVR;
 
-class VRController final : public GarbageCollectedFinalized<VRController>,
+class VRController final : public GarbageCollected<VRController>,
                            public device::mojom::blink::VRServiceClient,
                            public ContextLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(VRController);

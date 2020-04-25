@@ -62,14 +62,14 @@ InspectorMain.RenderingOptionsView = class extends UI.VBox {
             Common.moduleSetting('showHitTestBorders'));
         this.contentElement.createChild('div').classList.add('panel-section-separator');
 
-        const mediaSetting = Common.moduleSetting('emulatedCSSMedia');
-        const mediaSelect = UI.SettingsUI.createControlForSetting(mediaSetting);
-        if (mediaSelect) {
-          const mediaRow = this.contentElement.createChild('span', 'media-row');
-          mediaRow.createChild('label').textContent = ls`Emulate CSS media`;
-          mediaRow.createChild('p').textContent = ls`Forces media type for testing print and screen styles.`;
-          mediaRow.appendChild(mediaSelect);
-        }
+        this._appendSelect(
+            ls`Forces media type for testing print and screen styles`, Common.moduleSetting('emulatedCSSMedia'));
+        this._appendSelect(
+            ls`Forces CSS prefers-color-scheme media feature`,
+            Common.moduleSetting('emulatedCSSMediaFeaturePrefersColorScheme'));
+        this._appendSelect(
+            ls`Forces CSS prefers-reduced-motion media feature`,
+            Common.moduleSetting('emulatedCSSMediaFeaturePrefersReducedMotion'));
   }
 
   /**
@@ -81,5 +81,16 @@ InspectorMain.RenderingOptionsView = class extends UI.VBox {
     const checkboxLabel = UI.CheckboxLabel.create(label, false, subtitle);
     UI.SettingsUI.bindCheckbox(checkboxLabel.checkboxElement, setting);
     this.contentElement.appendChild(checkboxLabel);
+  }
+
+  /**
+   * @param {string} label
+   * @param {!Common.Setting} setting
+   */
+  _appendSelect(label, setting) {
+    const control = UI.SettingsUI.createControlForSetting(setting, label);
+    if (control) {
+      this.contentElement.appendChild(control);
+    }
   }
 };

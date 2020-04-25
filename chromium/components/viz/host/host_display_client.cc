@@ -48,18 +48,18 @@ void HostDisplayClient::OnDisplayReceivedCALayerParams(
 
 #if defined(OS_WIN)
 void HostDisplayClient::CreateLayeredWindowUpdater(
-    mojom::LayeredWindowUpdaterRequest request) {
+    mojo::PendingReceiver<mojom::LayeredWindowUpdater> receiver) {
   if (!NeedsToUseLayerWindow(widget_)) {
     DLOG(ERROR) << "HWND shouldn't be using a layered window";
     return;
   }
 
   layered_window_updater_ =
-      std::make_unique<LayeredWindowUpdaterImpl>(widget_, std::move(request));
+      std::make_unique<LayeredWindowUpdaterImpl>(widget_, std::move(receiver));
 }
 #endif
 
-#if defined(USE_X11)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 void HostDisplayClient::DidCompleteSwapWithNewSize(const gfx::Size& size) {
   NOTIMPLEMENTED();
 }

@@ -36,10 +36,6 @@ IPC_MESSAGE_ROUTED2(PageMsg_SetHistoryOffsetAndLength,
 
 IPC_MESSAGE_ROUTED1(PageMsg_AudioStateChanged, bool /* is_audio_playing */)
 
-// Sent to OOPIF renderers when the main frame's ScreenInfo changes.
-IPC_MESSAGE_ROUTED1(PageMsg_UpdateScreenInfo,
-                    content::ScreenInfo /* screen_info */)
-
 // Sent to renderers with remote main frames when page-related visual properties
 // change.
 IPC_MESSAGE_ROUTED1(PageMsg_UpdatePageVisualProperties,
@@ -61,6 +57,9 @@ IPC_MESSAGE_ROUTED0(PageMsg_RestorePageFromBackForwardCache)
 // blink::TextAutosizer changes in the main frame's renderer.
 IPC_MESSAGE_ROUTED1(PageMsg_UpdateTextAutosizerPageInfoForRemoteMainFrames,
                     blink::WebTextAutosizerPageInfo /* page_info */)
+
+// Sends updated preferences to the renderer.
+IPC_MESSAGE_ROUTED1(PageMsg_SetRendererPrefs, blink::mojom::RendererPreferences)
 
 // -----------------------------------------------------------------------------
 // Messages sent from the renderer to the browser.

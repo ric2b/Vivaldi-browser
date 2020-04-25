@@ -23,8 +23,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "calendar/calendar_typedefs.h"
+#include "calendar/event_exception_type.h"
 #include "calendar/recurrence_exception_type.h"
-#include "calendar/recurrence_type.h"
 #include "calendar_type.h"
 #include "url/gurl.h"
 
@@ -45,16 +45,16 @@ enum UpdateEventFields {
   ENDRECURRING = 1 << 9,
   LOCATION = 1 << 10,
   URL = 1 << 11,
-  RECURRENCE = 1 << 12,
-  ETAG = 1 << 13,
-  HREF = 1 << 14,
-  UID = 1 << 15,
-  EVENT_TYPE_ID = 1 << 16,
-  TASK = 1 << 17,
-  COMPLETE = 1 << 18,
-  TRASH = 1 << 19,
-  SEQUENCE = 1 << 20,
-  ICAL = 1 << 21,
+  ETAG = 1 << 12,
+  HREF = 1 << 13,
+  UID = 1 << 14,
+  EVENT_TYPE_ID = 1 << 15,
+  TASK = 1 << 16,
+  COMPLETE = 1 << 17,
+  TRASH = 1 << 18,
+  SEQUENCE = 1 << 19,
+  ICAL = 1 << 20,
+  RRULE = 1 << 21,
 };
 
 // Represents a simplified version of a event.
@@ -74,7 +74,6 @@ struct CalendarEvent {
   base::Time end_recurring;
   base::string16 location;
   base::string16 url;
-  EventRecurrence recurrence;
   std::string etag;
   std::string href;
   std::string uid;
@@ -85,6 +84,7 @@ struct CalendarEvent {
   base::Time trash_time;
   int sequence;
   base::string16 ical;
+  std::string rrule;
   int updateFields;
 };
 
@@ -107,7 +107,6 @@ class EventRow {
            base::Time end_recurring,
            base::string16 location,
            base::string16 url,
-           EventRecurrence recurrence,
            std::string etag,
            std::string href,
            std::string uid,
@@ -117,7 +116,8 @@ class EventRow {
            bool trash,
            base::Time trash_time,
            int sequence,
-           base::string16 ical);
+           base::string16 ical,
+           std::string rrule);
   ~EventRow();
 
   EventRow(const EventRow& row);
@@ -180,9 +180,6 @@ class EventRow {
   std::string uid() const { return uid_; }
   void set_uid(std::string uid) { uid_ = uid; }
 
-  EventRecurrence recurrence() const { return recurrence_; }
-  void set_recurrence(EventRecurrence recurrence) { recurrence_ = recurrence; }
-
   RecurrenceExceptionRows recurrence_exceptions() const {
     return recurrence_exceptions_;
   }
@@ -214,6 +211,14 @@ class EventRow {
   base::string16 ical() const { return ical_; }
   void set_ical(base::string16 ical) { ical_ = ical; }
 
+  EventExceptions event_exceptions() const { return event_exceptions_; }
+  void set_event_exceptions(EventExceptions event_exceptions) {
+    event_exceptions_ = event_exceptions;
+  }
+
+  std::string rrule() const { return rrule_; }
+  void set_rrule(std::string rrule) { rrule_ = rrule; }
+
   EventID id_;
   CalendarID calendar_id_;
   AlarmID alarm_id_ = 0;
@@ -227,7 +232,6 @@ class EventRow {
   base::Time end_recurring_;
   base::string16 location_;
   base::string16 url_;
-  EventRecurrence recurrence_;
   RecurrenceExceptionRows recurrence_exceptions_;
   std::string etag_;
   std::string href_;
@@ -239,6 +243,8 @@ class EventRow {
   base::Time trash_time_;
   int sequence_;
   base::string16 ical_;
+  EventExceptions event_exceptions_;
+  std::string rrule_;
 
  protected:
   void Swap(EventRow* other);
@@ -251,7 +257,6 @@ class EventResult : public EventRow {
  public:
   EventResult();
   EventResult(const EventRow& event_row);
-  EventResult(const EventResult& other);
   ~EventResult();
 
   void SwapResult(EventResult* other);
@@ -304,7 +309,7 @@ class CreateEventResult {
   CreateEventResult();
   bool success;
   std::string message;
-  EventRow createdRow;
+  EventResult createdEvent;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CreateEventResult);

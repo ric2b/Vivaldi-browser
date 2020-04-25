@@ -28,7 +28,7 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/menu/menu_runner.h"
 
-namespace app_list {
+namespace ash {
 
 namespace {
 
@@ -413,7 +413,7 @@ void SearchResultView::SetIconImage(const gfx::ImageSkia& source,
 
 void SearchResultView::OnSearchResultActionActivated(size_t index,
                                                      int event_flags) {
-  // |result()| could be NULL when result list is changing.
+  // |result()| could be nullptr when result list is changing.
   if (!result())
     return;
 
@@ -463,7 +463,7 @@ void SearchResultView::ShowContextMenuForViewImpl(
     views::View* source,
     const gfx::Point& point,
     ui::MenuSourceType source_type) {
-  // |result()| could be NULL when result list is changing.
+  // |result()| could be nullptr when result list is changing.
   if (!result())
     return;
 
@@ -504,4 +504,4 @@ void SearchResultView::SetDisplayIcon(const gfx::ImageSkia& source) {
   icon_->SetVisible(source.isNull());
 }
 
-}  // namespace app_list
+}  // namespace ash

@@ -26,7 +26,7 @@ goog.require('__crWeb.common');
  */
 var getResponseForLinkElement = function(element) {
   return {
-    href: element.href,
+    href: getElementHref_(element),
     referrerPolicy: getReferrerPolicy_(element),
     innerText: element.innerText
   };
@@ -265,10 +265,10 @@ var elementsFromCoordinates = function(coordinates) {
  * @return {Object}
  */
 var spiralCoordinates_ = function(x, y) {
-  var MAX_ANGLE = Math.PI * 2.0 * 3.0;
-  var POINT_COUNT = 30;
+  var MAX_ANGLE = Math.PI * 2.0 * 2.0;
+  var POINT_COUNT = 10;
   var ANGLE_STEP = MAX_ANGLE / POINT_COUNT;
-  var TOUCH_MARGIN = 25;
+  var TOUCH_MARGIN = 15;
   var SPEED = TOUCH_MARGIN / MAX_ANGLE;
 
   var coordinates = [];
@@ -327,6 +327,21 @@ var getReferrerPolicy_ = function(opt_linkElement) {
     }
   }
   return 'default';
+};
+
+ /**
+  * Returns the href of the given element. Handles standard <a> links as well as
+  * xlink:href links as used within <svg> tags.
+  * @param {HTMLElement} element The link triggering the navigation.
+  * @return {string} The href of the given element.
+  * @private
+  */
+var getElementHref_ = function(element) {
+  var href = element.href;
+  if (href instanceof SVGAnimatedString) {
+    return href.animVal
+  }
+  return href
 };
 
 /**

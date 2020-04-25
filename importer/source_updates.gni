@@ -5,6 +5,21 @@ if (!is_android) {
       "//vivaldi/importer/viv_importer_browsertest.cpp",
     ]
   }
+
+  update_template_instance("//chrome/browser:browser") {
+    sources += [
+      "//vivaldi/importer/vivaldi_external_process_importer_client.cc",
+      "//vivaldi/importer/vivaldi_external_process_importer_host.cc",
+      "//vivaldi/importer/vivaldi_in_process_importer_bridge.cc",
+      "//vivaldi/importer/vivaldi_profile_writer.cc",
+    ]
+  }
+
+  update_target("//chrome/utility:utility") {
+    sources += [
+      "//vivaldi/importer/vivaldi_external_process_importer_bridge.cc",
+    ]
+  }
 }
 
 update_target("//chrome/common:common") {

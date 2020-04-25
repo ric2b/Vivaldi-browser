@@ -50,6 +50,7 @@ class AnimationHost;
 }
 
 namespace blink {
+class AgentMetricsCollector;
 class AutoscrollController;
 class BrowserControls;
 class ChromeClient;
@@ -60,9 +61,10 @@ class DragCaret;
 class DragController;
 class FocusController;
 class Frame;
-class LinkHighlights;
+class LinkHighlight;
 class LocalFrame;
 class LocalFrameView;
+class MediaFeatureOverrides;
 class OverscrollController;
 struct PageScaleConstraints;
 class PageScaleConstraintsSet;
@@ -83,7 +85,7 @@ typedef uint64_t LinkHash;
 
 float DeviceScaleFactorDeprecated(LocalFrame*);
 
-class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
+class CORE_EXPORT Page final : public GarbageCollected<Page>,
                                public Supplementable<Page>,
                                public PageVisibilityNotifier,
                                public SettingsDelegate,
@@ -184,6 +186,9 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   ValidationMessageClient& GetValidationMessageClient() const {
     return *validation_message_client_;
   }
+  AgentMetricsCollector* GetAgentMetricsCollector() const {
+    return agent_metrics_collector_.Get();
+  }
   void SetValidationMessageClientForTesting(ValidationMessageClient*);
 
   ScrollingCoordinator* GetScrollingCoordinator();
@@ -214,7 +219,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   VisualViewport& GetVisualViewport();
   const VisualViewport& GetVisualViewport() const;
 
-  LinkHighlights& GetLinkHighlights();
+  LinkHighlight& GetLinkHighlight();
 
   OverscrollController& GetOverscrollController();
   const OverscrollController& GetOverscrollController() const;
@@ -323,6 +328,13 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
     return web_text_autosizer_page_info_;
   }
 
+  void SetMediaFeatureOverride(const AtomicString& media_feature,
+                               const String& value);
+  const MediaFeatureOverrides* GetMediaFeatureOverrides() const {
+    return media_feature_overrides_.get();
+  }
+  void ClearMediaFeatureOverrides();
+
  private:
   friend class ScopedPagePauser;
 
@@ -368,12 +380,16 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
       global_root_scroller_controller_;
   const Member<VisualViewport> visual_viewport_;
   const Member<OverscrollController> overscroll_controller_;
-  const Member<LinkHighlights> link_highlights_;
+  const Member<LinkHighlight> link_highlight_;
   Member<SpatialNavigationController> spatial_navigation_controller_;
 
   Member<PluginData> plugin_data_;
 
   Member<ValidationMessageClient> validation_message_client_;
+
+  // Stored only for ordinary pages to avoid adding metrics from things like
+  // overlays, popups and SVG.
+  Member<AgentMetricsCollector> agent_metrics_collector_;
 
   Deprecation deprecation_;
   HostsUsingFeatures hosts_using_features_;
@@ -418,6 +434,9 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   FrameScheduler::SchedulingAffectingFeatureHandle has_related_pages_;
 
   std::unique_ptr<PageScheduler> page_scheduler_;
+
+  // Overrides for various media features set from the devtools.
+  std::unique_ptr<MediaFeatureOverrides> media_feature_overrides_;
 
   int32_t autoplay_flags_;
 

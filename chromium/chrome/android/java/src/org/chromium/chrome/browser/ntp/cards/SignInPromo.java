@@ -5,8 +5,9 @@
 package org.chromium.chrome.browser.ntp.cards;
 
 import android.content.Context;
-import android.support.annotation.StringRes;
 import android.text.format.DateUtils;
+
+import androidx.annotation.StringRes;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
@@ -14,13 +15,13 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.signin.ProfileDataCache;
-import org.chromium.chrome.browser.signin.SigninAccessPoint;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInAllowedObserver;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.signin.SigninPromoController;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountsChangeObserver;
+import org.chromium.components.signin.metrics.SigninAccessPoint;
 
 /**
  * Shows a card prompting the user to sign in. This item is also an {@link OptionalLeaf}, and sign
@@ -65,7 +66,9 @@ public class SignInPromo extends OptionalLeaf {
     protected SignInPromo(SigninManager signinManager) {
         Context context = ContextUtils.getApplicationContext();
 
-        mCanSignIn = signinManager.isSignInAllowed() && !signinManager.isSignedInOnNative();
+        // TODO(bsazonov): Signin manager should check for native status in isSignInAllowed
+        mCanSignIn = signinManager.isSignInAllowed()
+                && !signinManager.getIdentityManager().hasPrimaryAccount();
         mAccountsReady = AccountManagerFacade.get().isCachePopulated();
         updateVisibility();
 

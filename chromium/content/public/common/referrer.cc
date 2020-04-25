@@ -5,11 +5,14 @@
 #include "content/public/common/referrer.h"
 
 #include <string>
+#include <type_traits>
 
 #include "base/numerics/safe_conversions.h"
 #include "content/public/common/content_features.h"
+#include "mojo/public/cpp/bindings/enum_utils.h"
 #include "net/base/features.h"
 #include "services/network/loader_util.h"
+#include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/mojom/referrer.mojom.h"
 
 namespace content {
@@ -97,9 +100,13 @@ blink::mojom::ReferrerPtr Referrer::SanitizeForRequest(
       break;
   }
 
-  if (base::FeatureList::IsEnabled(net::features::kCapRefererHeaderLength) &&
-      base::saturated_cast<int>(sanitized_referrer->url.spec().length()) >
-          net::features::kMaxRefererHeaderLength.Get()) {
+  if ((base::FeatureList::IsEnabled(net::features::kCapRefererHeaderLength) &&
+       base::saturated_cast<int>(sanitized_referrer->url.spec().length()) >
+           net::features::kMaxRefererHeaderLength.Get()) ||
+      (base::FeatureList::IsEnabled(
+           network::features::kCapReferrerToOriginOnCrossOrigin) &&
+       !url::Origin::Create(sanitized_referrer->url)
+            .IsSameOriginWith(url::Origin::Create(request)))) {
     sanitized_referrer->url = sanitized_referrer->url.GetOrigin();
   }
 
@@ -114,13 +121,6 @@ url::Origin Referrer::SanitizeOriginForRequest(
   Referrer fake_referrer(initiator.GetURL(), policy);
   Referrer sanitizied_referrer = SanitizeForRequest(request, fake_referrer);
   return url::Origin::Create(sanitizied_referrer.url);
-}
-
-// static
-void Referrer::SetReferrerForRequest(net::URLRequest* request,
-                                     const Referrer& referrer) {
-  request->SetReferrer(network::ComputeReferrer(referrer.url));
-  request->set_referrer_policy(ReferrerPolicyForUrlRequest(referrer.policy));
 }
 
 // static
@@ -191,6 +191,12 @@ net::URLRequest::ReferrerPolicy Referrer::GetDefaultReferrerPolicy() {
         REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN;
   }
   return net::URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE;
+}
+
+// static
+network::mojom::ReferrerPolicy Referrer::ConvertToPolicy(int32_t policy) {
+  return mojo::ConvertIntToMojoEnum<network::mojom::ReferrerPolicy>(policy)
+      .value_or(network::mojom::ReferrerPolicy::kDefault);
 }
 
 }  // namespace content

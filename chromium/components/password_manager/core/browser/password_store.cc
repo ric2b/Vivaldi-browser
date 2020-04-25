@@ -24,6 +24,8 @@
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliated_match_helper.h"
+#include "components/password_manager/core/browser/leaked_credentials_table.h"
+#include "components/password_manager/core/browser/password_leak_history_consumer.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
@@ -65,7 +67,6 @@ void FilterLogins(
 
 }  // namespace
 
-// TODO(crbug.com/706392): Fix password reuse detection for Android.
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
 PasswordStore::CheckReuseRequest::CheckReuseRequest(
     PasswordReuseDetectorConsumer* consumer)
@@ -210,6 +211,13 @@ void PasswordStore::DisableAutoSignInForOrigins(
       base::RepeatingCallback<bool(const GURL&)>(origin_filter), completion));
 }
 
+void PasswordStore::Unblacklist(const PasswordStore::FormDigest& form_digest,
+                                base::OnceClosure completion) {
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
+  ScheduleTask(base::BindOnce(&PasswordStore::UnblacklistInternal, this,
+                              form_digest, std::move(completion)));
+}
+
 void PasswordStore::GetLogins(const FormDigest& form,
                               PasswordStoreConsumer* consumer) {
   DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
@@ -320,18 +328,45 @@ void PasswordStore::RemoveSiteStats(const GURL& origin_domain) {
       base::BindOnce(&PasswordStore::RemoveSiteStatsImpl, this, origin_domain));
 }
 
-void PasswordStore::GetAllSiteStats(PasswordStoreConsumer* consumer) {
-  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
-  PostStatsTaskAndReplyToConsumerWithResult(
-      consumer, base::BindOnce(&PasswordStore::GetAllSiteStatsImpl, this));
-}
-
 void PasswordStore::GetSiteStats(const GURL& origin_domain,
                                  PasswordStoreConsumer* consumer) {
   DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
   PostStatsTaskAndReplyToConsumerWithResult(
       consumer,
       base::BindOnce(&PasswordStore::GetSiteStatsImpl, this, origin_domain));
+}
+
+void PasswordStore::AddLeakedCredentials(
+    const LeakedCredentials& leaked_credentials) {
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
+  ScheduleTask(base::BindOnce(&PasswordStore::AddLeakedCredentialsImpl, this,
+                              leaked_credentials));
+}
+
+void PasswordStore::RemoveLeakedCredentials(const GURL& url,
+                                            const base::string16& username) {
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
+  ScheduleTask(base::BindOnce(&PasswordStore::RemoveLeakedCredentialsImpl, this,
+                              url, username));
+}
+
+void PasswordStore::GetAllLeakedCredentials(
+    PasswordLeakHistoryConsumer* consumer) {
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
+  PostLeakedCredentialsTaskAndReplyToConsumerWithResult(
+      consumer,
+      base::BindOnce(&PasswordStore::GetAllLeakedCredentialsImpl, this));
+}
+
+void PasswordStore::RemoveLeakedCredentialsByUrlAndTime(
+    base::RepeatingCallback<bool(const GURL&)> url_filter,
+    base::Time remove_begin,
+    base::Time remove_end,
+    base::OnceClosure completion) {
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
+  ScheduleTask(base::BindOnce(
+      &PasswordStore::RemoveLeakedCredentialsByUrlAndTimeInternal, this,
+      std::move(url_filter), remove_begin, remove_end, std::move(completion)));
 }
 
 void PasswordStore::AddObserver(Observer* observer) {
@@ -346,11 +381,6 @@ bool PasswordStore::ScheduleTask(base::OnceClosure task) {
   if (background_task_runner_)
     return background_task_runner_->PostTask(FROM_HERE, std::move(task));
   return false;
-}
-
-scoped_refptr<base::SequencedTaskRunner>
-PasswordStore::GetBackgroundTaskRunner() {
-  return background_task_runner_;
 }
 
 bool PasswordStore::IsAbleToSavePasswords() const {
@@ -390,7 +420,6 @@ PasswordStore::CreateSyncControllerDelegate() {
           base::Unretained(this)));
 }
 
-// TODO(crbug.com/706392): Fix password reuse detection for Android.
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
 void PasswordStore::CheckReuse(const base::string16& input,
                                const std::string& domain,
@@ -530,7 +559,7 @@ bool PasswordStore::InitOnBackgroundSequence(
     syncable_service_.reset(new PasswordSyncableService(this));
     syncable_service_->InjectStartSyncFlare(flare);
   }
-// TODO(crbug.com/706392): Fix password reuse detection for Android.
+
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
   reuse_detector_ = new PasswordReuseDetector;
 
@@ -586,7 +615,7 @@ void PasswordStore::NotifyLoginsChanged(
       syncable_service_->ActOnPasswordStoreChanges(changes);
     if (sync_bridge_)
       sync_bridge_->ActOnPasswordStoreChanges(changes);
-// TODO(crbug.com/706392): Fix password reuse detection for Android.
+
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
     if (reuse_detector_)
       reuse_detector_->OnLoginsChanged(changes);
@@ -594,7 +623,6 @@ void PasswordStore::NotifyLoginsChanged(
   }
 }
 
-// TODO(crbug.com/706392): Fix password reuse detection for Android.
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
 void PasswordStore::CheckReuseImpl(std::unique_ptr<CheckReuseRequest> request,
                                    const base::string16& input,
@@ -693,6 +721,15 @@ void PasswordStore::PostStatsTaskAndReplyToConsumerWithResult(
   consumer->cancelable_task_tracker()->PostTaskAndReplyWithResult(
       background_task_runner_.get(), FROM_HERE, std::move(task),
       base::BindOnce(&PasswordStoreConsumer::OnGetSiteStatistics,
+                     consumer->GetWeakPtr()));
+}
+
+void PasswordStore::PostLeakedCredentialsTaskAndReplyToConsumerWithResult(
+    PasswordLeakHistoryConsumer* consumer,
+    LeakedCredentialsTask task) {
+  consumer->cancelable_task_tracker()->PostTaskAndReplyWithResult(
+      background_task_runner_.get(), FROM_HERE, std::move(task),
+      base::BindOnce(&PasswordLeakHistoryConsumer::OnGetLeakedCredentials,
                      consumer->GetWeakPtr()));
 }
 
@@ -806,6 +843,33 @@ void PasswordStore::DisableAutoSignInForOriginsInternal(
   DisableAutoSignInForOriginsImpl(origin_filter);
   if (!completion.is_null())
     main_task_runner_->PostTask(FROM_HERE, completion);
+}
+
+void PasswordStore::UnblacklistInternal(
+    const PasswordStore::FormDigest& form_digest,
+    base::OnceClosure completion) {
+  DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
+
+  std::vector<std::unique_ptr<PasswordForm>> all_matches =
+      GetLoginsImpl(form_digest);
+  for (auto& form : all_matches) {
+    // Ignore PSL matches for blacklisted entries.
+    if (form->blacklisted_by_user && !form->is_public_suffix_match)
+      RemoveLoginInternal(*form);
+  }
+  if (!completion.is_null())
+    main_task_runner_->PostTask(FROM_HERE, std::move(completion));
+}
+
+void PasswordStore::RemoveLeakedCredentialsByUrlAndTimeInternal(
+    const base::RepeatingCallback<bool(const GURL&)>& url_filter,
+    base::Time remove_begin,
+    base::Time remove_end,
+    base::OnceClosure completion) {
+  DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
+  RemoveLeakedCredentialsByUrlAndTimeImpl(url_filter, remove_begin, remove_end);
+  if (!completion.is_null())
+    main_task_runner_->PostTask(FROM_HERE, std::move(completion));
 }
 
 std::vector<std::unique_ptr<autofill::PasswordForm>>
@@ -1037,7 +1101,7 @@ void PasswordStore::DestroyOnBackgroundSequence() {
   DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
   syncable_service_.reset();
   sync_bridge_.reset();
-// TODO(crbug.com/706392): Fix password reuse detection for Android.
+
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
   delete reuse_detector_;
   reuse_detector_ = nullptr;

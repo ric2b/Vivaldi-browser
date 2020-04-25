@@ -19,11 +19,9 @@ js_type_check("closure_compile") {
     ":fake_page_handler",
     ":main_view",
     ":permission_item",
-    ":permission_toggle",
     ":pin_to_shelf_item",
     ":pwa_permission_view",
     ":reducers",
-    ":router",
     ":store",
     ":store_client",
     ":toggle_row",
@@ -62,7 +60,6 @@ js_library("app_management_page") {
     ":actions",
     ":browser_proxy",
     ":main_view",
-    ":router",
     ":store",
     ":store_client",
   ]
@@ -75,6 +72,7 @@ js_library("app_permission_view") {
     ":dom_switch",
     ":pwa_permission_view",
     ":store_client",
+    "../../..:route",
   ]
 }
 
@@ -133,14 +131,8 @@ js_library("main_view") {
 js_library("permission_item") {
   deps = [
     ":fake_page_handler",
-    ":permission_toggle",
     ":store_client",
-    ":util",
-  ]
-}
-
-js_library("permission_toggle") {
-  deps = [
+    ":toggle_row",
     ":util",
   ]
 }
@@ -168,14 +160,6 @@ js_library("reducers") {
     ":types",
     ":util",
     "//ui/webui/resources/js:cr",
-  ]
-}
-
-js_library("router") {
-  deps = [
-    ":actions",
-    ":constants",
-    ":store_client",
   ]
 }
 
@@ -218,6 +202,7 @@ js_library("uninstall_button") {
     ":util",
     "//ui/webui/resources/cr_elements/cr_button:cr_button",
     "//ui/webui/resources/cr_elements/policy:cr_tooltip_icon",
+    "//ui/webui/resources/js:i18n_behavior",
   ]
 }
 

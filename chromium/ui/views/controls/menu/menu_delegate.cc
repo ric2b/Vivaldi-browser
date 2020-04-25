@@ -128,18 +128,6 @@ MenuItemView* MenuDelegate::GetSiblingMenu(MenuItemView* menu,
   return nullptr;
 }
 
-MenuItemView* MenuDelegate::GetVivaldiSiblingMenu(
-    MenuItemView* menu,
-    const gfx::Point& screen_point,
-    gfx::Rect* rect) {
-  return nullptr;
-}
-
-MenuItemView* MenuDelegate::GetNextSiblingMenu(bool next, bool* has_mnemonics,
-                                               gfx::Rect* rect) {
-  return nullptr;
-}
-
 int MenuDelegate::GetMaxWidthForMenu(MenuItemView* menu) {
   // NOTE: this needs to be large enough to accommodate the wrench menu with
   // big fonts.
@@ -166,10 +154,6 @@ bool MenuDelegate::ShouldReserveSpaceForSubmenuIndicator() const {
 
 bool MenuDelegate::ShouldTryPositioningBesideAnchor() const {
   return true;
-}
-
-bool MenuDelegate::VivaldiShouldTryPositioningInMenuBar() const {
-  return false;
 }
 
 }  // namespace views

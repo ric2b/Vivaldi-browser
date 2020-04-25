@@ -66,6 +66,9 @@ class VivaldiDataSourcesAPI
 
   static bool IsBookmarkCapureUrl(const std::string& url);
 
+  static void ScheduleRemovalOfUnusedUrlData(
+      content::BrowserContext* browser_context, base::TimeDelta when);
+
   // The following methods taking the BrowserContext* argument are static to
   // spare the caller from calling FromBrowserContext and checking the result.
 
@@ -77,12 +80,6 @@ class VivaldiDataSourcesAPI
                             int preference_index,
                             base::FilePath file_path,
                             UpdateMappingCallback callback);
-
-  static void OnUrlChange(content::BrowserContext* browser_context,
-                          const std::string& old_url,
-                          const std::string& new_url);
-
-  void OnUrlChange(const std::string& old_url, const std::string& new_url);
 
   // Add image data to disk and set up a mapping so it can be requested
   // using the usual image data protocol.
@@ -103,11 +100,6 @@ class VivaldiDataSourcesAPI
   void GetDataForId(UrlKind url_kind,
                     std::string id,
                     content::URLDataSource::GotDataCallback callback);
-
-  // During bulk changes the file mapping is not saved after each mutation
-  // operation.
-  static void SetBulkChangesMode(content::BrowserContext* browser_context,
-                                 bool enable);
 
   void LoadMappings();
 
@@ -136,10 +128,13 @@ class VivaldiDataSourcesAPI
                                  UpdateMappingCallback callback);
   void FinishUpdateMappingOnUIThread(int64_t bookmark_id,
                                      int preference_index,
-                                     std::string id,
+                                     std::string path_id,
                                      UpdateMappingCallback callback);
 
-  void RemoveDataUrlOnFileThread(UrlKind url_kind, std::string id);
+  // Use std::array, not plain C array to get proper move semantics.
+  using UsedIds = std::array<std::vector<std::string>, kUrlKindCount>;
+  void CollectUsedUrlsOnUIThread();
+  void RemoveUnusedUrlDataOnFileThread(UsedIds used_ids);
 
   void SetCacheOnIOThread(UrlKind url_kind, std::string id,
                           scoped_refptr<base::RefCountedMemory> data);
@@ -166,13 +161,15 @@ class VivaldiDataSourcesAPI
 
   void LoadMappingsOnFileThread();
   void InitMappingsOnFileThread(const base::DictionaryValue* dict);
-  void SetBulkChangesModeOnFileThread(bool enable);
 
   std::string GetMappingJSONOnFileThread();
   void SaveMappingsOnFileThread();
 
   base::FilePath GetFileMappingFilePath();
   base::FilePath GetThumbnailPath(base::StringPiece thumbnail_id);
+
+  void AddNewbornIdOnFileThread(UrlKind url_kind, const std::string& id);
+  void RemoveNewbornIdOnFileThread(UrlKind url_kind, const std::string& id);
 
   // This must be accessed only on UI thread. It is reset to null on shutdown.
   Profile* profile_;
@@ -187,10 +184,10 @@ class VivaldiDataSourcesAPI
   // be accessed only from the sequence_task_runner_.
   std::map<std::string, base::FilePath> path_id_map_;
 
-  // Flags to prevent frequent writes on bulk changes. They must be accessed
-  // only from sequence_task_runner_.
-  bool bulk_changes_ = false;
-  bool unsaved_changes_ = false;
+  // ids that have been newly allocated but not yet been stored as URL is
+  // bookmark nodes or preferences. This prevents their removal in
+  // RemoveUnusedUrlData. This must be accessed only from sequence_task_runner_.
+  std::vector<std::string> file_thread_newborn_ids_[kUrlKindCount];
 
   // Outside constructor or destructor this must be accessed only from the IO
   // thread.

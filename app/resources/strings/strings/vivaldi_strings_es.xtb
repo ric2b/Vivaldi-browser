@@ -2,9 +2,12 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="es">
 <translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Reservados todos los derechos.</translation>
-<translation id="3642991949832251880">¿Quieres salir de Vivaldi de todos modos?</translation>
+<translation id="2611953850925269349">¿Quieres cerrar Vivaldi de todas formas?</translation>
+<translation id="3642991949832251880">¿Cerrar Vivaldi de todos modos?</translation>
 <translation id="3850557856045828465">Advertencia: Vivaldi no puede evitar que las extensiones registren tu historial de navegación. Para desactivar esta extensión en el modo incógnito, desmarca esta opción.</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="5288672417093782294">Ir a las preferencias para las notificaciones de Vivaldi</translation>
 <translation id="5743878272102782872">Administrador de tareas de Vivaldi</translation>
 <translation id="6213772951145281007">Borrar las cookies y los datos de sitios web al salir de Vivaldi</translation>
+<translation id="6569282126279967574">¡Vaya! Vivaldi ha quebrado. ¿Quieres reiniciarlo ahora?</translation>
 </translationbundle>

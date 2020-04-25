@@ -361,6 +361,13 @@ void SynchronousLayerTreeFrameSink::SubmitCompositorFrame(
         root_local_surface_id_allocation_.local_surface_id(),
         std::move(embed_frame));
     display_->DrawAndSwap();
+
+    // We don't track metrics for frames submitted to |display_| but it still
+    // expects that every frame will receive a swap ack and presentation
+    // feedback so we send null signals here.
+    display_->DidReceiveSwapBuffersAck(gfx::SwapTimings());
+    display_->DidReceivePresentationFeedback(
+        gfx::PresentationFeedback::Failure());
   } else {
     // For hardware draws we send the whole frame to the client so it can draw
     // the content in it.
@@ -561,10 +568,8 @@ void SynchronousLayerTreeFrameSink::DidPresentCompositorFrame(
     const viz::FrameTimingDetailsMap& timing_details) {
   if (!client_)
     return;
-  for (const auto& pair : timing_details) {
-    client_->DidPresentCompositorFrame(pair.first,
-                                       pair.second.presentation_feedback);
-  }
+  for (const auto& pair : timing_details)
+    client_->DidPresentCompositorFrame(pair.first, pair.second);
 }
 
 void SynchronousLayerTreeFrameSink::BeginFrame(

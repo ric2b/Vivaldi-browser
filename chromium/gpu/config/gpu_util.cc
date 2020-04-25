@@ -14,7 +14,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
-#include "gpu/config/gpu_blacklist.h"
+#include "gpu/config/gpu_blocklist.h"
 #include "gpu/config/gpu_crash_keys.h"
 #include "gpu/config/gpu_driver_bug_list.h"
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
@@ -24,6 +24,7 @@
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/config/gpu_switches.h"
+#include "gpu/vulkan/buildflags.h"
 #include "ui/gfx/extension_set.h"
 #include "ui/gl/buildflags.h"
 #include "ui/gl/gl_switches.h"
@@ -64,6 +65,24 @@ GpuFeatureStatus GetMetalFeatureStatus(
     return kGpuFeatureStatusBlacklisted;
 
   if (!gpu_preferences.enable_metal)
+    return kGpuFeatureStatusDisabled;
+
+  return kGpuFeatureStatusEnabled;
+#else
+  return kGpuFeatureStatusDisabled;
+#endif
+}
+
+GpuFeatureStatus GetVulkanFeatureStatus(
+    const std::set<int>& blacklisted_features,
+    const GpuPreferences& gpu_preferences) {
+#if BUILDFLAG(ENABLE_VULKAN)
+  // Only blacklist native vulkan.
+  if (gpu_preferences.use_vulkan == VulkanImplementationName::kNative &&
+      blacklisted_features.count(GPU_FEATURE_TYPE_VULKAN))
+    return kGpuFeatureStatusBlacklisted;
+
+  if (gpu_preferences.use_vulkan == VulkanImplementationName::kNone)
     return kGpuFeatureStatusDisabled;
 
   return kGpuFeatureStatusEnabled;
@@ -312,6 +331,8 @@ GpuFeatureInfo ComputeGpuFeatureInfoWithHardwareAccelerationDisabled() {
       kGpuFeatureStatusDisabled;
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_METAL] =
       kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_VULKAN] =
+      kGpuFeatureStatusDisabled;
 #if DCHECK_IS_ON()
   for (int ii = 0; ii < NUMBER_OF_GPU_FEATURE_TYPES; ++ii) {
     DCHECK_NE(kGpuFeatureStatusUndefined, gpu_feature_info.status_values[ii]);
@@ -347,6 +368,8 @@ GpuFeatureInfo ComputeGpuFeatureInfoWithNoGpu() {
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_ANDROID_SURFACE_CONTROL] =
       kGpuFeatureStatusDisabled;
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_METAL] =
+      kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_VULKAN] =
       kGpuFeatureStatusDisabled;
 #if DCHECK_IS_ON()
   for (int ii = 0; ii < NUMBER_OF_GPU_FEATURE_TYPES; ++ii) {
@@ -384,6 +407,8 @@ GpuFeatureInfo ComputeGpuFeatureInfoForSwiftShader() {
       kGpuFeatureStatusDisabled;
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_METAL] =
       kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_VULKAN] =
+      kGpuFeatureStatusDisabled;
 #if DCHECK_IS_ON()
   for (int ii = 0; ii < NUMBER_OF_GPU_FEATURE_TYPES; ++ii) {
     DCHECK_NE(kGpuFeatureStatusUndefined, gpu_feature_info.status_values[ii]);
@@ -416,7 +441,7 @@ GpuFeatureInfo ComputeGpuFeatureInfo(const GPUInfo& gpu_info,
   std::set<int> blacklisted_features;
   if (!gpu_preferences.ignore_gpu_blacklist &&
       !command_line->HasSwitch(switches::kUseGpuInTests)) {
-    std::unique_ptr<GpuBlacklist> list(GpuBlacklist::Create());
+    std::unique_ptr<GpuBlocklist> list(GpuBlocklist::Create());
     if (gpu_preferences.log_gpu_control_list_decisions)
       list->EnableControlListLogging("gpu_blacklist");
     unsigned target_test_group = 0u;
@@ -465,6 +490,8 @@ GpuFeatureInfo ComputeGpuFeatureInfo(const GPUInfo& gpu_info,
                                             gpu_preferences);
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_METAL] =
       GetMetalFeatureStatus(blacklisted_features, gpu_preferences);
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_VULKAN] =
+      GetVulkanFeatureStatus(blacklisted_features, gpu_preferences);
 #if DCHECK_IS_ON()
   for (int ii = 0; ii < NUMBER_OF_GPU_FEATURE_TYPES; ++ii) {
     DCHECK_NE(kGpuFeatureStatusUndefined, gpu_feature_info.status_values[ii]);
@@ -542,7 +569,12 @@ void SetKeysForCrashLogging(const GPUInfo& gpu_info) {
       base::StringPrintf("0x%04x", active_gpu.vendor_id));
   crash_keys::gpu_device_id.Set(
       base::StringPrintf("0x%04x", active_gpu.device_id));
-#endif
+#endif  // !OS_ANDROID
+#if defined(OS_WIN)
+  crash_keys::gpu_sub_sys_id.Set(
+      base::StringPrintf("0x%08x", active_gpu.sub_sys_id));
+  crash_keys::gpu_revision.Set(base::StringPrintf("%u", active_gpu.revision));
+#endif  // OS_WIN
   crash_keys::gpu_driver_version.Set(active_gpu.driver_version);
   crash_keys::gpu_pixel_shader_version.Set(gpu_info.pixel_shader_version);
   crash_keys::gpu_vertex_shader_version.Set(gpu_info.vertex_shader_version);
@@ -754,5 +786,28 @@ std::string GetIntelGpuGeneration(uint32_t vendor_id, uint32_t device_id) {
   }
   return "";
 }
+
+#if defined(OS_WIN)
+std::string D3DFeatureLevelToString(uint32_t d3d_feature_level) {
+  if (d3d_feature_level == 0) {
+    return "Not supported";
+  } else {
+    return base::StringPrintf("D3D %d.%d", (d3d_feature_level >> 12) & 0xF,
+                              (d3d_feature_level >> 8) & 0xF);
+  }
+}
+
+std::string VulkanVersionToString(uint32_t vulkan_version) {
+  if (vulkan_version == 0) {
+    return "Not supported";
+  } else {
+    // Vulkan version number VK_MAKE_VERSION(major, minor, patch)
+    // (((major) << 22) | ((minor) << 12) | (patch))
+    return base::StringPrintf(
+        "Vulkan API %d.%d.%d", (vulkan_version >> 22) & 0x3FF,
+        (vulkan_version >> 12) & 0x3FF, vulkan_version & 0xFFF);
+  }
+}
+#endif  // OS_WIN
 
 }  // namespace gpu

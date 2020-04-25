@@ -124,11 +124,19 @@ void SessionClientBinding::OnChanged(
 void SessionClientBinding::OnExitPresent() {
   display_->OnExitPresent(is_immersive_);
 }
-void SessionClientBinding::OnBlur() {
-  display_->OnBlur(is_immersive_);
-}
-void SessionClientBinding::OnFocus() {
-  display_->OnFocus(is_immersive_);
+void SessionClientBinding::OnVisibilityStateChanged(
+    device::mojom::blink::XRVisibilityState visibility_state) {
+  switch (visibility_state) {
+    case device::mojom::blink::XRVisibilityState::VISIBLE:
+      display_->OnFocus(is_immersive_);
+      break;
+    case device::mojom::blink::XRVisibilityState::VISIBLE_BLURRED:
+      display_->OnBlur(is_immersive_);
+      break;
+    case device::mojom::blink::XRVisibilityState::HIDDEN:
+      display_->OnBlur(is_immersive_);
+      break;
+  }
 }
 void SessionClientBinding::Trace(blink::Visitor* visitor) {
   visitor->Trace(display_);
@@ -557,18 +565,18 @@ void VRDisplay::OnRequestImmersiveSessionReturned(
     // The presentation provider error handler can trigger if a device is
     // disconnected from the system. This can happen if, for example, an HMD is
     // unplugged.
-    vr_presentation_data_provider_.set_connection_error_handler(
+    vr_presentation_data_provider_.set_disconnect_handler(
         WTF::Bind(&VRDisplay::OnPresentationProviderConnectionError,
                   WrapWeakPersistent(this)));
     vr_presentation_provider_.Bind(
         std::move(session->submit_frame_sink->provider));
-    vr_presentation_provider_.set_connection_error_handler(
+    vr_presentation_provider_.set_disconnect_handler(
         WTF::Bind(&VRDisplay::OnPresentationProviderConnectionError,
                   WrapWeakPersistent(this)));
 
     frame_transport_ = MakeGarbageCollected<XRFrameTransport>();
     frame_transport_->BindSubmitFrameClient(
-        std::move(session->submit_frame_sink->client_request));
+        std::move(session->submit_frame_sink->client_receiver));
     frame_transport_->SetTransportOptions(
         std::move(session->submit_frame_sink->transport_options));
 
@@ -576,7 +584,7 @@ void VRDisplay::OnRequestImmersiveSessionReturned(
       immersive_client_binding_->Close();
     immersive_client_binding_ = MakeGarbageCollected<SessionClientBinding>(
         this, SessionClientBinding::SessionBindingType::kImmersive,
-        std::move(session->client_request));
+        std::move(session->client_receiver));
 
     Update(std::move(session->display_info));
 
@@ -605,7 +613,7 @@ void VRDisplay::SetNonImmersiveSession(
     non_immersive_provider_.Bind(std::move(session->data_provider));
     non_immersive_client_binding_ = MakeGarbageCollected<SessionClientBinding>(
         this, SessionClientBinding::SessionBindingType::kNonImmersive,
-        std::move(session->client_request));
+        std::move(session->client_receiver));
   }
 
   // Now that we're initialized, we need to ensure that the data is flowing

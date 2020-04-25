@@ -22,9 +22,9 @@
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/threading/scoped_blocking_call.h"
-#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/arc_web_contents_data.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/chromeos/login/configuration_keys.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_setup_controller.h"
@@ -661,6 +661,27 @@ std::unique_ptr<content::WebContents> CreateArcCustomTabWebContents(
                             std::make_unique<arc::ArcWebContentsData>());
 
   return web_contents;
+}
+
+std::string GetHistogramNameByUserType(const std::string& base_name,
+                                       const Profile* profile) {
+  if (profile == nullptr) {
+    profile = ProfileManager::GetPrimaryUserProfile();
+  }
+  if (IsRobotOrOfflineDemoAccountMode()) {
+    chromeos::DemoSession* demo_session = chromeos::DemoSession::Get();
+    if (demo_session && demo_session->started()) {
+      return demo_session->offline_enrolled() ? base_name + ".OfflineDemoMode"
+                                              : base_name + ".DemoMode";
+    }
+    return base_name + ".RobotAccount";
+  }
+  if (profile->IsChild())
+    return base_name + ".Child";
+  if (IsActiveDirectoryUserForProfile(profile))
+    return base_name + ".ActiveDirectory";
+  return base_name +
+         (policy_util::IsAccountManaged(profile) ? ".Managed" : ".Unmanaged");
 }
 
 }  // namespace arc

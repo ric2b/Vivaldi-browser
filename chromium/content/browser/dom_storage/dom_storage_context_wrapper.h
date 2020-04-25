@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 
+#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ref_counted.h"
@@ -25,10 +26,6 @@
 
 namespace base {
 class FilePath;
-}
-
-namespace service_manager {
-class Connector;
 }
 
 namespace storage {
@@ -64,7 +61,6 @@ class CONTENT_EXPORT DOMStorageContextWrapper
 
   // If |profile_path| is empty, nothing will be saved to disk.
   static scoped_refptr<DOMStorageContextWrapper> Create(
-      service_manager::Connector* connector,
       const base::FilePath& profile_path,
       const base::FilePath& local_partition_path,
       storage::SpecialStoragePolicy* special_storage_policy);
@@ -109,8 +105,10 @@ class CONTENT_EXPORT DOMStorageContextWrapper
       mojo::ReportBadMessageCallback bad_message_callback,
       mojo::PendingReceiver<blink::mojom::SessionStorageNamespace> receiver);
 
-  void SetLocalStorageDatabaseForTesting(
-      mojo::PendingAssociatedRemote<leveldb::mojom::LevelDBDatabase> database);
+  using LocalStorageDatabaseOpenCallback =
+      base::OnceCallback<void(LocalStorageContextMojo*)>;
+  void SetLocalStorageDatabaseOpenCallbackForTesting(
+      LocalStorageDatabaseOpenCallback callback);
 
   SessionStorageContextMojo* mojo_session_state() {
     return mojo_session_state_;

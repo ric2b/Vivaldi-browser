@@ -20,10 +20,16 @@ static constexpr float kAutoscrollMultiplier = 20.f;
 static constexpr base::TimeDelta kInitialAutoscrollTimerDelay =
     base::TimeDelta::FromMilliseconds(250);
 
+// Constants used to figure the how far out in the non-scrolling direction
+// should trigger the thumb to snap back to its origin.  These calculations are
+// based on observing the behavior of the MSVC8 main window scrollbar + some
+// guessing/extrapolation.
+static constexpr int kOffSideMultiplier = 8;
+static constexpr int kDefaultWinScrollbarThickness = 17;
+
 namespace cc {
 
 enum ScrollbarOrientation { HORIZONTAL, VERTICAL };
-enum ScrollDirection { SCROLL_BACKWARD, SCROLL_FORWARD };
 
 enum ScrollbarPart {
   THUMB,
@@ -45,17 +51,29 @@ class Scrollbar {
   virtual gfx::Point Location() const = 0;
   virtual bool IsOverlay() const = 0;
   virtual bool HasThumb() const = 0;
+  virtual bool SupportsDragSnapBack() const = 0;
   virtual int ThumbThickness() const = 0;
   virtual int ThumbLength() const = 0;
+
+  // Returns the track rect relative to the scrollbar's origin.
   virtual gfx::Rect TrackRect() const = 0;
+  // Returns the back button rect relative to the scrollbar's origin.
   virtual gfx::Rect BackButtonRect() const = 0;
+  // Returns the forward button rect relative to the scrollbar's origin.
   virtual gfx::Rect ForwardButtonRect() const = 0;
+
   virtual float ThumbOpacity() const = 0;
   virtual bool HasTickmarks() const = 0;
+
+  // Whether we need to repaint the part. Only THUMB and TRACK are supported.
+  // For TRACK, the return value means that the track, any buttons or tickmarks
+  // need repaint.
   virtual bool NeedsPaintPart(ScrollbarPart part) const = 0;
-  virtual void PaintPart(PaintCanvas* canvas,
-                         ScrollbarPart part,
-                         const gfx::Rect& content_rect) = 0;
+  // Paints the part. Only THUMB, TRACK and TICKMARKS are supported. When TRACK
+  // is specified, track, buttons and tickmarks will be painted. The canvas's
+  // coordinate space is relative to the part's origin.
+  virtual void PaintPart(PaintCanvas* canvas, ScrollbarPart part) = 0;
+
   virtual bool UsesNinePatchThumbResource() const = 0;
   virtual gfx::Size NinePatchThumbCanvasSize() const = 0;
   virtual gfx::Rect NinePatchThumbAperture() const = 0;

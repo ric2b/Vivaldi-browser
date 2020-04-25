@@ -46,6 +46,7 @@ RemoteFrame::RemoteFrame(RemoteFrameClient* client,
   dom_window_ = MakeGarbageCollected<RemoteDOMWindow>(*this);
   UpdateInertIfPossible();
   UpdateInheritedEffectiveTouchActionIfPossible();
+  UpdateVisibleToHitTesting();
 
   Initialize();
 }
@@ -71,12 +72,13 @@ void RemoteFrame::Navigate(const FrameLoadRequest& passed_request,
                     : network::mojom::RequestContextFrameType::kNested);
 
   const KURL& url = frame_request.GetResourceRequest().Url();
-  if (frame_request.OriginDocument() &&
-      !frame_request.OriginDocument()->GetSecurityOrigin()->CanDisplay(url)) {
-    frame_request.OriginDocument()->AddConsoleMessage(ConsoleMessage::Create(
-        mojom::ConsoleMessageSource::kSecurity,
-        mojom::ConsoleMessageLevel::kError,
-        "Not allowed to load local resource: " + url.ElidedString()));
+  if (!frame_request.CanDisplay(url)) {
+    if (frame_request.OriginDocument()) {
+      frame_request.OriginDocument()->AddConsoleMessage(ConsoleMessage::Create(
+          mojom::ConsoleMessageSource::kSecurity,
+          mojom::ConsoleMessageLevel::kError,
+          "Not allowed to load local resource: " + url.ElidedString()));
+    }
     return;
   }
 
@@ -167,14 +169,6 @@ bool RemoteFrame::ShouldClose() {
   return true;
 }
 
-void RemoteFrame::DidFreeze() {
-  // TODO(fmeawad): Add support for remote frames.
-}
-
-void RemoteFrame::DidResume() {
-  // TODO(fmeawad): Add support for remote frames.
-}
-
 void RemoteFrame::SetIsInert(bool inert) {
   if (inert != is_inert_)
     Client()->SetIsInert(inert);
@@ -221,7 +215,7 @@ RemoteFrameClient* RemoteFrame::Client() const {
   return static_cast<RemoteFrameClient*>(Frame::Client());
 }
 
-void RemoteFrame::PointerEventsChanged() {
+void RemoteFrame::DidChangeVisibleToHitTesting() {
   if (!cc_layer_ || !is_surface_layer_)
     return;
 
@@ -233,9 +227,9 @@ bool RemoteFrame::IsIgnoredForHitTest() const {
   HTMLFrameOwnerElement* owner = DeprecatedLocalOwner();
   if (!owner || !owner->GetLayoutObject())
     return false;
+
   return owner->OwnerType() == FrameOwnerElementType::kPortal ||
-         (owner->GetLayoutObject()->Style()->PointerEvents() ==
-          EPointerEvents::kNone);
+         !visible_to_hit_testing_;
 }
 
 void RemoteFrame::SetCcLayer(cc::Layer* cc_layer,
@@ -250,7 +244,10 @@ void RemoteFrame::SetCcLayer(cc::Layer* cc_layer,
   is_surface_layer_ = is_surface_layer;
   if (cc_layer_) {
     GraphicsLayer::RegisterContentsLayer(cc_layer_);
-    PointerEventsChanged();
+    if (is_surface_layer) {
+      static_cast<cc::SurfaceLayer*>(cc_layer_)->SetHasPointerEventsNone(
+          IsIgnoredForHitTest());
+    }
   }
 
   To<HTMLFrameOwnerElement>(Owner())->SetNeedsCompositingUpdate();

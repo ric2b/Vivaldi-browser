@@ -6,13 +6,14 @@ package org.chromium.chrome.browser.bookmarks;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
@@ -20,7 +21,6 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.PersonalizedSigninPromoView;
 import org.chromium.chrome.browser.signin.ProfileDataCache;
-import org.chromium.chrome.browser.signin.SigninAccessPoint;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.signin.SigninPromoController;
@@ -29,6 +29,7 @@ import org.chromium.chrome.browser.signin.SyncPromoView;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountsChangeObserver;
 import org.chromium.components.signin.ChromeSigninController;
+import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.components.sync.AndroidSyncSettings.AndroidSyncSettingsObserver;
 

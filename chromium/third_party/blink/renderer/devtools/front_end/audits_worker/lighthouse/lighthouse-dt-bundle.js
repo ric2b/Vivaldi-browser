@@ -1,4 +1,4 @@
-// lighthouse, browserified. 5.2.0 (651028676d93ff0089970a8d37f8b4b4904d18de)
+// lighthouse, browserified. 5.5.0 (33af3dbb7c10890c9d9e67e16af4968b7c49206c)
 require=function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a;}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r);},p,p.exports,r,e,n,t);}return n[i].exports;}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o;}return r;}()({"../audits/accessibility/accesskeys":[function(require,module,exports){
 (function(__filename){
 
@@ -24,7 +24,7 @@ failureTitle:'`[accesskey]` values are not unique',
 
 description:'Access keys let users quickly focus a part of the page. For proper '+
 'navigation, each access key must be unique. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/accesskeys?application=lighthouse).'};
+'[Learn more](https://web.dev/accesskeys/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -48,7 +48,7 @@ module.exports=Accesskeys;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/accesskeys.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/aria-allowed-attr":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/aria-allowed-attr":[function(require,module,exports){
 (function(__filename){
 
 
@@ -73,7 +73,7 @@ failureTitle:'`[aria-*]` attributes do not match their roles',
 
 description:'Each ARIA `role` supports a specific subset of `aria-*` attributes. '+
 'Mismatching these invalidates the `aria-*` attributes. [Learn '+
-'more](https://dequeuniversity.com/rules/axe/3.1/aria-allowed-attr?application=lighthouse).'};
+'more](https://web.dev/aria-allowed-attr/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -97,7 +97,7 @@ module.exports=ARIAAllowedAttr;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/aria-allowed-attr.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/aria-required-attr":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/aria-required-attr":[function(require,module,exports){
 (function(__filename){
 
 
@@ -121,7 +121,7 @@ title:'`[role]`s have all required `[aria-*]` attributes',
 failureTitle:'`[role]`s do not have all required `[aria-*]` attributes',
 
 description:'Some ARIA roles have required attributes that describe the state '+
-'of the element to screen readers. [Learn more](https://dequeuniversity.com/rules/axe/3.1/aria-required-attr?application=lighthouse).'};
+'of the element to screen readers. [Learn more](https://web.dev/aria-required-attr/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -145,7 +145,7 @@ module.exports=ARIARequiredAttr;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/aria-required-attr.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/aria-required-children":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/aria-required-children":[function(require,module,exports){
 (function(__filename){
 
 
@@ -165,14 +165,15 @@ const i18n=require('../../lib/i18n/i18n.js');
 
 const UIStrings={
 
-title:'Elements with `[role]` that require specific children `[role]`s, are present',
+title:'Elements with an ARIA `[role]` that require children to contain a specific '+
+'`[role]` have all required children.',
 
-failureTitle:'Elements with `[role]` that require specific children `[role]`s, '+
-'are missing.',
+failureTitle:'Elements with an ARIA `[role]` that require children to contain a specific '+
+'`[role]` are missing some or all of those required children.',
 
 description:'Some ARIA parent roles must contain specific child roles to perform '+
 'their intended accessibility functions. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/aria-required-children?application=lighthouse).'};
+'[Learn more](https://web.dev/aria-required-children/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -196,7 +197,7 @@ module.exports=AriaRequiredChildren;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/aria-required-children.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/aria-required-parent":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/aria-required-parent":[function(require,module,exports){
 (function(__filename){
 
 
@@ -222,7 +223,7 @@ failureTitle:'`[role]`s are not contained by their required parent element',
 
 description:'Some ARIA child roles must be contained by specific parent roles to '+
 'properly perform their intended accessibility functions. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/aria-required-parent?application=lighthouse).'};
+'[Learn more](https://web.dev/aria-required-parent/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -246,7 +247,7 @@ module.exports=AriaRequiredParent;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/aria-required-parent.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/aria-roles":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/aria-roles":[function(require,module,exports){
 (function(__filename){
 
 
@@ -271,7 +272,7 @@ failureTitle:'`[role]` values are not valid',
 
 description:'ARIA roles must have valid values in order to perform their '+
 'intended accessibility functions. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/aria-roles?application=lighthouse).'};
+'[Learn more](https://web.dev/aria-roles/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -295,7 +296,7 @@ module.exports=AriaRoles;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/aria-roles.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/aria-valid-attr-value":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/aria-valid-attr-value":[function(require,module,exports){
 (function(__filename){
 
 
@@ -320,7 +321,7 @@ failureTitle:'`[aria-*]` attributes do not have valid values',
 
 description:'Assistive technologies, like screen readers, can\'t interpret ARIA '+
 'attributes with invalid values. [Learn '+
-'more](https://dequeuniversity.com/rules/axe/3.1/aria-valid-attr-value?application=lighthouse).'};
+'more](https://web.dev/aria-valid-attr-value/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -344,7 +345,7 @@ module.exports=ARIAValidAttr;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/aria-valid-attr-value.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/aria-valid-attr":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/aria-valid-attr":[function(require,module,exports){
 (function(__filename){
 
 
@@ -369,7 +370,7 @@ failureTitle:'`[aria-*]` attributes are not valid or misspelled',
 
 description:'Assistive technologies, like screen readers, can\'t interpret ARIA '+
 'attributes with invalid names. [Learn '+
-'more](https://dequeuniversity.com/rules/axe/3.1/aria-valid-attr?application=lighthouse).'};
+'more](https://web.dev/aria-valid-attr/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -393,7 +394,7 @@ module.exports=ARIAValidAttr;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/aria-valid-attr.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/audio-caption":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/audio-caption":[function(require,module,exports){
 (function(__filename){
 
 
@@ -420,7 +421,7 @@ failureTitle:'`<audio>` elements are missing a `<track>` element with '+
 description:'Captions make audio elements usable for deaf or hearing-impaired users, '+
 'providing critical information such as who is talking, what they\'re saying, '+
 'and other non-speech information. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/audio-caption?application=lighthouse).'};
+'[Learn more](https://web.dev/audio-caption/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -444,7 +445,7 @@ module.exports=AudioCaption;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/audio-caption.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/button-name":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/button-name":[function(require,module,exports){
 (function(__filename){
 
 
@@ -469,7 +470,7 @@ failureTitle:'Buttons do not have an accessible name',
 
 description:'When a button doesn\'t have an accessible name, screen readers announce it '+
 'as "button", making it unusable for users who rely on screen readers. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/button-name?application=lighthouse).'};
+'[Learn more](https://web.dev/button-name/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -493,7 +494,7 @@ module.exports=ButtonName;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/button-name.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/bypass":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/bypass":[function(require,module,exports){
 (function(__filename){
 
 
@@ -519,7 +520,7 @@ failureTitle:'The page does not contain a heading, skip link, or landmark region
 
 description:'Adding ways to bypass repetitive content lets keyboard users navigate the '+
 'page more efficiently. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/bypass?application=lighthouse).'};
+'[Learn more](https://web.dev/bypass/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -543,7 +544,7 @@ module.exports=Bypass;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/bypass.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/color-contrast":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/color-contrast":[function(require,module,exports){
 (function(__filename){
 
 
@@ -569,7 +570,7 @@ failureTitle:'Background and foreground colors do not have a '+
 'sufficient contrast ratio.',
 
 description:'Low-contrast text is difficult or impossible for many users to read. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/color-contrast?application=lighthouse).'};
+'[Learn more](https://web.dev/color-contrast/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -593,7 +594,7 @@ module.exports=ColorContrast;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/color-contrast.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/definition-list":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/definition-list":[function(require,module,exports){
 (function(__filename){
 
 
@@ -620,7 +621,7 @@ failureTitle:'`<dl>`\'s do not contain only properly-ordered `<dt>` and `<dd>` '
 
 description:'When definition lists are not properly marked up, screen readers may produce '+
 'confusing or inaccurate output. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/definition-list?application=lighthouse).'};
+'[Learn more](https://web.dev/definition-list/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -644,7 +645,7 @@ module.exports=DefinitionList;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/definition-list.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/dlitem":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/dlitem":[function(require,module,exports){
 (function(__filename){
 
 
@@ -669,7 +670,7 @@ failureTitle:'Definition list items are not wrapped in `<dl>` elements',
 
 description:'Definition list items (`<dt>` and `<dd>`) must be wrapped in a '+
 'parent `<dl>` element to ensure that screen readers can properly announce them. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/dlitem?application=lighthouse).'};
+'[Learn more](https://web.dev/dlitem/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -693,7 +694,7 @@ module.exports=DLItem;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/dlitem.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/document-title":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/document-title":[function(require,module,exports){
 (function(__filename){
 
 
@@ -718,7 +719,7 @@ failureTitle:'Document doesn\'t have a `<title>` element',
 
 description:'The title gives screen reader users an overview of the page, and search '+
 'engine users rely on it heavily to determine if a page is relevant to their search. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/title).'};
+'[Learn more](https://web.dev/document-title/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -742,7 +743,7 @@ module.exports=DocumentTitle;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/document-title.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/duplicate-id":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/duplicate-id":[function(require,module,exports){
 (function(__filename){
 
 
@@ -767,7 +768,7 @@ failureTitle:'`[id]` attributes on the page are not unique',
 
 description:'The value of an id attribute must be unique to prevent '+
 'other instances from being overlooked by assistive technologies. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/duplicate-id?application=lighthouse).'};
+'[Learn more](https://web.dev/duplicate-id/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -791,7 +792,7 @@ module.exports=DuplicateId;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/duplicate-id.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/frame-title":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/frame-title":[function(require,module,exports){
 (function(__filename){
 
 
@@ -815,7 +816,7 @@ title:'`<frame>` or `<iframe>` elements have a title',
 failureTitle:'`<frame>` or `<iframe>` elements do not have a title',
 
 description:'Screen reader users rely on frame titles to describe the contents of frames. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/frame-title?application=lighthouse).'};
+'[Learn more](https://web.dev/frame-title/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -839,7 +840,7 @@ module.exports=FrameTitle;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/frame-title.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/html-has-lang":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/html-has-lang":[function(require,module,exports){
 (function(__filename){
 
 
@@ -866,7 +867,7 @@ description:'If a page doesn\'t specify a lang attribute, a screen reader assume
 'that the page is in the default language that the user chose when setting up the '+
 'screen reader. If the page isn\'t actually in the default language, then the screen '+
 'reader might not announce the page\'s text correctly. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/html-has-lang?application=lighthouse).'};
+'[Learn more](https://web.dev/html-has-lang/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -890,7 +891,7 @@ module.exports=HTMLHasLang;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/html-has-lang.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/html-lang-valid":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/html-lang-valid":[function(require,module,exports){
 (function(__filename){
 
 
@@ -916,7 +917,7 @@ failureTitle:'`<html>` element does not have a valid value for '+
 
 description:'Specifying a valid [BCP 47 language](https://www.w3.org/International/questions/qa-choosing-language-tags#question) '+
 'helps screen readers announce text properly. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/valid-lang?application=lighthouse).'};
+'[Learn more](https://web.dev/html-lang-valid/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -940,7 +941,7 @@ module.exports=HTMLLangValid;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/html-lang-valid.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/image-alt":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/image-alt":[function(require,module,exports){
 (function(__filename){
 
 
@@ -965,7 +966,7 @@ failureTitle:'Image elements do not have `[alt]` attributes',
 
 description:'Informative elements should aim for short, descriptive alternate text. '+
 'Decorative elements can be ignored with an empty alt attribute. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/image-alt?application=lighthouse).'};
+'[Learn more](https://web.dev/image-alt/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -989,7 +990,7 @@ module.exports=ImageAlt;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/image-alt.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/input-image-alt":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/input-image-alt":[function(require,module,exports){
 (function(__filename){
 
 
@@ -1014,7 +1015,7 @@ failureTitle:'`<input type="image">` elements do not have `[alt]` text',
 
 description:'When an image is being used as an `<input>` button, providing alternative '+
 'text can help screen reader users understand the purpose of the button. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/input-image-alt?application=lighthouse).'};
+'[Learn more](https://web.dev/input-image-alt/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -1038,7 +1039,7 @@ module.exports=InputImageAlt;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/input-image-alt.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/label":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/label":[function(require,module,exports){
 (function(__filename){
 
 
@@ -1063,7 +1064,7 @@ failureTitle:'Form elements do not have associated labels',
 
 description:'Labels ensure that form controls are announced properly by assistive '+
 'technologies, like screen readers. [Learn '+
-'more](https://dequeuniversity.com/rules/axe/3.1/label?application=lighthouse).'};
+'more](https://web.dev/label/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -1087,7 +1088,7 @@ module.exports=Label;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/label.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/layout-table":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/layout-table":[function(require,module,exports){
 (function(__filename){
 
 
@@ -1116,7 +1117,7 @@ failureTitle:'Presentational `<table>` elements do not avoid using `<th>`, '+
 description:'A table being used for layout purposes should not include data elements, '+
 'such as the th or caption elements or the summary attribute, because this can '+
 'create a confusing experience for screen reader users. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/layout-table?application=lighthouse).'};
+'[Learn more](https://web.dev/layout-table/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -1140,7 +1141,7 @@ module.exports=LayoutTable;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/layout-table.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/link-name":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/link-name":[function(require,module,exports){
 (function(__filename){
 
 
@@ -1166,7 +1167,7 @@ failureTitle:'Links do not have a discernible name',
 description:'Link text (and alternate text for images, when used as links) that is '+
 'discernible, unique, and focusable improves the navigation experience for '+
 'screen reader users. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/link-name?application=lighthouse).'};
+'[Learn more](https://web.dev/link-name/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -1190,7 +1191,7 @@ module.exports=LinkName;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/link-name.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/listitem":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/listitem":[function(require,module,exports){
 (function(__filename){
 
 
@@ -1216,7 +1217,7 @@ failureTitle:'List items (`<li>`) are not contained within `<ul>` '+
 
 description:'Screen readers require list items (`<li>`) to be contained within a '+
 'parent `<ul>` or `<ol>` to be announced properly. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/listitem?application=lighthouse).'};
+'[Learn more](https://web.dev/listitem/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -1240,7 +1241,7 @@ module.exports=ListItem;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/listitem.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/list":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/list":[function(require,module,exports){
 (function(__filename){
 
 
@@ -1267,7 +1268,7 @@ failureTitle:'Lists do not contain only `<li>` elements and script '+
 
 description:'Screen readers have a specific way of announcing lists. Ensuring proper list '+
 'structure aids screen reader output. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/list?application=lighthouse).'};
+'[Learn more](https://web.dev/list/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -1291,7 +1292,7 @@ module.exports=List;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/list.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/manual/custom-controls-labels":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/manual/custom-controls-labels":[function(require,module,exports){
 
 
 
@@ -1313,7 +1314,7 @@ class CustomControlsLabels extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'custom-controls-labels',
-description:'Custom interactive controls have associated labels, provided by aria-label or aria-labelledby. [Learn more](https://developers.google.com/web/fundamentals/accessibility/how-to-review#try_it_with_a_screen_reader).',
+description:'Custom interactive controls have associated labels, provided by aria-label or aria-labelledby. [Learn more](https://web.dev/custom-controls-labels/).',
 title:'Custom controls have associated labels'},
 super.partialMeta);
 }}
@@ -1343,7 +1344,7 @@ class CustomControlsRoles extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'custom-controls-roles',
-description:'Custom interactive controls have appropriate ARIA roles. [Learn more](https://developers.google.com/web/fundamentals/accessibility/how-to-review#try_it_with_a_screen_reader).',
+description:'Custom interactive controls have appropriate ARIA roles. [Learn more](https://web.dev/custom-control-roles/).',
 title:'Custom controls have ARIA roles'},
 super.partialMeta);
 }}
@@ -1373,7 +1374,7 @@ class FocusTraps extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'focus-traps',
-description:'A user can tab into and out of any control or region without accidentally trapping their focus. [Learn more](https://developers.google.com/web/fundamentals/accessibility/how-to-review#start_with_the_keyboard).',
+description:'A user can tab into and out of any control or region without accidentally trapping their focus. [Learn more](https://web.dev/focus-traps/).',
 title:'User focus is not accidentally trapped in a region'},
 super.partialMeta);
 }}
@@ -1403,7 +1404,7 @@ class FocusableControls extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'focusable-controls',
-description:'Custom interactive controls are keyboard focusable and display a focus indicator. [Learn more](https://developers.google.com/web/fundamentals/accessibility/how-to-review#start_with_the_keyboard).',
+description:'Custom interactive controls are keyboard focusable and display a focus indicator. [Learn more](https://web.dev/focusable-controls/).',
 title:'Interactive controls are keyboard focusable'},
 super.partialMeta);
 }}
@@ -1433,7 +1434,7 @@ class HeadingLevels extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'heading-levels',
-description:'Headings are used to create an outline for the page and heading levels are not skipped. [Learn more](https://developers.google.com/web/fundamentals/accessibility/how-to-review#take_advantage_of_headings_and_landmarks).',
+description:'Headings are used to create an outline for the page and heading levels are not skipped. [Learn more](https://web.dev/heading-levels/).',
 title:'Headings don\'t skip levels'},
 super.partialMeta);
 }}
@@ -1463,7 +1464,7 @@ class InteractiveElementAffordance extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'interactive-element-affordance',
-description:'Interactive elements, such as links and buttons, should indicate their state and be distinguishable from non-interactive elements. [Learn more](https://developers.google.com/web/fundamentals/accessibility/how-to-review#interactive_elements_like_links_and_buttons_should_indicate_their_purpose_and_state).',
+description:'Interactive elements, such as links and buttons, should indicate their state and be distinguishable from non-interactive elements. [Learn more](https://web.dev/interactive-element-affordance/).',
 title:'Interactive elements indicate their purpose and state'},
 super.partialMeta);
 }}
@@ -1493,7 +1494,7 @@ class LogicalTabOrder extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'logical-tab-order',
-description:'Tabbing through the page follows the visual layout. Users cannot focus elements that are offscreen. [Learn more](https://developers.google.com/web/fundamentals/accessibility/how-to-review#start_with_the_keyboard).',
+description:'Tabbing through the page follows the visual layout. Users cannot focus elements that are offscreen. [Learn more](https://web.dev/logical-tab-order/).',
 title:'The page has a logical tab order'},
 super.partialMeta);
 }}
@@ -1523,7 +1524,7 @@ class ManagedFocus extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'managed-focus',
-description:'If new content, such as a dialog, is added to the page, the user\'s focus is directed to it. [Learn more](https://developers.google.com/web/fundamentals/accessibility/how-to-review#start_with_the_keyboard).',
+description:'If new content, such as a dialog, is added to the page, the user\'s focus is directed to it. [Learn more](https://web.dev/managed-focus/).',
 title:'The user\'s focus is directed to new content added to the page'},
 super.partialMeta);
 }}
@@ -1554,7 +1555,7 @@ class OffscreenContentHidden extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'offscreen-content-hidden',
-description:'Offscreen content is hidden with display: none or aria-hidden=true. [Learn more](https://developers.google.com/web/fundamentals/accessibility/how-to-review#try_it_with_a_screen_reader).',
+description:'Offscreen content is hidden with display: none or aria-hidden=true. [Learn more](https://web.dev/offscreen-content-hidden/).',
 title:'Offscreen content is hidden from assistive technology'},
 super.partialMeta);
 }}
@@ -1584,7 +1585,7 @@ class UseLandmarks extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'use-landmarks',
-description:'Landmark elements (<main>, <nav>, etc.) are used to improve the keyboard navigation of the page for assistive technology. [Learn more](https://developers.google.com/web/fundamentals/accessibility/how-to-review#take_advantage_of_headings_and_landmarks).',
+description:'Landmark elements (<main>, <nav>, etc.) are used to improve the keyboard navigation of the page for assistive technology. [Learn more](https://web.dev/use-landmarks/).',
 title:'HTML5 landmark elements are used to improve navigation'},
 super.partialMeta);
 }}
@@ -1614,7 +1615,7 @@ class VisualOrderFollowsDOM extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'visual-order-follows-dom',
-description:'DOM order matches the visual order, improving navigation for assistive technology. [Learn more](https://developers.google.com/web/fundamentals/accessibility/how-to-review#try_it_with_a_screen_reader).',
+description:'DOM order matches the visual order, improving navigation for assistive technology. [Learn more](https://web.dev/visual-order-follows-dom/).',
 title:'Visual order on the page follows DOM order'},
 super.partialMeta);
 }}
@@ -1648,7 +1649,7 @@ failureTitle:'The document uses `<meta http-equiv="refresh">`',
 description:'Users do not expect a page to refresh automatically, and doing so will move '+
 'focus back to the top of the page. This may create a frustrating or '+
 'confusing experience. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/meta-refresh?application=lighthouse).'};
+'[Learn more](https://web.dev/meta-refresh/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -1672,7 +1673,7 @@ module.exports=MetaRefresh;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/meta-refresh.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/meta-viewport":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/meta-viewport":[function(require,module,exports){
 (function(__filename){
 
 
@@ -1699,7 +1700,7 @@ failureTitle:'`[user-scalable="no"]` is used in the `<meta name="viewport">` '+
 
 description:'Disabling zooming is problematic for users with low vision who rely on '+
 'screen magnification to properly see the contents of a web page. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/meta-viewport?application=lighthouse).'};
+'[Learn more](https://web.dev/meta-viewport/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -1723,7 +1724,7 @@ module.exports=MetaViewport;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/meta-viewport.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/object-alt":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/object-alt":[function(require,module,exports){
 (function(__filename){
 
 
@@ -1748,7 +1749,7 @@ failureTitle:'`<object>` elements do not have `[alt]` text',
 
 description:'Screen readers cannot translate non-text content. Adding alt text to '+
 '`<object>` elements helps screen readers convey meaning to users. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/object-alt?application=lighthouse).'};
+'[Learn more](https://web.dev/object-alt/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -1772,7 +1773,7 @@ module.exports=ObjectAlt;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/object-alt.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/tabindex":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/tabindex":[function(require,module,exports){
 (function(__filename){
 
 
@@ -1797,7 +1798,7 @@ failureTitle:'Some elements have a `[tabindex]` value greater than 0',
 
 description:'A value greater than 0 implies an explicit navigation ordering. '+
 'Although technically valid, this often creates frustrating experiences '+
-'for users who rely on assistive technologies. [Learn more](https://dequeuniversity.com/rules/axe/3.1/tabindex?application=lighthouse).'};
+'for users who rely on assistive technologies. [Learn more](https://web.dev/tabindex/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -1821,7 +1822,7 @@ module.exports=TabIndex;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/tabindex.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/td-headers-attr":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/td-headers-attr":[function(require,module,exports){
 (function(__filename){
 
 
@@ -1841,16 +1842,16 @@ const i18n=require('../../lib/i18n/i18n.js');
 
 const UIStrings={
 
-title:'Cells in a `<table>` element that use the `[headers]` attribute only refer '+
-'to other cells of that same table.',
+title:'Cells in a `<table>` element that use the `[headers]` attribute refer '+
+'to table cells within the same table.',
 
-failureTitle:'Cells in a `<table>` element that use the `[headers]` '+
-'attribute refers to other cells of that same table.',
+failureTitle:'Cells in a `<table>` element that use the `[headers]` attribute refer '+
+'to an element `id` not found within the same table.',
 
 description:'Screen readers have features to make navigating tables easier. Ensuring '+
 '`<td>` cells using the `[headers]` attribute only refer to other cells in the same '+
 'table may improve the experience for screen reader users. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/td-headers-attr?application=lighthouse).'};
+'[Learn more](https://web.dev/td-headers-attr/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -1874,7 +1875,7 @@ module.exports=TDHeadersAttr;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/td-headers-attr.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/th-has-data-cells":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/th-has-data-cells":[function(require,module,exports){
 (function(__filename){
 
 
@@ -1902,7 +1903,7 @@ failureTitle:'`<th>` elements and elements with '+
 description:'Screen readers have features to make navigating tables easier. Ensuring '+
 'table headers always refer to some set of cells may improve the experience for screen '+
 'reader users. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/th-has-data-cells?application=lighthouse).'};
+'[Learn more](https://web.dev/th-has-data-cells/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -1926,7 +1927,7 @@ module.exports=THHasDataCells;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/th-has-data-cells.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/valid-lang":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/valid-lang":[function(require,module,exports){
 (function(__filename){
 
 
@@ -1951,7 +1952,7 @@ failureTitle:'`[lang]` attributes do not have a valid value',
 
 description:'Specifying a valid [BCP 47 language](https://www.w3.org/International/questions/qa-choosing-language-tags#question) '+
 'on elements helps ensure that text is pronounced correctly by a screen reader. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/valid-lang?application=lighthouse).'};
+'[Learn more](https://web.dev/valid-lang/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -1975,7 +1976,7 @@ module.exports=ValidLang;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/valid-lang.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/video-caption":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/video-caption":[function(require,module,exports){
 (function(__filename){
 
 
@@ -2001,7 +2002,7 @@ failureTitle:'`<video>` elements do not contain a `<track>` element '+
 
 description:'When a video provides a caption it is easier for deaf and hearing impaired '+
 'users to access its information. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/video-caption?application=lighthouse).'};
+'[Learn more](https://web.dev/video-caption/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -2025,7 +2026,7 @@ module.exports=VideoCaption;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/video-caption.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/accessibility/video-description":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/accessibility/video-description":[function(require,module,exports){
 (function(__filename){
 
 
@@ -2051,7 +2052,7 @@ failureTitle:'`<video>` elements do not contain a `<track>` element with '+
 
 description:'Audio descriptions provide relevant information for videos that dialogue '+
 'cannot, such as facial expressions and scenes. '+
-'[Learn more](https://dequeuniversity.com/rules/axe/3.1/video-description?application=lighthouse).'};
+'[Learn more](https://web.dev/video-description/).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -2075,7 +2076,7 @@ module.exports=VideoDescription;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/video-description.js");
-},{"../../lib/i18n/i18n.js":68,"./axe-audit.js":2}],"../audits/apple-touch-icon":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./axe-audit.js":2}],"../audits/apple-touch-icon":[function(require,module,exports){
 (function(__filename){
 
 
@@ -2097,9 +2098,9 @@ title:'Provides a valid `apple-touch-icon`',
 
 failureTitle:'Does not provide a valid `apple-touch-icon`',
 
-description:'For ideal appearance on iOS when users add to the home screen, define an '+
-'apple-touch-icon. It must point to a non-transparent 192px (or 180px) square PNG. '+
-'[Learn More](https://developers.google.com/web/fundamentals/design-and-ux/browser-customization/).',
+description:'For ideal appearance on iOS when users add a progressive web app to the home '+
+'screen, define an `apple-touch-icon`. It must point to a non-transparent 192px (or 180px) '+
+'square PNG. [Learn More](https://web.dev/apple-touch-icon/).',
 
 precomposedWarning:'`apple-touch-icon-precomposed` is out of date; '+
 '`apple-touch-icon` is preferred.'};
@@ -2150,7 +2151,7 @@ module.exports=AppleTouchIcon;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/apple-touch-icon.js");
-},{"../lib/i18n/i18n.js":68,"./audit.js":3}],"../audits/bootup-time":[function(require,module,exports){
+},{"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/bootup-time":[function(require,module,exports){
 (function(__filename){
 
 
@@ -2174,7 +2175,7 @@ failureTitle:'Reduce JavaScript execution time',
 
 description:'Consider reducing the time spent parsing, compiling, and executing JS. '+
 'You may find delivering smaller JS payloads helps with this. [Learn '+
-'more](https://developers.google.com/web/tools/lighthouse/audits/bootup).',
+'more](https://web.dev/bootup-time).',
 
 columnTotal:'Total CPU Time',
 
@@ -2354,7 +2355,7 @@ module.exports=BootupTime;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/bootup-time.js");
-},{"../computed/main-thread-tasks.js":12,"../computed/network-records.js":33,"../lib/i18n/i18n.js":68,"../lib/network-request.js":76,"../lib/tracehouse/task-groups.js":85,"./audit.js":3}],"../audits/byte-efficiency/efficient-animated-content":[function(require,module,exports){
+},{"../computed/main-thread-tasks.js":12,"../computed/network-records.js":34,"../lib/i18n/i18n.js":67,"../lib/network-request.js":76,"../lib/tracehouse/task-groups.js":85,"./audit.js":3}],"../audits/byte-efficiency/efficient-animated-content":[function(require,module,exports){
 (function(__filename){
 
 
@@ -2376,7 +2377,7 @@ title:'Use video formats for animated content',
 
 description:'Large GIFs are inefficient for delivering animated content. Consider using '+
 'MPEG4/WebM videos for animations and PNG/WebP for static images instead of GIF to save '+
-'network bytes. [Learn more](https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/replace-animated-gifs-with-video/)'};
+'network bytes. [Learn more](https://web.dev/efficient-animated-content)'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -2450,7 +2451,7 @@ module.exports=EfficientAnimatedContent;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/efficient-animated-content.js");
-},{"../../lib/i18n/i18n.js":68,"../../lib/network-request.js":76,"./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/offscreen-images":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../../lib/network-request.js":76,"./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/offscreen-images":[function(require,module,exports){
 (function(__filename){
 
 
@@ -2477,7 +2478,7 @@ title:'Defer offscreen images',
 description:
 'Consider lazy-loading offscreen and hidden images after all critical resources have '+
 'finished loading to lower time to interactive. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/offscreen-images).'};
+'[Learn more](https://web.dev/offscreen-images).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -2697,7 +2698,7 @@ module.exports=OffscreenImages;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/offscreen-images.js");
-},{"../../computed/metrics/interactive.js":18,"../../computed/trace-of-tab.js":38,"../../lib/i18n/i18n.js":68,"../../lib/sentry.js":79,"../../lib/url-shim.js":"url","./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/render-blocking-resources":[function(require,module,exports){
+},{"../../computed/metrics/interactive.js":18,"../../computed/trace-of-tab.js":39,"../../lib/i18n/i18n.js":67,"../../lib/sentry.js":79,"../../lib/url-shim.js":"url","./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/render-blocking-resources":[function(require,module,exports){
 (function(__filename){
 
 
@@ -2736,7 +2737,7 @@ title:'Eliminate render-blocking resources',
 
 description:'Resources are blocking the first paint of your page. Consider '+
 'delivering critical JS/CSS inline and deferring all non-critical '+
-'JS/styles. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/blocking-resources).'};
+'JS/styles. [Learn more](https://web.dev/render-blocking-resources).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -2934,7 +2935,7 @@ module.exports=RenderBlockingResources;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/render-blocking-resources.js");
-},{"../../computed/load-simulator.js":10,"../../computed/metrics/first-contentful-paint.js":15,"../../computed/trace-of-tab.js":38,"../../lib/dependency-graph/base-node.js":57,"../../lib/i18n/i18n.js":68,"../../lib/network-request.js":76,"../audit.js":3,"./byte-efficiency-audit.js":4,"./unused-css-rules.js":"../audits/byte-efficiency/unused-css-rules"}],"../audits/byte-efficiency/total-byte-weight":[function(require,module,exports){
+},{"../../computed/load-simulator.js":10,"../../computed/metrics/first-contentful-paint.js":15,"../../computed/trace-of-tab.js":39,"../../lib/dependency-graph/base-node.js":58,"../../lib/i18n/i18n.js":67,"../../lib/network-request.js":76,"../audit.js":3,"./byte-efficiency-audit.js":4,"./unused-css-rules.js":"../audits/byte-efficiency/unused-css-rules"}],"../audits/byte-efficiency/total-byte-weight":[function(require,module,exports){
 (function(__filename){
 
 
@@ -2956,7 +2957,7 @@ failureTitle:'Avoid enormous network payloads',
 description:
 'Large network payloads cost users real money and are highly correlated with '+
 'long load times. [Learn '+
-'more](https://developers.google.com/web/tools/lighthouse/audits/network-payloads).',
+'more](https://web.dev/total-byte-weight).',
 
 displayValue:'Total size was {totalBytes, number, bytes}\xa0KB'};
 
@@ -3054,7 +3055,7 @@ module.exports=TotalByteWeight;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/total-byte-weight.js");
-},{"../../computed/network-records.js":33,"../../lib/i18n/i18n.js":68,"./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/unminified-css":[function(require,module,exports){
+},{"../../computed/network-records.js":34,"../../lib/i18n/i18n.js":67,"./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/unminified-css":[function(require,module,exports){
 (function(__filename){
 
 
@@ -3073,7 +3074,7 @@ const UIStrings={
 title:'Minify CSS',
 
 description:'Minifying CSS files can reduce network payload sizes. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/minify-css).'};
+'[Learn more](https://web.dev/unminified-css).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -3175,7 +3176,7 @@ module.exports=UnminifiedCSS;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/unminified-css.js");
-},{"../../lib/i18n/i18n.js":68,"../../lib/minification-estimator.js":74,"./byte-efficiency-audit.js":4,"./unused-css-rules.js":"../audits/byte-efficiency/unused-css-rules"}],"../audits/byte-efficiency/unminified-javascript":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../../lib/minification-estimator.js":74,"./byte-efficiency-audit.js":4,"./unused-css-rules.js":"../audits/byte-efficiency/unused-css-rules"}],"../audits/byte-efficiency/unminified-javascript":[function(require,module,exports){
 (function(__filename){
 
 
@@ -3193,7 +3194,7 @@ const UIStrings={
 title:'Minify JavaScript',
 
 description:'Minifying JavaScript files can reduce payload sizes and script parse time. '+
-'[Learn more](https://developers.google.com/speed/docs/insights/MinifyResources).'};
+'[Learn more](https://web.dev/unminified-javascript).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -3297,7 +3298,7 @@ module.exports=UnminifiedJavaScript;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/unminified-javascript.js");
-},{"../../lib/i18n/i18n.js":68,"../../lib/minification-estimator.js":74,"./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/unused-css-rules":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../../lib/minification-estimator.js":74,"./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/unused-css-rules":[function(require,module,exports){
 (function(__filename){
 
 
@@ -3315,12 +3316,14 @@ title:'Remove unused CSS',
 
 description:'Remove dead rules from stylesheets and defer the loading of CSS not used for '+
 'above-the-fold content to reduce unnecessary bytes consumed by network activity. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/unused-css).'};
+'[Learn more](https://web.dev/unused-css-rules).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
-const IGNORE_THRESHOLD_IN_BYTES=2048;
+
+
+const IGNORE_THRESHOLD_IN_BYTES=10*1024;
 const PREVIEW_LENGTH=100;
 
 
@@ -3346,6 +3349,10 @@ requiredArtifacts:['CSSUsage','URL','devtoolsLogs','traces']};
 
 static indexStylesheetsById(styles,networkRecords){
 const indexedNetworkRecords=networkRecords.
+
+
+
+filter(record=>record.resourceSize>0).
 reduce((indexed,record)=>{
 indexed[record.url]=record;
 return indexed;
@@ -3492,7 +3499,7 @@ module.exports=UnusedCSSRules;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/unused-css-rules.js");
-},{"../../lib/i18n/i18n.js":68,"./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/unused-javascript":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/unused-javascript":[function(require,module,exports){
 (function(__filename){
 
 
@@ -3630,7 +3637,7 @@ module.exports=UnusedJavaScript;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/unused-javascript.js");
-},{"../../lib/i18n/i18n.js":68,"./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/uses-long-cache-ttl":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/uses-long-cache-ttl":[function(require,module,exports){
 (function(__filename){
 
 
@@ -3656,7 +3663,7 @@ failureTitle:'Serve static assets with an efficient cache policy',
 
 description:
 'A long cache lifetime can speed up repeat visits to your page. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/cache-policy).',
+'[Learn more](https://web.dev/uses-long-cache-ttl).',
 
 displayValue:`{itemCount, plural,
     =1 {1 resource found}
@@ -3937,7 +3944,7 @@ module.exports=CacheHeaders;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/uses-long-cache-ttl.js");
-},{"../../computed/network-records.js":33,"../../lib/i18n/i18n.js":68,"../../lib/network-request.js":76,"../../lib/statistics.js":82,"../../lib/url-shim.js":"url","../audit.js":3,"assert":92,"parse-cache-control":142}],"../audits/byte-efficiency/uses-optimized-images":[function(require,module,exports){
+},{"../../computed/network-records.js":34,"../../lib/i18n/i18n.js":67,"../../lib/network-request.js":76,"../../lib/statistics.js":82,"../../lib/url-shim.js":"url","../audit.js":3,"assert":92,"parse-cache-control":139}],"../audits/byte-efficiency/uses-optimized-images":[function(require,module,exports){
 (function(__filename){
 
 
@@ -3959,7 +3966,7 @@ const UIStrings={
 title:'Efficiently encode images',
 
 description:'Optimized images load faster and consume less cellular data. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/optimize-images).'};
+'[Learn more](https://web.dev/uses-optimized-images).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -4076,7 +4083,7 @@ module.exports=UsesOptimizedImages;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/uses-optimized-images.js");
-},{"../../lib/i18n/i18n.js":68,"../../lib/url-shim.js":"url","./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/uses-responsive-images":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../../lib/url-shim.js":"url","./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/uses-responsive-images":[function(require,module,exports){
 (function(__filename){
 
 
@@ -4105,7 +4112,7 @@ title:'Properly size images',
 description:
 'Serve images that are appropriately-sized to save cellular data '+
 'and improve load time. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/oversized-images).'};
+'[Learn more](https://web.dev/uses-responsive-images).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -4222,7 +4229,7 @@ module.exports=UsesResponsiveImages;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/uses-responsive-images.js");
-},{"../../lib/i18n/i18n.js":68,"../../lib/sentry.js":79,"../../lib/url-shim.js":"url","./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/uses-text-compression":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../../lib/sentry.js":79,"../../lib/url-shim.js":"url","./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/uses-text-compression":[function(require,module,exports){
 (function(__filename){
 
 
@@ -4245,7 +4252,7 @@ title:'Enable text compression',
 
 description:'Text-based resources should be served with compression (gzip, deflate or'+
 ' brotli) to minimize total network bytes.'+
-' [Learn more](https://developers.google.com/web/tools/lighthouse/audits/text-compression).'};
+' [Learn more](https://web.dev/uses-text-compression).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -4326,7 +4333,7 @@ module.exports=ResponsesAreCompressed;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/uses-text-compression.js");
-},{"../../lib/i18n/i18n.js":68,"../../lib/url-shim.js":"url","./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/uses-webp-images":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../../lib/url-shim.js":"url","./byte-efficiency-audit.js":4}],"../audits/byte-efficiency/uses-webp-images":[function(require,module,exports){
 (function(__filename){
 
 
@@ -4348,7 +4355,7 @@ title:'Serve images in next-gen formats',
 
 description:'Image formats like JPEG 2000, JPEG XR, and WebP often provide better '+
 'compression than PNG or JPEG, which means faster downloads and less data consumption. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/webp).'};
+'[Learn more](https://web.dev/uses-webp-images).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -4464,7 +4471,8 @@ module.exports=UsesWebPImages;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/uses-webp-images.js");
-},{"../../lib/i18n/i18n.js":68,"../../lib/url-shim.js":"url","./byte-efficiency-audit.js":4}],"../audits/content-width":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../../lib/url-shim.js":"url","./byte-efficiency-audit.js":4}],"../audits/content-width":[function(require,module,exports){
+(function(__filename){
 
 
 
@@ -4473,6 +4481,27 @@ module.exports.UIStrings=UIStrings;
 'use strict';
 
 const Audit=require('./audit.js');
+const i18n=require('../lib/i18n/i18n.js');
+
+const UIStrings={
+
+title:'Content is sized correctly for the viewport',
+
+failureTitle:'Content is not sized correctly for the viewport',
+
+description:'If the width of your app\'s content doesn\'t match the width '+
+'of the viewport, your app might not be optimized for mobile screens. '+
+'[Learn more](https://web.dev/content-width).',
+
+
+
+
+
+explanation:'The viewport size of {innerWidth}px does not match the window '+
+'size of {outerWidth}px.'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 class ContentWidth extends Audit{
 
@@ -4481,11 +4510,9 @@ class ContentWidth extends Audit{
 static get meta(){
 return{
 id:'content-width',
-title:'Content is sized correctly for the viewport',
-failureTitle:'Content is not sized correctly for the viewport',
-description:'If the width of your app\'s content doesn\'t match the width '+
-'of the viewport, your app might not be optimized for mobile screens. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/content-sized-correctly-for-viewport).',
+title:str_(UIStrings.title),
+failureTitle:str_(UIStrings.failureTitle),
+description:str_(UIStrings.description),
 requiredArtifacts:['ViewportDimensions','TestedAsMobileDevice']};
 
 }
@@ -4500,37 +4527,32 @@ const viewportWidth=artifacts.ViewportDimensions.innerWidth;
 const windowWidth=artifacts.ViewportDimensions.outerWidth;
 const widthsMatch=viewportWidth===windowWidth;
 
-if(IsMobile){
-return{
-score:Number(widthsMatch),
-explanation:this.createExplanation(widthsMatch,artifacts.ViewportDimensions)};
-
-}else{
+if(!IsMobile){
 return{
 score:1,
 notApplicable:true};
 
 }
+
+let explanation='';
+if(!widthsMatch){
+explanation=str_(UIStrings.explanation,
+{innerWidth:artifacts.ViewportDimensions.innerWidth,
+outerWidth:artifacts.ViewportDimensions.outerWidth});
 }
 
+return{
+score:Number(widthsMatch),
+explanation};
 
-
-
-
-
-static createExplanation(match,artifact){
-if(match){
-return'';
-}
-
-return'The viewport size is '+artifact.innerWidth+'px, '+
-'whereas the window size is '+artifact.outerWidth+'px.';
 }}
 
 
 module.exports=ContentWidth;
+module.exports.UIStrings=UIStrings;
 
-},{"./audit.js":3}],"../audits/critical-request-chains":[function(require,module,exports){
+}).call(this,"/lighthouse-core/audits/content-width.js");
+},{"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/critical-request-chains":[function(require,module,exports){
 (function(__filename){
 
 
@@ -4545,13 +4567,13 @@ const ComputedChains=require('../computed/critical-request-chains.js');
 
 const UIStrings={
 
-title:'Minimize Critical Requests Depth',
+title:'Avoid chaining critical requests',
 
 description:'The Critical Request Chains below show you what resources are '+
 'loaded with a high priority. Consider reducing '+
 'the length of chains, reducing the download size of resources, or '+
 'deferring the download of unnecessary resources to improve page load. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/critical-request-chains).',
+'[Learn more](https://web.dev/critical-request-chains).',
 
 displayValue:`{itemCount, plural,
     =1 {1 chain found}
@@ -4758,7 +4780,7 @@ module.exports=CriticalRequestChains;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/critical-request-chains.js");
-},{"../computed/critical-request-chains.js":9,"../lib/i18n/i18n.js":68,"./audit.js":3}],"../audits/deprecations":[function(require,module,exports){
+},{"../computed/critical-request-chains.js":9,"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/deprecations":[function(require,module,exports){
 (function(__filename){
 
 
@@ -4783,7 +4805,7 @@ title:'Avoids deprecated APIs',
 failureTitle:'Uses deprecated APIs',
 
 description:'Deprecated APIs will eventually be removed from the browser. '+
-'[Learn more](https://www.chromestatus.com/features#deprecated).',
+'[Learn more](https://web.dev/deprecations).',
 
 displayValue:`{itemCount, plural,
     =1 {1 warning found}
@@ -4829,7 +4851,7 @@ lineNumber:log.entry.lineNumber};
 
 
 const headings=[
-{key:'value',itemType:'code',text:str_(UIStrings.columnDeprecate)},
+{key:'value',itemType:'text',text:str_(UIStrings.columnDeprecate)},
 {key:'url',itemType:'url',text:str_(i18n.UIStrings.columnURL)},
 {key:'lineNumber',itemType:'text',text:str_(UIStrings.columnLine)}];
 
@@ -4855,7 +4877,7 @@ module.exports=Deprecations;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/deprecations.js");
-},{"../lib/i18n/i18n.js":68,"./audit.js":3}],"../audits/diagnostics":[function(require,module,exports){
+},{"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/diagnostics":[function(require,module,exports){
 
 
 
@@ -4935,7 +4957,7 @@ items:[diagnostics]}};
 
 module.exports=Diagnostics;
 
-},{"../computed/main-thread-tasks.js":12,"../computed/network-analysis.js":32,"../computed/network-records.js":33,"../lib/dependency-graph/simulator/network-analyzer.js":62,"./audit.js":3}],"../audits/dobetterweb/appcache-manifest":[function(require,module,exports){
+},{"../computed/main-thread-tasks.js":12,"../computed/network-analysis.js":33,"../computed/network-records.js":34,"../lib/dependency-graph/simulator/network-analyzer.js":63,"./audit.js":3}],"../audits/dobetterweb/appcache-manifest":[function(require,module,exports){
 (function(__filename){
 
 
@@ -4959,7 +4981,10 @@ title:'Avoids Application Cache',
 failureTitle:'Uses Application Cache',
 
 description:'Application Cache is deprecated. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/appcache).',
+'[Learn more](https://web.dev/appcache-manifest).',
+
+
+
 
 displayValue:'Found "{AppCacheManifest}"'};
 
@@ -4985,13 +5010,16 @@ requiredArtifacts:['AppCacheManifest']};
 
 
 static audit(artifacts){
-const usingAppcache=artifacts.AppCacheManifest!==null;
-const displayValue=usingAppcache?
-str_(UIStrings.displayValue,{AppCacheManifest:artifacts.AppCacheManifest}):'';
+
+if(artifacts.AppCacheManifest!==null){
+return{
+score:0,
+displayValue:str_(UIStrings.displayValue,{AppCacheManifest:artifacts.AppCacheManifest})};
+
+}
 
 return{
-score:usingAppcache?0:1,
-displayValue};
+score:1};
 
 }}
 
@@ -5000,7 +5028,7 @@ module.exports=AppCacheManifestAttr;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/dobetterweb/appcache-manifest.js");
-},{"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/dobetterweb/doctype":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/dobetterweb/doctype":[function(require,module,exports){
 (function(__filename){
 
 
@@ -5019,8 +5047,8 @@ title:'Page has the HTML doctype',
 failureTitle:'Page lacks the HTML doctype, thus triggering quirks-mode',
 
 description:'Specifying a doctype prevents the browser '+
-'from switching to quirks-mode. Read more on the '+
-'[MDN Web Docs page](https://developer.mozilla.org/en-US/docs/Glossary/Doctype)',
+'from switching to quirks-mode. '+
+'[Learn more](https://web.dev/doctype).',
 
 explanationNoDoctype:'Document must contain a doctype',
 
@@ -5098,7 +5126,7 @@ module.exports=Doctype;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/dobetterweb/doctype.js");
-},{"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/dobetterweb/dom-size":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/dobetterweb/dom-size":[function(require,module,exports){
 (function(__filename){
 
 
@@ -5118,22 +5146,15 @@ const Audit=require('../audit.js');
 const Util=require('../../report/html/renderer/util.js');
 const i18n=require('../../lib/i18n/i18n.js');
 
-const MAX_DOM_ELEMENTS=1500;
-const MAX_DOM_TREE_WIDTH=60;
-const MAX_DOM_TREE_DEPTH=32;
-
 const UIStrings={
 
 title:'Avoids an excessive DOM size',
 
 failureTitle:'Avoid an excessive DOM size',
 
-description:'Browser engineers recommend pages contain fewer than '+
-`~${MAX_DOM_ELEMENTS.toLocaleString()} DOM elements. The sweet spot is a tree `+
-`depth < ${MAX_DOM_TREE_DEPTH} elements and fewer than ${MAX_DOM_TREE_WIDTH} `+
-'children/parent element. A large DOM can increase memory usage, cause longer '+
+description:'A large DOM will increase memory usage, cause longer '+
 '[style calculations](https://developers.google.com/web/fundamentals/performance/rendering/reduce-the-scope-and-complexity-of-style-calculations), '+
-'and produce costly [layout reflows](https://developers.google.com/speed/articles/reflow). [Learn more](https://developers.google.com/web/tools/lighthouse/audits/dom-size).',
+'and produce costly [layout reflows](https://developers.google.com/speed/articles/reflow). [Learn more](https://web.dev/dom-size).',
 
 columnStatistic:'Statistic',
 
@@ -5157,10 +5178,6 @@ const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 
 class DOMSize extends Audit{
-static get MAX_DOM_ELEMENTS(){
-return MAX_DOM_ELEMENTS;
-}
-
 
 
 
@@ -5251,7 +5268,7 @@ module.exports=DOMSize;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/dobetterweb/dom-size.js");
-},{"../../lib/i18n/i18n.js":68,"../../report/html/renderer/util.js":88,"../audit.js":3}],"../audits/dobetterweb/external-anchors-use-rel-noopener":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../../report/html/renderer/util.js":88,"../audit.js":3}],"../audits/dobetterweb/external-anchors-use-rel-noopener":[function(require,module,exports){
 (function(__filename){
 
 
@@ -5272,7 +5289,10 @@ failureTitle:'Links to cross-origin destinations are unsafe',
 
 description:'Add `rel="noopener"` or `rel="noreferrer"` to any external links to improve '+
 'performance and prevent security vulnerabilities. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/noopener).',
+'[Learn more](https://web.dev/external-anchors-use-rel-noopener).',
+
+
+
 
 warning:'Unable to determine the destination for anchor ({anchorHTML}). '+
 'If not used as a hyperlink, consider removing target=_blank.',
@@ -5354,7 +5374,7 @@ module.exports=ExternalAnchorsUseRelNoopenerAudit;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/dobetterweb/external-anchors-use-rel-noopener.js");
-},{"../../lib/i18n/i18n.js":68,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/dobetterweb/geolocation-on-start":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/dobetterweb/geolocation-on-start":[function(require,module,exports){
 (function(__filename){
 
 
@@ -5380,7 +5400,7 @@ failureTitle:'Requests the geolocation permission on page load',
 
 description:'Users are mistrustful of or confused by sites that request their '+
 'location without context. Consider tying the request to a user action instead. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/geolocation-on-load).'};
+'[Learn more](https://web.dev/geolocation-on-start).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -5430,7 +5450,7 @@ module.exports=GeolocationOnStart;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/dobetterweb/geolocation-on-start.js");
-},{"../../lib/i18n/i18n.js":68,"../violation-audit.js":7}],"../audits/dobetterweb/js-libraries":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../violation-audit.js":7}],"../audits/dobetterweb/js-libraries":[function(require,module,exports){
 (function(__filename){
 
 
@@ -5451,9 +5471,7 @@ const UIStrings={
 
 title:'Detected JavaScript libraries',
 
-description:'All front-end JavaScript libraries detected on the page.',
-
-columnName:'Name',
+description:'All front-end JavaScript libraries detected on the page. [Learn more](https://web.dev/js-libraries).',
 
 columnVersion:'Version'};
 
@@ -5488,7 +5506,7 @@ npm:stack.npm}));
 
 
 const headings=[
-{key:'name',itemType:'text',text:str_(UIStrings.columnName)},
+{key:'name',itemType:'text',text:str_(i18n.UIStrings.columnName)},
 {key:'version',itemType:'text',text:str_(UIStrings.columnVersion)}];
 
 const details=Audit.makeTableDetails(headings,libDetails,{});
@@ -5504,8 +5522,26 @@ module.exports=JsLibrariesAudit;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/dobetterweb/js-libraries.js");
-},{"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/dobetterweb/no-document-write":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/dobetterweb/no-document-write":[function(require,module,exports){
 (function(__filename){
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -5529,7 +5565,7 @@ failureTitle:'Uses `document.write()`',
 
 description:'For users on slow connections, external scripts dynamically injected via '+
 '`document.write()` can delay page load by tens of seconds. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/document-write).'};
+'[Learn more](https://web.dev/no-document-write).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -5577,7 +5613,7 @@ module.exports=NoDocWriteAudit;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/dobetterweb/no-document-write.js");
-},{"../../lib/i18n/i18n.js":68,"../violation-audit.js":7}],"../audits/dobetterweb/no-vulnerable-libraries":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../violation-audit.js":7}],"../audits/dobetterweb/no-vulnerable-libraries":[function(require,module,exports){
 (function(__filename){
 
 
@@ -5609,7 +5645,7 @@ failureTitle:'Includes front-end JavaScript libraries'+
 
 description:'Some third-party scripts may contain known security vulnerabilities '+
 'that are easily identified and exploited by attackers. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/vulnerabilities).',
+'[Learn more](https://web.dev/no-vulnerable-libraries).',
 
 displayValue:`{itemCount, plural,
     =1 {1 vulnerability detected}
@@ -5824,7 +5860,7 @@ module.exports=NoVulnerableLibrariesAudit;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js");
-},{"../../../third-party/snyk/snapshot.json":182,"../../lib/i18n/i18n.js":68,"../../lib/sentry.js":79,"../audit.js":3,"semver":166}],"../audits/dobetterweb/notification-on-start":[function(require,module,exports){
+},{"../../../third-party/snyk/snapshot.json":183,"../../lib/i18n/i18n.js":67,"../../lib/sentry.js":79,"../audit.js":3,"semver":163}],"../audits/dobetterweb/notification-on-start":[function(require,module,exports){
 (function(__filename){
 
 
@@ -5850,7 +5886,7 @@ failureTitle:'Requests the notification permission on page load',
 
 description:'Users are mistrustful of or confused by sites that request to send '+
 'notifications without context. Consider tying the request to user gestures '+
-'instead. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/notifications-on-load).'};
+'instead. [Learn more](https://web.dev/notification-on-start).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -5898,7 +5934,7 @@ module.exports=NotificationOnStart;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/dobetterweb/notification-on-start.js");
-},{"../../lib/i18n/i18n.js":68,"../violation-audit.js":7}],"../audits/dobetterweb/password-inputs-can-be-pasted-into":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../violation-audit.js":7}],"../audits/dobetterweb/password-inputs-can-be-pasted-into":[function(require,module,exports){
 (function(__filename){
 
 
@@ -5917,7 +5953,7 @@ title:'Allows users to paste into password fields',
 failureTitle:'Prevents users to paste into password fields',
 
 description:'Preventing password pasting undermines good security policy. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/password-pasting).',
+'[Learn more](https://web.dev/password-inputs-can-be-pasted-into).',
 
 columnFailingElem:'Failing Elements'};
 
@@ -5972,7 +6008,7 @@ module.exports=PasswordInputsCanBePastedIntoAudit;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/dobetterweb/password-inputs-can-be-pasted-into.js");
-},{"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/dobetterweb/uses-http2":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/dobetterweb/uses-http2":[function(require,module,exports){
 (function(__filename){
 
 
@@ -5999,7 +6035,7 @@ title:'Uses HTTP/2 for its own resources',
 failureTitle:'Does not use HTTP/2 for all of its resources',
 
 description:'HTTP/2 offers many benefits over HTTP/1.1, including binary headers, '+
-'multiplexing, and server push. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/http2).',
+'multiplexing, and server push. [Learn more](https://web.dev/uses-http2).',
 
 displayValue:`{itemCount, plural,
     =1 {1 request not served via HTTP/2}
@@ -6087,7 +6123,7 @@ module.exports=UsesHTTP2Audit;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/dobetterweb/uses-http2.js");
-},{"../../computed/network-records.js":33,"../../lib/i18n/i18n.js":68,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/dobetterweb/uses-passive-event-listeners":[function(require,module,exports){
+},{"../../computed/network-records.js":34,"../../lib/i18n/i18n.js":67,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/dobetterweb/uses-passive-event-listeners":[function(require,module,exports){
 (function(__filename){
 
 
@@ -6113,7 +6149,7 @@ failureTitle:'Does not use passive listeners to improve scrolling performance',
 
 description:'Consider marking your touch and wheel event listeners as `passive` '+
 'to improve your page\'s scroll performance. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/passive-event-listeners).'};
+'[Learn more](https://web.dev/uses-passive-event-listeners).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -6161,7 +6197,7 @@ module.exports=PassiveEventsAudit;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/dobetterweb/uses-passive-event-listeners.js");
-},{"../../lib/i18n/i18n.js":68,"../violation-audit.js":7}],"../audits/errors-in-console":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../violation-audit.js":7}],"../audits/errors-in-console":[function(require,module,exports){
 (function(__filename){
 
 
@@ -6175,6 +6211,7 @@ module.exports.UIStrings=UIStrings;
 
 
 
+const log=require('lighthouse-logger');
 const Audit=require('./audit.js');
 const i18n=require('../lib/i18n/i18n.js');
 
@@ -6185,12 +6222,15 @@ title:'No browser errors logged to the console',
 failureTitle:'Browser errors were logged to the console',
 
 description:'Errors logged to the console indicate unresolved problems. '+
-'They can come from network request failures and other browser concerns.',
+'They can come from network request failures and other browser concerns. '+
+'[Learn more](https://web.dev/errors-in-console)',
 
 columnDesc:'Description'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
+
+
 
 class ErrorLogs extends Audit{
 
@@ -6207,10 +6247,42 @@ requiredArtifacts:['ConsoleMessages','RuntimeExceptions']};
 }
 
 
+static defaultOptions(){
+return{};
+}
 
 
 
-static audit(artifacts){
+
+
+
+
+
+static filterAccordingToOptions(items,options){
+const{ignoredPatterns,...restOfOptions}=options;
+const otherOptionKeys=Object.keys(restOfOptions);
+if(otherOptionKeys.length)log.warn(this.meta.id,'Unrecognized options',otherOptionKeys);
+if(!ignoredPatterns)return items;
+
+return items.filter(({description})=>{
+if(!description)return true;
+for(const pattern of ignoredPatterns){
+if(pattern instanceof RegExp&&pattern.test(description))return false;
+if(typeof pattern==='string'&&description.includes(pattern))return false;
+}
+
+return true;
+});
+}
+
+
+
+
+
+
+static audit(artifacts,context){
+const auditOptions=context.options;
+
 const consoleEntries=artifacts.ConsoleMessages;
 const runtimeExceptions=artifacts.RuntimeExceptions;
 
@@ -6237,7 +6309,10 @@ url:entry.exceptionDetails.url};
 
 });
 
-const tableRows=consoleRows.concat(runtimeExRows);
+const tableRows=ErrorLogs.filterAccordingToOptions(
+consoleRows.concat(runtimeExRows),
+auditOptions).
+sort((a,b)=>(a.description||'').localeCompare(b.description||''));
 
 
 const headings=[
@@ -6260,7 +6335,7 @@ module.exports=ErrorLogs;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/errors-in-console.js");
-},{"../lib/i18n/i18n.js":68,"./audit.js":3}],"../audits/final-screenshot":[function(require,module,exports){
+},{"../lib/i18n/i18n.js":67,"./audit.js":3,"lighthouse-logger":125}],"../audits/final-screenshot":[function(require,module,exports){
 
 
 
@@ -6317,7 +6392,7 @@ data:finalScreenshot.datauri}};
 
 module.exports=FinalScreenshot;
 
-},{"../computed/screenshots.js":36,"../computed/trace-of-tab.js":38,"../lib/lh-error.js":72,"./audit.js":3}],"../audits/font-display":[function(require,module,exports){
+},{"../computed/screenshots.js":37,"../computed/trace-of-tab.js":39,"../lib/lh-error.js":72,"./audit.js":3}],"../audits/font-display":[function(require,module,exports){
 (function(__filename){
 
 
@@ -6344,7 +6419,10 @@ failureTitle:'Ensure text remains visible during webfont load',
 description:
 'Leverage the font-display CSS feature to ensure text is user-visible while '+
 'webfonts are loading. '+
-'[Learn more](https://developers.google.com/web/updates/2016/02/font-display).',
+'[Learn more](https://web.dev/font-display).',
+
+
+
 
 undeclaredFontURLWarning:'Lighthouse was unable to automatically check the font-display value '+
 'for the following URL: {fontURL}.'};
@@ -6482,7 +6560,7 @@ module.exports=FontDisplay;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/font-display.js");
-},{"../computed/network-records.js":33,"../lib/i18n/i18n.js":68,"../lib/sentry.js":79,"../lib/url-shim.js":"url","./audit.js":3}],"../audits/image-aspect-ratio":[function(require,module,exports){
+},{"../computed/network-records.js":34,"../lib/i18n/i18n.js":67,"../lib/sentry.js":79,"../lib/url-shim.js":"url","./audit.js":3}],"../audits/image-aspect-ratio":[function(require,module,exports){
 (function(__filename){
 
 
@@ -6508,7 +6586,10 @@ title:'Displays images with correct aspect ratio',
 failureTitle:'Displays images with incorrect aspect ratio',
 
 description:'Image display dimensions should match natural aspect ratio. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/aspect-ratio).',
+'[Learn more](https://web.dev/image-aspect-ratio).',
+
+
+
 
 warningCompute:'Invalid image sizing information {url}',
 
@@ -6620,7 +6701,8 @@ module.exports=ImageAspectRatio;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/image-aspect-ratio.js");
-},{"../lib/i18n/i18n.js":68,"../lib/url-shim.js":"url","./audit.js":3}],"../audits/installable-manifest":[function(require,module,exports){
+},{"../lib/i18n/i18n.js":67,"../lib/url-shim.js":"url","./audit.js":3}],"../audits/installable-manifest":[function(require,module,exports){
+(function(__filename){
 
 
 
@@ -6630,6 +6712,20 @@ module.exports.UIStrings=UIStrings;
 
 const MultiCheckAudit=require('./multi-check-audit.js');
 const ManifestValues=require('../computed/manifest-values.js');
+const i18n=require('../lib/i18n/i18n.js');
+
+const UIStrings={
+
+title:'Web app manifest meets the installability requirements',
+
+failureTitle:'Web app manifest does not meet the installability requirements',
+
+description:'Browsers can proactively prompt users to add your app to their homescreen, '+
+'which can lead to higher engagement. '+
+'[Learn more](https://web.dev/installable-manifest).'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 
 
@@ -6652,11 +6748,9 @@ class InstallableManifest extends MultiCheckAudit{
 static get meta(){
 return{
 id:'installable-manifest',
-title:'Web app manifest meets the installability requirements',
-failureTitle:'Web app manifest does not meet the installability requirements',
-description:'Browsers can proactively prompt users to add your app to their homescreen, '+
-'which can lead to higher engagement. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/install-prompt).',
+title:str_(UIStrings.title),
+failureTitle:str_(UIStrings.failureTitle),
+description:str_(UIStrings.description),
 requiredArtifacts:['URL','WebAppManifest']};
 
 }
@@ -6715,8 +6809,10 @@ manifestValues};
 
 
 module.exports=InstallableManifest;
+module.exports.UIStrings=UIStrings;
 
-},{"../computed/manifest-values.js":13,"./multi-check-audit.js":6}],"../audits/is-on-https":[function(require,module,exports){
+}).call(this,"/lighthouse-core/audits/installable-manifest.js");
+},{"../computed/manifest-values.js":13,"../lib/i18n/i18n.js":67,"./multi-check-audit.js":6}],"../audits/is-on-https":[function(require,module,exports){
 (function(__filename){
 
 
@@ -6740,7 +6836,7 @@ description:'All sites should be protected with HTTPS, even ones that don\'t han
 'sensitive data. HTTPS prevents intruders from tampering with or passively listening '+
 'in on the communications between your app and your users, and is a prerequisite for '+
 'HTTP/2 and many new web platform APIs. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/https).',
+'[Learn more](https://web.dev/is-on-https).',
 
 displayValue:`{itemCount, plural,
     =1 {1 insecure request found}
@@ -6819,7 +6915,7 @@ module.exports=HTTPS;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/is-on-https.js");
-},{"../computed/network-records.js":33,"../lib/i18n/i18n.js":68,"../lib/url-shim.js":"url","./audit.js":3}],"../audits/load-fast-enough-for-pwa":[function(require,module,exports){
+},{"../computed/network-records.js":34,"../lib/i18n/i18n.js":67,"../lib/url-shim.js":"url","./audit.js":3}],"../audits/load-fast-enough-for-pwa":[function(require,module,exports){
 (function(__filename){
 
 
@@ -6850,12 +6946,16 @@ title:'Page load is fast enough on mobile networks',
 
 failureTitle:'Page load is not fast enough on mobile networks',
 
-description:'A fast page load over a cellular network ensures a good mobile user experience. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/fast-3g).',
+description:'A fast page load over a cellular network ensures a good mobile user experience. [Learn more](https://web.dev/load-fast-enough-for-pwa).',
 
 displayValueText:'Interactive at {timeInMs, number, seconds}\xa0s',
 
 displayValueTextWithOverride:'Interactive on simulated mobile network at '+
-'{timeInMs, number, seconds}\xa0s'};
+'{timeInMs, number, seconds}\xa0s',
+
+explanationLoadSlow:'Your page loads too slowly and is not interactive within 10 seconds. '+
+'Look at the opportunities and diagnostics in the "Performance" section to learn how to '+
+'improve.'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -6909,9 +7009,7 @@ let displayValue;
 let explanation;
 if(!score){
 displayValue=str_(displayValueTemplate,{timeInMs:tti.timing});
-explanation='Your page loads too slowly and is not interactive within 10 seconds. '+
-'Look at the opportunities and diagnostics in the "Performance" section to learn how to '+
-'improve.';
+explanation=str_(UIStrings.explanationLoadSlow);
 }
 
 return{
@@ -6927,7 +7025,7 @@ module.exports=LoadFastEnough4Pwa;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/load-fast-enough-for-pwa.js");
-},{"../computed/metrics/interactive.js":18,"../config/constants.js":45,"../lib/i18n/i18n.js":68,"./audit.js":3,"lodash.isequal":129}],"../audits/main-thread-tasks":[function(require,module,exports){
+},{"../computed/metrics/interactive.js":18,"../config/constants.js":46,"../lib/i18n/i18n.js":67,"./audit.js":3,"lodash.isequal":126}],"../audits/main-thread-tasks":[function(require,module,exports){
 
 
 
@@ -7015,7 +7113,8 @@ title:'Minimizes main-thread work',
 failureTitle:'Minimize main-thread work',
 
 description:'Consider reducing the time spent parsing, compiling and executing JS. '+
-'You may find delivering smaller JS payloads helps with this.',
+'You may find delivering smaller JS payloads helps with this. '+
+'[Learn more](https://web.dev/mainthread-work-breakdown)',
 
 columnCategory:'Category'};
 
@@ -7126,7 +7225,8 @@ module.exports=MainThreadWorkBreakdown;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/mainthread-work-breakdown.js");
-},{"../computed/main-thread-tasks.js":12,"../lib/i18n/i18n.js":68,"../lib/tracehouse/task-groups.js":85,"./audit.js":3}],"../audits/manual/pwa-cross-browser":[function(require,module,exports){
+},{"../computed/main-thread-tasks.js":12,"../lib/i18n/i18n.js":67,"../lib/tracehouse/task-groups.js":85,"./audit.js":3}],"../audits/manual/pwa-cross-browser":[function(require,module,exports){
+(function(__filename){
 
 
 
@@ -7136,6 +7236,17 @@ module.exports.UIStrings=UIStrings;
 'use strict';
 
 const ManualAudit=require('./manual-audit.js');
+const i18n=require('../../lib/i18n/i18n.js');
+
+const UIStrings={
+
+title:'Site works cross-browser',
+
+description:'To reach the most number of users, sites should work across '+
+'every major browser. [Learn more](https://web.dev/pwa-cross-browser).'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 
 
@@ -7148,16 +7259,19 @@ class PWACrossBrowser extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'pwa-cross-browser',
-description:'To reach the most number of users, sites should work across '+
-'every major browser. [Learn more](https://developers.google.com/web/progressive-web-apps/checklist#site-works-cross-browser).',
-title:'Site works cross-browser'},
+title:str_(UIStrings.title),
+description:str_(UIStrings.description)},
 super.partialMeta);
 }}
 
 
 module.exports=PWACrossBrowser;
+module.exports.UIStrings=UIStrings;
 
-},{"./manual-audit.js":5}],"../audits/manual/pwa-each-page-has-url":[function(require,module,exports){
+
+}).call(this,"/lighthouse-core/audits/manual/pwa-cross-browser.js");
+},{"../../lib/i18n/i18n.js":67,"./manual-audit.js":5}],"../audits/manual/pwa-each-page-has-url":[function(require,module,exports){
+(function(__filename){
 
 
 
@@ -7166,6 +7280,17 @@ module.exports=PWACrossBrowser;
 'use strict';
 
 const ManualAudit=require('./manual-audit.js');
+const i18n=require('../../lib/i18n/i18n.js');
+
+const UIStrings={
+
+title:'Each page has a URL',
+
+description:'Ensure individual pages are deep linkable via URL and that URLs are '+
+'unique for the purpose of shareability on social media. [Learn more](https://web.dev/pwa-each-page-has-url).'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 
 
@@ -7178,16 +7303,18 @@ class PWAEachPageHasURL extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'pwa-each-page-has-url',
-description:'Ensure individual pages are deep linkable via the URLs and that URLs are '+
-'unique for the purpose of shareability on social media. [Learn more](https://developers.google.com/web/progressive-web-apps/checklist#each-page-has-a-url).',
-title:'Each page has a URL'},
+title:str_(UIStrings.title),
+description:str_(UIStrings.description)},
 super.partialMeta);
 }}
 
 
 module.exports=PWAEachPageHasURL;
+module.exports.UIStrings=UIStrings;
 
-},{"./manual-audit.js":5}],"../audits/manual/pwa-page-transitions":[function(require,module,exports){
+}).call(this,"/lighthouse-core/audits/manual/pwa-each-page-has-url.js");
+},{"../../lib/i18n/i18n.js":67,"./manual-audit.js":5}],"../audits/manual/pwa-page-transitions":[function(require,module,exports){
+(function(__filename){
 
 
 
@@ -7196,6 +7323,17 @@ module.exports=PWAEachPageHasURL;
 'use strict';
 
 const ManualAudit=require('./manual-audit.js');
+const i18n=require('../../lib/i18n/i18n.js');
+
+const UIStrings={
+
+title:'Page transitions don\'t feel like they block on the network',
+
+description:'Transitions should feel snappy as you tap around, even on a slow network. '+
+'This experience is key to a user\'s perception of performance. [Learn more](https://web.dev/pwa-page-transitions).'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 
 
@@ -7208,16 +7346,17 @@ class PWAPageTransitions extends ManualAudit{
 static get meta(){
 return Object.assign({
 id:'pwa-page-transitions',
-description:'Transitions should feel snappy as you tap around, even on a slow network, a '+
-'key to perceived performance. [Learn more](https://developers.google.com/web/progressive-web-apps/checklist#page-transitions-dont-feel-like-they-block-on-the-network).',
-title:'Page transitions don\'t feel like they block on the network'},
+title:str_(UIStrings.title),
+description:str_(UIStrings.description)},
 super.partialMeta);
 }}
 
 
 module.exports=PWAPageTransitions;
+module.exports.UIStrings=UIStrings;
 
-},{"./manual-audit.js":5}],"../audits/metrics/estimated-input-latency":[function(require,module,exports){
+}).call(this,"/lighthouse-core/audits/manual/pwa-page-transitions.js");
+},{"../../lib/i18n/i18n.js":67,"./manual-audit.js":5}],"../audits/metrics/estimated-input-latency":[function(require,module,exports){
 (function(__filename){
 
 
@@ -7237,7 +7376,7 @@ title:'Estimated Input Latency',
 description:'Estimated Input Latency is an estimate of how long your app takes to respond to '+
 'user input, in milliseconds, during the busiest 5s window of page load. If your '+
 'latency is higher than 50 ms, users may perceive your app as laggy. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/estimated-input-latency).'};
+'[Learn more](https://web.dev/estimated-input-latency).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -7297,7 +7436,7 @@ module.exports=EstimatedInputLatency;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/metrics/estimated-input-latency.js");
-},{"../../computed/metrics/estimated-input-latency.js":14,"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/metrics/first-contentful-paint-3g":[function(require,module,exports){
+},{"../../computed/metrics/estimated-input-latency.js":14,"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/metrics/first-contentful-paint-3g":[function(require,module,exports){
 
 
 
@@ -7363,7 +7502,7 @@ displayValue:`${metricResult.timing}\xa0ms`};
 
 module.exports=FirstContentfulPaint3G;
 
-},{"../../computed/metrics/first-contentful-paint.js":15,"../../config/constants.js":45,"../audit.js":3}],"../audits/metrics/first-contentful-paint":[function(require,module,exports){
+},{"../../computed/metrics/first-contentful-paint.js":15,"../../config/constants.js":46,"../audit.js":3}],"../audits/metrics/first-contentful-paint":[function(require,module,exports){
 (function(__filename){
 
 
@@ -7381,7 +7520,7 @@ const UIStrings={
 title:'First Contentful Paint',
 
 description:'First Contentful Paint marks the time at which the first text or image is '+
-`painted. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/first-contentful-paint).`};
+`painted. [Learn more](https://web.dev/first-contentful-paint).`};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -7440,7 +7579,7 @@ module.exports=FirstContentfulPaint;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/metrics/first-contentful-paint.js");
-},{"../../computed/metrics/first-contentful-paint.js":15,"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/metrics/first-cpu-idle":[function(require,module,exports){
+},{"../../computed/metrics/first-contentful-paint.js":15,"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/metrics/first-cpu-idle":[function(require,module,exports){
 (function(__filename){
 
 
@@ -7458,8 +7597,7 @@ const UIStrings={
 title:'First CPU Idle',
 
 description:'First CPU Idle marks the first time at which the page\'s main thread is '+
-'quiet enough to handle input. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/first-interactive).'};
+'quiet enough to handle input.  [Learn more](https://web.dev/first-cpu-idle).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -7521,7 +7659,7 @@ module.exports=FirstCPUIdle;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/metrics/first-cpu-idle.js");
-},{"../../computed/metrics/first-cpu-idle.js":16,"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/metrics/first-meaningful-paint":[function(require,module,exports){
+},{"../../computed/metrics/first-cpu-idle.js":16,"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/metrics/first-meaningful-paint":[function(require,module,exports){
 (function(__filename){
 
 
@@ -7539,7 +7677,7 @@ const UIStrings={
 title:'First Meaningful Paint',
 
 description:'First Meaningful Paint measures when the primary content of a page is '+
-'visible. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/first-meaningful-paint).'};
+'visible. [Learn more](https://web.dev/first-meaningful-paint).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -7601,7 +7739,7 @@ module.exports=FirstMeaningfulPaint;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/metrics/first-meaningful-paint.js");
-},{"../../computed/metrics/first-meaningful-paint.js":17,"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/metrics/interactive":[function(require,module,exports){
+},{"../../computed/metrics/first-meaningful-paint.js":17,"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/metrics/interactive":[function(require,module,exports){
 (function(__filename){
 
 
@@ -7619,7 +7757,7 @@ const UIStrings={
 title:'Time to Interactive',
 
 description:'Time to interactive is the amount of time it takes for the page to become fully '+
-'interactive. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/consistently-interactive).'};
+'interactive. [Learn more](https://web.dev/interactive).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -7696,7 +7834,7 @@ module.exports=InteractiveMetric;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/metrics/interactive.js");
-},{"../../computed/metrics/interactive.js":18,"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/metrics/max-potential-fid":[function(require,module,exports){
+},{"../../computed/metrics/interactive.js":18,"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/metrics/max-potential-fid":[function(require,module,exports){
 (function(__filename){
 
 
@@ -7776,7 +7914,7 @@ module.exports=MaxPotentialFID;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/metrics/max-potential-fid.js");
-},{"../../computed/metrics/max-potential-fid.js":28,"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/metrics/speed-index":[function(require,module,exports){
+},{"../../computed/metrics/max-potential-fid.js":29,"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/metrics/speed-index":[function(require,module,exports){
 (function(__filename){
 
 
@@ -7794,7 +7932,7 @@ const UIStrings={
 title:'Speed Index',
 
 description:'Speed Index shows how quickly the contents of a page are visibly populated. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/speed-index).'};
+'[Learn more](https://web.dev/speed-index).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -7855,7 +7993,7 @@ module.exports=SpeedIndex;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/metrics/speed-index.js");
-},{"../../computed/metrics/speed-index.js":30,"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/metrics/total-blocking-time":[function(require,module,exports){
+},{"../../computed/metrics/speed-index.js":31,"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/metrics/total-blocking-time":[function(require,module,exports){
 (function(__filename){
 
 
@@ -7942,7 +8080,7 @@ module.exports=TotalBlockingTime;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/metrics/total-blocking-time.js");
-},{"../../computed/metrics/total-blocking-time.js":31,"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/metrics":[function(require,module,exports){
+},{"../../computed/metrics/total-blocking-time.js":32,"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/metrics":[function(require,module,exports){
 
 
 
@@ -7955,6 +8093,7 @@ const TraceOfTab=require('../computed/trace-of-tab.js');
 const Speedline=require('../computed/speedline.js');
 const FirstContentfulPaint=require('../computed/metrics/first-contentful-paint.js');
 const FirstMeaningfulPaint=require('../computed/metrics/first-meaningful-paint.js');
+const LargestContentfulPaint=require('../computed/metrics/largest-contentful-paint.js');
 const FirstCPUIdle=require('../computed/metrics/first-cpu-idle.js');
 const Interactive=require('../computed/metrics/interactive.js');
 const SpeedIndex=require('../computed/metrics/speed-index.js');
@@ -7992,7 +8131,6 @@ const metricComputationData={trace,devtoolsLog,settings:context.settings};
 
 
 
-
 const requestOrUndefined=(Artifact,artifact)=>{
 return Artifact.request(artifact,context).catch(_=>undefined);
 };
@@ -8001,6 +8139,7 @@ const traceOfTab=await TraceOfTab.request(trace,context);
 const speedline=await Speedline.request(trace,context);
 const firstContentfulPaint=await FirstContentfulPaint.request(metricComputationData,context);
 const firstMeaningfulPaint=await FirstMeaningfulPaint.request(metricComputationData,context);
+const largestContentfulPaint=await requestOrUndefined(LargestContentfulPaint,metricComputationData);
 const firstCPUIdle=await requestOrUndefined(FirstCPUIdle,metricComputationData);
 const interactive=await requestOrUndefined(Interactive,metricComputationData);
 const speedIndex=await requestOrUndefined(SpeedIndex,metricComputationData);
@@ -8014,6 +8153,8 @@ firstContentfulPaint:firstContentfulPaint.timing,
 firstContentfulPaintTs:firstContentfulPaint.timestamp,
 firstMeaningfulPaint:firstMeaningfulPaint.timing,
 firstMeaningfulPaintTs:firstMeaningfulPaint.timestamp,
+largestContentfulPaint:largestContentfulPaint&&largestContentfulPaint.timing,
+largestContentfulPaintTs:largestContentfulPaint&&largestContentfulPaint.timestamp,
 firstCPUIdle:firstCPUIdle&&firstCPUIdle.timing,
 firstCPUIdleTs:firstCPUIdle&&firstCPUIdle.timestamp,
 interactive:interactive&&interactive.timing,
@@ -8033,6 +8174,8 @@ observedFirstContentfulPaint:traceOfTab.timings.firstContentfulPaint,
 observedFirstContentfulPaintTs:traceOfTab.timestamps.firstContentfulPaint,
 observedFirstMeaningfulPaint:traceOfTab.timings.firstMeaningfulPaint,
 observedFirstMeaningfulPaintTs:traceOfTab.timestamps.firstMeaningfulPaint,
+observedLargestContentfulPaint:traceOfTab.timings.largestContentfulPaint,
+observedLargestContentfulPaintTs:traceOfTab.timestamps.largestContentfulPaint,
 observedTraceEnd:traceOfTab.timings.traceEnd,
 observedTraceEndTs:traceOfTab.timestamps.traceEnd,
 observedLoad:traceOfTab.timings.load,
@@ -8060,7 +8203,7 @@ metrics[key]=Math.round(value);
 const details={
 type:'debugdata',
 
-items:[metrics]};
+items:[metrics,{lcpInvalidated:traceOfTab.lcpInvalidated}]};
 
 
 return{
@@ -8108,9 +8251,13 @@ details};
 
 
 
+
+
+
+
 module.exports=Metrics;
 
-},{"../computed/metrics/estimated-input-latency.js":14,"../computed/metrics/first-contentful-paint.js":15,"../computed/metrics/first-cpu-idle.js":16,"../computed/metrics/first-meaningful-paint.js":17,"../computed/metrics/interactive.js":18,"../computed/metrics/speed-index.js":30,"../computed/metrics/total-blocking-time.js":31,"../computed/speedline.js":37,"../computed/trace-of-tab.js":38,"./audit.js":3}],"../audits/mixed-content":[function(require,module,exports){
+},{"../computed/metrics/estimated-input-latency.js":14,"../computed/metrics/first-contentful-paint.js":15,"../computed/metrics/first-cpu-idle.js":16,"../computed/metrics/first-meaningful-paint.js":17,"../computed/metrics/interactive.js":18,"../computed/metrics/largest-contentful-paint.js":28,"../computed/metrics/speed-index.js":31,"../computed/metrics/total-blocking-time.js":32,"../computed/speedline.js":38,"../computed/trace-of-tab.js":39,"./audit.js":3}],"../audits/mixed-content":[function(require,module,exports){
 
 
 
@@ -8262,7 +8409,7 @@ details};
 
 module.exports=MixedContent;
 
-},{"../computed/network-records.js":33,"../lib/url-shim.js":"url","../report/html/renderer/util.js":88,"./audit.js":3}],"../audits/network-requests":[function(require,module,exports){
+},{"../computed/network-records.js":34,"../lib/url-shim.js":"url","../report/html/renderer/util.js":88,"./audit.js":3}],"../audits/network-requests":[function(require,module,exports){
 
 
 
@@ -8364,7 +8511,7 @@ details:tableDetails};
 
 module.exports=NetworkRequests;
 
-},{"../computed/network-records.js":33,"../lib/url-shim.js":"url","./audit.js":3}],"../audits/network-rtt":[function(require,module,exports){
+},{"../computed/network-records.js":34,"../lib/url-shim.js":"url","./audit.js":3}],"../audits/network-rtt":[function(require,module,exports){
 (function(__filename){
 
 
@@ -8448,7 +8595,7 @@ module.exports=NetworkRTT;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/network-rtt.js");
-},{"../computed/network-analysis.js":32,"../lib/i18n/i18n.js":68,"./audit.js":3}],"../audits/network-server-latency":[function(require,module,exports){
+},{"../computed/network-analysis.js":33,"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/network-server-latency":[function(require,module,exports){
 (function(__filename){
 
 
@@ -8531,7 +8678,8 @@ module.exports=NetworkServerLatency;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/network-server-latency.js");
-},{"../computed/network-analysis.js":32,"../lib/i18n/i18n.js":68,"./audit.js":3}],"../audits/offline-start-url":[function(require,module,exports){
+},{"../computed/network-analysis.js":33,"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/offline-start-url":[function(require,module,exports){
+(function(__filename){
 
 
 
@@ -8540,6 +8688,25 @@ module.exports.UIStrings=UIStrings;
 'use strict';
 
 const Audit=require('./audit.js');
+const i18n=require('../lib/i18n/i18n.js');
+
+const UIStrings={
+
+title:'`start_url` responds with a 200 when offline',
+
+failureTitle:'`start_url` does not respond with a 200 when offline',
+
+description:'A service worker enables your web app to be reliable in unpredictable '+
+'network conditions. [Learn more](https://web.dev/offline-start-url).',
+
+
+
+
+warningCantStart:'Lighthouse couldn\'t read the `start_url` from the manifest. As a result, '+
+'the `start_url` was assumed to be the document\'s URL. Error message: \'{manifestWarning}\'.'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 class OfflineStartUrl extends Audit{
 
@@ -8548,9 +8715,9 @@ class OfflineStartUrl extends Audit{
 static get meta(){
 return{
 id:'offline-start-url',
-title:'start_url responds with a 200 when offline',
-failureTitle:'start_url does not respond with a 200 when offline',
-description:'A service worker enables your web app to be reliable in unpredictable network conditions. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/http-200-when-offline).',
+title:str_(UIStrings.title),
+failureTitle:str_(UIStrings.failureTitle),
+description:str_(UIStrings.description),
 requiredArtifacts:['WebAppManifest','StartUrl']};
 
 }
@@ -8566,8 +8733,7 @@ const warnings=[];
 const manifest=artifacts.WebAppManifest;
 if(manifest&&manifest.value&&manifest.value.start_url.warning){
 const manifestWarning=manifest.value.start_url.warning;
-warnings.push('We couldn\'t read the start_url from the manifest. As a result, the '+
-`start_url was assumed to be the document's URL. Error message: '${manifestWarning}'.`);
+warnings.push(str_(UIStrings.warningCantStart,{manifestWarning}));
 }
 
 const hasOfflineStartUrl=artifacts.StartUrl.statusCode===200;
@@ -8581,8 +8747,10 @@ warnings};
 
 
 module.exports=OfflineStartUrl;
+module.exports.UIStrings=UIStrings;
 
-},{"./audit.js":3}],"../audits/performance-budget":[function(require,module,exports){
+}).call(this,"/lighthouse-core/audits/offline-start-url.js");
+},{"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/performance-budget":[function(require,module,exports){
 (function(__filename){
 
 
@@ -8593,6 +8761,8 @@ module.exports=OfflineStartUrl;
 
 const Audit=require('./audit.js');
 const ResourceSummary=require('../computed/resource-summary.js');
+const MainResource=require('../computed/main-resource.js');
+const Budget=require('../config/budget.js');
 const i18n=require('../lib/i18n/i18n.js');
 
 const UIStrings={
@@ -8707,7 +8877,14 @@ return(b.sizeOverBudget||0)-(a.sizeOverBudget||0);
 static async audit(artifacts,context){
 const devtoolsLog=artifacts.devtoolsLogs[Audit.DEFAULT_PASS];
 const summary=await ResourceSummary.request({devtoolsLog,URL:artifacts.URL},context);
-const budget=context.settings.budgets?context.settings.budgets[0]:undefined;
+const mainResource=await MainResource.request({URL:artifacts.URL,devtoolsLog},context);
+
+
+const budgets=Array.from(context.settings.budgets||[]);
+
+const budget=budgets?budgets.reverse().find(b=>{
+return Budget.urlMatchesPattern(mainResource.url,b.path);
+}):undefined;
 
 if(!budget){
 return{
@@ -8736,7 +8913,7 @@ module.exports=ResourceBudget;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/performance-budget.js");
-},{"../computed/resource-summary.js":35,"../lib/i18n/i18n.js":68,"./audit.js":3}],"../audits/predictive-perf":[function(require,module,exports){
+},{"../computed/main-resource.js":11,"../computed/resource-summary.js":36,"../config/budget.js":42,"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/predictive-perf":[function(require,module,exports){
 
 
 
@@ -8841,6 +9018,7 @@ items:[values]}};
 module.exports=PredictivePerf;
 
 },{"../computed/metrics/lantern-estimated-input-latency.js":19,"../computed/metrics/lantern-first-contentful-paint.js":20,"../computed/metrics/lantern-first-cpu-idle.js":21,"../computed/metrics/lantern-first-meaningful-paint.js":22,"../computed/metrics/lantern-interactive.js":23,"../computed/metrics/lantern-speed-index.js":26,"../report/html/renderer/util.js":88,"./audit.js":3}],"../audits/redirects-http":[function(require,module,exports){
+(function(__filename){
 
 
 
@@ -8849,6 +9027,19 @@ module.exports=PredictivePerf;
 'use strict';
 
 const Audit=require('./audit.js');
+const i18n=require('../lib/i18n/i18n.js');
+
+const UIStrings={
+
+title:'Redirects HTTP traffic to HTTPS',
+
+failureTitle:'Does not redirect HTTP traffic to HTTPS',
+
+description:'If you\'ve already set up HTTPS, make sure that you redirect all HTTP '+
+'traffic to HTTPS in order to enable secure web features for all your users. [Learn more](https://web.dev/redirects-http).'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 class RedirectsHTTP extends Audit{
 
@@ -8857,10 +9048,9 @@ class RedirectsHTTP extends Audit{
 static get meta(){
 return{
 id:'redirects-http',
-title:'Redirects HTTP traffic to HTTPS',
-failureTitle:'Does not redirect HTTP traffic to HTTPS',
-description:'If you\'ve already set up HTTPS, make sure that you redirect all HTTP '+
-'traffic to HTTPS. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/http-redirects-to-https).',
+title:str_(UIStrings.title),
+failureTitle:str_(UIStrings.failureTitle),
+description:str_(UIStrings.description),
 requiredArtifacts:['HTTPRedirect']};
 
 }
@@ -8877,8 +9067,10 @@ score:Number(artifacts.HTTPRedirect.value)};
 
 
 module.exports=RedirectsHTTP;
+module.exports.UIStrings=UIStrings;
 
-},{"./audit.js":3}],"../audits/redirects":[function(require,module,exports){
+}).call(this,"/lighthouse-core/audits/redirects-http.js");
+},{"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/redirects":[function(require,module,exports){
 (function(__filename){
 
 
@@ -8899,7 +9091,7 @@ const UIStrings={
 
 title:'Avoid multiple page redirects',
 
-description:'Redirects introduce additional delays before the page can be loaded. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/redirects).'};
+description:'Redirects introduce additional delays before the page can be loaded. [Learn more](https://web.dev/redirects).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -9008,7 +9200,7 @@ module.exports=Redirects;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/redirects.js");
-},{"../computed/main-resource.js":11,"../computed/metrics/lantern-interactive.js":23,"../computed/network-records.js":33,"../computed/trace-of-tab.js":38,"../lib/i18n/i18n.js":68,"./audit.js":3,"./byte-efficiency/byte-efficiency-audit.js":4}],"../audits/resource-summary":[function(require,module,exports){
+},{"../computed/main-resource.js":11,"../computed/metrics/lantern-interactive.js":23,"../computed/network-records.js":34,"../computed/trace-of-tab.js":39,"../lib/i18n/i18n.js":67,"./audit.js":3,"./byte-efficiency/byte-efficiency-audit.js":4}],"../audits/resource-summary":[function(require,module,exports){
 (function(__filename){
 
 
@@ -9028,8 +9220,9 @@ title:'Keep request counts low and transfer sizes small',
 description:'To set budgets for the quantity and size of page resources,'+
 ' add a budget.json file. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/budgets).',
 
-displayValue:`{requestCount, plural, =1 {1 request} other {# requests}}`+
-` • { byteCount, number, bytes } KB`};
+displayValue:`{requestCount, plural, `+
+`=1 {1 request • {byteCount, number, bytes} KB} `+
+`other {# requests • {byteCount, number, bytes} KB}}`};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -9115,7 +9308,7 @@ module.exports=ResourceSummary;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/resource-summary.js");
-},{"../computed/resource-summary.js":35,"../lib/i18n/i18n.js":68,"./audit.js":3}],"../audits/screenshot-thumbnails":[function(require,module,exports){
+},{"../computed/resource-summary.js":36,"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/screenshot-thumbnails":[function(require,module,exports){
 
 
 
@@ -9265,7 +9458,7 @@ items:thumbnails}};
 
 module.exports=ScreenshotThumbnails;
 
-},{"../computed/metrics/interactive.js":18,"../computed/speedline.js":37,"../lib/lh-error.js":72,"./audit.js":3,"jpeg-js":125}],"../audits/seo/canonical":[function(require,module,exports){
+},{"../computed/metrics/interactive.js":18,"../computed/speedline.js":38,"../lib/lh-error.js":72,"./audit.js":3,"jpeg-js":122}],"../audits/seo/canonical":[function(require,module,exports){
 (function(__filename){
 
 
@@ -9286,15 +9479,30 @@ title:'Document has a valid `rel=canonical`',
 failureTitle:'Document does not have a valid `rel=canonical`',
 
 description:'Canonical links suggest which URL to show in search results. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/canonical).',
+'[Learn more](https://web.dev/canonical).',
+
+
+
 
 explanationConflict:'Multiple conflicting URLs ({urlList})',
 
+
+
+
 explanationInvalid:'Invalid URL ({url})',
+
+
+
 
 explanationRelative:'Relative URL ({url})',
 
+
+
+
 explanationPointsElsewhere:'Points to another `hreflang` location ({url})',
+
+
+
 
 explanationDifferentDomain:'Points to a different domain ({url})',
 
@@ -9432,7 +9640,7 @@ explanation:str_(UIStrings.explanationPointsElsewhere,{url:baseURL.href})};
 if(!URL.rootDomainsMatch(canonicalURL,baseURL)){
 return{
 score:0,
-explanation:str_(UIStrings.explanationDifferentDomain,{url:canonicalURL})};
+explanation:str_(UIStrings.explanationDifferentDomain,{url:canonicalURL.href})};
 
 }
 
@@ -9485,7 +9693,7 @@ module.exports=Canonical;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/seo/canonical.js");
-},{"../../computed/main-resource.js":11,"../../lib/i18n/i18n.js":68,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/seo/font-size":[function(require,module,exports){
+},{"../../computed/main-resource.js":11,"../../lib/i18n/i18n.js":67,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/seo/font-size":[function(require,module,exports){
 (function(__filename){
 
 
@@ -9508,7 +9716,7 @@ title:'Document uses legible font sizes',
 
 failureTitle:'Document doesn\'t use legible font sizes',
 
-description:'Font sizes less than 12px are too small to be legible and require mobile visitors to “pinch to zoom” in order to read. Strive to have >60% of page text ≥12px. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/font-sizes).',
+description:'Font sizes less than 12px are too small to be legible and require mobile visitors to “pinch to zoom” in order to read. Strive to have >60% of page text ≥12px. [Learn more](https://web.dev/font-size).',
 
 displayValue:'{decimalProportion, number, extendedPercent} legible text',
 
@@ -9831,7 +10039,7 @@ module.exports=FontSize;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/seo/font-size.js");
-},{"../../computed/viewport-meta.js":40,"../../lib/i18n/i18n.js":68,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/seo/hreflang":[function(require,module,exports){
+},{"../../computed/viewport-meta.js":41,"../../lib/i18n/i18n.js":67,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/seo/hreflang":[function(require,module,exports){
 (function(global,__filename){
 
 
@@ -9853,7 +10061,7 @@ failureTitle:'Document doesn\'t have a valid `hreflang`',
 
 description:'hreflang links tell search engines what version of a page they should '+
 'list in search results for a given language or region. [Learn more]'+
-'(https://developers.google.com/web/tools/lighthouse/audits/hreflang).'};
+'(https://web.dev/hreflang).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -9951,7 +10159,7 @@ module.exports=Hreflang;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,typeof global!=="undefined"?global:typeof self!=="undefined"?self:typeof window!=="undefined"?window:{},"/lighthouse-core/audits/seo/hreflang.js");
-},{"../../lib/i18n/i18n.js":68,"../audit.js":3,"axe-core/lib/core/utils/valid-langs.js":96}],"../audits/seo/http-status-code":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../audit.js":3,"axe-core/lib/core/utils/valid-langs.js":96}],"../audits/seo/http-status-code":[function(require,module,exports){
 (function(__filename){
 
 
@@ -9973,8 +10181,7 @@ title:'Page has successful HTTP status code',
 failureTitle:'Page has unsuccessful HTTP status code',
 
 description:'Pages with unsuccessful HTTP status codes may not be indexed properly. '+
-'[Learn more]'+
-'(https://developers.google.com/web/tools/lighthouse/audits/successful-http-code).'};
+'[Learn more](https://web.dev/http-status-code).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -10025,7 +10232,7 @@ module.exports=HTTPStatusCode;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/seo/http-status-code.js");
-},{"../../computed/main-resource.js":11,"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/seo/is-crawlable":[function(require,module,exports){
+},{"../../computed/main-resource.js":11,"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/seo/is-crawlable":[function(require,module,exports){
 (function(__filename){
 
 
@@ -10053,8 +10260,7 @@ title:'Page isn’t blocked from indexing',
 failureTitle:'Page is blocked from indexing',
 
 description:'Search engines are unable to include your pages in search results '+
-'if they don\'t have permission to crawl them. [Learn '+
-'more](https://developers.google.com/web/tools/lighthouse/audits/indexing).'};
+'if they don\'t have permission to crawl them. [Learn more](https://web.dev/is-crawable).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -10179,7 +10385,7 @@ module.exports=IsCrawlable;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/seo/is-crawlable.js");
-},{"../../computed/main-resource.js":11,"../../lib/i18n/i18n.js":68,"../../lib/url-shim.js":"url","../audit.js":3,"robots-parser":164}],"../audits/seo/link-text":[function(require,module,exports){
+},{"../../computed/main-resource.js":11,"../../lib/i18n/i18n.js":67,"../../lib/url-shim.js":"url","../audit.js":3,"robots-parser":161}],"../audits/seo/link-text":[function(require,module,exports){
 (function(__filename){
 
 
@@ -10226,7 +10432,26 @@ const BLOCKLIST=new Set([
 'este',
 'enlace',
 'este enlace',
-'empezar']);
+'empezar',
+
+'clique aqui',
+'inicio',
+'início',
+'ir',
+'mais informação',
+'mais informações',
+'mais',
+'veja mais',
+
+'여기',
+'여기를 클릭',
+'클릭',
+'링크',
+'자세히',
+'자세히 보기',
+'계속',
+'이동',
+'전체 보기']);
 
 const i18n=require('../../lib/i18n/i18n.js');
 
@@ -10237,7 +10462,7 @@ title:'Links have descriptive text',
 failureTitle:'Links do not have descriptive text',
 
 description:'Descriptive link text helps search engines understand your content. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/descriptive-link-text).',
+'[Learn more](https://web.dev/link-text).',
 
 displayValue:`{itemCount, plural,
     =1 {1 link found}
@@ -10312,7 +10537,7 @@ module.exports=LinkText;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/seo/link-text.js");
-},{"../../lib/i18n/i18n.js":68,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/seo/manual/structured-data":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/seo/manual/structured-data":[function(require,module,exports){
 (function(__filename){
 
 
@@ -10326,7 +10551,7 @@ const i18n=require('../../../lib/i18n/i18n.js');
 
 const UIStrings={
 
-description:'Run the [Structured Data Testing Tool](https://search.google.com/structured-data/testing-tool/) and the [Structured Data Linter](http://linter.structured-data.org/) to validate structured data. [Learn more](https://developers.google.com/search/docs/guides/mark-up-content).',
+description:'Run the [Structured Data Testing Tool](https://search.google.com/structured-data/testing-tool/) and the [Structured Data Linter](http://linter.structured-data.org/) to validate structured data. [Learn more](https://web.dev/structured-data).',
 
 title:'Structured data is valid'};
 
@@ -10354,7 +10579,7 @@ module.exports=StructuredData;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/seo/manual/structured-data.js");
-},{"../../../lib/i18n/i18n.js":68,"../../manual/manual-audit.js":5}],"../audits/seo/meta-description":[function(require,module,exports){
+},{"../../../lib/i18n/i18n.js":67,"../../manual/manual-audit.js":5}],"../audits/seo/meta-description":[function(require,module,exports){
 (function(__filename){
 
 
@@ -10374,7 +10599,7 @@ failureTitle:'Document does not have a meta description',
 
 description:'Meta descriptions may be included in search results to concisely summarize '+
 'page content. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/description).',
+'[Learn more](https://web.dev/meta-description).',
 
 explanation:'Description text is empty.'};
 
@@ -10425,7 +10650,7 @@ module.exports=Description;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/seo/meta-description.js");
-},{"../../lib/i18n/i18n.js":68,"../audit.js":3}],"../audits/seo/plugins":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../audit.js":3}],"../audits/seo/plugins":[function(require,module,exports){
 (function(__filename){
 
 
@@ -10470,7 +10695,7 @@ failureTitle:'Document uses plugins',
 
 description:'Search engines can\'t index plugin content, and '+
 'many devices restrict plugins or don\'t support them. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/plugins).'};
+'[Learn more](https://web.dev/plugins).'};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
@@ -10599,7 +10824,7 @@ module.exports=Plugins;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/seo/plugins.js");
-},{"../../lib/i18n/i18n.js":68,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/seo/robots-txt":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/seo/robots-txt":[function(require,module,exports){
 (function(__filename){
 
 
@@ -10643,9 +10868,12 @@ title:'robots.txt is valid',
 failureTitle:'robots.txt is not valid',
 
 description:'If your robots.txt file is malformed, crawlers may not be able to understand '+
-'how you want your website to be crawled or indexed.',
+'how you want your website to be crawled or indexed. [Learn more](https://web.dev/robots-txt).',
 
-displayValueHttpBadCode:'request for robots.txt returned HTTP status: {statusCode}',
+
+
+
+displayValueHttpBadCode:'Request for robots.txt returned HTTP status: {statusCode}',
 
 displayValueValidationError:`{itemCount, plural,
     =1 {1 error found}
@@ -10856,7 +11084,7 @@ module.exports=RobotsTxt;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/seo/robots-txt.js");
-},{"../../lib/i18n/i18n.js":68,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/seo/tap-targets":[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../../lib/url-shim.js":"url","../audit.js":3}],"../audits/seo/tap-targets":[function(require,module,exports){
 (function(__filename){
 
 
@@ -10888,11 +11116,9 @@ title:'Tap targets are sized appropriately',
 
 failureTitle:'Tap targets are not sized appropriately',
 
-description:'Interactive elements like buttons and links should be large enough (48x48px), and have enough space around them, to be easy enough to tap without overlapping onto other elements. [Learn more](https://developers.google.com/web/fundamentals/accessibility/accessible-styles#multi-device_responsive_design).',
+description:'Interactive elements like buttons and links should be large enough (48x48px), and have enough space around them, to be easy enough to tap without overlapping onto other elements. [Learn more](https://web.dev/tap-targets).',
 
 tapTargetHeader:'Tap Target',
-
-sizeHeader:'Size',
 
 overlappingTargetHeader:'Overlapping Target',
 
@@ -11163,7 +11389,7 @@ const tableItems=getTableItems(overlapFailuresForDisplay);
 
 const headings=[
 {key:'tapTarget',itemType:'node',text:str_(UIStrings.tapTargetHeader)},
-{key:'size',itemType:'text',text:str_(UIStrings.sizeHeader)},
+{key:'size',itemType:'text',text:str_(i18n.UIStrings.columnSize)},
 {key:'overlappingTarget',itemType:'node',text:str_(UIStrings.overlappingTargetHeader)}];
 
 
@@ -11228,7 +11454,8 @@ module.exports.UIStrings=UIStrings;
 
 
 }).call(this,"/lighthouse-core/audits/seo/tap-targets.js");
-},{"../../computed/viewport-meta.js":40,"../../lib/i18n/i18n.js":68,"../../lib/rect-helpers.js":78,"../../lib/tappable-rects.js":83,"../audit.js":3}],"../audits/service-worker":[function(require,module,exports){
+},{"../../computed/viewport-meta.js":41,"../../lib/i18n/i18n.js":67,"../../lib/rect-helpers.js":78,"../../lib/tappable-rects.js":83,"../audit.js":3}],"../audits/service-worker":[function(require,module,exports){
+(function(__filename){
 
 
 
@@ -11238,6 +11465,39 @@ module.exports.UIStrings=UIStrings;
 
 const URL=require('../lib/url-shim.js');
 const Audit=require('./audit.js');
+const i18n=require('../lib/i18n/i18n.js');
+
+const UIStrings={
+
+title:'Registers a service worker that controls page and `start_url`',
+
+failureTitle:'Does not register a service worker that controls page and `start_url`',
+
+description:'The service worker is the technology that enables your app to use many '+
+'Progressive Web App features, such as offline, add to homescreen, and push '+
+'notifications. [Learn more](https://web.dev/service-worker).',
+
+
+
+
+explanationOutOfScope:'This origin has one or more service workers, however the page '+
+'({pageUrl}) is not in scope.',
+
+explanationNoManifest:'This page is controlled by a service worker, however '+
+'no `start_url` was found because no manifest was fetched.',
+
+explanationBadManifest:'This page is controlled by a service worker, however '+
+'no `start_url` was found because manifest failed to parse as valid JSON',
+
+
+
+
+
+explanationBadStartUrl:'This page is controlled by a service worker, however '+
+'the `start_url` ({startUrl}) is not in the service worker\'s scope ({scopeUrl})'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 class ServiceWorker extends Audit{
 
@@ -11246,11 +11506,9 @@ class ServiceWorker extends Audit{
 static get meta(){
 return{
 id:'service-worker',
-title:'Registers a service worker that controls page and start_url',
-failureTitle:'Does not register a service worker that controls page and start_url',
-description:'The service worker is the technology that enables your app to use many '+
-'Progressive Web App features, such as offline, add to homescreen, and push '+
-'notifications. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/registered-service-worker).',
+title:str_(UIStrings.title),
+failureTitle:str_(UIStrings.failureTitle),
+description:str_(UIStrings.description),
 requiredArtifacts:['URL','ServiceWorker','WebAppManifest']};
 
 }
@@ -11301,15 +11559,15 @@ return pageControllingScope;
 
 static checkStartUrl(manifest,scopeUrl){
 if(!manifest){
-return'no start_url was found because no manifest was fetched';
+return str_(UIStrings.explanationNoManifest);
 }
 if(!manifest.value){
-return'no start_url was found because manifest failed to parse as valid JSON';
+return str_(UIStrings.explanationBadManifest);
 }
 
 const startUrl=manifest.value.start_url.value;
 if(!startUrl.startsWith(scopeUrl)){
-return`the start_url ("${startUrl}") is not in the service worker's scope ("${scopeUrl}")`;
+return str_(UIStrings.explanationBadStartUrl,{startUrl,scopeUrl});
 }
 }
 
@@ -11334,7 +11592,7 @@ registrations,pageUrl);
 if(!controllingScopeUrl){
 return{
 score:0,
-explanation:`This origin has one or more service workers, however the page ("${pageUrl.href}") is not in scope.`};
+explanation:str_(UIStrings.explanationOutOfScope,{pageUrl:pageUrl.href})};
 
 }
 
@@ -11343,7 +11601,7 @@ controllingScopeUrl);
 if(startUrlFailure){
 return{
 score:0,
-explanation:`This page is controlled by a service worker, however ${startUrlFailure}.`};
+explanation:startUrlFailure};
 
 }
 
@@ -11355,8 +11613,11 @@ score:1};
 
 
 module.exports=ServiceWorker;
+module.exports.UIStrings=UIStrings;
 
-},{"../lib/url-shim.js":"url","./audit.js":3}],"../audits/splash-screen":[function(require,module,exports){
+}).call(this,"/lighthouse-core/audits/service-worker.js");
+},{"../lib/i18n/i18n.js":67,"../lib/url-shim.js":"url","./audit.js":3}],"../audits/splash-screen":[function(require,module,exports){
+(function(__filename){
 
 
 
@@ -11366,6 +11627,20 @@ module.exports=ServiceWorker;
 
 const MultiCheckAudit=require('./multi-check-audit.js');
 const ManifestValues=require('../computed/manifest-values.js');
+const i18n=require('../lib/i18n/i18n.js');
+
+const UIStrings={
+
+title:'Configured for a custom splash screen',
+
+failureTitle:'Is not configured for a custom splash screen',
+
+description:'A themed splash screen ensures a high-quality experience when '+
+'users launch your app from their homescreens. [Learn '+
+'more](https://web.dev/splash-screen).'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 
 
@@ -11387,11 +11662,9 @@ class SplashScreen extends MultiCheckAudit{
 static get meta(){
 return{
 id:'splash-screen',
-title:'Configured for a custom splash screen',
-failureTitle:'Is not configured for a custom splash screen',
-description:'A themed splash screen ensures a high-quality experience when '+
-'users launch your app from their homescreens. [Learn '+
-'more](https://developers.google.com/web/tools/lighthouse/audits/custom-splash-screen).',
+title:str_(UIStrings.title),
+failureTitle:str_(UIStrings.failureTitle),
+description:str_(UIStrings.description),
 requiredArtifacts:['WebAppManifest']};
 
 }
@@ -11442,8 +11715,11 @@ manifestValues};
 
 
 module.exports=SplashScreen;
+module.exports.UIStrings=UIStrings;
 
-},{"../computed/manifest-values.js":13,"./multi-check-audit.js":6}],"../audits/themed-omnibox":[function(require,module,exports){
+}).call(this,"/lighthouse-core/audits/splash-screen.js");
+},{"../computed/manifest-values.js":13,"../lib/i18n/i18n.js":67,"./multi-check-audit.js":6}],"../audits/themed-omnibox":[function(require,module,exports){
+(function(__filename){
 
 
 
@@ -11454,6 +11730,19 @@ module.exports=SplashScreen;
 const MultiCheckAudit=require('./multi-check-audit.js');
 const ManifestValues=require('../computed/manifest-values.js');
 const cssParsers=require('cssstyle/lib/parsers');
+const i18n=require('../lib/i18n/i18n.js');
+
+const UIStrings={
+
+title:'Sets a theme color for the address bar.',
+
+failureTitle:'Does not set a theme color for the address bar.',
+
+description:'The browser address bar can be themed to match your site. '+
+'[Learn more](https://web.dev/themed-omnibox).'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 
 
@@ -11472,10 +11761,9 @@ class ThemedOmnibox extends MultiCheckAudit{
 static get meta(){
 return{
 id:'themed-omnibox',
-title:'Sets an address-bar theme color',
-failureTitle:'Does not set an address-bar theme color',
-description:'The browser address bar can be themed to match your site. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/address-bar).',
+title:str_(UIStrings.title),
+failureTitle:str_(UIStrings.failureTitle),
+description:str_(UIStrings.description),
 requiredArtifacts:['WebAppManifest','MetaElements']};
 
 }
@@ -11494,6 +11782,7 @@ return cssParsers.valueType(color)===cssParsers.TYPES.COLOR;
 
 static assessMetaThemecolor(themeColorMeta,failures){
 if(!themeColorMeta){
+
 failures.push('No `<meta name="theme-color">` tag found');
 }else if(!ThemedOmnibox.isValidColor(themeColorMeta.content||'')){
 failures.push('The theme-color meta tag did not contain a valid CSS color');
@@ -11539,8 +11828,10 @@ themeColor:themeColorMeta&&themeColorMeta.content||null};
 
 
 module.exports=ThemedOmnibox;
+module.exports.UIStrings=UIStrings;
 
-},{"../computed/manifest-values.js":13,"./multi-check-audit.js":6,"cssstyle/lib/parsers":105}],"../audits/third-party-summary":[function(require,module,exports){
+}).call(this,"/lighthouse-core/audits/themed-omnibox.js");
+},{"../computed/manifest-values.js":13,"../lib/i18n/i18n.js":67,"./multi-check-audit.js":6,"cssstyle/lib/parsers":105}],"../audits/third-party-summary":[function(require,module,exports){
 (function(__filename){
 
 
@@ -11559,7 +11850,9 @@ const MainThreadTasks=require('../computed/main-thread-tasks.js');
 
 const UIStrings={
 
-title:'Third-Party Usage',
+title:'Minimize third-party usage',
+
+failureTitle:'Reduce the impact of third-party code',
 
 description:'Third-party code can significantly impact load performance. '+
 'Limit the number of redundant third-party providers and try to load third-party code after '+
@@ -11567,15 +11860,16 @@ description:'Third-party code can significantly impact load performance. '+
 
 columnThirdParty:'Third-Party',
 
-columnMainThreadTime:'Main Thread Time',
+columnBlockingTime:'Main-Thread Blocking Time',
 
-displayValue:`{itemCount, plural,
-    =1 {1 Third-Party Found}
-    other {# Third-Parties Found}
-  }`};
+displayValue:'Third-party code blocked the main thread for '+
+`{timeInMs, number, milliseconds}\xa0ms`};
 
 
 const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
+
+
+const PASS_THRESHOLD_IN_MS=250;
 
 
 
@@ -11587,8 +11881,8 @@ static get meta(){
 return{
 id:'third-party-summary',
 title:str_(UIStrings.title),
+failureTitle:str_(UIStrings.failureTitle),
 description:str_(UIStrings.description),
-scoreDisplayMode:Audit.SCORING_MODES.INFORMATIVE,
 requiredArtifacts:['traces','devtoolsLogs']};
 
 }
@@ -11618,12 +11912,13 @@ return undefined;
 static getSummaryByEntity(networkRecords,mainThreadTasks,cpuMultiplier){
 
 const entities=new Map();
+const defaultEntityStat={mainThreadTime:0,blockingTime:0,transferSize:0};
 
 for(const request of networkRecords){
 const entity=ThirdPartySummary.getEntitySafe(request.url);
 if(!entity)continue;
 
-const entityStats=entities.get(entity)||{mainThreadTime:0,transferSize:0};
+const entityStats=entities.get(entity)||{...defaultEntityStat};
 entityStats.transferSize+=request.transferSize;
 entities.set(entity,entityStats);
 }
@@ -11635,8 +11930,14 @@ const attributeableURL=BootupTime.getAttributableURLForTask(task,jsURLs);
 const entity=ThirdPartySummary.getEntitySafe(attributeableURL);
 if(!entity)continue;
 
-const entityStats=entities.get(entity)||{mainThreadTime:0,transferSize:0};
-entityStats.mainThreadTime+=task.selfTime*cpuMultiplier;
+const entityStats=entities.get(entity)||{...defaultEntityStat};
+const taskDuration=task.selfTime*cpuMultiplier;
+
+entityStats.mainThreadTime+=taskDuration;
+
+
+
+entityStats.blockingTime+=Math.max(taskDuration-50,0);
 entities.set(entity,entityStats);
 }
 
@@ -11661,15 +11962,10 @@ const summaryByEntity=ThirdPartySummary.getSummaryByEntity(networkRecords,tasks,
 
 const summary={wastedBytes:0,wastedMs:0};
 
-
-
-
-const computeSortValue=stats=>stats.transferSize/1024+stats.mainThreadTime;
-
 const results=Array.from(summaryByEntity.entries()).
 map(([entity,stats])=>{
 summary.wastedBytes+=stats.transferSize;
-summary.wastedMs+=stats.mainThreadTime;
+summary.wastedMs+=stats.blockingTime;
 
 return{
 entity:{
@@ -11678,18 +11974,20 @@ text:entity.name,
 url:entity.homepage||''},
 
 transferSize:stats.transferSize,
-mainThreadTime:stats.mainThreadTime};
+mainThreadTime:stats.mainThreadTime,
+blockingTime:stats.blockingTime};
 
 }).
-sort((a,b)=>computeSortValue(b)-computeSortValue(a));
+
+sort((a,b)=>b.blockingTime-a.blockingTime||b.transferSize-a.transferSize);
 
 
 const headings=[
 {key:'entity',itemType:'link',text:str_(UIStrings.columnThirdParty)},
 {key:'transferSize',granularity:1,itemType:'bytes',
 text:str_(i18n.UIStrings.columnSize)},
-{key:'mainThreadTime',granularity:1,itemType:'ms',
-text:str_(UIStrings.columnMainThreadTime)}];
+{key:'blockingTime',granularity:1,itemType:'ms',
+text:str_(UIStrings.columnBlockingTime)}];
 
 
 if(!results.length){
@@ -11700,8 +11998,10 @@ notApplicable:true};
 }
 
 return{
-score:Number(results.length===0),
-displayValue:str_(UIStrings.displayValue,{itemCount:results.length}),
+score:Number(summary.wastedMs<=PASS_THRESHOLD_IN_MS),
+displayValue:str_(UIStrings.displayValue,{
+timeInMs:summary.wastedMs}),
+
 details:Audit.makeTableDetails(headings,results,summary)};
 
 }}
@@ -11711,7 +12011,7 @@ module.exports=ThirdPartySummary;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/third-party-summary.js");
-},{"../computed/main-thread-tasks.js":12,"../computed/network-records.js":33,"../lib/i18n/i18n.js":68,"./audit.js":3,"./bootup-time.js":"../audits/bootup-time","third-party-web/httparchive-nostats-subset":172}],"../audits/time-to-first-byte":[function(require,module,exports){
+},{"../computed/main-thread-tasks.js":12,"../computed/network-records.js":34,"../lib/i18n/i18n.js":67,"./audit.js":3,"./bootup-time.js":"../audits/bootup-time","third-party-web/httparchive-nostats-subset":169}],"../audits/time-to-first-byte":[function(require,module,exports){
 (function(__filename){
 
 
@@ -11731,7 +12031,7 @@ title:'Server response times are low (TTFB)',
 failureTitle:'Reduce server response times (TTFB)',
 
 description:'Time To First Byte identifies the time at which your server sends a response.'+
-' [Learn more](https://developers.google.com/web/tools/lighthouse/audits/ttfb).',
+' [Learn more](https://web.dev/time-to-first-byte).',
 
 displayValue:`Root document took {timeInMs, number, milliseconds}\xa0ms`};
 
@@ -11801,7 +12101,7 @@ module.exports=TTFBMetric;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/time-to-first-byte.js");
-},{"../computed/main-resource.js":11,"../lib/i18n/i18n.js":68,"./audit.js":3}],"../audits/user-timings":[function(require,module,exports){
+},{"../computed/main-resource.js":11,"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/user-timings":[function(require,module,exports){
 (function(__filename){
 
 
@@ -11820,14 +12120,12 @@ title:'User Timing marks and measures',
 
 description:'Consider instrumenting your app with the User Timing API to measure your '+
 'app\'s real-world performance during key user experiences. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/user-timing).',
+'[Learn more](https://web.dev/user-timings).',
 
 displayValue:`{itemCount, plural,
     =1 {1 user timing}
     other {# user timings}
     }`,
-
-columnName:'Name',
 
 columnType:'Type',
 
@@ -11901,7 +12199,7 @@ return 1;
 
 
 const headings=[
-{key:'name',itemType:'text',text:str_(UIStrings.columnName)},
+{key:'name',itemType:'text',text:str_(i18n.UIStrings.columnName)},
 {key:'timingType',itemType:'text',text:str_(UIStrings.columnType)},
 {key:'startTime',itemType:'ms',granularity:0.01,
 text:str_(UIStrings.columnStartTime)},
@@ -11934,7 +12232,7 @@ module.exports=UserTimings;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/user-timings.js");
-},{"../computed/user-timings.js":39,"../lib/i18n/i18n.js":68,"./audit.js":3}],"../audits/uses-rel-preconnect":[function(require,module,exports){
+},{"../computed/user-timings.js":40,"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/uses-rel-preconnect":[function(require,module,exports){
 (function(__filename){
 
 
@@ -11965,8 +12263,11 @@ const UIStrings={
 title:'Preconnect to required origins',
 
 description:
-'Consider adding preconnect or dns-prefetch resource hints to establish early '+
-`connections to important third-party origins. [Learn more](https://developers.google.com/web/fundamentals/performance/resource-prioritization#preconnect).`,
+'Consider adding `preconnect` or `dns-prefetch` resource hints to establish early '+
+`connections to important third-party origins. [Learn more](https://web.dev/uses-rel-preconnect).`,
+
+
+
 
 crossoriginWarning:'A preconnect <link> was found for "{securityOrigin}" but was not used '+
 'by the browser. Check that you are using the `crossorigin` attribute properly.'};
@@ -12143,7 +12444,7 @@ module.exports=UsesRelPreconnectAudit;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/uses-rel-preconnect.js");
-},{"../computed/load-simulator.js":10,"../computed/main-resource.js":11,"../computed/network-records.js":33,"../lib/i18n/i18n.js":68,"../lib/url-shim.js":"url","./audit.js":3,"./byte-efficiency/byte-efficiency-audit.js":4}],"../audits/uses-rel-preload":[function(require,module,exports){
+},{"../computed/load-simulator.js":10,"../computed/main-resource.js":11,"../computed/network-records.js":34,"../lib/i18n/i18n.js":67,"../lib/url-shim.js":"url","./audit.js":3,"./byte-efficiency/byte-efficiency-audit.js":4}],"../audits/uses-rel-preload":[function(require,module,exports){
 (function(__filename){
 
 
@@ -12165,8 +12466,11 @@ const UIStrings={
 
 title:'Preload key requests',
 
-description:'Consider using <link rel=preload> to prioritize fetching resources that are '+
-'currently requested later in page load. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/preload).',
+description:'Consider using `<link rel=preload>` to prioritize fetching resources that are '+
+'currently requested later in page load. [Learn more](https://web.dev/uses-rel-preload).',
+
+
+
 
 crossoriginWarning:'A preload <link> was found for "{preloadURL}" but was not used '+
 'by the browser. Check that you are using the `crossorigin` attribute properly.'};
@@ -12386,7 +12690,8 @@ module.exports=UsesRelPreloadAudit;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/uses-rel-preload.js");
-},{"../computed/critical-request-chains.js":9,"../computed/load-simulator.js":10,"../computed/main-resource.js":11,"../computed/page-dependency-graph.js":34,"../lib/i18n/i18n.js":68,"../lib/url-shim.js":"url","./audit.js":3,"./byte-efficiency/byte-efficiency-audit.js":4}],"../audits/viewport":[function(require,module,exports){
+},{"../computed/critical-request-chains.js":9,"../computed/load-simulator.js":10,"../computed/main-resource.js":11,"../computed/page-dependency-graph.js":35,"../lib/i18n/i18n.js":67,"../lib/url-shim.js":"url","./audit.js":3,"./byte-efficiency/byte-efficiency-audit.js":4}],"../audits/viewport":[function(require,module,exports){
+(function(__filename){
 
 
 
@@ -12396,6 +12701,22 @@ module.exports.UIStrings=UIStrings;
 
 const Audit=require('./audit.js');
 const ComputedViewportMeta=require('../computed/viewport-meta.js');
+const i18n=require('../lib/i18n/i18n.js');
+
+const UIStrings={
+
+title:'Has a `<meta name="viewport">` tag with `width` or `initial-scale`',
+
+failureTitle:'Does not have a `<meta name="viewport">` tag with `width` '+
+'or `initial-scale`',
+
+description:'Add a `<meta name="viewport">` tag to optimize your app for mobile screens. '+
+'[Learn more](https://web.dev/viewport).',
+
+explanationNoTag:'No `<meta name="viewport">` tag found'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 class Viewport extends Audit{
 
@@ -12404,11 +12725,9 @@ class Viewport extends Audit{
 static get meta(){
 return{
 id:'viewport',
-title:'Has a `<meta name="viewport">` tag with `width` or `initial-scale`',
-failureTitle:'Does not have a `<meta name="viewport">` tag with `width` '+
-'or `initial-scale`',
-description:'Add a viewport meta tag to optimize your app for mobile screens. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/has-viewport-meta-tag).',
+title:str_(UIStrings.title),
+failureTitle:str_(UIStrings.failureTitle),
+description:str_(UIStrings.description),
 requiredArtifacts:['MetaElements']};
 
 }
@@ -12424,7 +12743,7 @@ const viewportMeta=await ComputedViewportMeta.request(artifacts.MetaElements,con
 if(!viewportMeta.hasViewportTag){
 return{
 score:0,
-explanation:'No viewport meta tag found'};
+explanation:str_(UIStrings.explanationNoTag)};
 
 }
 
@@ -12436,8 +12755,11 @@ warnings:viewportMeta.parserWarnings};
 
 
 module.exports=Viewport;
+module.exports.UIStrings=UIStrings;
 
-},{"../computed/viewport-meta.js":40,"./audit.js":3}],"../audits/without-javascript":[function(require,module,exports){
+}).call(this,"/lighthouse-core/audits/viewport.js");
+},{"../computed/viewport-meta.js":41,"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/without-javascript":[function(require,module,exports){
+(function(__filename){
 
 
 
@@ -12446,6 +12768,22 @@ module.exports=Viewport;
 'use strict';
 
 const Audit=require('./audit.js');
+const i18n=require('../lib/i18n/i18n.js');
+
+const UIStrings={
+
+title:'Contains some content when JavaScript is not available',
+
+failureTitle:'Does not provide fallback content when JavaScript is not available',
+
+description:'Your app should display some content when JavaScript is disabled, even if '+
+'it\'s just a warning to the user that JavaScript is required to use the app. '+
+'[Learn more](https://web.dev/without-javascript).',
+
+explanation:'The page body should render some content if its scripts are not available.'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 class WithoutJavaScript extends Audit{
 
@@ -12454,11 +12792,9 @@ class WithoutJavaScript extends Audit{
 static get meta(){
 return{
 id:'without-javascript',
-title:'Contains some content when JavaScript is not available',
-failureTitle:'Does not provide fallback content when JavaScript is not available',
-description:'Your app should display some content when JavaScript is disabled, even if '+
-'it\'s just a warning to the user that JavaScript is required to use the app. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/no-js).',
+title:str_(UIStrings.title),
+failureTitle:str_(UIStrings.failureTitle),
+description:str_(UIStrings.description),
 requiredArtifacts:['HTMLWithoutJavaScript']};
 
 }
@@ -12474,7 +12810,7 @@ const artifact=artifacts.HTMLWithoutJavaScript;
 if(artifact.bodyText.trim()===''&&!artifact.hasNoScript){
 return{
 score:0,
-explanation:'The page body should render some content if its scripts are not available.'};
+explanation:str_(UIStrings.explanation)};
 
 }
 
@@ -12485,8 +12821,11 @@ score:1};
 
 
 module.exports=WithoutJavaScript;
+module.exports.UIStrings=UIStrings;
 
-},{"./audit.js":3}],"../audits/works-offline":[function(require,module,exports){
+}).call(this,"/lighthouse-core/audits/without-javascript.js");
+},{"../lib/i18n/i18n.js":67,"./audit.js":3}],"../audits/works-offline":[function(require,module,exports){
+(function(__filename){
 
 
 
@@ -12496,6 +12835,28 @@ module.exports=WithoutJavaScript;
 
 const URL=require('../lib/url-shim.js');
 const Audit=require('./audit.js');
+const i18n=require('../lib/i18n/i18n.js');
+
+const UIStrings={
+
+title:'Current page responds with a 200 when offline',
+
+failureTitle:'Current page does not respond with a 200 when offline',
+
+description:'If you\'re building a Progressive Web App, consider using a service worker '+
+'so that your app can work offline. '+
+'[Learn more](https://web.dev/works-offline).',
+
+
+
+
+
+warningNoLoad:'The page may not be loading offline because your test URL '+
+`({requested}) was redirected to "{final}". `+
+'Try testing the second URL directly.'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
 
 class WorksOffline extends Audit{
 
@@ -12504,11 +12865,9 @@ class WorksOffline extends Audit{
 static get meta(){
 return{
 id:'works-offline',
-title:'Current page responds with a 200 when offline',
-failureTitle:'Current page does not respond with a 200 when offline',
-description:'If you\'re building a Progressive Web App, consider using a service worker '+
-'so that your app can work offline. '+
-'[Learn more](https://developers.google.com/web/tools/lighthouse/audits/http-200-when-offline).',
+title:str_(UIStrings.title),
+failureTitle:str_(UIStrings.failureTitle),
+description:str_(UIStrings.description),
 requiredArtifacts:['Offline','URL']};
 
 }
@@ -12522,9 +12881,8 @@ const warnings=[];
 const passed=artifacts.Offline===200;
 if(!passed&&
 !URL.equalWithExcludedFragments(artifacts.URL.requestedUrl,artifacts.URL.finalUrl)){
-warnings.push('You may be not loading offline because your test URL '+
-`(${artifacts.URL.requestedUrl}) was redirected to "${artifacts.URL.finalUrl}". `+
-'Try testing the second URL directly.');
+warnings.push(str_(UIStrings.warningNoLoad,
+{requested:artifacts.URL.requestedUrl,final:artifacts.URL.finalUrl}));
 }
 
 return{
@@ -12535,8 +12893,10 @@ warnings};
 
 
 module.exports=WorksOffline;
+module.exports.UIStrings=UIStrings;
 
-},{"../lib/url-shim.js":"url","./audit.js":3}],"../gather/gatherers/accessibility":[function(require,module,exports){
+}).call(this,"/lighthouse-core/audits/works-offline.js");
+},{"../lib/i18n/i18n.js":67,"../lib/url-shim.js":"url","./audit.js":3}],"../gather/gatherers/accessibility":[function(require,module,exports){
 
 
 
@@ -12639,7 +12999,7 @@ return returnedValue;
 
 module.exports=Accessibility;
 
-},{"../../lib/page-functions.js":77,"./gatherer.js":53}],"../gather/gatherers/anchor-elements":[function(require,module,exports){
+},{"../../lib/page-functions.js":77,"./gatherer.js":54}],"../gather/gatherers/anchor-elements":[function(require,module,exports){
 
 
 
@@ -12721,7 +13081,7 @@ return driver.evaluateAsync(expression,{useIsolation:true});
 
 module.exports=AnchorElements;
 
-},{"../../lib/page-functions.js":77,"./gatherer.js":53}],"../gather/gatherers/cache-contents":[function(require,module,exports){
+},{"../../lib/page-functions.js":77,"./gatherer.js":54}],"../gather/gatherers/cache-contents":[function(require,module,exports){
 
 
 
@@ -12782,7 +13142,7 @@ return cacheUrls;
 
 module.exports=CacheContents;
 
-},{"./gatherer.js":53}],"../gather/gatherers/console-messages":[function(require,module,exports){
+},{"./gatherer.js":54}],"../gather/gatherers/console-messages":[function(require,module,exports){
 
 
 
@@ -12838,7 +13198,7 @@ return this._logEntries;
 
 module.exports=ConsoleMessages;
 
-},{"./gatherer.js":53}],"../gather/gatherers/css-usage":[function(require,module,exports){
+},{"./gatherer.js":54}],"../gather/gatherers/css-usage":[function(require,module,exports){
 
 
 
@@ -12899,7 +13259,7 @@ stylesheets:Array.from(dedupedStylesheets.values())};
 
 module.exports=CSSUsage;
 
-},{"./gatherer.js":53}],"../gather/gatherers/dobetterweb/appcache":[function(require,module,exports){
+},{"./gatherer.js":54}],"../gather/gatherers/dobetterweb/appcache":[function(require,module,exports){
 
 
 
@@ -12926,7 +13286,7 @@ then(node=>node&&node.getAttribute('manifest'));
 
 module.exports=AppCacheManifest;
 
-},{"../gatherer.js":53}],"../gather/gatherers/dobetterweb/doctype":[function(require,module,exports){
+},{"../gatherer.js":54}],"../gather/gatherers/dobetterweb/doctype":[function(require,module,exports){
 
 
 
@@ -12964,7 +13324,7 @@ return driver.evaluateAsync(`(${getDoctype.toString()}())`);
 
 module.exports=Doctype;
 
-},{"../gatherer.js":53}],"../gather/gatherers/dobetterweb/domstats":[function(require,module,exports){
+},{"../gatherer.js":54}],"../gather/gatherers/dobetterweb/domstats":[function(require,module,exports){
 
 
 
@@ -13127,7 +13487,7 @@ return results;
 
 module.exports=DOMStats;
 
-},{"../../../lib/page-functions.js":77,"../gatherer.js":53}],"../gather/gatherers/dobetterweb/optimized-images":[function(require,module,exports){
+},{"../../../lib/page-functions.js":77,"../gatherer.js":54}],"../gather/gatherers/dobetterweb/optimized-images":[function(require,module,exports){
 
 
 
@@ -13140,6 +13500,7 @@ module.exports=DOMStats;
 
 'use strict';
 
+const log=require('lighthouse-logger');
 const Gatherer=require('../gatherer.js');
 const URL=require('../../../lib/url-shim.js');
 const NetworkRequest=require('../../../lib/network-request.js');
@@ -13254,6 +13615,8 @@ const stats=await this.calculateImageStats(driver,record);
 const image={failed:false,...stats,...record};
 results.push(image);
 }catch(err){
+log.warn('optimized-images',err.message);
+
 
 
 Sentry.captureException(err,{
@@ -13297,7 +13660,7 @@ return results;
 
 module.exports=OptimizedImages;
 
-},{"../../../lib/network-request.js":76,"../../../lib/sentry.js":79,"../../../lib/url-shim.js":"url","../../driver.js":51,"../gatherer.js":53}],"../gather/gatherers/dobetterweb/password-inputs-with-prevented-paste":[function(require,module,exports){
+},{"../../../lib/network-request.js":76,"../../../lib/sentry.js":79,"../../../lib/url-shim.js":"url","../../driver.js":52,"../gatherer.js":54,"lighthouse-logger":125}],"../gather/gatherers/dobetterweb/password-inputs-with-prevented-paste":[function(require,module,exports){
 
 
 
@@ -13344,7 +13707,7 @@ return passContext.driver.evaluateAsync(`(() => {
 
 module.exports=PasswordInputsWithPreventedPaste;
 
-},{"../../../lib/page-functions.js":77,"../gatherer.js":53}],"../gather/gatherers/dobetterweb/response-compression":[function(require,module,exports){
+},{"../../../lib/page-functions.js":77,"../gatherer.js":54}],"../gather/gatherers/dobetterweb/response-compression":[function(require,module,exports){
 (function(Buffer){
 
 
@@ -13470,7 +13833,7 @@ return record;
 module.exports=ResponseCompression;
 
 }).call(this,require("buffer").Buffer);
-},{"../../../lib/network-request.js":76,"../../../lib/sentry.js":79,"../../../lib/url-shim.js":"url","../gatherer.js":53,"buffer":102,"zlib":100}],"../gather/gatherers/dobetterweb/tags-blocking-first-paint":[function(require,module,exports){
+},{"../../../lib/network-request.js":76,"../../../lib/sentry.js":79,"../../../lib/url-shim.js":"url","../gatherer.js":54,"buffer":102,"zlib":100}],"../gather/gatherers/dobetterweb/tags-blocking-first-paint":[function(require,module,exports){
 
 
 
@@ -13663,7 +14026,7 @@ return TagsBlockingFirstPaint.findBlockingTags(passContext.driver,loadData.netwo
 
 module.exports=TagsBlockingFirstPaint;
 
-},{"../../driver.js":51,"../gatherer.js":53}],"../gather/gatherers/html-without-javascript":[function(require,module,exports){
+},{"../../driver.js":52,"../gatherer.js":54}],"../gather/gatherers/html-without-javascript":[function(require,module,exports){
 
 
 
@@ -13721,7 +14084,7 @@ hasNoScript};
 
 module.exports=HTMLWithoutJavaScript;
 
-},{"./gatherer.js":53}],"../gather/gatherers/http-redirect":[function(require,module,exports){
+},{"./gatherer.js":54}],"../gather/gatherers/http-redirect":[function(require,module,exports){
 
 
 
@@ -13768,7 +14131,64 @@ value:isHttps};
 
 module.exports=HTTPRedirect;
 
-},{"./gatherer.js":53}],"../gather/gatherers/image-elements":[function(require,module,exports){
+},{"./gatherer.js":54}],"../gather/gatherers/iframe-elements":[function(require,module,exports){
+
+
+
+
+
+'use strict';
+
+const Gatherer=require('./gatherer.js');
+const pageFunctions=require('../../lib/page-functions.js');
+
+
+
+
+
+
+
+function collectIFrameElements(){
+
+const iFrameElements=getElementsInDocument('iframe');
+return iFrameElements.map(node=>{
+const clientRect=node.getBoundingClientRect();
+const{top,bottom,left,right,width,height}=clientRect;
+return{
+id:node.id,
+src:node.src,
+clientRect:{top,bottom,left,right,width,height},
+
+isPositionFixed:isPositionFixed(node)};
+
+});
+}
+
+class IFrameElements extends Gatherer{
+
+
+
+
+
+async afterPass(passContext){
+const driver=passContext.driver;
+
+const expression=`(() => {
+      ${pageFunctions.getOuterHTMLSnippetString};
+      ${pageFunctions.getElementsInDocumentString};
+      ${pageFunctions.isPositionFixedString};
+      return (${collectIFrameElements})();
+    })()`;
+
+
+const iframeElements=await driver.evaluateAsync(expression,{useIsolation:true});
+return iframeElements;
+}}
+
+
+module.exports=IFrameElements;
+
+},{"../../lib/page-functions.js":77,"./gatherer.js":54}],"../gather/gatherers/image-elements":[function(require,module,exports){
 
 
 
@@ -13901,6 +14321,12 @@ img.src=url;
 }
 
 class ImageElements extends Gatherer{
+constructor(){
+super();
+
+this._naturalSizeCache=new Map();
+}
+
 
 
 
@@ -13908,11 +14334,16 @@ class ImageElements extends Gatherer{
 
 async fetchElementWithSizeInformation(driver,element){
 const url=JSON.stringify(element.src);
+if(this._naturalSizeCache.has(url)){
+return Object.assign(element,this._naturalSizeCache.get(url));
+}
+
 try{
 
 driver.setNextProtocolTimeout(250);
 
 const size=await driver.evaluateAsync(`(${determineNaturalSize.toString()})(${url})`);
+this._naturalSizeCache.set(url,size);
 return Object.assign(element,size);
 }catch(_){
 
@@ -13989,7 +14420,7 @@ return imageUsage;
 
 module.exports=ImageElements;
 
-},{"../../lib/page-functions.js":77,"../driver.js":51,"./gatherer.js":53}],"../gather/gatherers/js-usage":[function(require,module,exports){
+},{"../../lib/page-functions.js":77,"../driver.js":52,"./gatherer.js":54}],"../gather/gatherers/js-usage":[function(require,module,exports){
 
 
 
@@ -14027,7 +14458,7 @@ return coverageResponse.result;
 
 module.exports=JsUsage;
 
-},{"./gatherer.js":53}],"../gather/gatherers/link-elements":[function(require,module,exports){
+},{"./gatherer.js":54}],"../gather/gatherers/link-elements":[function(require,module,exports){
 
 
 
@@ -14039,8 +14470,9 @@ const Gatherer=require('./gatherer.js');
 const URL=require('../../lib/url-shim.js').URL;
 const NetworkAnalyzer=require('../../lib/dependency-graph/simulator/network-analyzer.js');
 const LinkHeader=require('http-link-header');
-const getElementsInDocumentString=require('../../lib/page-functions.js').
-getElementsInDocumentString;
+const{getElementsInDocumentString}=require('../../lib/page-functions.js');
+
+
 
 
 
@@ -14072,6 +14504,36 @@ if(value==='use-credentials')return'use-credentials';
 return null;
 }
 
+
+
+
+
+function getLinkElementsInDOM(){
+
+
+const browserElements=getElementsInDocument('link');
+
+const linkElements=[];
+
+for(const link of browserElements){
+
+
+if(!(link instanceof HTMLLinkElement))continue;
+
+linkElements.push({
+rel:link.rel,
+href:link.href,
+hrefRaw:link.href,
+hreflang:link.hreflang,
+as:link.as,
+crossOrigin:link.crossOrigin,
+source:link.closest('head')?'head':'body'});
+
+}
+
+return linkElements;
+}
+
 class LinkElements extends Gatherer{
 
 
@@ -14082,18 +14544,9 @@ static getLinkElementsInDOM(passContext){
 
 return passContext.driver.evaluateAsync(`(() => {
       ${getElementsInDocumentString};
+      ${getLinkElementsInDOM};
 
-      return getElementsInDocument('link').map(link => {
-        return {
-          rel: link.rel,
-          href: link.href,
-          hrefRaw: link.href,
-          hreflang: link.hreflang,
-          as: link.as,
-          crossOrigin: link.crossOrigin,
-          source: link.closest('head') ? 'head' : 'body',
-        };
-      });
+      return getLinkElementsInDOM();
     })()`,{useIsolation:true});
 }
 
@@ -14150,7 +14603,37 @@ return linkElements;
 
 module.exports=LinkElements;
 
-},{"../../lib/dependency-graph/simulator/network-analyzer.js":62,"../../lib/page-functions.js":77,"../../lib/url-shim.js":"url","./gatherer.js":53,"http-link-header":109}],"../gather/gatherers/meta-elements":[function(require,module,exports){
+},{"../../lib/dependency-graph/simulator/network-analyzer.js":63,"../../lib/page-functions.js":77,"../../lib/url-shim.js":"url","./gatherer.js":54,"http-link-header":109}],"../gather/gatherers/main-document-content":[function(require,module,exports){
+
+
+
+
+
+'use strict';
+
+const Gatherer=require('./gatherer.js');
+const NetworkAnalyzer=require('../../lib/dependency-graph/simulator/network-analyzer.js');
+
+
+
+
+class MainDocumentContent extends Gatherer{
+
+
+
+
+
+async afterPass(passContext,loadData){
+const mainResource=NetworkAnalyzer.findMainDocument(loadData.networkRecords,passContext.url);
+
+const driver=passContext.driver;
+return driver.getRequestContent(mainResource.requestId);
+}}
+
+
+module.exports=MainDocumentContent;
+
+},{"../../lib/dependency-graph/simulator/network-analyzer.js":63,"./gatherer.js":54}],"../gather/gatherers/meta-elements":[function(require,module,exports){
 
 
 
@@ -14186,7 +14669,7 @@ return driver.evaluateAsync(`(() => {
 
 module.exports=MetaElements;
 
-},{"../../lib/page-functions.js":77,"./gatherer.js":53}],"../gather/gatherers/mixed-content":[function(require,module,exports){
+},{"../../lib/page-functions.js":77,"./gatherer.js":54}],"../gather/gatherers/mixed-content":[function(require,module,exports){
 (function(Buffer){
 
 
@@ -14310,7 +14793,7 @@ return{url:passContext.url};
 module.exports=MixedContent;
 
 }).call(this,require("buffer").Buffer);
-},{"../../lib/url-shim.js":"url","../driver.js":51,"./gatherer.js":53,"buffer":102}],"../gather/gatherers/offline":[function(require,module,exports){
+},{"../../lib/url-shim.js":"url","../driver.js":52,"./gatherer.js":54,"buffer":102}],"../gather/gatherers/offline":[function(require,module,exports){
 
 
 
@@ -14326,6 +14809,9 @@ class Offline extends Gatherer{
 
 
 beforePass(passContext){
+
+
+
 return passContext.driver.goOffline();
 }
 
@@ -14334,20 +14820,19 @@ return passContext.driver.goOffline();
 
 
 
-afterPass(passContext,loadData){
+async afterPass(passContext,loadData){
 const navigationRecord=loadData.networkRecords.filter(record=>{
 return URL.equalWithExcludedFragments(record.url,passContext.url)&&
 record.fetchedViaServiceWorker;
 }).pop();
 
-return passContext.driver.goOnline(passContext).
-then(_=>navigationRecord?navigationRecord.statusCode:-1);
+return navigationRecord?navigationRecord.statusCode:-1;
 }}
 
 
 module.exports=Offline;
 
-},{"../../lib/url-shim.js":"url","./gatherer.js":53}],"../gather/gatherers/runtime-exceptions":[function(require,module,exports){
+},{"../../lib/url-shim.js":"url","./gatherer.js":54}],"../gather/gatherers/runtime-exceptions":[function(require,module,exports){
 
 
 
@@ -14397,7 +14882,7 @@ return this._exceptions;
 
 module.exports=RuntimeExceptions;
 
-},{"./gatherer.js":53}],"../gather/gatherers/script-elements":[function(require,module,exports){
+},{"./gatherer.js":54}],"../gather/gatherers/script-elements":[function(require,module,exports){
 
 
 
@@ -14426,6 +14911,7 @@ return scripts.map(script=>{
 return{
 type:script.type||null,
 src:script.src||null,
+id:script.id||null,
 async:script.async,
 defer:script.defer,
 source:script.closest('head')?'head':'body',
@@ -14481,6 +14967,7 @@ scripts.push({
 devtoolsNodePath:'',
 type:null,
 src:record.url,
+id:null,
 async:false,
 defer:false,
 source:'network',
@@ -14497,7 +14984,7 @@ return scripts;
 
 module.exports=ScriptElements;
 
-},{"../../lib/dependency-graph/simulator/network-analyzer.js":62,"../../lib/network-request.js":76,"../../lib/page-functions.js":77,"./gatherer.js":53}],"../gather/gatherers/seo/embedded-content":[function(require,module,exports){
+},{"../../lib/dependency-graph/simulator/network-analyzer.js":63,"../../lib/network-request.js":76,"../../lib/page-functions.js":77,"./gatherer.js":54}],"../gather/gatherers/seo/embedded-content":[function(require,module,exports){
 
 
 
@@ -14540,7 +15027,7 @@ return passContext.driver.evaluateAsync(expression);
 
 module.exports=EmbeddedContent;
 
-},{"../../../lib/page-functions.js":77,"../gatherer.js":53}],"../gather/gatherers/seo/font-size":[function(require,module,exports){
+},{"../../../lib/page-functions.js":77,"../gatherer.js":54}],"../gather/gatherers/seo/font-size":[function(require,module,exports){
 
 
 
@@ -14705,13 +15192,16 @@ if(directRule)return directRule;
 
 
 
-function getEffectiveFontRule({inlineStyle,matchedCSSRules,inherited}){
+function getEffectiveFontRule({attributesStyle,inlineStyle,matchedCSSRules,inherited}){
 
 if(hasFontSizeDeclaration(inlineStyle))return{type:'Inline',...inlineStyle};
 
 
 const matchedRule=findMostSpecificMatchedCSSRule(matchedCSSRules);
 if(matchedRule)return matchedRule;
+
+
+if(hasFontSizeDeclaration(attributesStyle))return{type:'Attributes',...attributesStyle};
 
 
 const inheritedRule=findInheritedCSSRule(inherited);
@@ -14903,7 +15393,7 @@ module.exports.TEXT_NODE_TYPE=TEXT_NODE_TYPE;
 module.exports.computeSelectorSpecificity=computeSelectorSpecificity;
 module.exports.getEffectiveFontRule=getEffectiveFontRule;
 
-},{"../../../lib/sentry.js":79,"../gatherer.js":53}],"../gather/gatherers/seo/robots-txt":[function(require,module,exports){
+},{"../../../lib/sentry.js":79,"../gatherer.js":54}],"../gather/gatherers/seo/robots-txt":[function(require,module,exports){
 
 
 
@@ -14944,7 +15434,7 @@ return passContext.driver.evaluateAsync(`(${getRobotsTxtContent.toString()}())`)
 
 module.exports=RobotsTxt;
 
-},{"../gatherer.js":53}],"../gather/gatherers/seo/tap-targets":[function(require,module,exports){
+},{"../gatherer.js":54}],"../gather/gatherers/seo/tap-targets":[function(require,module,exports){
 
 
 
@@ -15281,7 +15771,7 @@ return passContext.driver.evaluateAsync(expression,{useIsolation:true});
 
 module.exports=TapTargets;
 
-},{"../../../lib/page-functions.js":77,"../../../lib/rect-helpers.js":78,"../gatherer.js":53}],"../gather/gatherers/service-worker":[function(require,module,exports){
+},{"../../../lib/page-functions.js":77,"../../../lib/rect-helpers.js":78,"../gatherer.js":54}],"../gather/gatherers/service-worker":[function(require,module,exports){
 
 
 
@@ -15309,7 +15799,170 @@ registrations};
 
 module.exports=ServiceWorker;
 
-},{"./gatherer.js":53}],"../gather/gatherers/start-url":[function(require,module,exports){
+},{"./gatherer.js":54}],"../gather/gatherers/source-maps":[function(require,module,exports){
+(function(Buffer){
+
+
+
+
+
+'use strict';
+
+
+
+const Gatherer=require('./gatherer.js');
+const URL=require('../../lib/url-shim.js');
+
+
+
+
+
+
+
+
+
+
+async function fetchSourceMap(url){
+
+const response=await fetch(url);
+if(response.ok){
+return response.text();
+}else{
+throw new Error(`Received status code ${response.status} for ${url}`);
+}
+}
+
+
+
+
+class SourceMaps extends Gatherer{
+constructor(){
+super();
+
+this._scriptParsedEvents=[];
+this.onScriptParsed=this.onScriptParsed.bind(this);
+}
+
+
+
+
+
+
+async fetchSourceMapInPage(driver,sourceMapUrl){
+driver.setNextProtocolTimeout(1500);
+
+const sourceMapJson=
+await driver.evaluateAsync(`(${fetchSourceMap})(${JSON.stringify(sourceMapUrl)})`);
+return JSON.parse(sourceMapJson);
+}
+
+
+
+
+
+parseSourceMapFromDataUrl(sourceMapURL){
+const buffer=Buffer.from(sourceMapURL.split(',')[1],'base64');
+return JSON.parse(buffer.toString());
+}
+
+
+
+
+onScriptParsed(event){
+if(event.sourceMapURL){
+this._scriptParsedEvents.push(event);
+}
+}
+
+
+
+
+async beforePass(passContext){
+const driver=passContext.driver;
+driver.on('Debugger.scriptParsed',this.onScriptParsed);
+await driver.sendCommand('Debugger.enable');
+}
+
+
+
+
+
+
+_resolveUrl(url,base){
+try{
+return new URL(url,base).href;
+}catch(e){
+return;
+}
+}
+
+
+
+
+
+
+async _retrieveMapFromScriptParsedEvent(driver,event){
+if(!event.sourceMapURL){
+throw new Error('precondition failed: event.sourceMapURL should exist');
+}
+
+
+
+const isSourceMapADataUri=event.sourceMapURL.startsWith('data:');
+const scriptUrl=event.url;
+const rawSourceMapUrl=isSourceMapADataUri?
+event.sourceMapURL:
+this._resolveUrl(event.sourceMapURL,event.url);
+
+if(!rawSourceMapUrl){
+return{
+scriptUrl,
+errorMessage:`Could not resolve map url: ${event.sourceMapURL}`};
+
+}
+
+
+const sourceMapUrl=isSourceMapADataUri?undefined:rawSourceMapUrl;
+
+try{
+const map=isSourceMapADataUri?
+this.parseSourceMapFromDataUrl(rawSourceMapUrl):
+await this.fetchSourceMapInPage(driver,rawSourceMapUrl);
+return{
+scriptUrl,
+sourceMapUrl,
+map};
+
+}catch(err){
+return{
+scriptUrl,
+sourceMapUrl,
+errorMessage:err.toString()};
+
+}
+}
+
+
+
+
+
+async afterPass(passContext){
+const driver=passContext.driver;
+
+driver.off('Debugger.scriptParsed',this.onScriptParsed);
+await driver.sendCommand('Debugger.disable');
+
+const eventProcessPromises=this._scriptParsedEvents.
+map(event=>this._retrieveMapFromScriptParsedEvent(driver,event));
+
+return Promise.all(eventProcessPromises);
+}}
+
+
+module.exports=SourceMaps;
+
+}).call(this,require("buffer").Buffer);
+},{"../../lib/url-shim.js":"url","./gatherer.js":54,"buffer":102}],"../gather/gatherers/start-url":[function(require,module,exports){
 
 
 
@@ -15328,15 +15981,31 @@ class StartUrl extends Gatherer{
 
 
 async afterPass(passContext){
+
+await passContext.driver.goOffline();
+const result=await this._determineStartUrlAvailability(passContext);
+await passContext.driver.goOnline(passContext);
+
+return result;
+}
+
+
+
+
+
+
+async _determineStartUrlAvailability(passContext){
 const manifest=passContext.baseArtifacts.WebAppManifest;
 const startUrlInfo=this._readManifestStartUrl(manifest);
 if(startUrlInfo.isReadFailure){
 return{statusCode:-1,explanation:startUrlInfo.reason};
 }
 
-return this._attemptStartURLFetch(passContext.driver,startUrlInfo.startUrl).catch(()=>{
-return{statusCode:-1,explanation:'Unable to fetch start URL via service worker.'};
-});
+try{
+return await this._attemptStartURLFetch(passContext.driver,startUrlInfo.startUrl);
+}catch(err){
+return{statusCode:-1,explanation:'Error while fetching start_url via service worker.'};
+}
 }
 
 
@@ -15371,7 +16040,7 @@ _attemptStartURLFetch(driver,startUrl){
 
 const timeoutPromise=new Promise(resolve=>
 setTimeout(
-()=>resolve({statusCode:-1,explanation:'Timed out waiting for fetched start_url.'}),
+()=>resolve({statusCode:-1,explanation:'Timed out waiting for start_url to respond.'}),
 3000));
 
 
@@ -15389,7 +16058,7 @@ driver.off('Network.responseReceived',onResponseReceived);
 if(!response.fromServiceWorker){
 return resolve({
 statusCode:-1,
-explanation:'Unable to fetch start URL via service worker.'});
+explanation:'The start_url did respond, but not via a service worker.'});
 
 }
 
@@ -15405,7 +16074,7 @@ then(()=>Promise.race([fetchPromise,timeoutPromise]));
 
 module.exports=StartUrl;
 
-},{"./gatherer.js":53}],"../gather/gatherers/viewport-dimensions":[function(require,module,exports){
+},{"./gatherer.js":54}],"../gather/gatherers/viewport-dimensions":[function(require,module,exports){
 
 
 
@@ -15458,7 +16127,7 @@ return dimensions;
 
 module.exports=ViewportDimensions;
 
-},{"./gatherer.js":53}],1:[function(require,module,exports){
+},{"./gatherer.js":54}],1:[function(require,module,exports){
 
 
 
@@ -15469,6 +16138,7 @@ module.exports=ViewportDimensions;
 const lighthouse=require('../lighthouse-core/index.js');
 const RawProtocol=require('../lighthouse-core/gather/connections/raw.js');
 const log=require('lighthouse-logger');
+const{registerLocaleData,lookupLocale}=require('../lighthouse-core/lib/i18n/i18n.js');
 
 
 
@@ -15513,7 +16183,9 @@ if(typeof module!=='undefined'&&module.exports){
 
 module.exports={
 runLighthouseInWorker,
-listenForStatus};
+listenForStatus,
+registerLocaleData,
+lookupLocale};
 
 }
 
@@ -15524,9 +16196,13 @@ if(typeof self!=='undefined'){
 self.runLighthouseInWorker=runLighthouseInWorker;
 
 self.listenForStatus=listenForStatus;
+
+self.registerLocaleData=registerLocaleData;
+
+self.lookupLocale=lookupLocale;
 }
 
-},{"../lighthouse-core/gather/connections/raw.js":49,"../lighthouse-core/index.js":54,"lighthouse-logger":128}],2:[function(require,module,exports){
+},{"../lighthouse-core/gather/connections/raw.js":50,"../lighthouse-core/index.js":55,"../lighthouse-core/lib/i18n/i18n.js":67,"lighthouse-logger":125}],2:[function(require,module,exports){
 (function(__filename){
 
 
@@ -15618,7 +16294,7 @@ module.exports=AxeAudit;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/audits/accessibility/axe-audit.js");
-},{"../../lib/i18n/i18n.js":68,"../audit.js":3}],3:[function(require,module,exports){
+},{"../../lib/i18n/i18n.js":67,"../audit.js":3}],3:[function(require,module,exports){
 
 
 
@@ -16002,8 +16678,10 @@ return networkRecord.transferSize||0;
 
 
 const transferSize=networkRecord.transferSize||0;
-const resourceSize=networkRecord.resourceSize;
-const compressionRatio=resourceSize!==undefined?transferSize/resourceSize:1;
+const resourceSize=networkRecord.resourceSize||0;
+
+const compressionRatio=Number.isFinite(resourceSize)&&resourceSize>0?
+transferSize/resourceSize:1;
 return Math.round(totalBytes*compressionRatio);
 }
 }
@@ -16148,7 +16826,7 @@ throw new Error('audit_ unimplemented');
 module.exports=UnusedBytes;
 
 }).call(this,"/lighthouse-core/audits/byte-efficiency/byte-efficiency-audit.js");
-},{"../../computed/load-simulator.js":10,"../../computed/metrics/lantern-interactive.js":23,"../../computed/network-records.js":33,"../../computed/page-dependency-graph.js":34,"../../lib/i18n/i18n.js":68,"../../lib/statistics.js":82,"../audit.js":3}],5:[function(require,module,exports){
+},{"../../computed/load-simulator.js":10,"../../computed/metrics/lantern-interactive.js":23,"../../computed/network-records.js":34,"../../computed/page-dependency-graph.js":35,"../../lib/i18n/i18n.js":67,"../../lib/statistics.js":82,"../audit.js":3}],5:[function(require,module,exports){
 
 
 
@@ -16243,6 +16921,7 @@ items:[detailsItem]};
 if(result.failures.length>0){
 return{
 score:0,
+
 explanation:`Failures: ${result.failures.join(',\n')}.`,
 details};
 
@@ -16362,7 +17041,7 @@ return Object.assign(computableArtifact,{request});
 
 module.exports=makeComputedArtifact;
 
-},{"../lib/arbitrary-equality-map.js":55,"lighthouse-logger":128}],9:[function(require,module,exports){
+},{"../lib/arbitrary-equality-map.js":56,"lighthouse-logger":125}],9:[function(require,module,exports){
 
 
 
@@ -16531,7 +17210,7 @@ return CriticalRequestChains.extractChain(networkRecords,mainResource);
 
 module.exports=makeComputedArtifact(CriticalRequestChains);
 
-},{"../lib/network-request.js":76,"./computed-artifact.js":8,"./main-resource.js":11,"./network-records.js":33,"assert":92}],10:[function(require,module,exports){
+},{"../lib/network-request.js":76,"./computed-artifact.js":8,"./main-resource.js":11,"./network-records.js":34,"assert":92}],10:[function(require,module,exports){
 
 
 
@@ -16624,7 +17303,7 @@ return lanternData;
 
 module.exports=makeComputedArtifact(LoadSimulator);
 
-},{"../config/constants.js":45,"../lib/dependency-graph/simulator/simulator.js":63,"./computed-artifact.js":8,"./network-analysis.js":32}],11:[function(require,module,exports){
+},{"../config/constants.js":46,"../lib/dependency-graph/simulator/simulator.js":64,"./computed-artifact.js":8,"./network-analysis.js":33}],11:[function(require,module,exports){
 
 
 
@@ -16660,7 +17339,7 @@ return mainResource;
 
 module.exports=makeComputedArtifact(MainResource);
 
-},{"../lib/dependency-graph/simulator/network-analyzer.js":62,"./computed-artifact.js":8,"./network-records.js":33}],12:[function(require,module,exports){
+},{"../lib/dependency-graph/simulator/network-analyzer.js":63,"./computed-artifact.js":8,"./network-records.js":34}],12:[function(require,module,exports){
 
 
 
@@ -16686,7 +17365,7 @@ return MainThreadTasks_.getMainThreadTasks(mainThreadEvents,timestamps.traceEnd)
 
 module.exports=makeComputedArtifact(MainThreadTasks);
 
-},{"../lib/tracehouse/main-thread-tasks.js":84,"./computed-artifact.js":8,"./trace-of-tab.js":38}],13:[function(require,module,exports){
+},{"../lib/tracehouse/main-thread-tasks.js":84,"./computed-artifact.js":8,"./trace-of-tab.js":39}],13:[function(require,module,exports){
 
 
 
@@ -16805,7 +17484,7 @@ allChecks:remainingChecks};
 
 module.exports=makeComputedArtifact(ManifestValues);
 
-},{"../lib/icons.js":70,"./computed-artifact.js":8}],14:[function(require,module,exports){
+},{"../lib/icons.js":69,"./computed-artifact.js":8}],14:[function(require,module,exports){
 
 
 
@@ -16881,7 +17560,7 @@ timing:EstimatedInputLatency.calculateRollingWindowEIL(events)});
 
 module.exports=makeComputedArtifact(EstimatedInputLatency);
 
-},{"../../lib/lh-error.js":72,"../../lib/tracehouse/trace-processor.js":86,"../computed-artifact.js":8,"./lantern-estimated-input-latency.js":19,"./metric.js":29}],15:[function(require,module,exports){
+},{"../../lib/lh-error.js":72,"../../lib/tracehouse/trace-processor.js":86,"../computed-artifact.js":8,"./lantern-estimated-input-latency.js":19,"./metric.js":30}],15:[function(require,module,exports){
 
 
 
@@ -16919,7 +17598,7 @@ timestamp:traceOfTab.timestamps.firstContentfulPaint};
 
 module.exports=makeComputedArtifact(FirstContentfulPaint);
 
-},{"../computed-artifact.js":8,"./lantern-first-contentful-paint.js":20,"./metric.js":29}],16:[function(require,module,exports){
+},{"../computed-artifact.js":8,"./lantern-first-contentful-paint.js":20,"./metric.js":30}],16:[function(require,module,exports){
 
 
 
@@ -17135,7 +17814,7 @@ timestamp:valueInMs*1000+navStart});
 
 module.exports=makeComputedArtifact(FirstCPUIdle);
 
-},{"../../lib/lh-error.js":72,"../../lib/tracehouse/trace-processor.js":86,"../computed-artifact.js":8,"./lantern-first-cpu-idle.js":21,"./metric.js":29}],17:[function(require,module,exports){
+},{"../../lib/lh-error.js":72,"../../lib/tracehouse/trace-processor.js":86,"../computed-artifact.js":8,"./lantern-first-cpu-idle.js":21,"./metric.js":30}],17:[function(require,module,exports){
 
 
 
@@ -17178,7 +17857,7 @@ timestamp:traceOfTab.timestamps.firstMeaningfulPaint};
 
 module.exports=makeComputedArtifact(FirstMeaningfulPaint);
 
-},{"../../lib/lh-error.js":72,"../computed-artifact.js":8,"./lantern-first-meaningful-paint.js":22,"./metric.js":29}],18:[function(require,module,exports){
+},{"../../lib/lh-error.js":72,"../computed-artifact.js":8,"./lantern-first-meaningful-paint.js":22,"./metric.js":30}],18:[function(require,module,exports){
 
 
 
@@ -17369,7 +18048,7 @@ module.exports=makeComputedArtifact(Interactive);
 
 
 
-},{"../../lib/lh-error.js":72,"../../lib/network-recorder.js":75,"../../lib/tracehouse/trace-processor.js":86,"../computed-artifact.js":8,"./lantern-interactive.js":23,"./metric.js":29}],19:[function(require,module,exports){
+},{"../../lib/lh-error.js":72,"../../lib/network-recorder.js":75,"../../lib/tracehouse/trace-processor.js":86,"../computed-artifact.js":8,"./lantern-interactive.js":23,"./metric.js":30}],19:[function(require,module,exports){
 
 
 
@@ -17472,7 +18151,7 @@ return events.sort((a,b)=>a.start-b.start);
 
 module.exports=makeComputedArtifact(LanternEstimatedInputLatency);
 
-},{"../../lib/dependency-graph/base-node.js":57,"../computed-artifact.js":8,"./estimated-input-latency.js":14,"./lantern-first-meaningful-paint.js":22,"./lantern-metric.js":25}],20:[function(require,module,exports){
+},{"../../lib/dependency-graph/base-node.js":58,"../computed-artifact.js":8,"./estimated-input-latency.js":14,"./lantern-first-meaningful-paint.js":22,"./lantern-metric.js":25}],20:[function(require,module,exports){
 
 
 
@@ -17673,7 +18352,7 @@ node=>node.hasRenderBlockingPriority());
 
 module.exports=makeComputedArtifact(LanternFirstContentfulPaint);
 
-},{"../../lib/dependency-graph/base-node.js":57,"../computed-artifact.js":8,"./lantern-metric.js":25}],21:[function(require,module,exports){
+},{"../../lib/dependency-graph/base-node.js":58,"../computed-artifact.js":8,"./lantern-metric.js":25}],21:[function(require,module,exports){
 
 
 
@@ -17746,7 +18425,7 @@ return super.compute_(data,context);
 
 module.exports=makeComputedArtifact(LanternFirstCPUIdle);
 
-},{"../../lib/dependency-graph/base-node.js":57,"../computed-artifact.js":8,"./first-cpu-idle.js":16,"./lantern-interactive.js":23}],22:[function(require,module,exports){
+},{"../../lib/dependency-graph/base-node.js":58,"../computed-artifact.js":8,"./first-cpu-idle.js":16,"./lantern-interactive.js":23}],22:[function(require,module,exports){
 
 
 
@@ -17938,7 +18617,7 @@ reduce((max,x)=>Math.max(max||0,x||0),0);
 
 module.exports=makeComputedArtifact(LanternInteractive);
 
-},{"../../lib/dependency-graph/base-node.js":57,"../../lib/network-request.js":76,"../computed-artifact.js":8,"./lantern-first-meaningful-paint.js":22,"./lantern-metric.js":25}],24:[function(require,module,exports){
+},{"../../lib/dependency-graph/base-node.js":58,"../../lib/network-request.js":76,"../computed-artifact.js":8,"./lantern-first-meaningful-paint.js":22,"./lantern-metric.js":25}],24:[function(require,module,exports){
 
 
 
@@ -18028,7 +18707,7 @@ map(([_,timing])=>timing);
 
 module.exports=makeComputedArtifact(LanternMaxPotentialFID);
 
-},{"../../lib/dependency-graph/base-node.js":57,"../computed-artifact.js":8,"./lantern-first-contentful-paint.js":20,"./lantern-metric.js":25}],25:[function(require,module,exports){
+},{"../../lib/dependency-graph/base-node.js":58,"../computed-artifact.js":8,"./lantern-first-contentful-paint.js":20,"./lantern-metric.js":25}],25:[function(require,module,exports){
 
 
 
@@ -18181,7 +18860,7 @@ return this.computeMetricWithGraphs(data,context);
 
 module.exports=LanternMetricArtifact;
 
-},{"../../lib/dependency-graph/base-node.js":57,"../../lib/network-request.js":76,"../load-simulator.js":10,"../page-dependency-graph.js":34,"../trace-of-tab.js":38}],26:[function(require,module,exports){
+},{"../../lib/dependency-graph/base-node.js":58,"../../lib/network-request.js":76,"../load-simulator.js":10,"../page-dependency-graph.js":35,"../trace-of-tab.js":39}],26:[function(require,module,exports){
 
 
 
@@ -18329,7 +19008,7 @@ return totalWeightedTime/totalWeight;
 
 module.exports=makeComputedArtifact(LanternSpeedIndex);
 
-},{"../../config/constants.js":45,"../../lib/dependency-graph/base-node.js":57,"../computed-artifact.js":8,"../speedline.js":37,"./lantern-first-contentful-paint.js":20,"./lantern-metric.js":25}],27:[function(require,module,exports){
+},{"../../config/constants.js":46,"../../lib/dependency-graph/base-node.js":58,"../computed-artifact.js":8,"../speedline.js":38,"./lantern-first-contentful-paint.js":20,"./lantern-metric.js":25}],27:[function(require,module,exports){
 
 
 
@@ -18452,7 +19131,50 @@ return events;
 
 module.exports=makeComputedArtifact(LanternTotalBlockingTime);
 
-},{"../../lib/dependency-graph/base-node.js":57,"../computed-artifact.js":8,"./lantern-first-contentful-paint.js":20,"./lantern-interactive.js":23,"./lantern-metric.js":25,"./total-blocking-time.js":31}],28:[function(require,module,exports){
+},{"../../lib/dependency-graph/base-node.js":58,"../computed-artifact.js":8,"./lantern-first-contentful-paint.js":20,"./lantern-interactive.js":23,"./lantern-metric.js":25,"./total-blocking-time.js":32}],28:[function(require,module,exports){
+
+
+
+
+
+'use strict';
+
+const makeComputedArtifact=require('../computed-artifact.js');
+const ComputedMetric=require('./metric.js');
+const LHError=require('../../lib/lh-error.js');
+
+class LargestContentfulPaint extends ComputedMetric{
+
+
+
+
+
+
+static computeSimulatedMetric(data,context){
+throw new Error('Unimplemented');
+}
+
+
+
+
+
+static async computeObservedMetric(data){
+const{traceOfTab}=data;
+if(!traceOfTab.timestamps.largestContentfulPaint){
+throw new LHError(LHError.errors.NO_LCP);
+}
+
+return{
+
+timing:traceOfTab.timings.largestContentfulPaint,
+timestamp:traceOfTab.timestamps.largestContentfulPaint};
+
+}}
+
+
+module.exports=makeComputedArtifact(LargestContentfulPaint);
+
+},{"../../lib/lh-error.js":72,"../computed-artifact.js":8,"./metric.js":30}],29:[function(require,module,exports){
 
 
 
@@ -18499,7 +19221,7 @@ timing:Math.max(...events.map(evt=>evt.duration),16)});
 
 module.exports=makeComputedArtifact(MaxPotentialFID);
 
-},{"../../lib/lh-error.js":72,"../../lib/tracehouse/trace-processor.js":86,"../computed-artifact.js":8,"./lantern-max-potential-fid.js":24,"./metric.js":29}],29:[function(require,module,exports){
+},{"../../lib/lh-error.js":72,"../../lib/tracehouse/trace-processor.js":86,"../computed-artifact.js":8,"./lantern-max-potential-fid.js":24,"./metric.js":30}],30:[function(require,module,exports){
 
 
 
@@ -18573,7 +19295,7 @@ throw new TypeError(`Unrecognized throttling method: ${settings.throttlingMethod
 
 module.exports=ComputedMetric;
 
-},{"../../lib/tracehouse/trace-processor.js":86,"../network-records.js":33,"../trace-of-tab.js":38}],30:[function(require,module,exports){
+},{"../../lib/tracehouse/trace-processor.js":86,"../network-records.js":34,"../trace-of-tab.js":39}],31:[function(require,module,exports){
 
 
 
@@ -18611,7 +19333,7 @@ return Promise.resolve({timing,timestamp});
 
 module.exports=makeComputedArtifact(SpeedIndex);
 
-},{"../computed-artifact.js":8,"../speedline.js":37,"./lantern-speed-index.js":26,"./metric.js":29}],31:[function(require,module,exports){
+},{"../computed-artifact.js":8,"../speedline.js":38,"./lantern-speed-index.js":26,"./metric.js":30}],32:[function(require,module,exports){
 
 
 
@@ -18727,7 +19449,7 @@ interactiveTimeMs)};
 
 module.exports=makeComputedArtifact(TotalBlockingTime);
 
-},{"../../lib/lh-error.js":72,"../../lib/tracehouse/trace-processor.js":86,"../computed-artifact.js":8,"./interactive.js":18,"./lantern-total-blocking-time.js":27,"./metric.js":29}],32:[function(require,module,exports){
+},{"../../lib/lh-error.js":72,"../../lib/tracehouse/trace-processor.js":86,"../computed-artifact.js":8,"./interactive.js":18,"./lantern-total-blocking-time.js":27,"./metric.js":30}],33:[function(require,module,exports){
 
 
 
@@ -18793,7 +19515,7 @@ return{throughput,...rttAndServerResponseTime};
 
 module.exports=makeComputedArtifact(NetworkAnalysis);
 
-},{"../lib/dependency-graph/simulator/network-analyzer.js":62,"./computed-artifact.js":8,"./network-records.js":33}],33:[function(require,module,exports){
+},{"../lib/dependency-graph/simulator/network-analyzer.js":63,"./computed-artifact.js":8,"./network-records.js":34}],34:[function(require,module,exports){
 
 
 
@@ -18816,7 +19538,7 @@ return NetworkRecorder.recordsFromLogs(devtoolsLog);
 
 module.exports=makeComputedArtifact(NetworkRecords);
 
-},{"../lib/network-recorder.js":75,"./computed-artifact.js":8}],34:[function(require,module,exports){
+},{"../lib/network-recorder.js":75,"./computed-artifact.js":8}],35:[function(require,module,exports){
 
 
 
@@ -19190,7 +19912,7 @@ module.exports=makeComputedArtifact(PageDependencyGraph);
 
 
 
-},{"../lib/dependency-graph/cpu-node.js":58,"../lib/dependency-graph/network-node.js":59,"../lib/dependency-graph/simulator/network-analyzer.js":62,"../lib/network-request.js":76,"../lib/tracehouse/trace-processor.js":86,"./computed-artifact.js":8,"./network-records.js":33,"./trace-of-tab.js":38}],35:[function(require,module,exports){
+},{"../lib/dependency-graph/cpu-node.js":59,"../lib/dependency-graph/network-node.js":60,"../lib/dependency-graph/simulator/network-analyzer.js":63,"../lib/network-request.js":76,"../lib/tracehouse/trace-processor.js":86,"./computed-artifact.js":8,"./network-records.js":34,"./trace-of-tab.js":39}],36:[function(require,module,exports){
 
 
 
@@ -19276,7 +19998,7 @@ return ResourceSummary.summarize(networkRecords,mainResource.url);
 
 module.exports=makeComputedArtifact(ResourceSummary);
 
-},{"../lib/url-shim.js":"url","./computed-artifact.js":8,"./main-resource.js":11,"./network-records.js":33}],36:[function(require,module,exports){
+},{"../lib/url-shim.js":"url","./computed-artifact.js":8,"./main-resource.js":11,"./network-records.js":34}],37:[function(require,module,exports){
 
 
 
@@ -19307,7 +20029,7 @@ datauri:`data:image/jpeg;base64,${evt.args.snapshot}`};
 
 module.exports=makeComputedArtifact(Screenshots);
 
-},{"./computed-artifact.js":8}],37:[function(require,module,exports){
+},{"./computed-artifact.js":8}],38:[function(require,module,exports){
 
 
 
@@ -19363,7 +20085,7 @@ return speedline;
 
 module.exports=makeComputedArtifact(Speedline);
 
-},{"../lib/lh-error.js":72,"./computed-artifact.js":8,"./trace-of-tab.js":38,"speedline-core":168}],38:[function(require,module,exports){
+},{"../lib/lh-error.js":72,"./computed-artifact.js":8,"./trace-of-tab.js":39,"speedline-core":165}],39:[function(require,module,exports){
 
 
 
@@ -19430,7 +20152,7 @@ timestamps:{...timestamps,firstContentfulPaint:firstContentfulPaintTs}};
 
 module.exports=makeComputedArtifact(TraceOfTab);
 
-},{"../lib/lh-error.js":72,"../lib/tracehouse/trace-processor.js":86,"./computed-artifact.js":8}],39:[function(require,module,exports){
+},{"../lib/lh-error.js":72,"../lib/tracehouse/trace-processor.js":86,"./computed-artifact.js":8}],40:[function(require,module,exports){
 
 
 
@@ -19515,7 +20237,7 @@ return userTimings;
 
 module.exports=makeComputedArtifact(UserTimings);
 
-},{"./computed-artifact.js":8,"./trace-of-tab.js":38}],40:[function(require,module,exports){
+},{"./computed-artifact.js":8,"./trace-of-tab.js":39}],41:[function(require,module,exports){
 
 
 
@@ -19573,7 +20295,7 @@ module.exports=makeComputedArtifact(ViewportMeta);
 
 
 
-},{"./computed-artifact.js":8,"metaviewport-parser":132}],41:[function(require,module,exports){
+},{"./computed-artifact.js":8,"metaviewport-parser":129}],42:[function(require,module,exports){
 
 
 
@@ -19676,6 +20398,98 @@ budget};
 
 
 
+static throwInvalidPathError(path,error){
+throw new Error(`Invalid path ${path}. ${error}\n`+
+`'Path' should be specified using the 'robots.txt' format.\n`+
+`Learn more about the 'robots.txt' format here:\n`+
+`https://developers.google.com/search/reference/robots_txt#url-matching-based-on-path-values`);
+}
+
+
+
+
+
+
+
+
+static validatePath(path){
+if(path===undefined){
+return undefined;
+}else if(typeof path!=='string'){
+this.throwInvalidPathError(path,`Path should be a string.`);
+return;
+}else if(!path.startsWith('/')){
+this.throwInvalidPathError(path,`Path should start with '/'.`);
+}else if((path.match(/\*/g)||[]).length>1){
+this.throwInvalidPathError(path,`Path should only contain one '*'.`);
+}else if((path.match(/\$/g)||[]).length>1){
+this.throwInvalidPathError(path,`Path should only contain one '$' character.`);
+}else if(path.includes('$')&&!path.endsWith('$')){
+this.throwInvalidPathError(path,`'$' character should only occur at end of path.`);
+}
+return path;
+}
+
+
+
+
+
+
+
+
+
+static urlMatchesPattern(url,pattern='/'){
+const urlObj=new URL(url);
+const urlPath=urlObj.pathname+urlObj.search;
+
+const hasWildcard=pattern.includes('*');
+const hasDollarSign=pattern.includes('$');
+
+
+
+
+
+
+
+
+
+if(!hasWildcard&&!hasDollarSign){
+return urlPath.startsWith(pattern);
+
+
+
+
+
+}else if(!hasWildcard&&hasDollarSign){
+return urlPath===pattern.slice(0,-1);
+
+
+
+
+
+
+}else if(hasWildcard&&!hasDollarSign){
+const[beforeWildcard,afterWildcard]=pattern.split('*');
+const remainingUrl=urlPath.slice(beforeWildcard.length);
+return urlPath.startsWith(beforeWildcard)&&remainingUrl.includes(afterWildcard);
+
+
+
+
+
+
+}else if(hasWildcard&&hasDollarSign){
+const[beforeWildcard,afterWildcard]=pattern.split('*');
+const urlEnd=urlPath.slice(beforeWildcard.length);
+return urlPath.startsWith(beforeWildcard)&&urlEnd.endsWith(afterWildcard.slice(0,-1));
+}
+return false;
+}
+
+
+
+
+
 static validateTimingBudget(timingBudget){
 const{metric,budget,tolerance,...invalidRest}=timingBudget;
 Budget.assertNoExcessProperties(invalidRest,'Timing Budget');
@@ -19723,8 +20537,10 @@ const budgets=budgetJson.map((b,index)=>{
 
 const budget={};
 
-const{resourceSizes,resourceCounts,timings,...invalidRest}=b;
+const{path,resourceSizes,resourceCounts,timings,...invalidRest}=b;
 Budget.assertNoExcessProperties(invalidRest,'Budget');
+
+budget.path=Budget.validatePath(path);
 
 if(isArrayOfUnknownObjects(resourceSizes)){
 budget.resourceSizes=resourceSizes.map(Budget.validateResourceBudget);
@@ -19759,7 +20575,7 @@ return budgets;
 
 module.exports=Budget;
 
-},{}],42:[function(require,module,exports){
+},{}],43:[function(require,module,exports){
 (function(process,__dirname){
 
 
@@ -19973,7 +20789,7 @@ resolveModule};
 
 
 }).call(this,require('_process'),"/lighthouse-core/config");
-},{"../audits/audit.js":3,"../runner.js":90,"_process":145,"path":143}],43:[function(require,module,exports){
+},{"../audits/audit.js":3,"../runner.js":90,"_process":142,"path":140}],44:[function(require,module,exports){
 
 
 
@@ -20198,7 +21014,7 @@ groups:ConfigPlugin._parseGroups(pluginGroupsJson,pluginName)};
 
 module.exports=ConfigPlugin;
 
-},{}],44:[function(require,module,exports){
+},{}],45:[function(require,module,exports){
 (function(__dirname){
 
 
@@ -21026,7 +21842,7 @@ return fullPasses;
 module.exports=Config;
 
 }).call(this,"/lighthouse-core/config");
-},{"../runner.js":90,"./../lib/i18n/i18n.js":68,"./budget.js":41,"./config-helpers.js":42,"./config-plugin.js":43,"./constants.js":45,"./default-config.js":46,"./full-config.js":47,"lighthouse-logger":128,"lodash.isequal":129,"path":143}],45:[function(require,module,exports){
+},{"../runner.js":90,"./../lib/i18n/i18n.js":67,"./budget.js":42,"./config-helpers.js":43,"./config-plugin.js":44,"./constants.js":46,"./default-config.js":47,"./full-config.js":48,"lighthouse-logger":125,"lodash.isequal":126,"path":140}],46:[function(require,module,exports){
 
 
 
@@ -21072,7 +21888,7 @@ cpuSlowdownMultiplier:4}};
 
 const defaultSettings={
 output:'json',
-maxWaitForFcp:15*1000,
+maxWaitForFcp:30*1000,
 maxWaitForLoad:45*1000,
 throttlingMethod:'simulate',
 throttling:throttling.mobileSlow4G,
@@ -21122,7 +21938,7 @@ defaultPassConfig,
 nonSimulatedPassConfigOverrides};
 
 
-},{}],46:[function(require,module,exports){
+},{}],47:[function(require,module,exports){
 (function(__filename){
 
 
@@ -21221,6 +22037,15 @@ seoCrawlingGroupTitle:'Crawling and Indexing',
 
 seoCrawlingGroupDescription:'To appear in search results, crawlers need access to your app.',
 
+pwaCategoryTitle:'Progressive Web App',
+
+pwaCategoryDescription:'These checks validate the aspects of a Progressive Web App. '+
+'[Learn more](https://developers.google.com/web/progressive-web-apps/checklist).',
+
+pwaCategoryManualDescription:'These checks are required by the baseline '+
+'[PWA Checklist](https://developers.google.com/web/progressive-web-apps/checklist) but are '+
+'not automatically checked by Lighthouse. They do not affect your score but it\'s important that you verify them manually.',
+
 bestPracticesCategoryTitle:'Best Practices',
 
 pwaFastReliableGroupTitle:'Fast and reliable',
@@ -21252,6 +22077,8 @@ gatherers:[
 'link-elements',
 'meta-elements',
 'script-elements',
+'iframe-elements',
+'main-document-content',
 'dobetterweb/appcache',
 'dobetterweb/doctype',
 'dobetterweb/domstats',
@@ -21633,11 +22460,9 @@ auditRefs:[
 
 
 'pwa':{
-title:'Progressive Web App',
-description:'These checks validate the aspects of a Progressive Web App. [Learn more](https://developers.google.com/web/progressive-web-apps/checklist).',
-manualDescription:'These checks are required by the baseline '+
-'[PWA Checklist](https://developers.google.com/web/progressive-web-apps/checklist) but are '+
-'not automatically checked by Lighthouse. They do not affect your score but it\'s important that you verify them manually.',
+title:str_(UIStrings.pwaCategoryTitle),
+description:str_(UIStrings.pwaCategoryDescription),
+manualDescription:str_(UIStrings.pwaCategoryManualDescription),
 auditRefs:[
 
 {id:'load-fast-enough-for-pwa',weight:7,group:'pwa-fast-reliable'},
@@ -21673,7 +22498,7 @@ get:()=>UIStrings});
 
 
 }).call(this,"/lighthouse-core/config/default-config.js");
-},{"../lib/i18n/i18n.js":68,"./constants.js":45}],47:[function(require,module,exports){
+},{"../lib/i18n/i18n.js":67,"./constants.js":46}],48:[function(require,module,exports){
 
 
 
@@ -21708,7 +22533,7 @@ auditRefs:[
 
 module.exports=fullConfig;
 
-},{}],48:[function(require,module,exports){
+},{}],49:[function(require,module,exports){
 
 
 
@@ -21766,13 +22591,14 @@ return Promise.reject(new Error('Not implemented'));
 
 
 
-sendCommand(method,...paramArgs){
+
+sendCommand(method,sessionId,...paramArgs){
 
 const params=paramArgs.length?paramArgs[0]:undefined;
 
 log.formatProtocol('method => browser',{method,params},'verbose');
 const id=++this._lastCommandId;
-const message=JSON.stringify({id,method,params});
+const message=JSON.stringify({id,sessionId,method,params});
 this.sendRawMessage(message);
 
 return new Promise(resolve=>{
@@ -21828,7 +22654,7 @@ const callback=this._callbacks.get(object.id);
 if(callback){
 this._callbacks.delete(object.id);
 
-return callback.resolve(Promise.resolve().then(_=>{
+callback.resolve(Promise.resolve().then(_=>{
 if(object.error){
 log.formatProtocol('method <= browser ERR',{method:callback.method},'error');
 throw LHError.fromProtocolMessage(callback.method,object.error);
@@ -21871,7 +22697,7 @@ this._eventEmitter=null;
 
 module.exports=Connection;
 
-},{"../../lib/lh-error.js":72,"events":108,"lighthouse-logger":128}],49:[function(require,module,exports){
+},{"../../lib/lh-error.js":72,"events":108,"lighthouse-logger":125}],50:[function(require,module,exports){
 
 
 
@@ -21931,7 +22757,7 @@ this._port.send(message);
 
 module.exports=RawConnection;
 
-},{"./connection.js":48}],50:[function(require,module,exports){
+},{"./connection.js":49}],51:[function(require,module,exports){
 
 
 
@@ -21988,7 +22814,7 @@ this._messages.push(message);
 
 module.exports=DevtoolsLog;
 
-},{}],51:[function(require,module,exports){
+},{}],52:[function(require,module,exports){
 (function(Buffer){
 
 
@@ -21999,7 +22825,7 @@ module.exports=DevtoolsLog;
 
 const NetworkRecorder=require('../lib/network-recorder.js');
 const emulation=require('../lib/emulation.js');
-const Element=require('../lib/element.js');
+const LHElement=require('../lib/lh-element.js');
 const LHError=require('../lib/lh-error.js');
 const NetworkRequest=require('../lib/network-request.js');
 const EventEmitter=require('events').EventEmitter;
@@ -22061,21 +22887,8 @@ this._networkStatusMonitor=null;
 
 this._monitoredUrl=null;
 
-
-
-
-
-
-
-
-this._targetProxyMessageId=0;
-
 this.on('Target.attachedToTarget',event=>{
-this._handleTargetAttached(event,[]).catch(this._handleEventError);
-});
-
-this.on('Target.receivedMessageFromTarget',event=>{
-this._handleReceivedMessageFromTarget(event,[]).catch(this._handleEventError);
+this._handleTargetAttached(event).catch(this._handleEventError);
 });
 
 
@@ -22243,10 +23056,12 @@ this._eventEmitter.removeListener(eventName,cb);
 
 
 
-_shouldToggleDomain(domain,enable){
-const enabledCount=this._domainEnabledCounts.get(domain)||0;
+
+_shouldToggleDomain(domain,sessionId,enable){
+const key=domain+(sessionId||'');
+const enabledCount=this._domainEnabledCounts.get(key)||0;
 const newCount=enabledCount+(enable?1:-1);
-this._domainEnabledCounts.set(domain,Math.max(0,newCount));
+this._domainEnabledCounts.set(key,Math.max(0,newCount));
 
 
 if(enable&&newCount===1||!enable&&newCount===0){
@@ -22295,61 +23110,29 @@ log.error('Driver','Unhandled event error',error.message);
 
 
 
-
-async _handleReceivedMessageFromTarget(event,parentSessionIds){
-const{targetId,sessionId,message}=event;
-
-const protocolMessage=JSON.parse(message);
-
-
-if('id'in protocolMessage)return;
-
-
-
-const sessionIdPath=[sessionId,...parentSessionIds];
-
-if(protocolMessage.method==='Target.receivedMessageFromTarget'){
-
-await this._handleReceivedMessageFromTarget(protocolMessage.params,sessionIdPath);
-}
-
-if(protocolMessage.method==='Target.attachedToTarget'){
-
-await this._handleTargetAttached(protocolMessage.params,sessionIdPath);
-}
-
-if(protocolMessage.method.startsWith('Network')){
-this._handleProtocolEvent({...protocolMessage,source:{targetId,sessionId}});
-}
-}
-
-
-
-
-
-async _handleTargetAttached(event,parentSessionIds){
-const sessionIdPath=[event.sessionId,...parentSessionIds];
-
+async _handleTargetAttached(event){
 
 
 if(event.targetInfo.type!=='iframe'){
 
-await this.sendMessageToTarget(sessionIdPath,'Runtime.runIfWaitingForDebugger');
+await this.sendCommandToSession('Runtime.runIfWaitingForDebugger',event.sessionId);
 return;
 }
 
 
 
-await this.sendMessageToTarget(sessionIdPath,'Network.enable');
+await this.sendCommandToSession('Network.enable',event.sessionId);
 
-await this.sendMessageToTarget(sessionIdPath,'Target.setAutoAttach',{
+
+await this.sendCommandToSession('Target.setAutoAttach',event.sessionId,{
 autoAttach:true,
+flatten:true,
 
 waitForDebuggerOnStart:true});
 
 
 
-await this.sendMessageToTarget(sessionIdPath,'Runtime.runIfWaitingForDebugger');
+await this.sendCommandToSession('Runtime.runIfWaitingForDebugger',event.sessionId);
 }
 
 
@@ -22362,38 +23145,7 @@ await this.sendMessageToTarget(sessionIdPath,'Runtime.runIfWaitingForDebugger');
 
 
 
-sendMessageToTarget(sessionIdPath,method,...params){
-this._targetProxyMessageId++;
-
-let payload={
-sessionId:sessionIdPath[0],
-message:JSON.stringify({id:this._targetProxyMessageId,method,params:params[0]})};
-
-
-for(const sessionId of sessionIdPath.slice(1)){
-this._targetProxyMessageId++;
-payload={
-sessionId,
-message:JSON.stringify({
-id:this._targetProxyMessageId,
-method:'Target.sendMessageToTarget',
-params:payload})};
-
-
-}
-
-return this.sendCommand('Target.sendMessageToTarget',payload);
-}
-
-
-
-
-
-
-
-
-
-sendCommand(method,...params){
+sendCommandToSession(method,sessionId,...params){
 const timeout=this._nextProtocolTimeout;
 this._nextProtocolTimeout=DEFAULT_PROTOCOL_TIMEOUT;
 return new Promise(async(resolve,reject)=>{
@@ -22405,7 +23157,7 @@ LHError.errors.PROTOCOL_TIMEOUT,
 reject(err);
 },timeout);
 try{
-const result=await this._innerSendCommand(method,...params);
+const result=await this._innerSendCommand(method,sessionId,...params);
 resolve(result);
 }catch(err){
 reject(err);
@@ -22422,16 +23174,28 @@ clearTimeout(asyncTimeout);
 
 
 
+sendCommand(method,...params){
+return this.sendCommandToSession(method,undefined,...params);
+}
 
-_innerSendCommand(method,...params){
+
+
+
+
+
+
+
+
+
+_innerSendCommand(method,sessionId,...params){
 const domainCommand=/^(\w+)\.(enable|disable)$/.exec(method);
 if(domainCommand){
 const enable=domainCommand[2]==='enable';
-if(!this._shouldToggleDomain(domainCommand[1],enable)){
+if(!this._shouldToggleDomain(domainCommand[1],sessionId,enable)){
 return Promise.resolve();
 }
 }
-return this._connection.sendCommand(method,...params);
+return this._connection.sendCommand(method,sessionId,...params);
 }
 
 
@@ -22521,7 +23285,11 @@ this.setNextProtocolTimeout(timeout);
 const response=await this.sendCommand('Runtime.evaluate',evaluationParams);
 if(response.exceptionDetails){
 
-return Promise.reject(new Error(`Evaluation exception: ${response.exceptionDetails.text}`));
+
+const errorMessage=response.exceptionDetails.exception?
+response.exceptionDetails.exception.description:
+response.exceptionDetails.text;
+return Promise.reject(new Error(`Evaluation exception: ${errorMessage}`));
 }
 
 if(response.result===undefined){
@@ -23121,6 +23889,7 @@ await this._clearIsolatedContextId();
 
 
 await this.sendCommand('Target.setAutoAttach',{
+flatten:true,
 autoAttach:true,
 
 waitForDebuggerOnStart:true});
@@ -23130,7 +23899,7 @@ await this.sendCommand('Page.enable');
 await this.sendCommand('Page.setLifecycleEventsEnabled',{enabled:true});
 await this.sendCommand('Emulation.setScriptExecutionDisabled',{value:disableJS});
 
-const waitforPageNavigateCmd=this._innerSendCommand('Page.navigate',{url});
+const waitforPageNavigateCmd=this._innerSendCommand('Page.navigate',undefined,{url});
 
 if(waitForNavigated){
 await this._waitForFrameNavigated();
@@ -23230,7 +23999,7 @@ selector});
 if(targetNode.nodeId===0){
 return null;
 }
-return new Element(targetNode,this);
+return new LHElement(targetNode,this);
 }
 
 
@@ -23250,7 +24019,7 @@ selector});
 const elementList=[];
 targetNodeList.nodeIds.forEach(nodeId=>{
 if(nodeId!==0){
-elementList.push(new Element({nodeId},this));
+elementList.push(new LHElement({nodeId},this));
 }
 });
 return elementList;
@@ -23266,7 +24035,7 @@ getElementsInDocument(pierce=true){
 return this.getNodesInDocument(pierce).
 then(nodes=>nodes.
 filter(node=>node.nodeType===1).
-map(node=>new Element({nodeId:node.nodeId},this)));
+map(node=>new LHElement({nodeId:node.nodeId},this)));
 
 }
 
@@ -23356,7 +24125,7 @@ this.off('Tracing.dataCollected',dataListener);
 resolve({traceEvents});
 });
 
-return this.sendCommand('Tracing.end').catch(reject);
+this.sendCommand('Tracing.end').catch(reject);
 });
 }
 
@@ -23573,7 +24342,7 @@ await this.sendCommand('Page.enable');
 module.exports=Driver;
 
 }).call(this,require("buffer").Buffer);
-},{"../config/constants.js":45,"../lib/element.js":65,"../lib/emulation.js":66,"../lib/lh-error.js":72,"../lib/network-recorder.js":75,"../lib/network-request.js":76,"../lib/page-functions.js":77,"../lib/url-shim.js":"url","./connections/connection.js":48,"./devtools-log.js":50,"buffer":102,"events":108,"lighthouse-logger":128}],52:[function(require,module,exports){
+},{"../config/constants.js":46,"../lib/emulation.js":66,"../lib/lh-element.js":71,"../lib/lh-error.js":72,"../lib/network-recorder.js":75,"../lib/network-request.js":76,"../lib/page-functions.js":77,"../lib/url-shim.js":"url","./connections/connection.js":49,"./devtools-log.js":51,"buffer":102,"events":108,"lighthouse-logger":125}],53:[function(require,module,exports){
 
 
 
@@ -23585,7 +24354,7 @@ const log=require('lighthouse-logger');
 const manifestParser=require('../lib/manifest-parser.js');
 const stacksGatherer=require('../lib/stack-collector.js');
 const LHError=require('../lib/lh-error.js');
-const URL=require('../lib/url-shim.js');
+const NetworkAnalyzer=require('../lib/dependency-graph/simulator/network-analyzer.js');
 const NetworkRecorder=require('../lib/network-recorder.js');
 const constants=require('../config/constants.js');
 const i18n=require('../lib/i18n/i18n.js');
@@ -23711,13 +24480,7 @@ log.timeEnd(status);
 
 
 
-
-static getNetworkError(url,networkRecords){
-const mainRecord=networkRecords.find(record=>{
-
-return URL.equalWithExcludedFragments(record.url,url);
-});
-
+static getNetworkError(mainRecord){
 if(!mainRecord){
 return new LHError(LHError.errors.NO_DOCUMENT_REQUEST);
 }else if(mainRecord.failed){
@@ -23749,28 +24512,27 @@ LHError.errors.ERRORED_DOCUMENT_REQUEST,
 
 
 
-static getInterstitialError(networkRecords){
+
+static getInterstitialError(mainRecord,networkRecords){
+
+if(!mainRecord)return undefined;
+
 const interstitialRequest=networkRecords.
 find(record=>record.documentURL.startsWith('chrome-error://'));
 
 if(!interstitialRequest)return undefined;
 
-const pageNetworkRecords=networkRecords.
-filter(record=>!URL.NON_NETWORK_PROTOCOLS.includes(record.protocol)&&
-!record.documentURL.startsWith('chrome-error://'));
 
 
 
+if(!mainRecord.failed)return undefined;
 
-if(!pageNetworkRecords.some(record=>record.failed))return undefined;
 
-
-const insecureRequest=pageNetworkRecords.find(record=>
-record.failed&&record.localizedFailDescription.startsWith('net::ERR_CERT'));
-if(insecureRequest){
+if(mainRecord.localizedFailDescription.startsWith('net::ERR_CERT')){
 return new LHError(LHError.errors.INSECURE_DOCUMENT_REQUEST,{securityMessages:
-insecureRequest.localizedFailDescription});
+mainRecord.localizedFailDescription});
 }
+
 
 return new LHError(LHError.errors.CHROME_INTERSTITIAL_ERROR);
 }
@@ -23784,8 +24546,15 @@ return new LHError(LHError.errors.CHROME_INTERSTITIAL_ERROR);
 
 
 static getPageLoadError(passContext,loadData,navigationError){
-const networkError=GatherRunner.getNetworkError(passContext.url,loadData.networkRecords);
-const interstitialError=GatherRunner.getInterstitialError(loadData.networkRecords);
+const{networkRecords}=loadData;
+
+let mainRecord;
+try{
+mainRecord=NetworkAnalyzer.findMainDocument(networkRecords,passContext.url);
+}catch(_){}
+
+const networkError=GatherRunner.getNetworkError(mainRecord);
+const interstitialError=GatherRunner.getInterstitialError(mainRecord,networkRecords);
 
 
 if(!passContext.driver.online)return;
@@ -24245,7 +25014,7 @@ return GatherRunner.collectArtifacts(gathererResults);
 
 module.exports=GatherRunner;
 
-},{"../config/constants.js":45,"../lib/i18n/i18n.js":68,"../lib/lh-error.js":72,"../lib/manifest-parser.js":73,"../lib/network-recorder.js":75,"../lib/stack-collector.js":80,"../lib/url-shim.js":"url","lighthouse-logger":128}],53:[function(require,module,exports){
+},{"../config/constants.js":46,"../lib/dependency-graph/simulator/network-analyzer.js":63,"../lib/i18n/i18n.js":67,"../lib/lh-error.js":72,"../lib/manifest-parser.js":73,"../lib/network-recorder.js":75,"../lib/stack-collector.js":80,"lighthouse-logger":125}],54:[function(require,module,exports){
 
 
 
@@ -24306,7 +25075,7 @@ afterPass(passContext,loadData){}}
 
 module.exports=Gatherer;
 
-},{}],54:[function(require,module,exports){
+},{}],55:[function(require,module,exports){
 
 
 
@@ -24378,7 +25147,7 @@ lighthouse.NetworkRecords=require('./computed/network-records.js');
 
 module.exports=lighthouse;
 
-},{"./audits/audit.js":3,"./computed/network-records.js":33,"./config/config.js":44,"./gather/connections/cri.js":101,"./gather/driver.js":51,"./gather/gatherers/gatherer.js":53,"./runner.js":90,"lighthouse-logger":128}],55:[function(require,module,exports){
+},{"./audits/audit.js":3,"./computed/network-records.js":34,"./config/config.js":45,"./gather/connections/cri.js":101,"./gather/driver.js":52,"./gather/gatherers/gatherer.js":54,"./runner.js":90,"lighthouse-logger":125}],56:[function(require,module,exports){
 
 
 
@@ -24461,7 +25230,7 @@ return isEqual(objA,objB);
 
 module.exports=ArbitraryEqualityMap;
 
-},{"lodash.isequal":129}],56:[function(require,module,exports){
+},{"lodash.isequal":126}],57:[function(require,module,exports){
 (function(process){
 
 
@@ -24757,7 +25526,7 @@ stringifyReplacer};
 
 
 }).call(this,require('_process'));
-},{"../computed/load-simulator.js":10,"../computed/network-analysis.js":32,"../lib/lh-error.js":72,"./dependency-graph/simulator/simulator.js":63,"./lantern-trace-saver.js":71,"./traces/pwmetrics-events.js":87,"_process":145,"fs":101,"lighthouse-logger":128,"mkdirp":101,"path":143,"rimraf":101,"stream":170}],57:[function(require,module,exports){
+},{"../computed/load-simulator.js":10,"../computed/network-analysis.js":33,"../lib/lh-error.js":72,"./dependency-graph/simulator/simulator.js":64,"./lantern-trace-saver.js":70,"./traces/pwmetrics-events.js":87,"_process":142,"fs":101,"lighthouse-logger":125,"mkdirp":101,"path":140,"rimraf":101,"stream":167}],58:[function(require,module,exports){
 
 
 
@@ -25072,7 +25841,7 @@ CPU:'cpu'};
 
 module.exports=BaseNode;
 
-},{}],58:[function(require,module,exports){
+},{}],59:[function(require,module,exports){
 
 
 
@@ -25160,7 +25929,7 @@ return new CPUNode(this._event,this._childEvents);
 
 module.exports=CPUNode;
 
-},{"./base-node.js":57}],59:[function(require,module,exports){
+},{"./base-node.js":58}],60:[function(require,module,exports){
 
 
 
@@ -25244,7 +26013,7 @@ return node;
 
 module.exports=NetworkNode;
 
-},{"../network-request.js":76,"./base-node.js":57}],60:[function(require,module,exports){
+},{"../network-request.js":76,"./base-node.js":58}],61:[function(require,module,exports){
 
 
 
@@ -25415,7 +26184,7 @@ this._connectionsInUse.delete(connection);
 }};
 
 
-},{"./network-analyzer.js":62,"./tcp-connection.js":64}],61:[function(require,module,exports){
+},{"./network-analyzer.js":63,"./tcp-connection.js":65}],62:[function(require,module,exports){
 
 
 
@@ -25490,7 +26259,7 @@ DNSCache.RTT_MULTIPLIER=DNS_RESOLUTION_RTT_MULTIPLIER;
 
 module.exports=DNSCache;
 
-},{}],62:[function(require,module,exports){
+},{}],63:[function(require,module,exports){
 
 
 
@@ -25967,7 +26736,7 @@ module.exports=NetworkAnalyzer;
 
 
 
-},{"../../network-request.js":76,"../../url-shim.js":"url"}],63:[function(require,module,exports){
+},{"../../network-request.js":76,"../../url-shim.js":"url"}],64:[function(require,module,exports){
 
 
 
@@ -26478,7 +27247,7 @@ module.exports=Simulator;
 
 
 
-},{"../../../config/constants.js":45,"../base-node.js":57,"./connection-pool.js":60,"./dns-cache.js":61,"./tcp-connection.js":64}],64:[function(require,module,exports){
+},{"../../../config/constants.js":46,"../base-node.js":58,"./connection-pool.js":61,"./dns-cache.js":62,"./tcp-connection.js":65}],65:[function(require,module,exports){
 
 
 
@@ -26686,80 +27455,7 @@ module.exports=TcpConnection;
 
 
 
-},{}],65:[function(require,module,exports){
-
-
-
-
-
-'use strict';
-
-const Driver=require('../gather/driver.js');
-
-class Element{
-
-
-
-
-constructor(element,driver){
-if(!element||!driver){
-throw Error('Driver and element required to create Element');
-}
-this.driver=driver;
-this.element=element;
-}
-
-
-
-
-
-getAttribute(name){
-return this.driver.
-sendCommand('DOM.getAttributes',{
-nodeId:this.element.nodeId}).
-
-
-
-
-then(resp=>{
-const attrIndex=resp.attributes.indexOf(name);
-if(attrIndex===-1){
-return null;
-}
-
-return resp.attributes[attrIndex+1];
-});
-}
-
-
-
-
-getNodeId(){
-return this.element.nodeId;
-}
-
-
-
-
-
-getProperty(propName){
-return this.driver.
-sendCommand('DOM.resolveNode',{
-nodeId:this.element.nodeId}).
-
-then(resp=>{
-if(!resp.object.objectId){
-return null;
-}
-return this.driver.getObjectProperty(resp.object.objectId,propName);
-}).
-catch(()=>null);
-}}
-
-
-module.exports=Element;
-
-},{"../gather/driver.js":51}],66:[function(require,module,exports){
+},{}],66:[function(require,module,exports){
 
 
 
@@ -26928,1870 +27624,6 @@ DESKTOP_USERAGENT};
 
 
 },{}],67:[function(require,module,exports){
-module.exports={
-"lighthouse-core/audits/accessibility/accesskeys.js | description":{
-"message":"Access keys let users quickly focus a part of the page. For proper navigation, each access key must be unique. [Learn more](https://dequeuniversity.com/rules/axe/3.1/accesskeys?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/accesskeys.js | failureTitle":{
-"message":"`[accesskey]` values are not unique",
-"description":"Title of an accesibility audit that evaluates if the ARIA HTML attributes are misaligned with the aria-role HTML attribute specificed on the element, such mismatches are invalid. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/accesskeys.js | title":{
-"message":"`[accesskey]` values are unique",
-"description":"Title of an accesibility audit that evaluates if the accesskey HTML attribute values are unique across all elements. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/aria-allowed-attr.js | description":{
-"message":"Each ARIA `role` supports a specific subset of `aria-*` attributes. Mismatching these invalidates the `aria-*` attributes. [Learn more](https://dequeuniversity.com/rules/axe/3.1/aria-allowed-attr?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/aria-allowed-attr.js | failureTitle":{
-"message":"`[aria-*]` attributes do not match their roles",
-"description":"Title of an accesibility audit that evaluates if the ARIA HTML attributes are misaligned with the aria-role HTML attribute specificed on the element, such mismatches are invalid. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/aria-allowed-attr.js | title":{
-"message":"`[aria-*]` attributes match their roles",
-"description":"Title of an accesibility audit that evaluates if the ARIA HTML attributes are misaligned with the aria-role HTML attribute specificed on the element, such mismatches are invalid. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/aria-required-attr.js | description":{
-"message":"Some ARIA roles have required attributes that describe the state of the element to screen readers. [Learn more](https://dequeuniversity.com/rules/axe/3.1/aria-required-attr?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/aria-required-attr.js | failureTitle":{
-"message":"`[role]`s do not have all required `[aria-*]` attributes",
-"description":"Title of an accesibility audit that evaluates if all elements with the aria-role attribute have the other corresponding ARIA attributes set as well. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/aria-required-attr.js | title":{
-"message":"`[role]`s have all required `[aria-*]` attributes",
-"description":"Title of an accesibility audit that evaluates if all elements with the aria-role attribute have the other corresponding ARIA attributes set as well. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/aria-required-children.js | description":{
-"message":"Some ARIA parent roles must contain specific child roles to perform their intended accessibility functions. [Learn more](https://dequeuniversity.com/rules/axe/3.1/aria-required-children?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/aria-required-children.js | failureTitle":{
-"message":"Elements with `[role]` that require specific children `[role]`s, are missing.",
-"description":"Title of an accesibility audit that evaluates if the elements with an aria-role that require child elements have the required children. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/aria-required-children.js | title":{
-"message":"Elements with `[role]` that require specific children `[role]`s, are present",
-"description":"Title of an accesibility audit that evaluates if the elements with an aria-role that require child elements have the required children. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/aria-required-parent.js | description":{
-"message":"Some ARIA child roles must be contained by specific parent roles to properly perform their intended accessibility functions. [Learn more](https://dequeuniversity.com/rules/axe/3.1/aria-required-parent?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/aria-required-parent.js | failureTitle":{
-"message":"`[role]`s are not contained by their required parent element",
-"description":"Title of an accesibility audit that evaluates valid aria-role usage. Some ARIA roles require that elements must be a child of specific parent element. This audit checks that when those roles are used, the element with the role is in fact a child of the required parent. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/aria-required-parent.js | title":{
-"message":"`[role]`s are contained by their required parent element",
-"description":"Title of an accesibility audit that evaluates valid aria-role usage. Some ARIA roles require that elements must be a child of specific parent element. This audit checks that when those roles are used, the element with the role is in fact a child of the required parent. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/aria-roles.js | description":{
-"message":"ARIA roles must have valid values in order to perform their intended accessibility functions. [Learn more](https://dequeuniversity.com/rules/axe/3.1/aria-roles?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/aria-roles.js | failureTitle":{
-"message":"`[role]` values are not valid",
-"description":"Title of an accesibility audit that evaluates if all elements have valid aria-role HTML attributes. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/aria-roles.js | title":{
-"message":"`[role]` values are valid",
-"description":"Title of an accesibility audit that evaluates if all elements have valid aria-role HTML attributes. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/aria-valid-attr-value.js | description":{
-"message":"Assistive technologies, like screen readers, can't interpret ARIA attributes with invalid values. [Learn more](https://dequeuniversity.com/rules/axe/3.1/aria-valid-attr-value?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/aria-valid-attr-value.js | failureTitle":{
-"message":"`[aria-*]` attributes do not have valid values",
-"description":"Title of an accesibility audit that evaluates if all elements that have an ARIA HTML attribute have a valid value for that attribute. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/aria-valid-attr-value.js | title":{
-"message":"`[aria-*]` attributes have valid values",
-"description":"Title of an accesibility audit that evaluates if all elements that have an ARIA HTML attribute have a valid value for that attribute. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/aria-valid-attr.js | description":{
-"message":"Assistive technologies, like screen readers, can't interpret ARIA attributes with invalid names. [Learn more](https://dequeuniversity.com/rules/axe/3.1/aria-valid-attr?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/aria-valid-attr.js | failureTitle":{
-"message":"`[aria-*]` attributes are not valid or misspelled",
-"description":"Title of an accesibility audit that evaluates if all elements with ARIA HTML attributes have spelled the name of attribute correctly. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/aria-valid-attr.js | title":{
-"message":"`[aria-*]` attributes are valid and not misspelled",
-"description":"Title of an accesibility audit that evaluates if all elements with ARIA HTML attributes have spelled the name of attribute correctly. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/audio-caption.js | description":{
-"message":"Captions make audio elements usable for deaf or hearing-impaired users, providing critical information such as who is talking, what they're saying, and other non-speech information. [Learn more](https://dequeuniversity.com/rules/axe/3.1/audio-caption?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/audio-caption.js | failureTitle":{
-"message":"`<audio>` elements are missing a `<track>` element with `[kind=\"captions\"]`.",
-"description":"Title of an accesibility audit that evaluates if all audio elements have a track element that has captions for screen readers. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/audio-caption.js | title":{
-"message":"`<audio>` elements contain a `<track>` element with `[kind=\"captions\"]`",
-"description":"Title of an accesibility audit that evaluates if all audio elements have a track element that has captions for screen readers. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/axe-audit.js | failingElementsHeader":{
-"message":"Failing Elements",
-"description":"Label of a table column that identifies HTML elements that have failed an audit."},
-
-"lighthouse-core/audits/accessibility/button-name.js | description":{
-"message":"When a button doesn't have an accessible name, screen readers announce it as \"button\", making it unusable for users who rely on screen readers. [Learn more](https://dequeuniversity.com/rules/axe/3.1/button-name?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/button-name.js | failureTitle":{
-"message":"Buttons do not have an accessible name",
-"description":"Title of an accesibility audit that evaluates if all button elements have names accessible to screen readers. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/button-name.js | title":{
-"message":"Buttons have an accessible name",
-"description":"Title of an accesibility audit that evaluates if all button elements have names accessible to screen readers. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/bypass.js | description":{
-"message":"Adding ways to bypass repetitive content lets keyboard users navigate the page more efficiently. [Learn more](https://dequeuniversity.com/rules/axe/3.1/bypass?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/bypass.js | failureTitle":{
-"message":"The page does not contain a heading, skip link, or landmark region",
-"description":"Title of an accesibility audit that evaluates if the page has elements that let screen reader users skip over repetitive content. `heading`, `skip link`, and `landmark region` are technical terms for the elements that enable quick page navigation. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/bypass.js | title":{
-"message":"The page contains a heading, skip link, or landmark region",
-"description":"Title of an accesibility audit that evaluates if the page has elements that let screen reader users skip over repetitive content. `heading`, `skip link`, and `landmark region` are technical terms for the elements that enable quick page navigation. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/color-contrast.js | description":{
-"message":"Low-contrast text is difficult or impossible for many users to read. [Learn more](https://dequeuniversity.com/rules/axe/3.1/color-contrast?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/color-contrast.js | failureTitle":{
-"message":"Background and foreground colors do not have a sufficient contrast ratio.",
-"description":"Title of an accesibility audit that evaluates if all foreground colors are distinct enough from their background colors to be legible for users. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/color-contrast.js | title":{
-"message":"Background and foreground colors have a sufficient contrast ratio",
-"description":"Title of an accesibility audit that evaluates if all foreground colors are distinct enough from their background colors to be legible for users. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/definition-list.js | description":{
-"message":"When definition lists are not properly marked up, screen readers may produce confusing or inaccurate output. [Learn more](https://dequeuniversity.com/rules/axe/3.1/definition-list?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/definition-list.js | failureTitle":{
-"message":"`<dl>`'s do not contain only properly-ordered `<dt>` and `<dd>` groups, `<script>` or `<template>` elements.",
-"description":"Title of an accesibility audit that evaluates if all the definition list elements have valid markup for screen readers. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/definition-list.js | title":{
-"message":"`<dl>`'s contain only properly-ordered `<dt>` and `<dd>` groups, `<script>` or `<template>` elements.",
-"description":"Title of an accesibility audit that evaluates if all the definition list elements have valid markup for screen readers. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/dlitem.js | description":{
-"message":"Definition list items (`<dt>` and `<dd>`) must be wrapped in a parent `<dl>` element to ensure that screen readers can properly announce them. [Learn more](https://dequeuniversity.com/rules/axe/3.1/dlitem?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/dlitem.js | failureTitle":{
-"message":"Definition list items are not wrapped in `<dl>` elements",
-"description":"Title of an accesibility audit that evaluates if all definition list item elements (`<dt>`/`<dd>`) have a definition list parent element (`<dl>`). This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/dlitem.js | title":{
-"message":"Definition list items are wrapped in `<dl>` elements",
-"description":"Title of an accesibility audit that evaluates if all definition list item elements (`<dt>`/`<dd>`) have a definition list parent element (`<dl>`). This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/document-title.js | description":{
-"message":"The title gives screen reader users an overview of the page, and search engine users rely on it heavily to determine if a page is relevant to their search. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/title).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/document-title.js | failureTitle":{
-"message":"Document doesn't have a `<title>` element",
-"description":"Title of an accesibility audit that evaluates if the page has a <title> element that describes the page. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/document-title.js | title":{
-"message":"Document has a `<title>` element",
-"description":"Title of an accesibility audit that evaluates if the page has a <title> element that describes the page. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/duplicate-id.js | description":{
-"message":"The value of an id attribute must be unique to prevent other instances from being overlooked by assistive technologies. [Learn more](https://dequeuniversity.com/rules/axe/3.1/duplicate-id?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/duplicate-id.js | failureTitle":{
-"message":"`[id]` attributes on the page are not unique",
-"description":"Title of an accesibility audit that evaluates if there are any duplicate id HTML attributes on the page. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/duplicate-id.js | title":{
-"message":"`[id]` attributes on the page are unique",
-"description":"Title of an accesibility audit that evaluates if there are any duplicate id HTML attributes on the page. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/frame-title.js | description":{
-"message":"Screen reader users rely on frame titles to describe the contents of frames. [Learn more](https://dequeuniversity.com/rules/axe/3.1/frame-title?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/frame-title.js | failureTitle":{
-"message":"`<frame>` or `<iframe>` elements do not have a title",
-"description":"Title of an accesibility audit that evaluates if all `<frame>` and `<iframe>` elements on the page have a title HTML attribute to describe their contents. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/frame-title.js | title":{
-"message":"`<frame>` or `<iframe>` elements have a title",
-"description":"Title of an accesibility audit that evaluates if all `<frame>` and `<iframe>` elements on the page have a title HTML attribute to describe their contents. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/html-has-lang.js | description":{
-"message":"If a page doesn't specify a lang attribute, a screen reader assumes that the page is in the default language that the user chose when setting up the screen reader. If the page isn't actually in the default language, then the screen reader might not announce the page's text correctly. [Learn more](https://dequeuniversity.com/rules/axe/3.1/html-has-lang?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/html-has-lang.js | failureTitle":{
-"message":"`<html>` element does not have a `[lang]` attribute",
-"description":"Title of an accesibility audit that evaluates if the root HTML tag has a lang attribute identifying the page's language. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/html-has-lang.js | title":{
-"message":"`<html>` element has a `[lang]` attribute",
-"description":"Title of an accesibility audit that evaluates if the root HTML tag has a lang attribute identifying the page's language. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/html-lang-valid.js | description":{
-"message":"Specifying a valid [BCP 47 language](https://www.w3.org/International/questions/qa-choosing-language-tags#question) helps screen readers announce text properly. [Learn more](https://dequeuniversity.com/rules/axe/3.1/valid-lang?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/html-lang-valid.js | failureTitle":{
-"message":"`<html>` element does not have a valid value for its `[lang]` attribute.",
-"description":"Title of an accesibility audit that evaluates if the value for root HTML tag's lang attribute is a valid BCP 47 language. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/html-lang-valid.js | title":{
-"message":"`<html>` element has a valid value for its `[lang]` attribute",
-"description":"Title of an accesibility audit that evaluates if the value for root HTML tag's lang attribute is a valid BCP 47 language. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/image-alt.js | description":{
-"message":"Informative elements should aim for short, descriptive alternate text. Decorative elements can be ignored with an empty alt attribute. [Learn more](https://dequeuniversity.com/rules/axe/3.1/image-alt?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/image-alt.js | failureTitle":{
-"message":"Image elements do not have `[alt]` attributes",
-"description":"Title of an accesibility audit that evaluates if all image elements have the alt HTML attribute to describe their contents. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/image-alt.js | title":{
-"message":"Image elements have `[alt]` attributes",
-"description":"Title of an accesibility audit that evaluates if all image elements have the alt HTML attribute to describe their contents. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/input-image-alt.js | description":{
-"message":"When an image is being used as an `<input>` button, providing alternative text can help screen reader users understand the purpose of the button. [Learn more](https://dequeuniversity.com/rules/axe/3.1/input-image-alt?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/input-image-alt.js | failureTitle":{
-"message":"`<input type=\"image\">` elements do not have `[alt]` text",
-"description":"Title of an accesibility audit that evaluates if all input elements of type image have an alt HTML attribute to describe their contents. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/input-image-alt.js | title":{
-"message":"`<input type=\"image\">` elements have `[alt]` text",
-"description":"Title of an accesibility audit that evaluates if all input elements of type image have an alt HTML attribute to describe their contents. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/label.js | description":{
-"message":"Labels ensure that form controls are announced properly by assistive technologies, like screen readers. [Learn more](https://dequeuniversity.com/rules/axe/3.1/label?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/label.js | failureTitle":{
-"message":"Form elements do not have associated labels",
-"description":"Title of an accesibility audit that evaluates if all form elements have corresponding label elements. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/label.js | title":{
-"message":"Form elements have associated labels",
-"description":"Title of an accesibility audit that evaluates if all form elements have corresponding label elements. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/layout-table.js | description":{
-"message":"A table being used for layout purposes should not include data elements, such as the th or caption elements or the summary attribute, because this can create a confusing experience for screen reader users. [Learn more](https://dequeuniversity.com/rules/axe/3.1/layout-table?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/layout-table.js | failureTitle":{
-"message":"Presentational `<table>` elements do not avoid using `<th>`, `<caption>` or the `[summary]` attribute.",
-"description":"Title of an accesibility audit that evaluates if a table intended for layout contains data annotations as it can be confusing for screen readers. This is evaluated by checking if tables with the ARIA role of `presentation` or `none` contain any data elements such as table headers (`<th>`). This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/layout-table.js | title":{
-"message":"Presentational `<table>` elements avoid using `<th>`, `<caption>` or the `[summary]` attribute.",
-"description":"Title of an accesibility audit that evaluates if a table intended for layout contains data annotations as it can be confusing for screen readers. This is evaluated by checking if tables with the ARIA role of `presentation` or `none` contain any data elements such as table headers (`<th>`). This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/link-name.js | description":{
-"message":"Link text (and alternate text for images, when used as links) that is discernible, unique, and focusable improves the navigation experience for screen reader users. [Learn more](https://dequeuniversity.com/rules/axe/3.1/link-name?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/link-name.js | failureTitle":{
-"message":"Links do not have a discernible name",
-"description":"Title of an accesibility audit that evaluates if all link elements have a non-generic name to screen readers. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/link-name.js | title":{
-"message":"Links have a discernible name",
-"description":"Title of an accesibility audit that evaluates if all link elements have a non-generic name to screen readers. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/list.js | description":{
-"message":"Screen readers have a specific way of announcing lists. Ensuring proper list structure aids screen reader output. [Learn more](https://dequeuniversity.com/rules/axe/3.1/list?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/list.js | failureTitle":{
-"message":"Lists do not contain only `<li>` elements and script supporting elements (`<script>` and `<template>`).",
-"description":"Title of an accesibility audit that evaluates if all list elements have a valid structure containing only list items. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/list.js | title":{
-"message":"Lists contain only `<li>` elements and script supporting elements (`<script>` and `<template>`).",
-"description":"Title of an accesibility audit that evaluates if all list elements have a valid structure containing only list items. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/listitem.js | description":{
-"message":"Screen readers require list items (`<li>`) to be contained within a parent `<ul>` or `<ol>` to be announced properly. [Learn more](https://dequeuniversity.com/rules/axe/3.1/listitem?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/listitem.js | failureTitle":{
-"message":"List items (`<li>`) are not contained within `<ul>` or `<ol>` parent elements.",
-"description":"Title of an accesibility audit that evaluates if any list item elements do not have list parent elements. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/listitem.js | title":{
-"message":"List items (`<li>`) are contained within `<ul>` or `<ol>` parent elements",
-"description":"Title of an accesibility audit that evaluates if any list item elements do not have list parent elements. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/meta-refresh.js | description":{
-"message":"Users do not expect a page to refresh automatically, and doing so will move focus back to the top of the page. This may create a frustrating or confusing experience. [Learn more](https://dequeuniversity.com/rules/axe/3.1/meta-refresh?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/meta-refresh.js | failureTitle":{
-"message":"The document uses `<meta http-equiv=\"refresh\">`",
-"description":"Title of an accesibility audit that evaluates if the page uses a meta tag that refreshes the page automatically. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/meta-refresh.js | title":{
-"message":"The document does not use `<meta http-equiv=\"refresh\">`",
-"description":"Title of an accesibility audit that evaluates if the page uses a meta tag that refreshes the page automatically. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/meta-viewport.js | description":{
-"message":"Disabling zooming is problematic for users with low vision who rely on screen magnification to properly see the contents of a web page. [Learn more](https://dequeuniversity.com/rules/axe/3.1/meta-viewport?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/meta-viewport.js | failureTitle":{
-"message":"`[user-scalable=\"no\"]` is used in the `<meta name=\"viewport\">` element or the `[maximum-scale]` attribute is less than 5.",
-"description":"Title of an accesibility audit that evaluates if the page has limited the scaling properties of the page in a way that harms users with low vision. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/meta-viewport.js | title":{
-"message":"`[user-scalable=\"no\"]` is not used in the `<meta name=\"viewport\">` element and the `[maximum-scale]` attribute is not less than 5.",
-"description":"Title of an accesibility audit that evaluates if the page has limited the scaling properties of the page in a way that harms users with low vision. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/object-alt.js | description":{
-"message":"Screen readers cannot translate non-text content. Adding alt text to `<object>` elements helps screen readers convey meaning to users. [Learn more](https://dequeuniversity.com/rules/axe/3.1/object-alt?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/object-alt.js | failureTitle":{
-"message":"`<object>` elements do not have `[alt]` text",
-"description":"Title of an accesibility audit that evaluates if all object elements have an alt HTML attribute that describes their contents. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/object-alt.js | title":{
-"message":"`<object>` elements have `[alt]` text",
-"description":"Title of an accesibility audit that evaluates if all object elements have an alt HTML attribute that describes their contents. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/tabindex.js | description":{
-"message":"A value greater than 0 implies an explicit navigation ordering. Although technically valid, this often creates frustrating experiences for users who rely on assistive technologies. [Learn more](https://dequeuniversity.com/rules/axe/3.1/tabindex?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/tabindex.js | failureTitle":{
-"message":"Some elements have a `[tabindex]` value greater than 0",
-"description":"Title of an accesibility audit that evaluates if any elements have custom tabindex HTML attributes that might frustrate users of assitive technology. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/tabindex.js | title":{
-"message":"No element has a `[tabindex]` value greater than 0",
-"description":"Title of an accesibility audit that evaluates if any elements have custom tabindex HTML attributes that might frustrate users of assitive technology. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/td-headers-attr.js | description":{
-"message":"Screen readers have features to make navigating tables easier. Ensuring `<td>` cells using the `[headers]` attribute only refer to other cells in the same table may improve the experience for screen reader users. [Learn more](https://dequeuniversity.com/rules/axe/3.1/td-headers-attr?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/td-headers-attr.js | failureTitle":{
-"message":"Cells in a `<table>` element that use the `[headers]` attribute refers to other cells of that same table.",
-"description":"Title of an accesibility audit that evaluates if all table cell elements in a table that use the headers HTML attribute use it correctly to refer to cells within the same table. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/td-headers-attr.js | title":{
-"message":"Cells in a `<table>` element that use the `[headers]` attribute only refer to other cells of that same table.",
-"description":"Title of an accesibility audit that evaluates if all table cell elements in a table that use the headers HTML attribute use it correctly to refer to cells within the same table. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/th-has-data-cells.js | description":{
-"message":"Screen readers have features to make navigating tables easier. Ensuring table headers always refer to some set of cells may improve the experience for screen reader users. [Learn more](https://dequeuniversity.com/rules/axe/3.1/th-has-data-cells?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/th-has-data-cells.js | failureTitle":{
-"message":"`<th>` elements and elements with `[role=\"columnheader\"/\"rowheader\"]` do not have data cells they describe.",
-"description":"Title of an accesibility audit that evaluates if all table header elements have children. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/th-has-data-cells.js | title":{
-"message":"`<th>` elements and elements with `[role=\"columnheader\"/\"rowheader\"]` have data cells they describe.",
-"description":"Title of an accesibility audit that evaluates if all table header elements have children. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/valid-lang.js | description":{
-"message":"Specifying a valid [BCP 47 language](https://www.w3.org/International/questions/qa-choosing-language-tags#question) on elements helps ensure that text is pronounced correctly by a screen reader. [Learn more](https://dequeuniversity.com/rules/axe/3.1/valid-lang?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/valid-lang.js | failureTitle":{
-"message":"`[lang]` attributes do not have a valid value",
-"description":"Title of an accesibility audit that evaluates if all lang HTML attributes are valid BCP 47 languages. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/valid-lang.js | title":{
-"message":"`[lang]` attributes have a valid value",
-"description":"Title of an accesibility audit that evaluates if all lang HTML attributes are valid BCP 47 languages. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/video-caption.js | description":{
-"message":"When a video provides a caption it is easier for deaf and hearing impaired users to access its information. [Learn more](https://dequeuniversity.com/rules/axe/3.1/video-caption?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/video-caption.js | failureTitle":{
-"message":"`<video>` elements do not contain a `<track>` element with `[kind=\"captions\"]`.",
-"description":"Title of an accesibility audit that evaluates if all video elements contain a child track element that has captions describing their audio. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/video-caption.js | title":{
-"message":"`<video>` elements contain a `<track>` element with `[kind=\"captions\"]`",
-"description":"Title of an accesibility audit that evaluates if all video elements contain a child track element that has captions describing their audio. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/accessibility/video-description.js | description":{
-"message":"Audio descriptions provide relevant information for videos that dialogue cannot, such as facial expressions and scenes. [Learn more](https://dequeuniversity.com/rules/axe/3.1/video-description?application=lighthouse).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should try to pass. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/accessibility/video-description.js | failureTitle":{
-"message":"`<video>` elements do not contain a `<track>` element with `[kind=\"description\"]`.",
-"description":"Title of an accesibility audit that evaluates if all video elements have child track elements that contain a description of the video content. This title is descriptive of the failing state and is shown to users when there is a failure that needs to be addressed."},
-
-"lighthouse-core/audits/accessibility/video-description.js | title":{
-"message":"`<video>` elements contain a `<track>` element with `[kind=\"description\"]`",
-"description":"Title of an accesibility audit that evaluates if all video elements have child track elements that contain a description of the video content. This title is descriptive of the successful state and is shown to users when no user action is required."},
-
-"lighthouse-core/audits/apple-touch-icon.js | description":{
-"message":"For ideal appearance on iOS when users add to the home screen, define an apple-touch-icon. It must point to a non-transparent 192px (or 180px) square PNG. [Learn More](https://developers.google.com/web/fundamentals/design-and-ux/browser-customization/).",
-"description":"Description of a Lighthouse audit that tells the user what having a valid apple-touch-icon does. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation. \"apple-touch-icon\" is an HTML attribute value and should not be translated."},
-
-"lighthouse-core/audits/apple-touch-icon.js | failureTitle":{
-"message":"Does not provide a valid `apple-touch-icon`",
-"description":"Title of a Lighthouse audit that tells the user that their site contains a vaild touch icon. This descriptive title is shown when the page does not contain a valid iOS touch icon. \"apple-touch-icon\" is an HTML attribute value and should not be translated."},
-
-"lighthouse-core/audits/apple-touch-icon.js | precomposedWarning":{
-"message":"`apple-touch-icon-precomposed` is out of date; `apple-touch-icon` is preferred.",
-"description":"Warning that HTML attribute `apple-touch-icon-precomposed` should not be used in favor of `apple-touch-icon`.  \"apple-touch-icon-precomposed\" and \"apple-touch-icon\" are HTML attribute values and should not be translated."},
-
-"lighthouse-core/audits/apple-touch-icon.js | title":{
-"message":"Provides a valid `apple-touch-icon`",
-"description":"Title of a Lighthouse audit that tells the user that their site contains a vaild touch icon. This descriptive title is shown when the page contains a valid iOS touch icon. \"apple-touch-icon\" is an HTML attribute value and should not be translated."},
-
-"lighthouse-core/audits/bootup-time.js | chromeExtensionsWarning":{
-"message":"Chrome extensions negatively affected this page's load performance. Try auditing the page in incognito mode or from a Chrome profile without extensions.",
-"description":"A message displayed in a Lighthouse audit result warning that Chrome extensions on the user's system substantially affected Lighthouse's measurements and instructs the user on how to run again without those extensions."},
-
-"lighthouse-core/audits/bootup-time.js | columnScriptEval":{
-"message":"Script Evaluation",
-"description":"Label for a time column in a data table; entries will be the number of milliseconds spent evaluating script for every script loaded by the page."},
-
-"lighthouse-core/audits/bootup-time.js | columnScriptParse":{
-"message":"Script Parse",
-"description":"Label for a time column in a data table; entries will be the number of milliseconds spent parsing script files for every script loaded by the page."},
-
-"lighthouse-core/audits/bootup-time.js | columnTotal":{
-"message":"Total CPU Time",
-"description":"Label for the total time column in a data table; entries will be the number of milliseconds spent executing per resource loaded by the page."},
-
-"lighthouse-core/audits/bootup-time.js | description":{
-"message":"Consider reducing the time spent parsing, compiling, and executing JS. You may find delivering smaller JS payloads helps with this. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/bootup).",
-"description":"Description of a Lighthouse audit that tells the user that they should reduce the amount of time spent executing javascript and one method of doing so. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/bootup-time.js | failureTitle":{
-"message":"Reduce JavaScript execution time",
-"description":"Title of a diagnostic audit that provides detail on the time spent executing javascript files during the load. This imperative title is shown to users when there is a significant amount of execution time that could be reduced."},
-
-"lighthouse-core/audits/bootup-time.js | title":{
-"message":"JavaScript execution time",
-"description":"Title of a diagnostic audit that provides detail on the time spent executing javascript files during the load. This descriptive title is shown to users when the amount is acceptable and no user action is required."},
-
-"lighthouse-core/audits/byte-efficiency/efficient-animated-content.js | description":{
-"message":"Large GIFs are inefficient for delivering animated content. Consider using MPEG4/WebM videos for animations and PNG/WebP for static images instead of GIF to save network bytes. [Learn more](https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/replace-animated-gifs-with-video/)",
-"description":"Description of a Lighthouse audit that tells the user *why* they should use video instead of GIF format for delivering animated content. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/byte-efficiency/efficient-animated-content.js | title":{
-"message":"Use video formats for animated content",
-"description":"Imperative title of a Lighthouse audit that tells the user to use video formats rather than animated GIFs, which are wasteful. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/byte-efficiency/offscreen-images.js | description":{
-"message":"Consider lazy-loading offscreen and hidden images after all critical resources have finished loading to lower time to interactive. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/offscreen-images).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should defer loading offscreen images. Offscreen images are images located outside of the visible browser viewport. As they are unseen by the user and slow down page load, they should be loaded later, closer to when the user is going to see them. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/byte-efficiency/offscreen-images.js | title":{
-"message":"Defer offscreen images",
-"description":"Imperative title of a Lighthouse audit that tells the user to defer loading offscreen images. Offscreen images are images located outside of the visible browser viewport. As they are unseen by the user and slow down page load, they should be loaded later, closer to when the user is going to see them. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/byte-efficiency/render-blocking-resources.js | description":{
-"message":"Resources are blocking the first paint of your page. Consider delivering critical JS/CSS inline and deferring all non-critical JS/styles. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/blocking-resources).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should reduce or remove network resources that block the initial render of the page. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/byte-efficiency/render-blocking-resources.js | title":{
-"message":"Eliminate render-blocking resources",
-"description":"Imperative title of a Lighthouse audit that tells the user to reduce or remove network resources that block the initial render of the page. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/byte-efficiency/total-byte-weight.js | description":{
-"message":"Large network payloads cost users real money and are highly correlated with long load times. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/network-payloads).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should reduce the size of the network resources required by the page. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/byte-efficiency/total-byte-weight.js | displayValue":{
-"message":"Total size was {totalBytes, number, bytes} KB",
-"description":"Used to summarize the total byte size of the page and all its network requests. The `{totalBytes}` placeholder will be replaced with the total byte sizes, shown in kilobytes (e.g. 142 KB)"},
-
-"lighthouse-core/audits/byte-efficiency/total-byte-weight.js | failureTitle":{
-"message":"Avoid enormous network payloads",
-"description":"Title of a diagnostic audit that provides detail on large network resources required during page load. 'Payloads' is roughly equivalent to 'resources'. This imperative title is shown to users when there is a significant amount of execution time that could be reduced."},
-
-"lighthouse-core/audits/byte-efficiency/total-byte-weight.js | title":{
-"message":"Avoids enormous network payloads",
-"description":"Title of a diagnostic audit that provides detail on large network resources required during page load. 'Payloads' is roughly equivalent to 'resources'. This descriptive title is shown to users when the amount is acceptable and no user action is required."},
-
-"lighthouse-core/audits/byte-efficiency/unminified-css.js | description":{
-"message":"Minifying CSS files can reduce network payload sizes. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/minify-css).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should minify (remove whitespace) the page's CSS code. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/byte-efficiency/unminified-css.js | title":{
-"message":"Minify CSS",
-"description":"Imperative title of a Lighthouse audit that tells the user to minify (remove whitespace) the page's CSS code. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/byte-efficiency/unminified-javascript.js | description":{
-"message":"Minifying JavaScript files can reduce payload sizes and script parse time. [Learn more](https://developers.google.com/speed/docs/insights/MinifyResources).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should minify the page’s JS code to reduce file size. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/byte-efficiency/unminified-javascript.js | title":{
-"message":"Minify JavaScript",
-"description":"Imperative title of a Lighthouse audit that tells the user to minify the page’s JS code to reduce file size. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/byte-efficiency/unused-css-rules.js | description":{
-"message":"Remove dead rules from stylesheets and defer the loading of CSS not used for above-the-fold content to reduce unnecessary bytes consumed by network activity. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/unused-css).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should defer loading any content in CSS that isn’t needed at page load. This is displayed after a user expands the section to see more. No word length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/byte-efficiency/unused-css-rules.js | title":{
-"message":"Remove unused CSS",
-"description":"Imperative title of a Lighthouse audit that tells the user to remove content from their CSS that isn’t needed immediately and instead load that content at a later time. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/byte-efficiency/unused-javascript.js | description":{
-"message":"Remove unused JavaScript to reduce bytes consumed by network activity.",
-"description":"Description of a Lighthouse audit that tells the user *why* they should remove JavaScript that is never needed/evaluated by the browser. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/byte-efficiency/unused-javascript.js | title":{
-"message":"Remove unused JavaScript",
-"description":"Imperative title of a Lighthouse audit that tells the user to remove JavaScript that is never evaluated during page load. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/byte-efficiency/uses-long-cache-ttl.js | description":{
-"message":"A long cache lifetime can speed up repeat visits to your page. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/cache-policy).",
-"description":"Description of a Lighthouse audit that tells the user *why* they need to adopt a long cache lifetime policy. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/byte-efficiency/uses-long-cache-ttl.js | displayValue":{
-"message":"{itemCount, plural,\n    =1 {1 resource found}\n    other {# resources found}\n    }",
-"description":"[ICU Syntax] Label for the audit identifying network resources with inefficient cache values. Clicking this will expand the audit to show the resources."},
-
-"lighthouse-core/audits/byte-efficiency/uses-long-cache-ttl.js | failureTitle":{
-"message":"Serve static assets with an efficient cache policy",
-"description":"Title of a diagnostic audit that provides details on the any page resources that could have been served with more efficient cache policies. Cache refers to browser disk cache, which keeps old versions of network resources around for future use. This imperative title is shown to users when there is a significant amount of assets served with poor cache policies."},
-
-"lighthouse-core/audits/byte-efficiency/uses-long-cache-ttl.js | title":{
-"message":"Uses efficient cache policy on static assets",
-"description":"Title of a diagnostic audit that provides detail on the cache policy applies to the page's static assets. Cache refers to browser disk cache, which keeps old versions of network resources around for future use. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/byte-efficiency/uses-optimized-images.js | description":{
-"message":"Optimized images load faster and consume less cellular data. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/optimize-images).",
-"description":"Description of a Lighthouse audit that tells the user *why* they need to efficiently encode images. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/byte-efficiency/uses-optimized-images.js | title":{
-"message":"Efficiently encode images",
-"description":"Imperative title of a Lighthouse audit that tells the user to encode images with optimization (better compression). This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/byte-efficiency/uses-responsive-images.js | description":{
-"message":"Serve images that are appropriately-sized to save cellular data and improve load time. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/oversized-images).",
-"description":"Description of a Lighthouse audit that tells the user *why* they need to serve appropriately sized images. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/byte-efficiency/uses-responsive-images.js | title":{
-"message":"Properly size images",
-"description":"Imperative title of a Lighthouse audit that tells the user to resize images to match the display dimensions. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/byte-efficiency/uses-text-compression.js | description":{
-"message":"Text-based resources should be served with compression (gzip, deflate or brotli) to minimize total network bytes. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/text-compression).",
-"description":"Description of a Lighthouse audit that tells the user *why* their text-based resources should be served with compression (like gzip). This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/byte-efficiency/uses-text-compression.js | title":{
-"message":"Enable text compression",
-"description":"Imperative title of a Lighthouse audit that tells the user to enable text compression (like gzip) in order to enhance the performance of a page. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/byte-efficiency/uses-webp-images.js | description":{
-"message":"Image formats like JPEG 2000, JPEG XR, and WebP often provide better compression than PNG or JPEG, which means faster downloads and less data consumption. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/webp).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should use newer and more efficient image formats. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/byte-efficiency/uses-webp-images.js | title":{
-"message":"Serve images in next-gen formats",
-"description":"Imperative title of a Lighthouse audit that tells the user to serve images in newer and more efficient image formats in order to enhance the performance of a page. A non-modern image format was designed 20+ years ago. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/critical-request-chains.js | description":{
-"message":"The Critical Request Chains below show you what resources are loaded with a high priority. Consider reducing the length of chains, reducing the download size of resources, or deferring the download of unnecessary resources to improve page load. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/critical-request-chains).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should reduce the depth of critical network requests to enhance initial load of a page . This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/critical-request-chains.js | displayValue":{
-"message":"{itemCount, plural,\n    =1 {1 chain found}\n    other {# chains found}\n    }",
-"description":"[ICU Syntax] Label for an audit identifying the number of sequences of dependent network requests used to load the page."},
-
-"lighthouse-core/audits/critical-request-chains.js | title":{
-"message":"Minimize Critical Requests Depth",
-"description":"Imperative title of a Lighthouse audit that tells the user to reduce the depth of critical network requests to enhance initial load of a page. Critical request chains are series of dependent network requests that are important for page rendering. For example, here's a 4-request-deep chain: The biglogo.jpg image is required, but is requested via the styles.css style code, which is requested by the initialize.js javascript, which is requested by the page's HTML. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/deprecations.js | columnDeprecate":{
-"message":"Deprecation / Warning",
-"description":"Header of the table column which displays the warning message describing use of a deprecated API by code running in the web page."},
-
-"lighthouse-core/audits/deprecations.js | columnLine":{
-"message":"Line",
-"description":"Table column header for line of code (eg. 432) that is using a deprecated API."},
-
-"lighthouse-core/audits/deprecations.js | description":{
-"message":"Deprecated APIs will eventually be removed from the browser. [Learn more](https://www.chromestatus.com/features#deprecated).",
-"description":"Description of a Lighthouse audit that tells the user why they should not use deprecated APIs on their page. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/deprecations.js | displayValue":{
-"message":"{itemCount, plural,\n    =1 {1 warning found}\n    other {# warnings found}\n    }",
-"description":"[ICU Syntax] Label for the audit identifying the number of warnings generated by using deprecated APIs."},
-
-"lighthouse-core/audits/deprecations.js | failureTitle":{
-"message":"Uses deprecated APIs",
-"description":"Title of a Lighthouse audit that provides detail on the use of deprecated APIs. This descriptive title is shown to users when the page uses deprecated APIs."},
-
-"lighthouse-core/audits/deprecations.js | title":{
-"message":"Avoids deprecated APIs",
-"description":"Title of a Lighthouse audit that provides detail on the use of deprecated APIs. This descriptive title is shown to users when the page does not use deprecated APIs."},
-
-"lighthouse-core/audits/dobetterweb/appcache-manifest.js | description":{
-"message":"Application Cache is deprecated. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/appcache).",
-"description":"Description of a Lighthouse audit that tells the user why they should not use the Application Cache API. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/dobetterweb/appcache-manifest.js | displayValue":{
-"message":"Found \"{AppCacheManifest}\"",
-"description":"Label for the audit identifying uses of the Application Cache."},
-
-"lighthouse-core/audits/dobetterweb/appcache-manifest.js | failureTitle":{
-"message":"Uses Application Cache",
-"description":"Title of a Lighthouse audit that provides detail on the use of the Application Cache API. This descriptive title is shown to users when they do use the Application Cache API, which is considered bad practice."},
-
-"lighthouse-core/audits/dobetterweb/appcache-manifest.js | title":{
-"message":"Avoids Application Cache",
-"description":"Title of a Lighthouse audit that provides detail on the use of the Application Cache API. This descriptive title is shown to users when they do not use the Application Cache API."},
-
-"lighthouse-core/audits/dobetterweb/doctype.js | description":{
-"message":"Specifying a doctype prevents the browser from switching to quirks-mode. Read more on the [MDN Web Docs page](https://developer.mozilla.org/en-US/docs/Glossary/Doctype)",
-"description":"Description of a Lighthouse audit that tells the user why they should define an HTML doctype. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/dobetterweb/doctype.js | explanationBadDoctype":{
-"message":"Doctype name must be the lowercase string `html`",
-"description":"Explanatory message stating that the doctype is set, but is not \"html\" and is therefore invalid."},
-
-"lighthouse-core/audits/dobetterweb/doctype.js | explanationNoDoctype":{
-"message":"Document must contain a doctype",
-"description":"Explanatory message stating that the document has no doctype."},
-
-"lighthouse-core/audits/dobetterweb/doctype.js | explanationPublicId":{
-"message":"Expected publicId to be an empty string",
-"description":"Explanatory message stating that the publicId field is not empty."},
-
-"lighthouse-core/audits/dobetterweb/doctype.js | explanationSystemId":{
-"message":"Expected systemId to be an empty string",
-"description":"Explanatory message stating that the systemId field is not empty."},
-
-"lighthouse-core/audits/dobetterweb/doctype.js | failureTitle":{
-"message":"Page lacks the HTML doctype, thus triggering quirks-mode",
-"description":"Title of a Lighthouse audit that provides detail on the doctype of a page. This descriptive title is shown to users when the page's doctype is not set to HTML."},
-
-"lighthouse-core/audits/dobetterweb/doctype.js | title":{
-"message":"Page has the HTML doctype",
-"description":"Title of a Lighthouse audit that provides detail on the doctype of a page. This descriptive title is shown to users when the pages's doctype is set to HTML."},
-
-"lighthouse-core/audits/dobetterweb/dom-size.js | columnElement":{
-"message":"Element",
-"description":"Table column header for the DOM element. Each DOM element is described with its HTML representation."},
-
-"lighthouse-core/audits/dobetterweb/dom-size.js | columnStatistic":{
-"message":"Statistic",
-"description":"Table column header for the type of statistic. These statistics describe how big the DOM is (count of DOM elements, children, depth)."},
-
-"lighthouse-core/audits/dobetterweb/dom-size.js | columnValue":{
-"message":"Value",
-"description":"Table column header for the observed value of the DOM statistic."},
-
-"lighthouse-core/audits/dobetterweb/dom-size.js | description":{
-"message":"Browser engineers recommend pages contain fewer than ~1,500 DOM elements. The sweet spot is a tree depth < 32 elements and fewer than 60 children/parent element. A large DOM can increase memory usage, cause longer [style calculations](https://developers.google.com/web/fundamentals/performance/rendering/reduce-the-scope-and-complexity-of-style-calculations), and produce costly [layout reflows](https://developers.google.com/speed/articles/reflow). [Learn more](https://developers.google.com/web/tools/lighthouse/audits/dom-size).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should reduce the size of the web page's DOM. The size of a DOM is characterized by the total number of DOM elements and greatest DOM depth. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/dobetterweb/dom-size.js | displayValue":{
-"message":"{itemCount, plural,\n    =1 {1 element}\n    other {# elements}\n    }",
-"description":"[ICU Syntax] Label for an audit identifying the number of DOM elements found in the page."},
-
-"lighthouse-core/audits/dobetterweb/dom-size.js | failureTitle":{
-"message":"Avoid an excessive DOM size",
-"description":"Title of a diagnostic audit that provides detail on the size of the web page's DOM. The size of a DOM is characterized by the total number of DOM elements and greatest DOM depth. This imperative title is shown to users when there is a significant amount of execution time that could be reduced."},
-
-"lighthouse-core/audits/dobetterweb/dom-size.js | statisticDOMDepth":{
-"message":"Maximum DOM Depth",
-"description":"Label for the numeric value of the maximum depth in the page's DOM tree."},
-
-"lighthouse-core/audits/dobetterweb/dom-size.js | statisticDOMElements":{
-"message":"Total DOM Elements",
-"description":"Label for the total number of DOM elements found in the page."},
-
-"lighthouse-core/audits/dobetterweb/dom-size.js | statisticDOMWidth":{
-"message":"Maximum Child Elements",
-"description":"Label for the numeric value of the maximum number of children any DOM element in the page has. The element described will have the most children in the page."},
-
-"lighthouse-core/audits/dobetterweb/dom-size.js | title":{
-"message":"Avoids an excessive DOM size",
-"description":"Title of a diagnostic audit that provides detail on the size of the web page's DOM. The size of a DOM is characterized by the total number of DOM elements and greatest DOM depth. This descriptive title is shown to users when the amount is acceptable and no user action is required."},
-
-"lighthouse-core/audits/dobetterweb/external-anchors-use-rel-noopener.js | columnRel":{
-"message":"Rel",
-"description":"Label for a column in a data table; entries will be the values of the html \"rel\" attribute from link in a page."},
-
-"lighthouse-core/audits/dobetterweb/external-anchors-use-rel-noopener.js | columnTarget":{
-"message":"Target",
-"description":"Label for a column in a data table; entries will be the target attribute of a link. Each entry is either an empty string or a string like `_blank`."},
-
-"lighthouse-core/audits/dobetterweb/external-anchors-use-rel-noopener.js | description":{
-"message":"Add `rel=\"noopener\"` or `rel=\"noreferrer\"` to any external links to improve performance and prevent security vulnerabilities. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/noopener).",
-"description":"Description of a Lighthouse audit that tells the user why and how they should secure cross-origin links. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/dobetterweb/external-anchors-use-rel-noopener.js | failureTitle":{
-"message":"Links to cross-origin destinations are unsafe",
-"description":"Title of a Lighthouse audit that provides detail on the cross-origin links that the web page contains, and whether the links can be considered safe. This descriptive title is shown to users when not all links can be considered safe."},
-
-"lighthouse-core/audits/dobetterweb/external-anchors-use-rel-noopener.js | title":{
-"message":"Links to cross-origin destinations are safe",
-"description":"Title of a Lighthouse audit that provides detail on the cross-origin links that the web page contains, and whether the links can be considered safe. This descriptive title is shown to users when all links are safe."},
-
-"lighthouse-core/audits/dobetterweb/external-anchors-use-rel-noopener.js | warning":{
-"message":"Unable to determine the destination for anchor ({anchorHTML}). If not used as a hyperlink, consider removing target=_blank.",
-"description":"Warning that some links' destinations cannot be determined and therefore the audit cannot evaluate the link's safety."},
-
-"lighthouse-core/audits/dobetterweb/geolocation-on-start.js | description":{
-"message":"Users are mistrustful of or confused by sites that request their location without context. Consider tying the request to a user action instead. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/geolocation-on-load).",
-"description":"Description of a Lighthouse audit that tells the user why they should not ask for geolocation permissions on load. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/dobetterweb/geolocation-on-start.js | failureTitle":{
-"message":"Requests the geolocation permission on page load",
-"description":"Title of a Lighthouse audit that provides detail on geolocation permissions requests. This descriptive title is shown to users when the page does ask for geolocation permissions on load."},
-
-"lighthouse-core/audits/dobetterweb/geolocation-on-start.js | title":{
-"message":"Avoids requesting the geolocation permission on page load",
-"description":"Title of a Lighthouse audit that provides detail on geolocation permission requests while the page is loading. This descriptive title is shown to users when the page does not ask for geolocation permissions on load."},
-
-"lighthouse-core/audits/dobetterweb/js-libraries.js | columnName":{
-"message":"Name",
-"description":"Label for a column in a data table; entries will be the names of the detected Javascript libraries."},
-
-"lighthouse-core/audits/dobetterweb/js-libraries.js | columnVersion":{
-"message":"Version",
-"description":"Label for a column in a data table; entries will be the version numbers of the detected Javascript libraries."},
-
-"lighthouse-core/audits/dobetterweb/js-libraries.js | description":{
-"message":"All front-end JavaScript libraries detected on the page.",
-"description":"Description of a Lighthouse audit that tells the user what this audit is detecting. This is displayed after a user expands the section to see more. No character length limits."},
-
-"lighthouse-core/audits/dobetterweb/js-libraries.js | title":{
-"message":"Detected JavaScript libraries",
-"description":"Title of a Lighthouse audit that provides detail on the Javascript libraries that are used on the page."},
-
-"lighthouse-core/audits/dobetterweb/no-document-write.js | description":{
-"message":"For users on slow connections, external scripts dynamically injected via `document.write()` can delay page load by tens of seconds. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/document-write).",
-"description":"Description of a Lighthouse audit that tells the user why they should avoid `document.write`. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/dobetterweb/no-document-write.js | failureTitle":{
-"message":"Uses `document.write()`",
-"description":"Title of a Lighthouse audit that provides detail on the page's use of the `document.write` API. This descriptive title is shown to users when the page does use `document.write`."},
-
-"lighthouse-core/audits/dobetterweb/no-document-write.js | title":{
-"message":"Avoids `document.write()`",
-"description":"Title of a Lighthouse audit that provides detail on the page's use of the `document.write` API. This descriptive title is shown to users when the page does not use `document.write`."},
-
-"lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | columnSeverity":{
-"message":"Highest Severity",
-"description":"Label for a column in a data table; entries will be the severity of the vulnerabilities found within a Javascript library."},
-
-"lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | columnVersion":{
-"message":"Library Version",
-"description":"Label for a column in a data table; entries will be the version numbers of the Javascript libraries found."},
-
-"lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | columnVuln":{
-"message":"Vulnerability Count",
-"description":"Label for a column in a data table; entries will be the counts of JavaScript-library vulnerabilities found."},
-
-"lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | description":{
-"message":"Some third-party scripts may contain known security vulnerabilities that are easily identified and exploited by attackers. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/vulnerabilities).",
-"description":"Description of a Lighthouse audit that tells the user why they should be concerned about the third party Javascript libraries that they use. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | displayValue":{
-"message":"{itemCount, plural,\n    =1 {1 vulnerability detected}\n    other {# vulnerabilities detected}\n    }",
-"description":"[ICU Syntax] Label for the audit identifying the number of vulnerable Javascript libraries found."},
-
-"lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | failureTitle":{
-"message":"Includes front-end JavaScript libraries with known security vulnerabilities",
-"description":"Title of a Lighthouse audit that provides detail on Javascript libraries the page uses. This descriptive title is shown to users when some detected Javascript libraries have known security vulnerabilities."},
-
-"lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | rowSeverityHigh":{
-"message":"High",
-"description":"Table row value for the severity of a high impact, or dangerous Javascript vulnerability.  Part of a ranking scale in the form: low, medium, high."},
-
-"lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | rowSeverityLow":{
-"message":"Low",
-"description":"Table row value for the severity of a small, or low impact Javascript vulnerability.  Part of a ranking scale in the form: low, medium, high."},
-
-"lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | rowSeverityMedium":{
-"message":"Medium",
-"description":"Table row value for the severity of a Javascript vulnerability.  Part of a ranking scale in the form: low, medium, high."},
-
-"lighthouse-core/audits/dobetterweb/no-vulnerable-libraries.js | title":{
-"message":"Avoids front-end JavaScript libraries with known security vulnerabilities",
-"description":"Title of a Lighthouse audit that provides detail on Javascript libraries the page uses. This descriptive title is shown to users when all Javascript libraries are free of known security vulnerabilities."},
-
-"lighthouse-core/audits/dobetterweb/notification-on-start.js | description":{
-"message":"Users are mistrustful of or confused by sites that request to send notifications without context. Consider tying the request to user gestures instead. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/notifications-on-load).",
-"description":"Description of a Lighthouse audit that tells the user why they should not ask for notification permission on load. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/dobetterweb/notification-on-start.js | failureTitle":{
-"message":"Requests the notification permission on page load",
-"description":"Title of a Lighthouse audit that provides detail on the page's notification permission requests. This descriptive title is shown to users when the page does ask for notification permission on load."},
-
-"lighthouse-core/audits/dobetterweb/notification-on-start.js | title":{
-"message":"Avoids requesting the notification permission on page load",
-"description":"Title of a Lighthouse audit that provides detail on the page's notification permission requests. This descriptive title is shown to users when the page does not ask for notification permission on load."},
-
-"lighthouse-core/audits/dobetterweb/password-inputs-can-be-pasted-into.js | columnFailingElem":{
-"message":"Failing Elements",
-"description":"Table column header for the HTML elements that do not allow pasting of content."},
-
-"lighthouse-core/audits/dobetterweb/password-inputs-can-be-pasted-into.js | description":{
-"message":"Preventing password pasting undermines good security policy. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/password-pasting).",
-"description":"Description of a Lighthouse audit that tells the user why they should allow pasting of content into password fields. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/dobetterweb/password-inputs-can-be-pasted-into.js | failureTitle":{
-"message":"Prevents users to paste into password fields",
-"description":"Title of a Lighthouse audit that provides detail on the ability to paste into password fields. This descriptive title is shown to users when the page does not allow pasting of content into password fields."},
-
-"lighthouse-core/audits/dobetterweb/password-inputs-can-be-pasted-into.js | title":{
-"message":"Allows users to paste into password fields",
-"description":"Title of a Lighthouse audit that provides detail on the ability to paste into password fields. This descriptive title is shown to users when the page allows pasting of content into password fields."},
-
-"lighthouse-core/audits/dobetterweb/uses-http2.js | columnProtocol":{
-"message":"Protocol",
-"description":"Label for a column in a data table; entries in the column will be the HTTP Protocol used to make a network request."},
-
-"lighthouse-core/audits/dobetterweb/uses-http2.js | description":{
-"message":"HTTP/2 offers many benefits over HTTP/1.1, including binary headers, multiplexing, and server push. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/http2).",
-"description":"Description of a Lighthouse audit that tells the user why they should use HTTP/2. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/dobetterweb/uses-http2.js | displayValue":{
-"message":"{itemCount, plural,\n    =1 {1 request not served via HTTP/2}\n    other {# requests not served via HTTP/2}\n    }",
-"description":"[ICU Syntax] Label identifying the number of network requests that were not served with HTTP/2."},
-
-"lighthouse-core/audits/dobetterweb/uses-http2.js | failureTitle":{
-"message":"Does not use HTTP/2 for all of its resources",
-"description":"Title of a Lighthouse audit that provides detail on whether the webpage uses HTTP/2 for resources it requests over the network. This descriptive title is shown to users when the page does not use HTTP/2 for its requests."},
-
-"lighthouse-core/audits/dobetterweb/uses-http2.js | title":{
-"message":"Uses HTTP/2 for its own resources",
-"description":"Title of a Lighthouse audit that provides detail on whether the webpage uses HTTP/2 for resources it requests over the network. This descriptive title is shown to users when the page uses HTTP/2 for its requests."},
-
-"lighthouse-core/audits/dobetterweb/uses-passive-event-listeners.js | description":{
-"message":"Consider marking your touch and wheel event listeners as `passive` to improve your page's scroll performance. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/passive-event-listeners).",
-"description":"Description of a Lighthouse audit that tells the user why they should use passive event listeners on the page. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/dobetterweb/uses-passive-event-listeners.js | failureTitle":{
-"message":"Does not use passive listeners to improve scrolling performance",
-"description":"Title of a Lighthouse audit that provides detail on the page's use of passive event listeners used to improve the scrolling performance of the page. This descriptive title is shown to users when the page does not use passive listeners."},
-
-"lighthouse-core/audits/dobetterweb/uses-passive-event-listeners.js | title":{
-"message":"Uses passive listeners to improve scrolling performance",
-"description":"Title of a Lighthouse audit that provides detail on the page's use of passive event listeners used to improve the scrolling performance of the page. This descriptive title is shown to users when the page does use passive listeners."},
-
-"lighthouse-core/audits/errors-in-console.js | columnDesc":{
-"message":"Description",
-"description":"Label for a column in a data table; entries in the column will be the descriptions of logged browser errors."},
-
-"lighthouse-core/audits/errors-in-console.js | description":{
-"message":"Errors logged to the console indicate unresolved problems. They can come from network request failures and other browser concerns.",
-"description":"Description of a Lighthouse audit that tells the user why errors being logged to the devtools console are a cause for concern and so should be fixed. This is displayed after a user expands the section to see more. No character length limits."},
-
-"lighthouse-core/audits/errors-in-console.js | failureTitle":{
-"message":"Browser errors were logged to the console",
-"description":"Title of a Lighthouse audit that provides detail on browser errors. This descriptive title is shown to users when browser errors occurred and were logged into the devtools console."},
-
-"lighthouse-core/audits/errors-in-console.js | title":{
-"message":"No browser errors logged to the console",
-"description":"Title of a Lighthouse audit that provides detail on browser errors. This descriptive title is shown to users when no browser errors were logged into the devtools console."},
-
-"lighthouse-core/audits/font-display.js | description":{
-"message":"Leverage the font-display CSS feature to ensure text is user-visible while webfonts are loading. [Learn more](https://developers.google.com/web/updates/2016/02/font-display).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should use the font-display CSS feature. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/font-display.js | failureTitle":{
-"message":"Ensure text remains visible during webfont load",
-"description":"Title of a diagnostic audit that provides detail on the load of the page's webfonts. Often the text is invisible for seconds before the webfont resource is loaded. This imperative title is shown to users when there is a significant amount of execution time that could be reduced."},
-
-"lighthouse-core/audits/font-display.js | title":{
-"message":"All text remains visible during webfont loads",
-"description":"Title of a diagnostic audit that provides detail on if all the text on a webpage was visible while the page was loading its webfonts. This descriptive title is shown to users when the amount is acceptable and no user action is required."},
-
-"lighthouse-core/audits/font-display.js | undeclaredFontURLWarning":{
-"message":"Lighthouse was unable to automatically check the font-display value for the following URL: {fontURL}.",
-"description":"A warning message that is shown when Lighthouse couldn't automatically check some of the page's fonts and that the user will need to manually check it."},
-
-"lighthouse-core/audits/image-aspect-ratio.js | columnActual":{
-"message":"Aspect Ratio (Actual)",
-"description":"Label for a column in a data table; entries in the column will be the numeric aspect ratio of the raw (actual) image."},
-
-"lighthouse-core/audits/image-aspect-ratio.js | columnDisplayed":{
-"message":"Aspect Ratio (Displayed)",
-"description":"Label for a column in a data table; entries in the column will be the numeric aspect ratio of an image as displayed in a web page."},
-
-"lighthouse-core/audits/image-aspect-ratio.js | description":{
-"message":"Image display dimensions should match natural aspect ratio. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/aspect-ratio).",
-"description":"Description of a Lighthouse audit that tells the user why they should maintain the correct aspect ratios for all images. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/image-aspect-ratio.js | failureTitle":{
-"message":"Displays images with incorrect aspect ratio",
-"description":"Title of a Lighthouse audit that provides detail on the aspect ratios of all images on the page. This descriptive title is shown to users when not all images use correct aspect ratios."},
-
-"lighthouse-core/audits/image-aspect-ratio.js | title":{
-"message":"Displays images with correct aspect ratio",
-"description":"Title of a Lighthouse audit that provides detail on the aspect ratios of all images on the page. This descriptive title is shown to users when all images use correct aspect ratios."},
-
-"lighthouse-core/audits/image-aspect-ratio.js | warningCompute":{
-"message":"Invalid image sizing information {url}",
-"description":"Warning that the size information for an image was nonsensical. `url` will be replaced with the url of that image."},
-
-"lighthouse-core/audits/is-on-https.js | columnInsecureURL":{
-"message":"Insecure URL",
-"description":"Label for a column in a data table; entries in the column will be the URLs of insecure (non-HTTPS) network requests."},
-
-"lighthouse-core/audits/is-on-https.js | description":{
-"message":"All sites should be protected with HTTPS, even ones that don't handle sensitive data. HTTPS prevents intruders from tampering with or passively listening in on the communications between your app and your users, and is a prerequisite for HTTP/2 and many new web platform APIs. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/https).",
-"description":"Description of a Lighthouse audit that tells the user *why* HTTPS use is important. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/is-on-https.js | displayValue":{
-"message":"{itemCount, plural,\n    =1 {1 insecure request found}\n    other {# insecure requests found}\n    }",
-"description":"[ICU Syntax] Label identifying the number of insecure network requests found by an audit of a web page."},
-
-"lighthouse-core/audits/is-on-https.js | failureTitle":{
-"message":"Does not use HTTPS",
-"description":"Title of a Lighthouse audit that provides detail on the useage of HTTPS on a page. This descriptive title is shown to users when some, or all, requests on the page use HTTP instead of HTTPS."},
-
-"lighthouse-core/audits/is-on-https.js | title":{
-"message":"Uses HTTPS",
-"description":"Title of a Lighthouse audit that provides detail on the useage of HTTPS on a page. This descriptive title is shown to users when all requests on a page are fufilled using HTTPS."},
-
-"lighthouse-core/audits/load-fast-enough-for-pwa.js | description":{
-"message":"A fast page load over a cellular network ensures a good mobile user experience. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/fast-3g).",
-"description":"Description of a Lighthouse audit that tells the user *why* they need to load fast enough on mobile networks. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/load-fast-enough-for-pwa.js | displayValueText":{
-"message":"Interactive at {timeInMs, number, seconds} s",
-"description":"Label for the audit identifying the time it took for the page to become interactive."},
-
-"lighthouse-core/audits/load-fast-enough-for-pwa.js | displayValueTextWithOverride":{
-"message":"Interactive on simulated mobile network at {timeInMs, number, seconds} s",
-"description":"Label for the audit identifying the time it took for the page to become interactive on a mobile network."},
-
-"lighthouse-core/audits/load-fast-enough-for-pwa.js | failureTitle":{
-"message":"Page load is not fast enough on mobile networks",
-"description":"Imperative title of a Lighthouse audit that tells the user that their page has loaded fast enough to be considered a Progressive Web App. This imperative title is shown to users when the web page has loaded too slowly to be considered a Progressive Web App."},
-
-"lighthouse-core/audits/load-fast-enough-for-pwa.js | title":{
-"message":"Page load is fast enough on mobile networks",
-"description":"Imperative title of a Lighthouse audit that tells the user that their page has loaded fast enough to be considered a Progressive Web App. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/mainthread-work-breakdown.js | columnCategory":{
-"message":"Category",
-"description":"Label for the Main Thread Category column in data tables, rows will have a main thread Category and main thread Task Name."},
-
-"lighthouse-core/audits/mainthread-work-breakdown.js | description":{
-"message":"Consider reducing the time spent parsing, compiling and executing JS. You may find delivering smaller JS payloads helps with this.",
-"description":"Description of a Lighthouse audit that tells the user *why* they should reduce JS execution times. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/mainthread-work-breakdown.js | failureTitle":{
-"message":"Minimize main-thread work",
-"description":"Title of a diagnostic audit that provides detail on the main thread work the browser did to load the page. This imperative title is shown to users when there is a significant amount of execution time that could be reduced."},
-
-"lighthouse-core/audits/mainthread-work-breakdown.js | title":{
-"message":"Minimizes main-thread work",
-"description":"Title of a diagnostic audit that provides detail on the main thread work the browser did to load the page. This descriptive title is shown to users when the amount is acceptable and no user action is required."},
-
-"lighthouse-core/audits/metrics/estimated-input-latency.js | description":{
-"message":"Estimated Input Latency is an estimate of how long your app takes to respond to user input, in milliseconds, during the busiest 5s window of page load. If your latency is higher than 50 ms, users may perceive your app as laggy. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/estimated-input-latency).",
-"description":"Description of the Estimated Input Latency metric that estimates the amount of time, in milliseconds, that the app takes to respond to user input. This description is displayed within a tooltip when the user hovers on the metric name to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/metrics/estimated-input-latency.js | title":{
-"message":"Estimated Input Latency",
-"description":"The name of the metric that marks the estimated time between the page receiving input (a user clicking, tapping, or typing) and the page responding. Shown to users as the label for the numeric metric value. Ideally fits within a ~40 character limit."},
-
-"lighthouse-core/audits/metrics/first-contentful-paint.js | description":{
-"message":"First Contentful Paint marks the time at which the first text or image is painted. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/first-contentful-paint).",
-"description":"Description of the First Contentful Paint (FCP) metric, which marks the time at which the first text or image is painted by the browser. This is displayed within a tooltip when the user hovers on the metric name to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/metrics/first-contentful-paint.js | title":{
-"message":"First Contentful Paint",
-"description":"The name of the metric that marks the time at which the first text or image is painted by the browser. Shown to users as the label for the numeric metric value. Ideally fits within a ~40 character limit."},
-
-"lighthouse-core/audits/metrics/first-cpu-idle.js | description":{
-"message":"First CPU Idle marks the first time at which the page's main thread is quiet enough to handle input. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/first-interactive).",
-"description":"Description of the First CPU Idle metric, which marks the time at which the page has displayed content and the CPU is not busy executing the page's scripts. This is displayed within a tooltip when the user hovers on the metric name to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/metrics/first-cpu-idle.js | title":{
-"message":"First CPU Idle",
-"description":"The name of the metric that marks when the page has displayed content and the CPU is not busy executing the page's scripts. Shown to users as the label for the numeric metric value. Ideally fits within a ~40 character limit."},
-
-"lighthouse-core/audits/metrics/first-meaningful-paint.js | description":{
-"message":"First Meaningful Paint measures when the primary content of a page is visible. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/first-meaningful-paint).",
-"description":"Description of the First Meaningful Paint (FMP) metric, which marks the time at which a majority of the content has been painted by the browser. This is displayed within a tooltip when the user hovers on the metric name to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/metrics/first-meaningful-paint.js | title":{
-"message":"First Meaningful Paint",
-"description":"The name of the metric that marks the time at which a majority of the content has been painted by the browser. Shown to users as the label for the numeric metric value. Ideally fits within a ~40 character limit."},
-
-"lighthouse-core/audits/metrics/interactive.js | description":{
-"message":"Time to interactive is the amount of time it takes for the page to become fully interactive. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/consistently-interactive).",
-"description":"Description of the Time to Interactive (TTI) metric, which evaluates when a page has completed its primary network activity and main thread work. This is displayed within a tooltip when the user hovers on the metric name to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/metrics/interactive.js | title":{
-"message":"Time to Interactive",
-"description":"The name of the metric that marks the time at which the page is fully loaded and is able to quickly respond to user input (clicks, taps, and keypresses feel responsive). Shown to users as the label for the numeric metric value. Ideally fits within a ~40 character limit."},
-
-"lighthouse-core/audits/metrics/max-potential-fid.js | description":{
-"message":"The maximum potential First Input Delay that your users could experience is the duration, in milliseconds, of the longest task. [Learn more](https://developers.google.com/web/updates/2018/05/first-input-delay).",
-"description":"Description of the Maximum Potential First Input Delay metric that marks the maximum estimated time between the page receiving input (a user clicking, tapping, or typing) and the page responding. This description is displayed within a tooltip when the user hovers on the metric name to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/metrics/max-potential-fid.js | title":{
-"message":"Max Potential First Input Delay",
-"description":"The name of the metric \"Maximum Potential First Input Delay\" that marks the maximum estimated time between the page receiving input (a user clicking, tapping, or typing) and the page responding. Shown to users as the label for the numeric metric value. Ideally fits within a ~40 character limit."},
-
-"lighthouse-core/audits/metrics/speed-index.js | description":{
-"message":"Speed Index shows how quickly the contents of a page are visibly populated. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/speed-index).",
-"description":"Description of the Speed Index metric, which summarizes how quickly the page looked visually complete. This is displayed within a tooltip when the user hovers on the metric name to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/metrics/speed-index.js | title":{
-"message":"Speed Index",
-"description":"The name of the metric that summarizes how quickly the page looked visually complete. The name of this metric is largely abstract and can be loosely translated. Shown to users as the label for the numeric metric value. Ideally fits within a ~40 character limit."},
-
-"lighthouse-core/audits/metrics/total-blocking-time.js | description":{
-"message":"Sum of all time periods between FCP and Time to Interactive, when task length exceeded 50ms, expressed in milliseconds.",
-"description":"Description of the Total Blocking Time (TBT) metric, which calculates the total duration of blocking time for a web page. Blocking times are time periods when the page would be blocked (prevented) from responding to user input (clicks, taps, and keypresses will feel slow to respond). This is displayed within a tooltip when the user hovers on the metric name to see more. No character length limits."},
-
-"lighthouse-core/audits/metrics/total-blocking-time.js | title":{
-"message":"Total Blocking Time",
-"description":"The name of a metric that calculates the total duration of blocking time for a web page. Blocking times are time periods when the page would be blocked (prevented) from responding to user input (clicks, taps, and keypresses will feel slow to respond). Shown to users as the label for the numeric metric value. Ideally fits within a ~40 character limit."},
-
-"lighthouse-core/audits/network-rtt.js | description":{
-"message":"Network round trip times (RTT) have a large impact on performance. If the RTT to an origin is high, it's an indication that servers closer to the user could improve performance. [Learn more](https://hpbn.co/primer-on-latency-and-bandwidth/).",
-"description":"Description of a Lighthouse audit that tells the user that a high network round trip time (RTT) can effect their website's performance because the server is physically far away from them thus making the RTT high. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/network-rtt.js | title":{
-"message":"Network Round Trip Times",
-"description":"Descriptive title of a Lighthouse audit that tells the user the round trip times to each origin the page connected to. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/network-server-latency.js | description":{
-"message":"Server latencies can impact web performance. If the server latency of an origin is high, it's an indication the server is overloaded or has poor backend performance. [Learn more](https://hpbn.co/primer-on-web-performance/#analyzing-the-resource-waterfall).",
-"description":"Description of a Lighthouse audit that tells the user that server latency can effect their website's performance negatively. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/network-server-latency.js | title":{
-"message":"Server Backend Latencies",
-"description":"Descriptive title of a Lighthouse audit that tells the user the server latencies observed from each origin the page connected to. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/performance-budget.js | columnOverBudget":{
-"message":"Over Budget",
-"description":"Label for a column in a data table; entries will be how much the quantity or size of network requests exceeded a predetermined budget."},
-
-"lighthouse-core/audits/performance-budget.js | description":{
-"message":"Keep the quantity and size of network requests under the targets set by the provided performance budget. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/budgets).",
-"description":"Description of a Lighthouse audit where a user sets budgets for the quantity and size of page resources. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/performance-budget.js | requestCountOverBudget":{
-"message":"{count, plural,\n    =1 {1 request}\n    other {# requests}\n   }",
-"description":"[ICU Syntax] Entry in a data table identifying the number of network requests of a particular type. Count will be a whole number. String should be as short as possible to be able to fit well into the table."},
-
-"lighthouse-core/audits/performance-budget.js | title":{
-"message":"Performance budget",
-"description":"Title of a Lighthouse audit that compares the size and quantity of page resources against targets set by the user. These targets are thought of as \"performance budgets\" because these metrics impact page performance (i.e. how quickly a page loads)."},
-
-"lighthouse-core/audits/redirects.js | description":{
-"message":"Redirects introduce additional delays before the page can be loaded. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/redirects).",
-"description":"Description of a Lighthouse audit that tells users why they should reduce the number of server-side redirects on their page. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/redirects.js | title":{
-"message":"Avoid multiple page redirects",
-"description":"Imperative title of a Lighthouse audit that tells the user to eliminate the redirects taken through multiple URLs to load the page. This is shown in a list of audits that Lighthouse generates."},
-
-"lighthouse-core/audits/resource-summary.js | description":{
-"message":"To set budgets for the quantity and size of page resources, add a budget.json file. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/budgets).",
-"description":"Description of a Lighthouse audit that tells the user that they can setup a budgets for the quantity and size of page resources. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/resource-summary.js | displayValue":{
-"message":"{requestCount, plural, =1 {1 request} other {# requests}} • { byteCount, number, bytes } KB",
-"description":"[ICU Syntax] Label for an audit identifying the number of requests and kilobytes used to load the page."},
-
-"lighthouse-core/audits/resource-summary.js | title":{
-"message":"Keep request counts low and transfer sizes small",
-"description":"Imperative title of a Lighthouse audit that tells the user to minimize the size and quantity of resources used to load the page."},
-
-"lighthouse-core/audits/seo/canonical.js | description":{
-"message":"Canonical links suggest which URL to show in search results. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/canonical).",
-"description":"Description of a Lighthouse audit that tells the user *why* they need to have a valid rel=canonical link. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/seo/canonical.js | explanationConflict":{
-"message":"Multiple conflicting URLs ({urlList})",
-"description":"Explanatory message stating that there was a failure in an audit caused by multiple URLs conflicting with each other. \"urlList\" will be replaced by a list of URLs (e.g. https://example.com, https://example2.com, etc )."},
-
-"lighthouse-core/audits/seo/canonical.js | explanationDifferentDomain":{
-"message":"Points to a different domain ({url})",
-"description":"Explanatory message stating that there was a failure in an audit caused by a URL pointing to a different domain. \"url\" will be replaced by the invalid URL (e.g. https://example.com)."},
-
-"lighthouse-core/audits/seo/canonical.js | explanationInvalid":{
-"message":"Invalid URL ({url})",
-"description":"Explanatory message stating that there was a failure in an audit caused by a URL being invalid. \"url\" will be replaced by the invalid URL (e.g. https://example.com)."},
-
-"lighthouse-core/audits/seo/canonical.js | explanationPointsElsewhere":{
-"message":"Points to another `hreflang` location ({url})",
-"description":"Explanatory message stating that there was a failure in an audit caused by a URL pointing to a different hreflang than the current context. \"url\" will be replaced by the invalid URL (e.g. https://example.com). 'hreflang' is an HTML attribute and should not be translated."},
-
-"lighthouse-core/audits/seo/canonical.js | explanationRelative":{
-"message":"Relative URL ({url})",
-"description":"Explanatory message stating that there was a failure in an audit caused by a URL being relative instead of absolute. \"url\" will be replaced by the invalid URL (e.g. https://example.com)."},
-
-"lighthouse-core/audits/seo/canonical.js | explanationRoot":{
-"message":"Points to the domain's root URL (the homepage), instead of an equivalent page of content",
-"description":"Explanatory message stating that the page's canonical URL was pointing to the domain's root URL, which is a common mistake. \"points\" refers to the action of the 'rel=canonical' referencing another link. \"root\" refers to the starting/home page of the website. \"domain\" refers to the registered domain name of the website."},
-
-"lighthouse-core/audits/seo/canonical.js | failureTitle":{
-"message":"Document does not have a valid `rel=canonical`",
-"description":"Title of a Lighthouse audit that provides detail on a page's rel=canonical link. This descriptive title is shown to users when the rel=canonical link is invalid and should be fixed. \"rel=canonical\" is an HTML attribute and value and so should not be translated."},
-
-"lighthouse-core/audits/seo/canonical.js | title":{
-"message":"Document has a valid `rel=canonical`",
-"description":"Title of a Lighthouse audit that provides detail on a page's rel=canonical link. This descriptive title is shown to users when the rel=canonical link is valid. \"rel=canonical\" is an HTML attribute and value and so should not be translated."},
-
-"lighthouse-core/audits/seo/font-size.js | description":{
-"message":"Font sizes less than 12px are too small to be legible and require mobile visitors to “pinch to zoom” in order to read. Strive to have >60% of page text ≥12px. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/font-sizes).",
-"description":"Description of a Lighthouse audit that tells the user *why* they need to use a larger font size. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/seo/font-size.js | displayValue":{
-"message":"{decimalProportion, number, extendedPercent} legible text",
-"description":"Label for the audit identifying font sizes that are too small."},
-
-"lighthouse-core/audits/seo/font-size.js | explanationViewport":{
-"message":"Text is illegible because there's no viewport meta tag optimized for mobile screens.",
-"description":"Explanatory message stating that there was a failure in an audit caused by a missing page viewport meta tag configuration. \"viewport\" and \"meta\" are HTML terms and should not be translated."},
-
-"lighthouse-core/audits/seo/font-size.js | explanationWithDisclaimer":{
-"message":"{decimalProportion, number, extendedPercent} of text is too small (based on {decimalProportionVisited, number, extendedPercent} sample).",
-"description":"Explanatory message stating that there was a failure in an audit caused by a certain percentage of the text on the page being too small, based on a sample size of text that was less than 100% of the text on the page. \"decimalProportion\" will be replaced by a percentage between 0 and 100%."},
-
-"lighthouse-core/audits/seo/font-size.js | failureTitle":{
-"message":"Document doesn't use legible font sizes",
-"description":"Title of a Lighthouse audit that provides detail on the font sizes used on the page. This descriptive title is shown to users when there is a font that may be too small to be read by users."},
-
-"lighthouse-core/audits/seo/font-size.js | title":{
-"message":"Document uses legible font sizes",
-"description":"Title of a Lighthouse audit that provides detail on the font sizes used on the page. This descriptive title is shown to users when the fonts used on the page are large enough to be considered legible."},
-
-"lighthouse-core/audits/seo/hreflang.js | description":{
-"message":"hreflang links tell search engines what version of a page they should list in search results for a given language or region. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/hreflang).",
-"description":"Description of a Lighthouse audit that tells the user *why* they need to have an hreflang link on their page. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation. \"hreflang\" is an HTML attribute and should not be translated."},
-
-"lighthouse-core/audits/seo/hreflang.js | failureTitle":{
-"message":"Document doesn't have a valid `hreflang`",
-"description":"Title of a Lighthouse audit that provides detail on the `hreflang` attribute on a page. This descriptive title is shown when the page's `hreflang` attribute is not valid and needs to be fixed. \"hreflang\" is an HTML attribute and should not be translated."},
-
-"lighthouse-core/audits/seo/hreflang.js | title":{
-"message":"Document has a valid `hreflang`",
-"description":"Title of a Lighthouse audit that provides detail on the `hreflang` attribute on a page. This descriptive title is shown when the page's `hreflang` attribute is configured correctly. \"hreflang\" is an HTML attribute and should not be translated."},
-
-"lighthouse-core/audits/seo/http-status-code.js | description":{
-"message":"Pages with unsuccessful HTTP status codes may not be indexed properly. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/successful-http-code).",
-"description":"Description of a Lighthouse audit that tells the user *why* they need to serve pages with a valid HTTP status code. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/seo/http-status-code.js | failureTitle":{
-"message":"Page has unsuccessful HTTP status code",
-"description":"Descriptive title of a Lighthouse audit that provides detail on the HTTP status code a page responds with. This descriptive title is shown when the page responds to requests with an HTTP status code that indicates the request was unsuccessful."},
-
-"lighthouse-core/audits/seo/http-status-code.js | title":{
-"message":"Page has successful HTTP status code",
-"description":"Title of a Lighthouse audit that provides detail on the HTTP status code a page responds with. This descriptive title is shown when the page has responded with a valid HTTP status code."},
-
-"lighthouse-core/audits/seo/is-crawlable.js | description":{
-"message":"Search engines are unable to include your pages in search results if they don't have permission to crawl them. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/indexing).",
-"description":"Description of a Lighthouse audit that tells the user *why* allowing search-engine crawling of their page is beneficial. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/seo/is-crawlable.js | failureTitle":{
-"message":"Page is blocked from indexing",
-"description":"Title of a Lighthouse audit that provides detail on if search-engine crawlers are blocked from indexing the page. This title is shown when the page has been configured to block indexing and therefore cannot be indexed by search engines."},
-
-"lighthouse-core/audits/seo/is-crawlable.js | title":{
-"message":"Page isn’t blocked from indexing",
-"description":"Title of a Lighthouse audit that provides detail on if search-engine crawlers are blocked from indexing the page. This title is shown when the page is not blocked from indexing and can be crawled."},
-
-"lighthouse-core/audits/seo/link-text.js | description":{
-"message":"Descriptive link text helps search engines understand your content. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/descriptive-link-text).",
-"description":"Description of a Lighthouse audit that tells the user *why* they need to have descriptive text on the links in their page. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/seo/link-text.js | displayValue":{
-"message":"{itemCount, plural,\n    =1 {1 link found}\n    other {# links found}\n    }",
-"description":"[ICU Syntax] Label for the audit identifying the number of links found. \"link\" here refers to the links in a web page to other web pages."},
-
-"lighthouse-core/audits/seo/link-text.js | failureTitle":{
-"message":"Links do not have descriptive text",
-"description":"Title of a Lighthouse audit that tests if each link on a page contains a sufficient description of what a user will find when they click it. Generic, non-descriptive text like \"click here\" doesn't give an indication of what the link leads to. This descriptive title is shown when one or more links on the page contain generic, non-descriptive text."},
-
-"lighthouse-core/audits/seo/link-text.js | title":{
-"message":"Links have descriptive text",
-"description":"Title of a Lighthouse audit that tests if each link on a page contains a sufficient description of what a user will find when they click it. Generic, non-descriptive text like \"click here\" doesn't give an indication of what the link leads to. This descriptive title is shown when all links on the page have sufficient textual descriptions."},
-
-"lighthouse-core/audits/seo/manual/structured-data.js | description":{
-"message":"Run the [Structured Data Testing Tool](https://search.google.com/structured-data/testing-tool/) and the [Structured Data Linter](http://linter.structured-data.org/) to validate structured data. [Learn more](https://developers.google.com/search/docs/guides/mark-up-content).",
-"description":"Description of a Lighthouse audit that provides detail on the structured data in a page. \"Structured data\" is a standardized data format on a page that helps a search engine categorize and understand its contents. This description is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/seo/manual/structured-data.js | title":{
-"message":"Structured data is valid",
-"description":"Title of a Lighthouse audit that prompts users to manually check their page for valid structured data. \"Structured data\" is a standardized data format on a page that helps a search engine categorize and understand its contents."},
-
-"lighthouse-core/audits/seo/meta-description.js | description":{
-"message":"Meta descriptions may be included in search results to concisely summarize page content. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/description).",
-"description":"Description of a Lighthouse audit that tells the user *why* they need to have meta descriptions on their page. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/seo/meta-description.js | explanation":{
-"message":"Description text is empty.",
-"description":"Explanatory message stating that there was a failure in an audit caused by the page's meta description text being empty."},
-
-"lighthouse-core/audits/seo/meta-description.js | failureTitle":{
-"message":"Document does not have a meta description",
-"description":"Title of a Lighthouse audit that provides detail on the web page's document meta description. This descriptive title is shown when the document does not have a meta description. \"meta\" should be left untranslated because it refers to an HTML element."},
-
-"lighthouse-core/audits/seo/meta-description.js | title":{
-"message":"Document has a meta description",
-"description":"Title of a Lighthouse audit that provides detail on the web page's document meta description. This descriptive title is shown when the document has a meta description. \"meta\" should be left untranslated because it refers to an HTML element."},
-
-"lighthouse-core/audits/seo/plugins.js | description":{
-"message":"Search engines can't index plugin content, and many devices restrict plugins or don't support them. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/plugins).",
-"description":"Description of a Lighthouse audit that tells the user *why* they need to avoid using browser plugins in their content. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/seo/plugins.js | failureTitle":{
-"message":"Document uses plugins",
-"description":"Descriptive title of a Lighthouse audit that provides detail on the browser plugins used by the page. This title is shown when there is plugin content on the page."},
-
-"lighthouse-core/audits/seo/plugins.js | title":{
-"message":"Document avoids plugins",
-"description":"Title of a Lighthouse audit that provides detail on the browser plugins used by the page. This descriptive title is shown when there is no plugin content on the page that would restrict search indexing."},
-
-"lighthouse-core/audits/seo/robots-txt.js | description":{
-"message":"If your robots.txt file is malformed, crawlers may not be able to understand how you want your website to be crawled or indexed.",
-"description":"Description of a Lighthouse audit that tells the user *why* they need to have a valid robots.txt file. Note: \"robots.txt\" is a canonical filename and should not be translated. This is displayed after a user expands the section to see more. No character length limits."},
-
-"lighthouse-core/audits/seo/robots-txt.js | displayValueHttpBadCode":{
-"message":"request for robots.txt returned HTTP status: {statusCode}",
-"description":"Label for the audit identifying that the robots.txt request has returned a specific HTTP status code. Note: \"robots.txt\" is a canonical filename and should not be translated. \"statusCode\" will be replaced with a 3 digit integer which represents the status of the HTTP connectiong for this page."},
-
-"lighthouse-core/audits/seo/robots-txt.js | displayValueValidationError":{
-"message":"{itemCount, plural,\n    =1 {1 error found}\n    other {# errors found}\n    }",
-"description":"[ICU Syntax] Label for the audit identifying the number of errors that occured while validating the robots.txt file. \"itemCount\" will be replaced by the integer count of errors encountered."},
-
-"lighthouse-core/audits/seo/robots-txt.js | explanation":{
-"message":"Lighthouse was unable to download a robots.txt file",
-"description":"Explanatory message stating that there was a failure in an audit caused by Lighthouse not being able to download the robots.txt file for the site.  Note: \"robots.txt\" is a canonical filename and should not be translated."},
-
-"lighthouse-core/audits/seo/robots-txt.js | failureTitle":{
-"message":"robots.txt is not valid",
-"description":"Title of a Lighthouse audit that provides detail on the site's robots.txt file. Note: \"robots.txt\" is a canonical filename and should not be translated. This descriptive title is shown when the robots.txt file is misconfigured, which makes the page hard or impossible to scan via web crawler."},
-
-"lighthouse-core/audits/seo/robots-txt.js | title":{
-"message":"robots.txt is valid",
-"description":"Title of a Lighthouse audit that provides detail on the site's robots.txt file. Note: \"robots.txt\" is a canonical filename and should not be translated. This descriptive title is shown when the robots.txt file is present and configured correctly."},
-
-"lighthouse-core/audits/seo/tap-targets.js | description":{
-"message":"Interactive elements like buttons and links should be large enough (48x48px), and have enough space around them, to be easy enough to tap without overlapping onto other elements. [Learn more](https://developers.google.com/web/fundamentals/accessibility/accessible-styles#multi-device_responsive_design).",
-"description":"Description of a Lighthouse audit that tells the user why buttons and links need to be big enough and what 'big enough' means. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/seo/tap-targets.js | displayValue":{
-"message":"{decimalProportion, number, percent} appropriately sized tap targets",
-"description":"Explanatory message stating that a certain percentage of the tap targets (like buttons and links) on the page are of an appropriately large size."},
-
-"lighthouse-core/audits/seo/tap-targets.js | explanationViewportMetaNotOptimized":{
-"message":"Tap targets are too small because there's no viewport meta tag optimized for mobile screens",
-"description":"Explanatory message stating that there was a failure in an audit caused by the viewport meta tag not being optimized for mobile screens, which caused tap targets like buttons and links to be too small to tap on."},
-
-"lighthouse-core/audits/seo/tap-targets.js | failureTitle":{
-"message":"Tap targets are not sized appropriately",
-"description":"Descriptive title of a Lighthouse audit that provides detail on whether tap targets (like buttons and links) on a page are big enough so they can easily be tapped on a mobile device. This descriptive title is shown when tap targets are not easy to tap on."},
-
-"lighthouse-core/audits/seo/tap-targets.js | overlappingTargetHeader":{
-"message":"Overlapping Target",
-"description":"Label of a table column that identifies a tap target (like a link or button) that overlaps with another tap target."},
-
-"lighthouse-core/audits/seo/tap-targets.js | sizeHeader":{
-"message":"Size",
-"description":"Label of a table column that specifies the size of tap targets like buttons and links."},
-
-"lighthouse-core/audits/seo/tap-targets.js | tapTargetHeader":{
-"message":"Tap Target",
-"description":"Label of a table column that identifies tap targets (like buttons and links) that have failed the audit and aren't easy to tap on."},
-
-"lighthouse-core/audits/seo/tap-targets.js | title":{
-"message":"Tap targets are sized appropriately",
-"description":"Title of a Lighthouse audit that provides detail on whether tap targets (like buttons and links) on a page are big enough so they can easily be tapped on a mobile device. This descriptive title is shown when tap targets are easy to tap on."},
-
-"lighthouse-core/audits/third-party-summary.js | columnMainThreadTime":{
-"message":"Main Thread Time",
-"description":"Label for a table column that displays how much time each row spent executing on the main thread, entries will be the number of milliseconds spent."},
-
-"lighthouse-core/audits/third-party-summary.js | columnThirdParty":{
-"message":"Third-Party",
-"description":"Label for a table column that displays the name of a third-party provider that potentially links to their website."},
-
-"lighthouse-core/audits/third-party-summary.js | description":{
-"message":"Third-party code can significantly impact load performance. Limit the number of redundant third-party providers and try to load third-party code after your page has primarily finished loading. [Learn more](https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/loading-third-party-javascript/).",
-"description":"Description of a Lighthouse audit that identifies the code on the page that the user doesn't control. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/third-party-summary.js | displayValue":{
-"message":"{itemCount, plural,\n    =1 {1 Third-Party Found}\n    other {# Third-Parties Found}\n  }",
-"description":"Summary text for the result of a Lighthouse audit that identifies the code on the page that the user doesn't control. This text summarizes the number of distinct entities that were found on the page."},
-
-"lighthouse-core/audits/third-party-summary.js | title":{
-"message":"Third-Party Usage",
-"description":"Title of a Lighthouse audit that identifies the code on the page that the user doesn't control. This is shown in a list of audits that Lighthouse generates."},
-
-"lighthouse-core/audits/time-to-first-byte.js | description":{
-"message":"Time To First Byte identifies the time at which your server sends a response. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/ttfb).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should reduce the amount of time it takes their server to start responding to requests. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/time-to-first-byte.js | displayValue":{
-"message":"Root document took {timeInMs, number, milliseconds} ms",
-"description":"Used to summarize the total Time to First Byte duration for the primary HTML response. The `{timeInMs}` placeholder will be replaced with the time duration, shown in milliseconds (e.g. 210 ms)"},
-
-"lighthouse-core/audits/time-to-first-byte.js | failureTitle":{
-"message":"Reduce server response times (TTFB)",
-"description":"Title of a diagnostic audit that provides detail on how long it took from starting a request to when the server started responding. This imperative title is shown to users when there is a significant amount of execution time that could be reduced."},
-
-"lighthouse-core/audits/time-to-first-byte.js | title":{
-"message":"Server response times are low (TTFB)",
-"description":"Title of a diagnostic audit that provides detail on how long it took from starting a request to when the server started responding. This descriptive title is shown to users when the amount is acceptable and no user action is required."},
-
-"lighthouse-core/audits/user-timings.js | columnDuration":{
-"message":"Duration",
-"description":"Label for the Duration column in the User Timing event data table. User Timing API entries are added by the developer of the web page. Durations are only provided for 'Measure' entries. Durations are the number of total number milliseconds from Start Time to their ending point. e.g. '2,020.64 ms'"},
-
-"lighthouse-core/audits/user-timings.js | columnName":{
-"message":"Name",
-"description":"Label for the Name column in the User Timing event data table. User Timing API entries are added by the developer of the web page. An example user timing event name: 'pageload_logoimage_done'"},
-
-"lighthouse-core/audits/user-timings.js | columnStartTime":{
-"message":"Start Time",
-"description":"Label for the Start Time column in the User Timing event data table. User Timing API entries are added by the developer of the web page. Start Times are the number of milliseconds since the page started loading, e.g. '380.26 ms'"},
-
-"lighthouse-core/audits/user-timings.js | columnType":{
-"message":"Type",
-"description":"Label for the Type column in the User Timing event data table. User Timing API entries are added by the developer of the web page. The only possible types are 'Mark' and Measure'."},
-
-"lighthouse-core/audits/user-timings.js | description":{
-"message":"Consider instrumenting your app with the User Timing API to measure your app's real-world performance during key user experiences. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/user-timing).",
-"description":"Description of a Lighthouse audit that tells the user they may want to use the User Timing API to help measure the performance of aspects of their page load and interaction. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/user-timings.js | displayValue":{
-"message":"{itemCount, plural,\n    =1 {1 user timing}\n    other {# user timings}\n    }",
-"description":"[ICU Syntax] Label for an audit identifying the number of User Timing timestamps present in the page."},
-
-"lighthouse-core/audits/user-timings.js | title":{
-"message":"User Timing marks and measures",
-"description":"Descriptive title of a diagnostic audit that provides details on any timestamps generated by the page. User Timing refers to the 'User Timing API', which enables a website to record specific times as 'marks', or spans of time as 'measures'."},
-
-"lighthouse-core/audits/uses-rel-preconnect.js | crossoriginWarning":{
-"message":"A preconnect <link> was found for \"{securityOrigin}\" but was not used by the browser. Check that you are using the `crossorigin` attribute properly.",
-"description":"A warning message that is shown when the user tried to follow the advice of the audit, but it's not working as expected. Forgetting to set the `crossorigin` HTML attribute, or setting it to an incorrect value, on the link is a common mistake when adding preconnect links."},
-
-"lighthouse-core/audits/uses-rel-preconnect.js | description":{
-"message":"Consider adding preconnect or dns-prefetch resource hints to establish early connections to important third-party origins. [Learn more](https://developers.google.com/web/fundamentals/performance/resource-prioritization#preconnect).",
-"description":"Description of a Lighthouse audit that tells the user how to connect early to third-party domains that will be used to load page resources. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/uses-rel-preconnect.js | title":{
-"message":"Preconnect to required origins",
-"description":"Imperative title of a Lighthouse audit that tells the user to connect early to internet domains that will be used to load page resources. Origin is the correct term, however 'domain name' could be used if neccsesary. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/audits/uses-rel-preload.js | crossoriginWarning":{
-"message":"A preload <link> was found for \"{preloadURL}\" but was not used by the browser. Check that you are using the `crossorigin` attribute properly.",
-"description":"A warning message that is shown when the user tried to follow the advice of the audit, but it's not working as expected. Forgetting to set the `crossorigin` HTML attribute, or setting it to an incorrect value, on the link is a common mistake when adding preload links."},
-
-"lighthouse-core/audits/uses-rel-preload.js | description":{
-"message":"Consider using <link rel=preload> to prioritize fetching resources that are currently requested later in page load. [Learn more](https://developers.google.com/web/tools/lighthouse/audits/preload).",
-"description":"Description of a Lighthouse audit that tells the user *why* they should preload important network requests. The associated network requests are started halfway through pageload (or later) but should be started at the beginning. This is displayed after a user expands the section to see more. No character length limits. '<link rel=preload>' is the html code the user would include in their page and shouldn't be translated. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/audits/uses-rel-preload.js | title":{
-"message":"Preload key requests",
-"description":"Imperative title of a Lighthouse audit that tells the user to use <link rel=preload> to initiate important network requests earlier during page load. This is displayed in a list of audit titles that Lighthouse generates."},
-
-"lighthouse-core/config/default-config.js | a11yAriaGroupDescription":{
-"message":"These are opportunities to improve the usage of ARIA in your application which may enhance the experience for users of assistive technology, like a screen reader.",
-"description":"Description of the ARIA validity section within the Accessibility category. Within this section are audits with descriptive titles that highlight if whether all the aria- HTML attributes have been used properly."},
-
-"lighthouse-core/config/default-config.js | a11yAriaGroupTitle":{
-"message":"ARIA",
-"description":"Title of the ARIA validity section within the Accessibility category. Within this section are audits with descriptive titles that highlight if whether all the aria- HTML attributes have been used properly."},
-
-"lighthouse-core/config/default-config.js | a11yAudioVideoGroupDescription":{
-"message":"These are opportunities to provide alternative content for audio and video. This may improve the experience for users with hearing or vision impairments.",
-"description":"Description of the navigation section within the Accessibility category. Within this section are audits with descriptive titles that highlight opportunities to provide alternative content for audio and video."},
-
-"lighthouse-core/config/default-config.js | a11yAudioVideoGroupTitle":{
-"message":"Audio and video",
-"description":"Title of the navigation section within the Accessibility category. Within this section are audits with descriptive titles that highlight opportunities to provide alternative content for audio and video."},
-
-"lighthouse-core/config/default-config.js | a11yBestPracticesGroupDescription":{
-"message":"These items highlight common accessibility best practices.",
-"description":"Description of the best practices section within the Accessibility category. Within this section are audits with descriptive titles that highlight common accessibility best practices."},
-
-"lighthouse-core/config/default-config.js | a11yBestPracticesGroupTitle":{
-"message":"Best practices",
-"description":"Title of the best practices section of the Accessibility category. Within this section are audits with descriptive titles that highlight common accessibility best practices."},
-
-"lighthouse-core/config/default-config.js | a11yCategoryDescription":{
-"message":"These checks highlight opportunities to [improve the accessibility of your web app](https://developers.google.com/web/fundamentals/accessibility). Only a subset of accessibility issues can be automatically detected so manual testing is also encouraged.",
-"description":"Description of the Accessibility category. This is displayed at the top of a list of audits focused on making web content accessible to all users. No character length limits. 'improve the accessibility of your web app' becomes link text to additional documentation."},
-
-"lighthouse-core/config/default-config.js | a11yCategoryManualDescription":{
-"message":"These items address areas which an automated testing tool cannot cover. Learn more in our guide on [conducting an accessibility review](https://developers.google.com/web/fundamentals/accessibility/how-to-review).",
-"description":"Description of the Accessibility manual checks category. This description is displayed above a list of accessibility audits that currently have no automated test and so must be verified manually by the user. No character length limits. 'conducting an accessibility review' becomes link text to additional documentation."},
-
-"lighthouse-core/config/default-config.js | a11yCategoryTitle":{
-"message":"Accessibility",
-"description":"Title of the Accessibility category of audits. This section contains audits focused on making web content accessible to all users. Also used as a label of a score gauge; try to limit to 20 characters."},
-
-"lighthouse-core/config/default-config.js | a11yColorContrastGroupDescription":{
-"message":"These are opportunities to improve the legibility of your content.",
-"description":"Description of the color contrast section within the Accessibility category. Within this section are audits with descriptive titles that highlight the color and vision aspects of the page's accessibility that are passing or failing."},
-
-"lighthouse-core/config/default-config.js | a11yColorContrastGroupTitle":{
-"message":"Contrast",
-"description":"Title of the color contrast section within the Accessibility category. Within this section are audits with descriptive titles that highlight the color and vision aspects of the page's accessibility that are passing or failing."},
-
-"lighthouse-core/config/default-config.js | a11yLanguageGroupDescription":{
-"message":"These are opportunities to improve the interpretation of your content by users in different locales.",
-"description":"Description of the language section within the Accessibility category. Within this section are audits with descriptive titles that highlight if the language has been annotated in the correct HTML attributes on the page."},
-
-"lighthouse-core/config/default-config.js | a11yLanguageGroupTitle":{
-"message":"Internationalization and localization",
-"description":"Title of the language section within the Accessibility category. Within this section are audits with descriptive titles that highlight if the language has been annotated in the correct HTML attributes on the page."},
-
-"lighthouse-core/config/default-config.js | a11yNamesLabelsGroupDescription":{
-"message":"These are opportunities to improve the semantics of the controls in your application. This may enhance the experience for users of assistive technology, like a screen reader.",
-"description":"Description of the HTML element naming section within the Accessibility category. Within this section are audits with descriptive titles that highlight if the non-textual HTML elements on the page have names discernible by a screen reader."},
-
-"lighthouse-core/config/default-config.js | a11yNamesLabelsGroupTitle":{
-"message":"Names and labels",
-"description":"Title of the HTML element naming section within the Accessibility category. Within this section are audits with descriptive titles that highlight if the non-textual HTML elements on the page have names discernible by a screen reader."},
-
-"lighthouse-core/config/default-config.js | a11yNavigationGroupDescription":{
-"message":"These are opportunities to improve keyboard navigation in your application.",
-"description":"Description of the navigation section within the Accessibility category. Within this section are audits with descriptive titles that highlight opportunities to improve keyboard navigation."},
-
-"lighthouse-core/config/default-config.js | a11yNavigationGroupTitle":{
-"message":"Navigation",
-"description":"Title of the navigation section within the Accessibility category. Within this section are audits with descriptive titles that highlight opportunities to improve keyboard navigation."},
-
-"lighthouse-core/config/default-config.js | a11yTablesListsVideoGroupDescription":{
-"message":"These are opportunities to to improve the experience of reading tabular or list data using assistive technology, like a screen reader.",
-"description":"Description of the navigation section within the Accessibility category. Within this section are audits with descriptive titles that highlight opportunities to improve the experience of reading tabular or list data using assistive technology."},
-
-"lighthouse-core/config/default-config.js | a11yTablesListsVideoGroupTitle":{
-"message":"Tables and lists",
-"description":"Title of the navigation section within the Accessibility category. Within this section are audits with descriptive titles that highlight opportunities to improve the experience of reading tabular or list data using assistive technology."},
-
-"lighthouse-core/config/default-config.js | bestPracticesCategoryTitle":{
-"message":"Best Practices",
-"description":"Title of the Best Practices category of audits. This is displayed at the top of a list of audits focused on topics related to following web development best practices and accepted guidelines. Also used as a label of a score gauge; try to limit to 20 characters."},
-
-"lighthouse-core/config/default-config.js | budgetsGroupDescription":{
-"message":"Performance budgets set standards for the performance of your site.",
-"description":"Description of the Budgets section of the Performance category. Within this section the budget results are displayed."},
-
-"lighthouse-core/config/default-config.js | budgetsGroupTitle":{
-"message":"Budgets",
-"description":"Title of the Budgets section of the Performance Category. 'Budgets' refers to a budget (like a financial budget), but applied to the amount of resources on a page, rather than money."},
-
-"lighthouse-core/config/default-config.js | diagnosticsGroupDescription":{
-"message":"More information about the performance of your application. These numbers don't [directly affect](https://github.com/GoogleChrome/lighthouse/blob/d2ec9ffbb21de9ad1a0f86ed24575eda32c796f0/docs/scoring.md#how-are-the-scores-weighted) the Performance score.",
-"description":"Description of the diagnostics section of the Performance category. Within this section are audits with non-imperative titles that provide more detail on a web page's load performance characteristics. Within this section, the user may read the details and deduce additional actions they could take to improve performance."},
-
-"lighthouse-core/config/default-config.js | diagnosticsGroupTitle":{
-"message":"Diagnostics",
-"description":"Title of the diagnostics section of the Performance category. Within this section are audits with non-imperative titles that provide more detail on the page's page load performance characteristics. Whereas the 'Opportunities' suggest an action along with expected time savings, diagnostics do not. Within this section, the user may read the details and deduce additional actions they could take."},
-
-"lighthouse-core/config/default-config.js | firstPaintImprovementsGroupDescription":{
-"message":"The most critical aspect of performance is how quickly pixels are rendered onscreen. Key metrics: First Contentful Paint, First Meaningful Paint",
-"description":"Description of an opportunity sub-section of the Performance category. Within this section are audits with imperative titles that suggest actions the user can take to improve the time of the first initial render of the webpage."},
-
-"lighthouse-core/config/default-config.js | firstPaintImprovementsGroupTitle":{
-"message":"First Paint Improvements",
-"description":"Title of an opportunity sub-section of the Performance category. Within this section are audits with imperative titles that suggest actions the user can take to improve the time of the first initial render of the webpage."},
-
-"lighthouse-core/config/default-config.js | loadOpportunitiesGroupDescription":{
-"message":"These suggestions can help your page load faster. They don't [directly affect](https://github.com/GoogleChrome/lighthouse/blob/d2ec9ffbb21de9ad1a0f86ed24575eda32c796f0/docs/scoring.md#how-are-the-scores-weighted) the Performance score.",
-"description":"Description of the opportunity section of the Performance category. 'Suggestions' could also be 'recommendations'. Within this section are audits with imperative titles that suggest actions the user can take to improve the loading performance of their web page."},
-
-"lighthouse-core/config/default-config.js | loadOpportunitiesGroupTitle":{
-"message":"Opportunities",
-"description":"Title of the opportunity section of the Performance category. Within this section are audits with imperative titles that suggest actions the user can take to improve the loading performance of their web page. 'Suggestion'/'Optimization'/'Recommendation' are reasonable synonyms for 'opportunity' in this case."},
-
-"lighthouse-core/config/default-config.js | metricGroupTitle":{
-"message":"Metrics",
-"description":"Title of the speed metrics section of the Performance category. Within this section are various speed metrics which quantify the pageload performance into values presented in seconds and milliseconds."},
-
-"lighthouse-core/config/default-config.js | overallImprovementsGroupDescription":{
-"message":"Enhance the overall loading experience, so the page is responsive and ready to use as soon as possible. Key metrics: Time to Interactive, Speed Index",
-"description":"Description of an opportunity sub-section of the Performance category. Within this section are audits with imperative titles that suggest actions the user can take to improve the overall loading performance of their web page."},
-
-"lighthouse-core/config/default-config.js | overallImprovementsGroupTitle":{
-"message":"Overall Improvements",
-"description":"Title of an opportunity sub-section of the Performance category. Within this section are audits with imperative titles that suggest actions the user can take to improve the overall loading performance of their web page."},
-
-"lighthouse-core/config/default-config.js | performanceCategoryTitle":{
-"message":"Performance",
-"description":"Title of the Performance category of audits. Equivalent to 'Web performance', this term is inclusive of all web page speed and loading optimization topics. Also used as a label of a score gauge; try to limit to 20 characters."},
-
-"lighthouse-core/config/default-config.js | pwaFastReliableGroupTitle":{
-"message":"Fast and reliable",
-"description":"Title of the Fast and Reliable section of the web app category. Within this section are audits that check if the web site loaded quickly and can reliably load even if the internet connection is very slow or goes offline."},
-
-"lighthouse-core/config/default-config.js | pwaInstallableGroupTitle":{
-"message":"Installable",
-"description":"Title of the Installable section of the web app category. Within this section are audits that check if Chrome supports installing the web site as an app on their device."},
-
-"lighthouse-core/config/default-config.js | pwaOptimizedGroupTitle":{
-"message":"PWA Optimized",
-"description":"Title of the \"PWA Optimized\" section of the web app category. Within this section are audits that check if the developer has taken advantage of features to make their web page more enjoyable and engaging for the user."},
-
-"lighthouse-core/config/default-config.js | seoCategoryDescription":{
-"message":"These checks ensure that your page is optimized for search engine results ranking. There are additional factors Lighthouse does not check that may affect your search ranking. [Learn more](https://support.google.com/webmasters/answer/35769).",
-"description":"Description of the Search Engine Optimization (SEO) category. This is displayed at the top of a list of audits focused on optimizing a website for indexing by search engines. No character length limits. 'Learn More' becomes link text to additional documentation."},
-
-"lighthouse-core/config/default-config.js | seoCategoryManualDescription":{
-"message":"Run these additional validators on your site to check additional SEO best practices.",
-"description":"Description of the Search Engine Optimization (SEO) manual checks category, the additional validators must be run by hand in order to check all SEO best practices. This is displayed at the top of a list of manually run audits focused on optimizing a website for indexing by search engines. No character length limits."},
-
-"lighthouse-core/config/default-config.js | seoCategoryTitle":{
-"message":"SEO",
-"description":"Title of the Search Engine Optimization (SEO) category of audits. This is displayed at the top of a list of audits focused on topics related to optimizing a website for indexing by search engines. Also used as a label of a score gauge; try to limit to 20 characters."},
-
-"lighthouse-core/config/default-config.js | seoContentGroupDescription":{
-"message":"Format your HTML in a way that enables crawlers to better understand your app’s content.",
-"description":"Description of the navigation section within the Search Engine Optimization (SEO) category. Within this section are audits with descriptive titles that highlight ways to make a website content more easily understood by search engine crawler bots."},
-
-"lighthouse-core/config/default-config.js | seoContentGroupTitle":{
-"message":"Content Best Practices",
-"description":"Title of the navigation section within the Search Engine Optimization (SEO) category. Within this section are audits with descriptive titles that highlight ways to make a website content more easily understood by search engine crawler bots."},
-
-"lighthouse-core/config/default-config.js | seoCrawlingGroupDescription":{
-"message":"To appear in search results, crawlers need access to your app.",
-"description":"Description of the navigation section within the Search Engine Optimization (SEO) category. Within this section are audits with descriptive titles that highlight ways to make a website accessible to search engine crawlers."},
-
-"lighthouse-core/config/default-config.js | seoCrawlingGroupTitle":{
-"message":"Crawling and Indexing",
-"description":"Title of the navigation section within the Search Engine Optimization (SEO) category. Within this section are audits with descriptive titles that highlight ways to make a website accessible to search engine crawlers."},
-
-"lighthouse-core/config/default-config.js | seoMobileGroupDescription":{
-"message":"Make sure your pages are mobile friendly so users don’t have to pinch or zoom in order to read the content pages. [Learn more](https://developers.google.com/search/mobile-sites/).",
-"description":"Description of the navigation section within the Search Engine Optimization (SEO) category. Within this section are audits with descriptive titles that highlight opportunities to make a page more usable on mobile devices."},
-
-"lighthouse-core/config/default-config.js | seoMobileGroupTitle":{
-"message":"Mobile Friendly",
-"description":"Title of the navigation section within the Search Engine Optimization (SEO) category. Within this section are audits with descriptive titles that highlight opportunities to make a page more usable on mobile devices."},
-
-"lighthouse-core/lib/i18n/i18n.js | columnCacheTTL":{
-"message":"Cache TTL",
-"description":"Label for a column in a data table; entries will be the time to live value of the cache header on a web resource."},
-
-"lighthouse-core/lib/i18n/i18n.js | columnLocation":{
-"message":"Location",
-"description":"Label for a column in a data table; entries will be the location of a specific line of code in a file, in the format \"line: 102\"."},
-
-"lighthouse-core/lib/i18n/i18n.js | columnRequests":{
-"message":"Requests",
-"description":"Label for a column in a data table; entries will be the number of network requests done by a webpage."},
-
-"lighthouse-core/lib/i18n/i18n.js | columnResourceType":{
-"message":"Resource Type",
-"description":"Label for a column in a data table; entries will be types of resources loaded over the network, e.g. \"Scripts\", \"Third-Party\", \"Stylesheet\"."},
-
-"lighthouse-core/lib/i18n/i18n.js | columnSize":{
-"message":"Size",
-"description":"Label for a column in a data table; entries will be the size of a web resource in kilobytes."},
-
-"lighthouse-core/lib/i18n/i18n.js | columnTimeSpent":{
-"message":"Time Spent",
-"description":"Label for a column in a data table; entries will be the number of milliseconds spent during a particular activity."},
-
-"lighthouse-core/lib/i18n/i18n.js | columnTransferSize":{
-"message":"Transfer Size",
-"description":"Label for a column in a data table; entries will be the number of kilobytes transferred to load a set of files."},
-
-"lighthouse-core/lib/i18n/i18n.js | columnURL":{
-"message":"URL",
-"description":"Label for a column in a data table; entries will be the URL of a web resource"},
-
-"lighthouse-core/lib/i18n/i18n.js | columnWastedBytes":{
-"message":"Potential Savings",
-"description":"Label for a column in a data table; entries will be the number of kilobytes the user could reduce their page by if they implemented the suggestions."},
-
-"lighthouse-core/lib/i18n/i18n.js | columnWastedMs":{
-"message":"Potential Savings",
-"description":"Label for a column in a data table; entries will be the number of milliseconds the user could reduce page load by if they implemented the suggestions."},
-
-"lighthouse-core/lib/i18n/i18n.js | displayValueByteSavings":{
-"message":"Potential savings of {wastedBytes, number, bytes} KB",
-"description":"Label shown per-audit to show how many bytes smaller the page could be if the user implemented the suggestions. The `{wastedBytes}` placeholder will be replaced with the number of bytes, shown in kilobytes (e.g. 148 KB)"},
-
-"lighthouse-core/lib/i18n/i18n.js | displayValueMsSavings":{
-"message":"Potential savings of {wastedMs, number, milliseconds} ms",
-"description":"Label shown per-audit to show how many milliseconds faster the page load could be if the user implemented the suggestions. The `{wastedMs}` placeholder will be replaced with the time duration, shown in milliseconds (e.g. 140 ms)"},
-
-"lighthouse-core/lib/i18n/i18n.js | documentResourceType":{
-"message":"Document",
-"description":"Label for a row in a data table; entries will be the total number and byte size of all 'Document' resources loaded by a web page."},
-
-"lighthouse-core/lib/i18n/i18n.js | fontResourceType":{
-"message":"Font",
-"description":"Label for a row in a data table; entries will be the total number and byte size of all 'Font' resources loaded by a web page."},
-
-"lighthouse-core/lib/i18n/i18n.js | imageResourceType":{
-"message":"Image",
-"description":"Label for a row in a data table; entries will be the total number and byte size of all 'Image' resources loaded by a web page."},
-
-"lighthouse-core/lib/i18n/i18n.js | mediaResourceType":{
-"message":"Media",
-"description":"Label for a row in a data table; entries will be the total number and byte size of all 'Media' resources loaded by a web page. 'Media' refers to audio and video files."},
-
-"lighthouse-core/lib/i18n/i18n.js | ms":{
-"message":"{timeInMs, number, milliseconds} ms",
-"description":"Used to show the duration in milliseconds that something lasted. The `{timeInMs}` placeholder will be replaced with the time duration, shown in milliseconds (e.g. 63 ms)"},
-
-"lighthouse-core/lib/i18n/i18n.js | otherResourceType":{
-"message":"Other",
-"description":"Label for a row in a data table; entries will be the total number and byte size of all resources loaded by a web page that don't fit into the categories of Document, Script, Stylesheet, Image, Media, & Font."},
-
-"lighthouse-core/lib/i18n/i18n.js | scriptResourceType":{
-"message":"Script",
-"description":"Label for a row in a data table; entries will be the total number and byte size of all 'Script' resources loaded by a web page. 'Script' refers to JavaScript or other files that are executable by a browser."},
-
-"lighthouse-core/lib/i18n/i18n.js | seconds":{
-"message":"{timeInMs, number, seconds} s",
-"description":"Used to show the duration in seconds that something lasted. The {timeInMs} placeholder will be replaced with the time duration, shown in seconds (e.g. 5.2 s)"},
-
-"lighthouse-core/lib/i18n/i18n.js | stylesheetResourceType":{
-"message":"Stylesheet",
-"description":"Label for a row in a data table; entries will be the total number and byte size of all 'Stylesheet' resources loaded by a web page. 'Stylesheet' refers to CSS stylesheets."},
-
-"lighthouse-core/lib/i18n/i18n.js | thirdPartyResourceType":{
-"message":"Third-party",
-"description":"Label for a row in a data table; entries will be the total number and byte size of all third-party resources loaded by a web page. 'Third-party resources are items loaded from URLs that aren't controlled by the owner of the web page."},
-
-"lighthouse-core/lib/i18n/i18n.js | totalResourceType":{
-"message":"Total",
-"description":"Label for a row in a data table; entries will be the total number and byte size of all resources loaded by a web page."},
-
-"lighthouse-core/lib/lh-error.js | badTraceRecording":{
-"message":"Something went wrong with recording the trace over your page load. Please run Lighthouse again. ({errorCode})",
-"description":"Error message explaining that the network trace was not able to be recorded for the Lighthouse run."},
-
-"lighthouse-core/lib/lh-error.js | criTimeout":{
-"message":"Timeout waiting for initial Debugger Protocol connection.",
-"description":"Error message explaining that Lighthouse timed out while waiting for the initial connection to the Chrome Devtools protocol."},
-
-"lighthouse-core/lib/lh-error.js | didntCollectScreenshots":{
-"message":"Chrome didn't collect any screenshots during the page load. Please make sure there is content visible on the page, and then try re-running Lighthouse. ({errorCode})",
-"description":"Error message explaining that the Lighthouse run was not able to collect screenshots through Chrome."},
-
-"lighthouse-core/lib/lh-error.js | dnsFailure":{
-"message":"DNS servers could not resolve the provided domain.",
-"description":"Error message explaining that the requested page could not be resolved by the DNS server."},
-
-"lighthouse-core/lib/lh-error.js | erroredRequiredArtifact":{
-"message":"Required {artifactName} gatherer encountered an error: {errorMessage}",
-"description":"Error message explaning that there was an error while trying to collect a resource that was required for testing. \"artifactName\" will be replaced with the name of the resource that wasn't collected; \"errorMessage\" will be replaced with a string description of the error that occurred."},
-
-"lighthouse-core/lib/lh-error.js | internalChromeError":{
-"message":"An internal Chrome error occurred. Please restart Chrome and try re-running Lighthouse.",
-"description":"Error message explaining that Chrome has encountered an error during the Lighthouse run, and that Chrome should be restarted."},
-
-"lighthouse-core/lib/lh-error.js | missingRequiredArtifact":{
-"message":"Required {artifactName} gatherer did not run.",
-"description":"Error message explaning that a resource that was required for testing was never collected. \"artifactName\" will be replaced with the name of the resource that wasn't collected."},
-
-"lighthouse-core/lib/lh-error.js | pageLoadFailed":{
-"message":"Lighthouse was unable to reliably load the page you requested. Make sure you are testing the correct URL and that the server is properly responding to all requests.",
-"description":"Error message explaining that Lighthouse could not load the requested URL and the steps that might be taken to fix the unreliability."},
-
-"lighthouse-core/lib/lh-error.js | pageLoadFailedHung":{
-"message":"Lighthouse was unable to reliably load the URL you requested because the page stopped responding.",
-"description":"Error message explaining that Lighthouse couldn't complete because the page has stopped responding to its instructions."},
-
-"lighthouse-core/lib/lh-error.js | pageLoadFailedInsecure":{
-"message":"The URL you have provided does not have a valid security certificate. {securityMessages}",
-"description":"Error message explaining that the security certificate of the page Lighthouse observed was invalid, so the URL cannot be accessed. securityMessages will be replaced with one or more strings from the browser explaining what was insecure about the page load."},
-
-"lighthouse-core/lib/lh-error.js | pageLoadFailedInterstitial":{
-"message":"Chrome prevented page load with an interstitial. Make sure you are testing the correct URL and that the server is properly responding to all requests.",
-"description":"Error message explaining that Chrome prevented the page from loading and displayed an interstitial screen instead, so the URL cannot be accessed."},
-
-"lighthouse-core/lib/lh-error.js | pageLoadFailedWithDetails":{
-"message":"Lighthouse was unable to reliably load the page you requested. Make sure you are testing the correct URL and that the server is properly responding to all requests. (Details: {errorDetails})",
-"description":"Error message explaining that Lighthouse could not load the requested URL and the steps that might be taken to fix the unreliability."},
-
-"lighthouse-core/lib/lh-error.js | pageLoadFailedWithStatusCode":{
-"message":"Lighthouse was unable to reliably load the page you requested. Make sure you are testing the correct URL and that the server is properly responding to all requests. (Status code: {statusCode})",
-"description":"Error message explaining that Lighthouse could not load the requested URL and the steps that might be taken to fix the unreliability."},
-
-"lighthouse-core/lib/lh-error.js | pageLoadTookTooLong":{
-"message":"Your page took too long to load. Please follow the opportunities in the report to reduce your page load time, and then try re-running Lighthouse. ({errorCode})",
-"description":"Error message explaining that the page loaded too slowly to perform a Lighthouse run."},
-
-"lighthouse-core/lib/lh-error.js | protocolTimeout":{
-"message":"Waiting for DevTools protocol response has exceeded the allotted time. (Method: {protocolMethod})",
-"description":"Error message explaining that the Chrome Devtools protocol has exceeded the maximum timeout allowed."},
-
-"lighthouse-core/lib/lh-error.js | requestContentTimeout":{
-"message":"Fetching resource content has exceeded the allotted time",
-"description":"Error message explaining that fetching the resources of the webpage has taken longer than the maximum time."},
-
-"lighthouse-core/lib/lh-error.js | urlInvalid":{
-"message":"The URL you have provided appears to be invalid.",
-"description":"Error message explaining that the provided URL Lighthouse points to is not valid, and cannot be loaded."},
-
-"lighthouse-core/report/html/renderer/util.js | auditGroupExpandTooltip":{
-"message":"Show audits",
-"description":"The tooltip text on an expandable chevron icon. Clicking the icon expands a section to reveal a list of audit results that was hidden by default."},
-
-"lighthouse-core/report/html/renderer/util.js | crcInitialNavigation":{
-"message":"Initial Navigation",
-"description":"String of text shown in a graphical representation of the flow of network requests for the web page. This label represents the initial network request that fetches an HTML page. This navigation may be redirected (eg. Initial navigation to http://example.com redirects to https://www.example.com)."},
-
-"lighthouse-core/report/html/renderer/util.js | crcLongestDurationLabel":{
-"message":"Maximum critical path latency:",
-"description":"Label of value shown in the summary of critical request chains. Refers to the total amount of time (milliseconds) of the longest critical path chain/sequence of network requests. Example value: 2310 ms"},
-
-"lighthouse-core/report/html/renderer/util.js | errorLabel":{
-"message":"Error!",
-"description":"A label, shown next to an audit title or metric title, indicating that there was an error computing it. The user can hover on the label to reveal a tooltip with the extended error message. Translation should be short (< 20 characters)."},
-
-"lighthouse-core/report/html/renderer/util.js | errorMissingAuditInfo":{
-"message":"Report error: no audit information",
-"description":"An error string displayed next to a particular audit when it has errored, but not provided any specific error message."},
-
-"lighthouse-core/report/html/renderer/util.js | labDataTitle":{
-"message":"Lab Data",
-"description":"Title of the lab data section of the Performance category. Within this section are various speed metrics which quantify the pageload performance into values presented in seconds and milliseconds. \"Lab\" is an abbreviated form of \"laboratory\", and refers to the fact that the data is from a controlled test of a website, not measurements from real users visiting that site."},
-
-"lighthouse-core/report/html/renderer/util.js | lsPerformanceCategoryDescription":{
-"message":"[Lighthouse](https://developers.google.com/web/tools/lighthouse/) analysis of the current page on an emulated mobile network. Values are estimated and may vary.",
-"description":"Explanation shown to users below performance results to inform them that the test was done with a 4G network connection and to warn them that the numbers they see will likely change slightly the next time they run Lighthouse. 'Lighthouse' becomes link text to additional documentation."},
-
-"lighthouse-core/report/html/renderer/util.js | manualAuditsGroupTitle":{
-"message":"Additional items to manually check",
-"description":"Section heading shown above a list of audits that were not computed by Lighthouse. They serve as a list of suggestions for the user to go and manually check. For example, Lighthouse can't automate testing cross-browser compatibility, so that is listed within this section, so the user is reminded to test it themselves. This section is collapsed by default, as the user should be focusing on the failed audits instead. Users can click this heading to reveal the list."},
-
-"lighthouse-core/report/html/renderer/util.js | notApplicableAuditsGroupTitle":{
-"message":"Not applicable",
-"description":"Section heading shown above a list of audits that do not apply to the page. For example, if an audit is 'Are images optimized?', but the page has no images on it, the audit will be marked as not applicable. This is neither passing or failing. This section is collapsed by default, as the user should be focusing on the failed audits instead. Users can click this heading to reveal the list."},
-
-"lighthouse-core/report/html/renderer/util.js | opportunityResourceColumnLabel":{
-"message":"Opportunity",
-"description":"Column heading label for the listing of opportunity audits. Each audit title represents an opportunity. There are only 2 columns, so no strict character limit."},
-
-"lighthouse-core/report/html/renderer/util.js | opportunitySavingsColumnLabel":{
-"message":"Estimated Savings",
-"description":"Column heading label for the estimated page load savings of opportunity audits. Estimated Savings is the total amount of time (in seconds) that Lighthouse computed could be reduced from the total page load time, if the suggested action is taken. There are only 2 columns, so no strict character limit."},
-
-"lighthouse-core/report/html/renderer/util.js | passedAuditsGroupTitle":{
-"message":"Passed audits",
-"description":"Section heading shown above a list of audits that are passing. 'Passed' here refers to a passing grade. This section is collapsed by default, as the user should be focusing on the failed audits instead. Users can click this heading to reveal the list."},
-
-"lighthouse-core/report/html/renderer/util.js | snippetCollapseButtonLabel":{
-"message":"Collapse snippet",
-"description":"Label for button that only shows a few lines of the snippet when clicked"},
-
-"lighthouse-core/report/html/renderer/util.js | snippetExpandButtonLabel":{
-"message":"Expand snippet",
-"description":"Label for button that shows all lines of the snippet when clicked"},
-
-"lighthouse-core/report/html/renderer/util.js | thirdPartyResourcesLabel":{
-"message":"Show 3rd-party resources",
-"description":"This label is for a checkbox above a table of items loaded by a web page. The checkbox is used to show or hide third-party (or \"3rd-party\") resources in the table, where \"third-party resources\" refers to items loaded by a web page from URLs that aren't controlled by the owner of the web page."},
-
-"lighthouse-core/report/html/renderer/util.js | toplevelWarningsMessage":{
-"message":"There were issues affecting this run of Lighthouse:",
-"description":"Label shown preceding any important warnings that may have invalidated the entire report. For example, if the user has Chrome extensions installed, they may add enough performance overhead that Lighthouse's performance metrics are unreliable. If shown, this will be displayed at the top of the report UI."},
-
-"lighthouse-core/report/html/renderer/util.js | varianceDisclaimer":{
-"message":"Values are estimated and may vary. The performance score is [based only on these metrics](https://github.com/GoogleChrome/lighthouse/blob/d2ec9ffbb21de9ad1a0f86ed24575eda32c796f0/docs/scoring.md#how-are-the-scores-weighted).",
-"description":"Disclaimer shown to users below the metric values (First Contentful Paint, Time to Interactive, etc) to warn them that the numbers they see will likely change slightly the next time they run Lighthouse."},
-
-"lighthouse-core/report/html/renderer/util.js | warningAuditsGroupTitle":{
-"message":"Passed audits but with warnings",
-"description":"Section heading shown above a list of passed audits that contain warnings. Audits under this section do not negatively impact the score, but Lighthouse has generated some potentially actionable suggestions that should be reviewed. This section is expanded by default and displays after the failing audits."},
-
-"lighthouse-core/report/html/renderer/util.js | warningHeader":{
-"message":"Warnings: ",
-"description":"This label is shown above a bulleted list of warnings. It is shown directly below an audit that produced warnings. Warnings describe situations the user should be aware of, as Lighthouse was unable to complete all the work required on this audit. For example, The 'Unable to decode image (biglogo.jpg)' warning may show up below an image encoding audit."},
-
-"stack-packs/packs/wordpress.js | efficient_animated_content":{
-"message":"Consider uploading your GIF to a service which will make it available to embed as an HTML5 video.",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve performance by encoding animated images as video, in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."},
-
-"stack-packs/packs/wordpress.js | offscreen_images":{
-"message":"Install a [lazy-load WordPress plugin](https://wordpress.org/plugins/search/lazy+load/) that provides the ability to defer any offscreen images, or switch to a theme that provides that functionality. Also consider using [the AMP plugin](https://wordpress.org/plugins/amp/).",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve performance by lazy loading images that are initially offscreen in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."},
-
-"stack-packs/packs/wordpress.js | render_blocking_resources":{
-"message":"There are a number of WordPress plugins that can help you [inline critical assets](https://wordpress.org/plugins/search/critical+css/) or [defer less important resources](https://wordpress.org/plugins/search/defer+css+javascript/). Beware that optimizations provided by these plugins may break features of your theme or plugins, so you will likely need to make code changes.",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve performance by reducing the amount of render blocking resources present on their page, in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."},
-
-"stack-packs/packs/wordpress.js | time_to_first_byte":{
-"message":"Themes, plugins, and server specifications all contribute to server response time. Consider finding a more optimized theme, carefully selecting an optimization plugin, and/or upgrading your server.",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve the time to first byte speed metric, in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."},
-
-"stack-packs/packs/wordpress.js | total_byte_weight":{
-"message":"Consider showing excerpts in your post lists (e.g. via the more tag), reducing the number of posts shown on a given page, breaking your long posts into multiple pages, or using a plugin to lazy-load comments.",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve site loading performance by reducing the total bytes delivered by their page in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."},
-
-"stack-packs/packs/wordpress.js | unminified_css":{
-"message":"A number of [WordPress plugins](https://wordpress.org/plugins/search/minify+css/) can speed up your site by concatenating, minifying, and compressing your styles. You may also want to use a build process to do this minification up-front if possible.",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve performance by minifying their CSS files in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."},
-
-"stack-packs/packs/wordpress.js | unminified_javascript":{
-"message":"A number of [WordPress plugins](https://wordpress.org/plugins/search/minify+javascript/) can speed up your site by concatenating, minifying, and compressing your scripts. You may also want to use a build process to do this minification up front if possible.",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve performance by minifying their Javascript files in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."},
-
-"stack-packs/packs/wordpress.js | unused_css_rules":{
-"message":"Consider reducing, or switching, the number of [WordPress plugins](https://wordpress.org/plugins/) loading unused CSS in your page. To identify plugins that are adding extraneous CSS, try running [code coverage](https://developers.google.com/web/updates/2017/04/devtools-release-notes#coverage) in Chrome DevTools. You can identify the theme/plugin responsible from the URL of the stylesheet. Look out for plugins that have many stylesheets in the list which have a lot of red in code coverage. A plugin should only enqueue a stylesheet if it is actually used on the page.",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve performance by removing unused CSS, in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."},
-
-"stack-packs/packs/wordpress.js | unused_javascript":{
-"message":"Consider reducing, or switching, the number of [WordPress plugins](https://wordpress.org/plugins/) loading unused JavaScript in your page. To identify plugins that are adding extraneous JS, try running [code coverage](https://developers.google.com/web/updates/2017/04/devtools-release-notes#coverage) in Chrome DevTools. You can identify the theme/plugin responsible from the URL of the script. Look out for plugins that have many scripts in the list which have a lot of red in code coverage. A plugin should only enqueue a script if it is actually used on the page.",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve performance by removing unused Javascript files in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."},
-
-"stack-packs/packs/wordpress.js | uses_long_cache_ttl":{
-"message":"Read about [Browser Caching in WordPress](https://codex.wordpress.org/WordPress_Optimization#Browser_Caching).",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve their site by enabling long caching in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."},
-
-"stack-packs/packs/wordpress.js | uses_optimized_images":{
-"message":"Consider using an [image optimization WordPress plugin](https://wordpress.org/plugins/search/optimize+images/) that compresses your images while retaining quality.",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve site performance by optimizing images, in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."},
-
-"stack-packs/packs/wordpress.js | uses_responsive_images":{
-"message":"Upload images directly through the [media library](https://codex.wordpress.org/Media_Library_Screen) to ensure that the required image sizes are available, and then insert them from the media library or use the image widget to ensure the optimal image sizes are used (including those for the responsive breakpoints). Avoid using `Full Size` images unless the dimensions are adequate for their usage. [Learn More](https://codex.wordpress.org/Inserting_Images_into_Posts_and_Pages#Image_Size).",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve performance by using responsive images in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."},
-
-"stack-packs/packs/wordpress.js | uses_text_compression":{
-"message":"You can enable text compression in your web server configuration.",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve performance via enabling text compression in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."},
-
-"stack-packs/packs/wordpress.js | uses_webp_images":{
-"message":"Consider using a [plugin](https://wordpress.org/plugins/search/convert+webp/) or service that will automatically convert your uploaded images to the optimal formats.",
-"description":"Additional description of a Lighthouse audit that tells the user how they can improve image loading by using webp in the context of the Wordpress CMS platform. This is displayed after a user expands the section to see more. No character length limits. Links in (parenthesis) become link texts to additional documentation."}};
-
-
-
-},{}],68:[function(require,module,exports){
 (function(__filename,__dirname){
 
 
@@ -28804,9 +27636,11 @@ const path=require('path');
 const isDeepEqual=require('lodash.isequal');
 const log=require('lighthouse-logger');
 const MessageFormat=require('intl-messageformat').default;
-const MessageParser=require('intl-messageformat-parser');
 const lookupClosestLocale=require('lookup-closest-locale');
 const LOCALES=require('./locales.js');
+
+
+
 
 const LH_ROOT=path.join(__dirname,'../../../');
 const MESSAGE_INSTANCE_ID_REGEX=/(.* \| .*) # (\d+)$/;
@@ -28816,16 +27650,24 @@ const MESSAGE_INSTANCE_ID_QUICK_REGEX=/ # \d+$/;
 (()=>{
 
 
-try{
+
+
+
+require('intl-pluralrules');
+
 
 const IntlPolyfill=require('intl');
 
+
 if(!IntlPolyfill.NumberFormat)return;
 
+
+const minimumLocales=['en','es','ru','zh'];
+const supportedLocales=Intl.NumberFormat.supportedLocalesOf(minimumLocales);
+
+if(supportedLocales.length!==minimumLocales.length){
 Intl.NumberFormat=IntlPolyfill.NumberFormat;
 Intl.DateTimeFormat=IntlPolyfill.DateTimeFormat;
-}catch(_){
-log.warn('i18n','Failed to install `intl` polyfill');
 }
 })();
 
@@ -28859,6 +27701,8 @@ columnResourceType:'Resource Type',
 columnRequests:'Requests',
 
 columnTransferSize:'Transfer Size',
+
+columnName:'Name',
 
 totalResourceType:'Total',
 
@@ -28922,37 +27766,106 @@ return closestLocale||'en';
 
 
 
-function _preprocessMessageValues(icuMessage,values={}){
-const clonedValues=JSON.parse(JSON.stringify(values));
-const parsed=MessageParser.parse(icuMessage);
 
-parsed.elements.
-filter(el=>el.type==='argumentElement').
-forEach(el=>{
-if(el.id&&el.id in values===false){
-throw new Error(`ICU Message contains a value reference ("${el.id}") that wasn't provided`);
+
+
+
+
+
+
+
+
+
+
+
+
+
+function collectAllCustomElementsFromICU(icuElements,seenElementsById=new Map()){
+for(const el of icuElements){
+
+if(el.type!=='argumentElement')continue;
+
+seenElementsById.set(el.id,el);
+
+
+if(!el.format||el.format.type!=='pluralFormat')continue;
+
+for(const option of el.format.options){
+
+collectAllCustomElementsFromICU(option.value.elements,seenElementsById);
 }
-});
+}
+
+return seenElementsById;
+}
 
 
-parsed.elements.
-filter(el=>el.format&&el.format.style==='milliseconds').
-
-forEach(el=>clonedValues[el.id]=Math.round(clonedValues[el.id]/10)*10);
 
 
-parsed.elements.
-filter(el=>el.format&&el.format.style==='seconds'&&el.id==='timeInMs').
-
-forEach(el=>clonedValues[el.id]=Math.round(clonedValues[el.id]/100)/10);
 
 
-parsed.elements.
-filter(el=>el.format&&el.format.style==='bytes').
 
-forEach(el=>clonedValues[el.id]=clonedValues[el.id]/1024);
 
-return clonedValues;
+
+
+function _preformatValues(icuMessage,messageFormatter,values){
+const elementMap=collectAllCustomElementsFromICU(messageFormatter.getAst().elements);
+const argumentElements=[...elementMap.values()];
+
+
+const formattedValues={};
+
+for(const{id,format}of argumentElements){
+
+if(id&&id in values===false){
+throw new Error(`ICU Message "${icuMessage}" contains a value reference ("${id}") `+
+`that wasn't provided`);
+}
+
+const value=values[id];
+
+
+if(!format||format.type!=='numberFormat'){
+formattedValues[id]=value;
+continue;
+}
+
+if(typeof value!=='number'){
+throw new Error(`ICU Message "${icuMessage}" contains a numeric reference ("${id}") `+
+'but provided value was not a number');
+}
+
+
+if(format.style==='milliseconds'){
+
+formattedValues[id]=Math.round(value/10)*10;
+}else if(format.style==='seconds'&&id==='timeInMs'){
+
+formattedValues[id]=Math.round(value/100)/10;
+}else if(format.style==='bytes'){
+
+formattedValues[id]=value/1024;
+}else{
+
+formattedValues[id]=value;
+}
+}
+
+
+for(const valueId of Object.keys(values)){
+if(valueId in formattedValues)continue;
+
+
+if(valueId==='errorCode'){
+formattedValues.errorCode=values.errorCode;
+continue;
+}
+
+throw new Error(`Provided value "${valueId}" does not match any placeholder in `+
+`ICU message "${icuMessage}"`);
+}
+
+return formattedValues;
 }
 
 
@@ -28974,24 +27887,38 @@ const _ICUMsgNotFoundMsg='ICU message not found in destination locale';
 
 
 
-function _formatIcuMessage(locale,icuMessageId,fallbackMessage,values){
+function _formatIcuMessage(locale,icuMessageId,uiStringMessage,values={}){
 const localeMessages=LOCALES[locale];
 if(!localeMessages)throw new Error(`Unsupported locale '${locale}'`);
+let localeMessage=localeMessages[icuMessageId]&&localeMessages[icuMessageId].message;
 
-const localeMessage=localeMessages[icuMessageId]&&localeMessages[icuMessageId].message;
 
 
-const messageForMessageFormat=localeMessage||fallbackMessage;
-if(messageForMessageFormat===undefined)throw new Error(_ICUMsgNotFoundMsg);
+if(!localeMessage&&uiStringMessage){
+
+localeMessage=uiStringMessage;
+
+
+if(!LOCALES.en[icuMessageId]||localeMessage!==LOCALES.en[icuMessageId].message){
+log.warn('i18n',`Message "${icuMessageId}" does not match its 'en' counterpart. `+
+`Run 'i18n' to update.`);
+}
+}
+
+if(!localeMessage){
+throw new Error(_ICUMsgNotFoundMsg);
+}
+
 
 const localeForMessageFormat=locale==='en-XA'||locale==='en-XL'?'de-DE':locale;
 
-const valuesForMessageFormat=_preprocessMessageValues(messageForMessageFormat,values);
+const formatter=new MessageFormat(localeMessage,localeForMessageFormat,formats);
 
-const formatter=new MessageFormat(messageForMessageFormat,localeForMessageFormat,formats);
+
+const valuesForMessageFormat=_preformatValues(localeMessage,formatter,values);
+
 const formattedString=formatter.format(valuesForMessageFormat);
-
-return{formattedString,icuMessage:messageForMessageFormat};
+return{formattedString,icuMessage:localeMessage};
 }
 
 
@@ -29034,9 +27961,18 @@ return strings;
 
 
 
+
+
+
 function createMessageInstanceIdFn(filename,fileStrings){
 
 const mergedStrings={...UIStrings,...fileStrings};
+
+
+
+
+
+
 
 
 const getMessageInstanceIdFn=(icuMessage,values)=>{
@@ -29164,6 +28100,19 @@ replaceInObject(inputObject,icuMessagePaths);
 return icuMessagePaths;
 }
 
+
+
+
+
+
+
+
+
+
+function registerLocaleData(locale,lhlMessages){
+LOCALES[locale]=lhlMessages;
+}
+
 module.exports={
 _formatPathAsString,
 _ICUMsgNotFoundMsg,
@@ -29174,11 +28123,13 @@ createMessageInstanceIdFn,
 getFormatted,
 getFormattedFromIdAndValues,
 replaceIcuMessageInstanceIds,
-isIcuMessage};
+isIcuMessage,
+collectAllCustomElementsFromICU,
+registerLocaleData};
 
 
 }).call(this,"/lighthouse-core/lib/i18n/i18n.js","/lighthouse-core/lib/i18n");
-},{"./locales.js":69,"intl":101,"intl-messageformat":116,"intl-messageformat-parser":114,"lighthouse-logger":128,"lodash.isequal":129,"lookup-closest-locale":130,"path":143}],69:[function(require,module,exports){
+},{"./locales.js":68,"intl":101,"intl-messageformat":119,"intl-pluralrules":101,"lighthouse-logger":125,"lodash.isequal":126,"lookup-closest-locale":127,"path":140}],68:[function(require,module,exports){
 
 
 
@@ -29197,9 +28148,12 @@ isIcuMessage};
 
 
 
+
+
+
 const locales={
-'en-US':require('./en-US.json'),
-'en':require('./en-US.json'),
+'en-US':require('./locales/en-US.json'),
+'en':require('./locales/en-US.json'),
 
 
 'en-AU':require('./locales/en-GB.json'),
@@ -29292,7 +28246,7 @@ const locales={
 
 module.exports=locales;
 
-},{"./en-US.json":67,"./locales/ar-XB.json":101,"./locales/ar.json":101,"./locales/bg.json":101,"./locales/ca.json":101,"./locales/cs.json":101,"./locales/da.json":101,"./locales/de.json":101,"./locales/el.json":101,"./locales/en-GB.json":101,"./locales/en-XA.json":101,"./locales/en-XL.json":101,"./locales/es-419.json":101,"./locales/es.json":101,"./locales/fi.json":101,"./locales/fil.json":101,"./locales/fr.json":101,"./locales/he.json":101,"./locales/hi.json":101,"./locales/hr.json":101,"./locales/hu.json":101,"./locales/id.json":101,"./locales/it.json":101,"./locales/ja.json":101,"./locales/ko.json":101,"./locales/lt.json":101,"./locales/lv.json":101,"./locales/nl.json":101,"./locales/no.json":101,"./locales/pl.json":101,"./locales/pt-PT.json":101,"./locales/pt.json":101,"./locales/ro.json":101,"./locales/ru.json":101,"./locales/sk.json":101,"./locales/sl.json":101,"./locales/sr-Latn.json":101,"./locales/sr.json":101,"./locales/sv.json":101,"./locales/ta.json":101,"./locales/te.json":101,"./locales/th.json":101,"./locales/tr.json":101,"./locales/uk.json":101,"./locales/vi.json":101,"./locales/zh-HK.json":101,"./locales/zh-TW.json":101,"./locales/zh.json":101}],70:[function(require,module,exports){
+},{"./locales/ar-XB.json":101,"./locales/ar.json":101,"./locales/bg.json":101,"./locales/ca.json":101,"./locales/cs.json":101,"./locales/da.json":101,"./locales/de.json":101,"./locales/el.json":101,"./locales/en-GB.json":101,"./locales/en-US.json":101,"./locales/en-XA.json":101,"./locales/en-XL.json":101,"./locales/es-419.json":101,"./locales/es.json":101,"./locales/fi.json":101,"./locales/fil.json":101,"./locales/fr.json":101,"./locales/he.json":101,"./locales/hi.json":101,"./locales/hr.json":101,"./locales/hu.json":101,"./locales/id.json":101,"./locales/it.json":101,"./locales/ja.json":101,"./locales/ko.json":101,"./locales/lt.json":101,"./locales/lv.json":101,"./locales/nl.json":101,"./locales/no.json":101,"./locales/pl.json":101,"./locales/pt-PT.json":101,"./locales/pt.json":101,"./locales/ro.json":101,"./locales/ru.json":101,"./locales/sk.json":101,"./locales/sl.json":101,"./locales/sr-Latn.json":101,"./locales/sr.json":101,"./locales/sv.json":101,"./locales/ta.json":101,"./locales/te.json":101,"./locales/th.json":101,"./locales/tr.json":101,"./locales/uk.json":101,"./locales/vi.json":101,"./locales/zh-HK.json":101,"./locales/zh-TW.json":101,"./locales/zh.json":101}],69:[function(require,module,exports){
 
 
 
@@ -29366,7 +28320,7 @@ doExist,
 pngSizedAtLeast};
 
 
-},{"./url-shim.js":"url"}],71:[function(require,module,exports){
+},{"./url-shim.js":"url"}],70:[function(require,module,exports){
 
 
 
@@ -29574,7 +28528,80 @@ simulationNamesToIgnore:[
 convertNodeTimingsToTrace};
 
 
-},{}],72:[function(require,module,exports){
+},{}],71:[function(require,module,exports){
+
+
+
+
+
+'use strict';
+
+const Driver=require('../gather/driver.js');
+
+class LHElement{
+
+
+
+
+constructor(element,driver){
+if(!element||!driver){
+throw Error('Driver and element required to create Element');
+}
+this.driver=driver;
+this.element=element;
+}
+
+
+
+
+
+getAttribute(name){
+return this.driver.
+sendCommand('DOM.getAttributes',{
+nodeId:this.element.nodeId}).
+
+
+
+
+then(resp=>{
+const attrIndex=resp.attributes.indexOf(name);
+if(attrIndex===-1){
+return null;
+}
+
+return resp.attributes[attrIndex+1];
+});
+}
+
+
+
+
+getNodeId(){
+return this.element.nodeId;
+}
+
+
+
+
+
+getProperty(propName){
+return this.driver.
+sendCommand('DOM.resolveNode',{
+nodeId:this.element.nodeId}).
+
+then(resp=>{
+if(!resp.object.objectId){
+return null;
+}
+return this.driver.getObjectProperty(resp.object.objectId,propName);
+}).
+catch(()=>null);
+}}
+
+
+module.exports=LHElement;
+
+},{"../gather/driver.js":52}],72:[function(require,module,exports){
 (function(__filename){
 
 
@@ -29588,17 +28615,35 @@ const i18n=require('./i18n/i18n.js');
 
 const UIStrings={
 
+
+
+
 didntCollectScreenshots:`Chrome didn't collect any screenshots during the page load. Please make sure there is content visible on the page, and then try re-running Lighthouse. ({errorCode})`,
 
+
+
+
 badTraceRecording:'Something went wrong with recording the trace over your page load. Please run Lighthouse again. ({errorCode})',
+
+
+
 
 pageLoadTookTooLong:'Your page took too long to load. Please follow the opportunities in the report to reduce your page load time, and then try re-running Lighthouse. ({errorCode})',
 
 pageLoadFailed:'Lighthouse was unable to reliably load the page you requested. Make sure you are testing the correct URL and that the server is properly responding to all requests.',
 
+
+
+
 pageLoadFailedWithStatusCode:'Lighthouse was unable to reliably load the page you requested. Make sure you are testing the correct URL and that the server is properly responding to all requests. (Status code: {statusCode})',
 
+
+
+
 pageLoadFailedWithDetails:'Lighthouse was unable to reliably load the page you requested. Make sure you are testing the correct URL and that the server is properly responding to all requests. (Details: {errorDetails})',
+
+
+
 
 pageLoadFailedInsecure:'The URL you have provided does not have a valid security certificate. {securityMessages}',
 
@@ -29610,6 +28655,9 @@ requestContentTimeout:'Fetching resource content has exceeded the allotted time'
 
 urlInvalid:'The URL you have provided appears to be invalid.',
 
+
+
+
 protocolTimeout:'Waiting for DevTools protocol response has exceeded the allotted time. (Method: {protocolMethod})',
 
 dnsFailure:'DNS servers could not resolve the provided domain.',
@@ -29618,7 +28666,14 @@ pageLoadFailedHung:'Lighthouse was unable to reliably load the URL you requested
 
 criTimeout:'Timeout waiting for initial Debugger Protocol connection.',
 
+
+
+
 missingRequiredArtifact:'Required {artifactName} gatherer did not run.',
+
+
+
+
 
 erroredRequiredArtifact:'Required {artifactName} gatherer encountered an error: {errorMessage}'};
 
@@ -29650,6 +28705,7 @@ constructor(errorDefinition,properties){
 super(errorDefinition.code);
 this.name='LHError';
 this.code=errorDefinition.code;
+
 
 this.friendlyMessage=str_(errorDefinition.message,{errorCode:this.code,...properties});
 this.lhrRuntimeError=!!errorDefinition.lhrRuntimeError;
@@ -29802,6 +28858,10 @@ NO_FMP:{
 code:'NO_FMP',
 message:UIStrings.badTraceRecording},
 
+NO_LCP:{
+code:'NO_LCP',
+message:UIStrings.badTraceRecording},
+
 
 
 FMP_TOO_LATE_FOR_FCPUI:{code:'FMP_TOO_LATE_FOR_FCPUI',message:UIStrings.pageLoadTookTooLong},
@@ -29934,7 +28994,7 @@ module.exports=LighthouseError;
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/lighthouse-core/lib/lh-error.js");
-},{"./i18n/i18n.js":68}],73:[function(require,module,exports){
+},{"./i18n/i18n.js":67}],73:[function(require,module,exports){
 
 
 
@@ -30639,7 +29699,7 @@ this._recordsById=new Map();
 
 
 getInflightRecords(){
-return this._records.filter(record=>!NetworkRecorder.isNetworkRecordFinished(record));
+return this._records.filter(record=>!record.finished);
 }
 
 getRecords(){
@@ -30663,24 +29723,35 @@ return super.once(event,listener);
 }
 
 isIdle(){
-return!!this._getActiveIdlePeriod(0);
+return this._isActiveIdlePeriod(0);
 }
 
 is2Idle(){
-return!!this._getActiveIdlePeriod(2);
+return this._isActiveIdlePeriod(2);
 }
 
 
 
 
-_getActiveIdlePeriod(allowedRequests){
-const quietPeriods=NetworkRecorder.findNetworkQuietPeriods(this._records,allowedRequests);
-return quietPeriods.find(period=>!Number.isFinite(period.end));
+
+
+
+_isActiveIdlePeriod(allowedRequests){
+let inflightRequests=0;
+
+for(let i=0;i<this._records.length;i++){
+const record=this._records[i];
+if(record.finished)continue;
+if(IGNORED_NETWORK_SCHEMES.includes(record.parsedURL.scheme))continue;
+inflightRequests++;
+}
+
+return inflightRequests<=allowedRequests;
 }
 
 _emitNetworkStatus(){
-const zeroQuiet=this._getActiveIdlePeriod(0);
-const twoQuiet=this._getActiveIdlePeriod(2);
+const zeroQuiet=this.isIdle();
+const twoQuiet=this.is2Idle();
 
 if(twoQuiet&&zeroQuiet){
 log.verbose('NetworkRecorder','network fully-quiet');
@@ -30703,28 +29774,6 @@ this.emit('networkbusy');
 
 
 
-static _isQUICAndFinished(record){
-const isQUIC=record.responseHeaders&&record.responseHeaders.
-some(header=>header.name.toLowerCase()==='alt-svc'&&/quic/.test(header.value));
-const receivedHeaders=record.timing&&record.timing.receiveHeadersEnd>0;
-return!!(isQUIC&&receivedHeaders&&record.endTime);
-}
-
-
-
-
-
-static isNetworkRecordFinished(record){
-return record.finished||
-NetworkRecorder._isQUICAndFinished(record);
-}
-
-
-
-
-
-
-
 
 
 static findNetworkQuietPeriods(networkRecords,allowedConcurrentRequests,endTime=Infinity){
@@ -30739,7 +29788,7 @@ return;
 
 
 timeBoundaries.push({time:record.startTime*1000,isStart:true});
-if(NetworkRecorder.isNetworkRecordFinished(record)){
+if(record.finished){
 timeBoundaries.push({time:record.endTime*1000,isStart:false});
 }
 });
@@ -30809,11 +29858,12 @@ this._emitNetworkStatus();
 
 onRequestWillBeSent(event){
 const data=event.params;
-const originalRequest=this._findRealRequestAndSetSource(data.requestId,event.source);
+const originalRequest=this._findRealRequestAndSetSession(data.requestId,event.sessionId);
 
 if(!originalRequest){
 const request=new NetworkRequest();
 request.onRequestWillBeSent(data);
+request.sessionId=event.sessionId;
 this.onRequestStarted(request);
 return;
 }
@@ -30849,7 +29899,7 @@ this.onRequestFinished(originalRequest);
 
 onRequestServedFromCache(event){
 const data=event.params;
-const request=this._findRealRequestAndSetSource(data.requestId,event.source);
+const request=this._findRealRequestAndSetSession(data.requestId,event.sessionId);
 if(!request)return;
 request.onRequestServedFromCache();
 }
@@ -30859,7 +29909,7 @@ request.onRequestServedFromCache();
 
 onResponseReceived(event){
 const data=event.params;
-const request=this._findRealRequestAndSetSource(data.requestId,event.source);
+const request=this._findRealRequestAndSetSession(data.requestId,event.sessionId);
 if(!request)return;
 request.onResponseReceived(data);
 }
@@ -30869,7 +29919,7 @@ request.onResponseReceived(data);
 
 onDataReceived(event){
 const data=event.params;
-const request=this._findRealRequestAndSetSource(data.requestId,event.source);
+const request=this._findRealRequestAndSetSession(data.requestId,event.sessionId);
 if(!request)return;
 request.onDataReceived(data);
 }
@@ -30879,7 +29929,7 @@ request.onDataReceived(data);
 
 onLoadingFinished(event){
 const data=event.params;
-const request=this._findRealRequestAndSetSource(data.requestId,event.source);
+const request=this._findRealRequestAndSetSession(data.requestId,event.sessionId);
 if(!request)return;
 request.onLoadingFinished(data);
 this.onRequestFinished(request);
@@ -30890,7 +29940,7 @@ this.onRequestFinished(request);
 
 onLoadingFailed(event){
 const data=event.params;
-const request=this._findRealRequestAndSetSource(data.requestId,event.source);
+const request=this._findRealRequestAndSetSession(data.requestId,event.sessionId);
 if(!request)return;
 request.onLoadingFailed(data);
 this.onRequestFinished(request);
@@ -30901,7 +29951,7 @@ this.onRequestFinished(request);
 
 onResourceChangedPriority(event){
 const data=event.params;
-const request=this._findRealRequestAndSetSource(data.requestId,event.source);
+const request=this._findRealRequestAndSetSession(data.requestId,event.sessionId);
 if(!request)return;
 request.onResourceChangedPriority(data);
 }
@@ -30933,7 +29983,7 @@ default:return;}
 
 
 
-_findRealRequestAndSetSource(requestId,source){
+_findRealRequestAndSetSession(requestId,sessionId){
 let request=this._recordsById.get(requestId);
 if(!request||!request.isValid)return undefined;
 
@@ -30941,7 +29991,8 @@ while(request.redirectDestination){
 request=request.redirectDestination;
 }
 
-request.setSource(source);
+request.setSession(sessionId);
+
 return request;
 }
 
@@ -30998,7 +30049,7 @@ return records;
 
 module.exports=NetworkRecorder;
 
-},{"./network-request.js":76,"events":108,"lighthouse-logger":128}],76:[function(require,module,exports){
+},{"./network-request.js":76,"events":108,"lighthouse-logger":125}],76:[function(require,module,exports){
 (function(global){
 
 
@@ -31129,12 +30180,6 @@ this.responseHeadersText='';
 this.fetchedViaServiceWorker=false;
 
 this.frameId='';
-
-
-
-
-
-this.targetId=undefined;
 
 
 
@@ -31276,14 +30321,8 @@ this._updateResponseReceivedTimeIfNecessary();
 
 
 
-setSource(source){
-if(source){
-this.targetId=source.targetId;
-this.sessionId=source.sessionId;
-}else{
-this.targetId=undefined;
-this.sessionId=undefined;
-}
+setSession(sessionId){
+this.sessionId=sessionId;
 }
 
 
@@ -31716,6 +30755,43 @@ return parts.join(' > ');
 
 
 
+function isPositionFixed(element){
+
+
+
+
+
+function getStyleAttrValue(element,attr){
+
+return element.style[attr]||window.getComputedStyle(element)[attr];
+}
+
+
+const htmlEl=document.querySelector('html');
+if(htmlEl.scrollHeight<=htmlEl.clientHeight||
+!['scroll','auto','visible'].includes(getStyleAttrValue(htmlEl,'overflowY'))){
+return false;
+}
+
+let currentEl=element;
+while(currentEl){
+const position=getStyleAttrValue(currentEl,'position');
+if(position==='fixed'||position==='sticky'){
+return true;
+}
+currentEl=currentEl.parentElement;
+}
+return false;
+}
+
+
+
+
+
+
+
+
+
 function getNodeLabel(node){
 
 
@@ -31762,7 +30838,8 @@ getNodePathString:getNodePath.toString(),
 getNodeSelectorString:getNodeSelector.toString(),
 getNodeSelector:getNodeSelector,
 getNodeLabel:getNodeLabel,
-getNodeLabelString:getNodeLabel.toString()};
+getNodeLabelString:getNodeLabel.toString(),
+isPositionFixedString:isPositionFixed.toString()};
 
 
 },{}],78:[function(require,module,exports){
@@ -32142,7 +31219,7 @@ log.warn(
 
 module.exports=sentryDelegate;
 
-},{"lighthouse-logger":128,"raven":101}],80:[function(require,module,exports){
+},{"lighthouse-logger":125,"raven":101}],80:[function(require,module,exports){
 
 
 
@@ -32159,7 +31236,7 @@ module.exports=sentryDelegate;
 'use strict';
 
 
-const libDetectorSource="var UNKNOWN_VERSION = null;\nvar d41d8cd98f00b204e9800998ecf8427e_LibraryDetectorTests = {\n\n    'GWT': {\n        icon: 'gwt',\n        url: 'http://www.gwtproject.org/',\n        test: function(win) {\n            // pretty complicated, many possible tell tales\n            var doc = win.document,\n                hasHistFrame = doc.getElementById('__gwt_historyFrame'),\n                hasGwtUid = doc.gwt_uid,\n                hasBodyListener = doc.body.__listener,\n                hasBodyEventBits = doc.body.__eventBits,\n                hasModules = win.__gwt_activeModules,\n                hasJsonP = win.__gwt_jsonp__,\n                hasRootWinApp = win.__gwt_scriptsLoaded || win.__gwt_stylesLoaded || win.__gwt_activeModules;\n\n            // use the many possible indicators\n            if(hasHistFrame || hasGwtUid || hasBodyListener || hasBodyEventBits || hasModules || hasJsonP || hasRootWinApp) {\n\n                // carefully look at frames, but only if certain is GWT frame\n                var frames = doc.getElementsByTagName('iframe'),\n                    gwtVersion = UNKNOWN_VERSION;\n                for(var n=0; n<frames.length; n++) {\n                    // catch security access errors\n                    try {\n                        var hasNegativeTabIndex = frames[n].tabIndex < 0; // on for GWT\n                        if(hasNegativeTabIndex && frames[n].contentWindow && frames[n].contentWindow.$gwt_version) {\n                            gwtVersion = frames[n].contentWindow.$gwt_version;\n                            break;\n                        }\n                    }\n                    catch(e) {}\n                }\n\n                if(gwtVersion=='0.0.999') {\n                  gwtVersion = 'Google Internal';\n                }\n\n                return { version: gwtVersion };\n            }\n            return false;\n        }\n    },\n\n    'Ink': {\n        icon: 'ink',\n        url: 'http://ink.sapo.pt/',\n        test: function(win) {\n            if (win.Ink && win.Ink.createModule) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Vaadin': {\n        icon: 'vaadin',\n        url: 'https://vaadin.com/',\n        test: function(win) {\n            if (win.vaadin && win.vaadin.registerWidgetset) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Bootstrap': {\n        icon: 'bootstrap',\n        url: 'http://getbootstrap.com/',\n        npm: 'bootstrap',\n        // look for a function Boostrap has added to jQuery - regex for BS 2 & 3\n        test: function(win) {\n            var jQueryAvailable = win.$ && win.$.fn,\n                RE_PREFIX_V2 = '\\\\$this\\\\.data\\\\((?:\\'|\")',\n                RE_PREFIX_V3 = '\\\\$this\\\\.data\\\\((?:\\'|\")(?:bs\\\\.){1}',\n                bootstrapComponents = [\n                    'affix', 'alert', 'button', 'carousel', 'collapse', 'dropdown',\n                    'modal', 'popover', 'scrollspy', 'tab', 'tooltip'\n                ];\n\n            if(jQueryAvailable) {\n                var bootstrapVersion;\n\n                bootstrapComponents.some(function(component) {\n                    if(win.$.fn[component]) {\n                        // Bootstrap >= 3.2.0 detection\n                        if(win.$.fn[component].Constructor && win.$.fn[component].Constructor.VERSION) {\n                            bootstrapVersion = win.$.fn[component].Constructor.VERSION;\n                            return true;\n                        // Bootstrap >= 2.0.0 and <= 3.1.0 detection\n                        } else if(new RegExp(RE_PREFIX_V3 + component).test(win.$.fn[component].toString())) {\n                            bootstrapVersion = '>= 3.0.0 & <= 3.1.1';\n                            return true;\n                        // Bootstrap < 3.1.0 detection\n                        } else if(new RegExp(RE_PREFIX_V2 + component).test(win.$.fn[component].toString())) {\n                            bootstrapVersion = '>= 2.0.0 & <= 2.3.2';\n                            return true;\n                        }\n                    }\n\n                    return false;\n                });\n\n                if (bootstrapVersion) {\n                    return { version: bootstrapVersion };\n                }\n            }\n\n            return false;\n        }\n    },\n\n    'Zurb': {\n        icon: 'zurb',\n        url: 'https://foundation.zurb.com/',\n        npm: 'foundation-sites',\n        test: function(win) {\n            if(win.Foundation && win.Foundation.Toggler) {\n                return { version: win.Foundation.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Polymer': {\n        icon: 'polymer',\n        url: 'https://www.polymer-project.org/',\n        npm: '@polymer/polymer',\n        test: function(win) {\n            if(win.Polymer && win.Polymer.dom) {\n                return { version: win.Polymer.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Highcharts': {\n        icon: 'highcharts',\n        url: 'http://www.highcharts.com',\n        npm: 'highcharts',\n        test: function(win) {\n            if(win.Highcharts && win.Highcharts.Point) {\n                return { version: win.Highcharts.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'InfoVis': {\n        icon: 'jit',\n        url: 'http://philogb.github.com/jit/',\n        test: function test(win) {\n            if(win.$jit && win.$jit.PieChart) {\n                return { version: win.$jit.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'FlotCharts': {\n        icon: 'flotcharts',\n        url: 'http://www.flotcharts.org/',\n        npm: 'flot',\n        test: function(win) {\n            if(win.$ && win.$.plot) {\n                return { version: win.$.plot.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'CreateJS': {\n        icon: 'createjs',\n        url: 'https://createjs.com/',\n        npm: 'createjs',\n        test: function(win) {\n            if(win.createjs && win.createjs.promote) {\n                return { version: UNKNOWN_VERSION}; // no version info available\n            }\n            return false;\n        }\n    },\n\n    'Google Maps': {\n        icon: 'gmaps',\n        url: 'https://developers.google.com/maps/',\n        test: function(win) {\n            if (win.google && win.google.maps) {\n                return { version: win.google.maps.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'jQuery': {\n        icon: 'jquery',\n        url: 'http://jquery.com',\n        npm: 'jquery',\n        test: function(win) {\n            var jq = win.jQuery || win.$;\n            if (jq && jq.fn) {\n                return { version: jq.fn.jquery.replace(/[^\\d+\\.+]/g, '') || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'jQuery UI': {\n        icon: 'jquery_ui',\n        url: 'http://jqueryui.com',\n        npm: 'jquery-ui',\n        test: function(win) {\n            var jq = win.jQuery || win.$ || win.$jq || win.$j;\n            if(jq && jq.fn && jq.fn.jquery && jq.ui) {\n                var plugins = 'accordion,datepicker,dialog,draggable,droppable,progressbar,resizable,selectable,slider,menu,grid,tabs'.split(','), concat = [];\n                for (var i=0; i < plugins.length; i++) { if(jq.ui[plugins[i]]) concat.push(plugins[i].substr(0,1).toUpperCase() + plugins[i].substr(1)); }\n                return { version: jq.ui.version || UNKNOWN_VERSION, details: concat.length ? 'Plugins used: '+concat.join(',') : '' };\n            }\n            return false;\n        }\n    },\n\n    'Dojo': {\n        icon: 'dojo',\n        url: 'http://dojotoolkit.org',\n        npm: 'dojo',\n        test: function(win) {\n            if(win.dojo && win.dojo.delegate) {\n                var version = win.dojo.version ? win.dojo.version.toString() : UNKNOWN_VERSION;\n                return { version: version, details: 'Details: '+(win.dijit ? 'Uses Dijit' : 'none') };\n            }\n            return false;\n        }\n    },\n\n    'Prototype': {\n        icon: 'prototype',\n        url: 'http://prototypejs.org',\n        test: function(win) {\n            if(win.Prototype && win.Prototype.BrowserFeatures) {\n                return { version: win.Prototype.Version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Scriptaculous': {\n        icon: 'scriptaculous',\n        url: 'http://script.aculo.us',\n        test: function(win) {\n            if(win.Scriptaculous && win.Scriptaculous.load) {\n                return { version: win.Scriptaculous.Version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'MooTools': {\n        icon: 'mootools',\n        url: 'https://mootools.net/',\n        test: function(win) {\n            if(win.MooTools && win.MooTools.build) {\n                return { version: win.MooTools.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Spry': {\n        icon: 'spry',\n        url: 'http://labs.adobe.com/technologies/spry',\n        test: function(win) {\n            if (win.Spry && win.Spry.Data) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'YUI 2': {\n        icon: 'yui',\n        url: 'http://developer.yahoo.com/yui/2/',\n        test: function(win) {\n            if (win.YAHOO && win.YAHOO.util) {\n                return { version: win.YAHOO.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'YUI 3': {\n        icon: 'yui3',\n        url: 'https://yuilibrary.com/',\n        npm: 'yui',\n        test: function(win) {\n            if (win.YUI && win.YUI.Env) {\n                return { version: win.YUI.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Qooxdoo': {\n        icon: 'qooxdoo',\n        url: 'http://www.qooxdoo.org/',\n        npm: 'qooxdoo',\n        test: function(win) {\n            if(win.qx && win.qx.Bootstrap) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Ext JS': {\n        icon: 'extjs',\n        url: 'https://www.sencha.com/products/extjs/',\n        test: function(win) {\n            if (win.Ext && win.Ext.versions) {\n                return { version: win.Ext.versions.core.version };\n            }\n            else if(win.Ext) {\n                return { version: win.Ext.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'base2': {\n        icon: 'base2',\n        url: 'http://code.google.com/p/base2',\n        test: function(win) {\n            if(win.base2 && win.base2.dom) {\n                return { version: win.base2.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Closure Library': {\n        icon: 'closure',\n        url: 'https://developers.google.com/closure/library/',\n        npm: 'google-closure-library',\n        test: function(win) {\n            if(win.goog && win.goog.provide) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Rapha&euml;l': {\n        icon: 'raphael',\n        url: 'http://dmitrybaranovskiy.github.io/raphael/',\n        test: function(win) {\n            if (win.Raphael && win.Raphael.circle) {\n                return { version: win.Raphael.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'React': {\n        icon: 'react',\n        url: 'https://reactjs.org/',\n        npm: 'react',\n        test: function(win) {\n            function isMatch(node) {\n                return node!=null && node._reactRootContainer!=null;\n            }\n            function nodeFilter(node) {\n                return isMatch(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;\n            }\n            var reactRoot = document.getElementById('react-root');\n            var altHasReact = document.querySelector('*[data-reactroot]');\n            var bodyReactRoot = isMatch(document.body) || isMatch(document.body.firstElementChild);\n            var hasReactRoot = bodyReactRoot|| document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, nodeFilter).nextNode() != null;\n            if (hasReactRoot || reactRoot && reactRoot.innerText.length > 0 || altHasReact || win.React && win.React.Component) {\n                return { version: win.React && win.React.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Next.js': {\n        icon: 'next',\n        url: 'https://nextjs.org/',\n        npm: 'next',\n        test: function(win) {\n            if (win.__NEXT_DATA__ && win.__NEXT_DATA__.buildId) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Preact': {\n        icon: 'preact',\n        url: 'https://preactjs.com/',\n        npm: 'preact',\n        test: function(win) {\n            var expando = typeof Symbol!='undefined' && Symbol.for && Symbol.for('preactattr');\n            function isMatch(node) {\n                return node._component!=null || node.__preactattr_!=null || expando && node[expando]!=null;\n            }\n            function getMatch(node) {\n                return node!=null && isMatch(node) && node;\n            }\n            function nodeFilter(node) {\n                return isMatch(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;\n            }\n            var preactRoot = getMatch(document.body) || getMatch(document.body.firstElementChild);\n            if (!preactRoot) {\n                preactRoot = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, nodeFilter).nextNode();\n            }\n            if (preactRoot || win.preact) {\n                var version = UNKNOWN_VERSION;\n                if (expando && preactRoot && preactRoot[expando]!=null) {\n                    version = '7';\n                }\n                return { version: version };\n            }\n            return false;\n        }\n    },\n\n    'Modernizr': {\n        icon: 'modernizr',\n        url: 'https://modernizr.com/',\n        npm: 'modernizr',\n        test: function(win) {\n            if (win.Modernizr && win.Modernizr.addTest) {\n                return { version: win.Modernizr._version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Processing.js': {\n        icon: 'processingjs',\n        url: 'http://processingjs.org',\n        npm: 'processing-js',\n        test: function(win) {\n            if(win.Processing && win.Processing.box) {\n                return { version: Processing.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Backbone': {\n        icon: 'backbone',\n        url: 'http://backbonejs.org/',\n        npm: 'backbone',\n        test: function(win) {\n            if (win.Backbone && win.Backbone.Model.extend) {\n                return {version: win.Backbone.VERSION || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Leaflet': {\n        icon: 'leaflet',\n        url: 'http://leafletjs.com',\n        npm: 'leaflet',\n        test: function(win) {\n            // Leaflet 3.1 uses L.Marker and L.VERSION; later versions use L.marker and L.version\n            if (win.L && win.L.GeoJSON && (win.L.marker || win.L.Marker)) {\n                return { version: win.L.version || win.L.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Mapbox': {\n        icon: 'mapbox',\n        url: 'https://www.mapbox.com/',\n        npm: 'mapbox-gl',\n        test: function(win) {\n            if (win.L && win.L.mapbox && win.L.mapbox.geocoder) {\n                return { version: win.L.mapbox.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Lo-Dash': {\n        icon: 'lodash',\n        url: 'https://lodash.com/',\n        npm: 'lodash',\n        test: function(win) {\n            var _ = typeof (_ = win._) == 'function' && _,\n                chain = typeof (chain = _ && _.chain) == 'function' && chain,\n                wrapper = (chain || _ || function() { return {}; })(1);\n\n            if (_ && wrapper.__wrapped__) {\n                return { version: _.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Underscore': {\n        icon: 'underscore',\n        url: 'http://underscorejs.org/',\n        npm: 'underscore',\n        test: function(win) {\n            if (win._ && typeof win._.tap === 'function' &&\n                !d41d8cd98f00b204e9800998ecf8427e_LibraryDetectorTests['Lo-Dash'].test(win)) {\n                return {version: win._.VERSION || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Sammy': {\n        icon: 'sammy',\n        url: 'http://sammyjs.org',\n        test: function(win) {\n            if (win.Sammy && win.Sammy.Application.curry) {\n                return {version: win.Sammy.VERSION || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Rico': {\n        icon: 'rico',\n        url: 'http://openrico.sourceforge.net/examples/index.html',\n        test:  function(win) {\n            if (win.Rico && window.Rico.checkIfComplete) {\n                return {version: win.Rico.Version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'MochiKit': {\n        icon: 'mochikit',\n        url: 'https://mochi.github.io/mochikit/',\n        test: function(win) {\n            if (win.MochiKit && win.MochiKit.Base.module) {\n                return {version: MochiKit.VERSION || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'gRapha&euml;l': {\n        icon: 'graphael',\n        url: 'https://github.com/DmitryBaranovskiy/g.raphael',\n        test: function(win) {\n            if (win.Raphael && win.Raphael.fn.g) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Glow': {\n        icon: 'glow',\n        url: 'http://www.bbc.co.uk/glow/',\n        test: function(win) {\n            if (win.gloader && win.gloader.getRequests) {\n                return {version: UNKNOWN_VERSION};\n            }\n            else if (win.glow && win.glow.dom) {\n                return {version: win.glow.VERSION || UNKNOWN_VERSION};\n            }\n            else if (win.Glow) {\n                return {version: win.Glow.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Socket.IO': {\n        icon: 'socketio', // currently has no icon\n        url: 'https://socket.io/',\n        npm: 'socket.io',\n        test: function(win) {\n            // version 0.6.2 uses only io.Socket; more recent versions also have io.sockets\n            if (win.io && (win.io.sockets || win.io.Socket)) {\n                return {version: win.io.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Mustache': {\n        icon: 'mustache',\n        url: 'http://mustache.github.io/',\n        npm: 'mustache',\n        test: function(win) {\n            if (win.Mustache && win.Mustache.to_html) {\n                return {version: win.Mustache.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Fabric.js': {\n        icon: 'icon38', // currently has no icon\n        url: 'http://fabricjs.com/',\n        npm: 'fabric',\n        test: function(win) {\n            if (win.fabric && win.fabric.util) {\n                return {version: win.fabric.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'FuseJS': {\n        icon: 'fusejs',\n        url: 'http://fusejs.io/',\n        npm: 'fuse.js',\n        test: function(win) {\n            if (win.Fuse) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Tween.js': {\n        icon: 'icon38', // currently has no icon\n        url: 'https://github.com/tweenjs/tween.js',\n        npm: 'tween.js',\n        test: function(win) {\n            if (win.TWEEN && win.TWEEN.Easing) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'SproutCore': {\n       icon: 'sproutcore',\n       url: 'http://sproutcore.com/',\n       test: function(win) {\n           if (win.SC && win.SC.Application) {\n               return {version: UNKNOWN_VERSION};\n           }\n           return false;\n       }\n    },\n\n    'Zepto.js': {\n       icon: 'zepto',\n       url: 'http://zeptojs.com',\n       npm: 'zepto',\n       test: function(win) {\n           if (win.Zepto && win.Zepto.fn) {\n               return {version: UNKNOWN_VERSION};\n           }\n           return false;\n       }\n    },\n\n    'three.js': {\n       icon: 'icon38', // currently has no icon\n       url: 'https://threejs.org/',\n       npm: 'three',\n       test: function(win) {\n           if (win.THREE && win.THREE.REVISION) {\n               return {version: 'r' + win.THREE.REVISION};\n           }\n           else if (win.THREE) {\n               return {version: UNKNOWN_VERSION};\n           }\n           return false;\n       }\n    },\n\n    'PhiloGL': {\n       icon: 'philogl',\n       url: 'http://www.senchalabs.org/philogl/',\n       npm: 'philogl',\n       test: function(win) {\n           if (win.PhiloGL && win.PhiloGL.Camera) {\n               return {version: win.PhiloGL.version || UNKNOWN_VERSION};\n           }\n           return false;\n       }\n    },\n\n    'CamanJS': {\n        icon: 'camanjs',\n        url: 'http://camanjs.com/',\n        npm: 'caman',\n        test: function(win) {\n            if (win.Caman && win.Caman.version) {\n                return {version: win.Caman.version.release};\n            }\n            else if (win.Caman) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'yepnope': {\n        icon: 'yepnope',\n        url: 'http://yepnopejs.com/',\n        test: function(win) {\n            if (win.yepnope && win.yepnope.injectJs) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'LABjs': {\n        icon: 'icon38',\n        url: 'https://github.com/getify/LABjs',\n        test: function(win) {\n            if (win.$LAB && win.$LAB.setOptions) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Head JS': {\n        icon: 'headjs',\n        url: 'http://headjs.com/',\n        npm: 'headjs',\n        test: function(win) {\n            if (win.head && win.head.js) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'ControlJS': {\n        icon: 'icon38',\n        url: 'http://stevesouders.com/controljs/',\n        test: function(win) {\n            if (win.CJS && win.CJS.start) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'RequireJS': {\n        icon: 'requirejs',\n        url: 'http://requirejs.org/',\n        npm: 'requirejs',\n        test: function(win) {\n            var req = win.require || win.requirejs;\n            if (req && (req.load || (req.s && req.s.contexts && req.s.contexts._ && (req.s.contexts._.loaded || req.s.contexts._.load)))) {\n                return { version: req.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'RightJS': {\n        icon: 'rightjs',\n        url: 'http://rightjs.org/',\n        test: function(win) {\n            if (win.RightJS && win.RightJS.isNode) {\n                return { version: win.RightJS.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'jQuery Tools': {\n       icon: 'jquerytools',\n       url: 'http://jquerytools.github.io/',\n       test: function(win) {\n            var jq = win.jQuery || win.$;\n            if(jq && jq.tools) {\n               return { version: jq.tools.version || UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'Pusher': {\n       icon: 'pusher',\n       url: 'https://pusher.com/docs/',\n       npm: 'pusher-js',\n       test: function(win) {\n            if(win.Pusher && win.Pusher.Channel) {\n               return { version: win.Pusher.VERSION || UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'Paper.js': {\n       icon: 'paperjs',\n       url: 'http://paperjs.org/',\n       npm: 'paper',\n       test: function(win) {\n            if(win.paper && win.paper.Point) {\n               return { version: win.paper.version || UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'Swiffy': {\n       icon: 'icon38',\n       url: 'https://developers.google.com/swiffy/',\n       test: function(win) {\n            if(win.swiffy && win.swiffy.Stage) {\n               return { version: UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'Move': {\n       icon: 'move',\n       url: 'https://github.com/rsms/move',\n       npm: 'move',\n       test: function(win) {\n            if(win.move && win.move.compile) {\n               return { version: win.move.version() || UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'AmplifyJS': {\n       icon: 'amplifyjs',\n       url: 'http://amplifyjs.com/',\n       npm: 'amplifyjs',\n       test: function(win) {\n            if(win.amplify && win.amplify.publish) {\n               return { version: UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'Popcorn.js': {\n       icon: 'popcornjs',\n       url: 'https://github.com/mozilla/popcorn-js/',\n       test: function(win) {\n            if (win.Popcorn && win.Popcorn.Events) {\n               return { version: win.Popcorn.version || UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'D3': {\n        icon: 'd3',\n        url: 'https://d3js.org/',\n        npm: 'd3',\n        test: function(win) {\n            if (win.d3 && win.d3.select) {\n                return { version: win.d3.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Handlebars': {\n        icon: 'handlebars',\n        url: 'http://handlebarsjs.com/',\n        npm: 'handlebars',\n        test: function(win) {\n            if(win.Handlebars && win.Handlebars.compile) {\n                return { version: win.Handlebars.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Knockout': {\n        icon: 'knockout',\n        url: 'http://knockoutjs.com/',\n        npm: 'knockout',\n        test: function(win) {\n            if (win.ko && win.ko.applyBindings) {\n                return { version: win.ko.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Spine': {\n        icon: 'icon38',\n        url: 'http://spine.github.io/',\n        test: function(win) {\n            if (win.Spine && win.Spine.Controller) {\n                return {version: win.Spine.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'jQuery Mobile': {\n        icon: 'jquery_mobile',\n        url: 'http://jquerymobile.com/',\n        npm: 'jquery-mobile',\n        test: function(win) {\n            var jq = win.jQuery || win.$ || win.$jq || win.$j;\n            if(jq && jq.fn && jq.fn.jquery && jq.mobile) {\n                return { version: jq.mobile.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'WebFont Loader': {\n        icon: 'icon38',\n        url: 'https://github.com/typekit/webfontloader',\n        npm: 'webfontloader',\n        test: function(win) {\n            if(win.WebFont && win.WebFont.load) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Angular': {\n        icon: 'angular',\n        url: 'https://angular.io/',\n        npm: '@angular/core',\n        test: function(win) {\n            var ngVersion = win.document.querySelector('[ng-version]');\n            if (ngVersion) {\n                return { version: ngVersion.getAttribute('ng-version') || UNKNOWN_VERSION };\n            }\n            else if (win.ng && win.ng.probe instanceof Function) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'AngularJS': {\n        icon: 'angularjs',\n        url: 'https://angularjs.org/',\n        npm: 'angular',\n        test: function(win) {\n            var ng = win.angular;\n            if(ng && ng.version && ng.version.full) {\n                return { version: ng.version.full };\n            }\n            else if (ng) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Ember.js': {\n        icon: 'emberjs',\n        url: 'https://emberjs.com/',\n        npm: 'ember-source',\n        test: function(win) {\n            var ember = win.Ember || win.Em;\n            if (ember && ember.propertyDidChange) {\n                return { version: ember.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Hammer.js': {\n        icon: 'hammerjs',\n        url: 'http://eightmedia.github.io/hammer.js/',\n        npm: 'hammerjs',\n        test: function(win) {\n            if(win.Hammer && win.Hammer.Pinch) {\n                // Hammer.VERSION available in 1.0.10+\n                return { version: win.Hammer.VERSION || \"&lt; 1.0.10\" };\n            }\n            return false;\n        }\n    },\n\n    'Visibility.js': {\n        icon: 'icon38',\n        url: 'https://github.com/ai/visibilityjs',\n        npm: 'visibilityjs',\n        test: function(win) {\n            if(win.Visibility && win.Visibility.every) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Velocity.js': {\n        icon: 'icon38',\n        url: 'http://velocityjs.org/',\n        npm: 'velocity-animate',\n        test: function(win) {\n            var jq = win.jQuery || win.$,\n                velocity = jq ? jq.Velocity : win.Velocity;\n\n            if(velocity && velocity.RegisterEffect && velocity.version) {\n                return {\n                    version:\n                        velocity.version.major + \".\" +\n                        velocity.version.minor + \".\" +\n                        velocity.version.patch\n                };\n            }\n            else if (velocity && velocity.RegisterEffect) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'IfVisible.js': {\n        icon: 'icon38',\n        url: 'http://serkanyersen.github.io/ifvisible.js/',\n        npm: 'ifvisible.js',\n        test: function(win) {\n            var iv = win.ifvisible;\n            if(iv && iv.__ceGUID === \"ifvisible.object.event.identifier\") {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Pixi.js': {\n        icon: 'pixi',\n        url: 'http://www.pixijs.com/',\n        npm: 'pixi.js',\n        test: function(win) {\n            var px = win.PIXI;\n            if(px && px.WebGLRenderer && px.VERSION) {\n                // version 4.4.3 returns simply \"4.4.3\"; version 1.5.2 returns \"v1.5.2\"\n                return { version: px.VERSION.replace('v', '') || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'DC.js': {\n        icon: 'dcjs',\n        url: 'http://dc-js.github.io/dc.js/',\n        npm: 'dc',\n        test: function(win) {\n            var dc = win.dc;\n            if(dc && dc.registerChart) {\n                return { version: dc.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'GreenSock JS': {\n        icon: 'greensock',\n        url: 'https://greensock.com/gsap',\n        npm: 'gsap',\n        test: function(win) {\n            if (win.TweenMax && win.TweenMax.pauseAll) {\n                return { version: win.TweenMax.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'FastClick': {\n        icon: 'fastclick',\n        url: 'https://github.com/ftlabs/fastclick',\n        npm: 'fastclick',\n        test: function(win) {\n            if(win.FastClick && win.FastClick.notNeeded) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Isotope': {\n        icon: 'isotope',\n        url: 'https://isotope.metafizzy.co/',\n        npm: 'isotope-layout',\n        test: function(win) {\n            if(win.Isotope || (win.$ != null && win.$.Isotope)) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Marionette': {\n        icon: 'marionette',\n        url: 'https://marionettejs.com/',\n        npm: 'backbone.marionette',\n        test: function(win) {\n            if(win.Marionette && win.Marionette.Application) {\n                return { version: win.Marionette.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Can': {\n        icon: 'canjs',\n        url: 'https://canjs.com/',\n        npm: 'can',\n        test: function (win) {\n            if (win.can && win.can.Construct) {\n                return { version: win.can.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Vue': {\n        icon: 'vue',\n        url: 'https://vuejs.org/',\n        npm: 'vue',\n        test: function(win) {\n            function isVueNode(node) {\n                return node.__vue__ != null ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;\n            }\n            var hasVueNode = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, isVueNode).nextNode() !== null;\n            if (hasVueNode) {\n                return { version: win.Vue && win.Vue.version || UNKNOWN_VERSION }\n            }\n            return false;\n        }\n    },\n    'Nuxt.js': {\n        icon: 'nuxt',\n        url: 'https://nuxtjs.org/',\n        npm: 'nuxt',\n        test: function(win) {\n            if ((win.__NUXT__ && win.__NUXT__.data != null) || win.$nuxt) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Two': {\n        icon: 'two',\n        url: 'https://two.js.org/',\n        npm: 'two.js',\n        test: function(win) {\n            if (win.Two && win.Two.Utils) {\n                return { version: win.Two.Version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Brewser': {\n        icon: 'brewser',\n        url: 'https://robertpataki.github.io/brewser/',\n        npm: 'brewser',\n        test: function(win) {\n            if(win.BREWSER && win.BREWSER.ua) {\n                return { version: BREWSER.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Material Design Lite': {\n        icon: 'mdl',\n        url: 'https://getmdl.io/',\n        npm: 'material-design-lite',\n        test: function(win) {\n            if(win.componentHandler && win.componentHandler.upgradeElement) {\n                return { version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n    'Kendo UI': {\n        icon: 'kendoui',\n        url: 'https://github.com/telerik/kendo-ui-core',\n        npm: 'kendo-ui-core',\n        test: function(win) {\n            if (win.kendo && win.kendo.View && win.kendo.View.extend) {\n                return {version: win.kendo.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n    'Matter.js': {\n        icon: 'matter-js',\n        url: 'http://brm.io/matter-js/',\n        npm: 'matter-js',\n        test: function(win) {\n            if (win.Matter && win.Matter.Engine) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n    'Riot': {\n        icon: 'riot',\n        url: 'http://riotjs.com/',\n        npm: 'riot',\n        test: function(win) {\n            if (win.riot && win.riot.mixin) {\n                return { version: win.riot.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Sea.js': {\n        icon: 'icon38',\n        url: 'https://seajs.github.io/seajs/docs/',\n        npm: 'seajs',\n        test: function(win) {\n            if(win.seajs && win.seajs.use) {\n                return { version: win.seajs.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Moment.js': {\n        icon: 'momentjs',\n        url: 'http://momentjs.com/',\n        npm: 'moment',\n        test: function(win) {\n            if(win.moment && (win.moment.isMoment || win.moment.lang)) {\n                // version 1.0.0 has neither \"isMoment\" nor \"version\"\n                return { version: win.moment.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Moment Timezone': {\n        icon: 'momentjs',\n        url: 'http://momentjs.com/timezone/',\n        npm: 'moment-timezone',\n        test: function(win) {\n            if (win.moment && win.moment.tz) {\n                return { version: win.moment.tz.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'ScrollMagic': {\n        icon: 'scrollmagic',\n        url: 'http://scrollmagic.io/',\n        npm: 'scrollmagic',\n        test: function(win) {\n            if (win.ScrollMagic && win.ScrollMagic.Controller) {\n                return {version: ScrollMagic.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n    'SWFObject': {\n        icon: 'icon38', // currently has no icon\n        url: 'https://github.com/swfobject/swfobject',\n        test: function(win) {\n            if (win.swfobject && win.swfobject.embedSWF) {\n                // 2.x - exact version only for 2.3\n                return { version: win.swfobject.version || UNKNOWN_VERSION };\n            } else if(win.deconcept && win.deconcept.SWFObject) {\n                // 1.x\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'FlexSlider': {\n        icon: 'icon38', // currently has no icon\n        url: 'https://woocommerce.com/flexslider/',\n        npm: 'flexslider',\n        test: function(win) {\n            var jq = win.jQuery || win.$ || win.$jq || win.$j;\n            if (jq && jq.fn && jq.fn.jquery && jq.flexslider){\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'SPF': {\n        icon: 'icon38', // currently has no icon\n        url: 'https://youtube.github.io/spfjs/',\n        npm: 'spf',\n        test: function(win) {\n            if (win.spf && win.spf.init) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Numeral.js': {\n        icon: 'icon38', // currently has no icon\n        url: 'http://numeraljs.com/',\n        npm: 'numeraljs',\n        test: function(win) {\n            if (win.numeral && win.isNumeral) {\n                return { version: win.numeral.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'boomerang.js': {\n        icon: 'icon38', // currently has no icon\n        url: 'https://soasta.github.io/boomerang/',\n        npm: 'boomerangjs',\n        test: function(win) {\n            if (win.BOOMR && win.BOOMR.utils && win.BOOMR.init) {\n                return { version: win.BOOMR.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Framer': {\n        icon: 'framer',\n        url: 'https://framer.com/',\n        npm: 'framerjs',\n        test: function(win) {\n            if (win.Framer && win.Framer.Layer) {\n                return { version: win.Framer.Version.build || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Marko': {\n        icon: 'marko',\n        url: 'https://markojs.com/',\n        npm: 'marko',\n        test: function (win) {\n            var selector = '[data-marko-key], [data-marko]';\n            var markoElement = document.querySelector(selector);\n            if (markoElement) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'AMP': {\n        icon: 'amp',\n        url: 'https://ampproject.org/',\n        npm: null,\n        test: function (win) {\n            var version = win.document.documentElement.getAttribute(\"amp-version\");\n            return version ? { version: version } : false;\n        }\n    },\n    'Gatsby': {\n        icon: 'gatsby',\n        url: 'https://www.gatsbyjs.org/',\n        npm: 'gatsby',\n        test: function (win) {\n            if (document.getElementById('___gatsby')) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Shopify': {\n        icon: 'shopify',\n        url: 'https://www.shopify.com/',\n        npm: null,\n        test: function (win) {\n            if (win.Shopify && win.Shopify.shop) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'WordPress': {\n        icon: 'wordpress',\n        url: 'https://wordpress.org/',\n        npm: null,\n        test: function (win) {\n            const hasAPILinkElem = !!document.querySelector('link[rel=\"https://api.w.org/\"]');\n            const hasWPIncludes = !!document.querySelectorAll('link[href*=\"wp-includes\"], script[src*=\"wp-includes\"]').length;\n      \n            if (!hasAPILinkElem && !hasWPIncludes) return false;\n      \n            const generatorMeta = document.querySelector('meta[name=generator][content^=\"WordPress\"]')\n            const version = generatorMeta ? generatorMeta.getAttribute(\"content\").replace(/^\\w+\\s/,'') : UNKNOWN_VERSION;\n            return { version };\n        }\n    },\n    'Wix': {\n        icon: 'wix',\n        url: 'https://www.wix.com/',\n        npm: null,\n        test: function (win) {\n            if (win.wixBiSession) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Workbox': {\n      icon: 'workbox',\n      url: 'https://developers.google.com/web/tools/workbox/',\n      npm: 'workbox-sw',\n      test: async function (win) {\n        var nav = win.navigator;\n        // Service Workers not supported\n        if (!('serviceWorker' in nav)) {\n          return false;\n        }\n        return nav.serviceWorker.getRegistration()\n        .then(function(registration) {\n          var scriptURL = nav.serviceWorker.controller.scriptURL;\n          return fetch(scriptURL, { credentials: 'include',\n            headers: { 'service-worker': 'script' }\n          })\n          .then(function(response) {\n            return response.text();\n          })\n          .then(function(scriptContent) {\n            var workboxRegExp = /new Workbox|new workbox|workbox\\.precaching\\.|workbox\\.strategies/gm;\n            if (workboxRegExp.test(scriptContent)) {\n              // Adapted from\n              // https://github.com/semver/semver/issues/232#issue-48635632\n              var semVerRegExp = /workbox.*?\\b((0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-(0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(\\.(0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?(\\+[0-9a-zA-Z-]+(\\.[0-9a-zA-Z-]+)*)?)\\b/gim;\n              var matches = semVerRegExp.exec(scriptContent);\n              var version = UNKNOWN_VERSION;\n              if (Array.isArray(matches) && matches.length > 1 && matches[1]) {\n                version = matches[1];\n              }\n              return { version: version };\n            }\n            return false;\n          });\n        }).catch(function(exception) {\n          return false;\n        });\n      }\n    }\n};\n";
+const libDetectorSource="var UNKNOWN_VERSION = null;\nvar d41d8cd98f00b204e9800998ecf8427e_LibraryDetectorTests = {\n\n    'GWT': {\n        icon: 'gwt',\n        url: 'http://www.gwtproject.org/',\n        test: function(win) {\n            // pretty complicated, many possible tell tales\n            var doc = win.document,\n                hasHistFrame = doc.getElementById('__gwt_historyFrame'),\n                hasGwtUid = doc.gwt_uid,\n                hasBodyListener = doc.body.__listener,\n                hasBodyEventBits = doc.body.__eventBits,\n                hasModules = win.__gwt_activeModules,\n                hasJsonP = win.__gwt_jsonp__,\n                hasRootWinApp = win.__gwt_scriptsLoaded || win.__gwt_stylesLoaded || win.__gwt_activeModules;\n\n            // use the many possible indicators\n            if(hasHistFrame || hasGwtUid || hasBodyListener || hasBodyEventBits || hasModules || hasJsonP || hasRootWinApp) {\n\n                // carefully look at frames, but only if certain is GWT frame\n                var frames = doc.getElementsByTagName('iframe'),\n                    gwtVersion = UNKNOWN_VERSION;\n                for(var n=0; n<frames.length; n++) {\n                    // catch security access errors\n                    try {\n                        var hasNegativeTabIndex = frames[n].tabIndex < 0; // on for GWT\n                        if(hasNegativeTabIndex && frames[n].contentWindow && frames[n].contentWindow.$gwt_version) {\n                            gwtVersion = frames[n].contentWindow.$gwt_version;\n                            break;\n                        }\n                    }\n                    catch(e) {}\n                }\n\n                if(gwtVersion=='0.0.999') {\n                  gwtVersion = 'Google Internal';\n                }\n\n                return { version: gwtVersion };\n            }\n            return false;\n        }\n    },\n\n    'Ink': {\n        icon: 'ink',\n        url: 'http://ink.sapo.pt/',\n        test: function(win) {\n            if (win.Ink && win.Ink.createModule) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Vaadin': {\n        icon: 'vaadin',\n        url: 'https://vaadin.com/',\n        test: function(win) {\n            if (win.vaadin && win.vaadin.registerWidgetset) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Bootstrap': {\n        icon: 'bootstrap',\n        url: 'http://getbootstrap.com/',\n        npm: 'bootstrap',\n        // look for a function Boostrap has added to jQuery - regex for BS 2 & 3\n        test: function(win) {\n            var jQueryAvailable = win.$ && win.$.fn,\n                RE_PREFIX_V2 = '\\\\$this\\\\.data\\\\((?:\\'|\")',\n                RE_PREFIX_V3 = '\\\\$this\\\\.data\\\\((?:\\'|\")(?:bs\\\\.){1}',\n                bootstrapComponents = [\n                    'affix', 'alert', 'button', 'carousel', 'collapse', 'dropdown',\n                    'modal', 'popover', 'scrollspy', 'tab', 'tooltip'\n                ];\n\n            if(jQueryAvailable) {\n                var bootstrapVersion;\n\n                bootstrapComponents.some(function(component) {\n                    if(win.$.fn[component]) {\n                        // Bootstrap >= 3.2.0 detection\n                        if(win.$.fn[component].Constructor && win.$.fn[component].Constructor.VERSION) {\n                            bootstrapVersion = win.$.fn[component].Constructor.VERSION;\n                            return true;\n                        // Bootstrap >= 2.0.0 and <= 3.1.0 detection\n                        } else if(new RegExp(RE_PREFIX_V3 + component).test(win.$.fn[component].toString())) {\n                            bootstrapVersion = '>= 3.0.0 & <= 3.1.1';\n                            return true;\n                        // Bootstrap < 3.1.0 detection\n                        } else if(new RegExp(RE_PREFIX_V2 + component).test(win.$.fn[component].toString())) {\n                            bootstrapVersion = '>= 2.0.0 & <= 2.3.2';\n                            return true;\n                        }\n                    }\n\n                    return false;\n                });\n\n                if (bootstrapVersion) {\n                    return { version: bootstrapVersion };\n                }\n            }\n\n            return false;\n        }\n    },\n\n    'Zurb': {\n        icon: 'zurb',\n        url: 'https://foundation.zurb.com/',\n        npm: 'foundation-sites',\n        test: function(win) {\n            if(win.Foundation && win.Foundation.Toggler) {\n                return { version: win.Foundation.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Polymer': {\n        icon: 'polymer',\n        url: 'https://www.polymer-project.org/',\n        npm: '@polymer/polymer',\n        test: function(win) {\n            if(win.Polymer && win.Polymer.dom) {\n                return { version: win.Polymer.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Highcharts': {\n        icon: 'highcharts',\n        url: 'http://www.highcharts.com',\n        npm: 'highcharts',\n        test: function(win) {\n            if(win.Highcharts && win.Highcharts.Point) {\n                return { version: win.Highcharts.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'InfoVis': {\n        icon: 'jit',\n        url: 'http://philogb.github.com/jit/',\n        test: function test(win) {\n            if(win.$jit && win.$jit.PieChart) {\n                return { version: win.$jit.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'FlotCharts': {\n        icon: 'flotcharts',\n        url: 'http://www.flotcharts.org/',\n        npm: 'flot',\n        test: function(win) {\n            if(win.$ && win.$.plot) {\n                return { version: win.$.plot.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'CreateJS': {\n        icon: 'createjs',\n        url: 'https://createjs.com/',\n        npm: 'createjs',\n        test: function(win) {\n            if(win.createjs && win.createjs.promote) {\n                return { version: UNKNOWN_VERSION}; // no version info available\n            }\n            return false;\n        }\n    },\n\n    'Google Maps': {\n        icon: 'gmaps',\n        url: 'https://developers.google.com/maps/',\n        test: function(win) {\n            if (win.google && win.google.maps) {\n                return { version: win.google.maps.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'jQuery': {\n        icon: 'jquery',\n        url: 'http://jquery.com',\n        npm: 'jquery',\n        test: function(win) {\n            var jq = win.jQuery || win.$;\n            if (jq && jq.fn && jq.fn.jquery) {\n                return { version: jq.fn.jquery.replace(/[^\\d+\\.+]/g, '') || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'jQuery (Fast path)': {\n        icon: 'jquery',\n        url: 'http://jquery.com',\n        npm: 'jquery',\n        test: function (win) {\n            var jq = win.jQuery || win.$;\n            if (jq && jq.fn) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'jQuery UI': {\n        icon: 'jquery_ui',\n        url: 'http://jqueryui.com',\n        npm: 'jquery-ui',\n        test: function(win) {\n            var jq = win.jQuery || win.$ || win.$jq || win.$j;\n            if(jq && jq.fn && jq.fn.jquery && jq.ui) {\n                var plugins = 'accordion,datepicker,dialog,draggable,droppable,progressbar,resizable,selectable,slider,menu,grid,tabs'.split(','), concat = [];\n                for (var i=0; i < plugins.length; i++) { if(jq.ui[plugins[i]]) concat.push(plugins[i].substr(0,1).toUpperCase() + plugins[i].substr(1)); }\n                return { version: jq.ui.version || UNKNOWN_VERSION, details: concat.length ? 'Plugins used: '+concat.join(',') : '' };\n            }\n            return false;\n        }\n    },\n\n    'Dojo': {\n        icon: 'dojo',\n        url: 'http://dojotoolkit.org',\n        npm: 'dojo',\n        test: function(win) {\n            if(win.dojo && win.dojo.delegate) {\n                var version = win.dojo.version ? win.dojo.version.toString() : UNKNOWN_VERSION;\n                return { version: version, details: 'Details: '+(win.dijit ? 'Uses Dijit' : 'none') };\n            }\n            return false;\n        }\n    },\n\n    'Prototype': {\n        icon: 'prototype',\n        url: 'http://prototypejs.org',\n        test: function(win) {\n            if(win.Prototype && win.Prototype.BrowserFeatures) {\n                return { version: win.Prototype.Version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Scriptaculous': {\n        icon: 'scriptaculous',\n        url: 'http://script.aculo.us',\n        test: function(win) {\n            if(win.Scriptaculous && win.Scriptaculous.load) {\n                return { version: win.Scriptaculous.Version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'MooTools': {\n        icon: 'mootools',\n        url: 'https://mootools.net/',\n        test: function(win) {\n            if(win.MooTools && win.MooTools.build) {\n                return { version: win.MooTools.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Spry': {\n        icon: 'spry',\n        url: 'http://labs.adobe.com/technologies/spry',\n        test: function(win) {\n            if (win.Spry && win.Spry.Data) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'YUI 2': {\n        icon: 'yui',\n        url: 'http://developer.yahoo.com/yui/2/',\n        test: function(win) {\n            if (win.YAHOO && win.YAHOO.util) {\n                return { version: win.YAHOO.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'YUI 3': {\n        icon: 'yui3',\n        url: 'https://yuilibrary.com/',\n        npm: 'yui',\n        test: function(win) {\n            if (win.YUI && win.YUI.Env) {\n                return { version: win.YUI.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Qooxdoo': {\n        icon: 'qooxdoo',\n        url: 'http://www.qooxdoo.org/',\n        npm: 'qooxdoo',\n        test: function(win) {\n            if(win.qx && win.qx.Bootstrap) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Ext JS': {\n        icon: 'extjs',\n        url: 'https://www.sencha.com/products/extjs/',\n        test: function(win) {\n            if (win.Ext && win.Ext.versions) {\n                return { version: win.Ext.versions.core.version };\n            }\n            else if(win.Ext) {\n                return { version: win.Ext.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'base2': {\n        icon: 'base2',\n        url: 'http://code.google.com/p/base2',\n        test: function(win) {\n            if(win.base2 && win.base2.dom) {\n                return { version: win.base2.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Closure Library': {\n        icon: 'closure',\n        url: 'https://developers.google.com/closure/library/',\n        npm: 'google-closure-library',\n        test: function(win) {\n            if(win.goog && win.goog.provide) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Rapha&euml;l': {\n        icon: 'raphael',\n        url: 'http://dmitrybaranovskiy.github.io/raphael/',\n        test: function(win) {\n            if (win.Raphael && win.Raphael.circle) {\n                return { version: win.Raphael.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'React': {\n        icon: 'react',\n        url: 'https://reactjs.org/',\n        npm: 'react',\n        test: function(win) {\n            function isMatch(node) {\n                return node!=null && node._reactRootContainer!=null;\n            }\n            function nodeFilter(node) {\n                return isMatch(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;\n            }\n            var reactRoot = document.getElementById('react-root');\n            var altHasReact = document.querySelector('*[data-reactroot]');\n            var bodyReactRoot = isMatch(document.body) || isMatch(document.body.firstElementChild);\n            var hasReactRoot = bodyReactRoot|| document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, nodeFilter).nextNode() != null;\n            if (hasReactRoot || reactRoot && reactRoot.innerText.length > 0 || altHasReact || win.React && win.React.Component) {\n                return { version: win.React && win.React.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'React (Fast path)': {\n        icon: 'react',\n        url: 'https://reactjs.org/',\n        npm: 'react',\n        test: function (win) {\n            function isMatch(node) {\n                return node != null && node._reactRootContainer != null;\n            }\n            var reactRoot = document.getElementById('react-root');\n            var altHasReact = document.querySelector('*[data-reactroot]');\n            var hasReactRoot = isMatch(document.body) || isMatch(document.body.firstElementChild);\n            if (hasReactRoot || reactRoot || altHasReact || win.React) {\n                return { version: win.React && win.React.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Next.js': {\n        icon: 'next',\n        url: 'https://nextjs.org/',\n        npm: 'next',\n        test: function(win) {\n            if (win.__NEXT_DATA__ && win.__NEXT_DATA__.buildId) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Next.js (Fast path)': {\n        icon: 'next',\n        url: 'https://nextjs.org/',\n        npm: 'next',\n        test: function (win) {\n            if (win.__NEXT_DATA__) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Preact': {\n        icon: 'preact',\n        url: 'https://preactjs.com/',\n        npm: 'preact',\n        test: function(win) {\n            var expando = typeof Symbol!='undefined' && Symbol.for && Symbol.for('preactattr');\n            function isMatch(node) {\n                return node._component!=null || node.__preactattr_!=null || expando && node[expando]!=null;\n            }\n            function getMatch(node) {\n                return node!=null && isMatch(node) && node;\n            }\n            function nodeFilter(node) {\n                return isMatch(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;\n            }\n            var preactRoot = getMatch(document.body) || getMatch(document.body.firstElementChild);\n            if (!preactRoot) {\n                preactRoot = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, nodeFilter).nextNode();\n            }\n            if (preactRoot || win.preact) {\n                var version = UNKNOWN_VERSION;\n                if (expando && preactRoot && preactRoot[expando]!=null) {\n                    version = '7';\n                }\n                return { version: version };\n            }\n            return false;\n        }\n    },\n\n    'Preact (Fast path)': {\n        icon: 'preact',\n        url: 'https://preactjs.com/',\n        npm: 'preact',\n        test: function (win) {\n            function isMatch(node) {\n                return node._component != null || node.__preactattr_ != null;\n            }\n            function getMatch(node) {\n                return node != null && isMatch(node);\n            }\n            var preactRoot = getMatch(document.body) || getMatch(document.body.firstElementChild);\n            if (preactRoot || win.preact) {\n                var version = UNKNOWN_VERSION;\n                return { version: version };\n            }\n            return false;\n        }\n    },\n\n    'Modernizr': {\n        icon: 'modernizr',\n        url: 'https://modernizr.com/',\n        npm: 'modernizr',\n        test: function(win) {\n            if (win.Modernizr && win.Modernizr.addTest) {\n                return { version: win.Modernizr._version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Processing.js': {\n        icon: 'processingjs',\n        url: 'http://processingjs.org',\n        npm: 'processing-js',\n        test: function(win) {\n            if(win.Processing && win.Processing.box) {\n                return { version: Processing.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Backbone': {\n        icon: 'backbone',\n        url: 'http://backbonejs.org/',\n        npm: 'backbone',\n        test: function(win) {\n            if (win.Backbone && win.Backbone.Model.extend) {\n                return {version: win.Backbone.VERSION || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Leaflet': {\n        icon: 'leaflet',\n        url: 'http://leafletjs.com',\n        npm: 'leaflet',\n        test: function(win) {\n            // Leaflet 3.1 uses L.Marker and L.VERSION; later versions use L.marker and L.version\n            if (win.L && win.L.GeoJSON && (win.L.marker || win.L.Marker)) {\n                return { version: win.L.version || win.L.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Mapbox': {\n        icon: 'mapbox',\n        url: 'https://www.mapbox.com/',\n        npm: 'mapbox-gl',\n        test: function(win) {\n            if (win.L && win.L.mapbox && win.L.mapbox.geocoder) {\n                return { version: win.L.mapbox.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Lo-Dash': {\n        icon: 'lodash',\n        url: 'https://lodash.com/',\n        npm: 'lodash',\n        test: function(win) {\n            var _ = typeof (_ = win._) == 'function' && _,\n                chain = typeof (chain = _ && _.chain) == 'function' && chain,\n                wrapper = (chain || _ || function() { return {}; })(1);\n\n            if (_ && wrapper.__wrapped__) {\n                return { version: _.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Underscore': {\n        icon: 'underscore',\n        url: 'http://underscorejs.org/',\n        npm: 'underscore',\n        test: function(win) {\n            if (win._ && typeof win._.tap === 'function' &&\n                !d41d8cd98f00b204e9800998ecf8427e_LibraryDetectorTests['Lo-Dash'].test(win)) {\n                return {version: win._.VERSION || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Sammy': {\n        icon: 'sammy',\n        url: 'http://sammyjs.org',\n        test: function(win) {\n            if (win.Sammy && win.Sammy.Application.curry) {\n                return {version: win.Sammy.VERSION || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Rico': {\n        icon: 'rico',\n        url: 'http://openrico.sourceforge.net/examples/index.html',\n        test:  function(win) {\n            if (win.Rico && window.Rico.checkIfComplete) {\n                return {version: win.Rico.Version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'MochiKit': {\n        icon: 'mochikit',\n        url: 'https://mochi.github.io/mochikit/',\n        test: function(win) {\n            if (win.MochiKit && win.MochiKit.Base.module) {\n                return {version: MochiKit.VERSION || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'gRapha&euml;l': {\n        icon: 'graphael',\n        url: 'https://github.com/DmitryBaranovskiy/g.raphael',\n        test: function(win) {\n            if (win.Raphael && win.Raphael.fn.g) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Glow': {\n        icon: 'glow',\n        url: 'http://www.bbc.co.uk/glow/',\n        test: function(win) {\n            if (win.gloader && win.gloader.getRequests) {\n                return {version: UNKNOWN_VERSION};\n            }\n            else if (win.glow && win.glow.dom) {\n                return {version: win.glow.VERSION || UNKNOWN_VERSION};\n            }\n            else if (win.Glow) {\n                return {version: win.Glow.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Socket.IO': {\n        icon: 'socketio', // currently has no icon\n        url: 'https://socket.io/',\n        npm: 'socket.io',\n        test: function(win) {\n            // version 0.6.2 uses only io.Socket; more recent versions also have io.sockets\n            if (win.io && (win.io.sockets || win.io.Socket)) {\n                return {version: win.io.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Mustache': {\n        icon: 'mustache',\n        url: 'http://mustache.github.io/',\n        npm: 'mustache',\n        test: function(win) {\n            if (win.Mustache && win.Mustache.to_html) {\n                return {version: win.Mustache.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Fabric.js': {\n        icon: 'icon38', // currently has no icon\n        url: 'http://fabricjs.com/',\n        npm: 'fabric',\n        test: function(win) {\n            if (win.fabric && win.fabric.util) {\n                return {version: win.fabric.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'FuseJS': {\n        icon: 'fusejs',\n        url: 'http://fusejs.io/',\n        npm: 'fuse.js',\n        test: function(win) {\n            if (win.Fuse) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Tween.js': {\n        icon: 'icon38', // currently has no icon\n        url: 'https://github.com/tweenjs/tween.js',\n        npm: 'tween.js',\n        test: function(win) {\n            if (win.TWEEN && win.TWEEN.Easing) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'SproutCore': {\n       icon: 'sproutcore',\n       url: 'http://sproutcore.com/',\n       test: function(win) {\n           if (win.SC && win.SC.Application) {\n               return {version: UNKNOWN_VERSION};\n           }\n           return false;\n       }\n    },\n\n    'Zepto.js': {\n       icon: 'zepto',\n       url: 'http://zeptojs.com',\n       npm: 'zepto',\n       test: function(win) {\n           if (win.Zepto && win.Zepto.fn) {\n               return {version: UNKNOWN_VERSION};\n           }\n           return false;\n       }\n    },\n\n    'three.js': {\n       icon: 'icon38', // currently has no icon\n       url: 'https://threejs.org/',\n       npm: 'three',\n       test: function(win) {\n           if (win.THREE && win.THREE.REVISION) {\n               return {version: 'r' + win.THREE.REVISION};\n           }\n           else if (win.THREE) {\n               return {version: UNKNOWN_VERSION};\n           }\n           return false;\n       }\n    },\n\n    'PhiloGL': {\n       icon: 'philogl',\n       url: 'http://www.senchalabs.org/philogl/',\n       npm: 'philogl',\n       test: function(win) {\n           if (win.PhiloGL && win.PhiloGL.Camera) {\n               return {version: win.PhiloGL.version || UNKNOWN_VERSION};\n           }\n           return false;\n       }\n    },\n\n    'CamanJS': {\n        icon: 'camanjs',\n        url: 'http://camanjs.com/',\n        npm: 'caman',\n        test: function(win) {\n            if (win.Caman && win.Caman.version) {\n                return {version: win.Caman.version.release};\n            }\n            else if (win.Caman) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'yepnope': {\n        icon: 'yepnope',\n        url: 'http://yepnopejs.com/',\n        test: function(win) {\n            if (win.yepnope && win.yepnope.injectJs) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'LABjs': {\n        icon: 'icon38',\n        url: 'https://github.com/getify/LABjs',\n        test: function(win) {\n            if (win.$LAB && win.$LAB.setOptions) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'Head JS': {\n        icon: 'headjs',\n        url: 'http://headjs.com/',\n        npm: 'headjs',\n        test: function(win) {\n            if (win.head && win.head.js) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'ControlJS': {\n        icon: 'icon38',\n        url: 'http://stevesouders.com/controljs/',\n        test: function(win) {\n            if (win.CJS && win.CJS.start) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'RequireJS': {\n        icon: 'requirejs',\n        url: 'http://requirejs.org/',\n        npm: 'requirejs',\n        test: function(win) {\n            var req = win.require || win.requirejs;\n            if (req && (req.load || (req.s && req.s.contexts && req.s.contexts._ && (req.s.contexts._.loaded || req.s.contexts._.load)))) {\n                return { version: req.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'RightJS': {\n        icon: 'rightjs',\n        url: 'http://rightjs.org/',\n        test: function(win) {\n            if (win.RightJS && win.RightJS.isNode) {\n                return { version: win.RightJS.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'jQuery Tools': {\n       icon: 'jquerytools',\n       url: 'http://jquerytools.github.io/',\n       test: function(win) {\n            var jq = win.jQuery || win.$;\n            if(jq && jq.tools) {\n               return { version: jq.tools.version || UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'Pusher': {\n       icon: 'pusher',\n       url: 'https://pusher.com/docs/',\n       npm: 'pusher-js',\n       test: function(win) {\n            if(win.Pusher && win.Pusher.Channel) {\n               return { version: win.Pusher.VERSION || UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'Paper.js': {\n       icon: 'paperjs',\n       url: 'http://paperjs.org/',\n       npm: 'paper',\n       test: function(win) {\n            if(win.paper && win.paper.Point) {\n               return { version: win.paper.version || UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'Swiffy': {\n       icon: 'icon38',\n       url: 'https://developers.google.com/swiffy/',\n       test: function(win) {\n            if(win.swiffy && win.swiffy.Stage) {\n               return { version: UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'Move': {\n       icon: 'move',\n       url: 'https://github.com/rsms/move',\n       npm: 'move',\n       test: function(win) {\n            if(win.move && win.move.compile) {\n               return { version: win.move.version() || UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'AmplifyJS': {\n       icon: 'amplifyjs',\n       url: 'http://amplifyjs.com/',\n       npm: 'amplifyjs',\n       test: function(win) {\n            if(win.amplify && win.amplify.publish) {\n               return { version: UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'Popcorn.js': {\n       icon: 'popcornjs',\n       url: 'https://github.com/mozilla/popcorn-js/',\n       test: function(win) {\n            if (win.Popcorn && win.Popcorn.Events) {\n               return { version: win.Popcorn.version || UNKNOWN_VERSION };\n           }\n           return false;\n       }\n    },\n\n    'D3': {\n        icon: 'd3',\n        url: 'https://d3js.org/',\n        npm: 'd3',\n        test: function(win) {\n            if (win.d3 && win.d3.select) {\n                return { version: win.d3.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Handlebars': {\n        icon: 'handlebars',\n        url: 'http://handlebarsjs.com/',\n        npm: 'handlebars',\n        test: function(win) {\n            if(win.Handlebars && win.Handlebars.compile) {\n                return { version: win.Handlebars.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Knockout': {\n        icon: 'knockout',\n        url: 'http://knockoutjs.com/',\n        npm: 'knockout',\n        test: function(win) {\n            if (win.ko && win.ko.applyBindings) {\n                return { version: win.ko.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Spine': {\n        icon: 'icon38',\n        url: 'http://spine.github.io/',\n        test: function(win) {\n            if (win.Spine && win.Spine.Controller) {\n                return {version: win.Spine.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n\n    'jQuery Mobile': {\n        icon: 'jquery_mobile',\n        url: 'http://jquerymobile.com/',\n        npm: 'jquery-mobile',\n        test: function(win) {\n            var jq = win.jQuery || win.$ || win.$jq || win.$j;\n            if(jq && jq.fn && jq.fn.jquery && jq.mobile) {\n                return { version: jq.mobile.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'WebFont Loader': {\n        icon: 'icon38',\n        url: 'https://github.com/typekit/webfontloader',\n        npm: 'webfontloader',\n        test: function(win) {\n            if(win.WebFont && win.WebFont.load) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Angular': {\n        icon: 'angular',\n        url: 'https://angular.io/',\n        npm: '@angular/core',\n        test: function(win) {\n            var ngVersion = win.document.querySelector('[ng-version]');\n            if (ngVersion) {\n                return { version: ngVersion.getAttribute('ng-version') || UNKNOWN_VERSION };\n            }\n            else if (win.ng && win.ng.probe instanceof Function) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'AngularJS': {\n        icon: 'angularjs',\n        url: 'https://angularjs.org/',\n        npm: 'angular',\n        test: function(win) {\n            var ng = win.angular;\n            if(ng && ng.version && ng.version.full) {\n                return { version: ng.version.full };\n            }\n            else if (ng) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Ember.js': {\n        icon: 'emberjs',\n        url: 'https://emberjs.com/',\n        npm: 'ember-source',\n        test: function(win) {\n            var ember = win.Ember || win.Em;\n            if (ember && ember.GUID_KEY) {\n                return { version: ember.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Ember.js (Fast path)': {\n        icon: 'emberjs',\n        url: 'https://emberjs.com/',\n        npm: 'ember-source',\n        test: function (win) {\n            var ember = win.Ember || win.Em;\n            if (ember) {\n                return { version: ember.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Hammer.js': {\n        icon: 'hammerjs',\n        url: 'http://eightmedia.github.io/hammer.js/',\n        npm: 'hammerjs',\n        test: function(win) {\n            if(win.Hammer && win.Hammer.Pinch) {\n                // Hammer.VERSION available in 1.0.10+\n                return { version: win.Hammer.VERSION || \"&lt; 1.0.10\" };\n            }\n            return false;\n        }\n    },\n\n    'Visibility.js': {\n        icon: 'icon38',\n        url: 'https://github.com/ai/visibilityjs',\n        npm: 'visibilityjs',\n        test: function(win) {\n            if(win.Visibility && win.Visibility.every) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'Velocity.js': {\n        icon: 'icon38',\n        url: 'http://velocityjs.org/',\n        npm: 'velocity-animate',\n        test: function(win) {\n            var jq = win.jQuery || win.$,\n                velocity = jq ? jq.Velocity : win.Velocity;\n\n            if(velocity && velocity.RegisterEffect && velocity.version) {\n                return {\n                    version:\n                        velocity.version.major + \".\" +\n                        velocity.version.minor + \".\" +\n                        velocity.version.patch\n                };\n            }\n            else if (velocity && velocity.RegisterEffect) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n\n    'IfVisible.js': {\n        icon: 'icon38',\n        url: 'http://serkanyersen.github.io/ifvisible.js/',\n        npm: 'ifvisible.js',\n        test: function(win) {\n            var iv = win.ifvisible;\n            if(iv && iv.__ceGUID === \"ifvisible.object.event.identifier\") {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Pixi.js': {\n        icon: 'pixi',\n        url: 'http://www.pixijs.com/',\n        npm: 'pixi.js',\n        test: function(win) {\n            var px = win.PIXI;\n            if(px && px.WebGLRenderer && px.VERSION) {\n                // version 4.4.3 returns simply \"4.4.3\"; version 1.5.2 returns \"v1.5.2\"\n                return { version: px.VERSION.replace('v', '') || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'DC.js': {\n        icon: 'dcjs',\n        url: 'http://dc-js.github.io/dc.js/',\n        npm: 'dc',\n        test: function(win) {\n            var dc = win.dc;\n            if(dc && dc.registerChart) {\n                return { version: dc.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'GreenSock JS': {\n        icon: 'greensock',\n        url: 'https://greensock.com/gsap',\n        npm: 'gsap',\n        test: function(win) {\n            if (win.TweenMax && win.TweenMax.pauseAll) {\n                return { version: win.TweenMax.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'FastClick': {\n        icon: 'fastclick',\n        url: 'https://github.com/ftlabs/fastclick',\n        npm: 'fastclick',\n        test: function(win) {\n            if(win.FastClick && win.FastClick.notNeeded) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Isotope': {\n        icon: 'isotope',\n        url: 'https://isotope.metafizzy.co/',\n        npm: 'isotope-layout',\n        test: function(win) {\n            if(win.Isotope || (win.$ != null && win.$.Isotope)) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Marionette': {\n        icon: 'marionette',\n        url: 'https://marionettejs.com/',\n        npm: 'backbone.marionette',\n        test: function(win) {\n            if(win.Marionette && win.Marionette.Application) {\n                return { version: win.Marionette.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Can': {\n        icon: 'canjs',\n        url: 'https://canjs.com/',\n        npm: 'can',\n        test: function (win) {\n            if (win.can && win.can.Construct) {\n                return { version: win.can.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Vue': {\n        icon: 'vue',\n        url: 'https://vuejs.org/',\n        npm: 'vue',\n        test: function(win) {\n            function isVueNode(node) {\n                return node.__vue__ != null ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;\n            }\n            var hasVueNode = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, isVueNode).nextNode() !== null;\n            if (hasVueNode) {\n                return { version: win.Vue && win.Vue.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Vue (Fast path)': {\n        icon: 'vue',\n        url: 'https://vuejs.org/',\n        npm: 'vue',\n        test: function (win) {\n            if (win.Vue) {\n                return { version: win.Vue && win.Vue.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Nuxt.js': {\n        icon: 'nuxt',\n        url: 'https://nuxtjs.org/',\n        npm: 'nuxt',\n        test: function(win) {\n            if ((win.__NUXT__ && win.__NUXT__.data != null) || win.$nuxt) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Nuxt.js (Fast path)': {\n        icon: 'nuxt',\n        url: 'https://nuxtjs.org/',\n        npm: 'nuxt',\n        test: function (win) {\n            if (win.__NUXT__  || win.$nuxt) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Two': {\n        icon: 'two',\n        url: 'https://two.js.org/',\n        npm: 'two.js',\n        test: function(win) {\n            if (win.Two && win.Two.Utils) {\n                return { version: win.Two.Version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Brewser': {\n        icon: 'brewser',\n        url: 'https://robertpataki.github.io/brewser/',\n        npm: 'brewser',\n        test: function(win) {\n            if(win.BREWSER && win.BREWSER.ua) {\n                return { version: BREWSER.VERSION || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Material Design Lite': {\n        icon: 'mdl',\n        url: 'https://getmdl.io/',\n        npm: 'material-design-lite',\n        test: function(win) {\n            if(win.componentHandler && win.componentHandler.upgradeElement) {\n                return { version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n    'Kendo UI': {\n        icon: 'kendoui',\n        url: 'https://github.com/telerik/kendo-ui-core',\n        npm: 'kendo-ui-core',\n        test: function(win) {\n            if (win.kendo && win.kendo.View && win.kendo.View.extend) {\n                return {version: win.kendo.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n    'Matter.js': {\n        icon: 'matter-js',\n        url: 'http://brm.io/matter-js/',\n        npm: 'matter-js',\n        test: function(win) {\n            if (win.Matter && win.Matter.Engine) {\n                return {version: UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n    'Riot': {\n        icon: 'riot',\n        url: 'http://riotjs.com/',\n        npm: 'riot',\n        test: function(win) {\n            if (win.riot && win.riot.mixin) {\n                return { version: win.riot.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Sea.js': {\n        icon: 'icon38',\n        url: 'https://seajs.github.io/seajs/docs/',\n        npm: 'seajs',\n        test: function(win) {\n            if(win.seajs && win.seajs.use) {\n                return { version: win.seajs.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Moment.js': {\n        icon: 'momentjs',\n        url: 'http://momentjs.com/',\n        npm: 'moment',\n        test: function(win) {\n            if(win.moment && (win.moment.isMoment || win.moment.lang)) {\n                // version 1.0.0 has neither \"isMoment\" nor \"version\"\n                return { version: win.moment.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Moment Timezone': {\n        icon: 'momentjs',\n        url: 'http://momentjs.com/timezone/',\n        npm: 'moment-timezone',\n        test: function(win) {\n            if (win.moment && win.moment.tz) {\n                return { version: win.moment.tz.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'ScrollMagic': {\n        icon: 'scrollmagic',\n        url: 'http://scrollmagic.io/',\n        npm: 'scrollmagic',\n        test: function(win) {\n            if (win.ScrollMagic && win.ScrollMagic.Controller) {\n                return {version: ScrollMagic.version || UNKNOWN_VERSION};\n            }\n            return false;\n        }\n    },\n    'SWFObject': {\n        icon: 'icon38', // currently has no icon\n        url: 'https://github.com/swfobject/swfobject',\n        test: function(win) {\n            if (win.swfobject && win.swfobject.embedSWF) {\n                // 2.x - exact version only for 2.3\n                return { version: win.swfobject.version || UNKNOWN_VERSION };\n            } else if(win.deconcept && win.deconcept.SWFObject) {\n                // 1.x\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'FlexSlider': {\n        icon: 'icon38', // currently has no icon\n        url: 'https://woocommerce.com/flexslider/',\n        npm: 'flexslider',\n        test: function(win) {\n            var jq = win.jQuery || win.$ || win.$jq || win.$j;\n            if (jq && jq.fn && jq.fn.jquery && jq.flexslider){\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'SPF': {\n        icon: 'icon38', // currently has no icon\n        url: 'https://youtube.github.io/spfjs/',\n        npm: 'spf',\n        test: function(win) {\n            if (win.spf && win.spf.init) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Numeral.js': {\n        icon: 'icon38', // currently has no icon\n        url: 'http://numeraljs.com/',\n        npm: 'numeraljs',\n        test: function(win) {\n            if (win.numeral && win.isNumeral) {\n                return { version: win.numeral.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'boomerang.js': {\n        icon: 'icon38', // currently has no icon\n        url: 'https://soasta.github.io/boomerang/',\n        npm: 'boomerangjs',\n        test: function(win) {\n            if (win.BOOMR && win.BOOMR.utils && win.BOOMR.init) {\n                return { version: win.BOOMR.version || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Framer': {\n        icon: 'framer',\n        url: 'https://framer.com/',\n        npm: 'framerjs',\n        test: function(win) {\n            if (win.Framer && win.Framer.Layer) {\n                return { version: win.Framer.Version.build || UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Marko': {\n        icon: 'marko',\n        url: 'https://markojs.com/',\n        npm: 'marko',\n        test: function (win) {\n            var selector = '[data-marko-key], [data-marko]';\n            var markoElement = document.querySelector(selector);\n            if (markoElement) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'AMP': {\n        icon: 'amp',\n        url: 'https://ampproject.org/',\n        npm: null,\n        test: function (win) {\n            var version = win.document.documentElement.getAttribute(\"amp-version\");\n            return version ? { version: version } : false;\n        }\n    },\n    'Gatsby': {\n        icon: 'gatsby',\n        url: 'https://www.gatsbyjs.org/',\n        npm: 'gatsby',\n        test: function (win) {\n            if (document.getElementById('___gatsby')) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Shopify': {\n        icon: 'shopify',\n        url: 'https://www.shopify.com/',\n        npm: null,\n        test: function (win) {\n            if (win.Shopify && win.Shopify.shop) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Magento': {\n        icon: 'magento',\n        url: 'https://magento.com/',\n        npm: null,\n        test: function (win) {\n            // Same detecton used in Magento 2 DevTools: https://github.com/magento/m2-devtools\n            const reRequireScript = /\\/static(?:\\/version\\d+)?\\/frontend\\/.+\\/.+\\/requirejs\\/require(?:\\.min)?\\.js/;\n            const scripts = Array.from(document.querySelectorAll('script[src]') || []);\n            if (scripts.some(s => reRequireScript.test(s.src))) {\n                return { version: 2 }; // Magento 1 is no longer supported and this only verifies version 2\n            }\n            \n            return false;\n        }\n    },\n    'WordPress': {\n        icon: 'wordpress',\n        url: 'https://wordpress.org/',\n        npm: null,\n        test: function (win) {\n            const hasAPILinkElem = !!document.querySelector('link[rel=\"https://api.w.org/\"]');\n            const hasWPIncludes = !!document.querySelectorAll('link[href*=\"wp-includes\"], script[src*=\"wp-includes\"]').length;\n\n            if (!hasAPILinkElem && !hasWPIncludes) return false;\n\n            const generatorMeta = document.querySelector('meta[name=generator][content^=\"WordPress\"]');\n            const version = generatorMeta ? generatorMeta.getAttribute(\"content\").replace(/^\\w+\\s/,'') : UNKNOWN_VERSION;\n            return { version };\n        }\n    },\n    'Wix': {\n        icon: 'wix',\n        url: 'https://www.wix.com/',\n        npm: null,\n        test: function (win) {\n            if (win.wixBiSession) {\n                return { version: UNKNOWN_VERSION };\n            }\n            return false;\n        }\n    },\n    'Workbox': {\n      icon: 'workbox',\n      url: 'https://developers.google.com/web/tools/workbox/',\n      npm: 'workbox-sw',\n      test: async function (win) {\n        var nav = win.navigator;\n        // Service Workers not supported\n        if (!('serviceWorker' in nav)) {\n          return false;\n        }\n        return nav.serviceWorker.getRegistration()\n        .then(function(registration) {\n          var scriptURL = nav.serviceWorker.controller.scriptURL;\n          return fetch(scriptURL, { credentials: 'include',\n            headers: { 'service-worker': 'script' }\n          })\n          .then(function(response) {\n            return response.text();\n          })\n          .then(function(scriptContent) {\n            var workboxRegExp = /new Workbox|new workbox|workbox\\.precaching\\.|workbox\\.strategies/gm;\n            if (workboxRegExp.test(scriptContent)) {\n              // Adapted from\n              // https://github.com/semver/semver/issues/232#issue-48635632\n              var semVerRegExp = /workbox.*?\\b((0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-(0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(\\.(0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?(\\+[0-9a-zA-Z-]+(\\.[0-9a-zA-Z-]+)*)?)\\b/gim;\n              var matches = semVerRegExp.exec(scriptContent);\n              var version = UNKNOWN_VERSION;\n              if (Array.isArray(matches) && matches.length > 1 && matches[1]) {\n                version = matches[1];\n              }\n              return { version: version };\n            }\n            return false;\n          });\n        }).catch(function(exception) {\n          return false;\n        });\n      }\n    }\n};\n";
 
 
 
@@ -32249,9 +31326,27 @@ const log=require('lighthouse-logger');
 
 
 
-const stackPacksToInclude=[{
+const stackPacksToInclude=[
+{
 packId:'wordpress',
-requiredStacks:['js:wordpress']}];
+requiredStacks:['js:wordpress']},
+
+{
+packId:'react',
+requiredStacks:['js:react']},
+
+{
+packId:'angular',
+requiredStacks:['js:@angular/core']},
+
+{
+packId:'amp',
+requiredStacks:['js:amp']},
+
+{
+packId:'magento',
+requiredStacks:['js:magento']}];
+
 
 
 
@@ -32293,7 +31388,7 @@ module.exports={
 getStackPacks};
 
 
-},{"../../stack-packs/index.js":180,"lighthouse-logger":128}],82:[function(require,module,exports){
+},{"../../stack-packs/index.js":177,"lighthouse-logger":125}],82:[function(require,module,exports){
 
 
 
@@ -32526,30 +31621,37 @@ const{taskGroups,taskNameToGroup}=require('./task-groups.js');
 
 
 
+
 class MainThreadTasks{
 
 
 
 
 
-static _createNewTaskNode(event,parent){
+static _createNewTaskNode(event,endEvent){
+const isCompleteEvent=event.ph==='X'&&!endEvent;
+const isStartEndEventPair=event.ph==='B'&&endEvent&&endEvent.ph==='E';
+if(!isCompleteEvent&&!isStartEndEventPair){
+throw new Error('Invalid parameters for _createNewTaskNode');
+}
+
+const startTime=event.ts;
+const endTime=endEvent?endEvent.ts:event.ts+Number(event.dur||0);
+
 const newTask={
 event,
-startTime:event.ts,
-endTime:event.ph==='X'?event.ts+Number(event.dur||0):NaN,
-parent:parent,
+startTime,
+endTime,
+duration:endTime-startTime,
+
+
+unbounded:false,
+parent:undefined,
 children:[],
-
-
 attributableURLs:[],
 group:taskGroups.other,
-duration:NaN,
 selfTime:NaN};
 
-
-if(parent){
-parent.children.push(newTask);
-}
 
 return newTask;
 }
@@ -32560,73 +31662,311 @@ return newTask;
 
 
 
-static _createTasksFromEvents(mainThreadEvents,priorTaskData,traceEndTs){
 
-const tasks=[];
+static _assignAllTimersUntilTs(
+currentTask,
+stopTs,
+priorTaskData,
+reverseEventsQueue)
+{
+while(reverseEventsQueue.length){
+const nextTimerInstallEvent=reverseEventsQueue.pop();
 
-let currentTask;
-
-for(const event of mainThreadEvents){
-
-if(event.name==='TimerInstall'&&currentTask){
+if(!nextTimerInstallEvent)break;
 
 
-const timerId=event.args.data.timerId;
-priorTaskData.timers.set(timerId,currentTask);
+if(nextTimerInstallEvent.ts>stopTs){
+reverseEventsQueue.push(nextTimerInstallEvent);
+break;
 }
 
 
-if(event.ph!=='X'&&event.ph!=='B'&&event.ph!=='E')continue;
+if(nextTimerInstallEvent.ts<currentTask.startTime){
+continue;
+}
+
+
+
+
+const timerId=nextTimerInstallEvent.args.data.timerId;
+priorTaskData.timers.set(timerId,currentTask);
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+static _createTasksFromStartAndEndEvents(taskStartEvents,taskEndEvents,traceEndTs){
+
+const tasks=[];
+
+
+
+const taskEndEventsReverseQueue=taskEndEvents.slice().reverse();
+
+for(let i=0;i<taskStartEvents.length;i++){
+const taskStartEvent=taskStartEvents[i];
+if(taskStartEvent.ph==='X'){
+
+tasks.push(MainThreadTasks._createNewTaskNode(taskStartEvent));
+continue;
+}
+
+
+let matchedEventIndex=-1;
+let matchingNestedEventCount=0;
+let matchingNestedEventIndex=i+1;
+
+
+
+
+
+for(let j=taskEndEventsReverseQueue.length-1;j>=0;j--){
+const endEvent=taskEndEventsReverseQueue[j];
+
+for(;matchingNestedEventIndex<taskStartEvents.length;matchingNestedEventIndex++){
+if(taskStartEvents[matchingNestedEventIndex].ts>=endEvent.ts)break;
+
+if(taskStartEvents[matchingNestedEventIndex].name===taskStartEvent.name){
+matchingNestedEventCount++;
+}
+}
+
+
+if(endEvent.name!==taskStartEvent.name)continue;
+
+if(endEvent.ts<taskStartEvent.ts)continue;
+
+
+if(matchingNestedEventCount>0){
+
+matchingNestedEventCount--;
+continue;
+}
+
+
+matchedEventIndex=j;
+break;
+}
+
+
+let taskEndEvent;
+let unbounded=false;
+if(matchedEventIndex===-1){
+
+
+taskEndEvent={ph:'E',ts:traceEndTs};
+unbounded=true;
+}else if(matchedEventIndex===taskEndEventsReverseQueue.length-1){
+
+
+taskEndEvent=taskEndEventsReverseQueue.pop();
+}else{
+taskEndEvent=taskEndEventsReverseQueue.splice(matchedEventIndex,1)[0];
+}
+
+const task=MainThreadTasks._createNewTaskNode(taskStartEvent,taskEndEvent);
+task.unbounded=unbounded;
+tasks.push(task);
+}
+
+if(taskEndEventsReverseQueue.length){
+throw new Error(
+`Fatal trace logic error - ${taskEndEventsReverseQueue.length} unmatched end events`);
+
+}
+
+return tasks;
+}
+
+
+
+
+
+
+
+
+
+
+static _createTaskRelationships(sortedTasks,timerInstallEvents,priorTaskData){
+
+let currentTask;
+
+const timerInstallEventsReverseQueue=timerInstallEvents.slice().reverse();
+
+for(let i=0;i<sortedTasks.length;i++){
+let nextTask=sortedTasks[i];
+
+
 
 
 
 while(
 currentTask&&
 Number.isFinite(currentTask.endTime)&&
-currentTask.endTime<=event.ts)
+currentTask.endTime<=nextTask.startTime)
 {
+MainThreadTasks._assignAllTimersUntilTs(
+currentTask,
+currentTask.endTime,
+priorTaskData,
+timerInstallEventsReverseQueue);
+
 currentTask=currentTask.parent;
 }
 
 
-if(!currentTask){
 
-if(event.ph==='E'){
-throw new Error('Fatal trace logic error - unexpected end event');
+if(currentTask){
+if(nextTask.endTime>currentTask.endTime){
+const timeDelta=nextTask.endTime-currentTask.endTime;
+
+
+if(timeDelta<1000){
+
+currentTask.endTime=nextTask.endTime;
+currentTask.duration+=timeDelta;
+}else if(nextTask.unbounded){
+
+nextTask.endTime=currentTask.endTime;
+nextTask.duration=nextTask.endTime-nextTask.startTime;
+}else if(
+nextTask.startTime-currentTask.startTime<1000&&
+!currentTask.children.length)
+{
+
+
+
+
+
+
+
+
+const actualParentTask=nextTask;
+const actualChildTask=currentTask;
+
+
+
+const grandparentTask=currentTask.parent;
+if(grandparentTask){
+const lastGrandparentChildIndex=grandparentTask.children.length-1;
+if(grandparentTask.children[lastGrandparentChildIndex]!==actualChildTask){
+
+
+throw new Error('Fatal trace logic error - impossible children');
 }
 
-currentTask=MainThreadTasks._createNewTaskNode(event);
-tasks.push(currentTask);
-
-continue;
+grandparentTask.children.pop();
+grandparentTask.children.push(actualParentTask);
 }
 
-if(event.ph==='X'||event.ph==='B'){
-
-const newTask=MainThreadTasks._createNewTaskNode(event,currentTask);
-tasks.push(newTask);
-currentTask=newTask;
+actualParentTask.parent=grandparentTask;
+actualParentTask.startTime=actualChildTask.startTime;
+actualParentTask.duration=actualParentTask.endTime-actualParentTask.startTime;
+currentTask=actualParentTask;
+nextTask=actualChildTask;
 }else{
-if(currentTask.event.ph!=='B'){
-throw new Error(
-`Fatal trace logic error - expected start event, got ${currentTask.event.ph}`);
+
+
+
+
+
+
+
+const error=new Error('Fatal trace logic error - child cannot end after parent');
+error.timeDelta=timeDelta;
+error.nextTaskEvent=nextTask.event;
+error.nextTaskEndTime=nextTask.endTime;
+error.currentTaskEvent=currentTask.event;
+error.currentTaskEndTime=currentTask.endTime;
+throw error;
+}
+}
+
+nextTask.parent=currentTask;
+currentTask.children.push(nextTask);
+MainThreadTasks._assignAllTimersUntilTs(
+currentTask,
+nextTask.startTime,
+priorTaskData,
+timerInstallEventsReverseQueue);
+
+}
+
+currentTask=nextTask;
+}
+
+if(currentTask){
+MainThreadTasks._assignAllTimersUntilTs(
+currentTask,
+currentTask.endTime,
+priorTaskData,
+timerInstallEventsReverseQueue);
+
+}
 }
 
 
-currentTask.endTime=event.ts;
-currentTask=currentTask.parent;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+static _createTasksFromEvents(mainThreadEvents,priorTaskData,traceEndTs){
+
+const taskStartEvents=[];
+
+const taskEndEvents=[];
+
+const timerInstallEvents=[];
+
+
+for(const event of mainThreadEvents){
+if(event.ph==='X'||event.ph==='B')taskStartEvents.push(event);
+if(event.ph==='E')taskEndEvents.push(event);
+if(event.name==='TimerInstall')timerInstallEvents.push(event);
 }
-}
 
 
-while(currentTask&&!Number.isFinite(currentTask.endTime)){
+const tasks=MainThreadTasks._createTasksFromStartAndEndEvents(
+taskStartEvents,
+taskEndEvents,
+traceEndTs);
 
-currentTask.endTime=traceEndTs;
-currentTask=currentTask.parent;
-}
 
 
-return tasks;
+const sortedTasks=tasks.sort(
+(taskA,taskB)=>taskA.startTime-taskB.startTime||taskB.duration-taskA.duration);
+
+
+
+MainThreadTasks._createTaskRelationships(sortedTasks,timerInstallEvents,priorTaskData);
+
+
+return sortedTasks.sort(
+(taskA,taskB)=>taskA.startTime-taskB.startTime||taskB.duration-taskA.duration);
+
 }
 
 
@@ -32642,7 +31982,6 @@ throw new Error('Fatal trace logic error - child cannot end after parent');
 const childTime=task.children.
 map(child=>MainThreadTasks._computeRecursiveSelfTime(child,task)).
 reduce((sum,child)=>sum+child,0);
-task.duration=task.endTime-task.startTime;
 task.selfTime=task.duration-childTime;
 return task.duration;
 }
@@ -32699,6 +32038,7 @@ attributableURLs.push(url);
 task.attributableURLs=attributableURLs;
 task.children.forEach(child=>
 MainThreadTasks._computeRecursiveAttributableURLs(child,attributableURLs,priorTaskData));
+
 }
 
 
@@ -32716,10 +32056,14 @@ task.children.forEach(child=>MainThreadTasks._computeRecursiveTaskGroup(child,ta
 
 
 
-static getMainThreadTasks(traceEvents,traceEndTs){
+static getMainThreadTasks(mainThreadEvents,traceEndTs){
 const timers=new Map();
 const priorTaskData={timers};
-const tasks=MainThreadTasks._createTasksFromEvents(traceEvents,priorTaskData,traceEndTs);
+const tasks=MainThreadTasks._createTasksFromEvents(
+mainThreadEvents,
+priorTaskData,
+traceEndTs);
+
 
 
 for(const task of tasks){
@@ -32931,7 +32275,111 @@ ACCEPTABLE_NAVIGATION_URL_REGEX.test(event.args.data.documentLoaderURL));
 
 
 
-static _filteredStableSort(traceEvents,filter){
+
+
+
+
+
+
+
+
+
+
+
+
+
+static _sortTimestampEventGroup(
+tsGroupIndices,
+timestampSortedIndices,
+indexOfTsGroupIndicesStart,
+traceEvents)
+{
+
+
+
+
+
+
+
+
+
+
+
+
+const lookupArrayIndexByTsIndex=i=>timestampSortedIndices[i];
+
+const lookupEventByTsIndex=i=>traceEvents[lookupArrayIndexByTsIndex(i)];
+
+
+const eEventIndices=[];
+
+const bxEventIndices=[];
+
+const otherEventIndices=[];
+
+for(const tsIndex of tsGroupIndices){
+
+const arrayIndex=lookupArrayIndexByTsIndex(tsIndex);
+const event=lookupEventByTsIndex(tsIndex);
+if(event.ph==='E')eEventIndices.push(arrayIndex);else
+if(event.ph==='X'||event.ph==='B')bxEventIndices.push(arrayIndex);else
+otherEventIndices.push(arrayIndex);
+}
+
+
+const effectiveDuration=new Map();
+for(const index of bxEventIndices){
+const event=traceEvents[index];
+if(event.ph==='X'){
+effectiveDuration.set(index,event.dur);
+}else{
+
+let duration=Number.MAX_SAFE_INTEGER;
+
+let additionalNestedEventsWithSameName=0;
+const startIndex=indexOfTsGroupIndicesStart+tsGroupIndices.length;
+for(let j=startIndex;j<timestampSortedIndices.length;j++){
+const potentialMatchingEvent=lookupEventByTsIndex(j);
+const eventMatches=potentialMatchingEvent.name===event.name&&
+potentialMatchingEvent.pid===event.pid&&
+potentialMatchingEvent.tid===event.tid;
+
+
+if(!eventMatches)continue;
+
+if(potentialMatchingEvent.ph==='E'&&additionalNestedEventsWithSameName===0){
+
+duration=potentialMatchingEvent.ts-event.ts;
+break;
+}else if(potentialMatchingEvent.ph==='E'){
+
+additionalNestedEventsWithSameName--;
+}else if(potentialMatchingEvent.ph==='B'){
+
+additionalNestedEventsWithSameName++;
+}
+}
+
+effectiveDuration.set(index,duration);
+}
+}
+
+bxEventIndices.sort((indexA,indexB)=>(effectiveDuration.get(indexB)||0)-(
+effectiveDuration.get(indexA)||0)||indexA-indexB);
+
+otherEventIndices.sort((indexA,indexB)=>indexA-indexB);
+
+return[...eEventIndices,...bxEventIndices,...otherEventIndices];
+}
+
+
+
+
+
+
+
+
+static filteredTraceSort(traceEvents,filter){
 
 const indices=[];
 for(let srcIndex=0;srcIndex<traceEvents.length;srcIndex++){
@@ -32941,10 +32389,32 @@ indices.push(srcIndex);
 }
 
 
-indices.sort((indexA,indexB)=>{
-const result=traceEvents[indexA].ts-traceEvents[indexB].ts;
-return result?result:indexA-indexB;
-});
+indices.sort((indexA,indexB)=>traceEvents[indexA].ts-traceEvents[indexB].ts);
+
+
+for(let i=0;i<indices.length-1;i++){
+const ts=traceEvents[indices[i]].ts;
+const tsGroupIndices=[i];
+for(let j=i+1;j<indices.length;j++){
+if(traceEvents[indices[j]].ts!==ts)break;
+tsGroupIndices.push(j);
+}
+
+
+if(tsGroupIndices.length===1)continue;
+
+
+const finalIndexOrder=TraceProcessor._sortTimestampEventGroup(
+tsGroupIndices,
+indices,
+i,
+traceEvents);
+
+indices.splice(i,finalIndexOrder.length,...finalIndexOrder);
+
+
+i+=tsGroupIndices.length-1;
+}
 
 
 const sorted=[];
@@ -33218,7 +32688,7 @@ evt.name===SCHEDULABLE_TASK_TITLE_ALT3;
 static computeTraceOfTab(trace){
 
 
-const keyEvents=this._filteredStableSort(trace.traceEvents,e=>{
+const keyEvents=this.filteredTraceSort(trace.traceEvents,e=>{
 return e.cat.includes('blink.user_timing')||
 e.cat.includes('loading')||
 e.cat.includes('devtools.timeline')||
@@ -33264,6 +32734,28 @@ log.verbose('trace-of-tab','No `firstMeaningfulPaintCandidate` events found in t
 firstMeaningfulPaint=lastCandidate;
 }
 
+
+
+
+let largestContentfulPaint;
+let lcpInvalidated=false;
+
+for(let i=frameEvents.length-1;i>=0;i--){
+const e=frameEvents[i];
+
+if(e.ts<=navigationStart.ts)break;
+
+if(e.name==='largestContentfulPaint::Invalidate'){
+lcpInvalidated=true;
+break;
+}
+
+if(e.name!=='largestContentfulPaint::Candidate')continue;
+
+largestContentfulPaint=e;
+break;
+}
+
 const load=frameEvents.find(e=>e.name==='loadEventEnd'&&e.ts>navigationStart.ts);
 const domContentLoaded=frameEvents.find(
 e=>e.name==='domContentLoadedEventEnd'&&e.ts>navigationStart.ts);
@@ -33272,7 +32764,7 @@ e=>e.name==='domContentLoadedEventEnd'&&e.ts>navigationStart.ts);
 
 
 const processEvents=TraceProcessor.
-_filteredStableSort(trace.traceEvents,e=>e.pid===mainFrameIds.pid);
+filteredTraceSort(trace.traceEvents,e=>e.pid===mainFrameIds.pid);
 
 const mainThreadEvents=processEvents.
 filter(e=>e.tid===mainFrameIds.tid);
@@ -33291,6 +32783,7 @@ navigationStart:navigationStart.ts,
 firstPaint:getTimestamp(firstPaint),
 firstContentfulPaint:getTimestamp(firstContentfulPaint),
 firstMeaningfulPaint:getTimestamp(firstMeaningfulPaint),
+largestContentfulPaint:getTimestamp(largestContentfulPaint),
 traceEnd:fakeEndOfTraceEvt.ts,
 load:getTimestamp(load),
 domContentLoaded:getTimestamp(domContentLoaded)};
@@ -33306,6 +32799,7 @@ navigationStart:0,
 firstPaint:maybeGetTiming(timestamps.firstPaint),
 firstContentfulPaint:maybeGetTiming(timestamps.firstContentfulPaint),
 firstMeaningfulPaint:maybeGetTiming(timestamps.firstMeaningfulPaint),
+largestContentfulPaint:maybeGetTiming(timestamps.largestContentfulPaint),
 traceEnd:getTiming(timestamps.traceEnd),
 load:maybeGetTiming(timestamps.load),
 domContentLoaded:maybeGetTiming(timestamps.domContentLoaded)};
@@ -33321,9 +32815,11 @@ navigationStartEvt:navigationStart,
 firstPaintEvt:firstPaint,
 firstContentfulPaintEvt:firstContentfulPaint,
 firstMeaningfulPaintEvt:firstMeaningfulPaint,
+largestContentfulPaintEvt:largestContentfulPaint,
 loadEvt:load,
 domContentLoadedEvt:domContentLoaded,
-fmpFellBack};
+fmpFellBack,
+lcpInvalidated};
 
 }}
 
@@ -33338,7 +32834,7 @@ module.exports=TraceProcessor;
 
 
 
-},{"lighthouse-logger":128}],87:[function(require,module,exports){
+},{"lighthouse-logger":125}],87:[function(require,module,exports){
 
 
 
@@ -33543,7 +33039,7 @@ return fakeEvents;
 
 module.exports=Metrics;
 
-},{"lighthouse-logger":128}],88:[function(require,module,exports){
+},{"lighthouse-logger":125}],88:[function(require,module,exports){
 
 
 
@@ -33738,7 +33234,7 @@ return rating;
 
 static formatNumber(number,granularity=0.1){
 const coarseValue=Math.round(number/granularity)*granularity;
-return coarseValue.toLocaleString(Util.numberDateLocale);
+return Util.numberFormatter.format(coarseValue);
 }
 
 
@@ -33747,8 +33243,7 @@ return coarseValue.toLocaleString(Util.numberDateLocale);
 
 
 static formatBytesToKB(size,granularity=0.1){
-const kbs=(Math.round(size/1024/granularity)*granularity).
-toLocaleString(Util.numberDateLocale);
+const kbs=Util.numberFormatter.format(Math.round(size/1024/granularity)*granularity);
 return`${kbs}${NBSP}KB`;
 }
 
@@ -33759,7 +33254,7 @@ return`${kbs}${NBSP}KB`;
 
 static formatMilliseconds(ms,granularity=10){
 const coarseTime=Math.round(ms/granularity)*granularity;
-return`${coarseTime.toLocaleString(Util.numberDateLocale)}${NBSP}ms`;
+return`${Util.numberFormatter.format(coarseTime)}${NBSP}ms`;
 }
 
 
@@ -33769,7 +33264,7 @@ return`${coarseTime.toLocaleString(Util.numberDateLocale)}${NBSP}ms`;
 
 static formatSeconds(ms,granularity=0.1){
 const coarseTime=Math.round(ms/1000/granularity)*granularity;
-return`${coarseTime.toLocaleString(Util.numberDateLocale)}${NBSP}s`;
+return`${Util.numberFormatter.format(coarseTime)}${NBSP}s`;
 }
 
 
@@ -33824,6 +33319,73 @@ parts.push(`${numberOfUnits}\xa0${label}`);
 });
 
 return parts.join(' ');
+}
+
+
+
+
+
+
+
+
+static splitMarkdownCodeSpans(text){
+
+const segments=[];
+
+
+const parts=text.split(/`(.*?)`/g);
+for(let i=0;i<parts.length;i++){
+const text=parts[i];
+
+
+if(!text)continue;
+
+
+const isCode=i%2!==0;
+segments.push({
+isCode,
+text});
+
+}
+
+return segments;
+}
+
+
+
+
+
+
+
+
+
+static splitMarkdownLink(text){
+
+const segments=[];
+
+const parts=text.split(/\[([^\]]+?)\]\((https?:\/\/.*?)\)/g);
+while(parts.length){
+
+const[preambleText,linkText,linkHref]=parts.splice(0,3);
+
+if(preambleText){
+segments.push({
+isLink:false,
+text:preambleText});
+
+}
+
+
+if(linkText&&linkHref){
+segments.push({
+isLink:true,
+text:linkText,
+linkHref});
+
+}
+}
+
+return segments;
 }
 
 
@@ -34035,10 +33597,11 @@ summary:`${deviceEmulation}, ${summary}`};
 
 
 static setNumberDateLocale(locale){
+
+if(locale==='en-XA')locale='de';
+
 Util.numberDateLocale=locale;
-
-
-if(Util.numberDateLocale==='en-XA')Util.numberDateLocale='de';
+Util.numberFormatter=new Intl.NumberFormat(locale);
 }
 
 
@@ -34096,6 +33659,12 @@ return categoryId.startsWith('lighthouse-plugin-');
 
 
 Util.numberDateLocale='en';
+
+
+
+
+
+Util.numberFormatter=new Intl.NumberFormat(Util.numberDateLocale);
 
 
 
@@ -34699,7 +34268,7 @@ return /\.js$/.test(f)&&!ignoredFiles.includes(f);
 
 static getGathererList(){
 const fileList=[
-...["accessibility.js","anchor-elements.js","cache-contents.js","console-messages.js","css-usage.js","dobetterweb","gatherer.js","html-without-javascript.js","http-redirect.js","image-elements.js","js-usage.js","link-elements.js","meta-elements.js","mixed-content.js","offline.js","runtime-exceptions.js","script-elements.js","seo","service-worker.js","start-url.js","viewport-dimensions.js"],
+...["accessibility.js","anchor-elements.js","cache-contents.js","console-messages.js","css-usage.js","dobetterweb","gatherer.js","html-without-javascript.js","http-redirect.js","iframe-elements.js","image-elements.js","js-usage.js","link-elements.js","main-document-content.js","meta-elements.js","mixed-content.js","offline.js","runtime-exceptions.js","script-elements.js","seo","service-worker.js","source-maps.js","start-url.js","viewport-dimensions.js"],
 ...["embedded-content.js","font-size.js","robots-txt.js","tap-targets.js"].map(f=>`seo/${f}`),
 ...["appcache.js","doctype.js","domstats.js","optimized-images.js","password-inputs-with-prevented-paste.js","response-compression.js","tags-blocking-first-paint.js"].
 map(f=>`dobetterweb/${f}`)];
@@ -34726,7 +34295,7 @@ return path.join(process.cwd(),'latest-run');
 module.exports=Runner;
 
 }).call(this,require('_process'));
-},{"../package.json":179,"./audits/audit.js":3,"./gather/driver.js":51,"./gather/gather-runner.js":52,"./lib/asset-saver.js":56,"./lib/i18n/i18n.js":68,"./lib/lh-error.js":72,"./lib/sentry.js":79,"./lib/stack-packs.js":81,"./lib/url-shim.js":"url","./report/report-generator.js":89,"./scoring.js":91,"_process":145,"lighthouse-logger":128,"lodash.isequal":129,"path":143}],91:[function(require,module,exports){
+},{"../package.json":176,"./audits/audit.js":3,"./gather/driver.js":52,"./gather/gather-runner.js":53,"./lib/asset-saver.js":57,"./lib/i18n/i18n.js":67,"./lib/lh-error.js":72,"./lib/sentry.js":79,"./lib/stack-packs.js":81,"./lib/url-shim.js":"url","./report/report-generator.js":89,"./scoring.js":91,"_process":142,"lighthouse-logger":125,"lodash.isequal":126,"path":140}],91:[function(require,module,exports){
 
 
 
@@ -35937,7 +35506,7 @@ return Object.prototype.hasOwnProperty.call(obj,prop);
 }
 
 }).call(this,require('_process'),typeof global!=="undefined"?global:typeof self!=="undefined"?self:typeof window!=="undefined"?window:{});
-},{"./support/isBuffer":94,"_process":145,"inherits":93}],96:[function(require,module,exports){
+},{"./support/isBuffer":94,"_process":142,"inherits":93}],96:[function(require,module,exports){
 
 const langs=[
 'aa',
@@ -44658,7 +44227,7 @@ this._error('Failed to reset stream');
 
 exports.Zlib=Zlib;
 }).call(this,require('_process'),require("buffer").Buffer);
-},{"_process":145,"assert":92,"buffer":102,"pako/lib/zlib/constants":136,"pako/lib/zlib/deflate.js":138,"pako/lib/zlib/inflate.js":101,"pako/lib/zlib/zstream":141}],100:[function(require,module,exports){
+},{"_process":142,"assert":92,"buffer":102,"pako/lib/zlib/constants":133,"pako/lib/zlib/deflate.js":135,"pako/lib/zlib/inflate.js":101,"pako/lib/zlib/zstream":138}],100:[function(require,module,exports){
 (function(process){
 'use strict';
 
@@ -45270,7 +44839,7 @@ util.inherits(DeflateRaw,Zlib);
 util.inherits(InflateRaw,Zlib);
 util.inherits(Unzip,Zlib);
 }).call(this,require('_process'));
-},{"./binding":99,"_process":145,"assert":92,"buffer":102,"stream":170,"util":178}],101:[function(require,module,exports){
+},{"./binding":99,"_process":142,"assert":92,"buffer":102,"stream":167,"util":175}],101:[function(require,module,exports){
 arguments[4][98][0].apply(exports,arguments);
 },{"dup":98}],102:[function(require,module,exports){
 (function(Buffer){
@@ -47164,7 +46733,7 @@ return Object.prototype.toString.call(o);
 }
 
 }).call(this,{"isBuffer":require("../../is-buffer/index.js")});
-},{"../../is-buffer/index.js":123}],104:[function(require,module,exports){
+},{"../../is-buffer/index.js":120}],104:[function(require,module,exports){
 module.exports=[
 "aliceblue",
 "antiquewhite",
@@ -48204,7 +47773,7 @@ return window.localStorage;
 }
 
 }).call(this,require('_process'));
-},{"./debug":107,"_process":145}],107:[function(require,module,exports){
+},{"./debug":107,"_process":142}],107:[function(require,module,exports){
 
 
 
@@ -48408,7 +47977,7 @@ if(val instanceof Error)return val.stack||val.message;
 return val;
 }
 
-},{"ms":133}],108:[function(require,module,exports){
+},{"ms":130}],108:[function(require,module,exports){
 
 
 
@@ -49240,7 +48809,7 @@ return refs.join(', ');
 module.exports=Link;
 
 }).call(this,{"isBuffer":require("../../is-buffer/index.js")});
-},{"../../is-buffer/index.js":123,"./trim":110,"querystring":148}],110:[function(require,module,exports){
+},{"../../is-buffer/index.js":120,"./trim":110,"querystring":145}],110:[function(require,module,exports){
 module.exports=function trim(value){
 return value.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g,'');
 };
@@ -49481,20 +49050,19 @@ arguments[4][93][0].apply(exports,arguments);
 },{"dup":93}],114:[function(require,module,exports){
 'use strict';
 
-exports=module.exports=require('./lib/parser')['default'];
-exports['default']=exports;
+var parser=require('./lib/parser');
+
+module.exports=parser;
+module.exports['default']=parser;
 
 },{"./lib/parser":115}],115:[function(require,module,exports){
+
+
+
+
+
+
 "use strict";
-
-exports["default"]=function(){
-"use strict";
-
-
-
-
-
-
 
 function peg$subclass(child,parent){
 function ctor(){this.constructor=child;}
@@ -49516,11 +49084,117 @@ Error.captureStackTrace(this,peg$SyntaxError);
 
 peg$subclass(peg$SyntaxError,Error);
 
-function peg$parse(input){
-var options=arguments.length>1?arguments[1]:{},
-parser=this,
+peg$SyntaxError.buildMessage=function(expected,found){
+var DESCRIBE_EXPECTATION_FNS={
+literal:function(expectation){
+return"\""+literalEscape(expectation.text)+"\"";
+},
 
-peg$FAILED={},
+"class":function(expectation){
+var escapedParts="",
+i;
+
+for(i=0;i<expectation.parts.length;i++){
+escapedParts+=expectation.parts[i]instanceof Array?
+classEscape(expectation.parts[i][0])+"-"+classEscape(expectation.parts[i][1]):
+classEscape(expectation.parts[i]);
+}
+
+return"["+(expectation.inverted?"^":"")+escapedParts+"]";
+},
+
+any:function(expectation){
+return"any character";
+},
+
+end:function(expectation){
+return"end of input";
+},
+
+other:function(expectation){
+return expectation.description;
+}};
+
+
+function hex(ch){
+return ch.charCodeAt(0).toString(16).toUpperCase();
+}
+
+function literalEscape(s){
+return s.
+replace(/\\/g,'\\\\').
+replace(/"/g,'\\"').
+replace(/\0/g,'\\0').
+replace(/\t/g,'\\t').
+replace(/\n/g,'\\n').
+replace(/\r/g,'\\r').
+replace(/[\x00-\x0F]/g,function(ch){return'\\x0'+hex(ch);}).
+replace(/[\x10-\x1F\x7F-\x9F]/g,function(ch){return'\\x'+hex(ch);});
+}
+
+function classEscape(s){
+return s.
+replace(/\\/g,'\\\\').
+replace(/\]/g,'\\]').
+replace(/\^/g,'\\^').
+replace(/-/g,'\\-').
+replace(/\0/g,'\\0').
+replace(/\t/g,'\\t').
+replace(/\n/g,'\\n').
+replace(/\r/g,'\\r').
+replace(/[\x00-\x0F]/g,function(ch){return'\\x0'+hex(ch);}).
+replace(/[\x10-\x1F\x7F-\x9F]/g,function(ch){return'\\x'+hex(ch);});
+}
+
+function describeExpectation(expectation){
+return DESCRIBE_EXPECTATION_FNS[expectation.type](expectation);
+}
+
+function describeExpected(expected){
+var descriptions=new Array(expected.length),
+i,j;
+
+for(i=0;i<expected.length;i++){
+descriptions[i]=describeExpectation(expected[i]);
+}
+
+descriptions.sort();
+
+if(descriptions.length>0){
+for(i=1,j=1;i<descriptions.length;i++){
+if(descriptions[i-1]!==descriptions[i]){
+descriptions[j]=descriptions[i];
+j++;
+}
+}
+descriptions.length=j;
+}
+
+switch(descriptions.length){
+case 1:
+return descriptions[0];
+
+case 2:
+return descriptions[0]+" or "+descriptions[1];
+
+default:
+return descriptions.slice(0,-1).join(", ")+
+", or "+
+descriptions[descriptions.length-1];}
+
+}
+
+function describeFound(found){
+return found?"\""+literalEscape(found)+"\"":"end of input";
+}
+
+return"Expected "+describeExpected(expected)+" but "+describeFound(found)+" found.";
+};
+
+function peg$parse(input,options){
+options=options!==void 0?options:{};
+
+var peg$FAILED={},
 
 peg$startRuleFunctions={start:peg$parsestart},
 peg$startRuleFunction=peg$parsestart,
@@ -49532,19 +49206,10 @@ elements:elements,
 location:location()};
 
 },
-peg$c1=function(text){
-var string='',
-i,j,outerLen,inner,innerLen;
-
-for(i=0,outerLen=text.length;i<outerLen;i+=1){
-inner=text[i];
-
-for(j=0,innerLen=inner.length;j<innerLen;j+=1){
-string+=inner[j];
-}
-}
-
-return string;
+peg$c1=function(chunks){
+return chunks.reduce(function(all,chunk){
+return all.concat(chunk);
+},[]).join('');
 },
 peg$c2=function(messageText){
 return{
@@ -49553,15 +49218,14 @@ value:messageText,
 location:location()};
 
 },
-peg$c3=/^[^ \t\n\r,.+={}#]/,
-peg$c4={type:"class",value:"[^ \\t\\n\\r,.+={}#]",description:"[^ \\t\\n\\r,.+={}#]"},
-peg$c5="{",
-peg$c6={type:"literal",value:"{",description:"\"{\""},
-peg$c7=",",
-peg$c8={type:"literal",value:",",description:"\",\""},
-peg$c9="}",
-peg$c10={type:"literal",value:"}",description:"\"}\""},
-peg$c11=function(id,format){
+peg$c3=function(chars){return chars.join('');},
+peg$c4="{",
+peg$c5=peg$literalExpectation("{",false),
+peg$c6=",",
+peg$c7=peg$literalExpectation(",",false),
+peg$c8="}",
+peg$c9=peg$literalExpectation("}",false),
+peg$c10=function(id,format){
 return{
 type:'argumentElement',
 id:id,
@@ -49569,22 +49233,22 @@ format:format&&format[2],
 location:location()};
 
 },
-peg$c12="number",
-peg$c13={type:"literal",value:"number",description:"\"number\""},
-peg$c14="date",
-peg$c15={type:"literal",value:"date",description:"\"date\""},
-peg$c16="time",
-peg$c17={type:"literal",value:"time",description:"\"time\""},
-peg$c18=function(type,style){
+peg$c11="number",
+peg$c12=peg$literalExpectation("number",false),
+peg$c13="date",
+peg$c14=peg$literalExpectation("date",false),
+peg$c15="time",
+peg$c16=peg$literalExpectation("time",false),
+peg$c17=function(type,style){
 return{
 type:type+'Format',
 style:style&&style[2],
 location:location()};
 
 },
-peg$c19="plural",
-peg$c20={type:"literal",value:"plural",description:"\"plural\""},
-peg$c21=function(pluralStyle){
+peg$c18="plural",
+peg$c19=peg$literalExpectation("plural",false),
+peg$c20=function(pluralStyle){
 return{
 type:pluralStyle.type,
 ordinal:false,
@@ -49593,9 +49257,9 @@ options:pluralStyle.options,
 location:location()};
 
 },
-peg$c22="selectordinal",
-peg$c23={type:"literal",value:"selectordinal",description:"\"selectordinal\""},
-peg$c24=function(pluralStyle){
+peg$c21="selectordinal",
+peg$c22=peg$literalExpectation("selectordinal",false),
+peg$c23=function(pluralStyle){
 return{
 type:pluralStyle.type,
 ordinal:true,
@@ -49604,18 +49268,18 @@ options:pluralStyle.options,
 location:location()};
 
 },
-peg$c25="select",
-peg$c26={type:"literal",value:"select",description:"\"select\""},
-peg$c27=function(options){
+peg$c24="select",
+peg$c25=peg$literalExpectation("select",false),
+peg$c26=function(options){
 return{
 type:'selectFormat',
 options:options,
 location:location()};
 
 },
-peg$c28="=",
-peg$c29={type:"literal",value:"=",description:"\"=\""},
-peg$c30=function(selector,pattern){
+peg$c27="=",
+peg$c28=peg$literalExpectation("=",false),
+peg$c29=function(selector,pattern){
 return{
 type:'optionalFormatPattern',
 selector:selector,
@@ -49623,12 +49287,12 @@ value:pattern,
 location:location()};
 
 },
-peg$c31="offset:",
-peg$c32={type:"literal",value:"offset:",description:"\"offset:\""},
-peg$c33=function(number){
+peg$c30="offset:",
+peg$c31=peg$literalExpectation("offset:",false),
+peg$c32=function(number){
 return number;
 },
-peg$c34=function(offset,options){
+peg$c33=function(offset,options){
 return{
 type:'pluralFormat',
 offset:offset,
@@ -49636,45 +49300,51 @@ options:options,
 location:location()};
 
 },
-peg$c35={type:"other",description:"whitespace"},
-peg$c36=/^[ \t\n\r]/,
-peg$c37={type:"class",value:"[ \\t\\n\\r]",description:"[ \\t\\n\\r]"},
-peg$c38={type:"other",description:"optionalWhitespace"},
-peg$c39=/^[0-9]/,
-peg$c40={type:"class",value:"[0-9]",description:"[0-9]"},
-peg$c41=/^[0-9a-f]/i,
-peg$c42={type:"class",value:"[0-9a-f]i",description:"[0-9a-f]i"},
-peg$c43="0",
-peg$c44={type:"literal",value:"0",description:"\"0\""},
-peg$c45=/^[1-9]/,
-peg$c46={type:"class",value:"[1-9]",description:"[1-9]"},
-peg$c47=function(digits){
+peg$c34=peg$otherExpectation("whitespace"),
+peg$c35=/^[ \t\n\r]/,
+peg$c36=peg$classExpectation([" ","\t","\n","\r"],false,false),
+peg$c37=peg$otherExpectation("optionalWhitespace"),
+peg$c38=/^[0-9]/,
+peg$c39=peg$classExpectation([["0","9"]],false,false),
+peg$c40=/^[0-9a-f]/i,
+peg$c41=peg$classExpectation([["0","9"],["a","f"]],false,true),
+peg$c42="0",
+peg$c43=peg$literalExpectation("0",false),
+peg$c44=/^[1-9]/,
+peg$c45=peg$classExpectation([["1","9"]],false,false),
+peg$c46=function(digits){
 return parseInt(digits,10);
 },
-peg$c48=/^[^{}\\\0-\x1F \t\n\r]/,
-peg$c49={type:"class",value:"[^{}\\\\\\0-\\x1F\\x7f \\t\\n\\r]",description:"[^{}\\\\\\0-\\x1F\\x7f \\t\\n\\r]"},
-peg$c50="\\\\",
-peg$c51={type:"literal",value:"\\\\",description:"\"\\\\\\\\\""},
-peg$c52=function(){return'\\';},
-peg$c53="\\#",
-peg$c54={type:"literal",value:"\\#",description:"\"\\\\#\""},
-peg$c55=function(){return'\\#';},
-peg$c56="\\{",
-peg$c57={type:"literal",value:"\\{",description:"\"\\\\{\""},
-peg$c58=function(){return'\u007B';},
-peg$c59="\\}",
-peg$c60={type:"literal",value:"\\}",description:"\"\\\\}\""},
-peg$c61=function(){return'\u007D';},
-peg$c62="\\u",
-peg$c63={type:"literal",value:"\\u",description:"\"\\\\u\""},
-peg$c64=function(digits){
+peg$c47="'",
+peg$c48=peg$literalExpectation("'",false),
+peg$c49=/^[ \t\n\r,.+={}#]/,
+peg$c50=peg$classExpectation([" ","\t","\n","\r",",",".","+","=","{","}","#"],false,false),
+peg$c51=peg$anyExpectation(),
+peg$c52=function(char){return char;},
+peg$c53=function(sequence){return sequence;},
+peg$c54=/^[^{}\\\0-\x1F\x7F \t\n\r]/,
+peg$c55=peg$classExpectation(["{","}","\\",["\0","\x1F"],"\x7F"," ","\t","\n","\r"],true,false),
+peg$c56="\\\\",
+peg$c57=peg$literalExpectation("\\\\",false),
+peg$c58=function(){return'\\';},
+peg$c59="\\#",
+peg$c60=peg$literalExpectation("\\#",false),
+peg$c61=function(){return'\\#';},
+peg$c62="\\{",
+peg$c63=peg$literalExpectation("\\{",false),
+peg$c64=function(){return'\u007B';},
+peg$c65="\\}",
+peg$c66=peg$literalExpectation("\\}",false),
+peg$c67=function(){return'\u007D';},
+peg$c68="\\u",
+peg$c69=peg$literalExpectation("\\u",false),
+peg$c70=function(digits){
 return String.fromCharCode(parseInt(digits,16));
 },
-peg$c65=function(chars){return chars.join('');},
 
 peg$currPos=0,
 peg$savedPos=0,
-peg$posDetailsCache=[{line:1,column:1,seenCR:false}],
+peg$posDetailsCache=[{line:1,column:1}],
 peg$maxFailPos=0,
 peg$maxFailExpected=[],
 peg$silentFails=0,
@@ -49697,27 +49367,44 @@ function location(){
 return peg$computeLocation(peg$savedPos,peg$currPos);
 }
 
-function expected(description){
-throw peg$buildException(
-null,
-[{type:"other",description:description}],
+function expected(description,location){
+location=location!==void 0?location:peg$computeLocation(peg$savedPos,peg$currPos);
+
+throw peg$buildStructuredError(
+[peg$otherExpectation(description)],
 input.substring(peg$savedPos,peg$currPos),
-peg$computeLocation(peg$savedPos,peg$currPos));
+location);
 
 }
 
-function error(message){
-throw peg$buildException(
-message,
-null,
-input.substring(peg$savedPos,peg$currPos),
-peg$computeLocation(peg$savedPos,peg$currPos));
+function error(message,location){
+location=location!==void 0?location:peg$computeLocation(peg$savedPos,peg$currPos);
 
+throw peg$buildSimpleError(message,location);
+}
+
+function peg$literalExpectation(text,ignoreCase){
+return{type:"literal",text:text,ignoreCase:ignoreCase};
+}
+
+function peg$classExpectation(parts,inverted,ignoreCase){
+return{type:"class",parts:parts,inverted:inverted,ignoreCase:ignoreCase};
+}
+
+function peg$anyExpectation(){
+return{type:"any"};
+}
+
+function peg$endExpectation(){
+return{type:"end"};
+}
+
+function peg$otherExpectation(description){
+return{type:"other",description:description};
 }
 
 function peg$computePosDetails(pos){
-var details=peg$posDetailsCache[pos],
-p,ch;
+var details=peg$posDetailsCache[pos],p;
 
 if(details){
 return details;
@@ -49730,23 +49417,15 @@ p--;
 details=peg$posDetailsCache[p];
 details={
 line:details.line,
-column:details.column,
-seenCR:details.seenCR};
+column:details.column};
 
 
 while(p<pos){
-ch=input.charAt(p);
-if(ch==="\n"){
-if(!details.seenCR){details.line++;}
-details.column=1;
-details.seenCR=false;
-}else if(ch==="\r"||ch==="\u2028"||ch==="\u2029"){
+if(input.charCodeAt(p)===10){
 details.line++;
 details.column=1;
-details.seenCR=true;
 }else{
 details.column++;
-details.seenCR=false;
 }
 
 p++;
@@ -49786,71 +49465,13 @@ peg$maxFailExpected=[];
 peg$maxFailExpected.push(expected);
 }
 
-function peg$buildException(message,expected,found,location){
-function cleanupExpected(expected){
-var i=1;
-
-expected.sort(function(a,b){
-if(a.description<b.description){
-return-1;
-}else if(a.description>b.description){
-return 1;
-}else{
-return 0;
-}
-});
-
-while(i<expected.length){
-if(expected[i-1]===expected[i]){
-expected.splice(i,1);
-}else{
-i++;
-}
-}
+function peg$buildSimpleError(message,location){
+return new peg$SyntaxError(message,null,null,location);
 }
 
-function buildMessage(expected,found){
-function stringEscape(s){
-function hex(ch){return ch.charCodeAt(0).toString(16).toUpperCase();}
-
-return s.
-replace(/\\/g,'\\\\').
-replace(/"/g,'\\"').
-replace(/\x08/g,'\\b').
-replace(/\t/g,'\\t').
-replace(/\n/g,'\\n').
-replace(/\f/g,'\\f').
-replace(/\r/g,'\\r').
-replace(/[\x00-\x07\x0B\x0E\x0F]/g,function(ch){return'\\x0'+hex(ch);}).
-replace(/[\x10-\x1F\x80-\xFF]/g,function(ch){return'\\x'+hex(ch);}).
-replace(/[\u0100-\u0FFF]/g,function(ch){return'\\u0'+hex(ch);}).
-replace(/[\u1000-\uFFFF]/g,function(ch){return'\\u'+hex(ch);});
-}
-
-var expectedDescs=new Array(expected.length),
-expectedDesc,foundDesc,i;
-
-for(i=0;i<expected.length;i++){
-expectedDescs[i]=expected[i].description;
-}
-
-expectedDesc=expected.length>1?
-expectedDescs.slice(0,-1).join(", ")+
-" or "+
-expectedDescs[expected.length-1]:
-expectedDescs[0];
-
-foundDesc=found?"\""+stringEscape(found)+"\"":"end of input";
-
-return"Expected "+expectedDesc+" but "+foundDesc+" found.";
-}
-
-if(expected!==null){
-cleanupExpected(expected);
-}
-
+function peg$buildStructuredError(expected,found,location){
 return new peg$SyntaxError(
-message!==null?message:buildMessage(expected,found),
+peg$SyntaxError.buildMessage(expected,found),
 expected,
 found,
 location);
@@ -49988,32 +49609,16 @@ s0=peg$parsenumber();
 if(s0===peg$FAILED){
 s0=peg$currPos;
 s1=[];
-if(peg$c3.test(input.charAt(peg$currPos))){
-s2=input.charAt(peg$currPos);
-peg$currPos++;
-}else{
-s2=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c4);}
-}
-if(s2!==peg$FAILED){
+s2=peg$parsequoteEscapedChar();
 while(s2!==peg$FAILED){
 s1.push(s2);
-if(peg$c3.test(input.charAt(peg$currPos))){
-s2=input.charAt(peg$currPos);
-peg$currPos++;
-}else{
-s2=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c4);}
-}
-}
-}else{
-s1=peg$FAILED;
+s2=peg$parsequoteEscapedChar();
 }
 if(s1!==peg$FAILED){
-s0=input.substring(s0,peg$currPos);
-}else{
-s0=s1;
+peg$savedPos=s0;
+s1=peg$c3(s1);
 }
+s0=s1;
 }
 
 return s0;
@@ -50024,11 +49629,11 @@ var s0,s1,s2,s3,s4,s5,s6,s7,s8;
 
 s0=peg$currPos;
 if(input.charCodeAt(peg$currPos)===123){
-s1=peg$c5;
+s1=peg$c4;
 peg$currPos++;
 }else{
 s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c6);}
+if(peg$silentFails===0){peg$fail(peg$c5);}
 }
 if(s1!==peg$FAILED){
 s2=peg$parse_();
@@ -50039,11 +49644,11 @@ s4=peg$parse_();
 if(s4!==peg$FAILED){
 s5=peg$currPos;
 if(input.charCodeAt(peg$currPos)===44){
-s6=peg$c7;
+s6=peg$c6;
 peg$currPos++;
 }else{
 s6=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c8);}
+if(peg$silentFails===0){peg$fail(peg$c7);}
 }
 if(s6!==peg$FAILED){
 s7=peg$parse_();
@@ -50071,15 +49676,15 @@ if(s5!==peg$FAILED){
 s6=peg$parse_();
 if(s6!==peg$FAILED){
 if(input.charCodeAt(peg$currPos)===125){
-s7=peg$c9;
+s7=peg$c8;
 peg$currPos++;
 }else{
 s7=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c10);}
+if(peg$silentFails===0){peg$fail(peg$c9);}
 }
 if(s7!==peg$FAILED){
 peg$savedPos=s0;
-s1=peg$c11(s3,s5);
+s1=peg$c10(s3,s5);
 s0=s1;
 }else{
 peg$currPos=s0;
@@ -50134,28 +49739,28 @@ function peg$parsesimpleFormat(){
 var s0,s1,s2,s3,s4,s5,s6;
 
 s0=peg$currPos;
-if(input.substr(peg$currPos,6)===peg$c12){
-s1=peg$c12;
+if(input.substr(peg$currPos,6)===peg$c11){
+s1=peg$c11;
 peg$currPos+=6;
 }else{
 s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c13);}
+if(peg$silentFails===0){peg$fail(peg$c12);}
 }
 if(s1===peg$FAILED){
-if(input.substr(peg$currPos,4)===peg$c14){
-s1=peg$c14;
+if(input.substr(peg$currPos,4)===peg$c13){
+s1=peg$c13;
 peg$currPos+=4;
 }else{
 s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c15);}
+if(peg$silentFails===0){peg$fail(peg$c14);}
 }
 if(s1===peg$FAILED){
-if(input.substr(peg$currPos,4)===peg$c16){
-s1=peg$c16;
+if(input.substr(peg$currPos,4)===peg$c15){
+s1=peg$c15;
 peg$currPos+=4;
 }else{
 s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c17);}
+if(peg$silentFails===0){peg$fail(peg$c16);}
 }
 }
 }
@@ -50164,11 +49769,11 @@ s2=peg$parse_();
 if(s2!==peg$FAILED){
 s3=peg$currPos;
 if(input.charCodeAt(peg$currPos)===44){
-s4=peg$c7;
+s4=peg$c6;
 peg$currPos++;
 }else{
 s4=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c8);}
+if(peg$silentFails===0){peg$fail(peg$c7);}
 }
 if(s4!==peg$FAILED){
 s5=peg$parse_();
@@ -50194,7 +49799,7 @@ s3=null;
 }
 if(s3!==peg$FAILED){
 peg$savedPos=s0;
-s1=peg$c18(s1,s3);
+s1=peg$c17(s1,s3);
 s0=s1;
 }else{
 peg$currPos=s0;
@@ -50216,22 +49821,22 @@ function peg$parsepluralFormat(){
 var s0,s1,s2,s3,s4,s5;
 
 s0=peg$currPos;
-if(input.substr(peg$currPos,6)===peg$c19){
-s1=peg$c19;
+if(input.substr(peg$currPos,6)===peg$c18){
+s1=peg$c18;
 peg$currPos+=6;
 }else{
 s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c20);}
+if(peg$silentFails===0){peg$fail(peg$c19);}
 }
 if(s1!==peg$FAILED){
 s2=peg$parse_();
 if(s2!==peg$FAILED){
 if(input.charCodeAt(peg$currPos)===44){
-s3=peg$c7;
+s3=peg$c6;
 peg$currPos++;
 }else{
 s3=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c8);}
+if(peg$silentFails===0){peg$fail(peg$c7);}
 }
 if(s3!==peg$FAILED){
 s4=peg$parse_();
@@ -50239,7 +49844,7 @@ if(s4!==peg$FAILED){
 s5=peg$parsepluralStyle();
 if(s5!==peg$FAILED){
 peg$savedPos=s0;
-s1=peg$c21(s5);
+s1=peg$c20(s5);
 s0=s1;
 }else{
 peg$currPos=s0;
@@ -50269,22 +49874,22 @@ function peg$parseselectOrdinalFormat(){
 var s0,s1,s2,s3,s4,s5;
 
 s0=peg$currPos;
-if(input.substr(peg$currPos,13)===peg$c22){
-s1=peg$c22;
+if(input.substr(peg$currPos,13)===peg$c21){
+s1=peg$c21;
 peg$currPos+=13;
 }else{
 s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c23);}
+if(peg$silentFails===0){peg$fail(peg$c22);}
 }
 if(s1!==peg$FAILED){
 s2=peg$parse_();
 if(s2!==peg$FAILED){
 if(input.charCodeAt(peg$currPos)===44){
-s3=peg$c7;
+s3=peg$c6;
 peg$currPos++;
 }else{
 s3=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c8);}
+if(peg$silentFails===0){peg$fail(peg$c7);}
 }
 if(s3!==peg$FAILED){
 s4=peg$parse_();
@@ -50292,7 +49897,7 @@ if(s4!==peg$FAILED){
 s5=peg$parsepluralStyle();
 if(s5!==peg$FAILED){
 peg$savedPos=s0;
-s1=peg$c24(s5);
+s1=peg$c23(s5);
 s0=s1;
 }else{
 peg$currPos=s0;
@@ -50322,22 +49927,22 @@ function peg$parseselectFormat(){
 var s0,s1,s2,s3,s4,s5,s6;
 
 s0=peg$currPos;
-if(input.substr(peg$currPos,6)===peg$c25){
-s1=peg$c25;
+if(input.substr(peg$currPos,6)===peg$c24){
+s1=peg$c24;
 peg$currPos+=6;
 }else{
 s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c26);}
+if(peg$silentFails===0){peg$fail(peg$c25);}
 }
 if(s1!==peg$FAILED){
 s2=peg$parse_();
 if(s2!==peg$FAILED){
 if(input.charCodeAt(peg$currPos)===44){
-s3=peg$c7;
+s3=peg$c6;
 peg$currPos++;
 }else{
 s3=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c8);}
+if(peg$silentFails===0){peg$fail(peg$c7);}
 }
 if(s3!==peg$FAILED){
 s4=peg$parse_();
@@ -50354,7 +49959,7 @@ s5=peg$FAILED;
 }
 if(s5!==peg$FAILED){
 peg$savedPos=s0;
-s1=peg$c27(s5);
+s1=peg$c26(s5);
 s0=s1;
 }else{
 peg$currPos=s0;
@@ -50386,11 +49991,11 @@ var s0,s1,s2,s3;
 s0=peg$currPos;
 s1=peg$currPos;
 if(input.charCodeAt(peg$currPos)===61){
-s2=peg$c28;
+s2=peg$c27;
 peg$currPos++;
 }else{
 s2=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c29);}
+if(peg$silentFails===0){peg$fail(peg$c28);}
 }
 if(s2!==peg$FAILED){
 s3=peg$parsenumber();
@@ -50418,7 +50023,7 @@ return s0;
 }
 
 function peg$parseoptionalFormatPattern(){
-var s0,s1,s2,s3,s4,s5,s6,s7,s8;
+var s0,s1,s2,s3,s4,s5,s6;
 
 s0=peg$currPos;
 s1=peg$parse_();
@@ -50428,38 +50033,26 @@ if(s2!==peg$FAILED){
 s3=peg$parse_();
 if(s3!==peg$FAILED){
 if(input.charCodeAt(peg$currPos)===123){
-s4=peg$c5;
+s4=peg$c4;
 peg$currPos++;
 }else{
 s4=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c6);}
+if(peg$silentFails===0){peg$fail(peg$c5);}
 }
 if(s4!==peg$FAILED){
-s5=peg$parse_();
+s5=peg$parsemessageFormatPattern();
 if(s5!==peg$FAILED){
-s6=peg$parsemessageFormatPattern();
-if(s6!==peg$FAILED){
-s7=peg$parse_();
-if(s7!==peg$FAILED){
 if(input.charCodeAt(peg$currPos)===125){
-s8=peg$c9;
+s6=peg$c8;
 peg$currPos++;
 }else{
-s8=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c10);}
+s6=peg$FAILED;
+if(peg$silentFails===0){peg$fail(peg$c9);}
 }
-if(s8!==peg$FAILED){
+if(s6!==peg$FAILED){
 peg$savedPos=s0;
-s1=peg$c30(s2,s6);
+s1=peg$c29(s2,s5);
 s0=s1;
-}else{
-peg$currPos=s0;
-s0=peg$FAILED;
-}
-}else{
-peg$currPos=s0;
-s0=peg$FAILED;
-}
 }else{
 peg$currPos=s0;
 s0=peg$FAILED;
@@ -50492,12 +50085,12 @@ function peg$parseoffset(){
 var s0,s1,s2,s3;
 
 s0=peg$currPos;
-if(input.substr(peg$currPos,7)===peg$c31){
-s1=peg$c31;
+if(input.substr(peg$currPos,7)===peg$c30){
+s1=peg$c30;
 peg$currPos+=7;
 }else{
 s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c32);}
+if(peg$silentFails===0){peg$fail(peg$c31);}
 }
 if(s1!==peg$FAILED){
 s2=peg$parse_();
@@ -50505,7 +50098,7 @@ if(s2!==peg$FAILED){
 s3=peg$parsenumber();
 if(s3!==peg$FAILED){
 peg$savedPos=s0;
-s1=peg$c33(s3);
+s1=peg$c32(s3);
 s0=s1;
 }else{
 peg$currPos=s0;
@@ -50546,7 +50139,7 @@ s3=peg$FAILED;
 }
 if(s3!==peg$FAILED){
 peg$savedPos=s0;
-s1=peg$c34(s1,s3);
+s1=peg$c33(s1,s3);
 s0=s1;
 }else{
 peg$currPos=s0;
@@ -50569,22 +50162,22 @@ var s0,s1;
 
 peg$silentFails++;
 s0=[];
-if(peg$c36.test(input.charAt(peg$currPos))){
+if(peg$c35.test(input.charAt(peg$currPos))){
 s1=input.charAt(peg$currPos);
 peg$currPos++;
 }else{
 s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c37);}
+if(peg$silentFails===0){peg$fail(peg$c36);}
 }
 if(s1!==peg$FAILED){
 while(s1!==peg$FAILED){
 s0.push(s1);
-if(peg$c36.test(input.charAt(peg$currPos))){
+if(peg$c35.test(input.charAt(peg$currPos))){
 s1=input.charAt(peg$currPos);
 peg$currPos++;
 }else{
 s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c37);}
+if(peg$silentFails===0){peg$fail(peg$c36);}
 }
 }
 }else{
@@ -50593,7 +50186,7 @@ s0=peg$FAILED;
 peg$silentFails--;
 if(s0===peg$FAILED){
 s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c35);}
+if(peg$silentFails===0){peg$fail(peg$c34);}
 }
 
 return s0;
@@ -50618,7 +50211,7 @@ s0=s1;
 peg$silentFails--;
 if(s0===peg$FAILED){
 s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c38);}
+if(peg$silentFails===0){peg$fail(peg$c37);}
 }
 
 return s0;
@@ -50627,12 +50220,12 @@ return s0;
 function peg$parsedigit(){
 var s0;
 
-if(peg$c39.test(input.charAt(peg$currPos))){
+if(peg$c38.test(input.charAt(peg$currPos))){
 s0=input.charAt(peg$currPos);
 peg$currPos++;
 }else{
 s0=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c40);}
+if(peg$silentFails===0){peg$fail(peg$c39);}
 }
 
 return s0;
@@ -50641,12 +50234,12 @@ return s0;
 function peg$parsehexDigit(){
 var s0;
 
-if(peg$c41.test(input.charAt(peg$currPos))){
+if(peg$c40.test(input.charAt(peg$currPos))){
 s0=input.charAt(peg$currPos);
 peg$currPos++;
 }else{
 s0=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c42);}
+if(peg$silentFails===0){peg$fail(peg$c41);}
 }
 
 return s0;
@@ -50657,21 +50250,21 @@ var s0,s1,s2,s3,s4,s5;
 
 s0=peg$currPos;
 if(input.charCodeAt(peg$currPos)===48){
-s1=peg$c43;
+s1=peg$c42;
 peg$currPos++;
 }else{
 s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c44);}
+if(peg$silentFails===0){peg$fail(peg$c43);}
 }
 if(s1===peg$FAILED){
 s1=peg$currPos;
 s2=peg$currPos;
-if(peg$c45.test(input.charAt(peg$currPos))){
+if(peg$c44.test(input.charAt(peg$currPos))){
 s3=input.charAt(peg$currPos);
 peg$currPos++;
 }else{
 s3=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c46);}
+if(peg$silentFails===0){peg$fail(peg$c45);}
 }
 if(s3!==peg$FAILED){
 s4=[];
@@ -50699,9 +50292,117 @@ s1=s2;
 }
 if(s1!==peg$FAILED){
 peg$savedPos=s0;
-s1=peg$c47(s1);
+s1=peg$c46(s1);
 }
 s0=s1;
+
+return s0;
+}
+
+function peg$parsequoteEscapedChar(){
+var s0,s1,s2;
+
+s0=peg$currPos;
+s1=peg$currPos;
+peg$silentFails++;
+if(input.charCodeAt(peg$currPos)===39){
+s2=peg$c47;
+peg$currPos++;
+}else{
+s2=peg$FAILED;
+if(peg$silentFails===0){peg$fail(peg$c48);}
+}
+if(s2===peg$FAILED){
+if(peg$c49.test(input.charAt(peg$currPos))){
+s2=input.charAt(peg$currPos);
+peg$currPos++;
+}else{
+s2=peg$FAILED;
+if(peg$silentFails===0){peg$fail(peg$c50);}
+}
+}
+peg$silentFails--;
+if(s2===peg$FAILED){
+s1=void 0;
+}else{
+peg$currPos=s1;
+s1=peg$FAILED;
+}
+if(s1!==peg$FAILED){
+if(input.length>peg$currPos){
+s2=input.charAt(peg$currPos);
+peg$currPos++;
+}else{
+s2=peg$FAILED;
+if(peg$silentFails===0){peg$fail(peg$c51);}
+}
+if(s2!==peg$FAILED){
+peg$savedPos=s0;
+s1=peg$c52(s2);
+s0=s1;
+}else{
+peg$currPos=s0;
+s0=peg$FAILED;
+}
+}else{
+peg$currPos=s0;
+s0=peg$FAILED;
+}
+if(s0===peg$FAILED){
+s0=peg$currPos;
+if(input.charCodeAt(peg$currPos)===39){
+s1=peg$c47;
+peg$currPos++;
+}else{
+s1=peg$FAILED;
+if(peg$silentFails===0){peg$fail(peg$c48);}
+}
+if(s1!==peg$FAILED){
+s2=peg$parseescape();
+if(s2!==peg$FAILED){
+peg$savedPos=s0;
+s1=peg$c53(s2);
+s0=s1;
+}else{
+peg$currPos=s0;
+s0=peg$FAILED;
+}
+}else{
+peg$currPos=s0;
+s0=peg$FAILED;
+}
+}
+
+return s0;
+}
+
+function peg$parseapostrophe(){
+var s0;
+
+if(input.charCodeAt(peg$currPos)===39){
+s0=peg$c47;
+peg$currPos++;
+}else{
+s0=peg$FAILED;
+if(peg$silentFails===0){peg$fail(peg$c48);}
+}
+
+return s0;
+}
+
+function peg$parseescape(){
+var s0;
+
+if(peg$c49.test(input.charAt(peg$currPos))){
+s0=input.charAt(peg$currPos);
+peg$currPos++;
+}else{
+s0=peg$FAILED;
+if(peg$silentFails===0){peg$fail(peg$c50);}
+}
+if(s0===peg$FAILED){
+s0=peg$parseapostrophe();
+}
 
 return s0;
 }
@@ -50709,41 +50410,36 @@ return s0;
 function peg$parsechar(){
 var s0,s1,s2,s3,s4,s5,s6,s7;
 
-if(peg$c48.test(input.charAt(peg$currPos))){
+s0=peg$currPos;
+if(input.charCodeAt(peg$currPos)===39){
+s1=peg$c47;
+peg$currPos++;
+}else{
+s1=peg$FAILED;
+if(peg$silentFails===0){peg$fail(peg$c48);}
+}
+if(s1!==peg$FAILED){
+s2=peg$parseapostrophe();
+if(s2!==peg$FAILED){
+peg$savedPos=s0;
+s1=peg$c53(s2);
+s0=s1;
+}else{
+peg$currPos=s0;
+s0=peg$FAILED;
+}
+}else{
+peg$currPos=s0;
+s0=peg$FAILED;
+}
+if(s0===peg$FAILED){
+if(peg$c54.test(input.charAt(peg$currPos))){
 s0=input.charAt(peg$currPos);
 peg$currPos++;
 }else{
 s0=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c49);}
+if(peg$silentFails===0){peg$fail(peg$c55);}
 }
-if(s0===peg$FAILED){
-s0=peg$currPos;
-if(input.substr(peg$currPos,2)===peg$c50){
-s1=peg$c50;
-peg$currPos+=2;
-}else{
-s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c51);}
-}
-if(s1!==peg$FAILED){
-peg$savedPos=s0;
-s1=peg$c52();
-}
-s0=s1;
-if(s0===peg$FAILED){
-s0=peg$currPos;
-if(input.substr(peg$currPos,2)===peg$c53){
-s1=peg$c53;
-peg$currPos+=2;
-}else{
-s1=peg$FAILED;
-if(peg$silentFails===0){peg$fail(peg$c54);}
-}
-if(s1!==peg$FAILED){
-peg$savedPos=s0;
-s1=peg$c55();
-}
-s0=s1;
 if(s0===peg$FAILED){
 s0=peg$currPos;
 if(input.substr(peg$currPos,2)===peg$c56){
@@ -50782,6 +50478,34 @@ s1=peg$FAILED;
 if(peg$silentFails===0){peg$fail(peg$c63);}
 }
 if(s1!==peg$FAILED){
+peg$savedPos=s0;
+s1=peg$c64();
+}
+s0=s1;
+if(s0===peg$FAILED){
+s0=peg$currPos;
+if(input.substr(peg$currPos,2)===peg$c65){
+s1=peg$c65;
+peg$currPos+=2;
+}else{
+s1=peg$FAILED;
+if(peg$silentFails===0){peg$fail(peg$c66);}
+}
+if(s1!==peg$FAILED){
+peg$savedPos=s0;
+s1=peg$c67();
+}
+s0=s1;
+if(s0===peg$FAILED){
+s0=peg$currPos;
+if(input.substr(peg$currPos,2)===peg$c68){
+s1=peg$c68;
+peg$currPos+=2;
+}else{
+s1=peg$FAILED;
+if(peg$silentFails===0){peg$fail(peg$c69);}
+}
+if(s1!==peg$FAILED){
 s2=peg$currPos;
 s3=peg$currPos;
 s4=peg$parsehexDigit();
@@ -50817,7 +50541,7 @@ s2=s3;
 }
 if(s2!==peg$FAILED){
 peg$savedPos=s0;
-s1=peg$c64(s2);
+s1=peg$c70(s2);
 s0=s1;
 }else{
 peg$currPos=s0;
@@ -50826,6 +50550,7 @@ s0=peg$FAILED;
 }else{
 peg$currPos=s0;
 s0=peg$FAILED;
+}
 }
 }
 }
@@ -50852,7 +50577,7 @@ s1=peg$FAILED;
 }
 if(s1!==peg$FAILED){
 peg$savedPos=s0;
-s1=peg$c65(s1);
+s1=peg$c3(s1);
 }
 s0=s1;
 
@@ -50865,11 +50590,10 @@ if(peg$result!==peg$FAILED&&peg$currPos===input.length){
 return peg$result;
 }else{
 if(peg$result!==peg$FAILED&&peg$currPos<input.length){
-peg$fail({type:"end",description:"end of input"});
+peg$fail(peg$endExpectation());
 }
 
-throw peg$buildException(
-null,
+throw peg$buildStructuredError(
 peg$maxFailExpected,
 peg$maxFailPos<input.length?input.charAt(peg$maxFailPos):null,
 peg$maxFailPos<input.length?
@@ -50879,86 +50603,73 @@ peg$computeLocation(peg$maxFailPos,peg$maxFailPos));
 }
 }
 
-return{
+module.exports={
 SyntaxError:peg$SyntaxError,
 parse:peg$parse};
 
-}();
-
 
 },{}],116:[function(require,module,exports){
-
-
-'use strict';
-
-var IntlMessageFormat=require('./lib/main')['default'];
-
-
-
-require('./lib/locales');
-
-
-
-
-exports=module.exports=IntlMessageFormat;
-exports['default']=exports;
-
-},{"./lib/locales":98,"./lib/main":121}],117:[function(require,module,exports){
-
-
-
-
-
-
-
-
 "use strict";
-exports["default"]=Compiler;
 
-function Compiler(locales,formats,pluralFn){
+
+
+
+
+var __extends=this&&this.__extends||function(){
+var extendStatics=function(d,b){
+extendStatics=Object.setPrototypeOf||
+{__proto__:[]}instanceof Array&&function(d,b){d.__proto__=b;}||
+function(d,b){for(var p in b)if(b.hasOwnProperty(p))d[p]=b[p];};
+return extendStatics(d,b);
+};
+return function(d,b){
+extendStatics(d,b);
+function __(){this.constructor=d;}
+d.prototype=b===null?Object.create(b):(__.prototype=b.prototype,new __());
+};
+}();
+Object.defineProperty(exports,"__esModule",{value:true});
+var Compiler=function(){
+function Compiler(locales,formats,formatters){
+this.locales=[];
+this.formats={
+number:{},
+date:{},
+time:{}};
+
+this.pluralNumberFormat=null;
+this.currentPlural=null;
+this.pluralStack=[];
 this.locales=locales;
 this.formats=formats;
-this.pluralFn=pluralFn;
+this.formatters=formatters;
 }
-
 Compiler.prototype.compile=function(ast){
 this.pluralStack=[];
 this.currentPlural=null;
 this.pluralNumberFormat=null;
-
 return this.compileMessage(ast);
 };
-
 Compiler.prototype.compileMessage=function(ast){
+var _this=this;
 if(!(ast&&ast.type==='messageFormatPattern')){
 throw new Error('Message AST is not of type: "messageFormatPattern"');
 }
-
-var elements=ast.elements,
-pattern=[];
-
-var i,len,element;
-
-for(i=0,len=elements.length;i<len;i+=1){
-element=elements[i];
-
-switch(element.type){
-case'messageTextElement':
-pattern.push(this.compileMessageText(element));
-break;
-
-case'argumentElement':
-pattern.push(this.compileArgument(element));
-break;
-
-default:
-throw new Error('Message element does not have a valid type');}
-
+var elements=ast.elements;
+var pattern=elements.
+filter(function(el){
+return el.type==='messageTextElement'||el.type==='argumentElement';
+}).
+map(function(el){
+return el.type==='messageTextElement'?
+_this.compileMessageText(el):
+_this.compileArgument(el);
+});
+if(pattern.length!==elements.length){
+throw new Error('Message element does not have a valid type');
 }
-
 return pattern;
 };
-
 Compiler.prototype.compileMessageText=function(element){
 
 
@@ -50969,531 +50680,412 @@ if(this.currentPlural&&/(^|[^\\])#/g.test(element.value)){
 if(!this.pluralNumberFormat){
 this.pluralNumberFormat=new Intl.NumberFormat(this.locales);
 }
-
-return new PluralOffsetString(
-this.currentPlural.id,
-this.currentPlural.format.offset,
-this.pluralNumberFormat,
-element.value);
+return new PluralOffsetString(this.currentPlural.id,this.currentPlural.format.offset,this.pluralNumberFormat,element.value);
 }
-
 
 return element.value.replace(/\\#/g,'#');
 };
-
 Compiler.prototype.compileArgument=function(element){
-var format=element.format;
-
+var format=element.format,id=element.id;
+var formatters=this.formatters;
 if(!format){
-return new StringFormat(element.id);
+return new StringFormat(id);
 }
-
-var formats=this.formats,
-locales=this.locales,
-pluralFn=this.pluralFn,
-options;
-
+var _a=this,formats=_a.formats,locales=_a.locales;
 switch(format.type){
 case'numberFormat':
-options=formats.number[format.style];
 return{
-id:element.id,
-format:new Intl.NumberFormat(locales,options).format};
-
+id:id,
+format:formatters.getNumberFormat(locales,formats.number[format.style]).format};
 
 case'dateFormat':
-options=formats.date[format.style];
 return{
-id:element.id,
-format:new Intl.DateTimeFormat(locales,options).format};
-
+id:id,
+format:formatters.getDateTimeFormat(locales,formats.date[format.style]).format};
 
 case'timeFormat':
-options=formats.time[format.style];
 return{
-id:element.id,
-format:new Intl.DateTimeFormat(locales,options).format};
-
+id:id,
+format:formatters.getDateTimeFormat(locales,formats.time[format.style]).format};
 
 case'pluralFormat':
-options=this.compileOptions(element);
-return new PluralFormat(
-element.id,format.ordinal,format.offset,options,pluralFn);
-
+return new PluralFormat(id,format.offset,this.compileOptions(element),formatters.getPluralRules(locales,{
+type:format.ordinal?'ordinal':'cardinal'}));
 
 case'selectFormat':
-options=this.compileOptions(element);
-return new SelectFormat(element.id,options);
-
+return new SelectFormat(id,this.compileOptions(element));
 default:
 throw new Error('Message element does not have a valid format type');}
 
 };
-
 Compiler.prototype.compileOptions=function(element){
-var format=element.format,
-options=format.options,
-optionsHash={};
-
+var _this=this;
+var format=element.format;
+var options=format.options;
 
 
 
 this.pluralStack.push(this.currentPlural);
 this.currentPlural=format.type==='pluralFormat'?element:null;
+var optionsHash=options.reduce(function(all,option){
 
-var i,len,option;
-
-for(i=0,len=options.length;i<len;i+=1){
-option=options[i];
-
-
-optionsHash[option.selector]=this.compileMessage(option.value);
-}
-
+all[option.selector]=_this.compileMessage(option.value);
+return all;
+},{});
 
 this.currentPlural=this.pluralStack.pop();
-
 return optionsHash;
 };
+return Compiler;
+}();
+exports.default=Compiler;
 
-
-
-function StringFormat(id){
+var Formatter=function(){
+function Formatter(id){
 this.id=id;
 }
-
+return Formatter;
+}();
+var StringFormat=function(_super){
+__extends(StringFormat,_super);
+function StringFormat(){
+return _super!==null&&_super.apply(this,arguments)||this;
+}
 StringFormat.prototype.format=function(value){
 if(!value&&typeof value!=='number'){
 return'';
 }
-
 return typeof value==='string'?value:String(value);
 };
-
-function PluralFormat(id,useOrdinal,offset,options,pluralFn){
+return StringFormat;
+}(Formatter);
+var PluralFormat=function(){
+function PluralFormat(id,offset,options,pluralRules){
 this.id=id;
-this.useOrdinal=useOrdinal;
 this.offset=offset;
 this.options=options;
-this.pluralFn=pluralFn;
+this.pluralRules=pluralRules;
 }
-
 PluralFormat.prototype.getOption=function(value){
 var options=this.options;
-
 var option=options['='+value]||
-options[this.pluralFn(value-this.offset,this.useOrdinal)];
-
+options[this.pluralRules.select(value-this.offset)];
 return option||options.other;
 };
-
+return PluralFormat;
+}();
+var PluralOffsetString=function(_super){
+__extends(PluralOffsetString,_super);
 function PluralOffsetString(id,offset,numberFormat,string){
-this.id=id;
-this.offset=offset;
-this.numberFormat=numberFormat;
-this.string=string;
+var _this=_super.call(this,id)||this;
+_this.offset=offset;
+_this.numberFormat=numberFormat;
+_this.string=string;
+return _this;
 }
-
 PluralOffsetString.prototype.format=function(value){
 var number=this.numberFormat.format(value-this.offset);
-
 return this.string.
 replace(/(^|[^\\])#/g,'$1'+number).
 replace(/\\#/g,'#');
 };
-
+return PluralOffsetString;
+}(Formatter);
+exports.PluralOffsetString=PluralOffsetString;
+var SelectFormat=function(){
 function SelectFormat(id,options){
 this.id=id;
 this.options=options;
 }
-
 SelectFormat.prototype.getOption=function(value){
 var options=this.options;
 return options[value]||options.other;
 };
-
-
-},{}],118:[function(require,module,exports){
-
-
-
-
-
-
-
-
-"use strict";
-var src$utils$$=require("./utils"),src$es5$$=require("./es5"),src$compiler$$=require("./compiler"),intl$messageformat$parser$$=require("intl-messageformat-parser");
-exports["default"]=MessageFormat;
-
-
-
-function MessageFormat(message,locales,formats){
-
-var ast=typeof message==='string'?
-MessageFormat.__parse(message):message;
-
-if(!(ast&&ast.type==='messageFormatPattern')){
-throw new TypeError('A message must be provided as a String or AST.');
+return SelectFormat;
+}();
+exports.SelectFormat=SelectFormat;
+function isSelectOrPluralFormat(f){
+return!!f.options;
 }
+exports.isSelectOrPluralFormat=isSelectOrPluralFormat;
 
-
-
-formats=this._mergeFormats(MessageFormat.formats,formats);
-
-
-src$es5$$.defineProperty(this,'_locale',{value:this._resolveLocale(locales)});
+},{}],117:[function(require,module,exports){
+"use strict";
 
 
 
 
-var pluralFn=this._findPluralRuleFunction(this._locale);
-var pattern=this._compilePattern(ast,locales,formats,pluralFn);
+
+var __extends=this&&this.__extends||function(){
+var extendStatics=function(d,b){
+extendStatics=Object.setPrototypeOf||
+{__proto__:[]}instanceof Array&&function(d,b){d.__proto__=b;}||
+function(d,b){for(var p in b)if(b.hasOwnProperty(p))d[p]=b[p];};
+return extendStatics(d,b);
+};
+return function(d,b){
+extendStatics(d,b);
+function __(){this.constructor=d;}
+d.prototype=b===null?Object.create(b):(__.prototype=b.prototype,new __());
+};
+}();
+var __assign=this&&this.__assign||function(){
+__assign=Object.assign||function(t){
+for(var s,i=1,n=arguments.length;i<n;i++){
+s=arguments[i];
+for(var p in s)if(Object.prototype.hasOwnProperty.call(s,p))
+t[p]=s[p];
+}
+return t;
+};
+return __assign.apply(this,arguments);
+};
+Object.defineProperty(exports,"__esModule",{value:true});
+
+var compiler_1=require("./compiler");
+
+function resolveLocale(locales){
+if(typeof locales==='string'){
+locales=[locales];
+}
+try{
+return Intl.NumberFormat.supportedLocalesOf(locales,{
+
+
+localeMatcher:'best fit'})[
+0];
+}
+catch(e){
+return IntlMessageFormat.defaultLocale;
+}
+}
+function formatPatterns(pattern,values){
+var result='';
+for(var _i=0,pattern_1=pattern;_i<pattern_1.length;_i++){
+var part=pattern_1[_i];
+
+if(typeof part==='string'){
+result+=part;
+continue;
+}
+var id=part.id;
+
+if(!(values&&id in values)){
+throw new FormatError("A value must be provided for: "+id,id);
+}
+var value=values[id];
 
 
 
-var messageFormat=this;
+if(compiler_1.isSelectOrPluralFormat(part)){
+result+=formatPatterns(part.getOption(value),values);
+}else
+{
+result+=part.format(value);
+}
+}
+return result;
+}
+function mergeConfig(c1,c2){
+if(!c2){
+return c1;
+}
+return __assign({},c1||{},c2||{},Object.keys(c1).reduce(function(all,k){
+all[k]=__assign({},c1[k],c2[k]||{});
+return all;
+},{}));
+}
+function mergeConfigs(defaultConfig,configs){
+if(!configs){
+return defaultConfig;
+}
+return Object.keys(defaultConfig).reduce(function(all,k){
+all[k]=mergeConfig(defaultConfig[k],configs[k]);
+return all;
+},__assign({},defaultConfig));
+}
+var FormatError=function(_super){
+__extends(FormatError,_super);
+function FormatError(msg,variableId){
+var _this=_super.call(this,msg)||this;
+_this.variableId=variableId;
+return _this;
+}
+return FormatError;
+}(Error);
+function createDefaultFormatters(){
+return{
+getNumberFormat:function(){
+var _a;
+var args=[];
+for(var _i=0;_i<arguments.length;_i++){
+args[_i]=arguments[_i];
+}
+return new((_a=Intl.NumberFormat).bind.apply(_a,[void 0].concat(args)))();
+},
+getDateTimeFormat:function(){
+var _a;
+var args=[];
+for(var _i=0;_i<arguments.length;_i++){
+args[_i]=arguments[_i];
+}
+return new((_a=Intl.DateTimeFormat).bind.apply(_a,[void 0].concat(args)))();
+},
+getPluralRules:function(){
+var _a;
+var args=[];
+for(var _i=0;_i<arguments.length;_i++){
+args[_i]=arguments[_i];
+}
+return new((_a=Intl.PluralRules).bind.apply(_a,[void 0].concat(args)))();
+}};
+
+}
+exports.createDefaultFormatters=createDefaultFormatters;
+var IntlMessageFormat=function(){
+function IntlMessageFormat(message,locales,overrideFormats,opts){
+var _this=this;
+if(locales===void 0){locales=IntlMessageFormat.defaultLocale;}
 this.format=function(values){
 try{
-return messageFormat._format(pattern,values);
-}catch(e){
+return formatPatterns(_this.pattern,values);
+}
+catch(e){
 if(e.variableId){
-throw new Error(
-'The intl string context variable \''+e.variableId+'\''+
-' was not provided to the string \''+message+'\'');
-
-}else{
+throw new Error("The intl string context variable '"+e.variableId+"' was not provided to the string '"+_this.message+"'");
+}else
+{
 throw e;
 }
 }
 };
+if(typeof message==='string'){
+if(!IntlMessageFormat.__parse){
+throw new TypeError('IntlMessageFormat.__parse must be set to process `message` of type `string`');
+}
+
+this.ast=IntlMessageFormat.__parse(message);
+}else
+{
+this.ast=message;
+}
+this.message=message;
+if(!(this.ast&&this.ast.type==='messageFormatPattern')){
+throw new TypeError('A message must be provided as a String or AST.');
 }
 
 
+var formats=mergeConfigs(IntlMessageFormat.formats,overrideFormats);
+
+this.locale=resolveLocale(locales||[]);
+var formatters=opts&&opts.formatters||createDefaultFormatters();
 
 
-src$es5$$.defineProperty(MessageFormat,'formats',{
-enumerable:true,
 
-value:{
+this.pattern=new compiler_1.default(locales,formats,formatters).compile(this.ast);
+
+
+}
+IntlMessageFormat.prototype.resolvedOptions=function(){
+return{locale:this.locale};
+};
+IntlMessageFormat.prototype.getAst=function(){
+return this.ast;
+};
+IntlMessageFormat.defaultLocale='en';
+IntlMessageFormat.__parse=undefined;
+
+
+
+IntlMessageFormat.formats={
 number:{
-'currency':{
+currency:{
 style:'currency'},
 
-
-'percent':{
+percent:{
 style:'percent'}},
 
 
-
 date:{
-'short':{
+short:{
 month:'numeric',
 day:'numeric',
 year:'2-digit'},
 
-
-'medium':{
+medium:{
 month:'short',
 day:'numeric',
 year:'numeric'},
 
-
-'long':{
+long:{
 month:'long',
 day:'numeric',
 year:'numeric'},
 
-
-'full':{
+full:{
 weekday:'long',
 month:'long',
 day:'numeric',
 year:'numeric'}},
 
 
-
 time:{
-'short':{
+short:{
 hour:'numeric',
 minute:'numeric'},
 
-
-'medium':{
+medium:{
 hour:'numeric',
 minute:'numeric',
 second:'numeric'},
 
-
-'long':{
+long:{
 hour:'numeric',
 minute:'numeric',
 second:'numeric',
 timeZoneName:'short'},
 
-
-'full':{
+full:{
 hour:'numeric',
 minute:'numeric',
 second:'numeric',
-timeZoneName:'short'}}}});
+timeZoneName:'short'}}};
 
 
 
-
-
-
-src$es5$$.defineProperty(MessageFormat,'__localeData__',{value:src$es5$$.objCreate(null)});
-src$es5$$.defineProperty(MessageFormat,'__addLocaleData',{value:function(data){
-if(!(data&&data.locale)){
-throw new Error(
-'Locale data provided to IntlMessageFormat is missing a '+
-'`locale` property');
-
-}
-
-MessageFormat.__localeData__[data.locale.toLowerCase()]=data;
-}});
-
-
-src$es5$$.defineProperty(MessageFormat,'__parse',{value:intl$messageformat$parser$$["default"].parse});
-
-
-
-src$es5$$.defineProperty(MessageFormat,'defaultLocale',{
-enumerable:true,
-writable:true,
-value:undefined});
-
-
-MessageFormat.prototype.resolvedOptions=function(){
-
-return{
-locale:this._locale};
-
-};
-
-MessageFormat.prototype._compilePattern=function(ast,locales,formats,pluralFn){
-var compiler=new src$compiler$$["default"](locales,formats,pluralFn);
-return compiler.compile(ast);
-};
-
-MessageFormat.prototype._findPluralRuleFunction=function(locale){
-var localeData=MessageFormat.__localeData__;
-var data=localeData[locale.toLowerCase()];
-
-
-
-while(data){
-if(data.pluralRuleFunction){
-return data.pluralRuleFunction;
-}
-
-data=data.parentLocale&&localeData[data.parentLocale.toLowerCase()];
-}
-
-throw new Error(
-'Locale data added to IntlMessageFormat is missing a '+
-'`pluralRuleFunction` for :'+locale);
-
-};
-
-MessageFormat.prototype._format=function(pattern,values){
-var result='',
-i,len,part,id,value,err;
-
-for(i=0,len=pattern.length;i<len;i+=1){
-part=pattern[i];
-
-
-if(typeof part==='string'){
-result+=part;
-continue;
-}
-
-id=part.id;
-
-
-if(!(values&&src$utils$$.hop.call(values,id))){
-err=new Error('A value must be provided for: '+id);
-err.variableId=id;
-throw err;
-}
-
-value=values[id];
-
-
-
-
-if(part.options){
-result+=this._format(part.getOption(value),values);
-}else{
-result+=part.format(value);
-}
-}
-
-return result;
-};
-
-MessageFormat.prototype._mergeFormats=function(defaults,formats){
-var mergedFormats={},
-type,mergedType;
-
-for(type in defaults){
-if(!src$utils$$.hop.call(defaults,type)){continue;}
-
-mergedFormats[type]=mergedType=src$es5$$.objCreate(defaults[type]);
-
-if(formats&&src$utils$$.hop.call(formats,type)){
-src$utils$$.extend(mergedType,formats[type]);
-}
-}
-
-return mergedFormats;
-};
-
-MessageFormat.prototype._resolveLocale=function(locales){
-if(typeof locales==='string'){
-locales=[locales];
-}
-
-
-locales=(locales||[]).concat(MessageFormat.defaultLocale);
-
-var localeData=MessageFormat.__localeData__;
-var i,len,localeParts,data;
-
-
-
-
-
-
-for(i=0,len=locales.length;i<len;i+=1){
-localeParts=locales[i].toLowerCase().split('-');
-
-while(localeParts.length){
-data=localeData[localeParts.join('-')];
-if(data){
-
-
-return data.locale;
-}
-
-localeParts.pop();
-}
-}
-
-var defaultLocale=locales.pop();
-throw new Error(
-'No locale data has been added to IntlMessageFormat for: '+
-locales.join(', ')+', or the default locale: '+defaultLocale);
-
-};
-
-
-},{"./compiler":117,"./es5":120,"./utils":122,"intl-messageformat-parser":114}],119:[function(require,module,exports){
-
-"use strict";
-exports["default"]={"locale":"en","pluralRuleFunction":function(n,ord){var s=String(n).split("."),v0=!s[1],t0=Number(s[0])==n,n10=t0&&s[0].slice(-1),n100=t0&&s[0].slice(-2);if(ord)return n10==1&&n100!=11?"one":n10==2&&n100!=12?"two":n10==3&&n100!=13?"few":"other";return n==1&&v0?"one":"other";}};
-
-
-},{}],120:[function(require,module,exports){
-
-
-
-
-
-
-
-
-"use strict";
-var src$utils$$=require("./utils");
-
-
-
-
-var realDefineProp=function(){
-try{return!!Object.defineProperty({},'a',{});}
-catch(e){return false;}
+return IntlMessageFormat;
 }();
+exports.IntlMessageFormat=IntlMessageFormat;
+exports.default=IntlMessageFormat;
 
-var es3=!realDefineProp&&!Object.prototype.__defineGetter__;
-
-var defineProperty=realDefineProp?Object.defineProperty:
-function(obj,name,desc){
-
-if('get'in desc&&obj.__defineGetter__){
-obj.__defineGetter__(name,desc.get);
-}else if(!src$utils$$.hop.call(obj,name)||'value'in desc){
-obj[name]=desc.value;
-}
-};
-
-var objCreate=Object.create||function(proto,props){
-var obj,k;
-
-function F(){}
-F.prototype=proto;
-obj=new F();
-
-for(k in props){
-if(src$utils$$.hop.call(props,k)){
-defineProperty(obj,k,props[k]);
-}
-}
-
-return obj;
-};
-
-exports.defineProperty=defineProperty,exports.objCreate=objCreate;
-
-
-},{"./utils":122}],121:[function(require,module,exports){
-
-
+},{"./compiler":116}],118:[function(require,module,exports){
 "use strict";
-var src$core$$=require("./core"),src$en$$=require("./en");
-
-src$core$$["default"].__addLocaleData(src$en$$["default"]);
-src$core$$["default"].defaultLocale='en';
-
-exports["default"]=src$core$$["default"];
-
-
-},{"./core":118,"./en":119}],122:[function(require,module,exports){
 
 
 
 
 
-
-
-
-"use strict";
-exports.extend=extend;
-var hop=Object.prototype.hasOwnProperty;
-
-function extend(obj){
-var sources=Array.prototype.slice.call(arguments,1),
-i,len,source,key;
-
-for(i=0,len=sources.length;i<len;i+=1){
-source=sources[i];
-if(!source){continue;}
-
-for(key in source){
-if(hop.call(source,key)){
-obj[key]=source[key];
+function __export(m){
+for(var p in m)if(!exports.hasOwnProperty(p))exports[p]=m[p];
 }
-}
-}
+Object.defineProperty(exports,"__esModule",{value:true});
+var intl_messageformat_parser_1=require("intl-messageformat-parser");
+var core_1=require("./core");
+core_1.default.__parse=intl_messageformat_parser_1.default.parse;
+__export(require("./core"));
+exports.default=core_1.default;
 
-return obj;
-}
-exports.hop=hop;
+},{"./core":117,"intl-messageformat-parser":114}],119:[function(require,module,exports){
+'use strict';
+var IntlMessageFormat=require('./dist').default;
 
 
-},{}],123:[function(require,module,exports){
+
+
+exports=module.exports=IntlMessageFormat;
+exports['default']=exports;
+
+},{"./dist":118}],120:[function(require,module,exports){
 
 
 
@@ -51516,14 +51108,14 @@ function isSlowBuffer(obj){
 return typeof obj.readFloatLE==='function'&&typeof obj.slice==='function'&&isBuffer(obj.slice(0,0));
 }
 
-},{}],124:[function(require,module,exports){
+},{}],121:[function(require,module,exports){
 var toString={}.toString;
 
 module.exports=Array.isArray||function(arr){
 return toString.call(arr)=='[object Array]';
 };
 
-},{}],125:[function(require,module,exports){
+},{}],122:[function(require,module,exports){
 var encode=require('./lib/encoder'),
 decode=require('./lib/decoder');
 
@@ -51532,7 +51124,7 @@ encode:encode,
 decode:decode};
 
 
-},{"./lib/decoder":126,"./lib/encoder":127}],126:[function(require,module,exports){
+},{"./lib/decoder":123,"./lib/encoder":124}],123:[function(require,module,exports){
 (function(Buffer){
 
 
@@ -52522,7 +52114,7 @@ return image;
 }
 
 }).call(this,require("buffer").Buffer);
-},{"buffer":102}],127:[function(require,module,exports){
+},{"buffer":102}],124:[function(require,module,exports){
 (function(Buffer){
 
 
@@ -53292,7 +52884,7 @@ return ctx.getImageData(0,0,cvs.width,cvs.height);
 }
 
 }).call(this,require("buffer").Buffer);
-},{"buffer":102}],128:[function(require,module,exports){
+},{"buffer":102}],125:[function(require,module,exports){
 (function(process){
 
 
@@ -53537,7 +53129,7 @@ Log.getTimeEntries=()=>marky.getEntries();
 module.exports=Log;
 
 }).call(this,require('_process'));
-},{"_process":145,"debug":106,"events":108,"marky":131}],129:[function(require,module,exports){
+},{"_process":142,"debug":106,"events":108,"marky":128}],126:[function(require,module,exports){
 (function(global){
 
 
@@ -55389,7 +54981,7 @@ return false;
 module.exports=isEqual;
 
 }).call(this,typeof global!=="undefined"?global:typeof self!=="undefined"?self:typeof window!=="undefined"?window:{});
-},{}],130:[function(require,module,exports){
+},{}],127:[function(require,module,exports){
 
 
 
@@ -55406,7 +54998,7 @@ current.pop();
 }
 };
 
-},{}],131:[function(require,module,exports){
+},{}],128:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports,'__esModule',{value:true});
@@ -55486,7 +55078,7 @@ exports.getEntries=function(){return entries;};
 exports.clear=function(){entries=[];};
 }
 
-},{}],132:[function(require,module,exports){
+},{}],129:[function(require,module,exports){
 exports.getRenderingDataFromViewport=function(viewportProperties,uaDeviceWidth,uaDeviceHeight,uaMaxZoom,uaMinZoom){
 
 var vw=uaDeviceWidth/100;
@@ -55829,7 +55421,7 @@ exports.expectedValues={
 "viewport-fit":["auto","cover"]};
 
 
-},{}],133:[function(require,module,exports){
+},{}],130:[function(require,module,exports){
 
 
 
@@ -55983,7 +55575,7 @@ return Math.floor(ms/n)+' '+name;
 return Math.ceil(ms/n)+' '+name+'s';
 }
 
-},{}],134:[function(require,module,exports){
+},{}],131:[function(require,module,exports){
 'use strict';
 
 
@@ -56090,7 +55682,7 @@ exports.assign(exports,fnUntyped);
 
 exports.setTyped(TYPED_OK);
 
-},{}],135:[function(require,module,exports){
+},{}],132:[function(require,module,exports){
 'use strict';
 
 
@@ -56143,7 +55735,7 @@ return s1|s2<<16|0;
 
 module.exports=adler32;
 
-},{}],136:[function(require,module,exports){
+},{}],133:[function(require,module,exports){
 'use strict';
 
 
@@ -56213,7 +55805,7 @@ Z_DEFLATED:8};
 
 
 
-},{}],137:[function(require,module,exports){
+},{}],134:[function(require,module,exports){
 'use strict';
 
 
@@ -56274,7 +55866,7 @@ return crc^-1;
 
 module.exports=crc32;
 
-},{}],138:[function(require,module,exports){
+},{}],135:[function(require,module,exports){
 'use strict';
 
 
@@ -58150,7 +57742,7 @@ exports.deflateInfo='pako deflate (from Nodeca project)';
 
 
 
-},{"../utils/common":134,"./adler32":135,"./crc32":137,"./messages":139,"./trees":140}],139:[function(require,module,exports){
+},{"../utils/common":131,"./adler32":132,"./crc32":134,"./messages":136,"./trees":137}],136:[function(require,module,exports){
 'use strict';
 
 
@@ -58184,7 +57776,7 @@ module.exports={
 '-6':'incompatible version'};
 
 
-},{}],140:[function(require,module,exports){
+},{}],137:[function(require,module,exports){
 'use strict';
 
 
@@ -59408,7 +59000,7 @@ exports._tr_flush_block=_tr_flush_block;
 exports._tr_tally=_tr_tally;
 exports._tr_align=_tr_align;
 
-},{"../utils/common":134}],141:[function(require,module,exports){
+},{"../utils/common":131}],138:[function(require,module,exports){
 'use strict';
 
 
@@ -59457,7 +59049,7 @@ this.adler=0;
 
 module.exports=ZStream;
 
-},{}],142:[function(require,module,exports){
+},{}],139:[function(require,module,exports){
 module.exports=function parseCacheControl(field){
 
 if(typeof field!=='string'){
@@ -59496,7 +59088,7 @@ catch(err){}
 return err?null:header;
 };
 
-},{}],143:[function(require,module,exports){
+},{}],140:[function(require,module,exports){
 (function(process){
 
 
@@ -59802,7 +59394,7 @@ return str.substr(start,len);
 
 
 }).call(this,require('_process'));
-},{"_process":145}],144:[function(require,module,exports){
+},{"_process":142}],141:[function(require,module,exports){
 (function(process){
 'use strict';
 
@@ -59850,7 +59442,7 @@ fn.apply(null,args);
 
 
 }).call(this,require('_process'));
-},{"_process":145}],145:[function(require,module,exports){
+},{"_process":142}],142:[function(require,module,exports){
 
 var process=module.exports={};
 
@@ -60036,7 +59628,7 @@ throw new Error('process.chdir is not supported');
 };
 process.umask=function(){return 0;};
 
-},{}],146:[function(require,module,exports){
+},{}],143:[function(require,module,exports){
 
 
 
@@ -60122,7 +59714,7 @@ var isArray=Array.isArray||function(xs){
 return Object.prototype.toString.call(xs)==='[object Array]';
 };
 
-},{}],147:[function(require,module,exports){
+},{}],144:[function(require,module,exports){
 
 
 
@@ -60209,16 +59801,16 @@ if(Object.prototype.hasOwnProperty.call(obj,key))res.push(key);
 return res;
 };
 
-},{}],148:[function(require,module,exports){
+},{}],145:[function(require,module,exports){
 'use strict';
 
 exports.decode=exports.parse=require('./decode');
 exports.encode=exports.stringify=require('./encode');
 
-},{"./decode":146,"./encode":147}],149:[function(require,module,exports){
+},{"./decode":143,"./encode":144}],146:[function(require,module,exports){
 module.exports=require('./lib/_stream_duplex.js');
 
-},{"./lib/_stream_duplex.js":150}],150:[function(require,module,exports){
+},{"./lib/_stream_duplex.js":147}],147:[function(require,module,exports){
 
 
 
@@ -60350,7 +59942,7 @@ this.end();
 
 pna.nextTick(cb,err);
 };
-},{"./_stream_readable":152,"./_stream_writable":154,"core-util-is":103,"inherits":113,"process-nextick-args":144}],151:[function(require,module,exports){
+},{"./_stream_readable":149,"./_stream_writable":151,"core-util-is":103,"inherits":113,"process-nextick-args":141}],148:[function(require,module,exports){
 
 
 
@@ -60398,7 +59990,7 @@ Transform.call(this,options);
 PassThrough.prototype._transform=function(chunk,encoding,cb){
 cb(null,chunk);
 };
-},{"./_stream_transform":153,"core-util-is":103,"inherits":113}],152:[function(require,module,exports){
+},{"./_stream_transform":150,"core-util-is":103,"inherits":113}],149:[function(require,module,exports){
 (function(process,global){
 
 
@@ -61420,7 +61012,7 @@ if(xs[i]===x)return i;
 return-1;
 }
 }).call(this,require('_process'),typeof global!=="undefined"?global:typeof self!=="undefined"?self:typeof window!=="undefined"?window:{});
-},{"./_stream_duplex":150,"./internal/streams/BufferList":155,"./internal/streams/destroy":156,"./internal/streams/stream":157,"_process":145,"core-util-is":103,"events":108,"inherits":113,"isarray":124,"process-nextick-args":144,"safe-buffer":165,"string_decoder/":158,"util":98}],153:[function(require,module,exports){
+},{"./_stream_duplex":147,"./internal/streams/BufferList":152,"./internal/streams/destroy":153,"./internal/streams/stream":154,"_process":142,"core-util-is":103,"events":108,"inherits":113,"isarray":121,"process-nextick-args":141,"safe-buffer":162,"string_decoder/":155,"util":98}],150:[function(require,module,exports){
 
 
 
@@ -61635,7 +61227,7 @@ if(stream._transformState.transforming)throw new Error('Calling transform done w
 
 return stream.push(null);
 }
-},{"./_stream_duplex":150,"core-util-is":103,"inherits":113}],154:[function(require,module,exports){
+},{"./_stream_duplex":147,"core-util-is":103,"inherits":113}],151:[function(require,module,exports){
 (function(process,global,setImmediate){
 
 
@@ -62325,7 +61917,7 @@ this.end();
 cb(err);
 };
 }).call(this,require('_process'),typeof global!=="undefined"?global:typeof self!=="undefined"?self:typeof window!=="undefined"?window:{},require("timers").setImmediate);
-},{"./_stream_duplex":150,"./internal/streams/destroy":156,"./internal/streams/stream":157,"_process":145,"core-util-is":103,"inherits":113,"process-nextick-args":144,"safe-buffer":165,"timers":175,"util-deprecate":176}],155:[function(require,module,exports){
+},{"./_stream_duplex":147,"./internal/streams/destroy":153,"./internal/streams/stream":154,"_process":142,"core-util-is":103,"inherits":113,"process-nextick-args":141,"safe-buffer":162,"timers":172,"util-deprecate":173}],152:[function(require,module,exports){
 'use strict';
 
 function _classCallCheck(instance,Constructor){if(!(instance instanceof Constructor)){throw new TypeError("Cannot call a class as a function");}}
@@ -62405,7 +61997,7 @@ var obj=util.inspect({length:this.length});
 return this.constructor.name+' '+obj;
 };
 }
-},{"safe-buffer":165,"util":98}],156:[function(require,module,exports){
+},{"safe-buffer":162,"util":98}],153:[function(require,module,exports){
 'use strict';
 
 
@@ -62480,10 +62072,10 @@ module.exports={
 destroy:destroy,
 undestroy:undestroy};
 
-},{"process-nextick-args":144}],157:[function(require,module,exports){
+},{"process-nextick-args":141}],154:[function(require,module,exports){
 module.exports=require('events').EventEmitter;
 
-},{"events":108}],158:[function(require,module,exports){
+},{"events":108}],155:[function(require,module,exports){
 
 
 
@@ -62780,10 +62372,10 @@ return buf.toString(this.encoding);
 function simpleEnd(buf){
 return buf&&buf.length?this.write(buf):'';
 }
-},{"safe-buffer":165}],159:[function(require,module,exports){
+},{"safe-buffer":162}],156:[function(require,module,exports){
 module.exports=require('./readable').PassThrough;
 
-},{"./readable":160}],160:[function(require,module,exports){
+},{"./readable":157}],157:[function(require,module,exports){
 exports=module.exports=require('./lib/_stream_readable.js');
 exports.Stream=exports;
 exports.Readable=exports;
@@ -62792,13 +62384,13 @@ exports.Duplex=require('./lib/_stream_duplex.js');
 exports.Transform=require('./lib/_stream_transform.js');
 exports.PassThrough=require('./lib/_stream_passthrough.js');
 
-},{"./lib/_stream_duplex.js":150,"./lib/_stream_passthrough.js":151,"./lib/_stream_readable.js":152,"./lib/_stream_transform.js":153,"./lib/_stream_writable.js":154}],161:[function(require,module,exports){
+},{"./lib/_stream_duplex.js":147,"./lib/_stream_passthrough.js":148,"./lib/_stream_readable.js":149,"./lib/_stream_transform.js":150,"./lib/_stream_writable.js":151}],158:[function(require,module,exports){
 module.exports=require('./readable').Transform;
 
-},{"./readable":160}],162:[function(require,module,exports){
+},{"./readable":157}],159:[function(require,module,exports){
 module.exports=require('./lib/_stream_writable.js');
 
-},{"./lib/_stream_writable.js":154}],163:[function(require,module,exports){
+},{"./lib/_stream_writable.js":151}],160:[function(require,module,exports){
 var URL=require('url').URL;
 
 
@@ -63221,13 +62813,13 @@ return this._sitemaps.slice(0);
 
 module.exports=Robots;
 
-},{"url":"url"}],164:[function(require,module,exports){
+},{"url":"url"}],161:[function(require,module,exports){
 var Robots=require('./Robots');
 
 module.exports=function(url,contents){
 return new Robots(url,contents);
 };
-},{"./Robots":163}],165:[function(require,module,exports){
+},{"./Robots":160}],162:[function(require,module,exports){
 
 var buffer=require('buffer');
 var Buffer=buffer.Buffer;
@@ -63291,7 +62883,7 @@ throw new TypeError('Argument must be a number');
 return buffer.SlowBuffer(size);
 };
 
-},{"buffer":102}],166:[function(require,module,exports){
+},{"buffer":102}],163:[function(require,module,exports){
 (function(process){
 exports=module.exports=SemVer;
 
@@ -64778,7 +64370,7 @@ return parse(match[1]+
 }
 
 }).call(this,require('_process'));
-},{"_process":145}],167:[function(require,module,exports){
+},{"_process":142}],164:[function(require,module,exports){
 (function(Buffer){
 'use strict';
 
@@ -65020,7 +64612,7 @@ create:frame};
 
 
 }).call(this,require("buffer").Buffer);
-},{"buffer":102,"fs":101,"jpeg-js":125}],168:[function(require,module,exports){
+},{"buffer":102,"fs":101,"jpeg-js":122}],165:[function(require,module,exports){
 'use strict';
 
 const frame=require('./frame');
@@ -65090,7 +64682,7 @@ return calculateValues(frames,data);
 });
 };
 
-},{"./frame":167,"./speed-index":169}],169:[function(require,module,exports){
+},{"./frame":164,"./speed-index":166}],166:[function(require,module,exports){
 'use strict';
 
 const imageSSIM=require('image-ssim');
@@ -65362,7 +64954,7 @@ calculatePerceptualProgress,
 calculateSpeedIndexes};
 
 
-},{"image-ssim":112}],170:[function(require,module,exports){
+},{"image-ssim":112}],167:[function(require,module,exports){
 
 
 
@@ -65491,17 +65083,20 @@ dest.emit('pipe',source);
 return dest;
 };
 
-},{"events":108,"inherits":113,"readable-stream/duplex.js":149,"readable-stream/passthrough.js":159,"readable-stream/readable.js":160,"readable-stream/transform.js":161,"readable-stream/writable.js":162}],171:[function(require,module,exports){
-module.exports=[{"name":"Google Analytics","company":"Google","homepage":"https://www.google.com/analytics/analytics/","categories":["analytics"],"domains":["www.google-analytics.com","ssl.google-analytics.com","google-analytics.com","urchin.com"]},{"name":"Facebook","homepage":"https://www.facebook.com","categories":["social"],"domains":["www.facebook.com","connect.facebook.net","staticxx.facebook.com","static.xx.fbcdn.net","m.facebook.com","atlassbx.com","fbcdn-photos-e-a.akamaihd.net","23.62.3.183","akamai.net","akamaiedge.net","akamaitechnologies.com","akamaitechnologies.fr","akamaized.net","edgefcs.net","edgekey.net","edgesuite.net","srip.net","cquotient.com","demandware.net","platform-lookaside.fbsbx.com"]},{"name":"Google CDN","company":"Google","homepage":"https://developers.google.com/speed/libraries/","categories":["library"],"domains":["ajax.googleapis.com","www.gstatic.com","commondatastorage.googleapis.com"]},{"name":"Google/Doubleclick Ads","company":"Google","homepage":"https://www.doubleclickbygoogle.com/","categories":["ad"],"domains":["pagead2.googlesyndication.com","tpc.googlesyndication.com","googleads.g.doubleclick.net","securepubads.g.doubleclick.net","cm.g.doubleclick.net","s0.2mdn.net","stats.g.doubleclick.net","survey.g.doubleclick.net","fls.doubleclick.net","ad.doubleclick.net","www.googleadservices.com","adservice.google.se","adservice.google.com","adservice.google.de","www.googletagservices.com"]},{"name":"Google Tag Manager","company":"Google","homepage":"https://marketingplatform.google.com/about/tag-manager/","categories":["tag-manager"],"domains":["www.googletagmanager.com"]},{"name":"Other Google APIs/SDKs","company":"Google","homepage":"https://developers.google.com/apis-explorer/#p/","categories":["utility"],"domains":["www.google.com","apis.google.com","cse.google.com","translate.googleapis.com","storage.googleapis.com","imasdk.googleapis.com","lh3.googleusercontent.com","calendar.google.com","pay.google.com","news.google.com","payments.google.com","clients2.google.com"]},{"name":"Twitter","homepage":"https://twitter.com","categories":["social"],"domains":["platform.twitter.com","cdn.syndication.twimg.com","twitpic.com","vine.co"]},{"name":"Yandex Metrica","company":"Yandex","homepage":"https://metrica.yandex.com/about?","categories":["analytics"],"domains":["mc.yandex.ru","d31j93rd8oukbv.cloudfront.net"]},{"name":"jQuery CDN","homepage":"https://code.jquery.com/","categories":["library"],"domains":["code.jquery.com"]},{"name":"AddThis","homepage":"http://www.addthis.com/","categories":["social"],"domains":["s7.addthis.com","addthiscdn.com","addthisedge.com","r.dlx.addthis.com","su.addthis.com","x.dlx.addthis.com"]},{"name":"Google Maps","company":"Google","homepage":"https://www.google.com/maps","categories":["utility"],"domains":["maps-api-ssl.google.com","maps.google.com","maps.gstatic.com","maps.googleapis.com","mts.googleapis.com"]},{"name":"Hotjar","homepage":"https://www.hotjar.com/","categories":["analytics"],"domains":["script.hotjar.com","static.hotjar.com","in.hotjar.com","vc.hotjar.io","vars.hotjar.com"]},{"name":"Cloudflare CDN","homepage":"https://cdnjs.com/","categories":["library"],"domains":["cdnjs.cloudflare.com","amp.cloudflare.com"]},{"name":"WordPress","company":"Automattic","homepage":"https://wp.com/","categories":["hosting"],"domains":["s0.wp.com","s2.wp.com","s.w.org","wordpress.com","stats.wp.com"]},{"name":"Shopify","homepage":"https://www.shopify.com/","categories":["hosting"],"domains":["cdn.shopify.com","productreviews.shopifycdn.com","shopifyapps.com"]},{"name":"Criteo","homepage":"https://www.criteo.com/","categories":["ad"],"domains":["static.criteo.net","bidder.criteo.com","emailretargeting.com"]},{"name":"ZenDesk","homepage":"https://zendesk.com/","categories":["customer-success"],"domains":["assets.zendesk.com","static.zdassets.com","v2.zopim.com"]},{"name":"Tawk.to","homepage":"https://www.tawk.to/","categories":["customer-success"],"domains":["embed.tawk.to"]},{"name":"AMP","homepage":"https://www.ampproject.org/","categories":["content"],"domains":["cdn.ampproject.org"]},{"name":"Wix","homepage":"https://www.wix.com/","categories":["hosting"],"domains":["static.parastorage.com","static.wixstatic.com","www.wix.com"]},{"name":"Squarespace","homepage":"https://www.squarespace.com/","categories":["hosting"],"domains":["static.squarespace.com","static1.squarespace.com"]},{"name":"YouTube","homepage":"https://youtube.com","categories":["video"],"domains":["www.youtube.com","s.ytimg.com","yt3.ggpht.com","youtube-nocookie.com"]},{"name":"Jivochat","homepage":"https://www.jivochat.com/","categories":["customer-success"],"domains":["cdn-ca.jivosite.com","code.jivosite.com"]},{"name":"Amazon Web Services","homepage":"https://aws.amazon.com/s3/","categories":["other"],"domains":["s3.amazonaws.com","amazonwebservices.com","api-cdn.amazon.com","ecx.images-amazon.com","elasticbeanstalk.com","amazonwebapps.com","ws.amazon.co.uk","payments-amazon.com"]},{"name":"Adobe Tag Manager","company":"Adobe","homepage":"https://www.adobe.com/experience-platform/","categories":["tag-manager"],"domains":["assets.adobedtm.com","dpm.demdex.net","sync-tm.everesttech.net"]},{"name":"PIXNET","homepage":"https://www.pixnet.net/","categories":["social"],"domains":["front.pixfs.net","falcon-asset.pixfs.net","pixgame-asset.pixfs.net"]},{"name":"JSDelivr CDN","homepage":"https://www.jsdelivr.com/","categories":["library"],"domains":["cdn.jsdelivr.net"]},{"name":"Yandex Ads","company":"Yandex","homepage":"https://yandex.com/adv/","categories":["ad"],"domains":["an.yandex.ru"]},{"name":"Yandex Share","company":"Yandex","homepage":"https://yastatic.net/share2/share.js","categories":["social"],"domains":["yastatic.net"]},{"name":"Yandex APIs","company":"Yandex","homepage":"https://yandex.ru/","categories":["utility"],"domains":["api-maps.yandex.ru","money.yandex.ru"]},{"name":"Salesforce","homepage":"https://www.salesforce.com/products/marketing-cloud/","categories":["analytics"],"domains":["cdn.krxd.net","beacon.krxd.net","consumer.krxd.net","usermatch.krxd.net"]},{"name":"Sumo","homepage":"https://sumo.com/","categories":["marketing"],"domains":["sumo.b-cdn.net","load.sumo.com","load.sumome.com"]},{"name":"Beeketing","homepage":"https://beeketing.com/","categories":["marketing"],"domains":["sdk-cdn.beeketing.com","sdk.beeketing.com"]},{"name":"FontAwesome CDN","homepage":"https://fontawesome.com/","categories":["library"],"domains":["use.fontawesome.com"]},{"name":"ShareThis","homepage":"https://www.sharethis.com/","categories":["social"],"domains":["w.sharethis.com","ws.sharethis.com","t.sharethis.com"]},{"name":"Hatena Blog","homepage":"https://hatenablog.com/","categories":["hosting"],"domains":["cdn.blog.st-hatena.com","cdn.pool.st-hatena.com","cdn7.www.st-hatena.com","s.hatena.ne.jp","b.st-hatena.com"]},{"name":"Mailchimp","homepage":"https://mailchimp.com/","categories":["marketing"],"domains":["downloads.mailchimp.com","chimpstatic.com","list-manage.com"]},{"name":"Amazon Ads","homepage":"https://ad.amazon.com/","categories":["ad"],"domains":["s.amazon-adsystem.com","c.amazon-adsystem.com","aax.amazon-adsystem.com","z-na.amazon-adsystem.com"]},{"name":"Sentry","homepage":"https://sentry.io/","categories":["utility"],"domains":["cdn.ravenjs.com","browser.sentry-cdn.com","getsentry.com"]},{"name":"Pinterest","homepage":"https://pinterest.com/","categories":["social"],"domains":["assets.pinterest.com","pinimg.com","ct.pinterest.com"]},{"name":"Hubspot","homepage":"https://hubspot.com/","categories":["marketing"],"domains":["forms.hubspot.com","js.hsforms.net","js.hs-analytics.net","hscollectedforms.net","hscta.net","hsleadflows.net","js.leadin.com","hs-scripts.com","hsstatic.net","hubspot.net"]},{"name":"LinkedIn","homepage":"https://www.linkedin.com/","categories":["social"],"domains":["platform.linkedin.com","bizographics.com","slideshare.com","slidesharecdn.com"]},{"name":"Taboola","homepage":"https://www.taboola.com/","categories":["ad"],"domains":["cdn.taboola.com","trc.taboola.com","vidstat.taboola.com","taboolasyndication.com"]},{"name":"Intercom","homepage":"https://www.intercom.com/","categories":["customer-success"],"domains":["js.intercomcdn.com"]},{"name":"Histats","homepage":"http://histats.com/","categories":["analytics"],"domains":["s10.histats.com"]},{"name":"Optimizely","homepage":"https://www.optimizely.com/","categories":["analytics"],"domains":["cdn.optimizely.com","cdn-pci.optimizely.com","logx.optimizely.com","cdn3.optimizely.com"]},{"name":"Moat","homepage":"https://moat.com/","categories":["ad"],"domains":["z.moatads.com","moatpixel.com","px.moatads.com","geo.moatads.com","sejs.moatads.com","mb.moatads.com","v4.moatads.com"]},{"name":"Tealium","homepage":"https://tealium.com/","categories":["tag-manager"],"domains":["tags.tiqcdn.com","tealium.hs.llnwd.net","aniview.com","delvenetworks.com","link.videoplatform.limelight.com"]},{"name":"Distil Networks","homepage":"https://www.distilnetworks.com/","categories":["utility"],"domains":["n-cdn.areyouahuman.com"]},{"name":"Scorecard Research","homepage":"https://www.scorecardresearch.com/","categories":["ad"],"domains":["sb.scorecardresearch.com"]},{"name":"Blogger","homepage":"http://www.blogger.com/","categories":["hosting"],"domains":["1.bp.blogspot.com","www.blogger.com","images-blogger-opensocial.googleusercontent.com"]},{"name":"Wistia","homepage":"https://wistia.com/","categories":["video"],"domains":["fast.wistia.com","fast.wistia.net"]},{"name":"LiveChat","homepage":"https://www.livechatinc.com/","categories":["customer-success"],"domains":["cdn.livechatinc.com","secure.livechatinc.com"]},{"name":"Adobe TypeKit","company":"Adobe","homepage":"https://fonts.adobe.com/","categories":["library"],"domains":["use.typekit.net","typekit.com","p.typekit.net"]},{"name":"Shareaholic","homepage":"https://www.shareaholic.com/","categories":["social"],"domains":["dsms0mj1bbhn4.cloudfront.net","shareaholic.com"]},{"name":"OneSignal","homepage":"https://onesignal.com/","categories":["utility"],"domains":["cdn.onesignal.com"]},{"name":"Cookiebot","homepage":"https://www.cookiebot.com/","categories":["utility"],"domains":["consent.cookiebot.com"]},{"name":"Tumblr","homepage":"https://tumblr.com/","categories":["social"],"domains":["assets.tumblr.com","static.tumblr.com"]},{"name":"Cloudflare","homepage":"https://www.cloudflare.com/website-optimization/","categories":["utility"],"domains":["ajax.cloudflare.com"]},{"name":"Integral Ad Science","homepage":"https://integralads.com/uk/","categories":["ad"],"domains":["pixel.adsafeprotected.com","static.adsafeprotected.com","fw.adsafeprotected.com","cdn.adsafeprotected.com","dt.adsafeprotected.com","iasds01.com"]},{"name":"PayPal","homepage":"https://paypal.com","categories":["utility"],"domains":["www.paypalobjects.com","paypal.com"]},{"name":"Segment","homepage":"https://segment.com/","categories":["analytics"],"domains":["cdn.segment.com","api.segment.io"]},{"name":"Baidu Analytics","homepage":"https://tongji.baidu.com/web/welcome/login","categories":["analytics"],"domains":["hm.baidu.com"]},{"name":"Dealer","homepage":"https://www.dealer.com/","categories":["hosting"],"domains":["static.dealer.com"]},{"name":"Olark","homepage":"https://www.olark.com/","categories":["customer-success"],"domains":["static.olark.com"]},{"name":"VK","homepage":"https://vk.com/","categories":["social"],"domains":["vk.com"]},{"name":"OpenX","homepage":"https://www.openx.com/","categories":["ad"],"domains":["uk-ads.openx.net","us-ads.openx.net","33across-d.openx.net","rtb.openx.net","us-u.openx.net","eu-u.openx.net","u.openx.net","deliverimp.com","jump-time.net","openxadexchange.com","servedbyopenx.com"]},{"name":"Lucky Orange","homepage":"https://www.luckyorange.com/","categories":["analytics"],"domains":["d10lpsik1i8c69.cloudfront.net","luckyorange.com","luckyorange.net"]},{"name":"OptinMonster","homepage":"https://optinmonster.com/","categories":["marketing"],"domains":["a.optmstr.com","api.opmnstr.com","a.optmnstr.com"]},{"name":"Snapchat","homepage":"https://www.snapchat.com","categories":["analytics"],"domains":["tr.snapchat.com","sc-static.net"]},{"name":"33 Across","homepage":"https://33across.com/","categories":["ad"],"domains":["sic.33across.com","cdn-sic.33across.com"]},{"name":"Ensighten","homepage":"https://www.ensighten.com/","categories":["tag-manager"],"domains":["nexus.ensighten.com"]},{"name":"WordAds","company":"Automattic","homepage":"https://wordads.co/","categories":["ad"],"domains":["s.pubmine.com"]},{"name":"Snowplow","homepage":"https://snowplowanalytics.com/","categories":["analytics"],"domains":["d32hwlnfiv2gyn.cloudfront.net"]},{"name":"Brightcove","homepage":"https://www.brightcove.com/en/","categories":["video"],"domains":["vjs.zencdn.net","players.brightcove.net","brightcove.com"]},{"name":"Drift","homepage":"https://www.drift.com/","categories":["marketing"],"domains":["js.driftt.com","api.drift.com"]},{"name":"Microsoft Hosted Libs","company":"Microsoft","categories":["library"],"domains":["ajax.aspnetcdn.com"]},{"name":"Stripe","homepage":"https://stripe.com","categories":["utility"],"domains":["m.stripe.network","js.stripe.com","stripecdn.com"]},{"name":"Parking Crew","homepage":"http://parkingcrew.net/","categories":["other"],"domains":["d1lxhc4jvstzrp.cloudfront.net","parkingcrew.net"]},{"name":"Popads","homepage":"https://www.popads.net/","categories":["ad"],"domains":["serve.popads.net","c1.popads.net"]},{"name":"DigiTrust","homepage":"http://www.digitru.st/","categories":["analytics"],"domains":["cdn.digitru.st"]},{"name":"Mixpanel","homepage":"https://mixpanel.com/","categories":["analytics"],"domains":["cdn.mxpnl.com","mixpanel.com"]},{"name":"MediaVine","homepage":"https://www.mediavine.com/","categories":["ad"],"domains":["scripts.mediavine.com","video.mediavine.com"]},{"name":"FullStory","categories":["analytics"],"domains":["fullstory.com","rs.fullstory.com"]},{"name":"Sizmek","homepage":"https://www.sizmek.com/","categories":["ad"],"domains":["secure-ds.serving-sys.com","ds.serving-sys.com","peer39.net","bs.serving-sys.com"]},{"name":"CDK Dealer Management","company":"CDK Global","homepage":"https://www.cdkglobal.com/us","categories":["hosting"],"domains":["media-cf.assets-cdk.com"]},{"name":"Quantcast","homepage":"https://www.quantcast.com","categories":["analytics"],"domains":["pixel.quantserve.com","secure.quantserve.com","rules.quantcount.com","brtstats.com","ntv.io","semantictec.com"]},{"name":"Pubmatic","homepage":"https://pubmatic.com/","categories":["ad"],"domains":["image6.pubmatic.com","ads.pubmatic.com","image2.pubmatic.com","simage2.pubmatic.com","image4.pubmatic.com","simage4.pubmatic.com"]},{"name":"RD Station","homepage":"https://www.rdstation.com/en/","categories":["marketing"],"domains":["d335luupugsy2.cloudfront.net"]},{"name":"MGID","homepage":"https://www.mgid.com/","categories":["ad"],"domains":["servicer.mgid.com","dt07.net"]},{"name":"Media.net","homepage":"https://www.media.net/","categories":["ad"],"domains":["contextual.media.net","mnet-ad.net"]},{"name":"New Relic","homepage":"https://newrelic.com/","categories":["utility"],"domains":["js-agent.newrelic.com","bam.nr-data.net"]},{"name":"Rubicon Project","homepage":"https://rubiconproject.com/","categories":["ad"],"domains":["pixel.rubiconproject.com","fastlane.rubiconproject.com","secure-assets.rubiconproject.com","eus.rubiconproject.com","pixel-us-east.rubiconproject.com","token.rubiconproject.com","ads.rubiconproject.com","chango.com","fimserve.com"]},{"name":"VWO","homepage":"https://vwo.com","categories":["analytics"],"domains":["dev.visualwebsiteoptimizer.com"]},{"name":"Keen","company":"Keen","homepage":"https://keen.io/","categories":["analytics"],"domains":["d26b395fwzu5fz.cloudfront.net","keen.io"]},{"name":"Adroll","homepage":"https://www.adroll.com/","categories":["ad"],"domains":["d.adroll.com","s.adroll.com"]},{"name":"Unpkg","homepage":"https://unpkg.com","categories":["library"],"domains":["unpkg.com"]},{"name":"Parse.ly","categories":["analytics"],"domains":["d1z2jf7jlzjs58.cloudfront.net","parsely.com"]},{"name":"Searchanise","categories":["analytics"],"domains":["www.searchanise.com"]},{"name":"AppNexus","homepage":"https://www.appnexus.com/","categories":["ad"],"domains":["acdn.adnxs.com","secure.adnxs.com","ctasnet.com","ib.adnxs.com"]},{"name":"uLogin","categories":["other"],"domains":["ulogin.ru"]},{"name":"fam","company":"Fing Co Ltd.","homepage":"http://admin.fam-ad.com/report/","categories":["ad"],"domains":["fam-ad.com","img.fam-ad.com"]},{"name":"Yandex CDN","company":"Yandex","homepage":"https://yandex.ru/","categories":["library"],"domains":["yandex.st"]},{"name":"Albacross","homepage":"https://albacross.com/","categories":["marketing"],"domains":["serve.albacross.com"]},{"name":"CreateJS CDN","homepage":"http://code.createjs.com/","categories":["library"],"domains":["code.createjs.com"]},{"name":"Help Scout","homepage":"https://www.helpscout.net/","categories":["customer-success"],"domains":["djtflbt20bdde.cloudfront.net","beacon-v2.helpscout.net"]},{"name":"AppDynamics","homepage":"https://www.appdynamics.com/","categories":["utility"],"domains":["cdn.appdynamics.com","d3tjaysgumg9lf.cloudfront.net","eum-appdynamics.com"]},{"name":"Siteimprove","categories":["utility"],"domains":["siteimprove.com","siteimproveanalytics.com"]},{"name":"DoubleVerify","homepage":"https://www.doubleverify.com/","categories":["ad"],"domains":["cdn.doubleverify.com","rtb0.doubleverify.com","rtbcdn.doubleverify.com","dvtps.com","tm.iqfp1.com"]},{"name":"AOL / Oath / Verizon Media","homepage":"https://www.oath.com/","categories":["ad"],"domains":["pixel.advertising.com","dtm.advertising.com","tag.sp.advertising.com","service.sp.advertising.com","adtech.advertising.com","aol.co.uk","aol.com","aolcdn.com","blogsmithmedia.com","mighty.aol.net","tacoda.net","consent.cmp.oath.com"]},{"name":"Alexa","homepage":"https://www.alexa.com/","categories":["analytics"],"domains":["d31qbv1cthcecs.cloudfront.net"]},{"name":"SessionCam","company":"ServiceTick","categories":["analytics"],"domains":["d2oh4tlt9mrke9.cloudfront.net","sessioncam.com"]},{"name":"Foursixty","categories":["customer-success"],"domains":["foursixty.com"]},{"name":"Listrak","homepage":"https://www.listrak.com/","categories":["marketing"],"domains":["cdn.listrakbi.com","s1.listrakbi.com","listrak.com"]},{"name":"mPulse","homepage":"https://developer.akamai.com/akamai-mpulse","categories":["analytics"],"domains":["c.go-mpulse.net","0211c83c.akstat.io","mpstat.us","mpulse.net"]},{"name":"Opentag","company":"Qubit","categories":["tag-manager"],"domains":["d3c3cq33003psk.cloudfront.net","opentag-stats.qutics.com"]},{"name":"Market GID","homepage":"https://www.marketgid.com/","categories":["ad"],"domains":["jsc.marketgid.com"]},{"name":"Freshdesk","homepage":"https://freshdesk.com/","categories":["customer-success"],"domains":["d36mpcpuzc4ztk.cloudfront.net"]},{"name":"IBM Digital Analytics","company":"IBM","categories":["analytics"],"domains":["cmcore.com","coremetrics.com","data.coremetrics.com","data.coremetrics.eu","data.de.coremetrics.com","iocdn.coremetrics.com","libs.coremetrics.com","libs.de.coremetrics.com","s81c.com","tmscdn.coremetrics.com","tmscdn.de.coremetrics.com","unica.com"]},{"name":"Usabilla","homepage":"https://usabilla.com","categories":["analytics"],"domains":["w.usabilla.com","d6tizftlrpuof.cloudfront.net"]},{"name":"Bugsnag","categories":["utility"],"domains":["d2wy8f7a9ursnm.cloudfront.net","notify.bugsnag.com"]},{"name":"AddShoppers","categories":["social"],"domains":["addshoppers.com","d3rr3d0n31t48m.cloudfront.net","shop.pe"]},{"name":"Po.st","company":"RadiumOne","categories":["utility"],"domains":["po.st"]},{"name":"Disqus","homepage":"http://disqus.com/","categories":["social"],"domains":["c.disquscdn.com","disqus.com"]},{"name":"PhotoBucket","categories":["content"],"domains":["photobucket.com"]},{"name":"GitHub","categories":["utility"],"domains":["cdn.rawgit.com"]},{"name":"Bootstrap CDN","homepage":"https://www.bootstrapcdn.com/","categories":["library"],"domains":["maxcdn.bootstrapcdn.com","stackpath.bootstrapcdn.com"]},{"name":"Radar","company":"Cedexis","homepage":"https://www.cedexis.com/radar/","categories":["analytics"],"domains":["radar.cedexis.com","rpt.cedexis.com","2-01-49cd-0002.cdx.cedexis.net","a-cedexis.msedge.net","bench.cedexis-test.com","cedexis-radar.net","cedexis-test01.insnw.net","cedexis.leasewebcdn.com","cedexisakamaitest.azureedge.net","cedexispub.cdnetworks.net","cs600.wac.alphacdn.net","cs600.wpc.edgecastdns.net","global2.cmdolb.com","img-cedexis.mncdn.com","zn3vgszfh.fastestcdn.net","edgecastcdn.net"]},{"name":"SnapWidget","categories":["content"],"domains":["snapwidget.com"]},{"name":"Media Math","homepage":"http://www.mediamath.com/","categories":["ad"],"domains":["mathid.mathtag.com","mathads.com","sync.mathtag.com","pixel.mathtag.com"]},{"name":"ClickDesk","categories":["customer-success"],"domains":["clickdesk.com","d1gwclp1pmzk26.cloudfront.net"]},{"name":"Google Plus","company":"Google","categories":["social"],"domains":["plus.google.com"]},{"name":"LinkedIn Ads","categories":["ad"],"domains":["ads.linkedin.com","snap.licdn.com","www.linkedin.com"]},{"name":"Madison Logic","categories":["marketing"],"domains":["ml314.com"]},{"name":"Smarter Click","categories":["ad"],"domains":["smarterclick.co.uk","smct.co"]},{"name":"Bing Ads","homepage":"https://bingads.microsoft.com","categories":["ad"],"domains":["bat.bing.com","c.bing.com","bat.r.msn.com","ajax.microsoft.com","msads.net","msecnd.net","s-msft.com","s-msn.com","windows.net"]},{"name":"Fresh Relevance","categories":["analytics"],"domains":["d1y9qtn9cuc3xw.cloudfront.ne","d1y9qtn9cuc3xw.cloudfront.net","d81mfvml8p5ml.cloudfront.net","dkpklk99llpj0.cloudfront.net","freshrelevance.com"]},{"name":"Browsealoud","homepage":"https://www.texthelp.com/en-gb/products/browsealoud/","categories":["other"],"domains":["www.browsealoud.com","texthelp.com"]},{"name":"Qubit Deliver","company":"Qubit","categories":["analytics"],"domains":["d1m54pdnjzjnhe.cloudfront.net","d22rutvoghj3db.cloudfront.net","dd6zx4ibq538k.cloudfront.net"]},{"name":"Crazy Egg","homepage":"https://www.crazyegg.com/","categories":["analytics"],"domains":["dnn506yrbagrg.cloudfront.net","cetrk.com","crazyegg.com","hellobar.com"]},{"name":"Vox Media","homepage":"https://www.voxmedia.com/","categories":["content"],"domains":["cdn.vox-cdn.com","voxmedia.com"]},{"name":"SaleCycle","categories":["ad"],"domains":["d16fk4ms6rqz1v.cloudfront.net","d22j4fzzszoii2.cloudfront.net","d30ke5tqu2tkyx.cloudfront.net","salecycle.com"]},{"name":"Sidecar","categories":["other"],"domains":["d3v27wwd40f0xu.cloudfront.net","getsidecar.com"]},{"name":"Concert","homepage":"https://concert.io/","categories":["ad"],"domains":["cdn.concert.io"]},{"name":"Kaizen Platform","categories":["analytics"],"domains":["cdn.kaizenplatform.net","log-v4.kaizenplatform.net"]},{"name":"unpkg","categories":["utility"],"domains":["npmcdn.com"]},{"name":"Edge Web Fonts","company":"Adobe Systems","categories":["library"],"domains":["use.edgefonts.net"]},{"name":"The Trade Desk","homepage":"https://www.thetradedesk.com/","categories":["ad"],"domains":["js.adsrvr.org","match.adsrvr.org","d1eoo1tco6rr5e.cloudfront.net","snap.adsrvr.org"]},{"name":"Ipify","homepage":"https://www.ipify.org","categories":["utility"],"domains":["api.ipify.org","geo.ipify.org"]},{"name":"Permutive","categories":["ad"],"domains":["d3alqb8vzo7fun.cloudfront.net","permutive.com"]},{"name":"Pingdom RUM","homepage":"https://www.pingdom.com/product/performance-monitoring/","categories":["analytics"],"domains":["rum-static.pingdom.net","rum-collector-2.pingdom.net"]},{"name":"Clicktripz","categories":["content"],"domains":["static.clicktripz.com","www.clicktripz.com"]},{"name":"Talkable","categories":["ad"],"domains":["d2jjzw81hqbuqv.cloudfront.net","www.talkable.com"]},{"name":"GoSquared","homepage":"https://www.gosquared.com","categories":["analytics"],"domains":["data.gosquared.com","d1l6p2sc9645hc.cloudfront.net","data2.gosquared.com"]},{"name":"Republer","categories":["ad"],"domains":["sync.republer.com"]},{"name":"TrackJS","categories":["analytics"],"domains":["d2zah9y47r7bi2.cloudfront.net","usage.trackjs.com"]},{"name":"Vimeo","homepage":"http://vimeo.com/","categories":["video"],"domains":["f.vimeocdn.com","player.vimeo.com"]},{"name":"Yieldify","categories":["ad"],"domains":["d33wq5gej88ld6.cloudfront.net","dwmvwp56lzq5t.cloudfront.net","geo.yieldifylabs.com","yieldify.com"]},{"name":"DialogTech SourceTrak","company":"DialogTech","categories":["ad"],"domains":["d31y97ze264gaa.cloudfront.net"]},{"name":"Twitter Online Conversion Tracking","company":"Twitter","categories":["ad"],"domains":["static.ads-twitter.com","analytics.twitter.com"]},{"name":"CleverTap","categories":["analytics"],"domains":["d2r1yp2w7bby2u.cloudfront.net"]},{"name":"Omniconvert","categories":["analytics"],"domains":["d2tgfbvjf3q6hn.cloudfront.net","d3vbj265bmdenw.cloudfront.net","omniconvert.com"]},{"name":"Underdog Media","categories":["ad"],"domains":["udmserve.net","underdog.media"]},{"name":"[24]7","categories":["customer-success"],"domains":["247-inc.net","247inc.net","d1af033869koo7.cloudfront.net"]},{"name":"Reflektion","categories":["analytics"],"domains":["d26opx5dl8t69i.cloudfront.net","reflektion.com"]},{"name":"Auto Link Maker","company":"Apple","categories":["ad"],"domains":["autolinkmaker.itunes.apple.com"]},{"name":"Friendbuy","categories":["ad"],"domains":["djnf6e5yyirys.cloudfront.net","friendbuy.com"]},{"name":"Opinion Stage","categories":["analytics"],"domains":["www.opinionstage.com"]},{"name":"LongTail Ad Solutions","categories":["ad"],"domains":["jwpcdn.com","jwplatform.com","jwplayer.com","jwpltx.com","jwpsrv.com","longtailvideo.com"]},{"name":"Marketo","homepage":"https://www.marketo.com","categories":["analytics"],"domains":["munchkin.marketo.net","marketo.com","mktoresp.com"]},{"name":"Sourcepoint","categories":["ad"],"domains":["d2lv4zbk7v5f93.cloudfront.net","d3qxwzhswv93jk.cloudfront.net","www.decenthat.com","www.fallingfalcon.com"]},{"name":"Net Reviews","categories":["analytics"],"domains":["www.avis-verifies.com"]},{"name":"Tag Inspector","company":"InfoTrust","categories":["analytics"],"domains":["d22xmn10vbouk4.cloudfront.net"]},{"name":"Polldaddy","company":"Automattic","categories":["analytics"],"domains":["polldaddy.com"]},{"name":"Freespee","categories":["customer-success"],"domains":["analytics.freespee.com"]},{"name":"KISSmetrics","categories":["analytics"],"domains":["doug1izaerwt3.cloudfront.net","dsyszv14g9ymi.cloudfront.net","kissmetrics.com"]},{"name":"Adthink","company":"Adthink Media","categories":["ad"],"domains":["d.adxcore.com","dcoengine.com"]},{"name":"Extole","categories":["ad"],"domains":["extole.com","origin.extole.io"]},{"name":"AnswerDash","categories":["customer-success"],"domains":["p1.answerdash.com"]},{"name":"Cookie-Script.com","categories":["utility"],"domains":["cookie-script.com"]},{"name":"Fastly Insights","homepage":"https://insights.fastlylabs.com","categories":["analytics"],"domains":["www.fastly-insights.com"]},{"name":"Amplitude Mobile Analytics","company":"Amplitude","categories":["analytics"],"domains":["amplitude.com","d24n15hnbwhuhn.cloudfront.net"]},{"name":"MLveda","categories":["utility"],"domains":["www.mlveda.com"]},{"name":"CNET Content Solutions","company":"CBS Interactive","categories":["content"],"domains":["cdn.cnetcontent.com","cnetcontent.com","ws.cnetcontent.com"]},{"name":"Browser-Update.org","categories":["other"],"domains":["browser-update.org"]},{"name":"Triblio","categories":["marketing"],"domains":["tribl.io"]},{"name":"Fonecall","categories":["analytics"],"domains":["web-call-analytics.com"]},{"name":"LoyaltyLion","categories":["ad"],"domains":["dg1f2pfrgjxdq.cloudfront.net","loyaltylion.com"]},{"name":"StatCounter","categories":["analytics"],"domains":["statcounter.com"]},{"name":"Curalate","categories":["marketing"],"domains":["curalate.com","d116tqlcqfmz3v.cloudfront.net"]},{"name":"piano","categories":["ad"],"domains":["tinypass.com","www.npttech.com"]},{"name":"UpSellit","categories":["analytics"],"domains":["www.upsellit.com"]},{"name":"Soundest","categories":["ad"],"domains":["soundest.net","soundestlink.com"]},{"name":"Micropat","categories":["social"],"domains":["addtoany.com"]},{"name":"Weebly","homepage":"https://www.weebly.com/","categories":["hosting"],"domains":["editmysite.com"]},{"name":"Tynt","company":"33 Across","categories":["ad"],"domains":["tynt.com"]},{"name":"Datacamp","categories":["utility"],"domains":["cdn77.org"]},{"name":"Treasure Data","categories":["analytics"],"domains":["treasuredata.com"]},{"name":"Nielsen NetRatings SiteCensus","company":"The Nielsen Company","homepage":"http://www.nielsen-online.com/intlpage.html","categories":["analytics"],"domains":["imrworldwide.com"]},{"name":"iubenda","categories":["utility"],"domains":["www.iubenda.com"]},{"name":"Yotpo","homepage":"https://www.yotpo.com/","categories":["marketing"],"domains":["yotpo.com"]},{"name":"Privy","categories":["ad"],"domains":["privy.com","privymktg.com"]},{"name":"VigLink","categories":["ad"],"domains":["viglink.com"]},{"name":"Kakao","categories":["social"],"domains":["daum.net","daumcdn.net"]},{"name":"Chartbeat","categories":["analytics"],"domains":["chartbeat.com","chartbeat.net"]},{"name":"Klaviyo","categories":["ad"],"domains":["klaviyo.com"]},{"name":"BrightTag / Signal","company":"Signal","homepage":"https://www.signal.co","categories":["tag-manager"],"domains":["btstatic.com","thebrighttag.com"]},{"name":"fluct","categories":["ad"],"domains":["adingo.jp"]},{"name":"AudienceSearch","company":"Intimate Merger","categories":["ad"],"domains":["im-apps.net"]},{"name":"Inspectlet","categories":["analytics"],"domains":["inspectlet.com"]},{"name":"Skimbit","categories":["ad"],"domains":["redirectingat.com","skimresources.com","skimresources.net"]},{"name":"DTSCOUT","categories":["ad"],"domains":["dtscout.com"]},{"name":"Rambler","company":"Rambler & Co","categories":["utility"],"domains":["rambler.ru"]},{"name":"Bigcommerce","categories":["marketing"],"domains":["bigcommerce.com"]},{"name":"Tidio Live Chat","company":"Tidio","homepage":"https://www.tidiochat.com/en/","categories":["customer-success"],"domains":["tidiochat.com"]},{"name":"CallRail","categories":["analytics"],"domains":["callrail.com"]},{"name":"Teads","categories":["ad"],"domains":["teads.tv"]},{"name":"Instagram","homepage":"https://www.instagram.com","categories":["social"],"domains":["scontent.cdninstagram.com","instagram.com"]},{"name":"Fastly","categories":["utility"],"domains":["fastly.net"]},{"name":"MailMunch","categories":["ad"],"domains":["mailmunch.co"]},{"name":"LivePerson","categories":["customer-success"],"homepage":"https://www.liveperson.com/","domains":["liveperson.com","liveperson.net","look.io","lpsnmedia.net"]},{"name":"Monotype","categories":["library"],"domains":["fonts.com","fonts.net"]},{"name":"Outbrain","homepage":"https://www.outbrain.com/","categories":["ad"],"domains":["outbrain.com","visualrevenue.com"]},{"name":"Pure Chat","categories":["customer-success"],"domains":["purechat.com"]},{"name":"LiveJournal","categories":["social"],"domains":["livejournal.com","livejournal.net"]},{"name":"PushCrew","categories":["ad"],"domains":["pushcrew.com"]},{"name":"Index Exchange","company":"WPP","categories":["ad"],"domains":["casalemedia.com","indexww.com"]},{"name":"StickyADS.tv","categories":["ad"],"domains":["stickyadstv.com"]},{"name":"GumGum","categories":["ad"],"domains":["gumgum.com"]},{"name":"AB Tasty","categories":["analytics"],"domains":["abtasty.com","d1447tq2m68ekg.cloudfront.net"]},{"name":"Trust Pilot","categories":["analytics"],"domains":["trustpilot.com"]},{"name":"Embedly","categories":["content"],"domains":["embed.ly","embedly.com"]},{"name":"Adform","categories":["ad"],"domains":["adform.net","adformdsp.net"]},{"name":"sovrn","categories":["ad"],"domains":["lijit.com"]},{"name":"iPerceptions","categories":["customer-success"],"domains":["iperceptions.com"]},{"name":"Cxense","categories":["ad"],"domains":["cxense.com","cxpublic.com","emediate.dk","emediate.eu"]},{"name":"Bold Commerce","categories":["utility"],"domains":["boldapps.net","shappify-cdn.com","shappify.com"]},{"name":"Marchex","categories":["analytics"],"domains":["marchex.io","voicestar.com"]},{"name":"BlueKai","company":"Oracle","categories":["ad"],"domains":["bkrtx.com","bluekai.com"]},{"name":"PubNation","categories":["ad"],"domains":["pubnation.com"]},{"name":"Infolinks","categories":["ad"],"domains":["infolinks.com"]},{"name":"Ezoic","categories":["analytics"],"domains":["ezoic.net"]},{"name":"Sharethrough","categories":["ad"],"domains":["sharethrough.com"]},{"name":"Ve","company":"Ve Interactive","categories":["marketing"],"domains":["veinteractive.com"]},{"name":"Roxr Software","categories":["analytics"],"domains":["getclicky.com"]},{"name":"LiveTex","categories":["customer-success"],"domains":["livetex.ru"]},{"name":"Crowd Control","company":"Lotame","categories":["ad"],"domains":["crwdcntrl.net"]},{"name":"Digital ad Consortium","categories":["ad"],"domains":["impact-ad.jp"]},{"name":"GetSiteControl","company":"GetWebCraft","categories":["utility"],"domains":["getsitecontrol.com"]},{"name":"Mapbox","categories":["utility"],"domains":["mapbox.com"]},{"name":"Adloox","categories":["ad"],"domains":["adlooxtracking.com"]},{"name":"Nosto","categories":["analytics"],"domains":["nosto.com"]},{"name":"Gigya","categories":["analytics"],"domains":["gigya.com"]},{"name":"Heap","categories":["analytics"],"domains":["heapanalytics.com"]},{"name":"ExoClick","categories":["ad"],"domains":["exoclick.com"]},{"name":"OpenTable","company":"Priceline Group","categories":["content"],"domains":["opentable.co.uk","opentable.com","www.toptable.co.uk"]},{"name":"iBillboard","categories":["ad"],"domains":["ibillboard.com"]},{"name":"Microad","categories":["ad"],"domains":["microad.jp"]},{"name":"Rakuten Marketing","company":"Rakuten","categories":["ad"],"domains":["rakuten-static.com","rmtag.com"]},{"name":"JuicyAds","categories":["ad"],"domains":["juicyads.com"]},{"name":"Mouseflow","categories":["analytics"],"domains":["mouseflow.com"]},{"name":"Swiftype","categories":["utility"],"domains":["swiftype.com","swiftypecdn.com"]},{"name":"Yahoo!","homepage":"https://www.yahoo.com/","categories":["ad"],"domains":["ads.yahoo.com","analytics.yahoo.com","bluelithium.com","hostingprod.com","lexity.com","yahoo.net","yahooapis.com","yimg.com","zenfs.com","geo.yahoo.com"]},{"name":"etracker","categories":["analytics"],"domains":["etracker.de","www.etracker.com"]},{"name":"Accuweather","categories":["content"],"domains":["accuweather.com"]},{"name":"Feefo.com","company":"Feefo","categories":["analytics"],"domains":["feefo.com"]},{"name":"Smart AdServer","categories":["ad"],"domains":["sasqos.com","smartadserver.com"]},{"name":"Medium","categories":["content"],"domains":["medium.com"]},{"name":"Trusted Shops","categories":["utility"],"domains":["trustedshops.com"]},{"name":"Constant Contact","categories":["ad"],"domains":["ctctcdn.com"]},{"name":"AdMatic","categories":["ad"],"domains":["admatic.com.tr"]},{"name":"Unbounce","categories":["ad"],"domains":["d2xxq4ijfwetlm.cloudfront.net","d9hhrg4mnvzow.cloudfront.net","ubembed.com","unbounce.com"]},{"name":"Evidon","categories":["analytics"],"domains":["evidon.com"]},{"name":"SmartAdServer","categories":["ad"],"domains":["sascdn.com","securite.01net.com"]},{"name":"Gemius","categories":["ad"],"domains":["gemius.pl"]},{"name":"SocialShopWave","categories":["social"],"domains":["socialshopwave.com"]},{"name":"Sift Science","categories":["utility"],"domains":["siftscience.com"]},{"name":"Affirm","categories":["utility"],"domains":["affirm.com"]},{"name":"Admixer for Publishers","company":"Admixer","categories":["ad"],"domains":["admixer.net"]},{"name":"LKQD","categories":["ad"],"domains":["lkqd.net"]},{"name":"Hotmart","homepage":"https://www.hotmart.com/","categories":["content"],"domains":["launchermodule.hotmart.com"]},{"name":"Secomapp","categories":["utility"],"domains":["secomapp.com"]},{"name":"Sortable","categories":["ad"],"domains":["deployads.com"]},{"name":"Bazaarvoice","categories":["analytics"],"domains":["bazaarvoice.com","feedmagnet.com"]},{"name":"Seznam","categories":["utility"],"domains":["imedia.cz"]},{"name":"Vidible","categories":["ad"],"domains":["vidible.tv"]},{"name":"Affiliate Window","company":"Digital Window","categories":["ad"],"domains":["dwin1.com"]},{"name":"OptiMonk","categories":["ad"],"domains":["optimonk.com"]},{"name":"Refersion","categories":["ad"],"domains":["refersion.com"]},{"name":"Pagely","categories":["other"],"domains":["optnmstr.com"]},{"name":"BounceX","categories":["analytics"],"homepage":"https://www.bouncex.com/","domains":["bounceexchange.com","events.bouncex.net"]},{"name":"TrafficStars","categories":["ad"],"domains":["trafficstars.com","tsyndicate.com"]},{"name":"SnapEngage","categories":["customer-success"],"domains":["snapengage.com"]},{"name":"Esri ArcGIS","company":"Esri","categories":["utility"],"domains":["arcgis.com","arcgisonline.com"]},{"name":"ForeSee","company":"Answers","categories":["analytics"],"domains":["4seeresults.com","answerscloud.com","foresee.com","foreseeresults.com"]},{"name":"TagCommander","categories":["tag-manager"],"domains":["commander1.com","tagcommander.com"]},{"name":"Convert Insights","categories":["analytics"],"domains":["convertexperiments.com"]},{"name":"iovation","categories":["utility"],"domains":["iesnare.com"]},{"name":"Clicktale","categories":["analytics"],"domains":["clicktale.net","clicktalecdn.sslcs.cdngc.net"]},{"name":"Comm100","categories":["customer-success"],"domains":["comm100.com"]},{"name":"Yieldmo","categories":["ad"],"domains":["yieldmo.com"]},{"name":"IPONWEB","categories":["ad"],"domains":["company-target.com","liadm.com","p161.net","pool.udsp.iponweb.net"]},{"name":"Nend","categories":["ad"],"domains":["nend.net"]},{"name":"Perfect Market","categories":["ad"],"domains":["perfectmarket.com"]},{"name":"Fraudlogix","categories":["utility"],"domains":["yabidos.com"]},{"name":"Symantec","categories":["utility"],"domains":["extended-validation-ssl.websecurity.symantec.com","norton.com","symantec.com","symcb.com","symcd.com"]},{"name":"Bizible","categories":["ad"],"domains":["bizible.com"]},{"name":"Between Digital","categories":["ad"],"domains":["betweendigital.com"]},{"name":"Maxymiser","categories":["analytics"],"domains":["maxymiser.net"]},{"name":"Branch Metrics","categories":["ad"],"domains":["app.link","branch.io"]},{"name":"Tradelab","categories":["ad"],"domains":["tradelab.fr"]},{"name":"Digioh","categories":["ad"],"domains":["lightboxcdn.com"]},{"name":"Tail Target","company":"Tail","categories":["ad"],"domains":["tailtarget.com"]},{"name":"GetResponse","categories":["ad"],"domains":["getresponse.com"]},{"name":"OwnerIQ","categories":["ad"],"domains":["owneriq.net"]},{"name":"Dynamic Yield","categories":["customer-success"],"domains":["dynamicyield.com"]},{"name":"Fort Awesome","categories":["library"],"domains":["fortawesome.com"]},{"name":"Clerk.io ApS","categories":["analytics"],"domains":["clerk.io"]},{"name":"Adyoulike","categories":["ad"],"domains":["adyoulike.com","adyoulike.net","omnitagjs.com"]},{"name":"iAdvize SAS","categories":["customer-success"],"domains":["iadvize.com"]},{"name":"Ecwid","categories":["hosting"],"domains":["d3fi9i0jj23cau.cloudfront.net","d3j0zfs7paavns.cloudfront.net","ecwid.com","shopsettings.com"]},{"name":"issuu","categories":["content"],"domains":["issuu.com","isu.pub"]},{"name":"Effective Measure","categories":["ad"],"domains":["effectivemeasure.net"]},{"name":"Geniee","categories":["ad"],"domains":["cs.gssprt.jp","genieessp.jp","genieesspv.jp","gssprt.jp","href.asia"]},{"name":"Bronto Software","categories":["marketing"],"domains":["bm23.com","bronto.com","brontops.com"]},{"name":"eBay","categories":["ad"],"domains":["ebay.com","ebayimg.com","fetchback.com"]},{"name":"Elastic Ad","categories":["ad"],"domains":["elasticad.net"]},{"name":"PowerReviews","categories":["analytics"],"domains":["powerreviews.com"]},{"name":"Okas Concepts","categories":["utility"],"domains":["okasconcepts.com"]},{"name":"Media Management Technologies","categories":["ad"],"domains":["speedshiftmedia.com"]},{"name":"Blindado","categories":["utility"],"domains":["siteblindado.com"]},{"name":"Nativo","categories":["ad"],"domains":["postrelease.com"]},{"name":"Autopilot","categories":["ad"],"domains":["autopilothq.com"]},{"name":"Picreel","categories":["analytics"],"domains":["pcrl.co","picreel.com"]},{"name":"Celtra","categories":["ad"],"domains":["celtra.com"]},{"name":"UserReport","categories":["analytics"],"domains":["userreport.com"]},{"name":"Adverline Board","company":"Adverline","categories":["ad"],"domains":["adnext.fr","adverline.com"]},{"name":"The ADEX","categories":["ad"],"domains":["theadex.com"]},{"name":"Mather Economics","categories":["analytics"],"domains":["matheranalytics.com"]},{"name":"Decibel Insight","categories":["analytics"],"domains":["decibelinsight.net"]},{"name":"Revcontent","categories":["content"],"domains":["revcontent.com"]},{"name":"LightWidget","categories":["utility"],"domains":["lightwidget.com"]},{"name":"Wishpond Technologies","categories":["marketing"],"domains":["wishpond.com","wishpond.net"]},{"name":"Riskified","categories":["utility"],"domains":["riskified.com"]},{"name":"Kaltura Video Platform","company":"Kaltura","categories":["content"],"domains":["cdnsecakmi.kaltura.com"]},{"name":"TRUSTe","categories":["utility"],"domains":["truste.com"]},{"name":"Navegg","categories":["ad"],"domains":["navdmp.com"]},{"name":"LoopMe","categories":["ad"],"domains":["loopme.biz","loopme.com","loopme.me","vntsm.com"]},{"name":"Weborama","categories":["ad"],"domains":["weborama.com","weborama.fr"]},{"name":"Polar Mobile Group","categories":["ad"],"domains":["mediavoice.com","polarmobile.com"]},{"name":"Interpublic Group","categories":["ad"],"domains":["mbww.com"]},{"name":"Sekindo","categories":["content"],"domains":["sekindo.com"]},{"name":"WebEngage","categories":["customer-success"],"domains":["d23nd6ymopvz52.cloudfront.net","d3701cc9l7v9a6.cloudfront.net","webengage.co","webengage.com"]},{"name":"Cross Pixel Media","categories":["ad"],"domains":["crsspxl.com"]},{"name":"plista","categories":["ad"],"domains":["plista.com"]},{"name":"Kampyle","categories":["analytics"],"domains":["kampyle.com"]},{"name":"Tribal Fusion","company":"Exponential Interactive","categories":["ad"],"domains":["tribalfusion.com"]},{"name":"Gleam","categories":["marketing"],"domains":["gleam.io"]},{"name":"Forensiq","categories":["utility"],"domains":["fqtag.com"]},{"name":"Audience 360","company":"Datapoint Media","categories":["ad"],"domains":["dpmsrv.com"]},{"name":"Flowplayer","categories":["content"],"domains":["flowplayer.org"]},{"name":"Sooqr Search","company":"Sooqr","categories":["utility"],"domains":["sooqr.com"]},{"name":"MaxCDN Enterprise","company":"MaxCDN","categories":["utility"],"domains":["netdna-cdn.com","netdna-ssl.com"]},{"name":"Shopgate","categories":["utility"],"domains":["shopgate.com"]},{"name":"BoldChat","company":"LogMeIn","categories":["customer-success"],"domains":["boldchat.com"]},{"name":"smartclip","categories":["ad"],"domains":["smartclip.net"]},{"name":"rewardStyle.com","categories":["ad"],"domains":["rewardstyle.com"]},{"name":"Chitika","categories":["ad"],"domains":["chitika.net"]},{"name":"WisePops","categories":["utility"],"domains":["wisepops.com"]},{"name":"Monetate","categories":["analytics"],"domains":["monetate.net"]},{"name":"SpotXchange","categories":["ad"],"domains":["spotx.tv","spotxcdn.com","spotxchange.com"]},{"name":"Zanox","categories":["ad"],"domains":["zanox.com","zanox.ws"]},{"name":"SublimeSkinz","categories":["ad"],"domains":["ayads.co"]},{"name":"Adocean","company":"Gemius","categories":["ad"],"domains":["adocean.pl"]},{"name":"Meetrics","categories":["ad"],"domains":["meetrics.net","mxcdn.net","research.de.com"]},{"name":"Booking.com","categories":["content"],"domains":["bstatic.com"]},{"name":"Sparkflow","company":"Intercept Interactive","categories":["ad"],"domains":["sparkflow.net"]},{"name":"Lytics","categories":["ad"],"domains":["lytics.io"]},{"name":"ResponsiveVoice","categories":["other"],"domains":["responsivevoice.org"]},{"name":"Ooyala","categories":["ad"],"domains":["ooyala.com"]},{"name":"Snacktools","categories":["ad"],"domains":["bannersnack.com"]},{"name":"linkpulse","categories":["analytics"],"domains":["lp4.io"]},{"name":"Tencent","categories":["content"],"domains":["qq.com","ywxi.net"]},{"name":"Rocket Fuel","categories":["ad"],"domains":["rfihub.com","rfihub.net","ru4.com"]},{"name":"Adnium","categories":["ad"],"domains":["adnium.com"]},{"name":"Appier","categories":["ad"],"domains":["appier.net"]},{"name":"Stackla PTY","categories":["social"],"domains":["stackla.com"]},{"name":"Hupso Website Analyzer","company":"Hupso","categories":["analytics"],"domains":["hupso.com"]},{"name":"ReadSpeaker","homepage":"https://www.readspeaker.com","categories":["other"],"domains":["sf1-eu.readspeaker.com"]},{"name":"ShopiMind","company":"ShopIMind","categories":["ad"],"domains":["shopimind.com"]},{"name":"DialogTech","categories":["ad"],"domains":["dialogtech.com"]},{"name":"FoxyCart","categories":["utility"],"domains":["foxycart.com"]},{"name":"Neodata","categories":["ad"],"domains":["neodatagroup.com"]},{"name":"WebpageFX","categories":["ad"],"domains":["leadmanagerfx.com"]},{"name":"Smart Insight Tracking","company":"Emarsys","categories":["analytics"],"domains":["scarabresearch.com"]},{"name":"Feedbackify","company":"InsideMetrics","categories":["analytics"],"domains":["feedbackify.com"]},{"name":"Survicate","categories":["analytics"],"domains":["survicate.com"]},{"name":"Aggregate Knowledge","company":"Neustar","categories":["ad"],"domains":["agkn.com"]},{"name":"Exponea","categories":["analytics"],"domains":["exponea.com"]},{"name":"eXelate","categories":["ad"],"domains":["exelator.com"]},{"name":"Adition","homepage":"https://www.adition.com","categories":["ad"],"domains":["dsp.adfarm1.adition.com"]},{"name":"Highcharts","categories":["utility"],"domains":["highcharts.com"]},{"name":"FirstImpression","categories":["ad"],"domains":["firstimpression.io"]},{"name":"LiveHelpNow","categories":["customer-success"],"domains":["livehelpnow.net"]},{"name":"SearchSpring","categories":["utility"],"domains":["searchspring.net"]},{"name":"Pardot","categories":["marketing"],"domains":["pardot.com"]},{"name":"JustPremium Ads","company":"JustPremium","categories":["ad"],"domains":["justpremium.com"]},{"name":"DMD Marketing","homepage":"https://www.dmdconnects.com/","categories":["ad"],"domains":["medtargetsystem.com"]},{"name":"The Hut Group","categories":["content"],"domains":["thcdn.com"]},{"name":"Cloudinary","categories":["content"],"domains":["cloudinary.com"]},{"name":"Technorati","company":"Synacor","categories":["ad"],"domains":["technoratimedia.com"]},{"name":"Github","categories":["utility"],"domains":["github.com","github.io","raw.githubusercontent.com"]},{"name":"Bootstrap Chinese network","categories":["library"],"domains":["bootcss.com"]},{"name":"Typepad","categories":["hosting"],"domains":["typepad.com"]},{"name":"Keywee","categories":["ad"],"domains":["keywee.co"]},{"name":"Skype","categories":["other"],"domains":["skype.com"]},{"name":"Opta","company":"Perform Group","categories":["content"],"domains":["opta.net"]},{"name":"Livefyre","categories":["content"],"domains":["fyre.co","livefyre.com"]},{"name":"ReTargeter","categories":["ad"],"domains":["retargeter.com"]},{"name":"TruConversion","categories":["analytics"],"domains":["truconversion.com"]},{"name":"fifty-five","categories":["ad"],"domains":["55labs.com"]},{"name":"Time","categories":["content"],"domains":["timeinc.net"]},{"name":"Pixlee","categories":["social"],"domains":["pixlee.com"]},{"name":"Reevoo","categories":["analytics"],"domains":["reevoo.com"]},{"name":"Accordant Media","categories":["ad"],"domains":["segment.a3cloud.net"]},{"name":"Evergage","categories":["analytics"],"domains":["evergage.com"]},{"name":"Exponential Interactive","categories":["ad"],"domains":["exponential.com"]},{"name":"Best Of Media S.A.","categories":["content"],"domains":["servebom.com"]},{"name":"Steelhouse","categories":["ad"],"domains":["steelhousemedia.com"]},{"name":"Dailymotion","categories":["content"],"domains":["ad.pxlad.io","dm.gg","dmcdn.net","sublimevideo.net","www.dailymotion.com"]},{"name":"TripleLift","categories":["ad"],"domains":["3lift.com"]},{"name":"DemandBase","categories":["marketing"],"domains":["demandbase.com"]},{"name":"One by AOL","company":"AOL","categories":["ad"],"domains":["adtech.de","adtechjp.com"]},{"name":"Adkontekst","categories":["ad"],"domains":["adkontekst.pl"]},{"name":"Profitshare","categories":["ad"],"domains":["profitshare.ro"]},{"name":"Drip","company":"The Numa Group","categories":["ad"],"domains":["getdrip.com"]},{"name":"Ghostery Enterprise","company":"Ghostery","categories":["marketing"],"domains":["betrad.com"]},{"name":"Socialphotos","categories":["social"],"domains":["slpht.com"]},{"name":"SoundCloud","homepage":"https://www.soundcloud.com/","categories":["content"],"domains":["widget.sndcdn.com","soundcloud.com","stratus.sc"]},{"name":"Rackspace","categories":["hosting"],"domains":["rackcdn.com","rackspacecloud.com","raxcdn.com","websitetestlink.com"]},{"name":"NetAffiliation","company":"Kwanco","categories":["ad"],"domains":["metaffiliation.com"]},{"name":"CPEx","categories":["content"],"domains":["cpex.cz"]},{"name":"Sweet Tooth","categories":["ad"],"domains":["sweettooth.io"]},{"name":"Playbuzz","categories":["hosting"],"domains":["playbuzz.com"]},{"name":"Civic","categories":["hosting"],"domains":["civiccomputing.com"]},{"name":"Sajari Pty","categories":["utility"],"domains":["sajari.com"]},{"name":"PerimeterX Bot Defender","company":"PerimeterX","categories":["utility"],"domains":["perimeterx.net","pxi.pub"]},{"name":"Marketplace Web Service","company":"Amazon","categories":["other"],"domains":["ssl-images-amazon.com"]},{"name":"Ambassador","categories":["ad"],"domains":["getambassador.com"]},{"name":"Pictela (AOL)","categories":["analytics"],"domains":["pictela.net"]},{"name":"AdSniper","categories":["ad"],"domains":["adsniper.ru","sniperlog.ru"]},{"name":"Adscale","categories":["ad"],"domains":["adscale.de"]},{"name":"Signyfyd","categories":["utility"],"domains":["signifyd.com"]},{"name":"Connatix","categories":["ad"],"domains":["connatix.com"]},{"name":"Zarget","categories":["analytics"],"domains":["zarget.com"]},{"name":"Woopra","categories":["analytics"],"domains":["woopra.com"]},{"name":"Infinity Tracking","categories":["analytics"],"domains":["infinity-tracking.net"]},{"name":"ResponseTap","categories":["analytics"],"domains":["adinsight.com","responsetap.com"]},{"name":"Sirv","categories":["other"],"domains":["sirv.com"]},{"name":"Salesforce.com","categories":["ad"],"domains":["force.com","salesforce.com","secure.force.com"]},{"name":"Conversant Tag Manager","company":"Conversant","categories":["tag-manager"],"domains":["mplxtms.com"]},{"name":"Petametrics","categories":["analytics"],"domains":["petametrics.com"]},{"name":"BannerFlow","company":"Nordic Factory Solutions","categories":["ad"],"domains":["bannerflow.com"]},{"name":"Pixalate","categories":["utility"],"domains":["adrta.com"]},{"name":"reEmbed","categories":["other"],"domains":["reembed.com"]},{"name":"FreakOut","categories":["ad"],"domains":["fout.jp"]},{"name":"VoiceFive","categories":["analytics"],"domains":["voicefive.com"]},{"name":"Impact Radius","categories":["ad"],"domains":["7eer.net","a.impactradius-go.com","d3cxv97fi8q177.cloudfront.net","impactradius-event.com","microsoft-uk.evyy.net","ojrq.net"]},{"name":"AWeber","categories":["ad"],"domains":["aweber.com"]},{"name":"Simpli.fi","categories":["ad"],"domains":["simpli.fi"]},{"name":"Unruly Media","categories":["ad"],"domains":["unrulymedia.com"]},{"name":"Hola Networks","categories":["other"],"domains":["h-cdn.com"]},{"name":"Customer.io","categories":["ad"],"domains":["customer.io"]},{"name":"Delta Projects AB","categories":["ad"],"domains":["de17a.com"]},{"name":"Advance Magazine Group","categories":["content"],"domains":["condenast.co.uk","condenastdigital.com","condenet.com"]},{"name":"Key CDN","categories":["utility"],"domains":["kxcdn.com"]},{"name":"ThreatMetrix","categories":["utility"],"domains":["online-metrix.net"]},{"name":"Adtech (AOL)","categories":["ad"],"domains":["adtechus.com"]},{"name":"News","categories":["social"],"domains":["news-static.com","news.com.au","newsanalytics.com.au","newsapi.com.au","newscdn.com.au","newsdata.com.au","newsdiscover.com.au"]},{"name":"AvantLink","categories":["ad"],"domains":["avmws.com"]},{"name":"CyberSource (Visa)","categories":["utility"],"domains":["authorize.net"]},{"name":"Vibrant Media","categories":["ad"],"domains":["intellitxt.com","picadmedia.com"]},{"name":"FLXone","company":"Teradata","categories":["ad"],"domains":["d2hlpp31teaww3.cloudfront.net","flx1.com","pangolin.blue"]},{"name":"Adobe Marketing Cloud","company":"Adobe Systems","categories":["ad"],"domains":["adobetag.com"]},{"name":"WebSpectator","categories":["ad"],"domains":["webspectator.com"]},{"name":"Intercept Interactive","categories":["ad"],"domains":["undertone.com"]},{"name":"Simplicity Marketing","categories":["ad"],"domains":["flashtalking.com"]},{"name":"AdRiver","categories":["ad"],"domains":["adriver.ru"]},{"name":"Mobify","categories":["utility"],"domains":["mobify.com","mobify.net"]},{"name":"Apester","categories":["analytics"],"domains":["apester.com","qmerce.com"]},{"name":"Covert Pics","categories":["content"],"domains":["covet.pics"]},{"name":"CleverDATA","categories":["ad"],"domains":["1dmp.io"]},{"name":"SecuredVisit","company":"4Cite Marketing","categories":["ad"],"domains":["securedvisit.com"]},{"name":"SlimCut Media Outstream","company":"SlimCut Media","categories":["ad"],"domains":["freeskreen.com"]},{"name":"Exactag","categories":["ad"],"domains":["exactag.com"]},{"name":"Postcode Anywhere (Holdings)","categories":["utility"],"domains":["postcodeanywhere.co.uk"]},{"name":"Flickr","categories":["content"],"domains":["flickr.com","staticflickr.com"]},{"name":"bRealTime","categories":["ad"],"domains":["brealtime.com"]},{"name":"Research Online","company":"Skills Development Scotland","categories":["content"],"domains":["www.researchonline.org.uk"]},{"name":"Swoop","categories":["ad"],"domains":["swoop.com"]},{"name":"Widespace","homepage":"https://www.widespace.com","categories":["ad"],"domains":["sync.widespace.com"]},{"name":"Eyeota","categories":["ad"],"domains":["eyeota.net"]},{"name":"Pagefair","categories":["ad"],"domains":["pagefair.com","pagefair.net"]},{"name":"Wow Analytics","categories":["analytics"],"domains":["wowanalytics.co.uk"]},{"name":"Rakuten LinkShare","company":"Rakuten","categories":["ad"],"domains":["linksynergy.com"]},{"name":"Transifex","categories":["utility"],"domains":["transifex.com"]},{"name":"Ziff Davis Tech","categories":["ad"],"domains":["adziff.com","zdbb.net"]},{"name":"Betgenius","company":"Genius Sports","categories":["content"],"domains":["connextra.com"]},{"name":"AIR.TV","categories":["ad"],"domains":["air.tv"]},{"name":"MaxMind","categories":["utility"],"domains":["maxmind.com"]},{"name":"Expedia","categories":["content"],"domains":["travel-assets.com","trvl-media.com","www.trvl-px.com","www.uciservice.com"]},{"name":"ContextWeb","categories":["ad"],"domains":["contextweb.com"]},{"name":"Pusher","homepage":"https://pusher.com/","categories":["utility"],"domains":["stats.pusher.com","pusherapp.com"]},{"name":"LeasdBoxer","company":"LeadBoxer","categories":["ad"],"domains":["leadboxer.com"]},{"name":"SkyScanner","categories":["content"],"domains":["api.skyscanner.net"]},{"name":"WalkMe","categories":["customer-success"],"domains":["walkme.com"]},{"name":"AdTrue","company":"FPT AdTrue","categories":["ad"],"domains":["adtrue.com"]},{"name":"Resonance Insights","categories":["analytics"],"domains":["res-x.com"]},{"name":"Hull.js","categories":["utility"],"domains":["hull.io","hullapp.io"]},{"name":"Video Media Groep","categories":["ad"],"domains":["inpagevideo.nl","vmg.host"]},{"name":"MonetizeMore","categories":["ad"],"domains":["m2.ai"]},{"name":"Fanplayr","categories":["analytics"],"domains":["d38nbbai6u794i.cloudfront.net","fanplayr.com"]},{"name":"Onet","categories":["ad"],"domains":["onet.pl"]},{"name":"Boomtrain","categories":["ad"],"domains":["boomtrain.com","boomtrain.net"]},{"name":"Proper Media","categories":["content"],"domains":["proper.io"]},{"name":"StumbleUpon","categories":["content"],"domains":["stumble-upon.com","stumbleupon.com"]},{"name":"Zmags","categories":["marketing"],"domains":["zmags.com"]},{"name":"Vee24","categories":["customer-success"],"domains":["vee24.com"]},{"name":"Sailthru","categories":["analytics"],"domains":["sail-horizon.com","sail-personalize.com","sail-track.com"]},{"name":"Klevu Search","company":"Klevu","categories":["utility"],"domains":["klevu.com"]},{"name":"Cedato","categories":["ad"],"domains":["algovid.com","vdoserv.com"]},{"name":"Trip Advisor","categories":["content"],"domains":["tacdn.com","tripadvisor.co.uk","tripadvisor.com","viator.com","www.jscache.com","www.tamgrt.com"]},{"name":"Captify Media","categories":["ad"],"domains":["cpx.to"]},{"name":"Yottaa","categories":["hosting"],"domains":["yottaa.com","yottaa.net"]},{"name":"PERFORM","categories":["content"],"domains":["performgroup.com"]},{"name":"Vindico","company":"Viant","categories":["ad"],"domains":["vindicosuite.com"]},{"name":"Snack Media","categories":["content"],"domains":["snack-media.com"]},{"name":"FuelX","categories":["ad"],"domains":["fuelx.com"]},{"name":"OnScroll","categories":["ad"],"domains":["onscroll.com"]},{"name":"Alliance for Audited Media","categories":["ad"],"domains":["aamsitecertifier.com"]},{"name":"ShopRunner","categories":["content"],"domains":["s-9.us","shoprunner.com"]},{"name":"Janrain","categories":["analytics"],"domains":["d3hmp0045zy3cs.cloudfront.net","janrain.com","janrainbackplane.com","rpxnow.com"]},{"name":"AliveChat","company":"AYU Technology Solutions","categories":["customer-success"],"domains":["websitealive.com","websitealive7.com"]},{"name":"SpringServer","categories":["ad"],"domains":["springserve.com"]},{"name":"Global-e","categories":["hosting"],"domains":["global-e.com"]},{"name":"cloudIQ","categories":["analytics"],"domains":["cloud-iq.com"]},{"name":"ZEDO","categories":["ad"],"domains":["zedo.com"]},{"name":"Forter","categories":["utility"],"domains":["forter.com"]},{"name":"Silverpop","company":"IBM","categories":["ad"],"domains":["mkt51.net","mkt61.net","mkt912.com","mkt922.com","mkt932.com","mkt941.com","pages01.net","pages02.net","pages03.net","pages04.net","pages05.net"]},{"name":"Polyfill service","company":"Polyfill.io","categories":["other"],"domains":["polyfill.io"]},{"name":"epoq internet services","categories":["analytics"],"domains":["epoq.de"]},{"name":"CDN.net","categories":["utility"],"domains":["uk.cdn-net.com"]},{"name":"Kameleoon","categories":["analytics"],"domains":["kameleoon.com"]},{"name":"Council ad Network","categories":["ad"],"domains":["counciladvertising.net"]},{"name":"Oracle Recommendations On Demand","company":"Oracle","categories":["analytics"],"domains":["atgsvcs.com"]},{"name":"Viacom","categories":["content"],"domains":["mtvnservices.com"]},{"name":"Optimove","company":"Mobius Solutions","categories":["analytics"],"domains":["optimove.net"]},{"name":"Cookie Reports","categories":["utility"],"domains":["cookiereports.com"]},{"name":"Storygize","categories":["ad"],"domains":["www.storygize.net"]},{"name":"Revolver Maps","categories":["analytics"],"domains":["revolvermaps.com"]},{"name":"Reactful","categories":["analytics"],"domains":["reactful.com"]},{"name":"NaviStone","categories":["ad"],"domains":["murdoog.com"]},{"name":"Vertical Mass","categories":["ad"],"domains":["vmweb.net"]},{"name":"Conversant","categories":["analytics"],"domains":["dotomi.com","dtmpub.com","emjcd.com","fastclick.net","mediaplex.com","www.tqlkg.com"]},{"name":"BlueCava","categories":["ad"],"domains":["bluecava.com"]},{"name":"VidPulse","categories":["analytics"],"domains":["vidpulse.com"]},{"name":"LoginRadius","categories":["social"],"domains":["loginradius.com"]},{"name":"Byside","homepage":"http://www.byside.com","categories":["analytics"],"domains":["byce2.byside.com","wce2.byside.com"]},{"name":"MailPlus","categories":["ad"],"domains":["mailplus.nl"]},{"name":"Touch Commerce","categories":["customer-success"],"domains":["inq.com","touchcommerce.com"]},{"name":"Netlify","homepage":"https://www.netlify.com/","categories":["utility"],"domains":["netlify.com","cloud.netlifyusercontent.com"]},{"name":"Kargo","categories":["marketing"],"domains":["kargo.com"]},{"name":"SurveyMonkey","categories":["analytics"],"domains":["surveymonkey.com"]},{"name":"User Replay","categories":["analytics"],"domains":["userreplay.net"]},{"name":"Catchpoint","homepage":"https://www.catchpoint.com/","categories":["analytics"],"domains":["3gl.net"]},{"name":"Conversio","categories":["ad"],"domains":["conversio.com"]},{"name":"AdvertServe","categories":["ad"],"domains":["advertserve.com"]},{"name":"PrintFriendly","categories":["utility"],"domains":["printfriendly.com"]},{"name":"Mopinion","categories":["analytics"],"domains":["mopinion.com"]},{"name":"Barilliance","categories":["analytics"],"domains":["barilliance.net","dn3y71tq7jf07.cloudfront.net"]},{"name":"Flockler","categories":["ad"],"domains":["flockler.com"]},{"name":"Attribution","categories":["ad"],"domains":["attributionapp.com"]},{"name":"Vergic AB","categories":["customer-success"],"domains":["psplugin.com"]},{"name":"CANDDi","company":"Campaign and Digital Intelligence","categories":["ad"],"domains":["canddi.com"]},{"name":"PebblePost","categories":["ad"],"domains":["pbbl.co"]},{"name":"Braintree Payments","company":"Paypal","categories":["utility"],"domains":["braintreegateway.com"]},{"name":"InSkin Media","categories":["ad"],"domains":["inskinad.com","inskinmedia.com"]},{"name":"StreamRail","categories":["ad"],"domains":["streamrail.com","streamrail.net"]},{"name":"Site24x7 Real User Monitoring","company":"Site24x7","categories":["analytics"],"domains":["site24x7rum.com"]},{"name":"YoYo","categories":["utility"],"domains":["goadservices.com"]},{"name":"Adunity","categories":["ad"],"domains":["adunity.com"]},{"name":"PlayAd Media Group","categories":["ad"],"domains":["youplay.se"]},{"name":"BuySellAds","categories":["ad"],"domains":["buysellads.com"]},{"name":"Moovweb","categories":["utility"],"domains":["moovweb.net"]},{"name":"Bookatable","categories":["content"],"domains":["bookatable.com","livebookings.com"]},{"name":"Raygun","categories":["utility"],"domains":["raygun.io"]},{"name":"Sociomantic Labs","company":"DunnHumby","categories":["ad"],"domains":["sociomantic.com"]},{"name":"Borderfree","company":"pitney bowes","categories":["utility"],"domains":["borderfree.com","fiftyone.com"]},{"name":"Dynamic Converter","categories":["utility"],"domains":["dynamicconverter.com"]},{"name":"C3 Metrics","categories":["analytics"],"domains":["c3tag.com"]},{"name":"eGain","categories":["analytics"],"domains":["analytics-egain.com","egain.com"]},{"name":"TechTarget","categories":["content"],"domains":["techtarget.com","ttgtmedia.com"]},{"name":"Adobe Scene7","company":"Adobe Systems","categories":["content"],"domains":["everestads.net","everestjs.net","scene7.com","wwwimages.adobe.com"]},{"name":"HotelsCombined","categories":["content"],"domains":["datahc.com"]},{"name":"StackAdapt","categories":["ad"],"domains":["stackadapt.com"]},{"name":"The Publisher Desk","categories":["ad"],"domains":["206ads.com","publisherdesk.com"]},{"name":"Ekm Systems","categories":["analytics"],"domains":["ekmpinpoint.co.uk","ekmsecure.com","globalstats.ekmsecure.com"]},{"name":"DistroScale","categories":["ad"],"domains":["jsrdn.com"]},{"name":"Knight Lab","company":"Northwestern University","categories":["utility"],"domains":["knightlab.com"]},{"name":"Vergic Engage Platform","company":"Vergic","categories":["customer-success"],"domains":["vergic.com"]},{"name":"AdCurve","categories":["ad"],"domains":["shop2market.com"]},{"name":"StackExchange","categories":["social"],"domains":["sstatic.net"]},{"name":"MathJax","categories":["utility"],"domains":["mathjax.org"]},{"name":"RebelMouse","categories":["ad"],"domains":["rbl.ms","www.rebelmouse.com"]},{"name":"ShopStorm","categories":["utility"],"domains":["shopstorm.com"]},{"name":"Ad6Media","categories":["ad"],"domains":["ad6media.fr"]},{"name":"OCSP","company":"GoDaddy","categories":["utility"],"domains":["ocsp.godaddy.com","seal.godaddy.com"]},{"name":"Bluecore","categories":["analytics"],"domains":["www.bluecore.com"]},{"name":"Cachefly","categories":["utility"],"domains":["cachefly.net"]},{"name":"Nanorep","company":"Nanorep Technologies","categories":["customer-success"],"domains":["nanorep.com"]},{"name":"AdSpruce","categories":["ad"],"domains":["adspruce.com"]},{"name":"content.ad","categories":["ad"],"domains":["content.ad"]},{"name":"Improve Digital","categories":["ad"],"domains":["360yield.com"]},{"name":"Fastest Forward","categories":["analytics"],"domains":["gaug.es"]},{"name":"RichRelevance","categories":["analytics"],"domains":["richrelevance.com"]},{"name":"ARM","categories":["analytics"],"domains":["tag4arm.com"]},{"name":"Webtrends","categories":["analytics"],"domains":["d1q62gfb8siqnm.cloudfront.net","webtrends.com","webtrendslive.com"]},{"name":"Click4Assistance","categories":["customer-success"],"domains":["click4assistance.co.uk"]},{"name":"Realytics","categories":["analytics"],"domains":["dcniko1cv0rz.cloudfront.net","realytics.net"]},{"name":"Xaxis","homepage":"https://www.xaxis.com/","categories":["ad"],"domains":["t.mookie1.com","247realmedia.com","gmads.net","odr.mookie1.com"]},{"name":"UPS i-parcel","company":"UPS","categories":["other"],"domains":["i-parcel.com"]},{"name":"Qualtrics","categories":["analytics"],"domains":["qualtrics.com"]},{"name":"Adobe Test & Target","company":"Adobe Systems","categories":["analytics"],"domains":["tt.omtrdc.net"]}];
-},{}],172:[function(require,module,exports){
+},{"events":108,"inherits":113,"readable-stream/duplex.js":146,"readable-stream/passthrough.js":156,"readable-stream/readable.js":157,"readable-stream/transform.js":158,"readable-stream/writable.js":159}],168:[function(require,module,exports){
+module.exports=[{"name":"Google Analytics","company":"Google","homepage":"https://www.google.com/analytics/analytics/","categories":["analytics"],"domains":["*.google-analytics.com","*.urchin.com"],"examples":["www.google-analytics.com","ssl.google-analytics.com"]},{"name":"Facebook","homepage":"https://www.facebook.com","categories":["social"],"domains":["*.atlassbx.com","*.facebook.com","*.fbsbx.com","fbcdn-photos-e-a.akamaihd.net","*.facebook.net","*.fbcdn.net"],"examples":["www.facebook.com","connect.facebook.net","staticxx.facebook.com","static.xx.fbcdn.net","m.facebook.com","an.facebook.com","platform-lookaside.fbsbx.com"]},{"name":"Google CDN","company":"Google","homepage":"https://developers.google.com/speed/libraries/","categories":["cdn"],"domains":["ajax.googleapis.com","commondatastorage.googleapis.com","www.gstatic.com"]},{"name":"Google/Doubleclick Ads","company":"Google","homepage":"https://www.doubleclickbygoogle.com/","categories":["ad"],"domains":["adservice.google.com","adservice.google.com.au","adservice.google.com.sg","adservice.google.com.br","adservice.google.com.ua","adservice.google.co.uk","adservice.google.co.jp","adservice.google.co.in","adservice.google.co.kr","adservice.google.co.id","adservice.google.co.nz","adservice.google.ie","adservice.google.se","adservice.google.de","adservice.google.ca","adservice.google.be","adservice.google.es","adservice.google.ch","adservice.google.fr","adservice.google.nl","*.googleadservices.com","*.googlesyndication.com","*.googletagservices.com","*.2mdn.net","*.doubleclick.net"],"examples":["pagead2.googlesyndication.com","tpc.googlesyndication.com","ade.googlesyndication.com","googleads.g.doubleclick.net","googleads4.g.doubleclick.net","securepubads.g.doubleclick.net","pubads.g.doubleclick.net","static.doubleclick.net","cm.g.doubleclick.net","bid.g.doubleclick.net","s0.2mdn.net","stats.g.doubleclick.net","survey.g.doubleclick.net","fls.doubleclick.net","ad.doubleclick.net","www.googleadservices.com","https://www.googletagservices.com/tag/js/gpt.js"]},{"name":"Google Tag Manager","company":"Google","homepage":"https://marketingplatform.google.com/about/tag-manager/","categories":["tag-manager"],"domains":["*.googletagmanager.com"],"examples":["www.googletagmanager.com"]},{"name":"Other Google APIs/SDKs","company":"Google","homepage":"https://developers.google.com/apis-explorer/#p/","categories":["utility"],"domains":["accounts.google.com","apis.google.com","calendar.google.com","clients2.google.com","cse.google.com","news.google.com","pay.google.com","payments.google.com","play.google.com","smartlock.google.com","www.google.com","www.google.de","www.google.co.jp","www.google.com.au","www.google.co.uk","www.google.ie","www.google.com.sg","www.google.co.in","www.google.com.br","www.google.ca","www.google.co.kr","www.google.co.nz","www.google.co.id","www.google.fr","www.google.be","www.google.com.ua","www.google.nl","www.google.ru","www.google.se","imasdk.googleapis.com","storage.googleapis.com","translate.googleapis.com","lh3.googleusercontent.com","csi.gstatic.com"]},{"name":"YouTube","homepage":"https://youtube.com","categories":["video"],"domains":["*.ggpht.com","*.youtube-nocookie.com","*.youtube.com","*.ytimg.com"],"examples":["www.youtube.com","s.ytimg.com","yt3.ggpht.com","img.youtube.com","fcmatch.youtube.com"]},{"name":"Google Maps","company":"Google","homepage":"https://www.google.com/maps","categories":["utility"],"domains":["maps.google.com","maps-api-ssl.google.com","maps.googleapis.com","mts.googleapis.com","maps.gstatic.com"]},{"name":"Twitter","homepage":"https://twitter.com","categories":["social"],"domains":["*.vine.co","*.twimg.com","*.twitpic.com","platform.twitter.com","syndication.twitter.com"],"examples":["cdn.syndication.twimg.com","abs.twimg.com","pbs.twimg.com"]},{"name":"Yandex Metrica","company":"Yandex","homepage":"https://metrica.yandex.com/about?","categories":["analytics"],"domains":["d31j93rd8oukbv.cloudfront.net","mc.yandex.ru"]},{"name":"jQuery CDN","homepage":"https://code.jquery.com/","categories":["cdn"],"domains":["*.jquery.com"],"examples":["code.jquery.com"]},{"name":"Hotjar","homepage":"https://www.hotjar.com/","categories":["analytics"],"domains":["*.hotjar.com","*.hotjar.io"],"examples":["script.hotjar.com","static.hotjar.com","in.hotjar.com","vc.hotjar.io","vars.hotjar.com"]},{"name":"AddThis","homepage":"http://www.addthis.com/","categories":["social"],"domains":["*.addthis.com","*.addthiscdn.com","*.addthisedge.com"],"examples":["s7.addthis.com","r.dlx.addthis.com","su.addthis.com","x.dlx.addthis.com"]},{"name":"WordPress","company":"Automattic","homepage":"https://wp.com/","categories":["hosting"],"domains":["*.wordpress.com","s0.wp.com","s2.wp.com","*.w.org","c0.wp.com","s1.wp.com","widgets.wp.com"],"examples":["s.w.org"]},{"name":"Cloudflare CDN","homepage":"https://cdnjs.com/","categories":["cdn"],"domains":["amp.cloudflare.com","cdnjs.cloudflare.com"]},{"name":"Shopify","homepage":"https://www.shopify.com/","categories":["hosting"],"domains":["*.shopify.com","*.shopifyapps.com","*.shopifycdn.com"],"examples":["cdn.shopify.com","productreviews.shopifycdn.com"]},{"name":"ZenDesk","homepage":"https://zendesk.com/","categories":["customer-success"],"domains":["*.zdassets.com","*.zendesk.com","*.zopim.com"],"examples":["assets.zendesk.com","static.zdassets.com","v2.zopim.com"]},{"name":"Criteo","homepage":"https://www.criteo.com/","categories":["ad"],"domains":["*.criteo.com","*.emailretargeting.com","*.criteo.net"],"examples":["static.criteo.net","bidder.criteo.com","dis.criteo.com","gum.criteo.com","sslwidget.criteo.com","dis.us.criteo.com"]},{"name":"Pubmatic","homepage":"https://pubmatic.com/","categories":["ad"],"domains":["*.pubmatic.com"],"examples":["image6.pubmatic.com","ads.pubmatic.com","image2.pubmatic.com","simage2.pubmatic.com","image4.pubmatic.com","simage4.pubmatic.com","image5.pubmatic.com","hbopenbid.pubmatic.com"]},{"name":"Tawk.to","homepage":"https://www.tawk.to/","categories":["customer-success"],"domains":["*.tawk.to"],"examples":["embed.tawk.to"]},{"name":"AMP","homepage":"https://amp.dev/","categories":["content"],"domains":["*.ampproject.org"],"examples":["cdn.ampproject.org"]},{"name":"Wix","homepage":"https://www.wix.com/","categories":["hosting"],"domains":["*.parastorage.com","*.wix.com","*.wixstatic.com","*.wixapps.net"],"examples":["static.parastorage.com","static.wixstatic.com","www.wix.com","instagram.codev.wixapps.net"]},{"name":"Squarespace","homepage":"https://www.squarespace.com/","categories":["hosting"],"domains":["*.squarespace.com"],"examples":["static.squarespace.com","static1.squarespace.com"]},{"name":"Amazon Web Services","homepage":"https://aws.amazon.com/s3/","categories":["other"],"domains":["*.amazon.com","*.amazonaws.com","*.amazonwebapps.com","*.amazonwebservices.com","*.elasticbeanstalk.com","*.images-amazon.com","*.amazon.co.uk"],"examples":["s3.amazonaws.com","us-east-1.amazonaws.com","api-cdn.amazon.com","ecx.images-amazon.com","ws.amazon.co.uk"]},{"name":"ShareThis","homepage":"https://www.sharethis.com/","categories":["social"],"domains":["*.sharethis.com"],"examples":["w.sharethis.com","ws.sharethis.com","t.sharethis.com"]},{"name":"Vimeo","homepage":"http://vimeo.com/","categories":["video"],"domains":["*.vimeo.com","*.vimeocdn.com"],"examples":["f.vimeocdn.com","player.vimeo.com","i.vimeocdn.com"]},{"name":"JSDelivr CDN","homepage":"https://www.jsdelivr.com/","categories":["cdn"],"domains":["*.jsdelivr.net"],"examples":["cdn.jsdelivr.net"]},{"name":"Adobe Tag Manager","company":"Adobe","homepage":"https://www.adobe.com/experience-platform/","categories":["tag-manager"],"domains":["*.adobedtm.com","*.demdex.net","*.everesttech.net"],"examples":["assets.adobedtm.com","sync-tm.everesttech.net","cm.everesttech.net"]},{"name":"Jivochat","homepage":"https://www.jivochat.com/","categories":["customer-success"],"domains":["*.jivosite.com"],"examples":["cdn-ca.jivosite.com","code.jivosite.com"]},{"name":"PIXNET","homepage":"https://www.pixnet.net/","categories":["social"],"domains":["*.pixfs.net"],"examples":["front.pixfs.net","falcon-asset.pixfs.net","pixgame-asset.pixfs.net"]},{"name":"Yandex Share","company":"Yandex","homepage":"https://yastatic.net/share2/share.js","categories":["social"],"domains":["*.yastatic.net"]},{"name":"Scorecard Research","homepage":"https://www.scorecardresearch.com/","categories":["ad"],"domains":["*.scorecardresearch.com"],"examples":["sb.scorecardresearch.com","sa.scorecardresearch.com","b.scorecardresearch.com"]},{"name":"Rubicon Project","homepage":"https://rubiconproject.com/","categories":["ad"],"domains":["*.chango.com","*.fimserve.com","*.rubiconproject.com"],"examples":["pixel.rubiconproject.com","fastlane.rubiconproject.com","secure-assets.rubiconproject.com","eus.rubiconproject.com","pixel-us-east.rubiconproject.com","token.rubiconproject.com","ads.rubiconproject.com"]},{"name":"FontAwesome CDN","homepage":"https://fontawesome.com/","categories":["cdn"],"domains":["*.fontawesome.com"],"examples":["use.fontawesome.com"]},{"name":"Cloudflare","homepage":"https://www.cloudflare.com/website-optimization/","categories":["utility"],"domains":["ajax.cloudflare.com"]},{"name":"Blogger","homepage":"http://www.blogger.com/","categories":["hosting"],"domains":["*.blogblog.com","*.blogger.com","*.blogspot.com","images-blogger-opensocial.googleusercontent.com"],"examples":["1.bp.blogspot.com","www.blogger.com"]},{"name":"Salesforce","homepage":"https://www.salesforce.com/products/marketing-cloud/","categories":["analytics"],"domains":["*.krxd.net"],"examples":["cdn.krxd.net","beacon.krxd.net","consumer.krxd.net","usermatch.krxd.net"]},{"name":"Yandex Ads","company":"Yandex","homepage":"https://yandex.com/adv/","categories":["ad"],"domains":["an.yandex.ru"]},{"name":"Tynt","company":"33 Across","categories":["ad"],"domains":["*.tynt.com"]},{"name":"Yandex APIs","company":"Yandex","homepage":"https://yandex.ru/","categories":["utility"],"domains":["api-maps.yandex.ru","money.yandex.ru"]},{"name":"Micropat","categories":["social"],"domains":["*.addtoany.com"]},{"name":"Hubspot","homepage":"https://hubspot.com/","categories":["marketing"],"domains":["*.hs-scripts.com","*.hubspot.com","*.leadin.com","*.hs-analytics.net","*.hscollectedforms.net","*.hscta.net","*.hsforms.net","*.hsleadflows.net","*.hsstatic.net","*.hubspot.net"],"examples":["forms.hubspot.com","js.hsforms.net","js.hs-analytics.net","js.leadin.com"]},{"name":"Sumo","homepage":"https://sumo.com/","categories":["marketing"],"domains":["*.sumo.com","*.sumome.com","sumo.b-cdn.net"],"examples":["sumo.b-cdn.net","load.sumo.com","load.sumome.com"]},{"name":"Beeketing","homepage":"https://beeketing.com/","categories":["marketing"],"domains":["*.beeketing.com"],"examples":["sdk-cdn.beeketing.com","sdk.beeketing.com"]},{"name":"Mailchimp","homepage":"https://mailchimp.com/","categories":["marketing"],"domains":["*.chimpstatic.com","*.list-manage.com","*.mailchimp.com"],"examples":["downloads.mailchimp.com"]},{"name":"Media.net","homepage":"https://www.media.net/","categories":["ad"],"domains":["*.media.net","*.mnet-ad.net"],"examples":["contextual.media.net","cdnwest-xch.media.net","hbx.media.net","cs.media.net","hblg.media.net"]},{"name":"Skimbit","categories":["ad"],"domains":["*.redirectingat.com","*.skimresources.com","*.skimresources.net"]},{"name":"Moat","homepage":"https://moat.com/","categories":["ad"],"domains":["*.moatads.com","*.moatpixel.com"],"examples":["z.moatads.com","px.moatads.com","geo.moatads.com","sejs.moatads.com","mb.moatads.com","v4.moatads.com"]},{"name":"AppNexus","homepage":"https://www.appnexus.com/","categories":["ad"],"domains":["*.adnxs.com","*.ctasnet.com"],"examples":["acdn.adnxs.com","secure.adnxs.com","ib.adnxs.com","sharethrough.adnxs.com","cdn.adnxs.com","vcdn.adnxs.com"]},{"name":"VK","homepage":"https://vk.com/","categories":["social"],"domains":["*.vk.com"]},{"name":"LiveChat","homepage":"https://www.livechatinc.com/","categories":["customer-success"],"domains":["*.livechatinc.com"],"examples":["cdn.livechatinc.com","secure.livechatinc.com"]},{"name":"OneSignal","homepage":"https://onesignal.com/","categories":["utility"],"domains":["*.onesignal.com"],"examples":["cdn.onesignal.com","https://onesignal.com/api/v1/sync/"]},{"name":"WordAds","company":"Automattic","homepage":"https://wordads.co/","categories":["ad"],"domains":["*.pubmine.com"],"examples":["s.pubmine.com"]},{"name":"Integral Ad Science","homepage":"https://integralads.com/uk/","categories":["ad"],"domains":["*.adsafeprotected.com","*.iasds01.com"],"examples":["pixel.adsafeprotected.com","static.adsafeprotected.com","fw.adsafeprotected.com","cdn.adsafeprotected.com","dt.adsafeprotected.com"]},{"name":"Amazon Ads","homepage":"https://ad.amazon.com/","categories":["ad"],"domains":["*.amazon-adsystem.com"],"examples":["s.amazon-adsystem.com","c.amazon-adsystem.com","aax.amazon-adsystem.com","z-na.amazon-adsystem.com","fls-na.amazon-adsystem.com","aax-us-east.amazon-adsystem.com","ir-na.amazon-adsystem.com"]},{"name":"Yahoo!","homepage":"https://www.yahoo.com/","categories":["ad"],"domains":["*.bluelithium.com","*.hostingprod.com","*.lexity.com","*.yahoo.com","*.yahooapis.com","*.yimg.com","*.yimg.jp","*.zenfs.com","*.yahoo.net"],"examples":["ads.yahoo.com","analytics.yahoo.com","geo.yahoo.com","udc.yahoo.com","ganon.yahoo.com","ads.yap.yahoo.com"]},{"name":"Hatena Blog","homepage":"https://hatenablog.com/","categories":["hosting"],"domains":["*.st-hatena.com","*.hatena.ne.jp"],"examples":["cdn.blog.st-hatena.com","cdn.pool.st-hatena.com","cdn7.www.st-hatena.com","s.hatena.ne.jp","b.st-hatena.com"]},{"name":"Pinterest","homepage":"https://pinterest.com/","categories":["social"],"domains":["*.pinimg.com","*.pinterest.com"],"examples":["assets.pinterest.com","ct.pinterest.com","log.pinterest.com"]},{"name":"LinkedIn","homepage":"https://www.linkedin.com/","categories":["social"],"domains":["*.bizographics.com","platform.linkedin.com","*.slideshare.com","*.slidesharecdn.com"]},{"name":"Stripe","homepage":"https://stripe.com","categories":["utility"],"domains":["*.stripe.com","*.stripecdn.com","*.stripe.network"],"examples":["m.stripe.network","js.stripe.com"]},{"name":"Taboola","homepage":"https://www.taboola.com/","categories":["ad"],"domains":["*.taboola.com","*.taboolasyndication.com"],"examples":["cdn.taboola.com","trc.taboola.com","vidstat.taboola.com","images.taboola.com"]},{"name":"Weebly","homepage":"https://www.weebly.com/","categories":["hosting"],"domains":["*.editmysite.com"]},{"name":"Bing Ads","homepage":"https://bingads.microsoft.com","categories":["ad"],"domains":["*.bing.com","*.microsoft.com","*.msn.com","*.s-msft.com","*.s-msn.com","*.msads.net","*.msecnd.net","*.windows.net"],"examples":["bat.bing.com","c.bing.com","bat.r.msn.com","ajax.microsoft.com"]},{"name":"Intercom","homepage":"https://www.intercom.com","categories":["customer-success"],"domains":["*.intercomcdn.com","*.intercom.io"],"examples":["js.intercomcdn.com","api-iam.intercom.io","widget.intercom.io","nexus-websocket-a.intercom.io"]},{"name":"Crazy Egg","homepage":"https://www.crazyegg.com/","categories":["analytics"],"domains":["*.cetrk.com","*.crazyegg.com","*.hellobar.com","dnn506yrbagrg.cloudfront.net"]},{"name":"Amazon Pay","homepage":"https://pay.amazon.com","categories":["utility"],"domains":["payments.amazon.com","*.payments-amazon.com"]},{"name":"Histats","homepage":"http://histats.com/","categories":["analytics"],"domains":["*.histats.com"],"examples":["s10.histats.com"]},{"name":"Adform","categories":["ad"],"domains":["*.adform.net","*.adformdsp.net"]},{"name":"Datacamp","categories":["utility"],"domains":["*.cdn77.org"]},{"name":"Tealium","homepage":"https://tealium.com/","categories":["tag-manager"],"domains":["*.aniview.com","*.delvenetworks.com","*.limelight.com","*.tiqcdn.com","*.llnwd.net","*.tealiumiq.com"],"examples":["tags.tiqcdn.com","tealium.hs.llnwd.net","link.videoplatform.limelight.com","datacloud.tealiumiq.com"]},{"name":"Optimizely","homepage":"https://www.optimizely.com/","categories":["analytics"],"domains":["*.optimizely.com"],"examples":["cdn.optimizely.com","cdn-pci.optimizely.com","logx.optimizely.com","cdn3.optimizely.com"]},{"name":"Yotpo","homepage":"https://www.yotpo.com/","categories":["marketing"],"domains":["*.yotpo.com"]},{"name":"Trust Pilot","categories":["analytics"],"domains":["*.trustpilot.com"]},{"name":"Privy","categories":["ad"],"domains":["*.privy.com","*.privymktg.com"]},{"name":"Baidu Analytics","homepage":"https://tongji.baidu.com/web/welcome/login","categories":["analytics"],"domains":["*.baidu.com"],"examples":["hm.baidu.com"]},{"name":"Wistia","homepage":"https://wistia.com/","categories":["video"],"domains":["*.wistia.com","embedwistia-a.akamaihd.net","*.wistia.net"],"examples":["fast.wistia.com","fast.wistia.net","distillery.wistia.com","pipedream.wistia.com"]},{"name":"iubenda","categories":["utility"],"domains":["*.iubenda.com"],"examples":["www.iubenda.com"]},{"name":"Nielsen NetRatings SiteCensus","company":"The Nielsen Company","homepage":"http://www.nielsen-online.com/intlpage.html","categories":["analytics"],"domains":["*.imrworldwide.com"]},{"name":"BrightTag / Signal","company":"Signal","homepage":"https://www.signal.co","categories":["tag-manager"],"domains":["*.btstatic.com","*.thebrighttag.com"]},{"name":"mPulse","homepage":"https://developer.akamai.com/akamai-mpulse","categories":["analytics"],"domains":["*.akstat.io","*.go-mpulse.net","*.mpulse.net","*.mpstat.us"],"examples":["c.go-mpulse.net","0211c83c.akstat.io"]},{"name":"PayPal","homepage":"https://paypal.com","categories":["utility"],"domains":["*.paypal.com","*.paypalobjects.com"],"examples":["www.paypalobjects.com"]},{"name":"Sentry","homepage":"https://sentry.io/","categories":["utility"],"domains":["*.getsentry.com","*.ravenjs.com","*.sentry-cdn.com"],"examples":["cdn.ravenjs.com","browser.sentry-cdn.com"]},{"name":"Cookiebot","homepage":"https://www.cookiebot.com/","categories":["utility"],"domains":["*.cookiebot.com"],"examples":["consent.cookiebot.com"]},{"name":"Distil Networks","homepage":"https://www.distilnetworks.com/","categories":["utility"],"domains":["*.areyouahuman.com"],"examples":["n-cdn.areyouahuman.com"]},{"name":"Adobe TypeKit","company":"Adobe","homepage":"https://fonts.adobe.com/","categories":["cdn"],"domains":["*.typekit.com","*.typekit.net"],"examples":["use.typekit.net","p.typekit.net"]},{"name":"Kakao","categories":["social"],"domains":["*.daum.net","*.daumcdn.net"]},{"name":"Bold Commerce","categories":["utility"],"domains":["*.shappify-cdn.com","*.shappify.com","*.boldapps.net"]},{"name":"Akamai","homepage":"https://www.akamai.com/","categories":["cdn"],"domains":["23.62.3.183","*.akamaitechnologies.com","*.akamaitechnologies.fr","*.akamai.net","*.akamaiedge.net","*.akamaihd.net","*.akamaized.net","*.edgefcs.net","*.edgekey.net","edgesuite.net","*.srip.net"]},{"name":"Segment","homepage":"https://segment.com/","categories":["analytics"],"domains":["*.segment.com","*.segment.io"],"examples":["cdn.segment.com","api.segment.io"]},{"name":"District M","categories":["ad"],"domains":["*.districtm.io"]},{"name":"Bigcommerce","categories":["marketing"],"domains":["*.bigcommerce.com"]},{"name":"Dealer","homepage":"https://www.dealer.com/","categories":["hosting"],"domains":["*.dealer.com"],"examples":["static.dealer.com"]},{"name":"Klaviyo","categories":["ad"],"domains":["*.klaviyo.com"]},{"name":"Rambler","company":"Rambler & Co","categories":["utility"],"domains":["*.rambler.ru"]},{"name":"Tumblr","homepage":"https://tumblr.com/","categories":["social"],"domains":["*.tumblr.com"],"examples":["assets.tumblr.com","static.tumblr.com"]},{"name":"Snapchat","homepage":"https://www.snapchat.com","categories":["analytics"],"domains":["*.snapchat.com","*.sc-static.net"],"examples":["tr.snapchat.com"]},{"name":"VigLink","categories":["ad"],"domains":["*.viglink.com"]},{"name":"StatCounter","categories":["analytics"],"domains":["*.statcounter.com"]},{"name":"TrustArc","homepage":"https://www.trustarc.com/","categories":["utility"],"domains":["*.trustarc.com"],"examples":["choices.trustarc.com","consent.trustarc.com"]},{"name":"Tidio Live Chat","company":"Tidio","homepage":"https://www.tidiochat.com/en/","categories":["customer-success"],"domains":["*.tidiochat.com"]},{"name":"DoubleVerify","homepage":"https://www.doubleverify.com/","categories":["ad"],"domains":["*.doubleverify.com","*.dvtps.com","*.iqfp1.com"],"examples":["cdn.doubleverify.com","cdn3.doubleverify.com","tps.doubleverify.com","tps712.doubleverify.com","tps714.doubleverify.com","tps706.doubleverify.com","tps700.doubleverify.com","tps707.doubleverify.com","rtb2.doubleverify.com","rtb0.doubleverify.com","rtbcdn.doubleverify.com","tps11020.doubleverify.com","tm.iqfp1.com"]},{"name":"Instagram","homepage":"https://www.instagram.com","categories":["social"],"domains":["*.cdninstagram.com","*.instagram.com"],"examples":["scontent.cdninstagram.com"]},{"name":"OptinMonster","homepage":"https://optinmonster.com/","categories":["marketing"],"domains":["*.opmnstr.com","*.optmnstr.com","*.optmstr.com"],"examples":["a.optmstr.com","api.opmnstr.com","a.optmnstr.com"]},{"name":"Evidon","categories":["analytics"],"domains":["*.evidon.com"]},{"name":"Lucky Orange","homepage":"https://www.luckyorange.com/","categories":["analytics"],"domains":["*.luckyorange.com","d10lpsik1i8c69.cloudfront.net","*.luckyorange.net"]},{"name":"Gemius","categories":["ad"],"domains":["*.gemius.pl"]},{"name":"Olark","homepage":"https://www.olark.com/","categories":["customer-success"],"domains":["*.olark.com"],"examples":["static.olark.com"]},{"name":"CallRail","categories":["analytics"],"domains":["*.callrail.com"]},{"name":"Mixpanel","homepage":"https://mixpanel.com/","categories":["analytics"],"domains":["*.mixpanel.com","*.mxpnl.com"],"examples":["cdn.mxpnl.com"]},{"name":"OpenX","homepage":"https://www.openx.com/","categories":["ad"],"domains":["*.deliverimp.com","*.openxadexchange.com","*.servedbyopenx.com","*.jump-time.net","*.openx.net"],"examples":["uk-ads.openx.net","us-ads.openx.net","33across-d.openx.net","rtb.openx.net","us-u.openx.net","eu-u.openx.net","u.openx.net"]},{"name":"CreateJS CDN","homepage":"http://code.createjs.com/","categories":["cdn"],"domains":["*.createjs.com"],"examples":["code.createjs.com"]},{"name":"Chartbeat","categories":["analytics"],"domains":["*.chartbeat.com","*.chartbeat.net"]},{"name":"Sizmek","homepage":"https://www.sizmek.com/","categories":["ad"],"domains":["*.serving-sys.com","*.peer39.net"],"examples":["secure-ds.serving-sys.com","ds.serving-sys.com","bs.serving-sys.com"]},{"name":"FullStory","categories":["analytics"],"domains":["*.fullstory.com"],"examples":["rs.fullstory.com"]},{"name":"Snowplow","homepage":"https://snowplowanalytics.com/","categories":["analytics"],"domains":["d32hwlnfiv2gyn.cloudfront.net"]},{"name":"Brightcove","homepage":"https://www.brightcove.com/en/","categories":["video"],"domains":["*.brightcove.com","*.brightcove.net","*.zencdn.net"],"examples":["vjs.zencdn.net","players.brightcove.net"]},{"name":"GoDaddy","homepage":"https://www.godaddy.com/","categories":["utility"],"domains":["*.godaddy.com","*.wsimg.com"],"examples":["ocsp.godaddy.com","seal.godaddy.com"]},{"name":"Inspectlet","categories":["analytics"],"domains":["*.inspectlet.com"]},{"name":"Teads","categories":["ad"],"domains":["*.teads.tv"]},{"name":"New Relic","homepage":"https://newrelic.com/","categories":["utility"],"domains":["*.newrelic.com","*.nr-data.net"],"examples":["js-agent.newrelic.com","bam.nr-data.net"]},{"name":"Ensighten","homepage":"https://www.ensighten.com/","categories":["tag-manager"],"domains":["*.ensighten.com"],"examples":["nexus.ensighten.com"]},{"name":"Parking Crew","homepage":"http://parkingcrew.net/","categories":["other"],"domains":["d1lxhc4jvstzrp.cloudfront.net","*.parkingcrew.net"]},{"name":"Azure Web Services","company":"Microsoft","categories":["cdn"],"domains":["*.azurewebsites.net","*.azureedge.net","*.msedge.net"]},{"name":"BlueKai","company":"Oracle","categories":["ad"],"domains":["*.bkrtx.com","*.bluekai.com"]},{"name":"Treasure Data","categories":["analytics"],"domains":["*.treasuredata.com"]},{"name":"Drift","homepage":"https://www.drift.com/","categories":["marketing"],"domains":["*.drift.com","*.driftt.com"],"examples":["js.driftt.com","api.drift.com"]},{"name":"MGID","homepage":"https://www.mgid.com/","categories":["ad"],"domains":["*.mgid.com","*.dt07.net"],"examples":["servicer.mgid.com"]},{"name":"Microsoft Hosted Libs","company":"Microsoft","categories":["cdn"],"domains":["*.aspnetcdn.com"],"examples":["ajax.aspnetcdn.com"]},{"name":"33 Across","homepage":"https://33across.com/","categories":["ad"],"domains":["*.33across.com"],"examples":["sic.33across.com","cdn-sic.33across.com"]},{"name":"Monotype","categories":["cdn"],"domains":["*.fonts.com","*.fonts.net"]},{"name":"DTSCOUT","categories":["ad"],"domains":["*.dtscout.com"]},{"name":"WordPress Site Stats","company":"Automattic","homepage":"https://wp.com/","categories":["analytics"],"domains":["pixel.wp.com","stats.wp.com"]},{"name":"Mapbox","categories":["utility"],"domains":["*.mapbox.com"]},{"name":"MediaVine","homepage":"https://www.mediavine.com/","categories":["ad"],"domains":["*.mediavine.com"],"examples":["scripts.mediavine.com","video.mediavine.com"]},{"name":"Shareaholic","homepage":"https://www.shareaholic.com/","categories":["social"],"domains":["*.shareaholic.com","dsms0mj1bbhn4.cloudfront.net"]},{"name":"Dataxu","categories":["marketing"],"domains":["*.w55c.net"]},{"name":"MailMunch","categories":["ad"],"domains":["*.mailmunch.co"]},{"name":"Cxense","categories":["ad"],"domains":["*.cxense.com","*.cxpublic.com","*.emediate.dk","*.emediate.eu"]},{"name":"Marchex","categories":["analytics"],"domains":["*.voicestar.com","*.marchex.io"]},{"name":"Fastly","categories":["utility"],"domains":["*.fastly.net"]},{"name":"Unpkg","homepage":"https://unpkg.com","categories":["cdn"],"domains":["*.unpkg.com"]},{"name":"LivePerson","categories":["customer-success"],"homepage":"https://www.liveperson.com/","domains":["*.liveperson.com","*.look.io","*.liveperson.net","*.lpsnmedia.net"]},{"name":"SoundCloud","homepage":"https://www.soundcloud.com/","categories":["content"],"domains":["*.sndcdn.com","*.soundcloud.com","*.stratus.sc"],"examples":["widget.sndcdn.com"]},{"name":"VWO","homepage":"https://vwo.com","categories":["analytics"],"domains":["*.visualwebsiteoptimizer.com"],"examples":["dev.visualwebsiteoptimizer.com"]},{"name":"StickyADS.tv","categories":["ad"],"domains":["*.stickyadstv.com"]},{"name":"PushCrew","categories":["ad"],"domains":["*.pushcrew.com"]},{"name":"Embedly","categories":["content"],"domains":["*.embedly.com","*.embed.ly"]},{"name":"CDK Dealer Management","company":"CDK Global","homepage":"https://www.cdkglobal.com/us","categories":["hosting"],"domains":["*.assets-cdk.com"],"examples":["media-cf.assets-cdk.com"]},{"name":"Popads","homepage":"https://www.popads.net/","categories":["ad"],"domains":["*.popads.net"],"examples":["serve.popads.net","c1.popads.net"]},{"name":"FreakOut","categories":["ad"],"domains":["*.fout.jp"]},{"name":"SnapWidget","categories":["content"],"domains":["*.snapwidget.com"]},{"name":"Pure Chat","categories":["customer-success"],"domains":["*.purechat.com"]},{"name":"Outbrain","homepage":"https://www.outbrain.com/","categories":["ad"],"domains":["*.outbrain.com","*.outbrainimg.com","*.visualrevenue.com"]},{"name":"RD Station","homepage":"https://www.rdstation.com/en/","categories":["marketing"],"domains":["d335luupugsy2.cloudfront.net"]},{"name":"LiveJournal","categories":["social"],"domains":["*.livejournal.com","*.livejournal.net"]},{"name":"ContactAtOnce","homepage":"https://www.contactatonce.com/","categories":["customer-success"],"domains":["*.contactatonce.com"],"examples":["tag.contactatonce.com","agentpresence.contactatonce.com"]},{"name":"Ezoic","categories":["analytics"],"domains":["*.ezoic.net"]},{"name":"AB Tasty","categories":["analytics"],"domains":["*.abtasty.com","d1447tq2m68ekg.cloudfront.net"]},{"name":"Quantcast","homepage":"https://www.quantcast.com","categories":["analytics"],"domains":["*.brtstats.com","*.quantcount.com","*.quantserve.com","*.semantictec.com","*.ntv.io"],"examples":["pixel.quantserve.com","secure.quantserve.com","cms.quantserve.com","rules.quantcount.com"]},{"name":"DigiTrust","homepage":"http://www.digitru.st/","categories":["analytics"],"domains":["*.digitru.st"],"examples":["cdn.digitru.st"]},{"name":"LongTail Ad Solutions","categories":["ad"],"domains":["*.jwpcdn.com","*.jwplatform.com","*.jwplayer.com","*.jwpltx.com","*.jwpsrv.com","*.longtailvideo.com"]},{"name":"Parse.ly","categories":["analytics"],"domains":["*.parsely.com","d1z2jf7jlzjs58.cloudfront.net"]},{"name":"Index Exchange","company":"WPP","categories":["ad"],"domains":["*.casalemedia.com","*.indexww.com"]},{"name":"Clicktripz","categories":["content"],"domains":["*.clicktripz.com"],"examples":["static.clicktripz.com","www.clicktripz.com"]},{"name":"Ve","company":"Ve Interactive","categories":["marketing"],"domains":["*.veinteractive.com"]},{"name":"Adloox","categories":["ad"],"domains":["*.adlooxtracking.com"]},{"name":"GumGum","categories":["ad"],"domains":["*.gumgum.com"]},{"name":"Digital ad Consortium","categories":["ad"],"domains":["*.impact-ad.jp"]},{"name":"Amplitude Mobile Analytics","company":"Amplitude","categories":["analytics"],"domains":["*.amplitude.com","d24n15hnbwhuhn.cloudfront.net"]},{"name":"Adobe Business Catalyst","homepage":"https://www.businesscatalyst.com/","categories":["hosting"],"domains":["*.businesscatalyst.com"]},{"name":"LightWidget","categories":["utility"],"domains":["*.lightwidget.com"]},{"name":"Spotify","homepage":"https://www.spotify.com/","categories":["content"],"domains":["*.scdn.co","*.spotify.com"],"examples":["open.spotify.com","open.scdn.co","i.scdn.co"]},{"name":"SmartAdServer","categories":["ad"],"domains":["*.01net.com","*.sascdn.com"],"examples":["securite.01net.com"]},{"name":"Adroll","homepage":"https://www.adroll.com/","categories":["ad"],"domains":["*.adroll.com"],"examples":["d.adroll.com","s.adroll.com"]},{"name":"PureCars","homepage":"https://www.purecars.com/","categories":["marketing"],"domains":["*.purecars.com"],"examples":["cdn.purecars.com"]},{"name":"Keen","company":"Keen","homepage":"https://keen.io/","categories":["analytics"],"domains":["*.keen.io","d26b395fwzu5fz.cloudfront.net"]},{"name":"Infolinks","categories":["ad"],"domains":["*.infolinks.com"]},{"name":"Unbounce","categories":["ad"],"domains":["*.ubembed.com","*.unbounce.com","d2xxq4ijfwetlm.cloudfront.net","d9hhrg4mnvzow.cloudfront.net"]},{"name":"Roxr Software","categories":["analytics"],"domains":["*.getclicky.com"]},{"name":"OpenTable","company":"Priceline Group","categories":["content"],"domains":["*.opentable.com","*.opentable.co.uk","*.toptable.co.uk"],"examples":["www.toptable.co.uk"]},{"name":"uLogin","categories":["other"],"domains":["*.ulogin.ru"]},{"name":"Searchanise","categories":["analytics"],"domains":["*.searchanise.com"],"examples":["www.searchanise.com"]},{"name":"Gigya","categories":["analytics"],"domains":["*.gigya.com"]},{"name":"Net Reviews","categories":["analytics"],"domains":["*.avis-verifies.com"],"examples":["www.avis-verifies.com"]},{"name":"Booking.com","categories":["content"],"domains":["*.bstatic.com"]},{"name":"Disqus","homepage":"http://disqus.com/","categories":["social"],"domains":["*.disqus.com","*.disquscdn.com"],"examples":["c.disquscdn.com"]},{"name":"Tray Commerce","homepage":"https://www.tray.com.br/","categories":["marketing"],"domains":["*.tcdn.com.br"],"examples":["images.tcdn.com.br"]},{"name":"Crowd Control","company":"Lotame","categories":["ad"],"domains":["*.crwdcntrl.net"]},{"name":"Intent Media","homepage":"https://intent.com/","categories":["ad"],"domains":["*.intentmedia.net"]},{"name":"issuu","categories":["content"],"domains":["*.issuu.com","*.isu.pub"]},{"name":"Salesforce Commerce Cloud","homepage":"https://www.salesforce.com/products/commerce-cloud/overview/","categories":["hosting"],"domains":["*.cquotient.com","*.demandware.net","demandware.edgesuite.net"]},{"name":"sovrn","categories":["ad"],"domains":["*.lijit.com"]},{"name":"JuicyAds","categories":["ad"],"domains":["*.juicyads.com"]},{"name":"Sharethrough","categories":["ad"],"domains":["*.sharethrough.com"]},{"name":"Heap","categories":["analytics"],"domains":["*.heapanalytics.com"]},{"name":"LiveTex","categories":["customer-success"],"domains":["*.livetex.ru"]},{"name":"Nosto","categories":["analytics"],"domains":["*.nosto.com"]},{"name":"fluct","categories":["ad"],"domains":["*.adingo.jp"]},{"name":"Smart AdServer","categories":["ad"],"domains":["*.sasqos.com","*.smartadserver.com"]},{"name":"fam","company":"Fing Co Ltd.","homepage":"http://admin.fam-ad.com/report/","categories":["ad"],"domains":["*.fam-ad.com"],"examples":["img.fam-ad.com"]},{"name":"ExoClick","categories":["ad"],"domains":["*.exoclick.com"]},{"name":"BannerFlow","company":"Nordic Factory Solutions","categories":["ad"],"domains":["*.bannerflow.com"]},{"name":"iPerceptions","categories":["customer-success"],"domains":["*.iperceptions.com"]},{"name":"Albacross","homepage":"https://albacross.com/","categories":["marketing"],"domains":["*.albacross.com"],"examples":["serve.albacross.com"]},{"name":"RevJet","homepage":"https://www.revjet.com/","categories":["ad"],"domains":["*.revjet.com"],"examples":["pix.revjet.com","ads.revjet.com"]},{"name":"Trusted Shops","categories":["utility"],"domains":["*.trustedshops.com"]},{"name":"MaxCDN Enterprise","company":"MaxCDN","categories":["utility"],"domains":["*.netdna-cdn.com","*.netdna-ssl.com"]},{"name":"etracker","categories":["analytics"],"domains":["*.etracker.com","*.etracker.de"],"examples":["www.etracker.com"]},{"name":"Yandex CDN","company":"Yandex","homepage":"https://yandex.ru/","categories":["cdn"],"domains":["*.yandex.st"]},{"name":"LKQD","categories":["ad"],"domains":["*.lkqd.net"]},{"name":"Sift Science","categories":["utility"],"domains":["*.siftscience.com"]},{"name":"Help Scout","homepage":"https://www.helpscout.net/","categories":["customer-success"],"domains":["djtflbt20bdde.cloudfront.net","*.helpscout.net"],"examples":["beacon-v2.helpscout.net"]},{"name":"Seznam","categories":["utility"],"domains":["*.imedia.cz"]},{"name":"Vidible","categories":["ad"],"domains":["*.vidible.tv"]},{"name":"Media Math","homepage":"http://www.mediamath.com/","categories":["ad"],"domains":["*.mathads.com","*.mathtag.com"],"examples":["mathid.mathtag.com","sync.mathtag.com","pixel.mathtag.com"]},{"name":"Simplicity Marketing","categories":["ad"],"domains":["*.flashtalking.com"]},{"name":"Mouseflow","categories":["analytics"],"domains":["*.mouseflow.com"]},{"name":"Siteimprove","categories":["utility"],"domains":["*.siteimprove.com","*.siteimproveanalytics.com"]},{"name":"GetSiteControl","company":"GetWebCraft","categories":["utility"],"domains":["*.getsitecontrol.com"]},{"name":"AOL / Oath / Verizon Media","homepage":"https://www.oath.com/","categories":["ad"],"domains":["*.advertising.com","*.aol.com","*.aolcdn.com","*.blogsmithmedia.com","*.oath.com","*.aol.net","*.tacoda.net","*.aol.co.uk"],"examples":["pixel.advertising.com","dtm.advertising.com","tag.sp.advertising.com","service.sp.advertising.com","adtech.advertising.com","adaptv.advertising.com","mighty.aol.net","consent.cmp.oath.com"]},{"name":"Accuweather","categories":["content"],"domains":["*.accuweather.com"]},{"name":"Feefo.com","company":"Feefo","categories":["analytics"],"domains":["*.feefo.com"]},{"name":"Constant Contact","categories":["ad"],"domains":["*.ctctcdn.com"]},{"name":"Rakuten Marketing","company":"Rakuten","categories":["ad"],"domains":["*.rakuten-static.com","*.rmtag.com"]},{"name":"TrafficStars","categories":["ad"],"domains":["*.trafficstars.com","*.tsyndicate.com"]},{"name":"ForeSee","company":"Answers","categories":["analytics"],"domains":["*.4seeresults.com","*.answerscloud.com","*.foresee.com","*.foreseeresults.com"]},{"name":"Swiftype","categories":["utility"],"domains":["*.swiftype.com","*.swiftypecdn.com"]},{"name":"Bazaarvoice","categories":["analytics"],"domains":["*.bazaarvoice.com","*.feedmagnet.com"]},{"name":"SocialShopWave","categories":["social"],"domains":["*.socialshopwave.com"]},{"name":"Bootstrap CDN","homepage":"https://www.bootstrapcdn.com/","categories":["cdn"],"domains":["*.bootstrapcdn.com"],"examples":["maxcdn.bootstrapcdn.com","stackpath.bootstrapcdn.com"]},{"name":"SessionCam","company":"ServiceTick","categories":["analytics"],"domains":["*.sessioncam.com","d2oh4tlt9mrke9.cloudfront.net"]},{"name":"AppDynamics","homepage":"https://www.appdynamics.com/","categories":["utility"],"domains":["*.appdynamics.com","*.eum-appdynamics.com","d3tjaysgumg9lf.cloudfront.net"],"examples":["cdn.appdynamics.com"]},{"name":"Adyoulike","categories":["ad"],"domains":["*.adyoulike.com","*.omnitagjs.com","*.adyoulike.net"]},{"name":"Affirm","categories":["utility"],"domains":["*.affirm.com"]},{"name":"Sortable","categories":["ad"],"domains":["*.deployads.com"]},{"name":"Neodata","categories":["ad"],"domains":["*.neodatagroup.com"]},{"name":"Adnium","categories":["ad"],"domains":["*.adnium.com"]},{"name":"AdScore","homepage":"https://www.adscore.com/","categories":["ad"],"domains":["*.adsco.re"],"examples":["c.adsco.re"]},{"name":"Comm100","categories":["customer-success"],"domains":["*.comm100.com"]},{"name":"Medium","categories":["content"],"domains":["*.medium.com"]},{"name":"Esri ArcGIS","company":"Esri","categories":["utility"],"domains":["*.arcgis.com","*.arcgisonline.com"]},{"name":"iBillboard","categories":["ad"],"domains":["*.ibillboard.com"]},{"name":"Hotmart","homepage":"https://www.hotmart.com/","categories":["content"],"domains":["*.hotmart.com"],"examples":["launchermodule.hotmart.com"]},{"name":"Secomapp","categories":["utility"],"domains":["*.secomapp.com"]},{"name":"AdMatic","categories":["ad"],"domains":["*.admatic.com.tr"]},{"name":"Dailymotion","categories":["content"],"domains":["*.dailymotion.com","*.dmxleo.com","*.dm.gg","*.pxlad.io","*.dmcdn.net","*.sublimevideo.net"],"examples":["ad.pxlad.io","www.dailymotion.com"]},{"name":"Foursixty","categories":["customer-success"],"domains":["*.foursixty.com"]},{"name":"OptiMonk","categories":["ad"],"domains":["*.optimonk.com"]},{"name":"Refersion","categories":["ad"],"domains":["*.refersion.com"]},{"name":"Pardot","categories":["marketing"],"domains":["*.pardot.com"]},{"name":"GitHub","categories":["utility"],"domains":["*.rawgit.com"],"examples":["cdn.rawgit.com"]},{"name":"Alexa","homepage":"https://www.alexa.com/","categories":["analytics"],"domains":["*.alexametrics.com","d31qbv1cthcecs.cloudfront.net"],"examples":["certify.alexametrics.com"]},{"name":"Bugsnag","categories":["utility"],"domains":["*.bugsnag.com","d2wy8f7a9ursnm.cloudfront.net"],"examples":["notify.bugsnag.com"]},{"name":"ResponsiveVoice","categories":["other"],"domains":["*.responsivevoice.org"]},{"name":"ContentSquare","categories":["analytics"],"domains":["d1m6l9dfulcyw7.cloudfront.net","*.content-square.net","*.contentsquare.net"]},{"name":"BounceX","categories":["analytics"],"homepage":"https://www.bouncex.com/","domains":["*.bounceexchange.com","*.bouncex.net"],"examples":["events.bouncex.net"]},{"name":"Tencent","categories":["content"],"domains":["*.qq.com","*.ywxi.net"]},{"name":"TagCommander","categories":["tag-manager"],"domains":["*.commander1.com","*.tagcommander.com"]},{"name":"Between Digital","categories":["ad"],"domains":["*.betweendigital.com"]},{"name":"Tribal Fusion","company":"Exponential Interactive","categories":["ad"],"domains":["*.tribalfusion.com"]},{"name":"iovation","categories":["utility"],"domains":["*.iesnare.com"]},{"name":"Auto Link Maker","company":"Apple","categories":["ad"],"domains":["*.apple.com"],"examples":["autolinkmaker.itunes.apple.com"]},{"name":"SnapEngage","categories":["customer-success"],"domains":["*.snapengage.com"]},{"name":"iAdvize SAS","categories":["customer-success"],"domains":["*.iadvize.com"]},{"name":"Listrak","homepage":"https://www.listrak.com/","categories":["marketing"],"domains":["*.listrak.com","*.listrakbi.com"],"examples":["cdn.listrakbi.com","s1.listrakbi.com"]},{"name":"Branch Metrics","categories":["ad"],"domains":["*.branch.io","*.app.link"]},{"name":"Admixer for Publishers","company":"Admixer","categories":["ad"],"domains":["*.admixer.net"]},{"name":"Tail Target","company":"Tail","categories":["ad"],"domains":["*.tailtarget.com"]},{"name":"Clicktale","categories":["analytics"],"domains":["*.cdngc.net","*.clicktale.net"],"examples":["clicktalecdn.sslcs.cdngc.net"]},{"name":"Maxymiser","categories":["analytics"],"domains":["*.maxymiser.net"]},{"name":"Marketo","homepage":"https://www.marketo.com","categories":["analytics"],"domains":["*.marketo.com","*.mktoresp.com","*.marketo.net"],"examples":["munchkin.marketo.net"]},{"name":"Bizible","categories":["ad"],"domains":["*.bizible.com","*.bizibly.com"]},{"name":"LoyaltyLion","categories":["ad"],"domains":["*.loyaltylion.com","*.loyaltylion.net","dg1f2pfrgjxdq.cloudfront.net"]},{"name":"Convert Insights","categories":["analytics"],"domains":["*.convertexperiments.com"]},{"name":"Opentag","company":"Qubit","categories":["tag-manager"],"domains":["*.qutics.com","d3c3cq33003psk.cloudfront.net"],"examples":["opentag-stats.qutics.com"]},{"name":"Adverline Board","company":"Adverline","categories":["ad"],"domains":["*.adverline.com","*.adnext.fr"]},{"name":"Optanon","homepage":"https://www.cookielaw.org/","categories":["utility"],"domains":["*.onetrust.com","*.cookielaw.org"],"examples":["cdn.cookielaw.org","geolocation.onetrust.com"]},{"name":"Adocean","company":"Gemius","categories":["ad"],"domains":["*.adocean.pl"]},{"name":"Po.st","company":"RadiumOne","categories":["utility"],"domains":["*.po.st"]},{"name":"Yieldmo","categories":["ad"],"domains":["*.yieldmo.com"]},{"name":"Market GID","homepage":"https://www.marketgid.com/","categories":["ad"],"domains":["*.marketgid.com"],"examples":["jsc.marketgid.com"]},{"name":"TRUSTe","categories":["utility"],"domains":["*.truste.com"]},{"name":"One by AOL","company":"AOL","categories":["ad"],"domains":["*.adtechjp.com","*.adtech.de"]},{"name":"Affiliate Window","company":"Digital Window","categories":["ad"],"domains":["*.dwin1.com"]},{"name":"Pagely","categories":["other"],"domains":["*.optnmstr.com"]},{"name":"Perfect Market","categories":["ad"],"domains":["*.perfectmarket.com"]},{"name":"Symantec","categories":["utility"],"domains":["*.norton.com","*.symantec.com","*.symcb.com","*.symcd.com"],"examples":["extended-validation-ssl.websecurity.symantec.com"]},{"name":"piano","categories":["ad"],"domains":["*.npttech.com","*.tinypass.com"],"examples":["www.npttech.com"]},{"name":"Elastic Ad","categories":["ad"],"domains":["*.elasticad.net"]},{"name":"Freshdesk","homepage":"https://freshdesk.com/","categories":["customer-success"],"domains":["d36mpcpuzc4ztk.cloudfront.net"]},{"name":"IPONWEB","categories":["ad"],"domains":["*.company-target.com","*.liadm.com","*.iponweb.net","*.p161.net"],"examples":["pool.udsp.iponweb.net"]},{"name":"Ecwid","categories":["hosting"],"domains":["*.ecwid.com","*.shopsettings.com","d3fi9i0jj23cau.cloudfront.net","d3j0zfs7paavns.cloudfront.net"]},{"name":"Digioh","categories":["ad"],"domains":["*.lightboxcdn.com"]},{"name":"Fort Awesome","categories":["cdn"],"domains":["*.fortawesome.com"]},{"name":"Nend","categories":["ad"],"domains":["*.nend.net"]},{"name":"Bronto Software","categories":["marketing"],"domains":["*.bm23.com","*.bronto.com","*.brontops.com"]},{"name":"TrackJS","categories":["analytics"],"domains":["*.trackjs.com","d2zah9y47r7bi2.cloudfront.net"],"examples":["usage.trackjs.com"]},{"name":"Dynamic Yield","categories":["customer-success"],"domains":["*.dynamicyield.com"]},{"name":"Clerk.io ApS","categories":["analytics"],"domains":["*.clerk.io"]},{"name":"IBM Digital Analytics","company":"IBM","categories":["analytics"],"domains":["*.cmcore.com","coremetrics.com","data.coremetrics.com","data.de.coremetrics.com","libs.de.coremetrics.com","tmscdn.de.coremetrics.com","iocdn.coremetrics.com","libs.coremetrics.com","tmscdn.coremetrics.com","*.s81c.com","*.unica.com","*.coremetrics.eu"],"examples":["data.coremetrics.eu"]},{"name":"Usabilla","homepage":"https://usabilla.com","categories":["analytics"],"domains":["*.usabilla.com","d6tizftlrpuof.cloudfront.net"],"examples":["w.usabilla.com"]},{"name":"Meetrics","categories":["ad"],"domains":["*.de.com","*.meetrics.net","*.mxcdn.net"],"examples":["research.de.com"]},{"name":"Forensiq","categories":["utility"],"domains":["*.fqtag.com"]},{"name":"Revolver Maps","categories":["analytics"],"domains":["*.revolvermaps.com"]},{"name":"Monetate","categories":["analytics"],"domains":["*.monetate.net"]},{"name":"Fraudlogix","categories":["utility"],"domains":["*.yabidos.com"]},{"name":"Mather Economics","categories":["analytics"],"domains":["*.matheranalytics.com"]},{"name":"Blindado","categories":["utility"],"domains":["*.siteblindado.com"]},{"name":"UserReport","categories":["analytics"],"domains":["*.userreport.com"]},{"name":"OwnerIQ","categories":["ad"],"domains":["*.owneriq.net"]},{"name":"CPEx","categories":["content"],"domains":["*.cpex.cz"]},{"name":"eBay","categories":["ad"],"domains":["*.ebay.com","*.ebayimg.com","*.fetchback.com"]},{"name":"Skype","categories":["other"],"domains":["*.skype.com"]},{"name":"DialogTech","categories":["ad"],"domains":["*.dialogtech.com"]},{"name":"WebsiteBuilder.com","homepage":"https://www.websitebuilder.com","categories":["hosting"],"domains":["*.mywebsitebuilder.com"]},{"name":"iZooto","homepage":"https://www.izooto.com","categories":["marketing"],"domains":["*.izooto.com"],"examples":["cdn.izooto.com"]},{"name":"AddEvent","categories":["utility"],"domains":["*.addevent.com"],"examples":["www.addevent.com"]},{"name":"GetResponse","categories":["ad"],"domains":["*.getresponse.com"]},{"name":"Twitch","homepage":"https://twitch.tv/","categories":["video"],"domains":["*.twitch.tv"],"examples":["player.twitch.tv"]},{"name":"Radar","company":"Cedexis","homepage":"https://www.cedexis.com/radar/","categories":["analytics"],"domains":["*.cedexis-test.com","*.cedexis.com","*.cmdolb.com","cedexis.leasewebcdn.com","*.cedexis-radar.net","*.cedexis.net","cedexis-test01.insnw.net","cedexisakamaitest.azureedge.net","cedexispub.cdnetworks.net","cs600.wac.alphacdn.net","cs600.wpc.edgecastdns.net","global2.cmdolb.com","img-cedexis.mncdn.com","a-cedexis.msedge.net","zn3vgszfh.fastestcdn.net"],"examples":["radar.cedexis.com","rpt.cedexis.com","2-01-49cd-0002.cdx.cedexis.net","bench.cedexis-test.com"]},{"name":"Smart Insight Tracking","company":"Emarsys","categories":["analytics"],"domains":["*.scarabresearch.com"]},{"name":"Polar","homepage":"https://polar.me/","categories":["ad"],"domains":["*.polarmobile.ca","*.mediaeverywhere.com","*.mediavoice.com","*.plrsrvcs.com","*.polarcdn-engine.com","*.polarcdn-meraxes.com","*.polarcdn-pentos.com","*.polarcdn-static.com","*.polarcdn-terrax.com","*.polarcdn.com","*.polarmobile.com","*.poweredbypolar.com","*.mediaconductor.me","*.polaracademy.me"]},{"name":"AudienceSearch","company":"Intimate Merger","categories":["ad"],"domains":["*.im-apps.net"]},{"name":"Autopilot","categories":["ad"],"domains":["*.autopilothq.com"]},{"name":"Rackspace","categories":["hosting"],"domains":["*.rackcdn.com","*.rackspacecloud.com","*.raxcdn.com","*.websitetestlink.com"]},{"name":"PowerReviews","categories":["analytics"],"domains":["*.powerreviews.com"]},{"name":"Rocket Fuel","categories":["ad"],"domains":["*.rfihub.com","*.ru4.com","*.rfihub.net","*.ad1x.com"]},{"name":"Okas Concepts","categories":["utility"],"domains":["*.okasconcepts.com"]},{"name":"Madison Logic","categories":["marketing"],"domains":["*.ml314.com"]},{"name":"Celtra","categories":["ad"],"domains":["*.celtra.com"]},{"name":"Snacktools","categories":["ad"],"domains":["*.bannersnack.com"]},{"name":"ClickDesk","categories":["customer-success"],"domains":["*.clickdesk.com","d1gwclp1pmzk26.cloudfront.net"]},{"name":"F@N Communications","homepage":"https://www.fancs.com/","categories":["ad"],"domains":["*.ladsp.com"],"examples":["px.ladsp.com"]},{"name":"Tradelab","categories":["ad"],"domains":["*.tradelab.fr"]},{"name":"CleverDATA","categories":["ad"],"domains":["*.1dmp.io"]},{"name":"Media Management Technologies","categories":["ad"],"domains":["*.speedshiftmedia.com"]},{"name":"Wishpond Technologies","categories":["marketing"],"domains":["*.wishpond.com","*.wishpond.net"]},{"name":"Reviews.co.uk","categories":["analytics"],"domains":["*.reviews.co.uk"]},{"name":"Adobe Scene7","company":"Adobe Systems","categories":["content"],"domains":["wwwimages.adobe.com","*.scene7.com","*.everestads.net","*.everestjs.net"]},{"name":"Permutive","categories":["ad"],"domains":["*.permutive.com","d3alqb8vzo7fun.cloudfront.net"]},{"name":"plista","categories":["ad"],"domains":["*.plista.com"]},{"name":"Kampyle","categories":["analytics"],"domains":["*.kampyle.com"]},{"name":"LinkedIn Ads","categories":["ad"],"domains":["*.licdn.com","ads.linkedin.com","www.linkedin.com"],"examples":["snap.licdn.com"]},{"name":"Survicate","categories":["analytics"],"domains":["*.survicate.com"]},{"name":"Nativo","categories":["ad"],"domains":["*.postrelease.com"]},{"name":"Decibel Insight","categories":["analytics"],"domains":["*.decibelinsight.net"]},{"name":"Github","categories":["utility"],"domains":["*.github.com","*.githubusercontent.com","*.github.io"],"examples":["raw.githubusercontent.com"]},{"name":"WebEngage","categories":["customer-success"],"domains":["*.webengage.co","*.webengage.com","d23nd6ymopvz52.cloudfront.net","d3701cc9l7v9a6.cloudfront.net"]},{"name":"Geniee","categories":["ad"],"domains":["*.href.asia","*.genieessp.jp","*.genieesspv.jp","*.gssprt.jp"],"examples":["cs.gssprt.jp"]},{"name":"The Trade Desk","homepage":"https://www.thetradedesk.com/","categories":["ad"],"domains":["d1eoo1tco6rr5e.cloudfront.net","*.adsrvr.org"],"examples":["js.adsrvr.org","match.adsrvr.org","insight.adsrvr.org","usw-lax.adsrvr.org","data.adsrvr.org","snap.adsrvr.org"]},{"name":"Lytics","categories":["ad"],"domains":["*.lytics.io"]},{"name":"rewardStyle.com","categories":["ad"],"domains":["*.rewardstyle.com"]},{"name":"Kaltura Video Platform","company":"Kaltura","categories":["content"],"domains":["*.kaltura.com"],"examples":["cdnsecakmi.kaltura.com"]},{"name":"WisePops","categories":["utility"],"domains":["*.wisepops.com"]},{"name":"Picreel","categories":["analytics"],"domains":["*.pcrl.co","*.picreel.com"]},{"name":"Riskified","categories":["utility"],"domains":["*.riskified.com"]},{"name":"Supership","homepage":"https://supership.jp/","categories":["ad"],"domains":["*.socdm.com"]},{"name":"Google Plus","company":"Google","categories":["social"],"domains":["plus.google.com"]},{"name":"Yieldify","categories":["ad"],"domains":["*.yieldify.com","*.yieldifylabs.com","d33wq5gej88ld6.cloudfront.net","dwmvwp56lzq5t.cloudfront.net"],"examples":["geo.yieldifylabs.com"]},{"name":"Smarter Click","categories":["ad"],"domains":["*.smct.co","*.smarterclick.co.uk"]},{"name":"Evergage","categories":["analytics"],"domains":["*.evergage.com","*.evgnet.com"],"examples":["cdn.evgnet.com"]},{"name":"SaleCycle","categories":["ad"],"domains":["*.salecycle.com","d16fk4ms6rqz1v.cloudfront.net","d22j4fzzszoii2.cloudfront.net","d30ke5tqu2tkyx.cloudfront.net"]},{"name":"Zanox","categories":["ad"],"domains":["*.zanox.com","*.zanox.ws"]},{"name":"AddShoppers","categories":["social"],"domains":["*.addshoppers.com","d3rr3d0n31t48m.cloudfront.net","*.shop.pe"]},{"name":"Interpublic Group","categories":["ad"],"domains":["*.mbww.com"]},{"name":"Qualaroo","categories":["analytics"],"domains":["*.qualaroo.com"]},{"name":"BoldChat","company":"LogMeIn","categories":["customer-success"],"domains":["*.boldchat.com"]},{"name":"Effective Measure","categories":["ad"],"domains":["*.effectivemeasure.net"]},{"name":"LoopMe","categories":["ad"],"domains":["*.loopme.biz","*.loopme.com","*.vntsm.com","*.loopme.me"]},{"name":"Sooqr Search","company":"Sooqr","categories":["utility"],"domains":["*.sooqr.com"]},{"name":"smartclip","categories":["ad"],"domains":["*.smartclip.net"]},{"name":"Cloudinary","categories":["content"],"domains":["*.cloudinary.com"]},{"name":"Gleam","categories":["marketing"],"domains":["*.gleam.io"]},{"name":"Revcontent","categories":["content"],"domains":["*.revcontent.com"]},{"name":"Browsealoud","homepage":"https://www.texthelp.com/en-gb/products/browsealoud/","categories":["other"],"domains":["*.browsealoud.com","*.texthelp.com"],"examples":["www.browsealoud.com"]},{"name":"Ooyala","categories":["ad"],"domains":["*.ooyala.com"]},{"name":"Intercept Interactive","categories":["ad"],"domains":["*.undertone.com"]},{"name":"Appier","categories":["ad"],"domains":["*.appier.net"]},{"name":"SublimeSkinz","categories":["ad"],"domains":["*.ayads.co"]},{"name":"KISSmetrics","categories":["analytics"],"domains":["*.kissmetrics.com","doug1izaerwt3.cloudfront.net","dsyszv14g9ymi.cloudfront.net"]},{"name":"Pixlee","categories":["social"],"domains":["*.pixlee.com"]},{"name":"NetFlix","categories":["content"],"domains":["*.nflxext.com","*.nflximg.net"]},{"name":"Shopgate","categories":["utility"],"domains":["*.shopgate.com"]},{"name":"Highcharts","categories":["utility"],"domains":["*.highcharts.com"]},{"name":"Audience 360","company":"Datapoint Media","categories":["ad"],"domains":["*.dpmsrv.com"]},{"name":"Bootstrap Chinese network","categories":["cdn"],"domains":["*.bootcss.com"]},{"name":"Sparkflow","company":"Intercept Interactive","categories":["ad"],"domains":["*.sparkflow.net"]},{"name":"Flowplayer","categories":["content"],"domains":["*.flowplayer.org"]},{"name":"Fresh Relevance","categories":["analytics"],"domains":["*.freshrelevance.com","*.cloudfront.ne","d1y9qtn9cuc3xw.cloudfront.net","d81mfvml8p5ml.cloudfront.net","dkpklk99llpj0.cloudfront.net"],"examples":["d1y9qtn9cuc3xw.cloudfront.ne"]},{"name":"WebpageFX","categories":["ad"],"domains":["*.leadmanagerfx.com"]},{"name":"Simpli.fi","categories":["ad"],"domains":["*.simpli.fi"]},{"name":"Omniconvert","categories":["analytics"],"domains":["*.omniconvert.com","d2tgfbvjf3q6hn.cloudfront.net","d3vbj265bmdenw.cloudfront.net"]},{"name":"Adscale","categories":["ad"],"domains":["*.adscale.de"]},{"name":"Covert Pics","categories":["content"],"domains":["*.covet.pics"]},{"name":"Curalate","categories":["marketing"],"domains":["*.curalate.com","d116tqlcqfmz3v.cloudfront.net"]},{"name":"ReadSpeaker","homepage":"https://www.readspeaker.com","categories":["other"],"domains":["*.readspeaker.com"],"examples":["sf1-eu.readspeaker.com"]},{"name":"Stackla PTY","categories":["social"],"domains":["*.stackla.com"]},{"name":"SpotXchange","categories":["ad"],"domains":["*.spotxcdn.com","*.spotxchange.com","*.spotx.tv"]},{"name":"Qubit Deliver","company":"Qubit","categories":["analytics"],"domains":["d1m54pdnjzjnhe.cloudfront.net","d22rutvoghj3db.cloudfront.net","dd6zx4ibq538k.cloudfront.net"]},{"name":"Opta","company":"Perform Group","categories":["content"],"domains":["*.opta.net"]},{"name":"Unruly Media","categories":["ad"],"domains":["*.unrulymedia.com"]},{"name":"Quantum Metric","homepage":"https://www.quantummetric.com/","categories":["analytics"],"domains":["*.quantummetric.com"]},{"name":"Weborama","categories":["ad"],"domains":["*.weborama.com","*.weborama.fr"]},{"name":"Republer","categories":["ad"],"domains":["*.republer.com"],"examples":["sync.republer.com"]},{"name":"Vox Media","homepage":"https://www.voxmedia.com/","categories":["content"],"domains":["*.vox-cdn.com","*.voxmedia.com"],"examples":["cdn.vox-cdn.com"]},{"name":"FoxyCart","categories":["utility"],"domains":["*.foxycart.com"]},{"name":"Adition","homepage":"https://www.adition.com","categories":["ad"],"domains":["*.adition.com"],"examples":["dsp.adfarm1.adition.com"]},{"name":"LiveHelpNow","categories":["customer-success"],"domains":["*.livehelpnow.net"]},{"name":"DemandBase","categories":["marketing"],"domains":["*.demandbase.com"]},{"name":"Concert","homepage":"https://concert.io/","categories":["ad"],"domains":["*.concert.io"],"examples":["cdn.concert.io"]},{"name":"TINT","categories":["content"],"domains":["*.71n7.com","d33w9bm0n1egwm.cloudfront.net","d36hc0p18k1aoc.cloudfront.net","d3l7tj34e9fc43.cloudfront.net"],"examples":["www.71n7.com"]},{"name":"Arbor","company":"LiveRamp","categories":["other"],"domains":["*.pippio.com"]},{"name":"Vidyard","homepage":"https://www.vidyard.com/","categories":["utility"],"domains":["*.vidyard.com"]},{"name":"linkpulse","categories":["analytics"],"domains":["*.lp4.io"]},{"name":"Edge Web Fonts","company":"Adobe Systems","categories":["cdn"],"domains":["*.edgefonts.net"],"examples":["use.edgefonts.net"]},{"name":"ShopiMind","company":"ShopIMind","categories":["ad"],"domains":["*.shopimind.com"]},{"name":"Feedbackify","company":"InsideMetrics","categories":["analytics"],"domains":["*.feedbackify.com"]},{"name":"Sidecar","categories":["other"],"domains":["*.getsidecar.com","d3v27wwd40f0xu.cloudfront.net"]},{"name":"SearchSpring","categories":["utility"],"domains":["*.searchspring.net"]},{"name":"DMD Marketing","homepage":"https://www.dmdconnects.com/","categories":["ad"],"domains":["*.medtargetsystem.com"]},{"name":"C3 Metrics","categories":["analytics"],"domains":["*.c3tag.com"]},{"name":"FirstImpression","categories":["ad"],"domains":["*.firstimpression.io"]},{"name":"GetIntent RTBSuite","company":"GetIntent","categories":["ad"],"domains":["*.adhigh.net"]},{"name":"unpkg","categories":["utility"],"domains":["*.npmcdn.com"]},{"name":"PerimeterX Bot Defender","company":"PerimeterX","categories":["utility"],"domains":["*.perimeterx.net","*.pxi.pub"]},{"name":"JustPremium Ads","company":"JustPremium","categories":["ad"],"domains":["*.justpremium.com"]},{"name":"Talkable","categories":["ad"],"domains":["*.talkable.com","d2jjzw81hqbuqv.cloudfront.net"],"examples":["www.talkable.com"]},{"name":"Steelhouse","categories":["ad"],"domains":["*.steelhousemedia.com"]},{"name":"Adtech (AOL)","categories":["ad"],"domains":["*.adtechus.com"]},{"name":"Technorati","company":"Synacor","categories":["ad"],"domains":["*.technoratimedia.com"]},{"name":"Drip","company":"The Numa Group","categories":["ad"],"domains":["*.getdrip.com"]},{"name":"VoiceFive","categories":["analytics"],"domains":["*.voicefive.com"]},{"name":"Adkontekst","categories":["ad"],"domains":["*.adkontekst.pl"]},{"name":"Cedato","categories":["ad"],"domains":["*.algovid.com","*.vdoserv.com"]},{"name":"TripAdvisor","categories":["content"],"domains":["*.jscache.com","*.tacdn.com","*.tamgrt.com","*.tripadvisor.com","*.viator.com","*.tripadvisor.co.uk"],"examples":["www.jscache.com","www.tamgrt.com"]},{"name":"Typepad","categories":["hosting"],"domains":["*.typepad.com"]},{"name":"Silverpop","company":"IBM","categories":["ad"],"domains":["*.mkt912.com","*.mkt922.com","*.mkt932.com","*.mkt941.com","*.mkt51.net","*.mkt61.net","*.pages01.net","*.pages02.net","*.pages03.net","*.pages04.net","*.pages05.net"]},{"name":"Attentive","homepage":"https://attentivemobile.com/","categories":["ad"],"domains":["*.attn.tv","*.attentivemobile.com"]},{"name":"Salesforce.com","categories":["ad"],"domains":["*.force.com","*.salesforce.com"],"examples":["secure.force.com"]},{"name":"WebSpectator","categories":["ad"],"domains":["*.webspectator.com"]},{"name":"Kaizen Platform","categories":["analytics"],"domains":["*.kaizenplatform.net"],"examples":["cdn.kaizenplatform.net","log-v4.kaizenplatform.net"]},{"name":"Global-e","categories":["hosting"],"domains":["*.global-e.com"]},{"name":"TruConversion","categories":["analytics"],"domains":["*.truconversion.com"]},{"name":"White Ops","categories":["utility"],"domains":["*.acexedge.com","*.tagsrvcs.com"]},{"name":"Accordant Media","categories":["ad"],"domains":["*.a3cloud.net"],"examples":["segment.a3cloud.net"]},{"name":"Keywee","categories":["ad"],"domains":["*.keywee.co"]},{"name":"Hupso Website Analyzer","company":"Hupso","categories":["analytics"],"domains":["*.hupso.com"]},{"name":"ThreatMetrix","categories":["utility"],"domains":["*.online-metrix.net"]},{"name":"eXelate","categories":["ad"],"domains":["*.exelator.com"]},{"name":"Delta Projects AB","categories":["ad"],"domains":["*.de17a.com"]},{"name":"Profitshare","categories":["ad"],"domains":["*.profitshare.ro"]},{"name":"TubeMogul","categories":["ad"],"domains":["*.tubemogul.com"]},{"name":"Ipify","homepage":"https://www.ipify.org","categories":["utility"],"domains":["*.ipify.org"],"examples":["api.ipify.org","geo.ipify.org"]},{"name":"Marketplace Web Service","company":"Amazon","categories":["other"],"domains":["*.ssl-images-amazon.com"]},{"name":"Key CDN","categories":["utility"],"domains":["*.kxcdn.com"]},{"name":"The ADEX","categories":["ad"],"domains":["*.theadex.com"]},{"name":"ZEDO","categories":["ad"],"domains":["*.zedo.com"]},{"name":"Sajari Pty","categories":["utility"],"domains":["*.sajari.com"]},{"name":"The Hut Group","categories":["content"],"domains":["*.thcdn.com"]},{"name":"Signyfyd","categories":["utility"],"domains":["*.signifyd.com"]},{"name":"Apester","categories":["analytics"],"domains":["*.apester.com","*.qmerce.com"]},{"name":"mParticle","homepage":"https://www.mparticle.com/","categories":["utility"],"domains":["*.mparticle.com"],"examples":["jssdks.mparticle.com","identity.mparticle.com"]},{"name":"AdSniper","categories":["ad"],"domains":["*.adsniper.ru","*.sniperlog.ru"]},{"name":"Time","categories":["content"],"domains":["*.timeinc.net"]},{"name":"SurveyMonkey","categories":["analytics"],"domains":["*.surveymonkey.com"]},{"name":"GIPHY","categories":["content"],"domains":["*.giphy.com"]},{"name":"Socialphotos","categories":["social"],"domains":["*.slpht.com"]},{"name":"Livefyre","categories":["content"],"domains":["*.fyre.co","*.livefyre.com"]},{"name":"Civic","categories":["hosting"],"domains":["*.civiccomputing.com"]},{"name":"Auth0","homepage":"https://auth0.com/","categories":["utility"],"domains":["*.auth0.com"],"examples":["cdn.auth0.com"]},{"name":"Flickr","categories":["content"],"domains":["*.flickr.com","*.staticflickr.com"]},{"name":"Reevoo","categories":["analytics"],"domains":["*.reevoo.com"]},{"name":"Sirv","categories":["other"],"domains":["*.sirv.com"]},{"name":"Underdog Media","categories":["ad"],"domains":["*.underdog.media","*.udmserve.net"]},{"name":"Petametrics","categories":["analytics"],"domains":["*.petametrics.com"]},{"name":"Sweet Tooth","categories":["ad"],"domains":["*.sweettooth.io"]},{"name":"Hola Networks","categories":["other"],"domains":["*.h-cdn.com"]},{"name":"Verizon Digital Media CDN","homepage":"https://www.verizondigitalmedia.com/","categories":["cdn"],"domains":["*.edgecastcdn.net","*.edgecastdns.net"]},{"name":"Zarget","categories":["analytics"],"domains":["*.zarget.com"]},{"name":"ResponseTap","categories":["analytics"],"domains":["*.adinsight.com","*.responsetap.com"]},{"name":"ReTargeter","categories":["ad"],"domains":["*.retargeter.com"]},{"name":"Yottaa","categories":["hosting"],"domains":["*.yottaa.com","*.yottaa.net"]},{"name":"Connatix","categories":["ad"],"domains":["*.connatix.com"]},{"name":"Klevu Search","company":"Klevu","categories":["utility"],"domains":["*.klevu.com"]},{"name":"Best Of Media S.A.","categories":["content"],"domains":["*.servebom.com"]},{"name":"AdTrue","company":"FPT AdTrue","categories":["ad"],"domains":["*.adtrue.com"]},{"name":"Customer.io","categories":["ad"],"domains":["*.customer.io"]},{"name":"Advance Magazine Group","categories":["content"],"domains":["*.condenastdigital.com","*.condenet.com","*.condenast.co.uk"]},{"name":"StreamRail","categories":["ad"],"domains":["*.streamrail.com","*.streamrail.net"]},{"name":"Opinion Stage","categories":["analytics"],"domains":["*.opinionstage.com"],"examples":["www.opinionstage.com"]},{"name":"CleverTap","categories":["analytics"],"domains":["d2r1yp2w7bby2u.cloudfront.net"]},{"name":"Fanplayr","categories":["analytics"],"domains":["*.fanplayr.com","d38nbbai6u794i.cloudfront.net"]},{"name":"Calendly","categories":["other"],"domains":["*.calendly.com"]},{"name":"Adobe Test & Target","company":"Adobe Systems","categories":["analytics"],"domains":["*.omtrdc.net"],"examples":["tt.omtrdc.net"]},{"name":"Navegg","categories":["ad"],"domains":["*.navdmp.com"]},{"name":"Sekindo","categories":["content"],"domains":["*.sekindo.com"]},{"name":"Conversio","categories":["ad"],"domains":["*.conversio.com"]},{"name":"CyberSource (Visa)","categories":["utility"],"domains":["*.authorize.net"]},{"name":"Pixalate","categories":["utility"],"domains":["*.adrta.com"]},{"name":"Reviews.io","categories":["analytics"],"domains":["*.reviews.io"]},{"name":"NetAffiliation","company":"Kwanco","categories":["ad"],"domains":["*.metaffiliation.com"]},{"name":"FuelX","categories":["ad"],"domains":["*.fuelx.com"]},{"name":"Touch Commerce","categories":["customer-success"],"domains":["*.inq.com","*.touchcommerce.com"]},{"name":"TripleLift","categories":["ad"],"domains":["*.3lift.com"]},{"name":"Ambassador","categories":["ad"],"domains":["*.getambassador.com"]},{"name":"epoq internet services","categories":["analytics"],"domains":["*.epoq.de"]},{"name":"Woopra","categories":["analytics"],"domains":["*.woopra.com"]},{"name":"Playbuzz","categories":["hosting"],"domains":["*.playbuzz.com"]},{"name":"Exponential Interactive","categories":["ad"],"domains":["*.exponential.com"]},{"name":"JustUno","categories":["ad"],"domains":["*.justuno.com"]},{"name":"Widespace","homepage":"https://www.widespace.com","categories":["ad"],"domains":["*.widespace.com"],"examples":["sync.widespace.com"]},{"name":"VisScore","categories":["analytics"],"domains":["*.visscore.com","d2hkbi3gan6yg6.cloudfront.net"]},{"name":"AWeber","categories":["ad"],"domains":["*.aweber.com"]},{"name":"AvantLink","categories":["ad"],"domains":["*.avmws.com"]},{"name":"Conversant Tag Manager","company":"Conversant","categories":["tag-manager"],"domains":["*.mplxtms.com"]},{"name":"Postcode Anywhere (Holdings)","categories":["utility"],"domains":["*.postcodeanywhere.co.uk"]},{"name":"Conversant","categories":["analytics"],"domains":["*.dotomi.com","*.dtmpub.com","*.emjcd.com","mediaplex.com","*.tqlkg.com","*.fastclick.net"],"examples":["www.tqlkg.com"]},{"name":"FLXone","company":"Teradata","categories":["ad"],"domains":["*.pangolin.blue","*.flx1.com","d2hlpp31teaww3.cloudfront.net"]},{"name":"Infinity Tracking","categories":["analytics"],"domains":["*.infinity-tracking.net"]},{"name":"reEmbed","categories":["other"],"domains":["*.reembed.com"]},{"name":"Kameleoon","categories":["analytics"],"domains":["*.kameleoon.com"]},{"name":"Impact Radius","categories":["ad"],"domains":["*.impactradius-event.com","*.impactradius-go.com","*.7eer.net","d3cxv97fi8q177.cloudfront.net","*.evyy.net","*.ojrq.net"],"examples":["a.impactradius-go.com","microsoft-uk.evyy.net"]},{"name":"Heroku","categories":["other"],"domains":["*.herokuapp.com"]},{"name":"AdsWizz","categories":["ad"],"domains":["*.adswizz.com"]},{"name":"MaxMind","categories":["utility"],"domains":["*.maxmind.com"]},{"name":"Pusher","homepage":"https://pusher.com/","categories":["utility"],"domains":["*.pusher.com","*.pusherapp.com"],"examples":["stats.pusher.com"]},{"name":"Admitad","categories":["ad"],"domains":["*.lenmit.com"]},{"name":"AdsNative","categories":["ad"],"domains":["*.adsnative.com"]},{"name":"Viacom","categories":["content"],"domains":["*.mtvnservices.com"]},{"name":"Cookie-Script.com","categories":["utility"],"domains":["*.cookie-script.com"]},{"name":"MonetizeMore","categories":["ad"],"domains":["*.m2.ai"]},{"name":"Mediahawk","categories":["analytics"],"domains":["*.mediahawk.co.uk"]},{"name":"GoSquared","homepage":"https://www.gosquared.com","categories":["analytics"],"domains":["*.gosquared.com","d1l6p2sc9645hc.cloudfront.net"],"examples":["data.gosquared.com","data2.gosquared.com"]},{"name":"Datonics","categories":["ad"],"domains":["*.pro-market.net"],"examples":["pbid.pro-market.net"]},{"name":"Adobe Marketing Cloud","company":"Adobe Systems","categories":["ad"],"domains":["*.adobetag.com"]},{"name":"News","categories":["social"],"domains":["*.news.com.au","*.newsanalytics.com.au","*.newsapi.com.au","*.newscdn.com.au","*.newsdata.com.au","*.newsdiscover.com.au","*.news-static.com"]},{"name":"Experian Cross-Channel Marketing Platform","company":"Experian","categories":["marketing"],"domains":["*.eccmp.com","*.ccmp.eu"]},{"name":"SkyScanner","categories":["content"],"domains":["*.skyscanner.net"],"examples":["api.skyscanner.net"]},{"name":"Vibrant Media","categories":["ad"],"domains":["*.intellitxt.com","*.picadmedia.com"]},{"name":"Mobify","categories":["utility"],"domains":["*.mobify.com","*.mobify.net"]},{"name":"Bookatable","categories":["content"],"domains":["*.bookatable.com","*.livebookings.com"]},{"name":"SecuredVisit","company":"4Cite Marketing","categories":["ad"],"domains":["*.securedvisit.com"]},{"name":"[24]7","categories":["customer-success"],"domains":["*.247-inc.net","*.247inc.net","d1af033869koo7.cloudfront.net"]},{"name":"Transifex","categories":["utility"],"domains":["*.transifex.com"]},{"name":"Tagboard","categories":["social"],"domains":["*.tagboard.com"]},{"name":"Council ad Network","categories":["ad"],"domains":["*.counciladvertising.net"]},{"name":"WalkMe","categories":["customer-success"],"domains":["*.walkme.com"]},{"name":"Betgenius","company":"Genius Sports","categories":["content"],"domains":["*.connextra.com"]},{"name":"Exactag","categories":["ad"],"domains":["*.exactag.com"]},{"name":"Knight Lab","company":"Northwestern University","categories":["utility"],"domains":["*.knightlab.com"]},{"name":"Reflektion","categories":["analytics"],"domains":["*.reflektion.com","d26opx5dl8t69i.cloudfront.net"]},{"name":"Expedia","categories":["content"],"domains":["*.travel-assets.com","*.trvl-media.com","*.trvl-px.com","*.uciservice.com"],"examples":["www.trvl-px.com","www.uciservice.com"]},{"name":"Performio","categories":["ad"],"domains":["*.performax.cz"],"examples":["ut.performax.cz"]},{"name":"Janrain","categories":["analytics"],"domains":["*.janrain.com","*.janrainbackplane.com","*.rpxnow.com","d3hmp0045zy3cs.cloudfront.net"]},{"name":"Resonance Insights","categories":["analytics"],"domains":["*.res-x.com"]},{"name":"cloudIQ","categories":["analytics"],"domains":["*.cloud-iq.com"]},{"name":"Snack Media","categories":["content"],"domains":["*.snack-media.com"]},{"name":"Ekm Systems","categories":["analytics"],"domains":["*.ekmsecure.com","*.ekmpinpoint.co.uk"],"examples":["globalstats.ekmsecure.com"]},{"name":"Wow Analytics","categories":["analytics"],"domains":["*.wowanalytics.co.uk"]},{"name":"AdvertServe","categories":["ad"],"domains":["*.advertserve.com"]},{"name":"Pingdom RUM","homepage":"https://www.pingdom.com/product/performance-monitoring/","categories":["analytics"],"domains":["*.pingdom.net"],"examples":["rum-static.pingdom.net","rum-collector-2.pingdom.net"]},{"name":"DialogTech SourceTrak","company":"DialogTech","categories":["ad"],"domains":["d31y97ze264gaa.cloudfront.net"]},{"name":"bRealTime","categories":["ad"],"domains":["*.brealtime.com"]},{"name":"Tag Inspector","company":"InfoTrust","categories":["analytics"],"domains":["d22xmn10vbouk4.cloudfront.net"]},{"name":"Zmags","categories":["marketing"],"domains":["*.zmags.com"]},{"name":"LeasdBoxer","company":"LeadBoxer","categories":["ad"],"domains":["*.leadboxer.com"]},{"name":"Friendbuy","categories":["ad"],"domains":["*.friendbuy.com","djnf6e5yyirys.cloudfront.net"]},{"name":"Acceptable Ads","homepage":"https://acceptableads.com/","categories":["ad"],"domains":["*.aaxads.com","*.aaxdetect.com"]},{"name":"Onet","categories":["ad"],"domains":["*.onet.pl"]},{"name":"Netlify","homepage":"https://www.netlify.com/","categories":["utility"],"domains":["*.netlify.com","*.netlifyusercontent.com"],"examples":["cloud.netlifyusercontent.com"]},{"name":"Twitter Online Conversion Tracking","company":"Twitter","categories":["ad"],"domains":["*.ads-twitter.com","analytics.twitter.com"],"examples":["static.ads-twitter.com"]},{"name":"AdRiver","categories":["ad"],"domains":["*.adriver.ru"]},{"name":"Proper Media","categories":["content"],"domains":["*.proper.io"]},{"name":"Storygize","categories":["ad"],"domains":["*.storygize.net"],"examples":["www.storygize.net"]},{"name":"Oracle Recommendations On Demand","company":"Oracle","categories":["analytics"],"domains":["*.atgsvcs.com"]},{"name":"Raygun","categories":["utility"],"domains":["*.raygun.io"]},{"name":"Rakuten LinkShare","company":"Rakuten","categories":["ad"],"domains":["*.linksynergy.com"]},{"name":"BlueCava","categories":["ad"],"domains":["*.bluecava.com"]},{"name":"Hull.js","categories":["utility"],"domains":["*.hull.io","*.hullapp.io"]},{"name":"PERFORM","categories":["content"],"domains":["*.performgroup.com"]},{"name":"Moxie","homepage":"https://www.gomoxie.com/","categories":["utility"],"domains":["*.gomoxie.solutions"]},{"name":"Vee24","categories":["customer-success"],"domains":["*.vee24.com"]},{"name":"Aggregate Knowledge","company":"Neustar","categories":["ad"],"domains":["*.agkn.com"]},{"name":"Cookie Reports","categories":["utility"],"domains":["*.cookiereports.com"]},{"name":"PlayAd Media Group","categories":["ad"],"domains":["*.youplay.se"]},{"name":"Exponea","categories":["analytics"],"domains":["*.exponea.com"]},{"name":"AIR.TV","categories":["ad"],"domains":["*.air.tv"]},{"name":"SlimCut Media Outstream","company":"SlimCut Media","categories":["ad"],"domains":["*.freeskreen.com"]},{"name":"Mopinion","categories":["analytics"],"domains":["*.mopinion.com"]},{"name":"Dynamic Converter","categories":["utility"],"domains":["*.dynamicconverter.com"]},{"name":"Remintrex","company":"SmartUp Venture","categories":["ad"],"domains":["*.remintrex.com"]},{"name":"Attribution","categories":["ad"],"domains":["*.attributionapp.com"]},{"name":"Browser-Update.org","categories":["other"],"domains":["*.browser-update.org"]},{"name":"Sailthru","categories":["analytics"],"domains":["*.sail-horizon.com","*.sail-personalize.com","*.sail-track.com"]},{"name":"AnswerDash","categories":["customer-success"],"domains":["*.answerdash.com"],"examples":["p1.answerdash.com"]},{"name":"Ziff Davis Tech","categories":["ad"],"domains":["*.adziff.com","*.zdbb.net"]},{"name":"Adthink","company":"Adthink Media","categories":["ad"],"domains":["*.adxcore.com","*.dcoengine.com"],"examples":["d.adxcore.com"]},{"name":"Site24x7 Real User Monitoring","company":"Site24x7","categories":["analytics"],"domains":["*.site24x7rum.com"]},{"name":"SpringServer","categories":["ad"],"domains":["*.springserve.com"]},{"name":"Freespee","categories":["customer-success"],"domains":["*.freespee.com"],"examples":["analytics.freespee.com"]},{"name":"VidPulse","categories":["analytics"],"domains":["*.vidpulse.com"]},{"name":"InAuth","categories":["utility"],"homepage":"https://www.inauth.com/","domains":["*.cdn-net.com"],"examples":["uk.cdn-net.com"]},{"name":"MLveda","categories":["utility"],"domains":["*.mlveda.com"],"examples":["www.mlveda.com"]},{"name":"Microad","categories":["ad"],"domains":["*.microad.jp"]},{"name":"ShopRunner","categories":["content"],"domains":["*.shoprunner.com","*.s-9.us"]},{"name":"Reactful","categories":["analytics"],"domains":["*.reactful.com"]},{"name":"Vergic AB","categories":["customer-success"],"domains":["*.psplugin.com"]},{"name":"Alliance for Audited Media","categories":["ad"],"domains":["*.aamsitecertifier.com"]},{"name":"Forter","categories":["utility"],"domains":["*.forter.com"]},{"name":"Swoop","categories":["ad"],"domains":["*.swoop.com"]},{"name":"Gfycat","company":"Gycat","categories":["utility"],"domains":["*.gfycat.com"]},{"name":"Optimove","company":"Mobius Solutions","categories":["analytics"],"domains":["*.optimove.net"]},{"name":"LoginRadius","categories":["social"],"domains":["*.loginradius.com"]},{"name":"Flockler","categories":["ad"],"domains":["*.flockler.com"]},{"name":"Moovweb","categories":["utility"],"domains":["*.moovweb.net"]},{"name":"Cachefly","categories":["utility"],"domains":["*.cachefly.net"]},{"name":"emetriq","homepage":"https://www.emetriq.com/","categories":["ad"],"domains":["*.emetriq.de","*.xplosion.de"]},{"name":"CANDDi","company":"Campaign and Digital Intelligence","categories":["ad"],"domains":["*.canddi.com"]},{"name":"Braintree Payments","company":"Paypal","categories":["utility"],"domains":["*.braintreegateway.com"]},{"name":"Meltwater Group","categories":["customer-success"],"domains":["*.meltwaternews.com"]},{"name":"Video Media Groep","categories":["ad"],"domains":["*.vmg.host","*.inpagevideo.nl"]},{"name":"Polldaddy","company":"Automattic","categories":["analytics"],"domains":["polldaddy.com"]},{"name":"Triblio","categories":["marketing"],"domains":["*.tribl.io"]},{"name":"Wufoo","categories":["utility"],"domains":["*.wufoo.com"]},{"name":"User Replay","categories":["analytics"],"domains":["*.userreplay.net"]},{"name":"Barilliance","categories":["analytics"],"domains":["*.barilliance.net","dn3y71tq7jf07.cloudfront.net"]},{"name":"Boomtrain","categories":["ad"],"domains":["*.boomtrain.com","*.boomtrain.net"]},{"name":"Extole","categories":["ad"],"domains":["*.extole.com","*.extole.io"],"examples":["origin.extole.io"]},{"name":"infogr.am","categories":["utility"],"domains":["*.infogr.am","*.jifo.co"]},{"name":"Catchpoint","homepage":"https://www.catchpoint.com/","categories":["analytics"],"domains":["*.3gl.net"]},{"name":"InSkin Media","categories":["ad"],"domains":["*.inskinad.com","*.inskinmedia.com"]},{"name":"Kargo","categories":["marketing"],"domains":["*.kargo.com"]},{"name":"Byside","homepage":"http://www.byside.com","categories":["analytics"],"domains":["*.byside.com"],"examples":["byce2.byside.com","wce2.byside.com"]},{"name":"CNET Content Solutions","company":"CBS Interactive","categories":["content"],"domains":["*.cnetcontent.com"],"examples":["cdn.cnetcontent.com","ws.cnetcontent.com"]},{"name":"HotelsCombined","categories":["content"],"domains":["*.datahc.com"]},{"name":"Hawk Search","categories":["utility"],"domains":["*.hawksearch.com"]},{"name":"Vergic Engage Platform","company":"Vergic","categories":["customer-success"],"domains":["*.vergic.com"]},{"name":"Vertical Mass","categories":["ad"],"domains":["*.vmweb.net"]},{"name":"ShopStorm","categories":["utility"],"domains":["*.shopstorm.com"]},{"name":"Borderfree","company":"pitney bowes","categories":["utility"],"domains":["*.borderfree.com","*.fiftyone.com"]},{"name":"Fonecall","categories":["analytics"],"domains":["*.web-call-analytics.com"]},{"name":"PebblePost","categories":["ad"],"domains":["*.pbbl.co"]},{"name":"DemandJump","categories":["analytics"],"domains":["*.demandjump.com"]},{"name":"Kiosked","categories":["ad"],"domains":["*.kiosked.com"]},{"name":"Ad6Media","categories":["ad"],"domains":["*.ad6media.fr"]},{"name":"The Publisher Desk","categories":["ad"],"domains":["*.206ads.com","*.publisherdesk.com"]},{"name":"Ghostery Enterprise","company":"Ghostery","categories":["marketing"],"domains":["*.betrad.com"]},{"name":"content.ad","categories":["ad"],"domains":["*.content.ad"]},{"name":"Innovid","categories":["ad"],"homepage":"https://www.innovid.com/","domains":["*.innovid.com"],"examples":["ag.innovid.com","rtr.innovid.com"]},{"name":"RightNow Service Cloud","company":"Oracle","categories":["customer-success"],"domains":["*.rightnowtech.com","*.rnengage.com"]},{"name":"Polyfill service","company":"Polyfill.io","categories":["other"],"domains":["*.polyfill.io"]},{"name":"Prezi","categories":["utility"],"domains":["*.prezi.com"]},{"name":"Sourcepoint","categories":["ad"],"domains":["*.decenthat.com","*.fallingfalcon.com","*.summerhamster.com","d2lv4zbk7v5f93.cloudfront.net","d3qxwzhswv93jk.cloudfront.net"],"examples":["www.decenthat.com","www.fallingfalcon.com","www.summerhamster.com"]},{"name":"PowerFront","categories":["hosting"],"domains":["*.inside-graph.com"]},{"name":"Bidswitch","homepage":"https://www.bidswitch.com/","categories":["ad"],"domains":["*.bidswitch.net"],"examples":["x.bidswitch.net"]},{"name":"Bet365","categories":["ad"],"domains":["*.bet365affiliates.com"]},{"name":"RichRelevance","categories":["analytics"],"domains":["*.richrelevance.com"]},{"name":"Elecard StreamEye","company":"Elecard","categories":["other"],"domains":["*.streameye.net"]},{"name":"NaviStone","categories":["ad"],"domains":["*.murdoog.com"]},{"name":"MailPlus","categories":["ad"],"domains":["*.mailplus.nl"]},{"name":"Cross Pixel Media","categories":["ad"],"domains":["*.crsspxl.com"]},{"name":"TurnTo","homepage":"https://www.turntonetworks.com/","categories":["utility"],"domains":["*.turnto.com"]},{"name":"Connexity","homepage":"http://connexity.com/","categories":["analytics"],"domains":["*.connexity.net"]},{"name":"Iterate","homepage":"https://iteratehq.com/","categories":["analytics"],"domains":["*.iteratehq.com"]},{"name":"OnScroll","categories":["ad"],"domains":["*.onscroll.com"]},{"name":"Web Dissector","company":"Beijing Gridsum Technologies","categories":["analytics"],"domains":["*.gridsumdissector.com","*.webdissector.com"],"examples":["www.webdissector.com"]},{"name":"Bluecore","categories":["analytics"],"domains":["*.bluecore.com"],"examples":["www.bluecore.com"]},{"name":"Flipboard","categories":["social"],"domains":["*.flipboard.com"]},{"name":"UPS i-parcel","company":"UPS","categories":["other"],"domains":["*.i-parcel.com"]},{"name":"TechTarget","categories":["content"],"domains":["*.techtarget.com","*.ttgtmedia.com"]},{"name":"Realytics","categories":["analytics"],"domains":["dcniko1cv0rz.cloudfront.net","*.realytics.net"]},{"name":"Dropbox","categories":["utility"],"domains":["*.dropboxusercontent.com"]},{"name":"StumbleUpon","categories":["content"],"domains":["*.stumble-upon.com","*.stumbleupon.com"]},{"name":"ReCollect","categories":["utility"],"domains":["*.recollect.net"]},{"name":"AdSpruce","categories":["ad"],"domains":["*.adspruce.com"]},{"name":"RebelMouse","categories":["ad"],"domains":["*.rebelmouse.com","*.rbl.ms"],"examples":["www.rebelmouse.com"]},{"name":"Intilery","categories":["customer-success"],"domains":["*.intilery-analytics.com"]},{"name":"Adunity","categories":["ad"],"domains":["*.adunity.com"]},{"name":"UpSellit","categories":["analytics"],"domains":["*.upsellit.com"],"examples":["www.upsellit.com"]},{"name":"AdSupply","categories":["ad"],"domains":["*.doublepimp.com"]},{"name":"Better Business Bureau","categories":["analytics"],"domains":["*.bbb.org"]},{"name":"Spot.IM","categories":["social"],"domains":["*.spot.im"]},{"name":"Improve Digital","categories":["ad"],"domains":["*.360yield.com"]},{"name":"Sociomantic Labs","company":"DunnHumby","categories":["ad"],"domains":["*.sociomantic.com"]},{"name":"MathJax","categories":["utility"],"domains":["*.mathjax.org"]},{"name":"Qualtrics","categories":["analytics"],"domains":["*.qualtrics.com"]},{"name":"ConvertMedia","categories":["ad"],"domains":["*.admailtiser.com","*.basebanner.com","*.cmbestsrv.com","*.vidfuture.com","*.zorosrv.com"],"examples":["www.cmbestsrv.com"]},{"name":"Soundest","categories":["ad"],"domains":["*.soundestlink.com","*.soundest.net"]},{"name":"Xaxis","homepage":"https://www.xaxis.com/","categories":["ad"],"domains":["*.247realmedia.com","*.mookie1.com","*.gmads.net"],"examples":["t.mookie1.com","odr.mookie1.com"]},{"name":"Research Online","company":"Skills Development Scotland","categories":["content"],"domains":["*.org.uk"],"examples":["www.researchonline.org.uk"]},{"name":"DistroScale","categories":["ad"],"domains":["*.jsrdn.com"]},{"name":"StackExchange","categories":["social"],"domains":["*.sstatic.net"]},{"name":"BuySellAds","categories":["ad"],"domains":["*.buysellads.com"]},{"name":"Reklama","categories":["ad"],"domains":["*.o2.pl","*.wp.pl"],"examples":["dot.wp.pl","px.o2.pl","px.wp.pl"]},{"name":"eGain","categories":["analytics"],"domains":["*.analytics-egain.com","*.egain.com"]},{"name":"Sonobi","categories":["ad"],"domains":["*.sonobi.com"]},{"name":"AliveChat","company":"AYU Technology Solutions","categories":["customer-success"],"domains":["*.websitealive.com","*.websitealive7.com"]},{"name":"Zolando","categories":["content"],"domains":["*.ztat.net"]},{"name":"AdCurve","categories":["ad"],"domains":["*.shop2market.com"]},{"name":"Pagefair","categories":["ad"],"domains":["*.pagefair.com","*.pagefair.net"]},{"name":"StackAdapt","categories":["ad"],"domains":["*.stackadapt.com"]},{"name":"United Internet","categories":["hosting"],"domains":["*.uicdn.com"]},{"name":"Nanorep","company":"Nanorep Technologies","categories":["customer-success"],"domains":["*.nanorep.com"]},{"name":"Fastest Forward","categories":["analytics"],"domains":["*.gaug.es"]},{"name":"Ceros","categories":["other"],"domains":["ceros.com","view.ceros.com"]},{"name":"Investis","categories":["utility"],"domains":["*.investis.com"]},{"name":"Channel.me","categories":["customer-success"],"domains":["*.channel.me"]},{"name":"ARM","categories":["analytics"],"domains":["*.tag4arm.com"]},{"name":"Webtrends","categories":["analytics"],"domains":["*.webtrends.com","*.webtrendslive.com","d1q62gfb8siqnm.cloudfront.net"]},{"name":"Scoota","categories":["ad"],"domains":["*.rockabox.co","*.scoota.co","d31i2625d5nv27.cloudfront.net","dyjnzf8evxrp2.cloudfront.net"]},{"name":"TrafficJunky","homepage":"https://www.trafficjunky.com/","categories":["ad"],"domains":["*.contentabc.com","*.trafficjunky.net"],"examples":["ads2.contentabc.com","hw-cdn.contentabc.com","media.trafficjunky.net","ads.trafficjunky.net","hw-cdn.trafficjunky.net"]},{"name":"PrintFriendly","categories":["utility"],"domains":["*.printfriendly.com"]},{"name":"Datawrapper","categories":["utility"],"domains":["*.datawrapper.de","*.dwcdn.net"],"examples":["www.datawrapper.de"]},{"name":"Click4Assistance","categories":["customer-success"],"domains":["*.click4assistance.co.uk"]},{"name":"Glassdoor","categories":["content"],"domains":["*.glassdoor.com"]},{"name":"Highwinds","categories":["utility"],"domains":["*.hwcdn.net"]},{"name":"YoYo","categories":["utility"],"domains":["*.goadservices.com"]},{"name":"Webtrekk","categories":["analytics"],"domains":["*.wbtrk.net","*.webtrekk-asia.net","*.webtrekk.net","*.wt-eu02.net"]},{"name":"Fastly Insights","homepage":"https://insights.fastlylabs.com","categories":["analytics"],"domains":["*.fastly-insights.com"],"examples":["www.fastly-insights.com"]},{"name":"HP Optimost","company":"Hewlett-Packard Development Company","categories":["marketing"],"domains":["*.hp.com","d2uncb19xzxhzx.cloudfront.net"],"examples":["by.marketinghub.hp.com","marketinghub.hp.com"]},{"name":"Eyeota","categories":["ad"],"domains":["*.eyeota.net"]},{"name":"PhotoBucket","categories":["content"],"domains":["*.photobucket.com"]},{"name":"ContextWeb","categories":["ad"],"domains":["*.contextweb.com"]},{"name":"Captify Media","categories":["ad"],"domains":["*.cpx.to"]},{"name":"Intent IQ","categories":["ad"],"domains":["*.intentiq.com"]},{"name":"Vindico","company":"Viant","categories":["ad"],"domains":["*.vindicosuite.com"]},{"name":"Pictela (AOL)","categories":["analytics"],"domains":["*.pictela.net"]},{"name":"PubNation","categories":["ad"],"domains":["*.pubnation.com"]},{"name":"Freshchat","homepage":"https://www.freshworks.com/live-chat-software/","categories":["utility"],"domains":["*.freshchat.com"]},{"name":"Bridgewell DSP","homepage":"https://www.bridgewell.com/","categories":["ad"],"domains":["*.scupio.com"],"examples":["img.scupio.com"]},{"name":"PageSense","homepage":"https://www.zoho.com/pagesense/","categories":["analytics"],"domains":["*.pagesense.io"],"examples":["cdn.pagesense.io"]},{"name":"Wicked Reports","homepage":"https://www.wickedreports.com/","categories":["marketing"],"domains":["*.wickedreports.com"],"examples":["widget.wickedreports.com"]},{"name":"Pendo","homepage":"https://www.pendo.io","categories":["analytics"],"domains":["*.pendo.io"],"examples":["app.pendo.io"]},{"name":"Dynatrace","categories":["analytics"],"domains":["*.ruxit.com","js-cdn.dynatrace.com"]},{"name":"Click Guardian","homepage":"https://www.clickguardian.co.uk/","categories":["advertising"],"domains":["*.clickguardian.app","*.clickguardian.co.uk"],"examples":["v2.clickguardian.app","protection.clickguardian.co.uk"]}];
+},{}],169:[function(require,module,exports){
 module.exports=require("./lib/subsets/httparchive-nostats.js");
 
-},{"./lib/subsets/httparchive-nostats.js":174}],173:[function(require,module,exports){
-const DOMAIN_IN_URL_REGEX=/:\/\/(.*?)(\/|$)/;
-const DOMAIN_CHARACTERS=/[a-z0-9.-]+\.[a-z0-9]+/i;
+},{"./lib/subsets/httparchive-nostats.js":171}],170:[function(require,module,exports){
+const DOMAIN_IN_URL_REGEX=/:\/\/(\S*?)(:\d+)?(\/|$)/;
+const DOMAIN_CHARACTERS=/([a-z0-9.-]+\.[a-z0-9]+|localhost)/i;
+const IP_REGEX=/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const ROOT_DOMAIN_REGEX=/[^.]+\.([^.]+|(gov|com|co|ne)\.\w{2})$/i;
 
 function getDomainFromOriginOrURL(originOrURL){
+if(typeof originOrURL!=='string')return null;
+if(originOrURL.length>10000||originOrURL.startsWith('data:'))return null;
 if(DOMAIN_IN_URL_REGEX.test(originOrURL))return originOrURL.match(DOMAIN_IN_URL_REGEX)[1];
 if(DOMAIN_CHARACTERS.test(originOrURL))return originOrURL.match(DOMAIN_CHARACTERS)[0];
 throw new Error(`Unable to find domain in "${originOrURL}"`);
@@ -65509,6 +65104,8 @@ throw new Error(`Unable to find domain in "${originOrURL}"`);
 
 function getRootDomain(originOrURL){
 const domain=getDomainFromOriginOrURL(originOrURL);
+if(!domain)return null;
+if(IP_REGEX.test(domain))return domain;
 const match=domain.match(ROOT_DOMAIN_REGEX);
 return match&&match[0]||domain;
 }
@@ -65516,6 +65113,7 @@ return match&&match[0]||domain;
 function getEntityInDataset(entityByDomain,entityByRootDomain,originOrURL){
 const domain=getDomainFromOriginOrURL(originOrURL);
 const rootDomain=getRootDomain(domain);
+if(!domain||!rootDomain)return undefined;
 if(entityByDomain.has(domain))return entityByDomain.get(domain);
 if(entityByRootDomain.has(rootDomain))return entityByRootDomain.get(rootDomain);
 return undefined;
@@ -65535,10 +65133,9 @@ entity.averageExecutionTime=entity.totalExecutionTime/entity.totalOccurrences;
 for(const domain of entity.domains){
 if(entityByDomain.has(domain))throw new Error(`Duplicate domain ${domain}`);
 entityByDomain.set(domain,entity);
+
 const rootDomain=getRootDomain(domain);
-if(entityByRootDomain.has(rootDomain)&&entityByRootDomain.get(rootDomain)!==entity){
-entityByRootDomain.set(rootDomain,false);
-}else{
+if(domain.startsWith('*.')){
 entityByRootDomain.set(rootDomain,entity);
 }
 }
@@ -65554,12 +65151,12 @@ return{getEntity,getRootDomain,entities};
 
 module.exports={createAPIFromDataset};
 
-},{}],174:[function(require,module,exports){
+},{}],171:[function(require,module,exports){
 const{createAPIFromDataset}=require('../create-entity-finder-api.js');
 const entities=require('../../dist/entities-httparchive-nostats.json');
 module.exports=createAPIFromDataset(entities);
 
-},{"../../dist/entities-httparchive-nostats.json":171,"../create-entity-finder-api.js":173}],175:[function(require,module,exports){
+},{"../../dist/entities-httparchive-nostats.json":168,"../create-entity-finder-api.js":170}],172:[function(require,module,exports){
 (function(setImmediate,clearImmediate){
 var nextTick=require('process/browser.js').nextTick;
 var apply=Function.prototype.apply;
@@ -65638,7 +65235,7 @@ exports.clearImmediate=typeof clearImmediate==="function"?clearImmediate:functio
 delete immediateIds[id];
 };
 }).call(this,require("timers").setImmediate,require("timers").clearImmediate);
-},{"process/browser.js":145,"timers":175}],176:[function(require,module,exports){
+},{"process/browser.js":142,"timers":172}],173:[function(require,module,exports){
 (function(global){
 
 
@@ -65709,15 +65306,15 @@ return String(val).toLowerCase()==='true';
 }
 
 }).call(this,typeof global!=="undefined"?global:typeof self!=="undefined"?self:typeof window!=="undefined"?window:{});
-},{}],177:[function(require,module,exports){
+},{}],174:[function(require,module,exports){
 arguments[4][94][0].apply(exports,arguments);
-},{"dup":94}],178:[function(require,module,exports){
+},{"dup":94}],175:[function(require,module,exports){
 arguments[4][95][0].apply(exports,arguments);
-},{"./support/isBuffer":177,"_process":145,"dup":95,"inherits":113}],179:[function(require,module,exports){
+},{"./support/isBuffer":174,"_process":142,"dup":95,"inherits":113}],176:[function(require,module,exports){
 module.exports={
-"version":"5.2.0"};
+"version":"5.5.0"};
 
-},{}],180:[function(require,module,exports){
+},{}],177:[function(require,module,exports){
 
 
 
@@ -65728,12 +65325,231 @@ module.exports={
 
 
 const stackPacks=[
-require('./packs/wordpress.js')];
+require('./packs/wordpress.js'),
+require('./packs/react.js'),
+require('./packs/angular.js'),
+require('./packs/amp.js'),
+require('./packs/magento.js')];
 
 
 module.exports=stackPacks;
 
-},{"./packs/wordpress.js":181}],181:[function(require,module,exports){
+},{"./packs/amp.js":178,"./packs/angular.js":179,"./packs/magento.js":180,"./packs/react.js":181,"./packs/wordpress.js":182}],178:[function(require,module,exports){
+(function(__filename){
+
+
+
+
+
+
+
+'use strict';
+
+const i18n=require('../../lighthouse-core/lib/i18n/i18n.js');
+
+const ampIcon=`data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"%3E%3Cpath d="M171.887 116.28l-53.696 89.36h-9.728l9.617-58.227-30.2.047a4.852 4.852 0 01-4.855-4.855c0-1.152 1.07-3.102 1.07-3.102l53.52-89.254 9.9.043-9.86 58.317 30.413-.043a4.852 4.852 0 014.855 4.855c0 1.088-.427 2.044-1.033 2.854l.004.004zM128 0C57.306 0 0 57.3 0 128s57.306 128 128 128 128-57.306 128-128S198.7 0 128 0z" fill="%230379c4" fill-rule="evenodd"/%3E%3C/svg%3E`;
+
+const UIStrings={
+
+uses_webp_images:'Consider displaying all your `amp-img` components in WebP formats while specifying an appropriate fallback for other browsers. [Learn more](https://amp.dev/documentation/components/amp-img/#example:-specifying-a-fallback-image).',
+
+offscreen_images:'Ensure that you are you using valid `amp-img` tags for your images which automatically lazy-load outside the first viewport. [Learn more](https://amp.dev/documentation/guides-and-tutorials/develop/media_iframes_3p/?format=websites#images).',
+
+render_blocking_resources:'Use tools such as [AMP Optimizer](https://github.com/ampproject/amp-toolbox/tree/master/packages/optimizer) to [server-side render AMP layouts](https://amp.dev/documentation/guides-and-tutorials/optimize-and-measure/server-side-rendering/).',
+
+unminified_css:'Refer to the [AMP documentation](https://amp.dev/documentation/guides-and-tutorials/develop/style_and_layout/style_pages/) to ensure all your styles are supported.',
+
+efficient_animated_content:'For animated content, use [amp-anim](https://amp.dev/documentation/components/amp-anim/) to minimize CPU usage while the content remains offscreen.',
+
+uses_responsive_images:'The `amp-img` element supports the `srcset` attribute to specify which image assets to use based on the screen size.  [Learn more](https://amp.dev/documentation/guides-and-tutorials/develop/style_and_layout/art_direction/).'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
+
+module.exports={
+id:'amp',
+iconDataURL:ampIcon,
+title:'AMP',
+descriptions:{
+'uses-webp-images':str_(UIStrings.uses_webp_images),
+'offscreen-images':str_(UIStrings.offscreen_images),
+'render-blocking-resources':str_(UIStrings.render_blocking_resources),
+'unminified-css':str_(UIStrings.unminified_css),
+'efficient-animated-content':str_(UIStrings.efficient_animated_content),
+'uses-responsive-images':str_(UIStrings.uses_responsive_images)}};
+
+
+module.exports.UIStrings=UIStrings;
+
+}).call(this,"/stack-packs/packs/amp.js");
+},{"../../lighthouse-core/lib/i18n/i18n.js":67}],179:[function(require,module,exports){
+(function(__filename){
+
+
+
+
+
+
+
+'use strict';
+
+const i18n=require('../../lighthouse-core/lib/i18n/i18n.js');
+
+const angularIcon=`data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 250"%3E%3Cpath fill="%23dd0031" d="M125 30L31.9 63.2l14.2 123.1L125 230l78.9-43.7 14.2-123.1z"/%3E%3Cpath fill="%23c3002f" d="M125 30v22.2-.1V230l78.9-43.7 14.2-123.1L125 30z"/%3E%3Cpath d="M125 52.1L66.8 182.6h21.7l11.7-29.2h49.4l11.7 29.2H183L125 52.1zm17 83.3h-34l17-40.9 17 40.9z" fill="%23fff"/%3E%3C/svg%3E`;
+
+const UIStrings={
+
+total_byte_weight:'Apply [route-level code-splitting](https://web.dev/route-level-code-splitting-in-angular/) to minimize the size of your JavaScript bundles. Also, consider precaching assets with the [Angular service worker](https://web.dev/precaching-with-the-angular-service-worker/).',
+
+unminified_warning:'If you are using Angular CLI, ensure that builds are generated in production mode. [Learn more](https://angular.io/guide/deployment#enable-runtime-production-mode).',
+
+unused_javascript:'If you are using Angular CLI, include source maps into your production build to inspect your bundles. [Learn more](https://angular.io/guide/deployment#inspect-the-bundles).',
+
+uses_responsive_images:'Consider using the `BreakpointObserver` utility in the Component Dev Kit (CDK) to manage image breakpoints. [Learn more](https://material.angular.io/cdk/layout/overview).',
+
+uses_rel_preload:'Preload routes ahead of time to speed up navigation. [Learn more](https://web.dev/route-preloading-in-angular/).',
+
+dom_size:'Consider virtual scrolling with the Component Dev Kit (CDK) if very large lists are being rendered. [Learn more](https://web.dev/virtualize-lists-with-angular-cdk/).'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
+
+module.exports={
+id:'angular',
+iconDataURL:angularIcon,
+title:'Angular',
+descriptions:{
+'total-byte-weight':str_(UIStrings.total_byte_weight),
+'unminified-css':str_(UIStrings.unminified_warning),
+'unminified-javascript':str_(UIStrings.unminified_warning),
+'unused-javascript':str_(UIStrings.unused_javascript),
+'uses-responsive-images':str_(UIStrings.uses_responsive_images),
+'uses-rel-preload':str_(UIStrings.uses_rel_preload),
+'dom-size':str_(UIStrings.dom_size)}};
+
+
+module.exports.UIStrings=UIStrings;
+
+}).call(this,"/stack-packs/packs/angular.js");
+},{"../../lighthouse-core/lib/i18n/i18n.js":67}],180:[function(require,module,exports){
+(function(__filename){
+
+
+
+
+
+
+
+'use strict';
+
+const i18n=require('../../lighthouse-core/lib/i18n/i18n.js');
+
+const magentoIcon=`data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" fill="%23f26322" viewBox="0 0 1000 1000"%3E%3Cpath d="M916.9 267.4v465.3l-111.3 67.4V331.4l-1.5-.9-303.9-189-304.6 189.2-1.2.8V799L83.1 732.6V267.4l.7-.4L500.3 10l416 257 .6.4zM560.7 468.5v383.3L500.3 890l-61-38.2V306.7l-136 84.3v476.6l197 122.5 196.4-122.5V391l-136-84.3v161.8z"/%3E%3C/svg%3E`;
+
+const UIStrings={
+
+uses_webp_images:'Consider searching the [Magento Marketplace](https://marketplace.magento.com/catalogsearch/result/?q=webp) for a variety of third-party extensions to leverage newer image formats.',
+
+offscreen_images:'Consider modifying your product and catalog templates to make use of the web platform\'s [lazy loading](https://web.dev/native-lazy-loading) feature.',
+
+disable_bundling:'Disable Magento\'s built-in [JavaScript bundling and minification](https://devdocs.magento.com/guides/v2.3/frontend-dev-guide/themes/js-bundling.html), and consider using [baler](https://github.com/magento/baler/) instead.',
+
+unminified_css:'Enable the "Minify CSS Files" option in your store\'s Developer settings. [Learn more](https://devdocs.magento.com/guides/v2.3/performance-best-practices/configuration.html?itm_source=devdocs&itm_medium=search_page&itm_campaign=federated_search&itm_term=minify%20css%20files).',
+
+unminified_javascript:'Use [Terser](https://www.npmjs.com/package/terser) to minify all JavaScript assets outfrom from static content deployment, and disable the built-in minification feature.',
+
+unused_javascript:'Disable Magento\'s built-in [JavaScript bundling](https://devdocs.magento.com/guides/v2.3/frontend-dev-guide/themes/js-bundling.html).',
+
+uses_optimized_images:'Consider searching the [Magento Marketplace](https://marketplace.magento.com/catalogsearch/result/?q=optimize%20image) for a variety of third party extensions to optimize images.',
+
+time_to_first_byte:'Use Magento\'s [Varnish integration](https://devdocs.magento.com/guides/v2.3/config-guide/varnish/config-varnish.html).',
+
+uses_rel_preconnect:'Preconnect or dns-prefetch resource hints can be added by [modifying a themes\'s layout](https://devdocs.magento.com/guides/v2.3/frontend-dev-guide/layouts/xml-manage.html).',
+
+uses_rel_preload:'`<link rel=preload>` tags can be added by [modifying a themes\'s layout](https://devdocs.magento.com/guides/v2.3/frontend-dev-guide/layouts/xml-manage.html).',
+
+critical_request_chains:'If you are not bundling your JavaScript assets, consider using [baler](https://github.com/magento/baler).',
+
+font_display:'Specify `@font-display` when [defining custom fonts](https://devdocs.magento.com/guides/v2.3/frontend-dev-guide/css-topics/using-fonts.html).'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
+
+module.exports={
+id:'magento',
+iconDataURL:magentoIcon,
+title:'Magento',
+descriptions:{
+'uses-webp-images':str_(UIStrings.uses_webp_images),
+'offscreen-images':str_(UIStrings.offscreen_images),
+'total-byte-weight':str_(UIStrings.disable_bundling),
+'render-blocking-resources':str_(UIStrings.disable_bundling),
+'unminified-css':str_(UIStrings.unminified_css),
+'unminified-javascript':str_(UIStrings.unminified_javascript),
+'unused-javascript':str_(UIStrings.unused_javascript),
+'uses-optimized-images':str_(UIStrings.uses_optimized_images),
+'time-to-first-byte':str_(UIStrings.time_to_first_byte),
+'uses-rel-preconnect':str_(UIStrings.uses_rel_preconnect),
+'uses-rel-preload':str_(UIStrings.uses_rel_preload),
+'critical-request-chains':str_(UIStrings.critical_request_chains),
+'font-display':str_(UIStrings.font_display)}};
+
+
+module.exports.UIStrings=UIStrings;
+
+}).call(this,"/stack-packs/packs/magento.js");
+},{"../../lighthouse-core/lib/i18n/i18n.js":67}],181:[function(require,module,exports){
+(function(__filename){
+
+
+
+
+
+
+
+'use strict';
+
+const i18n=require('../../lighthouse-core/lib/i18n/i18n.js');
+
+const reactIcon=`data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 841.9 595.3"%3E %3Cg fill="%2361DAFB"%3E%3Cpath d="M666.3 296.5c0-32.5-40.7-63.3-103.1-82.4 14.4-63.6 8-114.2-20.2-130.4-6.5-3.8-14.1-5.6-22.4-5.6v22.3c4.6 0 8.3.9 11.4 2.6 13.6 7.8 19.5 37.5 14.9 75.7-1.1 9.4-2.9 19.3-5.1 29.4-19.6-4.8-41-8.5-63.5-10.9-13.5-18.5-27.5-35.3-41.6-50 32.6-30.3 63.2-46.9 84-46.9V78c-27.5 0-63.5 19.6-99.9 53.6-36.4-33.8-72.4-53.2-99.9-53.2v22.3c20.7 0 51.4 16.5 84 46.6-14 14.7-28 31.4-41.3 49.9-22.6 2.4-44 6.1-63.6 11-2.3-10-4-19.7-5.2-29-4.7-38.2 1.1-67.9 14.6-75.8 3-1.8 6.9-2.6 11.5-2.6V78.5c-8.4 0-16 1.8-22.6 5.6-28.1 16.2-34.4 66.7-19.9 130.1-62.2 19.2-102.7 49.9-102.7 82.3 0 32.5 40.7 63.3 103.1 82.4-14.4 63.6-8 114.2 20.2 130.4 6.5 3.8 14.1 5.6 22.5 5.6 27.5 0 63.5-19.6 99.9-53.6 36.4 33.8 72.4 53.2 99.9 53.2 8.4 0 16-1.8 22.6-5.6 28.1-16.2 34.4-66.7 19.9-130.1 62-19.1 102.5-49.9 102.5-82.3zm-130.2-66.7c-3.7 12.9-8.3 26.2-13.5 39.5-4.1-8-8.4-16-13.1-24-4.6-8-9.5-15.8-14.4-23.4 14.2 2.1 27.9 4.7 41 7.9zm-45.8 106.5c-7.8 13.5-15.8 26.3-24.1 38.2-14.9 1.3-30 2-45.2 2-15.1 0-30.2-.7-45-1.9-8.3-11.9-16.4-24.6-24.2-38-7.6-13.1-14.5-26.4-20.8-39.8 6.2-13.4 13.2-26.8 20.7-39.9 7.8-13.5 15.8-26.3 24.1-38.2 14.9-1.3 30-2 45.2-2 15.1 0 30.2.7 45 1.9 8.3 11.9 16.4 24.6 24.2 38 7.6 13.1 14.5 26.4 20.8 39.8-6.3 13.4-13.2 26.8-20.7 39.9zm32.3-13c5.4 13.4 10 26.8 13.8 39.8-13.1 3.2-26.9 5.9-41.2 8 4.9-7.7 9.8-15.6 14.4-23.7 4.6-8 8.9-16.1 13-24.1zM421.2 430c-9.3-9.6-18.6-20.3-27.8-32 9 .4 18.2.7 27.5.7 9.4 0 18.7-.2 27.8-.7-9 11.7-18.3 22.4-27.5 32zm-74.4-58.9c-14.2-2.1-27.9-4.7-41-7.9 3.7-12.9 8.3-26.2 13.5-39.5 4.1 8 8.4 16 13.1 24 4.7 8 9.5 15.8 14.4 23.4zM420.7 163c9.3 9.6 18.6 20.3 27.8 32-9-.4-18.2-.7-27.5-.7-9.4 0-18.7.2-27.8.7 9-11.7 18.3-22.4 27.5-32zm-74 58.9c-4.9 7.7-9.8 15.6-14.4 23.7-4.6 8-8.9 16-13 24-5.4-13.4-10-26.8-13.8-39.8 13.1-3.1 26.9-5.8 41.2-7.9zm-90.5 125.2c-35.4-15.1-58.3-34.9-58.3-50.6 0-15.7 22.9-35.6 58.3-50.6 8.6-3.7 18-7 27.7-10.1 5.7 19.6 13.2 40 22.5 60.9-9.2 20.8-16.6 41.1-22.2 60.6-9.9-3.1-19.3-6.5-28-10.2zM310 490c-13.6-7.8-19.5-37.5-14.9-75.7 1.1-9.4 2.9-19.3 5.1-29.4 19.6 4.8 41 8.5 63.5 10.9 13.5 18.5 27.5 35.3 41.6 50-32.6 30.3-63.2 46.9-84 46.9-4.5-.1-8.3-1-11.3-2.7zm237.2-76.2c4.7 38.2-1.1 67.9-14.6 75.8-3 1.8-6.9 2.6-11.5 2.6-20.7 0-51.4-16.5-84-46.6 14-14.7 28-31.4 41.3-49.9 22.6-2.4 44-6.1 63.6-11 2.3 10.1 4.1 19.8 5.2 29.1zm38.5-66.7c-8.6 3.7-18 7-27.7 10.1-5.7-19.6-13.2-40-22.5-60.9 9.2-20.8 16.6-41.1 22.2-60.6 9.9 3.1 19.3 6.5 28.1 10.2 35.4 15.1 58.3 34.9 58.3 50.6-.1 15.7-23 35.6-58.4 50.6zM320.8 78.4z"/%3E %3Ccircle cx="420.9" cy="296.5" r="45.7"/%3E %3Cpath d="M520.5 78.1z"/%3E%3C/g%3E%3C/svg%3E`;
+
+const UIStrings={
+
+unminified_css:'If your build system minifies your CSS files automatically, ensure that you are deploying the production build of your application. You can check this with the React Developer Tools extension. [Learn more](https://reactjs.org/docs/optimizing-performance.html#use-the-production-build).',
+
+unminified_javascript:'If your build system minifies your JS files automatically, ensure that you are deploying the production build of your application. You can check this with the React Developer Tools extension. [Learn more](https://reactjs.org/docs/optimizing-performance.html#use-the-production-build).',
+
+unused_javascript:'If you are not server-side rendering, [split your JavaScript bundles](https://web.dev/code-splitting-suspense/) with `React.lazy()`. Otherwise, code-split using a third-party library such as [loadable-components](https://www.smooth-code.com/open-source/loadable-components/docs/getting-started/).',
+
+time_to_first_byte:'If you are server-side rendering any React components, consider using `renderToNodeStream()` or `renderToStaticNodeStream()` to allow the client to receive and hydrate different parts of the markup instead of all at once. [Learn more](https://reactjs.org/docs/react-dom-server.html#rendertonodestream).',
+
+redirects:'If you are using React Router, minimize usage of the `<Redirect>` component for [route navigations](https://reacttraining.com/react-router/web/api/Redirect).',
+
+user_timings:'Use the React DevTools Profiler, which makes use of the Profiler API, to measure the rendering performance of your components. [Learn more.](https://reactjs.org/blog/2018/09/10/introducing-the-react-profiler.html)',
+
+dom_size:'Consider using a “windowing” library like `react-window` to minimize the number of DOM nodes created if you are rendering many repeated elements on the page. [Learn more](https://web.dev/virtualize-long-lists-react-window/). Also, minimize unecessary re-renders using [shouldComponentUpdate](https://reactjs.org/docs/optimizing-performance.html#shouldcomponentupdate-in-action), [PureComponent](https://reactjs.org/docs/react-api.html#reactpurecomponent), or [React.memo](https://reactjs.org/docs/react-api.html#reactmemo) and [skip effects](https://reactjs.org/docs/hooks-effect.html#tip-optimizing-performance-by-skipping-effects) only until certain dependencies have changed if you are using the Effect hook to improve runtime performance.'};
+
+
+const str_=i18n.createMessageInstanceIdFn(__filename,UIStrings);
+
+module.exports={
+id:'react',
+iconDataURL:reactIcon,
+title:'React',
+descriptions:{
+'unminified-css':str_(UIStrings.unminified_css),
+'unminified-javascript':str_(UIStrings.unminified_javascript),
+'unused-javascript':str_(UIStrings.unused_javascript),
+'time-to-first-byte':str_(UIStrings.time_to_first_byte),
+'redirects':str_(UIStrings.redirects),
+'user-timings':str_(UIStrings.user_timings),
+'dom-size':str_(UIStrings.dom_size)}};
+
+
+module.exports.UIStrings=UIStrings;
+
+}).call(this,"/stack-packs/packs/react.js");
+},{"../../lighthouse-core/lib/i18n/i18n.js":67}],182:[function(require,module,exports){
 (function(__filename){
 
 
@@ -65805,29 +65621,32 @@ descriptions:{
 module.exports.UIStrings=UIStrings;
 
 }).call(this,"/stack-packs/packs/wordpress.js");
-},{"../../lighthouse-core/lib/i18n/i18n.js":68}],182:[function(require,module,exports){
+},{"../../lighthouse-core/lib/i18n/i18n.js":67}],183:[function(require,module,exports){
 module.exports={
 "npm":{
 "angular":[
+{"id":"SNYK-JS-ANGULAR-471885","severity":"medium","semver":{"vulnerable":["<1.6.3"]}},
+{"id":"SNYK-JS-ANGULAR-471882","severity":"medium","semver":{"vulnerable":["<1.6.5"]}},
+{"id":"SNYK-JS-ANGULAR-471879","severity":"medium","semver":{"vulnerable":["<1.6.0-rc.0"]}},
 {"id":"npm:angular:20180202","severity":"medium","semver":{"vulnerable":["<1.6.9"]}},
 {"id":"npm:angular:20171018","severity":"medium","semver":{"vulnerable":["<1.6.7"]}},
-{"id":"npm:angular:20160527","severity":"medium","semver":{"vulnerable":["<1.2.30 >=1.0.0"]}},
-{"id":"npm:angular:20160122","severity":"medium","semver":{"vulnerable":["<1.5.0-rc.2 >=1.3.0"]}},
+{"id":"npm:angular:20160527","severity":"medium","semver":{"vulnerable":[">=1.0.0 <1.2.30"]}},
+{"id":"npm:angular:20160122","severity":"medium","semver":{"vulnerable":[">=1.3.0 <1.5.0-rc.2"]}},
 {"id":"npm:angular:20140608","severity":"low","semver":{"vulnerable":["<1.3.0"]}},
 {"id":"npm:angular:20131113","severity":"high","semver":{"vulnerable":["<1.2.2"]}},
 {"id":"npm:angular:20140908","severity":"medium","semver":{"vulnerable":["<1.3.0-rc.4"]}},
-{"id":"npm:angular:20161101","severity":"medium","semver":{"vulnerable":["<1.5.9 >=1.5.0"]}},
+{"id":"npm:angular:20161101","severity":"medium","semver":{"vulnerable":[">=1.5.0 <1.5.9"]}},
 {"id":"npm:angular:20150909","severity":"high","semver":{"vulnerable":["<1.5.0-beta.2"]}},
 {"id":"npm:angular:20151205","severity":"medium","semver":{"vulnerable":["<1.5.0-rc.0"]}},
 {"id":"npm:angular:20151130","severity":"medium","semver":{"vulnerable":["<1.4.10"]}},
-{"id":"npm:angular:20130622","severity":"medium","semver":{"vulnerable":["<1.2.0 >=1.0.0"]}},
-{"id":"npm:angular:20150807-1","severity":"medium","semver":{"vulnerable":["<1.5.0-beta.0 >=1.3.1"]}},
-{"id":"npm:angular:20150807","severity":"high","semver":{"vulnerable":["<1.5.0-beta.0 >=1.0.0"]}},
+{"id":"npm:angular:20130622","severity":"medium","semver":{"vulnerable":[">=1.0.0 <1.2.0"]}},
+{"id":"npm:angular:20150807-1","severity":"medium","semver":{"vulnerable":[">=1.3.1 <1.5.0-beta.0"]}},
+{"id":"npm:angular:20150807","severity":"high","semver":{"vulnerable":[">=1.0.0 <1.5.0-beta.0"]}},
 {"id":"npm:angular:20150315","severity":"medium","semver":{"vulnerable":["<1.6.1"]}},
 {"id":"npm:angular:20150310","severity":"high","semver":{"vulnerable":["<1.5.0-beta.2"]}},
 {"id":"npm:angular:20141104","severity":"medium","semver":{"vulnerable":["<1.3.2"]}},
-{"id":"npm:angular:20130621","severity":"medium","semver":{"vulnerable":["<=1.1.5"]}},
-{"id":"npm:angular:20140909","severity":"high","semver":{"vulnerable":["<1.2.24 >=1.2.19"]}},
+{"id":"npm:angular:20130621","severity":"medium","semver":{"vulnerable":["<1.2.0"]}},
+{"id":"npm:angular:20140909","severity":"high","semver":{"vulnerable":[">=1.2.19 <1.2.24"]}},
 {"id":"npm:angular:20130625","severity":"high","semver":{"vulnerable":["<1.1.5"]}}],
 
 "backbone":[
@@ -65844,9 +65663,11 @@ module.exports={
 {"id":"npm:bootstrap:20120510","severity":"medium","semver":{"vulnerable":["<2.1.0"]}}],
 
 "dojo":[
+{"id":"SNYK-JS-DOJO-174934","severity":"medium","semver":{"vulnerable":[">=1.0.0 <1.0.3",">=1.1.0 <1.1.2",">=1.2.0 <1.2.4",">=1.3.0 <1.3.3",">=1.4.0 <1.4.2"]}},
+{"id":"SNYK-JS-DOJO-174933","severity":"medium","semver":{"vulnerable":["<1.2.0"]}},
 {"id":"SNYK-JS-DOJO-72305","severity":"medium","semver":{"vulnerable":["<1.14"]}},
 {"id":"npm:dojo:20180818","severity":"medium","semver":{"vulnerable":["<1.10.10 || >=1.11.0 <1.11.6 || >=1.12.0 <1.12.4 || >=1.13.0 <1.13.1"]}},
-{"id":"npm:dojo:20160523","severity":"medium","semver":{"vulnerable":["<= 1.0.0"]}},
+{"id":"npm:dojo:20160523","severity":"medium","semver":{"vulnerable":["<1.1.0"]}},
 {"id":"npm:dojo:20100614-6","severity":"medium","semver":{"vulnerable":["<1.4.2"]}},
 {"id":"npm:dojo:20100614","severity":"high","semver":{"vulnerable":[">=0.4 <0.4.4 || >=1.0 <1.0.3 || >=1.1 <1.1.2 || >=1.2 <1.2.4 || >=1.3 <1.3.3 || >=1.4 <1.4.2"]}},
 {"id":"npm:dojo:20090409","severity":"medium","semver":{"vulnerable":["<1.1"]}}],
@@ -65856,8 +65677,12 @@ module.exports={
 {"id":"npm:foundation-sites:20150619","severity":"medium","semver":{"vulnerable":["<5.5.3"]}},
 {"id":"npm:foundation-sites:20120717","severity":"medium","semver":{"vulnerable":["<3.0.6 >=3.0.0"]}}],
 
+"google-closure-library":[
+{"id":"SNYK-JS-GOOGLECLOSURELIBRARY-174519","severity":"medium","semver":{"vulnerable":[">=20190121.0.0 <20190301.0.0"]}}],
+
 "handlebars":[
-{"id":"SNYK-JS-HANDLEBARS-174183","severity":"high","semver":{"vulnerable":[">=4.1.0 <4.1.2","<4.0.14"]}},
+{"id":"SNYK-JS-HANDLEBARS-469063","severity":"high","semver":{"vulnerable":["<4.3.0"]}},
+{"id":"SNYK-JS-HANDLEBARS-174183","severity":"high","semver":{"vulnerable":["<3.0.7",">=4.1.0 <4.1.2","<4.0.14"]}},
 {"id":"SNYK-JS-HANDLEBARS-173692","severity":"high","semver":{"vulnerable":["<4.0.13"]}},
 {"id":"npm:handlebars:20151207","severity":"medium","semver":{"vulnerable":["<4.0.0"]}},
 {"id":"npm:handlebars:20110425","severity":"medium","semver":{"vulnerable":["<=1.0.0-beta.3"]}}],
@@ -65867,25 +65692,27 @@ module.exports={
 
 "jquery":[
 {"id":"SNYK-JS-JQUERY-174006","severity":"medium","semver":{"vulnerable":["<3.4.0"]}},
-{"id":"npm:jquery:20160529","severity":"low","semver":{"vulnerable":["=3.0.0-rc1"]}},
+{"id":"npm:jquery:20160529","severity":"low","semver":{"vulnerable":[">=3.0.0-rc1 <3.0.0"]}},
 {"id":"npm:jquery:20150627","severity":"medium","semver":{"vulnerable":["<1.12.2",">=1.12.3 <2.2.2",">=2.2.3 <3.0.0"]}},
 {"id":"npm:jquery:20140902","severity":"medium","semver":{"vulnerable":[">=1.4.2 <1.6.2"]}},
 {"id":"npm:jquery:20120206","severity":"medium","semver":{"vulnerable":[">=1.7.1 <1.9.0"]}},
 {"id":"npm:jquery:20110606","severity":"medium","semver":{"vulnerable":["<1.6.3"]}}],
 
 "jquery-mobile":[
+{"id":"SNYK-JS-JQUERYMOBILE-174599","severity":"medium","semver":{"vulnerable":["<=1.5.0-alpha.1"]}},
 {"id":"npm:jquery-mobile:20120802","severity":"medium","semver":{"vulnerable":["<1.2.0"]}}],
 
 "jquery-ui":[
 {"id":"npm:jquery-ui:20121127","severity":"medium","semver":{"vulnerable":["<1.10.0"]}},
 {"id":"npm:jquery-ui:20100903","severity":"medium","semver":{"vulnerable":["<1.10.0"]}},
-{"id":"npm:jquery-ui:20160721","severity":"high","semver":{"vulnerable":["<=1.11.4"]}}],
+{"id":"npm:jquery-ui:20160721","severity":"high","semver":{"vulnerable":["<1.12.0"]}}],
 
 "knockout":[
 {"id":"npm:knockout:20180213","severity":"medium","semver":{"vulnerable":["<3.5.0-beta"]}},
 {"id":"npm:knockout:20130701","severity":"medium","semver":{"vulnerable":["<3.0.0 >=2.1.0-pre"]}}],
 
 "lodash":[
+{"id":"SNYK-JS-LODASH-450202","severity":"high","semver":{"vulnerable":["<4.17.12"]}},
 {"id":"SNYK-JS-LODASH-73639","severity":"medium","semver":{"vulnerable":["<4.17.11"]}},
 {"id":"SNYK-JS-LODASH-73638","severity":"high","semver":{"vulnerable":["<4.17.11"]}},
 {"id":"npm:lodash:20180130","severity":"medium","semver":{"vulnerable":["<4.17.5"]}}],
@@ -65893,7 +65720,7 @@ module.exports={
 "moment":[
 {"id":"npm:moment:20170905","severity":"low","semver":{"vulnerable":["<2.19.3"]}},
 {"id":"npm:moment:20161019","severity":"medium","semver":{"vulnerable":["<2.15.2"]}},
-{"id":"npm:moment:20160126","severity":"medium","semver":{"vulnerable":["<=2.11.1"]}}],
+{"id":"npm:moment:20160126","severity":"medium","semver":{"vulnerable":["<2.11.2"]}}],
 
 "mustache":[
 {"id":"npm:mustache:20151207","severity":"medium","semver":{"vulnerable":["<2.2.1"]}},
@@ -65914,7 +65741,7 @@ module.exports={
 {"id":"npm:vue:20170829","severity":"medium","semver":{"vulnerable":["<2.4.3"]}},
 {"id":"npm:vue:20170401","severity":"medium","semver":{"vulnerable":["<2.3.0-beta.1"]}},
 {"id":"npm:vue:20180802","severity":"medium","semver":{"vulnerable":["<2.5.17"]}},
-{"id":"npm:vue:20180222","severity":"low","semver":{"vulnerable":["<=2.5.14"]}}],
+{"id":"npm:vue:20180222","severity":"low","semver":{"vulnerable":["<2.5.14"]}}],
 
 "yui":[
 {"id":"npm:yui:20130604","severity":"medium","semver":{"vulnerable":[">=3.0.0 <3.10.1 || =3.10.2"]}},
@@ -65959,6 +65786,7 @@ if(!url||!url.startsWith('chrome://'))return url;
 if(url.endsWith('/'))url=url.replace(/\/$/,'');
 return url.replace(/^chrome:\/\/chrome\//,'chrome://');
 }
+
 
 class URLShim extends URL{
 

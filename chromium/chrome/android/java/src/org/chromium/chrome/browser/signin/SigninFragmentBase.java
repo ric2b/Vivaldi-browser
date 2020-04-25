@@ -13,9 +13,6 @@ import android.graphics.Point;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.SystemClock;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
-import android.support.annotation.StringRes;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentTransaction;
 import android.support.v7.app.AlertDialog;
@@ -25,6 +22,10 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
@@ -435,7 +436,6 @@ public abstract class SigninFragmentBase
     private void runStateMachineAndSignin(boolean settingsClicked) {
         mConfirmSyncDataStateMachine = new ConfirmSyncDataStateMachine(getContext(),
                 getChildFragmentManager(),
-                ConfirmImportSyncDataDialog.ImportSyncType.PREVIOUS_DATA_FOUND,
                 PrefServiceBridge.getInstance().getSyncLastAccountName(), mSelectedAccountName,
                 new ConfirmImportSyncDataDialog.Listener() {
                     @Override
@@ -586,7 +586,8 @@ public abstract class SigninFragmentBase
 
         mAccountNames = getAccountNames(maybeAccountNames);
         mHasGmsError = mAccountNames == null;
-        if (mAccountNames == null) return;
+        mView.getAcceptButton().setEnabled(!mHasGmsError);
+        if (mHasGmsError) return;
 
         if (mAccountNames.isEmpty()) {
             mSelectedAccountName = null;

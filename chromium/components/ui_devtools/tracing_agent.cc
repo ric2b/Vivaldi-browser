@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/process/process.h"
 #include "base/timer/timer.h"
+#include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "components/ui_devtools/connector_delegate.h"
 #include "components/ui_devtools/devtools_base_agent.h"
@@ -103,8 +104,9 @@ class TracingAgent::PerfettoTracingSession
     perfetto::TraceConfig perfetto_config =
         CreatePerfettoConfiguration(chrome_config);
 
-    tracing::mojom::TracingSessionClientPtr tracing_session_client;
-    receiver_.Bind(mojo::MakeRequest(&tracing_session_client));
+    mojo::PendingRemote<tracing::mojom::TracingSessionClient>
+        tracing_session_client;
+    receiver_.Bind(tracing_session_client.InitWithNewPipeAndPassReceiver());
     receiver_.set_disconnect_handler(
         base::BindOnce(&PerfettoTracingSession::OnTracingSessionFailed,
                        base::Unretained(this)));
@@ -160,6 +162,7 @@ class TracingAgent::PerfettoTracingSession
         this, std::move(consumer_handle));
     tracing_session_host_->DisableTracingAndEmitJson(
         agent_label_, std::move(producer_handle),
+        /*privacy_filtering_enabled=*/false,
         base::BindOnce(&PerfettoTracingSession::OnReadBuffersComplete,
                        base::Unretained(this)));
   }
@@ -380,14 +383,8 @@ Response TracingAgent::end() {
 void TracingAgent::StartTracing(std::unique_ptr<StartCallback> callback) {
   trace_config_.SetProcessFilterConfig(CreateProcessFilterConfig(gpu_pid_));
 
-  if (tracing::TracingUsesPerfettoBackend()) {
-    perfetto_session_ =
-        std::make_unique<PerfettoTracingSession>(connector_.get());
-  } else {
-    callback->sendFailure(
-        Response::Error("Could not start tracing by Perfetto."));
-    return;
-  }
+  perfetto_session_ =
+      std::make_unique<PerfettoTracingSession>(connector_.get());
   perfetto_session_->EnableTracing(
       trace_config_,
       base::BindOnce(&TracingAgent::OnRecordingEnabled,

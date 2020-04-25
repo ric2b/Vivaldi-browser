@@ -12,31 +12,31 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
+#include "base/system/sys_info.h"
 #include "components/sync_device_info/device_info.h"
 #include "components/sync_device_info/local_device_info_provider.h"
 #include "components/version_info/version_info.h"
 
 namespace syncer {
 
+class DeviceInfoSyncClient;
+
 class LocalDeviceInfoProviderImpl : public MutableLocalDeviceInfoProvider {
  public:
-  using SigninScopedDeviceIdCallback = base::RepeatingCallback<std::string()>;
-  using SendTabToSelfReceivingEnabledCallback = base::RepeatingCallback<bool()>;
 
   using SessionNameOverrideCallback = base::RepeatingCallback<std::string()>;
 
-  LocalDeviceInfoProviderImpl(
-      version_info::Channel channel,
-      const std::string& version,
-      const SigninScopedDeviceIdCallback& signin_scoped_device_id_callback,
-      const SendTabToSelfReceivingEnabledCallback&
-          send_tab_to_self_receiving_enabled_callback);
+  LocalDeviceInfoProviderImpl(version_info::Channel channel,
+                              const std::string& version,
+                              const DeviceInfoSyncClient* sync_client);
   ~LocalDeviceInfoProviderImpl() override;
 
   // MutableLocalDeviceInfoProvider implementation.
   void Initialize(const std::string& cache_guid,
-                  const std::string& session_name) override;
+                  const std::string& client_name,
+                  const base::SysInfo::HardwareInfo& hardware_info) override;
   void Clear() override;
+  void UpdateClientName(const std::string& client_name) override;
   version_info::Channel GetChannel() const override;
   const DeviceInfo* GetLocalDeviceInfo() const override;
   std::unique_ptr<Subscription> RegisterOnInitializedCallback(
@@ -54,9 +54,7 @@ class LocalDeviceInfoProviderImpl : public MutableLocalDeviceInfoProvider {
   // The version string for the current client.
   const std::string version_;
 
-  const SigninScopedDeviceIdCallback signin_scoped_device_id_callback_;
-  const SendTabToSelfReceivingEnabledCallback
-      send_tab_to_self_receiving_enabled_callback_;
+  const DeviceInfoSyncClient* const sync_client_;
 
   SessionNameOverrideCallback session_name_override_callback_;
 

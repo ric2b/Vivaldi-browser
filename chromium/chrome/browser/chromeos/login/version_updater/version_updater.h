@@ -45,7 +45,7 @@ class VersionUpdater : public UpdateEngineClient::Observer,
   struct UpdateInfo {
     UpdateInfo();
 
-    UpdateEngineClient::Status status = UpdateEngineClient::Status();
+    update_engine::StatusResult status;
 
     // Estimated time left, in seconds.
     int estimated_time_left_in_secs = 0;
@@ -95,8 +95,15 @@ class VersionUpdater : public UpdateEngineClient::Observer,
     virtual void DelayErrorMessage() = 0;
   };
 
+  // Callback type for |GetEolStatus|.
+  using EolStatusCallback =
+      base::OnceCallback<void(update_engine::EndOfLifeStatus status)>;
+
   explicit VersionUpdater(VersionUpdater::Delegate* delegate);
   ~VersionUpdater() override;
+
+  // Resets |VersionUpdater| to initial state.
+  void Init();
 
   // Starts network check. If success, starts update check.
   void StartNetworkCheck();
@@ -109,22 +116,34 @@ class VersionUpdater : public UpdateEngineClient::Observer,
 
   const UpdateInfo& update_info() { return update_info_; }
 
+  // Has the device already reached its End of Life (Auto Update Expiration)?
+  void GetEolStatus(EolStatusCallback callback);
+
   void set_tick_clock_for_testing(const base::TickClock* tick_clock) {
     tick_clock_ = tick_clock;
   }
 
+  void set_wait_for_reboot_time_for_testing(
+      base::TimeDelta wait_for_reboot_time) {
+    wait_for_reboot_time_ = wait_for_reboot_time;
+  }
+
   base::OneShotTimer* GetRebootTimerForTesting();
-  void UpdateStatusChangedForTesting(const UpdateEngineClient::Status& status);
+  void UpdateStatusChangedForTesting(const update_engine::StatusResult& status);
 
  private:
+  // Callback from UpdateEngineClient::GetEolStatus().
+  void OnGetEolStatus(EolStatusCallback callback,
+                      update_engine::EndOfLifeStatus status);
+
   void RequestUpdateCheck();
 
   // UpdateEngineClient::Observer implementation:
-  void UpdateStatusChanged(const UpdateEngineClient::Status& status) override;
+  void UpdateStatusChanged(const update_engine::StatusResult& status) override;
 
   // Updates downloading stats (remaining time and downloading
   // progress), which are stored in update_info_.
-  void UpdateDownloadingStats(const UpdateEngineClient::Status& status);
+  void UpdateDownloadingStats(const update_engine::StatusResult& status);
 
   // NetworkPortalDetector::Observer implementation:
   void OnPortalDetectionCompleted(
@@ -169,6 +188,10 @@ class VersionUpdater : public UpdateEngineClient::Observer,
   // Timer for the interval to wait for the reboot.
   // If reboot didn't happen - ask user to reboot manually.
   base::OneShotTimer reboot_timer_;
+  // Time in seconds after which we decide that the device has not rebooted
+  // automatically. If reboot didn't happen during this interval, ask user to
+  // reboot device manually.
+  base::TimeDelta wait_for_reboot_time_;
 
   // True if there was no notification from NetworkPortalDetector
   // about state for the default network.

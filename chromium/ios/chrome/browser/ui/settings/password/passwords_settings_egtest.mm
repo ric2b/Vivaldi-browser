@@ -338,10 +338,13 @@ class TestStoreConsumer : public password_manager::PasswordStoreConsumer {
 // done.
 void SaveToPasswordStore(const PasswordForm& form) {
   GetPasswordStore()->AddLogin(form);
+  // When we retrieve the form from the store, |from_store| should be set.
+  autofill::PasswordForm expected_form = form;
+  expected_form.from_store = autofill::PasswordForm::Store::kProfileStore;
   // Check the result and ensure PasswordStore processed this.
   TestStoreConsumer consumer;
   for (const auto& result : consumer.GetStoreResults()) {
-    if (result == form)
+    if (result == expected_form)
       return;
   }
   GREYFail(@"Stored form was not found in the PasswordStore results.");
@@ -1553,8 +1556,10 @@ PasswordForm CreateSampleFormWithIndex(int index) {
     [[EarlGrey
         selectElementWithMatcher:grey_allOf(
                                      ButtonWithAccessibilityLabel(dismissLabel),
-                                     grey_interactable(), nullptr)]
-        performAction:grey_tap()];
+                                     grey_interactable(),
+                                     grey_not(grey_accessibilityTrait(
+                                         UIAccessibilityTraitNotEnabled)),
+                                     nullptr)] performAction:grey_tap()];
   }
 
   // Wait until the activity view is dismissed.

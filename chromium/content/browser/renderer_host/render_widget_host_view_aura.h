@@ -65,7 +65,7 @@ class LocatedEvent;
 namespace content {
 #if defined(OS_WIN)
 class LegacyRenderWidgetHostHWND;
-class DirectManipulationBrowserTest;
+class DirectManipulationBrowserTestBase;
 #endif
 
 class CursorManager;
@@ -198,7 +198,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void DidNavigate() override;
   void TakeFallbackContentFrom(RenderWidgetHostView* view) override;
   bool CanSynchronizeVisualProperties() override;
-  void CancelActiveTouches() override;
+  std::vector<std::unique_ptr<ui::TouchEvent>> ExtractAndCancelActiveTouches()
+      override;
+  void TransferTouches(
+      const std::vector<std::unique_ptr<ui::TouchEvent>>& touches) override;
 
   // Overridden from ui::TextInputClient:
   void SetCompositionText(const ui::CompositionText& composition) override;
@@ -383,7 +386,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 #if defined(OS_WIN)
   friend class AccessibilityObjectLifetimeWinBrowserTest;
   friend class AccessibilityTreeLinkageWinBrowserTest;
-  friend class DirectManipulationBrowserTest;
+  friend class DirectManipulationBrowserTestBase;
 #endif
   FRIEND_TEST_ALL_PREFIXES(InputMethodResultAuraTest,
                            FinishImeCompositionSession);
@@ -515,10 +518,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // the mouse cursor is visible anywhere on the screen.
   void NotifyRendererOfCursorVisibilityState(bool is_visible);
 
-  // If |clip| is non-empty and and doesn't contain |rect| or |clip| is empty
-  // SchedulePaint() is invoked for |rect|.
-  void SchedulePaintIfNotInClip(const gfx::Rect& rect, const gfx::Rect& clip);
-
   // Called after |window_| is parented to a WindowEventDispatcher.
   void AddedToRootWindow();
 
@@ -572,6 +571,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   // Called to process a display metrics change.
   void ProcessDisplayMetricsChanged();
+
+  void CancelActiveTouches();
 
   // NOTE: this is null if |is_mus_browser_plugin_guest_| is true.
   aura::Window* window_;

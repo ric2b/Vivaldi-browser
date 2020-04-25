@@ -41,6 +41,8 @@
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "google_apis/gaia/core_account_id.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+#include "net/cookies/cookie_change_dispatcher.h"
+#include "net/cookies/cookie_constants.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_cookie_manager.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -347,8 +349,8 @@ class IdentityManagerTest : public testing::Test {
 
     if (primary_account_manager_setup ==
         PrimaryAccountManagerSetup::kWithAuthenticatedAccout) {
-      primary_account_manager->SetAuthenticatedAccountInfo(kTestGaiaId,
-                                                           kTestEmail);
+      account_tracker_service->SeedAccountInfo(kTestGaiaId, kTestEmail);
+      primary_account_manager->SignIn(kTestEmail);
     }
 
     auto accounts_cookie_mutator = std::make_unique<AccountsCookieMutatorImpl>(
@@ -383,8 +385,9 @@ class IdentityManagerTest : public testing::Test {
   void SimulateCookieDeletedByUser(
       network::mojom::CookieChangeListener* listener,
       const net::CanonicalCookie& cookie) {
-    listener->OnCookieChange(cookie,
-                             network::mojom::CookieChangeCause::EXPLICIT);
+    listener->OnCookieChange(
+        net::CookieChangeInfo(cookie, net::CookieAccessSemantics::UNKNOWN,
+                              net::CookieChangeCause::EXPLICIT));
   }
 
   void SimulateOAuthMultiloginFinished(GaiaCookieManagerService* manager,
@@ -549,6 +552,9 @@ TEST_F(IdentityManagerTest, HasPrimaryAccount) {
   ClearPrimaryAccount(identity_manager(), ClearPrimaryAccountPolicy::DEFAULT);
   EXPECT_FALSE(identity_manager()->HasPrimaryAccount());
   EXPECT_FALSE(identity_manager()->HasUnconsentedPrimaryAccount());
+  EXPECT_FALSE(identity_manager_observer()
+                   ->PrimaryAccountFromClearedCallback()
+                   .IsEmpty());
 #endif
 }
 
@@ -1080,8 +1086,9 @@ TEST_F(IdentityManagerTest, RemoveAccessTokenFromCache) {
   std::set<std::string> scopes{"scope"};
   std::string access_token = "access_token";
 
-  identity_manager()->GetPrimaryAccountManager()->SetAuthenticatedAccountInfo(
-      kTestGaiaId, kTestEmail);
+  identity_manager()->GetAccountTrackerService()->SeedAccountInfo(kTestGaiaId,
+                                                                  kTestEmail);
+  identity_manager()->GetPrimaryAccountManager()->SignIn(kTestEmail);
   token_service()->UpdateCredentials(primary_account_id(), "refresh_token");
 
   base::RunLoop run_loop;
@@ -1119,8 +1126,9 @@ TEST_F(IdentityManagerTest,
   identity_manager_diagnostics_observer()
       ->set_on_access_token_requested_callback(run_loop.QuitClosure());
 
-  identity_manager()->GetPrimaryAccountManager()->SetAuthenticatedAccountInfo(
-      kTestGaiaId, kTestEmail);
+  identity_manager()->GetAccountTrackerService()->SeedAccountInfo(kTestGaiaId,
+                                                                  kTestEmail);
+  identity_manager()->GetPrimaryAccountManager()->SignIn(kTestEmail);
   token_service()->UpdateCredentials(primary_account_id(), "refresh_token");
 
   std::set<std::string> scopes{"scope"};
@@ -1207,8 +1215,9 @@ TEST_F(IdentityManagerTest, ObserveAccessTokenFetch) {
   identity_manager_diagnostics_observer()
       ->set_on_access_token_requested_callback(run_loop.QuitClosure());
 
-  identity_manager()->GetPrimaryAccountManager()->SetAuthenticatedAccountInfo(
-      kTestGaiaId, kTestEmail);
+  identity_manager()->GetAccountTrackerService()->SeedAccountInfo(kTestGaiaId,
+                                                                  kTestEmail);
+  identity_manager()->GetPrimaryAccountManager()->SignIn(kTestEmail);
   token_service()->UpdateCredentials(primary_account_id(), "refresh_token");
 
   std::set<std::string> scopes{"scope"};
@@ -1260,8 +1269,9 @@ TEST_F(IdentityManagerTest,
   identity_manager_diagnostics_observer()
       ->set_on_access_token_request_completed_callback(run_loop.QuitClosure());
 
-  identity_manager()->GetPrimaryAccountManager()->SetAuthenticatedAccountInfo(
-      kTestGaiaId, kTestEmail);
+  identity_manager()->GetAccountTrackerService()->SeedAccountInfo(kTestGaiaId,
+                                                                  kTestEmail);
+  identity_manager()->GetPrimaryAccountManager()->SignIn(kTestEmail);
   token_service()->UpdateCredentials(primary_account_id(), "refresh_token");
   token_service()->set_auto_post_fetch_response_on_message_loop(true);
 
@@ -1326,35 +1336,6 @@ TEST_F(IdentityManagerTest, GetAccountsCookieMutator) {
       identity_manager()->GetAccountsCookieMutator();
   EXPECT_TRUE(mutator);
 }
-
-#if !defined(OS_IOS) && !defined(OS_ANDROID)
-// Tests that requesting a load of accounts results in the notification
-// firing that tokens were loaded.
-TEST_F(IdentityManagerTest, DeprecatedLoadCredentialsForSupervisedUser) {
-  base::RunLoop run_loop;
-  identity_manager_observer()->SetOnRefreshTokensLoadedCallback(
-      run_loop.QuitClosure());
-
-  // Load the accounts and ensure that we see the resulting notification that
-  // they were loaded.
-  identity_manager()->DeprecatedLoadCredentialsForSupervisedUser("");
-  run_loop.Run();
-}
-#endif
-
-#if defined(OS_IOS)
-TEST_F(IdentityManagerTest, ForceTriggerOnCookieChange) {
-  base::RunLoop run_loop;
-  identity_manager_observer()->SetOnAccountsInCookieUpdatedCallback(
-      run_loop.QuitClosure());
-
-  SetListAccountsResponseNoAccounts(test_url_loader_factory());
-  // Forces the processing of OnCookieChange and it calls
-  // OnGaiaAccountsInCookieUpdated.
-  identity_manager()->ForceTriggerOnCookieChange();
-  run_loop.Run();
-}
-#endif
 
 #if defined(OS_CHROMEOS)
 // On ChromeOS, AccountTrackerService first receives the normalized email
@@ -1574,6 +1555,58 @@ TEST_F(
       identity_manager_observer()->UnconsentedPrimaryAccountFromCallback(),
       empty_info);
   EXPECT_EQ(identity_manager()->GetUnconsentedPrimaryAccountInfo(), empty_info);
+}
+
+TEST_F(IdentityManagerTest,
+       UnconsentedPrimaryAccountTokenRevokedWithStaleCookies) {
+  ClearPrimaryAccount(identity_manager(), ClearPrimaryAccountPolicy::DEFAULT);
+
+  // Add an unconsented primary account, incl. proper cookies.
+  AccountInfo account_info = MakeAccountAvailableWithCookies(
+      identity_manager(), test_url_loader_factory(), kTestEmail2, kTestGaiaId2);
+  EXPECT_EQ(kTestEmail2, account_info.email);
+
+  EXPECT_EQ(identity_manager()->GetUnconsentedPrimaryAccountInfo(),
+            account_info);
+
+  // Make the cookies stale and remove the account.
+  signin::SetFreshnessOfAccountsInGaiaCookie(identity_manager(), false);
+  RemoveRefreshTokenForAccount(identity_manager(), account_info.account_id);
+  AccountsInCookieJarInfo cookie_info =
+      identity_manager()->GetAccountsInCookieJar();
+  ASSERT_FALSE(cookie_info.accounts_are_fresh);
+  // Unconsented account was removed.
+  EXPECT_EQ(identity_manager()->GetUnconsentedPrimaryAccountInfo(),
+            CoreAccountInfo());
+}
+
+TEST_F(IdentityManagerTest,
+       UnconsentedPrimaryAccountTokenRevokedWithStaleCookiesMultipleAccounts) {
+  ClearPrimaryAccount(identity_manager(), ClearPrimaryAccountPolicy::DEFAULT);
+
+  // Add two accounts with cookies.
+  AccountInfo main_account_info =
+      MakeAccountAvailable(identity_manager(), kTestEmail2);
+  AccountInfo secondary_account_info =
+      MakeAccountAvailable(identity_manager(), kTestEmail3);
+  SetCookieAccounts(
+      identity_manager(), test_url_loader_factory(),
+      {{main_account_info.email, main_account_info.gaia},
+       {secondary_account_info.email, secondary_account_info.gaia}});
+
+  EXPECT_EQ(identity_manager()->GetUnconsentedPrimaryAccountInfo(),
+            main_account_info);
+
+  // Make the cookies stale and remove the main account.
+  signin::SetFreshnessOfAccountsInGaiaCookie(identity_manager(), false);
+  RemoveRefreshTokenForAccount(identity_manager(),
+                               main_account_info.account_id);
+  AccountsInCookieJarInfo cookie_info =
+      identity_manager()->GetAccountsInCookieJar();
+  ASSERT_FALSE(cookie_info.accounts_are_fresh);
+  // Unconsented account was removed.
+  EXPECT_EQ(identity_manager()->GetUnconsentedPrimaryAccountInfo(),
+            CoreAccountInfo());
 }
 #endif
 
@@ -1994,10 +2027,10 @@ TEST_F(IdentityManagerTest, CallbackSentOnAccountsCookieDeletedByUserAction) {
   base::RunLoop run_loop;
   identity_manager_observer()->SetOnCookieDeletedByUserCallback(
       run_loop.QuitClosure());
-  net::CanonicalCookie cookie("APISID", std::string(), ".google.com", "/",
-                              base::Time(), base::Time(), base::Time(), false,
-                              false, net::CookieSameSite::NO_RESTRICTION,
-                              net::COOKIE_PRIORITY_DEFAULT);
+  net::CanonicalCookie cookie(
+      "SAPISID", std::string(), ".google.com", "/", base::Time(), base::Time(),
+      base::Time(), /*secure=*/true, false, net::CookieSameSite::NO_RESTRICTION,
+      net::COOKIE_PRIORITY_DEFAULT);
   SimulateCookieDeletedByUser(identity_manager()->GetGaiaCookieManagerService(),
                               cookie);
   run_loop.Run();
@@ -2026,19 +2059,21 @@ TEST_F(IdentityManagerTest, OnNetworkInitialized) {
   // Note that this call differs from calling SimulateCookieDeletedByUser()
   // directly in the sense that SimulateCookieDeletedByUser() does not go
   // through any mojo pipe.
-  net::CanonicalCookie cookie("APISID", std::string(), ".google.com", "/",
-                              base::Time(), base::Time(), base::Time(), false,
-                              false, net::CookieSameSite::NO_RESTRICTION,
-                              net::COOKIE_PRIORITY_DEFAULT);
+  net::CanonicalCookie cookie(
+      "SAPISID", std::string(), ".google.com", "/", base::Time(), base::Time(),
+      base::Time(), /*secure=*/true, false, net::CookieSameSite::NO_RESTRICTION,
+      net::COOKIE_PRIORITY_DEFAULT);
   test_cookie_manager_ptr->DispatchCookieChange(
-      cookie, network::mojom::CookieChangeCause::EXPLICIT);
+      net::CookieChangeInfo(cookie, net::CookieAccessSemantics::UNKNOWN,
+                            net::CookieChangeCause::EXPLICIT));
   run_loop.Run();
 }
 
 TEST_F(IdentityManagerTest,
        BatchChangeObserversAreNotifiedOnCredentialsUpdate) {
-  identity_manager()->GetPrimaryAccountManager()->SetAuthenticatedAccountInfo(
-      kTestGaiaId, kTestEmail);
+  identity_manager()->GetAccountTrackerService()->SeedAccountInfo(kTestGaiaId,
+                                                                  kTestEmail);
+  identity_manager()->GetPrimaryAccountManager()->SignIn(kTestEmail);
   token_service()->UpdateCredentials(primary_account_id(), "refresh_token");
 
   EXPECT_EQ(1ul, identity_manager_observer()->BatchChangeRecords().size());

@@ -7,6 +7,7 @@
 <translation id="1156623771253174079">{SECONDS,plural, =1{Преди 1 минута}other{Преди # минути}}</translation>
 <translation id="1169783199079129864">{MINUTES,plural, =1{1 мин}other{# мин}}</translation>
 <translation id="1181037720776840403">Премахване</translation>
+<translation id="1201402288615127009">Напред</translation>
 <translation id="1243314992276662751">Качване</translation>
 <translation id="1266864766717917324">Споделянето на <ph name="CONTENT_TYPE" /> не бе възможно</translation>
 <translation id="1269641567813814718">Win</translation>
@@ -51,6 +52,7 @@
 <translation id="2289052229480071835">Докоснете съответните цели на екрана.</translation>
 <translation id="2295140143284145483">Анкета</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> ТБ/сек</translation>
+<translation id="2353636109065292463">Връзката с интернет се проверява</translation>
 <translation id="2388990488038464401">Искате ли да се обадите на този номер от телефона си?</translation>
 <translation id="24452542372838207">Разгъване на известието</translation>
 <translation id="2445449901874883781">Използване на висока плътност</translation>
@@ -81,7 +83,6 @@
 <translation id="3295886253693811851">Извършване на обаждане от</translation>
 <translation id="335581015389089642">Speech</translation>
 <translation id="3389286852084373014">Текстът е твърде голям</translation>
-<translation id="3443810440409579745">Получен раздел.</translation>
 <translation id="3479552764303398839">Не сега</translation>
 <translation id="348799646910989694">Лавицата се скрива автоматично</translation>
 <translation id="3600566671520689681">{DAYS,plural, =1{Остава 1 ден}other{Остават # дни}}</translation>
@@ -111,14 +112,11 @@
 <translation id="4724120544754982507">Център за известия, <ph name="UNREAD_NOTIFICATION_COUNT" /> непрочетени</translation>
 <translation id="4730374152663651037">ЧЕСТО ИЗПОЛЗВАНИ</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{Остава 1 месец}other{Остават # месеца}}</translation>
-<translation id="4841881773802181781">Вмъкване</translation>
-<translation id="4881695831933465202">Отваряне</translation>
 <translation id="4888938634149558681">Обаждане</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 секунда}other{# секунди}}</translation>
 <translation id="4971687151119236543">Мултимедия, предишният запис</translation>
 <translation id="5046499563572181734">Докоснете тук</translation>
 <translation id="5076340679995252485">&amp;Поставяне</translation>
-<translation id="5137751499640340777">Стартиране на Google Асистент</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> ПБ</translation>
 <translation id="5266161281976477809">Триъгълник за разкриване на съдържание</translation>
 <translation id="5278860589123563674">Изпращането не бе успешно</translation>
@@ -155,6 +153,7 @@
 <translation id="6394627529324717982">Запетая</translation>
 <translation id="6397363302884558537">Stop Speaking</translation>
 <translation id="6404817160109697034">{SECONDS,plural, =1{Преди 1 сек}other{Преди # сек}}</translation>
+<translation id="6417265370957905582">Google Асистент</translation>
 <translation id="6430678249303439055">Блокиране на всички известия от това приложение</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{Преди 1 секунда}other{Преди # секунди}}</translation>
 <translation id="6539092367496845964">Нещо се обърка. Опитайте пак по-късно.</translation>
@@ -165,7 +164,7 @@
 <translation id="6620110761915583480">Запазване на файл</translation>
 <translation id="6656912866303152668">Проверете дали синхронизацията в Chrome е включена за <ph name="TARGET_DEVICE_NAME" /> и опитайте да изпратите отново.</translation>
 <translation id="6699343763173986273">Мултимедия, следващият запис</translation>
-<translation id="673773751041746814">Изтриване</translation>
+<translation id="6710213216561001401">Предишна</translation>
 <translation id="6779314412797872738">За да изпратите номер оттук до телефона си с Android, <ph name="TROUBLESHOOT_LINK" /> в настройките и на двете устройства.</translation>
 <translation id="6786750046913594791">Затваряне на папката</translation>
 <translation id="6808150112686056157">Мултимедия, стоп</translation>
@@ -183,6 +182,7 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{Остава 1 мин}other{Остават # мин}}</translation>
 <translation id="7319740667687257810">Стартов панел, частичен изглед</translation>
+<translation id="7352651011704765696">Нещо се обърка</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{Преди 1 мин}other{Преди # мин}}</translation>
 <translation id="7389409599945284130">– <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{Остава 1 минута}other{Остават # минути}}</translation>
@@ -198,9 +198,10 @@
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{Повече от 1 непрочетено известие}other{Повече от # непрочетени известия}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{след 1 м}other{след # м}}</translation>
 <translation id="8087772101393322318"><ph name="KEY_MODIFIER_NAME" /> + <ph name="KEY_COMBO_NAME" /></translation>
-<translation id="8098075892845277643">Стартиране на гласова заявка към Google Асистент</translation>
+<translation id="8090736967111090568">Номер от <ph name="ORIGIN" /></translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{Преди 1 час}other{Преди # часа}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{Остава 1 сек}other{Остават # сек}}</translation>
+<translation id="8134065097954893699">Презаредете страницата</translation>
 <translation id="8144660977431427332">Търсенията се извършват с помощта на Google Асистент. <ph name="LEARN_MORE" /></translation>
 <translation id="8152264887680882389"><ph name="TEXT" />, автоматично довършване</translation>
 <translation id="815598010540052116">Превъртане надолу</translation>

@@ -152,11 +152,27 @@ class Controller : public ScriptExecutorDelegate,
       std::unique_ptr<autofill::AutofillProfile> address) override;
   void SetContactInfo(
       std::unique_ptr<autofill::AutofillProfile> profile) override;
-  void SetCreditCard(std::unique_ptr<autofill::CreditCard> card) override;
+  void SetCreditCard(
+      std::unique_ptr<autofill::CreditCard> card,
+      std::unique_ptr<autofill::AutofillProfile> billing_profile) override;
   void SetTermsAndConditions(
       TermsAndConditionsState terms_and_conditions) override;
   void SetLoginOption(std::string identifier) override;
   void OnTermsAndConditionsLinkClicked(int link) override;
+  void SetDateTimeRangeStart(int year,
+                             int month,
+                             int day,
+                             int hour,
+                             int minute,
+                             int second) override;
+  void SetDateTimeRangeEnd(int year,
+                           int month,
+                           int day,
+                           int hour,
+                           int minute,
+                           int second) override;
+  void SetAdditionalValue(const std::string& client_memory_key,
+                          const std::string& value) override;
   void GetTouchableArea(std::vector<RectF>* area) const override;
   void GetRestrictedArea(std::vector<RectF>* area) const override;
   void GetVisualViewport(RectF* visual_viewport) const override;

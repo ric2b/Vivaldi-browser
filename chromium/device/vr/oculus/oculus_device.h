@@ -11,7 +11,9 @@
 #include "base/single_thread_task_runner.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/vr_device_base.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "third_party/libovr/src/Include/OVR_CAPI.h"
 
 namespace device {
@@ -41,8 +43,9 @@ class DEVICE_VR_EXPORT OculusDevice
 
   bool IsAvailable();
 
-  mojom::IsolatedXRGamepadProviderFactoryPtr BindGamepadFactory();
-  mojom::XRCompositorHostPtr BindCompositorHost();
+  mojo::PendingRemote<mojom::IsolatedXRGamepadProviderFactory>
+  BindGamepadFactory();
+  mojo::PendingRemote<mojom::XRCompositorHost> BindCompositorHost();
 
  private:
   // XRSessionController
@@ -52,11 +55,12 @@ class DEVICE_VR_EXPORT OculusDevice
 
   // mojom::IsolatedXRGamepadProviderFactory
   void GetIsolatedXRGamepadProvider(
-      mojom::IsolatedXRGamepadProviderRequest provider_request) override;
+      mojo::PendingReceiver<mojom::IsolatedXRGamepadProvider> provider_receiver)
+      override;
 
   // XRCompositorHost
   void CreateImmersiveOverlay(
-      mojom::ImmersiveOverlayRequest overlay_request) override;
+      mojo::PendingReceiver<mojom::ImmersiveOverlay> overlay_receiver) override;
 
   void OnPresentationEnded();
   bool EnsureValidDisplayInfo();
@@ -69,13 +73,14 @@ class DEVICE_VR_EXPORT OculusDevice
   ovrSession session_ = nullptr;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
 
-  mojo::Binding<mojom::XRSessionController> exclusive_controller_binding_;
-  mojo::Binding<mojom::IsolatedXRGamepadProviderFactory>
-      gamepad_provider_factory_binding_;
-  mojom::IsolatedXRGamepadProviderRequest provider_request_;
+  mojo::Receiver<mojom::XRSessionController> exclusive_controller_receiver_{
+      this};
+  mojo::Receiver<mojom::IsolatedXRGamepadProviderFactory>
+      gamepad_provider_factory_receiver_{this};
+  mojo::PendingReceiver<mojom::IsolatedXRGamepadProvider> provider_receiver_;
 
-  mojo::Binding<mojom::XRCompositorHost> compositor_host_binding_;
-  mojom::ImmersiveOverlayRequest overlay_request_;
+  mojo::Receiver<mojom::XRCompositorHost> compositor_host_receiver_{this};
+  mojo::PendingReceiver<mojom::ImmersiveOverlay> overlay_receiver_;
 
   base::WeakPtrFactory<OculusDevice> weak_ptr_factory_;
 

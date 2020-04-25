@@ -8,10 +8,12 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.provider.Browser;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.view.Window;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
+import androidx.browser.customtabs.CustomTabsSessionToken;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.ActivityTabProvider;
@@ -32,6 +34,7 @@ import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.customtabs.FirstMeaningfulPaintObserver;
 import org.chromium.chrome.browser.customtabs.PageLoadMetricsObserver;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
+import org.chromium.chrome.browser.init.StartupTabPreloader;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.InflationObserver;
 import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
@@ -42,20 +45,23 @@ import org.chromium.chrome.browser.tab.TabObserverRegistrar;
 import org.chromium.chrome.browser.tab.TabRedirectHandler;
 import org.chromium.chrome.browser.tabmodel.AsyncTabParams;
 import org.chromium.chrome.browser.tabmodel.AsyncTabParamsManager;
+import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
 import org.chromium.chrome.browser.tabmodel.TabReparentingParams;
 import org.chromium.chrome.browser.translate.TranslateBridge;
 import org.chromium.chrome.browser.util.IntentUtils;
+import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.common.Referrer;
+import org.chromium.network.mojom.ReferrerPolicy;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 import javax.inject.Inject;
 
-import androidx.browser.customtabs.CustomTabsSessionToken;
 import dagger.Lazy;
 
 /**
@@ -90,6 +96,7 @@ public class CustomTabActivityTabController implements InflationObserver, Native
     private final CustomTabNavigationEventObserver mTabNavigationEventObserver;
     private final ActivityTabProvider mActivityTabProvider;
     private final CustomTabActivityTabProvider mTabProvider;
+    private final StartupTabPreloader mStartupTabPreloader;
 
     @Nullable
     private final CustomTabsSessionToken mSession;
@@ -113,7 +120,7 @@ public class CustomTabActivityTabController implements InflationObserver, Native
             CustomTabTabPersistencePolicy persistencePolicy, CustomTabActivityTabFactory tabFactory,
             Lazy<CustomTabObserver> customTabObserver, WebContentsFactory webContentsFactory,
             CustomTabNavigationEventObserver tabNavigationEventObserver,
-            CustomTabActivityTabProvider tabProvider) {
+            CustomTabActivityTabProvider tabProvider, StartupTabPreloader startupTabPreloader) {
         mCustomTabDelegateFactory = customTabDelegateFactory;
         mActivity = activity;
         mConnection = connection;
@@ -128,6 +135,7 @@ public class CustomTabActivityTabController implements InflationObserver, Native
         mTabNavigationEventObserver = tabNavigationEventObserver;
         mActivityTabProvider = activityTabProvider;
         mTabProvider = tabProvider;
+        mStartupTabPreloader = startupTabPreloader;
 
         mSession = mIntentDataProvider.getSession();
         mIntent = mIntentDataProvider.getIntent();
@@ -236,6 +244,32 @@ public class CustomTabActivityTabController implements InflationObserver, Native
         }
     }
 
+    /**
+     * @return A tab if mStartupTabPreloader contains a tab matching the intent.
+     */
+    private Tab maybeTakeTabFromStartupTabPreloader() {
+        // Don't overwrite any pre-existing tab.
+        if (mTabProvider.getTab() != null) return null;
+
+        LoadUrlParams loadUrlParams = new LoadUrlParams(mIntentDataProvider.getUrlToLoad());
+        String referrer = mConnection.getReferrer(mSession, mIntent);
+        if (referrer != null && !referrer.isEmpty()) {
+            loadUrlParams.setReferrer(new Referrer(referrer, ReferrerPolicy.DEFAULT));
+        }
+
+        Tab tab = mStartupTabPreloader.takeTabIfMatchingOrDestroy(
+                loadUrlParams, TabLaunchType.FROM_EXTERNAL_APP);
+        if (tab == null) return null;
+
+        TabAssociatedApp.from(tab).setAppId(mConnection.getClientPackageNameForSession(mSession));
+        if (mIntentDataProvider.shouldEnableEmbeddedMediaExperience()) {
+            // Configures web preferences for viewing downloaded media.
+            if (tab.getWebContents() != null) tab.getWebContents().notifyRendererPreferenceUpdate();
+        }
+        initializeTab(tab);
+        return tab;
+    }
+
     // Creates the tab on native init, if it hasn't been created yet, and does all the additional
     // initialization steps necessary at this stage.
     private void finalizeCreatingTab(TabModelSelectorImpl tabModelSelector, TabModel tabModel) {
@@ -253,7 +287,15 @@ public class CustomTabActivityTabController implements InflationObserver, Native
         }
 
         if (tab == null) {
-            // No tab was restored or created early, creating a new tab.
+            // No tab was restored or created early, check if we preloaded a tab.
+            tab = maybeTakeTabFromStartupTabPreloader();
+            if (tab != null) mode = TabCreationMode.FROM_STARTUP_TAB_PRELOADER;
+        } else {
+            mStartupTabPreloader.destroy();
+        }
+
+        if (tab == null) {
+            // No tab was restored, preloaded or created early, creating a new tab.
             tab = createTab();
             mode = TabCreationMode.DEFAULT;
         }
@@ -313,7 +355,7 @@ public class CustomTabActivityTabController implements InflationObserver, Native
 
     private Tab createTab() {
         WebContents webContents = takeWebContents();
-        Tab tab = mTabFactory.createTab();
+        Tab tab = mTabFactory.createTab(webContents, mCustomTabDelegateFactory.get());
         int launchSource = mIntent.getIntExtra(
                 CustomTabIntentDataProvider.EXTRA_BROWSER_LAUNCH_SOURCE, LaunchSourceType.OTHER);
         if (launchSource == LaunchSourceType.WEBAPK) {
@@ -323,9 +365,6 @@ public class CustomTabActivityTabController implements InflationObserver, Native
             TabAssociatedApp.from(tab).setAppId(
                     mConnection.getClientPackageNameForSession(mSession));
         }
-
-        tab.initialize(webContents, mCustomTabDelegateFactory.get(), false /*initiallyHidden*/,
-                null, false /*unfreeze*/);
 
         if (mIntentDataProvider.shouldEnableEmbeddedMediaExperience()) {
             if (tab.getWebContents() != null) tab.getWebContents().notifyRendererPreferenceUpdate();

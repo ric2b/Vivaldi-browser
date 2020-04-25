@@ -1,6 +1,9 @@
 # Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
 
 import("//build/config/jumbo.gni")
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
 
 jumbo_static_library("notes") {
   sources = [
@@ -17,6 +20,13 @@ jumbo_static_library("notes") {
     "scoped_group_notes_actions.cpp",
     "scoped_group_notes_actions.h",
   ]
+  if (is_android) {
+    sources += [
+      "note_type.h",
+      "note_id.cc",
+      "note_id.h",
+    ]
+  }
   deps = [
     "//base:base",
     "//base:i18n",
@@ -49,9 +59,31 @@ jumbo_static_library("browser") {
     "notes_model_loaded_observer.cpp",
     "notes_model_loaded_observer.h",
     "notes_model_observer.h",
-    "notes_submenu_observer.cc",
-    "notes_submenu_observer.h",
   ]
+  if (is_linux || is_win) {
+    sources += [
+      "notes_submenu_observer_helper_views.cc",
+      "notes_submenu_observer_helper_views.h",
+    ]
+  }
+  if (is_mac) {
+    sources += [
+      "notes_submenu_observer_helper_mac.cc",
+      "notes_submenu_observer_helper_mac.h",
+    ]
+  }
+  if (is_android) {
+    sources += [
+      "notes_bridge.h",
+      "notes_bridge.cc"
+    ]
+  } else { #! is_android
+    sources += [
+      "notes_submenu_observer.cc",
+      "notes_submenu_observer.h",
+    ]
+  }
+
   deps = [
     "//base:base",
     "//base:i18n",

@@ -109,6 +109,7 @@ blink_platform_sources("scheduler") {
     "main_thread/user_model.cc",
     "main_thread/user_model.h",
     "main_thread/web_render_widget_scheduling_state.cc",
+    "main_thread/web_scheduling_priority.cc",
     "main_thread/web_scheduling_task_queue_impl.cc",
     "main_thread/web_scheduling_task_queue_impl.h",
     "main_thread/web_scoped_virtual_time_pauser.cc",
@@ -165,6 +166,7 @@ blink_platform_sources("scheduler") {
     "//services/metrics/public/cpp:ukm_builders",
     "//services/metrics/public/mojom",
     "//third_party/blink/renderer/platform:make_platform_generated",
+    "//third_party/blink/renderer/platform/instrumentation",
     "//third_party/blink/renderer/platform/wtf",
     "//v8",
   ]

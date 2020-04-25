@@ -38,6 +38,8 @@ extern const char kAccountsPrefDeviceLocalAccountsKeyArcKioskAction[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kAccountsPrefDeviceLocalAccountsKeyArcKioskDisplayName[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
+extern const char kAccountsPrefDeviceLocalAccountsKeyWebKioskUrl[];
+COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kAccountsPrefDeviceLocalAccountAutoLoginId[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kAccountsPrefDeviceLocalAccountAutoLoginDelay[];
@@ -170,6 +172,8 @@ COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kDeviceLoginScreenLocales[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kDeviceLoginScreenInputMethods[];
+COMPONENT_EXPORT(CHROMEOS_SETTINGS)
+extern const char kDeviceLoginScreenSystemInfoEnforced[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kPerUserTimezoneEnabled[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)

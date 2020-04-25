@@ -10,7 +10,8 @@ import android.content.ContentResolver;
 import android.content.SyncStatusObserver;
 import android.os.Bundle;
 import android.os.StrictMode;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
@@ -22,6 +23,8 @@ import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.ChromeSigninController;
 
 import javax.annotation.concurrent.ThreadSafe;
+
+import org.vivaldi.browser.sync.VivaldiSyncContentResolverDelegate;
 
 /**
  * A helper class to handle the current status of sync for Chrome in Android settings.
@@ -75,7 +78,7 @@ public class AndroidSyncSettings {
         synchronized (CLASS_LOCK) {
             if (sInstance == null) {
                 SyncContentResolverDelegate contentResolver =
-                        new SystemSyncContentResolverDelegate();
+                        new VivaldiSyncContentResolverDelegate();
                 sInstance = new AndroidSyncSettings(contentResolver);
             }
             return sInstance;

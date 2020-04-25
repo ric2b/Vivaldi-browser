@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/ranges.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -80,7 +81,7 @@ float AveragePower(const media::AudioBus& buffer) {
 
   // Update accumulated average results, with clamping for sanity.
   const float average_power =
-      std::max(0.0f, std::min(1.0f, sum_power / (frames * channels)));
+      base::ClampToRange(sum_power / (frames * channels), 0.0f, 1.0f);
 
   // Convert average power level to dBFS units, and pin it down to zero if it
   // is insignificantly small.
@@ -94,10 +95,6 @@ float AveragePower(const media::AudioBus& buffer) {
 #endif  // AUDIO_POWER_MONITORING
 
 #if defined(AUDIO_PROCESSING_IN_AUDIO_SERVICE)
-
-bool CanRunApm() {
-  return base::FeatureList::IsEnabled(features::kWebRtcApmInAudioService);
-}
 
 bool SamplesNeedClamping(const media::AudioBus& bus) {
   const auto IsOutOfRange = [](float sample) {
@@ -410,7 +407,8 @@ InputController::InputController(
 
 #if defined(AUDIO_PROCESSING_IN_AUDIO_SERVICE)
   if (processing_config_) {
-    if (processing_config_->settings.requires_apm() && CanRunApm()) {
+    if (processing_config_->settings.requires_apm() &&
+        media::IsWebRtcApmInAudioServiceEnabled()) {
       processing_helper_.emplace(
           params, processing_config_->settings,
           std::move(processing_config_->controls_receiver));

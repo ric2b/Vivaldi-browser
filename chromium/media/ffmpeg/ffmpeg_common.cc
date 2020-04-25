@@ -80,7 +80,7 @@ AudioCodec CodecIDToAudioCodec(AVCodecID codec_id) {
   switch (codec_id) {
     case AV_CODEC_ID_AAC:
       return kCodecAAC;
-#if BUILDFLAG(ENABLE_AC3_EAC3_AUDIO_DEMUXING)
+#if BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
     case AV_CODEC_ID_AC3:
       return kCodecAC3;
     case AV_CODEC_ID_EAC3:
@@ -178,7 +178,7 @@ static VideoCodec CodecIDToVideoCodec(AVCodecID codec_id) {
   switch (codec_id) {
     case AV_CODEC_ID_H264:
       return kCodecH264;
-#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
     case AV_CODEC_ID_HEVC:
       return kCodecHEVC;
 #endif
@@ -202,7 +202,7 @@ AVCodecID VideoCodecToCodecID(VideoCodec video_codec) {
   switch (video_codec) {
     case kCodecH264:
       return AV_CODEC_ID_H264;
-#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
     case kCodecHEVC:
       return AV_CODEC_ID_HEVC;
 #endif
@@ -341,7 +341,7 @@ bool AVCodecContextToAudioDecoderConfig(
     // not fill |sample_fmt|.
     case kCodecAC3:
     case kCodecEAC3:
-#if BUILDFLAG(ENABLE_AC3_EAC3_AUDIO_DEMUXING)
+#if BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
       // The spec for AC3/EAC3 audio is ETSI TS 102 366. According to sections
       // F.3.1 and F.5.1 in that spec the sample_format for AC3/EAC3 must be 16.
       sample_format = kSampleFormatS16;
@@ -382,7 +382,7 @@ bool AVCodecContextToAudioDecoderConfig(
   if (channel_layout == CHANNEL_LAYOUT_DISCRETE)
     config->SetChannelsForDiscrete(codec_context->channels);
 
-#if BUILDFLAG(ENABLE_AC3_EAC3_AUDIO_DEMUXING)
+#if BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
   // These are bitstream formats unknown to ffmpeg, so they don't have
   // a known sample format size.
   if (codec == kCodecAC3 || codec == kCodecEAC3)
@@ -521,7 +521,7 @@ bool AVStreamToVideoDecoderConfig(const AVStream* stream,
     case kCodecAV1:
       profile = AV1PROFILE_PROFILE_MAIN;
       break;
-#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
     case kCodecHEVC:
       profile = HEVCPROFILE_MAIN;
       break;

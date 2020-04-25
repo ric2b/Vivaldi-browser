@@ -58,20 +58,10 @@ void CloneBookmarkNodeImpl(BookmarkModel* model,
     Time date_added = reset_node_times ? Time::Now() : element.date_added;
     DCHECK(!date_added.is_null());
 
-    model->AddURLWithCreationTimeAndMetaInfo(parent,
-                                             index_to_add_at,
-                                             element.title,
-                                             element.url,
-                                             date_added,
-                                             &meta_info_map,
-                                             element.nickname,
-                                             element.description,
-                                             element.thumbnail,
-                                             element.partner,
-                                             element.speeddial,
-                                             &element.date_visited);
+    model->AddURL(parent, index_to_add_at, element.title, element.url,
+                  &meta_info_map, date_added);
   } else {
-    const BookmarkNode* cloned_node = model->AddFolderWithMetaInfo(
+    const BookmarkNode* cloned_node = model->AddFolder(
         parent, index_to_add_at, element.title, &meta_info_map);
     if (!reset_node_times) {
       DCHECK(!element.date_folder_modified.is_null());
@@ -374,17 +364,6 @@ std::vector<const BookmarkNode*> GetMostRecentlyModifiedUserFolders(
     }
   }
   return nodes;
-}
-
-bool DoesNickExists(BookmarkModel* model, base::string16 nickname, int64_t id) {
-  ui::TreeNodeIterator<const BookmarkNode> iterator(model->root_node());
-  while (iterator.has_next()) {
-    const BookmarkNode* node = iterator.Next();
-    if (node->GetNickName().compare(nickname) == 0 && node->id() != id) {
-      return true;
-    }
-  }
-  return false;
 }
 
 void GetMostRecentlyAddedEntries(BookmarkModel* model,

@@ -76,4 +76,9 @@ public class BookmarkTextInputLayout extends ChromeTextInputLayout {
             setError(isEmpty() ? mEmptyErrorMessage : null);
         }
     }
+
+    // Vivaldi
+    public boolean isEmptyPublic() { return isEmpty(); }
+    public void validatePublic() { validate(); }
+    public String getTrimmedTextPublic() { return getTrimmedText(); }
 }

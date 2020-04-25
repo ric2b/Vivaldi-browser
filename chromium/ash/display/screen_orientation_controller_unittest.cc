@@ -12,6 +12,7 @@
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
 #include "ash/public/cpp/app_types.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/shell.h"
 #include "ash/system/screen_layout_observer.h"
@@ -24,6 +25,7 @@
 #include "ash/wm/window_state.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/test/scoped_feature_list.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer_type.h"
@@ -146,6 +148,10 @@ class ScreenOrientationControllerTest : public AshTestBase {
     ScreenOrientationControllerTestApi test_api(
         Shell::Get()->screen_orientation_controller());
     return test_api.UserLockedOrientation();
+  }
+
+  SplitViewController* split_view_controller() {
+    return SplitViewController::Get(Shell::GetPrimaryRootWindow());
   }
 
  private:
@@ -341,13 +347,13 @@ TEST_F(ScreenOrientationControllerTest, SplitViewPreventsLock) {
   Lock(child_window2.get(), OrientationLockType::kPortrait);
   ASSERT_TRUE(RotationLocked());
 
-  Shell::Get()->split_view_controller()->SnapWindow(focus_window1.get(),
-                                                    SplitViewController::LEFT);
-  Shell::Get()->split_view_controller()->SnapWindow(focus_window1.get(),
-                                                    SplitViewController::RIGHT);
+  split_view_controller()->SnapWindow(focus_window1.get(),
+                                      SplitViewController::LEFT);
+  split_view_controller()->SnapWindow(focus_window1.get(),
+                                      SplitViewController::RIGHT);
   EXPECT_FALSE(RotationLocked());
 
-  Shell::Get()->split_view_controller()->EndSplitView();
+  split_view_controller()->EndSplitView();
   EXPECT_TRUE(RotationLocked());
 }
 
@@ -441,6 +447,10 @@ TEST_F(ScreenOrientationControllerTest, RotationLockPreventsRotation) {
 // Tests that the screen rotation notifications are suppressed when
 // triggered by the accelerometer.
 TEST_F(ScreenOrientationControllerTest, BlockRotationNotifications) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      features::kReduceDisplayNotifications);
+
   EnableTabletMode(true);
   Shell::Get()->screen_layout_observer()->set_show_notifications_for_testing(
       true);

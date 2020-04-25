@@ -80,7 +80,6 @@
 #include "chrome/browser/chromeos/certificate_provider/certificate_provider.h"
 #include "chrome/browser/chromeos/certificate_provider/certificate_provider_service.h"
 #include "chrome/browser/chromeos/certificate_provider/certificate_provider_service_factory.h"
-#include "chrome/browser/chromeos/fileapi/external_file_protocol_handler.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/net/client_cert_filter_chromeos.h"
 #include "chrome/browser/chromeos/net/client_cert_store_chromeos.h"
@@ -270,28 +269,24 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
     params->system_key_slot_use_type = SystemKeySlotUseType::kUseForClientAuth;
   }
 
-  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
-  if (user_manager) {
-    const user_manager::User* user =
-        chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
-    // No need to initialize NSS for users with empty username hash:
-    // Getters for a user's NSS slots always return NULL slot if the user's
-    // username hash is empty, even when the NSS is not initialized for the
-    // user.
-    if (user && !user->username_hash().empty()) {
-      params->username_hash = user->username_hash();
-      DCHECK(!params->username_hash.empty());
-      base::PostTask(
-          FROM_HERE, {BrowserThread::IO},
-          base::BindOnce(&StartNSSInitOnIOThread, user->GetAccountId(),
-                         user->username_hash(), profile->GetPath()));
+  const user_manager::User* user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
+  // No need to initialize NSS for users with empty username hash:
+  // Getters for a user's NSS slots always return a null slot if the user's
+  // username hash is empty, even when the NSS is not initialized for the
+  // user.
+  if (user && !user->username_hash().empty()) {
+    params->username_hash = user->username_hash();
+    DCHECK(!params->username_hash.empty());
+    base::PostTask(FROM_HERE, {BrowserThread::IO},
+                   base::BindOnce(&StartNSSInitOnIOThread, user->GetAccountId(),
+                                  user->username_hash(), profile->GetPath()));
 
-      // Use the device-wide system key slot only if the user is affiliated on
-      // the device.
-      if (user->IsAffiliated()) {
-        params->system_key_slot_use_type =
-            SystemKeySlotUseType::kUseForClientAuthAndCertManagement;
-      }
+    // Use the device-wide system key slot only if the user is affiliated on
+    // the device.
+    if (user->IsAffiliated()) {
+      params->system_key_slot_use_type =
+          SystemKeySlotUseType::kUseForClientAuthAndCertManagement;
     }
   }
 

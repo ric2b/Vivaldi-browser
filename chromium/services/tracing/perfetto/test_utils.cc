@@ -189,8 +189,7 @@ MockConsumer::MockConsumer(std::vector<std::string> data_source_names,
   for (const auto& source : data_source_names) {
     data_sources_.emplace_back(DataSourceStatus{
         source,
-        perfetto::ObservableEvents::DataSourceInstanceStateChange::
-            DataSourceInstanceState::DATA_SOURCE_INSTANCE_STATE_STOPPED});
+        perfetto::ObservableEvents::DATA_SOURCE_INSTANCE_STATE_STOPPED});
   }
   CHECK(!data_sources_.empty());
   consumer_endpoint_ = service->ConnectConsumer(this, /*uid=*/0);
@@ -232,7 +231,7 @@ void MockConsumer::OnTraceData(std::vector<perfetto::TracePacket> packets,
                                bool has_more) {
   for (auto& encoded_packet : packets) {
     perfetto::protos::TracePacket packet;
-    EXPECT_TRUE(encoded_packet.Decode(&packet));
+    EXPECT_TRUE(packet.ParseFromString(encoded_packet.GetRawBytesForTesting()));
     ++received_packets_;
     if (packet.for_testing().str() == kPerfettoTestString) {
       ++received_test_packets_;
@@ -282,8 +281,7 @@ void MockConsumer::WaitForAllDataSourcesStopped() {
 void MockConsumer::CheckForAllDataSourcesStarted() {
   for (auto& data_source_status : data_sources_) {
     if (data_source_status.state !=
-        perfetto::ObservableEvents::DataSourceInstanceStateChange::
-            DATA_SOURCE_INSTANCE_STATE_STARTED) {
+        perfetto::ObservableEvents::DATA_SOURCE_INSTANCE_STATE_STARTED) {
       return;
     }
   }
@@ -296,8 +294,7 @@ void MockConsumer::CheckForAllDataSourcesStarted() {
 void MockConsumer::CheckForAllDataSourcesStopped() {
   for (auto& data_source_status : data_sources_) {
     if (data_source_status.state !=
-        perfetto::ObservableEvents::DataSourceInstanceStateChange::
-            DATA_SOURCE_INSTANCE_STATE_STOPPED) {
+        perfetto::ObservableEvents::DATA_SOURCE_INSTANCE_STATE_STOPPED) {
       return;
     }
   }
@@ -316,13 +313,13 @@ MockProducerHost::MockProducerHost(
     : producer_name_(producer_name),
       datasource_registered_callback_(
           std::move(datasource_registered_callback)) {
-  mojom::ProducerClientPtr client;
-  mojom::ProducerHostPtrInfo host_info;
-  auto client_request = mojo::MakeRequest(&client);
+  mojo::PendingRemote<mojom::ProducerClient> client;
+  mojo::PendingRemote<mojom::ProducerHost> host_remote;
+  auto client_receiver = client.InitWithNewPipeAndPassReceiver();
   Initialize(std::move(client), service, producer_name_);
-  binding_.Bind(mojo::MakeRequest(&host_info));
-  producer_client->BindClientAndHostPipesForTesting(std::move(client_request),
-                                                    std::move(host_info));
+  receiver_.Bind(host_remote.InitWithNewPipeAndPassReceiver());
+  producer_client->BindClientAndHostPipesForTesting(std::move(client_receiver),
+                                                    std::move(host_remote));
   producer_client->SetupDataSource(data_source_name);
 }
 

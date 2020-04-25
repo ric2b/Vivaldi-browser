@@ -10,7 +10,6 @@
 #include "chrome/browser/extensions/forced_extensions/installation_reporter.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
-#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/install/crx_install_error.h"
 #include "extensions/browser/pref_names.h"
 
@@ -30,7 +29,6 @@ InstallationTracker::InstallationTracker(
       profile_(profile),
       pref_service_(profile->GetPrefs()),
       start_time_(base::Time::Now()),
-      observer_(this),
       timer_(std::move(timer)) {
   observer_.Add(registry_);
   pref_change_registrar_.Init(pref_service_);
@@ -51,14 +49,32 @@ InstallationTracker::InstallationTracker(
 InstallationTracker::~InstallationTracker() = default;
 
 void InstallationTracker::OnForcedExtensionsPrefChanged() {
-  // Load forced extensions list only once.
-  if (!forced_extensions_.empty())
-    return;
-
   const base::DictionaryValue* value =
       pref_service_->GetDictionary(pref_names::kInstallForceList);
-  if (!value || value->empty())
+  if (!value)
     return;
+
+  std::vector<ExtensionId> extensions_to_remove;
+  for (const auto& extension_id : forced_extensions_) {
+    if (value->FindKey(extension_id) == nullptr)
+      extensions_to_remove.push_back(extension_id);
+  }
+
+  for (const auto& extension_id : extensions_to_remove) {
+    forced_extensions_.erase(extension_id);
+    pending_forced_extensions_.erase(extension_id);
+  }
+
+  // Report if all remaining extensions were removed from policy.
+  if (loaded_ && pending_forced_extensions_.empty())
+    ReportResults(true /* succeeded */);
+
+  // Load forced extensions list only once.
+  if (value->empty() || loaded_) {
+    return;
+  }
+
+  loaded_ = true;
 
   for (const auto& entry : *value) {
     forced_extensions_.insert(entry.first);
@@ -70,7 +86,6 @@ void InstallationTracker::OnForcedExtensionsPrefChanged() {
 }
 
 void InstallationTracker::OnShutdown(ExtensionRegistry*) {
-  InstallationReporter::Clear(profile_);
   observer_.RemoveAll();
   pref_change_registrar_.RemoveAll();
   timer_->Stop();
@@ -98,6 +113,8 @@ void InstallationTracker::ReportResults(bool succeeded) {
       // crbug/904600.
       VLOG(2) << "All forced extensions seems to be installed";
     } else {
+      InstallationReporter* installation_reporter =
+          InstallationReporter::Get(profile_);
       size_t enabled_missing_count = pending_forced_extensions_.size();
       auto installed_extensions = registry_->GenerateInstalledExtensionsSet();
       for (const auto& entry : *installed_extensions)
@@ -113,7 +130,7 @@ void InstallationTracker::ReportResults(bool succeeded) {
               << " forced extensions.";
       for (const auto& extension_id : pending_forced_extensions_) {
         InstallationReporter::InstallationData installation =
-            InstallationReporter::Get(profile_, extension_id);
+            installation_reporter->Get(extension_id);
         if (!installation.failure_reason && installation.install_stage) {
           installation.failure_reason =
               InstallationReporter::FailureReason::IN_PROGRESS;
@@ -148,7 +165,7 @@ void InstallationTracker::ReportResults(bool succeeded) {
     }
   }
   reported_ = true;
-  InstallationReporter::Clear(profile_);
+  InstallationReporter::Get(profile_)->Clear();
   observer_.RemoveAll();
   pref_change_registrar_.RemoveAll();
   timer_->Stop();

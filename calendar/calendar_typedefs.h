@@ -13,7 +13,6 @@ namespace calendar {
 
 typedef int64_t EventID;
 typedef int64_t AlarmID;
-typedef int64_t RecurrenceID;
 typedef int64_t EventTypeID;
 typedef int64_t RecurrenceExceptionID;
 

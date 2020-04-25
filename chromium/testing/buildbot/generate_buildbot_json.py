@@ -633,13 +633,17 @@ class BBJSONGenerator(object):
 
   def generate_junit_test(self, waterfall, tester_name, tester_config,
                           test_name, test_config):
-    del tester_config
     if not self.should_run_on_tester(waterfall, tester_name, test_name,
                                      test_config):
       return None
-    result = {
-      'test': test_name,
-    }
+    result = copy.deepcopy(test_config)
+    result.update({
+      'name': test_name,
+      'test': test_config.get('test', test_name),
+    })
+    self.initialize_args_for_test(result, tester_config)
+    result = self.update_and_cleanup_test(
+        result, test_name, tester_name, tester_config, waterfall)
     return result
 
   def generate_instrumentation_test(self, waterfall, tester_name, tester_config,
@@ -759,13 +763,26 @@ class BBJSONGenerator(object):
 
   def check_composition_test_suites(self):
     # Pre-pass to catch errors reliably.
-    for name, value in self.test_suites.iteritems():
-      if isinstance(value, list):
-        for entry in value:
-          if isinstance(self.test_suites[entry], list):
+    for suite, suite_def in self.test_suites.iteritems():
+      if isinstance(suite_def, list):
+        seen_tests = {}
+        for sub_suite in suite_def:
+          if isinstance(self.test_suites[sub_suite], list):
             raise BBGenErr('Composition test suites may not refer to other '
                            'composition test suites (error found while '
-                           'processing %s)' % name)
+                           'processing %s)' % suite)
+          else:
+            # test name -> basic_suite that it came from
+            basic_tests = {k: sub_suite for k in self.test_suites[sub_suite]}
+            for test_name, test_suite in basic_tests.iteritems():
+              if (test_name in seen_tests and
+                  self.test_suites[test_suite][test_name] !=
+                  self.test_suites[seen_tests[test_name]][test_name]):
+                raise BBGenErr('Conflicting test definitions for %s from %s '
+                               'and %s in Composition test suite (error found '
+                               'while processing %s)' % (test_name,
+                               seen_tests[test_name], test_suite, suite))
+            seen_tests.update(basic_tests)
 
   def flatten_test_suites(self):
     new_test_suites = {}
@@ -992,7 +1009,7 @@ class BBJSONGenerator(object):
         bot_names.add(l[l.rindex('/') + 1:l.rindex('"')])
     return bot_names
 
-  def get_bots_that_do_not_actually_exist(self):
+  def get_builders_that_do_not_actually_exist(self):
     # Some of the bots on the chromium.gpu.fyi waterfall in particular
     # are defined only to be mirrored into trybots, and don't actually
     # exist on any of the waterfalls or consoles.
@@ -1032,15 +1049,12 @@ class BBJSONGenerator(object):
       'win32-dbg',
       'win-archive-dbg',
       'win32-archive-dbg',
-      # chromium.mac, see https://crbug.com/943804
-      'mac-dummy-rel',
-      # Defined in internal configs.
-      'chromeos-amd64-generic-google-rel',
-      'chromeos-betty-google-rel',
-      'chromeos-kevin-google-rel',
-      # code coverage, see https://crbug.com/1000367.
-      'linux-chromeos-coverage-rel-dummy',
     ]
+
+  def get_internal_waterfalls(self):
+    # Similar to get_builders_that_do_not_actually_exist above, but for
+    # waterfalls defined in internal configs.
+    return ['chrome']
 
   def check_input_file_consistency(self, verbose=False):
     self.check_input_files_sorting(verbose)
@@ -1051,10 +1065,14 @@ class BBJSONGenerator(object):
 
     # All bots should exist.
     bot_names = self.get_valid_bot_names()
-    bots_that_dont_exist = self.get_bots_that_do_not_actually_exist()
+    internal_waterfalls = self.get_internal_waterfalls()
+    builders_that_dont_exist = self.get_builders_that_do_not_actually_exist()
     for waterfall in self.waterfalls:
+      # TODO(crbug.com/991417): Remove the need for this exception.
+      if waterfall['name'] in internal_waterfalls:
+        continue  # pragma: no cover
       for bot_name in waterfall['machines']:
-        if bot_name in bots_that_dont_exist:
+        if bot_name in builders_that_dont_exist:
           continue  # pragma: no cover
         if bot_name not in bot_names:
           if waterfall['name'] in ['client.v8.chromium', 'client.v8.fyi']:
@@ -1115,7 +1133,7 @@ class BBJSONGenerator(object):
         if removal not in all_bots:
           missing_bots.add(removal)
 
-    missing_bots = missing_bots - set(bots_that_dont_exist)
+    missing_bots = missing_bots - set(builders_that_dont_exist)
     if missing_bots:
       raise BBGenErr('The following nonexistent machines were referenced in '
                      'the test suite exceptions: ' + str(missing_bots))

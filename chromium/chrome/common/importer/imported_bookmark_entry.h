@@ -23,11 +23,13 @@ struct ImportedBookmarkEntry {
   GURL url;
   std::vector<base::string16> path;
   base::string16 title;
-  base::string16 nickname;
-  base::string16 description;
-  base::string16 thumbnail;
-  bool speeddial;
   base::Time creation_time;
+
+  // Vivaldi
+  std::string nickname;
+  std::string description;
+  std::string thumbnail;
+  bool speeddial = false;
   base::Time visited_time;
 };
 

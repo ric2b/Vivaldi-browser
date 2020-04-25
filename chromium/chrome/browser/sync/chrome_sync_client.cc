@@ -40,7 +40,6 @@
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
-#include "chrome/browser/web_applications/web_app_sync_manager.h"
 #include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
@@ -103,6 +102,7 @@
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+#include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service.h"
@@ -293,14 +293,14 @@ ChromeSyncClient::CreateDataTypeControllers(syncer::SyncService* sync_service) {
         SecurityEventRecorderFactory::GetForProfile(profile_)
             ->GetControllerDelegate()
             .get();
-    // Forward both on-disk and in-memory storage modes to the same delegate,
+    // Forward both full-sync and transport-only modes to the same delegate,
     // since behavior for SECURITY_EVENTS does not differ.
     controllers.push_back(std::make_unique<syncer::ModelTypeController>(
         syncer::SECURITY_EVENTS,
-        /*delegate_on_disk=*/
+        /*delegate_for_full_sync_mode=*/
         std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
             delegate),
-        /*delegate_in_memory=*/
+        /*delegate_for_transport_mode=*/
         std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
             delegate)));
   }
@@ -416,6 +416,17 @@ BookmarkUndoService* ChromeSyncClient::GetBookmarkUndoService() {
   return BookmarkUndoServiceFactory::GetForProfile(profile_);
 }
 
+syncer::TrustedVaultClient* ChromeSyncClient::GetTrustedVaultClient() {
+#if defined(OS_ANDROID)
+  // TODO(crbug.com/1012659): Instantiate a client for Android.
+  NOTIMPLEMENTED();
+#else
+  // TODO(crbug.com/1012660): Instantiate a generic client for other platforms.
+  NOTIMPLEMENTED();
+#endif  // defined(OS_ANDROID)
+  return nullptr;
+}
+
 invalidation::InvalidationService* ChromeSyncClient::GetInvalidationService() {
   invalidation::ProfileInvalidationProvider* provider =
       invalidation::ProfileInvalidationProviderFactory::GetForProfile(profile_);
@@ -499,6 +510,11 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
 #if defined(OS_CHROMEOS)
     case syncer::ARC_PACKAGE:
       return arc::ArcPackageSyncableService::Get(profile_)->AsWeakPtr();
+    case syncer::OS_PREFERENCES:
+    case syncer::OS_PRIORITY_PREFERENCES:
+      return PrefServiceSyncableFromProfile(profile_)
+          ->GetSyncableService(type)
+          ->AsWeakPtr();
 #endif  // defined(OS_CHROMEOS)
     default:
       // The following datatypes still need to be transitioned to the
@@ -542,10 +558,12 @@ ChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
       DCHECK(base::FeatureList::IsEnabled(features::kDesktopPWAsUSS));
       auto* provider = web_app::WebAppProvider::Get(profile_);
       DCHECK(provider);
-      return provider->sync_manager()
-          .bridge()
-          .change_processor()
-          ->GetControllerDelegate();
+
+      web_app::WebAppSyncBridge* sync_bridge =
+          provider->registry_controller().AsWebAppSyncBridge();
+      DCHECK(sync_bridge);
+
+      return sync_bridge->change_processor()->GetControllerDelegate();
     }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
     // We don't exercise this function for certain datatypes, because their

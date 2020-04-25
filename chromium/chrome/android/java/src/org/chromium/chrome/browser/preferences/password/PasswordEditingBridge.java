@@ -8,6 +8,7 @@ import android.content.Context;
 import android.os.Bundle;
 
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
 
 /**
@@ -15,11 +16,28 @@ import org.chromium.chrome.browser.preferences.PreferencesLauncher;
  * launching the PasswordEntryEditor and handling the password changes that happen through the
  * PasswordEntryEditor.
  */
-public class PasswordEditingBridge {
+public class PasswordEditingBridge implements PasswordEditingDelegate {
     private long mNativePasswordEditingBridge;
 
     public PasswordEditingBridge(long nativePasswordEditingBridge) {
         mNativePasswordEditingBridge = nativePasswordEditingBridge;
+        PasswordEditingDelegateProvider.getInstance().setPasswordEditingDelegate(this);
+    }
+
+    /**
+     * The method edits a password form saved in the password store according to changes performed
+     * in PasswordEntryEditor. The delegate holds all the information about the password form that
+     * was loaded in the PasswordEntryEditor, so there's no need to pass the site, the old username
+     * or the old password to this method. Sometimes the form can have no username (for PSL-matched
+     * credentials), but it has to always have a password.
+     *
+     * @param newUsername that will replace the old one if it's given.
+     * @param newPassword that will replace the old one.
+     */
+    @Override
+    public void editSavedPasswordEntry(String newUsername, String newPassword) {
+        PasswordEditingBridgeJni.get().handleEditSavedPasswordEntry(
+                mNativePasswordEditingBridge, PasswordEditingBridge.this, newUsername, newPassword);
     }
 
     @CalledByNative
@@ -39,12 +57,19 @@ public class PasswordEditingBridge {
     /**
      * Destroy the native object.
      */
+    @Override
     public void destroy() {
-        if (mNativePasswordEditingBridge != 0) {
-            nativeDestroy(mNativePasswordEditingBridge);
-            mNativePasswordEditingBridge = 0;
-        }
+        PasswordEditingDelegateProvider.getInstance().setPasswordEditingDelegate(null);
+        assert mNativePasswordEditingBridge != 0;
+        PasswordEditingBridgeJni.get().destroy(
+                mNativePasswordEditingBridge, PasswordEditingBridge.this);
+        mNativePasswordEditingBridge = 0;
     }
 
-    private native void nativeDestroy(long nativePasswordEditingBridge);
+    @NativeMethods
+    interface Natives {
+        void destroy(long nativePasswordEditingBridge, PasswordEditingBridge caller);
+        void handleEditSavedPasswordEntry(long nativePasswordEditingBridge,
+                PasswordEditingBridge caller, String newUsername, String newPassword);
+    }
 }

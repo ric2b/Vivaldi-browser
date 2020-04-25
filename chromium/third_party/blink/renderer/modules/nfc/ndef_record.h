@@ -33,13 +33,13 @@ class MODULES_EXPORT NDEFRecord final : public ScriptWrappable {
   explicit NDEFRecord(DOMArrayBuffer*);
 
   NDEFRecord(const String&, const String&, WTF::Vector<uint8_t>);
-  explicit NDEFRecord(const device::mojom::blink::NDEFRecordPtr&);
+  explicit NDEFRecord(const device::mojom::blink::NDEFRecord&);
 
   const String& recordType() const;
   const String& mediaType() const;
-  String toText() const;
-  DOMArrayBuffer* toArrayBuffer() const;
-  ScriptValue toJSON(ScriptState*, ExceptionState&) const;
+  String text() const;
+  DOMArrayBuffer* arrayBuffer() const;
+  ScriptValue json(ScriptState*, ExceptionState&) const;
 
   const WTF::Vector<uint8_t>& data() const;
 

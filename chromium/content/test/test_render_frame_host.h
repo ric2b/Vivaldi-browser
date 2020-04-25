@@ -22,6 +22,8 @@
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_render_widget_host.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "third_party/blink/public/mojom/bluetooth/web_bluetooth.mojom.h"
 #include "ui/base/page_transition_types.h"
 
 namespace net {
@@ -80,7 +82,6 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   void InitializeRenderFrameIfNeeded() override;
   TestRenderFrameHost* AppendChild(const std::string& frame_name) override;
   void Detach() override;
-  void SimulateNavigationStop() override;
   void SendNavigateWithTransition(int nav_entry_id,
                                   bool did_create_new_entry,
                                   const GURL& url,
@@ -89,7 +90,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   void SimulateSwapOutACK() override;
   void SimulateFeaturePolicyHeader(
       blink::mojom::FeaturePolicyFeature feature,
-      const std::vector<url::Origin>& whitelist) override;
+      const std::vector<url::Origin>& allowlist) override;
   const std::vector<std::string>& GetConsoleMessages() override;
 
   void SendNavigate(int nav_entry_id,
@@ -206,13 +207,26 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
     return navigation_requests_;
   }
 
+  enum class LoadingScenario {
+    NewDocumentNavigation,
+    kSameDocumentNavigation,
+
+    // TODO(altimin): Improve handling for the scenarios where navigation or
+    // page load have failed.
+    kOther
+  };
+
+  // Simulates RenderFrameHost finishing loading and dispatching all relevant
+  // callbacks.
+  void SimulateLoadingCompleted(LoadingScenario loading_scenario);
+
  protected:
   void SendCommitNavigation(
       mojom::NavigationClient* navigation_client,
       NavigationRequest* navigation_request,
       mojom::CommonNavigationParamsPtr common_params,
       mojom::CommitNavigationParamsPtr commit_params,
-      const network::ResourceResponseHead& response_head,
+      network::mojom::URLResponseHeadPtr response_head,
       mojo::ScopedDataPipeConsumerHandle response_body,
       network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
       std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
@@ -286,6 +300,9 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   std::map<NavigationRequest*,
            mojom::NavigationClient::CommitFailedNavigationCallback>
       navigation_client_commit_failed_callback_;
+
+  mojo::PendingRemote<blink::mojom::WebBluetoothService>
+      dummy_web_bluetooth_service_remote_;
 
   DISALLOW_COPY_AND_ASSIGN(TestRenderFrameHost);
 };

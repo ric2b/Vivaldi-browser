@@ -14,9 +14,9 @@
 #include "ash/login/ui/login_pin_view.h"
 #include "ash/login/ui/non_accessible_view.h"
 #include "ash/public/cpp/login_types.h"
+#include "ash/public/cpp/shelf_config.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
-#include "ash/shelf/shelf_constants.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
@@ -32,6 +32,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/session_manager/session_manager_types.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event.h"
@@ -231,7 +232,7 @@ class ParentAccessView::FocusableLabelButton : public views::LabelButton {
                        const base::string16& text)
       : views::LabelButton(listener, text) {
     SetInstallFocusRingOnFocus(true);
-    focus_ring()->SetColor(kShelfFocusBorderColor);
+    focus_ring()->SetColor(ShelfConfig::Get()->shelf_focus_border_color());
   }
   ~FocusableLabelButton() override = default;
 
@@ -373,6 +374,10 @@ class ParentAccessView::AccessCodeInput : public views::View,
   bool HandleKeyEvent(views::Textfield* sender,
                       const ui::KeyEvent& key_event) override {
     if (key_event.type() != ui::ET_KEY_PRESSED)
+      return false;
+
+    // Default handling for events with Alt modifier like spoken feedback.
+    if (key_event.IsAltDown())
       return false;
 
     // AccessCodeInput class responds to limited subset of key press events.
@@ -613,7 +618,7 @@ ParentAccessView::ParentAccessView(const AccountId& account_id,
     label->SetSubpixelRenderingEnabled(false);
     label->SetAutoColorReadabilityEnabled(false);
     label->SetEnabledColor(kTextColor);
-    label->SetFocusBehavior(FocusBehavior::ALWAYS);
+    label->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   };
 
   // Main view title.
@@ -843,6 +848,7 @@ void ParentAccessView::UpdateState(State state) {
       title_label_->SetEnabledColor(kErrorColor);
       title_label_->SetText(
           l10n_util::GetStringUTF16(IDS_ASH_LOGIN_PARENT_ACCESS_TITLE_ERROR));
+      title_label_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
       return;
     }
   }

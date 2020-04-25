@@ -20,6 +20,7 @@
 #include "base/memory/singleton.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
+#include "content/browser/can_commit_status.h"
 #include "content/browser/isolated_origin_util.h"
 #include "content/browser/isolation_context.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -114,6 +115,19 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
 
   // Identical to the above method, but takes url::Origin as input.
   bool CanAccessDataForOrigin(int child_id, const url::Origin& origin);
+
+  // Determines if the combination of |origin| & |url| is safe to commit to
+  // the process associated with |child_id|.
+  //
+  // Returns CAN_COMMIT_ORIGIN_AND_URL if it is safe to commit the |origin| and
+  // |url| combination to the process associated with |child_id|.
+  // Returns CANNOT_COMMIT_URL if |url| is not safe to commit.
+  // Returns CANNOT_COMMIT_ORIGIN if |origin| is not safe to commit.
+  CanCommitStatus CanCommitOriginAndUrl(
+      int child_id,
+      const IsolationContext& isolation_context,
+      const url::Origin& origin,
+      const GURL& url);
 
   // This function will check whether |origin| requires process isolation
   // within |isolation_context|, and if so, it will return true and put the
@@ -219,24 +233,6 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   // Revoke read raw cookies permission.
   void RevokeReadRawCookies(int child_id);
 
-  // A version of the public ChildProcessSecurityPolicy::CanCommitURL() which
-  // takes an additional bool |check_origin_lock|, specifying whether to
-  // reject |url| if it does not match the origin lock on process |child_id|.
-  // Passing true for |check_origin_lock| provides stronger enforcement with
-  // strict site isolation; it is only set to false by features (e.g., Origin
-  // header validation) that aren't yet ready for this enforcement. This
-  // function should *not* be used by new features; use the public
-  // ChildProcessSecurityPolicy::CanCommitURL() instead, which internally calls
-  // this with |check_origin_lock| being true.
-  //
-  // TODO(alexmos): Remove |check_origin_lock| and check origin locks
-  // unconditionally once https://crbug.com/515309 is fixed.
-  bool CanCommitURL(int child_id, const GURL& url, bool check_origin_lock);
-
-  // Whether the given origin is valid for an origin header. Valid origin
-  // headers are commitable URLs.
-  bool CanSetAsOriginHeader(int child_id, const GURL& url);
-
   // Explicit permissions checks for FileSystemURL specified files.
   bool CanReadFileSystemFile(int child_id,
                              const storage::FileSystemURL& filesystem_url);
@@ -252,12 +248,14 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   bool CanDeleteFileSystemFile(int child_id,
                                const storage::FileSystemURL& filesystem_url);
 
-  // True if cookie headers may be exposed to renderer |child_id| for |url| for
-  // display in DevTools. |url| should be a WebSocket URL.
-  bool CanAccessDataForWebSocket(int child_id, const GURL& url);
-
   // Returns true if the specified child_id has been granted ReadRawCookies.
   bool CanReadRawCookies(int child_id);
+
+  // Notifies security state of |child_id| about the IsolationContext it will
+  // host.  The main side effect is proper setting of the lowest
+  // BrowsingInstanceId associated with the security state.
+  void IncludeIsolationContext(int child_id,
+                               const IsolationContext& isolation_context);
 
   // Sets the process identified by |child_id| as only permitted to access data
   // for the origin specified by |lock_url|. Most callers should use

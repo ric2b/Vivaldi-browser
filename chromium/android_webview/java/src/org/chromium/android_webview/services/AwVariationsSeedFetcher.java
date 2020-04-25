@@ -142,9 +142,9 @@ public class AwVariationsSeedFetcher extends JobService {
                     shouldFinish = false; // jobFinished will be deferred until updateSeed is done.
                 }
             } catch (IOException e) {
-                // downloadContent() logs and re-throws IOExceptions, so there's no need to log
-                // here. IOException includes InterruptedIOException, which may happen inside
-                // downloadContent() if the task is cancelled.
+                // downloadContent() logs and re-throws these exceptions, so there's no need to log
+                // here. IOException includes SocketTimeoutException and UnknownHostException,
+                // which may happen inside downloadContent().
             } finally {
                 if (shouldFinish) jobFinished(mParams);
             }

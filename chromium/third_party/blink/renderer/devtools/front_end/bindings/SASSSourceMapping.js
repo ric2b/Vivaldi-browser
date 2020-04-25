@@ -31,7 +31,7 @@
 /**
  * @implements {Bindings.CSSWorkspaceBinding.SourceMapping}
  */
-Bindings.SASSSourceMapping = class {
+export default class SASSSourceMapping {
   /**
    * @param {!SDK.Target} target
    * @param {!SDK.SourceMapManager} sourceMapManager
@@ -79,7 +79,7 @@ Bindings.SASSSourceMapping = class {
           typeof embeddedContent === 'string' ? new Workspace.UISourceCodeMetadata(null, embeddedContent.length) : null;
       uiSourceCode = this._project.createUISourceCode(sassURL, contentProvider.contentType());
       Bindings.NetworkProject.setInitialFrameAttribution(uiSourceCode, header.frameId);
-      uiSourceCode[Bindings.SASSSourceMapping._sourceMapSymbol] = sourceMap;
+      uiSourceCode[_sourceMapSymbol] = sourceMap;
       this._project.addUISourceCodeWithProvider(uiSourceCode, contentProvider, metadata, mimeType);
     }
     Bindings.cssWorkspaceBinding.updateLocations(header);
@@ -120,8 +120,9 @@ Bindings.SASSSourceMapping = class {
       const sassText = /** @type {string} */ (newSources.get(sourceURL));
       uiSourceCode.setWorkingCopy(sassText);
     }
-    for (const header of headers)
+    for (const header of headers) {
       Bindings.cssWorkspaceBinding.updateLocations(header);
+    }
   }
 
   /**
@@ -131,17 +132,21 @@ Bindings.SASSSourceMapping = class {
    */
   rawLocationToUILocation(rawLocation) {
     const header = rawLocation.header();
-    if (!header)
+    if (!header) {
       return null;
+    }
     const sourceMap = this._sourceMapManager.sourceMapForClient(header);
-    if (!sourceMap)
+    if (!sourceMap) {
       return null;
+    }
     const entry = sourceMap.findEntry(rawLocation.lineNumber, rawLocation.columnNumber);
-    if (!entry || !entry.sourceURL)
+    if (!entry || !entry.sourceURL) {
       return null;
+    }
     const uiSourceCode = this._project.uiSourceCodeForURL(entry.sourceURL);
-    if (!uiSourceCode)
+    if (!uiSourceCode) {
       return null;
+    }
     return uiSourceCode.uiLocation(entry.sourceLineNumber || 0, entry.sourceColumnNumber);
   }
 
@@ -151,14 +156,16 @@ Bindings.SASSSourceMapping = class {
    * @return {!Array<!SDK.CSSLocation>}
    */
   uiLocationToRawLocations(uiLocation) {
-    const sourceMap = uiLocation.uiSourceCode[Bindings.SASSSourceMapping._sourceMapSymbol];
-    if (!sourceMap)
+    const sourceMap = uiLocation.uiSourceCode[_sourceMapSymbol];
+    if (!sourceMap) {
       return [];
+    }
     const entries =
         sourceMap.findReverseEntries(uiLocation.uiSourceCode.url(), uiLocation.lineNumber, uiLocation.columnNumber);
     const locations = [];
-    for (const header of this._sourceMapManager.clientsForSourceMap(sourceMap))
+    for (const header of this._sourceMapManager.clientsForSourceMap(sourceMap)) {
       locations.pushAll(entries.map(entry => new SDK.CSSLocation(header, entry.lineNumber, entry.columnNumber)));
+    }
     return locations;
   }
 
@@ -166,6 +173,17 @@ Bindings.SASSSourceMapping = class {
     this._project.dispose();
     Common.EventTarget.removeEventListeners(this._eventListeners);
   }
-};
+}
 
-Bindings.SASSSourceMapping._sourceMapSymbol = Symbol('sourceMap');
+export const _sourceMapSymbol = Symbol('sourceMap');
+
+/* Legacy exported object */
+self.Bindings = self.Bindings || {};
+
+/* Legacy exported object */
+Bindings = Bindings || {};
+
+/** @constructor */
+Bindings.SASSSourceMapping = SASSSourceMapping;
+
+Bindings.SASSSourceMapping._sourceMapSymbol = _sourceMapSymbol;

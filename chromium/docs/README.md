@@ -173,6 +173,7 @@ used when committed.
     Capture stack traces on layout test crashes without an attached debugger
 *   [Test Descriptions](testing/test_descriptions.md) - Unit test targets that can be
     built, with associated desciptions.
+*   [Fuzz Testing](../testing/libfuzzer/README.md) - Fuzz testing in Chromium.
 *   [IPC Fuzzer](testing/ipc_fuzzer.md) - Fuzz testing of Chromium IPC interfaces.
 *   [Running Chrome tests with AddressSanitizer (asan) and LeakSanitizer (lsan)](testing/linux_running_asan_tests.md) -
     Run Chrome tests with ASAN and LSAN builds to detect addressability issues and memory leaks.
@@ -274,6 +275,8 @@ used when committed.
     How to build Android app bundles for Chrome.
 *   [Dynamic Feature Modules (DFMs)](android_dynamic_feature_modules.md) - How
     to create dynamic feature modules.
+*   [Chrome for Android UI](ui/android/overview.md) - Resources and best practices for
+    developing UI
 
 ### Misc iOS-Specific Docs
 *   [Continuous Build and Test Infrastructure for Chromium for iOS](ios/infra.md)

@@ -305,10 +305,10 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
     // See https://drafts.csswg.org/css-display/#unbox-html
     // Some of these elements are handled with other adjustments above.
     if (IsA<HTMLBRElement>(element) || IsHTMLWBRElement(element) ||
-        IsHTMLMeterElement(element) || IsHTMLProgressElement(element) ||
+        IsA<HTMLMeterElement>(element) || IsA<HTMLProgressElement>(element) ||
         IsA<HTMLCanvasElement>(element) || IsHTMLMediaElement(element) ||
         IsHTMLInputElement(element) || IsHTMLTextAreaElement(element) ||
-        IsHTMLSelectElement(element)) {
+        IsA<HTMLSelectElement>(element)) {
       style.SetDisplay(EDisplay::kNone);
     }
   }
@@ -417,8 +417,7 @@ static void AdjustStyleForDisplay(ComputedStyle& style,
   // setting of block-flow to anything other than TopToBottomWritingMode.
   // https://bugs.webkit.org/show_bug.cgi?id=46418 - Flexible box support.
   if (style.GetWritingMode() != WritingMode::kHorizontalTb &&
-      (style.Display() == EDisplay::kWebkitBox ||
-       style.Display() == EDisplay::kWebkitInlineBox)) {
+      style.IsDeprecatedWebkitBox()) {
     style.SetWritingMode(WritingMode::kHorizontalTb);
     style.UpdateFontOrientation();
   }
@@ -567,7 +566,9 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     AdjustStyleForFirstLetter(style);
   }
 
-  if (element && RuntimeEnabledFeatures::DisplayLockingEnabled() &&
+  if (element &&
+      RuntimeEnabledFeatures::DisplayLockingEnabled(
+          element->GetExecutionContext()) &&
       element->hasAttribute(html_names::kRendersubtreeAttr)) {
     // The element has the rendersubtree attr, so we should add style and
     // layout containment. If the attribute contains "invisible" we should
@@ -584,7 +585,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
   }
 
   if (style.IsColorInternalText()) {
-    style.SetColor(
+    style.ResolveInternalTextColor(
         LayoutTheme::GetTheme().RootElementColor(style.UsedColorScheme()));
   }
 

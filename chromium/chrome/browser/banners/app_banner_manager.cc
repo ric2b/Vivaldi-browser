@@ -23,6 +23,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/rappor_service_impl.h"
+#include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -45,16 +46,6 @@ InstallableParams ParamsToGetManifest() {
 }  // anonymous namespace
 
 namespace banners {
-
-AppBannerManager::Observer::Observer() = default;
-AppBannerManager::Observer::~Observer() = default;
-
-void AppBannerManager::Observer::ObserveAppBannerManager(
-    AppBannerManager* manager) {
-  scoped_observer_.RemoveAll();
-  if (manager)
-    scoped_observer_.Add(manager);
-}
 
 // static
 base::Time AppBannerManager::GetCurrentTime() {
@@ -176,7 +167,7 @@ void AppBannerManager::RequestAppBanner(const GURL& validated_url) {
       base::BindOnce(&AppBannerManager::OnDidGetManifest, GetWeakPtr()));
 }
 
-void AppBannerManager::OnInstall(blink::WebDisplayMode display) {
+void AppBannerManager::OnInstall(blink::mojom::DisplayMode display) {
   TrackInstallDisplayMode(display);
   mojo::Remote<blink::mojom::InstallationService> installation_service;
   web_contents()->GetMainFrame()->GetRemoteInterfaces()->GetInterface(
@@ -215,7 +206,7 @@ void AppBannerManager::MigrateObserverListForTesting(
     content::WebContents* web_contents) {
   AppBannerManager* existing_manager = FromWebContents(web_contents);
   for (Observer& observer : existing_manager->observer_list_)
-    observer.ObserveAppBannerManager(this);
+    observer.OnAppBannerManagerChanged(this);
   DCHECK(existing_manager->observer_list_.begin() ==
          existing_manager->observer_list_.end())
       << "Old observer list must be empty after transfer to test instance.";
@@ -223,6 +214,11 @@ void AppBannerManager::MigrateObserverListForTesting(
 
 bool AppBannerManager::IsPromptAvailableForTesting() const {
   return receiver_.is_bound();
+}
+
+AppBannerManager::InstallableWebAppCheckResult
+AppBannerManager::GetInstallableWebAppCheckResultForTesting() {
+  return installable_web_app_check_result_;
 }
 
 AppBannerManager::AppBannerManager(content::WebContents* web_contents)
@@ -242,11 +238,7 @@ AppBannerManager::AppBannerManager(content::WebContents* web_contents)
   AppBannerSettingsHelper::UpdateFromFieldTrial();
 }
 
-AppBannerManager::~AppBannerManager() {
-  for (Observer& observer : observer_list_)
-    observer.ObserveAppBannerManager(nullptr);
-  CHECK(!observer_list_.might_have_observers());
-}
+AppBannerManager::~AppBannerManager() = default;
 
 bool AppBannerManager::CheckIfShouldShowBanner() {
   if (ShouldBypassEngagementChecks())
@@ -269,11 +261,6 @@ bool AppBannerManager::CheckIfShouldShowBanner() {
   }
   Stop(code);
   return false;
-}
-
-bool AppBannerManager::CheckIfInstalled() {
-  return IsWebAppConsideredInstalled(web_contents(), validated_url_,
-                                     manifest_.start_url, manifest_url_);
 }
 
 bool AppBannerManager::ShouldDeferToRelatedApplication() const {
@@ -301,7 +288,6 @@ std::string AppBannerManager::GetBannerType() {
   return "web";
 }
 
-
 bool AppBannerManager::HasSufficientEngagement() const {
   return has_sufficient_engagement_ || ShouldBypassEngagementChecks();
 }
@@ -311,11 +297,11 @@ bool AppBannerManager::ShouldBypassEngagementChecks() const {
       switches::kBypassAppBannerEngagementChecks);
 }
 
-bool AppBannerManager::IsWebAppConsideredInstalled(
-    content::WebContents* web_contents,
-    const GURL& validated_url,
-    const GURL& start_url,
-    const GURL& manifest_url) {
+bool AppBannerManager::IsWebAppConsideredInstalled() {
+  return false;
+}
+
+bool AppBannerManager::ShouldAllowWebAppReplacementInstall() {
   return false;
 }
 
@@ -377,7 +363,7 @@ void AppBannerManager::OnDidPerformInstallableWebAppCheck(
     return;
   }
 
-  if (CheckIfInstalled()) {
+  if (IsWebAppConsideredInstalled() && !ShouldAllowWebAppReplacementInstall()) {
     banners::TrackDisplayEvent(banners::DISPLAY_EVENT_INSTALLED_PREVIOUSLY);
     SetInstallableWebAppCheckResult(InstallableWebAppCheckResult::kNo);
     Stop(ALREADY_INSTALLED);
@@ -437,10 +423,13 @@ void AppBannerManager::ResetBindings() {
 }
 
 void AppBannerManager::ResetCurrentPageData() {
+  load_finished_ = false;
+  has_sufficient_engagement_ = false;
   active_media_players_.clear();
   manifest_ = blink::Manifest();
   manifest_url_ = GURL();
   validated_url_ = GURL();
+  UpdateState(State::INACTIVE);
   SetInstallableWebAppCheckResult(InstallableWebAppCheckResult::kUnknown);
 }
 
@@ -547,22 +536,27 @@ void AppBannerManager::UpdateState(State state) {
   state_ = state;
 }
 
-void AppBannerManager::DidStartNavigation(content::NavigationHandle* handle) {
-  if (!handle->IsInMainFrame() || handle->IsSameDocument())
+void AppBannerManager::DidFinishNavigation(content::NavigationHandle* handle) {
+  if (!handle->IsInMainFrame() || !handle->HasCommitted() ||
+      handle->IsSameDocument()) {
     return;
+  }
+
+  // If the page gets stored in the back-forward cache we will not trigger the
+  // pipeline again when navigating back (DidFinishLoad will not trigger). So
+  // only allow the page to enter the cache if we know for sure that no
+  // installation is needed.
+  // Note: this check must happen before calling Terminate as it might set the
+  // installable_web_app_check_result_ to kNo.
+  if (installable_web_app_check_result_ != InstallableWebAppCheckResult::kNo &&
+      state_ != State::INACTIVE) {
+    content::BackForwardCache::DisableForRenderFrameHost(
+        handle->GetPreviousRenderFrameHostId(), "banners::AppBannerManager");
+  }
 
   if (state_ != State::COMPLETE && state_ != State::INACTIVE)
     Terminate();
-  UpdateState(State::INACTIVE);
-  load_finished_ = false;
-  has_sufficient_engagement_ = false;
-}
-
-void AppBannerManager::DidFinishNavigation(content::NavigationHandle* handle) {
-  if (handle->IsInMainFrame() && handle->HasCommitted() &&
-      !handle->IsSameDocument()) {
-    ResetCurrentPageData();
-  }
+  ResetCurrentPageData();
 }
 
 void AppBannerManager::DidFinishLoad(

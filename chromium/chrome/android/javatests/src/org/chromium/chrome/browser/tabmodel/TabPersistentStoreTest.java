@@ -28,18 +28,18 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.accessibility_tab_switcher.OverviewListLayout;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelper;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.snackbar.undo.UndoBarController;
+import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabBuilder;
 import org.chromium.chrome.browser.tab.TabState;
 import org.chromium.chrome.browser.tab.TabTestUtils;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabModelSelectorMetadata;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabPersistentStoreObserver;
 import org.chromium.chrome.browser.tabmodel.TestTabModelDirectory.TabModelMetaDataInfo;
-import org.chromium.chrome.browser.widget.OverviewListLayout;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -101,10 +101,7 @@ public class TabPersistentStoreTest {
 
         @Override
         public Tab createNewTab(LoadUrlParams loadUrlParams, @TabLaunchType int type, Tab parent) {
-            Tab tab = TabBuilder.createForLazyLoad(loadUrlParams)
-                              .setIncognito(mIsIncognito)
-                              .setLaunchType(TabLaunchType.FROM_LINK)
-                              .build();
+            Tab tab = new MockTab(0, mIsIncognito, TabLaunchType.FROM_LINK);
             mSelector.getModel(mIsIncognito).addTab(tab, TabModel.INVALID_TAB_INDEX, type);
             storeTabInfo(null, tab.getId());
             return tab;
@@ -112,10 +109,7 @@ public class TabPersistentStoreTest {
 
         @Override
         public Tab createFrozenTab(TabState state, int id, int index) {
-            Tab tab = TabBuilder.createFromFrozenState()
-                              .setId(id)
-                              .setIncognito(state.isIncognito())
-                              .build();
+            Tab tab = new MockTab(id, state.isIncognito(), TabLaunchType.FROM_RESTORE);
             TabTestUtils.restoreFieldsFromState(tab, state);
             mSelector.getModel(mIsIncognito).addTab(tab, index, TabLaunchType.FROM_RESTORE);
             storeTabInfo(state, id);
@@ -293,7 +287,7 @@ public class TabPersistentStoreTest {
     private SharedPreferences mPreferences;
 
     @Before
-    public void setUp() throws Exception {
+    public void setUp() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mChromeActivity = new ChromeActivity() {
                 @Override
@@ -330,7 +324,7 @@ public class TabPersistentStoreTest {
     }
 
     @After
-    public void tearDown() throws Exception {
+    public void tearDown() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             TabWindowManager.getInstance().onActivityStateChange(
                     mChromeActivity, ActivityState.DESTROYED);
@@ -343,7 +337,7 @@ public class TabPersistentStoreTest {
             final TabPersistentStoreObserver observer) {
         return TestThreadUtils.runOnUiThreadBlockingNoException(new Callable<TabPersistentStore>() {
             @Override
-            public TabPersistentStore call() throws Exception {
+            public TabPersistentStore call() {
                 return new TabPersistentStore(persistencePolicy, modelSelector, creatorManager,
                         observer);
             }

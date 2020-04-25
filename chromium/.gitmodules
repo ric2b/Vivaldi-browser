@@ -262,6 +262,9 @@
 [submodule "buildtools/clang_format/script"]
 	path = buildtools/clang_format/script
 	url = ../llvm-project/cfe/tools/clang-format.git
+[submodule "third_party/expat/src"]
+	path = third_party/expat/src
+	url = ../../external/github.com/libexpat/libexpat.git
 [submodule "third_party/wds/src"]
 	path = third_party/wds/src
 	url = ../../external/github.com/01org/wds.git

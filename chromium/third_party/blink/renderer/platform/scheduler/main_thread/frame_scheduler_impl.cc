@@ -185,6 +185,12 @@ FrameSchedulerImpl::FrameSchedulerImpl(
                              this,
                              &tracing_controller_,
                              YesNoStateToString),
+      preempted_for_cooperative_scheduling_(
+          false,
+          "FrameScheduler.PreemptedForCooperativeScheduling",
+          this,
+          &tracing_controller_,
+          YesNoStateToString),
       aggressive_throttling_opt_out_count(0),
       opted_out_from_aggressive_throttling_(
           false,
@@ -829,6 +835,7 @@ void FrameSchedulerImpl::UpdateQueuePolicy(
   DCHECK(parent_page_scheduler_);
   bool queue_disabled = false;
   queue_disabled |= frame_paused_ && queue->CanBePaused();
+  queue_disabled |= preempted_for_cooperative_scheduling_;
   // Per-frame freezable task queues will be frozen after 5 mins in background
   // on Android, and if the browser freezes the page in the background. They
   // will be resumed when the page is visible.
@@ -1147,7 +1154,7 @@ FrameSchedulerImpl::ThrottleableTaskQueueTraits() {
       .SetCanBeFrozen(true)
       .SetCanBeDeferred(true)
       .SetCanBePaused(true)
-      .SetShouldUseVirtualTime(true);
+      .SetCanRunWhenVirtualTimePaused(true);
 }
 
 // static
@@ -1158,7 +1165,7 @@ FrameSchedulerImpl::DeferrableTaskQueueTraits() {
       .SetCanBeFrozen(base::FeatureList::IsEnabled(
           blink::features::kStopNonTimersInBackground))
       .SetCanBePaused(true)
-      .SetShouldUseVirtualTime(true);
+      .SetCanRunWhenVirtualTimePaused(true);
 }
 
 // static
@@ -1168,7 +1175,7 @@ FrameSchedulerImpl::PausableTaskQueueTraits() {
       .SetCanBeFrozen(base::FeatureList::IsEnabled(
           blink::features::kStopNonTimersInBackground))
       .SetCanBePaused(true)
-      .SetShouldUseVirtualTime(true);
+      .SetCanRunWhenVirtualTimePaused(true);
 }
 
 // static
@@ -1182,23 +1189,26 @@ FrameSchedulerImpl::FreezableTaskQueueTraits() {
 // static
 MainThreadTaskQueue::QueueTraits
 FrameSchedulerImpl::UnpausableTaskQueueTraits() {
-  return QueueTraits().SetShouldUseVirtualTime(true);
+  return QueueTraits().SetCanRunWhenVirtualTimePaused(true);
 }
 
 MainThreadTaskQueue::QueueTraits
 FrameSchedulerImpl::ForegroundOnlyTaskQueueTraits() {
   return ThrottleableTaskQueueTraits()
       .SetCanRunInBackground(false)
-      .SetShouldUseVirtualTime(true);
+      .SetCanRunWhenVirtualTimePaused(true);
 }
 
 MainThreadTaskQueue::QueueTraits
 FrameSchedulerImpl::DoesNotUseVirtualTimeTaskQueueTraits() {
-  return QueueTraits().SetShouldUseVirtualTime(false);
+  return QueueTraits().SetCanRunWhenVirtualTimePaused(false);
 }
 
-void FrameSchedulerImpl::SetPausedForCooperativeScheduling(Paused paused) {
-  // TODO(keishi): Stop all task queues
+void FrameSchedulerImpl::SetPreemptedForCooperativeScheduling(
+    Preempted preempted) {
+  DCHECK_NE(preempted.value(), preempted_for_cooperative_scheduling_);
+  preempted_for_cooperative_scheduling_ = preempted.value();
+  UpdatePolicy();
 }
 
 MainThreadTaskQueue::QueueTraits

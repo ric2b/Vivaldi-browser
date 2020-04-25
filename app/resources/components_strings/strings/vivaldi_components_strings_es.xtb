@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="es">
 <translation id="1038842779957582377">nombre desconocido</translation>
+<translation id="1089439967362294234">Cambiar contraseña</translation>
 <translation id="1110994991967754504">Seleccionar permiso de <ph name="PERMISSION_NAME" /></translation>
 <translation id="1152921474424827756">Accede a una <ph name="BEGIN_LINK" />copia almacenada en caché<ph name="END_LINK" /> de <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> ha cerrado la conexión de forma inesperada.</translation>
@@ -17,7 +18,7 @@
 <translation id="1710259589646384581">Sistema operativo</translation>
 <translation id="1728677426644403582">Estás viendo el código fuente de una página web</translation>
 <translation id="1734878702283171397">Intenta ponerte en contacto con el administrador del sistema.</translation>
-<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Probar a ejecutar diagnósticos de red de Windows<ph name="END_LINK" />.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Intenta ejecutar diagnósticos de red de Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Este sitio web contiene programas dañinos</translation>
 <translation id="1916770123977586577">Recarga esta página para aplicar a este sitio web tu nuevas preferencias</translation>
 <translation id="1919345977826869612">Anuncios</translation>
@@ -38,7 +39,7 @@
 <translation id="2355395290879513365">Puede ser que los atacantes sepan qué imágenes estás viendo en este sitio web y que las modifiquen para engañarte.</translation>
 <translation id="2356070529366658676">Preguntar</translation>
 <translation id="2359808026110333948">Continuar</translation>
-<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Ejecutar diagnósticos de red<ph name="END_LINK" /></translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Ejecutando diagnóstico de conectividad<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notificaciones</translation>
 <translation id="2539524384386349900">Detectar</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> ha enviado una respuesta no válida.</translation>
@@ -48,14 +49,18 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Acceso al archivo denegado</translation>
 <translation id="2705137772291741111">La copia guardada (almacenada en caché) de este sitio web no se ha podido leer.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Ejecutando diagnóstico de conectividad<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Se ha restablecido la conexión.</translation>
 <translation id="2826760142808435982">La conexión se ha cifrado y autenticado con <ph name="CIPHER" />, y utiliza <ph name="KX" /> como mecanismo de intercambio de claves.</translation>
 <translation id="2856444702002559011">Es posible que los atacantes estén intentando robar tu información de <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (por ejemplo, contraseñas, mensajes o tarjetas de crédito). <ph name="BEGIN_LEARN_MORE_LINK" />Más información<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Se ha detectado un cambio de red.</translation>
+<translation id="2948083400971632585">Puede deshabilitar cualquier proxy configurado para una conexión desde Opciones.</translation>
 <translation id="2991571918955627853">Ahora mismo no puedes acceder a <ph name="SITE" /> según el HSTS que utiliza el sitio web. Los ataques y los errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="3005723025932146533">Mostrar copia guardada</translation>
 <translation id="301521992641321250">Bloqueado automáticamente</translation>
+<translation id="3041612393474885105">Datos del certificado</translation>
 <translation id="3109728660330352905">No tienes autorización para ver esta página.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Prueba ejecutando el diagnóstico de conectividad<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Esta página contiene un formulario que no puede enviar de forma segura. Otros usuarios pueden interceptar y ver los datos que envías y así un atacante podría modificar lo que el servidor recibe.</translation>
 <translation id="3176929007561373547">Comprueba la configuración del proxy o ponte en contacto con el administrador de red para
       asegurarte de que el servidor proxy funcione correctamente. Si consideras que no necesitas utilizar
@@ -69,6 +74,7 @@
 <translation id="3447661539832366887">El propietario de este dispositivo ha desactivado el juego del dinosaurio.</translation>
 <translation id="3447884698081792621">Mostrar certificado (emitido por <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Ocultar configuración avanzada</translation>
+<translation id="3484560055331845446">Podrías perder el acceso a tu cuenta de Google. Chrome te recomienda que cambies la contraseña ahora. Se te pedirá que inicies sesión.</translation>
 <translation id="3566021033012934673">Tu conexión no es privada</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Ocultar detalles</translation>
@@ -108,9 +114,11 @@
 <translation id="4744603770635761495">Ruta al ejecutable</translation>
 <translation id="4750917950439032686">Tu información (por ejemplo, las contraseñas o los números de las tarjetas de crédito) es privada cuando se envía a este sitio web.</translation>
 <translation id="4764776831041365478">Es posible que la página web <ph name="URL" /> esté temporalmente inactiva o que se haya trasladado definitivamente a otra dirección.</translation>
+<translation id="4943872375798546930">Sin resultados</translation>
 <translation id="4974590756084640048">Reactivar los avisos</translation>
 <translation id="5023310440958281426">Consulta las políticas del administrador</translation>
 <translation id="5039804452771397117">Permitir</translation>
+<translation id="5068778127327928576">{NUM_COOKIES,plural, =1 {(1 en uso)} other {(# en uso)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Comprobando la dirección del proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bits)</translation>
 <translation id="5287240709317226393">Mostrar cookies</translation>
@@ -124,7 +132,6 @@
     Ponte en contacto con el administrador del sistema.</translation>
 <translation id="5510766032865166053">Es posible que se haya movido o eliminado.</translation>
 <translation id="5556459405103347317">Cargar de nuevo</translation>
-<translation id="5571347317547569613">({NUM_COOKIES,plural, =1 {1 en uso} other {# en uso}})</translation>
 <translation id="5610142619324316209">Comprobando la conexión</translation>
 <translation id="5617949217645503996">La página <ph name="HOST_NAME" /> te ha redirigido demasiadas veces.</translation>
 <translation id="5675650730144413517">Esta página no funciona</translation>
@@ -201,6 +208,7 @@
 <translation id="8225771182978767009">La persona que ha configurado este ordenador ha elegido bloquear este sitio web.</translation>
 <translation id="8241707690549784388">La página que buscas usó la información que especificaste. Volver a la página podría hacer que tengas que repetir alguna acción. ¿Quieres continuar?</translation>
 <translation id="8241712895048303527">Bloquear en este sitio web</translation>
+<translation id="8286036467436129157">Iniciar sesión</translation>
 <translation id="8288807391153049143">Mostrar certificado</translation>
 <translation id="8289355894181816810">Si tienes alguna duda, ponte en contacto con el administrador de red.</translation>
 <translation id="8332188693563227489">Se ha denegado el acceso a <ph name="HOST_NAME" /></translation>
@@ -208,6 +216,7 @@
 <translation id="8503813439785031346">Nombre de usuario</translation>
 <translation id="8703575177326907206">Tu conexión a <ph name="DOMAIN" /> no está cifrada.</translation>
 <translation id="8740359287975076522">No se ha podido encontrar la &lt;abbr id="dnsDefinition"&gt;dirección DNS&lt;/abbr&gt; de la página <ph name="HOST_NAME" />. Se está diagnosticando el problema.</translation>
+<translation id="8820817407110198400">Marcadores</translation>
 <translation id="9001074447101275817">El proxy <ph name="DOMAIN" /> necesita un nombre de usuario y una contraseña.</translation>
 <translation id="9008201768610948239">Ignorar</translation>
 <translation id="9011424611726486705">Abrir configuración del sitio</translation>

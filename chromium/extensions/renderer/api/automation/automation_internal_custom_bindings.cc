@@ -20,7 +20,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "content/app/strings/grit/content_strings.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
@@ -34,6 +33,7 @@
 #include "gin/converter.h"
 #include "gin/data_object_builder.h"
 #include "ipc/message_filter.h"
+#include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -1394,6 +1394,20 @@ void AutomationInternalCustomBindings::AddRoutes() {
         if (node->GetTableCellRowIndex())
           result.Set(*node->GetTableCellRowIndex());
       });
+  RouteNodeIDFunction(
+      "GetTableCellAriaColumnIndex",
+      [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
+         AutomationAXTreeWrapper* tree_wrapper, ui::AXNode* node) {
+        if (node->GetTableCellAriaColIndex())
+          result.Set(*node->GetTableCellAriaColIndex());
+      });
+  RouteNodeIDFunction(
+      "GetTableCellAriaRowIndex",
+      [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
+         AutomationAXTreeWrapper* tree_wrapper, ui::AXNode* node) {
+        if (node->GetTableCellAriaRowIndex())
+          result.Set(*node->GetTableCellAriaRowIndex());
+      });
 }
 
 void AutomationInternalCustomBindings::Invalidate() {
@@ -1833,7 +1847,7 @@ ui::AXNode* AutomationInternalCustomBindings::GetPreviousInTreeOrder(
 }
 
 float AutomationInternalCustomBindings::GetDeviceScaleFactor() const {
-  return context()->GetRenderFrame()->GetRenderView()->GetDeviceScaleFactor();
+  return context()->GetRenderFrame()->GetDeviceScaleFactor();
 }
 
 void AutomationInternalCustomBindings::RouteTreeIDFunction(

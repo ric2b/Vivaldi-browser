@@ -33,6 +33,11 @@
 namespace views {
 
 ////////////////////////////////////////////////////////////////////////////////
+// DialogDelegate::Params:
+DialogDelegate::Params::Params() = default;
+DialogDelegate::Params::~Params() = default;
+
+////////////////////////////////////////////////////////////////////////////////
 // DialogDelegate:
 
 DialogDelegate::DialogDelegate() {
@@ -76,9 +81,9 @@ Widget::InitParams DialogDelegate::GetDialogWidgetInitParams(
   DialogDelegate* dialog = delegate->AsDialogDelegate();
 
   if (dialog)
-    dialog->supports_custom_frame_ &= CanSupportCustomFrame(parent);
+    dialog->params_.custom_frame &= CanSupportCustomFrame(parent);
 
-  if (!dialog || dialog->ShouldUseCustomFrame()) {
+  if (!dialog || dialog->use_custom_frame()) {
     params.opacity = Widget::InitParams::TRANSLUCENT_WINDOW;
     params.remove_standard_frame = true;
 #if !defined(OS_MACOSX)
@@ -105,6 +110,8 @@ int DialogDelegate::GetDialogButtons() const {
 }
 
 int DialogDelegate::GetDefaultDialogButton() const {
+  if (GetParams().default_button.has_value())
+    return *GetParams().default_button;
   if (GetDialogButtons() & ui::DIALOG_BUTTON_OK)
     return ui::DIALOG_BUTTON_OK;
   if (GetDialogButtons() & ui::DIALOG_BUTTON_CANCEL)
@@ -114,6 +121,9 @@ int DialogDelegate::GetDefaultDialogButton() const {
 
 base::string16 DialogDelegate::GetDialogButtonLabel(
     ui::DialogButton button) const {
+  if (!GetParams().button_labels[button].empty())
+    return GetParams().button_labels[button];
+
   if (button == ui::DIALOG_BUTTON_OK)
     return l10n_util::GetStringUTF16(IDS_APP_OK);
   if (button == ui::DIALOG_BUTTON_CANCEL) {
@@ -130,11 +140,7 @@ bool DialogDelegate::IsDialogButtonEnabled(ui::DialogButton button) const {
 }
 
 std::unique_ptr<View> DialogDelegate::CreateExtraView() {
-  return nullptr;
-}
-
-bool DialogDelegate::GetExtraViewPadding(int* padding) {
-  return false;
+  return std::move(extra_view_);
 }
 
 std::unique_ptr<View> DialogDelegate::CreateFootnoteView() {
@@ -156,29 +162,6 @@ bool DialogDelegate::Close() {
     return Cancel();
   }
   return Accept();
-}
-
-bool DialogDelegate::IsDialogDraggable() const {
-  return false;
-}
-
-void DialogDelegate::UpdateButton(LabelButton* button, ui::DialogButton type) {
-  button->SetText(GetDialogButtonLabel(type));
-  button->SetEnabled(IsDialogButtonEnabled(type));
-  bool is_default = type == GetDefaultDialogButton();
-  if (!PlatformStyle::kDialogDefaultButtonCanBeCancel &&
-      type == ui::DIALOG_BUTTON_CANCEL) {
-    is_default = false;
-  }
-  button->SetIsDefault(is_default);
-}
-
-bool DialogDelegate::ShouldSnapFrameWidth() const {
-  return GetDialogButtons() != ui::DIALOG_BUTTON_NONE;
-}
-
-bool DialogDelegate::ShouldHaveRoundCorners() const {
-  return true;
 }
 
 View* DialogDelegate::GetInitiallyFocusedView() {
@@ -212,8 +195,9 @@ ClientView* DialogDelegate::CreateClientView(Widget* widget) {
 }
 
 NonClientFrameView* DialogDelegate::CreateNonClientFrameView(Widget* widget) {
-  if (ShouldUseCustomFrame())
+  if (use_custom_frame())
     return CreateDialogFrameView(widget);
+
   return WidgetDelegate::CreateNonClientFrameView(widget);
 }
 
@@ -229,7 +213,7 @@ NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
   border->set_use_theme_background_color(true);
   DialogDelegate* delegate = widget->widget_delegate()->AsDialogDelegate();
   if (delegate) {
-    if (delegate->ShouldHaveRoundCorners()) {
+    if (delegate->GetParams().round_corners) {
       border->SetCornerRadius(
           base::FeatureList::IsEnabled(
               features::kEnableMDRoundedCornersOnDialogs)
@@ -242,10 +226,6 @@ NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
   return frame;
 }
 
-bool DialogDelegate::ShouldUseCustomFrame() const {
-  return supports_custom_frame_;
-}
-
 const DialogClientView* DialogDelegate::GetDialogClientView() const {
   if (!GetWidget())
     return nullptr;
@@ -256,6 +236,27 @@ DialogClientView* DialogDelegate::GetDialogClientView() {
   if (!GetWidget())
     return nullptr;
   return GetWidget()->client_view()->AsDialogClientView();
+}
+
+BubbleFrameView* DialogDelegate::GetBubbleFrameView() const {
+  if (!use_custom_frame())
+    return nullptr;
+
+  const NonClientView* view =
+      GetWidget() ? GetWidget()->non_client_view() : nullptr;
+  return view ? static_cast<BubbleFrameView*>(view->frame_view()) : nullptr;
+}
+
+views::LabelButton* DialogDelegate::GetOkButton() {
+  DCHECK(GetWidget()) << "Don't call this before OnDialogInitialized";
+  auto* client = GetDialogClientView();
+  return client ? client->ok_button() : nullptr;
+}
+
+views::LabelButton* DialogDelegate::GetCancelButton() {
+  DCHECK(GetWidget()) << "Don't call this before OnDialogInitialized";
+  auto* client = GetDialogClientView();
+  return client ? client->cancel_button() : nullptr;
 }
 
 void DialogDelegate::AddObserver(DialogObserver* observer) {
@@ -278,6 +279,10 @@ DialogDelegate::~DialogDelegate() {
 
 ax::mojom::Role DialogDelegate::GetAccessibleWindowRole() {
   return ax::mojom::Role::kDialog;
+}
+
+void DialogDelegate::OnWidgetInitialized() {
+  OnDialogInitialized();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

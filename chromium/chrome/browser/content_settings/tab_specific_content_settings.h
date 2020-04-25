@@ -21,13 +21,12 @@
 #include "chrome/common/custom_handlers/protocol_handler.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/content_settings_usages_state.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "net/cookies/canonical_cookie.h"
-
-class HostContentSettingsMap;
 
 namespace content {
 class NavigationHandle;
@@ -200,6 +199,14 @@ class TabSpecificContentSettings
   // Only public for tests.
   const std::string& media_stream_selected_video_device() const {
     return media_stream_selected_video_device_;
+  }
+
+  bool camera_was_just_granted_on_site_level() {
+    return camera_was_just_granted_on_site_level_;
+  }
+
+  bool mic_was_just_granted_on_site_level() {
+    return mic_was_just_granted_on_site_level_;
   }
 
   // Returns the state of the camera and microphone usage.
@@ -452,8 +459,14 @@ class TabSpecificContentSettings
   std::string media_stream_requested_audio_device_;
   std::string media_stream_requested_video_device_;
 
+  // The camera and/or microphone permission was granted to this origin from a
+  // permission prompt that was triggered by the currently active document.
+  bool camera_was_just_granted_on_site_level_ = false;
+  bool mic_was_just_granted_on_site_level_ = false;
+
   // Observer to watch for content settings changed.
-  ScopedObserver<HostContentSettingsMap, content_settings::Observer> observer_;
+  ScopedObserver<HostContentSettingsMap, content_settings::Observer> observer_{
+      this};
 
   // Stores content settings changed by the user via page info since the last
   // navigation. Used to determine whether to display the settings in page info.

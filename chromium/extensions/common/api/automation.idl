@@ -8,7 +8,7 @@
 // used to programmatically interact with a page by examining names, roles, and
 // states, listening for events, and performing actions on nodes.
 [nocompile] namespace automation {
-  // Keep the following enums in sync with 'ui/accessibility/ax_enums.idl'.
+  // Keep the following enums in sync with 'ui/accessibility/ax_enums.mojom'.
   // They are kept here purely for extension docs generation.
 
   // Possible events fired on an $(ref:automation.AutomationNode).
@@ -81,7 +81,11 @@
     alert,
     alertDialog,
     anchor,
-    annotation,
+    annotationAttribution,
+    annotationCommentary,
+    annotationPresence,
+    annotationRevision,
+    annotationSuggestion,
     application,
     article,
     audio,
@@ -164,6 +168,7 @@
     figcaption,
     figure,
     footer,
+    footerAsNonLandmark,
     form,
     genericContainer,
     // --------------------------------------------------------------
@@ -176,6 +181,8 @@
     // --------------------------------------------------------------
     grid,
     group,
+    header,
+    headerAsNonLandmark,
     heading,
     iframe,
     iframePresentational,
@@ -228,10 +235,12 @@
     row,
     rowHeader,
     ruby,
+    rubyAnnotation,
     scrollBar,
     scrollView,
     search,
     searchBox,
+    section,
     slider,
     sliderThumb,
     spinButton,
@@ -570,6 +579,9 @@
     // Accessible Name Calculation</a> process.
     DOMString? name;
 
+    // The tooltip of the node, if any.
+    DOMString? tooltip;
+
     // The source of the name.
     NameFromType? nameFrom;
 
@@ -813,7 +825,7 @@
     long? tableCellColumnIndex;
 
     // The ARIA column index as specified by the page author.
-    long? ariaCellColumnIndex;
+    long? tableCellAriaColumnIndex;
 
     // The number of columns that this cell spans (default is 1).
     long? tableCellColumnSpan;
@@ -823,7 +835,7 @@
     long? tableCellRowIndex;
 
     // The ARIA row index as specified by the page author.
-    long? ariaCellRowIndex;
+    long? tableCellAriaRowIndex;
 
     // The number of rows that this cell spans (default is 1).
     long? tableCellRowSpan;
@@ -1110,6 +1122,17 @@
 
     static AutomationNode getNextTextMatch(
         DOMString searchStr, boolean backward);
+
+    // Returns the detected languages for the provided string attribute as an
+    // array of LanguageSpan objects. There are several guarantees about the
+    // format of the LanguageSpan array:
+    // 1. Is either empty or contains LanguageSpans that cover all indices in
+    // the associated string attribute value.
+    // 2. Is sorted by increasing startIndex (those with smaller startIndex
+    // appear first).
+    // 3. LanguageSpans are non-overlapping and contain exactly one language.
+    static LanguageSpan[] languageAnnotationForStringAttribute(
+        DOMString attribute);
   };
 
   // Called when the <code>AutomationNode</code> for the page is available.
@@ -1156,16 +1179,5 @@
     // the value where the selection starts or ends, respectively.
     [nocompile] static void setDocumentSelection(
         SetDocumentSelectionParams params);
-
-    // Returns the detected languages for the provided string attribute as an
-    // array of LanguageSpan objects. There are several guarantees about the
-    // format of the LanguageSpan array:
-    // 1. Is either empty or contains LanguageSpans that cover all indices in
-    // the associated string attribute value.
-    // 2. Is sorted by increasing startIndex (those with smaller startIndex
-    // appear first).
-    // 3. LanguageSpans are non-overlapping and contain exactly one language.
-    [nocompile] LanguageSpan[] languageAnnotationForStringAttribute(
-        DOMString attribute);
   };
 };

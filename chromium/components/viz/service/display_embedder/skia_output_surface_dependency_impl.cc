@@ -76,6 +76,10 @@ gpu::MailboxManager* SkiaOutputSurfaceDependencyImpl::GetMailboxManager() {
   return gpu_service_impl_->mailbox_manager();
 }
 
+gpu::ImageFactory* SkiaOutputSurfaceDependencyImpl::GetGpuImageFactory() {
+  return gpu_service_impl_->gpu_image_factory();
+}
+
 bool SkiaOutputSurfaceDependencyImpl::IsOffscreen() {
   return surface_handle_ == gpu::kNullSurfaceHandle;
 }
@@ -110,5 +114,22 @@ void SkiaOutputSurfaceDependencyImpl::DidCreateAcceleratedSurfaceChildWindow(
   gpu_service_impl_->SendCreatedChildWindow(parent_window, child_window);
 }
 #endif
+
+void SkiaOutputSurfaceDependencyImpl::RegisterDisplayContext(
+    gpu::DisplayContext* display_context) {
+  gpu_service_impl_->RegisterDisplayContext(display_context);
+}
+
+void SkiaOutputSurfaceDependencyImpl::UnregisterDisplayContext(
+    gpu::DisplayContext* display_context) {
+  gpu_service_impl_->UnregisterDisplayContext(display_context);
+}
+
+void SkiaOutputSurfaceDependencyImpl::DidLoseContext(
+    bool offscreen,
+    gpu::error::ContextLostReason reason,
+    const GURL& active_url) {
+  gpu_service_impl_->DidLoseContext(offscreen, reason, active_url);
+}
 
 }  // namespace viz

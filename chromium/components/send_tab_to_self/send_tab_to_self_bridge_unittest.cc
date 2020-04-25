@@ -92,14 +92,15 @@ class SendTabToSelfBridgeTest : public testing::Test {
  protected:
   SendTabToSelfBridgeTest()
       : store_(syncer::ModelTypeStoreTestUtil::CreateInMemoryStoreForTest()) {
-    scoped_feature_list_.InitAndEnableFeature(kSendTabToSelfShowSendingUI);
     SetLocalDeviceCacheGuid(kLocalDeviceCacheGuid);
     local_device_ = std::make_unique<syncer::DeviceInfo>(
         kLocalDeviceCacheGuid, "device", "72", "agent",
         sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_is",
+        base::SysInfo::HardwareInfo(),
         clock()->Now() - base::TimeDelta::FromDays(1),
-        /*send_tab_to_self_receiving_enabled=*/true);
-    AddTestDevice(local_device_.get());
+        /*send_tab_to_self_receiving_enabled=*/true,
+        /*sharing_info=*/base::nullopt);
+    AddTestDevice(local_device_.get(), /*local=*/true);
   }
 
   // Initialized the bridge based on the current local device and store. Can
@@ -179,8 +180,11 @@ class SendTabToSelfBridgeTest : public testing::Test {
         .WillByDefault(Return(cache_guid));
   }
 
-  void AddTestDevice(const syncer::DeviceInfo* device) {
+  void AddTestDevice(const syncer::DeviceInfo* device, bool local = false) {
     device_info_tracker_.Add(device);
+    if (local) {
+      device_info_tracker_.SetLocalCacheGuid(device->guid());
+    }
   }
 
   syncer::MockModelTypeChangeProcessor* processor() { return &mock_processor_; }
@@ -571,9 +575,7 @@ TEST_F(SendTabToSelfBridgeTest, AddDuplicateEntries) {
 TEST_F(SendTabToSelfBridgeTest,
        NotifyRemoteSendTabToSelfEntryAdded_BroadcastDisabled) {
   base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitWithFeatures(
-      /*enabled_features=*/{kSendTabToSelfShowSendingUI},
-      /*disabled_features=*/{kSendTabToSelfBroadcast});
+  scoped_features.InitAndDisableFeature(kSendTabToSelfBroadcast);
 
   const std::string kRemoteGuid = "RemoteDevice";
   InitializeBridge();
@@ -605,10 +607,7 @@ TEST_F(SendTabToSelfBridgeTest,
 TEST_F(SendTabToSelfBridgeTest,
        NotifyRemoteSendTabToSelfEntryAdded_BroadcastEnabled) {
   base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitWithFeatures(
-      /*enabled_features=*/{kSendTabToSelfShowSendingUI,
-                            kSendTabToSelfBroadcast},
-      /*disabled_features=*/{});
+  scoped_features.InitAndEnableFeature(kSendTabToSelfBroadcast);
 
   InitializeBridge();
   SetLocalDeviceCacheGuid("Device1");
@@ -651,22 +650,28 @@ TEST_F(SendTabToSelfBridgeTest,
   syncer::DeviceInfo recent_device(
       kRecentGuid, "device_name", "72", "agent",
       sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_is",
+      base::SysInfo::HardwareInfo(),
       clock()->Now() - base::TimeDelta::FromDays(1),
-      /*send_tab_to_self_receiving_enabled=*/true);
+      /*send_tab_to_self_receiving_enabled=*/true,
+      /*sharing_info=*/base::nullopt);
   AddTestDevice(&recent_device);
 
   syncer::DeviceInfo old_device(
       kOldGuid, "device_name", "72", "agent",
       sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_is",
+      base::SysInfo::HardwareInfo(),
       /*last_updated_timestamp=*/clock()->Now() - base::TimeDelta::FromDays(3),
-      /*send_tab_to_self_receiving_enabled=*/true);
+      /*send_tab_to_self_receiving_enabled=*/true,
+      /*sharing_info=*/base::nullopt);
   AddTestDevice(&old_device);
 
   syncer::DeviceInfo older_device(
       kOlderGuid, "device_name", "72", "agent",
       sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_is",
+      base::SysInfo::HardwareInfo(),
       /*last_updated_timestamp=*/clock()->Now() - base::TimeDelta::FromDays(5),
-      /*send_tab_to_self_receiving_enabled=*/true);
+      /*send_tab_to_self_receiving_enabled=*/true,
+      /*sharing_info=*/base::nullopt);
   AddTestDevice(&older_device);
 
   TargetDeviceInfo target_device_info(
@@ -683,18 +688,22 @@ TEST_F(SendTabToSelfBridgeTest,
        GetTargetDeviceInfoSortedList_OnlyReceivingEnabled) {
   InitializeBridge();
 
-  syncer::DeviceInfo enabled_device(
-      "enabled_guid", "enabled_device_name", "72", "agent",
-      sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_is",
-      /*last_updated_timestamp=*/clock()->Now(),
-      /*send_tab_to_self_receiving_enabled=*/true);
+  syncer::DeviceInfo enabled_device("enabled_guid", "enabled_device_name", "72",
+                                    "agent",
+                                    sync_pb::SyncEnums_DeviceType_TYPE_LINUX,
+                                    "scoped_is", base::SysInfo::HardwareInfo(),
+                                    /*last_updated_timestamp=*/clock()->Now(),
+                                    /*send_tab_to_self_receiving_enabled=*/true,
+                                    /*sharing_info=*/base::nullopt);
   AddTestDevice(&enabled_device);
 
   syncer::DeviceInfo disabled_device(
       "disabled_guid", "disabled_device_name", "72", "agent",
       sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_is",
+      base::SysInfo::HardwareInfo(),
       /*last_updated_timestamp=*/clock()->Now(),
-      /*send_tab_to_self_receiving_enabled=*/false);
+      /*send_tab_to_self_receiving_enabled=*/false,
+      /*sharing_info=*/base::nullopt);
   AddTestDevice(&disabled_device);
 
   TargetDeviceInfo target_device_info(
@@ -713,15 +722,19 @@ TEST_F(SendTabToSelfBridgeTest,
   syncer::DeviceInfo expired_device(
       "expired_guid", "expired_device_name", "72", "agent",
       sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_is",
+      base::SysInfo::HardwareInfo(),
       /*last_updated_timestamp=*/clock()->Now() - base::TimeDelta::FromDays(11),
-      /*send_tab_to_self_receiving_enabled=*/true);
+      /*send_tab_to_self_receiving_enabled=*/true,
+      /*sharing_info=*/base::nullopt);
   AddTestDevice(&expired_device);
 
   syncer::DeviceInfo valid_device(
       "valid_guid", "valid_device_name", "72", "agent",
       sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_is",
+      base::SysInfo::HardwareInfo(),
       /*last_updated_timestamp=*/clock()->Now() - base::TimeDelta::FromDays(1),
-      /*send_tab_to_self_receiving_enabled=*/true);
+      /*send_tab_to_self_receiving_enabled=*/true,
+      /*sharing_info=*/base::nullopt);
   AddTestDevice(&valid_device);
 
   TargetDeviceInfo target_device_info(
@@ -737,25 +750,31 @@ TEST_F(SendTabToSelfBridgeTest, GetTargetDeviceInfoSortedList_NoLocalDevice) {
   InitializeBridge();
   bridge()->SetLocalDeviceNameForTest(kLocalDeviceName);
 
-  syncer::DeviceInfo local_device(
-      kLocalDeviceCacheGuid, kLocalDeviceName, "72", "agent",
-      sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_is",
-      /*last_updated_timestamp=*/clock()->Now(),
-      /*send_tab_to_self_receiving_enabled=*/true);
+  syncer::DeviceInfo local_device(kLocalDeviceCacheGuid, kLocalDeviceName, "72",
+                                  "agent",
+                                  sync_pb::SyncEnums_DeviceType_TYPE_LINUX,
+                                  "scoped_is", base::SysInfo::HardwareInfo(),
+                                  /*last_updated_timestamp=*/clock()->Now(),
+                                  /*send_tab_to_self_receiving_enabled=*/true,
+                                  /*sharing_info=*/base::nullopt);
   AddTestDevice(&local_device);
 
   syncer::DeviceInfo other_local_device(
       "other_local_guid", kLocalDeviceName, "72", "agent",
       sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_is",
+      base::SysInfo::HardwareInfo(),
       /*last_updated_timestamp=*/clock()->Now(),
-      /*send_tab_to_self_receiving_enabled=*/true);
+      /*send_tab_to_self_receiving_enabled=*/true,
+      /*sharing_info=*/base::nullopt);
   AddTestDevice(&local_device);
 
-  syncer::DeviceInfo other_device(
-      "other_guid", "other_device_name", "72", "agent",
-      sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_is",
-      /*last_updated_timestamp=*/clock()->Now(),
-      /*send_tab_to_self_receiving_enabled=*/true);
+  syncer::DeviceInfo other_device("other_guid", "other_device_name", "72",
+                                  "agent",
+                                  sync_pb::SyncEnums_DeviceType_TYPE_LINUX,
+                                  "scoped_is", base::SysInfo::HardwareInfo(),
+                                  /*last_updated_timestamp=*/clock()->Now(),
+                                  /*send_tab_to_self_receiving_enabled=*/true,
+                                  /*sharing_info=*/base::nullopt);
   AddTestDevice(&other_device);
 
   TargetDeviceInfo target_device_info(
@@ -775,15 +794,19 @@ TEST_F(SendTabToSelfBridgeTest,
   syncer::DeviceInfo older_device(
       "older_guid", "older_name", "72", "agent",
       sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_is",
+      base::SysInfo::HardwareInfo(),
       /*last_updated_timestamp=*/clock()->Now() - base::TimeDelta::FromDays(9),
-      /*send_tab_to_self_receiving_enabled=*/true);
+      /*send_tab_to_self_receiving_enabled=*/true,
+      /*sharing_info=*/base::nullopt);
   AddTestDevice(&older_device);
 
   syncer::DeviceInfo recent_device(
       "recent_guid", "recent_name", "72", "agent",
       sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "scoped_is",
+      base::SysInfo::HardwareInfo(),
       /*last_updated_timestamp=*/clock()->Now() - base::TimeDelta::FromDays(1),
-      /*send_tab_to_self_receiving_enabled=*/true);
+      /*send_tab_to_self_receiving_enabled=*/true,
+      /*sharing_info=*/base::nullopt);
   AddTestDevice(&recent_device);
 
   TargetDeviceInfo older_device_info(
@@ -811,10 +834,12 @@ TEST_F(SendTabToSelfBridgeTest,
   InitializeBridge();
 
   // Set a valid device.
-  syncer::DeviceInfo device(
-      "guid", "name", "72", "agent", sync_pb::SyncEnums_DeviceType_TYPE_LINUX,
-      "scoped_is", /*last_updated_timestamp=*/clock()->Now(),
-      /*send_tab_to_self_receiving_enabled=*/true);
+  syncer::DeviceInfo device("guid", "name", "72", "agent",
+                            sync_pb::SyncEnums_DeviceType_TYPE_LINUX,
+                            "scoped_is", base::SysInfo::HardwareInfo(),
+                            /*last_updated_timestamp=*/clock()->Now(),
+                            /*send_tab_to_self_receiving_enabled=*/true,
+                            /*sharing_info=*/base::nullopt);
   AddTestDevice(&device);
 
   // Set the map by calling it. Make sure it has the device.
@@ -828,9 +853,10 @@ TEST_F(SendTabToSelfBridgeTest,
   // Add a new device.
   syncer::DeviceInfo new_device("new_guid", "new_name", "72", "agent",
                                 sync_pb::SyncEnums_DeviceType_TYPE_LINUX,
-                                "scoped_is",
+                                "scoped_is", base::SysInfo::HardwareInfo(),
                                 /*last_updated_timestamp=*/clock()->Now(),
-                                /*send_tab_to_self_receiving_enabled=*/true);
+                                /*send_tab_to_self_receiving_enabled=*/true,
+                                /*sharing_info=*/base::nullopt);
   AddTestDevice(&new_device);
 
   // Make sure both devices are in the map.
@@ -844,10 +870,7 @@ TEST_F(SendTabToSelfBridgeTest,
 
 TEST_F(SendTabToSelfBridgeTest, NotifyRemoteSendTabToSelfEntryOpened) {
   base::test::ScopedFeatureList scoped_features;
-  scoped_features.InitWithFeatures(
-      /*enabled_features=*/{kSendTabToSelfShowSendingUI,
-                            kSendTabToSelfBroadcast},
-      /*disabled_features=*/{});
+  scoped_features.InitAndEnableFeature(kSendTabToSelfBroadcast);
 
   InitializeBridge();
   SetLocalDeviceCacheGuid("Device1");

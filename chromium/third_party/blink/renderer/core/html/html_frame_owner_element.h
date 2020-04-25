@@ -46,7 +46,6 @@ class WebPluginContainerImpl;
 class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
                                           public FrameOwner {
   USING_GARBAGE_COLLECTED_MIXIN(HTMLFrameOwnerElement);
-
  public:
   ~HTMLFrameOwnerElement() override;
 
@@ -120,10 +119,6 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   // For unit tests, manually trigger the UpdateContainerPolicy method.
   void UpdateContainerPolicyForTests() { UpdateContainerPolicy(); }
 
-  // This function is to notify ChildFrameCompositor of pointer-events changes
-  // of an OOPIF.
-  void PointerEventsChanged();
-
   void CancelPendingLazyLoad();
 
   void ParseAttribute(const AttributeModificationParams&) override;
@@ -142,9 +137,9 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
                               const AtomicString& frame_name,
                               bool replace_current_item);
   bool IsKeyboardFocusable() const override;
+  void FrameOwnerPropertiesChanged() override;
 
   void DisposePluginSoon(WebPluginContainerImpl*);
-  void FrameOwnerPropertiesChanged();
 
   // Return the origin which is to be used for feature policy container
   // policies, as "the origin of the URL in the frame's src attribute" (see
@@ -170,8 +165,10 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   // already HTMLFrameOwnerElement.
   bool IsLocal() const final { return true; }
   bool IsRemote() const final { return false; }
-
   bool IsFrameOwnerElement() const final { return true; }
+  void SetIsSwappingFrames(bool is_swapping) override {
+    is_swapping_frames_ = is_swapping;
+  }
 
   virtual network::mojom::ReferrerPolicy ReferrerPolicyAttribute() {
     return network::mojom::ReferrerPolicy::kDefault;
@@ -185,6 +182,7 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
 
   Member<LazyLoadFrameObserver> lazy_load_frame_observer_;
   bool should_lazy_load_children_;
+  bool is_swapping_frames_;
 };
 
 class SubframeLoadingDisabler {

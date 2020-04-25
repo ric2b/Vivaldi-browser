@@ -21,9 +21,9 @@
 #include "media/gpu/linux/dmabuf_video_frame_pool.h"
 #include "media/gpu/media_gpu_export.h"
 
-namespace base {
-class TickClock;
-}
+namespace gpu {
+class GpuMemoryBufferFactory;
+}  // namespace gpu
 
 namespace media {
 
@@ -35,18 +35,14 @@ namespace media {
 // PlatformVideoFramePool object. Before calling GetFrame(), the client should
 // call NegotiateFrameFormat(). If the parameters passed to
 // NegotiateFrameFormat() are changed, then the memory used by frames with the
-// old parameter values will be purged from the pool. Frames which are not used
-// for a certain period will be purged.
+// old parameter values will be purged from the pool.
 class MEDIA_GPU_EXPORT PlatformVideoFramePool : public DmabufVideoFramePool {
  public:
-  using DmabufId = const std::vector<base::ScopedFD>*;
-
-  PlatformVideoFramePool();
+  explicit PlatformVideoFramePool(
+      gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory);
   ~PlatformVideoFramePool() override;
 
   // VideoFramePoolBase Implementation.
-  void set_parent_task_runner(
-      scoped_refptr<base::SequencedTaskRunner> parent_task_runner) override;
   void SetMaxNumFrames(size_t max_num_frames) override;
   base::Optional<VideoFrameLayout> NegotiateFrameFormat(
       const VideoFrameLayout& layout,
@@ -54,25 +50,27 @@ class MEDIA_GPU_EXPORT PlatformVideoFramePool : public DmabufVideoFramePool {
       const gfx::Size& natural_size) override;
   scoped_refptr<VideoFrame> GetFrame() override;
   bool IsExhausted() override;
-  VideoFrame* UnwrapFrame(const VideoFrame& wrapped_frame) override;
   void NotifyWhenFrameAvailable(base::OnceClosure cb) override;
+
+  // Returns the original frame of a wrapped frame. We need this method to
+  // determine whether the frame returned by GetFrame() is the same one after
+  // recycling, and bind destruction callback at original frames.
+  VideoFrame* UnwrapFrame(const VideoFrame& wrapped_frame);
 
  private:
   friend class PlatformVideoFramePoolTest;
 
   using CreateFrameCB = base::RepeatingCallback<scoped_refptr<VideoFrame>(
+      gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
       VideoPixelFormat format,
       const gfx::Size& coded_size,
       const gfx::Rect& visible_rect,
       const gfx::Size& natural_size,
       base::TimeDelta timestamp)>;
 
-  // Used to store free frame and the last used time.
-  struct FrameEntry;
-
-  // Allows injection of create frame callback and base::SimpleTestClock.
-  // This is used to test the behavior of the video frame pool.
-  PlatformVideoFramePool(CreateFrameCB cb, const base::TickClock* tick_clock);
+  // Allows injection of create frame callback. This is used to test the
+  // behavior of the video frame pool.
+  PlatformVideoFramePool(CreateFrameCB cb);
 
   // Returns the number of frames in the pool for testing purposes.
   size_t GetPoolSizeForTesting();
@@ -98,19 +96,17 @@ class MEDIA_GPU_EXPORT PlatformVideoFramePool : public DmabufVideoFramePool {
       EXCLUSIVE_LOCKS_REQUIRED(lock_);
   bool IsExhausted_Locked() EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
-  // Purges the stale frame. This method is executed periodically on
-  // |parent_task_runner_|.
-  void PurgeStaleFrames();
-
   // The function used to allocate new frames.
   const CreateFrameCB create_frame_cb_;
-
-  // |tick_clock_| is always a DefaultTickClock outside of testing.
-  const base::TickClock* tick_clock_;
 
   // Lock to protect all data members.
   // Every public method and OnFrameReleased() should acquire this lock.
   base::Lock lock_;
+
+  // Used to allocate the video frame GpuMemoryBuffers, passed directly to
+  // the callback that creates video frames. Indirectly owned by GpuChildThread;
+  // therefore alive as long as the GPU process is.
+  gpu::GpuMemoryBufferFactory* const gpu_memory_buffer_factory_ = nullptr;
 
   // The arguments of current frame. We allocate new frames only if a pixel
   // format or coded size in |frame_layout_| is changed. When GetFrame() is
@@ -121,12 +117,13 @@ class MEDIA_GPU_EXPORT PlatformVideoFramePool : public DmabufVideoFramePool {
 
   // The pool of free frames. The layout of all the frames in |free_frames_|
   // should be the same as |format_| and |coded_size_|.
-  base::circular_deque<FrameEntry> free_frames_ GUARDED_BY(lock_);
+  base::circular_deque<scoped_refptr<VideoFrame>> free_frames_
+      GUARDED_BY(lock_);
   // Mapping from the unique_id of the wrapped frame to the original frame.
   std::map<DmabufId, VideoFrame*> frames_in_use_ GUARDED_BY(lock_);
 
   // The maximum number of frames created by the pool.
-  size_t max_num_frames_ GUARDED_BY(lock_);
+  size_t max_num_frames_ GUARDED_BY(lock_) = 0;
 
   // Callback which is called when the pool is not exhausted.
   base::OnceClosure frame_available_cb_ GUARDED_BY(lock_);
@@ -134,7 +131,7 @@ class MEDIA_GPU_EXPORT PlatformVideoFramePool : public DmabufVideoFramePool {
   // The weak pointer of this, bound at |parent_task_runner_|.
   // Used at the VideoFrame destruction callback.
   base::WeakPtr<PlatformVideoFramePool> weak_this_;
-  base::WeakPtrFactory<PlatformVideoFramePool> weak_this_factory_;
+  base::WeakPtrFactory<PlatformVideoFramePool> weak_this_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(PlatformVideoFramePool);
 };

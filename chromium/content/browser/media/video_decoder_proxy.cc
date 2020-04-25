@@ -31,7 +31,7 @@ void VideoDecoderProxy::Add(media::mojom::InterfaceFactoryRequest request) {
 }
 
 void VideoDecoderProxy::CreateAudioDecoder(
-    media::mojom::AudioDecoderRequest request) {}
+    mojo::PendingReceiver<media::mojom::AudioDecoder> receiver) {}
 
 void VideoDecoderProxy::CreateVideoDecoder(
     media::mojom::VideoDecoderRequest request) {
@@ -71,10 +71,11 @@ void VideoDecoderProxy::CreateCdm(
 
 void VideoDecoderProxy::CreateDecryptor(
     int cdm_id,
-    media::mojom::DecryptorRequest request) {}
+    mojo::PendingReceiver<media::mojom::Decryptor> receiver) {}
 
-void VideoDecoderProxy::CreateCdmProxy(const base::Token& cdm_guid,
-                                       media::mojom::CdmProxyRequest request) {}
+void VideoDecoderProxy::CreateCdmProxy(
+    const base::Token& cdm_guid,
+    mojo::PendingReceiver<media::mojom::CdmProxy> receiver) {}
 
 media::mojom::InterfaceFactory* VideoDecoderProxy::GetMediaInterfaceFactory() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="ro">
+<translation id="3076631378407175873">Drepturi de autor <ph name="YEAR" /> Vivaldi Technologies AS. Toate drepturile rezervate.</translation>
+<translation id="3700829948786686853">Bun venit la Vivaldi</translation>
+<translation id="4121750346708795461">Folosind această aplicație, acceptați <ph name="BEGIN_LINK1" />Acordul de licență pentru utilizator<ph name="END_LINK1" /> și <ph name="BEGIN_LINK2" />Politica privind confidențialitatea<ph name="END_LINK2" /> de la Vivaldi.</translation>
+<translation id="5118676864324397542">Spațiu de stocare <ph name="APP_NAME" /></translation>
+<translation id="5840488417521835756">Aflați despre subiectele de pe site-uri fără să părăsiți pagina. Funcția Atinge pentru a căuta este o caracteristică disponibilă numai atunci când Google este setat ca motor de căutare implicit în Vivaldi. Această funcție trimite către Google Search un cuvânt și contextul înconjurător, primind înapoi definiții, imagini, rezultate de căutări și alte detalii.
+
+Pentru a ajusta termenul de căutare, apăsați lung pentru a selecta textul. Pentru a rafina căutarea, glisați panoul până în partea de sus și atingeți caseta de căutare.</translation>
+<translation id="706339621163631076">Politica privind confidențialitatea browserului</translation>
+<translation id="7427132068601343474">Despre Vivaldi</translation>
+<translation id="7519434535192513364">Funcția Atinge pentru a căuta este o caracteristică disponibilă numai atunci când Google este setat ca motor de căutare implicit în Vivaldi. Această funcție trimite către Google Search un cuvânt și pagina curentă drept context. Puteți dezactiva această funcție în <ph name="BEGIN_LINK" />Setări<ph name="END_LINK" />.</translation>
+<translation id="7649070708921625228">Ajutor</translation>
+<translation id="804786196054284061">Acordul de licență pentru utilizator</translation>
+</translationbundle>

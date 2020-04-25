@@ -41,17 +41,8 @@ DawnColorStateDescriptor AsDawnType(
 
   DawnColorStateDescriptor dawn_desc = {};
   dawn_desc.nextInChain = nullptr;
-
-  GPUBlendDescriptor* gpu_alpha_blend = webgpu_desc->hasAlphaBlend()
-                                            ? webgpu_desc->alphaBlend()
-                                            : GPUBlendDescriptor::Create();
-  dawn_desc.alphaBlend = AsDawnType(gpu_alpha_blend);
-
-  GPUBlendDescriptor* gpu_color_blend = webgpu_desc->hasColorBlend()
-                                            ? webgpu_desc->colorBlend()
-                                            : GPUBlendDescriptor::Create();
-  dawn_desc.colorBlend = AsDawnType(gpu_color_blend);
-
+  dawn_desc.alphaBlend = AsDawnType(webgpu_desc->alphaBlend());
+  dawn_desc.colorBlend = AsDawnType(webgpu_desc->colorBlend());
   dawn_desc.writeMask =
       AsDawnEnum<DawnColorWriteMask>(webgpu_desc->writeMask());
   dawn_desc.format = AsDawnEnum<DawnTextureFormat>(webgpu_desc->format());
@@ -177,6 +168,9 @@ DawnVertexInputInfo GPUVertexInputAsDawnInputState(
     // stopped appending to the vector so the pointers aren't invalidated.
     uint32_t attributeIndex = 0;
     for (DawnVertexBufferDescriptor& buffer : dawn_vertex_buffers) {
+      if (buffer.attributeCount == 0) {
+        continue;
+      }
       buffer.attributes = &dawn_vertex_attributes[attributeIndex];
       attributeIndex += buffer.attributeCount;
     }
@@ -217,11 +211,14 @@ GPURenderPipeline* GPURenderPipeline::Create(
   DawnRenderPipelineDescriptor dawn_desc = {};
   dawn_desc.nextInChain = nullptr;
   dawn_desc.layout = AsDawnType(webgpu_desc->layout());
+  if (webgpu_desc->hasLabel()) {
+    dawn_desc.label = webgpu_desc->label().Utf8().data();
+  }
 
-  OwnedPipelineStageDescriptor vertex_stage_info =
+  OwnedProgrammableStageDescriptor vertex_stage_info =
       AsDawnType(webgpu_desc->vertexStage());
   dawn_desc.vertexStage = std::get<0>(vertex_stage_info);
-  OwnedPipelineStageDescriptor fragment_stage_info;
+  OwnedProgrammableStageDescriptor fragment_stage_info;
   if (webgpu_desc->hasFragmentStage()) {
     fragment_stage_info = AsDawnType(webgpu_desc->fragmentStage());
     dawn_desc.fragmentStage = &std::get<0>(fragment_stage_info);
@@ -229,34 +226,24 @@ GPURenderPipeline* GPURenderPipeline::Create(
     dawn_desc.fragmentStage = nullptr;
   }
 
-  DawnVertexInputInfo vertex_input_info;
-  if (webgpu_desc->hasVertexInput()) {
-    // TODO(crbug.com/dawn/131): Update Dawn to match WebGPU vertex input
-    v8::Isolate* isolate = script_state->GetIsolate();
-    ExceptionState exception_state(isolate,
-                                   ExceptionState::kConstructionContext,
-                                   "GPUVertexInputDescriptor");
-    vertex_input_info = GPUVertexInputAsDawnInputState(
-        isolate, webgpu_desc->vertexInput(), exception_state);
-    dawn_desc.vertexInput = &std::get<0>(vertex_input_info);
+  // TODO(crbug.com/dawn/131): Update Dawn to match WebGPU vertex input
+  v8::Isolate* isolate = script_state->GetIsolate();
+  ExceptionState exception_state(isolate, ExceptionState::kConstructionContext,
+                                 "GPUVertexInputDescriptor");
+  DawnVertexInputInfo vertex_input_info = GPUVertexInputAsDawnInputState(
+      isolate, webgpu_desc->vertexInput(), exception_state);
+  dawn_desc.vertexInput = &std::get<0>(vertex_input_info);
 
-    if (exception_state.HadException()) {
-      return nullptr;
-    }
-  } else {
-    dawn_desc.vertexInput = nullptr;
+  if (exception_state.HadException()) {
+    return nullptr;
   }
 
   dawn_desc.primitiveTopology =
       AsDawnEnum<DawnPrimitiveTopology>(webgpu_desc->primitiveTopology());
 
   DawnRasterizationStateDescriptor rasterization_state;
-  if (webgpu_desc->hasRasterizationState()) {
-    rasterization_state = AsDawnType(webgpu_desc->rasterizationState());
-    dawn_desc.rasterizationState = &rasterization_state;
-  } else {
-    dawn_desc.rasterizationState = nullptr;
-  }
+  rasterization_state = AsDawnType(webgpu_desc->rasterizationState());
+  dawn_desc.rasterizationState = &rasterization_state;
 
   dawn_desc.sampleCount = webgpu_desc->sampleCount();
 
@@ -273,8 +260,7 @@ GPURenderPipeline* GPURenderPipeline::Create(
   dawn_desc.colorStateCount =
       static_cast<uint32_t>(webgpu_desc->colorStates().size());
 
-  DawnColorStateDescriptor* color_state_descriptors = color_states.get();
-  dawn_desc.colorStates = &color_state_descriptors;
+  dawn_desc.colorStates = color_states.get();
 
   dawn_desc.sampleMask = webgpu_desc->sampleMask();
   dawn_desc.alphaToCoverageEnabled = webgpu_desc->alphaToCoverageEnabled();

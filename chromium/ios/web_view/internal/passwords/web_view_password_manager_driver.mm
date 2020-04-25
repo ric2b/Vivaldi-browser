@@ -23,6 +23,11 @@ WebViewPasswordManagerDriver::WebViewPasswordManagerDriver(
 
 WebViewPasswordManagerDriver::~WebViewPasswordManagerDriver() = default;
 
+int WebViewPasswordManagerDriver::GetId() const {
+  // There is only one driver per tab on iOS so returning 0 is fine.
+  return 0;
+}
+
 void WebViewPasswordManagerDriver::FillPasswordForm(
     const autofill::PasswordFormFillData& form_data) {
   [delegate_ fillPasswordForm:form_data];
@@ -48,9 +53,6 @@ void WebViewPasswordManagerDriver::PreviewSuggestion(
     const base::string16& password) {
   NOTIMPLEMENTED();
 }
-
-void WebViewPasswordManagerDriver::ShowInitialPasswordAccountSuggestions(
-    const autofill::PasswordFormFillData& form_data) {}
 
 void WebViewPasswordManagerDriver::ClearPreviewedForm() {
   NOTIMPLEMENTED();

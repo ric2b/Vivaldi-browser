@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/chromeos/arc/accessibility/accessibility_window_info_data_wrapper.h"
+
 #include "chrome/browser/chromeos/arc/accessibility/ax_tree_source_arc.h"
 #include "components/exo/wm_helper.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -91,6 +92,8 @@ void AccessibilityWindowInfoDataWrapper::Serialize(
     ui::AXNodeData* out_data) const {
   if (!tree_source_->GetRoot())
     return;
+
+  PopulateAXRole(out_data);
 
   // String properties.
   std::string title;

@@ -8,8 +8,7 @@
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 
-VivaldiLocationBar::VivaldiLocationBar(Profile* profile)
-    : LocationBar(profile) {}
+VivaldiLocationBar::VivaldiLocationBar(Profile* profile) {}
 
 VivaldiLocationBar::~VivaldiLocationBar() = default;
 

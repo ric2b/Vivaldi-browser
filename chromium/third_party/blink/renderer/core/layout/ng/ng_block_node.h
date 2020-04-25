@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NGBlockNode_h
-#define NGBlockNode_h
+#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_BLOCK_NODE_H_
+#define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_BLOCK_NODE_H_
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
@@ -16,9 +16,10 @@ namespace blink {
 class LayoutBox;
 class NGBaselineRequest;
 class NGBlockBreakToken;
+class NGBoxFragmentBuilder;
 class NGBreakToken;
 class NGConstraintSpace;
-class NGBoxFragmentBuilder;
+class NGEarlyBreak;
 class NGLayoutResult;
 class NGPhysicalBoxFragment;
 class NGPhysicalContainerFragment;
@@ -38,7 +39,8 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
 
   scoped_refptr<const NGLayoutResult> Layout(
       const NGConstraintSpace& constraint_space,
-      const NGBreakToken* break_token = nullptr);
+      const NGBreakToken* break_token = nullptr,
+      const NGEarlyBreak* = nullptr);
 
   // This method is just for use within the |NGSimplifiedLayoutAlgorithm|.
   //
@@ -198,4 +200,4 @@ struct DowncastTraits<NGBlockNode> {
 
 }  // namespace blink
 
-#endif  // NGBlockNode
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_BLOCK_NODE_H_

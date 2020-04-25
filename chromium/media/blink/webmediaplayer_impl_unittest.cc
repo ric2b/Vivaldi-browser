@@ -148,13 +148,14 @@ class MockWebMediaPlayerClient : public blink::WebMediaPlayerClient {
   MOCK_CONST_METHOD0(IsInAutoPIP, bool());
   MOCK_METHOD1(ActivateViewportIntersectionMonitoring, void(bool));
   MOCK_METHOD1(MediaRemotingStarted, void(const blink::WebString&));
-  MOCK_METHOD1(MediaRemotingStopped, void(blink::WebLocalizedString::Name));
+  MOCK_METHOD1(MediaRemotingStopped, void(int));
   MOCK_METHOD0(PictureInPictureStopped, void());
   MOCK_METHOD0(OnPictureInPictureStateChange, void());
   MOCK_CONST_METHOD0(CouldPlayIfEnoughData, bool());
   MOCK_METHOD0(RequestPlay, void());
   MOCK_METHOD0(RequestPause, void());
   MOCK_METHOD1(RequestMuted, void(bool));
+  MOCK_METHOD0(GetFeatures, Features(void));
 
   void set_was_always_muted(bool value) { was_always_muted_ = value; }
 
@@ -700,6 +701,8 @@ class WebMediaPlayerImplTest : public testing::Test {
     // Cycle anything that was posted back from the media thread.
     base::RunLoop().RunUntilIdle();
   }
+
+  void OnProgress() { wmpi_->OnProgress(); }
 
   // "Media" thread. This is necessary because WMPI destruction waits on a
   // WaitableEvent.
@@ -1267,6 +1270,19 @@ TEST_F(WebMediaPlayerImplTest, ComputePlayState_Ended) {
 
   SetPaused(true);
   state = ComputePlayState();
+  EXPECT_EQ(WebMediaPlayerImpl::DelegateState::GONE, state.delegate_state);
+  EXPECT_TRUE(state.is_idle);
+  EXPECT_FALSE(state.is_suspended);
+  EXPECT_FALSE(state.is_memory_reporting_enabled);
+}
+
+TEST_F(WebMediaPlayerImplTest, ComputePlayState_DoesNotStaySuspended) {
+  InitializeWebMediaPlayerImpl();
+  SetMetadata(true, true);
+  SetReadyState(blink::WebMediaPlayer::kReadyStateHaveMetadata);
+
+  // Should stay suspended even though not stale or backgrounded.
+  WebMediaPlayerImpl::PlayState state = ComputePlayState_Suspended();
   EXPECT_EQ(WebMediaPlayerImpl::DelegateState::GONE, state.delegate_state);
   EXPECT_TRUE(state.is_idle);
   EXPECT_FALSE(state.is_suspended);
@@ -1923,6 +1939,22 @@ TEST_F(WebMediaPlayerImplTest, PictureInPictureStateChange) {
   wmpi_->OnSurfaceIdUpdated(surface_id_);
 
   EXPECT_CALL(*surface_layer_bridge_ptr_, ClearObserver());
+}
+
+TEST_F(WebMediaPlayerImplTest, OnProgressClearsStale) {
+  InitializeWebMediaPlayerImpl();
+  SetMetadata(true, true);
+
+  for (auto rs = blink::WebMediaPlayer::kReadyStateHaveNothing;
+       rs <= blink::WebMediaPlayer::kReadyStateHaveEnoughData;
+       rs = static_cast<blink::WebMediaPlayer::ReadyState>(
+           static_cast<int>(rs) + 1)) {
+    SetReadyState(rs);
+    delegate_.SetStaleForTesting(true);
+    OnProgress();
+    EXPECT_EQ(delegate_.IsStale(delegate_.player_id()),
+              rs >= blink::WebMediaPlayer::kReadyStateHaveFutureData);
+  }
 }
 
 class WebMediaPlayerImplBackgroundBehaviorTest

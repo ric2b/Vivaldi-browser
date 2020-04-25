@@ -64,7 +64,7 @@ public class WebXrVrDeviceTest {
     }
 
     @Before
-    public void setUp() throws Exception {
+    public void setUp() {
         mWebXrVrTestFramework = new WebXrVrTestFramework(mTestRule);
         mWebVrTestFramework = new WebVrTestFramework(mTestRule);
     }
@@ -77,7 +77,7 @@ public class WebXrVrDeviceTest {
     @MediumTest
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
     @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP) // WebVR is only supported on L+
-    public void testDeviceCapabilitiesMatchExpectations() throws InterruptedException {
+    public void testDeviceCapabilitiesMatchExpectations() {
         mWebVrTestFramework.loadUrlAndAwaitInitialization(
                 WebVrTestFramework.getFileUrlForHtmlTestFile(
                         "test_device_capabilities_match_expectations"),
@@ -96,7 +96,7 @@ public class WebXrVrDeviceTest {
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
     @Restriction(RESTRICTION_TYPE_SVR)
     // Sensorless still works on older devices since it doesn't rely on anything in the DFM.
-    public void testGvrlessMagicWindowCapabilities() throws InterruptedException {
+    public void testGvrlessMagicWindowCapabilities() {
         // Make Chrome think that VrCore is not installed
         VrShellDelegateUtils.setVrCoreCompatibility(VrCoreCompatibility.VR_NOT_AVAILABLE);
 
@@ -121,7 +121,7 @@ public class WebXrVrDeviceTest {
             @CommandLineFlags.Add({"enable-features=WebXR"})
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
             @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP) // WebXR is only supported on L+
-            public void testWebXrCapabilities() throws InterruptedException {
+            public void testWebXrCapabilities() {
         mWebXrVrTestFramework.loadUrlAndAwaitInitialization(
                 WebXrVrTestFramework.getFileUrlForHtmlTestFile("test_webxr_capabilities"),
                 PAGE_LOAD_TIMEOUT_S);
@@ -144,10 +144,12 @@ public class WebXrVrDeviceTest {
             @CommandLineFlags.Add({"enable-features=WebXR"})
             @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
             @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP) // WebXR is only supported on L+
-            public void testForNullPosesInInlineVrPostImmersive() throws InterruptedException {
+            public void testForNullPosesInInlineVrPostImmersive() {
         mWebXrVrTestFramework.loadUrlAndAwaitInitialization(
                 WebXrVrTestFramework.getFileUrlForHtmlTestFile("test_inline_vr_poses"),
                 PAGE_LOAD_TIMEOUT_S);
+        mWebXrVrTestFramework.enterMagicWindowSessionWithUserGestureOrFail();
+
         mWebXrVrTestFramework.enterSessionWithUserGestureOrFail();
         Assert.assertTrue("Browser did not enter VR", VrShellDelegate.isInVr());
 
@@ -180,12 +182,13 @@ public class WebXrVrDeviceTest {
             @CommandLineFlags.Add({"enable-features=WebXR"})
             @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
             @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP) // WebVR is only supported on L+
-            public void testForNullPosesInInlineVrFromNfc() throws InterruptedException {
+            public void testForNullPosesInInlineVrFromNfc() {
         mWebXrVrTestFramework.loadUrlAndAwaitInitialization(
                 WebXrVrTestFramework.getFileUrlForHtmlTestFile("test_inline_vr_poses"),
                 PAGE_LOAD_TIMEOUT_S);
         NfcSimUtils.simNfcScanUntilVrEntry(mTestRule.getActivity());
 
+        mWebXrVrTestFramework.enterMagicWindowSessionWithUserGestureOrFail();
         mWebXrVrTestFramework.executeStepAndWait("posesTurnedOffStep()");
 
         mWebXrVrTestFramework.executeStepAndWait("resetCounters()");
@@ -214,12 +217,13 @@ public class WebXrVrDeviceTest {
             @CommandLineFlags.Add({"enable-features=WebXR"})
             @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
             @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP) // WebVR is only supported on L+
-            public void testForNullPosesInInlineVrOnNavigation() throws InterruptedException {
+            public void testForNullPosesInInlineVrOnNavigation() {
         NfcSimUtils.simNfcScanUntilVrEntry(mTestRule.getActivity());
         mWebXrVrTestFramework.loadUrlAndAwaitInitialization(
                 WebXrVrTestFramework.getFileUrlForHtmlTestFile("test_inline_vr_poses"),
                 PAGE_LOAD_TIMEOUT_S);
 
+        mWebXrVrTestFramework.enterMagicWindowSessionWithUserGestureOrFail();
         mWebXrVrTestFramework.executeStepAndWait("posesTurnedOffStep()");
 
         mWebXrVrTestFramework.executeStepAndWait("resetCounters()");

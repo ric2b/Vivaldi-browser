@@ -42,6 +42,8 @@ Polymer({
   onClickNativeSettingsButton_: function() {
     app_management.BrowserProxy.getInstance().handler.openNativeSettings(
         this.app_.id);
+    app_management.util.recordAppManagementUserAction(
+        this.app_.type, AppManagementUserAction.NativeSettingsOpened);
   },
 
   /**
@@ -67,5 +69,27 @@ Polymer({
    */
   getCollapsedIcon_: function(listExpanded) {
     return listExpanded ? 'cr:expand-less' : 'cr:expand-more';
+  },
+
+  /**
+   * Returns true if the app has not requested any permissions.
+   *
+   * @param {App} app
+   * @return {boolean}
+   * @private
+   */
+  noPermissionsRequested_: function(app) {
+    const permissionItems =
+        this.$$('#subpermission-list')
+            .querySelectorAll('app-management-permission-item');
+    for (let i = 0; i < permissionItems.length; i++) {
+      const permissionItem = permissionItems[i];
+      const permission =
+          app_management.util.getPermission(app, permissionItem.permissionType);
+      if (permission !== undefined) {
+        return false;
+      }
+    }
+    return true;
   },
 });

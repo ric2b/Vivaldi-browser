@@ -18,6 +18,10 @@ import("//vivaldi/ui/source_updates.gni")
 import("//vivaldi/vivapp/source_updates.gni")
 import("//vivaldi/platform_media/source_updates.gni")
 
+if (is_android) {
+  import("//vivaldi/android/source_updates.gni")
+}
+
 _targets = [
   "//chrome/common:version_header",
   "//components/version_info:generate_version_info",
@@ -63,6 +67,7 @@ if (is_win) {
         "lib/rlz_lib.cc",
     ]
   }
+
   update_template_instance("//gpu/command_buffer/service:gles2_sources") {
     if (!defined(jumbo_excluded_sources)) {
       jumbo_excluded_sources = []
@@ -70,6 +75,14 @@ if (is_win) {
     jumbo_excluded_sources += [
       "shared_context_state.cc",
     ]
+  }
+
+  update_template_instance("//chrome/app/version_assembly:chrome_exe_version_manifest") {
+    template_file = "//vivaldi/app/version_assembly/vivaldi_exe_manifest.template"
+  }
+
+  update_template_instance("//chrome/app/version_assembly:version_assembly_manifest") {
+    template_file = "//vivaldi/app/version_assembly/vivaldi_version_assembly_manifest.template"
   }
 }
 

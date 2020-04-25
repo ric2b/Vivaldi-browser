@@ -39,10 +39,10 @@
 #include "components/sync/engine_impl/net/server_connection_manager.h"
 #include "components/sync/engine_impl/sync_scheduler_impl.h"
 #include "components/sync/engine_impl/syncer_proto_util.h"
-#include "components/sync/nigori/cryptographer.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 #include "components/sync/protocol/nigori_specifics.pb.h"
 #include "components/sync/protocol/preference_specifics.pb.h"
+#include "components/sync/syncable/directory_cryptographer.h"
 #include "components/sync/syncable/mutable_entry.h"
 #include "components/sync/syncable/nigori_util.h"
 #include "components/sync/syncable/syncable_delete_journal.h"
@@ -279,7 +279,6 @@ class SyncerTest : public testing::Test,
     context_ = std::make_unique<SyncCycleContext>(
         mock_server_.get(), directory(), extensions_activity_.get(), listeners,
         debug_info_getter_.get(), model_type_registry_.get(),
-        true,  // enable keystore encryption
         "fake_invalidator_client_id", mock_server_->store_birthday(),
         "fake_bag_of_chips",
         /*poll_interval=*/base::TimeDelta::FromMinutes(30));
@@ -505,7 +504,7 @@ class SyncerTest : public testing::Test,
     mock_server_->ExpectGetUpdatesRequestTypes(enabled_datatypes_);
   }
 
-  Cryptographer* GetCryptographer(syncable::BaseTransaction* trans) {
+  DirectoryCryptographer* GetCryptographer(syncable::BaseTransaction* trans) {
     return test_user_share_.GetCryptographer(trans);
   }
 
@@ -519,7 +518,7 @@ class SyncerTest : public testing::Test,
     ASSERT_FALSE(nudge_tracker_.IsGetUpdatesRequired(ProtocolTypes()));
   }
 
-  base::test::TaskEnvironment task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
 
   // Some ids to aid tests. Only the root one's value is specific. The rest
   // are named for test clarity.
@@ -659,7 +658,7 @@ TEST_F(SyncerTest, GetCommitIdsFiltersUnreadyEntries) {
     // Mark bookmarks as encrypted and set the cryptographer to have pending
     // keys.
     syncable::WriteTransaction wtrans(FROM_HERE, UNITTEST, directory());
-    Cryptographer other_cryptographer;
+    DirectoryCryptographer other_cryptographer;
     other_cryptographer.AddKey(other_params);
     sync_pb::EntitySpecifics specifics;
     sync_pb::NigoriSpecifics* nigori = specifics.mutable_nigori();
@@ -1014,7 +1013,7 @@ TEST_F(SyncerTest, GetCommitIds_VerifyDeletionCommitOrderMaxEntries) {
 
 TEST_F(SyncerTest, EncryptionAwareConflicts) {
   KeyParams key_params = {KeyDerivationParams::CreateForPbkdf2(), "foobar"};
-  Cryptographer other_cryptographer;
+  DirectoryCryptographer other_cryptographer;
   other_cryptographer.AddKey(key_params);
   sync_pb::EntitySpecifics bookmark, encrypted_bookmark, modified_bookmark;
   bookmark.mutable_bookmark()->set_title("title");

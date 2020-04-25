@@ -36,6 +36,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/child_process_host.h"
+#include "content/public/common/content_client.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
@@ -248,25 +249,16 @@ void OpenWindowOnUI(
   // function can't be used directly since there is no render frame host yet
   // that the navigation will occur in.
 
-  GURL dest_url(url);
-  if (!GetContentClient()->browser()->ShouldAllowOpenURL(site_instance, url))
-    dest_url = GURL(url::kAboutBlankURL);
-
   OpenURLParams params(
-      dest_url,
+      url,
       Referrer::SanitizeForRequest(
-          dest_url,
-          Referrer(script_url, network::mojom::ReferrerPolicy::kDefault)),
+          url, Referrer(script_url, network::mojom::ReferrerPolicy::kDefault)),
       type == WindowType::PAYMENT_HANDLER_WINDOW
           ? WindowOpenDisposition::NEW_POPUP
           : WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui::PAGE_TRANSITION_AUTO_TOPLEVEL, true /* is_renderer_initiated */);
   params.open_app_window_if_possible = type == WindowType::NEW_TAB_WINDOW;
   params.initiator_origin = url::Origin::Create(script_url.GetOrigin());
-
-  GetContentClient()->browser()->OverrideNavigationParams(
-      site_instance, &params.transition, &params.is_renderer_initiated,
-      &params.referrer, &params.initiator_origin);
 
   // End of RequestOpenURL copy.
 
@@ -317,8 +309,7 @@ void NavigateClientOnUI(const GURL& url,
           url, Referrer(script_url, network::mojom::ReferrerPolicy::kDefault)),
       WindowOpenDisposition::CURRENT_TAB,
       false /* should_replace_current_entry */, false /* user_gesture */,
-      blink::WebTriggeringEventInfo::kUnknown,
-      std::string() /* href_translate */,
+      blink::TriggeringEventInfo::kUnknown, std::string() /* href_translate */,
       nullptr /* blob_url_loader_factory */);
   new OpenURLObserver(web_contents, frame_tree_node_id, std::move(callback));
 }
@@ -367,7 +358,6 @@ void OnGetWindowClientsOnUI(
     const std::vector<std::tuple<int, int, base::TimeTicks, std::string>>&
         clients_info,
     const GURL& script_url,
-    blink::mojom::ServiceWorkerClientLifecycleStateQuery lifecycle_state,
     ClientsCallback callback,
     std::unique_ptr<ServiceWorkerClientPtrs> out_clients) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -388,19 +378,6 @@ void OnGetWindowClientsOnUI(
     // different URL than expected. In such case, we should make sure to not
     // expose cross-origin WindowClient.
     if (info->url.GetOrigin() != script_url.GetOrigin())
-      continue;
-
-    // Skip frozen clients if asked to be excluded.
-    if (lifecycle_state !=
-            blink::mojom::ServiceWorkerClientLifecycleStateQuery::kAll &&
-        ((lifecycle_state ==
-              blink::mojom::ServiceWorkerClientLifecycleStateQuery::kActive &&
-          info->lifecycle_state !=
-              blink::mojom::ServiceWorkerClientLifecycleState::kActive) ||
-         (lifecycle_state ==
-              blink::mojom::ServiceWorkerClientLifecycleStateQuery::kFrozen &&
-          info->lifecycle_state !=
-              blink::mojom::ServiceWorkerClientLifecycleState::kFrozen)))
       continue;
 
     out_clients->push_back(std::move(info));
@@ -506,12 +483,10 @@ void GetWindowClients(const base::WeakPtr<ServiceWorkerVersion>& controller,
     return;
   }
 
-  blink::mojom::ServiceWorkerClientLifecycleStateQuery lifecycle_state =
-      options->lifecycle_state;
   RunOrPostTaskOnThread(
       FROM_HERE, BrowserThread::UI,
       base::BindOnce(&OnGetWindowClientsOnUI, clients_info,
-                     controller->script_url(), lifecycle_state,
+                     controller->script_url(),
                      base::BindOnce(&DidGetWindowClients, controller,
                                     std::move(options), std::move(callback)),
                      std::move(clients)));

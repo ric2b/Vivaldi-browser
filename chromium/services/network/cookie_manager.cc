@@ -18,7 +18,6 @@
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_util.h"
-#include "services/network/cookie_managers_shared.h"
 #include "services/network/session_cleanup_cookie_store.h"
 #include "url/gurl.h"
 
@@ -38,9 +37,8 @@ CookieManager::ListenerRegistration::ListenerRegistration() {}
 CookieManager::ListenerRegistration::~ListenerRegistration() {}
 
 void CookieManager::ListenerRegistration::DispatchCookieStoreChange(
-    const net::CanonicalCookie& cookie,
-    net::CookieChangeCause cause) {
-  listener->OnCookieChange(cookie, ToCookieChangeCause(cause));
+    const net::CookieChangeInfo& change) {
+  listener->OnCookieChange(change);
 }
 
 CookieManager::CookieManager(
@@ -71,6 +69,11 @@ void CookieManager::AddReceiver(
 
 void CookieManager::GetAllCookies(GetAllCookiesCallback callback) {
   cookie_store_->GetAllCookiesAsync(std::move(callback));
+}
+
+void CookieManager::GetAllCookiesWithAccessSemantics(
+    GetAllCookiesWithAccessSemanticsCallback callback) {
+  cookie_store_->GetAllCookiesWithAccessSemanticsAsync(std::move(callback));
 }
 
 void CookieManager::GetCookieList(const GURL& url,

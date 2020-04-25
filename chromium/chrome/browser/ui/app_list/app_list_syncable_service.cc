@@ -25,7 +25,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
-#include "chrome/browser/ui/app_list/app_service_app_model_builder.h"
+#include "chrome/browser/ui/app_list/app_service/app_service_app_model_builder.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_item.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_model_builder.h"
@@ -136,8 +136,9 @@ bool IsUnRemovableDefaultApp(const std::string& id) {
 }
 
 void UninstallExtension(extensions::ExtensionService* service,
+                        extensions::ExtensionRegistry* registry,
                         const std::string& id) {
-  if (service && service->GetInstalledExtension(id)) {
+  if (service && registry->GetInstalledExtension(id)) {
     service->UninstallExtension(id, extensions::UNINSTALL_REASON_SYNC,
                                 nullptr /* error */);
   }
@@ -315,6 +316,7 @@ void AppListSyncableService::SetAppIsDefaultForTest(Profile* profile,
 AppListSyncableService::AppListSyncableService(Profile* profile)
     : profile_(profile),
       extension_system_(extensions::ExtensionSystem::Get(profile)),
+      extension_registry_(extensions::ExtensionRegistry::Get(profile)),
       initial_sync_data_processed_(false),
       first_app_list_sync_(true),
       is_app_service_enabled_(
@@ -691,7 +693,8 @@ bool AppListSyncableService::RemoveDefaultApp(const ChromeAppListItem* item,
       AppIsDefault(profile_, item->id())) {
     VLOG(2) << this
             << ": HandleDefaultApp: Uninstall: " << sync_item->ToString();
-    UninstallExtension(extension_system_->extension_service(), item->id());
+    UninstallExtension(extension_system_->extension_service(),
+                       extension_registry_, item->id());
     return true;
   }
 
@@ -1098,7 +1101,7 @@ void AppListSyncableService::ProcessNewSyncItem(SyncItem* sync_item) {
     case sync_pb::AppListSpecifics::TYPE_REMOVE_DEFAULT_APP: {
       VLOG(2) << this << ": Uninstall: " << sync_item->ToString();
       UninstallExtension(extension_system_->extension_service(),
-                         sync_item->item_id);
+                         extension_registry_, sync_item->item_id);
       return;
     }
     case sync_pb::AppListSpecifics::TYPE_FOLDER: {
@@ -1258,10 +1261,9 @@ bool AppListSyncableService::AppIsOem(const std::string& id) {
 
   if (!extension_system_->extension_service())
     return false;
-  extensions::ExtensionRegistry* registry =
-      extensions::ExtensionRegistry::Get(profile_);
-  const extensions::Extension* extension = registry->GetExtensionById(
-      id, extensions::ExtensionRegistry::COMPATIBILITY);
+  const extensions::Extension* extension =
+      extension_registry_->GetExtensionById(
+          id, extensions::ExtensionRegistry::EVERYTHING);
   return extension && extension->was_installed_by_oem();
 }
 
@@ -1341,8 +1343,8 @@ void AppListSyncableService::PruneRedundantPageBreakItems() {
 }
 
 void AppListSyncableService::InstallDefaultPageBreaks() {
-  for (size_t i = 0; i < app_list::kDefaultPageBreakAppIdsLength; ++i) {
-    auto* const id = app_list::kDefaultPageBreakAppIds[i];
+  for (size_t i = 0; i < kDefaultPageBreakAppIdsLength; ++i) {
+    auto* const id = kDefaultPageBreakAppIds[i];
     auto* sync_item = GetSyncItem(id);
     if (sync_item) {
       // The user may have cleared their sync from

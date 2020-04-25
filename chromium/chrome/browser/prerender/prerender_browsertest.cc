@@ -41,8 +41,6 @@
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/net/prediction_options.h"
-#include "chrome/browser/page_load_metrics/metrics_web_contents_observer.h"
-#include "chrome/browser/page_load_metrics/page_load_tracker.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
@@ -80,6 +78,8 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
+#include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
+#include "components/page_load_metrics/browser/page_load_tracker.h"
 #include "components/page_load_metrics/common/test/page_load_metrics_test_util.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
@@ -103,6 +103,7 @@
 #include "content/public/browser/tts_platform.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
@@ -179,8 +180,7 @@ const char kPrefetchJpeg[] = "/prerender/image.jpeg";
 
 class FaviconUpdateWatcher : public favicon::FaviconDriverObserver {
  public:
-  explicit FaviconUpdateWatcher(content::WebContents* web_contents)
-      : seen_(false), running_(false), scoped_observer_(this) {
+  explicit FaviconUpdateWatcher(content::WebContents* web_contents) {
     scoped_observer_.Add(
         favicon::ContentFaviconDriver::FromWebContents(web_contents));
   }
@@ -208,9 +208,10 @@ class FaviconUpdateWatcher : public favicon::FaviconDriverObserver {
     running_ = false;
   }
 
-  bool seen_;
-  bool running_;
-  ScopedObserver<favicon::FaviconDriver, FaviconUpdateWatcher> scoped_observer_;
+  bool seen_ = false;
+  bool running_ = false;
+  ScopedObserver<favicon::FaviconDriver, favicon::FaviconDriverObserver>
+      scoped_observer_{this};
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(FaviconUpdateWatcher);
@@ -498,26 +499,6 @@ class FakeDevToolsClient : public content::DevToolsAgentHostClient {
   void DispatchProtocolMessage(DevToolsAgentHost* agent_host,
                                const std::string& message) override {}
   void AgentHostClosed(DevToolsAgentHost* agent_host) override {}
-};
-
-// A ContentBrowserClient that cancels all prerenderers on OpenURL.
-class TestContentBrowserClient : public ChromeContentBrowserClient {
- public:
-  TestContentBrowserClient() {}
-  ~TestContentBrowserClient() override {}
-
-  // ChromeContentBrowserClient:
-  bool ShouldAllowOpenURL(content::SiteInstance* site_instance,
-                          const GURL& url) override {
-    PrerenderManagerFactory::GetForBrowserContext(
-        site_instance->GetBrowserContext())
-        ->CancelAllPrerenders();
-    return ChromeContentBrowserClient::ShouldAllowOpenURL(site_instance,
-                                                                  url);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestContentBrowserClient);
 };
 
 base::FilePath GetTestPath(const std::string& file_name) {
@@ -1344,22 +1325,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderNoSSLReferrer) {
   NavigateToDestURL();
 }
 
-// Checks that the referrer is set when prerendering is cancelled.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderCancelReferrer) {
-  std::unique_ptr<TestContentBrowserClient> test_content_browser_client(
-      new TestContentBrowserClient);
-  content::ContentBrowserClient* original_browser_client =
-      content::SetBrowserClientForTesting(test_content_browser_client.get());
-
-  PrerenderTestURL("/prerender/prerender_referrer.html", FINAL_STATUS_CANCELLED,
-                   1);
-  OpenDestURLViaClick();
-
-  EXPECT_TRUE(DidDisplayPass(GetActiveWebContents()));
-
-  content::SetBrowserClientForTesting(original_browser_client);
-}
-
 // Checks that popups on a prerendered page cause cancellation.
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderPopup) {
   PrerenderTestURL("/prerender/prerender_popup.html",
@@ -1921,30 +1886,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
   NavigateToDestURL();
 }
 
-// Checks that the referrer policy is used when prerendering is cancelled.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderCancelReferrerPolicy) {
-  std::unique_ptr<TestContentBrowserClient> test_content_browser_client(
-      new TestContentBrowserClient);
-  content::ContentBrowserClient* original_browser_client =
-      content::SetBrowserClientForTesting(test_content_browser_client.get());
-
-  set_loader_path("/prerender/prerender_loader_with_referrer_policy.html");
-  PrerenderTestURL("/prerender/prerender_referrer_policy.html",
-                   FINAL_STATUS_CANCELLED, 1);
-  OpenDestURLViaClick();
-
-  bool display_test_result = false;
-  WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      web_contents,
-      "window.domAutomationController.send(DidDisplayPass())",
-      &display_test_result));
-  EXPECT_TRUE(display_test_result);
-
-  content::SetBrowserClientForTesting(original_browser_client);
-}
-
 // Test interaction of the webNavigation and tabs API with prerender.
 class PrerenderBrowserTestWithExtensions : public PrerenderBrowserTest,
                                            public extensions::ExtensionApiTest {
@@ -2061,19 +2002,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderWebAudioDevice) {
   DisableLoadEventCheck();
   PrerenderTestURL("/prerender/prerender_web_audio_device.html",
                    FINAL_STATUS_CREATING_AUDIO_STREAM, 0);
-}
-
-// Checks that prerenders are aborted on cross-process navigation from
-// a client redirect.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
-                       PrerenderCrossProcessClientRedirect) {
-  // Cross-process navigation logic for renderer-initiated navigations
-  // is partially controlled by the renderer, namely
-  // ChromeContentRendererClient. This test instead relies on the Web
-  // Store triggering such navigations.
-  PrerenderTestURL(
-      CreateClientRedirect(extension_urls::GetWebstoreLaunchURL().spec()),
-      FINAL_STATUS_OPEN_URL, 1);
 }
 
 // Checks that deferred redirects in a synchronous XHR abort the prerender.

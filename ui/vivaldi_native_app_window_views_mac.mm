@@ -110,6 +110,12 @@ bool NSWindowIsMaximized(NSWindow* window) {
 
 }  // vivaldi
 
+// static
+std::unique_ptr<VivaldiNativeAppWindowViews>
+VivaldiNativeAppWindowViews::Create() {
+  return std::make_unique<VivaldiNativeAppWindowViewsMac>();
+}
+
 VivaldiNativeAppWindowViewsMac::VivaldiNativeAppWindowViewsMac() {}
 
 VivaldiNativeAppWindowViewsMac::~VivaldiNativeAppWindowViewsMac() {

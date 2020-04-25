@@ -13,6 +13,8 @@
 #include "components/viz/host/host_display_client.h"
 #include "components/viz/host/host_frame_sink_client.h"
 #include "components/viz/host/host_frame_sink_manager.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/viz/privileged/mojom/compositing/display_private.mojom.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom.h"
 #include "ui/gfx/native_widget_types.h"
@@ -26,10 +28,12 @@ class DemoClient;
 // the service.
 class DemoHost : public viz::HostFrameSinkClient {
  public:
-  DemoHost(gfx::AcceleratedWidget widget,
-           const gfx::Size& size,
-           viz::mojom::FrameSinkManagerClientRequest client_request,
-           viz::mojom::FrameSinkManagerPtr frame_sink_manager_ptr);
+  DemoHost(
+      gfx::AcceleratedWidget widget,
+      const gfx::Size& size,
+      mojo::PendingReceiver<viz::mojom::FrameSinkManagerClient> client_receiver,
+      mojo::PendingRemote<viz::mojom::FrameSinkManager>
+          frame_sink_manager_remote);
   ~DemoHost() override;
 
   void Resize(const gfx::Size& size);
@@ -39,8 +43,9 @@ class DemoHost : public viz::HostFrameSinkClient {
 
   void EmbedClients(DemoClient* embedder_client, const gfx::Rect& child_bounds);
 
-  void Initialize(viz::mojom::FrameSinkManagerClientRequest request,
-                  viz::mojom::FrameSinkManagerPtrInfo ptr_info);
+  void Initialize(
+      mojo::PendingReceiver<viz::mojom::FrameSinkManagerClient> receiver,
+      mojo::PendingRemote<viz::mojom::FrameSinkManager> remote);
 
   // viz::HostFrameSinkClient:
   void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;

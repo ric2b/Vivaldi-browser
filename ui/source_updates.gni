@@ -13,14 +13,14 @@ update_template_instance("//chrome/browser/ui:ui") {
   sources += [
     "//vivaldi/ui/about/vivaldi_about_version.cc",
     "//vivaldi/ui/about/vivaldi_about_version.h",
-    "//vivaldi/ui/cocoa/vivaldi_native_app_window.h",
   ]
   if (!is_android) {
     sources += [
-      "//vivaldi/ui/views/vivaldi_context_menu_views.h",
+      "//vivaldi/ui/views/vivaldi_bookmark_menu_controller_views.cc",
+      "//vivaldi/ui/views/vivaldi_bookmark_menu_views.h",
+      "//vivaldi/ui/views/vivaldi_bookmark_menu_views.cc",
       "//vivaldi/ui/views/vivaldi_context_menu_views.cc",
-      "//vivaldi/ui/vivaldi_app_window_client.cc",
-      "//vivaldi/ui/vivaldi_app_window_client.h",
+      "//vivaldi/ui/views/vivaldi_context_menu_views.h",
       "//vivaldi/ui/vivaldi_browser_window.cc",
       "//vivaldi/ui/vivaldi_browser_window.h",
       "//vivaldi/ui/infobar_container_web_proxy.cc",
@@ -29,6 +29,10 @@ update_template_instance("//chrome/browser/ui:ui") {
       "//vivaldi/ui/vivaldi_context_menu.h",
       "//vivaldi/ui/vivaldi_location_bar.cc",
       "//vivaldi/ui/vivaldi_location_bar.h",
+      "//vivaldi/ui/vivaldi_native_app_window_views.cc",
+      "//vivaldi/ui/vivaldi_native_app_window_views.h",
+      "//vivaldi/ui/vivaldi_quit_confirmation_dialog.cc",
+      "//vivaldi/ui/vivaldi_quit_confirmation_dialog.h",
       "//vivaldi/ui/vivaldi_session_service.cc",
       "//vivaldi/ui/vivaldi_session_service.h",
       "//vivaldi/ui/vivaldi_ui_utils.cc",
@@ -37,49 +41,41 @@ update_template_instance("//chrome/browser/ui:ui") {
   }
   if (is_mac) {
     sources += [
-      "//vivaldi/ui/views/vivaldi_bookmark_menu_controller_views.cc",
-      "//vivaldi/ui/views/vivaldi_bookmark_menu_views.h",
-      "//vivaldi/ui/views/vivaldi_bookmark_menu_views.cc",
       "//vivaldi/ui/vivaldi_context_menu_mac.h",
       "//vivaldi/ui/vivaldi_context_menu_mac.mm",
       "//vivaldi/ui/vivaldi_fullscreen_menubar_tracker_mac.h",
       "//vivaldi/ui/vivaldi_fullscreen_menubar_tracker_mac.mm",
       "//vivaldi/ui/vivaldi_main_menu_mac.h",
       "//vivaldi/ui/vivaldi_main_menu_mac.mm",
-      "//vivaldi/ui/vivaldi_app_window_client_views_mac.h",
-      "//vivaldi/ui/vivaldi_app_window_client_views_mac.mm",
       "//vivaldi/ui/vivaldi_native_app_window_frame_view_mac.h",
       "//vivaldi/ui/vivaldi_native_app_window_frame_view_mac.mm",
       "//vivaldi/ui/vivaldi_native_app_window_views_mac.h",
       "//vivaldi/ui/vivaldi_native_app_window_views_mac.mm",
-      "//vivaldi/ui/vivaldi_native_app_window_views.h",
-      "//vivaldi/ui/vivaldi_native_app_window_views.cc",
-      "//vivaldi/ui/vivaldi_quit_confirmation_dialog.h",
-      "//vivaldi/ui/vivaldi_quit_confirmation_dialog.cc",
     ]
-  } else if (!is_android) {
+  }
+  if (is_win || is_linux) {
     sources += [
-      "//vivaldi/ui/views/vivaldi_bookmark_menu_controller_views.cc",
-      "//vivaldi/ui/views/vivaldi_bookmark_menu_views.h",
-      "//vivaldi/ui/views/vivaldi_bookmark_menu_views.cc",
       "//vivaldi/ui/views/vivaldi_system_menu_model_builder.cc",
       "//vivaldi/ui/views/vivaldi_system_menu_model_builder.h",
-      "//vivaldi/ui/vivaldi_native_app_window_views.cc",
-      "//vivaldi/ui/vivaldi_native_app_window_views.h",
-      "//vivaldi/ui/vivaldi_app_window_client_views_win.cc",
-      "//vivaldi/ui/vivaldi_app_window_client_views_linux.cc",
-      "//vivaldi/ui/vivaldi_app_window_desktop_native_widget_aura_win.cc",
-      "//vivaldi/ui/vivaldi_app_window_desktop_native_widget_aura_win.h",
-      "//vivaldi/ui/vivaldi_app_window_desktop_window_tree_host_win.cc",
-      "//vivaldi/ui/vivaldi_app_window_desktop_window_tree_host_win.h",
       "//vivaldi/ui/views/vivaldi_menubar_menu_views.h",
       "//vivaldi/ui/views/vivaldi_menubar_menu_views.cc",
       "//vivaldi/ui/vivaldi_native_app_window_views_aura.cc",
       "//vivaldi/ui/vivaldi_native_app_window_views_aura.h",
+    ]
+  }
+  if (is_win) {
+    sources += [
+      "//vivaldi/ui/vivaldi_app_window_desktop_native_widget_aura_win.cc",
+      "//vivaldi/ui/vivaldi_app_window_desktop_native_widget_aura_win.h",
+      "//vivaldi/ui/vivaldi_app_window_desktop_window_tree_host_win.cc",
+      "//vivaldi/ui/vivaldi_app_window_desktop_window_tree_host_win.h",
       "//vivaldi/ui/vivaldi_native_app_window_views_win.cc",
       "//vivaldi/ui/vivaldi_native_app_window_views_win.h",
-      "//vivaldi/ui/vivaldi_quit_confirmation_dialog.cc",
-      "//vivaldi/ui/vivaldi_quit_confirmation_dialog.h"
+    ]
+  }
+  if (is_linux) {
+    sources += [
+      "//vivaldi/ui/vivaldi_native_app_window_views_linux.cc",
     ]
   }
 }
@@ -94,8 +90,9 @@ if (!is_android) {
   update_target("//ui/views:views") {
     sources += [
       "//vivaldi/ui/views/vivaldi_menu_controller_views.cc",
-      "//vivaldi/ui/views/vivaldi_menu_model_adapter.cc",
       "//vivaldi/ui/views/vivaldi_menu_config.cc",
+      "//vivaldi/ui/views/vivaldi_menu_delegate.cc",
+      "//vivaldi/ui/views/vivaldi_menu_model_adapter.cc",
     ]
   }
 }

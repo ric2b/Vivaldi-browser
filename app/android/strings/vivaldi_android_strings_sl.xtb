@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="sl">
+<translation id="1029351048239796117">Vivaldi potrebuje dovoljenje za dostop do vašega mikrofona za to spletno mesto.</translation>
+<translation id="1063227610401477317">Uporabi spremembe</translation>
+<translation id="1067048845568873861">Ustvarjeno</translation>
+<translation id="1151669774236491028">Vivaldi.net ima težave: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="1193152013480891461">Ustvarite račun Vivaldi</translation>
+<translation id="119944043368869598">Počisti vse</translation>
+<translation id="1228311134236651326">Ni najdenih zapisov</translation>
+<translation id="1243314992276662751">Prenos</translation>
+<translation id="1249276067323441352">Podatki za sinhronizacijo</translation>
+<translation id="1302932907222175914">Preiščite beležke</translation>
+<translation id="1644574205037202324">Zgodovina</translation>
+<translation id="1689333818294560261">Vzdevek</translation>
+<translation id="1721552494230946796">Nova mapa za hitro izbiranje</translation>
+<translation id="1799160781006135561">Geslo za šifriranje ni določeno</translation>
+<translation id="1887193815546011584">Nova hitra izbira</translation>
+<translation id="1984391066297619717">Samodejna sinhronizacija</translation>
+<translation id="2030706494969937066">Ni bilo mogoče pridobiti poverilnic. Prijavite se znova.</translation>
+<translation id="2034405583989639424">Uredi hitro izbiranje</translation>
+<translation id="2071726368047511075">Zajemi stran</translation>
+<translation id="2199644148227291099">Ali ste prepričani, da želite uporabiti geslo za prijavo za šifriranje? To močno zmanjša varnost sinhroniziranih podatkov na spletu.</translation>
+<translation id="2243210264130642074">Opomba je shranjena</translation>
+<translation id="2336309953058658733">Izprazni koš</translation>
+<translation id="2359808026110333948">Nadaljuj</translation>
+<translation id="2526968784648867272">Zajemanje strani...</translation>
+<translation id="2709516037105925701">Samodejno izpolnjevanje</translation>
+<translation id="271033894570825754">Novo</translation>
+<translation id="2745324713975967671">Geslo za šifriranje</translation>
+<translation id="2818042133587341562">Vivaldi potrebuje dovoljenje za dostop do vaše kamere za to spletno mesto.</translation>
+<translation id="2842985007712546952">Nadrejena mapa</translation>
+<translation id="2850144663494818309">Inicializacija sinhronizacije...</translation>
+<translation id="2873951654529031587">Smetnjak</translation>
+<translation id="2915527103487649658">Sinhroniziraj vse podatke</translation>
+<translation id="2953995378235516294">Podatki na vašem računu za sinhronizacijo so šifrirani. Za dešifriranje vnesite svoje geslo za šifriranje.</translation>
+<translation id="2996809686854298943">Potreben je URL</translation>
+<translation id="3177673846235066154">Strežnik je zavrnil vaše poverilnice.</translation>
+<translation id="3183006304368105350">Kloniraj zavihek</translation>
+<translation id="3271422135763022755">Začnite tipkati...</translation>
+<translation id="3335772982573114336">Nova opomba</translation>
+<translation id="33451081266695216">Strežnik je omejil povezavo.</translation>
+<translation id="3377025655491224618">Zasebni zavihek</translation>
+<translation id="3513566764071045027">Odjava</translation>
+<translation id="3596285013654573099">Prijavite se v sinhronizacijo</translation>
+<translation id="3611176835527015865">Vpliva samo na interne strani Vivaldi in ne na spletna mesta</translation>
+<translation id="3723593528923555236">Nadaljuj brez ločenega gesla</translation>
+<translation id="3838463869765243557">Ime naprave (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">Opis</translation>
+<translation id="3897711243931585177">SPLOŠNO</translation>
+<translation id="4014682279600355881">Priporočamo, da ustvarite ločeno, močno geslo za šifriranje. Lahko pa pustite prazno - v tem primeru bomo uporabili shranjeno geslo računa.</translation>
+<translation id="4073968054795398875">V strežniku za sinhronizacijo se pojavljajo težave. Kmalu sledi ponovni poskus sinhronizacije...</translation>
+<translation id="4082980568238151037">Nastavite geslo za šifriranje.</translation>
+<translation id="4145489350420416595">Nepričakovana napaka.</translation>
+<translation id="4268574628540273656">URL:</translation>
+<translation id="4304224509867189079">Prijava</translation>
+<translation id="4435780204941264251">Počisti sinhronizacijske podatke</translation>
+<translation id="4532845899244822526">Izberite mapo</translation>
+<translation id="4579489600439872414">Sinhronizacija je onemogočena v nastavitvah Androida.</translation>
+<translation id="4589558845651536280">V teku...</translation>
+<translation id="4752136117982598343">Opomba je shranjena v <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">Prenosi</translation>
+<translation id="4833044618885331665">Če želite uporabljati sinhronizacijo, morate nadgraditi Vivaldi.</translation>
+<translation id="4847896847259487518">Zaznamek strani</translation>
+<translation id="4890701585167892790">Tukaj ni nobenih opomb</translation>
+<translation id="4892521078757281695">Povlecite na Zapri zavihek</translation>
+<translation id="4936710149174207991">Ni sinhronizirano</translation>
+<translation id="4954427294703861104">Novi ste v Vivaldiju? Ustvarite račun.</translation>
+<translation id="504986598654589766">Brskanje v zavihku Zasebno pomeni, da Vivaldi ne bo shranil iskanj, obiskanih strani, piškotkov in začasnih datotek. Ne šifrira ali drugače spreminja vaše povezave.</translation>
+<translation id="5161254044473106830">Zahteva naslov</translation>
+<translation id="5186185447130319458">Zasebno</translation>
+<translation id="5271549068863921519">Shrani geslo</translation>
+<translation id="5286002386457946212">Napaka stranke.</translation>
+<translation id="5290452628447338707">Brez opomb</translation>
+<translation id="5351912500249789547">Vivaldi.net je zavrnil vaše poverilnice: Error code <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">Odpri sliko</translation>
+<translation id="5421638721143596928">Vaših poverilnic ni bilo mogoče dešifrirati. Ponovno se prijavite.</translation>
+<translation id="5443210757369395869">Zajemi vidno območje</translation>
+<translation id="5448025735280530073">Vivaldi potrebuje dostop do vaše lokacije, da s to stranjo deli vašo lokacijo.</translation>
+<translation id="5510723066938954312">Zaznamki in Hitra izbira</translation>
+<translation id="5525981542754785361">Opomba je shranjena v <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">Kopiraj v beležko</translation>
+<translation id="5754087700864822036">SPLETNE STRANI</translation>
+<translation id="5765833063161370062">Premakni beležke</translation>
+<translation id="5790085346892983794">Uspešno</translation>
+<translation id="5803562371819294631">S tem boste odstranili vse podatke o sinhronizaciji, shranjeni na strežniku za sinhronizacijo, ponastavili geslo za šifriranje in se odjavili. Ali ste prepričani?</translation>
+<translation id="5823830882692559950">Vivaldi.net je zavrnil vaše poverilnice: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5841317974325635710">Nova beležka je ustvarjena</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> opomba}
+          other {<ph name="NOTES_COUNT_MANY" /> opombe}}</translation>
+<translation id="6012194412768958291">Ni mogoče vzpostaviti povezave z vivaldi.net.</translation>
+<translation id="6027204815015935175">Za dešifriranje je potrebno geslo.</translation>
+<translation id="6059232451013891645">Mapa:</translation>
+<translation id="6077943432358741146">Hitra izbira</translation>
+<translation id="6091125352818749975">Brisanje sinhroniziranih podatkov na daljavo.</translation>
+<translation id="6135798666968342262">Prikaži drsne trake</translation>
+<translation id="6179463181009746489">Izbriši beležke</translation>
+<translation id="6231148928368101651">Paneli</translation>
+<translation id="6406506848690869874">Sinhronizacija</translation>
+<translation id="6657585470893396449">Geslo</translation>
+<translation id="6682232524697939870">Vivaldi potrebuje dovoljenje za dostop do vaše kamere in mikrofona za to spletno mesto.</translation>
+<translation id="6698381487523150993">Ustvarjeno:</translation>
+<translation id="6786747875388722282">Razširitve</translation>
+<translation id="6887143077297974801">Sinhronizacije ni bilo mogoče zagnati.</translation>
+<translation id="6945221475159498467">Izberi</translation>
+<translation id="6960734555676205519">Zadnja sinhronizacija</translation>
+<translation id="7029809446516969842">Gesla</translation>
+<translation id="7075547914712055886">Znova zaženite sinhronizacijo</translation>
+<translation id="7222342267839079597">Da bi zaščitili svoje podatke izberite močno geslo.</translation>
+<translation id="7228660378238874411">Vedno prikaži spletno mesto namizja</translation>
+<translation id="7390295729483215958">Sinhronizacija je v teku...</translation>
+<translation id="7492794630657957996">Za dokončanje namestitve potrdite podatke za sinhronizacijo,</translation>
+<translation id="7514365320538308">Prenesi</translation>
+<translation id="7547490097772831952">Zajemi celo stran</translation>
+<translation id="7725641807765767506">Ni najdene hitre izbire</translation>
+<translation id="7765158879357617694">Premakni</translation>
+<translation id="7822864833609233785">NAPREDNO</translation>
+<translation id="798930073512159071">
+
+Napišite svojo prvo opombo
+
+Za začetek tapnite ikono Nova opomba ali izberite besedilo na kateri koli spletni strani in ustvarite opombo iz kontekstnega menija.</translation>
+<translation id="8004991133350335392">Najmanjša zahtevana dolžina gesla je 12 znakov.</translation>
+<translation id="8028021641083150097">Če želite znova pridobiti dostop do računa, morate ponastaviti vse oddaljene podatke sinhronizacije. Nato lahko začnete novo sinhronizacijo s trenutnimi podatki brskalnika.</translation>
+<translation id="8035133914807600019">Nova mapa…</translation>
+<translation id="8066170816074394954">Napaka strežnika.</translation>
+<translation id="8123787473700925741">Vivaldi.net ima težave: Koda napake <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">Zaženi sinhronizacijo</translation>
+<translation id="8206267832882844324">Uredi beležko</translation>
+<translation id="8225478925744929238">Odstrani iz zaznamkov</translation>
+<translation id="8233521945095997439">Tukaj ni hitre izbire</translation>
+<translation id="8257908958623224237">Konflikt s podatki druge stranke.</translation>
+<translation id="8261506727792406068">Izbriši</translation>
+<translation id="8305137170060620165">Zgodovina in oddaljene seje</translation>
+<translation id="8414685983518053656">Opombe</translation>
+<translation id="8422778094137438683">Za prijavo morate uporabiti uporabniški račun vivaldi.net.</translation>
+<translation id="8428213095426709021">Nastavitve</translation>
+<translation id="8462396943848220200">Ponovite za <ph name="TIME" /></translation>
+<translation id="8480556999740355963">Prijavljen kot <ph name="USERNAME" /> na <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">Prijavljanje v Vivaldi.net kot <ph name="USERNAME" />. Počakajte.</translation>
+<translation id="8503813439785031346">Uporabniško ime</translation>
+<translation id="8661216209723599816">Ponastavi oddaljene podatke</translation>
+<translation id="8721244337025311110">Nov zaznamek</translation>
+<translation id="8724114686743788114">Ne morem prikazati slike</translation>
+<translation id="8730621377337864115">Končano</translation>
+<translation id="8738958257180686306">Ustvarjeno: <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Vivaldi za prenos potrebuje dostop do shranjevalnih datotek.</translation>
+<translation id="8808060551076378370">Opombe ni bilo mogoče dodati.</translation>
+<translation id="8817201557520703060">Stran je zajeta</translation>
+<translation id="8820817407110198400">Zaznamki</translation>
+<translation id="8884751487662988673">Če si želite ogledati sinhronizirane zavihke, se prijavite v sinhronizacijo v nastavitvah.</translation>
+<translation id="895749247724466293">Preišči hitro izbiro</translation>
+<translation id="8959245489304000426">Izgubil sem geslo</translation>
+<translation id="8979401359137062629">Opomba:</translation>
+<translation id="9028089729841356743">Omrežna napaka.</translation>
+<translation id="9065203028668620118">Uredi</translation>
+<translation id="9148058034647219655">Izhod</translation>
+<translation id="9173575361559252669">Zajem strani ni uspel</translation>
+</translationbundle>

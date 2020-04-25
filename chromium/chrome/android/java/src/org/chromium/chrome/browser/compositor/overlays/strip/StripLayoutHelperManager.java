@@ -36,6 +36,8 @@ import org.chromium.ui.resources.ResourceManager;
 
 import java.util.List;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * This class handles managing which {@link StripLayoutHelper} is currently active and dispatches
  * all input and model events to the proper destination.
@@ -155,9 +157,15 @@ public class StripLayoutHelperManager implements SceneOverlay {
         mModelSelectorButton.setIncognito(false);
         mModelSelectorButton.setVisible(false);
         // Pressed resources are the same as the unpressed resources.
+        if(ChromeApplication.isVivaldi()) {
+            mModelSelectorButton.setResources(R.drawable.vivaldi_private_toggle,
+                    R.drawable.vivaldi_private_toggle, R.drawable.vivaldi_tab_switch_private_mode,
+                    R.drawable.vivaldi_tab_switch_private_mode);
+        } else {
         mModelSelectorButton.setResources(R.drawable.btn_tabstrip_switch_normal,
-                R.drawable.btn_tabstrip_switch_normal, R.drawable.btn_tabstrip_switch_incognito,
-                R.drawable.btn_tabstrip_switch_incognito);
+                R.drawable.btn_tabstrip_switch_normal, R.drawable.location_bar_incognito_badge,
+                R.drawable.location_bar_incognito_badge);
+        }
         mModelSelectorButton.setY(MODEL_SELECTOR_BUTTON_Y_OFFSET_DP);
 
         Resources res = context.getResources();
@@ -348,6 +356,13 @@ public class StripLayoutHelperManager implements SceneOverlay {
                 if (tab.getId() == lastId) return;
                 getStripLayoutHelper(tab.isIncognito()).tabSelected(time(), tab.getId(), lastId);
             }
+
+            /** Vivaldi **/
+            @Override
+            public void didAddTab(Tab tab, int type) {
+                updateModelSwitcherButton();
+            }
+
         };
 
         new TabModelSelectorTabObserver(modelSelector) {

@@ -48,6 +48,7 @@ void VivaldiContentBrowserClientParts::BrowserURLHandlerCreated(
 void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
     content::RenderViewHost* rvh,
     content::WebPreferences* web_prefs) {
+#if !defined(OS_ANDROID)
   if (!vivaldi::IsVivaldiRunning())
     return;
 
@@ -55,7 +56,6 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
       content::WebContents::FromRenderViewHost(rvh);
   if (web_contents) {
     // web_contents is nullptr on interstitial pages.
-#if !defined(OS_ANDROID)
     Profile* profile =
         Profile::FromBrowserContext(web_contents->GetBrowserContext());
     PrefService* prefs = profile->GetPrefs();
@@ -75,7 +75,6 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
       web_prefs->vivaldi_show_context_menu_on_double_click = true;
     }
 
-#endif
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     extensions::VivaldiAppHelper* vivaldi_app_helper =
         extensions::VivaldiAppHelper::FromWebContents(web_contents);
@@ -86,9 +85,13 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
       int min_font_size = 0;
       bool success = base::StringToInt(
           l10n_util::GetStringUTF8(IDS_MINIMUM_FONT_SIZE), &min_font_size);
-      if (success)
+      if (success) {
         web_prefs->minimum_font_size = min_font_size;
+      }
+      // No forced dark mode for our UI.
+      web_prefs->force_dark_mode_enabled = false;
     }
 #endif
   }
+#endif  // !OS_ANDROID
 }

@@ -9,6 +9,7 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -25,7 +26,6 @@
 namespace safe_browsing {
 namespace {
 
-const size_t kMaxUploadSizeBytes = 50 * 1024 * 1024;  // 50 MB
 const int kScanningTimeoutSeconds = 5 * 60;           // 5 minutes
 const char kSbBinaryUploadUrl[] =
     "https://safebrowsing.google.com/safebrowsing/uploads/webprotect";
@@ -55,12 +55,6 @@ void BinaryUploadService::UploadForDeepScanning(
   Request* raw_request = request.get();
   active_requests_[raw_request] = std::move(request);
 
-  if (raw_request->GetFileSize() > kMaxUploadSizeBytes) {
-    FinishRequest(raw_request, Result::FILE_TOO_LARGE,
-                  DeepScanningClientResponse());
-    return;
-  }
-
   if (!binary_fcm_service_) {
     FinishRequest(raw_request, Result::FAILED_TO_GET_TOKEN,
                   DeepScanningClientResponse());
@@ -68,6 +62,7 @@ void BinaryUploadService::UploadForDeepScanning(
   }
 
   std::string token = base::RandBytesAsString(128);
+  token = base::HexEncode(token.data(), token.size());
   active_tokens_[raw_request] = token;
   binary_fcm_service_->SetCallbackForToken(
       token, base::BindRepeating(&BinaryUploadService::OnGetResponse,
@@ -96,15 +91,21 @@ void BinaryUploadService::OnGetInstanceID(Request* request,
   }
 
   request->set_fcm_token(instance_id);
-  request->GetFileContents(
-      base::BindOnce(&BinaryUploadService::OnGetFileContents,
-                     weakptr_factory_.GetWeakPtr(), request));
+  request->GetRequestData(base::BindOnce(&BinaryUploadService::OnGetRequestData,
+                                         weakptr_factory_.GetWeakPtr(),
+                                         request));
 }
 
-void BinaryUploadService::OnGetFileContents(Request* request,
-                                            const std::string& file_contents) {
+void BinaryUploadService::OnGetRequestData(Request* request,
+                                           Result result,
+                                           const Request::Data& data) {
   if (!IsActive(request))
     return;
+
+  if (result != Result::SUCCESS) {
+    FinishRequest(request, result, DeepScanningClientResponse());
+    return;
+  }
 
   net::NetworkTrafficAnnotationTag traffic_annotation =
       net::DefineNetworkTrafficAnnotation("safe_browsing_binary_upload", R"(
@@ -149,7 +150,7 @@ void BinaryUploadService::OnGetFileContents(Request* request,
   base::Base64Encode(metadata, &metadata);
 
   auto upload_request = MultipartUploadRequest::Create(
-      url_loader_factory_, GURL(kSbBinaryUploadUrl), metadata, file_contents,
+      url_loader_factory_, GURL(kSbBinaryUploadUrl), metadata, data.contents,
       traffic_annotation,
       base::BindOnce(&BinaryUploadService::OnUploadComplete,
                      weakptr_factory_.GetWeakPtr(), request));
@@ -254,6 +255,8 @@ void BinaryUploadService::FinishRequest(Request* request,
     active_tokens_.erase(token_it);
   }
 }
+
+BinaryUploadService::Request::Data::Data() = default;
 
 BinaryUploadService::Request::Request(Callback callback)
     : callback_(std::move(callback)) {}

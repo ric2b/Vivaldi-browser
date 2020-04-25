@@ -128,6 +128,8 @@ void SafeBrowsingService::Initialize() {
   CreateTriggerManager();
 
   // Track profile creation and destruction.
+  if (g_browser_process->profile_manager())
+    g_browser_process->profile_manager()->AddObserver(this);
   profiles_registrar_.Add(this, chrome::NOTIFICATION_PROFILE_CREATED,
                           content::NotificationService::AllSources());
   profiles_registrar_.Add(this, chrome::NOTIFICATION_PROFILE_DESTROYED,
@@ -143,6 +145,8 @@ void SafeBrowsingService::ShutDown() {
   shutdown_ = true;
 
   // Remove Profile creation/destruction observers.
+  if (g_browser_process->profile_manager())
+    g_browser_process->profile_manager()->RemoveObserver(this);
   profiles_registrar_.RemoveAll();
 
   // Delete the PrefChangeRegistrars, whose dtors also unregister |this| as an
@@ -341,8 +345,6 @@ void SafeBrowsingService::Observe(int type,
       services_delegate_->CreateVerdictCacheManager(profile);
       services_delegate_->CreatePasswordProtectionService(profile);
       services_delegate_->CreateTelemetryService(profile);
-      if (!profile->IsOffTheRecord())
-        AddPrefService(profile->GetPrefs());
       services_delegate_->CreateBinaryUploadService(profile);
       break;
     }
@@ -352,8 +354,6 @@ void SafeBrowsingService::Observe(int type,
       services_delegate_->RemoveVerdictCacheManager(profile);
       services_delegate_->RemovePasswordProtectionService(profile);
       services_delegate_->RemoveTelemetryService();
-      if (!profile->IsOffTheRecord())
-        RemovePrefService(profile->GetPrefs());
       services_delegate_->RemoveBinaryUploadService(profile);
       break;
     }
@@ -362,7 +362,9 @@ void SafeBrowsingService::Observe(int type,
   }
 }
 
-void SafeBrowsingService::AddPrefService(PrefService* pref_service) {
+void SafeBrowsingService::OnProfileAdded(Profile* profile) {
+  // Start following the safe browsing preference on |pref_service|.
+  PrefService* pref_service = profile->GetPrefs();
   DCHECK(prefs_map_.find(pref_service) == prefs_map_.end());
   std::unique_ptr<PrefChangeRegistrar> registrar =
       std::make_unique<PrefChangeRegistrar>();
@@ -388,15 +390,6 @@ void SafeBrowsingService::AddPrefService(PrefService* pref_service) {
   RecordExtendedReportingMetrics(*pref_service);
 }
 
-void SafeBrowsingService::RemovePrefService(PrefService* pref_service) {
-  if (prefs_map_.find(pref_service) != prefs_map_.end()) {
-    prefs_map_.erase(pref_service);
-    RefreshState();
-  } else {
-    NOTREACHED();
-  }
-}
-
 std::unique_ptr<SafeBrowsingService::StateSubscription>
 SafeBrowsingService::RegisterStateCallback(
     const base::Callback<void(void)>& callback) {
@@ -409,7 +402,6 @@ void SafeBrowsingService::RefreshState() {
   // Check if any profile requires the service to be active.
   enabled_by_prefs_ = false;
   estimated_extended_reporting_by_prefs_ = SBER_LEVEL_OFF;
-  bool is_real_time_lookup_enabled = false;
   for (const auto& pref : prefs_map_) {
     if (pref.first->GetBoolean(prefs::kSafeBrowsingEnabled)) {
       enabled_by_prefs_ = true;
@@ -419,16 +411,8 @@ void SafeBrowsingService::RefreshState() {
       if (erl != SBER_LEVEL_OFF) {
         estimated_extended_reporting_by_prefs_ = erl;
       }
-
-      if (pref.first->GetBoolean(prefs::kSafeBrowsingRealTimeLookupEnabled)) {
-        is_real_time_lookup_enabled = true;
-      }
     }
   }
-
-  // TODO(crbug.com/991394): This enables real-time URL lookup if it is enabled
-  // for any of the active profiles. This should be fixed.
-  RealTimePolicyEngine::SetEnabled(is_real_time_lookup_enabled);
 
   if (enabled_by_prefs_)
     Start();

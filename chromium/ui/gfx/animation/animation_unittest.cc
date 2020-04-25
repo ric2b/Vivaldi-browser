@@ -16,13 +16,14 @@
 
 namespace gfx {
 
-class AnimationTest: public testing::Test {
+class AnimationTest : public testing::Test {
  protected:
   AnimationTest()
-      : task_environment_(base::test::TaskEnvironment::MainThreadType::UI) {}
+      : task_environment_(
+            base::test::SingleThreadTaskEnvironment::MainThreadType::UI) {}
 
  private:
-  base::test::TaskEnvironment task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
 };
 
 namespace {

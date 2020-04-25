@@ -27,8 +27,8 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/page_zoom.h"
 #include "content/public/common/url_constants.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/platform/web_gesture_event.h"
 
 #ifdef VIVALDI_BUILD
@@ -239,14 +239,6 @@ void GuestViewBase::Init(const base::DictionaryValue& create_params,
                     base::BindOnce(&GuestViewBase::CompleteInit,
                                    weak_ptr_factory_.GetWeakPtr(),
                                    std::move(params), std::move(callback)));
-
-  // web_contents() will not be set in some cases (like when we avctivate an
-  // non-loaded pdf-tab). We can deal with an unset delegate_to_browser_plugin_.
-  if (vivaldi::IsVivaldiRunning() && web_contents()) {
-    delegate_to_browser_plugin_ =
-      static_cast<content::WebContentsImpl*>(web_contents())
-      ->GetBrowserPluginGuest();
-  }
 }
 
 void GuestViewBase::InitWithWebContents(
@@ -631,7 +623,7 @@ void GuestViewBase::WillAttach(WebContents* embedder_web_contents,
 
   if (owner_web_contents_ != embedder_web_contents) {
     if(owner_contents_observer_)
-      DCHECK_EQ(owner_contents_observer_->web_contents(), owner_web_contents_);
+    DCHECK_EQ(owner_contents_observer_->web_contents(), owner_web_contents_);
     owner_web_contents_ = embedder_web_contents;
     owner_contents_observer_ =
         std::make_unique<OwnerContentsObserver>(this, embedder_web_contents);
@@ -705,14 +697,6 @@ void GuestViewBase::WebContentsDestroyed() {
 
   // Self-destruct.
   delete this;
-}
-
-void GuestViewBase::WebContentsDidDetach() {
-  // We can now safely do any pending attaching.
-  if (perform_attach_callback_)
-    std::move(perform_attach_callback_).Run();
-  if(attach_completion_callback_)
-    SignalWhenReady(std::move(attach_completion_callback_));
 }
 
 void GuestViewBase::DidFinishNavigation(
@@ -893,8 +877,8 @@ void GuestViewBase::OnZoomChanged(
     // The embedder's zoom level has changed.
     auto* guest_zoom_controller =
         zoom::ZoomController::FromWebContents(web_contents());
-    if (content::ZoomValuesEqual(data.new_zoom_level,
-                                 guest_zoom_controller->GetZoomLevel())) {
+    if (blink::PageZoomValuesEqual(data.new_zoom_level,
+                                   guest_zoom_controller->GetZoomLevel())) {
       return;
     }
     // When the embedder's zoom level doesn't match the guest's, then update the
@@ -946,6 +930,15 @@ void GuestViewBase::CompleteInit(
     std::move(callback).Run(nullptr);
     return;
   }
+
+  // web_contents() will not be set in some cases (like when we avctivate an
+  // non-loaded pdf-tab). We can deal with an unset delegate_to_browser_plugin_.
+  if (vivaldi::IsVivaldiRunning() && guest_web_contents) {
+    delegate_to_browser_plugin_ =
+      static_cast<content::WebContentsImpl*>(guest_web_contents)
+      ->GetBrowserPluginGuest();
+  }
+
   InitWithWebContents(*create_params, guest_web_contents);
   std::move(callback).Run(guest_web_contents);
 }
@@ -954,7 +947,7 @@ double GuestViewBase::GetEmbedderZoomFactor() const {
   if (!embedder_web_contents())
     return 1.0;
 
-  return content::ZoomLevelToZoomFactor(
+  return blink::PageZoomLevelToZoomFactor(
       zoom::ZoomController::GetZoomLevelForWebContents(
           embedder_web_contents()));
 }

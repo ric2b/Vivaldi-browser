@@ -11,7 +11,6 @@
 #include "base/guid.h"
 #include "base/run_loop.h"
 #include "content/browser/frame_host/frame_tree.h"
-#include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/navigator_impl.h"
@@ -20,6 +19,7 @@
 #include "content/common/frame_owner_properties.h"
 #include "content/common/navigation_params.h"
 #include "content/common/navigation_params_utils.h"
+#include "content/common/view_messages.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/common/navigation_policy.h"
 #include "content/public/common/url_constants.h"
@@ -29,6 +29,7 @@
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_render_widget_host.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/load_flags.h"
@@ -219,16 +220,6 @@ void TestRenderFrameHost::SimulateNavigationCommit(const GURL& url) {
   SendNavigateWithParams(&params, was_within_same_document);
 }
 
-void TestRenderFrameHost::SimulateNavigationStop() {
-  if (is_loading()) {
-    OnDidStopLoading();
-  } else {
-    // Even if the RenderFrameHost is not loading, there may still be an
-    // ongoing navigation in the FrameTreeNode. Cancel this one as well.
-    frame_tree_node()->ResetNavigationRequest(false, true);
-  }
-}
-
 void TestRenderFrameHost::SendBeforeUnloadACK(bool proceed) {
   base::TimeTicks now = base::TimeTicks::Now();
   OnBeforeUnloadACK(proceed, now, now);
@@ -241,12 +232,12 @@ void TestRenderFrameHost::SimulateSwapOutACK() {
 // TODO(loonybear): Add a test for non-bool type PolicyValue.
 void TestRenderFrameHost::SimulateFeaturePolicyHeader(
     blink::mojom::FeaturePolicyFeature feature,
-    const std::vector<url::Origin>& whitelist) {
+    const std::vector<url::Origin>& allowlist) {
   blink::ParsedFeaturePolicy header(1);
   header[0].feature = feature;
   header[0].fallback_value = blink::PolicyValue(false);
   header[0].opaque_value = blink::PolicyValue(false);
-  for (const auto& origin : whitelist) {
+  for (const auto& origin : allowlist) {
     header[0].values.insert(std::pair<url::Origin, blink::PolicyValue>(
         origin, blink::PolicyValue(true)));
   }
@@ -360,15 +351,18 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
   common_params->navigation_type = mojom::NavigationType::DIFFERENT_DOCUMENT;
   common_params->has_user_gesture = has_user_gesture;
 
-  mojom::NavigationClientAssociatedPtr navigation_client_ptr;
+  mojo::PendingAssociatedRemote<mojom::NavigationClient>
+      navigation_client_remote;
   if (IsPerNavigationMojoInterfaceEnabled()) {
-    GetRemoteAssociatedInterfaces()->GetInterface(&navigation_client_ptr);
+    GetRemoteAssociatedInterfaces()->GetInterface(
+        navigation_client_remote.InitWithNewEndpointAndPassReceiver());
     BeginNavigation(std::move(common_params), std::move(begin_params),
-                    mojo::NullRemote(), navigation_client_ptr.PassInterface(),
+                    mojo::NullRemote(), std::move(navigation_client_remote),
                     mojo::NullRemote());
   } else {
     BeginNavigation(std::move(common_params), std::move(begin_params),
-                    mojo::NullRemote(), nullptr, mojo::NullRemote());
+                    mojo::NullRemote(), mojo::NullAssociatedRemote(),
+                    mojo::NullRemote());
   }
 }
 
@@ -523,10 +517,9 @@ void TestRenderFrameHost::SimulateCommitProcessed(
 
 WebBluetoothServiceImpl*
 TestRenderFrameHost::CreateWebBluetoothServiceForTesting() {
-  WebBluetoothServiceImpl* service =
-      RenderFrameHostImpl::CreateWebBluetoothService(
-          blink::mojom::WebBluetoothServiceRequest());
-  return service;
+  RenderFrameHostImpl::CreateWebBluetoothService(
+      dummy_web_bluetooth_service_remote_.InitWithNewPipeAndPassReceiver());
+  return RenderFrameHostImpl::GetWebBluetoothServiceForTesting();
 }
 
 void TestRenderFrameHost::SendFramePolicy(
@@ -540,7 +533,7 @@ void TestRenderFrameHost::SendCommitNavigation(
     NavigationRequest* navigation_request,
     mojom::CommonNavigationParamsPtr common_params,
     mojom::CommitNavigationParamsPtr commit_params,
-    const network::ResourceResponseHead& response_head,
+    network::mojom::URLResponseHeadPtr response_head,
     mojo::ScopedDataPipeConsumerHandle response_body,
     network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
     std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
@@ -699,6 +692,28 @@ mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
 TestRenderFrameHost::CreateStubBrowserInterfaceBrokerReceiver() {
   return mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>()
       .InitWithNewPipeAndPassReceiver();
+}
+
+void TestRenderFrameHost::SimulateLoadingCompleted(
+    TestRenderFrameHost::LoadingScenario loading_scenario) {
+  if (!is_loading())
+    return;
+
+  if (loading_scenario == LoadingScenario::NewDocumentNavigation) {
+    static_cast<IPC::Listener*>(GetRenderViewHost())
+        ->OnMessageReceived(ViewHostMsg_DocumentAvailableInMainFrame(
+            GetRenderViewHost()->GetRoutingID(),
+            /* uses_temporary_zoom_level */ false));
+
+    OnMessageReceived(FrameHostMsg_DidFinishDocumentLoad(GetRoutingID()));
+
+    DocumentOnLoadCompleted();
+
+    OnMessageReceived(
+        FrameHostMsg_DidFinishLoad(GetRoutingID(), GetLastCommittedURL()));
+  }
+
+  OnDidStopLoading();
 }
 
 }  // namespace content

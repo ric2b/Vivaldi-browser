@@ -215,7 +215,7 @@ void It2MeHostTest::SetUp() {
 #endif
   run_loop_.reset(new base::RunLoop());
 
-  network_change_notifier_ = net::NetworkChangeNotifier::Create();
+  network_change_notifier_ = net::NetworkChangeNotifier::CreateIfNeeded();
 
   host_context_ = ChromotingHostContext::Create(new AutoThreadTaskRunner(
       base::ThreadTaskRunnerHandle::Get(), run_loop_->QuitClosure()));
@@ -298,12 +298,11 @@ void It2MeHostTest::StartHost(bool enable_dialogs) {
   auto log_to_server = std::make_unique<XmppLogToServer>(
       ServerLogEntry::IT2ME, fake_signal_strategy.get(), "fake_bot_jid",
       host_context_->network_task_runner());
-  it2me_host_->Connect(host_context_->Copy(), policies_->CreateDeepCopy(),
-                       std::move(dialog_factory),
-                       std::move(register_host_request),
-                       std::move(log_to_server), weak_factory_.GetWeakPtr(),
-                       std::move(fake_signal_strategy), kTestUserName,
-                       "fake_bot_jid", ice_config);
+  it2me_host_->Connect(
+      host_context_->Copy(), policies_->CreateDeepCopy(),
+      std::move(dialog_factory), std::move(register_host_request),
+      std::move(log_to_server), weak_factory_.GetWeakPtr(),
+      std::move(fake_signal_strategy), kTestUserName, ice_config);
 
   base::RunLoop run_loop;
   state_change_callback_ =

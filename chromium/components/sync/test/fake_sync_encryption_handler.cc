@@ -13,7 +13,7 @@ namespace syncer {
 FakeSyncEncryptionHandler::FakeSyncEncryptionHandler()
     : encrypted_types_(SensitiveTypes()),
       encrypt_everything_(false),
-      passphrase_type_(PassphraseType::IMPLICIT_PASSPHRASE) {}
+      passphrase_type_(PassphraseType::kImplicitPassphrase) {}
 FakeSyncEncryptionHandler::~FakeSyncEncryptionHandler() {}
 
 bool FakeSyncEncryptionHandler::Init() {
@@ -30,7 +30,7 @@ bool FakeSyncEncryptionHandler::ApplyNigoriUpdate(
   if (nigori.encrypt_everything())
     EnableEncryptEverything();
   if (nigori.keybag_is_frozen())
-    passphrase_type_ = PassphraseType::CUSTOM_PASSPHRASE;
+    passphrase_type_ = PassphraseType::kCustomPassphrase;
 
   // TODO(zea): consider adding fake support for migration.
   if (cryptographer_.CanDecrypt(nigori.encryption_keybag()))
@@ -45,7 +45,7 @@ bool FakeSyncEncryptionHandler::ApplyNigoriUpdate(
       observer.OnPassphraseRequired(REASON_DECRYPTION,
                                     KeyDerivationParams::CreateForPbkdf2(),
                                     pending_keys);
-  } else if (!cryptographer_.is_ready()) {
+  } else if (!cryptographer_.CanEncrypt()) {
     DVLOG(1) << "OnPassphraseRequired sent because cryptographer is not "
              << "ready";
     for (auto& observer : observers_) {
@@ -90,6 +90,12 @@ const Cryptographer* FakeSyncEncryptionHandler::GetCryptographer(
   return &cryptographer_;
 }
 
+const DirectoryCryptographer*
+FakeSyncEncryptionHandler::GetDirectoryCryptographer(
+    const syncable::BaseTransaction* const trans) const {
+  return &cryptographer_;
+}
+
 ModelTypeSet FakeSyncEncryptionHandler::GetEncryptedTypes(
     const syncable::BaseTransaction* const trans) const {
   return encrypted_types_;
@@ -105,11 +111,16 @@ void FakeSyncEncryptionHandler::RemoveObserver(Observer* observer) {
 
 void FakeSyncEncryptionHandler::SetEncryptionPassphrase(
     const std::string& passphrase) {
-  passphrase_type_ = PassphraseType::CUSTOM_PASSPHRASE;
+  passphrase_type_ = PassphraseType::kCustomPassphrase;
 }
 
 void FakeSyncEncryptionHandler::SetDecryptionPassphrase(
     const std::string& passphrase) {
+  // Do nothing.
+}
+
+void FakeSyncEncryptionHandler::AddTrustedVaultDecryptionKeys(
+    const std::vector<std::string>& encryption_keys) {
   // Do nothing.
 }
 
@@ -139,7 +150,11 @@ KeystoreKeysHandler* FakeSyncEncryptionHandler::GetKeystoreKeysHandler() {
   return this;
 }
 
-Cryptographer* FakeSyncEncryptionHandler::GetMutableCryptographer() {
+std::string FakeSyncEncryptionHandler::GetLastKeystoreKey() const {
+  return std::string();
+}
+
+DirectoryCryptographer* FakeSyncEncryptionHandler::GetMutableCryptographer() {
   return &cryptographer_;
 }
 

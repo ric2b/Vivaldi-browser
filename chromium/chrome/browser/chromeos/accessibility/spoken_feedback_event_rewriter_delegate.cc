@@ -13,16 +13,13 @@
 #include "content/public/common/service_manager_connection.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/common/constants.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/events/event.h"
 
 SpokenFeedbackEventRewriterDelegate::SpokenFeedbackEventRewriterDelegate() {
-  ash::EventRewriterController::Get()->SetSpokenFeedbackEventRewriterDelegate(
-      this);
 }
 
 SpokenFeedbackEventRewriterDelegate::~SpokenFeedbackEventRewriterDelegate() {
-  if (auto* controller = ash::EventRewriterController::Get())
-    controller->SetSpokenFeedbackEventRewriterDelegate(nullptr);
 }
 
 void SpokenFeedbackEventRewriterDelegate::DispatchKeyEventToChromeVox(

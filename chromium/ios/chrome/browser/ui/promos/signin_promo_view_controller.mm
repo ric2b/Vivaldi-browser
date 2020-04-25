@@ -8,8 +8,8 @@
 #include "base/metrics/user_metrics.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/version.h"
+#include "components/signin/ios/browser/features.h"
 #include "components/signin/public/base/signin_metrics.h"
-#include "components/unified_consent/feature.h"
 #include "components/version_info/version_info.h"
 #include "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -118,13 +118,8 @@ NSSet* GaiaIdSetWithIdentities(NSArray* identities) {
         self.presentingViewController;
     __weak id<ApplicationCommands> dispatcher = self.dispatcher;
     completion = ^{
-      if (unified_consent::IsUnifiedConsentFeatureEnabled()) {
-        [dispatcher showAdvancedSigninSettingsFromViewController:
-                        presentingViewController];
-      } else {
-        [dispatcher
-            showAccountsSettingsFromViewController:presentingViewController];
-      }
+      [dispatcher showAdvancedSigninSettingsFromViewController:
+                      presentingViewController];
     };
   }
   [self.presentingViewController dismissViewControllerAnimated:YES
@@ -184,6 +179,9 @@ NSSet* GaiaIdSetWithIdentities(NSArray* identities) {
 
 + (BOOL)shouldBePresentedForBrowserState:
     (ios::ChromeBrowserState*)browserState {
+  if (signin::ForceStartupSigninPromo())
+    return YES;
+
   if (tests_hook::DisableSigninRecallPromo())
     return NO;
 

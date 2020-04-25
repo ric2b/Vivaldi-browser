@@ -14,7 +14,6 @@
 #include "ash/public/cpp/event_rewriter_controller.h"
 #include "ash/public/cpp/keyboard/keyboard_controller.h"
 #include "ash/shell.h"
-#include "ash/sticky_keys/sticky_keys_controller.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
@@ -23,8 +22,6 @@
 #include "base/linux_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/weak_ptr.h"
-#include "base/optional.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -43,8 +40,7 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_mode_idle_app_name_notification.h"
-#include "chrome/browser/chromeos/arc/arc_service_launcher.h"
-#include "chrome/browser/chromeos/arc/voice_interaction/voice_interaction_controller_client.h"
+#include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/crostini/crostini_unsupported_action_notifier.h"
 #include "chrome/browser/chromeos/crostini/crosvm_metrics.h"
@@ -110,6 +106,7 @@
 #include "chrome/browser/chromeos/startup_settings_cache.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/chromeos/system/user_removal_manager.h"
+#include "chrome/browser/chromeos/system_token_cert_db_initializer.h"
 #include "chrome/browser/chromeos/ui/gnubby_notification.h"
 #include "chrome/browser/chromeos/ui/low_disk_notification.h"
 #include "chrome/browser/chromeos/usb/cros_usb_detector.h"
@@ -122,6 +119,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/task_manager/task_manager_interface.h"
+#include "chrome/browser/ui/ash/assistant/assistant_client.h"
+#include "chrome/browser/ui/ash/assistant/assistant_state_client.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/discover/discover_manager.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector_chromeos.h"
@@ -143,7 +142,6 @@
 #include "chromeos/cryptohome/homedir_methods.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/dbus/constants/cryptohome_key_delegate_constants.h"
-#include "chromeos/dbus/cryptohome/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power/power_policy_controller.h"
@@ -182,14 +180,10 @@
 #include "content/public/browser/system_connector.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
-#include "crypto/nss_util_internal.h"
-#include "crypto/scoped_nss_types.h"
 #include "dbus/object_path.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/network_change_notifier_posix.h"
-#include "net/cert/nss_cert_database.h"
-#include "net/cert/nss_cert_database_chromeos.h"
 #include "printing/backend/print_backend.h"
 #include "rlz/buildflags/buildflags.h"
 #include "services/audio/public/cpp/sounds/sounds_manager.h"
@@ -200,16 +194,11 @@
 #include "ui/base/ime/chromeos/input_method_util.h"
 #include "ui/base/pointer/pointer_device.h"
 #include "ui/base/ui_base_features.h"
-#include "ui/chromeos/events/event_rewriter_chromeos.h"
 #include "ui/chromeos/events/pref_names.h"
 #include "ui/events/event_utils.h"
 
 #if BUILDFLAG(ENABLE_RLZ)
 #include "components/rlz/rlz_tracker.h"
-#endif
-
-#if BUILDFLAG(ENABLE_CROS_ASSISTANT)
-#include "chrome/browser/ui/ash/assistant/assistant_client.h"
 #endif
 
 namespace chromeos {
@@ -239,50 +228,6 @@ void InitializeNetworkPortalDetector() {
     network_portal_detector::SetNetworkPortalDetector(
         new NetworkPortalDetectorImpl());
   }
-}
-
-// Called on UI Thread when the system slot has been retrieved.
-void GotSystemSlotOnUIThread(
-    base::Callback<void(crypto::ScopedPK11Slot)> callback_ui_thread,
-    crypto::ScopedPK11Slot system_slot) {
-  callback_ui_thread.Run(std::move(system_slot));
-}
-
-// Called on IO Thread when the system slot has been retrieved.
-void GotSystemSlotOnIOThread(
-    base::Callback<void(crypto::ScopedPK11Slot)> callback_ui_thread,
-    crypto::ScopedPK11Slot system_slot) {
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(&GotSystemSlotOnUIThread, callback_ui_thread,
-                                std::move(system_slot)));
-}
-
-// Called on IO Thread, initiates retrieval of system slot. |callback_ui_thread|
-// will be executed on the UI thread when the system slot has been retrieved.
-void GetSystemSlotOnIOThread(
-    base::Callback<void(crypto::ScopedPK11Slot)> callback_ui_thread) {
-  auto callback =
-      base::BindRepeating(&GotSystemSlotOnIOThread, callback_ui_thread);
-  crypto::ScopedPK11Slot system_nss_slot =
-      crypto::GetSystemNSSKeySlot(callback);
-  if (system_nss_slot) {
-    callback.Run(std::move(system_nss_slot));
-  }
-}
-
-// Decides if on start we shall signal to the platform that it can attempt
-// owning the TPM.
-// For official Chrome builds, send this signal if EULA has been accepted
-// already (i.e. the user has started OOBE) to make sure we are not stuck with
-// uninitialized TPM after an interrupted OOBE process.
-// For Chromium builds, don't send it here. Instead, rely on this signal being
-// sent after each successful login.
-bool ShallAttemptTpmOwnership() {
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  return StartupUtils::IsEulaAccepted();
-#else
-  return false;
-#endif
 }
 
 }  // namespace
@@ -459,97 +404,6 @@ class DBusServices {
   DISALLOW_COPY_AND_ASSIGN(DBusServices);
 };
 
-// Initializes a global NSSCertDatabase for the system token and starts
-// NetworkCertLoader with that database. Note that this is triggered from
-// PreMainMessageLoopRun, which is executed after PostMainMessageLoopStart,
-// where NetworkCertLoader is initialized. We can thus assume that
-// NetworkCertLoader is initialized.
-class SystemTokenCertDBInitializer {
- public:
-  SystemTokenCertDBInitializer() {}
-  ~SystemTokenCertDBInitializer() {}
-
-  // Entry point, called on UI thread.
-  void Initialize() {
-    // Only start loading the system token once cryptohome is available and only
-    // if the TPM is ready (available && owned && not being owned).
-    CryptohomeClient::Get()->WaitForServiceToBeAvailable(
-        base::Bind(&SystemTokenCertDBInitializer::OnCryptohomeAvailable,
-                   weak_ptr_factory_.GetWeakPtr()));
-  }
-
- private:
-  // Called once the cryptohome service is available.
-  void OnCryptohomeAvailable(bool available) {
-    if (!available) {
-      LOG(ERROR) << "SystemTokenCertDBInitializer: Failed to wait for "
-                    "cryptohome to become available.";
-      return;
-    }
-
-    VLOG(1) << "SystemTokenCertDBInitializer: Cryptohome available.";
-    CryptohomeClient::Get()->TpmIsReady(
-        base::Bind(&SystemTokenCertDBInitializer::OnGotTpmIsReady,
-                   weak_ptr_factory_.GetWeakPtr()));
-  }
-
-  // This is a callback for the cryptohome TpmIsReady query. Note that this is
-  // not a listener which would be called once TPM becomes ready if it was not
-  // ready on startup (e.g. after device enrollment), see crbug.com/725500.
-  void OnGotTpmIsReady(base::Optional<bool> tpm_is_ready) {
-    if (!tpm_is_ready.has_value() || !tpm_is_ready.value()) {
-      VLOG(1) << "SystemTokenCertDBInitializer: TPM is not ready - not loading "
-                 "system token.";
-      if (ShallAttemptTpmOwnership()) {
-        // Signal to cryptohome that it can attempt TPM ownership, if it
-        // haven't done that yet. The previous signal from EULA dialogue could
-        // have been lost if initialization was interrupted.
-        // We don't care about the result, and don't block waiting for it.
-        LOG(WARNING) << "Request attempting TPM ownership.";
-        CryptohomeClient::Get()->TpmCanAttemptOwnership(
-            EmptyVoidDBusMethodCallback());
-      }
-
-      return;
-    }
-    VLOG(1)
-        << "SystemTokenCertDBInitializer: TPM is ready, loading system token.";
-    TPMTokenLoader::Get()->EnsureStarted();
-    base::Callback<void(crypto::ScopedPK11Slot)> callback =
-        base::BindRepeating(&SystemTokenCertDBInitializer::InitializeDatabase,
-                            weak_ptr_factory_.GetWeakPtr());
-    base::PostTask(FROM_HERE, {content::BrowserThread::IO},
-                   base::BindOnce(&GetSystemSlotOnIOThread, callback));
-  }
-
-  // Initializes the global system token NSSCertDatabase with |system_slot|.
-  // Also starts NetworkCertLoader with the system token database.
-  void InitializeDatabase(crypto::ScopedPK11Slot system_slot) {
-    // Currently, NSSCertDatabase requires a public slot to be set, so we use
-    // the system slot there. We also want GetSystemSlot() to return the system
-    // slot. As ScopedPK11Slot is actually a unique_ptr which will be moved into
-    // the NSSCertDatabase, we need to create a copy, referencing the same slot
-    // (using PK11_ReferenceSlot).
-    crypto::ScopedPK11Slot system_slot_copy =
-        crypto::ScopedPK11Slot(PK11_ReferenceSlot(system_slot.get()));
-    auto database = std::make_unique<net::NSSCertDatabaseChromeOS>(
-        std::move(system_slot) /* public_slot */,
-        crypto::ScopedPK11Slot() /* private_slot */);
-    database->SetSystemSlot(std::move(system_slot_copy));
-
-    system_token_cert_database_ = std::move(database);
-
-    VLOG(1) << "SystemTokenCertDBInitializer: Passing system token NSS "
-               "database to NetworkCertLoader.";
-    NetworkCertLoader::Get()->SetSystemNSSDB(system_token_cert_database_.get());
-  }
-
-  // Global NSSCertDatabase which sees the system token.
-  std::unique_ptr<net::NSSCertDatabase> system_token_cert_database_;
-
-  base::WeakPtrFactory<SystemTokenCertDBInitializer> weak_ptr_factory_{this};
-};
-
 }  // namespace internal
 
 // ChromeBrowserMainPartsChromeos ----------------------------------------------
@@ -654,8 +508,7 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
 
   // Initialize NSS database for system token.
   system_token_certdb_initializer_ =
-      std::make_unique<internal::SystemTokenCertDBInitializer>();
-  system_token_certdb_initializer_->Initialize();
+      std::make_unique<SystemTokenCertDBInitializer>();
 
   CrasAudioHandler::Initialize(
       content::GetSystemConnector(),
@@ -692,8 +545,6 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
   network_throttling_observer_.reset(
       new NetworkThrottlingObserver(g_browser_process->local_state()));
 
-  arc_service_launcher_ = std::make_unique<arc::ArcServiceLauncher>();
-
   ResourceReporter::GetInstance()->StartMonitoring(
       task_manager::TaskManagerInterface::GetTaskManager());
 
@@ -704,10 +555,11 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
           DBusThreadManager::Get()->GetDebugDaemonClient(),
           g_browser_process->local_state());
 
+  arc_service_launcher_ = std::make_unique<arc::ArcServiceLauncher>(
+      scheduler_configuration_manager_.get());
+
   session_termination_manager_ =
       std::make_unique<chromeos::SessionTerminationManager>();
-  lock_to_single_user_manager_ =
-      std::make_unique<policy::LockToSingleUserManager>();
 
   ChromeBrowserMainPartsLinux::PreMainMessageLoopRun();
 }
@@ -736,6 +588,10 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
   // This forces the ProfileManager to be created and register for the
   // notification it needs to track the logged in user.
   g_browser_process->profile_manager();
+
+  // Must come after User Manager is inited.
+  lock_to_single_user_manager_ =
+      std::make_unique<policy::LockToSingleUserManager>();
 
   // AccessibilityManager and SystemKeyEventListener use InputMethodManager.
   input_method::Initialize();
@@ -776,16 +632,13 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
   MagnificationManager::Initialize();
 
   // Requires UserManager.
-  arc_voice_interaction_controller_client_ =
-      std::make_unique<arc::VoiceInteractionControllerClient>();
+  assistant_state_client_ = std::make_unique<AssistantStateClient>();
 
-#if BUILDFLAG(ENABLE_CROS_ASSISTANT)
   // Assistant has to be initialized before
   // ChromeBrowserMainExtraPartsAsh::session_controller_client_ to avoid race of
   // SessionChanged event and assistant_client initialization. It must come
-  // after VoiceInteractionControllerClient.
+  // after AssistantStateClient.
   assistant_client_ = std::make_unique<AssistantClient>();
-#endif
 
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
@@ -1039,21 +892,23 @@ void ChromeBrowserMainPartsChromeos::PreBrowserStart() {
 }
 
 void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
-  // Enable the KeyboardDrivenEventRewriter if the OEM manifest flag is on.
-  auto* event_rewriter_controller = ash::EventRewriterController::Get();
-  if (system::InputDeviceSettings::Get()->ForceKeyboardDrivenUINavigation())
-    event_rewriter_controller->SetKeyboardDrivenEventRewriterEnabled(true);
-
   // Construct a delegate to connect ChromeVox and SpokenFeedbackEventRewriter.
   spoken_feedback_event_rewriter_delegate_ =
       std::make_unique<SpokenFeedbackEventRewriterDelegate>();
 
   event_rewriter_delegate_ = std::make_unique<EventRewriterDelegateImpl>(
       ash::Shell::Get()->activation_client());
-  event_rewriter_controller->AddEventRewriter(
-      std::make_unique<ui::EventRewriterChromeOS>(
-          event_rewriter_delegate_.get(),
-          ash::Shell::Get()->sticky_keys_controller()));
+
+  // Set up the EventRewriterController after ash itself has finished
+  // initialization.
+  auto* event_rewriter_controller = ash::EventRewriterController::Get();
+  event_rewriter_controller->Initialize(
+      event_rewriter_delegate_.get(),
+      spoken_feedback_event_rewriter_delegate_.get());
+
+  // Enable the KeyboardDrivenEventRewriter if the OEM manifest flag is on.
+  if (system::InputDeviceSettings::Get()->ForceKeyboardDrivenUINavigation())
+    event_rewriter_controller->SetKeyboardDrivenEventRewriterEnabled(true);
 
   // In classic ash must occur after ash::Shell is initialized. Triggers a
   // fetch of the initial CrosSettings DeviceRebootOnShutdown policy.
@@ -1104,13 +959,11 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
 
   arc_service_launcher_->Shutdown();
 
-#if BUILDFLAG(ENABLE_CROS_ASSISTANT)
   // Assistant has to shut down before voice interaction controller client to
   // correctly remove the observer.
   assistant_client_.reset();
-#endif
 
-  arc_voice_interaction_controller_client_.reset();
+  assistant_state_client_.reset();
 
   // Unregister CrosSettings observers before CrosSettings is destroyed.
   shutdown_policy_forwarder_.reset();
@@ -1144,7 +997,6 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   low_disk_notification_.reset();
   demo_mode_resources_remover_.reset();
   adaptive_screen_brightness_manager_.reset();
-  scheduler_configuration_manager_.reset();
   auto_screen_brightness_controller_.reset();
   dark_resume_controller_.reset();
   lock_to_single_user_manager_.reset();
@@ -1227,6 +1079,8 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   // Specifically, this should be done after Profile destruction run in
   // ChromeBrowserMainPartsLinux::PostMainMessageLoopRun().
   arc_service_launcher_.reset();
+  // |arc_service_launcher_| uses |scheduler_configuration_manager_|.
+  scheduler_configuration_manager_.reset();
 
   AccessibilityManager::Shutdown();
 
@@ -1260,6 +1114,10 @@ void ChromeBrowserMainPartsChromeos::PostDestroyThreads() {
 
   network_change_manager_client_.reset();
   session_termination_manager_.reset();
+
+  // The cert database initializer must be shut down before DBus services are
+  // destroyed.
+  system_token_certdb_initializer_->ShutDown();
 
   // Destroy DBus services immediately after threads are stopped.
   dbus_services_.reset();

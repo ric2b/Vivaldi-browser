@@ -4,11 +4,15 @@
 
 #include "ash/wm/toplevel_window_event_handler.h"
 
+#include "ash/accelerators/accelerator_controller_impl.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
+#include "ash/home_screen/home_screen_controller.h"
 #include "ash/public/cpp/app_types.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/system/overview/overview_button_tray.h"
 #include "ash/system/status_area_widget.h"
@@ -29,6 +33,7 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
@@ -37,6 +42,8 @@
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_observer.h"
+#include "ui/base/accelerators/accelerator.h"
+#include "ui/base/accelerators/test_accelerator_target.h"
 #include "ui/base/hit_test.h"
 #include "ui/display/display_layout_builder.h"
 #include "ui/display/manager/display_manager.h"
@@ -1004,6 +1011,169 @@ TEST_F(ToplevelWindowEventHandlerTest, RunMoveLoopFailsDuringInProgressDrag) {
 
   generator.ReleaseLeftButton();
   EXPECT_EQ("10,11 100x100", window1->bounds().ToString());
+}
+
+class ToplevelWindowEventHandlerBackGestureTest : public AshTestBase {
+ public:
+  ToplevelWindowEventHandlerBackGestureTest() = default;
+  ~ToplevelWindowEventHandlerBackGestureTest() override = default;
+
+  void SetUp() override {
+    AshTestBase::SetUp();
+
+    feature_list_.InitAndEnableFeature(
+        ash::features::kSwipingFromLeftEdgeToGoBack);
+    top_window_ = CreateTestWindow();
+    TabletModeControllerTestApi().EnterTabletMode();
+  }
+
+  void TearDown() override {
+    top_window_.reset();
+    AshTestBase::TearDown();
+  }
+
+  void RegisterBackPressAndRelease(ui::TestAcceleratorTarget* back_press,
+                                   ui::TestAcceleratorTarget* back_release) {
+    AcceleratorControllerImpl* controller =
+        Shell::Get()->accelerator_controller();
+
+    // Register an accelerator that looks for back presses.
+    ui::Accelerator accelerator_back_press(ui::VKEY_BROWSER_BACK, ui::EF_NONE);
+    accelerator_back_press.set_key_state(ui::Accelerator::KeyState::PRESSED);
+    controller->Register({accelerator_back_press}, back_press);
+
+    // Register an accelerator that looks for back releases.
+    ui::Accelerator accelerator_back_release(ui::VKEY_BROWSER_BACK,
+                                             ui::EF_NONE);
+    accelerator_back_release.set_key_state(ui::Accelerator::KeyState::RELEASED);
+    controller->Register({accelerator_back_release}, back_release);
+  }
+
+  // Send gesture event with |type| to the toplevel window event handler.
+  void SendGestureEvent(const gfx::Point& position,
+                        int scroll_x,
+                        int scroll_y,
+                        ui::EventType type) {
+    ui::GestureEvent event = ui::GestureEvent(
+        position.x(), position.y(), ui::EF_NONE, base::TimeTicks::Now(),
+        ui::GestureEventDetails(type, scroll_x, scroll_y));
+    ui::Event::DispatcherApi(&event).set_target(top_window_.get());
+    ash::Shell::Get()->toplevel_window_event_handler()->OnGestureEvent(&event);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+  std::unique_ptr<aura::Window> top_window_;
+
+  DISALLOW_COPY_AND_ASSIGN(ToplevelWindowEventHandlerBackGestureTest);
+};
+
+TEST_F(ToplevelWindowEventHandlerBackGestureTest, SwipingFromLeftEdgeToGoBack) {
+  ui::TestAcceleratorTarget target_back_press, target_back_release;
+  RegisterBackPressAndRelease(&target_back_press, &target_back_release);
+
+  // Tests that swiping from the left less than |kSwipingDistanceForGoingBack|
+  // should not go to previous page.
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  const gfx::Point start(0, 100);
+  generator->GestureScrollSequence(
+      start,
+      gfx::Point(ToplevelWindowEventHandler::kSwipingDistanceForGoingBack - 10,
+                 100),
+      base::TimeDelta::FromMilliseconds(100), 3);
+  EXPECT_EQ(0, target_back_press.accelerator_count());
+  EXPECT_EQ(0, target_back_release.accelerator_count());
+
+  // Tests that swiping from the left more than |kSwipingDistanceForGoingBack|
+  // should go to previous page.
+  generator->GestureScrollSequence(
+      start,
+      gfx::Point(ToplevelWindowEventHandler::kSwipingDistanceForGoingBack + 10,
+                 100),
+      base::TimeDelta::FromMilliseconds(100), 3);
+  EXPECT_EQ(1, target_back_press.accelerator_count());
+  EXPECT_EQ(1, target_back_release.accelerator_count());
+}
+
+TEST_F(ToplevelWindowEventHandlerBackGestureTest, FlingFromLeftEdgeToGoBack) {
+  ui::TestAcceleratorTarget target_back_press, target_back_release;
+  RegisterBackPressAndRelease(&target_back_press, &target_back_release);
+
+  // Tests that fling from the left with velocity smaller than
+  // |kFlingVelocityForGoingBack| should not go to previous page.
+  gfx::Point start(0, 100);
+  gfx::Point update_and_end(200, 100);
+  SendGestureEvent(start, 0, 0, ui::ET_GESTURE_SCROLL_BEGIN);
+  SendGestureEvent(update_and_end, update_and_end.x() - start.x(), 0,
+                   ui::ET_GESTURE_SCROLL_UPDATE);
+  SendGestureEvent(update_and_end,
+                   ToplevelWindowEventHandler::kFlingVelocityForGoingBack - 10,
+                   0, ui::ET_SCROLL_FLING_START);
+  EXPECT_EQ(0, target_back_press.accelerator_count());
+  EXPECT_EQ(0, target_back_release.accelerator_count());
+
+  // Tests that fling from the left with velocity larger than
+  // |kFlingVelocityForGoingBack| should go to previous page.
+  SendGestureEvent(start, 0, 0, ui::ET_GESTURE_SCROLL_BEGIN);
+  SendGestureEvent(update_and_end, update_and_end.x() - start.x(), 0,
+                   ui::ET_GESTURE_SCROLL_UPDATE);
+  SendGestureEvent(update_and_end,
+                   ToplevelWindowEventHandler::kFlingVelocityForGoingBack + 10,
+                   0, ui::ET_SCROLL_FLING_START);
+  EXPECT_EQ(1, target_back_press.accelerator_count());
+  EXPECT_EQ(1, target_back_release.accelerator_count());
+}
+
+TEST_F(ToplevelWindowEventHandlerBackGestureTest, DonotStartGoingBack) {
+  ui::TestAcceleratorTarget target_back_press, target_back_release;
+  RegisterBackPressAndRelease(&target_back_press, &target_back_release);
+
+  auto* shell = Shell::Get();
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  const gfx::Point start(0, 100);
+
+  // Should not go back if it is not in ACTIVE session.
+  ASSERT_FALSE(shell->overview_controller()->InOverviewSession());
+  ASSERT_FALSE(shell->home_screen_controller()->IsHomeScreenVisible());
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOCKED);
+  generator->GestureScrollSequence(
+      start,
+      gfx::Point(ToplevelWindowEventHandler::kSwipingDistanceForGoingBack + 10,
+                 100),
+      base::TimeDelta::FromMilliseconds(100), 3);
+  EXPECT_EQ(0, target_back_press.accelerator_count());
+  EXPECT_EQ(0, target_back_release.accelerator_count());
+
+  // Should not go back while in overview mode but splitview is not active.
+  ASSERT_FALSE(SplitViewController::Get(Shell::GetPrimaryRootWindow())
+                   ->InSplitViewMode());
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+  ASSERT_EQ(session_manager::SessionState::ACTIVE,
+            shell->session_controller()->GetSessionState());
+  shell->overview_controller()->StartOverview();
+  ASSERT_TRUE(shell->overview_controller()->InOverviewSession());
+  generator->GestureScrollSequence(
+      start,
+      gfx::Point(ToplevelWindowEventHandler::kSwipingDistanceForGoingBack + 10,
+                 100),
+      base::TimeDelta::FromMilliseconds(100), 3);
+  EXPECT_EQ(0, target_back_press.accelerator_count());
+  EXPECT_EQ(0, target_back_release.accelerator_count());
+
+  // Should not go back if home screen is not visible.
+  shell->overview_controller()->EndOverview();
+  ASSERT_FALSE(shell->overview_controller()->InOverviewSession());
+  shell->home_screen_controller()->GoHome(GetPrimaryDisplay().id());
+  ASSERT_TRUE(shell->home_screen_controller()->IsHomeScreenVisible());
+  generator->GestureScrollSequence(
+      start,
+      gfx::Point(ToplevelWindowEventHandler::kSwipingDistanceForGoingBack + 10,
+                 100),
+      base::TimeDelta::FromMilliseconds(100), 3);
+  EXPECT_EQ(0, target_back_press.accelerator_count());
+  EXPECT_EQ(0, target_back_release.accelerator_count());
 }
 
 namespace {

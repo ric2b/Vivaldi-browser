@@ -278,6 +278,7 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoHost:
     case kPseudoHostContext:
     case kPseudoPart:
+    case kPseudoState:
     case kPseudoShadow:
     case kPseudoFullScreen:
     case kPseudoFullScreenAncestor:
@@ -291,6 +292,7 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoSlotted:
     case kPseudoVideoPersistent:
     case kPseudoVideoPersistentAncestor:
+    case kPseudoXrImmersiveDomOverlay:
       return kPseudoIdNone;
   }
 
@@ -323,6 +325,8 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"-internal-video-persistent", CSSSelector::kPseudoVideoPersistent},
     {"-internal-video-persistent-ancestor",
      CSSSelector::kPseudoVideoPersistentAncestor},
+    {"-internal-xr-immersive-dom-overlay",
+     CSSSelector::kPseudoXrImmersiveDomOverlay},
     {"-webkit-any-link", CSSSelector::kPseudoWebkitAnyLink},
     {"-webkit-autofill", CSSSelector::kPseudoAutofill},
     {"-webkit-drag", CSSSelector::kPseudoDrag},
@@ -415,6 +419,7 @@ const static NameToPseudoStruct kPseudoTypeWithArgumentsMap[] = {
     {"nth-of-type", CSSSelector::kPseudoNthOfType},
     {"part", CSSSelector::kPseudoPart},
     {"slotted", CSSSelector::kPseudoSlotted},
+    {"state", CSSSelector::kPseudoState},
     {"where", CSSSelector::kPseudoWhere},
 };
 
@@ -455,6 +460,11 @@ static CSSSelector::PseudoType NameToPseudoType(const AtomicString& name,
   if (match->type == CSSSelector::kPseudoPictureInPicture &&
       !RuntimeEnabledFeatures::CSSPictureInPictureEnabled())
     return CSSSelector::kPseudoUnknown;
+
+  if (match->type == CSSSelector::kPseudoState &&
+      !RuntimeEnabledFeatures::CustomStatePseudoClassEnabled()) {
+    return CSSSelector::kPseudoUnknown;
+  }
 
   return static_cast<CSSSelector::PseudoType>(match->type);
 }
@@ -578,6 +588,7 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoSpatialNavigationInterest:
     case kPseudoVideoPersistent:
     case kPseudoVideoPersistentAncestor:
+    case kPseudoXrImmersiveDomOverlay:
       if (mode != kUASheetMode) {
         pseudo_type_ = kPseudoUnknown;
         break;
@@ -645,6 +656,7 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoScope:
     case kPseudoSingleButton:
     case kPseudoStart:
+    case kPseudoState:
     case kPseudoTarget:
     case kPseudoUnknown:
     case kPseudoValid:
@@ -764,6 +776,7 @@ const CSSSelector* CSSSelector::SerializeCompound(
           break;
         }
         case kPseudoLang:
+        case kPseudoState:
           builder.Append('(');
           builder.Append(simple_selector->Argument());
           builder.Append(')');

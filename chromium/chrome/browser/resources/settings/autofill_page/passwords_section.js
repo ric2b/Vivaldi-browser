@@ -102,12 +102,6 @@ Polymer({
     },
 
     /** @private */
-    passwordsLeakDetectionEnabled_: {
-      type: Boolean,
-      value: loadTimeData.getBoolean('passwordsLeakDetectionEnabled'),
-    },
-
-    /** @private */
     showExportPasswords_: {
       type: Boolean,
       computed: 'hasPasswords_(savedPasswords.splices)',
@@ -125,22 +119,11 @@ Polymer({
     /** @private */
     showPasswordEditDialog_: Boolean,
 
-    // <if expr="not chromeos">
-    /** @private {Array<!settings.StoredAccount>} */
-    storedAccounts_: Object,
-    // </if>
-
     /** @private {settings.SyncPrefs} */
     syncPrefs_: Object,
 
     /** @private {settings.SyncStatus} */
     syncStatus_: Object,
-
-    /** @private */
-    userSignedIn_: {
-      type: Boolean,
-      computed: 'computeUserSignedIn_(syncStatus_, storedAccounts_)',
-    },
 
     /** Filter on the saved passwords and exceptions. */
     filter: {
@@ -266,13 +249,6 @@ Polymer({
     syncBrowserProxy.getSyncStatus().then(syncStatusChanged);
     this.addWebUIListener('sync-status-changed', syncStatusChanged);
 
-    // <if expr="not chromeos">
-    const storedAccountsChanged = storedAccounts => this.storedAccounts_ =
-        storedAccounts;
-    syncBrowserProxy.getStoredAccounts().then(storedAccountsChanged);
-    this.addWebUIListener('stored-accounts-updated', storedAccountsChanged);
-    // </if>
-
     const syncPrefsChanged = syncPrefs => this.syncPrefs_ = syncPrefs;
     syncBrowserProxy.sendSyncPrefsChanged();
     this.addWebUIListener('sync-prefs-changed', syncPrefsChanged);
@@ -363,24 +339,6 @@ Polymer({
   },
 
   /**
-   * @return {boolean}
-   * @private
-   */
-  computeUserSignedIn_: function() {
-    return (!!this.syncStatus_ && !!this.syncStatus_.signedIn) ||
-      (!!this.storedAccounts_ && this.storedAccounts_.length > 0);
-  },
-
-  /**
-   * @return {boolean}
-   * @private
-   */
-  getCheckedLeakDetection_: function() {
-    return this.userSignedIn_ &&
-        !!this.getPref('profile.password_manager_leak_detection').value;
-  },
-
-  /**
    * @param {string} filter
    * @return {!Array<!PasswordManagerProxy.UiEntryWithPassword>}
    * @private
@@ -393,20 +351,6 @@ Polymer({
     return this.savedPasswords.filter(
         p => [p.entry.urls.shown, p.entry.username].some(
             term => term.toLowerCase().includes(filter.toLowerCase())));
-  },
-
-  /**
-   * @return {string}
-   * @private
-   */
-  getPasswordsLeakDetectionSubLabel_: function() {
-    if (this.userSignedIn_) {
-      return this.i18n('passwordsLeakDetectionSignedInDescription');
-    }
-    if (this.getPref('profile.password_manager_leak_detection').value) {
-      return this.i18n('passwordsLeakDetectionSignedOutEnabledDescription');
-    }
-    return this.i18n('passwordsLeakDetectionSignedOutDisabledDescription');
   },
 
   /**
@@ -426,7 +370,9 @@ Polymer({
   onMenuRemovePasswordTap_: function() {
     this.passwordManager_.removeSavedPassword(
         this.activePassword.item.entry.id);
-    cr.toastManager.getInstance().show(this.i18n('passwordDeleted'), false);
+    cr.toastManager.getInstance().show(
+        this.i18n('passwordDeleted'),
+        /* showUndo */ true);
     /** @type {CrActionMenuElement} */ (this.$.menu).close();
   },
 
@@ -544,6 +490,6 @@ Polymer({
   showImportOrExportPasswords_: function(
       showExportPasswords, showImportPasswords) {
     return showExportPasswords || showImportPasswords;
-  }
+  },
 });
 })();

@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser.ntp;
 
 import android.content.Context;
-import android.support.annotation.IntDef;
+
+import androidx.annotation.IntDef;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
@@ -22,7 +23,6 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.PersonalizedSigninPromoView;
 import org.chromium.chrome.browser.signin.ProfileDataCache;
-import org.chromium.chrome.browser.signin.SigninAccessPoint;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.signin.SigninPromoController;
@@ -31,6 +31,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountsChangeObserver;
 import org.chromium.components.signin.ChromeSigninController;
+import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.components.sync.AndroidSyncSettings.AndroidSyncSettingsObserver;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
@@ -39,6 +40,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Collections;
 import java.util.List;
+
+import org.vivaldi.browser.ntp.VivaldiRecentTabsManager;
 
 /**
  * Provides the domain logic and data for RecentTabsPage and RecentTabsRowAdapter.
@@ -83,6 +86,9 @@ public class RecentTabsManager implements AndroidSyncSettingsObserver, SignInSta
     private final ProfileDataCache mProfileDataCache;
     private final SigninPromoController mSigninPromoController;
 
+    /** Vivaldi members */
+    private VivaldiRecentTabsManager mVivaldiRecentTabManager;
+
     /**
      * Create an RecentTabsManager to be used with RecentTabsPage and RecentTabsRowAdapter.
      *
@@ -118,6 +124,13 @@ public class RecentTabsManager implements AndroidSyncSettingsObserver, SignInSta
         registerObservers();
 
         SessionsInvalidationManager.get(mProfile).onRecentTabsPageOpened();
+
+        // NOTE(david@vivaldi.com): Du to visibility issues we can not override some required
+        // methods in the VivaldiRecentTabsManager. Therefore we are holding a reference to the
+        // VivaldiRecentTabsManager and calling methods directly.
+        mVivaldiRecentTabManager = null;
+        if(this instanceof VivaldiRecentTabsManager)
+            mVivaldiRecentTabManager = (VivaldiRecentTabsManager)this;
     }
 
     /**
@@ -182,6 +195,9 @@ public class RecentTabsManager implements AndroidSyncSettingsObserver, SignInSta
      * @return Most up-to-date list of foreign sessions.
      */
     public List<ForeignSession> getForeignSessions() {
+        /** Vivaldi */
+        if (mVivaldiRecentTabManager != null && !mVivaldiRecentTabManager.onlyShowForeignSessions())
+            return Collections.emptyList();
         return mForeignSessions;
     }
 
@@ -203,6 +219,10 @@ public class RecentTabsManager implements AndroidSyncSettingsObserver, SignInSta
             int windowDisposition) {
         if (mIsDestroyed) return;
         RecordUserAction.record("MobileRecentTabManagerTabFromOtherDeviceOpened");
+        /** Vivaldi */
+        if (mVivaldiRecentTabManager != null && mVivaldiRecentTabManager.onlyShowForeignSessions())
+            mVivaldiRecentTabManager.openForeignSessionTab(tab.url);
+        else
         mForeignSessionHelper.openForeignSessionTab(mTab, session, tab, windowDisposition);
     }
 
@@ -442,5 +462,10 @@ public class RecentTabsManager implements AndroidSyncSettingsObserver, SignInSta
     @VisibleForTesting
     public static void setRecentlyClosedTabManagerForTests(RecentlyClosedTabManager manager) {
         sRecentlyClosedTabManagerForTests = manager;
+    }
+
+    /** Vivaldi */
+    public VivaldiRecentTabsManager getVivaldiRecentTabsManager() {
+        return mVivaldiRecentTabManager;
     }
 }

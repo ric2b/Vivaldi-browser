@@ -11,9 +11,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class CWVAutofillController;
 @class CWVAutofillFormSuggestion;
+@class CWVAutofillProfile;
 @class CWVCreditCard;
 @class CWVCreditCardSaver;
 @class CWVCreditCardVerifier;
+@class CWVPassword;
 
 // User decision for saving / updating password.
 // Note: CWVPasswordUserDecisionNever is only used in saving scenarios.
@@ -76,6 +78,14 @@ typedef NS_ENUM(NSInteger, CWVPasswordUserDecision) {
 - (void)autofillControllerDidInsertFormElements:
     (CWVAutofillController*)autofillController;
 
+// Called when it is possible to save a new autofill profile used in filling
+// address forms. This is usually invoked after successfully submitting an
+// address form with a new profile. The profile will only be saved if this
+// method is implemented and |decisionHandler| is called with |YES|.
+- (void)autofillController:(CWVAutofillController*)autofillController
+    decideSavePolicyForAutofillProfile:(CWVAutofillProfile*)autofillProfile
+                       decisionHandler:(void (^)(BOOL save))decisionHandler;
+
 // Called when it is possible to save a new credit card. This is usually called
 // after a new card was entered in a form and submitted.
 // |saver| encapsulates information needed to assist with this save attempt.
@@ -88,31 +98,28 @@ typedef NS_ENUM(NSInteger, CWVPasswordUserDecision) {
 - (void)autofillController:(CWVAutofillController*)autofillController
     verifyCreditCardWithVerifier:(CWVCreditCardVerifier*)verifier;
 
-// Called when user needs to decide on whether or not to save the
-// password for |username|.
+// Called when user needs to decide on whether or not to save the |password|.
 // This can happen when user successfully logs into a web site with a new
 // username.
 // Pass user decision to |decisionHandler|. This block should be called only
 // once if user made the decision, or not get called if user ignores the prompt.
 // Not implementing it is equivalent of not calling |decisionHandler|.
 - (void)autofillController:(CWVAutofillController*)autofillController
-    decidePasswordSavingPolicyForUsername:(NSString*)username
-                          decisionHandler:
-                              (void (^)(CWVPasswordUserDecision decision))
-                                  decisionHandler;
+    decideSavePolicyForPassword:(CWVPassword*)password
+                decisionHandler:
+                    (void (^)(CWVPasswordUserDecision decision))decisionHandler;
 
-// Called when user needs to decide on whether or not to update the
-// password for |username|.
+// Called when user needs to decide on whether or not to update the |password|.
 // This can happen when user successfully logs into a web site with a new
 // password and an existing username.
 // Pass user decision to |decisionHandler|. This block should be called only
 // once if user made the decision, or not get called if user ignores the prompt.
 // Not implementing it is equivalent of not calling |decisionHandler|.
 - (void)autofillController:(CWVAutofillController*)autofillController
-    decidePasswordUpdatingPolicyForUsername:(NSString*)username
-                            decisionHandler:
-                                (void (^)(CWVPasswordUserDecision decision))
-                                    decisionHandler;
+    decideUpdatePolicyForPassword:(CWVPassword*)password
+                  decisionHandler:(void (^)(CWVPasswordUserDecision decision))
+                                      decisionHandler;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -636,6 +636,17 @@
       typedom_types: ["Keyword"],
     },
     {
+      name: "font-optical-sizing",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
+      inherited: true,
+      font: true,
+      name_for_methods: "FontOpticalSizing",
+      type_name: "OpticalSizing",
+      priority: "High",
+      keywords: ["auto", "none"],
+      typedom_types: ["Keyword"]
+    },
+    {
       name: "font-size",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
@@ -2093,9 +2104,8 @@
     },
     {
       name: "list-style-type",
-      property_methods: ["CSSValueFromComputedStyleInternal"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
-      field_template: "keyword",
       keywords: [
         "disc", "circle", "square", "decimal", "decimal-leading-zero",
         "arabic-indic", "bengali", "cambodian", "khmer", "devanagari",
@@ -2111,7 +2121,7 @@
         "simp-chinese-informal", "trad-chinese-formal", "trad-chinese-informal",
         "hiragana", "katakana", "hiragana-iroha", "katakana-iroha", "none"
       ],
-      default_value: "disc",
+      style_builder_custom_functions: ["initial", "inherit", "value"],
     },
     {
       name: "margin-bottom",

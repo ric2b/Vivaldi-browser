@@ -229,7 +229,8 @@ class BuildConfigGenerator extends DefaultTask {
         if (isPlayServicesTarget(dependencyId)) {
             if (Pattern.matches(".*cast_framework.*", dependencyId)) {
                 sb.append('  # Removing all resources from cast framework as they are unused bloat.\n')
-                sb.append('  strip_resources = true\n')
+                sb.append('  # Can only safely remove them when R8 will strip the path that accesses them.\n')
+                sb.append('  strip_resources = !is_java_debug\n')
             } else {
                 sb.append('  # Removing drawables from GMS .aars as they are unused bloat.\n')
                 sb.append('  strip_drawables = true\n')
@@ -249,10 +250,26 @@ class BuildConfigGenerator extends DefaultTask {
                 // Target has AIDL, but we don't support it yet: http://crbug.com/644439
                 sb.append('  ignore_aidl = true\n')
                 break
+            case 'androidx_test_uiautomator_uiautomator':
+	        sb.append('  deps = [":androidx_test_runner_java"]\n')
+                break
+            case 'com_android_support_mediarouter_v7':
+                sb.append('  # https://crbug.com/1000382\n')
+                sb.append('  proguard_configs = ["support_mediarouter.flags"]\n')
+                break
+            case 'androidx_mediarouter_mediarouter':
+                sb.append('  # https://crbug.com/1000382\n')
+                sb.append('  proguard_configs = ["androidx_mediarouter.flags"]\n')
+                break
             case 'androidx_transition_transition':
                 // Not specified in the POM, compileOnly dependency not supposed to be used unless
                 // the library is present: b/70887421
                 sb.append('  deps += [":androidx_fragment_fragment_java"]\n')
+                break
+            case 'androidx_vectordrawable_vectordrawable':
+            case 'com_android_support_support_vector_drawable':
+                // Target has AIDL, but we don't support it yet: http://crbug.com/644439
+                sb.append('  create_srcjar = false\n')
                 break
             case 'android_arch_lifecycle_runtime':
             case 'android_arch_lifecycle_viewmodel':
@@ -271,10 +288,6 @@ class BuildConfigGenerator extends DefaultTask {
                 sb.append('  # https://crbug.com/989505\n')
                 sb.append('  jar_excluded_patterns = ["META-INF/proguard/*"]\n')
                 break
-            case 'com_android_support_support_vector_drawable':
-                // Target has AIDL, but we don't support it yet: http://crbug.com/644439
-                sb.append('  create_srcjar = false\n')
-                break
             case 'com_android_support_transition':
                 // Not specified in the POM, compileOnly dependency not supposed to be used unless
                 // the library is present: b/70887421
@@ -288,9 +301,6 @@ class BuildConfigGenerator extends DefaultTask {
                 // Target .aar file contains .so libraries that need to be extracted,
                 // and android_aar_prebuilt template will fail if it's not set explictly.
                 sb.append('  extract_native_libraries = true\n')
-                // InstallActivity class is downloaded as a part of DFM & we need to inject
-                // a call to SplitCompat.install() into it.
-                sb.append('  split_compat_class_names = [ "com/google/ar/core/InstallActivity" ]\n')
                 break
             case 'androidx_test_rules':
                 // Target needs Android SDK deps which exist in third_party/android_sdk.

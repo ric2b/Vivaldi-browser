@@ -29,19 +29,31 @@ const size_t kBackOffResetDurationInSeconds = 5 * 60;  // 5 minutes.
 
 const size_t kURLLookupTimeoutDurationInSeconds = 1 * 60;  // 1 minute.
 
+// Fragements, usernames and passwords are removed, becuase fragments are only
+// used for local navigations and usernames/passwords are too privacy sensitive.
+GURL SanitizeURL(const GURL& url) {
+  GURL::Replacements replacements;
+  replacements.ClearRef();
+  replacements.ClearUsername();
+  replacements.ClearPassword();
+  return url.ReplaceComponents(replacements);
+}
+
 }  // namespace
 
 RealTimeUrlLookupService::RealTimeUrlLookupService(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
     : url_loader_factory_(url_loader_factory) {}
 
-void RealTimeUrlLookupService::StartLookup(const GURL& url,
-                                           RTLookupResponseCallback callback) {
+void RealTimeUrlLookupService::StartLookup(
+    const GURL& url,
+    RTLookupRequestCallback request_callback,
+    RTLookupResponseCallback response_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   DCHECK(url.is_valid());
 
   RTLookupRequest request;
-  request.set_url(url.spec());
+  request.set_url(SanitizeURL(url).spec());
   request.set_lookup_type(RTLookupRequest::NAVIGATION);
   std::string req_data, req_base64;
   request.SerializeToString(&req_data);
@@ -98,7 +110,9 @@ void RealTimeUrlLookupService::StartLookup(const GURL& url,
       base::BindOnce(&RealTimeUrlLookupService::OnURLLoaderComplete,
                      GetWeakPtr(), loader));
 
-  pending_requests_[owned_loader.release()] = std::move(callback);
+  pending_requests_[owned_loader.release()] = std::move(response_callback);
+
+  std::move(request_callback).Run(std::make_unique<RTLookupRequest>(request));
 }
 
 RealTimeUrlLookupService::~RealTimeUrlLookupService() {
@@ -171,6 +185,24 @@ void RealTimeUrlLookupService::ResetFailures() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   consecutive_failures_ = 0;
   reset_backoff_timer_.Stop();
+}
+
+// static
+SBThreatType RealTimeUrlLookupService::GetSBThreatTypeForRTThreatType(
+    RTLookupResponse::ThreatInfo::ThreatType rt_threat_type) {
+  switch (rt_threat_type) {
+    case RTLookupResponse::ThreatInfo::WEB_MALWARE:
+      return SB_THREAT_TYPE_URL_MALWARE;
+    case RTLookupResponse::ThreatInfo::SOCIAL_ENGINEERING:
+      return SB_THREAT_TYPE_URL_PHISHING;
+    case RTLookupResponse::ThreatInfo::UNWANTED_SOFTWARE:
+      return SB_THREAT_TYPE_URL_UNWANTED;
+    case RTLookupResponse::ThreatInfo::UNCLEAR_BILLING:
+      return SB_THREAT_TYPE_BILLING;
+    case RTLookupResponse::ThreatInfo::THREAT_TYPE_UNSPECIFIED:
+      NOTREACHED() << "Unexpected RTLookupResponse::ThreatType encountered";
+      return SB_THREAT_TYPE_SAFE;
+  }
 }
 
 base::WeakPtr<RealTimeUrlLookupService> RealTimeUrlLookupService::GetWeakPtr() {

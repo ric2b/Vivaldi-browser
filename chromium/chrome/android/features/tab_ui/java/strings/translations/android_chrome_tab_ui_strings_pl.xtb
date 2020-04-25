@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
+<translation id="1181037720776840403">Usuń</translation>
 <translation id="125153950246128346">Kliknij, by zobaczyć inną kartę</translation>
 <translation id="1869137256605757565">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> karta}few{<ph name="TABS_COUNT_MANY" /> karty}many{<ph name="TABS_COUNT_MANY" /> kart}other{<ph name="TABS_COUNT_MANY" /> karty}}</translation>
 <translation id="257674075312929031">Grupa</translation>
@@ -19,6 +20,7 @@
 <translation id="6615455863669487791">Pokaż mi</translation>
 <translation id="6803423358608456383">Otwarte karty – połowa wysokości</translation>
 <translation id="6840760312327750441">Aby pogrupować karty, naciśnij i przytrzymaj jedną z nich. Następnie przeciągnij ją na inną kartę.</translation>
+<translation id="7151209024774799310">Usuń karty z grupy</translation>
 <translation id="7559245342362162951">Pokazuj karty grupy na siatce pełnego ekranu</translation>
 <translation id="8582216581279205169">Otwarte karty – pełna wysokość</translation>
 <translation id="9150694013019234766">W grupie kart w dolnej części ekranu możesz przełączać się między kartami</translation>

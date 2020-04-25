@@ -31,7 +31,16 @@ struct FaviconImageResult;
 namespace vivaldi {
 class VivaldiContextMenu;
 
-class ContextMenuController : public ui::SimpleMenuModel::Delegate {
+
+class ContextMenuPostitionDelegate {
+ public:
+  virtual void SetPosition(gfx::Rect* menu_bounds,
+                           const gfx::Rect& monitor_bounds,
+                           const gfx::Rect& anchor_bounds) const {}
+};
+
+class ContextMenuController : public ui::SimpleMenuModel::Delegate,
+                              public ContextMenuPostitionDelegate {
  public:
   using MenuItem = extensions::vivaldi::context_menu::MenuItem;
   using Params = extensions::vivaldi::context_menu::Show::Params;
@@ -61,6 +70,11 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate {
   void VivaldiCommandIdHighlighted(int command_id) override;
   void ExecuteCommand(int command_id, int event_flags) override;
   void MenuClosed(ui::SimpleMenuModel* source) override;
+
+  // ContextMenuPostitionDelegate
+  void SetPosition(gfx::Rect* menu_bounds,
+                   const gfx::Rect& monitor_bounds,
+                   const gfx::Rect& anchor_bounds) const override;
 
  private:
   void InitModel();

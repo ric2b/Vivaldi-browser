@@ -1,0 +1,17 @@
+# These tests currently fail when run with --enable-features=BackForwardCache
+
+# Not a real problem. The bfcache_chrome_public_test_apk bot adds the
+# --enable-features=BackForwardCache switch, which increases the number of
+# features by one and make those tests to fail:
+-org.chromium.chrome.browser.FeaturesAnnotationsTest.testFeaturesAddToExistingFlags
+-org.chromium.chrome.browser.FeaturesAnnotationsTest.testFeaturesSetExistingFlags
+-org.chromium.chrome.browser.FeaturesAnnotationsTest.testFeaturesDoNotRemoveExistingFlags
+
+# Not triaged yet. See https://crbug.com/1006267
+# Reproduce with --enable-features=BackForwardCache,BackForwardCacheNoTimeEviction
+-org.chromium.chrome.browser.offlinepages.OfflinePageAutoFetchTest
+-org.chromium.chrome.browser.offlinepages.indicator.OfflineIndicatorControllerTest
+
+# Not triaged yet. See https://crbug.com/1006267
+# This fails even without bfcache flags but keep it disabled just for now.
+-org.chromium.chrome.browser.externalnav.UrlOverridingTest.testRedirectionFromIntent

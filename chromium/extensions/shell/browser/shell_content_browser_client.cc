@@ -281,6 +281,18 @@ void ShellContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
 }
 
 void ShellContentBrowserClient::
+    RegisterNonNetworkWorkerMainResourceURLLoaderFactories(
+        content::BrowserContext* browser_context,
+        NonNetworkURLLoaderFactoryMap* factories) {
+  DCHECK(browser_context);
+  DCHECK(factories);
+  factories->emplace(
+      extensions::kExtensionScheme,
+      extensions::CreateExtensionWorkerMainResourceURLLoaderFactory(
+          browser_context));
+}
+
+void ShellContentBrowserClient::
     RegisterNonNetworkServiceWorkerUpdateURLLoaderFactories(
         content::BrowserContext* browser_context,
         NonNetworkURLLoaderFactoryMap* factories) {
@@ -331,6 +343,7 @@ bool ShellContentBrowserClient::HandleExternalProtocol(
     bool is_main_frame,
     ui::PageTransition page_transition,
     bool has_user_gesture,
+    const base::Optional<url::Origin>& initiating_origin,
     network::mojom::URLLoaderFactoryPtr* out_factory) {
   return false;
 }
@@ -341,9 +354,11 @@ ShellContentBrowserClient::CreateURLLoaderFactoryForNetworkRequests(
     network::mojom::NetworkContext* network_context,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
-    const url::Origin& request_initiator) {
+    const url::Origin& request_initiator,
+    const base::Optional<net::NetworkIsolationKey>& network_isolation_key) {
   return URLLoaderFactoryManager::CreateFactory(
-      process, network_context, header_client, request_initiator);
+      process, network_context, header_client, request_initiator,
+      network_isolation_key);
 }
 
 std::string ShellContentBrowserClient::GetUserAgent() {

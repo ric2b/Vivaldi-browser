@@ -1,4 +1,35 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fi">
+<translation id="3830627370375585318">Myönnä Vivaldille verkon käyttöoikeus palomuurin tai virustorjuntaohjelmiston
+          asetuksissa.</translation>
+<translation id="4200102020577305737">Avaa
+          Vivaldi-valikko &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Lähiverkon asetukset
+          ja poista valinta ”Käytä välityspalvelinta lähiverkossa”.</translation>
+<translation id="4932161901409251843">Avaa
+          Vivaldi-valikko &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          ja varmista, että asetus on ”ei välityspalvelinta” tai ”suora”.</translation>
+<translation id="7023871570427738255">Avaa
+        Vivaldi-valikko &gt;
+        <ph name="SETTINGS_TITLE" />
+        &gt;
+        <ph name="ADVANCED_TITLE" />
+        ja poista valinta kohdasta <ph name="NO_PREFETCH_DESCRIPTION" />.
+        Ellei ongelma ratkea, palauta asetus käyttöön
+        suorituskyvyn parantamiseksi.</translation>
+<translation id="8187289872471304532">Avaa
+          Sovellukset &gt; Järjestelmäasetukset &gt; Verkko &gt; Lisäasetukset &gt; Välityspalvelimet
+          ja poista valinta kaikilta välityspalvelimilta.</translation>
 </translationbundle>

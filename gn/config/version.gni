@@ -42,3 +42,32 @@ chrome_dylib_version =
                 "trim string",
                 [vivaldi_version_path, chrome_version_path]
         )
+
+if (is_android && defined(is_vivaldi) && is_vivaldi) {
+  if (current_cpu == "arm") {
+    VERSION_ID_FORMAT = "'4%s%04d'"
+  } else if (current_cpu == "arm64") {
+    VERSION_ID_FORMAT = "'5%s%04d'"
+  } else if (current_cpu == "x86") {
+    VERSION_ID_FORMAT = "'6%s%04d'"
+  } else if (current_cpu == "x64") {
+    VERSION_ID_FORMAT = "'7%s%04d'"
+  } else {
+    assert(false, "Unsupported current CPU: " + current_cpu)
+  }
+
+  vivaldi_version_code =
+      exec_script(vivaldi_version_py_path,
+                  [
+                    "-f",
+                    rebase_path(vivaldi_version_path, root_build_dir),
+                    "-t",
+                    "@VERSION_ID@",
+                    "-e",
+                    "VERSION_ID=$VERSION_ID_FORMAT % (VIVALDI_NIGHTLY, int($GLOBAL_BUILDNUM)%1000)",
+                  ],
+                  "trim string",
+                  [vivaldi_version_path]
+          )
+  #print("Vivaldi version code: " + vivaldi_version_code)
+}

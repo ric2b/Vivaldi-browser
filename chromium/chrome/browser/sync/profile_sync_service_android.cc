@@ -120,13 +120,6 @@ void ProfileSyncServiceAndroid::OnStateChanged(syncer::SyncService* sync) {
       env, weak_java_profile_sync_service_.get(env));
 }
 
-bool ProfileSyncServiceAndroid::IsSyncAllowedByAndroid() const {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  JNIEnv* env = AttachCurrentThread();
-  return Java_ProfileSyncService_isMasterSyncEnabled(
-      env, weak_java_profile_sync_service_.get(env));
-}
-
 // Pure ProfileSyncService calls.
 
 jboolean ProfileSyncServiceAndroid::IsSyncRequested(
@@ -207,9 +200,11 @@ jboolean ProfileSyncServiceAndroid::IsFirstSetupComplete(
 
 void ProfileSyncServiceAndroid::SetFirstSetupComplete(
     JNIEnv* env,
-    const JavaParamRef<jobject>& obj) {
+    const JavaParamRef<jobject>& obj,
+    jint source) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  sync_service_->GetUserSettings()->SetFirstSetupComplete();
+  sync_service_->GetUserSettings()->SetFirstSetupComplete(
+      static_cast<syncer::SyncFirstSetupCompleteSource>(source));
 }
 
 ScopedJavaLocalRef<jintArray> ProfileSyncServiceAndroid::GetActiveDataTypes(
@@ -283,11 +278,12 @@ void ProfileSyncServiceAndroid::EnableEncryptEverything(
   sync_service_->GetUserSettings()->EnableEncryptEverything();
 }
 
-jboolean ProfileSyncServiceAndroid::IsPassphraseRequiredForDecryption(
+jboolean ProfileSyncServiceAndroid::IsPassphraseRequiredForPreferredDataTypes(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return sync_service_->GetUserSettings()->IsPassphraseRequiredForDecryption();
+  return sync_service_->GetUserSettings()
+      ->IsPassphraseRequiredForPreferredDataTypes();
 }
 
 jboolean ProfileSyncServiceAndroid::IsUsingSecondaryPassphrase(

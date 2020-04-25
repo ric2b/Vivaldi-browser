@@ -29,10 +29,12 @@
 #include "content/common/frame_owner_properties.h"
 #include "content/common/unfreezable_frame_messages.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "ipc/ipc_message.h"
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 
 namespace content {
 
@@ -137,11 +139,12 @@ RenderViewHostImpl* RenderFrameProxyHost::GetRenderViewHost() {
 }
 
 RenderWidgetHostView* RenderFrameProxyHost::GetRenderWidgetHostView() {
-  return frame_tree_node_->parent()->render_manager()
+  return frame_tree_node_->parent()
+      ->render_manager()
       ->GetRenderWidgetHostView();
 }
 
-bool RenderFrameProxyHost::Send(IPC::Message *msg) {
+bool RenderFrameProxyHost::Send(IPC::Message* msg) {
   return GetProcess()->Send(msg);
 }
 
@@ -217,7 +220,8 @@ bool RenderFrameProxyHost::InitRenderFrameProxy() {
   }
 
   int view_routing_id = frame_tree_node_->frame_tree()
-      ->GetRenderViewHost(site_instance_.get())->GetRoutingID();
+                            ->GetRenderViewHost(site_instance_.get())
+                            ->GetRoutingID();
   GetProcess()->GetRendererInterface()->CreateFrameProxy(
       routing_id_, view_routing_id, opener_routing_id, parent_routing_id,
       frame_tree_node_->current_replication_state(),
@@ -264,8 +268,34 @@ void RenderFrameProxyHost::UpdateOpener() {
   // first reaching this proxy and then referencing its window.opener.  Ensure
   // the new opener's proxy exists in this case.
   if (frame_tree_node_->opener()) {
+    bool create_proxies_in_opener = true;
+    if (::vivaldi::IsVivaldiRunning() &&
+        frame_tree_node_->render_manager()->IsMainFrameForInnerDelegate() &&
+        frame_tree_node_->render_manager()->GetProxyToOuterDelegate() == this) {
+      // NOTE(igor@vivaldi.com): Fix for Chromium bug 1013553.
+      //
+      // This proxy is the special proxy pointing from the webpage back to the
+      // app containing <webview> with the webpage. The same way
+      // RenderFrameHostManager::CreateProxiesForChildFrame() skips creating
+      // proxies pointing to the app in child iframes of the webpage (see
+      // comments in the method), there should be no proxies in the opener
+      // pointing the app. Essentially web pages should neither be able to reach
+      // the app via the window.opener nor via the window.parent links.
+      //
+      // Until Chromium confirms/provides a generic fix for the bug, apply the
+      // fix only to the Vivaldi windows, not an arbitrary Chrome app.
+      SiteInstance* site = GetSiteInstance();
+      if (site && site->GetSiteURL().possibly_invalid_spec() ==
+                      ::vivaldi::kVivaldiAppURLDomain) {
+        create_proxies_in_opener = false;
+      }
+    }
+    if (create_proxies_in_opener) {
+      // clang-format off
     frame_tree_node_->opener()->render_manager()->CreateOpenerProxies(
         GetSiteInstance(), frame_tree_node_);
+      // clang-format on
+    }
   }
 
   int opener_routing_id =
@@ -523,11 +553,10 @@ void RenderFrameProxyHost::OnAdvanceFocus(blink::WebFocusType type,
   RenderFrameHostImpl* source_rfh =
       RenderFrameHostImpl::FromID(GetProcess()->GetID(), source_routing_id);
   RenderFrameProxyHost* source_proxy =
-      source_rfh
-          ? source_rfh->frame_tree_node()
-                ->render_manager()
-                ->GetRenderFrameProxyHost(target_rfh->GetSiteInstance())
-          : nullptr;
+      source_rfh ? source_rfh->frame_tree_node()
+                       ->render_manager()
+                       ->GetRenderFrameProxyHost(target_rfh->GetSiteInstance())
+                 : nullptr;
 
   target_rfh->AdvanceFocus(type, source_proxy);
   frame_tree_node_->current_frame_host()->delegate()->OnAdvanceFocus(

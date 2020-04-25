@@ -18,6 +18,7 @@
 #include "media/base/video_frame.h"
 #include "media/base/video_frame_layout.h"
 #include "media/gpu/buildflags.h"
+#include "media/gpu/chromeos/fourcc.h"
 #include "media/gpu/image_processor_factory.h"
 #include "media/gpu/test/image.h"
 #include "media/gpu/test/video_frame_helpers.h"
@@ -30,6 +31,22 @@
 
 namespace media {
 namespace test {
+namespace {
+base::Optional<VideoFrameLayout> CreateLayout(
+    const ImageProcessor::PortConfig& config) {
+  const VideoPixelFormat pixel_format = config.fourcc.ToVideoPixelFormat();
+  if (config.planes.empty())
+    return base::nullopt;
+
+  if (config.fourcc.IsMultiPlanar()) {
+    return VideoFrameLayout::CreateWithPlanes(pixel_format, config.size,
+                                              config.planes);
+  } else {
+    return VideoFrameLayout::CreateMultiPlanar(pixel_format, config.size,
+                                               config.planes);
+  }
+}
+}  // namespace
 
 // static
 std::unique_ptr<ImageProcessorClient> ImageProcessorClient::Create(
@@ -49,7 +66,9 @@ std::unique_ptr<ImageProcessorClient> ImageProcessorClient::Create(
 
 ImageProcessorClient::ImageProcessorClient(
     std::vector<std::unique_ptr<VideoFrameProcessor>> frame_processors)
-    : frame_processors_(std::move(frame_processors)),
+    : gpu_memory_buffer_factory_(
+          gpu::GpuMemoryBufferFactory::CreateNativeType(nullptr)),
+      frame_processors_(std::move(frame_processors)),
       image_processor_client_thread_("ImageProcessorClientThread"),
       output_cv_(&output_lock_),
       num_processed_frames_(0),
@@ -111,17 +130,31 @@ scoped_refptr<VideoFrame> ImageProcessorClient::CreateInputFrame(
   LOG_ASSERT(image_processor_);
   LOG_ASSERT(input_image.IsLoaded());
 
-  const auto& input_layout = image_processor_->input_layout();
-  if (VideoFrame::IsStorageTypeMappable(
-          image_processor_->input_storage_type())) {
-    return CloneVideoFrame(CreateVideoFrameFromImage(input_image).get(),
-                           input_layout, VideoFrame::STORAGE_OWNED_MEMORY);
+  const ImageProcessor::PortConfig& input_config =
+      image_processor_->input_config();
+  const VideoFrame::StorageType input_storage_type =
+      input_config.storage_type();
+  base::Optional<VideoFrameLayout> input_layout = CreateLayout(input_config);
+  LOG_ASSERT(input_layout);
+
+  if (VideoFrame::IsStorageTypeMappable(input_storage_type)) {
+    return CloneVideoFrame(gpu_memory_buffer_factory_.get(),
+                           CreateVideoFrameFromImage(input_image).get(),
+                           *input_layout, VideoFrame::STORAGE_OWNED_MEMORY);
   } else {
 #if defined(OS_CHROMEOS)
-    LOG_ASSERT(image_processor_->input_storage_type() ==
-               VideoFrame::STORAGE_DMABUFS);
-    return CloneVideoFrame(CreateVideoFrameFromImage(input_image).get(),
-                           input_layout, VideoFrame::STORAGE_DMABUFS);
+    LOG_ASSERT(input_storage_type == VideoFrame::STORAGE_DMABUFS);
+    // NV12 and YV12 are the only formats that can be allocated with
+    // gfx::BufferUsage::SCANOUT_VEA_READ_CAMERA_AND_CPU_READ_WRITE. So
+    // gfx::BufferUsage::GPU_READ_CPU_READ_WRITE is specified for RGB formats.
+    gfx::BufferUsage dst_buffer_usage =
+        IsYuvPlanar(input_image.PixelFormat())
+            ? gfx::BufferUsage::SCANOUT_VEA_READ_CAMERA_AND_CPU_READ_WRITE
+            : gfx::BufferUsage::GPU_READ_CPU_READ_WRITE;
+    return CloneVideoFrame(gpu_memory_buffer_factory_.get(),
+                           CreateVideoFrameFromImage(input_image).get(),
+                           *input_layout, VideoFrame::STORAGE_DMABUFS,
+                           dst_buffer_usage);
 #endif
     return nullptr;
   }
@@ -133,19 +166,23 @@ scoped_refptr<VideoFrame> ImageProcessorClient::CreateOutputFrame(
   LOG_ASSERT(output_image.IsMetadataLoaded());
   LOG_ASSERT(image_processor_);
 
-  const auto& output_layout = image_processor_->output_layout();
-  if (VideoFrame::IsStorageTypeMappable(
-          image_processor_->output_storage_type())) {
+  const ImageProcessor::PortConfig& output_config =
+      image_processor_->output_config();
+  const VideoFrame::StorageType output_storage_type =
+      output_config.storage_type();
+  base::Optional<VideoFrameLayout> output_layout = CreateLayout(output_config);
+  LOG_ASSERT(output_layout);
+  if (VideoFrame::IsStorageTypeMappable(output_storage_type)) {
     return VideoFrame::CreateFrameWithLayout(
-        output_layout, gfx::Rect(output_image.Size()), output_image.Size(),
+        *output_layout, gfx::Rect(output_image.Size()), output_image.Size(),
         base::TimeDelta(), false /* zero_initialize_memory*/);
   } else {
 #if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
-    LOG_ASSERT(image_processor_->output_storage_type() ==
-               VideoFrame::STORAGE_DMABUFS);
+    LOG_ASSERT(output_storage_type == VideoFrame::STORAGE_DMABUFS);
     return CreatePlatformVideoFrame(
-        output_layout.format(), output_layout.coded_size(),
-        gfx::Rect(output_image.Size()), output_image.Size(), base::TimeDelta(),
+        gpu_memory_buffer_factory_.get(), output_layout->format(),
+        output_layout->coded_size(), gfx::Rect(output_image.Size()),
+        output_image.Size(), base::TimeDelta(),
         gfx::BufferUsage::GPU_READ_CPU_READ_WRITE);
 #endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
     return nullptr;

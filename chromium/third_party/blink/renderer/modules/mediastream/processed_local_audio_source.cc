@@ -21,6 +21,7 @@
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_constraints_util.h"
+#include "third_party/blink/public/web/modules/peerconnection/peer_connection_dependency_factory.h"
 #include "third_party/blink/public/web/modules/webrtc/webrtc_audio_device_impl.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_audio_processor.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_local_frame_wrapper.h"
@@ -82,14 +83,6 @@ void LogAudioProcesingProperties(
   blink::WebRtcLogMessage(str);
 }
 }  // namespace
-
-bool IsApmInAudioServiceEnabled() {
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
-  return base::FeatureList::IsEnabled(features::kWebRtcApmInAudioService);
-#else
-  return false;
-#endif
-}
 
 ProcessedLocalAudioSource::ProcessedLocalAudioSource(
     WebLocalFrame* web_frame,
@@ -202,7 +195,7 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
   // Create the MediaStreamAudioProcessor, bound to the WebRTC audio device
   // module.
   WebRtcAudioDeviceImpl* const rtc_audio_device =
-      Platform::Current()->GetWebRtcAudioDevice();
+      PeerConnectionDependencyFactory::GetInstance()->GetWebRtcAudioDevice();
   if (!rtc_audio_device) {
     blink::WebRtcLogMessage(
         "ProcessedLocalAudioSource::EnsureSourceIsStarted() fails"
@@ -267,7 +260,7 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
   DCHECK(params.IsValid());
   media::AudioSourceParameters source_params(device().session_id());
   const bool use_remote_apm =
-      IsApmInAudioServiceEnabled() &&
+      media::IsWebRtcApmInAudioServiceEnabled() &&
       MediaStreamAudioProcessor::WouldModifyAudio(audio_processing_properties_);
   if (use_remote_apm) {
     audio_processor_proxy_ =
@@ -326,7 +319,8 @@ void ProcessedLocalAudioSource::EnsureSourceIsStopped() {
   scoped_refptr<media::AudioCapturerSource> source_to_stop(std::move(source_));
 
   if (WebRtcAudioDeviceImpl* rtc_audio_device =
-          Platform::Current()->GetWebRtcAudioDevice()) {
+          PeerConnectionDependencyFactory::GetInstance()
+              ->GetWebRtcAudioDevice()) {
     rtc_audio_device->RemoveAudioCapturer(this);
   }
 

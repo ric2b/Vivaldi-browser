@@ -12,12 +12,16 @@
 #include "content/public/renderer/renderer_ppapi_host.h"
 #include "content/public/test/fake_pepper_plugin_instance.h"
 #include "content/public/test/render_view_test.h"
+#include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/public/web/web_view.h"
+#include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
 namespace pdf {
+
 namespace {
 
 const PP_PrivateAccessibilityTextRunInfo kFirstTextRun = {
@@ -39,6 +43,8 @@ const PP_PrivateAccessibilityTextRunInfo kThirdRunMultiLine = {
     9, 12, PP_MakeFloatRectFromXYWH(26.0f, 189.0f, 84.0f, 13.0f)};
 const PP_PrivateAccessibilityTextRunInfo kFourthRunMultiLine = {
     6, 12, PP_MakeFloatRectFromXYWH(26.0f, 189.0f, 84.0f, 13.0f)};
+
+const char kChromiumTestUrl[] = "www.cs.chromium.org";
 
 void CompareRect(PP_Rect expected_rect, PP_Rect actual_rect) {
   EXPECT_EQ(expected_rect.point.x, actual_rect.point.x);
@@ -151,7 +157,7 @@ class PdfAccessibilityTreeTest : public content::RenderViewTest {
     ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
         pak_file, ui::SCALE_FACTOR_NONE);
 
-    viewport_info_.zoom = 1.0;
+    viewport_info_.zoom_device_scale_factor = 1.0;
     viewport_info_.scroll = {0, 0};
     viewport_info_.offset = {0, 0};
     viewport_info_.selection_start_page_index = 0;
@@ -184,7 +190,7 @@ TEST_F(PdfAccessibilityTreeTest, TestEmptyPDFPage) {
 
   FakeRendererPpapiHost host(view_->GetMainRenderFrame());
   PP_Instance instance = 0;
-  pdf::PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
+  PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
 
   pdf_accessibility_tree.SetAccessibilityViewportInfo(viewport_info_);
   pdf_accessibility_tree.SetAccessibilityDocInfo(doc_info_);
@@ -202,7 +208,7 @@ TEST_F(PdfAccessibilityTreeTest, TestAccessibilityDisabledDuringPDFLoad) {
 
   FakeRendererPpapiHost host(view_->GetMainRenderFrame());
   PP_Instance instance = 0;
-  pdf::PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
+  PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
 
   pdf_accessibility_tree.SetAccessibilityViewportInfo(viewport_info_);
   pdf_accessibility_tree.SetAccessibilityDocInfo(doc_info_);
@@ -216,23 +222,36 @@ TEST_F(PdfAccessibilityTreeTest, TestAccessibilityDisabledDuringPDFLoad) {
 }
 
 TEST_F(PdfAccessibilityTreeTest, TestPdfAccessibilityTreeCreation) {
+  static const char kTestAltText[] = "Alternate text for image";
+
   text_runs_.emplace_back(kFirstTextRun);
   text_runs_.emplace_back(kSecondTextRun);
   chars_.insert(chars_.end(), std::begin(kDummyCharsData),
                 std::end(kDummyCharsData));
 
-  ppapi::PdfAccessibilityLinkInfo link;
-  link.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
-  link.url = "www.cs.chromium.org";
-  link.text_run_index = 0;
-  link.text_run_count = 1;
-  links_.push_back(link);
+  {
+    ppapi::PdfAccessibilityLinkInfo link;
+    link.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
+    link.url = kChromiumTestUrl;
+    link.text_run_index = 0;
+    link.text_run_count = 1;
+    links_.push_back(std::move(link));
+  }
 
-  ppapi::PdfAccessibilityImageInfo image;
-  image.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
-  image.alt_text = "Alternate text for image";
-  image.text_run_index = 2;
-  images_.push_back(image);
+  {
+    ppapi::PdfAccessibilityImageInfo image;
+    image.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
+    image.alt_text = kTestAltText;
+    image.text_run_index = 2;
+    images_.push_back(std::move(image));
+  }
+
+  {
+    ppapi::PdfAccessibilityImageInfo image;
+    image.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
+    image.text_run_index = 2;
+    images_.push_back(std::move(image));
+  }
 
   page_info_.text_run_count = text_runs_.size();
   page_info_.char_count = chars_.size();
@@ -261,6 +280,7 @@ TEST_F(PdfAccessibilityTreeTest, TestPdfAccessibilityTreeCreation) {
    * ++++ Paragraph
    * ++++++ Static Text
    * ++++++ Image
+   * ++++++ Image
    */
 
   ui::AXNode* root_node = pdf_accessibility_tree.GetRoot();
@@ -280,7 +300,7 @@ TEST_F(PdfAccessibilityTreeTest, TestPdfAccessibilityTreeCreation) {
 
   ui::AXNode* link_node = paragraph_node->children()[0];
   ASSERT_TRUE(link_node);
-  EXPECT_EQ(link.url,
+  EXPECT_EQ(kChromiumTestUrl,
             link_node->GetStringAttribute(ax::mojom::StringAttribute::kUrl));
   EXPECT_EQ(ax::mojom::Role::kLink, link_node->data().role);
   ASSERT_EQ(1u, link_node->children().size());
@@ -288,7 +308,7 @@ TEST_F(PdfAccessibilityTreeTest, TestPdfAccessibilityTreeCreation) {
   paragraph_node = page_node->children()[1];
   ASSERT_TRUE(paragraph_node);
   EXPECT_EQ(ax::mojom::Role::kParagraph, paragraph_node->data().role);
-  ASSERT_EQ(2u, paragraph_node->children().size());
+  ASSERT_EQ(3u, paragraph_node->children().size());
 
   ui::AXNode* static_text_node = paragraph_node->children()[0];
   ASSERT_TRUE(static_text_node);
@@ -298,7 +318,13 @@ TEST_F(PdfAccessibilityTreeTest, TestPdfAccessibilityTreeCreation) {
   ui::AXNode* image_node = paragraph_node->children()[1];
   ASSERT_TRUE(image_node);
   EXPECT_EQ(ax::mojom::Role::kImage, image_node->data().role);
-  EXPECT_EQ(image.alt_text,
+  EXPECT_EQ(kTestAltText,
+            image_node->GetStringAttribute(ax::mojom::StringAttribute::kName));
+
+  image_node = paragraph_node->children()[2];
+  ASSERT_TRUE(image_node);
+  EXPECT_EQ(ax::mojom::Role::kImage, image_node->data().role);
+  EXPECT_EQ(l10n_util::GetStringUTF8(IDS_AX_UNLABELED_IMAGE_ROLE_DESCRIPTION),
             image_node->GetStringAttribute(ax::mojom::StringAttribute::kName));
 }
 
@@ -310,12 +336,14 @@ TEST_F(PdfAccessibilityTreeTest, TestPreviousNextOnLine) {
   chars_.insert(chars_.end(), std::begin(kDummyCharsData),
                 std::end(kDummyCharsData));
 
-  ppapi::PdfAccessibilityLinkInfo link;
-  link.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
-  link.url = "www.cs.chromium.org";
-  link.text_run_index = 2;
-  link.text_run_count = 2;
-  links_.push_back(link);
+  {
+    ppapi::PdfAccessibilityLinkInfo link;
+    link.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
+    link.url = kChromiumTestUrl;
+    link.text_run_index = 2;
+    link.text_run_count = 2;
+    links_.push_back(std::move(link));
+  }
 
   page_info_.text_run_count = text_runs_.size();
   page_info_.char_count = chars_.size();
@@ -371,10 +399,14 @@ TEST_F(PdfAccessibilityTreeTest, TestPreviousNextOnLine) {
   ui::AXNode* previous_inline_node = static_text_node->children()[0];
   ASSERT_TRUE(previous_inline_node);
   EXPECT_EQ(ax::mojom::Role::kInlineTextBox, previous_inline_node->data().role);
+  ASSERT_FALSE(previous_inline_node->HasIntAttribute(
+      ax::mojom::IntAttribute::kPreviousOnLineId));
 
   ui::AXNode* next_inline_node = static_text_node->children()[1];
   ASSERT_TRUE(next_inline_node);
   EXPECT_EQ(ax::mojom::Role::kInlineTextBox, next_inline_node->data().role);
+  ASSERT_TRUE(next_inline_node->HasIntAttribute(
+      ax::mojom::IntAttribute::kNextOnLineId));
 
   ASSERT_EQ(next_inline_node->data().id,
             previous_inline_node->GetIntAttribute(
@@ -382,14 +414,10 @@ TEST_F(PdfAccessibilityTreeTest, TestPreviousNextOnLine) {
   ASSERT_EQ(previous_inline_node->data().id,
             next_inline_node->GetIntAttribute(
                 ax::mojom::IntAttribute::kPreviousOnLineId));
-  ASSERT_FALSE(next_inline_node->HasIntAttribute(
-      ax::mojom::IntAttribute::kNextOnLineId));
-  ASSERT_FALSE(previous_inline_node->HasIntAttribute(
-      ax::mojom::IntAttribute::kPreviousOnLineId));
 
   ui::AXNode* link_node = paragraph_node->children()[1];
   ASSERT_TRUE(link_node);
-  EXPECT_EQ(link.url,
+  EXPECT_EQ(kChromiumTestUrl,
             link_node->GetStringAttribute(ax::mojom::StringAttribute::kUrl));
   EXPECT_EQ(ax::mojom::Role::kLink, link_node->data().role);
   ASSERT_EQ(1u, link_node->children().size());
@@ -402,10 +430,18 @@ TEST_F(PdfAccessibilityTreeTest, TestPreviousNextOnLine) {
   previous_inline_node = static_text_node->children()[0];
   ASSERT_TRUE(previous_inline_node);
   EXPECT_EQ(ax::mojom::Role::kInlineTextBox, previous_inline_node->data().role);
+  ASSERT_TRUE(previous_inline_node->HasIntAttribute(
+      ax::mojom::IntAttribute::kPreviousOnLineId));
+  // Test that text and link on the same line are connected.
+  ASSERT_EQ(next_inline_node->data().id,
+            previous_inline_node->GetIntAttribute(
+                ax::mojom::IntAttribute::kPreviousOnLineId));
 
   next_inline_node = static_text_node->children()[1];
   ASSERT_TRUE(next_inline_node);
   EXPECT_EQ(ax::mojom::Role::kInlineTextBox, next_inline_node->data().role);
+  ASSERT_FALSE(next_inline_node->HasIntAttribute(
+      ax::mojom::IntAttribute::kNextOnLineId));
 
   ASSERT_EQ(next_inline_node->data().id,
             previous_inline_node->GetIntAttribute(
@@ -413,10 +449,6 @@ TEST_F(PdfAccessibilityTreeTest, TestPreviousNextOnLine) {
   ASSERT_EQ(previous_inline_node->data().id,
             next_inline_node->GetIntAttribute(
                 ax::mojom::IntAttribute::kPreviousOnLineId));
-  ASSERT_FALSE(next_inline_node->HasIntAttribute(
-      ax::mojom::IntAttribute::kNextOnLineId));
-  ASSERT_FALSE(previous_inline_node->HasIntAttribute(
-      ax::mojom::IntAttribute::kPreviousOnLineId));
 }
 
 TEST_F(PdfAccessibilityTreeTest, TextRunsAndCharsMismatch) {
@@ -436,7 +468,7 @@ TEST_F(PdfAccessibilityTreeTest, TextRunsAndCharsMismatch) {
 
   FakeRendererPpapiHost host(view_->GetMainRenderFrame());
   PP_Instance instance = 0;
-  pdf::PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
+  PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
 
   pdf_accessibility_tree.SetAccessibilityViewportInfo(viewport_info_);
   pdf_accessibility_tree.SetAccessibilityDocInfo(doc_info_);
@@ -454,17 +486,23 @@ TEST_F(PdfAccessibilityTreeTest, UnsortedLinkVector) {
   chars_.insert(chars_.end(), std::begin(kDummyCharsData),
                 std::end(kDummyCharsData));
 
-  ppapi::PdfAccessibilityLinkInfo link;
-  link.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
-  // Add first link in the vector.
-  link.text_run_index = 2;
-  link.text_run_count = 0;
-  links_.push_back(link);
+  {
+    // Add first link in the vector.
+    ppapi::PdfAccessibilityLinkInfo link;
+    link.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
+    link.text_run_index = 2;
+    link.text_run_count = 0;
+    links_.push_back(std::move(link));
+  }
 
-  // Add second link in the vector.
-  link.text_run_index = 0;
-  link.text_run_count = 1;
-  links_.push_back(link);
+  {
+    // Add second link in the vector.
+    ppapi::PdfAccessibilityLinkInfo link;
+    link.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
+    link.text_run_index = 0;
+    link.text_run_count = 1;
+    links_.push_back(std::move(link));
+  }
 
   page_info_.text_run_count = text_runs_.size();
   page_info_.char_count = chars_.size();
@@ -476,7 +514,7 @@ TEST_F(PdfAccessibilityTreeTest, UnsortedLinkVector) {
 
   FakeRendererPpapiHost host(view_->GetMainRenderFrame());
   PP_Instance instance = 0;
-  pdf::PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
+  PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
 
   pdf_accessibility_tree.SetAccessibilityViewportInfo(viewport_info_);
   pdf_accessibility_tree.SetAccessibilityDocInfo(doc_info_);
@@ -494,11 +532,13 @@ TEST_F(PdfAccessibilityTreeTest, OutOfBoundLink) {
   chars_.insert(chars_.end(), std::begin(kDummyCharsData),
                 std::end(kDummyCharsData));
 
-  ppapi::PdfAccessibilityLinkInfo link;
-  link.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
-  link.text_run_index = 3;
-  link.text_run_count = 0;
-  links_.push_back(link);
+  {
+    ppapi::PdfAccessibilityLinkInfo link;
+    link.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
+    link.text_run_index = 3;
+    link.text_run_count = 0;
+    links_.push_back(std::move(link));
+  }
 
   page_info_.text_run_count = text_runs_.size();
   page_info_.char_count = chars_.size();
@@ -510,7 +550,7 @@ TEST_F(PdfAccessibilityTreeTest, OutOfBoundLink) {
 
   FakeRendererPpapiHost host(view_->GetMainRenderFrame());
   PP_Instance instance = 0;
-  pdf::PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
+  PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
 
   pdf_accessibility_tree.SetAccessibilityViewportInfo(viewport_info_);
   pdf_accessibility_tree.SetAccessibilityDocInfo(doc_info_);
@@ -528,15 +568,21 @@ TEST_F(PdfAccessibilityTreeTest, UnsortedImageVector) {
   chars_.insert(chars_.end(), std::begin(kDummyCharsData),
                 std::end(kDummyCharsData));
 
-  ppapi::PdfAccessibilityImageInfo image;
-  image.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
-  // Add first image to the vector.
-  image.text_run_index = 1;
-  images_.push_back(image);
+  {
+    // Add first image to the vector.
+    ppapi::PdfAccessibilityImageInfo image;
+    image.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
+    image.text_run_index = 1;
+    images_.push_back(std::move(image));
+  }
 
-  // Add second image to the vector.
-  image.text_run_index = 0;
-  images_.push_back(image);
+  {
+    // Add second image to the vector.
+    ppapi::PdfAccessibilityImageInfo image;
+    image.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
+    image.text_run_index = 0;
+    images_.push_back(std::move(image));
+  }
 
   page_info_.text_run_count = text_runs_.size();
   page_info_.char_count = chars_.size();
@@ -548,7 +594,7 @@ TEST_F(PdfAccessibilityTreeTest, UnsortedImageVector) {
 
   FakeRendererPpapiHost host(view_->GetMainRenderFrame());
   PP_Instance instance = 0;
-  pdf::PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
+  PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
 
   pdf_accessibility_tree.SetAccessibilityViewportInfo(viewport_info_);
   pdf_accessibility_tree.SetAccessibilityDocInfo(doc_info_);
@@ -566,10 +612,12 @@ TEST_F(PdfAccessibilityTreeTest, OutOfBoundImage) {
   chars_.insert(chars_.end(), std::begin(kDummyCharsData),
                 std::end(kDummyCharsData));
 
-  ppapi::PdfAccessibilityImageInfo image;
-  image.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
-  image.text_run_index = 3;
-  images_.push_back(image);
+  {
+    ppapi::PdfAccessibilityImageInfo image;
+    image.bounds = PP_MakeFloatRectFromXYWH(0.0f, 0.0f, 0.0f, 0.0f);
+    image.text_run_index = 3;
+    images_.push_back(std::move(image));
+  }
 
   page_info_.text_run_count = text_runs_.size();
   page_info_.char_count = chars_.size();
@@ -581,7 +629,7 @@ TEST_F(PdfAccessibilityTreeTest, OutOfBoundImage) {
 
   FakeRendererPpapiHost host(view_->GetMainRenderFrame());
   PP_Instance instance = 0;
-  pdf::PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
+  PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
 
   pdf_accessibility_tree.SetAccessibilityViewportInfo(viewport_info_);
   pdf_accessibility_tree.SetAccessibilityDocInfo(doc_info_);
@@ -655,6 +703,77 @@ TEST_F(PdfAccessibilityTreeTest, TestActionDataConversion) {
       PP_PdfAccessibilityScrollAlignment::PP_PDF_SCROLL_ALIGNMENT_CLOSEST_EDGE,
       action_data.vertical_scroll_alignment);
   CompareRect({{0, 0}, {1, 1}}, action_data.target_rect);
+}
+
+TEST_F(PdfAccessibilityTreeTest, TestClickActionDataConversion) {
+  text_runs_.emplace_back(kFirstTextRun);
+  text_runs_.emplace_back(kSecondTextRun);
+  chars_.insert(chars_.end(), std::begin(kDummyCharsData),
+                std::end(kDummyCharsData));
+
+  {
+    ppapi::PdfAccessibilityLinkInfo link;
+    link.url = kChromiumTestUrl;
+    link.text_run_index = 0;
+    link.text_run_count = 1;
+    link.bounds = {{0, 0}, {10, 10}};
+    link.index_in_page = 0;
+    links_.push_back(std::move(link));
+  }
+
+  {
+    ppapi::PdfAccessibilityLinkInfo link;
+    link.url = kChromiumTestUrl;
+    link.text_run_index = 1;
+    link.text_run_count = 1;
+    link.bounds = {{10, 10}, {10, 10}};
+    link.index_in_page = 1;
+    links_.push_back(std::move(link));
+  }
+
+  page_info_.text_run_count = text_runs_.size();
+  page_info_.char_count = chars_.size();
+  page_info_.link_count = links_.size();
+
+  content::RenderFrame* render_frame = view_->GetMainRenderFrame();
+  render_frame->SetAccessibilityModeForTest(ui::AXMode::kWebContents);
+  ASSERT_TRUE(render_frame->GetRenderAccessibility());
+
+  ActionHandlingFakePepperPluginInstance fake_pepper_instance;
+  FakeRendererPpapiHost host(view_->GetMainRenderFrame(),
+                             &fake_pepper_instance);
+  PP_Instance instance = 0;
+  PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
+
+  pdf_accessibility_tree.SetAccessibilityViewportInfo(viewport_info_);
+  pdf_accessibility_tree.SetAccessibilityDocInfo(doc_info_);
+  pdf_accessibility_tree.SetAccessibilityPageInfo(page_info_, text_runs_,
+                                                  chars_, links_, images_);
+  ui::AXNode* root_node = pdf_accessibility_tree.GetRoot();
+  const std::vector<ui::AXNode*>& page_nodes = root_node->children();
+  ASSERT_EQ(1u, page_nodes.size());
+  const std::vector<ui::AXNode*>& para_nodes = page_nodes[0]->children();
+  ASSERT_EQ(2u, para_nodes.size());
+  const std::vector<ui::AXNode*>& link_nodes = para_nodes[1]->children();
+  ASSERT_EQ(1u, link_nodes.size());
+
+  const ui::AXNode* link_node = link_nodes[0];
+  std::unique_ptr<ui::AXActionTarget> pdf_action_target =
+      pdf_accessibility_tree.CreateActionTarget(*link_node);
+  ASSERT_EQ(ui::AXActionTarget::Type::kPdf, pdf_action_target->GetType());
+  pdf_action_target->Click();
+  PP_PdfAccessibilityActionData pdf_action_data =
+      fake_pepper_instance.GetReceivedActionData();
+
+  EXPECT_EQ(PP_PdfAccessibilityAction::PP_PDF_DO_DEFAULT_ACTION,
+            pdf_action_data.action);
+  EXPECT_EQ(PP_PdfAccessibilityScrollAlignment::PP_PDF_SCROLL_NONE,
+            pdf_action_data.horizontal_scroll_alignment);
+  EXPECT_EQ(PP_PdfAccessibilityScrollAlignment::PP_PDF_SCROLL_NONE,
+            pdf_action_data.vertical_scroll_alignment);
+  EXPECT_EQ(0u, pdf_action_data.page_index);
+  EXPECT_EQ(1u, pdf_action_data.link_index);
+  CompareRect({{0, 0}, {0, 0}}, pdf_action_data.target_rect);
 }
 
 TEST_F(PdfAccessibilityTreeTest, TestEmptyPdfAxActions) {

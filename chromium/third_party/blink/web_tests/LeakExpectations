@@ -24,6 +24,8 @@ crbug.com/859640 http/tests/devtools/tracing/timeline-style/timeline-style-recal
 crbug.com/755625 external/wpt/beacon/beacon-error.window.html [ Leak ]
 crbug.com/651742 external/wpt/content-security-policy/connect-src/connect-src-beacon-allowed.sub.html [ Leak ]
 
+crbug.com/1003224 http/tests/clipboard/async-write-image-read-image.html [ Leak ]
+
 # -----------------------------------------------------------------
 # Flakily leaks
 # -----------------------------------------------------------------
@@ -34,11 +36,6 @@ crbug.com/835943 [ Linux ] http/tests/appcache/non-html.xhtml [ Leak Pass ]
 crbug.com/860117 [ Linux ] editing/pasteboard/drag-drop-iframe-refresh-crash.html [ Pass Leak ]
 crbug.com/976438 [ Linux ] external/wpt/css/selectors/focus-visible-007.html [ Pass Leak ]
 
-# -----------------------------------------------------------------
-# Not revert suspected CL as jam@ request, expected to be fixed soon.
-# -----------------------------------------------------------------
-crbug.com/765721 [ Linux ] http/tests/navigation/navigation-interrupted-by-fragment.html [ Pass Leak ]
-crbug.com/765721 [ Linux ] virtual/stable/http/tests/navigation/navigation-interrupted-by-fragment.html [ Pass Leak ]
 
 crbug.com/809609 [ Linux ] editing/pasteboard/drop-file-svg.html [ Pass Leak ]
 crbug.com/809609 [ Linux ] editing/inserting/insert_div_with_style.html [ Pass Leak ]
@@ -104,6 +101,9 @@ crbug.com/1000512 [ Linux ] http/tests/devtools/a11y-axe-core/sources/source-nav
 crbug.com/1000512 [ Linux ] http/tests/devtools/a11y-axe-core/settings/geolocations-a11y-test.js [ Leak Pass ]
 crbug.com/1000512 [ Linux ] http/tests/devtools/a11y-axe-core/sources/source-navigator-network-a11y-test.js [ Leak Pass ]
 crbug.com/1000512 [ Linux ] http/tests/devtools/a11y-axe-core/sources/sources-editor-pane-a11y-test.js [ Leak Pass ]
+
+# Only times out on the leak bots.
+crbug.com/998399 [ Linux ] virtual/omt-worker-fetch/external/wpt/service-workers/service-worker/worker-interception.https.html [ Pass Timeout ]
 
 ###########################################################################
 # WARNING: Memory leaks must be fixed asap. Sheriff is expected to revert #

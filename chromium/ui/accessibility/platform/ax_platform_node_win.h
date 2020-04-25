@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/win/atl.h"
@@ -1031,6 +1032,9 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   // Helper to recursively find live-regions and fire a change event on them
   void FireLiveRegionChangeRecursive();
 
+  // Returns the parent node that makes this node inaccessible.
+  AXPlatformNodeWin* GetLowestAccessibleElement();
+
   // Convert a mojo event to an MSAA event. Exposed for testing.
   static base::Optional<DWORD> MojoEventToMSAAEvent(ax::mojom::Event event);
 
@@ -1070,6 +1074,10 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
 
   base::Optional<LONG> ComputeUIALandmarkType() const;
 
+  bool IsInaccessibleDueToAncestor() const;
+
+  bool ShouldHideChildren() const;
+
   // AXPlatformNodeBase overrides.
   void Dispose() override;
 
@@ -1101,6 +1109,17 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   void AddAttributeToList(const char* name,
                           const char* value,
                           PlatformAttributeList* attributes) override;
+
+  // Escape special characters as specified by the IA2 spec.
+  void SanitizeTextAttributeValue(const std::string& input,
+                                  std::string* output) const override;
+
+  // Escapes characters in string attributes as required by the IA2 Spec.
+  // It's okay for input to be the same as output.
+  static void SanitizeStringAttributeForIA2(const std::string& input,
+                                            std::string* output);
+  FRIEND_TEST_ALL_PREFIXES(AXPlatformNodeWinTest,
+                           TestSanitizeStringAttributeForIA2);
 
  private:
   bool IsWebAreaForPresentationalIframe();

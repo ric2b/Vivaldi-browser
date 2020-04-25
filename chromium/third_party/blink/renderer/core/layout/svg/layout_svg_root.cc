@@ -35,6 +35,7 @@
 #include "third_party/blink/renderer/core/layout/svg/svg_layout_support.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources_cache.h"
+#include "third_party/blink/renderer/core/layout/svg/transform_helper.h"
 #include "third_party/blink/renderer/core/layout/svg/transformed_hit_test_location.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/svg_root_painter.h"
@@ -95,7 +96,7 @@ void LayoutSVGRoot::UnscaledIntrinsicSizingInfo(
 
 void LayoutSVGRoot::ComputeIntrinsicSizingInfo(
     IntrinsicSizingInfo& intrinsic_sizing_info) const {
-  DCHECK(!ShouldApplySizeContainment() && !DisplayLockInducesSizeContainment());
+  DCHECK(!ShouldApplySizeContainment());
   UnscaledIntrinsicSizingInfo(intrinsic_sizing_info);
 
   intrinsic_sizing_info.size.Scale(StyleRef().EffectiveZoom());

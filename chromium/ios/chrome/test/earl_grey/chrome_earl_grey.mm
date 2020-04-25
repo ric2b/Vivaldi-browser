@@ -11,6 +11,7 @@
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_app_interface.h"
+#import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/testing/nserror_util.h"
 #include "ios/web/public/test/element_selector.h"
@@ -41,6 +42,8 @@ NSString* const kWaitForPageToFinishLoadingError =
     @"Page did not finish loading";
 NSString* const kTypedURLError =
     @"Error occurred during typed URL verification.";
+NSString* const kWaitForRestoreSessionToFinishError =
+    @"Session restoration did not finish";
 }
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -50,6 +53,14 @@ NSString* const kTypedURLError =
 #if defined(CHROME_EARL_GREY_2)
 GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 #endif  // defined(CHROME_EARL_GREY_2)
+
+@interface ChromeEarlGreyImpl ()
+
+// Waits for session restoration to finish within a timeout, or a GREYAssert is
+// induced.
+- (void)waitForRestoreSessionToFinish;
+
+@end
 
 @implementation ChromeEarlGreyImpl
 
@@ -236,6 +247,22 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   EG_TEST_HELPER_ASSERT_TRUE(matchedElement, errorDescription);
 }
 
+- (NSString*)currentTabTitle {
+  return [ChromeEarlGreyAppInterface currentTabTitle];
+}
+
+- (NSString*)nextTabTitle {
+  return [ChromeEarlGreyAppInterface nextTabTitle];
+}
+
+- (NSString*)currentTabID {
+  return [ChromeEarlGreyAppInterface currentTabID];
+}
+
+- (NSString*)nextTabID {
+  return [ChromeEarlGreyAppInterface nextTabID];
+}
+
 #pragma mark - Cookie Utilities (EG2)
 
 - (NSDictionary*)cookies {
@@ -319,6 +346,19 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   EG_TEST_HELPER_ASSERT_TRUE(tabCountEqual, errorString);
 }
 
+- (void)waitForRestoreSessionToFinish {
+  GREYCondition* finishedRestoreSession = [GREYCondition
+      conditionWithName:kWaitForRestoreSessionToFinishError
+                  block:^{
+                    return !
+                        [ChromeEarlGreyAppInterface isRestoreSessionInProgress];
+                  }];
+  bool restoreSessionCompleted =
+      [finishedRestoreSession waitWithTimeout:kWaitForPageLoadTimeout];
+  EG_TEST_HELPER_ASSERT_TRUE(restoreSessionCompleted,
+                             kWaitForRestoreSessionToFinishError);
+}
+
 - (void)submitWebStateFormWithID:(const std::string&)UTF8FormID {
   NSString* formID = base::SysUTF8ToNSString(UTF8FormID);
   EG_TEST_HELPER_ASSERT_NO_ERROR(
@@ -326,6 +366,12 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 }
 
 - (void)waitForWebStateContainingText:(const std::string&)UTF8Text {
+  [self waitForWebStateContainingText:UTF8Text
+                              timeout:kWaitForUIElementTimeout];
+}
+
+- (void)waitForWebStateContainingText:(const std::string&)UTF8Text
+                              timeout:(NSTimeInterval)timeout {
   NSString* text = base::SysUTF8ToNSString(UTF8Text);
   NSString* errorString = [NSString
       stringWithFormat:@"Failed waiting for web state containing %@", text];
@@ -336,7 +382,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
                     return
                         [ChromeEarlGreyAppInterface webStateContainsText:text];
                   }];
-  bool containsText = [waitForText waitWithTimeout:kWaitForUIElementTimeout];
+  bool containsText = [waitForText waitWithTimeout:timeout];
   EG_TEST_HELPER_ASSERT_TRUE(containsText, errorString);
 }
 
@@ -372,6 +418,26 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 - (GURL)webStateVisibleURL {
   return GURL(
       base::SysNSStringToUTF8([ChromeEarlGreyAppInterface webStateVisibleURL]));
+}
+
+- (void)purgeCachedWebViewPages {
+  [ChromeEarlGreyAppInterface purgeCachedWebViewPages];
+  [self waitForRestoreSessionToFinish];
+  [self waitForPageToFinishLoading];
+}
+
+- (void)triggerRestoreViaTabGridRemoveAllUndo {
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::ShowTabsButton()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridCloseAllButton()]
+      performAction:grey_tap()];
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::TabGridUndoCloseAllButton()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridDoneButton()]
+      performAction:grey_tap()];
+  [self waitForRestoreSessionToFinish];
+  [self waitForPageToFinishLoading];
 }
 
 #pragma mark - Settings Utilities (EG2)
@@ -543,6 +609,19 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   return result;
 }
 
+#pragma mark - URL Utilities (EG2)
+
+- (NSString*)displayTitleForURL:(const GURL&)URL {
+  NSString* spec = base::SysUTF8ToNSString(URL.spec());
+  return [ChromeEarlGreyAppInterface displayTitleForURL:spec];
+}
+
+#pragma mark - Autofill Utilities (EG2)
+
+- (void)clearCreditCards {
+  [ChromeEarlGreyAppInterface clearCreditCards];
+}
+
 #pragma mark - Accessibility Utilities (EG2)
 
 - (void)verifyAccessibilityForCurrentScreen {
@@ -574,6 +653,18 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 
 - (BOOL)isWebPaymentsModifiersEnabled {
   return [ChromeEarlGreyAppInterface isWebPaymentsModifiersEnabled];
+}
+
+- (BOOL)isSettingsAddPaymentMethodEnabled {
+  return [ChromeEarlGreyAppInterface isSettingsAddPaymentMethodEnabled];
+}
+
+- (BOOL)isCreditCardScannerEnabled {
+  return [ChromeEarlGreyAppInterface isCreditCardScannerEnabled];
+}
+
+- (BOOL)isCustomWebKitLoadedIfRequested {
+  return [ChromeEarlGreyAppInterface isCustomWebKitLoadedIfRequested];
 }
 
 #pragma mark - ScopedBlockPopupsPref

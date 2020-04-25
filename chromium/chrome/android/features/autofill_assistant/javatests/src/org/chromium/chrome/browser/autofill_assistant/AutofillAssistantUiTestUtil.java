@@ -8,18 +8,25 @@ import static android.support.test.espresso.Espresso.onView;
 import static android.support.test.espresso.assertion.ViewAssertions.matches;
 
 import android.graphics.Bitmap;
-import android.support.annotation.Nullable;
+import android.graphics.Typeface;
 import android.support.design.widget.CoordinatorLayout;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.espresso.NoMatchingViewException;
+import android.support.test.espresso.UiController;
+import android.support.test.espresso.ViewAction;
+import android.text.SpannableString;
+import android.text.style.ClickableSpan;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
+import org.hamcrest.Matchers;
 import org.hamcrest.TypeSafeMatcher;
 
 import org.chromium.base.Callback;
@@ -36,6 +43,7 @@ import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,12 +92,72 @@ class AutofillAssistantUiTestUtil {
         return new TypeSafeMatcher<View>() {
             @Override
             protected boolean matchesSafely(View item) {
+                if (!(item instanceof TextView)) {
+                    return false;
+                }
                 return ((TextView) item).getMaxLines() == maxLines;
             }
 
             @Override
             public void describeTo(Description description) {
                 description.appendText("isTextMaxLines");
+            }
+        };
+    }
+
+    /** Checks that a text view has a specific typeface style. */
+    public static TypeSafeMatcher<View> hasTypefaceStyle(/*@Typeface.Style*/ int style) {
+        return new TypeSafeMatcher<View>() {
+            @Override
+            protected boolean matchesSafely(View item) {
+                if (!(item instanceof TextView)) {
+                    return false;
+                }
+                Typeface typeface = ((TextView) item).getTypeface();
+                if (typeface == null) {
+                    return false;
+                }
+                return (typeface.getStyle() & style) == style;
+            }
+
+            @Override
+            public void describeTo(Description description) {
+                description.appendText("hasTypefaceStyle");
+            }
+        };
+    }
+
+    public static ViewAction openTextLink(String textLink) {
+        return new ViewAction() {
+            @Override
+            public Matcher<View> getConstraints() {
+                return Matchers.instanceOf(TextView.class);
+            }
+
+            @Override
+            public String getDescription() {
+                return "Opens a textlink of a TextView";
+            }
+
+            @Override
+            public void perform(UiController uiController, View view) {
+                TextView textView = (TextView) view;
+                SpannableString spannableString = (SpannableString) textView.getText();
+                ClickableSpan[] spans =
+                        spannableString.getSpans(0, spannableString.length(), ClickableSpan.class);
+                for (ClickableSpan span : spans) {
+                    if (textLink.contentEquals(
+                                spannableString.subSequence(spannableString.getSpanStart(span),
+                                        spannableString.getSpanEnd(span)))) {
+                        span.onClick(view);
+                        return;
+                    }
+                }
+
+                throw new NoMatchingViewException.Builder()
+                        .includeViewHierarchy(true)
+                        .withRootView(textView)
+                        .build();
             }
         };
     }
@@ -121,7 +189,7 @@ class AutofillAssistantUiTestUtil {
                         try {
                             onView(matcher).check(matches(condition));
                             return true;
-                        } catch (NoMatchingViewException e) {
+                        } catch (NoMatchingViewException | AssertionError e) {
                             // Note: all other exceptions are let through, in particular
                             // AmbiguousViewMatcherException.
                             return false;
@@ -142,15 +210,16 @@ class AutofillAssistantUiTestUtil {
         ViewGroup coordinator = activity.findViewById(R.id.coordinator);
         LayoutInflater.from(activity).inflate(R.layout.bottom_sheet, coordinator);
         BottomSheet bottomSheet = coordinator.findViewById(R.id.bottom_sheet);
-        bottomSheet.init(coordinator, activity);
+        bottomSheet.init(coordinator, activity.getActivityTabProvider(),
+                activity.getFullscreenManager(), activity.getWindow(),
+                activity.getWindowAndroid().getKeyboardDelegate());
 
         ((BottomContainer) activity.findViewById(R.id.bottom_container))
                 .setBottomSheet(bottomSheet);
 
-        return new BottomSheetController(activity, activity.getLifecycleDispatcher(),
+        return new BottomSheetController(activity.getLifecycleDispatcher(),
                 activity.getActivityTabProvider(), activity.getScrim(), bottomSheet,
-                activity.getCompositorViewHolder().getLayoutManager().getOverlayPanelManager(),
-                /* suppressSheetForContextualSearch= */ false);
+                activity.getCompositorViewHolder().getLayoutManager().getOverlayPanelManager());
     }
 
     /**
@@ -169,9 +238,17 @@ class AutofillAssistantUiTestUtil {
     /**
      * Starts the CCT test rule on a blank page.
      */
-    public static void startOnBlankPage(CustomTabActivityTestRule testRule)
-            throws InterruptedException {
+    public static void startOnBlankPage(CustomTabActivityTestRule testRule) {
         testRule.startCustomTabActivityWithIntent(CustomTabsTestUtils.createMinimalCustomTabIntent(
                 InstrumentationRegistry.getTargetContext(), "about:blank"));
+    }
+    /**
+     * Starts Autofill Assistant on the given {@code activity} and injects the given {@code
+     * testService}.
+     */
+    public static void startAutofillAssistant(
+            ChromeActivity activity, AutofillAssistantTestService testService) {
+        testService.scheduleForInjection();
+        TestThreadUtils.runOnUiThreadBlocking(() -> AutofillAssistantFacade.start(activity));
     }
 }

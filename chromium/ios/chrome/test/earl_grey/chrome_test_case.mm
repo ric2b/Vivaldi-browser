@@ -24,6 +24,10 @@
 
 namespace {
 
+// This flag indicates whether +setUpForTestCase has been executed in a test
+// case.
+bool gExecutedSetUpForTestCase = false;
+
 NSString* const kFlakyEarlGreyTestTargetSuffix = @"_flaky_egtests";
 
 // Contains a list of test names that run in multitasking test suite.
@@ -118,6 +122,10 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   // Block to be executed during object tearDown.
   ProceduralBlock _tearDownHandler;
 
+  // This flag indicates whether test method -setUp steps are executed during a
+  // test method.
+  BOOL _executedTestMethodSetUp;
+
   BOOL _isHTTPServerStopped;
   BOOL _isMockAuthenticationDisabled;
   std::unique_ptr<net::EmbeddedTestServer> _testServer;
@@ -205,6 +213,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
 + (void)setUpForTestCase {
   [super setUpForTestCase];
   [ChromeTestCase setUpHelper];
+  gExecutedSetUpForTestCase = true;
 }
 #endif  // CHROME_EARL_GREY_2
 
@@ -214,6 +223,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   [[self class] disableMockAuthentication];
   [[self class] stopHTTPServer];
   [super tearDown];
+  gExecutedSetUpForTestCase = false;
 }
 
 - (net::EmbeddedTestServer*)testServer {
@@ -242,6 +252,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   // Reset any remaining sign-in state from previous tests.
   [ChromeEarlGrey signOutAndClearAccounts];
   [ChromeEarlGrey openNewTab];
+  _executedTestMethodSetUp = YES;
 }
 
 // Tear down called once per test, to close all tabs and menus, and clear the
@@ -285,6 +296,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
 #endif
   }
   [super tearDown];
+  _executedTestMethodSetUp = NO;
 }
 
 #pragma mark - Public methods
@@ -396,6 +408,8 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
 // Dismisses and revert browser settings to default.
 // It also starts the HTTP server and enables mock authentication.
 + (void)setUpHelper {
+  XCTAssertTrue([ChromeEarlGrey isCustomWebKitLoadedIfRequested]);
+
   [CoverageUtils configureCoverageReportPath];
 
   [[self class] startHTTPServer];
@@ -428,8 +442,25 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
 #pragma mark AppLaunchManagerObserver method
 
 - (void)appLaunchManagerDidRelaunchApp:(AppLaunchManager*)appLaunchManager {
-  [ChromeTestCase setUpHelper];
-  [self resetAppState];
+  // Do not call +[ChromeTestCase setUpHelper] if the app was relaunched before
+  // +setUpForTestCase. +setUpForTestCase will call +setUpHelper, and
+  // +setUpHelper can not be called twice during setup process.
+  if (gExecutedSetUpForTestCase) {
+    [ChromeTestCase setUpHelper];
+
+    // Do not call test method setup steps if the app was relaunched before
+    // -setUp is executed. If do so, two new tabs will be opened before test
+    // method starts.
+    if (_executedTestMethodSetUp) {
+      [self resetAppState];
+
+      ResetAuthentication();
+
+      // Reset any remaining sign-in state from previous tests.
+      [ChromeEarlGrey signOutAndClearAccounts];
+      [ChromeEarlGrey openNewTab];
+    }
+  }
 }
 
 @end

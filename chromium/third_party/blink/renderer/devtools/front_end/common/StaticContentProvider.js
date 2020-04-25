@@ -5,11 +5,11 @@
  * @implements {Common.ContentProvider}
  * @unrestricted
  */
-Common.StaticContentProvider = class {
+export default class StaticContentProvider {
   /**
    * @param {string} contentURL
    * @param {!Common.ResourceType} contentType
-   * @param {function():!Promise<?string>} lazyContent
+   * @param {function():!Promise<!Common.DeferredContent>} lazyContent
    */
   constructor(contentURL, contentType, lazyContent) {
     this._contentURL = contentURL;
@@ -24,7 +24,7 @@ Common.StaticContentProvider = class {
    * @return {!Common.StaticContentProvider}
    */
   static fromString(contentURL, contentType, content) {
-    const lazyContent = () => Promise.resolve(content);
+    const lazyContent = () => Promise.resolve({content, isEncoded: false});
     return new Common.StaticContentProvider(contentURL, contentType, lazyContent);
   }
 
@@ -54,7 +54,7 @@ Common.StaticContentProvider = class {
 
   /**
    * @override
-   * @return {!Promise<?string>}
+   * @return {!Promise<!Common.DeferredContent>}
    */
   requestContent() {
     return this._lazyContent();
@@ -68,7 +68,16 @@ Common.StaticContentProvider = class {
    * @return {!Promise<!Array<!Common.ContentProvider.SearchMatch>>}
    */
   async searchInContent(query, caseSensitive, isRegex) {
-    const content = await this._lazyContent();
+    const {content} = (await this._lazyContent());
     return content ? Common.ContentProvider.performSearchInContent(content, query, caseSensitive, isRegex) : [];
   }
-};
+}
+
+/* Legacy exported object */
+self.Common = self.Common || {};
+Common = Common || {};
+
+/**
+ * @constructor
+ */
+Common.StaticContentProvider = StaticContentProvider;

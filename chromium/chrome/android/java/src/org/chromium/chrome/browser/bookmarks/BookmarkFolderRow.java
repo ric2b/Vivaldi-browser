@@ -13,6 +13,9 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkId;
 
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.common.VivaldiBookmarkUtils;
+
 /**
  * A row view that shows folder info in the bookmarks UI.
  */
@@ -28,7 +31,8 @@ public class BookmarkFolderRow extends BookmarkRow {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        setIconDrawable(BookmarkUtils.getFolderIcon(getContext()));
+        if (!ChromeApplication.isVivaldi())
+            setIconDrawable(BookmarkUtils.getFolderIcon(getContext()));
     }
 
     // BookmarkRow implementation.
@@ -47,11 +51,21 @@ public class BookmarkFolderRow extends BookmarkRow {
                         ? getResources().getQuantityString(
                                   R.plurals.bookmarks_count, childCount, childCount)
                         : getResources().getString(R.string.no_bookmarks));
+        if (ChromeApplication.isVivaldi()) {
+            if (bookmarkId.equals(mDelegate.getModel().getTrashFolderId())) {
+                setIconDrawable(VivaldiBookmarkUtils.getTrashFolderIcon(getContext()));
+            } else {
+                setIconDrawable(VivaldiBookmarkUtils.getFolderIcon(getContext()));
+            }
+        }
         return item;
     }
 
     @Override
     protected ColorStateList getDefaultIconTint() {
+        if (ChromeApplication.isVivaldi())
+            return null;
+        else
         return AppCompatResources.getColorStateList(
                 getContext(), BookmarkUtils.getFolderIconTint());
     }

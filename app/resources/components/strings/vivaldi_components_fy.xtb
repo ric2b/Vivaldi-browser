@@ -1,4 +1,33 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fy">
+<translation id="3830627370375585318">Vivaldi tastean tagong ta jo netwurk yn jo brânmuorre of antyfirus te brûken.</translation>
+<translation id="4200102020577305737">Gean nei
+          it Vivaldi menu &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          LAN ynstellingen
+          and set "Proksy tsjinner foar jo LAN" út.</translation>
+<translation id="4932161901409251843">Gean nei
+          it Vivaldi menu &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          en soargje derfoar dat de konfiguraasje ynsteld is op "gjin proksy" of "rjochtstreeks."</translation>
+<translation id="5248344925342018662">Jo besjogge in feilige Vivaldi side</translation>
+<translation id="7023871570427738255">Gean nei
+          it Vivaldi menu &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          en set "<ph name="NO_PREFETCH_DESCRIPTION" /> út."
+          As dit net de swierrigens oplost, riede wie oan dizze opsje wer te selektearjen
+          foar ferbettere prestaasjes.</translation>
+<translation id="8187289872471304532">Gean nei it Vivaldi menu &gt; Ynstellingen &gt; Netwurk &gt; Proksy ynstellingen en skeakel it proksy protokol út.</translation>
 </translationbundle>

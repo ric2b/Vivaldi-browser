@@ -13,6 +13,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
 #include "base/time/time.h"
+#include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
@@ -81,21 +82,19 @@ void CrostiniExportImport::Shutdown() {
 }
 
 void CrostiniExportImport::ExportContainer(content::WebContents* web_contents) {
-  if (!IsCrostiniExportImportUIAllowedForProfile(profile_)) {
-    return;
-  }
   OpenFileDialog(ExportImportType::EXPORT, web_contents);
 }
 
 void CrostiniExportImport::ImportContainer(content::WebContents* web_contents) {
-  if (!IsCrostiniExportImportUIAllowedForProfile(profile_)) {
-    return;
-  }
   OpenFileDialog(ExportImportType::IMPORT, web_contents);
 }
 
 void CrostiniExportImport::OpenFileDialog(ExportImportType type,
                                           content::WebContents* web_contents) {
+  if (!crostini::CrostiniFeatures::Get()->IsExportImportUIAllowed(profile_)) {
+    return;
+  }
+
   ui::SelectFileDialog::Type file_selector_mode;
   unsigned title = 0;
   base::FilePath default_path;
@@ -160,7 +159,7 @@ void CrostiniExportImport::Start(
     ContainerId container_id,
     base::FilePath path,
     CrostiniManager::CrostiniResultCallback callback) {
-  if (!IsCrostiniExportImportUIAllowedForProfile(profile_)) {
+  if (!crostini::CrostiniFeatures::Get()->IsExportImportUIAllowed(profile_)) {
     return std::move(callback).Run(CrostiniResult::NOT_ALLOWED);
   }
   auto* notification = CrostiniExportImportNotification::Create(
@@ -227,8 +226,7 @@ void CrostiniExportImport::ExportAfterSharing(
     if (it != notifications_.end()) {
       RemoveNotification(it).SetStatusFailed();
     } else {
-      NOTREACHED() << ContainerIdToString(container_id)
-                   << " has no notification to update";
+      NOTREACHED() << container_id << " has no notification to update";
     }
     return;
   }
@@ -248,8 +246,7 @@ void CrostiniExportImport::OnExportComplete(
     uint64_t compressed_size) {
   auto it = notifications_.find(container_id);
   if (it == notifications_.end()) {
-    NOTREACHED() << ContainerIdToString(container_id)
-                 << " has no notification to update";
+    NOTREACHED() << container_id << " has no notification to update";
     return;
   }
 
@@ -336,16 +333,13 @@ void CrostiniExportImport::OnExportComplete(
 }
 
 void CrostiniExportImport::OnExportContainerProgress(
-    const std::string& vm_name,
-    const std::string& container_name,
+    const ContainerId& container_id,
     ExportContainerProgressStatus status,
     int progress_percent,
     uint64_t progress_speed) {
-  ContainerId container_id(vm_name, container_name);
   auto it = notifications_.find(container_id);
   if (it == notifications_.end()) {
-    NOTREACHED() << ContainerIdToString(container_id)
-                 << " has no notification to update";
+    NOTREACHED() << container_id << " has no notification to update";
     return;
   }
 
@@ -364,14 +358,11 @@ void CrostiniExportImport::OnExportContainerProgress(
 }
 
 void CrostiniExportImport::OnExportContainerProgress(
-    const std::string& vm_name,
-    const std::string& container_name,
+    const ContainerId& container_id,
     const StreamingExportStatus& status) {
-  ContainerId container_id(vm_name, container_name);
   auto it = notifications_.find(container_id);
   if (it == notifications_.end()) {
-    NOTREACHED() << ContainerIdToString(container_id)
-                 << " has no notification to update";
+    NOTREACHED() << container_id << " has no notification to update";
     return;
   }
 
@@ -398,8 +389,7 @@ void CrostiniExportImport::ImportAfterSharing(
     if (it != notifications_.end()) {
       RemoveNotification(it).SetStatusFailed();
     } else {
-      NOTREACHED() << ContainerIdToString(container_id)
-                   << " has no notification to update";
+      NOTREACHED() << container_id << " has no notification to update";
     }
     return;
   }
@@ -437,8 +427,7 @@ void CrostiniExportImport::OnImportComplete(
           NOTREACHED();
       }
     } else {
-      NOTREACHED() << ContainerIdToString(container_id)
-                   << " has no notification to update";
+      NOTREACHED() << container_id << " has no notification to update";
     }
   } else if (result ==
              crostini::CrostiniResult::CONTAINER_EXPORT_IMPORT_CANCELLED) {
@@ -451,8 +440,7 @@ void CrostiniExportImport::OnImportComplete(
           NOTREACHED();
       }
     } else {
-      NOTREACHED() << ContainerIdToString(container_id)
-                   << " has no notification to update";
+      NOTREACHED() << container_id << " has no notification to update";
     }
   } else {
     LOG(ERROR) << "Error importing " << int(result);
@@ -484,12 +472,11 @@ void CrostiniExportImport::OnImportComplete(
                CrostiniExportImportNotification::Status::RUNNING);
         RemoveNotification(it).SetStatusFailed();
       } else {
-        NOTREACHED() << ContainerIdToString(container_id)
-                     << " has no notification to update";
+        NOTREACHED() << container_id << " has no notification to update";
       }
     } else {
-      DCHECK(it == notifications_.end()) << ContainerIdToString(container_id)
-                                         << " has unexpected notification";
+      DCHECK(it == notifications_.end())
+          << container_id << " has unexpected notification";
     }
     UMA_HISTOGRAM_LONG_TIMES("Crostini.RestoreTimeFailed",
                              base::Time::Now() - start);
@@ -498,12 +485,11 @@ void CrostiniExportImport::OnImportComplete(
 
   // Restart from CrostiniManager.
   CrostiniManager::GetForProfile(profile_)->RestartCrostini(
-      container_id.first, container_id.second, std::move(callback));
+      container_id.vm_name, container_id.container_name, std::move(callback));
 }
 
 void CrostiniExportImport::OnImportContainerProgress(
-    const std::string& vm_name,
-    const std::string& container_name,
+    const ContainerId& container_id,
     ImportContainerProgressStatus status,
     int progress_percent,
     uint64_t progress_speed,
@@ -511,11 +497,9 @@ void CrostiniExportImport::OnImportContainerProgress(
     const std::string& architecture_container,
     uint64_t available_space,
     uint64_t minimum_required_space) {
-  ContainerId container_id(vm_name, container_name);
   auto it = notifications_.find(container_id);
   if (it == notifications_.end()) {
-    NOTREACHED() << ContainerIdToString(container_id)
-                 << " has no notification to update";
+    NOTREACHED() << container_id << " has no notification to update";
     return;
   }
 
@@ -563,8 +547,7 @@ void CrostiniExportImport::CancelOperation(ExportImportType type,
                                            ContainerId container_id) {
   auto it = notifications_.find(container_id);
   if (it == notifications_.end()) {
-    NOTREACHED() << ContainerIdToString(container_id)
-                 << " has no notification to cancel";
+    NOTREACHED() << container_id << " has no notification to cancel";
     return;
   }
 

@@ -42,6 +42,7 @@ class NGBoxFragmentBuilder;
 class NGConstraintSpace;
 class ShapeOutsideInfo;
 struct BoxLayoutExtraInput;
+class NGEarlyBreak;
 class NGBreakToken;
 struct NGFragmentGeometry;
 enum class NGLayoutCacheStatus;
@@ -704,6 +705,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // TODO(crbug.com/962299): This is incorrect in some cases.
   int PixelSnappedClientWidth() const;
   int PixelSnappedClientHeight() const;
+  int PixelSnappedClientWidthWithTableSpecialBehavior() const;
+  int PixelSnappedClientHeightWithTableSpecialBehavior() const;
 
   // scrollWidth/scrollHeight will be the same as clientWidth/clientHeight
   // unless the object has overflow:hidden/scroll/auto specified and also has
@@ -950,6 +953,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   void SetFirstInlineFragment(NGPaintFragment*) final;
 
   void SetCachedLayoutResult(const NGLayoutResult&, const NGBreakToken*);
+  void ClearCachedLayoutResult();
   const NGLayoutResult* GetCachedLayoutResult() const {
     return cached_layout_result_.get();
   }
@@ -966,6 +970,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   scoped_refptr<const NGLayoutResult> CachedLayoutResult(
       const NGConstraintSpace&,
       const NGBreakToken*,
+      const NGEarlyBreak*,
       base::Optional<NGFragmentGeometry>* initial_fragment_geometry,
       NGLayoutCacheStatus* out_cache_status);
 
@@ -1293,9 +1298,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   bool IsCustomItem() const;
   bool IsCustomItemShrinkToFit() const;
 
-  bool IsDeprecatedFlexItem() const {
-    return IsFlexItemCommon() && Parent()->IsDeprecatedFlexibleBox();
-  }
   bool IsFlexItemIncludingDeprecatedAndNG() const {
     return IsFlexItemCommon() &&
            Parent()->IsFlexibleBoxIncludingDeprecatedAndNG();

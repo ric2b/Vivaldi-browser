@@ -7,7 +7,16 @@
 <merge xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto" >
 
-    <ScrollView
+    <!-- Vivaldi -->
+    <RelativeLayout
+        android:id="@+id/bookmarks_edit_wrapper"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="?attr/vivaldiPanelBackgroundColor"
+        android:fitsSystemWindows="true"
+        >
+
+   <ScrollView
         android:id="@+id/scroll_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -69,6 +78,38 @@
                     android:inputType="textUri"
                     android:singleLine="true" />
             </org.chromium.chrome.browser.bookmarks.BookmarkTextInputLayout>
+
+            <!-- Vivaldi add description and nickname -->
+            <org.chromium.chrome.browser.bookmarks.BookmarkTextInputLayout
+                android:id="@+id/description_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                app:hint="@string/bookmark_description">
+
+                <android.support.design.widget.TextInputEditText
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:imeOptions="flagNoExtractUi"
+                    android:inputType="textAutoCorrect"
+                    android:singleLine="true" />
+            </org.chromium.chrome.browser.bookmarks.BookmarkTextInputLayout>
+
+            <org.chromium.chrome.browser.bookmarks.BookmarkTextInputLayout
+                android:id="@+id/nick_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                app:hint="@string/bookmark_nick">
+
+                <android.support.design.widget.TextInputEditText
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:imeOptions="flagNoExtractUi"
+                    android:inputType="textAutoCorrect"
+                    android:singleLine="true" />
+            </org.chromium.chrome.browser.bookmarks.BookmarkTextInputLayout>
+
         </LinearLayout>
     </ScrollView>
 
@@ -76,7 +117,8 @@
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="@dimen/toolbar_height_no_shadow"
-        style="@style/ModernToolbar" />
+        android:layout_alignParentTop="true"
+        style="@style/BookmarkModernToolbar" />
 
     <View
         android:id="@+id/shadow"
@@ -84,5 +126,8 @@
         android:layout_height="@dimen/selectable_list_toolbar_shadow_height"
         android:layout_marginTop="@dimen/toolbar_height_no_shadow"
         android:background="@drawable/bookmark_title_bar_shadow"
+        android:layout_alignParentTop="true"
         android:visibility="gone" />
+
+    </RelativeLayout>
 </merge>

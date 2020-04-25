@@ -73,7 +73,8 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
       SkYUVColorSpace yuv_color_space,
       sk_sp<SkColorSpace> dst_color_space,
       bool has_alpha) override;
-  void SkiaSwapBuffers(OutputSurfaceFrame frame) override;
+  gpu::SyncToken SkiaSwapBuffers(OutputSurfaceFrame frame,
+                                 bool wants_sync_token) override;
   SkCanvas* BeginPaintRenderPass(const RenderPassId& id,
                                  const gfx::Size& surface_size,
                                  ResourceFormat format,
@@ -87,8 +88,9 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
       ResourceFormat format,
       bool mipmap,
       sk_sp<SkColorSpace> color_space) override;
-
   void RemoveRenderPassResource(std::vector<RenderPassId> ids) override;
+  void SetEnableDCLayers(bool enable) override {}
+  void ScheduleDCLayers(std::vector<DCLayerOverlay> overlays) override {}
   void CopyOutput(RenderPassId id,
                   const copy_output::RenderPassGeometry& geometry,
                   const gfx::ColorSpace& color_space,
@@ -103,6 +105,7 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
       const gpu::MailboxHolder& holder,
       const gfx::Size& size,
       ResourceFormat format,
+      const base::Optional<gpu::VulkanYCbCrInfo>& ycbcr_info,
       sk_sp<SkColorSpace> color_space) override;
 
   // If set true, callbacks triggering will be in a reverse order as SignalQuery
@@ -111,7 +114,15 @@ class FakeSkiaOutputSurface : public SkiaOutputSurface {
 
   void ScheduleGpuTaskForTesting(
       base::OnceClosure callback,
-      std::vector<gpu::SyncToken> sync_tokesn) override;
+      std::vector<gpu::SyncToken> sync_tokens) override;
+
+  void SendOverlayPromotionNotification(
+      std::vector<gpu::SyncToken> sync_tokens,
+      base::flat_set<gpu::Mailbox> promotion_denied,
+      base::flat_map<gpu::Mailbox, gfx::Rect> possible_promotions) override;
+  void RenderToOverlay(gpu::SyncToken sync_token,
+                       gpu::Mailbox overlay_candidate_mailbox,
+                       const gfx::Rect& bounds) override;
 
  private:
   explicit FakeSkiaOutputSurface(

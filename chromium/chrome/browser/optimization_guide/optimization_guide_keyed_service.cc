@@ -6,10 +6,12 @@
 
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
-#include "chrome/browser/data_saver/data_saver_top_host_provider.h"
 #include "chrome/browser/optimization_guide/optimization_guide_hints_manager.h"
 #include "chrome/browser/optimization_guide/optimization_guide_navigation_data.h"
+#include "chrome/browser/optimization_guide/optimization_guide_session_statistic.h"
+#include "chrome/browser/optimization_guide/optimization_guide_top_host_provider.h"
 #include "chrome/browser/optimization_guide/optimization_guide_web_contents_observer.h"
+#include "chrome/browser/optimization_guide/prediction/prediction_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/leveldb_proto/public/proto_database_provider.h"
 #include "components/optimization_guide/command_line_top_host_provider.h"
@@ -36,7 +38,7 @@ GetTopHostProviderIfUserPermitted(content::BrowserContext* browser_context) {
 
   // If not enabled by flag, see if the user is a Data Saver user and has seen
   // all the right prompts for it.
-  return DataSaverTopHostProvider::CreateIfAllowed(browser_context);
+  return OptimizationGuideTopHostProvider::CreateIfAllowed(browser_context);
 }
 
 // Logs |optimization_target_decision| for |optimization_target| and the
@@ -44,7 +46,7 @@ GetTopHostProviderIfUserPermitted(content::BrowserContext* browser_context) {
 // navigation's OptimizationGuideNavigationData;
 void LogDecisions(
     content::NavigationHandle* navigation_handle,
-    optimization_guide::OptimizationTarget optimization_target,
+    optimization_guide::proto::OptimizationTarget optimization_target,
     optimization_guide::OptimizationTargetDecision optimization_target_decision,
     optimization_guide::proto::OptimizationType optimization_type,
     optimization_guide::OptimizationTypeDecision optimization_type_decision) {
@@ -101,12 +103,16 @@ optimization_guide::OptimizationGuideDecision ResolveOptimizationGuideDecision(
     case optimization_guide::OptimizationTargetDecision::kPageLoadMatches:
       return GetOptimizationGuideDecisionFromOptimizationTypeDecision(
           optimization_type_decision);
+    case optimization_guide::OptimizationTargetDecision::
+        kModelNotAvailableOnClient:
+      return optimization_guide::OptimizationGuideDecision::kFalse;
     default:
       return optimization_guide::OptimizationGuideDecision::kUnknown;
   }
   static_assert(
       optimization_guide::OptimizationTargetDecision::kMaxValue ==
-          optimization_guide::OptimizationTargetDecision::kPageLoadMatches,
+          optimization_guide::OptimizationTargetDecision::
+              kModelNotAvailableOnClient,
       "This function should be updated when a new OptimizationTargetDecision "
       "is added");
 }
@@ -131,33 +137,45 @@ void OptimizationGuideKeyedService::Initialize(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(optimization_guide_service);
 
-  top_host_provider_ = GetTopHostProviderIfUserPermitted(browser_context_);
   Profile* profile = Profile::FromBrowserContext(browser_context_);
+  top_host_provider_ = GetTopHostProviderIfUserPermitted(browser_context_);
   hints_manager_ = std::make_unique<OptimizationGuideHintsManager>(
-      optimization_guide_service, profile_path, profile->GetPrefs(),
+      optimization_guide_service, profile, profile_path, profile->GetPrefs(),
       database_provider, top_host_provider_.get(),
       content::BrowserContext::GetDefaultStoragePartition(profile)
           ->GetURLLoaderFactoryForBrowserProcess());
+  if (optimization_guide::features::IsOptimizationTargetPredictionEnabled()) {
+    prediction_manager_ =
+        std::make_unique<optimization_guide::PredictionManager>();
+  }
 }
 
 void OptimizationGuideKeyedService::MaybeLoadHintForNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (hints_manager_ && hints_manager_->HasRegisteredOptimizationTypes())
-    hints_manager_->LoadHintForNavigation(navigation_handle, base::DoNothing());
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (hints_manager_ && hints_manager_->HasRegisteredOptimizationTypes()) {
+    hints_manager_->OnNavigationStartOrRedirect(navigation_handle,
+                                                base::DoNothing());
+  }
 }
 
-void OptimizationGuideKeyedService::RegisterOptimizationTypes(
-    std::vector<optimization_guide::proto::OptimizationType>
-        optimization_types) {
+void OptimizationGuideKeyedService::RegisterOptimizationTypesAndTargets(
+    const std::vector<optimization_guide::proto::OptimizationType>&
+        optimization_types,
+    const std::vector<optimization_guide::proto::OptimizationTarget>&
+        optimization_targets) {
   DCHECK(hints_manager_);
-
   hints_manager_->RegisterOptimizationTypes(optimization_types);
+
+  if (prediction_manager_)
+    prediction_manager_->RegisterOptimizationTargets(optimization_targets);
 }
 
 optimization_guide::OptimizationGuideDecision
 OptimizationGuideKeyedService::CanApplyOptimization(
     content::NavigationHandle* navigation_handle,
-    optimization_guide::OptimizationTarget optimization_target,
+    optimization_guide::proto::OptimizationTarget optimization_target,
     optimization_guide::proto::OptimizationType optimization_type,
     optimization_guide::OptimizationMetadata* optimization_metadata) {
   DCHECK(hints_manager_);
@@ -168,6 +186,13 @@ OptimizationGuideKeyedService::CanApplyOptimization(
       navigation_handle, optimization_target, optimization_type,
       &optimization_target_decision, &optimization_type_decision,
       optimization_metadata);
+
+  if (prediction_manager_) {
+    optimization_target_decision = prediction_manager_->ShouldTargetNavigation(
+        navigation_handle, optimization_target);
+    // TODO(crbug/1001194): Add feature param for propagating decision that
+    // allows for us to collect metrics without tainting the data.
+  }
 
   LogDecisions(navigation_handle, optimization_target,
                optimization_target_decision, optimization_type,
@@ -186,4 +211,9 @@ void OptimizationGuideKeyedService::Shutdown() {
     hints_manager_->Shutdown();
     hints_manager_ = nullptr;
   }
+}
+
+void OptimizationGuideKeyedService::UpdateSessionFCP(base::TimeDelta fcp) {
+  if (prediction_manager_)
+    prediction_manager_->UpdateFCPSessionStatistics(fcp);
 }

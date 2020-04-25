@@ -406,9 +406,45 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STATUS_TRAY_VOLUME_STATE_MUTED" desc="The accessible text used when the volume button is in the muted state.">
         Volume is muted.
       </message>
+      <message name="IDS_ASH_STATUS_TRAY_VOLUME_SLIDER_LABEL" desc="The accessible text for the volume slider in the tray.">
+        Volume
+      </message>
 
-      <message name="IDS_ASH_FEATURE_DISABLED_BY_POLICY" desc="The message used to indicate that this feature is disabled by policy.">
-        <ph name="FEATURE_NAME">$1<ex>Docked magnifier</ex></ph> has been disabled by a policy applied to this device. Please talk to your administrator to request changes.
+      <message name="IDS_ASH_ACCESSIBILITY_FEATURE_SHORTCUT_DISABLED_TITLE"
+               desc="Title to indicate that the shortcut for an accessibility feature has been disabled.">
+        Shortcut turned off
+      </message>
+      <message name="IDS_ASH_ACCESSIBILITY_FEATURE_SHORTCUT_DISABLED_MSG"
+               desc="The message used to indicate that, the corresponding shortcut for that accessibility feature has been disabled.">
+        <ph name="ORGANIZATION_NAME">$1<ex>google.com</ex></ph> has <ph name="FEATURE_STATE">$2<ex>activated</ex></ph> <ph name="FEATURE_NAME">$3<ex>Fullscreen magnifier</ex></ph>.
+      </message>
+      <message name="IDS_ASH_HIGH_CONTRAST_SHORTCUT_DISABLED"
+               desc="The label used in the notification used to indicate that, the shortcut for high contrast feature has been disabled.">
+        high-contrast mode
+      </message>
+      <message name="IDS_ASH_DOCKED_MAGNIFIER_SHORTCUT_DISABLED"
+               desc="The label used in the notification used to indicate that, the shortcut for docked magnifier feature has been disabled.">
+        the docked magnifier
+      </message>
+      <message name="IDS_ASH_FULLSCREEN_MAGNIFIER_SHORTCUT_DISABLED"
+               desc="The label used in the notification used to indicate that, the shortcut for fullscreen magnifier feature has been disabled.">
+        the full-screen magnifier
+      </message>
+      <message name="IDS_ASH_SPOKEN_FEEDBACK_SHORTCUT_DISABLED"
+               desc="The label used in the notification used to indicate that, the shortcut for spoken feedback feature has been disabled.">
+        ChromeVox (spoken feedback)
+      </message>
+      <message name="IDS_ASH_ACCESSIBILITY_FEATURE_ACTIVATED"
+               desc="The label used in the notification used to indicate that, the accessibility feature is being set as forced enabled.">
+        activated
+      </message>
+      <message name="IDS_ASH_ACCESSIBILITY_FEATURE_DEACTIVATED"
+               desc="The label used in the notification used to indicate that, the accessibility feature is being set as forced disabled.">
+        deactivated
+      </message>
+      <message name="IDS_ASH_ACCESSIBILITY_FEATURE_MANAGED"
+               desc="The label used to indicate that, the accessiblity feature is being managed by a policy.">
+        <ph name="FEATURE_NAME">$1<ex>Full-screen magnifier</ex></ph> This setting is enforced by your administrator.
       </message>
 
       <message name="IDS_ASH_STATUS_TRAY_IME_SHORT" desc="The short label used for IME button in system tray bubble.">
@@ -583,7 +619,13 @@ This file contains the strings for ash.
         Notifications
       </message>
       <message name="IDS_ASH_STATUS_TRAY_NOTIFICATIONS_TOGGLE_TOOLTIP" desc="The tooltip text of the button that toggles Do-not-disturb state for notifications">
-        Toggle Do not disturb
+        Toggle Do not disturb. <ph name="STATE_TEXT">$1<ex>Do not disturb is on.</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NOTIFICATIONS_DO_NOT_DISTURB_ON_STATE" desc="The tooltip text indicating that Do-not-disturb mode is on.">
+        Do not disturb is on.
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NOTIFICATIONS_DO_NOT_DISTURB_OFF_STATE" desc="The tooltip text indicating that Do-not-disturb mode is off.">
+        Do not disturb is off.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_NOTIFICATIONS_SETTINGS_ON_TOOLTIP" desc="The tooltip text of the button that shows notification settings. Used when all notifications are enabled.">
         Show notification settings. Notifications are on
@@ -680,25 +722,25 @@ This file contains the strings for ash.
       <message name="IDS_ASH_PALETTE_SETTINGS" desc="The label on the setting button used to open palette setting page.">
         Stylus settings
       </message>
-      <message name="IDS_ASH_VOICE_INTERACTION_LOCALE_UNSUPPORTED_TOAST_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed but the locale is unsupported.">
+      <message name="IDS_ASH_ASSISTANT_LOCALE_UNSUPPORTED_TOAST_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed but the locale is unsupported.">
         The Google Assistant doesn’t speak this language.
       </message>
-      <message name="IDS_ASH_VOICE_INTERACTION_SECONDARY_USER_TOAST_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed but the active user profile is not the primary user profile.">
+      <message name="IDS_ASH_ASSISTANT_SECONDARY_USER_TOAST_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed but the active user profile is not the primary user profile.">
         The Google Assistant is only available for primary profile.
       </message>
-      <message name="IDS_ASH_VOICE_INTERACTION_DISABLED_BY_POLICY_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed but the feature is disabled by enterprise policy.">
+      <message name="IDS_ASH_ASSISTANT_DISABLED_BY_POLICY_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed but the feature is disabled by enterprise policy.">
         The Google Assistant is disabled by your administrator.
       </message>
-      <message name="IDS_ASH_VOICE_INTERACTION_DISABLED_IN_DEMO_MODE_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed in a demo session, which does not support voice interaction.">
+      <message name="IDS_ASH_ASSISTANT_DISABLED_IN_DEMO_MODE_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed in a demo session, which does not support voice interaction.">
         The Google Assistant is not available in a demo session.
       </message>
-      <message name="IDS_ASH_VOICE_INTERACTION_DISABLED_IN_PUBLIC_SESSION_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed in a public session, which does not support voice interaction.">
+      <message name="IDS_ASH_ASSISTANT_DISABLED_IN_PUBLIC_SESSION_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed in a public session, which does not support voice interaction.">
         The Google Assistant is not available in a public session.
       </message>
-      <message name="IDS_ASH_VOICE_INTERACTION_DISABLED_IN_GUEST_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed in a guest session, which does not support voice interaction.">
+      <message name="IDS_ASH_ASSISTANT_DISABLED_IN_GUEST_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed in a guest session, which does not support voice interaction.">
         The Google Assistant is not available in a guest session.
       </message>
-      <message name="IDS_ASH_VOICE_INTERACTION_DISABLED_BY_ACCOUNT_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed but current logged in user account does not support voice interaction.">
+      <message name="IDS_ASH_ASSISTANT_DISABLED_BY_ACCOUNT_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed but current logged in user account does not support voice interaction.">
         The Google Assistant is not available for current user account.
       </message>
 
@@ -728,6 +770,14 @@ This file contains the strings for ash.
       <!-- Dictation -->
       <message name="IDS_ASH_DICTATION_BUTTON_ACCESSIBLE_NAME" desc="The accessible name for the Dictation button in the system tray.">
         Toggle dictation
+      </message>
+
+      <message name="IDS_ASH_STATUS_AREA_OVERFLOW_BUTTON_EXPAND" desc="The accessible name for the overflow button in the status area to expand width of the status area.">
+        Expand status area
+      </message>
+
+      <message name="IDS_ASH_STATUS_AREA_OVERFLOW_BUTTON_COLLAPSE" desc="The accessible name for the overflow button in the status area to expand width of the status area.">
+        Collapse status area
       </message>
 
       <!-- Overview Mode -->
@@ -780,11 +830,11 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STATUS_TRAY_CHARGING_FROM_DUAL_ROLE_TITLE" desc="The message title of a notification indicating that the device is being charged by a connected dual-role USB Type-C device.">
         Charging from <ph name="POWER_SOURCE">$1<ex>USB-C device (left port)</ex></ph>
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_CHARGING_DUAL_ROLE_DEVICE_TITLE" desc="The message title of a notification indicating that the device is charging the connected USB Type-C device.">
-        Charging <ph name="POWER_SOURCE">$1<ex>USB-C device (left port)</ex></ph>
+      <message name="IDS_ASH_STATUS_TRAY_CHARGING_DUAL_ROLE_DEVICE_TITLE" desc="The message title of a notification indicating that the device is powering the connected USB Type-C device.">
+        Powering <ph name="POWER_SOURCE">$1<ex>USB-C device (left port)</ex></ph>
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_CHARGING_DUAL_ROLE_DEVICES_TITLE" desc="The message title of a notification indicating that the device is charging multiple connected USB Type-C devices.">
-        Charging connected USB-C devices
+      <message name="IDS_ASH_STATUS_TRAY_CHARGING_DUAL_ROLE_DEVICES_TITLE" desc="The message title of a notification indicating that the device is powering multiple connected USB Type-C devices.">
+        Powering connected USB-C devices
       </message>
       <message name="IDS_ASH_STATUS_TRAY_DUAL_ROLE_MESSAGE" desc="The message body of a notification, which indicates that the user can click the notification to see and change which device is being used as a power source.">
         Click for more options
@@ -1269,6 +1319,9 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STATUS_TRAY_ETHERNET_ADDRESS" desc="The label for the mac address of the ethernet device.">
         Ethernet: <ph name="ADDRESS">$1<ex>01:23:45:67:89:AB</ex></ph>
       </message>
+      <message name="IDS_ASH_STATUS_TRAY_CELLULAR_ADDRESS" desc="The label for the mac address of the cellular device.">
+        Cellular: <ph name="ADDRESS">$1<ex>01:23:45:67:89:AB</ex></ph>
+      </message>
       <message name="IDS_ASH_STATUS_TRAY_INITIALIZING_CELLULAR" desc="Message for the status area when initializing the cellular device.">
         Initializing...
       </message>
@@ -1530,6 +1583,9 @@ This file contains the strings for ash.
       </message>
 
       <!-- Login screen strings -->
+      <message name="IDS_ASH_LOGIN_SCREEN_ACCESSIBLE_NAME" desc="Text that is spoken when requesting the login screen name.">
+        Login Screen
+      </message>
       <message name="IDS_ASH_LOGIN_POD_PASSWORD_PLACEHOLDER" desc="Text to display as placeholder in the password field when password is the only auth method.">
         Password
       </message>
@@ -1782,6 +1838,9 @@ This file contains the strings for ash.
       <message name="IDS_ASH_MESSAGE_CENTER_CLEAR_ALL_BUTTON_LABEL" desc="The label text for clearing all notifications.">
         Clear all
       </message>
+      <message name="IDS_ASH_MESSAGE_CENTER_EXPAND_ALL_NOTIFICATIONS_BUTTON_LABEL" desc="The label text for expanding all notifications.">
+        See all notifications
+      </message>
       <message name="IDS_ASH_MESSAGE_CENTER_HIDDEN_NOTIFICATION_COUNT_LABEL" desc="The label text the number of hidden notifications.">
         +<ph name="COUNT">$1<ex>2</ex></ph> more
       </message>
@@ -1949,20 +2008,14 @@ This file contains the strings for ash.
       <message name="IDS_ASSISTANT_TIMER_NOTIFICATION_TITLE" desc="Title for Assistant timer notification.">
         Time's up
       </message>
-      <message name="IDS_ASSISTANT_TIMER_NOTIFICATION_MESSAGE" desc="Message for Assistant timer notification. Example: -01:23s.">
-        <ph name="SIGN">{0}<ex>-</ex></ph><ph name="MINUTES_REMAINING">{1,number,00}<ex>01</ex></ph>:<ph name="SECONDS_REMAINING">{2,number,00}<ex>02</ex></ph>s
+      <message name="IDS_ASSISTANT_TIMER_NOTIFICATION_MESSAGE_EXPIRED" desc="Message for Assistant timer notification that has expired. Format: -hh:mm:ss.">
+        -<ph name="TIME_SINCE_EXPIRATION">{0}<ex>10:27</ex></ph>
       </message>
       <message name="IDS_ASSISTANT_TIMER_NOTIFICATION_ADD_1_MIN_BUTTON" desc="Label for button to add 1 minute to timer in Assistant timer notification.">
         Add 1 min
       </message>
-      <message name="IDS_ASSISTANT_TIMER_NOTIFICATION_ADD_1_MIN_QUERY" desc="Query to issue to add 1 minute to an Assistant timer.">
-        Add 1 min to timer
-      </message>
       <message name="IDS_ASSISTANT_TIMER_NOTIFICATION_STOP_BUTTON" desc="Label for stop button in Assistant timer notification.">
         Stop
-      </message>
-      <message name="IDS_ASSISTANT_TIMER_NOTIFICATION_STOP_QUERY" desc="Query to issue to stop Assistant timer.">
-        Stop timer
       </message>
       <message name="IDS_ASSISTANT_CREATE_REMINDER_QUERY" desc="Query to issue to create reminder.">
         Create reminder
@@ -2005,6 +2058,9 @@ This file contains the strings for ash.
       </message>
 
         <!-- Lock Screen Media Controls -->
+      <message name="IDS_ASH_LOCK_SCREEN_ACCESSIBLE_NAME" desc="Text that is spoken when requesting the lock screen name.">
+        Lock Screen
+      </message>
       <message name="IDS_ASH_LOCK_SCREEN_MEDIA_CONTROLS_ACTION_PREVIOUS_TRACK" desc="The button to trigger media playback to go to the previous track.">
         Previous Track
       </message>

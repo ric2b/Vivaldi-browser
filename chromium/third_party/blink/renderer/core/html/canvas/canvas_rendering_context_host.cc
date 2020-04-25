@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_host.h"
 
+#include "base/feature_list.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_async_blob_creator.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
@@ -16,6 +17,10 @@
 #include "third_party/skia/include/core/SkSurface.h"
 
 namespace blink {
+namespace {
+const base::Feature kLowLatencyCanvas2dSwapChain{
+    "LowLatencyCanvas2dSwapChain", base::FEATURE_DISABLED_BY_DEFAULT};
+}  // namespace
 
 CanvasRenderingContextHost::CanvasRenderingContextHost(HostType host_type)
     : host_type_(host_type) {}
@@ -161,7 +166,7 @@ CanvasRenderingContextHost::GetOrCreateCanvasResourceProviderImpl(
         }
         // Allow swap chains only if the runtime feature is enabled and we're
         // in low latency mode too.
-        if (RuntimeEnabledFeatures::Canvas2dSwapChainEnabled() &&
+        if (base::FeatureList::IsEnabled(kLowLatencyCanvas2dSwapChain) &&
             LowLatencyEnabled() && want_acceleration) {
           presentation_mode |=
               CanvasResourceProvider::kAllowSwapChainPresentationMode;
@@ -203,7 +208,7 @@ CanvasColorParams CanvasRenderingContextHost::ColorParams() const {
 ScriptPromise CanvasRenderingContextHost::convertToBlob(
     ScriptState* script_state,
     const ImageEncodeOptions* options,
-    ExceptionState& exception_state) const {
+    ExceptionState& exception_state) {
   WTF::String object_name = "Canvas";
   if (this->IsOffscreenCanvas())
     object_name = "OffscreenCanvas";
@@ -220,6 +225,12 @@ ScriptPromise CanvasRenderingContextHost::convertToBlob(
     exception_state.ThrowSecurityError(error_msg.str().c_str());
     return ScriptPromise();
   }
+
+  // It's possible that there are recorded commands that have not been resolved
+  // Finalize frame will be called in GetImage, but if there's no
+  // resourceProvider yet then the IsPaintable check will fail
+  if (RenderingContext())
+    RenderingContext()->FinalizeFrame();
 
   if (!this->IsPaintable() || Size().IsEmpty()) {
     error_msg << "The size of " << object_name << " is zero.";

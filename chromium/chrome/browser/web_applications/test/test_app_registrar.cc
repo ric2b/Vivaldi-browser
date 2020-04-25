@@ -6,6 +6,7 @@
 
 #include "base/callback.h"
 #include "base/stl_util.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "url/gurl.h"
 
 namespace web_app {
@@ -35,8 +36,6 @@ void TestAppRegistrar::SimulateExternalAppUninstalledByUser(
   if (base::Contains(installed_apps_, app_id))
     RemoveExternalApp(app_id);
 }
-
-void TestAppRegistrar::Init(base::OnceClosure callback) {}
 
 bool TestAppRegistrar::IsInstalled(const AppId& app_id) const {
   return base::Contains(installed_apps_, app_id);
@@ -131,15 +130,10 @@ base::Optional<GURL> TestAppRegistrar::GetAppScope(const AppId& app_id) const {
   return base::make_optional(result->second.install_url);
 }
 
-LaunchContainer TestAppRegistrar::GetAppLaunchContainer(
+blink::mojom::DisplayMode TestAppRegistrar::GetAppDisplayMode(
     const AppId& app_id) const {
   NOTIMPLEMENTED();
-  return LaunchContainer::kTab;
-}
-
-void TestAppRegistrar::SetAppLaunchContainer(const AppId& app_id,
-                                             LaunchContainer launch_container) {
-  NOTIMPLEMENTED();
+  return blink::mojom::DisplayMode::kBrowser;
 }
 
 std::vector<AppId> TestAppRegistrar::GetAppIds() const {

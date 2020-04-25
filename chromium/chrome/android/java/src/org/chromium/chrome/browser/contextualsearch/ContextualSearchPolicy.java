@@ -6,10 +6,11 @@ package org.chromium.chrome.browser.contextualsearch;
 
 import android.content.Context;
 import android.net.Uri;
-import android.support.annotation.Nullable;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.VisibleForTesting;
@@ -46,7 +47,6 @@ class ContextualSearchPolicy {
     private final ContextualSearchSelectionController mSelectionController;
     private ContextualSearchNetworkCommunicator mNetworkCommunicator;
     private ContextualSearchPanel mSearchPanel;
-    private ContextualSearchPreferenceHelper mContextualSearchPreferenceHelper;
 
     // Members used only for testing purposes.
     private boolean mDidOverrideDecidedStateForTesting;
@@ -62,11 +62,6 @@ class ContextualSearchPolicy {
 
         mSelectionController = selectionController;
         mNetworkCommunicator = networkCommunicator;
-    }
-
-    void initialize() {
-        // TODO(donnd): remove when integration with Unified Consent is complete.
-        mContextualSearchPreferenceHelper = ContextualSearchPreferenceHelper.getInstance();
     }
 
     /**
@@ -152,15 +147,7 @@ class ContextualSearchPolicy {
             return false;
         }
 
-        if (isPrivacyAggressiveResolveEnabled()
-                && mSelectionController.getSelectionType() == SelectionType.RESOLVING_LONG_PRESS)
-            return true;
-
-        return (isPromoAvailable()
-                       || (mContextualSearchPreferenceHelper != null
-                                  && mContextualSearchPreferenceHelper.canThrottle()))
-                ? isBasePageHTTP(mNetworkCommunicator.getBasePageUrl())
-                : true;
+        return isPromoAvailable() ? isBasePageHTTP(mNetworkCommunicator.getBasePageUrl()) : true;
     }
 
     /** @return Whether a long-press gesture can resolve. */
@@ -260,32 +247,13 @@ class ContextualSearchPolicy {
 
     /**
      * @return Whether a verbatim request should be made for the given base page, assuming there
-     *         is no exiting request.
+     *         is no existing request.
      */
     boolean shouldCreateVerbatimRequest() {
-        if (isPrivacyAggressiveResolveEnabled()) return false;
-
         @SelectionType
         int selectionType = mSelectionController.getSelectionType();
         return (mSelectionController.getSelectedText() != null
-                && (selectionType == SelectionType.LONG_PRESS
-                        || (selectionType == SelectionType.TAP
-                                && !shouldPreviousGestureResolve())));
-    }
-
-    /**
-     * Returns whether doing a privacy aggressive resolve is enabled (as opposed to privacy
-     * conservative).  When this is enabled, the selection is sent to the server immediately instead
-     * of waiting for the panel to be opened.  This allows the server to resolve the selection which
-     * will recognize entities, etc. and display those attributes in the Bar.
-     * @return Whether the privacy-aggressive behavior of immediately sending the selection to the
-     *         server is enabled.
-     */
-    boolean isPrivacyAggressiveResolveEnabled() {
-        return ContextualSearchFieldTrial.LONGPRESS_RESOLVE_PRIVACY_AGGRESSIVE.equals(
-                ChromeFeatureList.getFieldTrialParamByFeature(
-                        ChromeFeatureList.CONTEXTUAL_SEARCH_LONGPRESS_RESOLVE,
-                        ContextualSearchFieldTrial.LONGPRESS_RESOLVE_PARAM_NAME));
+                && (selectionType == SelectionType.LONG_PRESS || !shouldPreviousGestureResolve()));
     }
 
     /** @return whether Tap is disabled due to the longpress experiment. */
@@ -433,12 +401,6 @@ class ContextualSearchPolicy {
                 ChromePreferenceManager.CONTEXTUAL_SEARCH_TAP_SINCE_OPEN_COUNT);
     }
 
-    @VisibleForTesting
-    void applyUnifiedConsentGivenMetadata(
-            @ContextualSearchPreviousPreferenceMetadata int metadata) {
-        mContextualSearchPreferenceHelper.applyUnifiedConsentGivenMetadata(metadata);
-    }
-
     // --------------------------------------------------------------------------------------------
     // Translation support.
     // --------------------------------------------------------------------------------------------
@@ -506,8 +468,9 @@ class ContextualSearchPolicy {
      */
     String getHomeCountry(Context context) {
         if (ContextualSearchFieldTrial.getSwitch(
-                    ContextualSearchSwitch.IS_SEND_HOME_COUNTRY_DISABLED))
+                    ContextualSearchSwitch.IS_SEND_HOME_COUNTRY_DISABLED)) {
             return "";
+        }
 
         TelephonyManager telephonyManager =
                 (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);

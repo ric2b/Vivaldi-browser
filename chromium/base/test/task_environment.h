@@ -23,6 +23,7 @@ namespace base {
 
 class Clock;
 class FileDescriptorWatcher;
+class SimpleTaskExecutor;
 class TickClock;
 
 namespace subtle {
@@ -32,7 +33,6 @@ class ScopedTimeClockOverrides;
 namespace test {
 
 // This header exposes SingleThreadTaskEnvironment and TaskEnvironment.
-// TODO(gab): Rename this header to task_environment.h and migrate all users.
 //
 // SingleThreadTaskEnvironment enables the following APIs within its scope:
 //  - (Thread|Sequenced)TaskRunnerHandle on the main thread
@@ -152,19 +152,19 @@ class TaskEnvironment {
   };
 
   // List of traits that are valid inputs for the constructor below.
-  struct ValidTrait {
-    ValidTrait(TimeSource);
-    ValidTrait(MainThreadType);
-    ValidTrait(ThreadPoolExecutionMode);
-    ValidTrait(SubclassCreatesDefaultTaskRunner);
-    ValidTrait(ThreadingMode);
+  struct ValidTraits {
+    ValidTraits(TimeSource);
+    ValidTraits(MainThreadType);
+    ValidTraits(ThreadPoolExecutionMode);
+    ValidTraits(SubclassCreatesDefaultTaskRunner);
+    ValidTraits(ThreadingMode);
   };
 
   // Constructor accepts zero or more traits which customize the testing
   // environment.
   template <typename... TaskEnvironmentTraits,
             class CheckArgumentsAreValid = std::enable_if_t<
-                trait_helpers::AreValidTraits<ValidTrait,
+                trait_helpers::AreValidTraits<ValidTraits,
                                               TaskEnvironmentTraits...>::value>>
   NOINLINE explicit TaskEnvironment(TaskEnvironmentTraits... traits)
       : TaskEnvironment(
@@ -223,6 +223,12 @@ class TaskEnvironment {
   // WARNING: This has the same caveat as RunUntilIdle() and is even more likely
   // to spin forever (any RepeatingTimer will cause this).
   void FastForwardUntilNoTasksRemain();
+
+  // Only valid for instances using TimeSource::MOCK_TIME. Advances virtual time
+  // by |delta|. Unlike FastForwardBy, this does not run tasks. Prefer
+  // FastForwardBy() when possible but this can be useful when testing blocked
+  // pending tasks where being idle (required to fast-forward) is not possible.
+  void AdvanceClock(TimeDelta delta);
 
   // Only valid for instances using TimeSource::MOCK_TIME. Returns a
   // TickClock whose time is updated by FastForward(By|UntilNoTasksRemain).
@@ -342,18 +348,15 @@ class TaskEnvironment {
 
   std::unique_ptr<bool> owns_instance_ = std::make_unique<bool>(true);
 
+  // To support base::CurrentThread().
+  std::unique_ptr<SimpleTaskExecutor> simple_task_executor_;
+
   // Used to verify thread-affinity of operations that must occur on the main
   // thread. This is the case for anything that modifies or drives the
   // |sequence_manager_|.
   THREAD_CHECKER(main_thread_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(TaskEnvironment);
-};
-
-// TODO(gab): Mass migrate users and remove this.
-class ScopedTaskEnvironment : public TaskEnvironment {
- public:
-  using TaskEnvironment::TaskEnvironment;
 };
 
 // SingleThreadTaskEnvironment takes the same traits as TaskEnvironment and is

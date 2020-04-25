@@ -14,9 +14,9 @@ namespace network {
 TestSharedURLLoaderFactory::TestSharedURLLoaderFactory(
     NetworkService* network_service) {
   url_request_context_ = std::make_unique<net::TestURLRequestContext>();
-  mojom::NetworkContextPtr network_context;
+  mojo::Remote<mojom::NetworkContext> network_context;
   network_context_ = std::make_unique<NetworkContext>(
-      network_service, mojo::MakeRequest(&network_context),
+      network_service, network_context.BindNewPipeAndPassReceiver(),
       url_request_context_.get(),
       /*cors_exempt_header_list=*/std::vector<std::string>());
   mojom::URLLoaderFactoryParamsPtr params =
@@ -24,7 +24,7 @@ TestSharedURLLoaderFactory::TestSharedURLLoaderFactory(
   params->process_id = mojom::kBrowserProcessId;
   params->is_corb_enabled = false;
   network_context_->CreateURLLoaderFactory(
-      mojo::MakeRequest(&url_loader_factory_), std::move(params));
+      url_loader_factory_.BindNewPipeAndPassReceiver(), std::move(params));
 }
 
 TestSharedURLLoaderFactory::~TestSharedURLLoaderFactory() {}
@@ -42,7 +42,8 @@ void TestSharedURLLoaderFactory::CreateLoaderAndStart(
       std::move(client), traffic_annotation);
 }
 
-void TestSharedURLLoaderFactory::Clone(mojom::URLLoaderFactoryRequest request) {
+void TestSharedURLLoaderFactory::Clone(
+    mojo::PendingReceiver<mojom::URLLoaderFactory> receiver) {
   NOTIMPLEMENTED();
 }
 

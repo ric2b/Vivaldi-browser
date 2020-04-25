@@ -10,6 +10,7 @@
 
 #include <utility>
 
+#include "base/base64.h"
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/mac/scoped_nsobject.h"
@@ -87,22 +88,6 @@ CGWindowLevel CGWindowLevelForZOrderLevel(ui::ZOrderLevel level,
         return kCGStatusWindowLevel;
     case ui::ZOrderLevel::kSecuritySurface:
       return kCGScreenSaverWindowLevel - 1;
-  }
-}
-
-ui::ZOrderLevel ZOrderLevelForCGWindowLevel(CGWindowLevel level) {
-  switch (level) {
-    case kCGNormalWindowLevel:
-      return ui::ZOrderLevel::kNormal;
-    case kCGFloatingWindowLevel:
-    case kCGPopUpMenuWindowLevel:
-    default:
-      return ui::ZOrderLevel::kFloatingWindow;
-    case kCGStatusWindowLevel:
-    case kCGDraggingWindowLevel:
-      return ui::ZOrderLevel::kFloatingUIElement;
-    case kCGScreenSaverWindowLevel - 1:
-      return ui::ZOrderLevel::kSecuritySurface;
   }
 }
 
@@ -409,7 +394,9 @@ gfx::Rect NativeWidgetMac::GetRestoredBounds() const {
 }
 
 std::string NativeWidgetMac::GetWorkspace() const {
-  return std::string();
+  return ns_window_host_ ? base::Base64Encode(
+                               ns_window_host_->GetWindowStateRestorationData())
+                         : std::string();
 }
 
 void NativeWidgetMac::SetBounds(const gfx::Rect& bounds) {
@@ -541,20 +528,14 @@ bool NativeWidgetMac::IsActive() const {
 }
 
 void NativeWidgetMac::SetZOrderLevel(ui::ZOrderLevel order) {
-  NSWindow* window = GetNativeWindow().GetNativeNSWindow();
-  [window setLevel:CGWindowLevelForZOrderLevel(order, type_)];
-
-  // Windows that have a higher window level than NSNormalWindowLevel default to
-  // NSWindowCollectionBehaviorTransient. Set the value explicitly here to match
-  // normal windows.
-  NSWindowCollectionBehavior behavior =
-      [window collectionBehavior] | NSWindowCollectionBehaviorManaged;
-  [window setCollectionBehavior:behavior];
+  if (!GetNSWindowMojo())
+    return;
+  z_order_level_ = order;
+  GetNSWindowMojo()->SetWindowLevel(CGWindowLevelForZOrderLevel(order, type_));
 }
 
 ui::ZOrderLevel NativeWidgetMac::GetZOrderLevel() const {
-  return ZOrderLevelForCGWindowLevel(
-      [GetNativeWindow().GetNativeNSWindow() level]);
+  return z_order_level_;
 }
 
 void NativeWidgetMac::SetVisibleOnAllWorkspaces(bool always_visible) {

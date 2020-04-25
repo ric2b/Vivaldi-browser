@@ -103,6 +103,7 @@ Polymer({
       case settings.ContentSettingsTypes.BACKGROUND_SYNC:
       case settings.ContentSettingsTypes.IMAGES:
       case settings.ContentSettingsTypes.JAVASCRIPT:
+      case settings.ContentSettingsTypes.MIXEDSCRIPT:
       case settings.ContentSettingsTypes.SOUND:
       case settings.ContentSettingsTypes.SENSORS:
       case settings.ContentSettingsTypes.PAYMENT_HANDLER:
@@ -176,10 +177,22 @@ Polymer({
     if (update.source !== undefined &&
         update.source != ContentSettingProvider.PREFERENCE) {
       basePref.enforcement = chrome.settingsPrivate.Enforcement.ENFORCED;
-      basePref.controlledBy =
-          update.source == ContentSettingProvider.EXTENSION ?
-          chrome.settingsPrivate.ControlledBy.EXTENSION :
-          chrome.settingsPrivate.ControlledBy.USER_POLICY;
+      switch (update.source) {
+        case ContentSettingProvider.POLICY:
+          basePref.controlledBy =
+              chrome.settingsPrivate.ControlledBy.DEVICE_POLICY;
+          break;
+        case ContentSettingProvider.SUPERVISED_USER:
+          basePref.controlledBy = chrome.settingsPrivate.ControlledBy.PARENT;
+          break;
+        case ContentSettingProvider.EXTENSION:
+          basePref.controlledBy = chrome.settingsPrivate.ControlledBy.EXTENSION;
+          break;
+        default:
+          basePref.controlledBy =
+              chrome.settingsPrivate.ControlledBy.USER_POLICY;
+          break;
+      }
     }
 
     const prefValue = this.computeIsSettingEnabled(update.setting);

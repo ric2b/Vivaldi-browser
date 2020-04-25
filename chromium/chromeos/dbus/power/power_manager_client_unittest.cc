@@ -241,6 +241,11 @@ class PowerManagerClientTest : public testing::Test {
         *proxy_,
         DoCallMethod(HasMember(power_manager::kGetPowerSupplyPropertiesMethod),
                      _, _));
+    // Init will test for the presence of an ambient light sensor.
+    EXPECT_CALL(
+        *proxy_,
+        DoCallMethod(HasMember(power_manager::kHasAmbientColorDeviceMethod), _,
+                     _));
 
     PowerManagerClient::Initialize(bus_.get());
     client_ = PowerManagerClient::Get();
@@ -297,7 +302,7 @@ class PowerManagerClientTest : public testing::Test {
   static const int kSuspendDelayId = 100;
   static const int kDarkSuspendDelayId = 200;
 
-  base::test::TaskEnvironment task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
 
   // Mock bus and proxy for simulating calls to powerd.
   scoped_refptr<dbus::MockBus> bus_;

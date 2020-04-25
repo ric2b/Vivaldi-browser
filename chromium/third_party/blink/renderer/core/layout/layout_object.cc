@@ -63,6 +63,7 @@
 #include "third_party/blink/renderer/core/layout/geometry/transform_state.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_counter.h"
+#include "third_party/blink/renderer/core/layout/layout_custom_scrollbar_part.h"
 #include "third_party/blink/renderer/core/layout/layout_deprecated_flexible_box.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/layout/layout_fieldset.h"
@@ -75,7 +76,6 @@
 #include "third_party/blink/renderer/core/layout/layout_list_item.h"
 #include "third_party/blink/renderer/core/layout/layout_multi_column_spanner_placeholder.h"
 #include "third_party/blink/renderer/core/layout/layout_object_factory.h"
-#include "third_party/blink/renderer/core/layout/layout_scrollbar_part.h"
 #include "third_party/blink/renderer/core/layout/layout_table_caption.h"
 #include "third_party/blink/renderer/core/layout/layout_table_cell.h"
 #include "third_party/blink/renderer/core/layout/layout_table_col.h"
@@ -255,11 +255,8 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
       return LayoutObjectFactory::CreateTableCaption(*element, style, legacy);
     case EDisplay::kWebkitBox:
     case EDisplay::kWebkitInlineBox:
-      if (RuntimeEnabledFeatures::WebkitBoxLayoutUsesFlexLayoutEnabled() &&
-          (!style.HasLineClamp() ||
-           style.BoxOrient() == EBoxOrient::kHorizontal)) {
+      if (style.IsDeprecatedFlexboxUsingFlexLayout())
         return new LayoutFlexibleBox(element);
-      }
       return new LayoutDeprecatedFlexibleBox(*element);
     case EDisplay::kFlex:
     case EDisplay::kInlineFlex:
@@ -886,7 +883,7 @@ static inline bool ObjectIsRelayoutBoundary(const LayoutObject* object) {
 
   // Scrollbar parts can be removed during layout. Avoid the complexity of
   // having to deal with that.
-  if (object->IsLayoutScrollbarPart())
+  if (object->IsLayoutCustomScrollbarPart())
     return false;
 
   if (const LayoutBox* layout_box = ToLayoutBoxOrNull(object)) {
@@ -1229,8 +1226,11 @@ LayoutBlock* LayoutObject::ContainingBlock(AncestorSkipInfo* skip_info) const {
     object = SpannerPlaceholder()->ContainingBlock();
   } else {
     object = Parent();
-    if (!object && IsLayoutScrollbarPart())
-      object = ToLayoutScrollbarPart(this)->GetScrollableArea()->GetLayoutBox();
+    if (!object && IsLayoutCustomScrollbarPart()) {
+      object = ToLayoutCustomScrollbarPart(this)
+                   ->GetScrollableArea()
+                   ->GetLayoutBox();
+    }
     while (object && ((object->IsInline() && !object->IsAtomicInlineLevel()) ||
                       !object->IsLayoutBlock())) {
       if (skip_info)
@@ -1414,6 +1414,13 @@ const LayoutBoxModelObject* LayoutObject::EnclosingCompositedContainer() const {
 bool LayoutObject::HasDistortingVisualEffects() const {
   // TODO(szager): Check occlusion information propagated from out-of-process
   // parent frame.
+
+  // TODO(szager): Remove CHECK's after diagnosing crash.
+  PaintLayer* enclosing_layer = EnclosingLayer();
+  CHECK(enclosing_layer);
+  CHECK(enclosing_layer->GetLayoutObject()
+            .FirstFragment()
+            .HasLocalBorderBoxProperties());
   PropertyTreeState paint_properties = EnclosingLayer()
                                            ->GetLayoutObject()
                                            .FirstFragment()
@@ -1430,12 +1437,15 @@ bool LayoutObject::HasDistortingVisualEffects() const {
     }
   }
 
-  PropertyTreeState root_properties = GetDocument()
-                                          .GetFrame()
-                                          ->LocalFrameRoot()
-                                          .ContentLayoutObject()
-                                          ->FirstFragment()
-                                          .LocalBorderBoxProperties();
+  // TODO(szager): Remove CHECK's after diagnosing crash.
+  CHECK(GetDocument().IsActive());
+  LocalFrame* frame = GetDocument().GetFrame();
+  CHECK(frame);
+  LayoutView* layout_view = frame->LocalFrameRoot().ContentLayoutObject();
+  CHECK(layout_view);
+  CHECK(layout_view->FirstFragment().HasLocalBorderBoxProperties());
+  PropertyTreeState root_properties =
+      layout_view->FirstFragment().LocalBorderBoxProperties();
 
   // The only allowed transforms are 2D translation and proportional up-scaling.
   const auto& translation_2d_or_matrix =
@@ -1927,7 +1937,7 @@ StyleDifference LayoutObject::AdjustStyleDifference(
   return diff;
 }
 
-void LayoutObject::SetPseudoStyle(
+void LayoutObject::SetPseudoElementStyle(
     scoped_refptr<const ComputedStyle> pseudo_style) {
   DCHECK(pseudo_style->StyleType() == kPseudoIdBefore ||
          pseudo_style->StyleType() == kPseudoIdAfter ||
@@ -1970,11 +1980,15 @@ void LayoutObject::MarkContainerChainForOverflowRecalcIfNeeded() {
   } while (object);
 }
 
+void LayoutObject::SetNeedsVisualOverflowAndPaintInvalidation() {
+  SetShouldCheckForPaintInvalidation();
+  MarkSelfPaintingLayerForVisualOverflowRecalc();
+}
+
 void LayoutObject::SetNeedsOverflowRecalc() {
   bool needed_recalc = SelfNeedsLayoutOverflowRecalc();
   SetSelfNeedsLayoutOverflowRecalc();
-  SetShouldCheckForPaintInvalidation();
-  MarkSelfPaintingLayerForVisualOverflowRecalc();
+  SetNeedsVisualOverflowAndPaintInvalidation();
 
   if (!needed_recalc)
     MarkContainerChainForOverflowRecalcIfNeeded();
@@ -1997,7 +2011,7 @@ void LayoutObject::SetStyle(scoped_refptr<const ComputedStyle> style,
   if (style_) {
     diff = style_->VisualInvalidationDiff(GetDocument(), *style);
     if (const auto* cached_inherited_first_line_style =
-            style_->GetCachedPseudoStyle(kPseudoIdFirstLineInherited)) {
+            style_->GetCachedPseudoElementStyle(kPseudoIdFirstLineInherited)) {
       // Merge the difference to the first line style because even if the new
       // style is the same as the old style, the new style may have some higher
       // priority properties overriding first line style.
@@ -2145,7 +2159,7 @@ void LayoutObject::UpdateImageObservers(const ComputedStyle* old_style,
 void LayoutObject::UpdateFirstLineImageObservers(
     const ComputedStyle* new_style) {
   bool has_new_first_line_style =
-      new_style && new_style->HasPseudoStyle(kPseudoIdFirstLine) &&
+      new_style && new_style->HasPseudoElementStyle(kPseudoIdFirstLine) &&
       BehavesLikeBlockContainer();
   DCHECK(!has_new_first_line_style || new_style == Style());
 
@@ -2392,7 +2406,7 @@ void LayoutObject::StyleDidChange(StyleDifference diff,
       SetBackgroundNeedsFullPaintInvalidation();
   }
 
-  ApplyPseudoStyleChanges(old_style);
+  ApplyPseudoElementStyleChanges(old_style);
 
   if (old_style &&
       old_style->UsedTransformStyle3D() != StyleRef().UsedTransformStyle3D()) {
@@ -2402,18 +2416,20 @@ void LayoutObject::StyleDidChange(StyleDifference diff,
   }
 }
 
-void LayoutObject::ApplyPseudoStyleChanges(const ComputedStyle* old_style) {
+void LayoutObject::ApplyPseudoElementStyleChanges(
+    const ComputedStyle* old_style) {
   ApplyFirstLineChanges(old_style);
 
-  if ((old_style && old_style->HasPseudoStyle(kPseudoIdSelection)) ||
-      StyleRef().HasPseudoStyle(kPseudoIdSelection))
+  if ((old_style && old_style->HasPseudoElementStyle(kPseudoIdSelection)) ||
+      StyleRef().HasPseudoElementStyle(kPseudoIdSelection))
     InvalidateSelectedChildrenOnStyleChange();
 }
 
 void LayoutObject::ApplyFirstLineChanges(const ComputedStyle* old_style) {
   bool has_old_first_line_style =
-      old_style && old_style->HasPseudoStyle(kPseudoIdFirstLine);
-  bool has_new_first_line_style = StyleRef().HasPseudoStyle(kPseudoIdFirstLine);
+      old_style && old_style->HasPseudoElementStyle(kPseudoIdFirstLine);
+  bool has_new_first_line_style =
+      StyleRef().HasPseudoElementStyle(kPseudoIdFirstLine);
   if (!has_old_first_line_style && !has_new_first_line_style)
     return;
 
@@ -2421,7 +2437,7 @@ void LayoutObject::ApplyFirstLineChanges(const ComputedStyle* old_style) {
   bool has_diff = false;
   if (Parent() && has_old_first_line_style && has_new_first_line_style) {
     if (const auto* old_first_line_style =
-            old_style->GetCachedPseudoStyle(kPseudoIdFirstLine)) {
+            old_style->GetCachedPseudoElementStyle(kPseudoIdFirstLine)) {
       if (const auto* new_first_line_style = FirstLineStyleWithoutFallback()) {
         diff = old_first_line_style->VisualInvalidationDiff(
             GetDocument(), *new_first_line_style);
@@ -2500,7 +2516,7 @@ void LayoutObject::PropagateStyleToAnonymousChildren() {
       continue;
     }
     if (child->IsText() || child->IsQuote() || child->IsImage())
-      child->SetPseudoStyle(Style());
+      child->SetPseudoElementStyle(Style());
     child = child->NextInPreOrder(this);
   }
 }
@@ -3162,12 +3178,8 @@ void LayoutObject::WillBeRemovedFromTree() {
     FindReferencingScrollAnchors(this, kClear);
   }
 
-  if (RuntimeEnabledFeatures::FirstContentfulPaintPlusPlusEnabled() ||
-      RuntimeEnabledFeatures::ElementTimingEnabled(&GetDocument())) {
-    if (LocalFrameView* frame_view = GetFrameView()) {
-      frame_view->GetPaintTimingDetector().LayoutObjectWillBeDestroyed(*this);
-    }
-  }
+  if (LocalFrameView* frame_view = GetFrameView())
+    frame_view->GetPaintTimingDetector().LayoutObjectWillBeDestroyed(*this);
 }
 
 void LayoutObject::SetNeedsPaintPropertyUpdate() {
@@ -3390,39 +3402,44 @@ const ComputedStyle* LayoutObject::FirstLineStyleWithoutFallback() const {
 
   if (BehavesLikeBlockContainer()) {
     if (const ComputedStyle* cached =
-            StyleRef().GetCachedPseudoStyle(kPseudoIdFirstLine))
+            StyleRef().GetCachedPseudoElementStyle(kPseudoIdFirstLine))
       return cached;
 
     if (const LayoutBlock* first_line_block =
             To<LayoutBlock>(this)->EnclosingFirstLineStyleBlock()) {
-      if (first_line_block->Style() == Style())
-        return first_line_block->GetCachedPseudoStyle(kPseudoIdFirstLine);
+      if (first_line_block->Style() == Style()) {
+        return first_line_block->GetCachedPseudoElementStyle(
+            kPseudoIdFirstLine);
+      }
 
-      // We can't use first_line_block->GetCachedPseudoStyle() because it's
-      // based on first_line_block's style. We need to get the uncached first
-      // line style based on this object's style and cache the result in it.
-      return StyleRef().AddCachedPseudoStyle(
-          first_line_block->GetUncachedPseudoStyle(
-              PseudoStyleRequest(kPseudoIdFirstLine), Style()));
+      // We can't use first_line_block->GetCachedPseudoElementStyle() because
+      // it's based on first_line_block's style. We need to get the uncached
+      // first line style based on this object's style and cache the result in
+      // it.
+      return StyleRef().AddCachedPseudoElementStyle(
+          first_line_block->GetUncachedPseudoElementStyle(
+              PseudoElementStyleRequest(kPseudoIdFirstLine), Style()));
     }
   } else if (!IsAnonymous() && IsLayoutInline() &&
              !GetNode()->IsFirstLetterPseudoElement()) {
     if (const ComputedStyle* cached =
-            StyleRef().GetCachedPseudoStyle(kPseudoIdFirstLineInherited))
+            StyleRef().GetCachedPseudoElementStyle(kPseudoIdFirstLineInherited))
       return cached;
 
     if (const ComputedStyle* parent_first_line_style =
             Parent()->FirstLineStyleWithoutFallback()) {
       // A first-line style is in effect. Get uncached first line style based on
       // parent_first_line_style and cache the result in this object's style.
-      return StyleRef().AddCachedPseudoStyle(GetUncachedPseudoStyle(
-          kPseudoIdFirstLineInherited, parent_first_line_style));
+      return StyleRef().AddCachedPseudoElementStyle(
+          GetUncachedPseudoElementStyle(kPseudoIdFirstLineInherited,
+                                        parent_first_line_style));
     }
   }
   return nullptr;
 }
 
-const ComputedStyle* LayoutObject::GetCachedPseudoStyle(PseudoId pseudo) const {
+const ComputedStyle* LayoutObject::GetCachedPseudoElementStyle(
+    PseudoId pseudo) const {
   DCHECK_NE(pseudo, kPseudoIdBefore);
   DCHECK_NE(pseudo, kPseudoIdAfter);
   if (!GetNode())
@@ -3432,11 +3449,12 @@ const ComputedStyle* LayoutObject::GetCachedPseudoStyle(PseudoId pseudo) const {
   if (!element)
     return nullptr;
 
-  return element->CachedStyleForPseudoElement(PseudoStyleRequest(pseudo));
+  return element->CachedStyleForPseudoElement(
+      PseudoElementStyleRequest(pseudo));
 }
 
-scoped_refptr<ComputedStyle> LayoutObject::GetUncachedPseudoStyle(
-    const PseudoStyleRequest& request,
+scoped_refptr<ComputedStyle> LayoutObject::GetUncachedPseudoElementStyle(
+    const PseudoElementStyleRequest& request,
     const ComputedStyle* parent_style) const {
   DCHECK_NE(request.pseudo_id, kPseudoIdBefore);
   DCHECK_NE(request.pseudo_id, kPseudoIdAfter);
@@ -3533,17 +3551,10 @@ void LayoutObject::ImageNotifyFinished(ImageResourceContent* image) {
   if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
     cache->ImageLoaded(this);
 
-  if (RuntimeEnabledFeatures::ElementTimingEnabled(&GetDocument())) {
-    LocalDOMWindow* window = GetDocument().domWindow();
-    if (window) {
-      ImageElementTiming::From(*window).NotifyImageFinished(*this, image);
-    }
-  }
-  if (RuntimeEnabledFeatures::FirstContentfulPaintPlusPlusEnabled()) {
-    if (LocalFrameView* frame_view = GetFrameView()) {
-      frame_view->GetPaintTimingDetector().NotifyImageFinished(*this, image);
-    }
-  }
+  if (LocalDOMWindow* window = GetDocument().domWindow())
+    ImageElementTiming::From(*window).NotifyImageFinished(*this, image);
+  if (LocalFrameView* frame_view = GetFrameView())
+    frame_view->GetPaintTimingDetector().NotifyImageFinished(*this, image);
 }
 
 Element* LayoutObject::OffsetParent(const Element* base) const {
@@ -3596,17 +3607,10 @@ Element* LayoutObject::OffsetParent(const Element* base) const {
 }
 
 void LayoutObject::NotifyImageFullyRemoved(ImageResourceContent* image) {
-  if (RuntimeEnabledFeatures::ElementTimingEnabled(&GetDocument())) {
-    LocalDOMWindow* window = GetDocument().domWindow();
-    if (window) {
-      ImageElementTiming::From(*window).NotifyImageRemoved(this, image);
-    }
-  }
-  if (RuntimeEnabledFeatures::FirstContentfulPaintPlusPlusEnabled()) {
-    if (LocalFrameView* frame_view = GetFrameView()) {
-      frame_view->GetPaintTimingDetector().NotifyImageRemoved(*this, image);
-    }
-  }
+  if (LocalDOMWindow* window = GetDocument().domWindow())
+    ImageElementTiming::From(*window).NotifyImageRemoved(this, image);
+  if (LocalFrameView* frame_view = GetFrameView())
+    frame_view->GetPaintTimingDetector().NotifyImageRemoved(*this, image);
 }
 
 PositionWithAffinity LayoutObject::CreatePositionWithAffinity(

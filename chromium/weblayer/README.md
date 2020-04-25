@@ -23,8 +23,36 @@ Bug tracker: [Internals>WebLayer](https://bugs.chromium.org/p/chromium/issues/li
 
 `shell` sample app
 
+'test' test harnesses and test-only helper code
+
+'tools' helper scripts
+
+'app' internal code which runs at the beginning of each process
+
 `browser` internal code which runs in the browser process
 
 `common` internal code which runs in the browser and child processes
 
 `renderer` internal code which runs in the renderer process
+
+`utility` internal code which runs in the utility process
+
+## Setting Up Your Build Environment
+
+If you haven't done this already, you first need to set up an Android build. If
+you are a Google employee, reach out to weblayer-team@google.com for internal
+instructions. Otherwise follow the [Android build instructions](/docs/android_build_instructions.md).
+
+## Building and Testing
+
+To run the sample app:
+
+$ autoninja -C out/Default run_weblayer_shell
+$ out/Default/bin/run_weblayer_shell
+
+To run instrumentation tests:
+
+$ autoninja -C out/Default weblayer_instrumentation_test_apk
+$ out/Default/bin/run_weblayer_instrumentation_test_apk
+
+The test script will build and install all necessary APKs.

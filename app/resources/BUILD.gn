@@ -1,4 +1,0 @@
-import("vivaldi_grit.gni")
-
-group("resources") {
-}

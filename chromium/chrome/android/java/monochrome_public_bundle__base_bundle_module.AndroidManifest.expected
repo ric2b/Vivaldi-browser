@@ -953,10 +953,6 @@
         android:name="org.chromium.chrome.browser.browserservices.ClearDataDialogActivity"
         android:theme="@style/Theme.Chromium.ClearDataDialogActivity"/>
     <activity
-        android:exported="false"
-        android:name="org.chromium.chrome.browser.incognito.IncognitoDisclosureActivity"
-        android:theme="@style/Theme.Chromium.Activity.Fullscreen.Transparent"/>
-    <activity
         android:exported="true"
         android:name="org.chromium.chrome.browser.browserservices.ManageTrustedWebActivityDataActivity"
         android:theme="@style/Theme.Chromium.Activity.Fullscreen.Transparent">
@@ -981,6 +977,10 @@
         <category android:name="android.intent.category.DEFAULT"/>
       </intent-filter>
     </activity>
+    <activity
+        android:label="@string/crashes_list_activity_title"
+        android:name="org.chromium.android_webview.ui.CrashesListActivity"
+        android:process=":webview_apk"/>
     <activity
         android:label="@string/license_activity_title"
         android:name="com.android.webview.chromium.LicenseActivity"
@@ -1231,9 +1231,6 @@
         android:name="ipc.invalidation.ticl.gcm_upstream_service_class"
         android:value="org.chromium.chrome.browser.services.gcm.InvalidationGcmUpstreamSender"/>
     <meta-data
-        android:name="ipc.invalidation.ticl.listener_service_class"
-        android:value="org.chromium.chrome.browser.invalidation.ChromeInvalidationClientService"/>
-    <meta-data
         android:name="org.chromium.chrome:privileged_process0.ignore_multidex"
         android:value="true"/>
     <meta-data
@@ -1348,9 +1345,6 @@
     <receiver
         android:exported="false"
         android:name="org.chromium.chrome.browser.send_tab_to_self.NotificationManager$TimeoutReceiver"/>
-    <receiver
-        android:exported="false"
-        android:name="org.chromium.chrome.browser.sharing.SharingNotificationUtil$ActionReceiver"/>
     <receiver
         android:exported="false"
         android:name="org.chromium.chrome.browser.sharing.click_to_call.ClickToCallMessageHandler$TapReceiver"/>
@@ -1533,13 +1527,6 @@
         <action android:name="android.content.SyncAdapter"/>
       </intent-filter>
       <meta-data android:name="android.content.SyncAdapter" android:resource="@xml/syncadapter"/>
-    </service>
-    <service
-        android:exported="false"
-        android:name="org.chromium.chrome.browser.invalidation.ChromeInvalidationClientService">
-      <intent-filter>
-        <action android:name="com.google.ipc.invalidation.AUTH_TOKEN_REQUEST"/>
-      </intent-filter>
     </service>
     <service
         android:exported="false"

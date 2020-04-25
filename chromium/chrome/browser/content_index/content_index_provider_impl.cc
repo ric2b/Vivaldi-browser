@@ -14,6 +14,7 @@
 #include "chrome/browser/metrics/ukm_background_recorder_service.h"
 #include "chrome/browser/offline_items_collection/offline_content_aggregator_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_key.h"
 #include "components/offline_items_collection/core/offline_content_aggregator.h"
 #include "components/offline_items_collection/core/offline_item.h"
 #include "components/offline_items_collection/core/update_delta.h"
@@ -83,6 +84,7 @@ EntryKeyComponents GetEntryKeyComponents(const std::string& key) {
 
 OfflineItemFilter CategoryToFilter(blink::mojom::ContentCategory category) {
   switch (category) {
+    case blink::mojom::ContentCategory::NONE:
     case blink::mojom::ContentCategory::HOME_PAGE:
     case blink::mojom::ContentCategory::ARTICLE:
       return OfflineItemFilter::FILTER_PAGE;
@@ -100,7 +102,7 @@ OfflineItem EntryToOfflineItem(const content::ContentIndexEntry& entry) {
   item.description = entry.description->description;
   item.filter = CategoryToFilter(entry.description->category);
   item.is_transient = false;
-  item.is_suggested = false;
+  item.is_suggested = true;
   item.creation_time = entry.registration_time;
   item.is_openable = true;
   item.state = offline_items_collection::OfflineItemState::COMPLETE;

@@ -12,6 +12,8 @@ logic to inflate those into the full (unwieldy) configurations in
 //testing/buildbot that are consumed by the chromium recipe code.
 """
 
+from __future__ import print_function
+
 import argparse
 import collections
 import csv
@@ -373,7 +375,7 @@ BUILDERS = {
     'tests': [
       {
         'isolate': 'performance_test_suite',
-        'num_shards': 16,
+        'num_shards': 10,
         'extra_args': [
             '--run-ref-build',
             '--test-shard-map-filename=android-nexus5x-perf_map.json',
@@ -576,7 +578,15 @@ BUILDERS = {
         'isolate': 'base_perftests',
         'num_shards': 1,
         'type': TEST_TYPES.GTEST,
-      }
+      },
+      {
+        'isolate': 'dawn_perf_tests',
+        'num_shards': 1,
+        'type': TEST_TYPES.GTEST,
+        'extra_args': [
+            '--shard-timeout=300'
+        ],
+      },
     ],
     'platform': 'win',
     'target_bits': 64,
@@ -751,12 +761,12 @@ BUILDERS = {
         'isolate': 'base_perftests',
         'num_shards': 1,
         'type': TEST_TYPES.GTEST,
-      }
+      },
     ],
     'platform': 'linux',
     'dimension': {
       'gpu': '10de:1cb3',
-      'os': 'Ubuntu-14.04',
+      'os': 'Ubuntu',
       'pool': 'chrome.tests.perf',
     },
   },
@@ -795,7 +805,12 @@ BUILDERS = {
         'isolate': 'base_perftests',
         'num_shards': 1,
         'type': TEST_TYPES.GTEST,
-      }
+      },
+      {
+        'isolate': 'dawn_perf_tests',
+        'num_shards': 1,
+        'type': TEST_TYPES.GTEST,
+      },
     ],
     'platform': 'mac',
     'dimension': {
@@ -821,10 +836,10 @@ def update_all_tests(builders_dict, file_path):
 
 
 def merge_dicts(*dict_args):
-    result = {}
-    for dictionary in dict_args:
-      result.update(dictionary)
-    return result
+  result = {}
+  for dictionary in dict_args:
+    result.update(dictionary)
+  return result
 
 
 class BenchmarkMetadata(object):
@@ -868,7 +883,11 @@ GTEST_BENCHMARKS = {
         'Internals>Media'),
     'views_perftests': BenchmarkMetadata(
         'tapted@chromium.org', 'Internals>Views'),
-    'components_perftests': BenchmarkMetadata('csharrison@chromium.org')
+    'components_perftests': BenchmarkMetadata('csharrison@chromium.org'),
+    'dawn_perf_tests': BenchmarkMetadata(
+        'enga@chromium.org, chrome-gpu-perf-owners@chromium.org',
+        'Internals>GPU>Dawn',
+        'https://dawn.googlesource.com/dawn/+/HEAD/src/tests/perf_tests/README.md'),
 }
 
 
@@ -981,7 +1000,7 @@ def is_perf_benchmarks_scheduling_valid(
         '//tools/perf/core/perf_data_generator.py.' % test_name)
 
   for message in error_messages:
-    print >> outstream, '*', textwrap.fill(message, 70), '\n'
+    print('*', textwrap.fill(message, 70), '\n', file=outstream)
 
   return not error_messages
 
@@ -1289,11 +1308,11 @@ def main(args):
         and validate_docs(labs_docs_file)
         and is_perf_benchmarks_scheduling_valid(
             perf_waterfall_file, outstream=sys.stderr)):
-      print 'All the perf config files are up-to-date. \\o/'
+      print('All the perf config files are up-to-date. \\o/')
       return 0
     else:
-      print ('Not all perf config files are up-to-date. Please run %s '
-             'to update them.') % sys.argv[0]
+      print('Not all perf config files are up-to-date. Please run %s '
+            'to update them.' % sys.argv[0])
       return 1
   else:
     update_all_tests(FYI_BUILDERS, fyi_waterfall_file)

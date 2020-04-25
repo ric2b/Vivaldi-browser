@@ -50,7 +50,6 @@ import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
-import org.chromium.chrome.browser.signin.SignoutReason;
 import org.chromium.chrome.browser.widget.DateDividedAdapter;
 import org.chromium.chrome.browser.widget.selection.SelectableItemView;
 import org.chromium.chrome.browser.widget.selection.SelectableItemViewHolder;
@@ -59,6 +58,7 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.signin.ChromeSigninController;
+import org.chromium.components.signin.metrics.SignoutReason;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -172,7 +172,7 @@ public class HistoryActivityTest {
         SigninTestUtil.tearDownAuthForTest();
     }
 
-    private void launchHistoryActivity() throws Exception {
+    private void launchHistoryActivity() {
         HistoryActivity activity = mActivityTestRule.launchActivity(null);
         mHistoryManager = activity.getHistoryManagerForTests();
         mAdapter = mHistoryManager.getAdapterForTests();
@@ -521,7 +521,7 @@ public class HistoryActivityTest {
 
     @Test
     @SmallTest
-    public void testInvisibleHeader() throws Exception {
+    public void testInvisibleHeader() {
         Assert.assertTrue(mAdapter.hasListHeader());
 
         // Not sign in and set clear browsing data button to invisible
@@ -615,7 +615,7 @@ public class HistoryActivityTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             IdentityServicesProvider.getSigninManager().onFirstRunCheckDone();
             IdentityServicesProvider.getSigninManager().addSignInStateObserver(mTestObserver);
-            IdentityServicesProvider.getSigninManager().signIn(account, null, null);
+            IdentityServicesProvider.getSigninManager().signIn(account, null);
         });
 
         mTestObserver.onSigninStateChangedCallback.waitForCallback(

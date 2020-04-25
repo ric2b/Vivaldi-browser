@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.toolbar.bottom;
 
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.View.OnLongClickListener;
 import android.view.ViewGroup;
 
 import org.chromium.chrome.R;
@@ -25,6 +26,13 @@ import org.chromium.chrome.browser.toolbar.TabSwitcherButtonView;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
+import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
+import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.vivaldi.browser.toolbar.BackButton;
+import org.vivaldi.browser.toolbar.ForwardButton;
+import org.vivaldi.browser.toolbar.PanelButton;
+
 /**
  * The coordinator for the browsing mode bottom toolbar. This class has two primary components,
  * an Android view that handles user actions and a composited texture that draws when the controls
@@ -43,6 +51,11 @@ public class BrowsingModeBottomToolbarCoordinator {
     /** The search accelerator that lives in the bottom toolbar. */
     private final SearchAccelerator mSearchAccelerator;
 
+    /** Vivaldi buttons in the bottom toolbar. */
+    private final BackButton mBackButton;
+    private final ForwardButton mForwardButton;
+    private final PanelButton mPanelButton;
+
     /** The tab switcher button component that lives in the bottom toolbar. */
     private final TabSwitcherButtonCoordinator mTabSwitcherButtonCoordinator;
 
@@ -59,7 +72,7 @@ public class BrowsingModeBottomToolbarCoordinator {
      */
     BrowsingModeBottomToolbarCoordinator(View root, ActivityTabProvider tabProvider,
             OnClickListener homeButtonListener, OnClickListener searchAcceleratorListener,
-            OnClickListener shareButtonListener) {
+            OnClickListener shareButtonListener, OnLongClickListener tabSwitcherLongClickListener) {
         BrowsingModeBottomToolbarModel model = new BrowsingModeBottomToolbarModel();
 
         final ViewGroup toolbarRoot = root.findViewById(R.id.bottom_toolbar_browsing);
@@ -68,9 +81,12 @@ public class BrowsingModeBottomToolbarCoordinator {
                 model, toolbarRoot, new BrowsingModeBottomToolbarViewBinder());
 
         mMediator = new BrowsingModeBottomToolbarMediator(model);
-
+        if (ChromeApplication.isVivaldi()) {
+            mHomeButton = toolbarRoot.findViewById(R.id.vivaldi_home_button);
+        } else {
         mHomeButton = toolbarRoot.findViewById(R.id.home_button);
         mHomeButton.setWrapperView(toolbarRoot.findViewById(R.id.home_button_wrapper));
+        }
         mHomeButton.setOnClickListener(homeButtonListener);
         mHomeButton.setActivityTabProvider(tabProvider);
 
@@ -79,18 +95,43 @@ public class BrowsingModeBottomToolbarCoordinator {
         mShareButton.setOnClickListener(shareButtonListener);
         mShareButton.setActivityTabProvider(tabProvider);
 
-        mSearchAccelerator = toolbarRoot.findViewById(R.id.search_accelerator);
+        mSearchAccelerator = toolbarRoot.findViewById(R.id.vivaldi_search_accelerator);
+        if (!ChromeApplication.isVivaldi())
         mSearchAccelerator.setWrapperView(
                 toolbarRoot.findViewById(R.id.search_accelerator_wrapper));
         mSearchAccelerator.setOnClickListener(searchAcceleratorListener);
 
         mTabSwitcherButtonCoordinator = new TabSwitcherButtonCoordinator(toolbarRoot);
         // TODO(amaralp): Make this adhere to MVC framework.
-        ((TabSwitcherButtonView) toolbarRoot.findViewById(R.id.tab_switcher_button))
-                .setWrapperView(toolbarRoot.findViewById(R.id.tab_switcher_button_wrapper));
+        TabSwitcherButtonView tabSwitcherButtonView =
+                toolbarRoot.findViewById(R.id.tab_switcher_button);
+        tabSwitcherButtonView.setWrapperView(
+                toolbarRoot.findViewById(R.id.tab_switcher_button_wrapper));
 
+        if (tabSwitcherLongClickListener != null) {
+            tabSwitcherButtonView.setOnLongClickListener(
+                (view) -> tabSwitcherLongClickListener.onLongClick(tabSwitcherButtonView));
+        }
         mMenuButton = toolbarRoot.findViewById(R.id.menu_button_wrapper);
         mMenuButton.setWrapperView(toolbarRoot.findViewById(R.id.labeled_menu_button_wrapper));
+
+        /** Vivaldi */
+        ChromeTabbedActivity activity = (ChromeTabbedActivity)root.getContext();
+        mBackButton = toolbarRoot.findViewById(R.id.back_button);
+        mBackButton.setOnClickListener((View v) -> activity.getToolbarManager().back());
+        mForwardButton = toolbarRoot.findViewById(R.id.forward_button);
+        mForwardButton.setOnClickListener((View v) -> activity.getToolbarManager().forward());
+
+        mPanelButton = toolbarRoot.findViewById(R.id.panel_button);
+        mPanelButton.setOnClickListener(
+                (View v) -> BookmarkUtils.showBookmarkManager(activity));
+
+        toolbarRoot.findViewById(R.id.home_button_wrapper).setVisibility(View.GONE);
+        toolbarRoot.findViewById(R.id.share_button_wrapper).setVisibility(View.GONE);
+        toolbarRoot.findViewById(R.id.search_accelerator_wrapper).setVisibility(View.GONE);
+        toolbarRoot.findViewById(R.id.tab_switcher_button_wrapper).setVisibility(View.GONE);
+        toolbarRoot.findViewById(R.id.labeled_menu_button_wrapper).setVisibility(View.GONE);
+        /** Vivaldi */
 
         tabProvider.addObserverAndTrigger(new HintlessActivityTabObserver() {
             @Override
@@ -130,6 +171,12 @@ public class BrowsingModeBottomToolbarCoordinator {
         mSearchAccelerator.setThemeColorProvider(themeColorProvider);
         mSearchAccelerator.setIncognitoStateProvider(incognitoStateProvider);
 
+        /** Vivaldi */
+        mBackButton.setThemeColorProvider(themeColorProvider);
+        mForwardButton.setThemeColorProvider(themeColorProvider);
+        mPanelButton.setThemeColorProvider(themeColorProvider);
+        /** Vivaldi */
+
         mTabSwitcherButtonCoordinator.setTabSwitcherListener(tabSwitcherListener);
         mTabSwitcherButtonCoordinator.setThemeColorProvider(themeColorProvider);
         mTabSwitcherButtonCoordinator.setTabCountProvider(tabCountProvider);
@@ -167,6 +214,22 @@ public class BrowsingModeBottomToolbarCoordinator {
         return mMenuButton;
     }
 
+    /** Vivaldi. Update back button according to available back history. */
+    void updateBackButtonVisibility(boolean canGoBack) {
+        mBackButton.setEnabled(canGoBack);
+    }
+
+    /** Vivaldi. Update forward button according to available forward history. */
+    void updateForwardButtonVisibility(boolean canGoForward) {
+        mForwardButton.setEnabled(canGoForward);
+    }
+
+    /** Vivaldi. Update center button depending on showing home page or not **/
+    void updateCenterButton(boolean showSearch) {
+        mSearchAccelerator.setVisibility(showSearch ? View.VISIBLE : View.GONE);
+        mHomeButton.setVisibility(showSearch ? View.GONE : View.VISIBLE);
+    }
+
     /**
      * Clean up any state when the browsing mode bottom toolbar is destroyed.
      */
@@ -177,5 +240,11 @@ public class BrowsingModeBottomToolbarCoordinator {
         mSearchAccelerator.destroy();
         mTabSwitcherButtonCoordinator.destroy();
         mMenuButton.destroy();
+
+        /** Vivaldi */
+        mBackButton.destroy();
+        mForwardButton.destroy();
+        mPanelButton.destroy();
+        /** Vivaldi */
     }
 }

@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/sequence_checker.h"
+#include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "base/trace_event/trace_config.h"
 #include "chromecast/tracing/system_tracing_common.h"
@@ -285,12 +286,13 @@ void CastTracingAgent::StartTracing(const std::string& config,
                              base::Unretained(this), std::move(callback)));
 }
 
-void CastTracingAgent::StopAndFlush(tracing::mojom::RecorderPtr recorder) {
+void CastTracingAgent::StopAndFlush(
+    mojo::PendingRemote<tracing::mojom::Recorder> recorder) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   // This may be called even if we are not tracing.
   if (!session_)
     return;
-  recorder_ = std::move(recorder);
+  recorder_.Bind(std::move(recorder));
   session_->StopTracing(base::BindRepeating(&CastTracingAgent::HandleTraceData,
                                             base::Unretained(this)));
 }

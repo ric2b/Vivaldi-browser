@@ -69,7 +69,7 @@ AudioOutputStreamBroker::AudioOutputStreamBroker(
     const base::UnguessableToken& group_id,
     const base::Optional<base::UnguessableToken>& processing_id,
     DeleterCallback deleter,
-    media::mojom::AudioOutputStreamProviderClientPtr client)
+    mojo::PendingRemote<media::mojom::AudioOutputStreamProviderClient> client)
     : AudioStreamBroker(render_process_id, render_frame_id),
       output_device_id_(output_device_id),
       params_(params),
@@ -92,7 +92,7 @@ AudioOutputStreamBroker::AudioOutputStreamBroker(
     media_observer->OnCreatingAudioStream(render_process_id, render_frame_id);
 
   // Unretained is safe because |this| owns |client_|
-  client_.set_connection_error_handler(
+  client_.set_disconnect_handler(
       base::BindOnce(&AudioOutputStreamBroker::Cleanup, base::Unretained(this),
                      DisconnectReason::kTerminatedByClient));
 }
@@ -175,8 +175,7 @@ void AudioOutputStreamBroker::StreamCreated(
     return;
   }
 
-  client_->Created(media::mojom::AudioOutputStreamPtr(std::move(stream)),
-                   std::move(data_pipe));
+  client_->Created(std::move(stream), std::move(data_pipe));
 }
 
 void AudioOutputStreamBroker::ObserverBindingLost(

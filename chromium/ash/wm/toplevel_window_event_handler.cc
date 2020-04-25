@@ -4,8 +4,13 @@
 
 #include "ash/wm/toplevel_window_event_handler.h"
 
+#include "ash/home_screen/home_screen_controller.h"
 #include "ash/public/cpp/app_types.h"
+#include "ash/public/cpp/ash_features.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "ash/wm/back_gesture_affordance.h"
+#include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/resize_shadow_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_resizer.h"
@@ -36,6 +41,10 @@ namespace {
 // How many pixels are reserved for gesture events to start dragging the app
 // window from the top of the screen in tablet mode.
 constexpr int kDragStartTopEdgeInset = 8;
+
+// How many dips are reserved for gesture events to start swiping to previous
+// page from the left edge of the screen in tablet mode.
+constexpr int kStartGoingBackLeftEdgeInset = 16;
 
 // Returns whether |window| can be moved via a two finger drag given
 // the hittest results of the two fingers.
@@ -92,6 +101,55 @@ void OnDragCompleted(
     ToplevelWindowEventHandler::DragResult result) {
   *result_return_value = result;
   run_loop->Quit();
+}
+
+// True if we can start swiping from left edge to go to previous page.
+bool CanStartGoingBack() {
+  if (!features::IsSwipingFromLeftEdgeToGoBackEnabled())
+    return false;
+
+  Shell* shell = Shell::Get();
+  if (!shell->tablet_mode_controller()->InTabletMode())
+    return false;
+
+  // Do not enable back gesture if it is not in an ACTIVE session. e.g, login
+  // screen, lock screen.
+  if (shell->session_controller()->GetSessionState() !=
+      session_manager::SessionState::ACTIVE) {
+    return false;
+  }
+
+  // Do not enable back gesture while overview mode is active but splitview is
+  // not active.
+  if (shell->overview_controller()->InOverviewSession() &&
+      !SplitViewController::Get(Shell::GetPrimaryRootWindow())
+           ->InSplitViewMode()) {
+    return false;
+  }
+
+  // Do not enable back gesture if home screen is visible.
+  if (shell->home_screen_controller()->IsHomeScreenVisible())
+    return false;
+
+  return true;
+}
+
+// True if |event| is scrolling away from the restricted left area of the
+// display.
+bool StartedAwayFromLeftArea(ui::GestureEvent* event) {
+  if (event->details().scroll_x_hint() < 0)
+    return false;
+
+  const gfx::Point location_in_screen =
+      event->target()->GetScreenLocation(*event);
+  const gfx::Rect work_area_bounds =
+      display::Screen::GetScreen()
+          ->GetDisplayNearestWindow(static_cast<aura::Window*>(event->target()))
+          .work_area();
+
+  gfx::Rect hit_bounds_in_screen(work_area_bounds);
+  hit_bounds_in_screen.set_width(kStartGoingBackLeftEdgeInset);
+  return hit_bounds_in_screen.Contains(location_in_screen);
 }
 
 }  // namespace
@@ -264,6 +322,11 @@ void ToplevelWindowEventHandler::OnMouseEvent(ui::MouseEvent* event) {
 }
 
 void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
+  if (HandleGoingBackFromLeftEdge(event)) {
+    event->StopPropagation();
+    return;
+  }
+
   aura::Window* target = static_cast<aura::Window*>(event->target());
   int component = window_util::GetNonClientComponent(target, event->location());
   gfx::Point event_location = event->location();
@@ -794,6 +857,62 @@ void ToplevelWindowEventHandler::UpdateGestureTarget(
   gesture_target_ = target;
   if (gesture_target_)
     gesture_target_->AddObserver(this);
+}
+
+bool ToplevelWindowEventHandler::HandleGoingBackFromLeftEdge(
+    ui::GestureEvent* event) {
+  if (!CanStartGoingBack())
+    return false;
+
+  gfx::Point screen_location = event->location();
+  ::wm::ConvertPointToScreen(static_cast<aura::Window*>(event->target()),
+                             &screen_location);
+  switch (event->type()) {
+    case ui::ET_GESTURE_SCROLL_BEGIN: {
+      going_back_started_ = StartedAwayFromLeftArea(event);
+      if (!going_back_started_)
+        break;
+      back_gesture_affordance_ =
+          std::make_unique<BackGestureAffordance>(screen_location);
+      return true;
+    }
+    case ui::ET_GESTURE_SCROLL_UPDATE:
+      if (!going_back_started_)
+        break;
+      DCHECK(back_gesture_affordance_);
+      back_gesture_affordance_->SetDragProgress(screen_location.x());
+      return true;
+    case ui::ET_GESTURE_SCROLL_END:
+    case ui::ET_SCROLL_FLING_START: {
+      if (!going_back_started_)
+        break;
+      DCHECK(back_gesture_affordance_);
+      if ((event->type() == ui::ET_GESTURE_SCROLL_END &&
+           screen_location.x() >= kSwipingDistanceForGoingBack) ||
+          (event->type() == ui::ET_SCROLL_FLING_START &&
+           event->details().velocity_x() >= kFlingVelocityForGoingBack)) {
+        aura::Window* root_window =
+            window_util::GetRootWindowAt(screen_location);
+        ui::KeyEvent press_key_event(ui::ET_KEY_PRESSED, ui::VKEY_BROWSER_BACK,
+                                     ui::EF_NONE);
+        ignore_result(
+            root_window->GetHost()->SendEventToSink(&press_key_event));
+        ui::KeyEvent release_key_event(ui::ET_KEY_RELEASED,
+                                       ui::VKEY_BROWSER_BACK, ui::EF_NONE);
+        ignore_result(
+            root_window->GetHost()->SendEventToSink(&release_key_event));
+        back_gesture_affordance_->Complete();
+      } else {
+        back_gesture_affordance_->Abort();
+      }
+      going_back_started_ = false;
+      return true;
+    }
+    default:
+      break;
+  }
+
+  return false;
 }
 
 }  // namespace ash

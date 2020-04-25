@@ -15,8 +15,12 @@
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner.h"
+#include "base/threading/sequence_bound.h"
+#include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_provider.h"
+#include "components/services/leveldb/leveldb_database_impl.h"
 #include "components/services/leveldb/public/mojom/leveldb.mojom.h"
+#include "components/services/storage/dom_storage/dom_storage_database.h"
 #include "content/browser/dom_storage/dom_storage_task_runner.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
@@ -24,13 +28,8 @@
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/file/public/mojom/file_system.mojom.h"
 #include "third_party/blink/public/mojom/dom_storage/storage_area.mojom.h"
 #include "url/origin.h"
-
-namespace service_manager {
-class Connector;
-}
 
 namespace storage {
 class SpecialStoragePolicy;
@@ -61,8 +60,8 @@ class CONTENT_EXPORT LocalStorageContextMojo
       const base::FilePath& file_name);
 
   LocalStorageContextMojo(
+      const base::FilePath& partition_directory,
       scoped_refptr<base::SequencedTaskRunner> task_runner,
-      service_manager::Connector* connector,
       scoped_refptr<DOMStorageTaskRunner> legacy_task_runner,
       const base::FilePath& old_localstorage_path,
       const base::FilePath& subdirectory,
@@ -99,9 +98,6 @@ class CONTENT_EXPORT LocalStorageContextMojo
   // Clears unused storage areas, when thresholds are reached.
   void PurgeUnusedAreasIfNeeded();
 
-  void SetDatabaseForTesting(
-      mojo::PendingAssociatedRemote<leveldb::mojom::LevelDBDatabase> database);
-
   // base::trace_event::MemoryDumpProvider implementation.
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override;
@@ -112,6 +108,17 @@ class CONTENT_EXPORT LocalStorageContextMojo
   scoped_refptr<DOMStorageTaskRunner> legacy_task_runner() {
     return task_runner_;
   }
+
+  // Access the underlying DomStorageDatabase. May be null if the database is
+  // not yet open.
+  const base::SequenceBound<storage::DomStorageDatabase>&
+  GetDatabaseForTesting() const {
+    return database_->database();
+  }
+
+  // Wait for the database to be opened, or for opening to fail. If the database
+  // is already opened, |callback| is invoked immediately.
+  void SetDatabaseOpenCallbackForTesting(base::OnceClosure callback);
 
  private:
   friend class DOMStorageBrowserTest;
@@ -127,15 +134,12 @@ class CONTENT_EXPORT LocalStorageContextMojo
 
   // Part of our asynchronous directory opening called from RunWhenConnected().
   void InitiateConnection(bool in_memory_only = false);
-  void OnDirectoryOpened(base::File::Error err);
-  void OnDatabaseOpened(bool in_memory, leveldb::mojom::DatabaseError status);
-  void OnGotDatabaseVersion(leveldb::mojom::DatabaseError status,
+  void OnDatabaseOpened(leveldb::Status status);
+  void OnGotDatabaseVersion(leveldb::Status status,
                             const std::vector<uint8_t>& value);
   void OnConnectionFinished();
   void DeleteAndRecreateDatabase(const char* histogram_name);
-  void OnDBDestroyed(bool recreate_in_memory,
-                     leveldb::mojom::DatabaseError status);
-  void OnMojoConnectionDestroyed();
+  void OnDBDestroyed(bool recreate_in_memory, leveldb::Status status);
 
   // The (possibly delayed) implementation of OpenLocalStorage(). Can be called
   // directly from that function, or through |on_database_open_callbacks_|.
@@ -148,14 +152,14 @@ class CONTENT_EXPORT LocalStorageContextMojo
   // directly from that function, or through |on_database_open_callbacks_|.
   void RetrieveStorageUsage(GetStorageUsageCallback callback);
   void OnGotMetaData(GetStorageUsageCallback callback,
-                     leveldb::mojom::DatabaseError status,
+                     leveldb::Status status,
                      std::vector<leveldb::mojom::KeyValuePtr> data);
 
   void OnGotStorageUsageForShutdown(std::vector<StorageUsageInfo> usage);
-  void OnShutdownComplete(leveldb::mojom::DatabaseError error);
+  void OnShutdownComplete(leveldb::Status status);
 
   void GetStatistics(size_t* total_cache_size, size_t* unused_area_count);
-  void OnCommitResult(leveldb::mojom::DatabaseError error);
+  void OnCommitResult(leveldb::Status status);
 
   // These values are written to logs.  New enum values can be added, but
   // existing enums must never be renumbered or deleted and reused.
@@ -170,8 +174,7 @@ class CONTENT_EXPORT LocalStorageContextMojo
 
   void LogDatabaseOpenResult(OpenResult result);
 
-  std::unique_ptr<service_manager::Connector> connector_;
-  const base::FilePath subdirectory_;
+  const base::FilePath directory_;
 
   enum ConnectionState {
     NO_CONNECTION,
@@ -184,14 +187,13 @@ class CONTENT_EXPORT LocalStorageContextMojo
   bool force_keep_session_state_ = false;
   scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy_;
 
-  file::mojom::FileSystemPtr file_system_;
-  filesystem::mojom::DirectoryPtr directory_;
+  const scoped_refptr<base::SequencedTaskRunner> leveldb_task_runner_;
 
   base::trace_event::MemoryAllocatorDumpGuid memory_dump_id_;
 
-  mojo::Remote<leveldb::mojom::LevelDBService> leveldb_service_;
-  mojo::AssociatedRemote<leveldb::mojom::LevelDBDatabase> database_;
+  std::unique_ptr<leveldb::LevelDBDatabaseImpl> database_;
   bool tried_to_recreate_during_open_ = false;
+  bool in_memory_ = false;
 
   std::vector<base::OnceClosure> on_database_opened_callbacks_;
 

@@ -27,10 +27,6 @@ class ASH_EXPORT HomeScreenController : public OverviewObserver,
   HomeScreenController();
   ~HomeScreenController() override;
 
-  // Returns true if the home screen can be shown (generally corresponds to the
-  // device being in tablet mode).
-  bool IsHomeScreenAvailable();
-
   // Shows the home screen.
   void Show();
 
@@ -46,6 +42,9 @@ class ASH_EXPORT HomeScreenController : public OverviewObserver,
   // should hide it during dragging a window and reshow it when the drag ends.
   void OnWindowDragStarted();
   void OnWindowDragEnded();
+
+  // True if home screen is visible.
+  bool IsHomeScreenVisible() const;
 
   HomeLauncherGestureHandler* home_launcher_gesture_handler() {
     return home_launcher_gesture_handler_.get();

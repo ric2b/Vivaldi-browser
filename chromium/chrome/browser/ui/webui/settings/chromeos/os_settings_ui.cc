@@ -16,6 +16,7 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "build/build_config.h"
+#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/webui/app_management/app_management.mojom.h"
 #include "chrome/browser/ui/webui/app_management/app_management_page_handler.h"
 #include "chrome/browser/ui/webui/managed_ui_handler.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/ui/webui/settings/chromeos/wallpaper_handler.h"
 #include "chrome/browser/ui/webui/settings/downloads_handler.h"
 #include "chrome/browser/ui/webui/settings/extension_control_handler.h"
+#include "chrome/browser/ui/webui/settings/font_handler.h"
 #include "chrome/browser/ui/webui/settings/languages_handler.h"
 #include "chrome/browser/ui/webui/settings/people_handler.h"
 #include "chrome/browser/ui/webui/settings/profile_info_handler.h"
@@ -49,6 +51,7 @@
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/unified_consent/feature.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 
 namespace chromeos {
 namespace settings {
@@ -84,6 +87,7 @@ OSSettingsUI::OSSettingsUI(content::WebUI* web_ui)
       std::make_unique<::settings::DownloadsHandler>(profile));
   AddSettingsPageUIHandler(
       std::make_unique<::settings::ExtensionControlHandler>());
+  AddSettingsPageUIHandler(std::make_unique<::settings::FontHandler>(web_ui));
   AddSettingsPageUIHandler(
       std::make_unique<::settings::LanguagesHandler>(web_ui));
   AddSettingsPageUIHandler(
@@ -102,8 +106,8 @@ OSSettingsUI::OSSettingsUI(content::WebUI* web_ui)
   html_source->AddBoolean("unifiedConsentEnabled",
                           unified_consent::IsUnifiedConsentFeatureEnabled());
 
-  html_source->AddBoolean(
-      "showApps", base::FeatureList::IsEnabled(features::kAppManagement));
+  html_source->AddBoolean("showAppManagement", base::FeatureList::IsEnabled(
+                                                   features::kAppManagement));
 
 #if defined(OS_CHROMEOS)
   html_source->AddBoolean(
@@ -124,7 +128,8 @@ OSSettingsUI::OSSettingsUI(content::WebUI* web_ui)
   if (web_app::SystemWebAppManager::IsEnabled()) {
     html_source->AddResourcePath("icon-192.png", IDR_SETTINGS_LOGO_192);
     html_source->AddResourcePath("pwa.html", IDR_PWA_HTML);
-    html_source->AddResourcePath("manifest.json", IDR_OS_SETTINGS_MANIFEST);
+    web_app::SetManifestRequestFilter(html_source, IDR_OS_SETTINGS_MANIFEST,
+                                      IDS_SETTINGS_SETTINGS);
   }
 
 #if BUILDFLAG(OPTIMIZE_WEBUI)
@@ -154,7 +159,8 @@ OSSettingsUI::OSSettingsUI(content::WebUI* web_ui)
   html_source->AddResourcePath("app-management/image_info.mojom-lite.js",
                                IDR_APP_MANAGEMENT_IMAGE_INFO_MOJO_LITE_JS);
 
-  ::settings::AddLocalizedStrings(html_source, profile);
+  ::settings::AddLocalizedStrings(html_source, profile,
+                                  web_ui->GetWebContents());
 
   auto plural_string_handler = std::make_unique<PluralStringHandler>();
   plural_string_handler->AddLocalizedString("profileLabel",
@@ -183,18 +189,18 @@ void OSSettingsUI::AddSettingsPageUIHandler(
 }
 
 void OSSettingsUI::BindCrosNetworkConfig(
-    network_config::mojom::CrosNetworkConfigRequest request) {
-  ash::GetNetworkConfigService(std::move(request));
+    mojo::PendingReceiver<network_config::mojom::CrosNetworkConfig> receiver) {
+  ash::GetNetworkConfigService(std::move(receiver));
 }
 
 void OSSettingsUI::BindAppManagementPageHandlerFactory(
-    app_management::mojom::PageHandlerFactoryRequest request) {
+    mojo::PendingReceiver<app_management::mojom::PageHandlerFactory> receiver) {
   if (!app_management_page_handler_factory_) {
     app_management_page_handler_factory_ =
         std::make_unique<AppManagementPageHandlerFactory>(
             Profile::FromWebUI(web_ui()));
   }
-  app_management_page_handler_factory_->Bind(std::move(request));
+  app_management_page_handler_factory_->Bind(std::move(receiver));
 }
 
 }  // namespace settings

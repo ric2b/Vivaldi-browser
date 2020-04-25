@@ -8,10 +8,9 @@
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/fake_raster_source.h"
 #include "cc/test/geometry_test_utils.h"
-#include "cc/test/layer_test_common.h"
+#include "cc/test/layer_tree_impl_test_base.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/draw_property_utils.h"
-#include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -19,23 +18,20 @@
 namespace cc {
 namespace {
 
-class LayerTreeImplTest : public LayerTestCommon::LayerImplTest,
-                          public testing::Test {
+class LayerTreeImplTest : public LayerTreeImplTestBase, public testing::Test {
  public:
-  explicit LayerTreeImplTest(
-      const LayerTreeSettings& settings = LayerListSettings())
-      : LayerImplTest(settings) {}
+  LayerTreeImplTest() = default;
+  explicit LayerTreeImplTest(const LayerTreeSettings& settings)
+      : LayerTreeImplTestBase(settings) {}
 
   void SetUp() override {
     root_layer()->SetBounds(gfx::Size(100, 100));
-    SetupRootProperties(root_layer());
     UpdateDrawProperties(host_impl().active_tree());
   }
 
   FakeLayerTreeHostImpl& host_impl() const {
-    return *LayerImplTest::host_impl();
+    return *LayerTreeImplTestBase::host_impl();
   }
-  LayerImpl* root_layer() { return root_layer_for_testing(); }
 
   const RenderSurfaceList& GetRenderSurfaceList() const {
     return host_impl().active_tree()->GetRenderSurfaceList();
@@ -108,14 +104,6 @@ class LayerTreeImplTest : public LayerTestCommon::LayerImplTest,
   LayerImpl* top_ = nullptr;
   LayerImpl* left_child_ = nullptr;
   LayerImpl* right_child_ = nullptr;
-
- private:
-  RenderSurfaceList render_surface_list_impl_;
-};
-
-class LayerTreeImplTestWithLayerLists : public LayerTreeImplTest {
- public:
-  LayerTreeImplTestWithLayerLists() : LayerTreeImplTest(LayerListSettings()) {}
 };
 
 TEST_F(LayerTreeImplTest, HitTestingForSingleLayer) {
@@ -699,7 +687,6 @@ TEST_F(LayerTreeImplTest, HitTestingForNonClippingIntermediateLayer) {
   intermediate_layer->SetBounds(gfx::Size(50, 50));
   // Sanity check the intermediate layer should not clip.
   ASSERT_FALSE(intermediate_layer->masks_to_bounds());
-  ASSERT_FALSE(intermediate_layer->test_properties()->mask_layer);
   CopyProperties(root, intermediate_layer);
   // this layer is positioned, and hit testing should correctly know where the
   // layer is located.
@@ -973,13 +960,13 @@ TEST_F(LayerTreeImplTest, HitTestingForMultipleLayersAtVaryingDepths) {
   EXPECT_EQ(grand_child1, result_layer);
 }
 
-TEST_F(LayerTreeImplTestWithLayerLists, HitTestingRespectsClipParents) {
+TEST_F(LayerTreeImplTest, HitTestingRespectsClipParents) {
   LayerImpl* root = root_layer();
   root->SetBounds(gfx::Size(100, 100));
   root->SetDrawsContent(true);
   root->SetHitTestable(true);
 
-  LayerImpl* child = AddChildToRoot<LayerImpl>();
+  LayerImpl* child = AddLayer<LayerImpl>();
   child->SetBounds(gfx::Size(1, 1));
   child->SetDrawsContent(true);
   child->SetHitTestable(true);
@@ -987,14 +974,14 @@ TEST_F(LayerTreeImplTestWithLayerLists, HitTestingRespectsClipParents) {
   child->SetOffsetToTransformParent(gfx::Vector2dF(10.f, 10.f));
   CreateClipNode(child);
 
-  LayerImpl* scroll_child = AddChildToRoot<LayerImpl>();
+  LayerImpl* scroll_child = AddLayer<LayerImpl>();
   scroll_child->SetBounds(gfx::Size(200, 200));
   scroll_child->SetDrawsContent(true);
   scroll_child->SetHitTestable(true);
   CopyProperties(root, scroll_child);
   scroll_child->SetClipTreeIndex(child->clip_tree_index());
 
-  LayerImpl* grand_child = AddChildToRoot<LayerImpl>();
+  LayerImpl* grand_child = AddLayer<LayerImpl>();
   grand_child->SetBounds(gfx::Size(200, 200));
   grand_child->SetDrawsContent(true);
   grand_child->SetHitTestable(true);
@@ -1361,9 +1348,10 @@ TEST_F(LayerTreeImplTest,
       gfx::Rect(scaled_bounds_for_root));
 
   host_impl().active_tree()->SetDeviceScaleFactor(device_scale_factor);
-  LayerTreeImpl::ViewportLayerIds viewport_ids;
-  viewport_ids.page_scale = page_scale_layer->id();
-  host_impl().active_tree()->SetViewportLayersFromIds(viewport_ids);
+  LayerTreeImpl::ViewportPropertyIds viewport_property_ids;
+  viewport_property_ids.page_scale_transform =
+      page_scale_layer->transform_tree_index();
+  host_impl().active_tree()->SetViewportPropertyIds(viewport_property_ids);
   host_impl().active_tree()->PushPageScaleFromMainThread(
       page_scale_factor, page_scale_factor, max_page_scale_factor);
   host_impl().active_tree()->SetPageScaleOnActiveTree(page_scale_factor);
@@ -1445,7 +1433,8 @@ TEST_F(LayerTreeImplTest,
   // is also the root layer.
   page_scale_factor *= 1.5f;
   host_impl().active_tree()->SetPageScaleOnActiveTree(page_scale_factor);
-  EXPECT_EQ(page_scale_layer, host_impl().active_tree()->PageScaleLayer());
+  EXPECT_EQ(page_scale_layer->transform_tree_index(),
+            host_impl().active_tree()->PageScaleTransformNode()->id);
 
   test_point = gfx::PointF(35.f, 35.f);
   test_point =
@@ -1913,9 +1902,10 @@ TEST_F(LayerTreeImplTest, SelectionBoundsForScaledLayers) {
   gfx::Size scaled_bounds_for_root = gfx::ScaleToCeiledSize(
       root->bounds(), device_scale_factor * page_scale_factor);
 
-  LayerTreeImpl::ViewportLayerIds viewport_ids;
-  viewport_ids.page_scale = page_scale_layer->id();
-  host_impl().active_tree()->SetViewportLayersFromIds(viewport_ids);
+  LayerTreeImpl::ViewportPropertyIds viewport_property_ids;
+  viewport_property_ids.page_scale_transform =
+      page_scale_layer->transform_tree_index();
+  host_impl().active_tree()->SetViewportPropertyIds(viewport_property_ids);
   host_impl().active_tree()->SetDeviceViewportRect(
       gfx::Rect(scaled_bounds_for_root));
   host_impl().active_tree()->SetDeviceScaleFactor(device_scale_factor);
@@ -2155,28 +2145,6 @@ TEST_F(LayerTreeImplTest, HitTestingCorrectLayerWheelListener) {
   EXPECT_EQ(left_child, result_layer);
 }
 
-// When using layer lists, we may not have layers for the outer viewport. This
-// test verifies that scroll size can be calculated using property tree nodes.
-TEST_F(LayerTreeImplTest, ScrollSizeWithoutLayers) {
-  const gfx::Size inner_viewport_size(1000, 1000);
-  const gfx::Size outer_viewport_size(1000, 1000);
-  const gfx::Size scroll_layer_size(2000, 2000);
-
-  auto* tree_impl = host_impl().active_tree();
-  root_layer()->SetBounds(inner_viewport_size);
-  SetupViewport(root_layer(), outer_viewport_size, scroll_layer_size);
-
-  // With viewport layers the scrollable size should be correct.
-  EXPECT_EQ(gfx::SizeF(scroll_layer_size), tree_impl->ScrollableSize());
-
-  // The scrollable size should be correct without non-outer viewport layers.
-  LayerTreeImpl::ViewportLayerIds updated_viewport_ids;
-  updated_viewport_ids.outer_viewport_scroll =
-      tree_impl->OuterViewportScrollLayer()->id();
-  tree_impl->SetViewportLayersFromIds(updated_viewport_ids);
-  EXPECT_EQ(gfx::SizeF(scroll_layer_size), tree_impl->ScrollableSize());
-}
-
 namespace {
 
 class PersistentSwapPromise
@@ -2294,17 +2262,13 @@ TEST_F(LayerTreeImplTest, TrackPictureLayersWithPaintWorklets) {
 
   auto* root = EnsureRootLayerInPendingTree();
   root->SetBounds(gfx::Size(100, 100));
-  SetupRootProperties(root);
 
   // Add three layers; two with PaintWorklets and one without.
-  auto* child1 =
-      AddLayerInPendingTree<PictureLayerImpl>(Layer::LayerMaskType::NOT_MASK);
+  auto* child1 = AddLayerInPendingTree<PictureLayerImpl>();
   child1->SetBounds(gfx::Size(100, 100));
-  auto* child2 =
-      AddLayerInPendingTree<PictureLayerImpl>(Layer::LayerMaskType::NOT_MASK);
+  auto* child2 = AddLayerInPendingTree<PictureLayerImpl>();
   child2->SetBounds(gfx::Size(100, 100));
-  auto* child3 =
-      AddLayerInPendingTree<PictureLayerImpl>(Layer::LayerMaskType::NOT_MASK);
+  auto* child3 = AddLayerInPendingTree<PictureLayerImpl>();
   child3->SetBounds(gfx::Size(100, 100));
 
   CopyProperties(root, child1);
@@ -2336,8 +2300,7 @@ TEST_F(LayerTreeImplTest, TrackPictureLayersWithPaintWorklets) {
   EXPECT_EQ(layers.size(), 1u);
   EXPECT_FALSE(layers.contains(child1));
 
-  // Deleting a layer should also cause it to be removed from the set.
-  root->test_properties()->RemoveChild(child3);
+  pending_tree->DetachLayers();
   EXPECT_EQ(layers.size(), 0u);
 }
 
@@ -2365,7 +2328,7 @@ TEST_F(CommitToPendingTreeLayerTreeImplTest,
   // active tree (as they are only used on the sync tree).
   LayerTreeImpl* active_tree = host_impl().active_tree();
   UpdateDrawProperties(active_tree);
-  LayerImpl* active_root = active_tree->root_layer_for_testing();
+  LayerImpl* active_root = active_tree->root_layer();
 
   auto& active_opacity_map =
       active_tree->element_id_to_opacity_animations_for_testing();
@@ -2395,7 +2358,6 @@ TEST_F(CommitToPendingTreeLayerTreeImplTest,
   LayerImpl* child = AddLayerInPendingTree<LayerImpl>();
   pending_tree->SetElementIdsForTesting();
 
-  SetupRootProperties(pending_root);
   // A scale transform forces a TransformNode.
   gfx::Transform scale3d;
   scale3d.Scale3d(1, 1, 0.5);
@@ -2458,7 +2420,7 @@ TEST_F(LayerTreeImplTest, ElementIdToAnimationMapsTrackOnlyOnSyncTree) {
   // they are used on the sync tree).
   LayerTreeImpl* active_tree = host_impl().active_tree();
   UpdateDrawProperties(active_tree);
-  LayerImpl* root = active_tree->root_layer_for_testing();
+  LayerImpl* root = active_tree->root_layer();
 
   auto& opacity_map =
       active_tree->element_id_to_opacity_animations_for_testing();

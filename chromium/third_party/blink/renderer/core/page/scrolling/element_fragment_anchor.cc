@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/page/scrolling/element_fragment_anchor.h"
 
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
+#include "third_party/blink/renderer/core/display_lock/display_lock_context.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node.h"
@@ -33,7 +34,8 @@ Node* FindAnchorFromFragment(const String& fragment, Document& doc) {
 }  // namespace
 
 ElementFragmentAnchor* ElementFragmentAnchor::TryCreate(const KURL& url,
-                                                        LocalFrame& frame) {
+                                                        LocalFrame& frame,
+                                                        bool should_scroll) {
   DCHECK(frame.GetDocument());
   Document& doc = *frame.GetDocument();
 
@@ -72,7 +74,7 @@ ElementFragmentAnchor* ElementFragmentAnchor::TryCreate(const KURL& url,
   }
 
   if (target) {
-    target->ActivateDisplayLockIfNeeded();
+    target->ActivateDisplayLockIfNeeded(DisplayLockActivationReason::kUser);
     target->DispatchActivateInvisibleEventIfNeeded();
   }
 
@@ -80,6 +82,10 @@ ElementFragmentAnchor* ElementFragmentAnchor::TryCreate(const KURL& url,
     return nullptr;
 
   if (!anchor_node)
+    return nullptr;
+
+  // Element fragment anchors only need to be kept alive if they need scrolling.
+  if (!should_scroll)
     return nullptr;
 
   return MakeGarbageCollected<ElementFragmentAnchor>(*anchor_node, frame);

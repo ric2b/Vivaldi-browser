@@ -10,9 +10,6 @@ import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
-import android.support.annotation.ColorRes;
-import android.support.annotation.Nullable;
-import android.support.annotation.StringRes;
 import android.util.AttributeSet;
 import android.view.InputDevice;
 import android.view.MotionEvent;
@@ -21,6 +18,10 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ProgressBar;
+
+import androidx.annotation.ColorRes;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
@@ -31,6 +32,8 @@ import org.chromium.chrome.browser.ThemeColorProvider.TintObserver;
 import org.chromium.chrome.browser.appmenu.AppMenuButtonHelper;
 import org.chromium.chrome.browser.compositor.Invalidator;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
+import org.chromium.chrome.browser.findinpage.FindToolbar;
 import org.chromium.chrome.browser.fullscreen.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.LocationBar;
@@ -41,14 +44,16 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.MenuButton;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
+import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator.UrlExpansionObserver;
+import org.chromium.chrome.browser.ui.widget.textbubble.TextBubble;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.ViewUtils;
-import org.chromium.chrome.browser.widget.ToolbarProgressBar;
-import org.chromium.chrome.browser.widget.textbubble.TextBubble;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.ui.UiUtils;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Layout class that contains the base shared logic for manipulating the toolbar component. For
@@ -448,7 +453,7 @@ public abstract class ToolbarLayout
 
     /**
      * Gives inheriting classes the chance to respond to
-     * {@link org.chromium.chrome.browser.widget.findinpage.FindToolbar} state changes.
+     * {@link FindToolbar} state changes.
      * @param showing Whether or not the {@code FindToolbar} will be showing.
      */
     void handleFindLocationBarStateChange(boolean showing) {
@@ -629,6 +634,8 @@ public abstract class ToolbarLayout
 
     void setLayoutUpdateHost(LayoutUpdateHost layoutUpdateHost) {}
 
+    void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior) {}
+
     /**
      * @param attached Whether or not the web content is attached to the view heirarchy.
      */
@@ -709,6 +716,12 @@ public abstract class ToolbarLayout
      */
     void onUrlFocusChange(boolean hasFocus) {
         mUrlHasFocus = hasFocus;
+        // For Vivaldi, hide menu (V) button so it doesn't mix with the location bar buttons.
+        if (ChromeApplication.isVivaldi()) {
+            ImageButton menuButton = getMenuButton();
+            if (menuButton != null)
+                menuButton.setVisibility(hasFocus ? View.GONE : View.VISIBLE);
+        }
     }
 
     /**
@@ -795,7 +808,9 @@ public abstract class ToolbarLayout
      * @return Whether or not the current Tab did go back.
      */
     boolean back() {
-        if (getLocationBar() != null) getLocationBar().setUrlBarFocus(false);
+        if (getLocationBar() != null) {
+            getLocationBar().setUrlBarFocus(false, null, LocationBar.OmniboxFocusReason.UNFOCUS);
+        }
         return mToolbarTabController != null && mToolbarTabController.back() != null;
     }
 
@@ -804,7 +819,9 @@ public abstract class ToolbarLayout
      * @return Whether or not the current Tab did go forward.
      */
     boolean forward() {
-        if (getLocationBar() != null) getLocationBar().setUrlBarFocus(false);
+        if (getLocationBar() != null) {
+            getLocationBar().setUrlBarFocus(false, null, LocationBar.OmniboxFocusReason.UNFOCUS);
+        }
         return mToolbarTabController != null ? mToolbarTabController.forward() : false;
     }
 
@@ -815,7 +832,9 @@ public abstract class ToolbarLayout
      * <p>The buttons of the toolbar will be updated as a result of making this call.
      */
     void stopOrReloadCurrentTab() {
-        if (getLocationBar() != null) getLocationBar().setUrlBarFocus(false);
+        if (getLocationBar() != null) {
+            getLocationBar().setUrlBarFocus(false, null, LocationBar.OmniboxFocusReason.UNFOCUS);
+        }
         if (mToolbarTabController != null) mToolbarTabController.stopOrReloadCurrentTab();
     }
 
@@ -823,7 +842,9 @@ public abstract class ToolbarLayout
      * Opens hompage in the current tab.
      */
     void openHomepage() {
-        if (getLocationBar() != null) getLocationBar().setUrlBarFocus(false);
+        if (getLocationBar() != null) {
+            getLocationBar().setUrlBarFocus(false, null, LocationBar.OmniboxFocusReason.UNFOCUS);
+        }
         if (mToolbarTabController != null) mToolbarTabController.openHomepage();
     }
 

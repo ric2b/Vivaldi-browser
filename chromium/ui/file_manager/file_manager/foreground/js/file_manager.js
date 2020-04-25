@@ -19,9 +19,9 @@ class FileManager extends cr.EventTarget {
 
     /**
      * Volume manager.
-     * @private {?FilteredVolumeManager}
+     * @private {!FilteredVolumeManager}
      */
-    this.volumeManager_ = null;
+    this.volumeManager_;
 
     /** @private {?importer.HistoryLoader} */
     this.historyLoader_ = null;
@@ -438,7 +438,7 @@ class FileManager extends cr.EventTarget {
   }
 
   /**
-   * @return {FilteredVolumeManager}
+   * @return {!FilteredVolumeManager}
    */
   get volumeManager() {
     return this.volumeManager_;
@@ -625,9 +625,7 @@ class FileManager extends cr.EventTarget {
     this.ui_.decorateFilesMenuItems();
     this.ui_.selectionMenuButton.hidden = false;
 
-    console.warn('Files app sync started');
     await Promise.all([fileListPromise, currentDirectoryPromise]);
-    console.warn('Files app sync finished');
   }
 
   /**
@@ -642,7 +640,7 @@ class FileManager extends cr.EventTarget {
 
     this.fileTransferController_ = new FileTransferController(
         assert(this.document_), assert(this.ui_.listContainer),
-        assert(this.ui_.directoryTree), this.ui_.multiProfileShareDialog,
+        assert(this.ui_.directoryTree),
         this.ui_.showConfirmationDialog.bind(this.ui_),
         assert(this.fileBrowserBackground_.progressCenter),
         assert(this.fileOperationManager_), assert(this.metadataModel_),
@@ -776,7 +774,6 @@ class FileManager extends cr.EventTarget {
   initGeneral_() {
     // Initialize the application state.
     // TODO(mtomasz): Unify window.appState with location.search format.
-    console.warn('Files app starting up');
     if (window.appState) {
       const params = {};
 
@@ -1217,7 +1214,7 @@ class FileManager extends cr.EventTarget {
    */
   async onCrostiniChanged_(event) {
     // The background |this.crostini_| object also listens to all crostini
-    // events including enable/disable, allow/disallow and share/unshare.
+    // events including enable/disable, and share/unshare.
     // But to ensure we don't have any race conditions between bg and fg, we
     // set enabled status on it before calling |setupCrostini_| which reads
     // enabled status from it to determine whether 'Linux files' is shown.
@@ -1402,8 +1399,6 @@ class FileManager extends cr.EventTarget {
     const promise = (async () => {
       if (directoryEntry) {
         const entryDescription = util.entryDebugString(directoryEntry);
-        console.warn(
-            `Files app start up: Changing to directory: ${entryDescription}`);
         await new Promise(resolve => {
           this.directoryModel_.changeDirectoryEntry(
               assert(directoryEntry), resolve);
@@ -1411,8 +1406,6 @@ class FileManager extends cr.EventTarget {
         if (opt_selectionEntry) {
           this.directoryModel_.selectEntry(opt_selectionEntry);
         }
-        console.warn(
-            `Files app start up: Changed to directory: ${entryDescription}`);
       } else {
         console.warn('No entry for finishSetupCurrentDirectory_');
       }

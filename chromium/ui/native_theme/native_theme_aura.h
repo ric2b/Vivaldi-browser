@@ -18,11 +18,45 @@ class NATIVE_THEME_EXPORT NativeThemeAura : public NativeThemeBase {
   friend class NativeThemeAuraTest;
   friend class base::NoDestructor<NativeThemeAura>;
 
+  // Colors for form controls refresh.
+  enum ControlColorId {
+    kBorder,
+    kDisabledBorder,
+    kHoveredBorder,
+    kAccent,
+    kDisabledAccent,
+    kHoveredAccent,
+    kBackground,
+    kDisabledBackground,
+    kFill,
+    kDisabledFill,
+    kHoveredFill,
+    kLightenLayer
+  };
+
   explicit NativeThemeAura(bool use_overlay_scrollbars);
   ~NativeThemeAura() override;
 
   static NativeThemeAura* instance();
   static NativeThemeAura* web_instance();
+
+  void PaintLightenLayer(cc::PaintCanvas* canvas,
+                         SkRect skrect,
+                         State state,
+                         SkScalar border_radius,
+                         ColorScheme color_scheme) const;
+  SkColor ControlsAccentColorForState(State state,
+                                      ColorScheme color_scheme) const;
+  SkColor ControlsBorderColorForState(State state,
+                                      ColorScheme color_scheme) const;
+  SkColor ControlsFillColorForState(State state,
+                                    ColorScheme color_scheme) const;
+  SkColor ControlsBackgroundColorForState(State state,
+                                          ColorScheme color_scheme) const;
+  SkColor GetHighContrastControlColor(ControlColorId color_id,
+                                      ColorScheme color_scheme) const;
+  SkColor GetControlColor(ControlColorId color_id,
+                          ColorScheme color_scheme) const;
 
   // NativeThemeBase:
   SkColor GetSystemColor(ColorId color_id,
@@ -37,6 +71,11 @@ class NATIVE_THEME_EXPORT NativeThemeAura : public NativeThemeBase {
                                const gfx::Rect& rect,
                                const MenuItemExtraParams& menu_item,
                                ColorScheme color_scheme) const override;
+  void PaintProgressBar(cc::PaintCanvas* canvas,
+                        State state,
+                        const gfx::Rect& rect,
+                        const ProgressBarExtraParams& progress_bar,
+                        ColorScheme color_scheme) const override;
   void PaintArrowButton(cc::PaintCanvas* gc,
                         const gfx::Rect& rect,
                         Part direction,
@@ -107,6 +146,8 @@ class NATIVE_THEME_EXPORT NativeThemeAura : public NativeThemeBase {
   SkRect PaintCheckboxRadioCommon(cc::PaintCanvas* canvas,
                                   State state,
                                   const gfx::Rect& rect,
+                                  const ButtonExtraParams& button,
+                                  bool is_checkbox,
                                   const SkScalar borderRadius,
                                   ColorScheme color_scheme) const;
 

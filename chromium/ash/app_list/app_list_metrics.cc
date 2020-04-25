@@ -15,16 +15,15 @@
 #include "base/time/time.h"
 #include "ui/compositor/compositor.h"
 
-namespace app_list {
+namespace ash {
 
 namespace {
 
 int CalculateAnimationSmoothness(int actual_frames,
-                                 int ideal_duration_ms,
+                                 base::TimeDelta ideal_duration,
                                  float refresh_rate) {
   int smoothness = 100;
-  const int ideal_frames =
-      refresh_rate * ideal_duration_ms / base::Time::kMillisecondsPerSecond;
+  const int ideal_frames = refresh_rate * ideal_duration.InSecondsF();
   if (ideal_frames > actual_frames)
     smoothness = 100 * actual_frames / ideal_frames;
   return smoothness;
@@ -106,19 +105,19 @@ enum class ApplistSearchResultOpenedSource {
 };
 
 void RecordFolderShowHideAnimationSmoothness(int actual_frames,
-                                             int ideal_duration_ms,
+                                             base::TimeDelta ideal_duration,
                                              float refresh_rate) {
-  const int smoothness = CalculateAnimationSmoothness(
-      actual_frames, ideal_duration_ms, refresh_rate);
+  const int smoothness =
+      CalculateAnimationSmoothness(actual_frames, ideal_duration, refresh_rate);
   UMA_HISTOGRAM_PERCENTAGE(kFolderShowHideAnimationSmoothness, smoothness);
 }
 
 void RecordPaginationAnimationSmoothness(int actual_frames,
-                                         int ideal_duration_ms,
+                                         base::TimeDelta ideal_duration,
                                          float refresh_rate,
                                          bool is_tablet_mode) {
-  const int smoothness = CalculateAnimationSmoothness(
-      actual_frames, ideal_duration_ms, refresh_rate);
+  const int smoothness =
+      CalculateAnimationSmoothness(actual_frames, ideal_duration, refresh_rate);
   UMA_HISTOGRAM_PERCENTAGE(kPaginationTransitionAnimationSmoothness,
                            smoothness);
   if (is_tablet_mode) {
@@ -130,8 +129,8 @@ void RecordPaginationAnimationSmoothness(int actual_frames,
   }
 }
 
-void RecordPageSwitcherSourceByEventType(ui::EventType type,
-                                         bool is_tablet_mode) {
+void AppListRecordPageSwitcherSourceByEventType(ui::EventType type,
+                                                bool is_tablet_mode) {
   AppListPageSwitcherSource source;
 
   switch (type) {
@@ -344,4 +343,4 @@ bool IsCommandIdAnAppLaunch(int command_id_number) {
   return false;
 }
 
-}  // namespace app_list
+}  // namespace ash

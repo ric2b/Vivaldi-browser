@@ -269,7 +269,8 @@ void CrxInstaller::UpdateExtensionFromUnpackedCrx(
   if (!service || service->browser_terminating())
     return;
 
-  const Extension* extension = service->GetInstalledExtension(extension_id);
+  const Extension* extension = ExtensionRegistry::Get(service->profile())
+                                   ->GetInstalledExtension(extension_id);
   if (!extension) {
     LOG(WARNING) << "Will not update extension " << extension_id
                  << " because it is not installed";
@@ -543,7 +544,7 @@ void CrxInstaller::CheckInstall() {
     ExtensionRegistry* registry = ExtensionRegistry::Get(service->profile());
     for (const auto& import : imports) {
       const Extension* imported_module = registry->GetExtensionById(
-          import.extension_id, ExtensionRegistry::COMPATIBILITY);
+          import.extension_id, ExtensionRegistry::EVERYTHING);
       if (!imported_module)
         continue;
 
@@ -962,27 +963,28 @@ void CrxInstaller::NotifyCrxInstallComplete(
     const base::Optional<CrxInstallError>& error) {
   const std::string extension_id =
       expected_id_.empty() && extension() ? extension()->id() : expected_id_;
-  InstallationReporter::ReportInstallationStage(
-      profile_, extension_id, InstallationReporter::Stage::COMPLETE);
+  InstallationReporter* installation_reporter =
+      InstallationReporter::Get(profile_);
+  installation_reporter->ReportInstallationStage(
+      extension_id, InstallationReporter::Stage::COMPLETE);
   const bool success = !error.has_value();
 
   if (!success && (!expected_id_.empty() || extension())) {
     switch (error->type()) {
       case CrxInstallErrorType::DECLINED:
-        InstallationReporter::ReportCrxInstallError(
-            profile_, extension_id,
+        installation_reporter->ReportCrxInstallError(
+            extension_id,
             InstallationReporter::FailureReason::CRX_INSTALL_ERROR_DECLINED,
             error->detail());
         break;
       case CrxInstallErrorType::SANDBOXED_UNPACKER_FAILURE:
-        InstallationReporter::ReportFailure(
-            profile_, extension_id,
-            InstallationReporter::FailureReason::
-                CRX_INSTALL_ERROR_SANDBOXED_UNPACKER_FAILURE);
+        installation_reporter->ReportFailure(
+            extension_id, InstallationReporter::FailureReason::
+                              CRX_INSTALL_ERROR_SANDBOXED_UNPACKER_FAILURE);
         break;
       case CrxInstallErrorType::OTHER:
-        InstallationReporter::ReportCrxInstallError(
-            profile_, extension_id,
+        installation_reporter->ReportCrxInstallError(
+            extension_id,
             InstallationReporter::FailureReason::CRX_INSTALL_ERROR_OTHER,
             error->detail());
         break;
@@ -1047,7 +1049,8 @@ void CrxInstaller::CheckUpdateFromSettingsPage() {
     return;
 
   const Extension* installed_extension =
-      service->GetInstalledExtension(extension()->id());
+      ExtensionRegistry::Get(service->profile())
+          ->GetInstalledExtension(extension()->id());
   if (installed_extension) {
     // Previous version of the extension exists.
     update_from_settings_page_ = true;

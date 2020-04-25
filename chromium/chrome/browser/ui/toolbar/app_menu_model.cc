@@ -635,7 +635,7 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
       }
       LogMenuAction(MENU_ACTION_SITE_SETTINGS);
       break;
-    case IDC_HOSTED_APP_MENU_APP_INFO:
+    case IDC_WEB_APP_MENU_APP_INFO:
       if (!uma_action_recorded_)
         UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.AppInfo", delta);
       LogMenuAction(MENU_ACTION_APP_INFO);
@@ -777,22 +777,18 @@ void AppMenuModel::Build() {
 
   AddItemWithStringId(IDC_FIND, IDS_FIND);
 
-  base::Optional<web_app::AppId> app_id =
-      web_app::GetPwaForSecureActiveTab(browser());
-  if (app_id) {
-    auto* provider = web_app::WebAppProvider::Get(browser()->profile());
+  if (base::Optional<base::string16> name =
+          GetInstallPWAAppMenuItemName(browser_)) {
+    AddItem(IDC_INSTALL_PWA, *name);
+  } else if (base::Optional<web_app::AppId> app_id =
+                 web_app::GetPwaForSecureActiveTab(browser_)) {
+    auto* provider = web_app::WebAppProvider::Get(browser_->profile());
+    const base::string16 short_name =
+        base::UTF8ToUTF16(provider->registrar().GetAppShortName(*app_id));
+    const base::string16 truncated_name = gfx::TruncateString(
+        short_name, kMaxAppNameLength, gfx::CHARACTER_BREAK);
     AddItem(IDC_OPEN_IN_PWA_WINDOW,
-            l10n_util::GetStringFUTF16(
-                IDS_OPEN_IN_APP_WINDOW,
-                gfx::TruncateString(
-                    base::UTF8ToUTF16(
-                        provider->registrar().GetAppShortName(*app_id)),
-                    kMaxAppNameLength, gfx::CHARACTER_BREAK)));
-  } else {
-    base::Optional<base::string16> install_pwa_item_name =
-        GetInstallPWAAppMenuItemName(browser_);
-    if (install_pwa_item_name)
-      AddItem(IDC_INSTALL_PWA, *install_pwa_item_name);
+            l10n_util::GetStringFUTF16(IDS_OPEN_IN_APP_WINDOW, truncated_name));
   }
 
   if (dom_distiller::IsDomDistillerEnabled())
@@ -887,16 +883,12 @@ void AppMenuModel::CreateCutCopyPasteMenu() {
 }
 
 void AppMenuModel::CreateZoomMenu() {
-  // WARNING: Mac does not use the ButtonMenuItemModel, but instead defines the
-  // layout for this menu item in AppMenu.xib. It does, however, use the
-  // command_id value from AddButtonItem() to identify this special item.
   zoom_menu_item_model_.reset(new ui::ButtonMenuItemModel(IDS_ZOOM_MENU, this));
   zoom_menu_item_model_->AddGroupItemWithStringId(IDC_ZOOM_MINUS,
                                                   IDS_ZOOM_MINUS2);
   zoom_menu_item_model_->AddGroupItemWithStringId(IDC_ZOOM_PLUS,
                                                   IDS_ZOOM_PLUS2);
-  zoom_menu_item_model_->AddItemWithImage(IDC_FULLSCREEN,
-                                          IDR_FULLSCREEN_MENU_BUTTON);
+  zoom_menu_item_model_->AddImageItem(IDC_FULLSCREEN);
   AddButtonItem(IDC_ZOOM_MENU, zoom_menu_item_model_.get());
 }
 

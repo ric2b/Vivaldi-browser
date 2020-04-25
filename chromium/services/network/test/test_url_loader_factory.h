@@ -11,12 +11,13 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "net/http/http_status_code.h"
 #include "services/network/public/cpp/resource_request.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom-forward.h"
 
 namespace network {
 class WeakWrapperSharedURLLoaderFactory;
@@ -58,7 +59,7 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
   ~TestURLLoaderFactory() override;
 
   using Redirects =
-      std::vector<std::pair<net::RedirectInfo, ResourceResponseHead>>;
+      std::vector<std::pair<net::RedirectInfo, mojom::URLResponseHeadPtr>>;
 
   // Adds a response to be served. There is one unique response per URL, and if
   // this method is called multiple times for the same URL the last response
@@ -66,10 +67,10 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
   // This can be called before or after a request is made. If it's called after,
   // then pending requests will be "woken up".
   void AddResponse(const GURL& url,
-                   const ResourceResponseHead& head,
+                   mojom::URLResponseHeadPtr head,
                    const std::string& content,
                    const URLLoaderCompletionStatus& status,
-                   const Redirects& redirects = Redirects(),
+                   Redirects redirects = Redirects(),
                    ResponseProduceFlags rp_flags = kResponseDefault);
 
   // Simpler version of above for the common case of success or error page.
@@ -113,7 +114,7 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
   bool SimulateResponseForPendingRequest(
       const GURL& url,
       const network::URLLoaderCompletionStatus& completion_status,
-      const ResourceResponseHead& response_head,
+      mojom::URLResponseHeadPtr response_head,
       const std::string& content,
       ResponseMatchFlags flags = kMatchDefault);
 
@@ -132,7 +133,7 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
   // This method is useful to process requests at a given pre-defined order.
   void SimulateResponseWithoutRemovingFromPendingList(
       PendingRequest* request,
-      const ResourceResponseHead& head,
+      mojom::URLResponseHeadPtr head,
       std::string content,
       const URLLoaderCompletionStatus& status);
 
@@ -149,7 +150,7 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
                             mojom::URLLoaderClientPtr client,
                             const net::MutableNetworkTrafficAnnotationTag&
                                 traffic_annotation) override;
-  void Clone(mojom::URLLoaderFactoryRequest request) override;
+  void Clone(mojo::PendingReceiver<mojom::URLLoaderFactory> receiver) override;
 
   // Returns a 'safe' ref-counted weak wrapper around this TestURLLoaderFactory
   // instance.
@@ -170,7 +171,7 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
 
   static void SimulateResponse(mojom::URLLoaderClient* client,
                                Redirects redirects,
-                               ResourceResponseHead head,
+                               mojom::URLResponseHeadPtr head,
                                std::string content,
                                URLLoaderCompletionStatus status,
                                ResponseProduceFlags response_flags);
@@ -178,10 +179,11 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
   struct Response {
     Response();
     ~Response();
-    Response(const Response&);
+    Response(Response&&);
+    Response& operator=(Response&&);
     GURL url;
     Redirects redirects;
-    ResourceResponseHead head;
+    mojom::URLResponseHeadPtr head;
     std::string content;
     URLLoaderCompletionStatus status;
     ResponseProduceFlags flags;
@@ -193,7 +195,7 @@ class TestURLLoaderFactory : public mojom::URLLoaderFactory {
   scoped_refptr<network::WeakWrapperSharedURLLoaderFactory> weak_wrapper_;
 
   Interceptor interceptor_;
-  mojo::BindingSet<network::mojom::URLLoaderFactory> bindings_;
+  mojo::ReceiverSet<network::mojom::URLLoaderFactory> receivers_;
 
   DISALLOW_COPY_AND_ASSIGN(TestURLLoaderFactory);
 };

@@ -10,16 +10,16 @@ import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.res.ColorStateList;
-import android.support.annotation.DrawableRes;
 import android.support.v4.view.ViewCompat;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.animation.LinearInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+
+import androidx.annotation.DrawableRes;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
@@ -28,8 +28,9 @@ import org.chromium.chrome.browser.ThemeColorProvider.TintObserver;
 import org.chromium.chrome.browser.appmenu.AppMenuButtonHelper;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper.MenuButtonState;
+import org.chromium.chrome.browser.ui.widget.animation.Interpolators;
+import org.chromium.chrome.browser.ui.widget.highlight.PulseDrawable;
 import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.chrome.browser.widget.PulseDrawable;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
 
 /**
@@ -323,7 +324,7 @@ public class MenuButton extends FrameLayout implements TintObserver {
 
         // Create menu button ObjectAnimator.
         ObjectAnimator menuButtonFadeAnimator = ObjectAnimator.ofFloat(menuButton, View.ALPHA, 0.f);
-        menuButtonFadeAnimator.setInterpolator(new LinearInterpolator());
+        menuButtonFadeAnimator.setInterpolator(Interpolators.LINEAR_INTERPOLATOR);
 
         // Create AnimatorSet and listeners.
         AnimatorSet set = new AnimatorSet();

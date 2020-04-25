@@ -14,8 +14,10 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/task/post_task.h"
 #include "base/task/sequence_manager/test/fake_task.h"
 #include "base/task/sequence_manager/test/sequence_manager_for_test.h"
+#include "base/task/task_executor.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -45,6 +47,7 @@ namespace scheduler {
 namespace main_thread_scheduler_impl_unittest {
 
 using testing::Mock;
+using testing::NotNull;
 using InputEventState = WebThreadScheduler::InputEventState;
 using base::sequence_manager::FakeTask;
 using base::sequence_manager::FakeTaskTiming;
@@ -2106,6 +2109,32 @@ TEST_P(MainThreadSchedulerImplTest,
   EXPECT_FALSE(BlockingInputExpectedSoon());
 }
 
+TEST_P(MainThreadSchedulerImplTest,
+       GetTaskExecutorForCurrentThreadInPostedTask) {
+  base::TaskExecutor* task_executor = base::GetTaskExecutorForCurrentThread();
+  EXPECT_THAT(task_executor, NotNull());
+
+  base::RunLoop run_loop;
+
+  default_task_runner_->PostTask(
+      FROM_HERE, base::BindLambdaForTesting([&]() {
+        EXPECT_EQ(base::GetTaskExecutorForCurrentThread(), task_executor);
+        run_loop.Quit();
+      }));
+
+  run_loop.Run();
+}
+
+TEST_P(MainThreadSchedulerImplTest, CurrentThread) {
+  EXPECT_EQ(scheduler_->DeprecatedDefaultTaskRunner(),
+            base::CreateSingleThreadTaskRunner({base::CurrentThread()}));
+
+  // base::TaskPriority is currently ignored in blink.
+  EXPECT_EQ(scheduler_->DeprecatedDefaultTaskRunner(),
+            base::CreateSingleThreadTaskRunner(
+                {base::CurrentThread(), base::TaskPriority::BEST_EFFORT}));
+}
+
 class MainThreadSchedulerImplWithMessageLoopTest
     : public MainThreadSchedulerImplTest {
  public:
@@ -3239,7 +3268,7 @@ TEST_P(MainThreadSchedulerImplTest, VirtualTimeWithOneQueueWithoutVirtualTime) {
     task_queues.push_back(scheduler_->NewTaskQueue(
         MainThreadTaskQueue::QueueCreationParams(
             MainThreadTaskQueue::QueueType::kFrameThrottleable)
-            .SetShouldUseVirtualTime(i != 42)));
+            .SetCanRunWhenVirtualTimePaused(i != 42)));
   }
 
   // This should install a fence on all queues with virtual time.
@@ -3651,6 +3680,21 @@ TEST_P(MainThreadSchedulerImplTest, MicrotaskCheckpointTiming) {
   EXPECT_EQ(start_time, observer.result().front().first);
   EXPECT_EQ(start_time + kTaskTime + kMicrotaskTime,
             observer.result().front().second);
+}
+
+TEST_P(MainThreadSchedulerImplTest, IsBeginMainFrameScheduled) {
+  EXPECT_FALSE(scheduler_->IsBeginMainFrameScheduled());
+  scheduler_->DidScheduleBeginMainFrame();
+  EXPECT_TRUE(scheduler_->IsBeginMainFrameScheduled());
+  scheduler_->DidRunBeginMainFrame();
+  EXPECT_FALSE(scheduler_->IsBeginMainFrameScheduled());
+  scheduler_->DidScheduleBeginMainFrame();
+  scheduler_->DidScheduleBeginMainFrame();
+  EXPECT_TRUE(scheduler_->IsBeginMainFrameScheduled());
+  scheduler_->DidRunBeginMainFrame();
+  EXPECT_TRUE(scheduler_->IsBeginMainFrameScheduled());
+  scheduler_->DidRunBeginMainFrame();
+  EXPECT_FALSE(scheduler_->IsBeginMainFrameScheduled());
 }
 
 class VeryHighPriorityForCompositingAlwaysExperimentTest

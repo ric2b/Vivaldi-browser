@@ -13,11 +13,12 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "content/app/strings/grit/content_strings.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/common/accessibility_messages.h"
 #include "content/public/common/content_client.h"
+#include "third_party/blink/public/strings/grit/blink_strings.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_position.h"
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/ax_tree_id.h"
@@ -137,6 +138,12 @@ bool BrowserAccessibility::CanFireEvents() const {
     return false;
   // Allow events unless this object would be trimmed away.
   return !PlatformIsChildOfLeafIncludingIgnored();
+}
+
+ui::AXPlatformNode* BrowserAccessibility::GetAXPlatformNode() const {
+  // Not all BrowserAccessibility subclasses can return an AXPlatformNode yet.
+  // So, here we just return nullptr.
+  return nullptr;
 }
 
 uint32_t BrowserAccessibility::PlatformChildCount() const {
@@ -1181,7 +1188,8 @@ BrowserAccessibility::CreatePositionAt(int offset,
 BrowserAccessibilityPosition::AXPositionInstance
 BrowserAccessibility::CreatePositionForSelectionAt(int offset) const {
   BrowserAccessibilityPositionInstance position =
-      CreatePositionAt(offset)->AsLeafTextPosition();
+      CreatePositionAt(offset, ax::mojom::TextAffinity::kDownstream)
+          ->AsLeafTextPosition();
   if (position->GetAnchor() &&
       position->GetAnchor()->GetRole() == ax::mojom::Role::kInlineTextBox) {
     return position->CreateParentPosition();
@@ -1597,9 +1605,26 @@ gfx::NativeViewAccessible BrowserAccessibility::GetFocus() {
 }
 
 ui::AXPlatformNode* BrowserAccessibility::GetFromNodeID(int32_t id) {
-  // Not all BrowserAccessibility subclasses can return an AXPlatformNode yet.
-  // So, here we just return nullptr.
-  return nullptr;
+  BrowserAccessibility* node = manager_->GetFromID(id);
+  if (!node)
+    return nullptr;
+
+  return node->GetAXPlatformNode();
+}
+
+ui::AXPlatformNode* BrowserAccessibility::GetFromTreeIDAndNodeID(
+    const ui::AXTreeID& ax_tree_id,
+    int32_t id) {
+  BrowserAccessibilityManager* manager =
+      BrowserAccessibilityManager::FromID(ax_tree_id);
+  if (!manager)
+    return nullptr;
+
+  BrowserAccessibility* node = manager->GetFromID(id);
+  if (!node)
+    return nullptr;
+
+  return node->GetAXPlatformNode();
 }
 
 int BrowserAccessibility::GetIndexInParent() {
@@ -1826,6 +1851,7 @@ base::string16 BrowserAccessibility::GetLocalizedStringForLandmarkType() const {
 
   switch (data.role) {
     case ax::mojom::Role::kBanner:
+    case ax::mojom::Role::kHeader:
       return content_client->GetLocalizedString(IDS_AX_ROLE_BANNER);
 
     case ax::mojom::Role::kComplementary:
@@ -1836,6 +1862,7 @@ base::string16 BrowserAccessibility::GetLocalizedStringForLandmarkType() const {
       return content_client->GetLocalizedString(IDS_AX_ROLE_CONTENT_INFO);
 
     case ax::mojom::Role::kRegion:
+    case ax::mojom::Role::kSection:
       if (data.HasStringAttribute(ax::mojom::StringAttribute::kName))
         return content_client->GetLocalizedString(IDS_AX_ROLE_REGION);
       FALLTHROUGH;
@@ -1886,11 +1913,29 @@ base::string16 BrowserAccessibility::GetLocalizedStringForRoleDescription()
     case ax::mojom::Role::kFigure:
       return content_client->GetLocalizedString(IDS_AX_ROLE_FIGURE);
 
+    case ax::mojom::Role::kFooter:
+    case ax::mojom::Role::kFooterAsNonLandmark:
+      return content_client->GetLocalizedString(IDS_AX_ROLE_FOOTER);
+
+    case ax::mojom::Role::kHeader:
+    case ax::mojom::Role::kHeaderAsNonLandmark:
+      return content_client->GetLocalizedString(IDS_AX_ROLE_HEADER);
+
+    case ax::mojom::Role::kMark:
+      return content_client->GetLocalizedString(IDS_AX_ROLE_MARK);
+
     case ax::mojom::Role::kMeter:
       return content_client->GetLocalizedString(IDS_AX_ROLE_METER);
 
     case ax::mojom::Role::kSearchBox:
       return content_client->GetLocalizedString(IDS_AX_ROLE_SEARCH_BOX);
+
+    case ax::mojom::Role::kSection: {
+      if (data.HasStringAttribute(ax::mojom::StringAttribute::kName))
+        return content_client->GetLocalizedString(IDS_AX_ROLE_SECTION);
+
+      return {};
+    }
 
     case ax::mojom::Role::kStatus:
       return content_client->GetLocalizedString(IDS_AX_ROLE_OUTPUT);
@@ -1953,6 +1998,10 @@ base::Optional<int> BrowserAccessibility::GetSetSize() const {
   return node()->GetSetSize();
 }
 
+std::string BrowserAccessibility::ToString() const {
+  return GetData().ToString();
+}
+
 bool BrowserAccessibility::SetHypertextSelection(int start_offset,
                                                  int end_offset) {
   manager()->SetSelection(
@@ -1972,6 +2021,168 @@ BrowserAccessibility* BrowserAccessibility::PlatformGetRootOfChildTree() const {
     return child_manager->GetRoot();
 
   return nullptr;
+}
+
+ui::TextAttributeList BrowserAccessibility::ComputeTextAttributes() const {
+  return ui::TextAttributeList();
+}
+
+std::string BrowserAccessibility::GetInheritedFontFamilyName() const {
+  return GetInheritedStringAttribute(ax::mojom::StringAttribute::kFontFamily);
+}
+
+ui::TextAttributeMap BrowserAccessibility::GetSpellingAndGrammarAttributes()
+    const {
+  ui::TextAttributeMap spelling_attributes;
+  if (IsTextOnlyObject()) {
+    const std::vector<int32_t>& marker_types =
+        GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerTypes);
+    const std::vector<int>& marker_starts =
+        GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerStarts);
+    const std::vector<int>& marker_ends =
+        GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerEnds);
+    for (size_t i = 0; i < marker_types.size(); ++i) {
+      bool is_spelling_error =
+          (marker_types[i] &
+           static_cast<int32_t>(ax::mojom::MarkerType::kSpelling)) != 0;
+      bool is_grammar_error =
+          (marker_types[i] &
+           static_cast<int32_t>(ax::mojom::MarkerType::kGrammar)) != 0;
+
+      if (!is_spelling_error && !is_grammar_error)
+        continue;
+
+      ui::TextAttributeList start_attributes;
+      if (is_spelling_error && is_grammar_error)
+        start_attributes.push_back(
+            std::make_pair("invalid", "spelling,grammar"));
+      else if (is_spelling_error)
+        start_attributes.push_back(std::make_pair("invalid", "spelling"));
+      else if (is_grammar_error)
+        start_attributes.push_back(std::make_pair("invalid", "grammar"));
+
+      int start_offset = marker_starts[i];
+      int end_offset = marker_ends[i];
+      spelling_attributes[start_offset] = start_attributes;
+      spelling_attributes[end_offset] = ui::TextAttributeList();
+    }
+  }
+
+  if (IsPlainTextField()) {
+    int start_offset = 0;
+    for (BrowserAccessibility* static_text =
+             BrowserAccessibilityManager::NextTextOnlyObject(
+                 InternalGetFirstChild());
+         static_text; static_text = static_text->InternalGetNextSibling()) {
+      ui::TextAttributeMap text_spelling_attributes =
+          static_text->GetSpellingAndGrammarAttributes();
+      for (auto& attribute : text_spelling_attributes) {
+        spelling_attributes[start_offset + attribute.first] =
+            std::move(attribute.second);
+      }
+      start_offset += static_cast<int>(static_text->GetHypertext().length());
+    }
+  }
+
+  return spelling_attributes;
+}
+
+// static
+void BrowserAccessibility::MergeSpellingAndGrammarIntoTextAttributes(
+    const ui::TextAttributeMap& spelling_attributes,
+    int start_offset,
+    ui::TextAttributeMap* text_attributes) {
+  if (!text_attributes) {
+    NOTREACHED();
+    return;
+  }
+
+  ui::TextAttributeList prev_attributes;
+  for (const auto& spelling_attribute : spelling_attributes) {
+    int offset = start_offset + spelling_attribute.first;
+    auto iterator = text_attributes->find(offset);
+    if (iterator == text_attributes->end()) {
+      text_attributes->emplace(offset, prev_attributes);
+      iterator = text_attributes->find(offset);
+    } else {
+      prev_attributes = iterator->second;
+    }
+
+    ui::TextAttributeList& existing_attributes = iterator->second;
+    // There might be a spelling attribute already in the list of text
+    // attributes, originating from "aria-invalid", that is being overwritten
+    // by a spelling marker. If it already exists, prefer it over this
+    // automatically computed attribute.
+    if (!HasInvalidAttribute(existing_attributes)) {
+      // Does not exist -- insert our own.
+      existing_attributes.insert(existing_attributes.end(),
+                                 spelling_attribute.second.begin(),
+                                 spelling_attribute.second.end());
+    }
+  }
+}
+
+ui::TextAttributeMap BrowserAccessibility::ComputeTextAttributeMap(
+    const ui::TextAttributeList& default_attributes) const {
+  ui::TextAttributeMap attributes_map;
+  if (PlatformIsLeaf() || IsPlainTextField()) {
+    attributes_map[0] = default_attributes;
+    const ui::TextAttributeMap spelling_attributes =
+        GetSpellingAndGrammarAttributes();
+    MergeSpellingAndGrammarIntoTextAttributes(
+        spelling_attributes, 0 /* start_offset */, &attributes_map);
+    return attributes_map;
+  }
+
+  int start_offset = 0;
+  for (BrowserAccessibility::PlatformChildIterator it = PlatformChildrenBegin();
+       it != PlatformChildrenEnd(); ++it) {
+    auto* child = it.get();
+    DCHECK(child);
+    ui::TextAttributeList attributes(child->ComputeTextAttributes());
+
+    if (attributes_map.empty()) {
+      attributes_map[start_offset] = attributes;
+    } else {
+      // Only add the attributes for this child if we are at the start of a new
+      // style span.
+      ui::TextAttributeList previous_attributes =
+          attributes_map.rbegin()->second;
+      // Must check the size, otherwise if attributes is a subset of
+      // prev_attributes, they would appear to be equal.
+      if (attributes.size() != previous_attributes.size() ||
+          !std::equal(attributes.begin(), attributes.end(),
+                      previous_attributes.begin())) {
+        attributes_map[start_offset] = attributes;
+      }
+    }
+
+    if (child->IsTextOnlyObject()) {
+      const ui::TextAttributeMap spelling_attributes =
+          child->GetSpellingAndGrammarAttributes();
+      MergeSpellingAndGrammarIntoTextAttributes(spelling_attributes,
+                                                start_offset, &attributes_map);
+      start_offset += child->GetHypertext().length();
+    } else {
+      start_offset += 1;
+    }
+  }
+
+  return attributes_map;
+}
+
+// static
+bool BrowserAccessibility::HasInvalidAttribute(
+    const ui::TextAttributeList& attributes) {
+  return std::find_if(attributes.begin(), attributes.end(),
+                      [](const ui::TextAttribute& attribute) {
+                        return attribute.first == "invalid";
+                      }) != attributes.end();
+}
+
+std::ostream& operator<<(std::ostream& stream,
+                         const BrowserAccessibility& object) {
+  return stream << object.ToString();
 }
 
 }  // namespace content

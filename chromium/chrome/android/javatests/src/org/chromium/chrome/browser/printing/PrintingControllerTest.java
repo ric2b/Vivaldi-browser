@@ -23,7 +23,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
@@ -76,7 +75,7 @@ public class PrintingControllerTest {
     private static final long TEST_TIMEOUT = 20000L;
 
     @Before
-    public void setUp() throws InterruptedException {
+    public void setUp() {
         // Do nothing.
     }
 
@@ -103,9 +102,8 @@ public class PrintingControllerTest {
     }
 
     private static class WaitForOnWriteHelper extends CallbackHelper {
-        @Override
-        public void waitForCallback(String msg) throws InterruptedException, TimeoutException {
-            waitForCallback(msg, 0, 1, TEST_TIMEOUT, TimeUnit.MILLISECONDS);
+        public void waitForCallback(String msg) throws TimeoutException {
+            waitForFirst(msg, TEST_TIMEOUT, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -166,7 +164,7 @@ public class PrintingControllerTest {
     @LargeTest
     @Feature({"Printing"})
     public void testNormalPrintingFlow() throws Throwable {
-        if (!ApiCompatibilityUtils.isPrintingSupported()) return;
+        if (!(Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT)) return;
 
         mActivityTestRule.startMainActivityWithURL(URL);
         final Tab currentTab = mActivityTestRule.getActivity().getActivityTab();
@@ -234,8 +232,8 @@ public class PrintingControllerTest {
     @TargetApi(Build.VERSION_CODES.KITKAT)
     @MediumTest
     @Feature({"Printing"})
-    public void testPrintCloseWindowBeforeStart() throws Throwable {
-        if (!ApiCompatibilityUtils.isPrintingSupported()) return;
+    public void testPrintCloseWindowBeforeStart() {
+        if (!(Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT)) return;
 
         mActivityTestRule.startMainActivityWithURL(URL);
         final Tab currentTab = mActivityTestRule.getActivity().getActivityTab();
@@ -263,7 +261,7 @@ public class PrintingControllerTest {
     @LargeTest
     @Feature({"Printing"})
     public void testPrintCloseWindowBeforeOnWrite() throws Throwable {
-        if (!ApiCompatibilityUtils.isPrintingSupported()) return;
+        if (!(Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT)) return;
 
         mActivityTestRule.startMainActivityWithURL(URL);
         final Tab currentTab = mActivityTestRule.getActivity().getActivityTab();
@@ -330,7 +328,7 @@ public class PrintingControllerTest {
     @MediumTest
     @Feature({"Printing"})
     public void testCancelPrintBeforeWriteResultCallbacks() throws Throwable {
-        if (!ApiCompatibilityUtils.isPrintingSupported()) return;
+        if (!(Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT)) return;
 
         mActivityTestRule.startMainActivityWithURL(URL);
 
@@ -388,8 +386,8 @@ public class PrintingControllerTest {
     @Test
     @SmallTest
     @Feature({"Printing"})
-    public void testPdfWritingDoneCalledWithoutInitailizePrintingTask() throws Throwable {
-        if (!ApiCompatibilityUtils.isPrintingSupported()) return;
+    public void testPdfWritingDoneCalledWithoutInitailizePrintingTask() {
+        if (!(Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT)) return;
 
         mActivityTestRule.startMainActivityWithURL(URL);
         final PrintingControllerImpl controller = createControllerOnUiThread();

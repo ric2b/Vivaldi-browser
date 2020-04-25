@@ -41,6 +41,7 @@
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/autofill/autofill_bubble_handler_impl.h"
 #include "chrome/browser/ui/views/download/download_in_progress_dialog_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/common/chrome_switches.h"
@@ -71,7 +72,7 @@
 #include "renderer/vivaldi_render_messages.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/vivaldi_app_window_client.h"
+#include "ui/vivaldi_native_app_window_views.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -82,6 +83,33 @@
 using extensions::AppWindow;
 using extensions::NativeAppWindow;
 using web_modal::WebContentsModalDialogManager;
+
+VivaldiAutofillBubbleHandler::VivaldiAutofillBubbleHandler() {}
+VivaldiAutofillBubbleHandler::~VivaldiAutofillBubbleHandler() {}
+
+autofill::SaveCardBubbleView*
+VivaldiAutofillBubbleHandler::ShowSaveCreditCardBubble(
+    content::WebContents* web_contents,
+    autofill::SaveCardBubbleController* controller,
+    bool is_user_gesture) {
+  return nullptr;
+}
+
+autofill::SaveCardBubbleView*
+VivaldiAutofillBubbleHandler::ShowSaveCardSignInPromoBubble(
+    content::WebContents* contents,
+    autofill::SaveCardBubbleController* controller) {
+  return nullptr;
+}
+
+autofill::LocalCardMigrationBubble*
+VivaldiAutofillBubbleHandler::ShowLocalCardMigrationBubble(
+    content::WebContents* web_contents,
+    autofill::LocalCardMigrationBubbleController* controller,
+    bool is_user_gesture) {
+  return nullptr;
+}
+
 
 namespace {
 base::TimeTicks g_first_window_creation_time;
@@ -128,7 +156,7 @@ std::unique_ptr<content::WebContents> CreateBrowserWebContents(
 
   web_contents->GetMutableRendererPrefs()
       ->browser_handles_all_top_level_requests = true;
-  web_contents->GetRenderViewHost()->SyncRendererPrefs();
+  web_contents->SyncRendererPrefs();
 
   return web_contents;
 }
@@ -502,11 +530,10 @@ void VivaldiBrowserWindow::CreateWebContents(
   extensions::VivaldiAppHelper::CreateForWebContents(web_contents());
   zoom::ZoomController::CreateForWebContents(web_contents());
 
-  VivaldiAppWindowClient::Set(VivaldiAppWindowClient::GetInstance());
-
-  VivaldiAppWindowClient* app_window_client = VivaldiAppWindowClient::Get();
-  native_app_window_.reset(
-      app_window_client->CreateNativeAppWindow(this, params));
+  std::unique_ptr<VivaldiNativeAppWindowViews> native_view =
+      VivaldiNativeAppWindowViews::Create();
+  native_view->Init(this, params);
+  native_app_window_ = std::move(native_view);
 
   browser_->set_initial_show_state(params.state);
 
@@ -764,8 +791,7 @@ LocationBar* VivaldiBrowserWindow::GetLocationBar() const {
 }
 
 void VivaldiBrowserWindow::UpdateToolbar(content::WebContents* contents) {
-  GetToolbarPageActionIconContainer()->UpdatePageActionIcon(
-      PageActionIconType::kManagePasswords);
+  UpdatePageActionIcon(PageActionIconType::kManagePasswords);
 }
 
 ToolbarActionsBar* VivaldiBrowserWindow::GetToolbarActionsBar() {
@@ -1253,28 +1279,6 @@ void VivaldiBrowserWindow::OnPositionChanged() {
       browser_->profile());
 }
 
-PageActionIconContainer*
-VivaldiBrowserWindow::GetOmniboxPageActionIconContainer() {
-  return page_action_icon_container_.get();
-}
-
-PageActionIconContainer*
-VivaldiBrowserWindow::GetToolbarPageActionIconContainer() {
-  if (!page_action_icon_container_) {
-    page_action_icon_container_ =
-        std::make_unique<VivaldiPageActionIconContainer>(browser_.get());
-  }
-  return page_action_icon_container_.get();
-}
-
-autofill::LocalCardMigrationBubble*
-VivaldiBrowserWindow::ShowLocalCardMigrationBubble(
-    content::WebContents* contents,
-    autofill::LocalCardMigrationBubbleController* controller,
-    bool is_user_gesture) {
-  return nullptr;
-}
-
 bool VivaldiBrowserWindow::DoBrowserControlsShrinkRendererSize(
     const content::WebContents* contents) const {
   return false;
@@ -1303,35 +1307,17 @@ void VivaldiBrowserWindow::VivaldiManagePasswordsIconView::SetState(
   utils_api->OnPasswordIconStatusChanged(browser_->session_id().id(), show);
 }
 
-void VivaldiBrowserWindow::VivaldiManagePasswordsIconView::Update() {
+bool VivaldiBrowserWindow::VivaldiManagePasswordsIconView::Update() {
   // contents can be null when we recover after UI process crash.
   content::WebContents* web_contents =
       browser_->tab_strip_model()->GetActiveWebContents();
   if (web_contents) {
     ManagePasswordsUIController::FromWebContents(web_contents)
         ->UpdateIconAndBubbleState(this);
+    return true;
   }
+  return false;
 }
-
-VivaldiBrowserWindow::VivaldiPageActionIconContainer::
-    VivaldiPageActionIconContainer(Browser* browser)
-    : browser_(browser) {}
-
-VivaldiBrowserWindow::VivaldiPageActionIconContainer::
-    ~VivaldiPageActionIconContainer() = default;
-
-void VivaldiBrowserWindow::VivaldiPageActionIconContainer::UpdatePageActionIcon(
-    PageActionIconType type) {
-  if (type == PageActionIconType::kManagePasswords) {
-    if (!icon_view_) {
-      icon_view_ = std::make_unique<VivaldiManagePasswordsIconView>(browser_);
-    }
-    icon_view_->Update();
-  }
-}
-
-void VivaldiBrowserWindow::VivaldiPageActionIconContainer::
-    ExecutePageActionIconForTesting(PageActionIconType type) {}
 
 send_tab_to_self::SendTabToSelfBubbleView*
 VivaldiBrowserWindow::ShowSendTabToSelfBubble(
@@ -1367,17 +1353,41 @@ ui::ZOrderLevel VivaldiBrowserWindow::GetZOrderLevel() const {
   return ui::ZOrderLevel::kNormal;
 }
 
-autofill::SaveCardBubbleView* VivaldiBrowserWindow::ShowSaveCreditCardBubble(
+SharingDialog* VivaldiBrowserWindow::ShowSharingDialog(
     content::WebContents* contents,
-    autofill::SaveCardBubbleController* controller,
-    bool is_user_gesture) {
+    SharingDialogData data) {
   NOTIMPLEMENTED();
   return nullptr;
 }
 
-SharingDialog* VivaldiBrowserWindow::ShowSharingDialog(
+bool VivaldiBrowserWindow::IsOnCurrentWorkspace() const {
+  return native_app_window_->IsOnCurrentWorkspace();
+}
+
+bool VivaldiBrowserWindow::UpdatePageActionIcon(PageActionIconType type) {
+  if (type == PageActionIconType::kManagePasswords) {
+    if (!icon_view_) {
+      icon_view_.reset(new VivaldiManagePasswordsIconView(browser_.get()));
+    }
+    return icon_view_->Update();
+  }
+  return false;
+}
+
+autofill::AutofillBubbleHandler*
+VivaldiBrowserWindow::GetAutofillBubbleHandler() {
+  if (!autofill_bubble_handler_) {
+    autofill_bubble_handler_ =
+        std::make_unique<VivaldiAutofillBubbleHandler>();
+  }
+  return autofill_bubble_handler_.get();
+
+}
+
+qrcode_generator::QRCodeGeneratorBubbleView*
+VivaldiBrowserWindow::ShowQRCodeGeneratorBubble(
     content::WebContents* contents,
-    SharingUiController* controller) {
-  NOTIMPLEMENTED();
+    qrcode_generator::QRCodeGeneratorBubbleController* controller,
+    const GURL& url) {
   return nullptr;
 }

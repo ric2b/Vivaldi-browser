@@ -9,6 +9,8 @@
 
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/accessibility/accessibility_delegate.h"
+#include "ash/home_screen/home_launcher_gesture_handler.h"
+#include "ash/home_screen/home_screen_controller.h"
 #include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_animation_types.h"
@@ -82,7 +84,7 @@ aura::Window* GetBottomMostSnappedWindowForDeskContainer(
   // For the active desk, only use the windows snapped in SplitViewController if
   // SplitView mode is active.
   SplitViewController* split_view_controller =
-      Shell::Get()->split_view_controller();
+      SplitViewController::Get(desk_container);
   if (desks_util::IsActiveDeskContainer(desk_container) &&
       split_view_controller->InSplitViewMode()) {
     aura::Window* left_window = split_view_controller->left_window();
@@ -110,18 +112,25 @@ aura::Window* GetBottomMostSnappedWindowForDeskContainer(
 }  // namespace
 
 BackdropController::BackdropController(aura::Window* container)
-    : container_(container) {
+    : root_window_(container->GetRootWindow()), container_(container) {
   DCHECK(container_);
   auto* shell = Shell::Get();
-  shell->AddShellObserver(this);
+  SplitViewController::Get(root_window_)->AddObserver(this);
   shell->overview_controller()->AddObserver(this);
   shell->accessibility_controller()->AddObserver(this);
   shell->wallpaper_controller()->AddObserver(this);
   shell->tablet_mode_controller()->AddObserver(this);
+  shell->home_screen_controller()->home_launcher_gesture_handler()->AddObserver(
+      this);
 }
 
 BackdropController::~BackdropController() {
   auto* shell = Shell::Get();
+  if (shell->home_screen_controller()) {
+    shell->home_screen_controller()
+        ->home_launcher_gesture_handler()
+        ->RemoveObserver(this);
+  }
   // Shell destroys the TabletModeController before destroying all root windows.
   if (shell->tablet_mode_controller())
     shell->tablet_mode_controller()->RemoveObserver(this);
@@ -129,7 +138,7 @@ BackdropController::~BackdropController() {
   shell->wallpaper_controller()->RemoveObserver(this);
   if (shell->overview_controller())
     shell->overview_controller()->RemoveObserver(this);
-  shell->RemoveShellObserver(this);
+  SplitViewController::Get(root_window_)->RemoveObserver(this);
   // TODO(oshima): animations won't work right with mus:
   // http://crbug.com/548396.
   Hide(/*destroy=*/true);
@@ -210,14 +219,6 @@ aura::Window* BackdropController::GetTopmostWindowWithBackdrop() {
   return nullptr;
 }
 
-void BackdropController::OnSplitViewModeStarting() {
-  Shell::Get()->split_view_controller()->AddObserver(this);
-}
-
-void BackdropController::OnSplitViewModeEnded() {
-  Shell::Get()->split_view_controller()->RemoveObserver(this);
-}
-
 void BackdropController::OnOverviewModeStarting() {
   // Don't destroy backdrops, just hide them so they don't show in the overview
   // grid, but keep the widget so that it can be mirrored into the mini_desk
@@ -239,8 +240,9 @@ void BackdropController::OnAccessibilityStatusChanged() {
   UpdateBackdrop();
 }
 
-void BackdropController::OnSplitViewStateChanged(SplitViewState previous_state,
-                                                 SplitViewState state) {
+void BackdropController::OnSplitViewStateChanged(
+    SplitViewController::State previous_state,
+    SplitViewController::State state) {
   // Force the update of the backdrop, even if overview is active, so that the
   // backdrop shows up properly in the mini_views.
   UpdateBackdropInternal();
@@ -264,6 +266,18 @@ void BackdropController::OnTabletModeStarted() {
 }
 
 void BackdropController::OnTabletModeEnded() {
+  UpdateBackdrop();
+}
+
+void BackdropController::OnHomeLauncherTargetPositionChanged(
+    bool showing,
+    int64_t display_id) {
+  pause_update_ = true;
+}
+
+void BackdropController::OnHomeLauncherAnimationComplete(bool shown,
+                                                         int64_t display_id) {
+  pause_update_ = false;
   UpdateBackdrop();
 }
 
@@ -436,11 +450,11 @@ bool BackdropController::BackdropShouldFullscreen() {
   // CL.
   aura::Window* window = GetTopmostWindowWithBackdrop();
   SplitViewController* split_view_controller =
-      Shell::Get()->split_view_controller();
-  SplitViewState state = split_view_controller->state();
-  if ((state == SplitViewState::kLeftSnapped &&
+      SplitViewController::Get(root_window_);
+  SplitViewController::State state = split_view_controller->state();
+  if ((state == SplitViewController::State::kLeftSnapped &&
        window == split_view_controller->left_window()) ||
-      (state == SplitViewState::kRightSnapped &&
+      (state == SplitViewController::State::kRightSnapped &&
        window == split_view_controller->right_window())) {
     return false;
   }
@@ -452,17 +466,16 @@ gfx::Rect BackdropController::GetBackdropBounds() {
   DCHECK(!BackdropShouldFullscreen());
 
   SplitViewController* split_view_controller =
-      Shell::Get()->split_view_controller();
-  SplitViewState state = split_view_controller->state();
-  DCHECK(state == SplitViewState::kLeftSnapped ||
-         state == SplitViewState::kRightSnapped);
-  aura::Window* snapped_window =
-      split_view_controller->GetDefaultSnappedWindow();
+      SplitViewController::Get(root_window_);
+  SplitViewController::State state = split_view_controller->state();
+  DCHECK(state == SplitViewController::State::kLeftSnapped ||
+         state == SplitViewController::State::kRightSnapped);
   SplitViewController::SnapPosition snap_position =
-      (state == SplitViewState::kLeftSnapped) ? SplitViewController::LEFT
-                                              : SplitViewController::RIGHT;
+      (state == SplitViewController::State::kLeftSnapped)
+          ? SplitViewController::LEFT
+          : SplitViewController::RIGHT;
   return split_view_controller->GetSnappedWindowBoundsInScreenUnadjusted(
-      snapped_window, snap_position);
+      snap_position);
 }
 
 void BackdropController::Layout() {

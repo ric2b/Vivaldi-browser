@@ -7,7 +7,6 @@
 
 #include "base/auto_reset.h"
 #import "base/test/ios/wait_util.h"
-#include "components/unified_consent/feature.h"
 #import "ios/chrome/browser/ui/authentication/chrome_signin_view_controller.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui.h"
 #import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils.h"
@@ -45,25 +44,6 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
                     grey_sufficientlyVisible(), nil);
 }
 
-// Opens Accounts Settings and tap the sign out button. Assumes that the main
-// settings page is visible.
-void SignOutFromSettings() {
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::SettingsAccountButton()]
-      performAction:grey_tap()];
-
-  const CGFloat scroll_displacement = 100.0;
-  [[[EarlGrey
-      selectElementWithMatcher:grey_allOf(
-                                   chrome_test_util::SignOutAccountsButton(),
-                                   grey_interactable(), nil)]
-         usingSearchAction:grey_scrollInDirection(kGREYDirectionDown,
-                                                  scroll_displacement)
-      onElementWithMatcher:chrome_test_util::SettingsAccountsCollectionView()]
-      performAction:grey_tap()];
-  TapButtonWithLabelId(IDS_IOS_DISCONNECT_DIALOG_CONTINUE_BUTTON_MOBILE);
-  [SigninEarlGreyUtils checkSignedOut];
-}
-
 }  // namespace
 
 // Sign-in interactions tests that require Unified Consent to be enabled.
@@ -71,13 +51,6 @@ void SignOutFromSettings() {
 @end
 
 @implementation SigninInteractionControllerUnityEnabledTestCase
-
-- (void)setUp {
-  [super setUp];
-
-  CHECK(unified_consent::IsUnifiedConsentFeatureEnabled())
-      << "This test suite must be run with Unified Consent feature enabled.";
-}
 
 // Tests the "ADD ACCOUNT" button in the identity chooser view controller.
 - (void)testAddAccountAutomatically {
@@ -140,10 +113,10 @@ void SignOutFromSettings() {
   identity_service->AddIdentity(identity2);
 
   [SigninEarlGreyUI signinWithIdentity:identity1];
-  [ChromeEarlGreyUI openSettingsMenu];
-  SignOutFromSettings();
+  [SigninEarlGreyUI signOutWithManagedAccount:NO];
 
   // Sign in with |identity2|.
+  [ChromeEarlGreyUI openSettingsMenu];
   [[EarlGrey selectElementWithMatcher:SecondarySignInButton()]
       performAction:grey_tap()];
   [SigninEarlGreyUI selectIdentityWithEmail:identity2.userEmail];
@@ -185,10 +158,10 @@ void SignOutFromSettings() {
 
   // Sign in to |identity1|.
   [SigninEarlGreyUI signinWithIdentity:identity1];
-  [ChromeEarlGreyUI openSettingsMenu];
-  SignOutFromSettings();
+  [SigninEarlGreyUI signOutWithManagedAccount:NO];
 
   // Sign in with |identity2|.
+  [ChromeEarlGreyUI openSettingsMenu];
   [[EarlGrey selectElementWithMatcher:SecondarySignInButton()]
       performAction:grey_tap()];
   [SigninEarlGreyUI selectIdentityWithEmail:identity2.userEmail];
@@ -228,9 +201,7 @@ void SignOutFromSettings() {
   // Open Add Account screen.
   id<GREYMatcher> add_account_matcher =
       chrome_test_util::StaticTextWithAccessibilityLabelId(
-          unified_consent::IsUnifiedConsentFeatureEnabled()
-              ? IDS_IOS_ACCOUNT_IDENTITY_CHOOSER_ADD_ACCOUNT
-              : IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_ADD_ACCOUNT_BUTTON);
+          IDS_IOS_ACCOUNT_IDENTITY_CHOOSER_ADD_ACCOUNT);
   [[EarlGrey selectElementWithMatcher:add_account_matcher]
       performAction:grey_tap()];
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
@@ -247,8 +218,7 @@ void SignOutFromSettings() {
   // this will fail.
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  if (unified_consent::IsUnifiedConsentFeatureEnabled())
-    [SigninEarlGreyUI selectIdentityWithEmail:identity.userEmail];
+  [SigninEarlGreyUI selectIdentityWithEmail:identity.userEmail];
   VerifyChromeSigninViewVisible();
 
   // Close sign-in screen and Settings.

@@ -30,6 +30,7 @@
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/branding_buildflags.h"
+#include "build/buildflag.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -127,10 +128,12 @@
 #include "chrome/browser/ui/webui/help/help_utils_chromeos.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/assistant/buildflags.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/constants/chromeos_constants.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
+#include "chromeos/constants/devicetype.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "chromeos/geolocation/simple_geolocation_provider.h"
@@ -147,6 +150,7 @@
 #include "components/arc/arc_util.h"
 #include "components/arc/session/arc_bridge_service.h"
 #include "components/crash/content/app/breakpad_linux.h"
+#include "components/crash/content/app/crashpad.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
@@ -188,14 +192,18 @@ const chromeos::StaticOobeScreenId kResumableScreens[] = {
     chromeos::MultiDeviceSetupScreenView::kScreenId,
 };
 
-// Checks if device is in tablet mode, and that HID-detection screen is not
-// disabled by flag.
+// The HID detection screen is only allowed for form factors without built-in
+// inputs: Chromebases, Chromebits, and Chromeboxes (crbug.com/965765).
 bool CanShowHIDDetectionScreen() {
-  return !ash::TabletMode::Get()->InTabletMode() &&
-         !base::CommandLine::ForCurrentProcess()->HasSwitch(
-             chromeos::switches::kDisableHIDDetectionOnOOBE) &&
-         !base::CommandLine::ForCurrentProcess()->HasSwitch(
-             ash::switches::kAshEnableTabletMode);
+  switch (chromeos::GetDeviceType()) {
+    case chromeos::DeviceType::kChromebase:
+    case chromeos::DeviceType::kChromebit:
+    case chromeos::DeviceType::kChromebox:
+      return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kDisableHIDDetectionOnOOBE);
+    default:
+      return false;
+  }
 }
 
 bool IsResumableScreen(chromeos::OobeScreenId screen) {
@@ -317,9 +325,6 @@ PrefService* WizardController::local_state_for_testing_ = nullptr;
 WizardController::WizardController()
     : screen_manager_(std::make_unique<ScreenManager>()),
       network_state_helper_(std::make_unique<login::NetworkStateHelper>()) {
-  // In session OOBE was initiated from voice interaction keyboard shortcuts.
-  is_in_session_oobe_ =
-      session_manager::SessionManager::Get()->IsSessionStarted();
   AccessibilityManager* accessibility_manager = AccessibilityManager::Get();
   if (accessibility_manager) {
     // accessibility_manager could be null in Tests.
@@ -513,7 +518,8 @@ std::vector<std::unique_ptr<BaseScreen>> WizardController::CreateScreens() {
       base::BindRepeating(&WizardController::OnSupervisionTransitionScreenExit,
                           weak_factory_.GetWeakPtr())));
   append(std::make_unique<UpdateRequiredScreen>(
-      oobe_ui->GetView<UpdateRequiredScreenHandler>()));
+      oobe_ui->GetView<UpdateRequiredScreenHandler>(),
+      oobe_ui->GetErrorScreen()));
   append(std::make_unique<AssistantOptInFlowScreen>(
       oobe_ui->GetView<AssistantOptInFlowScreenHandler>(),
       base::BindRepeating(&WizardController::OnAssistantOptInFlowScreenExit,
@@ -682,8 +688,12 @@ void WizardController::ShowUpdateRequiredScreen() {
 }
 
 void WizardController::ShowAssistantOptInFlowScreen() {
+#if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
   UpdateStatusAreaVisibilityForScreen(AssistantOptInFlowScreenView::kScreenId);
   SetCurrentScreen(GetScreen(AssistantOptInFlowScreenView::kScreenId));
+#else
+  ShowMultiDeviceSetupScreen();
+#endif
 }
 
 void WizardController::ShowMultiDeviceSetupScreen() {
@@ -698,6 +708,19 @@ void WizardController::SkipToLoginForTesting(
     const LoginScreenContext& context) {
   VLOG(1) << "SkipToLoginForTesting.";
   StartupUtils::MarkEulaAccepted();
+
+  // Enable metrics and crash collection, and verify that they're enabled.
+  ChangeMetricsReportingStateWithReply(
+      true,
+      base::BindRepeating(&WizardController::OnChangedMetricsReportingState,
+                          weak_factory_.GetWeakPtr()));
+  if (!StatsReportingController::Get()->IsEnabled()) {
+    LOG(ERROR) << "StatsReportingController reports collection is NOT enabled";
+  }
+  if (!crash_reporter::GetUploadsEnabled()) {
+    LOG(ERROR) << "crash_reporter reports that crash uploads NOT enabled";
+  }
+
   PerformPostEulaActions();
   OnDeviceDisabledChecked(false /* device_disabled */);
 }
@@ -913,9 +936,13 @@ void WizardController::OnEnrollmentDone() {
           policy::EnrollmentConfig::MODE_RECOVERY ||
       prescribed_enrollment_config_.mode ==
           policy::EnrollmentConfig::MODE_ENROLLED_ROLLBACK) {
+    LOG(WARNING) << "Restart Chrome to pick up the policy changes";
     chrome::AttemptRestart();
     return;
   }
+
+  // We need a log to understand when the device finished enrollment.
+  VLOG(1) << "Enrollment done";
 
   if (KioskAppManager::Get()->IsAutoLaunchEnabled())
     AutoLaunchKioskApp();
@@ -1049,11 +1076,6 @@ void WizardController::OnArcTermsOfServiceScreenExit(
 }
 
 void WizardController::OnArcTermsOfServiceSkipped() {
-  if (is_in_session_oobe_) {
-    OnOobeFlowFinished();
-    return;
-  }
-
   // If the user finished with the PlayStore Terms of Service, advance to the
   // assistant opt-in flow screen.
   ShowAssistantOptInFlowScreen();
@@ -1120,6 +1142,11 @@ void WizardController::OnResetScreenExit() {
 void WizardController::OnChangedMetricsReportingState(bool enabled) {
   StatsReportingController::Get()->SetEnabled(
       ProfileManager::GetActiveUserProfile(), enabled);
+  if (crash_reporter::IsCrashpadEnabled()) {
+    crash_reporter::SetUploadConsent(enabled);
+    return;
+  }
+
   if (!enabled)
     return;
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -1146,13 +1173,6 @@ void WizardController::OnSupervisionTransitionScreenExit() {
 }
 
 void WizardController::OnOobeFlowFinished() {
-  if (is_in_session_oobe_ && current_screen_->screen_id() !=
-                                 SupervisionTransitionScreenView::kScreenId) {
-    GetLoginDisplayHost()->SetStatusAreaVisible(true);
-    GetLoginDisplayHost()->Finalize(base::OnceClosure());
-    return;
-  }
-
   if (!time_oobe_started_.is_null()) {
     base::TimeDelta delta = base::Time::Now() - time_oobe_started_;
     UMA_HISTOGRAM_CUSTOM_TIMES("OOBE.BootToSignInCompleted", delta,
@@ -1343,6 +1363,10 @@ void WizardController::UpdateStatusAreaVisibilityForScreen(
 
 void WizardController::OnHIDScreenNecessityCheck(bool screen_needed) {
   if (!GetOobeUI())
+    return;
+
+  // Check for tests configuration.
+  if (StartupUtils::IsEulaAccepted() || StartupUtils::IsOobeCompleted())
     return;
 
   const auto* skip_screen_key = oobe_configuration_.FindKeyOfType(

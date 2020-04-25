@@ -5,20 +5,17 @@ import("//build/util/version.gni")
 jumbo_static_library("browser") {
   public_deps = [
     "//vivaldi/app",
-    "//vivaldi/app/resources",
-    "//vivaldi/app/resources",
     "//vivaldi/components:content_adverse_adblocking",
     "//vivaldi/clientparts",
     "//vivaldi/importer:browser",
-    "//vivaldi/notifications",
     "//vivaldi/ui",
-    "//vivaldi/vivapp:vivaldi_app",
   ]
   if (!is_android) {
     public_deps += [
       "//vivaldi/components/datasource",
       "//vivaldi/extensions",
       "//vivaldi/extensions/schema",
+      "//vivaldi/vivapp:vivaldi_app",
     ]
   }
   deps = [
@@ -62,6 +59,8 @@ jumbo_static_library("browser") {
     "stats_reporter.h",
     "../components/adverse_adblocking/adverse_ad_filter_list_factory.cc",
     "../components/adverse_adblocking/adverse_ad_filter_list_factory.h",
+    "thumbnails/capture_page.cc",
+    "thumbnails/capture_page.h",
   ]
   if (!is_android) {
     sources += [
@@ -86,8 +85,11 @@ jumbo_static_library("browser") {
       "vivaldi_webcontents_util.h",
       "thumbnails/thumbnail_capture_contents.cc",
       "thumbnails/thumbnail_capture_contents.h",
-      "thumbnails/capture_page.cc",
-      "thumbnails/capture_page.h",
+    ]
+  } else {
+    sources += [
+      "vivaldi_default_bookmarks_reader.cc",
+      "vivaldi_default_bookmarks_reader.h",
     ]
   }
   if (is_mac) {

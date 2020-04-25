@@ -47,6 +47,9 @@ Polymer({
      */
     showScanProgress: {type: Boolean, value: false},
 
+    /** Whether cellular activation is unavailable in the current context. */
+    activationUnavailable: Boolean,
+
     /**
      * List of all network state data for all visible networks.
      * @private {!Array<!OncMojo.NetworkStateProperties>}
@@ -183,7 +186,7 @@ Polymer({
     const filter = {
       filter: chromeos.networkConfig.mojom.FilterType.kVisible,
       networkType: mojom.NetworkType.kAll,
-      limit: chromeos.networkConfig.mojom.kNoLimit,
+      limit: chromeos.networkConfig.mojom.NO_LIMIT,
     };
     this.networkConfig_.getNetworkStateList(filter).then(response => {
       this.onGetNetworkStateList_(deviceStates, response.result);
@@ -242,7 +245,7 @@ Polymer({
 
     const cellular =
         OncMojo.getDefaultNetworkState(mojom.NetworkType.kCellular);
-    cellular.cellular.scanning = this.cellularDeviceState_.scanning;
+    cellular.typeState.cellular.scanning = this.cellularDeviceState_.scanning;
 
     // Note: the default connectionState is kNotConnected.
     // TODO(khorimoto): Maybe set an 'initializing' CellularState property if

@@ -191,6 +191,11 @@ class Notes_Model : public KeyedService {
 
   void set_next_index_id(int64_t next_index) { current_index_ = next_index; }
 
+  void GetNotesMatching(
+     const base::string16& text,
+            size_t max_count,
+             std::vector<std::pair<int, Notes_Node::Type>>* matches);
+
  private:
   std::unique_ptr<NotesLoadDetails> CreateLoadDetails();
   Notes_Node* GetOrCreateTrashNode();

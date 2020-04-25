@@ -53,8 +53,6 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetAutoplayPolicy(AutoplayPolicy) override;
   void SetPreferCompositingToLCDTextEnabled(bool) override;
   void SetAccessibilityPasswordValuesEnabled(bool) override;
-  void SetAllowAccessKeys(bool) override;
-  bool AllowAccessKeys() const;
   void SetAllowFileAccessFromFileURLs(bool) override;
   void SetAllowCustomScrollbarInMainFrame(bool) override;
   void SetAllowGeolocationOnInsecureOrigins(bool) override;
@@ -187,7 +185,6 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetViewportStyle(WebViewportStyle) override;
   void SetUseSolidColorScrollbars(bool) override;
   void SetUseWideViewport(bool) override;
-  void SetServeResourceFromCacheOnly(bool) override;
   void SetV8CacheOptions(V8CacheOptions) override;
   void SetValidationMessageTimerMagnification(int) override;
   void SetViewportEnabled(bool) override;
@@ -218,10 +215,15 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetLazyImageLoadingDistanceThresholdPx2G(int) override;
   void SetLazyImageLoadingDistanceThresholdPx3G(int) override;
   void SetLazyImageLoadingDistanceThresholdPx4G(int) override;
+  void SetLazyImageFirstKFullyLoadUnknown(int) override;
+  void SetLazyImageFirstKFullyLoadSlow2G(int) override;
+  void SetLazyImageFirstKFullyLoad2G(int) override;
+  void SetLazyImageFirstKFullyLoad3G(int) override;
+  void SetLazyImageFirstKFullyLoad4G(int) override;
 
   void SetForceDarkModeEnabled(bool) override;
   void SetPreferredColorScheme(PreferredColorScheme) override;
-  void SetForcedColors(ForcedColors) override;
+  void SetNavigationControls(NavigationControls) override;
 
   bool RenderVSyncNotificationEnabled() const {
     return render_v_sync_notification_enabled_;
@@ -245,6 +247,9 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   bool MockGestureTapHighlightsEnabled() const;
 
   // Vivaldi
+  void SetAllowAccessKeys(bool) override;
+  bool AllowAccessKeys() const;
+  void SetServeResourceFromCacheOnly(bool) override;
   void SetAllowTabCycleIntoUI(bool) override;
   void SetVivaldiShowContextMenuOnDoubleClick(bool) override;
 

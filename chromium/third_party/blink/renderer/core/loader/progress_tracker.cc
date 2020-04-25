@@ -177,6 +177,19 @@ bool ProgressTracker::HaveParsedAndPainted() {
   return finished_parsing_ && did_first_contentful_paint_;
 }
 
+void ProgressTracker::UpdateProgressItem(ProgressItem& item,
+                                         int64_t bytes_received,
+                                         int64_t estimated_length) {
+  bytes_received_ += (bytes_received - item.bytes_received);
+  estimated_bytes_for_pending_requests_ +=
+      (estimated_length - item.estimated_length);
+  DCHECK_GE(bytes_received_, 0);
+  DCHECK_GE(estimated_bytes_for_pending_requests_, bytes_received_);
+
+  item.bytes_received = bytes_received;
+  item.estimated_length = estimated_length;
+}
+
 void ProgressTracker::MaybeSendProgress() {
   if (!frame_->IsLoading())
     return;
@@ -236,19 +249,6 @@ void ProgressTracker::CompleteProgress(uint64_t identifier) {
     elementsLoaded_++;
   }
   MaybeSendProgress();
-}
-
-void ProgressTracker::UpdateProgressItem(ProgressItem& item,
-                                         int64_t bytes_received,
-                                         int64_t estimated_length) {
-  bytes_received_ += (bytes_received - item.bytes_received);
-  estimated_bytes_for_pending_requests_ +=
-      (estimated_length - item.estimated_length);
-  DCHECK_GE(bytes_received_, 0);
-  DCHECK_GE(estimated_bytes_for_pending_requests_, bytes_received_);
-
-  item.bytes_received = bytes_received;
-  item.estimated_length = estimated_length;
 }
 
 }  // namespace blink

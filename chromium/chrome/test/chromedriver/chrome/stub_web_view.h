@@ -69,6 +69,9 @@ class StubWebView : public WebView {
                             bool async_dispatch_events = false) override;
   Status DispatchTouchEvents(const std::list<TouchEvent>& events,
                              bool async_dispatch_events = false) override;
+  Status DispatchTouchEventWithMultiPoints(
+      const std::list<TouchEvent>& events,
+      bool async_dispatch_events = false) override;
   Status DispatchKeyEvents(const std::list<KeyEvent>& events,
                            bool async_dispatch_events = false) override;
   Status GetCookies(std::unique_ptr<base::ListValue>* cookies,
@@ -82,6 +85,7 @@ class StubWebView : public WebView {
                    const std::string& value,
                    const std::string& domain,
                    const std::string& path,
+                   const std::string& sameSite,
                    bool secure,
                    bool httpOnly,
                    double expiry) override;

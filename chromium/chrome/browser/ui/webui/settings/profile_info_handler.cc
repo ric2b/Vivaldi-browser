@@ -35,12 +35,7 @@ const char ProfileInfoHandler::kProfileInfoChangedEventName[] =
 const char ProfileInfoHandler::kProfileStatsCountReadyEventName[] =
     "profile-stats-count-ready";
 
-ProfileInfoHandler::ProfileInfoHandler(Profile* profile)
-    : profile_(profile),
-#if defined(OS_CHROMEOS)
-      user_manager_observer_(this),
-#endif
-      profile_observer_(this) {
+ProfileInfoHandler::ProfileInfoHandler(Profile* profile) : profile_(profile) {
 #if defined(OS_CHROMEOS)
   // Set up the chrome://userimage/ source.
   content::URLDataSource::Add(profile,
@@ -157,7 +152,10 @@ ProfileInfoHandler::GetAccountNameAndIcon() const {
   if (g_browser_process->profile_manager()
           ->GetProfileAttributesStorage()
           .GetProfileAttributesWithPath(profile_->GetPath(), &entry)) {
-    name = base::UTF16ToUTF8(entry->GetName());
+    name = base::UTF16ToUTF8(
+        ProfileAttributesEntry::ShouldConcatenateGaiaAndProfileName()
+            ? entry->GetLocalProfileName()
+            : entry->GetName());
     // TODO(crbug.com/710660): return chrome://theme/IDR_PROFILE_AVATAR_*
     // and update theme_source.cc to get high res avatar icons. This does less
     // work here, sends less over IPC, and is more stable with returned results.

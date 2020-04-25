@@ -59,6 +59,8 @@ viz_component("service") {
     "display/output_surface_frame.h",
     "display/overlay_candidate.cc",
     "display/overlay_candidate.h",
+    "display/overlay_candidate_list.cc",
+    "display/overlay_candidate_list.h",
     "display/overlay_candidate_validator.cc",
     "display/overlay_candidate_validator.h",
     "display/overlay_processor.cc",
@@ -546,8 +548,10 @@ if (is_android) {
   android_library("service_java") {
     deps = [
       "//base:base_java",
+      "//base:jni_java",
       "//ui/android:ui_full_java",
     ]
+    annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
     java_files = [
       "java/src/org/chromium/components/viz/service/gl/ThrowUncaughtException.java",
       "java/src/org/chromium/components/viz/service/frame_sinks/ExternalBeginFrameSourceAndroid.java",

@@ -21,14 +21,12 @@ import android.support.v4.app.Fragment;
 import android.support.v7.preference.Preference;
 import android.support.v7.preference.PreferenceFragmentCompat;
 import android.support.v7.widget.RecyclerView;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeBaseAppCompatActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
@@ -90,17 +88,7 @@ public class Preferences extends ChromeBaseAppCompatActivity
         // from Android notifications, when Android is restoring Preferences after Chrome was
         // killed, or for tests. This should happen before super.onCreate() because it might
         // recreate a fragment, and a fragment might depend on the native library.
-        try {
-            ChromeBrowserInitializer.getInstance(this).handleSynchronousStartup();
-        } catch (ProcessInitException e) {
-            Log.e(TAG, "Failed to start browser process.", e);
-            // This can only ever happen, if at all, when the activity is started from an Android
-            // notification (or in tests). As such we don't want to show an error messsage to the
-            // user. The application is completely broken at this point, so close it down
-            // completely (not just the activity).
-            System.exit(-1);
-            return;
-        }
+        ChromeBrowserInitializer.getInstance(this).handleSynchronousStartup();
 
         super.onCreate(savedInstanceState);
 
@@ -263,7 +251,7 @@ public class Preferences extends ChromeBaseAppCompatActivity
             finish();
             return true;
         } else if (item.getItemId() == R.id.menu_id_general_help) {
-            HelpAndFeedback.getInstance(this).show(this, getString(R.string.help_context_settings),
+            HelpAndFeedback.getInstance().show(this, getString(R.string.help_context_settings),
                     Profile.getLastUsedProfile(), null);
             return true;
         }
@@ -304,9 +292,8 @@ public class Preferences extends ChromeBaseAppCompatActivity
      * Set device status bar to match the activity background color, if supported.
      */
     private void setStatusBarColor() {
-        // On O+, the status bar color is already set via the XML theme. We avoid setting status bar
-        // color via XML pre-O due to: https://crbug.com/884144.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) return;
+        // On P+, the status bar color is set via the XML theme.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) return;
 
         // Kill switch included due to past crashes when programmatically setting status bar color:
         // https://crbug.com/880694.

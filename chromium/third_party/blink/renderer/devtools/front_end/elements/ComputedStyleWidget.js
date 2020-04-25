@@ -109,8 +109,9 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
    */
   _fetchMatchedCascade() {
     const node = this._computedStyleModel.node();
-    if (!node || !this._computedStyleModel.cssModel())
+    if (!node || !this._computedStyleModel.cssModel()) {
       return Promise.resolve(/** @type {?SDK.CSSMatchedStyles} */ (null));
+    }
 
     return this._computedStyleModel.cssModel().cachedMatchedCascadeForNode(node).then(validateStyles.bind(this));
 
@@ -130,8 +131,9 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
    */
   _processColor(text) {
     const color = Common.Color.parse(text);
-    if (!color)
+    if (!color) {
       return createTextNode(text);
+    }
     const swatch = InlineEditor.ColorSwatch.create();
     swatch.setColor(color);
     swatch.setFormat(Common.Color.detectColorFormat(color));
@@ -146,8 +148,9 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
     /** @type {!Set<string>} */
     const expandedProperties = new Set();
     for (const treeElement of this._propertiesOutline.rootElement().children()) {
-      if (!treeElement.expanded)
+      if (!treeElement.expanded) {
         continue;
+      }
       const propertyName = treeElement[Elements.ComputedStyleWidget._propertySymbol].name;
       expandedProperties.add(propertyName);
     }
@@ -171,12 +174,15 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
       const propertyValue = nodeStyle.computedStyle.get(propertyName);
       const canonicalName = SDK.cssMetadata().canonicalPropertyName(propertyName);
       const inherited = !inhertiedProperties.has(canonicalName);
-      if (!showInherited && inherited && !(propertyName in this._alwaysShowComputedProperties))
+      if (!showInherited && inherited && !(propertyName in this._alwaysShowComputedProperties)) {
         continue;
-      if (!showInherited && propertyName.startsWith('--'))
+      }
+      if (!showInherited && propertyName.startsWith('--')) {
         continue;
-      if (propertyName !== canonicalName && propertyValue === nodeStyle.computedStyle.get(canonicalName))
+      }
+      if (propertyName !== canonicalName && propertyValue === nodeStyle.computedStyle.get(canonicalName)) {
         continue;
+      }
 
       const propertyElement = createElement('div');
       propertyElement.classList.add('computed-style-property');
@@ -208,8 +214,9 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
       const isOdd = this._propertiesOutline.rootElement().children().length % 2 === 0;
       treeElement.listItemElement.classList.toggle('odd-row', isOdd);
       this._propertiesOutline.appendChild(treeElement);
-      if (!this._propertiesOutline.selectedTreeElement)
+      if (!this._propertiesOutline.selectedTreeElement) {
         treeElement.select(!hadFocus);
+      }
 
       const trace = propertyTraces.get(propertyName);
       if (trace) {
@@ -217,11 +224,14 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
         treeElement.listItemElement.addEventListener('mousedown', e => e.consume(), false);
         treeElement.listItemElement.addEventListener('dblclick', e => e.consume(), false);
         treeElement.listItemElement.addEventListener('click', handleClick.bind(null, treeElement), false);
+        treeElement.listItemElement.addEventListener(
+            'contextmenu', this._handleContextMenuEvent.bind(this, matchedStyles, activeProperty));
         const gotoSourceElement = UI.Icon.create('mediumicon-arrow-in-circle', 'goto-source-icon');
         gotoSourceElement.addEventListener('click', this._navigateToSource.bind(this, activeProperty));
         propertyValueElement.appendChild(gotoSourceElement);
-        if (expandedProperties.has(propertyName))
+        if (expandedProperties.has(propertyName)) {
           treeElement.expand();
+        }
       }
     }
 
@@ -233,10 +243,12 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
      * @return {number}
      */
     function propertySorter(a, b) {
-      if (a.startsWith('--') ^ b.startsWith('--'))
+      if (a.startsWith('--') ^ b.startsWith('--')) {
         return a.startsWith('--') ? 1 : -1;
-      if (a.startsWith('-webkit') ^ b.startsWith('-webkit'))
+      }
+      if (a.startsWith('-webkit') ^ b.startsWith('-webkit')) {
         return a.startsWith('-webkit') ? 1 : -1;
+      }
       const canonical1 = SDK.cssMetadata().canonicalPropertyName(a);
       const canonical2 = SDK.cssMetadata().canonicalPropertyName(b);
       return canonical1.compareTo(canonical2);
@@ -247,10 +259,11 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
      * @param {!Event} event
      */
     function handleClick(treeElement, event) {
-      if (!treeElement.expanded)
+      if (!treeElement.expanded) {
         treeElement.expand();
-      else
+      } else {
         treeElement.collapse();
+      }
       event.consume();
     }
   }
@@ -277,10 +290,11 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
     for (const property of tracedProperties) {
       const trace = createElement('div');
       trace.classList.add('property-trace');
-      if (matchedStyles.propertyState(property) === SDK.CSSMatchedStyles.PropertyState.Overloaded)
+      if (matchedStyles.propertyState(property) === SDK.CSSMatchedStyles.PropertyState.Overloaded) {
         trace.classList.add('property-trace-inactive');
-      else
+      } else {
         activeProperty = property;
+      }
 
       const renderer =
           new Elements.StylesSidebarPropertyRenderer(null, node, property.name, /** @type {string} */ (property.value));
@@ -307,9 +321,34 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
 
       const traceTreeElement = new UI.TreeElement();
       traceTreeElement.title = trace;
+
+      traceTreeElement.listItemElement.addEventListener(
+          'contextmenu', this._handleContextMenuEvent.bind(this, matchedStyles, property));
       rootTreeElement.appendChild(traceTreeElement);
     }
     return /** @type {!SDK.CSSProperty} */ (activeProperty);
+  }
+
+  /**
+   * @param {!SDK.CSSMatchedStyles} matchedStyles
+   * @param {!SDK.CSSProperty} property
+   * @param {!Event} event
+   */
+  _handleContextMenuEvent(matchedStyles, property, event) {
+    const contextMenu = new UI.ContextMenu(event);
+    const rule = property.ownerStyle.parentRule;
+
+    if (rule) {
+      const header = rule.styleSheetId ? matchedStyles.cssModel().styleSheetHeaderForId(rule.styleSheetId) : null;
+      if (header && !header.isAnonymousInlineStyleSheet()) {
+        contextMenu.defaultSection().appendItem(ls`Navigate to selector source`, () => {
+          Elements.StylePropertiesSection.tryNavigateToRuleLocation(matchedStyles, rule);
+        });
+      }
+    }
+
+    contextMenu.defaultSection().appendItem(ls`Navigate to style`, () => Common.Revealer.reveal(property));
+    contextMenu.show();
   }
 
   /**
@@ -321,10 +360,12 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
     for (const style of matchedStyles.nodeStyles()) {
       const allProperties = style.allProperties();
       for (const property of allProperties) {
-        if (!property.activeInStyle() || !matchedStyles.propertyState(property))
+        if (!property.activeInStyle() || !matchedStyles.propertyState(property)) {
           continue;
-        if (!result.has(property.name))
+        }
+        if (!result.has(property.name)) {
           result.set(property.name, []);
+        }
         result.get(property.name).push(property);
       }
     }
@@ -339,8 +380,9 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
     const result = new Set();
     for (const style of matchedStyles.nodeStyles()) {
       for (const property of style.allProperties()) {
-        if (!matchedStyles.propertyState(property))
+        if (!matchedStyles.propertyState(property)) {
           continue;
+        }
         result.add(SDK.cssMetadata().canonicalPropertyName(property.name));
       }
     }
@@ -359,7 +401,7 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
       child.hidden = !matched;
       hasMatch |= matched;
     }
-    this._noMatchesElement.classList.toggle('hidden', hasMatch);
+    this._noMatchesElement.classList.toggle('hidden', !!hasMatch);
   }
 };
 

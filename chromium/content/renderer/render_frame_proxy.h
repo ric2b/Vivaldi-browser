@@ -17,6 +17,7 @@
 #include "content/renderer/child_frame_compositor.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/frame/user_activation_update_type.h"
@@ -154,9 +155,6 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
 
   int provisional_frame_routing_id() { return provisional_frame_routing_id_; }
 
-  // Returns the widget used for the local frame root.
-  RenderWidget* render_widget() { return render_widget_; }
-
   void SynchronizeVisualProperties();
 
   const gfx::Rect& screen_space_rect() const {
@@ -291,7 +289,7 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
 
   // Provides the mojo interface to this RenderFrameProxy's
   // RenderFrameProxyHost.
-  mojom::RenderFrameProxyHostAssociatedPtr frame_proxy_host_ptr_;
+  mojo::AssociatedRemote<mojom::RenderFrameProxyHost> frame_proxy_host_remote_;
   std::unique_ptr<blink::AssociatedInterfaceProvider>
       remote_associated_interfaces_;
 
@@ -299,7 +297,11 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   std::unique_ptr<ChildFrameCompositingHelper> compositing_helper_;
 
   RenderViewImpl* render_view_;
-  RenderWidget* render_widget_;
+
+  // The widget used for the local frame root. Can be nullptr if there
+  // is no local frame root. This happens for main frame proxies or subframes of
+  // main frame proxies.
+  RenderWidget* render_widget_ = nullptr;
 
   // Contains token to be used as a frame id in the devtools protocol.
   // It is derived from the content's devtools_frame_token, is

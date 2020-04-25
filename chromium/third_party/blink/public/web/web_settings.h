@@ -33,7 +33,7 @@
 
 #include <unicode/uscript.h>
 
-#include "third_party/blink/public/common/css/forced_colors.h"
+#include "third_party/blink/public/common/css/navigation_controls.h"
 #include "third_party/blink/public/common/css/preferred_color_scheme.h"
 #include "third_party/blink/public/platform/pointer_properties.h"
 #include "third_party/blink/public/platform/web_common.h"
@@ -120,7 +120,6 @@ class WebSettings {
   // LocalFrameClient set to the frame may override the value set by this
   // method.
   virtual void SetAccessibilityPasswordValuesEnabled(bool) = 0;
-  virtual void SetAllowAccessKeys(bool) = 0;
   virtual void SetAllowFileAccessFromFileURLs(bool) = 0;
   virtual void SetAllowCustomScrollbarInMainFrame(bool) = 0;
   virtual void SetAllowGeolocationOnInsecureOrigins(bool) = 0;
@@ -130,7 +129,6 @@ class WebSettings {
   // value set by this method.
   virtual void SetAllowRunningOfInsecureContent(bool) = 0;
   virtual void SetAllowScriptsToCloseWindows(bool) = 0;
-  virtual void SetAllowTabCycleIntoUI(bool) = 0;
   virtual void SetAllowUniversalAccessFromFileURLs(bool) = 0;
   virtual void SetAlwaysShowContextMenuOnTouch(bool) = 0;
   virtual void SetAntialiased2dCanvasEnabled(bool) = 0;
@@ -266,7 +264,6 @@ class WebSettings {
   virtual void SetViewportStyle(WebViewportStyle) = 0;
   virtual void SetUseSolidColorScrollbars(bool) = 0;
   virtual void SetUseWideViewport(bool) = 0;
-  virtual void SetServeResourceFromCacheOnly(bool) = 0;
   virtual void SetV8CacheOptions(V8CacheOptions) = 0;
   virtual void SetValidationMessageTimerMagnification(int) = 0;
   virtual void SetViewportEnabled(bool) = 0;
@@ -293,10 +290,19 @@ class WebSettings {
   virtual void SetLazyImageLoadingDistanceThresholdPx2G(int) = 0;
   virtual void SetLazyImageLoadingDistanceThresholdPx3G(int) = 0;
   virtual void SetLazyImageLoadingDistanceThresholdPx4G(int) = 0;
+  virtual void SetLazyImageFirstKFullyLoadUnknown(int) = 0;
+  virtual void SetLazyImageFirstKFullyLoadSlow2G(int) = 0;
+  virtual void SetLazyImageFirstKFullyLoad2G(int) = 0;
+  virtual void SetLazyImageFirstKFullyLoad3G(int) = 0;
+  virtual void SetLazyImageFirstKFullyLoad4G(int) = 0;
   virtual void SetForceDarkModeEnabled(bool) = 0;
   virtual void SetPreferredColorScheme(PreferredColorScheme) = 0;
-  virtual void SetForcedColors(ForcedColors) = 0;
+  virtual void SetNavigationControls(NavigationControls) = 0;
 
+  // Vivaldi
+  virtual void SetAllowAccessKeys(bool) = 0;
+  virtual void SetAllowTabCycleIntoUI(bool) = 0;
+  virtual void SetServeResourceFromCacheOnly(bool) = 0;
   virtual void SetVivaldiShowContextMenuOnDoubleClick(bool) = 0;
 
  protected:

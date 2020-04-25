@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.toolbar.bottom;
 
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.View.OnLongClickListener;
 import android.view.ViewGroup;
 import android.view.ViewStub;
 
@@ -17,6 +18,8 @@ import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.toolbar.IncognitoStateProvider;
 import org.chromium.chrome.browser.toolbar.MenuButton;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * The root coordinator for the bottom toolbar. It has two sub-components: the browsing mode bottom
@@ -46,11 +49,13 @@ class BottomToolbarCoordinator {
      */
     BottomToolbarCoordinator(ViewStub stub, ActivityTabProvider tabProvider,
             OnClickListener homeButtonListener, OnClickListener searchAcceleratorListener,
-            OnClickListener shareButtonListener, ThemeColorProvider themeColorProvider) {
+            OnClickListener shareButtonListener, OnLongClickListener tabSwitcherLongClickListener,
+            ThemeColorProvider themeColorProvider) {
         View root = stub.inflate();
 
         mBrowsingModeCoordinator = new BrowsingModeBottomToolbarCoordinator(root, tabProvider,
-                homeButtonListener, searchAcceleratorListener, shareButtonListener);
+                homeButtonListener, searchAcceleratorListener, shareButtonListener,
+                tabSwitcherLongClickListener);
 
         mTabSwitcherModeStub = root.findViewById(R.id.bottom_toolbar_tab_switcher_mode_stub);
 
@@ -115,6 +120,21 @@ class BottomToolbarCoordinator {
      */
     boolean isShowingAppMenuUpdateBadge() {
         return mBrowsingModeCoordinator.isShowingAppMenuUpdateBadge();
+    }
+
+    /** Vivaldi. Update back button according to available back history. */
+    void updateBackButtonVisibility(boolean canGoBack) {
+        mBrowsingModeCoordinator.updateBackButtonVisibility(canGoBack);
+    }
+
+    /** Vivaldi. Update forward button according to available forward history. */
+    void updateForwardButtonVisibility(boolean canGoForward) {
+        mBrowsingModeCoordinator.updateForwardButtonVisibility(canGoForward);
+    }
+
+    /** Vivaldi. Update search vs home button **/
+    void updateCenterButton(boolean showSearch) {
+        mBrowsingModeCoordinator.updateCenterButton(showSearch);
     }
 
     /**

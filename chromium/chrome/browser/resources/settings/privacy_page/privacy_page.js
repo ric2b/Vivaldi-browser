@@ -136,10 +136,10 @@ Polymer({
     },
 
     /** @private */
-    enableBluetoothScanningContentSetting_: {
+    enableInsecureContentContentSetting_: {
       type: Boolean,
       value: function() {
-        return loadTimeData.getBoolean('enableBluetoothScanningContentSetting');
+        return loadTimeData.getBoolean('enableInsecureContentContentSetting');
       }
     },
 

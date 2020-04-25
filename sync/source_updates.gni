@@ -11,6 +11,12 @@ if(!is_android) {
   }
 }
 
+update_target("//components/sync:rest_of_sync") {
+  sources += [
+    "//vivaldi/sync/vivaldi_directory_backing_store.cc",
+  ]
+}
+
 update_template_instance("//components/sync/base:base") {
   sources += [
     "//vivaldi/sync/vivaldi_hash_util.h",

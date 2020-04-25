@@ -50,7 +50,6 @@
 #include "extensions/buildflags/buildflags.h"
 #include "ipc/ipc_sync_channel.h"
 #include "media/base/localized_strings.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_module.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
@@ -142,11 +141,12 @@ bool ChromeRenderThreadObserver::is_incognito_process_ = false;
 // static
 scoped_refptr<ChromeRenderThreadObserver::ChromeOSListener>
 ChromeRenderThreadObserver::ChromeOSListener::Create(
-    chrome::mojom::ChromeOSListenerRequest chromeos_listener_request) {
+    mojo::PendingReceiver<chrome::mojom::ChromeOSListener>
+        chromeos_listener_receiver) {
   scoped_refptr<ChromeOSListener> helper = new ChromeOSListener();
   content::ChildThread::Get()->GetIOTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&ChromeOSListener::BindOnIOThread, helper,
-                                std::move(chromeos_listener_request)));
+                                std::move(chromeos_listener_receiver)));
   return helper;
 }
 
@@ -175,14 +175,14 @@ ChromeRenderThreadObserver::ChromeOSListener::ChromeOSListener()
     : session_merged_callbacks_(base::MakeRefCounted<DelayedCallbackGroup>(
           MergeSessionLoaderThrottle::GetMergeSessionTimeout(),
           GetCallbackGroupTaskRunner())),
-      merge_session_running_(true),
-      binding_(this) {}
+      merge_session_running_(true) {}
 
 ChromeRenderThreadObserver::ChromeOSListener::~ChromeOSListener() {}
 
 void ChromeRenderThreadObserver::ChromeOSListener::BindOnIOThread(
-    chrome::mojom::ChromeOSListenerRequest chromeos_listener_request) {
-  binding_.Bind(std::move(chromeos_listener_request));
+    mojo::PendingReceiver<chrome::mojom::ChromeOSListener>
+        chromeos_listener_receiver) {
+  receiver_.Bind(std::move(chromeos_listener_receiver));
 }
 #endif  // defined(OS_CHROMEOS)
 
@@ -198,9 +198,8 @@ ChromeRenderThreadObserver::ChromeRenderThreadObserver()
   thread->SetResourceDispatcherDelegate(resource_delegate_.get());
 
   // Configure modules that need access to resources.
-  net::NetModule::SetResourceProvider(chrome_common_net::NetResourceProvider);
-  media::SetLocalizedStringProvider(
-      chrome_common_media::LocalizedStringProvider);
+  net::NetModule::SetResourceProvider(ChromeNetResourceProvider);
+  media::SetLocalizedStringProvider(ChromeMediaLocalizedStringProvider);
 
   // chrome-native: is a scheme used for placeholder navigations that allow
   // UIs to be drawn with platform native widgets instead of HTML.  These pages
@@ -248,12 +247,13 @@ void ChromeRenderThreadObserver::UnregisterMojoInterfaces(
 
 void ChromeRenderThreadObserver::SetInitialConfiguration(
     bool is_incognito_process,
-    chrome::mojom::ChromeOSListenerRequest chromeos_listener_request) {
+    mojo::PendingReceiver<chrome::mojom::ChromeOSListener>
+        chromeos_listener_receiver) {
   is_incognito_process_ = is_incognito_process;
 #if defined(OS_CHROMEOS)
-  if (chromeos_listener_request) {
+  if (chromeos_listener_receiver) {
     chromeos_listener_ =
-        ChromeOSListener::Create(std::move(chromeos_listener_request));
+        ChromeOSListener::Create(std::move(chromeos_listener_receiver));
   }
 #endif  // defined(OS_CHROMEOS)
 }
@@ -275,8 +275,9 @@ void ChromeRenderThreadObserver::SetFieldTrialGroup(
 }
 
 void ChromeRenderThreadObserver::OnRendererConfigurationAssociatedRequest(
-    chrome::mojom::RendererConfigurationAssociatedRequest request) {
-  renderer_configuration_bindings_.AddBinding(this, std::move(request));
+    mojo::PendingAssociatedReceiver<chrome::mojom::RendererConfiguration>
+        receiver) {
+  renderer_configuration_receivers_.Add(this, std::move(receiver));
 }
 
 const RendererContentSettingRules*

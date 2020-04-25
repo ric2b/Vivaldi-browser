@@ -31,9 +31,11 @@
 
 #include "base/auto_reset.h"
 #include "base/debug/crash_logging.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "media/base/logging_override_if_enabled.h"
+#include "media/base/media_switches.h"
 #include "third_party/blink/public/platform/modules/remoteplayback/web_remote_playback_client.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -57,6 +59,7 @@
 #include "third_party/blink/renderer/core/dom/events/event_queue.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
+#include "third_party/blink/renderer/core/fileapi/url_file_api.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
@@ -1165,6 +1168,10 @@ void HTMLMediaElement::LoadResource(const WebMediaPlayerSource& source,
   // media element API.
   current_src_ = url;
 
+  // Default this to empty, so that we use |current_src_| unless the player
+  // provides one later.
+  current_src_after_redirects_ = KURL();
+
   if (audio_source_node_)
     audio_source_node_->OnCurrentSrcChanged(current_src_);
 
@@ -1188,11 +1195,24 @@ void HTMLMediaElement::LoadResource(const WebMediaPlayerSource& source,
   bool attempt_load = true;
 
   media_source_ = HTMLMediaSource::Lookup(url.GetString());
-  if (media_source_ && !media_source_->AttachToElement(this)) {
-    // Forget our reference to the MediaSource, so we leave it alone
-    // while processing remainder of load failure.
-    media_source_ = nullptr;
-    attempt_load = false;
+  if (media_source_) {
+    if (media_source_->AttachToElement(this)) {
+      // If the associated feature is enabled, auto-revoke the MediaSource
+      // object URL that was used for attachment on successful (start of)
+      // attachment. This can help reduce memory bloat later if the app does not
+      // revoke the object URL explicitly and the object URL was the only
+      // remaining strong reference to an attached HTMLMediaElement+MediaSource
+      // cycle of objects that could otherwise be garbage-collectable.
+      if (base::FeatureList::IsEnabled(
+              media::kRevokeMediaSourceObjectURLOnAttach)) {
+        URLFileAPI::revokeObjectURL(GetExecutionContext(), url.GetString());
+      }
+    } else {
+      // Forget our reference to the MediaSource, so we leave it alone
+      // while processing remainder of load failure.
+      media_source_ = nullptr;
+      attempt_load = false;
+    }
   }
 
   bool can_load_resource =
@@ -1441,6 +1461,12 @@ void HTMLMediaElement::TextTrackModeChanged(TextTrack* track) {
   // mode again.
   if (track->TrackType() == TextTrack::kTrackElement)
     track->SetHasBeenConfigured(true);
+
+  if (track->IsRendered()) {
+    GetDocument().GetStyleEngine().AddTextTrack(track);
+  } else {
+    GetDocument().GetStyleEngine().RemoveTextTrack(track);
+  }
 
   ConfigureTextTrackDisplay();
 
@@ -1774,6 +1800,13 @@ void HTMLMediaElement::SetReadyState(ReadyState state) {
       ready_state_ = kHaveCurrentData;
   }
 
+  // If we're transitioning to / past kHaveMetadata, then cache the final URL.
+  if (old_state < kHaveMetadata && new_state >= kHaveMetadata &&
+      web_media_player_) {
+    current_src_after_redirects_ =
+        KURL(web_media_player_->GetSrcAfterRedirects());
+  }
+
   if (new_state > ready_state_maximum_)
     ready_state_maximum_ = new_state;
 
@@ -1950,8 +1983,11 @@ bool HTMLMediaElement::SupportsSave() const {
     return false;
   }
 
+  // Get the URL that we'll use for downloading.
+  const KURL url = downloadURL();
+
   // URLs that lead to nowhere are ignored.
-  if (current_src_.IsNull() || current_src_.IsEmpty())
+  if (url.IsNull() || url.IsEmpty())
     return false;
 
   // If we have no source, we can't download.
@@ -1959,7 +1995,7 @@ bool HTMLMediaElement::SupportsSave() const {
     return false;
 
   // It is not useful to offer a save feature on local files.
-  if (current_src_.IsLocalFile())
+  if (url.IsLocalFile())
     return false;
 
   // MediaStream can't be downloaded.
@@ -1971,7 +2007,7 @@ bool HTMLMediaElement::SupportsSave() const {
     return false;
 
   // HLS stream shouldn't have a download button.
-  if (IsHLSURL(current_src_))
+  if (IsHLSURL(url))
     return false;
 
   // Infinite streams don't have a clear end at which to finish the download.
@@ -4103,22 +4139,6 @@ void HTMLMediaElement::OnRemovedFromDocumentTimerFired(TimerBase*) {
   PauseInternal();
 }
 
-void HTMLMediaElement::DefaultEventHandler(Event& event) {
-  if (event.IsKeyboardEvent() && event.type() == event_type_names::kKeyup &&
-      ShouldShowControls()) {
-    // TODO(bokan): Cleanup magic numbers once https://crbug.com/949766 lands.
-    const int key =
-        static_cast<int>(ToKeyboardEvent(event).KeyEvent()->dom_key);
-    if (key == 0x00200310) {
-      // We need to handle the event here rather than in
-      // MediaControlsTouchlessImpl because it is not sent to JS.
-      GetMediaControls()->ShowContextMenu();
-      event.SetDefaultHandled();
-    }
-  }
-  HTMLElement::DefaultEventHandler(event);
-}
-
 void HTMLMediaElement::AudioSourceProviderImpl::Wrap(
     scoped_refptr<WebAudioSourceProviderImpl> provider) {
   MutexLocker locker(provide_input_lock);
@@ -4192,10 +4212,10 @@ WebMediaPlayer::DisplayType HTMLMediaElement::DisplayType() const {
 }
 
 gfx::ColorSpace HTMLMediaElement::TargetColorSpace() {
-  const LocalFrame* frame = GetDocument().GetFrame();
+  LocalFrame* frame = GetDocument().GetFrame();
   if (!frame)
     return gfx::ColorSpace();
-  return frame->GetPage()->GetChromeClient().GetScreenInfo().color_space;
+  return frame->GetPage()->GetChromeClient().GetScreenInfo(*frame).color_space;
 }
 
 bool HTMLMediaElement::WasAutoplayInitiated() {
@@ -4219,6 +4239,26 @@ bool HTMLMediaElement::MediaShouldBeOpaque() const {
   return !IsMediaDataCorsSameOrigin() && ready_state_ < kHaveMetadata &&
          !FastGetAttribute(kSrcAttr).IsEmpty() &&
          EffectivePreloadType() != WebMediaPlayer::kPreloadNone;
+}
+
+WebMediaPlayerClient::Features HTMLMediaElement::GetFeatures() {
+  WebMediaPlayerClient::Features features;
+
+  features.id = FastGetAttribute(kIdAttr);
+  features.width = FastGetAttribute(kWidthAttr);
+
+  if (auto* parent = parentElement())
+    features.parent_id = parent->FastGetAttribute(kIdAttr);
+
+  features.alt_text = AltText();
+  features.is_page_visible = GetDocument().IsPageVisible();
+  features.is_in_main_frame = GetDocument().IsInMainFrame();
+
+  const KURL& url = GetDocument().Url();
+  features.url_host = url.Host();
+  features.url_path = url.GetPath();
+
+  return features;
 }
 
 STATIC_ASSERT_ENUM(WebMediaPlayer::kReadyStateHaveNothing,

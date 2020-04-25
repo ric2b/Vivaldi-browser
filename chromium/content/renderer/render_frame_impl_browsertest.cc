@@ -49,7 +49,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/frame/frame_host_test_interface.mojom.h"
-#include "third_party/blink/public/platform/web_effective_connection_type.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
@@ -101,6 +100,7 @@ class RenderFrameImplTest : public RenderViewTest {
   void LoadChildFrame() {
     mojom::CreateFrameWidgetParams widget_params;
     widget_params.routing_id = kSubframeWidgetRouteId;
+    widget_params.visual_properties.new_size = gfx::Size(100, 100);
 
     FrameReplicationState frame_replication_state;
     frame_replication_state.name = "frame";
@@ -135,7 +135,7 @@ class RenderFrameImplTest : public RenderViewTest {
         std::move(stub_browser_interface_broker), MSG_ROUTING_NONE,
         MSG_ROUTING_NONE, kFrameProxyRouteId, MSG_ROUTING_NONE,
         base::UnguessableToken::Create(), frame_replication_state,
-        &compositor_deps_, widget_params, FrameOwnerProperties(),
+        &compositor_deps_, &widget_params, FrameOwnerProperties(),
         /*has_committed_real_load=*/true);
 
     frame_ = static_cast<TestRenderFrame*>(
@@ -150,15 +150,6 @@ class RenderFrameImplTest : public RenderViewTest {
      __lsan_do_leak_check();
 #endif
      RenderViewTest::TearDown();
-  }
-
-  void SetPreviewsState(RenderFrameImpl* frame, PreviewsState previews_state) {
-    frame->previews_state_ = previews_state;
-  }
-
-  void SetEffectionConnectionType(RenderFrameImpl* frame,
-                                  blink::WebEffectiveConnectionType type) {
-    frame->effective_connection_type_ = type;
   }
 
   TestRenderFrame* GetMainRenderFrame() {
@@ -228,19 +219,22 @@ TEST_F(RenderFrameImplTest, FrameResize) {
   visual_properties.browser_controls_shrink_blink_size = false;
   visual_properties.is_fullscreen_granted = false;
 
-  WidgetMsg_SynchronizeVisualProperties resize_message(0, visual_properties);
-
   // The main frame's widget will receive the resize message before the
   // subframe's widget, and it will set the size for the WebView.
   RenderWidget* main_frame_widget =
       GetMainRenderFrame()->GetLocalRootRenderWidget();
+  WidgetMsg_UpdateVisualProperties resize_message(
+      main_frame_widget->routing_id(), visual_properties);
+
   main_frame_widget->OnMessageReceived(resize_message);
   EXPECT_EQ(view_->GetWebView()->MainFrameWidget()->Size(),
             blink::WebSize(size));
   EXPECT_NE(frame_widget()->GetWebWidget()->Size(), blink::WebSize(size));
 
   // The subframe sets the size only for itself.
-  frame_widget()->OnMessageReceived(resize_message);
+  WidgetMsg_UpdateVisualProperties resize_message_subframe(
+      frame_widget()->routing_id(), visual_properties);
+  frame_widget()->OnMessageReceived(resize_message_subframe);
   EXPECT_EQ(frame_widget()->GetWebWidget()->Size(), blink::WebSize(size));
 }
 
@@ -302,72 +296,6 @@ TEST_F(RenderFrameImplTest, LocalChildFrameWasShown) {
   EXPECT_TRUE(observer.visible());
 }
 
-// Test that effective connection type only updates for new main frame
-// documents.
-TEST_F(RenderFrameImplTest, EffectiveConnectionType) {
-  EXPECT_EQ(blink::WebEffectiveConnectionType::kTypeUnknown,
-            frame()->GetEffectiveConnectionType());
-  EXPECT_EQ(blink::WebEffectiveConnectionType::kTypeUnknown,
-            GetMainRenderFrame()->GetEffectiveConnectionType());
-
-  const struct {
-    blink::WebEffectiveConnectionType type;
-  } tests[] = {{blink::WebEffectiveConnectionType::kTypeUnknown},
-               {blink::WebEffectiveConnectionType::kType2G},
-               {blink::WebEffectiveConnectionType::kType4G}};
-
-  for (size_t i = 0; i < base::size(tests); ++i) {
-    SetEffectionConnectionType(GetMainRenderFrame(), tests[i].type);
-    SetEffectionConnectionType(frame(), tests[i].type);
-
-    EXPECT_EQ(tests[i].type, frame()->GetEffectiveConnectionType());
-    EXPECT_EQ(tests[i].type,
-              GetMainRenderFrame()->GetEffectiveConnectionType());
-
-    blink::WebHistoryItem item;
-    item.Initialize();
-
-    // The main frame's and subframe's effective connection type should stay the
-    // same on same-document navigations.
-    frame()->DidFinishSameDocumentNavigation(item, blink::kWebStandardCommit,
-                                             false /* content_initiated */);
-    EXPECT_EQ(tests[i].type, frame()->GetEffectiveConnectionType());
-    GetMainRenderFrame()->DidFinishSameDocumentNavigation(
-        item, blink::kWebStandardCommit, false /* content_initiated */);
-    EXPECT_EQ(tests[i].type, frame()->GetEffectiveConnectionType());
-
-    // The subframe's effective connection type should not be reset on commit.
-    NavigationState* navigation_state = NavigationState::FromDocumentLoader(
-        frame()->GetWebFrame()->GetDocumentLoader());
-    navigation_state->set_was_within_same_document(false);
-
-    mojo::PendingRemote<blink::mojom::DocumentInterfaceBroker>
-        stub_document_interface_broker;
-    frame()->DidCommitProvisionalLoad(
-        item, blink::kWebStandardCommit,
-        stub_document_interface_broker.InitWithNewPipeAndPassReceiver()
-            .PassPipe());
-    EXPECT_EQ(tests[i].type, frame()->GetEffectiveConnectionType());
-
-    // The main frame's effective connection type should be reset on commit.
-    navigation_state = NavigationState::FromDocumentLoader(
-        GetMainRenderFrame()->GetWebFrame()->GetDocumentLoader());
-    navigation_state->set_was_within_same_document(false);
-
-    stub_document_interface_broker.reset();
-    GetMainRenderFrame()->DidCommitProvisionalLoad(
-        item, blink::kWebStandardCommit,
-        stub_document_interface_broker.InitWithNewPipeAndPassReceiver()
-            .PassPipe());
-    EXPECT_EQ(blink::WebEffectiveConnectionType::kTypeUnknown,
-              GetMainRenderFrame()->GetEffectiveConnectionType());
-
-    // The subframe would be deleted here after a cross-document navigation.
-    // It happens to be left around in this test because this does not simulate
-    // the frame detach.
-  }
-}
-
 TEST_F(RenderFrameImplTest, SaveImageFromDataURL) {
   const IPC::Message* msg1 = render_thread_->sink().GetFirstMessageMatching(
       FrameHostMsg_SaveImageFromDataURL::ID);
@@ -385,7 +313,7 @@ TEST_F(RenderFrameImplTest, SaveImageFromDataURL) {
 
   FrameHostMsg_SaveImageFromDataURL::Param param1;
   FrameHostMsg_SaveImageFromDataURL::Read(msg2, &param1);
-  EXPECT_EQ(std::get<2>(param1), image_data_url);
+  EXPECT_EQ(std::get<0>(param1), image_data_url);
 
   base::RunLoop().RunUntilIdle();
   render_thread_->sink().ClearMessages();
@@ -400,7 +328,7 @@ TEST_F(RenderFrameImplTest, SaveImageFromDataURL) {
 
   FrameHostMsg_SaveImageFromDataURL::Param param2;
   FrameHostMsg_SaveImageFromDataURL::Read(msg3, &param2);
-  EXPECT_EQ(std::get<2>(param2), large_data_url);
+  EXPECT_EQ(std::get<0>(param2), large_data_url);
 
   base::RunLoop().RunUntilIdle();
   render_thread_->sink().ClearMessages();
@@ -427,9 +355,8 @@ TEST_F(RenderFrameImplTest, DownloadUrlLimit) {
       blink::WebSecurityOrigin::Create(GURL("http://test")));
 
   for (int i = 0; i < 10; ++i) {
-    frame()->DownloadURL(
-        request, blink::WebLocalFrameClient::CrossOriginRedirects::kNavigate,
-        mojo::ScopedMessagePipeHandle());
+    frame()->DownloadURL(request, network::mojom::RedirectMode::kManual,
+                         mojo::ScopedMessagePipeHandle());
     base::RunLoop().RunUntilIdle();
     const IPC::Message* msg2 = render_thread_->sink().GetFirstMessageMatching(
         FrameHostMsg_DownloadUrl::ID);
@@ -438,40 +365,12 @@ TEST_F(RenderFrameImplTest, DownloadUrlLimit) {
     render_thread_->sink().ClearMessages();
   }
 
-  frame()->DownloadURL(
-      request, blink::WebLocalFrameClient::CrossOriginRedirects::kNavigate,
-      mojo::ScopedMessagePipeHandle());
+  frame()->DownloadURL(request, network::mojom::RedirectMode::kManual,
+                       mojo::ScopedMessagePipeHandle());
   base::RunLoop().RunUntilIdle();
   const IPC::Message* msg3 = render_thread_->sink().GetFirstMessageMatching(
       FrameHostMsg_DownloadUrl::ID);
   EXPECT_FALSE(msg3);
-}
-
-TEST_F(RenderFrameImplTest, ZoomLimit) {
-  const double kMinZoomLevel = ZoomFactorToZoomLevel(kMinimumZoomFactor);
-  const double kMaxZoomLevel = ZoomFactorToZoomLevel(kMaximumZoomFactor);
-
-  // Verifies navigation to a URL with preset zoom level indeed sets the level.
-  // Regression test for http://crbug.com/139559, where the level was not
-  // properly set when it is out of the default zoom limits of WebView.
-  auto common_params = CreateCommonNavigationParams();
-  common_params->url = GURL("data:text/html,min_zoomlimit_test");
-  common_params->navigation_type = mojom::NavigationType::DIFFERENT_DOCUMENT;
-  GetMainRenderFrame()->SetHostZoomLevel(common_params->url, kMinZoomLevel);
-  GetMainRenderFrame()->Navigate(common_params.Clone(),
-                                 CreateCommitNavigationParams());
-  base::RunLoop().RunUntilIdle();
-  EXPECT_DOUBLE_EQ(kMinZoomLevel, view_->GetWebView()->ZoomLevel());
-
-  // It should work even when the zoom limit is temporarily changed in the page.
-  view_->GetWebView()->ZoomLimitsChanged(ZoomFactorToZoomLevel(1.0),
-                                         ZoomFactorToZoomLevel(1.0));
-  common_params->url = GURL("data:text/html,max_zoomlimit_test");
-  GetMainRenderFrame()->SetHostZoomLevel(common_params->url, kMaxZoomLevel);
-  GetMainRenderFrame()->Navigate(common_params.Clone(),
-                                 CreateCommitNavigationParams());
-  base::RunLoop().RunUntilIdle();
-  EXPECT_DOUBLE_EQ(kMaxZoomLevel, view_->GetWebView()->ZoomLevel());
 }
 
 // Regression test for crbug.com/692557. It shouldn't crash if we inititate a
@@ -534,15 +433,6 @@ TEST_F(RenderFrameImplTest, TestOverlayRoutingTokenSendsNow) {
   EXPECT_FALSE(msg);
 }
 #endif
-
-TEST_F(RenderFrameImplTest, GetPreviewsStateForFrame) {
-  SetPreviewsState(frame(), PREVIEWS_OFF);
-  EXPECT_EQ(WebURLRequest::kPreviewsOff, frame()->GetPreviewsStateForFrame());
-
-  SetPreviewsState(frame(), PREVIEWS_OFF | PREVIEWS_NO_TRANSFORM);
-  EXPECT_EQ(WebURLRequest::kPreviewsOff | WebURLRequest::kPreviewsNoTransform,
-            frame()->GetPreviewsStateForFrame());
-}
 
 TEST_F(RenderFrameImplTest, AutoplayFlags) {
   // Add autoplay flags to the page.
@@ -696,32 +586,6 @@ TEST_F(RenderFrameImplTest, TestDocumentInterfaceBrokerOverride) {
   frame_interface_broker.Flush();
 }
 
-TEST_F(RenderFrameImplTest, IPAddressSpace) {
-  // Verifies that the IPAddressSpace provided in the commit navigation params
-  // influences the web-visible `.addressSpace`.
-  auto common_params = CreateCommonNavigationParams();
-  common_params->url = GURL("data:text/html,ip_address_space");
-  common_params->navigation_type = mojom::NavigationType::DIFFERENT_DOCUMENT;
-
-  network::mojom::IPAddressSpace values[] = {
-      network::mojom::IPAddressSpace::kUnknown,
-      network::mojom::IPAddressSpace::kLocal,
-      network::mojom::IPAddressSpace::kPrivate,
-      network::mojom::IPAddressSpace::kPublic};
-
-  for (auto value : values) {
-    auto commit_params = CreateCommitNavigationParams();
-    commit_params->ip_address_space = value;
-    GetMainRenderFrame()->Navigate(common_params.Clone(),
-                                   commit_params.Clone());
-    base::RunLoop().RunUntilIdle();
-    EXPECT_EQ(value, GetMainRenderFrame()
-                         ->GetWebFrame()
-                         ->GetDocumentLoader()
-                         ->GetIPAddressSpace());
-  }
-}
-
 // RenderFrameRemoteInterfacesTest ------------------------------------
 
 namespace {
@@ -788,7 +652,7 @@ class TestSimpleDocumentInterfaceBrokerImpl
  public:
   using BinderCallback = base::RepeatingCallback<void(
       mojo::PendingReceiver<blink::mojom::FrameHostTestInterface>)>;
-  TestSimpleDocumentInterfaceBrokerImpl(BinderCallback binder_callback)
+  explicit TestSimpleDocumentInterfaceBrokerImpl(BinderCallback binder_callback)
       : binder_callback_(binder_callback) {}
   void BindAndFlush(
       mojo::PendingReceiver<blink::mojom::DocumentInterfaceBroker> receiver) {
@@ -804,15 +668,6 @@ class TestSimpleDocumentInterfaceBrokerImpl
       override {
     binder_callback_.Run(std::move(receiver));
   }
-  void GetCredentialManager(
-      mojo::PendingReceiver<blink::mojom::CredentialManager>) override {}
-  void GetAuthenticator(
-      mojo::PendingReceiver<blink::mojom::Authenticator> receiver) override {}
-  void GetPushMessaging(
-      mojo::PendingReceiver<blink::mojom::PushMessaging> receiver) override {}
-  void GetVirtualAuthenticatorManager(
-      mojo::PendingReceiver<blink::test::mojom::VirtualAuthenticatorManager>
-          receiver) override {}
 
   mojo::Receiver<blink::mojom::DocumentInterfaceBroker> receiver_{this};
   BinderCallback binder_callback_;
@@ -1255,7 +1110,7 @@ TEST_F(RenderFrameRemoteInterfacesTest, ChildFrameAtFirstCommittedLoad) {
       {{GURL(kNoDocumentMarkerURL), kFrameEventDidCreateNewFrame},
        {initial_empty_url, kFrameEventDidCreateNewDocument},
        {initial_empty_url, kFrameEventDidCreateDocumentElement},
-       {initial_empty_url, kFrameEventReadyToCommitNavigation},
+       {child_frame_url, kFrameEventReadyToCommitNavigation},
        // TODO(https://crbug.com/555773): It seems strange that the new
        // document is created and DidCreateNewDocument is invoked *before* the
        // provisional load would have even committed.
@@ -1309,7 +1164,7 @@ TEST_F(RenderFrameRemoteInterfacesTest,
       main_frame_exerciser
           .browser_interface_broker_receiver_for_initial_empty_document(),
       {{initial_empty_url, kFrameEventDidCreateNewFrame},
-       {initial_empty_url, kFrameEventReadyToCommitNavigation},
+       {new_window_url, kFrameEventReadyToCommitNavigation},
        {new_window_url, kFrameEventDidCreateNewDocument}});
   ExpectPendingInterfaceRequestsFromSources(
       main_frame_exerciser.interface_request_for_first_document(),
@@ -1377,7 +1232,7 @@ TEST_F(RenderFrameRemoteInterfacesTest,
         {{GURL(kNoDocumentMarkerURL), kFrameEventDidCreateNewFrame},
          {initial_empty_url, kFrameEventDidCreateNewDocument},
          {initial_empty_url, kFrameEventDidCreateDocumentElement},
-         {initial_empty_url, kFrameEventReadyToCommitNavigation},
+         {child_frame_url, kFrameEventReadyToCommitNavigation},
          {child_frame_url, kFrameEventDidCreateNewDocument},
          {child_frame_url, kFrameEventDidCommitProvisionalLoad},
          {child_frame_url, kFrameEventDidCreateDocumentElement}});
@@ -1435,7 +1290,7 @@ TEST_F(RenderFrameRemoteInterfacesTest, ReplacedOnNonSameDocumentNavigation) {
       std::move(document_interface_broker_receiver_for_first_document),
       std::move(browser_interface_broker_receiver_for_first_document),
       {{GURL(kTestFirstURL), kFrameEventAfterCommit},
-       {GURL(kTestFirstURL), kFrameEventReadyToCommitNavigation},
+       {GURL(kTestSecondURL), kFrameEventReadyToCommitNavigation},
        {GURL(kTestSecondURL), kFrameEventDidCreateNewDocument}});
 
   ASSERT_TRUE(interface_provider_request_for_second_document.is_pending());

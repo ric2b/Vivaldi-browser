@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "services/tracing/perfetto/producer_host.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
 #include "services/tracing/public/cpp/perfetto/producer_client.h"
@@ -140,8 +140,7 @@ class MockConsumer : public perfetto::Consumer {
  private:
   struct DataSourceStatus {
     std::string name;
-    perfetto::ObservableEvents::DataSourceInstanceStateChange::
-        DataSourceInstanceState state;
+    perfetto::ObservableEvents::DataSourceInstanceState state;
   };
 
   void CheckForAllDataSourcesStarted();
@@ -183,7 +182,7 @@ class MockProducerHost : public ProducerHost {
   const std::string producer_name_;
   base::OnceClosure datasource_registered_callback_;
   std::string all_host_commit_data_requests_;
-  mojo::Binding<mojom::ProducerHost> binding_{this};
+  mojo::Receiver<mojom::ProducerHost> receiver_{this};
 };
 
 class MockProducer {

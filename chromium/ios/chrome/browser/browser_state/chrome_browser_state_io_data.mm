@@ -113,14 +113,6 @@ void ChromeBrowserStateIOData::InitializeOnUIThread(
 
   chrome_http_user_agent_settings_.reset(
       new IOSChromeHttpUserAgentSettings(pref_service));
-
-  // These members are used only for sign in, which is not enabled
-  // in incognito mode.  So no need to initialize them.
-  if (!IsOffTheRecord()) {
-    google_services_user_account_id_.Init(prefs::kGoogleServicesUserAccountId,
-                                          pref_service);
-    google_services_user_account_id_.MoveToSequence(io_task_runner);
-  }
 }
 
 ChromeBrowserStateIOData::AppRequestContext::AppRequestContext() {}
@@ -234,21 +226,6 @@ net::URLRequestContext* ChromeBrowserStateIOData::GetMainRequestContext()
     const {
   DCHECK(initialized_);
   return main_request_context_.get();
-}
-
-net::URLRequestContext* ChromeBrowserStateIOData::GetIsolatedAppRequestContext(
-    net::URLRequestContext* main_context,
-    const base::FilePath& partition_path) const {
-  DCHECK(initialized_);
-  AppRequestContext* context = nullptr;
-  if (base::Contains(app_request_context_map_, partition_path)) {
-    context = app_request_context_map_[partition_path];
-  } else {
-    context = AcquireIsolatedAppRequestContext(main_context);
-    app_request_context_map_[partition_path] = context;
-  }
-  DCHECK(context);
-  return context;
 }
 
 void ChromeBrowserStateIOData::SetCookieStoreForPartitionPath(
@@ -412,7 +389,6 @@ void ChromeBrowserStateIOData::ShutdownOnUIThread(
     std::unique_ptr<IOSChromeURLRequestContextGetterVector> context_getters) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
 
-  google_services_user_account_id_.Destroy();
   enable_referrers_.Destroy();
   enable_do_not_track_.Destroy();
   enable_metrics_.Destroy();

@@ -50,6 +50,10 @@ class ExtensionsToolbarContainer : public ToolbarIconContainerView,
 
   ToolbarActionView* GetViewForId(const std::string& id);
 
+  void ShowActiveBubble(
+      views::View* anchor_view,
+      std::unique_ptr<ToolbarActionsBarBubbleDelegate> controller);
+
  private:
   // A struct representing the position and action being dragged.
   struct DropInfo;

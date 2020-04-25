@@ -24,7 +24,6 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.SystemClock;
 import android.print.PrintDocumentAdapter;
-import android.support.annotation.IntDef;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.DragEvent;
@@ -55,11 +54,12 @@ import android.webkit.WebViewClient;
 import android.webkit.WebViewProvider;
 import android.widget.TextView;
 
+import androidx.annotation.IntDef;
+
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContentsStatics;
 import org.chromium.android_webview.AwPrintDocumentAdapter;
 import org.chromium.android_webview.AwSettings;
-import org.chromium.android_webview.ResourcesContextWrapperFactory;
 import org.chromium.android_webview.gfx.AwDrawFnImpl;
 import org.chromium.android_webview.renderer_priority.RendererPriority;
 import org.chromium.base.BuildInfo;
@@ -69,6 +69,7 @@ import org.chromium.base.metrics.CachedMetrics.TimesHistogramSample;
 import org.chromium.base.metrics.ScopedSysTraceEvent;
 import org.chromium.base.task.PostTask;
 import org.chromium.components.autofill.AutofillProvider;
+import org.chromium.components.embedder_support.application.ClassLoaderContextWrapperFactory;
 import org.chromium.content_public.browser.NavigationHistory;
 import org.chromium.content_public.browser.SmartClipProvider;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
@@ -248,7 +249,7 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
             mWebView = webView;
             mWebViewPrivate = webViewPrivate;
             mHitTestResult = new WebView.HitTestResult();
-            mContext = ResourcesContextWrapperFactory.get(mWebView.getContext());
+            mContext = ClassLoaderContextWrapperFactory.get(mWebView.getContext());
             mAppTargetSdkVersion = mContext.getApplicationInfo().targetSdkVersion;
             mFactory = factory;
             mShouldDisableThreadChecking = shouldDisableThreadChecking;
@@ -957,6 +958,7 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
     public void insertVisualStateCallback(
             final long requestId, final VisualStateCallback callback) {
         sWebViewApiCallSample.record(ApiCall.INSERT_VISUAL_STATE_CALLBACK);
+        if (callback == null) return;
         mSharedWebViewChromium.insertVisualStateCallback(
                 requestId, new AwContents.VisualStateCallback() {
                     @Override

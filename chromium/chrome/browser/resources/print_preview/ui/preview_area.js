@@ -529,13 +529,12 @@ Polymer({
    */
   marginsValid_: function() {
     const type = this.getSettingValue('margins');
-    if (!Object.values(print_preview.ticket_items.MarginsTypeValue)
-             .includes(type)) {
+    if (!Object.values(print_preview.MarginsType).includes(type)) {
       // Unrecognized margins type.
       return false;
     }
 
-    if (type !== print_preview.ticket_items.MarginsTypeValue.CUSTOM) {
+    if (type !== print_preview.MarginsType.CUSTOM) {
       return true;
     }
 
@@ -567,11 +566,11 @@ Polymer({
     // Margins
     const newMarginsType = this.getSettingValue('margins');
     if (newMarginsType !== lastTicket.marginsType &&
-        newMarginsType !== print_preview.ticket_items.MarginsTypeValue.CUSTOM) {
+        newMarginsType !== print_preview.MarginsType.CUSTOM) {
       return true;
     }
 
-    if (newMarginsType === print_preview.ticket_items.MarginsTypeValue.CUSTOM) {
+    if (newMarginsType === print_preview.MarginsType.CUSTOM) {
       const customMargins =
           /** @type {!print_preview.MarginsSetting} */ (
               this.getSettingValue('customMargins'));
@@ -595,11 +594,10 @@ Polymer({
       }
 
       const customMarginsChanged =
-          Object.values(print_preview.ticket_items.CustomMarginsOrientation)
-              .some(side => {
-                return this.margins.get(side) !==
-                    customMargins[print_preview.MARGIN_KEY_MAP.get(side)];
-              });
+          Object.values(print_preview.CustomMarginsOrientation).some(side => {
+            return this.margins.get(side) !==
+                customMargins[print_preview.MARGIN_KEY_MAP.get(side)];
+          });
       if (customMarginsChanged) {
         return true;
       }
@@ -608,28 +606,25 @@ Polymer({
     // Simple settings: ranges, layout, header/footer, pages per sheet, fit to
     // page, css background, selection only, rasterize, scaling, dpi
     if (!areRangesEqual(
-            /** @type {!Array<{from: number, to: number}>} */ (
-                this.getSettingValue('ranges')),
-            lastTicket.pageRange) ||
+            /** @type {!Array<{from: number, to: number}>} */
+            (this.getSettingValue('ranges')), lastTicket.pageRange) ||
         this.getSettingValue('layout') !== lastTicket.landscape ||
         this.getColorForTicket_() !== lastTicket.color ||
         this.getSettingValue('headerFooter') !==
             lastTicket.headerFooterEnabled ||
-        this.getSettingValue('fitToPage') !== lastTicket.fitToPageEnabled ||
         this.getSettingValue('cssBackground') !==
             lastTicket.shouldPrintBackgrounds ||
         this.getSettingValue('selectionOnly') !==
             lastTicket.shouldPrintSelectionOnly ||
         this.getSettingValue('rasterize') !== lastTicket.rasterizePDF ||
-        this.getScaleFactorForTicket_() !== lastTicket.scaleFactor) {
+        this.isScalingChanged_(lastTicket)) {
       return true;
     }
 
     // Pages per sheet. If margins are non-default, wait for the return to
     // default margins to trigger a request.
     if (this.getSettingValue('pagesPerSheet') !== lastTicket.pagesPerSheet &&
-        this.getSettingValue('margins') ===
-            print_preview.ticket_items.MarginsTypeValue.DEFAULT) {
+        this.getSettingValue('margins') === print_preview.MarginsType.DEFAULT) {
       return true;
     }
 
@@ -641,17 +636,13 @@ Polymer({
         newValue.width_microns != lastTicket.mediaSize.width_microns ||
         (this.destination.id !== lastTicket.deviceName &&
          this.getSettingValue('margins') ===
-             print_preview.ticket_items.MarginsTypeValue.MINIMUM)) {
+             print_preview.MarginsType.MINIMUM)) {
       return true;
     }
 
     // Destination
-    if (this.destination.isPrivet !== lastTicket.printWithPrivet ||
-        this.destination.isExtension !== lastTicket.printWithExtension ||
-        !this.destination.isLocal !== lastTicket.printWithCloudPrint ||
-        (lastTicket.printToPDF &&
-         this.destination.id !==
-             print_preview.Destination.GooglePromotedId.SAVE_AS_PDF)) {
+    if (print_preview.getPrinterTypeForDestination(this.destination) !==
+        lastTicket.printerType) {
       return true;
     }
 
@@ -664,11 +655,46 @@ Polymer({
         /** @type {boolean} */ (this.getSettingValue('color')));
   },
 
-  /** @return {number} Scale factor. */
+  /** @return {number} Scale factor for print ticket. */
   getScaleFactorForTicket_: function() {
-    return this.getSettingValue('customScaling') ?
+    return this.getSettingValue(this.getScalingSettingKey_()) ===
+            print_preview.ScalingType.CUSTOM ?
         parseInt(this.getSettingValue('scaling'), 10) :
         100;
+  },
+
+  /** @return {string} Appropriate key for the scaling type setting. */
+  getScalingSettingKey_: function() {
+    return this.getSetting('scalingTypePdf').available ? 'scalingTypePdf' :
+                                                         'scalingType';
+  },
+
+  /**
+   * @param {Object} lastTicket Last print ticket.
+   * @return {boolean} Whether new scaling settings update the previewed
+   *     document.
+   */
+  isScalingChanged_: function(lastTicket) {
+    // Preview always updates if the scale factor is changed.
+    if (this.getScaleFactorForTicket_() !== lastTicket.scaleFactor) {
+      return true;
+    }
+
+    // If both scale factors and type match, no scaling change happened.
+    const scalingType = this.getSettingValue(this.getScalingSettingKey_());
+    if (scalingType === lastTicket.scalingType) {
+      return false;
+    }
+
+    // Scaling doesn't always change because of a scalingType change. Changing
+    // between custom scaling with a scale factor of 100 and default scaling
+    // makes no difference.
+    const defaultToCustom = scalingType === print_preview.ScalingType.DEFAULT &&
+        lastTicket.scalingType === print_preview.ScalingType.CUSTOM;
+    const customToDefault = scalingType === print_preview.ScalingType.CUSTOM &&
+        lastTicket.scalingType === print_preview.ScalingType.DEFAULT;
+
+    return !defaultToCustom && !customToDefault;
   },
 
   /**
@@ -705,8 +731,8 @@ Polymer({
       isFirstRequest: this.inFlightRequestId_ == 0,
       requestID: this.inFlightRequestId_,
       previewModifiable: this.documentModifiable,
-      fitToPageEnabled: this.getSettingValue('fitToPage'),
       scaleFactor: this.getScaleFactorForTicket_(),
+      scalingType: this.getSettingValue(this.getScalingSettingKey_()),
       shouldPrintBackgrounds: this.getSettingValue('cssBackground'),
       shouldPrintSelectionOnly: this.getSettingValue('selectionOnly'),
       // NOTE: Even though the remaining fields don't directly relate to the
@@ -720,11 +746,7 @@ Polymer({
       duplex: this.getSettingValue('duplex') ?
           print_preview.DuplexMode.LONG_EDGE :
           print_preview.DuplexMode.SIMPLEX,
-      printToPDF: this.destination.id ==
-          print_preview.Destination.GooglePromotedId.SAVE_AS_PDF,
-      printWithCloudPrint: !this.destination.isLocal,
-      printWithPrivet: this.destination.isPrivet,
-      printWithExtension: this.destination.isExtension,
+      printerType: print_preview.getPrinterTypeForDestination(this.destination),
       rasterizePDF: this.getSettingValue('rasterize'),
     };
 
@@ -733,8 +755,7 @@ Polymer({
       ticket.cloudPrintID = this.destination.id;
     }
 
-    if (this.getSettingValue('margins') ==
-        print_preview.ticket_items.MarginsTypeValue.CUSTOM) {
+    if (this.getSettingValue('margins') == print_preview.MarginsType.CUSTOM) {
       ticket.marginsCustom = this.getSettingValue('customMargins');
     }
     this.lastTicket_ = ticket;

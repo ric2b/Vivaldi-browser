@@ -14,7 +14,7 @@ namespace blink {
 
 namespace {
 
-using resource_coordinator::mojom::InterventionPolicy;
+using performance_manager::mojom::InterventionPolicy;
 
 }  // namespace
 
@@ -30,7 +30,7 @@ DocumentResourceCoordinator::MaybeCreate(
 
 DocumentResourceCoordinator::DocumentResourceCoordinator(
     service_manager::InterfaceProvider* interface_provider) {
-  interface_provider->GetInterface(mojo::MakeRequest(&service_));
+  interface_provider->GetInterface(service_.BindNewPipeAndPassReceiver());
   DCHECK(service_);
 }
 
@@ -41,7 +41,7 @@ void DocumentResourceCoordinator::SetNetworkAlmostIdle() {
 }
 
 void DocumentResourceCoordinator::SetLifecycleState(
-    resource_coordinator::mojom::LifecycleState state) {
+    performance_manager::mojom::LifecycleState state) {
   service_->SetLifecycleState(state);
 }
 

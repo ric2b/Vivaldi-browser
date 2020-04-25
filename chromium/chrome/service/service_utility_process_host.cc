@@ -34,7 +34,6 @@
 #include "content/public/app/content_browser_manifest.h"
 #include "content/public/app/content_utility_manifest.h"
 #include "content/public/common/child_process_host.h"
-#include "content/public/common/connection_filter.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/font_cache_dispatcher_win.h"
 #include "content/public/common/result_codes.h"
@@ -42,7 +41,8 @@
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/platform/named_platform_channel.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
@@ -118,8 +118,8 @@ class ServicePdfToEmfConverterClientImpl
     : public printing::mojom::PdfToEmfConverterClient {
  public:
   explicit ServicePdfToEmfConverterClientImpl(
-      printing::mojom::PdfToEmfConverterClientRequest request)
-      : binding_(this, std::move(request)) {}
+      mojo::PendingReceiver<printing::mojom::PdfToEmfConverterClient> receiver)
+      : receiver_(this, std::move(receiver)) {}
 
  private:
   // mojom::PdfToEmfConverterClient:
@@ -130,48 +130,8 @@ class ServicePdfToEmfConverterClientImpl
     std::move(callback).Run();
   }
 
-  mojo::Binding<printing::mojom::PdfToEmfConverterClient> binding_;
+  mojo::Receiver<printing::mojom::PdfToEmfConverterClient> receiver_;
 };
-
-class ConnectionFilterImpl : public content::ConnectionFilter {
- public:
-  ConnectionFilterImpl() {
-    registry_.AddInterface(
-        base::BindRepeating(&content::FontCacheDispatcher::Create));
-  }
-
-  ~ConnectionFilterImpl() override = default;
-
-  // content::ConnectionFilter:
-  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
-                       const std::string& interface_name,
-                       mojo::ScopedMessagePipeHandle* interface_pipe,
-                       service_manager::Connector* connector) override {
-    registry_.TryBindInterface(interface_name, interface_pipe, source_info);
-  }
-
- private:
-  service_manager::BinderRegistryWithArgs<
-      const service_manager::BindSourceInfo&>
-      registry_;
-
-  DISALLOW_COPY_AND_ASSIGN(ConnectionFilterImpl);
-};
-
-service_manager::Manifest GetContentSystemManifest() {
-  // TODO(https://crbug.com/961869): This is a bit of a temporary hack so that
-  // we can make the global service instance a singleton. For now we just mirror
-  // the per-BrowserContext manifest (formerly also used for the global
-  // singleton instance), sans packaged services, since those are only meant to
-  // be tied to a BrowserContext. The per-BrowserContext service should go away
-  // soon, and then this can be removed.
-  service_manager::Manifest manifest = content::GetContentBrowserManifest();
-  manifest.service_name = content::mojom::kSystemServiceName;
-  manifest.packaged_services.clear();
-  manifest.options.instance_sharing_policy =
-      service_manager::Manifest::InstanceSharingPolicy::kSingleton;
-  return manifest;
-}
 
 }  // namespace
 
@@ -186,31 +146,34 @@ class ServiceUtilityProcessHost::PdfToEmfState {
              const printing::PdfRenderSettings& conversion_settings) {
     weak_host_->BindInterface(
         printing::mojom::PdfToEmfConverterFactory::Name_,
-        mojo::MakeRequest(&pdf_to_emf_converter_factory_).PassMessagePipe());
+        pdf_to_emf_converter_factory_.BindNewPipeAndPassReceiver().PassPipe());
 
-    pdf_to_emf_converter_factory_.set_connection_error_handler(base::BindOnce(
+    pdf_to_emf_converter_factory_.set_disconnect_handler(base::BindOnce(
         &PdfToEmfState::OnFailed, weak_host_,
         std::string("Connection to PdfToEmfConverterFactory error.")));
 
-    printing::mojom::PdfToEmfConverterClientPtr pdf_to_emf_converter_client_ptr;
+    mojo::PendingRemote<printing::mojom::PdfToEmfConverterClient>
+        pdf_to_emf_converter_client_remote;
     pdf_to_emf_converter_client_impl_ =
         std::make_unique<ServicePdfToEmfConverterClientImpl>(
-            mojo::MakeRequest(&pdf_to_emf_converter_client_ptr));
+            pdf_to_emf_converter_client_remote
+                .InitWithNewPipeAndPassReceiver());
 
     pdf_to_emf_converter_factory_->CreateConverter(
         std::move(pdf_region), conversion_settings,
-        std::move(pdf_to_emf_converter_client_ptr),
+        std::move(pdf_to_emf_converter_client_remote),
         base::BindOnce(
             &ServiceUtilityProcessHost::OnRenderPDFPagesToMetafilesPageCount,
             weak_host_));
     return true;
   }
 
-  void GotPageCount(printing::mojom::PdfToEmfConverterPtr converter,
-                    uint32_t page_count) {
+  void GotPageCount(
+      mojo::PendingRemote<printing::mojom::PdfToEmfConverter> converter,
+      uint32_t page_count) {
     DCHECK(!pdf_to_emf_converter_.is_bound());
-    pdf_to_emf_converter_ = std::move(converter);
-    pdf_to_emf_converter_.set_connection_error_handler(
+    pdf_to_emf_converter_.Bind(std::move(converter));
+    pdf_to_emf_converter_.set_disconnect_handler(
         base::BindOnce(&PdfToEmfState::OnFailed, weak_host_,
                        std::string("Connection to PdfToEmfConverter error.")));
     page_count_ = page_count;
@@ -264,9 +227,10 @@ class ServiceUtilityProcessHost::PdfToEmfState {
   std::unique_ptr<ServicePdfToEmfConverterClientImpl>
       pdf_to_emf_converter_client_impl_;
 
-  printing::mojom::PdfToEmfConverterPtr pdf_to_emf_converter_;
+  mojo::Remote<printing::mojom::PdfToEmfConverter> pdf_to_emf_converter_;
 
-  printing::mojom::PdfToEmfConverterFactoryPtr pdf_to_emf_converter_factory_;
+  mojo::Remote<printing::mojom::PdfToEmfConverterFactory>
+      pdf_to_emf_converter_factory_;
 };
 
 ServiceUtilityProcessHost::ServiceUtilityProcessHost(
@@ -359,7 +323,8 @@ bool ServiceUtilityProcessHost::StartProcess(bool sandbox) {
   // child process, which exists ostensibly as the only instance of
   // "content_utility". This is all set up here.
   std::vector<service_manager::Manifest> manifests{
-      GetContentSystemManifest(), content::GetContentUtilityManifest()};
+      content::GetContentBrowserManifest(),
+      content::GetContentUtilityManifest()};
   service_manager_ = std::make_unique<service_manager::ServiceManager>(
       manifests,
       service_manager::ServiceManager::ServiceExecutablePolicy::kNotSupported);
@@ -368,12 +333,10 @@ bool ServiceUtilityProcessHost::StartProcess(bool sandbox) {
   service_manager_connection_ = content::ServiceManagerConnection::Create(
       mojo::MakeRequest(&browser_proxy),
       base::SequencedTaskRunnerHandle::Get());
-  service_manager_connection_->AddConnectionFilter(
-      std::make_unique<ConnectionFilterImpl>());
 
   mojo::Remote<service_manager::mojom::ProcessMetadata> metadata;
   service_manager_->RegisterService(
-      service_manager::Identity(content::mojom::kSystemServiceName,
+      service_manager::Identity(content::mojom::kBrowserServiceName,
                                 service_manager::kSystemInstanceGroup,
                                 base::Token{}, base::Token::CreateRandom()),
       std::move(browser_proxy), metadata.BindNewPipeAndPassReceiver());
@@ -526,7 +489,7 @@ void ServiceUtilityProcessHost::OnMetafileSpooled(bool success) {
 }
 
 void ServiceUtilityProcessHost::OnRenderPDFPagesToMetafilesPageCount(
-    printing::mojom::PdfToEmfConverterPtr converter,
+    mojo::PendingRemote<printing::mojom::PdfToEmfConverter> converter,
     uint32_t page_count) {
   DCHECK(waiting_for_reply_);
   if (page_count == 0 || pdf_to_emf_state_->has_page_count())

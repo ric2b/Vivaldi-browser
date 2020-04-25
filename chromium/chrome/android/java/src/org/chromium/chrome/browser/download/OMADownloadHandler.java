@@ -35,6 +35,7 @@ import org.chromium.base.ContentUriUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
+import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.browser.ChromeFeatureList;
@@ -44,6 +45,9 @@ import org.chromium.chrome.browser.download.DownloadManagerBridge.DownloadEnqueu
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
 import org.chromium.chrome.download.R;
 import org.chromium.components.download.DownloadCollectionBridge;
+import org.chromium.components.offline_items_collection.LegacyHelpers;
+import org.chromium.components.offline_items_collection.OfflineItem;
+import org.chromium.components.offline_items_collection.OfflineItemState;
 import org.chromium.ui.UiUtils;
 
 import java.io.DataOutputStream;
@@ -127,7 +131,6 @@ public class OMADownloadHandler extends BroadcastReceiver {
             new LongSparseArray<DownloadItem>();
     private final LongSparseArray<OMAInfo> mPendingOMADownloads =
             new LongSparseArray<OMAInfo>();
-    private final DownloadSnackbarController mDownloadSnackbarController;
     private final ObserverList<TestObserver> mObservers = new ObserverList<>();
 
     /**
@@ -253,11 +256,10 @@ public class OMADownloadHandler extends BroadcastReceiver {
         }
     }
 
-    public OMADownloadHandler(
-            Context context, DownloadSnackbarController downloadSnackbarController) {
+    /** Constructor. */
+    public OMADownloadHandler(Context context) {
         mContext = context;
         mSharedPrefs = ContextUtils.getAppSharedPreferences();
-        mDownloadSnackbarController = downloadSnackbarController;
     }
 
     /**
@@ -357,7 +359,7 @@ public class OMADownloadHandler extends BroadcastReceiver {
                         omaInfo, mDownloadInfo, DOWNLOAD_STATUS_INSUFFICIENT_MEMORY);
                 return;
             }
-            if (getOpennableType(mContext.getPackageManager(), omaInfo) == null) {
+            if (getOpennableType(omaInfo) == null) {
                 showDownloadWarningDialog(
                         R.string.oma_download_non_acceptable_content,
                         omaInfo, mDownloadInfo, DOWNLOAD_STATUS_NON_ACCEPTABLE_CONTENT);
@@ -512,7 +514,7 @@ public class OMADownloadHandler extends BroadcastReceiver {
         textView = (TextView) v.findViewById(R.id.oma_download_size);
         textView.setText(omaInfo.getValue(OMA_SIZE));
         textView = (TextView) v.findViewById(R.id.oma_download_type);
-        textView.setText(getOpennableType(mContext.getPackageManager(), omaInfo));
+        textView.setText(getOpennableType(omaInfo));
         textView = (TextView) v.findViewById(R.id.oma_download_description);
         textView.setText(omaInfo.getValue(OMA_DESCRIPTION));
 
@@ -596,11 +598,10 @@ public class OMADownloadHandler extends BroadcastReceiver {
     /**
      * Returns the first MIME type in the OMA download that can be opened on the device.
      *
-     * @param pm PackageManger for the current context.
      * @param omaInfo Information about the OMA content.
      * @return the MIME type can be opened by the device.
      */
-    static String getOpennableType(PackageManager pm, OMAInfo omaInfo) {
+    static String getOpennableType(OMAInfo omaInfo) {
         if (omaInfo.isValueEmpty(OMA_OBJECT_URI)) {
             return null;
         }
@@ -612,8 +613,9 @@ public class OMADownloadHandler extends BroadcastReceiver {
                     && !type.equalsIgnoreCase(OMA_DOWNLOAD_DESCRIPTOR_MIME)
                     && !type.equalsIgnoreCase(OMA_DRM_RIGHTS_MIME)) {
                 intent.setDataAndType(uri, type);
-                if (!pm.queryIntentActivities(intent,
-                        PackageManager.MATCH_DEFAULT_ONLY).isEmpty()) {
+                if (!PackageManagerUtils
+                                .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+                                .isEmpty()) {
                     return type;
                 }
             }
@@ -712,7 +714,7 @@ public class OMADownloadHandler extends BroadcastReceiver {
         if (omaInfo == null) return;
         String mimeType = omaInfo.getDrmType();
         if (mimeType == null) {
-            mimeType = getOpennableType(mContext.getPackageManager(), omaInfo);
+            mimeType = getOpennableType(omaInfo);
         }
         String fileName = omaInfo.getValue(OMA_NAME);
         String url = omaInfo.getValue(OMA_OBJECT_URI);
@@ -859,18 +861,32 @@ public class OMADownloadHandler extends BroadcastReceiver {
                 if (result.downloadStatus == DownloadManagerService.DownloadStatus.COMPLETE) {
                     onDownloadCompleted(item.getDownloadInfo(), downloadId, installNotifyURI);
                     removeOMADownloadFromSharedPrefs(downloadId);
-                    mDownloadSnackbarController.onDownloadSucceeded(item.getDownloadInfo(),
-                            DownloadSnackbarController.INVALID_NOTIFICATION_ID, downloadId,
-                            canResolve, true);
+                    showDownloadOnInfoBar(item, result.downloadStatus);
                 } else if (result.downloadStatus == DownloadManagerService.DownloadStatus.FAILED) {
                     onDownloadFailed(item.getDownloadInfo(), downloadId, result.failureReason,
                             installNotifyURI);
                     removeOMADownloadFromSharedPrefs(downloadId);
-                    DownloadManagerService.getDownloadManagerService().onDownloadFailed(
-                            item, result.failureReason);
+                    // TODO(shaktisahu): Find a way to pass the failure reason.
+                    showDownloadOnInfoBar(item, result.downloadStatus);
                 }
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    }
+
+    private void showDownloadOnInfoBar(DownloadItem downloadItem, int downloadStatus) {
+        DownloadInfoBarController infobarController =
+                DownloadManagerService.getDownloadManagerService().getInfoBarController(
+                        downloadItem.getDownloadInfo().isOffTheRecord());
+        if (infobarController == null) return;
+        OfflineItem offlineItem = DownloadInfo.createOfflineItem(downloadItem.getDownloadInfo());
+        offlineItem.id.namespace = LegacyHelpers.LEGACY_ANDROID_DOWNLOAD_NAMESPACE;
+        if (downloadStatus == DownloadManagerService.DownloadStatus.COMPLETE) {
+            offlineItem.state = OfflineItemState.COMPLETE;
+        } else if (downloadStatus == DownloadManagerService.DownloadStatus.FAILED) {
+            offlineItem.state = OfflineItemState.FAILED;
+        }
+
+        infobarController.onItemUpdated(offlineItem, null);
     }
 
     /**

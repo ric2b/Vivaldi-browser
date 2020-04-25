@@ -10,6 +10,7 @@
 #include "ash/wm/splitview/split_view_utils.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/view.h"
+#include "ui/views/widget/widget.h"
 
 namespace ash {
 
@@ -217,20 +218,6 @@ void SplitViewHighlightView::OnIndicatorTypeChanged(
     return;
   }
 
-  if (SplitViewDragIndicators::IsPreviewAreaState(previous_indicator_state)) {
-    const bool was_this_the_preview =
-        is_right_or_bottom_ !=
-        SplitViewDragIndicators::IsPreviewAreaOnLeftTopOfScreen(
-            previous_indicator_state);
-    DoSplitviewOpacityAnimation(
-        layer(), Shell::Get()->split_view_controller()->InSplitViewMode()
-                     ? SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_OUT
-                     : (was_this_the_preview
-                            ? SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_IN
-                            : SPLITVIEW_ANIMATION_OTHER_HIGHLIGHT_FADE_IN));
-    return;
-  }
-
   // Having ruled out kNone and the "preview area" states, we know that
   // |indicator_state| is either a "drag area" state or a "cannot snap" state.
   // If there is an indicator on only one side, and if this, in the sense of the
@@ -240,13 +227,31 @@ void SplitViewHighlightView::OnIndicatorTypeChanged(
           : SplitViewDragIndicators::IsRightIndicatorState(indicator_state)) {
     return;
   }
+
+  const bool in_split_view_mode =
+      SplitViewController::Get(GetWidget()->GetNativeWindow())
+          ->InSplitViewMode();
+
+  if (SplitViewDragIndicators::IsPreviewAreaState(previous_indicator_state)) {
+    const bool was_this_the_preview =
+        is_right_or_bottom_ !=
+        SplitViewDragIndicators::IsPreviewAreaOnLeftTopOfScreen(
+            previous_indicator_state);
+    DoSplitviewOpacityAnimation(
+        layer(), in_split_view_mode
+                     ? SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_OUT
+                     : (was_this_the_preview
+                            ? SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_IN
+                            : SPLITVIEW_ANIMATION_OTHER_HIGHLIGHT_FADE_IN));
+    return;
+  }
+
   SetColor(SplitViewDragIndicators::IsCannotSnapState(indicator_state)
                ? SK_ColorBLACK
                : SK_ColorWHITE);
   DoSplitviewOpacityAnimation(
-      layer(), Shell::Get()->split_view_controller()->InSplitViewMode()
-                   ? SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_OUT
-                   : SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_IN);
+      layer(), in_split_view_mode ? SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_OUT
+                                  : SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_IN);
 }
 
 }  // namespace ash

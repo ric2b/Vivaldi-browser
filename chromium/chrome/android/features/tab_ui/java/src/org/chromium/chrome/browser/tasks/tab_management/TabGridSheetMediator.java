@@ -5,8 +5,9 @@
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import android.content.Context;
-import android.support.annotation.Nullable;
 import android.view.View.OnClickListener;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.ThemeColorProvider;
@@ -104,12 +105,13 @@ class TabGridSheetMediator {
             }
         };
         mThemeColorObserver =
-                (color, shouldAnimate) -> mModel.set(TabGridSheetProperties.PRIMARY_COLOR, color);
-        mTintObserver = (tint, useLight) -> mModel.set(TabGridSheetProperties.TINT, tint);
+                (color, shouldAnimate) -> mModel.set(TabGridPanelProperties.PRIMARY_COLOR, color);
+        mTintObserver = (tint, useLight) -> mModel.set(TabGridPanelProperties.TINT, tint);
 
         mTabModelSelector.getTabModelFilterProvider().addTabModelFilterObserver(mTabModelObserver);
         mThemeColorProvider.addThemeColorObserver(mThemeColorObserver);
         mThemeColorProvider.addTintObserver(mTintObserver);
+        mModel.set(TabGridPanelProperties.IS_MAIN_CONTENT_VISIBLE, true);
 
         // setup toolbar property model
         setupToolbarClickHandlers();
@@ -172,17 +174,17 @@ class TabGridSheetMediator {
             return;
         }
 
-        mModel.set(TabGridSheetProperties.HEADER_TITLE,
+        mModel.set(TabGridPanelProperties.HEADER_TITLE,
                 mContext.getResources().getQuantityString(
                         R.plurals.bottom_tab_grid_title_placeholder, tabsCount, tabsCount));
-        mModel.set(TabGridSheetProperties.CONTENT_TOP_MARGIN,
+        mModel.set(TabGridPanelProperties.CONTENT_TOP_MARGIN,
                 (int) mContext.getResources().getDimension(R.dimen.control_container_height));
     }
 
     private void setupToolbarClickHandlers() {
         mModel.set(
-                TabGridSheetProperties.COLLAPSE_CLICK_LISTENER, getCollapseButtonClickListener());
-        mModel.set(TabGridSheetProperties.ADD_CLICK_LISTENER, getAddButtonClickListener());
+                TabGridPanelProperties.COLLAPSE_CLICK_LISTENER, getCollapseButtonClickListener());
+        mModel.set(TabGridPanelProperties.ADD_CLICK_LISTENER, getAddButtonClickListener());
     }
 
     private OnClickListener getCollapseButtonClickListener() {

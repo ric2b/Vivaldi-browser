@@ -5,6 +5,7 @@
 #include "ui/accessibility/ax_node_position.h"
 
 #include "base/strings/string_util.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_tree_manager_map.h"
 
@@ -92,37 +93,29 @@ AXNodePosition::AXPositionInstance AXNodePosition::AsUnignoredTextPosition(
   if (!IsLeafTextPosition())
     return AsLeafTextPosition()->AsUnignoredTextPosition(adjustment_behavior);
 
-  if (!GetAnchor()->IsIgnored())
-    return Clone();
+  AXPositionInstance unignored_position =
+      CreateUnignoredPositionFromLeafTextPosition(adjustment_behavior);
 
-  // Find the next/previous node that is not ignored.
-  AXNode* unignored_node = GetAnchor();
-  while (unignored_node) {
-    switch (adjustment_behavior) {
-      case AdjustmentBehavior::kMoveRight:
-        unignored_node = unignored_node->GetNextUnignoredInTreeOrder();
-        break;
-      case AdjustmentBehavior::kMoveLeft:
-        unignored_node = unignored_node->GetPreviousUnignoredInTreeOrder();
-    }
-    if (unignored_node && unignored_node->IsText()) {
-      switch (adjustment_behavior) {
-        case AdjustmentBehavior::kMoveRight:
-          return CreateTextPosition(tree_id(), unignored_node->id(), 0,
-                                    ax::mojom::TextAffinity::kDownstream);
-        case AdjustmentBehavior::kMoveLeft:
-          return CreateTextPosition(tree_id(), unignored_node->id(), 0,
-                                    ax::mojom::TextAffinity::kDownstream)
-              ->CreatePositionAtEndOfAnchor();
-      }
+  // If creating an unignored position using |adjustment_behavior| returns a
+  // null position, the position may be at the start or end of a document.
+  // For this case attempt to adjust using the opposite AdjustmentBehavior.
+  if (features::IsAccessibilityExposeDisplayNoneEnabled()) {
+    if (unignored_position->IsNullPosition()) {
+      const AdjustmentBehavior opposite_adjustment =
+          (adjustment_behavior == AdjustmentBehavior::kMoveRight)
+              ? AdjustmentBehavior::kMoveLeft
+              : AdjustmentBehavior::kMoveRight;
+      unignored_position =
+          CreateUnignoredPositionFromLeafTextPosition(opposite_adjustment);
     }
   }
-  return CreateNullPosition();
+
+  return unignored_position;
 }
 
 int AXNodePosition::MaxTextOffset() const {
   if (IsNullPosition())
-    return INVALID_INDEX;
+    return INVALID_OFFSET;
 
   const AXNode* anchor = GetAnchor();
   DCHECK(anchor);
@@ -146,13 +139,13 @@ int AXNodePosition::MaxTextOffset() const {
 
 void AXNodePosition::AnchorChild(int child_index,
                                  AXTreeID* tree_id,
-                                 int32_t* child_id) const {
+                                 AXNode::AXID* child_id) const {
   DCHECK(tree_id);
   DCHECK(child_id);
 
   if (!GetAnchor() || child_index < 0 || child_index >= AnchorChildCount()) {
     *tree_id = AXTreeIDUnknown();
-    *child_id = INVALID_ANCHOR_ID;
+    *child_id = AXNode::kInvalidAXID;
     return;
   }
 
@@ -194,10 +187,10 @@ base::stack<AXNode*> AXNodePosition::GetAncestorAnchors() const {
   base::stack<AXNode*> anchors;
   AXNode* current_anchor = GetAnchor();
 
-  int32_t current_anchor_id = GetAnchor()->id();
+  AXNode::AXID current_anchor_id = GetAnchor()->id();
   AXTreeID current_tree_id = this->tree_id();
 
-  int32_t parent_anchor_id = INVALID_ANCHOR_ID;
+  AXNode::AXID parent_anchor_id = AXNode::kInvalidAXID;
   AXTreeID parent_tree_id = AXTreeIDUnknown();
 
   while (current_anchor) {
@@ -212,12 +205,13 @@ base::stack<AXNode*> AXNodePosition::GetAncestorAnchors() const {
   return anchors;
 }
 
-void AXNodePosition::AnchorParent(AXTreeID* tree_id, int32_t* parent_id) const {
+void AXNodePosition::AnchorParent(AXTreeID* tree_id,
+                                  AXNode::AXID* parent_id) const {
   DCHECK(tree_id);
   DCHECK(parent_id);
 
   *tree_id = AXTreeIDUnknown();
-  *parent_id = INVALID_ANCHOR_ID;
+  *parent_id = AXNode::kInvalidAXID;
 
   if (!GetAnchor())
     return;
@@ -228,12 +222,13 @@ void AXNodePosition::AnchorParent(AXTreeID* tree_id, int32_t* parent_id) const {
 
   if (!parent) {
     *tree_id = AXTreeIDUnknown();
-    *parent_id = INVALID_ANCHOR_ID;
+    *parent_id = AXNode::kInvalidAXID;
   }
 }
 
-AXNode* AXNodePosition::GetNodeInTree(AXTreeID tree_id, int32_t node_id) const {
-  if (node_id == INVALID_ANCHOR_ID)
+AXNode* AXNodePosition::GetNodeInTree(AXTreeID tree_id,
+                                      AXNode::AXID node_id) const {
+  if (node_id == AXNode::kInvalidAXID)
     return nullptr;
 
   // Used for testing via AXNodePosition::SetTree
@@ -313,40 +308,40 @@ std::vector<int32_t> AXNodePosition::GetWordEndOffsets() const {
       ax::mojom::IntListAttribute::kWordEnds);
 }
 
-int32_t AXNodePosition::GetNextOnLineID(int32_t node_id) const {
+AXNode::AXID AXNodePosition::GetNextOnLineID(AXNode::AXID node_id) const {
   if (IsNullPosition())
-    return INVALID_ANCHOR_ID;
+    return AXNode::kInvalidAXID;
   AXNode* node = GetNodeInTree(tree_id(), node_id);
   int next_on_line_id;
   if (!node || !node->data().GetIntAttribute(
                    ax::mojom::IntAttribute::kNextOnLineId, &next_on_line_id)) {
-    return INVALID_ANCHOR_ID;
+    return AXNode::kInvalidAXID;
   }
-  return static_cast<int32_t>(next_on_line_id);
+  return static_cast<AXNode::AXID>(next_on_line_id);
 }
 
-int32_t AXNodePosition::GetPreviousOnLineID(int32_t node_id) const {
+AXNode::AXID AXNodePosition::GetPreviousOnLineID(AXNode::AXID node_id) const {
   if (IsNullPosition())
-    return INVALID_ANCHOR_ID;
+    return AXNode::kInvalidAXID;
   AXNode* node = GetNodeInTree(tree_id(), node_id);
   int previous_on_line_id;
   if (!node ||
       !node->data().GetIntAttribute(ax::mojom::IntAttribute::kPreviousOnLineId,
                                     &previous_on_line_id)) {
-    return INVALID_ANCHOR_ID;
+    return AXNode::kInvalidAXID;
   }
-  return static_cast<int32_t>(previous_on_line_id);
+  return static_cast<AXNode::AXID>(previous_on_line_id);
 }
 
 AXNode* AXNodePosition::GetParent(AXNode* child,
                                   AXTreeID child_tree_id,
                                   AXTreeID* parent_tree_id,
-                                  int32_t* parent_id) {
+                                  AXNode::AXID* parent_id) {
   DCHECK(parent_tree_id);
   DCHECK(parent_id);
 
   *parent_tree_id = AXTreeIDUnknown();
-  *parent_id = INVALID_ANCHOR_ID;
+  *parent_id = AXNode::kInvalidAXID;
 
   if (!child)
     return nullptr;
@@ -370,6 +365,39 @@ AXNode* AXNodePosition::GetParent(AXNode* child,
 
   *parent_id = parent->id();
   return parent;
+}
+
+AXNodePosition::AXPositionInstance
+AXNodePosition::CreateUnignoredPositionFromLeafTextPosition(
+    AdjustmentBehavior adjustment_behavior) const {
+  DCHECK(IsLeafTextPosition());
+
+  AXNode* unignored_node = GetAnchor();
+  if (!unignored_node->IsIgnored())
+    return Clone();
+
+  // Find the next/previous node that is not ignored.
+  while (unignored_node) {
+    switch (adjustment_behavior) {
+      case AdjustmentBehavior::kMoveRight:
+        unignored_node = unignored_node->GetNextUnignoredInTreeOrder();
+        break;
+      case AdjustmentBehavior::kMoveLeft:
+        unignored_node = unignored_node->GetPreviousUnignoredInTreeOrder();
+    }
+    if (unignored_node && unignored_node->IsText()) {
+      switch (adjustment_behavior) {
+        case AdjustmentBehavior::kMoveRight:
+          return CreateTextPosition(tree_id(), unignored_node->id(), 0,
+                                    ax::mojom::TextAffinity::kDownstream);
+        case AdjustmentBehavior::kMoveLeft:
+          return CreateTextPosition(tree_id(), unignored_node->id(), 0,
+                                    ax::mojom::TextAffinity::kDownstream)
+              ->CreatePositionAtEndOfAnchor();
+      }
+    }
+  }
+  return CreateNullPosition();
 }
 
 }  // namespace ui

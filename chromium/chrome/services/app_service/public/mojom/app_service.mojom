@@ -14,9 +14,13 @@ import "chrome/services/app_service/public/mojom/types.mojom";
 //
 // See chrome/services/app_service/README.md.
 interface AppService {
-  // App Registry methods.
-  RegisterPublisher(Publisher publisher, AppType app_type);
-  RegisterSubscriber(Subscriber subscriber, ConnectOptions? opts);
+  // Called by a publisher of apps to register itself and its apps with the App
+  // Service.
+  RegisterPublisher(pending_remote<Publisher> publisher, AppType app_type);
+
+  // Called by a consumer that wishes to know about available apps to register
+  // itself with the App Service.
+  RegisterSubscriber(pending_remote<Subscriber> subscriber, ConnectOptions? opts);
 
   // App Icon Factory methods.
   LoadIcon(
@@ -35,14 +39,36 @@ interface AppService {
       LaunchSource launch_source,
       int64 display_id);
 
+  // Launches an app with |app_id| and Chrome OS generic |intent| irrespective
+  // of app platform.
+  LaunchAppWithIntent(
+      AppType app_type,
+      string app_id,
+      Intent intent,
+      LaunchSource launch_source,
+      int64 display_id);
+
   SetPermission(
       AppType app_type,
       string app_id,
       Permission permission);
 
-  Uninstall(
+  // Uninstall which invokes a specific dialog per app type. When the unified
+  // uninstall dialog is done, this interface will be removed.
+  PromptUninstall(
       AppType app_type,
       string app_id);
+
+  // Directly uninstalls |app_id| without prompting the user.
+  // |clear_site_data| is available for bookmark apps only. If true, any site
+  // data associated with the app will be removed..
+  // |report_abuse| is available for Chrome Apps only. If true, the app will be
+  // reported for abuse to the Web Store.
+  Uninstall(
+      AppType app_type,
+      string app_id,
+      bool clear_site_data,
+      bool report_abuse);
 
   OpenNativeSettings(
       AppType app_type,
@@ -51,7 +77,7 @@ interface AppService {
 
 interface Publisher {
   // App Registry methods.
-  Connect(Subscriber subscriber, ConnectOptions? opts);
+  Connect(pending_remote<Subscriber> subscriber, ConnectOptions? opts);
 
   // App Icon Factory methods.
   LoadIcon(
@@ -68,12 +94,32 @@ interface Publisher {
       LaunchSource launch_source,
       int64 display_id);
 
+  // Launches an app with |app_id| and Chrome OS generic |intent| irrespective
+  // of app platform.
+  LaunchAppWithIntent(
+    string app_id,
+    Intent intent,
+    LaunchSource launch_source,
+    int64 display_id);
+
   SetPermission(
       string app_id,
       Permission permission);
 
-  Uninstall(
+  // Uninstall which invokes a specific dialog per app type. When the unified
+  // uninstall dialog is done, this interface will be removed.
+  PromptUninstall(
       string app_id);
+
+  // Directly uninstalls |app_id| without prompting the user.
+  // |clear_site_data| is available for bookmark apps only. If true, any site
+  // data associated with the app will be removed..
+  // |report_abuse| is available for Chrome Apps only. If true, the app will be
+  // reported for abuse to the Web Store.
+  Uninstall(
+      string app_id,
+      bool clear_site_data,
+      bool report_abuse);
 
   OpenNativeSettings(
       string app_id);
@@ -82,11 +128,11 @@ interface Publisher {
 interface Subscriber {
   OnApps(array<App> deltas);
 
-  // Binds this to the given request (message pipe endpoint), being to Mojo
+  // Binds this to the given receiver (message pipe endpoint), being to Mojo
   // interfaces what POSIX's dup is to file descriptors.
   //
   // See https://groups.google.com/a/chromium.org/d/msg/chromium-mojo/nFhBzGsb5Pg/V7t_8kNRAgAJ
-  Clone(Subscriber& request);
+  Clone(pending_receiver<Subscriber> receiver);
 };
 
 struct ConnectOptions {

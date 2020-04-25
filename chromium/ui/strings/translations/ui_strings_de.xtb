@@ -7,6 +7,7 @@
 <translation id="1156623771253174079">{SECONDS,plural, =1{vor 1 Minute}other{vor # Minuten}}</translation>
 <translation id="1169783199079129864">{MINUTES,plural, =1{1 min}other{# min}}</translation>
 <translation id="1181037720776840403">Entfernen</translation>
+<translation id="1201402288615127009">Weiter</translation>
 <translation id="1243314992276662751">Hochladen</translation>
 <translation id="1266864766717917324"><ph name="CONTENT_TYPE" /> konnte nicht geteilt werden</translation>
 <translation id="1269641567813814718">Win</translation>
@@ -51,6 +52,7 @@
 <translation id="2289052229480071835">Tippen Sie auf die Zielelemente auf dem Bildschirm.</translation>
 <translation id="2295140143284145483">Umfrage</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="2353636109065292463">Internetverbindung überprüfen</translation>
 <translation id="2388990488038464401">Möchten Sie diese Nummer auf Ihrem Smartphone anrufen?</translation>
 <translation id="24452542372838207">Benachrichtigung erweitern</translation>
 <translation id="2445449901874883781">Hohe Anzeigedichte verwenden</translation>
@@ -81,7 +83,6 @@
 <translation id="3295886253693811851">Anruf starten mit</translation>
 <translation id="335581015389089642">Sprachausgabe</translation>
 <translation id="3389286852084373014">SMS zu lang</translation>
-<translation id="3443810440409579745">Tab erhalten.</translation>
 <translation id="3479552764303398839">Jetzt nicht</translation>
 <translation id="348799646910989694">Ablage automatisch ausgeblendet</translation>
 <translation id="3600566671520689681">{DAYS,plural, =1{1 Tag übrig}other{# Tage übrig}}</translation>
@@ -111,14 +112,11 @@
 <translation id="4724120544754982507">Benachrichtigungscenter, <ph name="UNREAD_NOTIFICATION_COUNT" /> ungelesene Benachrichtigungen</translation>
 <translation id="4730374152663651037">HÄUFIG VERWENDET</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{noch 1 Monat}other{noch # Monate}}</translation>
-<translation id="4841881773802181781">Einfügen</translation>
-<translation id="4881695831933465202">Öffnen</translation>
 <translation id="4888938634149558681">Anrufen</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 Sekunde}other{# Sekunden}}</translation>
 <translation id="4971687151119236543">Medien – vorheriger Titel</translation>
 <translation id="5046499563572181734">Hier tippen</translation>
 <translation id="5076340679995252485">&amp;Einfügen</translation>
-<translation id="5137751499640340777">Google Assistant starten</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">Aufklappdreieck</translation>
 <translation id="5278860589123563674">Fehler beim Senden</translation>
@@ -155,6 +153,7 @@
 <translation id="6394627529324717982">Komma</translation>
 <translation id="6397363302884558537">Sprachausgabe stoppen</translation>
 <translation id="6404817160109697034">{SECONDS,plural, =1{1 Sek. her}other{# Sek. her}}</translation>
+<translation id="6417265370957905582">Google Assistant</translation>
 <translation id="6430678249303439055">Alle Benachrichtigungen von dieser App blockieren</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{Vor 1 Sekunde}other{Vor # Sekunden}}</translation>
 <translation id="6539092367496845964">Ein Fehler ist aufgetreten. Versuchen Sie es später noch einmal.</translation>
@@ -165,7 +164,7 @@
 <translation id="6620110761915583480">Datei speichern</translation>
 <translation id="6656912866303152668">Prüfen Sie, ob auf "<ph name="TARGET_DEVICE_NAME" />" die Synchronisierung in Chrome aktiviert ist, und versuchen Sie es dann noch einmal.</translation>
 <translation id="6699343763173986273">Medien – nächster Titel</translation>
-<translation id="673773751041746814">Löschen</translation>
+<translation id="6710213216561001401">Zurück</translation>
 <translation id="6779314412797872738">Wenn Sie eine Nummer von diesem Gerät an Ihr Android-Smartphone senden möchten, müssen Sie für beide Geräte in den Einstellungen die <ph name="TROUBLESHOOT_LINK" />.</translation>
 <translation id="6786750046913594791">Ordner schließen</translation>
 <translation id="6808150112686056157">Medien – Stopp</translation>
@@ -183,6 +182,7 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{1 Min. übrig}other{# Min. übrig}}</translation>
 <translation id="7319740667687257810">Übersicht, Teilansicht</translation>
+<translation id="7352651011704765696">Ein Problem ist aufgetreten.</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{vor 1 Min.}other{vor # Min.}}</translation>
 <translation id="7389409599945284130">– <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{1 Minute übrig}other{# Minuten übrig}}</translation>
@@ -198,9 +198,10 @@
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{Mehr als 1 ungelesene Benachrichtigung}other{Mehr als # ungelesene Benachrichtigungen}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{in 1 min}other{in # min}}</translation>
 <translation id="8087772101393322318"><ph name="KEY_MODIFIER_NAME" /> + <ph name="KEY_COMBO_NAME" /></translation>
-<translation id="8098075892845277643">Gesprochene Anfrage über Google Assistant starten</translation>
+<translation id="8090736967111090568">Zahl von <ph name="ORIGIN" /></translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{1 Stunde her}other{# Stunden her}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{1 Sek. übrig}other{# Sek. übrig}}</translation>
+<translation id="8134065097954893699">Diese Seite neu laden</translation>
 <translation id="8144660977431427332">Ihre Suchanfragen werden mit Google Assistant durchgeführt. <ph name="LEARN_MORE" /></translation>
 <translation id="8152264887680882389"><ph name="TEXT" />, automatische Vervollständigung</translation>
 <translation id="815598010540052116">Nach unten blättern</translation>

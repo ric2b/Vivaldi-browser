@@ -9,11 +9,14 @@ import static org.chromium.chrome.browser.customtabs.dynamicmodule.DynamicModule
 import android.content.ComponentName;
 import android.content.Context;
 import android.net.Uri;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
+import androidx.browser.customtabs.CustomTabsService;
+import androidx.browser.customtabs.PostMessageBackend;
 
 import org.chromium.base.Callback;
 import org.chromium.base.TraceEvent;
@@ -42,6 +45,7 @@ import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabObserverRegistrar;
 import org.chromium.chrome.browser.util.UrlConstants;
 import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.chrome.browser.util.UrlUtilitiesJni;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
@@ -53,8 +57,6 @@ import java.util.regex.Pattern;
 
 import javax.inject.Inject;
 
-import androidx.browser.customtabs.CustomTabsService;
-import androidx.browser.customtabs.PostMessageBackend;
 import dagger.Lazy;
 
 /**
@@ -421,7 +423,7 @@ public class DynamicModuleCoordinator implements NativeInitObserver, Destroyable
         if (!UrlConstants.HTTPS_SCHEME.equals(scheme)) {
             return false;
         }
-        if (!UrlUtilities.nativeIsGoogleDomainUrl(url, sAllowNonStandardPortNumber)) {
+        if (!UrlUtilitiesJni.get().isGoogleDomainUrl(url, sAllowNonStandardPortNumber)) {
             return false;
         }
         return true;

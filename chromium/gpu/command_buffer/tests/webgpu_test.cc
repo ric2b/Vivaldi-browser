@@ -5,6 +5,7 @@
 #include "gpu/command_buffer/tests/webgpu_test.h"
 
 #include <dawn/dawn.h>
+#include <dawn/dawn_proc.h>
 
 #include "base/test/test_simple_task_runner.h"
 #include "build/build_config.h"
@@ -29,8 +30,9 @@ bool WebGPUTest::WebGPUSupported() const {
 }
 
 bool WebGPUTest::WebGPUSharedImageSupported() const {
-  // Currently WebGPUSharedImage is only implemented on Mac and Linux
-#if (defined(OS_MACOSX) || defined(OS_LINUX)) && BUILDFLAG(USE_DAWN)
+  // Currently WebGPUSharedImage is only implemented on Mac, Linux and Windows
+#if (defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_WIN)) && \
+    BUILDFLAG(USE_DAWN)
   return true;
 #else
   return false;
@@ -77,8 +79,10 @@ void WebGPUTest::Initialize(const Options& options) {
     return;
   }
 
+  webgpu()->RequestAdapter(webgpu::PowerPreference::kHighPerformance);
+
   DawnProcTable procs = webgpu()->GetProcs();
-  dawnSetProcs(&procs);
+  dawnProcSetProcs(&procs);
 }
 
 webgpu::WebGPUInterface* WebGPUTest::webgpu() const {

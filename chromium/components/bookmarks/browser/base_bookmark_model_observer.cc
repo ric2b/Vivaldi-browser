@@ -60,4 +60,11 @@ void BaseBookmarkModelObserver::BookmarkNodeChildrenReordered(
   BookmarkModelChanged();
 }
 
+/** Vivaldi */
+void BaseBookmarkModelObserver::BookmarkSpeedDialNodeChanged(
+    BookmarkModel* model,
+    const BookmarkNode* node) {
+  BookmarkModelChanged();
+}
+
 }  // namespace bookmarks

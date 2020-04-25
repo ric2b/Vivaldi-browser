@@ -135,22 +135,23 @@ struct CORE_EXPORT Timing {
   struct CalculatedTiming {
     DISALLOW_NEW();
     Phase phase = Phase::kPhaseNone;
-    double current_iteration = 0;
+    base::Optional<double> current_iteration = 0;
     base::Optional<double> progress = 0;
     bool is_current = false;
     bool is_in_effect = false;
     bool is_in_play = false;
     double local_time = NullValue();
-    double time_to_forwards_effect_change =
-        std::numeric_limits<double>::infinity();
-    double time_to_reverse_effect_change =
-        std::numeric_limits<double>::infinity();
+    AnimationTimeDelta time_to_forwards_effect_change =
+        AnimationTimeDelta::Max();
+    AnimationTimeDelta time_to_reverse_effect_change =
+        AnimationTimeDelta::Max();
     double time_to_next_iteration = std::numeric_limits<double>::infinity();
   };
 
   CalculatedTiming CalculateTimings(double local_time,
                                     AnimationDirection animation_direction,
-                                    bool is_keyframe_effect) const;
+                                    bool is_keyframe_effect,
+                                    base::Optional<double> playback_rate) const;
   ComputedEffectTiming* getComputedTiming(const CalculatedTiming& calculated,
                                           bool is_keyframe_effect) const;
 };

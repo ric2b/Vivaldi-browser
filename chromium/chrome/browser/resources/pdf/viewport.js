@@ -6,13 +6,20 @@
  * @typedef {{
  *   width: number,
  *   height: number,
+ *   layoutOptions: (!LayoutOptions|undefined),
  *   pageDimensions: Array<ViewportRect>,
  * }}
  */
 let DocumentDimensions;
 
+/** @typedef {{defaultPageOrientation: number}} */
+let LayoutOptions;
+
 /** @typedef {{x: number, y: number}} */
 let Point;
+
+/** @typedef {{x: (number|undefined), y: (number|undefined)}} */
+let PartialPoint;
 
 /** @typedef {{width: number, height: number}} */
 let Size;
@@ -276,6 +283,15 @@ class Viewport {
       width: this.documentDimensions_.width,
       height: this.documentDimensions_.height
     };
+  }
+
+  /**
+   * @return {!LayoutOptions|undefined} A dictionary carrying layout options
+   *     from the plugin.
+   */
+  getLayoutOptions() {
+    return this.documentDimensions_ ? this.documentDimensions_.layoutOptions :
+                                      undefined;
   }
 
   /**
@@ -605,7 +621,7 @@ class Viewport {
       const bottom =
           this.pageDimensions_[page].y + this.pageDimensions_[page].height;
 
-      if (top <= y && bottom > y) {
+      if (top <= y && y <= bottom) {
         return page;
       }
 
@@ -1166,7 +1182,9 @@ class Viewport {
         this.fittingType_ == FittingType.FIT_TO_HEIGHT);
   }
 
-  /** @param {!Point} point The position to which to scroll the viewport. */
+  /**
+   * @param {!PartialPoint} point The position to which to scroll the viewport.
+   */
   scrollTo(point) {
     let changed = false;
     const newPosition = this.position;

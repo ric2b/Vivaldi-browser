@@ -36,6 +36,7 @@
     <output filename="vivaldi_native_strings_id.pak" type="data_package" lang="id" />
     <output filename="vivaldi_native_strings_it.pak" type="data_package" lang="it" />
     <output filename="vivaldi_native_strings_ja.pak" type="data_package" lang="ja" />
+    <output filename="vivaldi_native_strings_ja-KS.pak" type="data_package" lang="ja-KS" />
     <output filename="vivaldi_native_strings_kn.pak" type="data_package" lang="kn" />
     <output filename="vivaldi_native_strings_ko.pak" type="data_package" lang="ko" />
     <output filename="vivaldi_native_strings_lt.pak" type="data_package" lang="lt" />
@@ -105,6 +106,7 @@
     <file path="strings/vivaldi_native_strings_id.xtb" lang="id" />
     <file path="strings/vivaldi_native_strings_it.xtb" lang="it" />
     <file path="strings/vivaldi_native_strings_ja.xtb" lang="ja" />
+    <file path="strings/vivaldi_native_strings_ja-KS.xtb" lang="ja-KS" />
     <file path="strings/vivaldi_native_strings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_native_strings_ko.xtb" lang="ko" />
     <file path="strings/vivaldi_native_strings_lt.xtb" lang="lt" />
@@ -326,6 +328,13 @@
       </message>
       <message name="IDS_DEFAULT_CALENDAR_NAME" desc="The default calendar name given to a newly created profile.">
         My Calendar
+      </message>
+      <!-- Version UI -->
+      <message name="IDS_VIVALDI_VERSION_UI_LICENSE" desc="The label below the copyright message, containing the URLs.">
+        Vivaldi is made possible by the <ph name="BEGIN_LINK_CHROMIUM">&lt;a target="_blank" href="$1"&gt;</ph>Chromium<ph name="END_LINK_CHROMIUM">&lt;/a&gt;</ph> open source project and other <ph name="BEGIN_LINK_OSS">&lt;a target="_blank" href="$2"&gt;</ph>open source software<ph name="END_LINK_OSS">&lt;/a&gt;</ph>.
+      </message>
+      <message name="IDS_WELCOME_PAGE_URL" translateable="false">
+        chrome-extension://mpognobbkildjkofajifpdfhcoklimli/components/welcome/welcome.html
       </message>
 
       <part file="vivaldi_bookmark_strings.grdp" />

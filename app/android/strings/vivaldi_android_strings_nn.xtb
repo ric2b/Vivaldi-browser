@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="nn">
+<translation id="1029351048239796117">Vivald må få tilgang til mikrofonen din for denne nettstaden.</translation>
+<translation id="1063227610401477317">Ta endringane i bruk</translation>
+<translation id="1067048845568873861">Laga</translation>
+<translation id="1151669774236491028">Det er ein feil på Vivaldi.net: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="1193152013480891461">Lag ein Vivaldi-konto</translation>
+<translation id="119944043368869598">Tøm alt</translation>
+<translation id="1228311134236651326">Fann ingen notat</translation>
+<translation id="1243314992276662751">Last opp</translation>
+<translation id="1249276067323441352">Data å synkronisera</translation>
+<translation id="1302932907222175914">Søk gjennom notata dine</translation>
+<translation id="1644574205037202324">Historikk</translation>
+<translation id="1689333818294560261">Kallenamn</translation>
+<translation id="1799160781006135561">Krypteringspassordet er ikkje oppgjeve</translation>
+<translation id="1887193815546011584">Nytt snøggval</translation>
+<translation id="1984391066297619717">Automatisk synk</translation>
+<translation id="2071726368047511075">Fang side</translation>
+<translation id="2199644148227291099">Er du trygg på at du vil kryptera med påloggingspassordet ditt? Dette reduserer tryggleiken til dei synkroniserte fjerndataa dine kraftig.</translation>
+<translation id="2243210264130642074">Notatet vart lagra</translation>
+<translation id="2359808026110333948">Hald fram</translation>
+<translation id="2526968784648867272">Fangar sida …</translation>
+<translation id="2709516037105925701">Autofullføring</translation>
+<translation id="2745324713975967671">Krypteringspassord</translation>
+<translation id="2818042133587341562">Vivald må få tilgang til kameraet ditt for denne nettstaden.</translation>
+<translation id="2842985007712546952">Foreldremappe</translation>
+<translation id="2850144663494818309">Startar opp synk-motoren ...</translation>
+<translation id="2915527103487649658">Synkroniser alle data</translation>
+<translation id="2953995378235516294">Dataa i synk-kontoen din er krypterte. Du må skriva inn krypteringspassordet for å dekryptera dei.</translation>
+<translation id="2996809686854298943">Må ha adresse (URL)</translation>
+<translation id="3177673846235066154">Tenaren avviste pålogginga di.</translation>
+<translation id="3183006304368105350">Klon fana</translation>
+<translation id="3335772982573114336">Nytt notat</translation>
+<translation id="33451081266695216">Tenaren strypte sambandet.</translation>
+<translation id="3377025655491224618">Privat fane</translation>
+<translation id="3513566764071045027">Logg av</translation>
+<translation id="3723593528923555236">Hald fram utan eige passord</translation>
+<translation id="3838463869765243557">Einingsnamn (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">Skildring</translation>
+<translation id="3897711243931585177">Generelt</translation>
+<translation id="4014682279600355881">Vi tilrår at du lagar eit eige, sterkt krypteringspassord. Men du kan la det vera tomt; då vil vi bruka om att det lagra kontopassordet ditt.</translation>
+<translation id="4073968054795398875">Det er ein feil på synk-tenaren. Prøver å starta opp att snart …</translation>
+<translation id="4082980568238151037">Lag krypteringspassord.</translation>
+<translation id="4145489350420416595">Uventa feil.</translation>
+<translation id="4268574628540273656">Nettstadadresse:</translation>
+<translation id="4304224509867189079">Logg på</translation>
+<translation id="4435780204941264251">Tøm synk-dataa</translation>
+<translation id="4532845899244822526">Vel mappe</translation>
+<translation id="4579489600439872414">Synkroniseringa er slått av i Android-innstillingane.</translation>
+<translation id="4589558845651536280">Held på …</translation>
+<translation id="4752136117982598343">Notatet vart lagra i <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">Nedlastingar</translation>
+<translation id="4833044618885331665">Du må oppgradera Vivaldi for å kunna synkronisera.</translation>
+<translation id="4847896847259487518">Lag bokmerke av sida</translation>
+<translation id="4890701585167892790">Ingen notat her</translation>
+<translation id="4936710149174207991">Ikkje synka</translation>
+<translation id="4954427294703861104">Ny hos Vivaldi? Lag ein konto.</translation>
+<translation id="504986598654589766">Vivaldi vil ikkje lagra søka dine, stadane du besøkte, informasjonskapslar og mellombelse filer når du arbeider i ei privatfane. Sambandet vil heller ikkje verta kryptert eller endra på nokon som helst måte.</translation>
+<translation id="5161254044473106830">Må ha tittel</translation>
+<translation id="5271549068863921519">Lagra passordet</translation>
+<translation id="5286002386457946212">Klientfeil.</translation>
+<translation id="5290452628447338707">Ingen notat her</translation>
+<translation id="5351912500249789547">Vivaldi.net avviste autentiseringa di: feilkode <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">Opna bildet</translation>
+<translation id="5421638721143596928">Klarte ikkje å dekryptera påloggingsopplysningane dine. Logg på igjen.</translation>
+<translation id="5443210757369395869">Fang det synlege området</translation>
+<translation id="5448025735280530073">Vivald må få tilgang til posisjonen din for å kunna dela han med denne nettstaden.</translation>
+<translation id="5510723066938954312">Bokmerke og snøggval</translation>
+<translation id="5525981542754785361">Notatet vart lagra i <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">Kopier til notat</translation>
+<translation id="5765833063161370062">Flytt notat</translation>
+<translation id="5790085346892983794">Utført</translation>
+<translation id="5803562371819294631">Dette vil fjerna alle synkroniseringsdataa som er lagra på synk-tenaren, nullstilla krypteringspassordet og logga deg ut. Vil du gjera dette?</translation>
+<translation id="5823830882692559950">Vivaldi.net avviste autentiseringa di: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5841317974325635710">Nytt notat er laga</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> notat}
+          other {<ph name="NOTES_COUNT_MANY" /> notat}}</translation>
+<translation id="6012194412768958291">Klarte ikkje å kopla til vivaldi.net.</translation>
+<translation id="6027204815015935175">Passord er påkravd for å dekryptera.</translation>
+<translation id="6059232451013891645">Mappe:</translation>
+<translation id="6077943432358741146">Snøggval</translation>
+<translation id="6091125352818749975">Tømmer dei fjernsynkroniserte dataa.</translation>
+<translation id="6179463181009746489">Slett notat</translation>
+<translation id="6231148928368101651">Panel</translation>
+<translation id="6406506848690869874">Synk</translation>
+<translation id="6657585470893396449">Passord</translation>
+<translation id="6682232524697939870">Vivald må få tilgang til kameraet og mikrofonen din for denne nettstaden.</translation>
+<translation id="6698381487523150993">Laga:</translation>
+<translation id="6786747875388722282">Utvidingar</translation>
+<translation id="6887143077297974801">Klarte ikkje å starta synkinga.</translation>
+<translation id="6945221475159498467">Vel</translation>
+<translation id="6960734555676205519">Siste synkroniseringa</translation>
+<translation id="7029809446516969842">Passord</translation>
+<translation id="7075547914712055886">Start om att Sync</translation>
+<translation id="7222342267839079597">Vel eit sterkt krypteringspassord for å verna dataa dine.</translation>
+<translation id="7492794630657957996">Stadfest datasynkroniseringa for å fullføra oppsettet</translation>
+<translation id="7514365320538308">Last ned</translation>
+<translation id="7547490097772831952">Fang heile sida</translation>
+<translation id="7725641807765767506">Fann ingen snøggval</translation>
+<translation id="7765158879357617694">Flytt</translation>
+<translation id="7822864833609233785">Avansert</translation>
+<translation id="8028021641083150097">For å få attende tilgangen til kontoen din, må alle lagra synkdata på synk-tenaren verta nullstilte. Deretter kan du starta synkroniseringa igjen med dei gjeldande dataa i nettlesaren din.</translation>
+<translation id="8035133914807600019">Ny mappe …</translation>
+<translation id="8066170816074394954">Tenarfeil.</translation>
+<translation id="8123787473700925741">Det er ein feil på Vivaldi.net: feilkode <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">Start synkroniseringa</translation>
+<translation id="8206267832882844324">Endra notatet</translation>
+<translation id="8225478925744929238">Fjern frå bokmerka</translation>
+<translation id="8233521945095997439">Fann ingen snøggval her</translation>
+<translation id="8257908958623224237">Det er ein konflikt med ein annan klient sine data.</translation>
+<translation id="8261506727792406068">Slett</translation>
+<translation id="8305137170060620165">Innskriven historikk og fjernøkter</translation>
+<translation id="8414685983518053656">Notat</translation>
+<translation id="8422778094137438683">Du må bruka ein vivaldi.net-brukarkonto for å logga deg på.</translation>
+<translation id="8428213095426709021">Innstillingar</translation>
+<translation id="8462396943848220200">Prøver om <ph name="TIME" /></translation>
+<translation id="8480556999740355963">Pålogga som <ph name="USERNAME" /> på <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">Held på å logga på vivaldi.net som <ph name="USERNAME" />; vent litt.</translation>
+<translation id="8503813439785031346">Brukarnamn</translation>
+<translation id="8661216209723599816">Nullstill fjerndataa</translation>
+<translation id="8721244337025311110">Nytt bokmerke</translation>
+<translation id="8724114686743788114">Får ikkje opna bildet</translation>
+<translation id="8730621377337864115">Ferdig</translation>
+<translation id="8738958257180686306">Laga: <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Vivald må få lagringstilgang for å kunna lasta ned filer.</translation>
+<translation id="8808060551076378370">Klarte ikkje å leggja til notatet.</translation>
+<translation id="8817201557520703060">Sida er fanga</translation>
+<translation id="8820817407110198400">Bokmerke</translation>
+<translation id="895749247724466293">Søk gjennom snøggvala dine</translation>
+<translation id="8959245489304000426">Eg har gløymt passordet</translation>
+<translation id="8979401359137062629">Notat:</translation>
+<translation id="9028089729841356743">Nettverksfeil.</translation>
+<translation id="9065203028668620118">Endra</translation>
+<translation id="9148058034647219655">Avslutt</translation>
+<translation id="9173575361559252669">Klarte ikkje å fanga sida</translation>
+</translationbundle>

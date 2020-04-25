@@ -47,12 +47,28 @@ const char kPhoneNumber[] = "+9876543210";
 
 constexpr int kSeparatorCommandId = -1;
 
+class MockSharingDeviceRegistration : public SharingDeviceRegistration {
+ public:
+  MockSharingDeviceRegistration()
+      : SharingDeviceRegistration(/* pref_service_= */ nullptr,
+                                  /* sharing_sync_preference_= */ nullptr,
+                                  /* instance_id_driver_= */ nullptr,
+                                  /* vapid_key_manager_= */ nullptr) {}
+
+  ~MockSharingDeviceRegistration() override = default;
+
+  MOCK_CONST_METHOD0(IsSharedClipboardSupported, bool());
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockSharingDeviceRegistration);
+};
+
 class MockSharingService : public SharingService {
  public:
   explicit MockSharingService(std::unique_ptr<SharingFCMHandler> fcm_handler)
       : SharingService(/* sync_prefs= */ nullptr,
                        /* vapid_key_manager= */ nullptr,
-                       /* sharing_device_registration= */ nullptr,
+                       std::make_unique<MockSharingDeviceRegistration>(),
                        /* fcm_sender= */ nullptr,
                        std::move(fcm_handler),
                        /* gcm_driver= */ nullptr,
@@ -63,9 +79,10 @@ class MockSharingService : public SharingService {
 
   ~MockSharingService() override = default;
 
-  MOCK_CONST_METHOD1(GetDeviceCandidates,
-                     std::vector<std::unique_ptr<syncer::DeviceInfo>>(
-                         int required_capabilities));
+  MOCK_CONST_METHOD1(
+      GetDeviceCandidates,
+      std::vector<std::unique_ptr<syncer::DeviceInfo>>(
+          sync_pb::SharingSpecificFields::EnabledFeatures required_feature));
 
   MOCK_METHOD4(SendMessageToDevice,
                void(const std::string& device_guid,
@@ -113,8 +130,10 @@ class ClickToCallContextMenuObserverTest : public testing::Test {
           base::StrCat({"guid", base::NumberToString(i)}), "name",
           "chrome_version", "user_agent",
           sync_pb::SyncEnums_DeviceType_TYPE_PHONE, "device_id",
-          /* last_updated_timestamp= */ base::Time::Now(),
-          /* send_tab_to_self_receiving_enabled= */ false));
+          base::SysInfo::HardwareInfo(),
+          /*last_updated_timestamp=*/base::Time::Now(),
+          /*send_tab_to_self_receiving_enabled=*/false,
+          /*sharing_info=*/base::nullopt));
     }
     return devices;
   }

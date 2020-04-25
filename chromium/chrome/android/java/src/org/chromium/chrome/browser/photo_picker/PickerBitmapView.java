@@ -13,7 +13,6 @@ import android.graphics.PorterDuff;
 import android.graphics.drawable.AnimationDrawable;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.Nullable;
 import android.support.graphics.drawable.VectorDrawableCompat;
 import android.support.v4.widget.ImageViewCompat;
 import android.support.v7.content.res.AppCompatResources;
@@ -25,6 +24,8 @@ import android.view.animation.Animation;
 import android.view.animation.ScaleAnimation;
 import android.widget.ImageView;
 import android.widget.TextView;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
@@ -139,8 +140,9 @@ public class PickerBitmapView extends SelectableItemView<PickerBitmap> {
 
     @Override
     public void onClick() {
-        if (mBitmapDetails == null)
+        if (mBitmapDetails == null) {
             return; // Clicks are disabled until initialize() has been called.
+        }
 
         if (isGalleryTile()) {
             mCategoryView.showGallery();
@@ -180,18 +182,14 @@ public class PickerBitmapView extends SelectableItemView<PickerBitmap> {
         // being initialized.
         if (mBitmapDetails == null) return;
 
+        super.onSelectionStateChange(selectedItems);
+
         updateSelectionState();
 
         if (!isPictureTile()) return;
 
         boolean selected = selectedItems.contains(mBitmapDetails);
         boolean checked = super.isChecked();
-
-        // In single-selection mode, the list needs to be updated to account for items that were
-        // checked before but no longer are (because something else was selected).
-        if (!mCategoryView.isMultiSelectAllowed() && !selected && checked) {
-            super.toggle();
-        }
 
         boolean needsResize = selected != checked;
         int size = selected && !checked ? mCategoryView.getImageSize() - 2 * mBorder

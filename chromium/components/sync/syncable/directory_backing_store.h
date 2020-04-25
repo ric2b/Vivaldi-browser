@@ -168,9 +168,6 @@ class DirectoryBackingStore {
   bool SetVersion(int version);
   int GetVersion();
 
-  bool SetVivaldiVersion(int version);
-  int GetVivaldiVersion();
-
   // Individual version migrations.
   bool MigrateVersion67To68();
   bool MigrateVersion68To69();
@@ -198,8 +195,6 @@ class DirectoryBackingStore {
   bool MigrateVersion90To91();
   bool MigrateVersion91To92();
 
-  bool MigrateVivaldiVersion0To1();
-
   // Accessor for needs_column_refresh_.  Used in tests.
   bool needs_column_refresh() const;
 
@@ -207,6 +202,11 @@ class DirectoryBackingStore {
   void ResetAndCreateConnection();
 
   SEQUENCE_CHECKER(sequence_checker_);
+
+  // Vivaldi migration utilities
+  bool SetVivaldiVersion(int version);
+  int GetVivaldiVersion();
+  bool MigrateVivaldiVersion0To1();
 
  private:
   friend class DirectoryBackingStoreTest;

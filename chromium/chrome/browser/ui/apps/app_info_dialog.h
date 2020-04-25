@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_APPS_APP_INFO_DIALOG_H_
 #define CHROME_BROWSER_UI_APPS_APP_INFO_DIALOG_H_
 
+#include <string>
+
 #include "base/callback_forward.h"
 #include "chrome/common/buildflags.h"
 
@@ -37,7 +39,10 @@ enum AppInfoLaunchSource {
 
 // TODO(tsergeant): Move these methods into a class
 // Returns true if the app info dialog is available on the current platform.
-bool CanShowAppInfoDialog();
+bool CanPlatformShowAppInfoDialog();
+
+// Returns true if the app info dialog is available for an app.
+bool CanShowAppInfoDialog(Profile* profile, const std::string& extension_id);
 
 #if BUILDFLAG(ENABLE_APP_LIST)
 // Shows the chrome app information as a frameless window for the given |app|

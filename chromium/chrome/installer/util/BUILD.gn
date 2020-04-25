@@ -222,14 +222,7 @@ generate_embedded_i18n("generate_strings") {
   }
   if (defined(is_vivaldi) && is_vivaldi) {
     # Need to use this file and dependency to get the correct list of languages
-    grdfile_folder = "$root_gen_dir/vivaldi_resources/chrome/app/google_chrome_strings/"
     grdfile_name = "google_chrome_strings"
-    deps = [
-      "//chrome/app:google_chrome_strings",
-      "//chrome/app:merge_google_chrome_strings",
-    ]
-    default_embedded_i18_locales -= ["iw"]
-    default_embedded_i18_locales += ["he"] + vivaldi_pending_locales
   } else {
     grdfile_name = "chromium_strings"
   }

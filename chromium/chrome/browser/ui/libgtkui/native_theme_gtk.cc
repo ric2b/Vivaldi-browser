@@ -7,7 +7,6 @@
 #include <gtk/gtk.h>
 
 #include "chrome/browser/ui/libgtkui/gtk_util.h"
-#include "chrome/browser/ui/libgtkui/skia_utils_gtk.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect.h"
@@ -159,7 +158,8 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
       GdkColor* color;
       gtk_style_context_get_style(link_context, "link-color", &color, nullptr);
       if (color) {
-        SkColor ret_color = GdkColorToSkColor(*color);
+        SkColor ret_color =
+            SkColorSetRGB(color->red >> 8, color->green >> 8, color->blue >> 8);
         // gdk_color_free() was deprecated in Gtk3.14.  This code path is only
         // taken on versions earlier than Gtk3.12, but the compiler doesn't know
         // that, so silence the deprecation warnings.
@@ -345,13 +345,6 @@ NativeThemeGtk::NativeThemeGtk() {
   g_type_class_unref(g_type_class_ref(gtk_toggle_button_get_type()));
   g_type_class_unref(g_type_class_ref(gtk_tree_view_get_type()));
   g_type_class_unref(g_type_class_ref(gtk_window_get_type()));
-
-  // Add the web native theme as an observer to stay in sync with dark mode,
-  // high contrast, and preferred color scheme changes.
-  color_scheme_observer_ =
-      std::make_unique<NativeTheme::ColorSchemeNativeThemeObserver>(
-          NativeTheme::GetInstanceForWeb());
-  AddObserver(color_scheme_observer_.get());
 
   OnThemeChanged(gtk_settings_get_default(), nullptr);
 }

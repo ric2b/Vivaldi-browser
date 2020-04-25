@@ -26,6 +26,7 @@ jumbo_static_library("calendar") {
     "calendar_type.h",
     "event_database.cc",
     "event_database.h",
+    "event_exception_type.h",
     "event_type.cc",
     "event_type.h",
     "event_type_database.cc",
@@ -33,10 +34,6 @@ jumbo_static_library("calendar") {
     "recurrence_exception_table.cc",
     "recurrence_exception_table.h",
     "recurrence_exception_type.h",
-    "recurrence_table.cc",
-    "recurrence_table.h",
-    "recurrence_type.cc",
-    "recurrence_type.h",
   ]
   deps = [
     "//base:base",

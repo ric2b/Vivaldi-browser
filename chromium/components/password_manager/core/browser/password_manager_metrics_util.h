@@ -87,6 +87,7 @@ enum class LeakDialogDismissalReason {
 //
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.password_manager
 enum class OnboardingState {
   // The onboarding wasn't shown to the user.
   kDoNotShow = 0,
@@ -443,10 +444,6 @@ enum class GenerationPresaveConflict {
   kConflictWithEmptyUsername = 2,
   kMaxValue = kConflictWithEmptyUsername
 };
-
-// A version of the UMA_HISTOGRAM_BOOLEAN macro that allows the |name|
-// to vary over the program's runtime.
-void LogUMAHistogramBoolean(const std::string& name, bool sample);
 
 // Log the |reason| a user dismissed the password manager UI except save/update
 // bubbles.

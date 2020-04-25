@@ -13,7 +13,6 @@
 #include "components/viz/common/quads/render_pass.h"
 #include "components/viz/service/display/ca_layer_overlay.h"
 #include "components/viz/service/display/dc_layer_overlay.h"
-#include "components/viz/service/display/overlay_candidate.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/ipc/common/surface_handle.h"
 
@@ -22,9 +21,10 @@ class DisplayResourceProvider;
 }
 
 namespace viz {
+class OutputSurface;
+class OverlayCandidateList;
 class OverlayCandidateValidator;
 class RendererSettings;
-class ContextProvider;
 
 class VIZ_SERVICE_EXPORT OverlayProcessor {
  public:
@@ -92,8 +92,9 @@ class VIZ_SERVICE_EXPORT OverlayProcessor {
   using StrategyList = std::vector<std::unique_ptr<Strategy>>;
 
   static std::unique_ptr<OverlayProcessor> CreateOverlayProcessor(
-      const ContextProvider* context_provider,
+      SkiaOutputSurface* skia_output_surface,
       gpu::SurfaceHandle surface_handle,
+      const OutputSurface::Capabilities& capabilities,
       const RendererSettings& renderer_settings);
 
   virtual ~OverlayProcessor();
@@ -134,7 +135,8 @@ class VIZ_SERVICE_EXPORT OverlayProcessor {
   OutputSurfaceOverlayPlane ProcessOutputSurfaceAsOverlay(
       const gfx::Size& viewport_size,
       const gfx::BufferFormat& buffer_format,
-      const gfx::ColorSpace& color_space) const;
+      const gfx::ColorSpace& color_space,
+      bool has_alpha) const;
 
   // For Mac, if we successfully generated a candidate list for CALayerOverlay,
   // we no longer need the |output_surface_plane|. This function takes a pointer
@@ -158,6 +160,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessor {
 
  private:
   OverlayProcessor(
+      SkiaOutputSurface* skia_output_surface,
       std::unique_ptr<OverlayCandidateValidator> overlay_validator,
       std::unique_ptr<DCLayerOverlayProcessor> dc_layer_overlay_processor);
 
@@ -184,6 +187,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessor {
 
   std::unique_ptr<DCLayerOverlayProcessor> dc_layer_overlay_processor_;
 
+  SkiaOutputSurface* skia_output_surface_;
   bool output_surface_already_handled_;
   DISALLOW_COPY_AND_ASSIGN(OverlayProcessor);
 };

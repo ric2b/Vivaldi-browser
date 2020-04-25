@@ -11,8 +11,6 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
-#include "content/browser/loader/data_pipe_to_source_stream.h"
-#include "content/browser/loader/source_stream_to_data_pipe.h"
 #include "content/browser/web_package/signed_exchange_cert_fetcher_factory.h"
 #include "content/browser/web_package/signed_exchange_devtools_proxy.h"
 #include "content/browser/web_package/signed_exchange_handler.h"
@@ -28,8 +26,10 @@
 #include "net/http/http_util.h"
 #include "net/url_request/redirect_util.h"
 #include "services/network/public/cpp/constants.h"
+#include "services/network/public/cpp/data_pipe_to_source_stream.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/source_stream_to_data_pipe.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
@@ -68,7 +68,7 @@ SignedExchangeLoader::SignedExchangeLoader(
     std::unique_ptr<SignedExchangeReporter> reporter,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     URLLoaderThrottlesGetter url_loader_throttles_getter,
-    base::RepeatingCallback<int(void)> frame_tree_node_id_getter,
+    int frame_tree_node_id,
     scoped_refptr<SignedExchangePrefetchMetricRecorder> metric_recorder,
     const std::string& accept_langs)
     : outer_request_(outer_request),
@@ -81,7 +81,7 @@ SignedExchangeLoader::SignedExchangeLoader(
       reporter_(std::move(reporter)),
       url_loader_factory_(std::move(url_loader_factory)),
       url_loader_throttles_getter_(std::move(url_loader_throttles_getter)),
-      frame_tree_node_id_getter_(frame_tree_node_id_getter),
+      frame_tree_node_id_(frame_tree_node_id),
       metric_recorder_(std::move(metric_recorder)),
       accept_langs_(accept_langs) {
   DCHECK(outer_request_.url.is_valid());
@@ -154,7 +154,8 @@ void SignedExchangeLoader::OnStartLoadingResponseBody(
   if (g_signed_exchange_factory_for_testing_) {
     signed_exchange_handler_ = g_signed_exchange_factory_for_testing_->Create(
         outer_request_.url,
-        std::make_unique<DataPipeToSourceStream>(std::move(response_body)),
+        std::make_unique<network::DataPipeToSourceStream>(
+            std::move(response_body)),
         base::BindOnce(&SignedExchangeLoader::OnHTTPExchangeFound,
                        weak_factory_.GetWeakPtr()),
         std::move(cert_fetcher_factory));
@@ -164,13 +165,14 @@ void SignedExchangeLoader::OnStartLoadingResponseBody(
   signed_exchange_handler_ = std::make_unique<SignedExchangeHandler>(
       IsOriginSecure(outer_request_.url),
       HasNoSniffHeader(outer_response_head_), content_type_,
-      std::make_unique<DataPipeToSourceStream>(std::move(response_body)),
+      std::make_unique<network::DataPipeToSourceStream>(
+          std::move(response_body)),
       base::BindOnce(&SignedExchangeLoader::OnHTTPExchangeFound,
                      weak_factory_.GetWeakPtr()),
       std::move(cert_fetcher_factory), outer_request_.load_flags,
       std::make_unique<blink::SignedExchangeRequestMatcher>(
           outer_request_.headers, accept_langs_),
-      std::move(devtools_proxy_), reporter_.get(), frame_tree_node_id_getter_);
+      std::move(devtools_proxy_), reporter_.get(), frame_tree_node_id_);
 }
 
 void SignedExchangeLoader::OnComplete(
@@ -299,10 +301,8 @@ void SignedExchangeLoader::OnHTTPExchangeFound(
     return;
   }
   pending_body_consumer_ = std::move(consumer_handle);
-  body_data_pipe_adapter_ = std::make_unique<SourceStreamToDataPipe>(
-      std::move(payload_stream), std::move(producer_handle),
-      base::BindOnce(&SignedExchangeLoader::FinishReadingBody,
-                     base::Unretained(this)));
+  body_data_pipe_adapter_ = std::make_unique<network::SourceStreamToDataPipe>(
+      std::move(payload_stream), std::move(producer_handle));
 
   StartReadingBody();
 }
@@ -337,7 +337,8 @@ void SignedExchangeLoader::StartReadingBody() {
 
   // Start reading.
   client_->OnStartLoadingResponseBody(std::move(pending_body_consumer_));
-  body_data_pipe_adapter_->Start();
+  body_data_pipe_adapter_->Start(base::BindOnce(
+      &SignedExchangeLoader::FinishReadingBody, base::Unretained(this)));
 }
 
 void SignedExchangeLoader::FinishReadingBody(int result) {

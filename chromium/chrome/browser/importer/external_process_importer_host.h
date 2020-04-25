@@ -73,6 +73,8 @@ class ExternalProcessImporterHost
   void NotifyImportItemStarted(importer::ImportItem item);
   void NotifyImportItemEnded(importer::ImportItem item);
   void NotifyImportEnded();
+
+  // Vivaldi
   void NotifyImportItemFailed(importer::ImportItem item,
                               const std::string& error);
 
@@ -112,16 +114,17 @@ class ExternalProcessImporterHost
   // Returns false iff import should be aborted.
   bool CheckForFirefoxLock(const importer::SourceProfile& source_profile);
 
+  // Make sure BookmarkModel and TemplateURLService are loaded before import
+  // process starts, if bookmarks and/or search engines are among the items
+  // which are to be imported.
+  void CheckForLoadedModels(uint16_t items);
+
+  // Vivaldi
   //Arnar Vivaldi IsChromeRunningFunctions
   void OnChromiumImportLockDialogEnd(bool is_continue);
   bool CheckForChromeLock(const importer::SourceProfile& source_profile);
   void ShowChromeWarningDialog();
   std::unique_ptr<ChromiumProfileLock> chromium_lock_;
-
-  // Make sure BookmarkModel and TemplateURLService are loaded before import
-  // process starts, if bookmarks and/or search engines are among the items
-  // which are to be imported.
-  void CheckForLoadedModels(uint16_t items);
 
   // True if UI is not to be shown.
   bool headless_;

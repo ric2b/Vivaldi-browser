@@ -387,7 +387,7 @@ void CookieMonster::SetForceKeepSessionState() {
 void CookieMonster::SetAllCookiesAsync(const CookieList& list,
                                        SetCookiesCallback callback) {
   DoCookieCallback(base::BindOnce(
-      // base::Unretained is safe as DoCookieCallbackForURL stores
+      // base::Unretained is safe as DoCookieCallback stores
       // the callback on |*this|, so the callback will not outlive
       // the object.
       &CookieMonster::SetAllCookies, base::Unretained(this), list,
@@ -404,7 +404,7 @@ void CookieMonster::SetCanonicalCookieAsync(
   std::string domain = cookie->Domain();
   DoCookieCallbackForHostOrDomain(
       base::BindOnce(
-          // base::Unretained is safe as DoCookieCallbackForURL stores
+          // base::Unretained is safe as DoCookieCallbackForHostOrDomain stores
           // the callback on |*this|, so the callback will not outlive
           // the object.
           &CookieMonster::SetCanonicalCookie, base::Unretained(this),
@@ -429,17 +429,28 @@ void CookieMonster::GetCookieListWithOptionsAsync(
 
 void CookieMonster::GetAllCookiesAsync(GetAllCookiesCallback callback) {
   DoCookieCallback(base::BindOnce(
-      // base::Unretained is safe as DoCookieCallbackForURL stores
+      // base::Unretained is safe as DoCookieCallback stores
       // the callback on |*this|, so the callback will not outlive
       // the object.
       &CookieMonster::GetAllCookies, base::Unretained(this),
       std::move(callback)));
 }
 
+void CookieMonster::GetAllCookiesWithAccessSemanticsAsync(
+    GetAllCookiesWithAccessSemanticsCallback callback) {
+  DoCookieCallback(base::BindOnce(
+      // base::Unretained is safe as DoCookieCallback stores
+      // the callback on |*this|, so the callback will not outlive
+      // the object.
+      &CookieMonster::GetAllCookies, base::Unretained(this),
+      base::BindOnce(&CookieMonster::AttachAccessSemanticsListForCookieList,
+                     base::Unretained(this), std::move(callback))));
+}
+
 void CookieMonster::DeleteCanonicalCookieAsync(const CanonicalCookie& cookie,
                                                DeleteCallback callback) {
   DoCookieCallback(base::BindOnce(
-      // base::Unretained is safe as DoCookieCallbackForURL stores
+      // base::Unretained is safe as DoCookieCallback stores
       // the callback on |*this|, so the callback will not outlive
       // the object.
       &CookieMonster::DeleteCanonicalCookie, base::Unretained(this), cookie,
@@ -450,7 +461,7 @@ void CookieMonster::DeleteAllCreatedInTimeRangeAsync(
     const TimeRange& creation_range,
     DeleteCallback callback) {
   DoCookieCallback(base::BindOnce(
-      // base::Unretained is safe as DoCookieCallbackForURL stores
+      // base::Unretained is safe as DoCookieCallback stores
       // the callback on |*this|, so the callback will not outlive
       // the object.
       &CookieMonster::DeleteAllCreatedInTimeRange, base::Unretained(this),
@@ -460,7 +471,7 @@ void CookieMonster::DeleteAllCreatedInTimeRangeAsync(
 void CookieMonster::DeleteAllMatchingInfoAsync(CookieDeletionInfo delete_info,
                                                DeleteCallback callback) {
   DoCookieCallback(base::BindOnce(
-      // base::Unretained is safe as DoCookieCallbackForURL stores
+      // base::Unretained is safe as DoCookieCallback stores
       // the callback on |*this|, so the callback will not outlive
       // the object.
       &CookieMonster::DeleteAllMatchingInfo, base::Unretained(this),
@@ -470,7 +481,7 @@ void CookieMonster::DeleteAllMatchingInfoAsync(CookieDeletionInfo delete_info,
 void CookieMonster::DeleteSessionCookiesAsync(
     CookieStore::DeleteCallback callback) {
   DoCookieCallback(base::BindOnce(
-      // base::Unretained is safe as DoCookieCallbackForURL stores
+      // base::Unretained is safe as DoCookieCallback stores
       // the callback on |*this|, so the callback will not outlive
       // the object.
       &CookieMonster::DeleteSessionCookies, base::Unretained(this),
@@ -588,6 +599,17 @@ void CookieMonster::GetAllCookies(GetAllCookiesCallback callback) {
   MaybeRunCookieCallback(std::move(callback), cookie_list);
 }
 
+void CookieMonster::AttachAccessSemanticsListForCookieList(
+    GetAllCookiesWithAccessSemanticsCallback callback,
+    const CookieList& cookie_list) {
+  std::vector<CookieAccessSemantics> access_semantics_list;
+  for (const CanonicalCookie& cookie : cookie_list) {
+    access_semantics_list.push_back(GetAccessSemanticsForCookie(cookie));
+  }
+  MaybeRunCookieCallback(std::move(callback), cookie_list,
+                         access_semantics_list);
+}
+
 void CookieMonster::GetCookieListWithOptions(const GURL& url,
                                              const CookieOptions& options,
                                              GetCookieListCallback callback) {
@@ -641,7 +663,7 @@ void CookieMonster::DeleteAllMatchingInfo(CookieDeletionInfo delete_info,
     CanonicalCookie* cc = curit->second.get();
     ++it;
 
-    if (delete_info.Matches(*cc)) {
+    if (delete_info.Matches(*cc, GetAccessSemanticsForCookie(*cc))) {
       InternalDeleteCookie(curit, true, /*sync_to_store*/
                            DELETE_COOKIE_EXPLICIT);
       ++num_deleted;
@@ -972,8 +994,8 @@ void CookieMonster::FilterCookiesWithOptions(
     // Filter out cookies that should not be included for a request to the
     // given |url|. HTTP only cookies are filtered depending on the passed
     // cookie |options|.
-    CanonicalCookie::CookieInclusionStatus status =
-        (*it)->IncludeForRequestURL(url, options);
+    CanonicalCookie::CookieInclusionStatus status = (*it)->IncludeForRequestURL(
+        url, options, GetAccessSemanticsForCookie(**it));
 
     if (!status.IsInclude()) {
       if (options.return_excluded_cookies())
@@ -1126,12 +1148,17 @@ CookieMonster::CookieMap::iterator CookieMonster::InternalInsertCookie(
 
   // See InitializeHistograms() for details.
   int32_t type_sample =
-      !cc_ptr->IsEffectivelySameSiteNone() ? 1 << COOKIE_TYPE_SAME_SITE : 0;
+      !cc_ptr->IsEffectivelySameSiteNone(GetAccessSemanticsForCookie(*cc_ptr))
+          ? 1 << COOKIE_TYPE_SAME_SITE
+          : 0;
   type_sample |= cc_ptr->IsHttpOnly() ? 1 << COOKIE_TYPE_HTTPONLY : 0;
   type_sample |= cc_ptr->IsSecure() ? 1 << COOKIE_TYPE_SECURE : 0;
   histogram_cookie_type_->Add(type_sample);
 
-  change_dispatcher_.DispatchChange(*cc_ptr, CookieChangeCause::INSERTED, true);
+  change_dispatcher_.DispatchChange(
+      CookieChangeInfo(*cc_ptr, GetAccessSemanticsForCookie(*cc_ptr),
+                       CookieChangeCause::INSERTED),
+      true);
 
   return inserted;
 }
@@ -1152,7 +1179,7 @@ void CookieMonster::SetCanonicalCookie(std::unique_ptr<CanonicalCookie> cc,
   }
 
   status.AddExclusionReasonsAndWarningIfAny(
-      cc->IsSetPermittedInContext(options));
+      cc->IsSetPermittedInContext(options, GetAccessSemanticsForCookie(*cc)));
 
   if (!IsCookieableScheme(scheme_lower)) {
     status.AddExclusionReason(
@@ -1163,12 +1190,17 @@ void CookieMonster::SetCanonicalCookie(std::unique_ptr<CanonicalCookie> cc,
   // are enabled, non-SameSite cookies without the Secure attribute will be
   // rejected. A warning for this would have been added by
   // IsSetPermittedInContext().
-  if (cookie_util::IsCookiesWithoutSameSiteMustBeSecureEnabled() &&
-      cc->IsEffectivelySameSiteNone() && !cc->IsSecure()) {
+  if (GetAccessSemanticsForCookie(*cc) != CookieAccessSemantics::LEGACY &&
+      cookie_util::IsCookiesWithoutSameSiteMustBeSecureEnabled() &&
+      cc->SameSite() == CookieSameSite::NO_RESTRICTION && !cc->IsSecure()) {
     DVLOG(net::cookie_util::kVlogSetCookies)
         << "SetCookie() rejecting insecure cookie with SameSite=None.";
     status.AddExclusionReason(
         CanonicalCookie::CookieInclusionStatus::EXCLUDE_SAMESITE_NONE_INSECURE);
+  }
+  // Log whether a SameSite=None cookie is Secure or not.
+  if (cc->SameSite() == CookieSameSite::NO_RESTRICTION) {
+    UMA_HISTOGRAM_BOOLEAN("Cookie.SameSiteNoneIsSecure", cc->IsSecure());
   }
 
   const std::string key(GetKey(cc->Domain()));
@@ -1326,7 +1358,9 @@ void CookieMonster::InternalDeleteCookie(CookieMap::iterator it,
       sync_to_store) {
     store_->DeleteCookie(*cc);
   }
-  change_dispatcher_.DispatchChange(*cc, mapping.cause, mapping.notify);
+  change_dispatcher_.DispatchChange(
+      CookieChangeInfo(*cc, GetAccessSemanticsForCookie(*cc), mapping.cause),
+      mapping.notify);
   cookies_.erase(it);
 }
 
@@ -1660,6 +1694,13 @@ bool CookieMonster::HasCookieableScheme(const GURL& url) {
   DVLOG(net::cookie_util::kVlogPerCookieMonster)
       << "WARNING: Unsupported cookie scheme: " << url.scheme();
   return false;
+}
+
+CookieAccessSemantics CookieMonster::GetAccessSemanticsForCookie(
+    const CanonicalCookie& cookie) const {
+  if (cookie_access_delegate())
+    return cookie_access_delegate()->GetAccessSemantics(cookie);
+  return CookieAccessSemantics::UNKNOWN;
 }
 
 // Test to see if stats should be recorded, and record them if so.

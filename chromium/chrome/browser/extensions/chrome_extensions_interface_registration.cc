@@ -30,15 +30,15 @@
 #include "chromeos/services/ime/public/mojom/input_engine.mojom.h"
 #include "chromeos/services/media_perception/public/mojom/media_perception.mojom.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
+#include "components/chromeos_camera/camera_app_helper_impl.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/media_device_id.h"
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/api/media_perception_private/media_perception_api_delegate.h"
 #include "media/capture/video/chromeos/camera_app_device_provider_impl.h"
-#include "media/capture/video/chromeos/camera_app_helper_impl.h"
 #include "media/capture/video/chromeos/mojom/camera_app.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -78,19 +78,23 @@ void TranslateVideoDeviceId(
                  std::move(callback_on_io_thread));
 }
 
-void TriggerCameraIntent(content::BrowserContext* context,
-                         uint32_t intent_id,
-                         bool is_success,
-                         const std::vector<uint8_t>& captured_data) {
+void HandleCameraResult(
+    content::BrowserContext* context,
+    uint32_t intent_id,
+    arc::mojom::CameraIntentAction action,
+    const std::vector<uint8_t>& data,
+    chromeos_camera::mojom::CameraAppHelper::HandleCameraResultCallback
+        callback) {
   auto* intent_helper =
       arc::ArcIntentHelperBridge::GetForBrowserContext(context);
-  intent_helper->OnCameraIntentHandled(intent_id, is_success, captured_data);
+  intent_helper->HandleCameraResult(intent_id, action, data,
+                                    std::move(callback));
 }
 
 // Connects to CameraAppDeviceProvider which could be used to get
 // CameraAppDevice from video capture service through CameraAppDeviceBridge.
 void ConnectToCameraAppDeviceProvider(
-    cros::mojom::CameraAppDeviceProviderRequest request,
+    mojo::PendingReceiver<cros::mojom::CameraAppDeviceProvider> receiver,
     content::RenderFrameHost* source) {
   mojo::PendingRemote<cros::mojom::CameraAppDeviceBridge> device_bridge;
   auto device_bridge_receiver = device_bridge.InitWithNewPipeAndPassReceiver();
@@ -110,18 +114,21 @@ void ConnectToCameraAppDeviceProvider(
   auto camera_app_device_provider =
       std::make_unique<media::CameraAppDeviceProviderImpl>(
           std::move(device_bridge), std::move(mapping_callback));
-  mojo::MakeStrongBinding(std::move(camera_app_device_provider),
-                          std::move(request));
+  mojo::MakeSelfOwnedReceiver(std::move(camera_app_device_provider),
+                              std::move(receiver));
 }
 
 // Connects to CameraAppHelper that could handle camera intents.
-void ConnectToCameraAppHelper(cros::mojom::CameraAppHelperRequest request,
-                              content::RenderFrameHost* source) {
-  auto intent_callback = base::BindRepeating(
-      &TriggerCameraIntent, source->GetProcess()->GetBrowserContext());
+void ConnectToCameraAppHelper(
+    mojo::PendingReceiver<chromeos_camera::mojom::CameraAppHelper> receiver,
+    content::RenderFrameHost* source) {
+  auto handle_result_callback = base::BindRepeating(
+      &HandleCameraResult, source->GetProcess()->GetBrowserContext());
   auto camera_app_helper =
-      std::make_unique<media::CameraAppHelperImpl>(std::move(intent_callback));
-  mojo::MakeStrongBinding(std::move(camera_app_helper), std::move(request));
+      std::make_unique<chromeos_camera::CameraAppHelperImpl>(
+          std::move(handle_result_callback));
+  mojo::MakeSelfOwnedReceiver(std::move(camera_app_helper),
+                              std::move(receiver));
 }
 #endif
 
@@ -139,7 +146,7 @@ void RegisterChromeInterfacesForExtension(
       extension->permissions_data()->HasAPIPermission(
           APIPermission::kMediaRouterPrivate)) {
     registry->AddInterface(
-        base::Bind(&media_router::MediaRouterDesktop::BindToRequest,
+        base::Bind(&media_router::MediaRouterDesktop::BindToReceiver,
                    base::RetainedRef(extension), context));
   }
 

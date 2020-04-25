@@ -38,19 +38,21 @@
 #include "chrome/browser/ui/views/extensions/extension_popup.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
+#include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/top_container_background.h"
 #include "chrome/browser/ui/views/global_media_controls/media_toolbar_button_view.h"
 #include "chrome/browser/ui/views/location_bar/star_view.h"
 #include "chrome/browser/ui/views/media_router/cast_toolbar_button.h"
-#include "chrome/browser/ui/views/page_action/omnibox_page_action_icon_container_view.h"
+#include "chrome/browser/ui/views/page_action/page_action_icon_container_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/app_menu.h"
 #include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
 #include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/home_button.h"
 #include "chrome/browser/ui/views/toolbar/reload_button.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_account_icon_container_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
-#include "chrome/browser/ui/views/toolbar/toolbar_page_action_icon_container_view.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/common/chrome_features.h"
@@ -101,6 +103,10 @@
 #include "chrome/browser/ui/views/outdated_upgrade_bubble_view.h"
 #endif
 
+#if BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
+#include "chrome/browser/ui/views/frame/webui_tab_strip_container_view.h"
+#endif  // BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
+
 using base::UserMetricsAction;
 using content::WebContents;
 
@@ -144,6 +150,9 @@ ToolbarView::ToolbarView(Browser* browser, BrowserView* browser_view)
 
   UpgradeDetector::GetInstance()->AddObserver(this);
   md_observer_.Add(ui::MaterialDesignController::GetInstance());
+
+  if (display_mode_ == DisplayMode::NORMAL)
+    SetBackground(std::make_unique<TopContainerBackground>(browser_view));
 }
 
 ToolbarView::~ToolbarView() {
@@ -254,16 +263,16 @@ void ToolbarView::Init() {
         source_id, content::GetSystemConnector(), browser_);
   }
 
-  std::unique_ptr<ToolbarPageActionIconContainerView>
-      toolbar_page_action_container;
+  std::unique_ptr<ToolbarAccountIconContainerView>
+      toolbar_account_icon_container;
   bool show_avatar_toolbar_button = true;
   if (base::FeatureList::IsEnabled(
           autofill::features::kAutofillEnableToolbarStatusChip)) {
     // The avatar button is contained inside the page-action container and
     // should not be created twice.
     show_avatar_toolbar_button = false;
-    toolbar_page_action_container =
-        std::make_unique<ToolbarPageActionIconContainerView>(browser_);
+    toolbar_account_icon_container =
+        std::make_unique<ToolbarAccountIconContainerView>(browser_);
   } else {
 #if defined(OS_CHROMEOS)
     // ChromeOS only badges Incognito and Guest icons in the browser window.
@@ -302,14 +311,24 @@ void ToolbarView::Init() {
   if (media_button)
     media_button_ = AddChildView(std::move(media_button));
 
-  if (toolbar_page_action_container)
-    toolbar_page_action_container_ =
-        AddChildView(std::move(toolbar_page_action_container));
+  if (toolbar_account_icon_container) {
+    toolbar_account_icon_container_ =
+        AddChildView(std::move(toolbar_account_icon_container));
+  }
 
   // TODO(crbug.com/932818): Remove this once the
   // |kAutofillEnableToolbarStatusChip| is fully launched.
   if (avatar)
     avatar_ = AddChildView(std::move(avatar));
+
+#if BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
+  if (browser_view_->webui_tab_strip()) {
+    webui_new_tab_button_ =
+        AddChildView(browser_view_->webui_tab_strip()->CreateNewTabButton());
+    webui_toggle_button_ =
+        AddChildView(browser_view_->webui_tab_strip()->CreateToggleButton());
+  }
+#endif  // BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
 
   app_menu_button_ = AddChildView(std::move(app_menu_button));
 
@@ -364,8 +383,8 @@ void ToolbarView::Update(WebContents* tab) {
   if (reload_)
     reload_->set_menu_enabled(chrome::IsDebuggerAttachedToCurrentTab(browser_));
 
-  if (toolbar_page_action_container_)
-    toolbar_page_action_container_->UpdateAllIcons();
+  if (toolbar_account_icon_container_)
+    toolbar_account_icon_container_->UpdateAllIcons();
 }
 
 void ToolbarView::SetToolbarVisibility(bool visible) {
@@ -414,18 +433,17 @@ void ToolbarView::ShowIntentPickerBubble(
     bool show_stay_in_chrome,
     bool show_remember_selection,
     PageActionIconType icon_type,
+    const base::Optional<url::Origin>& initiating_origin,
     IntentPickerResponse callback) {
-  PageActionIconView* intent_picker_view =
-      location_bar()
-          ->omnibox_page_action_icon_container_view()
-          ->GetPageActionIconView(icon_type);
+  PageActionIconView* const intent_picker_view =
+      GetPageActionIconView(icon_type);
   if (!intent_picker_view)
     return;
 
   IntentPickerBubbleView::ShowBubble(
       location_bar(), intent_picker_view, icon_type, GetWebContents(),
       std::move(app_info), show_stay_in_chrome, show_remember_selection,
-      std::move(callback));
+      initiating_origin, std::move(callback));
   // TODO(knollr): find a way that the icon updates implicitly.
   intent_picker_view->Update();
 }
@@ -435,28 +453,17 @@ void ToolbarView::ShowBookmarkBubble(
     bool already_bookmarked,
     bookmarks::BookmarkBubbleObserver* observer) {
   views::View* const anchor_view = location_bar();
-  PageActionIconView* const star_view = location_bar()->star_view();
+  PageActionIconView* const bookmark_star_icon =
+      GetPageActionIconView(PageActionIconType::kBookmarkStar);
 
   std::unique_ptr<BubbleSyncPromoDelegate> delegate;
 #if !defined(OS_CHROMEOS)
   // ChromeOS does not show the signin promo.
   delegate.reset(new BookmarkBubbleSignInDelegate(browser_));
 #endif
-  BookmarkBubbleView::ShowBubble(anchor_view, star_view, gfx::Rect(), nullptr,
-                                 observer, std::move(delegate),
+  BookmarkBubbleView::ShowBubble(anchor_view, bookmark_star_icon, gfx::Rect(),
+                                 nullptr, observer, std::move(delegate),
                                  browser_->profile(), url, already_bookmarked);
-}
-
-AvatarToolbarButton* ToolbarView::GetAvatarToolbarButton() {
-  if (toolbar_page_action_container_ &&
-      toolbar_page_action_container_->avatar_button()) {
-    return toolbar_page_action_container_->avatar_button();
-  }
-
-  if (avatar_)
-    return avatar_;
-
-  return nullptr;
 }
 
 ExtensionsToolbarButton* ToolbarView::GetExtensionsButton() const {
@@ -616,36 +623,6 @@ void ToolbarView::Layout() {
   // Call super implementation to ensure layout manager and child layouts
   // happen.
   AccessiblePaneView::Layout();
-}
-
-void ToolbarView::OnPaintBackground(gfx::Canvas* canvas) {
-  if (display_mode_ != DisplayMode::NORMAL)
-    return;
-
-  const ui::ThemeProvider* tp = GetThemeProvider();
-
-  // If the toolbar has a theme image, it gets composited against the toolbar
-  // background color when it's imported, so we only need to specificallh draw
-  // the background color if there is no custom image.
-  if (tp->HasCustomImage(IDR_THEME_TOOLBAR)) {
-    const int x_offset =
-        GetMirroredX() + browser_view_->GetMirroredX() +
-        browser_view_->frame()->GetFrameView()->GetThemeBackgroundXInset();
-    const int y_offset = GetLayoutConstant(TAB_HEIGHT) -
-                         browser_view_->tabstrip()->GetStrokeThickness() -
-                         GetLayoutConstant(TABSTRIP_TOOLBAR_OVERLAP);
-    canvas->TileImageInt(*tp->GetImageSkiaNamed(IDR_THEME_TOOLBAR), x_offset,
-                         y_offset, 0, 0, width(), height());
-  } else {
-    canvas->FillRect(GetLocalBounds(),
-                     tp->GetColor(ThemeProperties::COLOR_TOOLBAR));
-  }
-
-  // Toolbar/content separator.
-  BrowserView::Paint1pxHorizontalLine(
-      canvas,
-      tp->GetColor(ThemeProperties::COLOR_TOOLBAR_CONTENT_AREA_SEPARATOR),
-      GetLocalBounds(), true);
 }
 
 void ToolbarView::OnThemeChanged() {
@@ -819,9 +796,16 @@ views::View* ToolbarView::GetDefaultExtensionDialogAnchorView() {
   return GetAppMenuButton();
 }
 
-OmniboxPageActionIconContainerView*
-ToolbarView::GetOmniboxPageActionIconContainerView() {
-  return location_bar_->omnibox_page_action_icon_container_view();
+PageActionIconView* ToolbarView::GetPageActionIconView(
+    PageActionIconType type) {
+  PageActionIconView* icon =
+      location_bar()->page_action_icon_container()->GetIconView(type);
+  if (icon)
+    return icon;
+  return toolbar_account_icon_container_
+             ? toolbar_account_icon_container_->page_action_icon_container()
+                   ->GetIconView(type)
+             : nullptr;
 }
 
 AppMenuButton* ToolbarView::GetAppMenuButton() {
@@ -849,8 +833,35 @@ views::AccessiblePaneView* ToolbarView::GetAsAccessiblePaneView() {
   return this;
 }
 
-views::View* ToolbarView::GetAnchorView() {
+views::View* ToolbarView::GetAnchorView(PageActionIconType type) {
+  // Return the container visually housing the icon so all the bubbles align
+  // with the same visible edge.
+  if (toolbar_account_icon_container_) {
+    views::View* icon = GetPageActionIconView(type);
+    if (toolbar_account_icon_container_->Contains(icon)) {
+      DCHECK(base::FeatureList::IsEnabled(
+          autofill::features::kAutofillEnableToolbarStatusChip));
+      return toolbar_account_icon_container_;
+    }
+  }
   return location_bar_;
+}
+
+void ToolbarView::ZoomChangedForActiveTab(bool can_show_bubble) {
+  location_bar_->page_action_icon_container()->ZoomChangedForActiveTab(
+      can_show_bubble);
+}
+
+AvatarToolbarButton* ToolbarView::GetAvatarToolbarButton() {
+  if (toolbar_account_icon_container_ &&
+      toolbar_account_icon_container_->avatar_button()) {
+    return toolbar_account_icon_container_->avatar_button();
+  }
+
+  if (avatar_)
+    return avatar_;
+
+  return nullptr;
 }
 
 BrowserRootView::DropIndex ToolbarView::GetDropIndex(
@@ -907,11 +918,20 @@ void ToolbarView::LoadImages() {
   if (media_button_)
     media_button_->UpdateIcon();
 
+  if (webui_new_tab_button_) {
+    webui_new_tab_button_->SetImage(
+        views::Button::STATE_NORMAL,
+        gfx::CreateVectorIcon(kAddIcon, normal_color));
+    webui_toggle_button_->SetImage(
+        views::Button::STATE_NORMAL,
+        gfx::CreateVectorIcon(kCaretUpIcon, normal_color));
+  }
+
   if (avatar_)
     avatar_->UpdateIcon();
 
-  if (toolbar_page_action_container_)
-    toolbar_page_action_container_->UpdateAllIcons();
+  if (toolbar_account_icon_container_)
+    toolbar_account_icon_container_->UpdateAllIcons();
 
   app_menu_button_->UpdateIcon();
 

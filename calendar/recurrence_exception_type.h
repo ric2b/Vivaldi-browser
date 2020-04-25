@@ -20,7 +20,7 @@ class RecurrenceExceptionRow {
   RecurrenceExceptionRow() = default;
   ~RecurrenceExceptionRow() = default;
 
-  RecurrenceID id;
+  RecurrenceExceptionID id;
   EventID parent_event_id;
   EventID exception_event_id;
   bool cancelled;

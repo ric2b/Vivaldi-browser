@@ -4,6 +4,7 @@
 
 #include "ui/views/controls/button/menu_button_controller.h"
 
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/events/event_constants.h"
@@ -12,6 +13,7 @@
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/button/menu_button_listener.h"
 #include "ui/views/mouse_constants.h"
+#include "ui/views/style/platform_style.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget.h"
 
@@ -24,9 +26,9 @@ namespace {
 ui::EventType NotifyActionToMouseEventType(
     ButtonController::NotifyAction notify_action) {
   switch (notify_action) {
-    case ButtonController::NOTIFY_ON_PRESS:
+    case ButtonController::NotifyAction::kOnPress:
       return ui::ET_MOUSE_PRESSED;
-    case ButtonController::NOTIFY_ON_RELEASE:
+    case ButtonController::NotifyAction::kOnRelease:
       return ui::ET_MOUSE_RELEASED;
   }
 }
@@ -81,7 +83,7 @@ MenuButtonController::MenuButtonController(
     : ButtonController(button, std::move(delegate)), listener_(listener) {
   // Triggers on button press by default, unless drag-and-drop is enabled, see
   // MenuButtonController::IsTriggerableEventType.
-  set_notify_action(ButtonController::NOTIFY_ON_PRESS);
+  set_notify_action(ButtonController::NotifyAction::kOnPress);
 }
 
 MenuButtonController::~MenuButtonController() = default;
@@ -102,7 +104,8 @@ void MenuButtonController::OnMouseReleased(const ui::MouseEvent& event) {
       button()->HitTestPoint(event.location()) && !delegate()->InDrag()) {
     Activate(&event);
   } else {
-    button()->AnimateInkDrop(InkDropState::HIDDEN, &event);
+    if (button()->hide_ink_drop_when_showing_context_menu())
+      button()->AnimateInkDrop(InkDropState::HIDDEN, &event);
     ButtonController::OnMouseReleased(event);
   }
 }
@@ -123,12 +126,18 @@ void MenuButtonController::OnMouseExited(const ui::MouseEvent& event) {
 }
 
 bool MenuButtonController::OnKeyPressed(const ui::KeyEvent& event) {
+  // Alt-space on windows should show the window menu.
+  if (event.key_code() == ui::VKEY_SPACE && event.IsAltDown())
+    return false;
+
+  // If Return doesn't normally click buttons, don't do it here either.
+  if (event.key_code() == ui::VKEY_RETURN &&
+      !PlatformStyle::kReturnClicksFocusedControl) {
+    return false;
+  }
+
   switch (event.key_code()) {
     case ui::VKEY_SPACE:
-      // Alt-space on windows should show the window menu.
-      if (event.IsAltDown())
-        break;
-      FALLTHROUGH;
     case ui::VKEY_RETURN:
     case ui::VKEY_UP:
     case ui::VKEY_DOWN: {
@@ -297,8 +306,8 @@ bool MenuButtonController::IsTriggerableEventType(const ui::Event& event) {
 }
 
 bool MenuButtonController::IsIntentionalMenuTrigger() const {
-  return (TimeTicks::Now() - menu_closed_time_).InMilliseconds() >=
-         kMinimumMsBetweenButtonClicks;
+  return (TimeTicks::Now() - menu_closed_time_) >=
+         kMinimumTimeBetweenButtonClicks;
 }
 
 void MenuButtonController::IncrementPressedLocked(

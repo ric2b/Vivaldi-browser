@@ -69,8 +69,6 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
 
   bool has_access_control() const { return has_access_control_; }
 
-  const std::string& mime_type() const { return mime_type_; }
-
   // Are HTTP range requests supported?
   bool range_supported() const { return range_supported_; }
 
@@ -122,7 +120,6 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   void set_length(int64_t length);
   void set_cacheable(bool cacheable);
   void set_valid_until(base::Time valid_until);
-  void set_mime_type(std::string mime_type);
   void set_range_supported();
   void set_last_modified(base::Time last_modified);
   void set_etag(const std::string& etag);
@@ -164,6 +161,9 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   void AddBytesReadFromNetwork(int64_t b);
   int64_t BytesReadFromNetwork() const { return bytes_read_from_network_; }
 
+  const std::string& mime_type() const { return mime_type_; }
+  void set_mime_type(std::string mime_type);
+
  protected:
   UrlData(const GURL& url, CorsMode cors_mode, UrlIndex* url_index);
   virtual ~UrlData();
@@ -201,8 +201,6 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   // Number of bytes read from network into the cache for this resource.
   int64_t bytes_read_from_network_ = 0;
 
-  std::string mime_type_;
-
   // Does the server support ranges?
   bool range_supported_;
 
@@ -238,6 +236,9 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   std::vector<base::OnceClosure> waiting_load_callbacks_;
 
   base::ThreadChecker thread_checker_;
+
+  std::string mime_type_;
+
   DISALLOW_COPY_AND_ASSIGN(UrlData);
 };
 

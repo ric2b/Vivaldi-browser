@@ -96,7 +96,7 @@ VivaldiDataSource::TaskRunnerForRequestPath(const std::string& path) {
   if (IsCSSRequest(path)) {
     // Use UI thread to load CSS since its construction touches non-thread-safe
     // gfx::Font names in ui::ResourceBundle.
-    return base::CreateSingleThreadTaskRunnerWithTraits(
+    return base::CreateSingleThreadTaskRunner(
         {content::BrowserThread::UI});
   }
   // nullptr means the IO thread.

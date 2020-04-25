@@ -19,10 +19,10 @@
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
+#include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -31,6 +31,7 @@
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/extensions/api/tabs.h"
 #include "chrome/common/extensions/command.h"
+#include "components/app_modal/javascript_app_modal_dialog.h"
 #include "components/prefs/pref_service.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/zoom/zoom_controller.h"
@@ -39,6 +40,7 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/native_web_keyboard_event.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -67,9 +69,9 @@
 #if defined(OS_WIN)
 #include "ui/display/win/screen_win.h"
 #endif  // defined(OS_WIN)
+#include "ui/strings/grit/ui_strings.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
-#include "ui/strings/grit/ui_strings.h"
 
 using content::WebContents;
 
@@ -115,7 +117,9 @@ struct RockerGestures {
   bool eat_next_right_mouseup = false;
 };
 
-class TabsPrivateAPIPrivate : public TabStripModelObserver {
+
+class TabsPrivateAPIPrivate : public TabStripModelObserver,
+                              public app_modal::AppModalDialogObserver {
  public:
   explicit TabsPrivateAPIPrivate(content::BrowserContext* context);
   ~TabsPrivateAPIPrivate() override;
@@ -124,6 +128,9 @@ class TabsPrivateAPIPrivate : public TabStripModelObserver {
   void TabChangedAt(content::WebContents* contents,
                     int index,
                     TabChangeType change_type) override;
+
+  // app_modal::AppModalDialogObserver implementation
+  void Notify(app_modal::JavaScriptAppModalDialog* dialog) override;
 
   std::unique_ptr<MouseGestures> mouse_gestures_;
   WheelGestures wheel_gestures_;
@@ -165,7 +172,7 @@ class VivaldiEventHooksImpl : public VivaldiEventHooks {
     return TabsPrivateAPI::GetPrivate(web_contents_->GetBrowserContext());
   }
 
-   WebContents* const web_contents_;
+  WebContents* const web_contents_;
 };
 
 TabsPrivateAPIPrivate::TabsPrivateAPIPrivate(
@@ -196,7 +203,7 @@ TabStripModelObserver* TabsPrivateAPI::GetTabStripModelObserver(
 
 void TabsPrivateAPI::Shutdown() {}
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<TabsPrivateAPI> >::
+static base::LazyInstance<BrowserContextKeyedAPIFactory<TabsPrivateAPI>>::
     DestructorAtExit g_factory_tabs = LAZY_INSTANCE_INITIALIZER;
 
 // static
@@ -219,47 +226,107 @@ bool FinishMouseOrWheelGesture(TabsPrivateAPIPrivate* priv,
                                content::BrowserContext* browser_context,
                                bool with_alt);
 
-static tabs_private::MediaType ConvertTabAlertState(TabAlertState status) {
-  switch (status) {
-  case TabAlertState::NONE:
-    return tabs_private::MediaType::MEDIA_TYPE_EMPTY;
-  case TabAlertState::MEDIA_RECORDING:
-    return tabs_private::MediaType::MEDIA_TYPE_RECORDING;
-  case TabAlertState::TAB_CAPTURING:
-    return tabs_private::MediaType::MEDIA_TYPE_CAPTURING;
-  case TabAlertState::AUDIO_PLAYING:
-    return tabs_private::MediaType::MEDIA_TYPE_PLAYING;
-  case TabAlertState::AUDIO_MUTING:
-    return tabs_private::MediaType::MEDIA_TYPE_MUTING;
-  case TabAlertState::BLUETOOTH_CONNECTED:
-    return tabs_private::MediaType::MEDIA_TYPE_BLUETOOTH;
-  case TabAlertState::USB_CONNECTED:
-    return tabs_private::MediaType::MEDIA_TYPE_USB;
-  case TabAlertState::PIP_PLAYING:
-    return tabs_private::MediaType::MEDIA_TYPE_PIP;
-  case TabAlertState::DESKTOP_CAPTURING:
-    return tabs_private::MediaType::MEDIA_TYPE_DESKTOP_CAPTURING;
-  case TabAlertState::VR_PRESENTING_IN_HEADSET:
-    return tabs_private::MediaType::MEDIA_TYPE_VR_PRESENTING_IN_HEADSET;
-  case TabAlertState::SERIAL_CONNECTED:
-    return tabs_private::MediaType::MEDIA_TYPE_SERIAL_CONNECTED;
+static const std::vector<tabs_private::TabAlertState> ConvertTabAlertState(
+    const std::vector<TabAlertState>& states) {
+
+  std::vector<tabs_private::TabAlertState> types;
+
+  for (auto status : states) {
+    switch (status) {
+      case TabAlertState::MEDIA_RECORDING:
+        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_RECORDING);
+        break;
+      case TabAlertState::TAB_CAPTURING:
+        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_CAPTURING);
+        break;
+      case TabAlertState::AUDIO_PLAYING:
+        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_PLAYING);
+        break;
+      case TabAlertState::AUDIO_MUTING:
+        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_MUTING);
+        break;
+      case TabAlertState::BLUETOOTH_CONNECTED:
+        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_BLUETOOTH);
+        break;
+      case TabAlertState::USB_CONNECTED:
+        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_USB);
+        break;
+      case TabAlertState::PIP_PLAYING:
+        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_PIP);
+        break;
+      case TabAlertState::DESKTOP_CAPTURING:
+        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_DESKTOP_CAPTURING);
+        break;
+      case TabAlertState::VR_PRESENTING_IN_HEADSET:
+        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_VR_PRESENTING_IN_HEADSET);
+        break;
+      case TabAlertState::SERIAL_CONNECTED:
+        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_SERIAL_CONNECTED);
+        break;
+      default:
+        NOTREACHED() << "Unknown TabAlertState Status:" << (int)status;
+        break;
+    }
   }
-  NOTREACHED() << "Unknown TabAlertState Status.";
-  return tabs_private::MediaType::MEDIA_TYPE_NONE;
+
+  // NOTE(andre@vivaldi.com) : We should only use the first type returned, if
+  // any. See comment for GetTabAlertStatesForContents.
+  if (types.empty()) {
+    types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_EMPTY);
+  }
+
+  return types;
 }
+
+int GetWindowId(WebContents* web_contents) {
+  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(web_contents);
+  // browser is null for DevTools
+  if (!browser)
+    return 0;
+  return browser->session_id().id();
+}
+
 }  // namespace
 
 void TabsPrivateAPIPrivate::TabChangedAt(content::WebContents* web_contents,
                                          int index,
                                          TabChangeType change_type) {
-  tabs_private::MediaType type =
-      ConvertTabAlertState(chrome::GetTabAlertStateForContents(web_contents));
+  if (!web_contents || !static_cast<content::WebContentsImpl*>(web_contents)
+                            ->GetMainFrame()
+                            ->GetProcess())
+    return;
+
+  std::vector<tabs_private::TabAlertState> states =
+      ConvertTabAlertState(chrome::GetTabAlertStatesForContents(web_contents));
+
+  int tabId = extensions::ExtensionTabUtil::GetTabId(web_contents);
+  int windowId = extensions::ExtensionTabUtil::GetWindowIdOfTab(web_contents);
 
   ::vivaldi::BroadcastEvent(
-      tabs_private::OnMediaStateChanged::kEventName,
-      tabs_private::OnMediaStateChanged::Create(
-          extensions::ExtensionTabUtil::GetTabId(web_contents), type),
-      web_contents->GetBrowserContext());
+    tabs_private::OnMediaStateChanged::kEventName,
+    tabs_private::OnMediaStateChanged::Create(
+      tabId, windowId, states[0]),
+    web_contents->GetBrowserContext());
+}
+
+void TabsPrivateAPIPrivate::Notify(
+    app_modal::JavaScriptAppModalDialog* dialog) {
+  if (dialog->is_before_unload_dialog()) {
+    // We notify the UI which tab opened a beforeunload dialog so
+    // it can make the tab active.
+    int id = SessionTabHelper::IdForTab(dialog->web_contents()).id();
+    Browser* browser =
+        ::vivaldi::FindBrowserWithWebContents(dialog->web_contents());
+    int window_id = 0;
+    if (browser) {
+      window_id = browser->session_id().id();
+    }
+    ::vivaldi::BroadcastEvent(
+        vivaldi::window_private::OnBeforeUnloadDialogOpened::kEventName,
+        vivaldi::window_private::OnBeforeUnloadDialogOpened::Create(window_id,
+                                                                    id),
+        dialog->web_contents()->GetBrowserContext());
+  }
 }
 
 // static
@@ -267,7 +334,6 @@ void TabsPrivateAPI::SendKeyboardShortcutEvent(
     content::BrowserContext* browser_context,
     const content::NativeWebKeyboardEvent& event,
     bool is_auto_repeat) {
-
   // We don't allow AltGr keyboard shortcuts
   if (event.GetModifiers() & blink::WebInputEvent::kAltGrKey)
     return;
@@ -285,15 +351,15 @@ void TabsPrivateAPI::SendKeyboardShortcutEvent(
   // If the event wasn't prevented we'll get a rawKeyDown event. In some
   // exceptional cases we'll never get that, so we let these through
   // unconditionally
-  std::vector<std::string> exceptions =
-      {"Up", "Down", "Shift+Delete", "Meta+Shift+V", "Esc"};
+  std::vector<std::string> exceptions = {"Up", "Down", "Shift+Delete",
+                                         "Meta+Shift+V", "Esc"};
   bool is_exception = std::find(exceptions.begin(), exceptions.end(),
                                 shortcut_text) != exceptions.end();
   if (event.GetType() == blink::WebInputEvent::kRawKeyDown || is_exception) {
-    ::vivaldi::BroadcastEvent(tabs_private::OnKeyboardShortcut::kEventName,
-                              tabs_private::OnKeyboardShortcut::Create(
-                                  shortcut_text, is_auto_repeat),
-                              browser_context);
+    ::vivaldi::BroadcastEvent(
+        tabs_private::OnKeyboardShortcut::kEventName,
+        tabs_private::OnKeyboardShortcut::Create(shortcut_text, is_auto_repeat),
+        browser_context);
   }
 }
 
@@ -309,7 +375,7 @@ bool IsGestureMouseMove(const blink::WebMouseEvent& mouse_event) {
   using blink::WebMouseEvent;
   DCHECK(mouse_event.GetType() == WebInputEvent::kMouseMove);
   return (mouse_event.button == WebMouseEvent::Button::kRight &&
-      !(mouse_event.GetModifiers() & WebInputEvent::kLeftButtonDown));
+          !(mouse_event.GetModifiers() & WebInputEvent::kLeftButtonDown));
 }
 
 bool IsGestureAltMouseMove(const blink::WebMouseEvent& mouse_event) {
@@ -317,17 +383,10 @@ bool IsGestureAltMouseMove(const blink::WebMouseEvent& mouse_event) {
   return IsLoneAltKeyPressed(mouse_event.GetModifiers());
 }
 
-int GetWindowId(WebContents* web_contents) {
-  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(web_contents);
-  // browser is null for DevTools
-  if (!browser)
-    return 0;
-  return browser->session_id().id();
-}
-
-void StartMouseGestureDetection(
-    TabsPrivateAPIPrivate* priv, WebContents* web_contents,
-    const blink::WebMouseEvent& mouse_event, bool with_alt) {
+void StartMouseGestureDetection(TabsPrivateAPIPrivate* priv,
+                                WebContents* web_contents,
+                                const blink::WebMouseEvent& mouse_event,
+                                bool with_alt) {
   DCHECK(!priv->mouse_gestures_);
 
   // Ignore any gesture after the wheel scroll with the Alt key or right button
@@ -356,8 +415,7 @@ void StartMouseGestureDetection(
 
   ::vivaldi::BroadcastEvent(
       tabs_private::OnMouseGestureDetection::kEventName,
-      tabs_private::OnMouseGestureDetection::Create(window_id),
-      profile);
+      tabs_private::OnMouseGestureDetection::Create(window_id), profile);
 }
 
 // The distance the mouse pointer has to travel in logical pixels before we
@@ -378,8 +436,8 @@ bool HandleMouseGestureMove(const blink::WebMouseEvent& mouse_event,
   float dx = x - mouse_gestures.last_x;
   float dy = y - mouse_gestures.last_y;
   if (!mouse_gestures.recording) {
-    if (fabs(dx) < MOUSE_GESTURE_THRESHOLD
-        && fabs(dy) < MOUSE_GESTURE_THRESHOLD) {
+    if (fabs(dx) < MOUSE_GESTURE_THRESHOLD &&
+        fabs(dy) < MOUSE_GESTURE_THRESHOLD) {
       return eat_event;
     }
     // The recording flag persists if we go under the threshold by moving the
@@ -469,9 +527,9 @@ bool FinishMouseOrWheelGesture(TabsPrivateAPIPrivate* priv,
   return after_gesture;
 }
 
-bool CheckMouseGesture(
-    TabsPrivateAPIPrivate* priv, WebContents* web_contents,
-    const blink::WebMouseEvent& mouse_event) {
+bool CheckMouseGesture(TabsPrivateAPIPrivate* priv,
+                       WebContents* web_contents,
+                       const blink::WebMouseEvent& mouse_event) {
   using blink::WebInputEvent;
   using blink::WebMouseEvent;
   using blink::WebMouseWheelEvent;
@@ -515,8 +573,7 @@ bool CheckMouseGesture(
         gesture = IsGestureMouseMove(mouse_event);
       }
       if (gesture) {
-        eat_event = HandleMouseGestureMove(mouse_event,
-                                           web_contents,
+        eat_event = HandleMouseGestureMove(mouse_event, web_contents,
                                            *priv->mouse_gestures_);
         break;
       }
@@ -640,7 +697,7 @@ void CheckWebviewClick(TabsPrivateAPIPrivate* priv,
   }
   int window_id = GetWindowId(web_contents);
   blink::WebFloatPoint p =
-    ::vivaldi::ToUICoordinates(web_contents, mouse_event.PositionInWidget());
+      ::vivaldi::ToUICoordinates(web_contents, mouse_event.PositionInWidget());
   ::vivaldi::BroadcastEvent(tabs_private::OnWebviewClickCheck::kEventName,
                             tabs_private::OnWebviewClickCheck::Create(
                                 window_id, mousedown, button, p.x, p.y),
@@ -699,6 +756,28 @@ bool VivaldiEventHooksImpl::HandleMouseEvent(
       eat_event = CheckMouseGesture(priv, web_contents_, event);
       if (!eat_event) {
         CheckWebviewClick(priv, web_contents_, event);
+      }
+
+      Browser* browser =
+          ::vivaldi::FindBrowserForEmbedderWebContents(web_contents_);
+      WebContents* activecontents;
+      // browser is null for devtools
+      if (browser && (activecontents =
+                          browser->tab_strip_model()->GetActiveWebContents())) {
+        content::NavigationController& controller =
+            activecontents->GetController();
+        if (event.GetType() == blink::WebInputEvent::Type::kMouseUp) {
+          if (event.button == blink::WebPointerProperties::Button::kBack &&
+              controller.CanGoBack()) {
+            controller.GoBack();
+            eat_event = true;
+          } else if (event.button ==
+                         blink::WebPointerProperties::Button::kForward &&
+                     controller.CanGoForward()) {
+            controller.GoForward();
+            eat_event = true;
+          }
+        }
       }
     }
   }
@@ -806,10 +885,10 @@ bool VivaldiEventHooksImpl::HandleWheelEventAfterChild(
     p = child_view->TransformPointToRootCoordSpaceF(p);
   }
   p = ::vivaldi::ToUICoordinates(web_contents_, p);
-  ::vivaldi::BroadcastEvent(tabs_private::OnPageZoom::kEventName,
-                            tabs_private::OnPageZoom::Create(
-                                window_id, steps, p.x(), p.y()),
-                            profile);
+  ::vivaldi::BroadcastEvent(
+      tabs_private::OnPageZoom::kEventName,
+      tabs_private::OnPageZoom::Create(window_id, steps, p.x(), p.y()),
+      profile);
 
   return true;
 }
@@ -861,8 +940,7 @@ VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
 
 VivaldiPrivateTabObserver::~VivaldiPrivateTabObserver() {}
 
-void VivaldiPrivateTabObserver::WebContentsDestroyed() {
-}
+void VivaldiPrivateTabObserver::WebContentsDestroyed() {}
 
 void VivaldiPrivateTabObserver::OnPrefsChanged(const std::string& path) {
   if (path == vivaldiprefs::kWebpagesFocusTrap) {
@@ -881,6 +959,7 @@ void VivaldiPrivateTabObserver::BroadcastTabInfo() {
   info.enable_plugins.reset(new bool(enable_plugins()));
   info.mime_type.reset(new std::string(contents_mime_type()));
   info.mute_tab.reset(new bool(mute()));
+  info.has_before_unload_handler.reset(new bool(NeedToFireBeforeUnload()));
   int id = SessionTabHelper::IdForTab(web_contents()).id();
 
   ::vivaldi::BroadcastEvent(tabs_private::OnTabUpdated::kEventName,
@@ -890,7 +969,8 @@ void VivaldiPrivateTabObserver::BroadcastTabInfo() {
 
 const int kThemeColorBufferSize = 8;
 
-void VivaldiPrivateTabObserver::DidChangeThemeColor(base::Optional<SkColor> theme_color) {
+void VivaldiPrivateTabObserver::DidChangeThemeColor(
+    base::Optional<SkColor> theme_color) {
   if (!theme_color)
     return;
 
@@ -930,8 +1010,8 @@ void VivaldiPrivateTabObserver::RenderViewCreated(
       tab_zoom_level_ = *zoom;
     } else {
       content::HostZoomMap* host_zoom_map =
-        content::HostZoomMap::GetDefaultForBrowserContext(
-          web_contents()->GetBrowserContext());
+          content::HostZoomMap::GetDefaultForBrowserContext(
+              web_contents()->GetBrowserContext());
       tab_zoom_level_ = host_zoom_map->GetDefaultZoomLevel();
     }
   }
@@ -999,7 +1079,7 @@ void VivaldiPrivateTabObserver::RenderViewHostChanged(
 
 void VivaldiPrivateTabObserver::UpdateAllowTabCycleIntoUI() {
   blink::mojom::RendererPreferences* render_prefs =
-    web_contents()->GetMutableRendererPrefs();
+      web_contents()->GetMutableRendererPrefs();
   DCHECK(render_prefs);
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
@@ -1009,7 +1089,7 @@ void VivaldiPrivateTabObserver::UpdateAllowTabCycleIntoUI() {
 
 void VivaldiPrivateTabObserver::UpdateAllowAccessKeys() {
   blink::mojom::RendererPreferences* render_prefs =
-    web_contents()->GetMutableRendererPrefs();
+      web_contents()->GetMutableRendererPrefs();
   DCHECK(render_prefs);
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
@@ -1079,7 +1159,7 @@ void VivaldiPrivateTabObserver::CommitSettings() {
   } else {
     render_prefs->should_ask_plugin_content = false;
   }
-  web_contents()->GetRenderViewHost()->SyncRendererPrefs();
+  web_contents()->SyncRendererPrefs();
 }
 
 void VivaldiPrivateTabObserver::OnZoomChanged(
@@ -1110,7 +1190,7 @@ void VivaldiPrivateTabObserver::SetZoomLevelForTab(double new_level,
     SaveZoomLevelToExtData(new_level);
   } else if (old_level != tab_zoom_level_) {
     // Make sure the view has the correct zoom level set.
-    RenderViewHost* rvh = web_contents()->GetRenderViewHost();
+    content::RenderViewHost* rvh = web_contents()->GetRenderViewHost();
     int render_view_id = rvh->GetRoutingID();
     int process_id = rvh->GetProcess()->GetID();
 
@@ -1125,39 +1205,42 @@ void VivaldiPrivateTabObserver::SetZoomLevelForTab(double new_level,
 bool VivaldiPrivateTabObserver::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(VivaldiPrivateTabObserver, message)
-  IPC_MESSAGE_HANDLER(VivaldiViewHostMsg_GetAccessKeysForPage_ACK,
-                      OnGetAccessKeysForPageResponse)
-  IPC_MESSAGE_UNHANDLED(handled = false)
+    IPC_MESSAGE_HANDLER(VivaldiViewHostMsg_GetAccessKeysForPage_ACK,
+                        OnGetAccessKeysForPageResponse)
+    IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
 }
 
-void VivaldiPrivateTabObserver::DocumentAvailableInMainFrame() {
+void VivaldiPrivateTabObserver::DidFinishLoad(
+    content::RenderFrameHost* render_frame_host,
+    const GURL& validated_url) {
   SetContentsMimeType(web_contents()->GetContentsMimeType());
   BroadcastTabInfo();
 }
 
 void VivaldiPrivateTabObserver::GetAccessKeys(AccessKeysCallback callback) {
   access_keys_callback_ = std::move(callback);
-  RenderViewHost* rvh = web_contents()->GetRenderViewHost();
+  content::RenderViewHost* rvh = web_contents()->GetRenderViewHost();
   rvh->Send(new VivaldiViewMsg_GetAccessKeysForPage(rvh->GetRoutingID()));
 }
 
 void VivaldiPrivateTabObserver::OnGetAccessKeysForPageResponse(
-  std::vector<VivaldiViewMsg_AccessKeyDefinition> access_keys) {
+    std::vector<VivaldiViewMsg_AccessKeyDefinition> access_keys) {
   if (!access_keys_callback_.is_null()) {
     std::move(access_keys_callback_).Run(std::move(access_keys));
   }
 }
 
 void VivaldiPrivateTabObserver::AccessKeyAction(std::string access_key) {
-  RenderViewHost* rvh = web_contents()->GetRenderViewHost();
+  content::RenderViewHost* rvh = web_contents()->GetRenderViewHost();
   rvh->Send(
       new VivaldiViewMsg_AccessKeyAction(rvh->GetRoutingID(), access_key));
 }
 
 void VivaldiPrivateTabObserver::OnPermissionAccessed(
-    ContentSettingsType content_settings_type, std::string origin,
+    ContentSettingsType content_settings_type,
+    std::string origin,
     ContentSetting content_setting) {
   int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
 
@@ -1166,19 +1249,19 @@ void VivaldiPrivateTabObserver::OnPermissionAccessed(
 
   std::string setting;
   switch (content_setting) {
-  case CONTENT_SETTING_ALLOW:
-    setting = "allow";
-    break;
-  case CONTENT_SETTING_ASK:
-    setting = "ask";
-    break;
-  case CONTENT_SETTING_BLOCK:
-    setting = "block";
-    break;
-  case CONTENT_SETTING_DEFAULT:
-  default:
-    setting = "default";
-    break;
+    case CONTENT_SETTING_ALLOW:
+      setting = "allow";
+      break;
+    case CONTENT_SETTING_ASK:
+      setting = "ask";
+      break;
+    case CONTENT_SETTING_BLOCK:
+      setting = "block";
+      break;
+    case CONTENT_SETTING_DEFAULT:
+    default:
+      setting = "default";
+      break;
   }
 
   ::vivaldi::BroadcastEvent(tabs_private::OnPermissionAccessed::kEventName,
@@ -1198,12 +1281,29 @@ void VivaldiPrivateTabObserver::WebContentsDidDetach() {
 
 void VivaldiPrivateTabObserver::WebContentsDidAttach() {
   int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
+  const std::vector<tabs_private::TabAlertState> states = ConvertTabAlertState(
+      chrome::GetTabAlertStatesForContents(web_contents()));
+
   ::vivaldi::BroadcastEvent(
       tabs_private::OnTabIsAttached::kEventName,
       tabs_private::OnTabIsAttached::Create(
           tab_id, ExtensionTabUtil::GetWindowIdOfTab(web_contents()),
-          ConvertTabAlertState(
-              chrome::GetTabAlertStateForContents(web_contents()))),
+          states[0]),
+      web_contents()->GetBrowserContext());
+}
+
+void VivaldiPrivateTabObserver::BeforeUnloadFired(
+    bool proceed,
+    const base::TimeTicks& proceed_time) {
+  int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
+  Browser* browser =
+    ::vivaldi::FindBrowserWithWebContents(web_contents());
+  int window_id = browser->session_id().id();
+
+  ::vivaldi::BroadcastEvent(
+      tabs_private::OnBeforeUnloadDialogClosed::kEventName,
+      tabs_private::OnBeforeUnloadDialogClosed::Create(window_id, tab_id,
+                                                       proceed),
       web_contents()->GetBrowserContext());
 }
 
@@ -1212,8 +1312,8 @@ VivaldiPrivateTabObserver* VivaldiPrivateTabObserver::FromTabId(
     int tab_id,
     std::string* error) {
   content::WebContents* tabstrip_contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-          tab_id, browser_context, error);
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, browser_context,
+                                                      error);
   if (!tabstrip_contents)
     return nullptr;
 
@@ -1228,14 +1328,17 @@ VivaldiPrivateTabObserver* VivaldiPrivateTabObserver::FromTabId(
   return observer;
 }
 
+bool VivaldiPrivateTabObserver::NeedToFireBeforeUnload() {
+  return web_contents()->NeedToFireBeforeUnload();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
 
-content::RenderViewHost *GetFocusedRenderViewHost(
-    ExtensionFunction* function,
-    int tab_id,
-    std::string* error) {
+content::RenderViewHost* GetFocusedRenderViewHost(ExtensionFunction* function,
+                                                  int tab_id,
+                                                  std::string* error) {
   content::WebContents* tabstrip_contents =
       ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
           tab_id, function->browser_context(), error);
@@ -1261,6 +1364,7 @@ content::RenderViewHost *GetFocusedRenderViewHost(
 
 ExtensionFunction::ResponseAction TabsPrivateUpdateFunction::Run() {
   using tabs_private::Update::Params;
+  namespace Results = tabs_private::Update::Results;
 
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -1286,7 +1390,8 @@ ExtensionFunction::ResponseAction TabsPrivateUpdateFunction::Run() {
   }
   tab_api->CommitSettings();
   tab_api->BroadcastTabInfo();
-  return RespondNow(NoArguments());
+
+  return RespondNow(ArgumentList(Results::Create(*info)));
 }
 
 ExtensionFunction::ResponseAction TabsPrivateGetFunction::Run() {
@@ -1304,9 +1409,10 @@ ExtensionFunction::ResponseAction TabsPrivateGetFunction::Run() {
 
   tabs_private::UpdateTabInfo info;
   info.show_images.reset(new bool(tab_api->show_images()));
-  info.load_from_cache_only.reset(
-      new bool(tab_api->load_from_cache_only()));
+  info.load_from_cache_only.reset(new bool(tab_api->load_from_cache_only()));
   info.enable_plugins.reset(new bool(tab_api->enable_plugins()));
+  info.has_before_unload_handler.reset(
+      new bool(tab_api->NeedToFireBeforeUnload()));
   return RespondNow(ArgumentList(Results::Create(info)));
 }
 

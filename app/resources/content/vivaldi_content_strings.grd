@@ -3,25 +3,26 @@
 <grit base_dir="." latest_public_release="0" current_release="1"
       source_lang_id="en" enc_check="möl">
   <outputs>
-    <output filename="content_strings_af.pak" type="data_package" lang="af" />
-    <output filename="content_strings_be.pak" type="data_package" lang="be" />
-    <output filename="content_strings_de-CH.pak" type="data_package" lang="de-CH" />
-    <output filename="content_strings_eo.pak" type="data_package" lang="eo" />
-    <output filename="content_strings_es-PE.pak" type="data_package" lang="es-PE" />
-    <output filename="content_strings_eu.pak" type="data_package" lang="eu" />
-    <output filename="content_strings_fy.pak" type="data_package" lang="fy" />
-    <output filename="content_strings_gd.pak" type="data_package" lang="gd" />
-    <output filename="content_strings_gl.pak" type="data_package" lang="gl" />
-    <output filename="content_strings_hy.pak" type="data_package" lang="hy" />
-    <output filename="content_strings_io.pak" type="data_package" lang="io" />
-    <output filename="content_strings_is.pak" type="data_package" lang="is" />
-    <output filename="content_strings_jbo.pak" type="data_package" lang="jbo" />
-    <output filename="content_strings_ka.pak" type="data_package" lang="ka" />
-    <output filename="content_strings_ku.pak" type="data_package" lang="ku" />
-    <output filename="content_strings_mk.pak" type="data_package" lang="mk" />
-    <output filename="content_strings_sc.pak" type="data_package" lang="sc" />
-    <output filename="content_strings_sq.pak" type="data_package" lang="sq" />
-    <output filename="content_strings_nn.pak" type="data_package" lang="nn" />
+    <output filename="blink_strings_af.pak" type="data_package" lang="af" />
+    <output filename="blink_strings_be.pak" type="data_package" lang="be" />
+    <output filename="blink_strings_de-CH.pak" type="data_package" lang="de-CH" />
+    <output filename="blink_strings_eo.pak" type="data_package" lang="eo" />
+    <output filename="blink_strings_es-PE.pak" type="data_package" lang="es-PE" />
+    <output filename="blink_strings_eu.pak" type="data_package" lang="eu" />
+    <output filename="blink_strings_fy.pak" type="data_package" lang="fy" />
+    <output filename="blink_strings_gd.pak" type="data_package" lang="gd" />
+    <output filename="blink_strings_gl.pak" type="data_package" lang="gl" />
+    <output filename="blink_strings_hy.pak" type="data_package" lang="hy" />
+    <output filename="blink_strings_io.pak" type="data_package" lang="io" />
+    <output filename="blink_strings_is.pak" type="data_package" lang="is" />
+    <output filename="blink_strings_ja-KS.pak" type="data_package" lang="ja-KS" />
+    <output filename="blink_strings_jbo.pak" type="data_package" lang="jbo" />
+    <output filename="blink_strings_ka.pak" type="data_package" lang="ka" />
+    <output filename="blink_strings_ku.pak" type="data_package" lang="ku" />
+    <output filename="blink_strings_mk.pak" type="data_package" lang="mk" />
+    <output filename="blink_strings_sc.pak" type="data_package" lang="sc" />
+    <output filename="blink_strings_sq.pak" type="data_package" lang="sq" />
+    <output filename="blink_strings_nn.pak" type="data_package" lang="nn" />
   </outputs>
   <translations>
     <file path="strings/vivaldi_content_strings_am.xtb" lang="am" />
@@ -48,6 +49,7 @@
     <file path="strings/vivaldi_content_strings_id.xtb" lang="id" />
     <file path="strings/vivaldi_content_strings_it.xtb" lang="it" />
     <file path="strings/vivaldi_content_strings_ja.xtb" lang="ja" />
+    <file path="strings/vivaldi_content_strings_ja-KS.xtb" lang="ja-KS" />
     <file path="strings/vivaldi_content_strings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_content_strings_ko.xtb" lang="ko" />
     <file path="strings/vivaldi_content_strings_lt.xtb" lang="lt" />

@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.preferences.sync;
 
 import android.content.Context;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
@@ -20,6 +19,8 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordUserAction;
@@ -28,7 +29,6 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
-import org.chromium.chrome.browser.invalidation.InvalidationController;
 import org.chromium.chrome.browser.preferences.ChromeSwitchPreference;
 import org.chromium.chrome.browser.preferences.PreferenceUtils;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -148,10 +148,6 @@ public class ManageSyncPreferences extends PreferenceFragmentCompat
     public void onDestroy() {
         super.onDestroy();
         mSyncSetupInProgressHandle.close();
-
-        if (mProfileSyncService.isSyncRequested()) {
-            InvalidationController.get().ensureStartedAndUpdateRegisteredTypes();
-        }
     }
 
     @Override
@@ -165,9 +161,9 @@ public class ManageSyncPreferences extends PreferenceFragmentCompat
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.menu_id_targeted_help) {
-            HelpAndFeedback.getInstance(getActivity())
-                    .show(getActivity(), getString(R.string.help_context_sync_and_services),
-                            Profile.getLastUsedProfile(), null);
+            HelpAndFeedback.getInstance().show(getActivity(),
+                    getString(R.string.help_context_sync_and_services),
+                    Profile.getLastUsedProfile(), null);
             return true;
         }
         return false;
@@ -267,10 +263,10 @@ public class ManageSyncPreferences extends PreferenceFragmentCompat
             closeDialogIfOpen(FRAGMENT_ENTER_PASSPHRASE);
             return;
         }
-        if (!mProfileSyncService.isPassphraseRequiredForDecryption()) {
+        if (!mProfileSyncService.isPassphraseRequiredForPreferredDataTypes()) {
             closeDialogIfOpen(FRAGMENT_ENTER_PASSPHRASE);
         }
-        if (mProfileSyncService.isPassphraseRequiredForDecryption() && isAdded()) {
+        if (mProfileSyncService.isPassphraseRequiredForPreferredDataTypes() && isAdded()) {
             mSyncEncryption.setSummary(
                     errorSummary(getString(R.string.sync_need_passphrase), getActivity()));
         }
@@ -348,7 +344,7 @@ public class ManageSyncPreferences extends PreferenceFragmentCompat
     @Override
     public boolean onPassphraseEntered(String passphrase) {
         if (!mProfileSyncService.isEngineInitialized()
-                || !mProfileSyncService.isPassphraseRequiredForDecryption()) {
+                || !mProfileSyncService.isPassphraseRequiredForPreferredDataTypes()) {
             // If the engine was shut down since the dialog was opened, or the passphrase isn't
             // required anymore, do nothing.
             return false;
@@ -401,7 +397,7 @@ public class ManageSyncPreferences extends PreferenceFragmentCompat
     private void onSyncEncryptionClicked() {
         if (!mProfileSyncService.isEngineInitialized()) return;
 
-        if (mProfileSyncService.isPassphraseRequiredForDecryption()) {
+        if (mProfileSyncService.isPassphraseRequiredForPreferredDataTypes()) {
             displayPassphraseDialog();
         } else {
             displayPassphraseTypeDialog();

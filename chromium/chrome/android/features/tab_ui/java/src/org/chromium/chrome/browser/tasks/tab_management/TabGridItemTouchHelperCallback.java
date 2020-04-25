@@ -83,9 +83,14 @@ public class TabGridItemTouchHelperCallback extends ItemTouchHelper.SimpleCallba
         boolean isTabGroupEnabled = FeatureUtilities.isTabGroupsAndroidEnabled();
         boolean isTabGroupUiImprovementEnabled =
                 FeatureUtilities.isTabGroupsAndroidUiImprovementsEnabled();
+        boolean isMRUEnabledInTabSwitcher =
+                TabSwitcherMediator.isShowingTabsInMRUOrder() && mActionsOnAllRelatedTabs;
         // Only enable drag for users with group disabled, or with group and group ui improvement
-        // enabled at the same time.
-        boolean isDragEnabled = !isTabGroupEnabled || isTabGroupUiImprovementEnabled;
+        // enabled at the same time. Also, disable drag for MRU-order tab switcher in start surface.
+        // TODO(crbug.com/1005931): Figure out how drag-to-reorder lives in StartSurface MRU
+        // ordering scenario.
+        boolean isDragEnabled = !isMRUEnabledInTabSwitcher
+                && (!isTabGroupEnabled || isTabGroupUiImprovementEnabled);
         mDragFlags = isDragEnabled ? ItemTouchHelper.START | ItemTouchHelper.END
                         | ItemTouchHelper.UP | ItemTouchHelper.DOWN
                                    : 0;
@@ -177,7 +182,11 @@ public class TabGridItemTouchHelperCallback extends ItemTouchHelper.SimpleCallba
                     View ungroupItemView = ungroupViewHolder.itemView;
                     filter.moveTabOutOfGroup(
                             mModel.get(mUnGroupTabIndex).model.get(TabProperties.TAB_ID));
-                    mRecyclerView.getLayoutManager().removeView(ungroupItemView);
+                    // Handle the case where the recyclerView is cleared out after ungrouping the
+                    // last tab in group.
+                    if (mRecyclerView.getAdapter().getItemCount() != 0) {
+                        mRecyclerView.getLayoutManager().removeView(ungroupItemView);
+                    }
                     RecordUserAction.record("TabGrid.Drag.RemoveFromGroup." + mComponentName);
                 }
             }
@@ -235,8 +244,6 @@ public class TabGridItemTouchHelperCallback extends ItemTouchHelper.SimpleCallba
             }
         } else if (actionState == ItemTouchHelper.ACTION_STATE_DRAG
                 && mTabGridDialogHandler != null) {
-            // Not allow ungrouping the last tab in group.
-            if (recyclerView.getAdapter().getItemCount() == 1) return;
             boolean isHoveredOnUngroupBar = viewHolder.itemView.getBottom() + dY
                     > recyclerView.getBottom() - mUngroupThreshold;
             if (mSelectedTabIndex == TabModel.INVALID_TAB_INDEX) return;

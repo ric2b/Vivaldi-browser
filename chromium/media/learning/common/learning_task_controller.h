@@ -8,6 +8,7 @@
 #include "base/callback.h"
 #include "base/component_export.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/unguessable_token.h"
 #include "media/learning/common/labelled_example.h"
 #include "media/learning/common/learning_task.h"
@@ -32,6 +33,12 @@ struct ObservationCompletion {
 
   // Optional, and ignored from the renderer.
   ukm::SourceId source_id;
+
+  // Mostly for gmock matchers.
+  bool operator==(const ObservationCompletion& rhs) const {
+    return target_value == rhs.target_value && weight == rhs.weight &&
+           source_id == rhs.source_id;
+  }
 };
 
 // Client for a single learning task.  Intended to be the primary API for client
@@ -51,14 +58,19 @@ class COMPONENT_EXPORT(LEARNING_COMMON) LearningTaskController {
   // features into an example for training a model, then call
   // CompleteObservation with the same id and an ObservationCompletion.
   // Otherwise, call CancelObservation with |id|.  It's also okay to destroy the
-  // controller with outstanding observations; these will be cancelled.
+  // controller with outstanding observations; these will be cancelled if no
+  // |default_target| was specified, or completed with |default_target|.
+  //
   // TODO(liberato): This should optionally take a callback to receive a
   // prediction for the FeatureVector.
   // TODO(liberato): See if this ends up generating smaller code with pass-by-
   // value or with |FeatureVector&&|, once we have callers that can actually
   // benefit from it.
-  virtual void BeginObservation(base::UnguessableToken id,
-                                const FeatureVector& features) = 0;
+  virtual void BeginObservation(
+      base::UnguessableToken id,
+      const FeatureVector& features,
+      const base::Optional<TargetValue>& default_target =
+          base::Optional<TargetValue>()) = 0;
 
   // Complete an observation by sending a completion.
   virtual void CompleteObservation(base::UnguessableToken id,

@@ -1,52 +1,123 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sq">
+<translation id="1038842779957582377">emër i panjohur</translation>
+<translation id="1089439967362294234">Ndryshoj fjalëkalimin</translation>
+<translation id="1110994991967754504">Përzgjedh autorizimin për <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> e preu lidhjen papritur.</translation>
+<translation id="1175364870820465910">&amp;Printoj...</translation>
+<translation id="129863573139666797"><ph name="BEGIN_LINK" />Provoni të pastroni cookies<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Për versionin</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> nuk dërgoi asnjë të dhënë.</translation>
 <translation id="1559528461873125649">Nuk ekziston skedari apo katalogu</translation>
+<translation id="1620510694547887537">Kamera</translation>
 <translation id="1710259589646384581">Sistemi operativ</translation>
+<translation id="1728677426644403582">Po shihni burimin e faqes së internetit</translation>
+<translation id="1734878702283171397">Provoni të kontaktoni administratorin e sistemit.</translation>
+<translation id="1919345977826869612">Reklamat</translation>
 <translation id="194030505837763158">Shkoj te <ph name="LINK" /></translation>
+<translation id="1974060860693918893">Parametrat e avancuar</translation>
 <translation id="2030481566774242610">Mos po kërkoni <ph name="LINK" />?</translation>
-<translation id="2166378884831602661">Kjo faqe nuk ofron një lidhje të sigurt</translation>
+<translation id="2119505898009119320">E lëshuar për: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
+<translation id="2166378884831602661">Faqja nuk ofron një lidhje të sigurt</translation>
+<translation id="2224337661447660594">Nuk ka internet</translation>
 <translation id="2292556288342944218">Është bllokuar aksesi në internet</translation>
-<translation id="255002559098805027"><ph name="HOST_NAME" /> dërgoi një përgjigje të pavlefshme.</translation>
+<translation id="2317259163369394535"><ph name="DOMAIN" /> kërkon një emër përdoruesi dhe fjalëkalim.</translation>
+<translation id="2337852623177822836">Parametri kontrollohet nga administratori</translation>
+<translation id="2356070529366658676">Pyes</translation>
+<translation id="255002559098805027"><ph name="HOST_NAME" /> ktheu përgjigje të pavlefshme.</translation>
 <translation id="2609632851001447353">Variantet</translation>
-<translation id="2634124572758952069">Nuk gjendet adresa IP e serverit për <ph name="HOST_NAME" />.</translation>
+<translation id="2634124572758952069">Nuk u gjet adresa IP e serverit për <ph name="HOST_NAME" />.</translation>
+<translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
+<translation id="2650446666397867134">U refuzua aksesi në skedar</translation>
 <translation id="2909946352844186028">U diktua një ndryshim në rrjet.</translation>
 <translation id="3005723025932146533">Tregoj kopjen e regjistruar</translation>
+<translation id="3041612393474885105">Informacion për certifikatën</translation>
 <translation id="3109728660330352905">Nuk keni autorizim për ta hapur këtë faqen.</translation>
 <translation id="3226128629678568754">Shtypni butonin Freskoj për të parashtruar edhe një herë të dhënat që nevojiten për të hapur faqen.</translation>
-<translation id="3422472998109090673"><ph name="HOST_NAME" /> nuk mund të arrihet për momentin.</translation>
+<translation id="3227137524299004712">Mikrofoni</translation>
+<translation id="3422472998109090673"><ph name="HOST_NAME" /> është e paarritshme për momentin.</translation>
+<translation id="3427092606871434483">Autorizoj (standarde)</translation>
 <translation id="3447661539832366887">Zotëruesi i këtij aparati e ka fikur lojën me dinozaur.</translation>
+<translation id="3447884698081792621">Tregoj certifikatën (e lëshuar nga <ph name="ISSUER" />)</translation>
+<translation id="3566021033012934673">Nuk jeni lidhur privatisht</translation>
+<translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Fsheh detajet</translation>
-<translation id="382518646247711829">Nëse përdorni një server proxy...</translation>
+<translation id="3658742229777143148">Revizionimi</translation>
+<translation id="3681007416295224113">Informacion për certifikatën</translation>
+<translation id="382518646247711829">Nëse përdorni server proxy...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> është bllokuar</translation>
-<translation id="4522570452068850558">Detaje</translation>
+<translation id="3987940399970879459">Më pak se 1 MB</translation>
+<translation id="4116663294526079822">Gjithmonë autorizoj për këtë faqen</translation>
+<translation id="4130226655945681476">Kontrollohen kabllot e linjës, modemi dhe ruteri</translation>
+<translation id="4235360514405112390">E vlefshme</translation>
+<translation id="4250431568374086873">Lidhja me faqen nuk është plotësisht e sigurt</translation>
+<translation id="4265872034478892965">Autorizohet nga administratori juaj</translation>
+<translation id="4312866146174492540">Bllokoj (standarde)</translation>
+<translation id="4522570452068850558">Detajet</translation>
+<translation id="4552089082226364758">Flash</translation>
+<translation id="4558551763791394412">Provoni të çaktivizoni shtesat.</translation>
+<translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">U ndërpre lidhja</translation>
-<translation id="5023310440958281426">Kontrolloni politikat e administratorit tuaj</translation>
+<translation id="4943872375798546930">Asnjë rezultat</translation>
+<translation id="5023310440958281426">Kontrolloni rregullat e administratorit tuaj</translation>
+<translation id="5039804452771397117">Autorizoj</translation>
+<translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 në përdorim)} other {(# në përdorim)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Verifikohet adresa proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="5431657950005405462">Nuk gjendet skedari</translation>
-<translation id="5452270690849572955">Nuk gjendet kjo faqja <ph name="HOST_NAME" /></translation>
+<translation id="5287240709317226393">Tregoj cookies</translation>
+<translation id="5431657950005405462">Nuk u gjet skedari</translation>
+<translation id="5452270690849572955">Nuk u gjet faqja <ph name="HOST_NAME" /></translation>
+<translation id="5457113250005438886">E pavlefshme</translation>
 <translation id="5510766032865166053">Mund të jetë zhvendosur ose fshirë.</translation>
 <translation id="5556459405103347317">Freskoj</translation>
+<translation id="5610142619324316209">Kontrollohet linja</translation>
 <translation id="5675650730144413517">Nuk funksionon faqja</translation>
-<translation id="5869405914158311789">Nuk mund të arrihet faqja</translation>
+<translation id="5689516760719285838">Vendndodhja</translation>
+<translation id="5710435578057952990">Nuk është verifikuar identiteti i faqes.</translation>
+<translation id="5778550464785688721">Kontrolloni plotësisht aparatet MIDI</translation>
+<translation id="5785756445106461925">Për më tepër, kjo faqe nuk përmban resurse të pasigurta. Këto resurse mund të shihen nga të tjerët gjatë transfertës dhe mund të modifikohen nga piratët informatikë për të ndryshuar paraqitjen e faqes.</translation>
+<translation id="5869405914158311789">Faqja është e paarritshme</translation>
 <translation id="5990559369517809815">Një shtesë bllokoi kërkesat që po i paraqiten serverit.</translation>
-<translation id="6146055958333702838">Kontrolloni kabllot dhe ndizni përsëri çdo ruter, modem apo aparat
-interneti që jeni duke përdorur.</translation>
+<translation id="6146055958333702838">Kontrolloni kabllot dhe ndizni përsëri ruterin, modemin apo çdo aparat tjetër interneti që përdorni.</translation>
+<translation id="6165508094623778733">Mësoj më shumë</translation>
+<translation id="6177128806592000436">Lidhja me faqen nuk është e sigurt</translation>
 <translation id="6203231073485539293">Kontrolloni linjën e internetit</translation>
 <translation id="6305205051461490394"><ph name="URL" /> është e paarritshme.</translation>
 <translation id="6321917430147971392">Kontrolloni parametrat DNS</translation>
 <translation id="6328639280570009161">Provoni të çaktivizoni parashikimin me rrjet</translation>
+<translation id="6358450015545214790">Çfarë tregojnë këto?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> refuzoi lidhjen.</translation>
+<translation id="6451458296329894277">Konfirmoni ridërgimin e formularit</translation>
+<translation id="6569060085658103619">Po shihni faqen e shtesës</translation>
+<translation id="6657585470893396449">Fjalëkalimi</translation>
 <translation id="6711464428925977395">Serveri proxy ka një problem ose adresa është e pasaktë.</translation>
+<translation id="7053983685419859001">Bllokoj</translation>
+<translation id="7090678807593890770">Kërkoni në Google për <ph name="LINK" /></translation>
+<translation id="7108819624672055576">Autorizohet nga një shtesë</translation>
+<translation id="7111012039238467737">(E vlefshme)</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> nuk respekton standardet e sigurisë.</translation>
-<translation id="7518003948725431193">Nuk u gjet asnjë faqe në adresën: <ph name="URL" /></translation>
+<translation id="7219179957768738017">Lidhja përdor <ph name="SSL_VERSION" />.</translation>
+<translation id="7260504762447901703">Revokoj aksesin</translation>
+<translation id="7518003948725431193">Nuk u gjet faqja me adresën: <ph name="URL" /></translation>
+<translation id="7662298039739062396">Parametri kontrollohet nga një shtesë</translation>
+<translation id="7663736086183791259">Certifikata <ph name="CERTIFICATE_VALIDITY" /></translation>
+<translation id="7714464543167945231">Certifikata</translation>
 <translation id="7716424297397655342">Nuk mund të hapet faqja nga cache</translation>
+<translation id="7878562273885520351">Fjalëkalimi juaj mund të jetë komprometuar</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
+<translation id="8037357227543935929">Pyes (standarde)</translation>
+<translation id="808894953321890993">Ndryshoj fjalëkalimin</translation>
+<translation id="8211406090763984747">Lidhja është e sigurt</translation>
 <translation id="8225771182978767009">Faqja është bllokuar nga personi që ka konfiguruar kompjuterin.</translation>
-<translation id="8498891568109133222"><ph name="HOST_NAME" /> mori shumë kohë për t'u përgjigjur.</translation>
-<translation id="8740359287975076522">Nuk gjendet &lt;abbr id="dnsDefinition"&gt;adresa DNS&lt;/abbr&gt; e <ph name="HOST_NAME" />. Problemi po diagnostikohet.</translation>
+<translation id="8241712895048303527">Bllokoj për këtë faqen</translation>
+<translation id="8288807391153049143">Tregoj certifikatën</translation>
+<translation id="8332188693563227489">U refuzua aksesi në <ph name="HOST_NAME" /></translation>
+<translation id="8498891568109133222"><ph name="HOST_NAME" /> u përgjigj shumë vonë.</translation>
+<translation id="8740359287975076522">Nuk u gjet &lt;abbr id="dnsDefinition"&gt;adresa DNS&lt;/abbr&gt; për <ph name="HOST_NAME" />. Po përcaktohet diagnoza e problemit.</translation>
+<translation id="8820817407110198400">Faqet me shenjë</translation>
+<translation id="9025348182339809926">(E pavlefshme)</translation>
+<translation id="9039213469156557790">Për më tepër, kjo faqe nuk përmban resurse të pasigurta. Këto resurse mund të shihen nga të tjerët gjatë transfertës dhe mund të modifikohen nga piratët informatikë për të ndryshuar funksionet e faqes.</translation>
+<translation id="9169664750068251925">Gjithmonë bllokoj për këtë faqen</translation>
+<translation id="9219103736887031265">Imazhet</translation>
 </translationbundle>

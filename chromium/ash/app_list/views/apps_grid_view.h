@@ -36,15 +36,11 @@
 #include "ui/views/view.h"
 #include "ui/views/view_model.h"
 
-namespace ash {
-class PaginationController;
-}
-
 namespace views {
 class ButtonListener;
 }
 
-namespace app_list {
+namespace ash {
 
 namespace test {
 class AppsGridViewTest;
@@ -56,6 +52,7 @@ class AppListConfig;
 class AppListItemView;
 class AppsGridViewFolderDelegate;
 class ContentsView;
+class PaginationController;
 class PulsingBlockView;
 class GhostImageView;
 
@@ -259,7 +256,7 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   void OnFolderItemRemoved();
 
   // Updates the opacity of all the items in the grid during dragging.
-  void UpdateOpacity();
+  void UpdateOpacity(bool restore_opacity);
 
   // Passes scroll information from AppListView to the PaginationController,
   // returns true if this scroll would change pages.
@@ -524,8 +521,8 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   gfx::Rect GetExpectedTileBounds(const GridIndex& index) const;
 
   // Gets the item view currently displayed at |slot| on the current page. If
-  // there is no item displayed at |slot|, returns NULL. Note that this finds an
-  // item *displayed* at a slot, which may differ from the item's location in
+  // there is no item displayed at |slot|, returns nullptr. Note that this finds
+  // an item *displayed* at a slot, which may differ from the item's location in
   // the model (as it may have been temporarily moved during a drag operation).
   AppListItemView* GetViewDisplayedAtSlotOnCurrentPage(int slot) const;
 
@@ -691,7 +688,7 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   AppListModel* model_ = nullptr;         // Owned by AppListView.
   AppListItemList* item_list_ = nullptr;  // Not owned.
 
-  // This can be NULL. Only grid views inside folders have a folder delegate.
+  // This can be nullptr. Only grid views inside folders have a folder delegate.
   AppsGridViewFolderDelegate* folder_delegate_ = nullptr;
 
   ash::PaginationModel pagination_model_{this};
@@ -845,6 +842,6 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   DISALLOW_COPY_AND_ASSIGN(AppsGridView);
 };
 
-}  // namespace app_list
+}  // namespace ash
 
 #endif  // ASH_APP_LIST_VIEWS_APPS_GRID_VIEW_H_

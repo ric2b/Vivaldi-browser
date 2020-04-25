@@ -7,12 +7,10 @@ package org.chromium.chrome.browser.webapps;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.SystemClock;
-import android.text.TextUtils;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.metrics.WebApkSplashscreenMetrics;
 import org.chromium.chrome.browser.metrics.WebApkUma;
@@ -77,12 +75,6 @@ public class WebApkActivity extends WebappActivity {
     }
 
     @Override
-    public void onResumeWithNative() {
-        super.onResumeWithNative();
-        AppHooks.get().setDisplayModeForActivity(getWebApkInfo().displayMode(), this);
-    }
-
-    @Override
     protected void recordIntentToCreationTime(long timeMs) {
         super.recordIntentToCreationTime(timeMs);
 
@@ -95,6 +87,7 @@ public class WebApkActivity extends WebappActivity {
 
         WebApkInfo info = getWebApkInfo();
         WebApkUma.recordShellApkVersion(info.shellApkVersion(), info.distributor());
+        storage.incrementLaunchCount();
 
         mUpdateManager = new WebApkUpdateManager(storage);
         mUpdateManager.updateIfNeeded(getActivityTab(), info);
@@ -184,8 +177,7 @@ public class WebApkActivity extends WebappActivity {
     protected boolean loadUrlIfPostShareTarget(WebappInfo webappInfo) {
         WebApkInfo webApkInfo = (WebApkInfo) webappInfo;
         WebApkInfo.ShareData shareData = webApkInfo.shareData();
-        if (shareData == null || !TextUtils.equals(shareData.shareActivityClassName,
-                webApkInfo.shareTargetActivityName())) {
+        if (shareData == null) {
             return false;
         }
         return new WebApkPostShareTargetNavigator().navigateIfPostShareTarget(

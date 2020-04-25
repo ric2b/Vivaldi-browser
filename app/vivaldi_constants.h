@@ -37,6 +37,8 @@ extern const char kVivaldiReservedApiError[];
 
 extern const char kVivaldiUIScheme[];
 
+extern const char kVivaldiNativeScheme[];
+
 extern const char kVivaldiUIDataHost[];
 extern const char kVivaldiWebUIHost[];
 extern const char kVivaldiThumbDataHost[];

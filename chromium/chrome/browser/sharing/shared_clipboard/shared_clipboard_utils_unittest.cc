@@ -16,7 +16,9 @@
 #include "chrome/browser/sharing/sharing_service_factory.h"
 #include "chrome/browser/sharing/sharing_sync_preference.h"
 #include "chrome/browser/sharing/vapid_key_manager.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -32,12 +34,28 @@ namespace {
 const char kEmptyText[] = "";
 const char kText[] = "Some text to copy to phone device.";
 
+class MockSharingDeviceRegistration : public SharingDeviceRegistration {
+ public:
+  explicit MockSharingDeviceRegistration()
+      : SharingDeviceRegistration(/* pref_service_= */ nullptr,
+                                  /* sharing_sync_preference_= */ nullptr,
+                                  /* instance_id_driver_= */ nullptr,
+                                  /* vapid_key_manager_= */ nullptr) {}
+
+  ~MockSharingDeviceRegistration() override = default;
+
+  MOCK_CONST_METHOD0(IsSharedClipboardSupported, bool());
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockSharingDeviceRegistration);
+};
+
 class MockSharingService : public SharingService {
  public:
   explicit MockSharingService(std::unique_ptr<SharingFCMHandler> fcm_handler)
       : SharingService(/* sync_prefs= */ nullptr,
                        /* vapid_key_manager= */ nullptr,
-                       /* sharing_device_registration= */ nullptr,
+                       std::make_unique<MockSharingDeviceRegistration>(),
                        /* fcm_sender= */ nullptr,
                        std::move(fcm_handler),
                        /* gcm_driver= */ nullptr,
@@ -112,6 +130,14 @@ TEST_F(SharedClipboardUtilsTest, ClipboardProtocol_ShowMenu) {
 TEST_F(SharedClipboardUtilsTest, NoSharingService_DoNotShowMenu) {
   scoped_feature_list_.InitAndEnableFeature(kSharedClipboardUI);
   create_service_ = false;
+  EXPECT_FALSE(
+      ShouldOfferSharedClipboard(&profile_, base::ASCIIToUTF16(kText)));
+}
+
+TEST_F(SharedClipboardUtilsTest, EnterprisePolicy_Disabled) {
+  scoped_feature_list_.InitAndEnableFeature(kSharedClipboardUI);
+  // Set the enterprise policy to false:
+  profile_.GetPrefs()->SetBoolean(prefs::kSharedClipboardEnabled, false);
   EXPECT_FALSE(
       ShouldOfferSharedClipboard(&profile_, base::ASCIIToUTF16(kText)));
 }

@@ -106,6 +106,11 @@ static_library("arc") {
     "//components/guest_os",
     "//components/onc",
     "//components/prefs",
+
+    # TODO(crbug.com/853604): After fully migrating the intent picker to query
+    # directly from App Service, we will deprecated the match functionality
+    # in intent_filter and this dependency will be removed.
+    "//components/services/app_service/public/cpp:intent_util",
     "//components/session_manager/core",
     "//components/timers",
     "//components/url_formatter",
@@ -223,6 +228,7 @@ static_library("arc_base") {
     "//chromeos/dbus/session_manager",
     "//chromeos/dbus/session_manager:login_manager_proto",
     "//chromeos/dbus/upstart",
+    "//chromeos/system:system",
     "//components/account_id",
     "//components/keyed_service/content",
     "//components/prefs",
@@ -355,6 +361,7 @@ source_set("unit_tests") {
     "session/arc_data_remover_unittest.cc",
     "session/arc_session_impl_unittest.cc",
     "session/arc_session_runner_unittest.cc",
+    "session/arc_vm_client_adapter_unittest.cc",
     "timer/arc_timer_bridge_unittest.cc",
     "wake_lock/arc_wake_lock_bridge_unittest.cc",
   ]
@@ -376,6 +383,7 @@ source_set("unit_tests") {
     "//chromeos/dbus/upstart",
     "//chromeos/disks:test_support",
     "//chromeos/network:test_support",
+    "//chromeos/system:system",
     "//components/account_id",
     "//components/keyed_service/content",
     "//components/prefs:test_support",

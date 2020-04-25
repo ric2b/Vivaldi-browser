@@ -6,6 +6,8 @@
 This script repacakges chrome builds for manual bisect script.
 """
 
+from __future__ import print_function
+
 from functools import partial
 import json
 import logging
@@ -43,6 +45,7 @@ CHROME_REQUIRED_FILES = {
         'chrome_100_percent.pak',
         'chrome_200_percent.pak',
         'chromedriver',
+        'crashpad_handler',
         'default_apps/',
         'icudtl.dat',
         'ClearKeyCdm/',
@@ -96,6 +99,7 @@ CHROME_WHITELIST_FILES = {
 CHROME_STRIP_LIST = {
     'linux': [
         'chrome',
+        'crashpad_handler',
         'nacl_helper'
     ]
 }
@@ -334,7 +338,7 @@ def verify_chrome_run(zip_dir):
     if code != 0:
       raise ChromeExecutionError('An error occurred when executing Chrome')
   except ChromeExecutionError,e:
-    print str(e)
+    print(str(e))
 
 
 def get_whitelist_files(extracted_folder, archive):
@@ -566,7 +570,7 @@ def main(argv):
   verify_run = False
   (opts, args) = option_parser.parse_args()
   if opts.archive is None:
-    print 'Error: missing required parameter: --archive'
+    print('Error: missing required parameter: --archive')
     option_parser.print_help()
     return 1
   if not opts.original or not opts.repackage:
@@ -610,9 +614,9 @@ def main(argv):
     repackage.Start()
     repackage.WaitFor()
   except (KeyboardInterrupt, SystemExit):
-    print 'Cleaning up...'
+    print('Cleaning up...')
     bisect_repackage_utils.RemovePath(staging_dir)
-  print 'Cleaning up...'
+  print('Cleaning up...')
   bisect_repackage_utils.RemovePath(staging_dir)
 
 

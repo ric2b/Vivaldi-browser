@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="pt-BR">
+<translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Todos os direitos reservados.</translation>
+<translation id="3700829948786686853">Bem-vindo ao Vivaldi</translation>
+<translation id="4121750346708795461">Ao utilizar este aplicativo, você concorda com o <ph name="BEGIN_LINK1" />Acordo de Licença de Usuário Final<ph name="END_LINK1" /> e com a <ph name="BEGIN_LINK2" />Política de Privacidade<ph name="END_LINK2" /> da Vivaldi.</translation>
+<translation id="5118676864324397542">Armazenamento do <ph name="APP_NAME" /></translation>
+<translation id="5840488417521835756">Saiba mais sobre um determinado assunto de um site sem sair da página. Com o recurso "Tocar para pesquisar", você toca na palavra e o contexto relacionado é enviado para a Pesquisa Vivaldi, que então mostra definições, imagens, resultados da pesquisa e outros detalhes relacionados para você.
+
+Para ajustar o termo de pesquisa, toque nele e mantenha-o pressionado. Para refinar a pesquisa, deslize o painel totalmente para cima e toque na caixa de pesquisa.</translation>
+<translation id="706339621163631076">Política de Privacidade da Vivaldi</translation>
+<translation id="7427132068601343474">Sobre o Vivaldi</translation>
+<translation id="7519434535192513364">O recurso "Tocar para pesquisar" envia a palavra selecionada e a página atual como contexto para a Pesquisa Vivaldi. É possível desativá-lo em <ph name="BEGIN_LINK" />Configurações<ph name="END_LINK" />.</translation>
+<translation id="7649070708921625228">Ajuda</translation>
+<translation id="804786196054284061">Acordo de Licença de Usuário Final</translation>
+</translationbundle>

@@ -37,6 +37,8 @@
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/web_contents_tester.h"
 #include "extensions/buildflags/buildflags.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "net/url_request/url_request_test_util.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -98,12 +100,13 @@ class CacheMissNetworkURLLoaderFactory final
     client->OnComplete(status);
   }
 
-  void Clone(network::mojom::URLLoaderFactoryRequest request) override {
-    bindings_.AddBinding(this, std::move(request));
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
+      override {
+    receivers_.Add(this, std::move(receiver));
   }
 
  private:
-  mojo::BindingSet<network::mojom::URLLoaderFactory> bindings_;
+  mojo::ReceiverSet<network::mojom::URLLoaderFactory> receivers_;
 
   DISALLOW_COPY_AND_ASSIGN(CacheMissNetworkURLLoaderFactory);
 };
@@ -301,7 +304,7 @@ class SafeBrowsingBlockingPageTestBase
     // get notified of it, so include that notification now.
     Profile* profile =
         Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-    safe_browsing_service->AddPrefService(profile->GetPrefs());
+    safe_browsing_service->OnProfileAdded(profile);
     content::BrowserThread::RunAllPendingTasksOnThreadForTesting(
         content::BrowserThread::IO);
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -1105,10 +1108,10 @@ class SafeBrowsingBlockingQuietPageTest
     auto* safe_browsing_service =
         sb_service_factory.CreateSafeBrowsingService();
     // A profile was created already but SafeBrowsingService wasn't around to
-    // get notified of it, so include that notification now.
-    safe_browsing_service->AddPrefService(
-        Profile::FromBrowserContext(web_contents()->GetBrowserContext())
-            ->GetPrefs());
+    // get notified of it (and it wasn't associated with a ProfileManager), so
+    // include that profile now.
+    safe_browsing_service->OnProfileAdded(
+        Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
     TestingBrowserProcess::GetGlobal()->SetSafeBrowsingService(
         safe_browsing_service);
     g_browser_process->safe_browsing_service()->Initialize();

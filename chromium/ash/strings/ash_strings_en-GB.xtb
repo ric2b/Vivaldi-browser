@@ -7,6 +7,7 @@
 <translation id="1037492556044956303"><ph name="DEVICE_NAME" /> added</translation>
 <translation id="1056775291175587022">No networks</translation>
 <translation id="1059194134494239015"><ph name="DISPLAY_NAME" />: <ph name="RESOLUTION" /></translation>
+<translation id="108486256082349153">Mobile: <ph name="ADDRESS" /></translation>
 <translation id="109942774857561566">I'm bored</translation>
 <translation id="1104084341931202936">Show accessibility settings</translation>
 <translation id="1104621072296271835">Your devices work even better together</translation>
@@ -17,11 +18,13 @@
 <translation id="1195412055398077112">overscan</translation>
 <translation id="119944043368869598">Clear all</translation>
 <translation id="1247372569136754018">Microphone (internal)</translation>
+<translation id="1249456112629248620"><ph name="FEATURE_NAME" /> This setting is enforced by your administrator.</translation>
 <translation id="1252999807265626933">Charging from <ph name="POWER_SOURCE" /></translation>
 <translation id="1255033239764210633">What's the weather?</translation>
 <translation id="1267032506238418139">Shortcut change</translation>
 <translation id="1270290102613614947">On-screen keyboard disabled</translation>
 <translation id="1272079795634619415">Stop</translation>
+<translation id="1275285675049378717">Powering <ph name="POWER_SOURCE" /></translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
 <translation id="1289185460362160437">Come back <ph name="COME_BACK_DAY_OF_WEEK" /> at <ph name="COME_BACK_TIME" />.</translation>
 <translation id="1290331692326790741">Weak signal</translation>
@@ -41,6 +44,7 @@
 <translation id="1460620680449458626">Volume is muted.</translation>
 <translation id="1467432559032391204">Left</translation>
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
+<translation id="1516740043221086139">Do Not Disturb is on.</translation>
 <translation id="1520303207432623762">{NUM_APPS,plural, =1{Show notification settings. Notifications are off for an app}other{Show notification settings. Notifications are off for # apps}}</translation>
 <translation id="1525508553941733066">DISMISS</translation>
 <translation id="1537254971476575106">Full-screen magnifier</translation>
@@ -60,7 +64,6 @@
 <translation id="1761222317188459878">Toggle network connection. <ph name="STATE_TEXT" /></translation>
 <translation id="1771761307086386028">Scroll right</translation>
 <translation id="1812997170047690955">What's on my screen?</translation>
-<translation id="1820355135508821526"><ph name="FEATURE_NAME" /> has been disabled by a policy applied to this device. Please talk to your administrator to request changes.</translation>
 <translation id="1823873187264960516">Ethernet: <ph name="ADDRESS" /></translation>
 <translation id="1836215606488044471">Assistant (loading...)</translation>
 <translation id="1838895407229022812">Night Light is off.</translation>
@@ -74,6 +77,7 @@
 <translation id="1951012854035635156">Assistant</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1957958912175573503">Set your language</translation>
+<translation id="1962969542251276847">Lock Screen</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
 <translation id="1978498689038657292">Text input</translation>
 <translation id="1993072747612765854">Learn more about the latest <ph name="SYSTEM_APP_NAME" /> update</translation>
@@ -104,7 +108,6 @@
 <translation id="2359808026110333948">Continue</translation>
 <translation id="2365393535144473978">Enabling mobile data will enable Bluetooth.</translation>
 <translation id="2391579633712104609">180°</translation>
-<translation id="239188844683466770">Toggle Do not disturb</translation>
 <translation id="2412593942846481727">Update available</translation>
 <translation id="2413728805700750528"><ph name="DISPLAY_NAME" /> is a managed session managed by <ph name="DOMAIN" /></translation>
 <translation id="2427507373259914951">Left click</translation>
@@ -116,6 +119,7 @@
 <translation id="2532589005999780174">High contrast mode</translation>
 <translation id="2542089167727451762">Tap your profile image</translation>
 <translation id="255671100581129685">The Google Assistant is not available in a public session.</translation>
+<translation id="256712445991462162">the docked magnifier</translation>
 <translation id="2575685495496069081">Multiple sign-in has been disabled</translation>
 <translation id="2582112259361606227">Restart to update</translation>
 <translation id="2617342710774726426">SIM card is locked</translation>
@@ -172,6 +176,7 @@
 <translation id="3364721542077212959">Stylus tools</translation>
 <translation id="3368922792935385530">Connected</translation>
 <translation id="3371140690572404006">USB-C device (right-hand-side front port)</translation>
+<translation id="3386978599540877378">the full-screen magnifier</translation>
 <translation id="3400357268283240774">Additional settings</translation>
 <translation id="3413817803639110246">Nothing to see just yet</translation>
 <translation id="343571671045587506">Edit reminder</translation>
@@ -229,17 +234,20 @@
 <translation id="4261870227682513959">Show notification settings. Notifications are off</translation>
 <translation id="4269883910223712419">The admin of this device has the ability to:</translation>
 <translation id="4279490309300973883">Mirroring</translation>
-<translation id="4281007048406351813">Add 1 min to timer</translation>
 <translation id="4296136865091727875">Clear all <ph name="COUNT" /> notifications</translation>
+<translation id="4303223480529385476">Expand status area</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4321776623976362024">You pressed the keyboard shortcut for high contrast. Do you want to turn it on?</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4338109981321384717">Magnifying glass</translation>
 <translation id="4351433414020964307">Assistant is loading...</translation>
+<translation id="4356930093361201197">high-contrast mode</translation>
 <translation id="4378551569595875038">Connecting...</translation>
 <translation id="4379531060876907730">These are your stylus tools</translation>
+<translation id="4383956581743965695">-<ph name="TIME_SINCE_EXPIRATION" /></translation>
 <translation id="4389184120735010762">You pressed the keyboard shortcut for the docked magnifier. Do you want to turn it on?</translation>
 <translation id="4421231901400348175">Sharing control of your screen with <ph name="HELPER_NAME" /> via Remote Assistance.</translation>
+<translation id="4430019312045809116">volume</translation>
 <translation id="4450893287417543264">Don't show again</translation>
 <translation id="4477350412780666475">Next track</translation>
 <translation id="4479639480957787382">Ethernet</translation>
@@ -254,6 +262,7 @@
 <translation id="4585337515783392668">Stop casting on an unknown receiver</translation>
 <translation id="4628757576491864469">Devices</translation>
 <translation id="4659419629803378708">ChromeVox enabled</translation>
+<translation id="4665114317261903604">Toggle Do Not Disturb. <ph name="STATE_TEXT" /></translation>
 <translation id="4696813013609194136">Unlock device with parent code</translation>
 <translation id="4731797938093519117">Parent access</translation>
 <translation id="4734965478015604180">Horizontal</translation>
@@ -262,9 +271,11 @@
 <translation id="4778095205580009397">The Google Assistant is not available in a demo session.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">Disconnect</translation>
+<translation id="4814539958450445987">Login Screen</translation>
 <translation id="4831034276697007977">Are you sure that you want to turn off automatic clicks?</translation>
 <translation id="4849058404725798627">Highlight object with keyboard focus</translation>
 <translation id="485592688953820832">No action (pause)</translation>
+<translation id="4868492592575313542">activated</translation>
 <translation id="4872237917498892622">Alt+Search or Shift</translation>
 <translation id="4890187583552566966">The Google Assistant is disabled by your administrator.</translation>
 <translation id="4895488851634969361">Battery is full.</translation>
@@ -342,7 +353,6 @@
 <translation id="6062360702481658777">You will automatically be signed out in <ph name="LOGOUT_TIME_LEFT" />.</translation>
 <translation id="6064337552080329342">Sorry, your password couldn't be verified. Please try again.</translation>
 <translation id="607652042414456612">Your computer is discoverable to nearby Bluetooth devices and will appear as "<ph name="NAME" />" with address <ph name="ADDRESS" /></translation>
-<translation id="6106745654298855237">Charging <ph name="POWER_SOURCE" /></translation>
 <translation id="612734058257491180">The Google Assistant is not available in a guest session.</translation>
 <translation id="615957422585914272">Show on-screen keyboard</translation>
 <translation id="6164005077879661055">All files and local data associated with the supervised user will be permanently deleted once this supervised user is removed. Visited websites and settings for this supervised user may still be visible by the manager at <ph name="MANAGEMENT_URL" />.</translation>
@@ -351,6 +361,7 @@
 <translation id="6254629735336163724">Locked to horizontal</translation>
 <translation id="6259254695169772643">Use your stylus to select</translation>
 <translation id="6267036997247669271"><ph name="NAME" />: Activating...</translation>
+<translation id="6283712521836204486">Do Not Disturb is off.</translation>
 <translation id="6284232397434400372">Resolution changed</translation>
 <translation id="6297287540776456956">Use the stylus to select a region</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> was rotated to <ph name="ROTATION" /></translation>
@@ -388,11 +399,13 @@
 <translation id="6727969043791803658">Connected, <ph name="BATTERY_PERCENTAGE" />% battery</translation>
 <translation id="6751826523481687655">Performance tracing is turned on</translation>
 <translation id="6752912906630585008">Desk <ph name="REMOVED_DESK" /> removed and merged with Desk <ph name="RECEIVE_DESK" /></translation>
+<translation id="6777216307882431711">Powering connected USB-C devices</translation>
 <translation id="6790428901817661496">Play</translation>
 <translation id="6803622936009808957">Could not mirror displays since no supported resolutions found. Entered extended desktop instead.</translation>
 <translation id="6820676911989879663">Take a break!</translation>
 <translation id="683971173229319003">Search+L</translation>
 <translation id="6857811139397017780">Activate <ph name="NETWORKSERVICE" /></translation>
+<translation id="6878400149835617132">Shortcut turned off</translation>
 <translation id="6910714959251846841">This update requires powerwashing of your device. Learn more about the latest <ph name="SYSTEM_APP_NAME" /> update.</translation>
 <translation id="6911468394164995108">Join other ...</translation>
 <translation id="6919251195245069855">Couldn’t recognise your smart card. Try again.</translation>
@@ -402,6 +415,7 @@
 <translation id="7015766095477679451">Come back at <ph name="COME_BACK_TIME" />.</translation>
 <translation id="7025533177575372252">Connect your <ph name="DEVICE_NAME" /> with your phone</translation>
 <translation id="7029814467594812963">Exit session</translation>
+<translation id="7042322267639375032">Collapse status area</translation>
 <translation id="7066646422045619941">This network is disabled by your administrator.</translation>
 <translation id="7067196344162293536">Auto rotate</translation>
 <translation id="7068360136237591149">Open files</translation>
@@ -413,7 +427,6 @@
 <translation id="7143207342074048698">Connecting ...</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358">Reverting to old resolution in <ph name="TIMEOUT_SECONDS" /></translation>
-<translation id="7222902781030499995">Stop timer</translation>
 <translation id="7256634071279256947">Rear microphone</translation>
 <translation id="726276584504105859">Drag here to use split screen</translation>
 <translation id="7262906531272962081">Create reminder</translation>
@@ -423,7 +436,6 @@
 <translation id="735745346212279324">VPN disconnected</translation>
 <translation id="7377169924702866686">Caps Lock is on.</translation>
 <translation id="7378594059915113390">Media controls</translation>
-<translation id="7384299914270925461"><ph name="SIGN" /><ph name="MINUTES_REMAINING" />:<ph name="SECONDS_REMAINING" />s</translation>
 <translation id="7398254312354928459">Switched network connection</translation>
 <translation id="7405710164030118432">To unlock the device, enter your Family Link parent access code</translation>
 <translation id="742594950370306541">Camera is in use.</translation>
@@ -439,11 +451,11 @@
 <translation id="7568294522609223312">Turn off automatic clicks</translation>
 <translation id="7569509451529460200">Braille and ChromeVox are enabled</translation>
 <translation id="7593891976182323525">Search or Shift</translation>
+<translation id="7600875258240007829">See all notifications</translation>
 <translation id="7645176681409127223"><ph name="USER_NAME" /> (owner)</translation>
 <translation id="7647488630410863958">Unlock device to view your notifications</translation>
 <translation id="7649070708921625228">Help</translation>
 <translation id="7654687942625752712">Press and hold both volume keys for five seconds to disable spoken feedback.</translation>
-<translation id="7692480393933218409">Charging connected USB-C devices</translation>
 <translation id="7705524343798198388">VPN</translation>
 <translation id="7723389094756330927">{NUM_NOTIFICATIONS,plural, =1{1 notification}other{# notifications}}</translation>
 <translation id="7749443890790263709">Maximum number of desks reached.</translation>
@@ -504,6 +516,7 @@
 <translation id="8452135315243592079">Missing SIM card</translation>
 <translation id="8454013096329229812">Wi-Fi is turned on.</translation>
 <translation id="847056008324733326">Display scale settings</translation>
+<translation id="8473301994082929012"><ph name="ORGANIZATION_NAME" /> has <ph name="FEATURE_STATE" /> <ph name="FEATURE_NAME" />.</translation>
 <translation id="8477270416194247200">Press Alt+Search or Shift to cancel.</translation>
 <translation id="8513108775083588393">Auto-rotate</translation>
 <translation id="8517041960877371778">Your <ph name="DEVICE_TYPE" /> may not charge while it is turned on.</translation>
@@ -532,6 +545,7 @@
 <translation id="8909138438987180327">Battery at <ph name="PERCENTAGE" /> per cent.</translation>
 <translation id="8921554779039049422">H+</translation>
 <translation id="8921624153894383499">The Google Assistant doesn’t speak this language.</translation>
+<translation id="8936501819958976551">deactivated</translation>
 <translation id="8938800817013097409">USB-C device (right port in the back)</translation>
 <translation id="8940956008527784070">Battery low (<ph name="PERCENTAGE" />%)</translation>
 <translation id="8983038754672563810">HSPA</translation>

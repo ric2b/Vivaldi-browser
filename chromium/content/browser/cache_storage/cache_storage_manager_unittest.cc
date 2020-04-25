@@ -42,6 +42,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_utils.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/disk_cache/disk_cache.h"
@@ -543,7 +544,7 @@ class CacheStorageManagerTest : public testing::Test {
         cache_manager_->OpenCacheStorage(origin, owner);
     cache_storage.value()->MatchCache(
         cache_name, std::move(request), std::move(match_options),
-        /* trace_id = */ 0,
+        CacheStorageSchedulerPriority::kNormal, /* trace_id = */ 0,
         base::BindOnce(&CacheStorageManagerTest::CacheMatchCallback,
                        base::Unretained(this), base::Unretained(&loop)));
     loop.Run();
@@ -573,7 +574,7 @@ class CacheStorageManagerTest : public testing::Test {
         cache_manager_->OpenCacheStorage(origin, owner);
     cache_storage.value()->MatchAllCaches(
         std::move(request), std::move(match_options),
-        /* trace_id = */ 0,
+        CacheStorageSchedulerPriority::kNormal, /* trace_id = */ 0,
         base::BindOnce(&CacheStorageManagerTest::CacheMatchCallback,
                        base::Unretained(this), base::Unretained(&loop)));
     loop.Run();
@@ -634,14 +635,14 @@ class CacheStorageManagerTest : public testing::Test {
     std::unique_ptr<storage::BlobDataHandle> blob_data_handle =
         blob_storage_context_->AddFinishedBlob(std::move(blob_data));
 
-    blink::mojom::BlobPtrInfo blob_ptr_info;
+    mojo::PendingRemote<blink::mojom::Blob> blob_remote;
     storage::BlobImpl::Create(std::move(blob_data_handle),
-                              MakeRequest(&blob_ptr_info));
+                              blob_remote.InitWithNewPipeAndPassReceiver());
 
     auto blob = blink::mojom::SerializedBlob::New();
     blob->uuid = blob_uuid;
     blob->size = request->url.spec().size();
-    blob->blob = std::move(blob_ptr_info);
+    blob->blob = std::move(blob_remote);
 
     base::RunLoop loop;
     CachePutWithStatusCodeAndBlobInternal(cache, std::move(request),
@@ -666,7 +667,9 @@ class CacheStorageManagerTest : public testing::Test {
         std::move(blob), blink::mojom::ServiceWorkerResponseError::kUnknown,
         base::Time(), std::string() /* cache_storage_cache_name */,
         std::vector<std::string>() /* cors_exposed_header_names */,
-        nullptr /* side_data_blob */);
+        nullptr /* side_data_blob */,
+        nullptr /* side_data_blob_for_cache_put */,
+        nullptr /* content_security_policy */);
 
     blink::mojom::BatchOperationPtr operation =
         blink::mojom::BatchOperation::New();
@@ -711,7 +714,8 @@ class CacheStorageManagerTest : public testing::Test {
     request->url = url;
     base::RunLoop loop;
     cache->Match(
-        std::move(request), nullptr, /* trace_id = */ 0,
+        std::move(request), nullptr, CacheStorageSchedulerPriority::kNormal,
+        /* trace_id = */ 0,
         base::BindOnce(&CacheStorageManagerTest::CacheMatchCallback,
                        base::Unretained(this), base::Unretained(&loop)));
     loop.Run();
@@ -2341,10 +2345,9 @@ TEST_P(CacheStorageManagerTestP, SlowPutCompletesWithoutExternalRef) {
   // Provide a fake blob implementation that delays completion.  This will
   // allow us to pause the writing operation so we can drop the external
   // reference.
-  auto blob_request = mojo::MakeRequest(&blob->blob);
   base::RunLoop blob_loop;
-  DelayedBlob delayed_blob(std::move(blob_request), body_data,
-                           blob_loop.QuitClosure());
+  DelayedBlob delayed_blob(blob->blob.InitWithNewPipeAndPassReceiver(),
+                           body_data, blob_loop.QuitClosure());
 
   // Begin the operation to write the blob into the cache.
   base::RunLoop cache_loop;

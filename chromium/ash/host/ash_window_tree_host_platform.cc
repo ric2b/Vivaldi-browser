@@ -25,7 +25,7 @@
 #include "ui/gfx/transform.h"
 #include "ui/ozone/public/input_controller.h"
 #include "ui/ozone/public/ozone_platform.h"
-#include "ui/platform_window/platform_window.h"
+#include "ui/platform_window/platform_window_base.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 
 namespace ash {
@@ -43,7 +43,7 @@ AshWindowTreeHostPlatform::AshWindowTreeHostPlatform()
       transformer_helper_(this) {
   CreateCompositor(viz::FrameSinkId(),
                    /* force_software_compositor */ false,
-                   /* external_begin_frame_client */ nullptr,
+                   /* use_external_begin_frame_control */ false,
                    /* are_events_in_pixels */ true);
   CommonInit();
 }

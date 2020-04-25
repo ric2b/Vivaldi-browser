@@ -312,10 +312,13 @@ network::mojom::URLLoaderFactoryPtrInfo CreateURLLoaderFactory(
     network::mojom::NetworkContext* network_context,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
-    const Extension& extension) {
+    const Extension& extension,
+    const base::Optional<net::NetworkIsolationKey>& network_isolation_key) {
   // Compute relaxed CORB config to be used by |extension|.
   network::mojom::URLLoaderFactoryParamsPtr params =
       network::mojom::URLLoaderFactoryParams::New();
+
+  params->network_isolation_key = network_isolation_key;
 
   // Setup factory bound allow list that overwrites per-profile common list
   // to allow tab specific permissions only for this newly created factory.
@@ -338,12 +341,12 @@ network::mojom::URLLoaderFactoryPtrInfo CreateURLLoaderFactory(
   return factory_info;
 }
 
-void MarkInitiatorsAsRequiringSeparateURLLoaderFactory(
+void MarkIsolatedWorldsAsRequiringSeparateURLLoaderFactory(
     content::RenderFrameHost* frame,
     std::vector<url::Origin> request_initiators,
     bool push_to_renderer_now) {
   DCHECK(!request_initiators.empty());
-  frame->MarkInitiatorsAsRequiringSeparateURLLoaderFactory(
+  frame->MarkIsolatedWorldsAsRequiringSeparateURLLoaderFactory(
       std::move(request_initiators), push_to_renderer_now);
 }
 
@@ -477,7 +480,7 @@ void URLLoaderFactoryManager::ReadyToCommitNavigation(
     // factories are pushed slightly later - during the commit.
     constexpr bool kPushToRendererNow = false;
 
-    MarkInitiatorsAsRequiringSeparateURLLoaderFactory(
+    MarkIsolatedWorldsAsRequiringSeparateURLLoaderFactory(
         frame, std::move(initiators_requiring_separate_factory),
         kPushToRendererNow);
   }
@@ -508,7 +511,7 @@ void URLLoaderFactoryManager::WillExecuteCode(content::RenderFrameHost* frame,
   // legacy IPC pipe (raciness will be introduced if that ever changes).
   constexpr bool kPushToRendererNow = true;
 
-  MarkInitiatorsAsRequiringSeparateURLLoaderFactory(
+  MarkIsolatedWorldsAsRequiringSeparateURLLoaderFactory(
       frame, {url::Origin::Create(extension->url())}, kPushToRendererNow);
 }
 
@@ -518,7 +521,8 @@ network::mojom::URLLoaderFactoryPtrInfo URLLoaderFactoryManager::CreateFactory(
     network::mojom::NetworkContext* network_context,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
-    const url::Origin& initiator_origin) {
+    const url::Origin& initiator_origin,
+    const base::Optional<net::NetworkIsolationKey>& network_isolation_key) {
   content::BrowserContext* browser_context = process->GetBrowserContext();
   const ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context);
   DCHECK(registry);  // CreateFactory shouldn't happen during shutdown.
@@ -538,7 +542,7 @@ network::mojom::URLLoaderFactoryPtrInfo URLLoaderFactoryManager::CreateFactory(
       registry->enabled_extensions().GetByID(precursor_origin.host());
   if (!extension) {
     // This may happen if an extension gets disabled between the time
-    // RenderFrameHost::MarkInitiatorAsRequiringSeparateURLLoaderFactory is
+    // RenderFrameHost::MarkIsolatedWorldAsRequiringSeparateURLLoaderFactory is
     // called and the time
     // ContentBrowserClient::CreateURLLoaderFactory is called.
     return network::mojom::URLLoaderFactoryPtrInfo();
@@ -555,7 +559,7 @@ network::mojom::URLLoaderFactoryPtrInfo URLLoaderFactoryManager::CreateFactory(
   if (!IsSpecialURLLoaderFactoryRequired(*extension, factory_user))
     return network::mojom::URLLoaderFactoryPtrInfo();
   return CreateURLLoaderFactory(process, network_context, header_client,
-                                *extension);
+                                *extension, network_isolation_key);
 }
 
 // static

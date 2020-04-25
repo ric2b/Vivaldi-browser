@@ -62,6 +62,9 @@
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/ipc_sync_message_filter.h"
 #include "mojo/core/embedder/scoped_ipc_support.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/platform/named_platform_channel.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
@@ -73,9 +76,7 @@
 #include "services/device/public/cpp/power_monitor/power_monitor_broadcast_source.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/client_process_impl.h"
 #include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
-#include "services/resource_coordinator/public/mojom/service_constants.mojom.h"
 #include "services/service_manager/embedder/switches.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 
@@ -90,7 +91,9 @@
 
 #if BUILDFLAG(CLANG_COVERAGE)
 #include <stdio.h>
-#include <unistd.h>
+#if defined(OS_WIN)
+#include <io.h>
+#endif
 // Function provided by libclang_rt.profile-*.a, declared and documented at:
 // https://github.com/llvm/llvm-project/blob/master/compiler-rt/lib/profile/InstrProfiling.h
 extern "C" void __llvm_profile_set_file_object(FILE* File, int EnableMerge);
@@ -229,12 +232,14 @@ mojo::IncomingInvitation InitializeMojoIPCChannel() {
           service_manager::kMojoIPCChannel))));
 #endif
 
-  return mojo::IncomingInvitation::Accept(std::move(endpoint));
+  return mojo::IncomingInvitation::Accept(
+      std::move(endpoint), MOJO_ACCEPT_INVITATION_FLAG_LEAK_TRANSPORT_ENDPOINT);
 }
 
 class ChannelBootstrapFilter : public ConnectionFilter {
  public:
-  explicit ChannelBootstrapFilter(IPC::mojom::ChannelBootstrapPtrInfo bootstrap)
+  explicit ChannelBootstrapFilter(
+      mojo::PendingRemote<IPC::mojom::ChannelBootstrap> bootstrap)
       : bootstrap_(std::move(bootstrap)) {}
 
  private:
@@ -250,13 +255,13 @@ class ChannelBootstrapFilter : public ConnectionFilter {
 
     if (interface_name == IPC::mojom::ChannelBootstrap::Name_) {
       DCHECK(bootstrap_.is_valid());
-      mojo::FuseInterface(
-          IPC::mojom::ChannelBootstrapRequest(std::move(*interface_pipe)),
-          std::move(bootstrap_));
+      mojo::FusePipes(mojo::PendingReceiver<IPC::mojom::ChannelBootstrap>(
+                          std::move(*interface_pipe)),
+                      std::move(bootstrap_));
     }
   }
 
-  IPC::mojom::ChannelBootstrapPtrInfo bootstrap_;
+  mojo::PendingRemote<IPC::mojom::ChannelBootstrap> bootstrap_;
 
   DISALLOW_COPY_AND_ASSIGN(ChannelBootstrapFilter);
 };
@@ -395,6 +400,11 @@ class ChildProcessImpl : public mojom::ChildProcess {
     int fd = file.TakePlatformFile();
     FILE* f = fdopen(fd, "r+b");
     __llvm_profile_set_file_object(f, 1);
+#elif defined(OS_WIN)
+    HANDLE handle = file.TakePlatformFile();
+    int fd = _open_osfhandle((intptr_t)handle, 0);
+    FILE* f = _fdopen(fd, "r+b");
+    __llvm_profile_set_file_object(f, 1);
 #endif
   }
 #endif
@@ -415,13 +425,13 @@ void BindChildProcessImpl(
     base::RepeatingClosure quit_closure,
     ChildThreadImpl::Options::ServiceBinder service_binder,
     mojo::PendingReceiver<mojom::ChildProcessHost> host_receiver,
-    mojom::ChildProcessRequest request) {
+    mojo::PendingReceiver<mojom::ChildProcess> receiver) {
   mojo::MakeSelfOwnedReceiver<mojom::ChildProcess>(
       std::make_unique<ChildProcessImpl>(
           std::move(main_thread_task_runner), std::move(weak_main_thread),
           std::move(quit_closure), std::move(service_binder),
           std::move(host_receiver)),
-      std::move(request));
+      std::move(receiver));
 }
 
 }  // namespace
@@ -539,18 +549,18 @@ void ChildThreadImpl::SetFieldTrialGroup(const std::string& trial_name,
 void ChildThreadImpl::OnFieldTrialGroupFinalized(
     const std::string& trial_name,
     const std::string& group_name) {
-  mojom::FieldTrialRecorderPtr field_trial_recorder;
-  BindHostReceiver(mojo::MakeRequest(&field_trial_recorder));
+  mojo::Remote<mojom::FieldTrialRecorder> field_trial_recorder;
+  BindHostReceiver(field_trial_recorder.BindNewPipeAndPassReceiver());
   field_trial_recorder->FieldTrialActivated(trial_name);
 }
 
 void ChildThreadImpl::ConnectChannel() {
   DCHECK(service_manager_connection_);
-  IPC::mojom::ChannelBootstrapPtr bootstrap;
+  mojo::PendingRemote<IPC::mojom::ChannelBootstrap> bootstrap;
   mojo::ScopedMessagePipeHandle handle =
-      mojo::MakeRequest(&bootstrap).PassMessagePipe();
+      bootstrap.InitWithNewPipeAndPassReceiver().PassPipe();
   service_manager_connection_->AddConnectionFilter(
-      std::make_unique<ChannelBootstrapFilter>(bootstrap.PassInterface()));
+      std::make_unique<ChannelBootstrapFilter>(std::move(bootstrap)));
 
   channel_->Init(
       IPC::ChannelMojo::CreateClientFactory(
@@ -632,31 +642,19 @@ void ChildThreadImpl::Init(const Options& options) {
   // In single process mode, browser-side tracing and memory will cover the
   // whole process including renderers.
   if (!IsInBrowserProcess()) {
-    if (service_manager_connection_) {
-      std::string process_type_str =
-          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-              switches::kProcessType);
-      auto process_type = memory_instrumentation::mojom::ProcessType::OTHER;
-      if (process_type_str == switches::kRendererProcess)
-        process_type = memory_instrumentation::mojom::ProcessType::RENDERER;
-      else if (process_type_str == switches::kGpuProcess)
-        process_type = memory_instrumentation::mojom::ProcessType::GPU;
-      else if (process_type_str == switches::kUtilityProcess)
-        process_type = memory_instrumentation::mojom::ProcessType::UTILITY;
-      else if (process_type_str == switches::kPpapiPluginProcess)
-        process_type = memory_instrumentation::mojom::ProcessType::PLUGIN;
-
-      memory_instrumentation::ClientProcessImpl::Config config(
-          GetConnector(), resource_coordinator::mojom::kServiceName,
-          process_type);
-      memory_instrumentation::ClientProcessImpl::CreateInstance(config);
-    }
+    mojo::PendingRemote<memory_instrumentation::mojom::Coordinator> coordinator;
+    mojo::PendingRemote<memory_instrumentation::mojom::ClientProcess> process;
+    auto process_receiver = process.InitWithNewPipeAndPassReceiver();
+    mojo::Remote<memory_instrumentation::mojom::CoordinatorConnector> connector;
+    BindHostReceiver(connector.BindNewPipeAndPassReceiver());
+    connector->RegisterCoordinatorClient(
+        coordinator.InitWithNewPipeAndPassReceiver(), std::move(process));
+    memory_instrumentation::ClientProcessImpl::CreateInstance(
+        std::move(process_receiver), std::move(coordinator));
   }
 
   // In single process mode we may already have initialized the power monitor,
-  // also for some edge cases where there is no ServiceManagerConnection, we do
-  // not create the power monitor.
-  if (!base::PowerMonitor::IsInitialized() && service_manager_connection_) {
+  if (!base::PowerMonitor::IsInitialized()) {
     auto power_monitor_source =
         std::make_unique<device::PowerMonitorBroadcastSource>(
             GetIOTaskRunner());
@@ -666,7 +664,9 @@ void ChildThreadImpl::Init(const Options& options) {
     // PowerMonitor is set before the power monitor source receives incoming
     // communication from the browser process (see https://crbug.com/821790 for
     // details)
-    source_ptr->Init(GetConnector());
+    mojo::PendingRemote<device::mojom::PowerMonitor> remote_power_monitor;
+    BindHostReceiver(remote_power_monitor.InitWithNewPipeAndPassReceiver());
+    source_ptr->Init(std::move(remote_power_monitor));
   }
 
 #if defined(OS_POSIX)
@@ -773,10 +773,8 @@ void ChildThreadImpl::ReleaseCachedFonts() {
 }
 
 mojom::FontCacheWin* ChildThreadImpl::GetFontCacheWin() {
-  if (!font_cache_win_ptr_) {
-    GetConnector()->BindInterface(mojom::kSystemServiceName,
-                                  &font_cache_win_ptr_);
-  }
+  if (!font_cache_win_ptr_)
+    BindHostReceiver(mojo::MakeRequest(&font_cache_win_ptr_));
   return font_cache_win_ptr_.get();
 }
 #endif
@@ -791,10 +789,6 @@ void ChildThreadImpl::RecordComputedAction(const std::string& action) {
 
 ServiceManagerConnection* ChildThreadImpl::GetServiceManagerConnection() {
   return service_manager_connection_.get();
-}
-
-service_manager::Connector* ChildThreadImpl::GetConnector() {
-  return service_manager_connection_->GetConnector();
 }
 
 void ChildThreadImpl::BindHostReceiver(mojo::GenericPendingReceiver receiver) {
@@ -912,19 +906,21 @@ void ChildThreadImpl::EnsureConnected() {
 
 void ChildThreadImpl::GetRoute(
     int32_t routing_id,
-    blink::mojom::AssociatedInterfaceProviderAssociatedRequest request) {
-  associated_interface_provider_bindings_.AddBinding(
-      this, std::move(request), routing_id);
+    mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterfaceProvider>
+        receiver) {
+  associated_interface_provider_receivers_.Add(this, std::move(receiver),
+                                               routing_id);
 }
 
 void ChildThreadImpl::GetAssociatedInterface(
     const std::string& name,
-    blink::mojom::AssociatedInterfaceAssociatedRequest request) {
+    mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterface>
+        receiver) {
   int32_t routing_id =
-      associated_interface_provider_bindings_.dispatch_context();
+      associated_interface_provider_receivers_.current_context();
   Listener* route = router_.GetRoute(routing_id);
   if (route)
-    route->OnAssociatedInterfaceRequest(name, request.PassHandle());
+    route->OnAssociatedInterfaceRequest(name, receiver.PassHandle());
 }
 
 bool ChildThreadImpl::IsInBrowserProcess() const {

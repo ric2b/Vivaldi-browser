@@ -76,7 +76,7 @@ class COMPONENTS_DOWNLOAD_EXPORT InProgressDownloadManager
     // create the DownloadItem from in-progress cache.
     virtual void StartDownloadItem(
         std::unique_ptr<DownloadCreateInfo> info,
-        const DownloadUrlParameters::OnStartedCallback& on_started,
+        DownloadUrlParameters::OnStartedCallback on_started,
         StartDownloadItemCallback callback) {}
   };
 
@@ -124,13 +124,12 @@ class COMPONENTS_DOWNLOAD_EXPORT InProgressDownloadManager
       std::unique_ptr<network::SharedURLLoaderFactoryInfo>
           url_loader_factory_info);
 
-  void StartDownload(
-      std::unique_ptr<DownloadCreateInfo> info,
-      std::unique_ptr<InputStream> stream,
-      URLLoaderFactoryProvider::URLLoaderFactoryProviderPtr
-          url_loader_factory_provider,
-      DownloadJob::CancelRequestCallback cancel_request_callback,
-      const DownloadUrlParameters::OnStartedCallback& on_started);
+  void StartDownload(std::unique_ptr<DownloadCreateInfo> info,
+                     std::unique_ptr<InputStream> stream,
+                     URLLoaderFactoryProvider::URLLoaderFactoryProviderPtr
+                         url_loader_factory_provider,
+                     DownloadJob::CancelRequestCallback cancel_request_callback,
+                     DownloadUrlParameters::OnStartedCallback on_started);
 
   // Shutting down the manager and stop all downloads.
   void ShutDown();
@@ -142,8 +141,6 @@ class COMPONENTS_DOWNLOAD_EXPORT InProgressDownloadManager
                                  const GURL& site_url) override;
   bool ShouldOpenDownload(DownloadItemImpl* item,
                           const ShouldOpenDownloadCallback& callback) override;
-  base::Optional<DownloadEntry> GetInProgressEntry(
-      DownloadItemImpl* download) override;
   void ReportBytesWasted(DownloadItemImpl* download) override;
 
   // Called to remove an in-progress download.
@@ -215,7 +212,7 @@ class COMPONENTS_DOWNLOAD_EXPORT InProgressDownloadManager
       URLLoaderFactoryProvider::URLLoaderFactoryProviderPtr
           url_loader_factory_provider,
       UrlDownloadHandler* downloader,
-      const DownloadUrlParameters::OnStartedCallback& callback) override;
+      DownloadUrlParameters::OnStartedCallback callback) override;
   void OnUrlDownloadStopped(UrlDownloadHandler* downloader) override;
   void OnUrlDownloadHandlerCreated(
       UrlDownloadHandler::UniqueUrlDownloadHandlerPtr downloader) override;
@@ -261,12 +258,6 @@ class COMPONENTS_DOWNLOAD_EXPORT InProgressDownloadManager
   // Cache for DownloadDB.
   std::unique_ptr<DownloadDBCache> download_db_cache_;
 
-  using DownloadEntryMap = std::map<std::string, DownloadEntry>;
-  // DownloadEntries to provide persistent information when creating download
-  // item.
-  // TODO(qinmin): remove this once features::kDownloadDBForNewDownloads is
-  // enabled by default.
-  DownloadEntryMap download_entries_;
 
   // listens to information about in-progress download items.
   std::unique_ptr<DownloadItem::Observer> in_progress_download_observer_;
@@ -302,9 +293,6 @@ class COMPONENTS_DOWNLOAD_EXPORT InProgressDownloadManager
 
   // Used to check if the URL is safe.
   URLSecurityPolicy url_security_policy_;
-
-  // Whether this object uses an empty database and no history will be saved.
-  bool use_empty_db_;
 
   // Connector to the service manager.
   service_manager::Connector* connector_;

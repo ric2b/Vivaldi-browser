@@ -4,7 +4,7 @@
 
 package org.chromium.base.library_loader;
 
-import android.support.annotation.IntDef;
+import androidx.annotation.IntDef;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.CachedMetrics.EnumeratedHistogramSample;
@@ -83,7 +83,8 @@ public class LoadStatusRecorder {
 
     private void recordWithProcessType(int sample) {
         if (mProcessType == LibraryProcessType.PROCESS_BROWSER
-                || mProcessType == LibraryProcessType.PROCESS_WEBVIEW) {
+                || mProcessType == LibraryProcessType.PROCESS_WEBVIEW
+                || mProcessType == LibraryProcessType.PROCESS_WEBLAYER) {
             sample |= LoadLibraryStatus.IS_BROWSER;
         }
         mHistogramSample.record(sample);

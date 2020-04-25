@@ -65,8 +65,7 @@ class FakeSemanticsManager : public fuchsia::accessibility::semantics::testing::
 class AccessibilityBridgeTest : public testing::Test {
  public:
   AccessibilityBridgeTest()
-      : task_environment_(
-            base::test::ScopedTaskEnvironment::MainThreadType::IO),
+      : task_environment_(base::test::TaskEnvironment::MainThreadType::IO),
         semantics_manager_binding_(&semantics_manager_) {}
   ~AccessibilityBridgeTest() override = default;
 

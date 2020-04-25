@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="sv">
+<translation id="1029351048239796117">Vivaldi behöver tillstånd att använda din mikrofon för den här sidan.</translation>
+<translation id="1063227610401477317">Verkställ ändringar</translation>
+<translation id="1067048845568873861">Skapad</translation>
+<translation id="1151669774236491028">Vivaldi.net har problem just nu: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="1193152013480891461">Skapa ett Vivaldi-konto</translation>
+<translation id="119944043368869598">Rensa allt</translation>
+<translation id="1228311134236651326">Inga anteckningar hittades</translation>
+<translation id="1243314992276662751">Uppladdning</translation>
+<translation id="1249276067323441352">Data att synkronisera</translation>
+<translation id="1302932907222175914">Sök bland dina anteckningar</translation>
+<translation id="1644574205037202324">Historik</translation>
+<translation id="1689333818294560261">Alias</translation>
+<translation id="1721552494230946796">Ny snabbvalsmapp</translation>
+<translation id="1799160781006135561">Krypteringslösenord inte specificerat</translation>
+<translation id="1887193815546011584">Nytt snabbval</translation>
+<translation id="1984391066297619717">Automatisk Synk</translation>
+<translation id="2034405583989639424">Redigera snabbval</translation>
+<translation id="2071726368047511075">Ta skärmbild av sida</translation>
+<translation id="2199644148227291099">Är du säker på att du vill använda ditt inloggningslösenord för kryptering? Detta minskar kraftigt säkerheten för dina synkroniserade data.</translation>
+<translation id="2243210264130642074">Anteckning sparad</translation>
+<translation id="2359808026110333948">Fortsätt</translation>
+<translation id="2526968784648867272">Tar skärmbild...</translation>
+<translation id="2709516037105925701">Autofyll</translation>
+<translation id="271033894570825754">Nytt</translation>
+<translation id="2745324713975967671">Krypteringslösenord</translation>
+<translation id="2818042133587341562">Vivaldi behöver tillstånd att använda din kamera för den här sidan.</translation>
+<translation id="2842985007712546952">I mapp</translation>
+<translation id="2850144663494818309">Initierar Synk...</translation>
+<translation id="2873951654529031587">Skräp</translation>
+<translation id="2915527103487649658">Synkronisera alla data</translation>
+<translation id="2953995378235516294">Data på ditt Synk-konto är krypterade. Ange ditt krypteringslösenord för att dekryptera dem.</translation>
+<translation id="2996809686854298943">URL krävs</translation>
+<translation id="3177673846235066154">Servern nekade dina inloggningsuppgifter.</translation>
+<translation id="3183006304368105350">Klona flik</translation>
+<translation id="3271422135763022755">Skriv här...</translation>
+<translation id="3335772982573114336">Ny anteckning</translation>
+<translation id="33451081266695216">Servern ströp förbindelsen.</translation>
+<translation id="3377025655491224618">Privat flik</translation>
+<translation id="3513566764071045027">Logga ut</translation>
+<translation id="3611176835527015865">Påverkar bara Vivaldis interna sidor och inte webbsidor</translation>
+<translation id="3723593528923555236">Fortsätt utan separat lösenord</translation>
+<translation id="3838463869765243557">Enhetsnamn (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">Beskrivning</translation>
+<translation id="3897711243931585177">ALLMÄNT</translation>
+<translation id="4014682279600355881">Vi rekommenderar att du skapar ett starkt separat krypteringslösenord. Dock kan du lämna det tomt - i vilket fall vi kommer återanvända ditt kontolösenord.</translation>
+<translation id="4073968054795398875">Synk-servern har problem. Försöker snart initiera igen...</translation>
+<translation id="4082980568238151037">Skapa krypteringslösenord.</translation>
+<translation id="4145489350420416595">Oväntat fel.</translation>
+<translation id="4268574628540273656">URL:</translation>
+<translation id="4304224509867189079">Logga in</translation>
+<translation id="4435780204941264251">Ta bort synkroniserade data</translation>
+<translation id="4532845899244822526">Välj mapp</translation>
+<translation id="4579489600439872414">Synk är inaktiverat i Android-inställningarna.</translation>
+<translation id="4589558845651536280">Pågår...</translation>
+<translation id="4752136117982598343">Anteckning sparad till <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">Nedladdningar</translation>
+<translation id="4833044618885331665">Du måste uppdatera Vivaldi för att kunna använda Synk.</translation>
+<translation id="4847896847259487518">Bokmärk sida</translation>
+<translation id="4890701585167892790">Inga anteckningar här</translation>
+<translation id="4892521078757281695">Svep för att stänga flikar</translation>
+<translation id="4936710149174207991">Inte synkroniserad</translation>
+<translation id="4954427294703861104">Ny till Vivaldi? Skapa ett konto.</translation>
+<translation id="504986598654589766">Att surfa i en privat flik innebär att sökningar, besökta sidor, kakor och temporära filer inte lagras av Vivaldi.  Din anslutning kommer inte krypteras eller på annat sätt förändras.</translation>
+<translation id="5161254044473106830">Titel krävs</translation>
+<translation id="5186185447130319458">Privat</translation>
+<translation id="5271549068863921519">Spara lösenord</translation>
+<translation id="5286002386457946212">Klientfel.</translation>
+<translation id="5290452628447338707">Inga anteckningar</translation>
+<translation id="5351912500249789547">Vivaldi.net nekade dina uppgifter: Felkod <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">Öppna bild</translation>
+<translation id="5421638721143596928">Misslyckades med att dekryptera dina uppgifter. Vänligen logga in igen.</translation>
+<translation id="5443210757369395869">Ta skärmbild av synligt område</translation>
+<translation id="5448025735280530073">Vivaldi behöver åtkomst till din plats för att dela den med den här sidan.</translation>
+<translation id="5510723066938954312">Bokmärken och snabbval</translation>
+<translation id="5525981542754785361">Anteckning sparad i <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">Kopiera till anteckning</translation>
+<translation id="5754087700864822036">WEBBSIDOR</translation>
+<translation id="5765833063161370062">Flytta anteckningar</translation>
+<translation id="5790085346892983794">Lyckad</translation>
+<translation id="5803562371819294631">All synkroniserad data lagrad på Vivaldi Synk-servern kommer tas bort, krypteringslösenordet nollställas och du loggas ut. Är du säker?</translation>
+<translation id="5823830882692559950">Vivaldi.net nekade dina uppgifter: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5841317974325635710">Ny anteckning skapades</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> anteckning}
+          other {<ph name="NOTES_COUNT_MANY" /> anteckningar}}</translation>
+<translation id="6012194412768958291">Kunde inte kontakta vivaldi.net.</translation>
+<translation id="6027204815015935175">Lösenord krävs för att dekryptera.</translation>
+<translation id="6059232451013891645">Mapp:</translation>
+<translation id="6077943432358741146">Snabbval</translation>
+<translation id="6091125352818749975">Tar bort synkroniserade fjärrdata.</translation>
+<translation id="6179463181009746489">Radera anteckningar</translation>
+<translation id="6231148928368101651">Paneler</translation>
+<translation id="6406506848690869874">Synk</translation>
+<translation id="6657585470893396449">Lösenord</translation>
+<translation id="6682232524697939870">Vivaldi behöver tillstånd att använda din kamera och mikrofon för den här sidan.</translation>
+<translation id="6698381487523150993">Skapad:</translation>
+<translation id="6786747875388722282">Tillägg</translation>
+<translation id="6887143077297974801">Synk kunde inte starta.</translation>
+<translation id="6945221475159498467">Välj</translation>
+<translation id="6960734555676205519">Senaste synkronisering</translation>
+<translation id="7029809446516969842">Lösenord</translation>
+<translation id="7075547914712055886">Starta om Synk</translation>
+<translation id="7222342267839079597">Vänligen välj ett starkt krypteringslösenord för att skydda dina data.</translation>
+<translation id="7390295729483215958">Synkronisering pågår</translation>
+<translation id="7492794630657957996">Bekräfta datasynkronisering för att slutföra konfigureringen</translation>
+<translation id="7514365320538308">Nedladdning</translation>
+<translation id="7547490097772831952">Ta skärmbild av hela sidan</translation>
+<translation id="7725641807765767506">Inga snabbval hittades</translation>
+<translation id="7765158879357617694">Flytta</translation>
+<translation id="7822864833609233785">AVANCERAT</translation>
+<translation id="798930073512159071">
+
+Skriv din första anteckning
+
+För att komma igång, klicka på ikonen för ny anteckning eller markera text på en webbsida och skapa en anteckning från snabbmenyn.</translation>
+<translation id="8004991133350335392">Lösenordet måste vara minst 12 tecken.</translation>
+<translation id="8028021641083150097">För att återfå tillgång till ditt konto måste alla synkroniseringsdata på Synk-servern nollställas. Du kan sedan börja synkronisera igen med data från webbläsaren.</translation>
+<translation id="8035133914807600019">Ny mapp…</translation>
+<translation id="8066170816074394954">Serverfel.</translation>
+<translation id="8123787473700925741">Vivaldi.net har problem just nu: Felkod <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">Starta Synk</translation>
+<translation id="8206267832882844324">Redigera anteckning</translation>
+<translation id="8225478925744929238">Ta bort från bokmärken</translation>
+<translation id="8233521945095997439">Inga snabbval här</translation>
+<translation id="8257908958623224237">Det uppstod en konflikt med en annan klients data.</translation>
+<translation id="8261506727792406068">Ta bort</translation>
+<translation id="8305137170060620165">Inskriven historik och fjärrsessioner</translation>
+<translation id="8414685983518053656">Anteckningar</translation>
+<translation id="8422778094137438683">Du måste använda ett vivaldi.net-användarkonto för att logga in.</translation>
+<translation id="8428213095426709021">Inställningar</translation>
+<translation id="8462396943848220200">Försöker igenom om <ph name="TIME" /></translation>
+<translation id="8480556999740355963">Inloggad som <ph name="USERNAME" /> på <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">Loggar in till Vivaldi.net som <ph name="USERNAME" />. Vänligen vänta.</translation>
+<translation id="8503813439785031346">Användarnamn</translation>
+<translation id="8661216209723599816">Nollställ fjärrdata</translation>
+<translation id="8721244337025311110">Nytt bokmärke</translation>
+<translation id="8724114686743788114">Kan inte visa bild</translation>
+<translation id="8730621377337864115">Klar</translation>
+<translation id="8738958257180686306">Skapad: <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Vivaldi behöver lagringsåtkomst för att kunna ladda ner filer.</translation>
+<translation id="8808060551076378370">Anteckningen kunde inte läggas till.</translation>
+<translation id="8817201557520703060">Skärmbild har tagits</translation>
+<translation id="8820817407110198400">Bokmärken</translation>
+<translation id="8884751487662988673">För att kunna se synkroniserade flikar, vänligen logga in till Synk i inställningarna.</translation>
+<translation id="895749247724466293">Sök bland dina snabbval</translation>
+<translation id="8959245489304000426">Jag har förlorat mitt lösenord</translation>
+<translation id="8979401359137062629">Anteckning:</translation>
+<translation id="9028089729841356743">Nätverksfel.</translation>
+<translation id="9065203028668620118">Redigera</translation>
+<translation id="9148058034647219655">Stäng</translation>
+<translation id="9173575361559252669">Misslyckades att ta skärmbild</translation>
+</translationbundle>

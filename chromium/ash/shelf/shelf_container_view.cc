@@ -4,7 +4,7 @@
 
 #include "ash/shelf/shelf_container_view.h"
 
-#include "ash/shelf/shelf_constants.h"
+#include "ash/public/cpp/shelf_config.h"
 
 namespace ash {
 
@@ -24,22 +24,11 @@ void ShelfContainerView::Initialize() {
 }
 
 gfx::Size ShelfContainerView::CalculatePreferredSize() const {
-  const int width =
-      ShelfView::GetSizeOfAppIcons(shelf_view_->last_visible_index() -
-                                       shelf_view_->first_visible_index() + 1,
-                                   false);
-  const int height = ShelfConstants::button_size();
-  return shelf_view_->shelf()->IsHorizontalAlignment()
-             ? gfx::Size(width, height)
-             : gfx::Size(height, width);
+  return CalculateIdealSize();
 }
 
 void ShelfContainerView::ChildPreferredSizeChanged(views::View* child) {
   PreferredSizeChanged();
-}
-
-void ShelfContainerView::Layout() {
-  shelf_view_->SetBoundsRect(gfx::Rect(shelf_view_->GetPreferredSize()));
 }
 
 const char* ShelfContainerView::GetClassName() const {
@@ -50,6 +39,17 @@ void ShelfContainerView::TranslateShelfView(const gfx::Vector2dF& offset) {
   gfx::Transform transform_matrix;
   transform_matrix.Translate(-offset);
   shelf_view_->SetTransform(transform_matrix);
+}
+
+gfx::Size ShelfContainerView::CalculateIdealSize() const {
+  const int width =
+      ShelfView::GetSizeOfAppIcons(shelf_view_->last_visible_index() -
+                                       shelf_view_->first_visible_index() + 1,
+                                   false);
+  const int height = ShelfConfig::Get()->button_size();
+  return shelf_view_->shelf()->IsHorizontalAlignment()
+             ? gfx::Size(width, height)
+             : gfx::Size(height, width);
 }
 
 }  // namespace ash

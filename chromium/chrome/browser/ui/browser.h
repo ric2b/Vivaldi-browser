@@ -61,6 +61,7 @@
 #include "chrome/browser/ui/signin_view_controller.h"
 #endif
 
+class BackgroundContents;
 class BrowserContentSettingBubbleModelDelegate;
 class BrowserInstantController;
 class BrowserSyncedWindowDelegate;
@@ -181,12 +182,7 @@ class Browser : public TabStripModelObserver,
   struct CreateParams {
     explicit CreateParams(Profile* profile, bool user_gesture);
     CreateParams(Type type, Profile* profile, bool user_gesture);
-    CreateParams(Type type,
-                 Profile* profile,
-                 bool user_gesture,
-                 bool in_tab_dragging);
     CreateParams(const CreateParams& other);
-    ~CreateParams();
 
     static CreateParams CreateForApp(const std::string& app_name,
                                      bool trusted_source,
@@ -196,8 +192,6 @@ class Browser : public TabStripModelObserver,
 
     static CreateParams CreateForDevTools(Profile* profile);
 
-    static CreateParams CreateForDevToolsForVivaldi(Profile* profile);
-
     // The browser type.
     Type type;
 
@@ -206,12 +200,6 @@ class Browser : public TabStripModelObserver,
 
     // Specifies the browser is_trusted_source_ value.
     bool trusted_source = false;
-
-    // True if this is Vivaldi browser object.
-    bool is_vivaldi = false;
-
-    // Ext data for the browser/window.
-    std::string ext_data;
 
     // The bounds of the window to open.
     gfx::Rect initial_bounds;
@@ -237,6 +225,16 @@ class Browser : public TabStripModelObserver,
     // Supply a custom BrowserWindow implementation, to be used instead of the
     // default. Intended for testing.
     BrowserWindow* window = nullptr;
+
+    // Vivaldi
+    ~CreateParams();
+    static CreateParams CreateForDevToolsForVivaldi(Profile* profile);
+
+    // True if this is Vivaldi browser object.
+    bool is_vivaldi = false;
+
+    // Ext data for the browser/window.
+    std::string ext_data;
 
    private:
     friend class Browser;
@@ -298,11 +296,10 @@ class Browser : public TabStripModelObserver,
 
   // Accessors ////////////////////////////////////////////////////////////////
 
+  const CreateParams& create_params() const { return create_params_; }
   Type type() const { return type_; }
   const std::string& app_name() const { return app_name_; }
   bool is_trusted_source() const { return is_trusted_source_; }
-  bool is_vivaldi() const { return is_vivaldi_; }
-  const std::string& ext_data() const { return ext_data_; }
   Profile* profile() const { return profile_; }
   gfx::Rect override_bounds() const { return override_bounds_; }
   const std::string& initial_workspace() const { return initial_workspace_; }
@@ -451,13 +448,6 @@ class Browser : public TabStripModelObserver,
   // cleanup.
   void OnWindowClosing();
 
-  // Vivaldi: Invoked from the WebContentsDelegate (GuestView) when the
-  // beforeunload handling is done for this tab.
-  void DoBeforeUnloadFired(content::WebContents* web_contents,
-                           bool proceed,
-                           bool* proceed_to_fire_unload);
-  void DoCloseContents(content::WebContents* source);
-
   // In-progress download termination handling /////////////////////////////////
 
   // Indicates whether or not this browser window can be closed, or
@@ -569,7 +559,7 @@ class Browser : public TabStripModelObserver,
   bool CanDragEnter(content::WebContents* source,
                     const content::DropData& data,
                     blink::WebDragOperationsMask operations_allowed) override;
-  blink::WebSecurityStyle GetSecurityStyle(
+  blink::SecurityStyle GetSecurityStyle(
       content::WebContents* web_contents,
       content::SecurityStyleExplanations* security_style_explanations) override;
   std::unique_ptr<content::BluetoothChooser> RunBluetoothChooser(
@@ -612,9 +602,6 @@ class Browser : public TabStripModelObserver,
     return type_ == TYPE_APP || type_ == TYPE_DEVTOOLS;
   }
 
-  // Set the ext data.
-  void set_ext_data(const std::string& ext_data);
-
   // True when the mouse cursor is locked.
   bool IsMouseLocked() const;
 
@@ -637,6 +624,19 @@ class Browser : public TabStripModelObserver,
   // This information is used to decide if fast resize will be used during
   // dragging.
   void SetIsInTabDragging(bool is_in_tab_dragging);
+
+  // Vivaldi
+  bool is_vivaldi() const { return is_vivaldi_; }
+  const std::string& ext_data() const { return ext_data_; }
+  // Set the ext data.
+  void set_ext_data(const std::string& ext_data);
+
+  // Invoked from the WebContentsDelegate (GuestView) when the
+  // beforeunload handling is done for this tab.
+  void DoBeforeUnloadFired(content::WebContents* web_contents,
+                           bool proceed,
+                           bool* proceed_to_fire_unload);
+  void DoCloseContents(content::WebContents* source);
 
  private:
   friend class BrowserTest;
@@ -727,14 +727,16 @@ class Browser : public TabStripModelObserver,
                          bool* proceed_to_fire_unload) override;
   bool ShouldFocusLocationBarByDefault(content::WebContents* source) override;
   void ShowRepostFormWarningDialog(content::WebContents* source) override;
-  bool ShouldCreateWebContents(
-      content::WebContents* web_contents,
+  bool IsWebContentsCreationOverridden(
+      content::SiteInstance* source_site_instance,
+      content::mojom::WindowContainerType window_container_type,
+      const GURL& opener_url,
+      const std::string& frame_name,
+      const GURL& target_url) override;
+  content::WebContents* CreateCustomWebContents(
       content::RenderFrameHost* opener,
       content::SiteInstance* source_site_instance,
-      int32_t route_id,
-      int32_t main_frame_route_id,
-      int32_t main_frame_widget_route_id,
-      content::mojom::WindowContainerType window_container_type,
+      bool is_new_browsing_instance,
       const GURL& opener_url,
       const std::string& frame_name,
       const GURL& target_url,
@@ -775,11 +777,11 @@ class Browser : public TabStripModelObserver,
   void EnterFullscreenModeForTab(
       content::WebContents* web_contents,
       const GURL& origin,
-      const blink::WebFullscreenOptions& options) override;
+      const blink::mojom::FullscreenOptions& options) override;
   void ExitFullscreenModeForTab(content::WebContents* web_contents) override;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) override;
-  blink::WebDisplayMode GetDisplayMode(
+  blink::mojom::DisplayMode GetDisplayMode(
       const content::WebContents* web_contents) override;
   void RegisterProtocolHandler(content::WebContents* web_contents,
                                const std::string& protocol,
@@ -904,6 +906,11 @@ class Browser : public TabStripModelObserver,
   // Removes all entries from scheduled_updates_ whose source is contents.
   void RemoveScheduledUpdatesFor(content::WebContents* contents);
 
+  // Configures |nav_params| to create a new tab group with the source, if
+  // applicable.
+  void ConfigureTabGroupForNavigation(content::WebContents* source,
+                                      NavigateParams* nav_params);
+
   // Getters for UI ///////////////////////////////////////////////////////////
 
   // TODO(beng): remove, and provide AutomationProvider a better way to access
@@ -1004,15 +1011,20 @@ class Browser : public TabStripModelObserver,
   // the last browser window is being closed.
   bool ShouldStartShutdown() const;
 
-  // Creates a BackgroundContents if appropriate; return true if one was
-  // created.
-  bool MaybeCreateBackgroundContents(
+  // Returns true if a BackgroundContents should be created in response to a
+  // WebContents::CreateNewWindow() call.
+  bool ShouldCreateBackgroundContents(
+      content::SiteInstance* source_site_instance,
+      const GURL& opener_url,
+      const std::string& frame_name);
+
+  // Creates a BackgroundContents. This should only be called when
+  // ShouldCreateBackgroundContents() is true.
+  BackgroundContents* CreateBackgroundContents(
       content::SiteInstance* source_site_instance,
       content::RenderFrameHost* opener,
       const GURL& opener_url,
-      int32_t route_id,
-      int32_t main_frame_route_id,
-      int32_t main_frame_widget_route_id,
+      bool is_new_browsing_instance,
       const std::string& frame_name,
       const GURL& target_url,
       const std::string& partition_id,
@@ -1025,6 +1037,9 @@ class Browser : public TabStripModelObserver,
   content::NotificationRegistrar registrar_;
 
   PrefChangeRegistrar profile_pref_registrar_;
+
+  // This Browser's create params.
+  const CreateParams create_params_;
 
   // This Browser's type.
   const Type type_;
@@ -1051,12 +1066,6 @@ class Browser : public TabStripModelObserver,
 
   // Whether this browser was created for focus mode. See https://crbug/932814.
   const bool is_focus_mode_;
-
-  // True if this is Vivaldi browser object.
-  bool is_vivaldi_;
-
-  // Addtional data/properties of the browser/window.
-  std::string ext_data_;
 
   // Unique identifier of this browser for session restore. This id is only
   // unique within the current session, and is not guaranteed to be unique
@@ -1161,6 +1170,13 @@ class Browser : public TabStripModelObserver,
   std::unique_ptr<extensions::ExtensionBrowserWindowHelper>
       extension_browser_window_helper_;
 #endif
+
+  // Vivaldi
+  // True if this is Vivaldi browser object.
+  bool is_vivaldi_;
+
+  // Addtional data/properties of the browser/window.
+  std::string ext_data_;
 
   // The following factory is used for chrome update coalescing.
   base::WeakPtrFactory<Browser> chrome_updater_factory_{this};

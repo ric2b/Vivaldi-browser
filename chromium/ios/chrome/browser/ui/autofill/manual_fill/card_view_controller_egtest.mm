@@ -9,18 +9,22 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/keyed_service/core/service_access_type.h"
+#import "ios/chrome/browser/autofill/form_suggestion_constants.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/card_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/card_mediator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/card_view_controller.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_accessory_view_controller.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_credit_card_table_view_controller.h"
+#import "ios/chrome/browser/ui/settings/autofill/features.h"
 #import "ios/chrome/browser/ui/util/ui_util.h"
+#include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -34,6 +38,10 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+using chrome_test_util::CancelButton;
+using chrome_test_util::StaticTextWithAccessibilityLabelId;
+using chrome_test_util::TapWebElementWithId;
 
 namespace {
 
@@ -66,6 +74,11 @@ const char kFormHTMLFile[] = "/multi_field_form.html";
 // PersonalDataManager.
 const NSTimeInterval kPDMMaxDelaySeconds = 10.0;
 
+// Returns a matcher for the scroll view in keyboard accessory bar.
+id<GREYMatcher> FormSuggestionViewMatcher() {
+  return grey_accessibilityID(kFormSuggestionsViewAccessibilityIdentifier);
+}
+
 // Returns a matcher for the credit card icon in the keyboard accessory bar.
 id<GREYMatcher> CreditCardIconMatcher() {
   return grey_accessibilityID(
@@ -89,9 +102,22 @@ id<GREYMatcher> ManageCreditCardsMatcher() {
   return grey_accessibilityID(manual_fill::ManageCardsAccessibilityIdentifier);
 }
 
+// Returns a matcher for the button to add credit cards settings in manual
+// fallback.
+id<GREYMatcher> AddCreditCardsMatcher() {
+  return grey_accessibilityID(
+      manual_fill::kAddCreditCardsAccessibilityIdentifier);
+}
+
 // Returns a matcher for the credit card settings collection view.
 id<GREYMatcher> CreditCardSettingsMatcher() {
   return grey_accessibilityID(kAutofillCreditCardTableViewId);
+}
+
+// Matcher for the not secure website alert.
+id<GREYMatcher> NotSecureWebsiteAlert() {
+  return StaticTextWithAccessibilityLabelId(
+      IDS_IOS_MANUAL_FALLBACK_NOT_SECURE_TITLE);
 }
 
 // Returns a matcher for the CreditCardTableView window.
@@ -99,6 +125,13 @@ id<GREYMatcher> CreditCardTableViewWindowMatcher() {
   id<GREYMatcher> classMatcher = grey_kindOfClass([UIWindow class]);
   id<GREYMatcher> parentMatcher = grey_descendant(CreditCardTableViewMatcher());
   return grey_allOf(classMatcher, parentMatcher, nil);
+}
+
+// Returns the matcher for an enabled cancel button in a navigation bar.
+id<GREYMatcher> NavigationBarCancelMatcher() {
+  return grey_allOf(
+      grey_ancestor(grey_kindOfClass([UINavigationBar class])), CancelButton(),
+      grey_not(grey_accessibilityTrait(UIAccessibilityTraitNotEnabled)), nil);
 }
 
 // Polls the JavaScript query |java_script_condition| until the returned
@@ -196,7 +229,7 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
 - (void)testCreditCardsButtonAbsentWhenNoCreditCardsAvailable {
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementUsername)];
+      performAction:TapWebElementWithId(kFormElementUsername)];
 
   // Verify there's no credit card icon.
   [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
@@ -209,7 +242,7 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
 
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementUsername)];
+      performAction:TapWebElementWithId(kFormElementUsername)];
 
   // Tap on the credit card icon.
   [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
@@ -227,7 +260,7 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
 
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementUsername)];
+      performAction:TapWebElementWithId(kFormElementUsername)];
 
   // Tap on the credit card icon.
   [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
@@ -243,13 +276,13 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
       assertWithMatcher:grey_interactable()];
 }
 
-// Tests that the "Manage Credt Cards..." action works.
+// Tests that the "Manage Credit Cards..." action works.
 - (void)testManageCreditCardsActionOpensCreditCardSettings {
   [self saveLocalCreditCard];
 
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementUsername)];
+      performAction:TapWebElementWithId(kFormElementUsername)];
 
   // Tap on the credit card icon.
   [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
@@ -268,6 +301,160 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 
+// Tests that the manual fallback view and icon is not highlighted after
+// presenting the manage credit cards view.
+- (void)testCreditCardsStateAfterPresentingCreditCardSettings {
+  [self saveLocalCreditCard];
+
+  // Bring up the keyboard.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
+      performAction:TapWebElementWithId(kFormElementUsername)];
+
+  // Scroll to the right.
+  [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]
+      performAction:grey_scrollToContentEdge(kGREYContentEdgeRight)];
+
+  // Tap on the credit card icon.
+  [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
+      performAction:grey_tap()];
+
+  // Verify the status of the icon.
+  [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
+      assertWithMatcher:grey_not(grey_userInteractionEnabled())];
+
+  // Try to scroll.
+  [[EarlGrey selectElementWithMatcher:CreditCardTableViewMatcher()]
+      performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
+
+  // Tap the "Manage Credit Cards..." action.
+  [[EarlGrey selectElementWithMatcher:ManageCreditCardsMatcher()]
+      performAction:grey_tap()];
+
+  // Tap Cancel Button.
+  [[EarlGrey selectElementWithMatcher:NavigationBarCancelMatcher()]
+      performAction:grey_tap()];
+
+  // Verify the status of the icons.
+  [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
+      assertWithMatcher:grey_sufficientlyVisible()];
+  [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
+      assertWithMatcher:grey_userInteractionEnabled()];
+  [[EarlGrey selectElementWithMatcher:KeyboardIconMatcher()]
+      assertWithMatcher:grey_not(grey_sufficientlyVisible())];
+
+  // Verify the keyboard is not cover by the cards view.
+  [[EarlGrey selectElementWithMatcher:CreditCardTableViewMatcher()]
+      assertWithMatcher:grey_notVisible()];
+}
+
+// Tests that the "Add Credit Cards..." action works.
+- (void)testAddCreditCardsActionOpensAddCreditCardSettings {
+  base::test::ScopedFeatureList featureList;
+  featureList.InitAndEnableFeature(kSettingsAddPaymentMethod);
+  [self saveLocalCreditCard];
+
+  // Bring up the keyboard.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
+      performAction:TapWebElementWithId(kFormElementUsername)];
+
+  // Tap on the credit card icon.
+  [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
+      performAction:grey_tap()];
+
+  // Try to scroll.
+  [[EarlGrey selectElementWithMatcher:CreditCardTableViewMatcher()]
+      performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
+
+  // Tap the "Add Credit Cards..." action.
+  [[EarlGrey selectElementWithMatcher:AddCreditCardsMatcher()]
+      performAction:grey_tap()];
+
+  // Verify the credit cards settings opened.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::AddCreditCardView()]
+      assertWithMatcher:grey_sufficientlyVisible()];
+}
+
+// Tests that the "Add Credit Cards..." action works on OTR.
+- (void)testOTRAddCreditCardsActionOpensAddCreditCardSettings {
+  base::test::ScopedFeatureList featureList;
+  featureList.InitAndEnableFeature(kSettingsAddPaymentMethod);
+  [self saveLocalCreditCard];
+
+  // Open a tab in incognito.
+  [ChromeEarlGrey openNewIncognitoTab];
+  const GURL URL = self.testServer->GetURL(kFormHTMLFile);
+  [ChromeEarlGrey loadURL:URL];
+  [ChromeEarlGrey waitForWebStateContainingText:"hello!"];
+
+  // Bring up the keyboard.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
+      performAction:TapWebElementWithId(kFormElementUsername)];
+
+  // Tap on the credit card icon.
+  [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
+      performAction:grey_tap()];
+
+  // Try to scroll.
+  [[EarlGrey selectElementWithMatcher:CreditCardTableViewMatcher()]
+      performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
+
+  // Tap the "Add Credit Cards..." action.
+  [[EarlGrey selectElementWithMatcher:AddCreditCardsMatcher()]
+      performAction:grey_tap()];
+
+  // Verify the credit cards settings opened.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::AddCreditCardView()]
+      assertWithMatcher:grey_sufficientlyVisible()];
+}
+
+// Tests that the manual fallback view icon is not highlighted after presenting
+// the add credit card view.
+- (void)testCreditCardsButtonStateAfterPresentingAddCreditCard {
+  base::test::ScopedFeatureList featureList;
+  featureList.InitAndEnableFeature(kSettingsAddPaymentMethod);
+  [self saveLocalCreditCard];
+
+  // Bring up the keyboard.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
+      performAction:TapWebElementWithId(kFormElementUsername)];
+
+  // Scroll to the right.
+  [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]
+      performAction:grey_scrollToContentEdge(kGREYContentEdgeRight)];
+
+  // Tap on the credit card icon.
+  [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
+      performAction:grey_tap()];
+
+  // Verify the status of the icon.
+  [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
+      assertWithMatcher:grey_not(grey_userInteractionEnabled())];
+
+  // Try to scroll.
+  [[EarlGrey selectElementWithMatcher:CreditCardTableViewMatcher()]
+      performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
+
+  // Tap the "Add Credit Cards..." action.
+  [[EarlGrey selectElementWithMatcher:AddCreditCardsMatcher()]
+      performAction:grey_tap()];
+
+  // Tap Cancel Button.
+  [[EarlGrey selectElementWithMatcher:NavigationBarCancelMatcher()]
+      performAction:grey_tap()];
+
+  // Verify the status of the icons.
+  [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
+      assertWithMatcher:grey_sufficientlyVisible()];
+  [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
+      assertWithMatcher:grey_userInteractionEnabled()];
+  [[EarlGrey selectElementWithMatcher:KeyboardIconMatcher()]
+      assertWithMatcher:grey_not(grey_sufficientlyVisible())];
+
+  // Verify the keyboard is not cover by the cards view.
+  [[EarlGrey selectElementWithMatcher:CreditCardTableViewMatcher()]
+      assertWithMatcher:grey_notVisible()];
+}
+
 // Tests that the credit card View Controller is dismissed when tapping the
 // keyboard icon.
 - (void)testKeyboardIconDismissCreditCardController {
@@ -279,7 +466,7 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
 
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementUsername)];
+      performAction:TapWebElementWithId(kFormElementUsername)];
 
   // Tap on the credit cards icon.
   [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
@@ -311,7 +498,7 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
 
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementUsername)];
+      performAction:TapWebElementWithId(kFormElementUsername)];
 
   // Tap on the credit cards icon.
   [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
@@ -345,7 +532,7 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
 
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementUsername)];
+      performAction:TapWebElementWithId(kFormElementUsername)];
 
   // Tap on the credit cards icon.
   [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
@@ -373,7 +560,7 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
 
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementUsername)];
+      performAction:TapWebElementWithId(kFormElementUsername)];
 
   // Tap on the credit cards icon.
   [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
@@ -381,7 +568,7 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
 
   // Tap the second element.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementOtherStuff)];
+      performAction:TapWebElementWithId(kFormElementOtherStuff)];
 
   // Try to scroll.
   [[EarlGrey selectElementWithMatcher:CreditCardTableViewMatcher()]
@@ -394,7 +581,7 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
 
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementUsername)];
+      performAction:TapWebElementWithId(kFormElementUsername)];
 
   // Tap on the credit cards icon.
   [[EarlGrey selectElementWithMatcher:CreditCardIconMatcher()]
@@ -422,6 +609,16 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
                         doesInjectValue:@""];
 }
 
+// Tests an alert is shown warning the user when trying to fill a credit card
+// number in an HTTP form.
+- (void)testCreditCardLocalNumberShowsWarningOnHttp {
+  [self verifyCreditCardButtonWithTitle:kLocalNumberObfuscated
+                        doesInjectValue:@""];
+  // Look for the alert.
+  [[EarlGrey selectElementWithMatcher:NotSecureWebsiteAlert()]
+      assertWithMatcher:grey_not(grey_nil())];
+}
+
 // Tests that credit card cardholder is injected.
 - (void)testCreditCardCardHolderInjectsCorrectly {
   [self verifyCreditCardButtonWithTitle:kLocalCardHolder
@@ -447,7 +644,7 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
 
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementUsername)];
+      performAction:TapWebElementWithId(kFormElementUsername)];
 
   // Wait for the accessory icon to appear.
   [GREYKeyboard waitForKeyboardToAppear];
@@ -480,7 +677,7 @@ BOOL WaitForJavaScriptCondition(NSString* java_script_condition) {
 
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementUsername)];
+      performAction:TapWebElementWithId(kFormElementUsername)];
 
   // Wait for the accessory icon to appear.
   [GREYKeyboard waitForKeyboardToAppear];

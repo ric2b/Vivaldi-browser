@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/core/paint/image_painter.h"
 
+#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
+#include "third_party/blink/public/mojom/feature_policy/policy_value.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
@@ -244,11 +246,10 @@ void ImagePainter::PaintIntoRect(GraphicsContext& context,
 
   context.DrawImage(
       image.get(), decode_mode, FloatRect(pixel_snapped_dest_rect), &src_rect,
+      layout_image_.StyleRef().HasFilterInducingProperty(),
       SkBlendMode::kSrcOver,
       LayoutObject::ShouldRespectImageOrientation(&layout_image_));
-  if (RuntimeEnabledFeatures::ElementTimingEnabled(
-          &layout_image_.GetDocument()) &&
-      (IsHTMLImageElement(node) || IsHTMLVideoElement(node)) &&
+  if ((IsHTMLImageElement(node) || IsHTMLVideoElement(node)) &&
       !context.ContextDisabled() && layout_image_.CachedImage() &&
       layout_image_.CachedImage()->IsLoaded()) {
     LocalDOMWindow* window = layout_image_.GetDocument().domWindow();
@@ -257,12 +258,9 @@ void ImagePainter::PaintIntoRect(GraphicsContext& context,
         &layout_image_, layout_image_.CachedImage(),
         context.GetPaintController().CurrentPaintChunkProperties());
   }
-
-  if (RuntimeEnabledFeatures::FirstContentfulPaintPlusPlusEnabled()) {
-    PaintTimingDetector::NotifyImagePaint(
-        layout_image_, image->Size(), layout_image_.CachedImage(),
-        context.GetPaintController().CurrentPaintChunkProperties());
-  }
+  PaintTimingDetector::NotifyImagePaint(
+      layout_image_, image->Size(), layout_image_.CachedImage(),
+      context.GetPaintController().CurrentPaintChunkProperties());
 }
 
 }  // namespace blink

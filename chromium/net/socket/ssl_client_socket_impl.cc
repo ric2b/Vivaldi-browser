@@ -16,15 +16,18 @@
 #include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/rand_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -68,11 +71,6 @@
 namespace net {
 
 namespace {
-
-#if defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_ARM64)
-constexpr base::FeatureParam<std::string> kPostQuantumGroup{
-    &features::kPostQuantumCECPQ2, "group", ""};
-#endif
 
 // This constant can be any non-negative/non-zero value (eg: it does not
 // overlap with any value of the net::Error range, including net::OK).
@@ -325,32 +323,6 @@ class SSLClientSocketImpl::SSLContext {
         ssl_ctx_.get(), TLSEXT_cert_compression_brotli,
         nullptr /* compression not supported */, DecompressBrotliCert);
 #endif
-
-#if defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_ARM64)
-    // CECPQ2b is only optimised for x86-64 and aarch64, and is too slow on
-    // other CPUs to even experiment with.
-    const std::string post_quantum_group = kPostQuantumGroup.Get();
-    if (!post_quantum_group.empty()) {
-      bool send_signal = false;
-      if (post_quantum_group == "Control") {
-        send_signal = true;
-      } else if (post_quantum_group == "CECPQ2") {
-        send_signal = true;
-        static const int kCurves[] = {NID_CECPQ2, NID_X25519,
-                                      NID_X9_62_prime256v1, NID_secp384r1};
-        SSL_CTX_set1_curves(ssl_ctx_.get(), kCurves, base::size(kCurves));
-      } else if (post_quantum_group == "CECPQ2b") {
-        send_signal = true;
-        static const int kCurves[] = {NID_CECPQ2b, NID_X25519,
-                                      NID_X9_62_prime256v1, NID_secp384r1};
-        SSL_CTX_set1_curves(ssl_ctx_.get(), kCurves, base::size(kCurves));
-      }
-
-      if (send_signal) {
-        SSL_CTX_enable_pq_experiment_signal(ssl_ctx_.get());
-      }
-    }
-#endif
   }
 
   static int ClientCertRequestCallback(SSL* ssl, void* arg) {
@@ -431,6 +403,7 @@ SSLClientSocketImpl::SSLClientSocketImpl(
       ssl_config_(ssl_config),
       next_handshake_state_(STATE_NONE),
       in_confirm_handshake_(false),
+      peek_complete_(false),
       disconnected_(false),
       negotiated_protocol_(kProtoUnknown),
       certificate_requested_(false),
@@ -629,8 +602,6 @@ bool SSLClientSocketImpl::GetSSLInfo(SSLInfo* ssl_info) {
   ssl_info->key_exchange_group = SSL_get_curve_id(ssl_.get());
   ssl_info->peer_signature_algorithm =
       SSL_get_peer_signature_algorithm(ssl_.get());
-  ssl_info->server_in_post_quantum_experiment =
-      SSL_pq_experiment_signal_seen(ssl_.get());
 
   SSLConnectionStatusSetCipherSuite(
       static_cast<uint16_t>(SSL_CIPHER_get_id(cipher)),
@@ -774,12 +745,6 @@ void SSLClientSocketImpl::OnWriteReady() {
   RetryAllOperations();
 }
 
-static bool EnforceTLS13DowngradeForKnownRootsOnly() {
-  return base::FeatureList::IsEnabled(features::kEnforceTLS13Downgrade) &&
-         base::GetFieldTrialParamByFeatureAsBool(
-             features::kEnforceTLS13Downgrade, "known_roots_only", true);
-}
-
 int SSLClientSocketImpl::Init() {
   DCHECK(!ssl_);
 
@@ -843,8 +808,7 @@ int SSLClientSocketImpl::Init() {
 
   SSL_set_early_data_enabled(ssl_.get(), ssl_config_.early_data_enabled);
 
-  if (!base::FeatureList::IsEnabled(features::kEnforceTLS13Downgrade) ||
-      EnforceTLS13DowngradeForKnownRootsOnly()) {
+  if (!context_->config().tls13_hardening_for_local_anchors_enabled) {
     SSL_set_ignore_tls13_downgrade(ssl_.get(), 1);
   }
 
@@ -903,8 +867,10 @@ int SSLClientSocketImpl::Init() {
   // Configure BoringSSL to allow renegotiations. Once the initial handshake
   // completes, if renegotiations are not allowed, the default reject value will
   // be restored. This is done in this order to permit a BoringSSL
-  // optimization. See https://crbug.com/boringssl/123.
-  SSL_set_renegotiate_mode(ssl_.get(), ssl_renegotiate_freely);
+  // optimization. See https://crbug.com/boringssl/123. Use
+  // ssl_renegotiate_explicit rather than ssl_renegotiate_freely so DoPeek()
+  // does not trigger renegotiations.
+  SSL_set_renegotiate_mode(ssl_.get(), ssl_renegotiate_explicit);
 
   SSL_set_shed_handshake_config(ssl_.get(), 1);
 
@@ -977,6 +943,9 @@ int SSLClientSocketImpl::DoHandshake() {
 }
 
 int SSLClientSocketImpl::DoHandshakeComplete(int result) {
+  if (in_confirm_handshake_)
+    MaybeRecordEarlyDataResult();
+
   if (result < 0)
     return result;
 
@@ -1034,8 +1003,7 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
     }
   }
 
-  if (!base::FeatureList::IsEnabled(features::kEnforceTLS13Downgrade) ||
-      EnforceTLS13DowngradeForKnownRootsOnly()) {
+  if (!context_->config().tls13_hardening_for_local_anchors_enabled) {
     // Record metrics on the TLS 1.3 anti-downgrade mechanism. This is only
     // recorded when enforcement is disabled. (When enforcement is enabled,
     // the connection will fail with ERR_TLS13_DOWNGRADE_DETECTED.) See
@@ -1085,8 +1053,7 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
                                   type);
       }
 
-      if (EnforceTLS13DowngradeForKnownRootsOnly() &&
-          server_cert_verify_result_.is_issued_by_known_root) {
+      if (server_cert_verify_result_.is_issued_by_known_root) {
         // Exit DoHandshakeLoop and return the result to the caller to
         // Connect.
         DCHECK_EQ(STATE_NONE, next_handshake_state_);
@@ -1117,6 +1084,25 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
 
   completed_connect_ = true;
   next_handshake_state_ = STATE_NONE;
+
+  // Read from the transport immediately after the handshake, whether Read() is
+  // called immediately or not. This serves several purposes:
+  //
+  // First, if this socket is preconnected and negotiates 0-RTT, the ServerHello
+  // will not be processed. See https://crbug.com/950706
+  //
+  // Second, in False Start and TLS 1.3, the tickets arrive after immediately
+  // after the handshake. This allows preconnected sockets to process the
+  // tickets sooner. This also avoids a theoretical deadlock if the tickets are
+  // too large. See
+  // https://boringssl-review.googlesource.com/c/boringssl/+/34948.
+  //
+  // TODO(https://crbug.com/958638): It is also a step in making TLS 1.3 client
+  // certificate alerts less unreliable.
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&SSLClientSocketImpl::DoPeek, weak_factory_.GetWeakPtr()));
+
   return OK;
 }
 
@@ -1352,22 +1338,29 @@ int SSLClientSocketImpl::DoPayloadRead(IOBuffer* buf, int buf_len) {
   }
 
   int total_bytes_read = 0;
-  int ssl_ret;
+  int ssl_ret, ssl_err;
   do {
     ssl_ret = SSL_read(ssl_.get(), buf->data() + total_bytes_read,
                        buf_len - total_bytes_read);
-    if (ssl_ret > 0)
+    ssl_err = SSL_get_error(ssl_.get(), ssl_ret);
+    if (ssl_ret > 0) {
       total_bytes_read += ssl_ret;
+    } else if (ssl_err == SSL_ERROR_WANT_RENEGOTIATE) {
+      if (!SSL_renegotiate(ssl_.get())) {
+        ssl_err = SSL_ERROR_SSL;
+      }
+    }
     // Continue processing records as long as there is more data available
     // synchronously.
-  } while (total_bytes_read < buf_len && ssl_ret > 0 &&
-           transport_adapter_->HasPendingReadData());
+  } while (ssl_err == SSL_ERROR_WANT_RENEGOTIATE ||
+           (total_bytes_read < buf_len && ssl_ret > 0 &&
+            transport_adapter_->HasPendingReadData()));
 
   // Although only the final SSL_read call may have failed, the failure needs to
   // processed immediately, while the information still available in OpenSSL's
   // error queue.
   if (ssl_ret <= 0) {
-    pending_read_ssl_error_ = SSL_get_error(ssl_.get(), ssl_ret);
+    pending_read_ssl_error_ = ssl_err;
     if (pending_read_ssl_error_ == SSL_ERROR_ZERO_RETURN) {
       pending_read_error_ = 0;
     } else if (pending_read_ssl_error_ == SSL_ERROR_WANT_X509_LOOKUP &&
@@ -1379,6 +1372,8 @@ int SSLClientSocketImpl::DoPayloadRead(IOBuffer* buf, int buf_len) {
       DCHECK_NE(kSSLClientSocketNoPendingResult, signature_result_);
       pending_read_error_ = ERR_IO_PENDING;
     } else {
+      if (pending_read_ssl_error_ == SSL_ERROR_EARLY_DATA_REJECTED)
+        MaybeRecordEarlyDataResult();
       pending_read_error_ = MapLastOpenSSLError(
           pending_read_ssl_error_, err_tracer, &pending_read_error_info_);
     }
@@ -1395,6 +1390,8 @@ int SSLClientSocketImpl::DoPayloadRead(IOBuffer* buf, int buf_len) {
     // Return any bytes read to the caller. The error will be deferred to the
     // next call of DoPayloadRead.
     rv = total_bytes_read;
+
+    MaybeRecordEarlyDataResult();
 
     // Do not treat insufficient data as an error to return in the next call to
     // DoPayloadRead() - instead, let the call fall through to check SSL_read()
@@ -1451,6 +1448,22 @@ int SSLClientSocketImpl::DoPayloadWrite() {
   return net_error;
 }
 
+void SSLClientSocketImpl::DoPeek() {
+  if (ssl_config_.disable_post_handshake_peek_for_testing ||
+      !completed_connect_ || peek_complete_) {
+    return;
+  }
+
+  crypto::OpenSSLErrStackTracer err_tracer(FROM_HERE);
+
+  char byte;
+  int rv = SSL_peek(ssl_.get(), &byte, 1);
+  int ssl_err = SSL_get_error(ssl_.get(), rv);
+  if (ssl_err != SSL_ERROR_WANT_READ && ssl_err != SSL_ERROR_WANT_WRITE) {
+    peek_complete_ = true;
+  }
+}
+
 void SSLClientSocketImpl::RetryAllOperations() {
   // SSL_do_handshake, SSL_read, and SSL_write may all be retried when blocked,
   // so retry all operations for simplicity. (Otherwise, SSL_get_error for each
@@ -1467,6 +1480,8 @@ void SSLClientSocketImpl::RetryAllOperations() {
 
   if (!guard.get())
     return;
+
+  DoPeek();
 
   int rv_read = ERR_IO_PENDING;
   int rv_write = ERR_IO_PENDING;
@@ -1800,6 +1815,22 @@ void SSLClientSocketImpl::LogConnectEndEvent(int rv) {
 void SSLClientSocketImpl::RecordNegotiatedProtocol() const {
   UMA_HISTOGRAM_ENUMERATION("Net.SSLNegotiatedAlpnProtocol",
                             negotiated_protocol_, kProtoLast + 1);
+}
+
+void SSLClientSocketImpl::MaybeRecordEarlyDataResult() {
+  DCHECK(ssl_);
+  if (!ssl_config_.early_data_enabled || recorded_early_data_result_)
+    return;
+
+  recorded_early_data_result_ = true;
+  // Since the two-parameter version of the macro (which asks for a max
+  // value) requires that the max value sentinel be named |kMaxValue|,
+  // transform the max-value sentinel into a one-past-the-end ("boundary")
+  // sentinel by adding 1, in order to be able to use the three-parameter
+  // macro.
+  UMA_HISTOGRAM_ENUMERATION("Net.SSLHandshakeEarlyDataReason",
+                            SSL_get_early_data_reason(ssl_.get()),
+                            ssl_early_data_reason_max_value + 1);
 }
 
 int SSLClientSocketImpl::MapLastOpenSSLError(

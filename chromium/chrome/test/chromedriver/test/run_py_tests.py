@@ -78,8 +78,8 @@ _NEGATIVE_FILTER = [
     'ChromeDriverTest.testAlertOnNewWindow',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2532
     'ChromeDriverPageLoadTimeoutTest.testRefreshWithPageLoadTimeout',
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2965
-    'ChromeExtensionsCapabilityTest.testWaitsForExtensionToLoad'
+    # https://bugs.chromium.org/p/chromium/issues/detail?id=1011225
+    'ChromeDriverTest.testActionsMultiTouchPoint',
 ]
 
 
@@ -109,9 +109,6 @@ _OS_SPECIFIC_FILTER['mac'] = [
     'MobileEmulationCapabilityTest.testTapElement',
     # https://bugs.chromium.org/p/chromium/issues/detail?id=946023
     'ChromeDriverTest.testWindowFullScreen',
-    'ChromeDownloadDirTest.testFileDownloadAfterTabHeadless',
-    'ChromeDownloadDirTest.testFileDownloadWithClickHeadless',
-    'ChromeDownloadDirTest.testFileDownloadWithGetHeadless',
 ]
 
 _DESKTOP_NEGATIVE_FILTER = [
@@ -451,6 +448,36 @@ class ChromeDriverTestWithCustomCapability(ChromeDriverBaseTestWithWebServer):
     eager_time = stop_eager - start_eager
     self.assertTrue(eager_time < 9)
     thread.join()
+
+  def testDoesntWaitWhenPageLoadStrategyIsNone(self):
+    class HandleRequest(object):
+      def __init__(self):
+        self.sent_hello = threading.Event()
+
+      def slowPage(self, request):
+        self.sent_hello.wait(2)
+        return {}, """
+        <html>
+        <body>hello</body>
+        </html>"""
+
+    handler = HandleRequest()
+    self._http_server.SetCallbackForPath('/slow', handler.slowPage)
+
+    driver = self.CreateDriver(page_load_strategy='none')
+    self.assertEquals('none', driver.capabilities['pageLoadStrategy'])
+
+    driver.Load(self._http_server.GetUrl() + '/chromedriver/empty.html')
+    start = time.time()
+    driver.Load(self._http_server.GetUrl() + '/slow')
+    self.assertTrue(time.time() - start < 2)
+    handler.sent_hello.set()
+    self.WaitForCondition(lambda: 'hello' in driver.GetPageSource())
+    self.assertTrue('hello' in driver.GetPageSource())
+
+  def testUnsupportedPageLoadStrategyRaisesException(self):
+    self.assertRaises(chromedriver.InvalidArgument,
+                      self.CreateDriver, page_load_strategy="unsupported")
 
 
 class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
@@ -919,6 +946,59 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
       "id": "pointer1"}]})
     self._driver.PerformActions(actions)
     self.assertEquals(1, len(self._driver.FindElements('tag name', 'br')))
+
+  def testActionsMultiTouchPoint(self):
+    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
+    self._driver.ExecuteScript(
+        '''
+        document.body.innerHTML
+          = "<div id='div' autofocus style='width:200px; height:200px'>";
+        window.events = [];
+        const div = document.getElementById('div');
+        div.addEventListener('touchstart', event => {
+          window.events.push(
+              {type: event.type,
+               x: event.touches[event.touches.length - 1].clientX,
+               y: event.touches[event.touches.length - 1].clientY});
+        });
+        div.addEventListener('touchend', event => {
+          window.events.push(
+              {type: event.type});
+        });
+        ''')
+
+    actions = ({"actions": [{
+      "type":"pointer",
+      "actions":[{"type": "pointerMove", "x": 50, "y": 50},
+                 {"type": "pointerDown"},
+                 {"type": "pointerUp"}],
+      "parameters": {"pointerType": "touch"},
+      "id": "pointer1"},
+      {
+      "type":"pointer",
+      "actions":[{"type": "pointerMove", "x": 60, "y": 60},
+                 {"type": "pointerDown"},
+                 {"type": "pointerUp"}],
+      "parameters": {"pointerType": "touch"},
+      "id": "pointer2"}]})
+    self._driver.PerformActions(actions)
+    time.sleep(1)
+    for _ in range(5):
+      events = self._driver.ExecuteScript('return window.events')
+      if len(events) == 4:
+        break
+      # Wait 100 more ms for the event handler to be executed.
+      time.sleep(0.1)
+
+    self.assertEquals(4, len(events))
+    self.assertEquals("touchstart", events[0]['type'])
+    self.assertEquals("touchstart", events[1]['type'])
+    self.assertEquals("touchend", events[2]['type'])
+    self.assertEquals("touchend", events[3]['type'])
+    self.assertEquals(50, events[0]['x'])
+    self.assertEquals(50, events[0]['y'])
+    self.assertEquals(60, events[1]['x'])
+    self.assertEquals(60, events[1]['y'])
 
   def testActionsMulti(self):
     self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
@@ -2351,6 +2431,7 @@ class ChromeDriverSecureContextTest(ChromeDriverBaseTestWithWebServer):
 
   def setUp(self):
     self._driver = self.CreateDriver(
+        accept_insecure_certs=True,
         chrome_switches=['host-resolver-rules=MAP * 127.0.0.1'])
 
   def testAddVirtualAuthenticator(self):
@@ -2365,6 +2446,23 @@ class ChromeDriverSecureContextTest(ChromeDriverBaseTestWithWebServer):
         transport = 'usb',
         hasResidentKey = False,
         hasUserVerification = False,
+        isUserConsenting = True,
+        isUserVerified = True,
+    )
+    result = self._driver.ExecuteAsyncScript(script)
+    self.assertEquals('OK', result['status'])
+    self.assertEquals(['usb'], result['credential']['transports'])
+
+  def testAddVirtualAuthenticatorDefaultParams(self):
+    script = """
+      let done = arguments[0];
+      registerCredential().then(done);
+    """
+    self._driver.Load(self.GetHttpsUrlForFile(
+        '/chromedriver/webauthn_test.html', 'chromedriver.test'))
+    self._driver.AddVirtualAuthenticator(
+        protocol = 'ctap1/u2f',
+        transport = 'usb',
     )
     result = self._driver.ExecuteAsyncScript(script)
     self.assertEquals('OK', result['status'])
@@ -2381,19 +2479,19 @@ class ChromeDriverSecureContextTest(ChromeDriverBaseTestWithWebServer):
         self._driver.RemoveVirtualAuthenticator, 'id')
 
     # Create an authenticator and try removing it.
-    response = self._driver.AddVirtualAuthenticator(
+    authenticatorId = self._driver.AddVirtualAuthenticator(
         protocol = 'ctap2',
         transport = 'usb',
         hasResidentKey = False,
         hasUserVerification = False,
     )
-    self._driver.RemoveVirtualAuthenticator(response['authenticatorId'])
+    self._driver.RemoveVirtualAuthenticator(authenticatorId)
 
     # Trying to remove the same authenticator should fail.
     self.assertRaisesRegexp(
         chromedriver.InvalidArgument,
         'Could not find a Virtual Authenticator matching the ID',
-        self._driver.RemoveVirtualAuthenticator, response['authenticatorId'])
+        self._driver.RemoveVirtualAuthenticator, authenticatorId)
 
   def testAddCredential(self):
 
@@ -2413,7 +2511,7 @@ class ChromeDriverSecureContextTest(ChromeDriverBaseTestWithWebServer):
         transport = 'usb',
         hasResidentKey = False,
         hasUserVerification = False,
-    )['authenticatorId']
+    )
 
     # Register a credential and try authenticating with it.
     self._driver.AddCredential(
@@ -2438,7 +2536,7 @@ class ChromeDriverSecureContextTest(ChromeDriverBaseTestWithWebServer):
         transport = 'usb',
         hasResidentKey = False,
         hasUserVerification = False,
-    )['authenticatorId']
+    )
 
     # Try adding a credentialId that is encoded in vanilla base64.
     self.assertRaisesRegexp(
@@ -2472,7 +2570,8 @@ class ChromeDriverSecureContextTest(ChromeDriverBaseTestWithWebServer):
         transport = 'usb',
         hasResidentKey = True,
         hasUserVerification = True,
-    )['authenticatorId']
+        isUserVerified = True,
+    )
 
     # Register a credential via the webauthn API.
     result = self._driver.ExecuteAsyncScript(script)
@@ -2480,7 +2579,7 @@ class ChromeDriverSecureContextTest(ChromeDriverBaseTestWithWebServer):
     credentialId = result['credential']['id']
 
     # GetCredentials should return the credential that was just created.
-    credentials = self._driver.GetCredentials(authenticatorId)['credentials']
+    credentials = self._driver.GetCredentials(authenticatorId)
     self.assertEquals(1, len(credentials))
     self.assertEquals(credentialId, credentials[0]['credentialId'])
     self.assertEquals(True, credentials[0]['isResidentCredential'])
@@ -2500,9 +2599,7 @@ class ChromeDriverSecureContextTest(ChromeDriverBaseTestWithWebServer):
     authenticatorId = self._driver.AddVirtualAuthenticator(
         protocol = 'ctap2',
         transport = 'usb',
-        hasResidentKey = True,
-        hasUserVerification = True,
-    )['authenticatorId']
+    )
 
     # Register two credentials.
     result = self._driver.ExecuteAsyncScript(script)
@@ -2514,12 +2611,12 @@ class ChromeDriverSecureContextTest(ChromeDriverBaseTestWithWebServer):
     credential2Id = result['credential']['id']
 
     # GetCredentials should return both credentials.
-    credentials = self._driver.GetCredentials(authenticatorId)['credentials']
+    credentials = self._driver.GetCredentials(authenticatorId)
     self.assertEquals(2, len(credentials))
 
     # Removing the first credential should leave only the first one.
     self._driver.RemoveCredential(authenticatorId, credential1Id)
-    credentials = self._driver.GetCredentials(authenticatorId)['credentials']
+    credentials = self._driver.GetCredentials(authenticatorId)
     self.assertEquals(1, len(credentials))
     self.assertEquals(credential2Id, credentials[0]['credentialId'])
 
@@ -2533,9 +2630,7 @@ class ChromeDriverSecureContextTest(ChromeDriverBaseTestWithWebServer):
     authenticatorId = self._driver.AddVirtualAuthenticator(
         protocol = 'ctap2',
         transport = 'usb',
-        hasResidentKey = True,
-        hasUserVerification = True,
-    )['authenticatorId']
+    )
 
     # Register a credential via the webauthn API.
     result = self._driver.ExecuteAsyncScript(register_credential_script)
@@ -2581,7 +2676,7 @@ class ChromeDriverSecureContextTest(ChromeDriverBaseTestWithWebServer):
         transport = 'usb',
         hasResidentKey = True,
         hasUserVerification = True,
-    )['authenticatorId']
+    )
 
     # Configure the virtual authenticator to fail user verification.
     self._driver.SetUserVerified(authenticatorId, False)
@@ -2931,11 +3026,19 @@ class ChromeDriverSiteIsolation(ChromeDriverBaseTestWithWebServer):
       self._driver.SetTimeouts({'implicit': 2000})
     self._driver.Load(self.GetHttpUrlForFile(
         '/chromedriver/cross_domain_iframe.html'))
+    frame = self._driver.FindElement('tag name', 'iframe')
+    self._driver.SwitchToFrame(frame)
+    self.assertTrue(self.WaitForCondition(
+        lambda: 'outer.html' in
+                self._driver.ExecuteScript('return window.location.href')))
+    self.assertTrue(self.WaitForCondition(
+        lambda: 'complete' ==
+                self._driver.ExecuteScript('return document.readyState')))
+    self._driver.SwitchToMainFrame()
     a_outer = self._driver.FindElement('tag name', 'a')
     a_outer.Click()
     frame_url = self._driver.ExecuteScript('return window.location.href')
     self.assertTrue(frame_url.endswith('#one'))
-    frame = self._driver.FindElement('tag name', 'iframe')
     self._driver.SwitchToFrame(frame)
     a_inner = self._driver.FindElement('tag name', 'a')
     a_inner.Click()
@@ -3313,22 +3416,6 @@ class ChromeExtensionsCapabilityTest(ChromeDriverBaseTestWithWebServer):
     zip_1 = os.path.join(_TEST_DATA_DIR, 'ext_test_1.zip')
     self.CreateDriver(chrome_extensions=[self._PackExtension(zip_1)])
 
-  def testWaitsForExtensionToLoad(self):
-    did_load_event = threading.Event()
-    def RunServer():
-      time.sleep(5)
-      self._sync_server.RespondWithContent('<html>iframe</html>')
-      did_load_event.set()
-
-    thread = threading.Thread(target=RunServer)
-    thread.daemon = True
-    thread.start()
-    crx = os.path.join(_TEST_DATA_DIR, 'ext_slow_loader.crx')
-    driver = self.CreateDriver(
-        chrome_switches=['user-agent=' + self._sync_server.GetUrl()],
-        chrome_extensions=[self._PackExtension(crx)])
-    self.assertTrue(did_load_event.is_set())
-
   def testCanLaunchApp(self):
     app_path = os.path.join(_TEST_DATA_DIR, 'test_app')
     driver = self.CreateDriver(chrome_switches=['load-extension=%s' % app_path])
@@ -3515,36 +3602,6 @@ class MobileEmulationCapabilityTest(ChromeDriverBaseTestWithWebServer):
         'return div;')
     div.SingleTap()
     self.assertEquals(1, len(driver.FindElements('tag name', 'br')))
-
-  def testDoesntWaitWhenPageLoadStrategyIsNone(self):
-    class HandleRequest(object):
-      def __init__(self):
-        self.sent_hello = threading.Event()
-
-      def slowPage(self, request):
-        self.sent_hello.wait(2)
-        return {}, """
-        <html>
-        <body>hello</body>
-        </html>"""
-
-    handler = HandleRequest()
-    self._http_server.SetCallbackForPath('/slow', handler.slowPage)
-
-    driver = self.CreateDriver(page_load_strategy='none')
-    self.assertEquals('none', driver.capabilities['pageLoadStrategy'])
-
-    driver.Load(self._http_server.GetUrl() + '/chromedriver/empty.html')
-    start = time.time()
-    driver.Load(self._http_server.GetUrl() + '/slow')
-    self.assertTrue(time.time() - start < 2)
-    handler.sent_hello.set()
-    self.WaitForCondition(lambda: 'hello' in driver.GetPageSource())
-    self.assertTrue('hello' in driver.GetPageSource())
-
-  def testUnsupportedPageLoadStrategyRaisesException(self):
-    self.assertRaises(chromedriver.InvalidArgument,
-                      self.CreateDriver, page_load_strategy="unsupported")
 
   def testNetworkConnectionDisabledByDefault(self):
     driver = self.CreateDriver()

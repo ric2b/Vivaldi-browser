@@ -109,6 +109,9 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
   }
 
   void TearDown() override {
+    handle_.reset();
+    manager_.reset();
+
     task_environment_.RunUntilIdle();
     EXPECT_TRUE(dir_.Delete());
   }
@@ -277,13 +280,17 @@ INSTANTIATE_TEST_SUITE_P(NativeFileSystemFileWriterImplTest,
                          ::testing::Bool());
 
 TEST_F(NativeFileSystemFileWriterImplTest, WriteInvalidBlob) {
+  // This test primarily verifies behavior of the browser process in the
+  // presence of a compromised renderer process. The situation this tests for
+  // normally can't occur. As such it doesn't really matter what status the
+  // write operation returns, the important part is that nothing crashes.
+
   mojo::PendingRemote<blink::mojom::Blob> blob;
   ignore_result(blob.InitWithNewPipeAndPassReceiver());
 
   uint64_t bytes_written;
   NativeFileSystemStatus result =
       WriteBlobSync(0, std::move(blob), &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kInvalidArgument);
   EXPECT_EQ(bytes_written, 0u);
 
   result = CloseSync();
@@ -419,7 +426,7 @@ TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteWithOffsetPastFile) {
   result = CloseSync();
   EXPECT_EQ(result, NativeFileSystemStatus::kOk);
 
-  using namespace std::string_literals;
+  using std::string_literals::operator""s;
   EXPECT_EQ("\0\0\0\0abc"s, ReadFile(test_file_url_));
 }
 
@@ -497,7 +504,7 @@ TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteAfterCloseNotOK) {
 
 // TODO(mek): More tests, particularly for error conditions.
 
-class NativeFileSystemFileWriterSafeBrowsingTest
+class NativeFileSystemFileWriterAfterWriteChecksTest
     : public NativeFileSystemFileWriterImplTest {
  public:
   NativeFileSystemPermissionContext* permission_context() override {
@@ -509,7 +516,7 @@ class NativeFileSystemFileWriterSafeBrowsingTest
       permission_context_;
 };
 
-TEST_F(NativeFileSystemFileWriterSafeBrowsingTest, Allow) {
+TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, Allow) {
   uint64_t bytes_written;
   NativeFileSystemStatus result = WriteSync(0, "abc", &bytes_written);
   EXPECT_EQ(result, NativeFileSystemStatus::kOk);
@@ -523,7 +530,7 @@ TEST_F(NativeFileSystemFileWriterSafeBrowsingTest, Allow) {
 
   EXPECT_CALL(
       permission_context_,
-      PerformSafeBrowsingChecks_(
+      PerformAfterWriteChecks_(
           AllOf(
               Field(&NativeFileSystemWriteItem::target_file_path,
                     Eq(test_file_url_.path())),
@@ -535,7 +542,7 @@ TEST_F(NativeFileSystemFileWriterSafeBrowsingTest, Allow) {
               Field(&NativeFileSystemWriteItem::has_user_gesture, Eq(false))),
           kProcessId, kFrameId, _))
       .WillOnce(base::test::RunOnceCallback<3>(
-          NativeFileSystemPermissionContext::SafeBrowsingResult::kAllow));
+          NativeFileSystemPermissionContext::AfterWriteCheckResult::kAllow));
 
   result = CloseSync();
   EXPECT_EQ(result, NativeFileSystemStatus::kOk);
@@ -548,16 +555,16 @@ TEST_F(NativeFileSystemFileWriterSafeBrowsingTest, Allow) {
                                               test_file_url_, 3));
 }
 
-TEST_F(NativeFileSystemFileWriterSafeBrowsingTest, Block) {
+TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, Block) {
   uint64_t bytes_written;
   NativeFileSystemStatus result = WriteSync(0, "abc", &bytes_written);
   EXPECT_EQ(result, NativeFileSystemStatus::kOk);
   EXPECT_EQ(bytes_written, 3u);
 
   EXPECT_CALL(permission_context_,
-              PerformSafeBrowsingChecks_(_, kProcessId, kFrameId, _))
+              PerformAfterWriteChecks_(_, kProcessId, kFrameId, _))
       .WillOnce(base::test::RunOnceCallback<3>(
-          NativeFileSystemPermissionContext::SafeBrowsingResult::kBlock));
+          NativeFileSystemPermissionContext::AfterWriteCheckResult::kBlock));
 
   result = CloseSync();
   EXPECT_EQ(result, NativeFileSystemStatus::kOperationAborted);
@@ -570,17 +577,17 @@ TEST_F(NativeFileSystemFileWriterSafeBrowsingTest, Block) {
                                               test_file_url_, 0));
 }
 
-TEST_F(NativeFileSystemFileWriterSafeBrowsingTest, HandleCloseDuringCheck) {
+TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, HandleCloseDuringCheck) {
   uint64_t bytes_written;
   NativeFileSystemStatus result = WriteSync(0, "abc", &bytes_written);
   EXPECT_EQ(result, NativeFileSystemStatus::kOk);
   EXPECT_EQ(bytes_written, 3u);
 
   using SBCallback = base::OnceCallback<void(
-      NativeFileSystemPermissionContext::SafeBrowsingResult)>;
+      NativeFileSystemPermissionContext::AfterWriteCheckResult)>;
   SBCallback sb_callback;
   base::RunLoop loop;
-  EXPECT_CALL(permission_context_, PerformSafeBrowsingChecks_)
+  EXPECT_CALL(permission_context_, PerformAfterWriteChecks_)
       .WillOnce(
           testing::Invoke([&](NativeFileSystemWriteItem* item, int process_id,
                               int frame_id, SBCallback& callback) {
@@ -600,7 +607,7 @@ TEST_F(NativeFileSystemFileWriterSafeBrowsingTest, HandleCloseDuringCheck) {
       AsyncFileTestHelper::kDontCheckSize));
 
   std::move(sb_callback)
-      .Run(NativeFileSystemPermissionContext::SafeBrowsingResult::kAllow);
+      .Run(NativeFileSystemPermissionContext::AfterWriteCheckResult::kAllow);
 
   // Swap file should now be deleted, target file should be unmodified.
   task_environment_.RunUntilIdle();

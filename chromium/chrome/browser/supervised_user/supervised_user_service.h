@@ -30,6 +30,7 @@
 #include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/browser/management_policy.h"
 #endif
@@ -46,10 +47,6 @@ class SupervisedUserWhitelistService;
 namespace base {
 class FilePath;
 class Version;
-}
-
-namespace extensions {
-class ExtensionRegistry;
 }
 
 namespace user_prefs {
@@ -108,24 +105,6 @@ class SupervisedUserService : public KeyedService,
   // Adds an access request for the given URL.
   void AddURLAccessRequest(const GURL& url, SuccessCallback callback);
 
-  // Adds an install request for the given WebStore item (App/Extension).
-  void AddExtensionInstallRequest(const std::string& extension_id,
-                                  const base::Version& version,
-                                  SuccessCallback callback);
-
-  // Same as above, but without a callback, just logging errors on failure.
-  void AddExtensionInstallRequest(const std::string& extension_id,
-                                  const base::Version& version);
-
-  // Adds an update request for the given WebStore item (App/Extension).
-  void AddExtensionUpdateRequest(const std::string& extension_id,
-                                 const base::Version& version,
-                                 SuccessCallback callback);
-
-  // Same as above, but without a callback, just logging errors on failure.
-  void AddExtensionUpdateRequest(const std::string& extension_id,
-                                 const base::Version& version);
-
   // Get the string used to identify an extension install or update request.
   // Public for testing.
   static std::string GetExtensionRequestId(const std::string& extension_id,
@@ -156,6 +135,8 @@ class SupervisedUserService : public KeyedService,
   // Returns a message saying that extensions can only be modified by the
   // custodian.
   base::string16 GetExtensionsLockedMessage() const;
+
+  bool IsSupervisedUserIframeFilterEnabled() const;
 
 #if !defined(OS_ANDROID)
   // Initializes this profile for syncing, using the provided |refresh_token| to
@@ -192,6 +173,9 @@ class SupervisedUserService : public KeyedService,
     signout_required_after_supervision_enabled_ = true;
   }
 #endif  // !defined(OS_ANDROID)
+
+  void SetPrimaryPermissionCreatorForTest(
+      std::unique_ptr<PermissionRequestCreator> permission_creator);
 
  private:
   friend class SupervisedUserServiceExtensionTestBase;
@@ -355,7 +339,7 @@ class SupervisedUserService : public KeyedService,
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   ScopedObserver<extensions::ExtensionRegistry,
                  extensions::ExtensionRegistryObserver>
-      registry_observer_;
+      registry_observer_{this};
 #endif
 
   base::ObserverList<SupervisedUserServiceObserver>::Unchecked observer_list_;

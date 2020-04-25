@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/leaked_credentials_table.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -71,8 +72,16 @@ class MockPasswordStore : public PasswordStore {
                std::vector<InteractionsStats>(const GURL& origin_domain));
   MOCK_METHOD1(AddSiteStatsImpl, void(const InteractionsStats&));
   MOCK_METHOD1(RemoveSiteStatsImpl, void(const GURL&));
+  MOCK_METHOD1(AddLeakedCredentialsImpl, void(const LeakedCredentials&));
+  MOCK_METHOD2(RemoveLeakedCredentialsImpl,
+               void(const GURL&, const base::string16&));
+  MOCK_METHOD0(GetAllLeakedCredentialsImpl, std::vector<LeakedCredentials>());
+  MOCK_METHOD3(RemoveLeakedCredentialsByUrlAndTimeImpl,
+               void(const base::RepeatingCallback<bool(const GURL&)>&,
+                    base::Time,
+                    base::Time));
   MOCK_CONST_METHOD0(IsAbleToSavePasswords, bool());
-// TODO(crbug.com/706392): Fix password reuse detection for Android.
+
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
   MOCK_METHOD3(CheckReuse,
                void(const base::string16&,

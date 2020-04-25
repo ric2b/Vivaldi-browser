@@ -63,6 +63,8 @@ bool ConvertedHitTest(views::View* src, views::View* dst, gfx::Point* point) {
 
 }  // namespace
 
+constexpr int BrowserViewLayout::kMainBrowserContentsMinimumWidth;
+
 class BrowserViewLayout::WebContentsModalDialogHostViews
     : public WebContentsModalDialogHost {
  public:
@@ -133,24 +135,24 @@ BrowserViewLayout::BrowserViewLayout(
     views::View* tab_strip_region_view,
     TabStrip* tab_strip,
     views::View* webui_tab_strip,
-    views::View* webui_tab_strip_caption_buttons,
     views::View* toolbar,
     InfoBarContainerView* infobar_container,
     views::View* contents_container,
     ImmersiveModeController* immersive_mode_controller,
-    views::View* web_footer_experiment)
+    views::View* web_footer_experiment,
+    views::View* contents_separator)
     : delegate_(std::move(delegate)),
       browser_(browser),
       browser_view_(browser_view),
       top_container_(top_container),
       tab_strip_region_view_(tab_strip_region_view),
       webui_tab_strip_(webui_tab_strip),
-      webui_tab_strip_caption_buttons_(webui_tab_strip_caption_buttons),
       toolbar_(toolbar),
       infobar_container_(infobar_container),
       contents_container_(contents_container),
       immersive_mode_controller_(immersive_mode_controller),
       web_footer_experiment_(web_footer_experiment),
+      contents_separator_(contents_separator),
       tab_strip_(tab_strip),
       dialog_host_(std::make_unique<WebContentsModalDialogHostViews>(this)) {}
 
@@ -169,13 +171,8 @@ gfx::Size BrowserViewLayout::GetMinimumSize(const views::View* host) const {
   // https://crbug.com/847179.
   constexpr gfx::Size kContentsMinimumSize(1, 1);
 
-  // This should be wide enough that WebUI pages (e.g. chrome://settings) and
-  // the various associated WebUI dialogs (e.g. Import Bookmarks) can still be
-  // functional. This value provides a trade-off between browser usability and
-  // privacy - specifically, the ability to browse in a very small window, even
-  // on large monitors (which is why a minimum height is not specified). This
-  // value is used for the main browser window only, not for popups.
-  constexpr gfx::Size kMainBrowserContentsMinimumSize(500, 1);
+  // The minimum height for the normal (tabbed) browser window's contents area.
+  constexpr int kMainBrowserContentsMinimumHeight = 1;
 
   const bool has_tabstrip =
       browser()->SupportsWindowFeature(Browser::FEATURE_TABSTRIP);
@@ -193,16 +190,15 @@ gfx::Size BrowserViewLayout::GetMinimumSize(const views::View* host) const {
                              ? toolbar_->GetMinimumSize()
                              : gfx::Size());
   gfx::Size bookmark_bar_size;
-  if (has_bookmarks_bar) {
+  if (has_bookmarks_bar)
     bookmark_bar_size = bookmark_bar_->GetMinimumSize();
-    bookmark_bar_size.Enlarge(0, -bookmark_bar_->GetToolbarOverlap());
-  }
   gfx::Size infobar_container_size(infobar_container_->GetMinimumSize());
   // TODO(pkotwicz): Adjust the minimum height for the find bar.
 
   gfx::Size contents_size(contents_container_->GetMinimumSize());
   contents_size.SetToMax(browser()->is_type_normal()
-                             ? kMainBrowserContentsMinimumSize
+                             ? gfx::Size(kMainBrowserContentsMinimumWidth,
+                                         kMainBrowserContentsMinimumHeight)
                              : kContentsMinimumSize);
 
   const int min_height =
@@ -415,10 +411,9 @@ int BrowserViewLayout::LayoutTabStripRegion(int top) {
 int BrowserViewLayout::LayoutWebUITabStrip(int top) {
   if (!webui_tab_strip_ || !webui_tab_strip_->GetVisible())
     return top;
-  constexpr int kWebUiTabStripHeightDp = 262;
-  webui_tab_strip_->SetBounds(vertical_layout_rect_.x(), top,
-                              vertical_layout_rect_.width(),
-                              kWebUiTabStripHeightDp);
+  webui_tab_strip_->SetBounds(
+      vertical_layout_rect_.x(), top, vertical_layout_rect_.width(),
+      webui_tab_strip_->GetHeightForWidth(vertical_layout_rect_.width()));
   return webui_tab_strip_->bounds().bottom();
 }
 
@@ -427,15 +422,6 @@ int BrowserViewLayout::LayoutToolbar(int top) {
   bool toolbar_visible = delegate_->IsToolbarVisible();
   int height = toolbar_visible ? toolbar_->GetPreferredSize().height() : 0;
   toolbar_->SetVisible(toolbar_visible);
-  if (webui_tab_strip_caption_buttons_) {
-    webui_tab_strip_caption_buttons_->SetVisible(toolbar_visible);
-    const int preferred_webui_tab_strip_caption_buttons_width =
-        webui_tab_strip_caption_buttons_->GetPreferredSize().width();
-    browser_view_width -= preferred_webui_tab_strip_caption_buttons_width;
-    webui_tab_strip_caption_buttons_->SetBounds(
-        vertical_layout_rect_.x() + browser_view_width, top,
-        preferred_webui_tab_strip_caption_buttons_width, height);
-  }
   toolbar_->SetBounds(vertical_layout_rect_.x(), top, browser_view_width,
                       height);
   return toolbar_->bounds().bottom();
@@ -449,30 +435,39 @@ int BrowserViewLayout::LayoutBookmarkAndInfoBars(int top, int browser_view_y) {
     top = std::max(toolbar_->bounds().bottom(), LayoutBookmarkBar(top));
   }
 
+  if (delegate_->IsContentsSeparatorEnabled() &&
+      (toolbar_->GetVisible() || bookmark_bar_) && top > 0) {
+    contents_separator_->SetVisible(true);
+    const int separator_height =
+        contents_separator_->GetPreferredSize().height();
+    contents_separator_->SetBounds(vertical_layout_rect_.x(), top,
+                                   vertical_layout_rect_.width(),
+                                   separator_height);
+    top += separator_height;
+  } else {
+    contents_separator_->SetVisible(false);
+  }
+
   return LayoutInfoBar(top);
 }
 
 int BrowserViewLayout::LayoutBookmarkBar(int top) {
-  int y = top;
   if (!delegate_->IsBookmarkBarVisible()) {
     bookmark_bar_->SetVisible(false);
     // TODO(jamescook): Don't change the bookmark bar height when it is
     // invisible, so we can use its height for layout even in that state.
-    bookmark_bar_->SetBounds(0, y, browser_view_->width(), 0);
-    return y;
+    bookmark_bar_->SetBounds(0, top, browser_view_->width(), 0);
+    return top;
   }
 
   bookmark_bar_->SetInfoBarVisible(IsInfobarVisible());
   int bookmark_bar_height = bookmark_bar_->GetPreferredSize().height();
-  y -= bookmark_bar_->GetToolbarOverlap();
-  bookmark_bar_->SetBounds(vertical_layout_rect_.x(),
-                           y,
-                           vertical_layout_rect_.width(),
-                           bookmark_bar_height);
+  bookmark_bar_->SetBounds(vertical_layout_rect_.x(), top,
+                           vertical_layout_rect_.width(), bookmark_bar_height);
   // Set visibility after setting bounds, as the visibility update uses the
   // bounds to determine if the mouse is hovering over a button.
   bookmark_bar_->SetVisible(true);
-  return y + bookmark_bar_height;
+  return top + bookmark_bar_height;
 }
 
 int BrowserViewLayout::LayoutInfoBar(int top) {

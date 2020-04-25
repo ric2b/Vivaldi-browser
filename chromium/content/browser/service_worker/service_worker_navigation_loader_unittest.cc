@@ -393,7 +393,8 @@ class ServiceWorkerNavigationLoaderTest : public testing::Test {
       provider_host_ = CreateProviderHostForWindow(
           helper_->mock_render_process_id(), /*is_parent_frame_secure=*/true,
           helper_->context()->AsWeakPtr(), &provider_endpoints_);
-      provider_host_->UpdateUrls(request->url, request->url);
+      provider_host_->UpdateUrls(request->url, request->url,
+                                 url::Origin::Create(request->url));
       provider_host_->AddMatchingRegistration(registration_.get());
       provider_host_->SetControllerRegistration(
           registration_, /*notify_controllerchange=*/false);
@@ -516,7 +517,8 @@ TEST_F(ServiceWorkerNavigationLoaderTest, NoActiveWorker) {
       helper_->mock_render_process_id(), /*is_parent_frame_secure=*/true,
       helper_->context()->AsWeakPtr(), &provider_endpoints_);
   provider_host_->UpdateUrls(GURL("https://example.com/"),
-                             GURL("https://example.com/"));
+                             GURL("https://example.com/"),
+                             url::Origin::Create(GURL("https://example.com/")));
 
   // Perform the request.
   StartRequest(CreateRequest());
@@ -566,9 +568,8 @@ TEST_F(ServiceWorkerNavigationLoaderTest, BlobResponse) {
   auto blob = blink::mojom::SerializedBlob::New();
   blob->uuid = blob_handle->uuid();
   blob->size = blob_handle->size();
-  mojo::PendingReceiver<blink::mojom::Blob> receiver =
-      mojo::MakeRequest(&blob->blob);
-  storage::BlobImpl::Create(std::move(blob_handle), std::move(receiver));
+  storage::BlobImpl::Create(std::move(blob_handle),
+                            blob->blob.InitWithNewPipeAndPassReceiver());
   service_worker_->RespondWithBlob(std::move(blob));
 
   // Perform the request.
@@ -607,9 +608,8 @@ TEST_F(ServiceWorkerNavigationLoaderTest, BrokenBlobResponse) {
                                   storage::BlobStatus::ERR_OUT_OF_MEMORY);
   auto blob = blink::mojom::SerializedBlob::New();
   blob->uuid = kBrokenUUID;
-  mojo::PendingReceiver<blink::mojom::Blob> receiver =
-      mojo::MakeRequest(&blob->blob);
-  storage::BlobImpl::Create(std::move(blob_handle), std::move(receiver));
+  storage::BlobImpl::Create(std::move(blob_handle),
+                            blob->blob.InitWithNewPipeAndPassReceiver());
   service_worker_->RespondWithBlob(std::move(blob));
 
   // Perform the request.

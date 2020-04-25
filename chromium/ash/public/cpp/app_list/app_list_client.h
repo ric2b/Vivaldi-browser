@@ -19,7 +19,7 @@
 #include "services/content/public/mojom/navigable_contents_factory.mojom.h"
 #include "ui/base/models/simple_menu_model.h"
 
-namespace app_list {
+namespace ash {
 
 class AppListController;
 
@@ -77,7 +77,7 @@ class ASH_PUBLIC_EXPORT AppListClient {
   // Invoked when the app list is closed.
   virtual void ViewClosing() = 0;
   // Notifies target visibility changes of the app list.
-  virtual void OnAppListTargetVisibilityChanged(bool visible) = 0;
+  virtual void OnAppListVisibilityWillChange(bool visible) = 0;
   // Notifies visibility changes of the app list.
   virtual void OnAppListVisibilityChanged(bool visible) = 0;
 
@@ -137,6 +137,6 @@ class ASH_PUBLIC_EXPORT AppListClient {
   virtual ~AppListClient() = default;
 };
 
-}  // namespace app_list
+}  // namespace ash
 
 #endif  // ASH_PUBLIC_CPP_APP_LIST_APP_LIST_CLIENT_H_

@@ -40,6 +40,7 @@ class NigoriKeyBag {
 
   size_t size() const;
   bool HasKey(const std::string& key_name) const;
+  bool HasKey(const sync_pb::NigoriKey& key) const;
 
   // |key_name| must exist in this keybag.
   sync_pb::NigoriKey ExportKey(const std::string& key_name) const;
@@ -47,6 +48,10 @@ class NigoriKeyBag {
   // Adds a new key to the keybag. Returns the name of the key or an empty
   // string in case of failure.
   std::string AddKey(std::unique_ptr<Nigori> nigori);
+
+  // Similar to AddKey(), but reads the key material from a proto. The |name|
+  // field is ignored since it's redundant.
+  std::string AddKeyFromProto(const sync_pb::NigoriKey& key);
 
   // Merges all keys from another keybag, which means adding all keys that we
   // don't know about.
@@ -57,6 +62,9 @@ class NigoriKeyBag {
   bool EncryptWithKey(const std::string& key_name,
                       const std::string& input,
                       sync_pb::EncryptedData* encrypted_output) const;
+
+  // Returns whether the key required to decrypt |encrypted_input| is known.
+  bool CanDecrypt(const sync_pb::EncryptedData& encrypted_input) const;
 
   // Decryption of strings (possibly binary). Returns true if success.
   // |decrypted_output| must not be null.

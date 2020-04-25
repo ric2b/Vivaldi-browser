@@ -5,23 +5,27 @@
 package org.chromium.chrome.browser.password_manager;
 
 import static org.chromium.chrome.browser.password_manager.PasswordManagerDialogProperties.DETAILS;
+import static org.chromium.chrome.browser.password_manager.PasswordManagerDialogProperties.HELP_BUTTON_CALLBACK;
 import static org.chromium.chrome.browser.password_manager.PasswordManagerDialogProperties.ILLUSTRATION;
 import static org.chromium.chrome.browser.password_manager.PasswordManagerDialogProperties.ILLUSTRATION_VISIBLE;
 import static org.chromium.chrome.browser.password_manager.PasswordManagerDialogProperties.TITLE;
 
 import android.content.res.Resources;
 import android.graphics.Typeface;
-import android.support.annotation.DrawableRes;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.StyleSpan;
 import android.view.View;
 
+import androidx.annotation.DrawableRes;
+
 import org.chromium.base.Callback;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.modaldialog.TabModalPresenter;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
@@ -97,6 +101,10 @@ class PasswordManagerDialogMediator implements View.OnLayoutChangeListener {
                 .with(ModalDialogProperties.PRIMARY_BUTTON_FILLED, primaryButtonFilled);
     }
 
+    void setHelpButtonCallback(Runnable callback) {
+        mModel.set(HELP_BUTTON_CALLBACK, callback);
+    }
+
     private boolean hasSufficientSpaceForIllustration(int heightPx) {
         heightPx -= TabModalPresenter.getContainerTopMargin(mResources, mContainerHeightResource);
         heightPx -= TabModalPresenter.getContainerBottomMargin(mFullscreenManager);
@@ -119,7 +127,9 @@ class PasswordManagerDialogMediator implements View.OnLayoutChangeListener {
         int oldHeight = oldBottom - oldTop;
         int newHeight = bottom - top;
         if (newHeight == oldHeight) return;
-        mModel.set(ILLUSTRATION_VISIBLE, hasSufficientSpaceForIllustration(newHeight));
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
+            mModel.set(ILLUSTRATION_VISIBLE, hasSufficientSpaceForIllustration(newHeight));
+        });
     }
 
     void showDialog(@ModalDialogManager.ModalDialogType int type) {

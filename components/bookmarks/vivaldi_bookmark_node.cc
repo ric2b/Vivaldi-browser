@@ -30,17 +30,8 @@ const base::Time BookmarkNode::date_visited() const {
   return base::Time(base::Time::FromInternalValue(date_val));
 }
 
-void BookmarkNode::set_date_visited(const base::Time& date) {
-  if (!date.is_null())
-    SetMetaInfo("Visited", base::NumberToString(date.ToInternalValue()));
-}
-
 void BookmarkNode::set_nickname(const base::string16 &nick) {
   SetMetaInfo("Nickname", base::UTF16ToUTF8(nick));
-}
-
-void BookmarkNode::set_thumbnail(const base::string16 &thumbnail) {
-  SetMetaInfo("Thumbnail", base::UTF16ToUTF8(thumbnail));
 }
 
 base::string16 BookmarkNode::GetThumbnail() const {
@@ -51,10 +42,6 @@ base::string16 BookmarkNode::GetThumbnail() const {
   return base::string16();
 }
 
-void BookmarkNode::set_partner(const base::string16 &partner) {
-  SetMetaInfo("Partner", base::UTF16ToUTF8(partner));
-}
-
 base::string16 BookmarkNode::GetPartner() const {
   std::string temp;
   if (GetMetaInfo("Partner", &temp))
@@ -63,28 +50,13 @@ base::string16 BookmarkNode::GetPartner() const {
   return base::string16();
 }
 
-void BookmarkNode::set_speeddial(bool speeddial) {
-  std::string temp;
-
-  temp = speeddial ? "true" : "false";
-
-  SetMetaInfo("Speeddial", temp);
-}
-
+// Note: This only works for folders
 bool BookmarkNode::GetSpeeddial() const {
   std::string temp;
   if (GetMetaInfo("Speeddial",&temp))
     return temp == "true";
 
   return false;
-}
-
-void BookmarkNode::set_bookmarkbar(bool bookmarkbar) {
-  std::string temp;
-
-  temp = bookmarkbar ? "true" : "false";
-
-  SetMetaInfo("Bookmarkbar", temp);
 }
 
 bool BookmarkNode::GetBookmarkbar() const {
@@ -114,5 +86,27 @@ base::string16 BookmarkNode::GetDescription() const {
 
   return base::string16();
 }
+
+base::string16 BookmarkNode::GetDefaultFaviconUri() const {
+  std::string temp;
+  if (GetMetaInfo("Default_Favicon_URI",&temp))
+    return base::UTF8ToUTF16(temp);
+
+  return base::string16();
+}
+
+const base::string16 BookmarkNode::GetTitledUrlNodeNickName() const {
+  return GetNickName();
+}
+
+const base::string16 BookmarkNode::GetTitledUrlNodeDescription() const {
+  return GetDescription();
+}
+
+bool BookmarkNode::is_separator() const {
+  const static base::string16 desc = base::ASCIIToUTF16("separator");
+  return GetDescription().compare(desc) == 0;
+}
+
 
 }  // namespace bookmarks

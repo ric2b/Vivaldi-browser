@@ -530,7 +530,7 @@ std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateRenderer(
       base::Bind(&PipelineIntegrationTestBase::CreateAudioDecodersForTest,
                  base::Unretained(this),
                  task_environment_.GetMainThreadTaskRunner(),
-            		 &media_log_,
+                 &media_log_,
                  prepend_audio_decoders_cb),
       &media_log_));
   if (hashing_enabled_) {

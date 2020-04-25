@@ -18,7 +18,7 @@ namespace blink {
 class LocalFrame;
 
 // Implementation of mojom::blink::Frame
-class CORE_EXPORT FrameImpl final : public GarbageCollectedFinalized<FrameImpl>,
+class CORE_EXPORT FrameImpl final : public GarbageCollected<FrameImpl>,
                                     public Supplement<LocalFrame>,
                                     public mojom::blink::Frame {
   USING_GARBAGE_COLLECTED_MIXIN(FrameImpl);
@@ -40,6 +40,8 @@ class CORE_EXPORT FrameImpl final : public GarbageCollectedFinalized<FrameImpl>,
   void GetTextSurroundingSelection(
       uint32_t max_length,
       GetTextSurroundingSelectionCallback callback) final;
+
+  void SendInterventionReport(const String& id, const String& message) final;
 
  private:
   mojo::AssociatedReceiver<mojom::blink::Frame> receiver_{this};

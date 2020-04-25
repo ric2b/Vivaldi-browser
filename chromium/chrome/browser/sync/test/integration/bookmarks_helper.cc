@@ -900,6 +900,23 @@ size_t CountFoldersWithTitlesMatching(int profile, const std::string& title) {
                                       base::UTF8ToUTF16(title));
 }
 
+bool ContainsBookmarkNodeWithGUID(int profile, const std::string& guid) {
+  BookmarkModel* model = GetBookmarkModel(profile);
+  // Check root node separately as iterator does not include it.
+  if (model->root_node()->guid() == guid) {
+    return true;
+  }
+  ui::TreeNodeIterator<const BookmarkNode> iterator(model->root_node());
+  // Walk through the model tree looking for a BookmarkNode whose GUID matches
+  // |guid|.
+  while (iterator.has_next()) {
+    const BookmarkNode* node = iterator.Next();
+    if (node->guid() == guid)
+      return true;
+  }
+  return false;
+}
+
 gfx::Image CreateFavicon(SkColor color) {
   const int dip_width = 16;
   const int dip_height = 16;
@@ -1031,17 +1048,23 @@ bool ServerBookmarksEqualityChecker::IsExitConditionSatisfied() {
   // Make a copy so we can remove bookmarks that were found.
   std::vector<ExpectedBookmark> expected = expected_bookmarks_;
   for (const sync_pb::SyncEntity& entity : entities) {
-    // If the cryptographer was provided, we expect the specifics to have
-    // encrypted data.
-    EXPECT_EQ(entity.specifics().has_encrypted(), cryptographer_ != nullptr);
-
     sync_pb::BookmarkSpecifics actual_specifics;
     if (entity.specifics().has_encrypted()) {
+      // If no cryptographer was provided, we expect the specifics to have
+      // unencrypted data.
+      if (!cryptographer_) {
+        return false;
+      }
       sync_pb::EntitySpecifics entity_specifics;
       EXPECT_TRUE(cryptographer_->Decrypt(entity.specifics().encrypted(),
                                           &entity_specifics));
       actual_specifics = entity_specifics.bookmark();
     } else {
+      // If the cryptographer was provided, we expect the specifics to have
+      // encrypted data.
+      if (cryptographer_) {
+        return false;
+      }
       actual_specifics = entity.specifics().bookmark();
     }
 
@@ -1094,3 +1117,10 @@ BookmarksUrlChecker::BookmarksUrlChecker(int profile,
                                                std::cref(url),
                                                expected_count),
                                     "Bookmark URL counts match.") {}
+
+BookmarksGUIDChecker::BookmarksGUIDChecker(int profile, const std::string& guid)
+    : AwaitMatchStatusChangeChecker(
+          base::BindRepeating(bookmarks_helper::ContainsBookmarkNodeWithGUID,
+                              profile,
+                              guid),
+          "Bookmark GUID exists.") {}

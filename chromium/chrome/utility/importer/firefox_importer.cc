@@ -104,7 +104,7 @@ struct FirefoxImporter::BookmarkItem {
   int id;
   GURL url;
   base::string16 title;
-  base::string16 description; // Added by vivaldi
+  std::string description; // Added by vivaldi
   BookmarkItemType type;
   std::string keyword;
   base::Time date_added;
@@ -782,7 +782,7 @@ void FirefoxImporter::GetWholeBookmarkFolder(sql::Database* db,
     if (vivaldi::IsVivaldiRunning()) {
       int column = favicons_location == FaviconsLocation::kPlacesDatabase ?
         7 : 6;
-      item->description = s.ColumnString16(column);
+      item->description = s.ColumnString(column);
     }
 
     temp_list.push_back(std::move(item));

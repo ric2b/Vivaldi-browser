@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partition_allocator.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
+#include "third_party/blink/renderer/platform/wtf/conditional_destructor.h"
 #include "third_party/blink/renderer/platform/wtf/construct_traits.h"
 #include "third_party/blink/renderer/platform/wtf/hash_traits.h"
 
@@ -694,7 +695,15 @@ template <typename Key,
           typename Traits,
           typename KeyTraits,
           typename Allocator>
-class HashTable final {
+class HashTable final
+    : public ConditionalDestructor<HashTable<Key,
+                                             Value,
+                                             Extractor,
+                                             HashFunctions,
+                                             Traits,
+                                             KeyTraits,
+                                             Allocator>,
+                                   Allocator::kIsGarbageCollected> {
   DISALLOW_NEW();
 
  public:
@@ -726,14 +735,10 @@ class HashTable final {
 
   HashTable();
 
-  // For design of the destructor, please refer to
-  // [here](https://docs.google.com/document/d/1AoGTvb3tNLx2tD1hNqAfLRLmyM59GM0O-7rCHTT_7_U/)
-  ~HashTable() {
+  void Finalize() {
+    static_assert(!Allocator::kIsGarbageCollected,
+                  "GCed collections can't be finalized.");
     if (LIKELY(!table_))
-      return;
-    // If this is called during sweeping, it must not touch other heap objects
-    // such as the backing.
-    if (Allocator::IsSweepForbidden())
       return;
     EnterAccessForbiddenScope();
     DeleteAllBucketsAndDeallocate(table_, table_size_);
@@ -742,10 +747,10 @@ class HashTable final {
   }
 
   HashTable(const HashTable&);
-  HashTable(HashTable&&) noexcept;
+  HashTable(HashTable&&);
   void swap(HashTable&);
   HashTable& operator=(const HashTable&);
-  HashTable& operator=(HashTable&&) noexcept;
+  HashTable& operator=(HashTable&&);
 
   // When the hash table is empty, just return the same iterator for end as
   // for begin.  This is more efficient because we don't have to skip all the
@@ -1924,7 +1929,7 @@ template <typename Key,
           typename KeyTraits,
           typename Allocator>
 HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::
-    HashTable(HashTable&& other) noexcept
+    HashTable(HashTable&& other)
     : table_(nullptr),
       table_size_(0),
       key_count_(0),
@@ -2003,7 +2008,7 @@ template <typename Key,
           typename Allocator>
 HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>&
 HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::
-operator=(HashTable&& other) noexcept {
+operator=(HashTable&& other) {
   swap(other);
   return *this;
 }

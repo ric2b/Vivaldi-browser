@@ -21,7 +21,8 @@
 #include "base/strings/string_split.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
-#include "fuchsia/engine/common.h"
+#include "fuchsia/engine/common/web_engine_content_client.h"
+#include "fuchsia/engine/switches.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/data_pipe_producer.h"
 #include "mojo/public/cpp/system/string_data_source.h"
@@ -42,14 +43,14 @@ ContentDirectoriesMap ParseContentDirectoriesFromCommandLine() {
   // Parse the list of content directories from the command line.
   std::string content_directories_unsplit =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          kContentDirectories);
+          switches::kContentDirectories);
   if (content_directories_unsplit.empty())
     return {};
 
   base::StringPairs named_handle_ids;
   if (!base::SplitStringIntoKeyValuePairs(content_directories_unsplit, '=', ',',
                                           &named_handle_ids)) {
-    LOG(WARNING) << "Couldn't parse --" << kContentDirectories
+    LOG(WARNING) << "Couldn't parse --" << switches::kContentDirectories
                  << " into KV pairs: " << content_directories_unsplit;
     return {};
   }
@@ -320,7 +321,8 @@ void ContentDirectoryLoaderFactory::CreateLoaderAndStart(
     const network::ResourceRequest& request,
     network::mojom::URLLoaderClientPtr client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
-  if (!request.url.SchemeIs(kFuchsiaContentDirectoryScheme) ||
+  if (!request.url.SchemeIs(
+          WebEngineContentClient::kFuchsiaContentDirectoryScheme) ||
       !request.url.is_valid()) {
     client->OnComplete(
         network::URLLoaderCompletionStatus(net::ERR_INVALID_URL));
@@ -333,10 +335,16 @@ void ContentDirectoryLoaderFactory::CreateLoaderAndStart(
     return;
   }
 
+  // Fuchsia paths do not support the notion of absolute paths, so strip the
+  // leading slash from the URL's path fragment.
+  base::StringPiece requested_path = request.url.path_piece();
+  DCHECK(requested_path.starts_with("/"));
+  requested_path.remove_prefix(1);
+
   fidl::InterfaceHandle<fuchsia::io::Node> file_handle;
-  net::Error open_result = OpenFileFromDirectory(
-      request.url.GetOrigin().host(), base::FilePath(request.url.path()),
-      file_handle.NewRequest());
+  net::Error open_result = OpenFileFromDirectory(request.url.GetOrigin().host(),
+                                                 base::FilePath(requested_path),
+                                                 file_handle.NewRequest());
   if (open_result != net::OK) {
     client->OnComplete(network::URLLoaderCompletionStatus(open_result));
     return;
@@ -347,10 +355,10 @@ void ContentDirectoryLoaderFactory::CreateLoaderAndStart(
   // |metadata_channel| will produce a ZX_CHANNEL_PEER_CLOSED status inside
   // ContentDirectoryURLLoader::Start().
   fidl::InterfaceHandle<fuchsia::io::Node> metadata_handle;
-  open_result =
-      OpenFileFromDirectory(request.url.GetOrigin().host(),
-                            base::FilePath(request.url.path() + "._metadata"),
-                            metadata_handle.NewRequest());
+  open_result = OpenFileFromDirectory(
+      request.url.GetOrigin().host(),
+      base::FilePath(requested_path.as_string() + "._metadata"),
+      metadata_handle.NewRequest());
   if (open_result != net::OK) {
     client->OnComplete(network::URLLoaderCompletionStatus(open_result));
     return;
@@ -366,8 +374,8 @@ void ContentDirectoryLoaderFactory::CreateLoaderAndStart(
 }
 
 void ContentDirectoryLoaderFactory::Clone(
-    network::mojom::URLLoaderFactoryRequest loader) {
-  bindings_.AddBinding(this, std::move(loader));
+    mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader) {
+  receivers_.Add(this, std::move(loader));
 }
 
 void ContentDirectoryLoaderFactory::SetContentDirectoriesForTest(

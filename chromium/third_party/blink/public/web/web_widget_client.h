@@ -60,7 +60,6 @@ struct ElementId;
 class LayerTreeMutator;
 class ScopedDeferMainFrameUpdate;
 class PaintImage;
-struct ViewportLayers;
 }
 
 namespace gfx {
@@ -134,6 +133,10 @@ class WebWidgetClient {
 
   // Called to show the widget according to the given policy.
   virtual void Show(WebNavigationPolicy) {}
+
+  // Returns information about the screen where this view's widgets are being
+  // displayed.
+  virtual WebScreenInfo GetScreenInfo() { return {}; }
 
   // Called to get/set the position of the widget's window in screen
   // coordinates. Note, the window includes any decorations such as borders,
@@ -257,11 +260,6 @@ class WebWidgetClient {
   // Find in page zooms a rect in the main-frame renderer.
   virtual void ZoomToFindInPageRectInMainFrame(const blink::WebRect& rect) {}
 
-  // Identify key viewport layers to the compositor. Pass a default-constructed
-  // ViewportLayers to clear them.
-  virtual void RegisterViewportLayers(
-      const cc::ViewportLayers& viewport_layers) {}
-
   // Used to update the active selection bounds. Pass a default-constructed
   // LayerSelection to clear it.
   virtual void RegisterSelection(const cc::LayerSelection&) {}
@@ -272,10 +270,6 @@ class WebWidgetClient {
                                             bool up,
                                             bool down) {}
   virtual void FallbackCursorModeSetCursorVisibility(bool visible) {}
-
-  // Informs the compositor if gpu raster will be allowed, or it is blocked
-  // based on heuristics from the content of the page.
-  virtual void SetAllowGpuRasterization(bool) {}
 
   // Sets the current page scale factor and minimum / maximum limits. Both
   // limits are initially 1 (no page scale allowed).

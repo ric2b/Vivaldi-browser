@@ -12,6 +12,7 @@
 #include "components/viz/common/resources/resource_id.h"
 #include "components/viz/service/display/external_use_client.h"
 #include "components/viz/service/display/output_surface.h"
+#include "components/viz/service/display/overlay_processor.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
 class SkCanvas;
@@ -25,6 +26,7 @@ namespace viz {
 
 class ContextLostObserver;
 class CopyOutputRequest;
+class DCLayerOverlay;
 
 namespace copy_output {
 struct RenderPassGeometry;
@@ -72,8 +74,11 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurface : public OutputSurface,
       sk_sp<SkColorSpace> dst_color_space,
       bool has_alpha) = 0;
 
-  // Swaps the current backbuffer to the screen.
-  virtual void SkiaSwapBuffers(OutputSurfaceFrame frame) = 0;
+  // Swaps the current backbuffer to the screen. This method returns a non-empty
+  // sync token which can be waited on to ensure swap is complete if
+  // |wants_sync_token| is true.
+  virtual gpu::SyncToken SkiaSwapBuffers(OutputSurfaceFrame frame,
+                                         bool wants_sync_token) = 0;
 
   // TODO(weiliangc): This API should move to OverlayProcessor.
   // Schedule |output_surface_plane| as an overlay plane to be displayed.
@@ -124,6 +129,13 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurface : public OutputSurface,
                           const gfx::ColorSpace& color_space,
                           std::unique_ptr<CopyOutputRequest> request) = 0;
 
+  // Enables/disables drawing with DC layers. Should be enabled before
+  // ScheduleDCLayers() will be called.
+  virtual void SetEnableDCLayers(bool enable) = 0;
+
+  // Schedule drawing DC layer overlays at next SkiaSwapBuffers() call.
+  virtual void ScheduleDCLayers(std::vector<DCLayerOverlay> dc_layers) = 0;
+
   // Add context lost observer.
   virtual void AddContextLostObserver(ContextLostObserver* observer) = 0;
 
@@ -134,6 +146,19 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurface : public OutputSurface,
   virtual void ScheduleGpuTaskForTesting(
       base::OnceClosure callback,
       std::vector<gpu::SyncToken> sync_tokens) = 0;
+
+  // Only used for the Android pre-SurfaceControl overlay code path to pass all
+  // promotion hints.
+  virtual void SendOverlayPromotionNotification(
+      std::vector<gpu::SyncToken> sync_tokens,
+      base::flat_set<gpu::Mailbox> promotion_denied,
+      base::flat_map<gpu::Mailbox, gfx::Rect> possible_promotions) = 0;
+
+  // Only used for the Android pre-SurfaceControl overlay code path to pass the
+  // single overlay candidate information.
+  virtual void RenderToOverlay(gpu::SyncToken sync_token,
+                               gpu::Mailbox overlay_candidate_mailbox,
+                               const gfx::Rect& bounds) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SkiaOutputSurface);

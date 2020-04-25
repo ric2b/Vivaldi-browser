@@ -62,9 +62,6 @@
 
 #include "components/guest_view/browser/guest_view_base.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
-#include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
-
-#include "app/vivaldi_apptools.h"
 
 namespace content {
 
@@ -137,7 +134,6 @@ BrowserPluginGuest::BrowserPluginGuest(bool has_render_view,
       seen_embedder_drag_source_ended_at_(false),
       ignore_dragged_url_(true),
       delegate_(delegate),
-      guest_routing_id_(MSG_ROUTING_NONE),
       can_use_cross_process_frames_(delegate->CanUseCrossProcessFrames()) {
   DCHECK(web_contents);
   DCHECK(delegate);
@@ -227,10 +223,6 @@ void BrowserPluginGuest::SetFocus(RenderWidgetHost* rwh,
     static_cast<RenderViewHostImpl*>(RenderViewHost::From(rwh))
         ->SetInitialFocus(focus_type == blink::kWebFocusTypeBackward);
   }
-  // NOTE(julien): Setting focus to a pdf currently causes it to set the focus
-  // to the top frame. We can remove this if once
-  // https://bugs.chromium.org/p/chromium/issues/detail?id=863943 is fixed
-  if (!vivaldi::IsVivaldiRunning())
   RenderWidgetHostImpl::From(rwh)->GetWidgetInputHandler()->SetFocus(focused);
   if (!focused && mouse_locked_)
     DidUnlockMouse();
@@ -663,11 +655,6 @@ void BrowserPluginGuest::RenderViewReady() {
   RenderViewHost* rvh = GetWebContents()->GetRenderViewHost();
   // TODO(fsamuel): Investigate whether it's possible to update state earlier
   // here (see http://crbug.com/158151).
-
-  // NOTE(julien): Setting focus to a pdf currently causes it to set the focus
-  // to the top frame. We can remove this if once
-  // https://bugs.chromium.org/p/chromium/issues/detail?id=863943 is fixed
-  if (!vivaldi::IsVivaldiRunning())
   RenderWidgetHostImpl::From(rvh->GetWidget())
       ->GetWidgetInputHandler()
       ->SetFocus(focused_);
@@ -688,10 +675,6 @@ void BrowserPluginGuest::RenderViewReady() {
   RenderWidgetHostImpl::From(rvh->GetWidget())
       ->set_hung_renderer_delay(
           base::TimeDelta::FromMilliseconds(kHungRendererDelayMs));
-}
-
-void BrowserPluginGuest::RenderViewDeleted(RenderViewHost* render_view_host) {
-  has_render_view_ = false;
 }
 
 void BrowserPluginGuest::RenderProcessGone(base::TerminationStatus status) {

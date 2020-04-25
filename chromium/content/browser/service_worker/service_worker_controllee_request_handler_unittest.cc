@@ -23,6 +23,7 @@
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/public/browser/resource_context.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/test/test_content_browser_client.h"
@@ -154,7 +155,8 @@ class ServiceWorkerTestContentBrowserClient : public TestContentBrowserClient {
   ServiceWorkerTestContentBrowserClient() {}
   bool AllowServiceWorkerOnIO(
       const GURL& scope,
-      const GURL& first_party,
+      const GURL& site_for_cookies,
+      const base::Optional<url::Origin>& top_frame_origin,
       const GURL& script_url,
       content::ResourceContext* context,
       base::RepeatingCallback<WebContents*()> wc_getter) override {
@@ -163,7 +165,8 @@ class ServiceWorkerTestContentBrowserClient : public TestContentBrowserClient {
 
   bool AllowServiceWorkerOnUI(
       const GURL& scope,
-      const GURL& first_party,
+      const GURL& site_for_cookies,
+      const base::Optional<url::Origin>& top_frame_origin,
       const GURL& script_url,
       content::BrowserContext* context,
       base::RepeatingCallback<WebContents*()> wc_getter) override {

@@ -6,6 +6,7 @@
 
 #include "base/stl_util.h"
 #include "mojo/public/cpp/bindings/array_traits_wtf_vector.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/public/platform/web_blob_info.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_key_range.h"
@@ -207,7 +208,7 @@ StructTraits<blink::mojom::IDBValueDataView, std::unique_ptr<blink::IDBValue>>::
     if (mime_type.IsNull())
       mime_type = g_empty_string;
     blob_info->mime_type = mime_type;
-    blob_info->blob = blink::mojom::blink::BlobPtrInfo(
+    blob_info->blob = mojo::PendingRemote<blink::mojom::blink::Blob>(
         info.CloneBlobHandle(), blink::mojom::blink::Blob::Version_);
     blob_or_file_info.push_back(std::move(blob_info));
   }
@@ -244,10 +245,10 @@ bool StructTraits<blink::mojom::IDBValueDataView,
                                    blink::FilePathToWebString(info->file->path),
                                    info->file->name, info->mime_type,
                                    info->file->last_modified.ToDoubleT(),
-                                   info->size, info->blob.PassHandle());
+                                   info->size, info->blob.PassPipe());
     } else {
       value_blob_info.emplace_back(info->uuid, info->mime_type, info->size,
-                                   info->blob.PassHandle());
+                                   info->blob.PassPipe());
     }
   }
 

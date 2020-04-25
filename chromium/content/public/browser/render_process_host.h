@@ -24,6 +24,7 @@
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_sender.h"
 #include "media/media_buildflags.h"
+#include "media/mojo/mojom/video_decode_perf_history.mojom-forward.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -34,6 +35,9 @@
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom-forward.h"
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom-forward.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-forward.h"
+#include "third_party/blink/public/mojom/locks/lock_manager.mojom-forward.h"
+#include "third_party/blink/public/mojom/payments/payment_app.mojom-forward.h"
+#include "third_party/blink/public/mojom/permissions/permission.mojom-forward.h"
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_ANDROID)
@@ -411,11 +415,11 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // Create an URLLoaderFactory that can be used by |origin| being hosted in
   // |this| process.
   //
-  // When NetworkService is enabled, |request| will be bound with a new
+  // When NetworkService is enabled, |receiver| will be bound with a new
   // URLLoaderFactory created from the storage partition's Network Context. Note
   // that the URLLoaderFactory returned by this method does NOT support
   // auto-reconnect after a crash of Network Service.
-  // When NetworkService is not enabled, |request| will be bound with a
+  // When NetworkService is not enabled, |receiver| will be bound with a
   // URLLoaderFactory which routes requests to ResourceDispatcherHost.
   //
   // |preferences| is an optional argument that might be used to control some
@@ -438,11 +442,10 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
       const net::NetworkIsolationKey& network_isolation_key,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
           header_client,
-      network::mojom::URLLoaderFactoryRequest request) = 0;
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver) = 0;
 
   // Whether this process is locked out from ever being reused for sites other
   // than the ones it currently has.
-  virtual void SetIsNeverSuitableForReuse() = 0;
   virtual bool MayReuseHost() = 0;
 
   // Indicates whether this RenderProcessHost is "unused".  This starts out as
@@ -489,11 +492,44 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
       const url::Origin& origin,
       mojo::PendingReceiver<blink::mojom::FileSystemManager> receiver) = 0;
 
-  // Binds |request| to the IndexedDBDispatcherHost instance. The binding is
+  // Binds |receiver| to the IndexedDBDispatcherHost instance. The receiver is
   // sent to the IO thread. This is for internal use only, and is only exposed
   // here to support MockRenderProcessHost usage in tests.
-  virtual void BindIndexedDB(blink::mojom::IDBFactoryRequest request,
-                             const url::Origin& origin) = 0;
+  //
+  // |render_frame_id| is the frame associated with |receiver|, or
+  // MSG_ROUTING_NONE if |receiver| is associated with a worker.
+  virtual void BindIndexedDB(
+      int render_frame_id,
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) = 0;
+
+  // Binds |receiver| to the VideoDecodePerfHistory instance.  This is for
+  // internal use only, and is only exposed here to support
+  // MockRenderProcessHost usage in tests.
+  virtual void BindVideoDecodePerfHistory(
+      mojo::PendingReceiver<media::mojom::VideoDecodePerfHistory> receiver) = 0;
+
+  // Binds |receiver| to an instance of LockManager. This is for internal use
+  // only, and is only exposed here to support MockRenderProcessHost usage in
+  // tests.
+  virtual void CreateLockManager(
+      int render_frame_id,
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::LockManager> receiver) = 0;
+
+  // Binds |receiver| to an instance of PermissionService. This is for internal
+  // use only, and is only exposed here to support MockRenderProcessHost usage
+  // in tests.
+  virtual void CreatePermissionService(
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::PermissionService> receiver) = 0;
+
+  // Binds |receiver| to an instance of PaymentManager. This is for internal
+  // use only, and is only exposed here to support MockRenderProcessHost usage
+  // in tests.
+  virtual void CreatePaymentManagerForOrigin(
+      const url::Origin& origin,
+      mojo::PendingReceiver<payments::mojom::PaymentManager> receiver) = 0;
 
   // Returns the current number of active views in this process.  Excludes
   // any RenderViewHosts that are swapped out.
@@ -595,6 +631,16 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
 
   // Counts current RenderProcessHost(s), ignoring the spare process.
   static int GetCurrentRenderProcessCountForTesting();
+
+  // Allows tests to override host interface binding behavior. Any interface
+  // binding request which would normally pass through the RPH's internal
+  // IOThreadHostImpl::BindHostReceiver() will pass through |callback| first if
+  // non-null. |callback| is only called from the IO thread.
+  using BindHostReceiverInterceptor =
+      base::RepeatingCallback<void(int render_process_id,
+                                   mojo::GenericPendingReceiver* receiver)>;
+  static void InterceptBindHostReceiverForTesting(
+      BindHostReceiverInterceptor callback);
 };
 
 }  // namespace content

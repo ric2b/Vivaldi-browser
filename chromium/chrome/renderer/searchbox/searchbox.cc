@@ -17,6 +17,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "chrome/common/search.mojom.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/renderer/searchbox/searchbox_extension.h"
 #include "components/favicon_base/favicon_types.h"
@@ -24,6 +25,7 @@
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/web/web_frame.h"
@@ -205,7 +207,7 @@ SearchBox::SearchBox(content::RenderFrame* render_frame)
       most_visited_items_cache_(kMaxInstantMostVisitedItemCacheSize),
       has_received_most_visited_(false) {
   // Connect to the embedded search interface in the browser.
-  chrome::mojom::EmbeddedSearchConnectorAssociatedPtr connector;
+  mojo::AssociatedRemote<chrome::mojom::EmbeddedSearchConnector> connector;
   render_frame->GetRemoteAssociatedInterfaces()->GetInterface(&connector);
   chrome::mojom::EmbeddedSearchClientAssociatedPtrInfo embedded_search_client;
   binding_.Bind(mojo::MakeRequest(&embedded_search_client));
@@ -429,6 +431,42 @@ void SearchBox::RevertThemeChanges() {
 
 void SearchBox::ConfirmThemeChanges() {
   embedded_search_service_->ConfirmThemeChanges();
+}
+
+void SearchBox::QueryAutocomplete(const base::string16& input) {
+  embedded_search_service_->QueryAutocomplete(
+      input, base::BindOnce(&SearchBox::QueryAutocompleteResult,
+                            weak_ptr_factory_.GetWeakPtr()));
+}
+
+void SearchBox::DeleteAutocompleteMatch(uint8_t line) {
+  embedded_search_service_->DeleteAutocompleteMatch(
+      line, base::BindOnce(&SearchBox::OnDeleteAutocompleteMatch,
+                           base::Unretained(this)));
+}
+
+void SearchBox::StopAutocomplete(bool clear_result) {
+  embedded_search_service_->StopAutocomplete(clear_result);
+}
+
+void SearchBox::BlocklistPromo(const std::string& promo_id) {
+  embedded_search_service_->BlocklistPromo(promo_id);
+}
+
+void SearchBox::QueryAutocompleteResult(
+    chrome::mojom::AutocompleteResultPtr result) {
+  if (can_run_js_in_renderframe_) {
+    SearchBoxExtension::DispatchQueryAutocompleteResult(
+        render_frame()->GetWebFrame(), std::move(result));
+  }
+}
+
+void SearchBox::OnDeleteAutocompleteMatch(
+    chrome::mojom::DeleteAutocompleteMatchResultPtr result) {
+  if (can_run_js_in_renderframe_) {
+    SearchBoxExtension::DispatchDeleteAutocompleteMatchResult(
+        render_frame()->GetWebFrame(), std::move(result));
+  }
 }
 
 void SearchBox::SetPageSequenceNumber(int page_seq_no) {

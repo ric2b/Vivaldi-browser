@@ -40,6 +40,7 @@ class StatusAreaWidget;
 class ShelfObserver;
 class TrayBackgroundView;
 class WorkAreaInsets;
+class ShelfTooltipManager;
 
 // Controller for the shelf state. One per display, because each display might
 // have different shelf alignment, autohide, etc. Exists for the lifetime of the
@@ -116,9 +117,6 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
 
   void UpdateVisibilityState();
 
-  // Sets whether shelf's visibility state updates should be suspended.
-  void SetSuspendVisibilityUpdate(bool value);
-
   void MaybeUpdateShelfBackground();
 
   ShelfVisibilityState GetVisibilityState() const;
@@ -140,7 +138,7 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   void ProcessMouseEvent(const ui::MouseEvent& event);
 
   // Handles a mousewheel scroll event coming from the shelf.
-  void ProcessMouseWheelEvent(const ui::MouseWheelEvent& event);
+  void ProcessMouseWheelEvent(ui::MouseWheelEvent* event);
 
   void AddObserver(ShelfObserver* observer);
   void RemoveObserver(ShelfObserver* observer);
@@ -184,6 +182,8 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
     return is_tablet_mode_animation_running_;
   }
   int auto_hide_lock() const { return auto_hide_lock_; }
+
+  ShelfTooltipManager* tooltip() { return tooltip_.get(); }
 
  protected:
   // ShelfLayoutManagerObserver:
@@ -235,6 +235,8 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   // Used by ScopedAutoHideLock to maintain the state of the lock for auto-hide
   // shelf.
   int auto_hide_lock_ = 0;
+
+  std::unique_ptr<ShelfTooltipManager> tooltip_;
 
   DISALLOW_COPY_AND_ASSIGN(Shelf);
 };

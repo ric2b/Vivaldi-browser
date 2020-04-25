@@ -19,6 +19,7 @@ source_set("helpers") {
     "//base:base",
     "//base/test:test_config",
     "//base/test:test_support",
+    "//gpu/ipc/common",
     "//media:test_support",
     "//media/gpu",
     "//mojo/core/embedder:embedder",
@@ -149,27 +150,31 @@ static_library("video_player_test_environment") {
     "//media/test/data/",
   ]
   deps = [
+    ":frame_file_writer",
     ":helpers",
     ":video_player",
     "//media/gpu",
   ]
 }
 
-static_library("image_processor") {
-  testonly = true
-  sources = [
-    "image_processor/image_processor_client.cc",
-    "image_processor/image_processor_client.h",
-  ]
-  deps = [
-    ":helpers",
-    ":render_helpers",
-    "//media:test_support",
-    "//media/gpu",
-    "//testing/gtest",
-    "//third_party/libyuv",
-  ]
-  data = [
-    "//media/test/data/",
-  ]
+if (use_vaapi || use_v4l2_codec) {
+  static_library("image_processor") {
+    testonly = true
+    sources = [
+      "image_processor/image_processor_client.cc",
+      "image_processor/image_processor_client.h",
+    ]
+    deps = [
+      ":helpers",
+      ":render_helpers",
+      "//media:test_support",
+      "//media/gpu",
+      "//media/gpu/chromeos:fourcc",
+      "//testing/gtest",
+      "//third_party/libyuv",
+    ]
+    data = [
+      "//media/test/data/",
+    ]
+  }
 }

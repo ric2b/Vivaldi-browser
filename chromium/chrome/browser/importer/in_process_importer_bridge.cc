@@ -25,9 +25,6 @@
 
 #include <iterator>
 
-#include "importer/imported_notes_entry.h"
-#include "importer/imported_speeddial_entry.h"
-
 namespace {
 
 history::URLRows ConvertImporterURLRowsToHistoryURLRows(
@@ -168,17 +165,6 @@ void InProcessImporterBridge::AddBookmarks(
   writer_->AddBookmarks(bookmarks, first_folder_name);
 }
 
-void InProcessImporterBridge::AddNotes(
-      const std::vector<ImportedNotesEntry>& notes,
-      const base::string16& first_folder_name) {
-  writer_->AddNotes(notes, first_folder_name);
-}
-
-void InProcessImporterBridge::AddSpeedDial(
-    const std::vector<ImportedSpeedDialEntry>& speeddials) {
-  writer_->AddSpeedDial(speeddials);
-}
-
 void InProcessImporterBridge::AddHomePage(const GURL& home_page) {
   writer_->AddHomepage(home_page);
 }
@@ -252,11 +238,6 @@ void InProcessImporterBridge::NotifyItemStarted(importer::ImportItem item) {
 
 void InProcessImporterBridge::NotifyItemEnded(importer::ImportItem item) {
   host_->NotifyImportItemEnded(item);
-}
-
-void InProcessImporterBridge::NotifyItemFailed(importer::ImportItem item,
-                                               const std::string& error) {
-  host_->NotifyImportItemFailed(item, error);
 }
 
 void InProcessImporterBridge::NotifyEnded() {

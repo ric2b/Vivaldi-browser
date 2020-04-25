@@ -34,7 +34,7 @@
 #import "ios/web/public/test/web_view_content_test_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 #import "ios/web/public/web_client.h"
-#include "ios/web/public/web_state/web_state_observer.h"
+#include "ios/web/public/web_state_observer.h"
 #include "ios/web/test/test_url_constants.h"
 #import "ios/web/test/web_int_test.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
@@ -66,6 +66,22 @@ using wk_navigation_util::CreateRedirectUrl;
 const char kExpectedMimeType[] = "text/html";
 
 const char kFailedTitle[] = "failed_title";
+
+// Location of a test page.
+const char kTestPageURL[] = "/pony.html";
+
+// A text string from the test HTML page at |kTestPageURL|.
+const char kTestSessionStoragePageText[] = "pony";
+
+// Returns a session storage with a single committed entry of a test HTML page.
+CRWSessionStorage* GetTestSessionStorage(const GURL& testUrl) {
+  CRWSessionStorage* result = [[CRWSessionStorage alloc] init];
+  result.lastCommittedItemIndex = 0;
+  CRWNavigationItemStorage* item = [[CRWNavigationItemStorage alloc] init];
+  [item setVirtualURL:testUrl];
+  [result setItemStorages:@[ item ]];
+  return result;
+}
 
 // WebStateObserverTest is parameterized on this enum to test both
 // LegacyNavigationManagerImpl and WKBasedNavigationManagerImpl.
@@ -312,7 +328,7 @@ ACTION_P5(VerifyDataFinishedContext,
       PageTransitionCoreTypeIs(ui::PageTransition::PAGE_TRANSITION_TYPED,
                                (*context)->GetPageTransition()));
   EXPECT_FALSE((*context)->IsSameDocument());
-  EXPECT_TRUE((*context)->HasCommitted());
+  EXPECT_FALSE((*context)->HasCommitted());
   EXPECT_FALSE((*context)->IsDownload());
   EXPECT_FALSE((*context)->IsPost());
   EXPECT_FALSE((*context)->GetError());
@@ -2219,6 +2235,7 @@ TEST_P(WebStateObserverTest, DisallowResponse) {
                                                       &context, &nav_id));
   test::LoadUrl(web_state(), test_server_->GetURL("/echo"));
   ASSERT_TRUE(test::WaitForPageToFinishLoading(web_state()));
+  EXPECT_EQ("", web_state()->GetVisibleURL());
 }
 
 // Tests stopping a navigation. Did FinishLoading and PageLoaded are never
@@ -2649,6 +2666,41 @@ TEST_P(WebStateObserverTest, RestoreSessionOnline) {
   EXPECT_EQ(0, navigation_manager()->GetLastCommittedItemIndex());
   ASSERT_TRUE(navigation_manager()->CanGoForward());
   ASSERT_FALSE(navigation_manager()->CanGoBack());
+}
+
+// Tests that if a saved session is provided when creating a new WebState, it is
+// restored after the first NavigationManager::LoadIfNecessary() call.
+TEST_P(WebStateObserverTest, RestoredFromHistory) {
+  auto web_state = WebState::CreateWithStorageSession(
+      WebState::CreateParams(GetBrowserState()),
+      GetTestSessionStorage(test_server_->GetURL(kTestPageURL)));
+
+  ASSERT_FALSE(test::IsWebViewContainingText(web_state.get(),
+                                             kTestSessionStoragePageText));
+  web_state->GetNavigationManager()->LoadIfNecessary();
+  EXPECT_TRUE(test::WaitForWebViewContainingText(web_state.get(),
+                                                 kTestSessionStoragePageText));
+}
+
+// Tests that NavigationManager::LoadIfNecessary() restores the page after
+// disabling and re-enabling web usage.
+TEST_P(WebStateObserverTest, DisableAndReenableWebUsage) {
+  auto web_state = WebState::CreateWithStorageSession(
+      WebState::CreateParams(GetBrowserState()),
+      GetTestSessionStorage(test_server_->GetURL(kTestPageURL)));
+  web_state->GetNavigationManager()->LoadIfNecessary();
+  ASSERT_TRUE(test::WaitForWebViewContainingText(web_state.get(),
+                                                 kTestSessionStoragePageText));
+
+  web_state->SetWebUsageEnabled(false);
+  web_state->SetWebUsageEnabled(true);
+
+  // NavigationManager::LoadIfNecessary() should restore the page.
+  ASSERT_FALSE(test::IsWebViewContainingText(web_state.get(),
+                                             kTestSessionStoragePageText));
+  web_state->GetNavigationManager()->LoadIfNecessary();
+  EXPECT_TRUE(test::WaitForWebViewContainingText(web_state.get(),
+                                                 kTestSessionStoragePageText));
 }
 
 // Tests successful navigation to a PDF file:// URL.

@@ -432,6 +432,68 @@ pp::FloatRect PDFiumPage::GetCharBounds(int char_index) {
   return GetFloatCharRectInPixels(page, text_page, char_index);
 }
 
+uint32_t PDFiumPage::GetLinkCount() {
+  if (!available_)
+    return 0;
+  CalculateLinks();
+  return links_.size();
+}
+
+bool PDFiumPage::GetLinkInfo(uint32_t link_index,
+                             std::string* out_url,
+                             int* out_start_char_index,
+                             int* out_char_count,
+                             pp::FloatRect* out_bounds) {
+  uint32_t link_count = GetLinkCount();
+  if (link_count == 0 || link_index >= link_count)
+    return false;
+
+  const Link& link = links_[link_index];
+  *out_url = link.target.url;
+  *out_start_char_index = link.start_char_index;
+  *out_char_count = link.char_count;
+  pp::Rect link_rect;
+  for (const auto& rect : link.bounding_rects)
+    link_rect = link_rect.Union(rect);
+
+  *out_bounds = pp::FloatRect(link_rect.x(), link_rect.y(), link_rect.width(),
+                              link_rect.height());
+  return true;
+}
+
+uint32_t PDFiumPage::GetImageCount() {
+  if (!available_)
+    return 0;
+  CalculateImages();
+  return images_.size();
+}
+
+bool PDFiumPage::GetImageInfo(uint32_t image_index,
+                              std::string* out_alt_text,
+                              pp::FloatRect* out_bounds) {
+  uint32_t image_count = GetImageCount();
+  if (image_index >= image_count)
+    return false;
+
+  const Image& image_info = images_[image_index];
+  *out_alt_text = image_info.alt_text;
+  *out_bounds = pp::FloatRect(
+      image_info.bounding_rect.x(), image_info.bounding_rect.y(),
+      image_info.bounding_rect.width(), image_info.bounding_rect.height());
+  return true;
+}
+
+PDFiumPage::Area PDFiumPage::GetLinkTargetAtIndex(int link_index,
+                                                  LinkTarget* target) {
+  if (!available_ || link_index < 0)
+    return NONSELECTABLE_AREA;
+  CalculateLinks();
+  if (link_index >= static_cast<int>(links_.size()))
+    return NONSELECTABLE_AREA;
+  *target = links_[link_index].target;
+  return target->url.empty() ? DOCLINK_AREA : WEBLINK_AREA;
+}
+
 PDFiumPage::Area PDFiumPage::GetCharIndex(const pp::Point& point,
                                           PageOrientation orientation,
                                           int* char_index,
@@ -562,16 +624,24 @@ PDFiumPage::Area PDFiumPage::GetDestinationTarget(FPDF_DEST destination,
 
   target->page = page_index;
 
-  base::Optional<gfx::PointF> xy = GetPageXYTarget(destination);
-  if (xy)
-    target->y_in_pixels = TransformPageToScreenXY(xy.value()).y();
+  base::Optional<gfx::PointF> xy;
+  GetPageDestinationTarget(destination, &xy, &target->zoom);
+  if (xy) {
+    gfx::PointF point = TransformPageToScreenXY(xy.value());
+    target->x_in_pixels = point.x();
+    target->y_in_pixels = point.y();
+  }
 
   return DOCLINK_AREA;
 }
 
-base::Optional<gfx::PointF> PDFiumPage::GetPageXYTarget(FPDF_DEST destination) {
+void PDFiumPage::GetPageDestinationTarget(FPDF_DEST destination,
+                                          base::Optional<gfx::PointF>* xy,
+                                          base::Optional<float>* zoom_value) {
+  *xy = base::nullopt;
+  *zoom_value = base::nullopt;
   if (!available_)
-    return {};
+    return;
 
   FPDF_BOOL has_x_coord;
   FPDF_BOOL has_y_coord;
@@ -582,10 +652,14 @@ base::Optional<gfx::PointF> PDFiumPage::GetPageXYTarget(FPDF_DEST destination) {
   FPDF_BOOL success = FPDFDest_GetLocationInPage(
       destination, &has_x_coord, &has_y_coord, &has_zoom, &x, &y, &zoom);
 
-  if (!success || !has_x_coord || !has_y_coord)
-    return {};
+  if (!success)
+    return;
 
-  return {gfx::PointF(x, y)};
+  if (has_x_coord && has_y_coord)
+    *xy = gfx::PointF(x, y);
+
+  if (has_zoom)
+    *zoom_value = zoom;
 }
 
 gfx::PointF PDFiumPage::TransformPageToScreenXY(const gfx::PointF& xy) {
@@ -635,7 +709,7 @@ int PDFiumPage::GetLink(int char_index, LinkTarget* target) {
     for (const auto& rect : links_[i].bounding_rects) {
       if (rect.Contains(origin)) {
         if (target)
-          target->url = links_[i].url;
+          target->url = links_[i].target.url;
         return i;
       }
     }
@@ -648,6 +722,11 @@ void PDFiumPage::CalculateLinks() {
     return;
 
   calculated_links_ = true;
+  PopulateWebLinks();
+  PopulateAnnotationLinks();
+}
+
+void PDFiumPage::PopulateWebLinks() {
   ScopedFPDFPageLink links(FPDFLink_LoadWebLinks(GetTextPage()));
   int count = FPDFLink_CountWebLinks(links.get());
   for (int i = 0; i < count; ++i) {
@@ -662,23 +741,23 @@ void PDFiumPage::CalculateLinks() {
       api_string_adapter.Close(actual_length);
     }
     Link link;
-    link.url = base::UTF16ToUTF8(url);
+    link.target.url = base::UTF16ToUTF8(url);
 
     IsValidLinkFunction is_valid_link_func =
         g_is_valid_link_func_for_testing ? g_is_valid_link_func_for_testing
                                          : &IsValidLink;
-    if (!is_valid_link_func(link.url))
+    if (!is_valid_link_func(link.target.url))
       continue;
 
     // Make sure all the characters in the URL are valid per RFC 1738.
     // http://crbug.com/340326 has a sample bad PDF.
     // GURL does not work correctly, e.g. it just strips \t \r \n.
     bool is_invalid_url = false;
-    for (size_t j = 0; j < link.url.length(); ++j) {
+    for (size_t j = 0; j < link.target.url.length(); ++j) {
       // Control characters are not allowed.
       // 0x7F is also a control character.
       // 0x80 and above are not in US-ASCII.
-      if (link.url[j] < ' ' || link.url[j] >= '\x7F') {
+      if (link.target.url[j] < ' ' || link.target.url[j] >= '\x7F') {
         is_invalid_url = true;
         break;
       }
@@ -703,6 +782,58 @@ void PDFiumPage::CalculateLinks() {
         links.get(), i, &link.start_char_index, &link.char_count);
     DCHECK(is_link_over_text);
     links_.push_back(link);
+  }
+}
+
+void PDFiumPage::PopulateAnnotationLinks() {
+  int start_pos = 0;
+  FPDF_LINK link_annot;
+  FPDF_PAGE page = GetPage();
+  while (FPDFLink_Enumerate(page, &start_pos, &link_annot)) {
+    Link link;
+    Area area = GetLinkTarget(link_annot, &link.target);
+    if (area == NONSELECTABLE_AREA)
+      continue;
+
+    FS_RECTF link_rect;
+    if (!FPDFLink_GetAnnotRect(link_annot, &link_rect))
+      continue;
+
+    // The horizontal/vertical coordinates in PDF Links could be
+    // flipped. Swap the coordinates before further processing.
+    if (link_rect.right < link_rect.left)
+      std::swap(link_rect.right, link_rect.left);
+    if (link_rect.bottom > link_rect.top)
+      std::swap(link_rect.bottom, link_rect.top);
+
+    int quad_point_count = FPDFLink_CountQuadPoints(link_annot);
+    // Calculate the bounds of link using the quad points data.
+    // If quad points for link is not present then use
+    // |link_rect| to calculate the bounds instead.
+    if (quad_point_count > 0) {
+      for (int i = 0; i < quad_point_count; ++i) {
+        FS_QUADPOINTSF point;
+        if (FPDFLink_GetQuadPoints(link_annot, i, &point)) {
+          // PDF Specifications: Quadpoints start from bottom left (x1, y1) and
+          // runs counter clockwise.
+          link.bounding_rects.push_back(
+              PageToScreen(pp::Point(), 1.0, point.x4, point.y4, point.x2,
+                           point.y2, PageOrientation::kOriginal));
+        }
+      }
+    } else {
+      link.bounding_rects.push_back(PageToScreen(
+          pp::Point(), 1.0, link_rect.left, link_rect.top, link_rect.right,
+          link_rect.bottom, PageOrientation::kOriginal));
+    }
+
+    // Calculate underlying text range of link.
+    GetUnderlyingTextRangeForRect(
+        pp::FloatRect(link_rect.left, link_rect.bottom,
+                      std::abs(link_rect.right - link_rect.left),
+                      std::abs(link_rect.bottom - link_rect.top)),
+        &link.start_char_index, &link.char_count);
+    links_.emplace_back(link);
   }
 }
 

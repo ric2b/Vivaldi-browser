@@ -147,6 +147,7 @@ enum PrintSettingsBuckets {
   DEFAULT_DPI,
   NON_DEFAULT_DPI,
   PIN,
+  FIT_TO_PAPER,
   PRINT_SETTINGS_BUCKET_BOUNDARY
 };
 
@@ -315,9 +316,6 @@ void ReportPrintSettingsStats(const base::Value& print_settings,
   if (print_settings.FindIntKey(kSettingCopies).value_or(1) > 1)
     ReportPrintSettingHistogram(COPIES);
 
-  if (preview_settings.FindIntKey(kSettingScaleFactor).value_or(100) != 100)
-    ReportPrintSettingHistogram(SCALING);
-
   if (preview_settings.FindIntKey(kSettingPagesPerSheet).value_or(1) != 1)
     ReportPrintSettingHistogram(PAGES_PER_SHEET);
 
@@ -354,9 +352,18 @@ void ReportPrintSettingsStats(const base::Value& print_settings,
   if (preview_settings.FindBoolKey(kSettingRasterizePdf).value_or(false))
     ReportPrintSettingHistogram(PRINT_AS_IMAGE);
 
-  if (is_pdf &&
-      preview_settings.FindBoolKey(kSettingFitToPageEnabled).value_or(false)) {
-    ReportPrintSettingHistogram(FIT_TO_PAGE);
+  ScalingType scaling_type =
+      static_cast<ScalingType>(preview_settings.FindIntKey(kSettingScalingType)
+                                   .value_or(ScalingType::DEFAULT));
+  if (scaling_type == ScalingType::CUSTOM) {
+    ReportPrintSettingHistogram(SCALING);
+  }
+
+  if (is_pdf) {
+    if (scaling_type == ScalingType::FIT_TO_PAGE)
+      ReportPrintSettingHistogram(FIT_TO_PAGE);
+    else if (scaling_type == ScalingType::FIT_TO_PAPER)
+      ReportPrintSettingHistogram(FIT_TO_PAPER);
   }
 
   if (print_settings.FindIntKey(kSettingDpiHorizontal).value_or(0) > 0 &&
@@ -377,21 +384,32 @@ void ReportPrintSettingsStats(const base::Value& print_settings,
 
 UserActionBuckets DetermineUserAction(const base::Value& settings) {
 #if defined(OS_MACOSX)
-  if (settings.FindKey(kSettingOpenPDFInPreview) != nullptr)
+  if (settings.FindKey(kSettingOpenPDFInPreview))
     return OPEN_IN_MAC_PREVIEW;
 #endif
   // This needs to be checked before checking for a cloud print ID, since a
   // print ticket for printing to Drive will also contain a cloud print ID.
   if (settings.FindBoolKey(kSettingPrintToGoogleDrive).value_or(false))
     return PRINT_TO_GOOGLE_DRIVE;
-  if (settings.FindKey(kSettingCloudPrintId) != nullptr)
+  if (settings.FindKey(kSettingCloudPrintId))
     return PRINT_WITH_CLOUD_PRINT;
-  if (settings.FindBoolKey(kSettingPrintWithPrivet).value_or(false))
-    return PRINT_WITH_PRIVET;
-  if (settings.FindBoolKey(kSettingPrintWithExtension).value_or(false))
-    return PRINT_WITH_EXTENSION;
-  if (settings.FindBoolKey(kSettingPrintToPDF).value_or(false))
-    return PRINT_TO_PDF;
+
+  PrinterType type = static_cast<PrinterType>(
+      settings.FindIntKey(kSettingPrinterType).value());
+  switch (type) {
+    case kPrivetPrinter:
+      return PRINT_WITH_PRIVET;
+    case kExtensionPrinter:
+      return PRINT_WITH_EXTENSION;
+    case kPdfPrinter:
+      return PRINT_TO_PDF;
+    case kLocalPrinter:
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+
   if (settings.FindBoolKey(kSettingShowSystemDialog).value_or(false))
     return FALLBACK_TO_ADVANCED_SETTINGS_DIALOG;
   return PRINT_TO_PRINTER;
@@ -965,7 +983,7 @@ void PrintPreviewHandler::GetUserAccountList(base::Value* settings) {
     const std::vector<gaia::ListedAccount>& accounts =
         identity_manager_->GetAccountsInCookieJar().signed_in_accounts;
     for (const gaia::ListedAccount& account : accounts) {
-      account_list.GetList().emplace_back(account.email);
+      account_list.Append(account.email);
     }
     settings->SetKey(kSyncAvailable, base::Value(true));
   } else {
@@ -982,6 +1000,8 @@ void PrintPreviewHandler::SendInitialSettings(
                                 print_preview_ui()->initiator_title());
   initial_settings.SetBoolKey(kSettingPreviewModifiable,
                               print_preview_ui()->source_is_modifiable());
+  initial_settings.SetBoolKey(kSettingPreviewIsPdf,
+                              print_preview_ui()->source_is_pdf());
   initial_settings.SetStringKey(kSettingPrinterName, default_printer);
   initial_settings.SetBoolKey(kDocumentHasSelection,
                               print_preview_ui()->source_has_selection());
@@ -1122,7 +1142,7 @@ void PrintPreviewHandler::OnAccountsInCookieUpdated(
   const std::vector<gaia::ListedAccount>& accounts =
       accounts_in_cookie_jar_info.signed_in_accounts;
   for (const auto account : accounts) {
-    account_list.GetList().emplace_back(account.email);
+    account_list.Append(account.email);
   }
   FireWebUIListener("user-accounts-updated", std::move(account_list));
 }
@@ -1136,6 +1156,10 @@ void PrintPreviewHandler::OnPrintPreviewReady(int preview_uid, int request_id) {
 }
 
 void PrintPreviewHandler::OnPrintPreviewFailed(int request_id) {
+  WebContents* initiator = GetInitiator();
+  if (!initiator || initiator->IsBeingDestroyed())
+    return;  // Drop notification if fired during destruction sequence.
+
   std::string callback_id = GetCallbackId(request_id);
   if (callback_id.empty())
     return;

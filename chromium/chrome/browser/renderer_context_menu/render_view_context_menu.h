@@ -33,11 +33,10 @@
 #include "chrome/browser/extensions/menu_manager.h"
 #endif
 
-class AccessibilityLabelsMenuObserver;
-class ClickToCallContextMenuObserver;
-
 #include "notes/notes_submenu_observer.h"
 
+class AccessibilityLabelsMenuObserver;
+class ClickToCallContextMenuObserver;
 class PrintPreviewContextMenuObserver;
 class Profile;
 class SharedClipboardContextMenuObserver;
@@ -59,8 +58,8 @@ class Point;
 }
 
 namespace blink {
+struct PluginAction;
 struct WebMediaPlayerAction;
-struct WebPluginAction;
 }
 
 class RenderViewContextMenu : public RenderViewContextMenuBase {
@@ -176,7 +175,6 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void AppendRotationItems();
   void AppendEditableItems();
   void AppendLanguageSettings();
-  void AppendInsertNoteSubMenu();
   void AppendSpellingSuggestionItems();
   void AppendSharedClipboardItems();
   // Returns true if the items were appended. This might not happen in all
@@ -240,11 +238,14 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void MediaPlayerActionAt(const gfx::Point& location,
                            const blink::WebMediaPlayerAction& action);
   void PluginActionAt(const gfx::Point& location,
-                      const blink::WebPluginAction& action);
+                      const blink::PluginAction& action);
 
   // Returns a list of registered ProtocolHandlers that can handle the clicked
   // on URL.
   ProtocolHandlerRegistry::ProtocolHandlerList GetHandlersForLinkUrl();
+
+  // Vivaldi
+  void AppendInsertNoteSubMenu();
 
   // The destination URL to use if the user tries to search for or navigate to
   // a text selection.
@@ -271,9 +272,6 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   std::unique_ptr<SpellingOptionsSubMenuObserver>
       spelling_options_submenu_observer_;
 #endif
-
-  std::unique_ptr<NotesSubMenuObserver>
-    insert_note_submenu_observer_;
 
 #if defined(OS_CHROMEOS)
   // An observer that handles "Open with <app>" items.
@@ -304,6 +302,9 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   // Shared clipboard menu observer.
   std::unique_ptr<SharedClipboardContextMenuObserver>
       shared_clipboard_context_menu_observer_;
+
+  // Vivaldi
+  std::unique_ptr<NotesSubMenuObserver> insert_note_submenu_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderViewContextMenu);
 };

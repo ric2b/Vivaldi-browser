@@ -14,11 +14,13 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "media/base/media_switches.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "net/dns/mock_host_resolver.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/autoplay/autoplay.mojom.h"
@@ -59,11 +61,13 @@ class ChromeContentBrowserClientOverrideWebAppScope
 // conflict with "AutoplayBrowserTest" in extensions code.
 class UnifiedAutoplayBrowserTest : public InProcessBrowserTest {
  public:
+  UnifiedAutoplayBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeature(media::kUnifiedAutoplay);
+  }
+
   ~UnifiedAutoplayBrowserTest() override = default;
 
   void SetUpOnMainThread() override {
-    scoped_feature_list_.InitAndEnableFeature(media::kUnifiedAutoplay);
-
     host_resolver()->AddRule("*", "127.0.0.1");
     ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -107,7 +111,7 @@ class UnifiedAutoplayBrowserTest : public InProcessBrowserTest {
   }
 
   void SetAutoplayForceAllowFlag(const GURL& url) {
-    blink::mojom::AutoplayConfigurationClientAssociatedPtr client;
+    mojo::AssociatedRemote<blink::mojom::AutoplayConfigurationClient> client;
     GetWebContents()
         ->GetMainFrame()
         ->GetRemoteAssociatedInterfaces()
@@ -416,13 +420,16 @@ IN_PROC_BROWSER_TEST_F(UnifiedAutoplayBrowserTest,
 
 class UnifiedAutoplaySettingBrowserTest : public UnifiedAutoplayBrowserTest {
  public:
+  UnifiedAutoplaySettingBrowserTest() {
+    scoped_feature_list_.InitWithFeatures(
+        {media::kAutoplayDisableSettings, media::kAutoplayWhitelistSettings},
+        {});
+  }
+
   ~UnifiedAutoplaySettingBrowserTest() override = default;
 
   void SetUpOnMainThread() override {
     UnifiedAutoplayBrowserTest::SetUpOnMainThread();
-    scoped_feature_list_.InitWithFeatures(
-        {media::kAutoplayDisableSettings, media::kAutoplayWhitelistSettings},
-        {});
   }
 
   bool AutoplayAllowed(const content::ToRenderFrameHost& adapter) {

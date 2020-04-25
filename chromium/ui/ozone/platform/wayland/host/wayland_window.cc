@@ -303,6 +303,16 @@ void WaylandWindow::ApplyPendingBounds() {
   MaybeUpdateOpaqueRegion();
 }
 
+void WaylandWindow::SetPointerFocus(bool focus) {
+  has_pointer_focus_ = focus;
+
+  // Whenever the window gets the pointer focus back, we must reinitialize the
+  // cursor. Otherwise, it is invalidated whenever the pointer leaves the
+  // surface and is not restored by the Wayland compositor.
+  if (has_pointer_focus_ && bitmap_)
+    connection_->SetCursorBitmap(bitmap_->bitmaps(), bitmap_->hotspot());
+}
+
 void WaylandWindow::DispatchHostWindowDragMovement(
     int hittest,
     const gfx::Point& pointer_location_in_px) {
@@ -326,7 +336,7 @@ void WaylandWindow::StartDrag(const ui::OSExchangeData& data,
   connection_->StartDrag(data, operation);
 }
 
-void WaylandWindow::Show() {
+void WaylandWindow::Show(bool inactive) {
   if (!is_tooltip_)  // Tooltip windows should not get keyboard focus
     set_keyboard_focus(true);
 
@@ -371,21 +381,18 @@ void WaylandWindow::Hide() {
 }
 
 void WaylandWindow::Close() {
-  NOTIMPLEMENTED();
+  delegate_->OnClosed();
+}
+
+bool WaylandWindow::IsVisible() const {
+  // X and Windows return true if the window is minimized. For consistency, do
+  // the same.
+  return (!!xdg_surface_ || !!xdg_popup_) || IsMinimized();
 }
 
 void WaylandWindow::PrepareForShutdown() {}
 
 void WaylandWindow::SetBounds(const gfx::Rect& bounds_px) {
-  // TODO(crbug.com/958314): figure out if this return is legitimate.
-  //
-  // The X11 implementation says that even if the pixel bounds didn't change, we
-  // still need to forward this call to the delegate, and that the device scale
-  // factor may have changed which effectively changes the bounds.  Perhaps we
-  // need to do the same here.
-  //
-  // After this is resolved, update test expectations for calls to
-  // delegate's OnBoundsChanged.
   if (bounds_px_ == bounds_px)
     return;
   bounds_px_ = bounds_px;
@@ -501,7 +508,16 @@ void WaylandWindow::Deactivate() {
   NOTIMPLEMENTED_LOG_ONCE();
 }
 
-void WaylandWindow::SetUseNativeFrame(bool use_native_frame) {}
+void WaylandWindow::SetUseNativeFrame(bool use_native_frame) {
+  // See comment below in ShouldUseNativeFrame.
+  NOTIMPLEMENTED_LOG_ONCE();
+}
+
+bool WaylandWindow::ShouldUseNativeFrame() const {
+  // This depends on availability of XDG-Decoration protocol extension.
+  NOTIMPLEMENTED_LOG_ONCE();
+  return false;
+}
 
 void WaylandWindow::SetCursor(PlatformCursor cursor) {
   scoped_refptr<BitmapCursorOzone> bitmap =
@@ -532,6 +548,24 @@ void WaylandWindow::SetRestoredBoundsInPixels(const gfx::Rect& bounds_px) {
 
 gfx::Rect WaylandWindow::GetRestoredBoundsInPixels() const {
   return restored_bounds_px_;
+}
+
+bool WaylandWindow::ShouldWindowContentsBeTransparent() const {
+  NOTIMPLEMENTED_LOG_ONCE();
+  return false;
+}
+
+void WaylandWindow::SetAspectRatio(const gfx::SizeF& aspect_ratio) {
+  NOTIMPLEMENTED_LOG_ONCE();
+}
+
+void WaylandWindow::SetWindowIcons(const gfx::ImageSkia& window_icon,
+                                   const gfx::ImageSkia& app_icon) {
+  NOTIMPLEMENTED_LOG_ONCE();
+}
+
+void WaylandWindow::SizeConstraintsChanged() {
+  NOTIMPLEMENTED_LOG_ONCE();
 }
 
 bool WaylandWindow::CanDispatchEvent(const PlatformEvent& event) {

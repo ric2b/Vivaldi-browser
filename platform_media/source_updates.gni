@@ -333,13 +333,19 @@ update_target("//media/base:base") {
 # ------------------
 
 if (is_mac) {
-   update_target("//media/base/mac:mac") {
-     sources += [
-       "//vivaldi/platform_media/common/mac/framework_type_conversions.h",
-       "//vivaldi/platform_media/common/mac/framework_type_conversions.mm",
-       "//vivaldi/platform_media/common/mac/scoped_audio_queue_ref.h",
-     ]
-   }
+  update_target("//media/base/mac:mac") {
+    sources += [
+      "//vivaldi/platform_media/common/mac/framework_type_conversions.h",
+      "//vivaldi/platform_media/common/mac/framework_type_conversions.mm",
+      "//vivaldi/platform_media/common/mac/scoped_audio_queue_ref.h",
+    ]
+  }
+
+  update_target("//services/service_manager/sandbox/mac:package_sb_files") {
+    sources -= ["renderer.sb"]
+    sources += [get_label_info("//vivaldi/platform_media/mac:generate_sb_files", "target_gen_dir")+"/renderer.sb"]
+    deps = ["//vivaldi/platform_media/mac:generate_sb_files"]
+  }
 }
 
 } # system_proprietary_codecs

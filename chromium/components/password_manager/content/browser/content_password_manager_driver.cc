@@ -14,7 +14,6 @@
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/content/browser/bad_message.h"
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
-#include "components/password_manager/content/browser/form_submission_tracker_util.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_metrics_recorder.h"
@@ -65,6 +64,8 @@ ContentPasswordManagerDriver::ContentPasswordManagerDriver(
       password_autofill_manager_(this, autofill_client, client),
       is_main_frame_(render_frame_host->GetParent() == nullptr),
       password_manager_receiver_(this) {
+  static unsigned next_free_id = 0;
+  id_ = next_free_id++;
   // For some frames |this| may be instantiated before log manager creation, so
   // here we can not send logging state to renderer process for them. For such
   // cases, after the log manager got ready later,
@@ -79,8 +80,7 @@ ContentPasswordManagerDriver::ContentPasswordManagerDriver(
   }
 }
 
-ContentPasswordManagerDriver::~ContentPasswordManagerDriver() {
-}
+ContentPasswordManagerDriver::~ContentPasswordManagerDriver() = default;
 
 // static
 ContentPasswordManagerDriver*
@@ -98,6 +98,10 @@ void ContentPasswordManagerDriver::BindPendingReceiver(
   password_manager_receiver_.Bind(std::move(pending_receiver));
 }
 
+int ContentPasswordManagerDriver::GetId() const {
+  return id_;
+}
+
 void ContentPasswordManagerDriver::FillPasswordForm(
     const autofill::PasswordFormFillData& form_data) {
   password_autofill_manager_.OnAddPasswordFillData(form_data);
@@ -113,14 +117,6 @@ void ContentPasswordManagerDriver::FormEligibleForGenerationFound(
   }
 }
 
-void ContentPasswordManagerDriver::AutofillDataReceived(
-    const autofill::FormsPredictionsMap& predictions) {
-  // TODO(https://crbug.com/949519): Remove this method, MOJO calls and
-  // processing server predictions in the renderer.
-  GetPasswordAutofillAgent()->AutofillUsernameAndPasswordDataReceived(
-      predictions);
-}
-
 void ContentPasswordManagerDriver::GeneratedPasswordAccepted(
     const base::string16& password) {
   GetPasswordGenerationAgent()->GeneratedPasswordAccepted(password);
@@ -132,6 +128,11 @@ void ContentPasswordManagerDriver::GeneratedPasswordAccepted(
     const base::string16& password) {
   GetPasswordManager()->OnGeneratedPasswordAccepted(
       this, form_data, generation_element_id, password);
+}
+
+void ContentPasswordManagerDriver::TouchToFillClosed(
+    ShowVirtualKeyboard show_virtual_keyboard) {
+  GetPasswordAutofillAgent()->TouchToFillClosed(show_virtual_keyboard.value());
 }
 
 void ContentPasswordManagerDriver::FillSuggestion(
@@ -150,12 +151,6 @@ void ContentPasswordManagerDriver::PreviewSuggestion(
     const base::string16& username,
     const base::string16& password) {
   GetAutofillAgent()->PreviewPasswordSuggestion(username, password);
-}
-
-void ContentPasswordManagerDriver::ShowInitialPasswordAccountSuggestions(
-    const autofill::PasswordFormFillData& form_data) {
-  password_autofill_manager_.OnAddPasswordFillData(form_data);
-  GetAutofillAgent()->ShowInitialPasswordAccountSuggestions(form_data);
 }
 
 void ContentPasswordManagerDriver::ClearPreviewedForm() {
@@ -194,17 +189,9 @@ const GURL& ContentPasswordManagerDriver::GetLastCommittedURL() const {
   return render_frame_host_->GetLastCommittedURL();
 }
 
-void ContentPasswordManagerDriver::DidNavigateFrame(
-    content::NavigationHandle* navigation_handle) {
-  // Clear page specific data after main frame navigation.
-  if (navigation_handle->IsInMainFrame() &&
-      !navigation_handle->IsSameDocument()) {
-    NotifyDidNavigateMainFrame(navigation_handle->IsRendererInitiated(),
-                               navigation_handle->GetPageTransition(),
-                               navigation_handle->WasInitiatedByLinkClick(),
-                               GetPasswordManager());
-    GetPasswordAutofillManager()->DidNavigateMainFrame();
-  }
+void ContentPasswordManagerDriver::AnnotateFieldsWithParsingResult(
+    const autofill::ParsingResult& parsing_result) {
+  GetPasswordAutofillAgent()->AnnotateFieldsWithParsingResult(parsing_result);
 }
 
 void ContentPasswordManagerDriver::GeneratePassword(
@@ -269,13 +256,9 @@ void ContentPasswordManagerDriver::HideManualFallbackForSaving() {
 }
 
 void ContentPasswordManagerDriver::SameDocumentNavigation(
-    const autofill::PasswordForm& password_form) {
-  if (!password_manager::bad_message::CheckChildProcessSecurityPolicy(
-          render_frame_host_, password_form,
-          BadMessageReason::CPMD_BAD_ORIGIN_IN_PAGE_NAVIGATION))
-    return;
-  GetPasswordManager()->OnPasswordFormSubmittedNoChecks(this, password_form);
-
+    autofill::mojom::SubmissionIndicatorEvent submission_indication_event) {
+  GetPasswordManager()->OnPasswordFormSubmittedNoChecks(
+      this, submission_indication_event);
   LogSiteIsolationMetricsForSubmittedForm(render_frame_host_);
 }
 

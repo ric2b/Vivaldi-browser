@@ -40,6 +40,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
@@ -112,6 +113,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   void CreateRestrictedCookieManager(
       network::mojom::RestrictedCookieManagerRole role,
       const url::Origin& origin,
+      const GURL& site_for_cookies,
+      const url::Origin& top_frame_origin,
       bool is_service_worker,
       int process_id,
       int routing_id,
@@ -297,7 +300,8 @@ class CONTENT_EXPORT StoragePartitionImpl
 
   // Override the origin policy manager for testing use only.
   void SetOriginPolicyManagerForBrowserProcessForTesting(
-      network::mojom::OriginPolicyManagerPtr test_origin_policy_manager);
+      mojo::PendingRemote<network::mojom::OriginPolicyManager>
+          test_origin_policy_manager);
   void ResetOriginPolicyManagerForBrowserProcessForTesting();
 
  private:
@@ -463,7 +467,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   // service. When it's disabled, the underlying NetworkContext may either be
   // provided by the embedder, or is created by the StoragePartition and owned
   // by |network_context_owner_|.
-  network::mojom::NetworkContextPtr network_context_;
+  mojo::Remote<network::mojom::NetworkContext> network_context_;
 
   mojo::Receiver<network::mojom::NetworkContextClient>
       network_context_client_receiver_{this};
@@ -484,7 +488,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   bool is_test_url_loader_factory_for_browser_process_with_corb_ = false;
   mojo::Remote<network::mojom::CookieManager>
       cookie_manager_for_browser_process_;
-  network::mojom::OriginPolicyManagerPtr
+  mojo::Remote<network::mojom::OriginPolicyManager>
       origin_policy_manager_for_browser_process_;
 
   // See comments for site_for_service_worker().

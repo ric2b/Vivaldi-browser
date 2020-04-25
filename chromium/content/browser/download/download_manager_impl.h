@@ -88,7 +88,6 @@ class CONTENT_EXPORT DownloadManagerImpl
   void DownloadUrl(
       std::unique_ptr<download::DownloadUrlParameters> parameters) override;
   void DownloadUrl(std::unique_ptr<download::DownloadUrlParameters> params,
-                   std::unique_ptr<storage::BlobDataHandle> blob_data_handle,
                    scoped_refptr<network::SharedURLLoaderFactory>
                        blob_url_loader_factory) override;
   void AddObserver(Observer* observer) override;
@@ -136,7 +135,7 @@ class CONTENT_EXPORT DownloadManagerImpl
   void StartDownload(
       std::unique_ptr<download::DownloadCreateInfo> info,
       std::unique_ptr<download::InputStream> stream,
-      const download::DownloadUrlParameters::OnStartedCallback& on_started);
+      download::DownloadUrlParameters::OnStartedCallback on_started);
 
   // For testing; specifically, accessed from TestFileErrorInjector.
   void SetDownloadItemFactoryForTesting(
@@ -182,14 +181,14 @@ class CONTENT_EXPORT DownloadManagerImpl
   base::FilePath GetDefaultDownloadDirectory() override;
   void StartDownloadItem(
       std::unique_ptr<download::DownloadCreateInfo> info,
-      const download::DownloadUrlParameters::OnStartedCallback& on_started,
+      download::DownloadUrlParameters::OnStartedCallback on_started,
       download::InProgressDownloadManager::StartDownloadItemCallback callback)
       override;
 
   // Creates a new download item and call |callback|.
   void CreateNewDownloadItemToStart(
       std::unique_ptr<download::DownloadCreateInfo> info,
-      const download::DownloadUrlParameters::OnStartedCallback& on_started,
+      download::DownloadUrlParameters::OnStartedCallback on_started,
       download::InProgressDownloadManager::StartDownloadItemCallback callback,
       uint32_t id);
 
@@ -231,8 +230,6 @@ class CONTENT_EXPORT DownloadManagerImpl
   void ShowDownloadInShell(download::DownloadItemImpl* download) override;
   void DownloadRemoved(download::DownloadItemImpl* download) override;
   void DownloadInterrupted(download::DownloadItemImpl* download) override;
-  base::Optional<download::DownloadEntry> GetInProgressEntry(
-      download::DownloadItemImpl* download) override;
   bool IsOffTheRecord() const override;
   void ReportBytesWasted(download::DownloadItemImpl* download) override;
   service_manager::Connector* GetServiceManagerConnector() override;
@@ -245,7 +242,6 @@ class CONTENT_EXPORT DownloadManagerImpl
   // Helper method to start or resume a download.
   void BeginDownloadInternal(
       std::unique_ptr<download::DownloadUrlParameters> params,
-      std::unique_ptr<storage::BlobDataHandle> blob_data_handle,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
       bool is_new_download,
       const GURL& site_url);
@@ -283,14 +279,12 @@ class CONTENT_EXPORT DownloadManagerImpl
   // Called when this object is considered initialized.
   void OnDownloadManagerInitialized();
 
-#if defined(OS_ANDROID)
-  // Check whether a download should be cleared from history. On Android,
-  // cancelled and non-resumable interrupted download will be cleaned up to
-  // save memory.
+  // Check whether a download should be cleared from history. Cancelled and
+  // non-resumable interrupted download will be cleaned up to save memory.
   bool ShouldClearDownloadFromDB(const GURL& url,
                                  download::DownloadItem::DownloadState state,
-                                 download::DownloadInterruptReason reason);
-#endif  // defined(OS_ANDROID)
+                                 download::DownloadInterruptReason reason,
+                                 const base::Time& start_time);
 
   // Factory for creation of downloads items.
   std::unique_ptr<download::DownloadItemFactory> item_factory_;

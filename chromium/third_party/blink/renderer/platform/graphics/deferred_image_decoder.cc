@@ -36,7 +36,6 @@
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/image-decoders/segment_reader.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
 #include "third_party/skia/include/core/SkImage.h"
 
@@ -234,11 +233,14 @@ sk_sp<PaintImageGenerator> DeferredImageDecoder::CreateGenerator(size_t index) {
   // common, so we avoid worrying about this with the line below.
   can_yuv_decode_ &= !incremental_decode_needed_.value();
 
+  DCHECK(image_metadata_);
+  image_metadata_->all_data_received_prior_to_decode =
+      !incremental_decode_needed_.value();
+
   auto generator = DecodingImageGenerator::Create(
       frame_generator_, info, std::move(segment_reader), std::move(frames),
-      complete_frame_content_id_, all_data_received_,
-      !incremental_decode_needed_.value() /* able to do accelerated decoding */,
-      can_yuv_decode_, image_type);
+      complete_frame_content_id_, all_data_received_, can_yuv_decode_,
+      *image_metadata_);
   first_decoding_generator_created_ = true;
 
   size_t image_byte_size = ByteSize();
@@ -418,9 +420,11 @@ void DeferredImageDecoder::PrepareLazyDecodedFrames() {
   }
 
   can_yuv_decode_ =
-      RuntimeEnabledFeatures::DecodeLossyWebPImagesToYUVEnabled() &&
       metadata_decoder_->CanDecodeToYUV() && all_data_received_ &&
       !frame_generator_->IsMultiFrame();
+
+  if (!image_metadata_)
+    image_metadata_ = metadata_decoder_->MakeMetadataForDecodeAcceleration();
 
   // If we've received all of the data, then we can reset the metadata decoder,
   // since everything we care about should now be stored in |frame_data_|.

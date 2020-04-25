@@ -15,6 +15,8 @@ import android.widget.TextView;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * The Button used for switching tabs. Currently this class is only being used for the bottom
  * toolbar tab switcher button.
@@ -57,6 +59,10 @@ public class TabSwitcherButtonView extends ImageView {
     protected void onFinishInflate() {
         super.onFinishInflate();
 
+        if (ChromeApplication.isVivaldi()) {
+            mTabSwitcherButtonDrawable =
+                    TabSwitcherDrawable.createTabSwitcherDrawableFromSVG(getContext(), true, false);
+        } else
         mTabSwitcherButtonDrawable =
                 TabSwitcherDrawable.createTabSwitcherDrawable(getContext(), false);
         setImageDrawable(mTabSwitcherButtonDrawable);

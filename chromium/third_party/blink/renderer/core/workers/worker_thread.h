@@ -35,7 +35,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/thread_annotations.h"
 #include "base/unguessable_token.h"
-#include "services/network/public/mojom/fetch_api.mojom-blink.h"
+#include "services/network/public/mojom/fetch_api.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_thread_type.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -57,7 +57,6 @@ namespace blink {
 
 class ConsoleMessageStorage;
 class InspectorTaskRunner;
-class InstalledScriptsManager;
 class WorkerBackingThread;
 class WorkerInspectorController;
 class WorkerOrWorkletGlobalScope;
@@ -187,6 +186,8 @@ class CORE_EXPORT WorkerThread : public Thread::TaskObserver {
 
   // Runs |function| with |parameters| on each worker thread, and
   // adds the current WorkerThread* as the first parameter |function|.
+  // This only calls |function| for threads for which Start() was already
+  // called.
   template <typename FunctionType, typename... Parameters>
   static void CallOnAllWorkerThreads(FunctionType function,
                                      TaskType task_type,
@@ -212,11 +213,6 @@ class CORE_EXPORT WorkerThread : public Thread::TaskObserver {
     return parent_thread_default_task_runner_;
   }
 
-  // For ServiceWorkerScriptStreaming. Returns nullptr otherwise.
-  virtual InstalledScriptsManager* GetInstalledScriptsManager() {
-    return nullptr;
-  }
-
   scheduler::WorkerScheduler* GetScheduler();
 
   // Returns a task runner bound to the per-global-scope scheduler's task queue.
@@ -226,6 +222,7 @@ class CORE_EXPORT WorkerThread : public Thread::TaskObserver {
   // function can be called on both the main thread and the worker thread.
   // You must not call this after Terminate() is called.
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(TaskType type) {
+    DCHECK(worker_scheduler_);
     return worker_scheduler_->GetTaskRunner(type);
   }
 
@@ -273,7 +270,11 @@ class CORE_EXPORT WorkerThread : public Thread::TaskObserver {
   FRIEND_TEST_ALL_PREFIXES(WorkerThreadTest,
                            Terminate_WhileDebuggerTaskIsRunning);
 
+  // Contains threads which are created but haven't started.
+  static HashSet<WorkerThread*>& InitializingWorkerThreads();
+  // Contains threads which have started.
   static HashSet<WorkerThread*>& WorkerThreads();
+  // This mutex guards both WorkerThreads() and InitializingWorkerThreads().
   static Mutex& ThreadSetMutex();
 
   // Represents the state of this worker thread.

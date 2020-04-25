@@ -21,9 +21,12 @@
 #include "services/service_manager/embedder/result_codes.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "weblayer/browser/webui/web_ui_controller_factory.h"
 #include "weblayer/public/main.h"
 
 #if defined(OS_ANDROID)
+#include "components/crash/content/browser/child_exit_observer_android.h"
+#include "components/crash/content/browser/child_process_crash_observer_android.h"
 #include "net/android/network_change_notifier_factory_android.h"
 #include "net/base/network_change_notifier.h"
 #endif
@@ -56,10 +59,21 @@ void StopMessageLoop(base::OnceClosure quit_closure) {
 BrowserMainPartsImpl::BrowserMainPartsImpl(
     MainParams* params,
     const content::MainFunctionParams& main_function_params)
-    : params_(params) {}
+    : params_(params), main_function_params_(main_function_params) {}
 
 BrowserMainPartsImpl::~BrowserMainPartsImpl() = default;
 
+int BrowserMainPartsImpl::PreCreateThreads() {
+#if defined(OS_ANDROID)
+  // The ChildExitObserver needs to be created before any child process is
+  // created because it needs to be notified during process creation.
+  crash_reporter::ChildExitObserver::Create();
+  crash_reporter::ChildExitObserver::GetInstance()->RegisterClient(
+      std::make_unique<crash_reporter::ChildProcessCrashObserver>());
+#endif
+
+  return service_manager::RESULT_CODE_NORMAL_EXIT;
+}
 void BrowserMainPartsImpl::PreMainMessageLoopStart() {
 #if defined(USE_AURA) && defined(USE_X11)
   ui::TouchFactory::SetTouchDeviceListFromCommandLine();
@@ -83,6 +97,19 @@ int BrowserMainPartsImpl::PreEarlyInitialization() {
 void BrowserMainPartsImpl::PreMainMessageLoopRun() {
   ui::MaterialDesignController::Initialize();
   params_->delegate->PreMainMessageLoopRun();
+
+  content::WebUIControllerFactory::RegisterFactory(
+      WebUIControllerFactory::GetInstance());
+
+  if (main_function_params_.ui_task) {
+    main_function_params_.ui_task->Run();
+    delete main_function_params_.ui_task;
+    run_message_loop_ = false;
+  }
+}
+
+bool BrowserMainPartsImpl::MainMessageLoopRun(int* result_code) {
+  return !run_message_loop_;
 }
 
 void BrowserMainPartsImpl::PreDefaultMainMessageLoopRun(

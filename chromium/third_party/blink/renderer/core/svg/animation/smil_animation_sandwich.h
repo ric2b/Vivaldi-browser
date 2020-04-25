@@ -33,49 +33,105 @@
 
 namespace blink {
 
-struct PriorityCompare {
-  PriorityCompare(double elapsed) : elapsed_(elapsed) {}
-  bool operator()(const Member<SVGSMILElement>& a,
-                  const Member<SVGSMILElement>& b) {
-    // FIXME: This should also consider possible timing relations between the
-    // elements.
-    SMILTime a_begin = a->IntervalBegin();
-    SMILTime b_begin = b->IntervalBegin();
-    // Frozen elements need to be prioritized based on their previous interval.
-    a_begin = a->IsFrozen() && elapsed_ < a_begin ? a->PreviousIntervalBegin()
-                                                  : a_begin;
-    b_begin = b->IsFrozen() && elapsed_ < b_begin ? b->PreviousIntervalBegin()
-                                                  : b_begin;
-    if (a_begin == b_begin)
-      return a->DocumentOrderIndex() < b->DocumentOrderIndex();
-    return a_begin < b_begin;
-  }
-  double elapsed_;
-};
-
+// This class implements/helps with implementing the "sandwich model" from SMIL.
+// https://www.w3.org/TR/SMIL3/smil-animation.html#animationNS-AnimationSandwichModel
+//
+// A "sandwich" contains all the animation elements (actually timed elements in
+// our case because of how we handle <discard>) that targets a specific
+// attribute (or property) on a certain element.
+//
+// Consider the following simple example:
+//
+// <svg>
+//   <rect id="foo" width="100" height="100" fill="yellow">
+//     <set id="s1" attributeName="fill" to="blue" begin="1s; 3s" dur="1s"/>
+//     <set id="s2" attributeName="fill" to="lightblue" begin="1.5s" dur="2s"/>
+//   </rect>
+// </svg>
+//
+// In this case there is only one sandwich: <#foo, "fill">
+//
+// The sandwich is priority-sorted with the priority being derived from when
+// the currently active interval began - later is higher. In the above example
+// there are three intervals: [1s 2s) and [3s 4s) for the first <set> element
+// (in tree-order) and [1.5s 3.5s) for the second <set> element. The animation
+// elements are only active within the intervals defined (no fill="freeze").
+//
+// When the first interval of the first <set> starts (at 1s), it is the only
+// active animation and thus the only one to apply. When the second interval
+// starts (at 1.5s) its animation gets a higher priority and replaces the lower
+// priority animation from the first <set>. The first <set> then ends at 2s,
+// leaving the second <set> as the only active animation. When the first <set>
+// then starts again at 3s it gets a higher priority because of the later begin
+// time and replaces the animation from the second <set>. When the second <set>
+// ends at 3.5s nothing changes because the first <set> is still active. When
+// the second <set> ends again at 4s, no animation apply and the target reverts
+// to the base value (yellow) again.
+//
+// Schematically (right hand side exclusive):
+//
+// 0s -> 1s:   No animations apply (fill=yellow)
+//             Sandwich order: (s1) (s2) [both inactive]
+// 1s -> 1.5s: The first <set> apply (fill=blue)
+//             Sandwich order: s1 (s2)   [only s1 active]
+// 1.5s -> 2s: The second <set> apply (fill=lightblue)
+//             Sandwich order: s1 s2
+// 2s -> 3s:   The second <set> apply (fill=lightblue)
+//             Sandwich order: (s1) s2
+// 3s -> 3.5s: The first <set> apply (fill=blue)
+//             Sandwich order: s2 s1
+// 3.5s -> 4s: The first <set> apply (fill=blue)
+//             Sandwich order: (s2) s1
+// 4s -> ...:  No animations apply (fill=yellow)
+//
+// -----
+//
+// Implementation details:
+//
+// UpdateTiming() handles updates to interval and transitions the active state.
+//
+// UpdateActiveStateAndOrder() handles the sorting described above and updates
+// the active state of the elements in the sandwich.
+//
+// UpdateActiveAnimationStack() constructs a vector containing only the active
+// elements.
+//
+// ApplyAnimationValues() computes the actual animation value based on the
+// vector of active elements and applies it to the target element.
+//
 class SMILAnimationSandwich : public GarbageCollected<SMILAnimationSandwich> {
  public:
   using ScheduledVector = HeapVector<Member<SVGSMILElement>>;
-  explicit SMILAnimationSandwich();
+  SMILAnimationSandwich();
 
   void Schedule(SVGSMILElement* animation);
   void Unschedule(SVGSMILElement* animation);
   void Reset();
 
-  void UpdateTiming(double elapsed);
-  void UpdateSyncBases(double elapsed);
+  void UpdateTiming(SMILTime presentation_time);
+  void UpdateActiveStateAndOrder(SMILTime presentation_time);
+  void UpdateActiveAnimationStack(SMILTime presentation_time);
   SVGSMILElement* ApplyAnimationValues();
 
-  SMILTime NextInterestingTime(SMILTime) const;
-  SMILTime GetNextFireTime() const;
+  SMILTime NextIntervalTime(SMILTime presentation_time) const;
+  SMILTime NextProgressTime(SMILTime presentation_time) const;
 
   bool IsEmpty() { return sandwich_.IsEmpty(); }
 
   void Trace(blink::Visitor*);
 
  private:
-  // The list stored here is always sorted.
+  // Results are accumulated to the first animation element that animates and
+  // contributes to a particular element/attribute pair. We refer to this as
+  // the "result element".
+  SVGSMILElement* ResultElement() const;
+
+  // All the animation (really: timed) elements that make up the sandwich,
+  // sorted according to priority.
   ScheduledVector sandwich_;
+  // The currently active animation elements in the sandwich. Retains the
+  // ordering of elements from |sandwich_| when created. This is the animation
+  // elements from which the animation value is computed.
   ScheduledVector active_;
 };
 

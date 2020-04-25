@@ -87,9 +87,9 @@ std::unique_ptr<LoopbackServerEntity> NotesEntityBuilder::Build() {
 
 NotesEntityBuilder EntityBuilderFactory::NewNotesEntityBuilder(
   const string& title, const GURL& url, const string& content) {
-  --latest_client_item_id_;
+  std::string originator_client_item_id = base::GenerateGUID();
   NotesEntityBuilder builder(title, url, content, cache_guid_,
-    base::NumberToString(latest_client_item_id_));
+                             originator_client_item_id);
   return builder;
 }
 

@@ -10,6 +10,7 @@
 
 #include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
@@ -85,7 +86,7 @@ void SuggestionChipView::InitLayout(const Params& params) {
 
   // Icon.
   const int icon_size =
-      app_list::AppListConfig::instance().suggestion_chip_icon_dimension();
+      AppListConfig::instance().suggestion_chip_icon_dimension();
   icon_view_->SetImageSize(gfx::Size(icon_size, icon_size));
   icon_view_->SetPreferredSize(gfx::Size(icon_size, icon_size));
 

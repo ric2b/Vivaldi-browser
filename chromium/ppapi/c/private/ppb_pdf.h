@@ -34,7 +34,7 @@ struct PP_PrivateFindResult {
 };
 
 struct PP_PrivateAccessibilityViewportInfo {
-  double zoom;
+  double zoom_device_scale_factor;
   struct PP_Point scroll;
   struct PP_Point offset;
   uint32_t selection_start_page_index;
@@ -80,7 +80,8 @@ struct PP_PrivateAccessibilityCharInfo {
 };
 
 // This holds the link information provided by the PDF and will be used in
-// accessibility to provide the link information.
+// accessibility to provide the link information. Needs to stay in sync with
+// C++ versions (PdfAccessibilityLinkInfo and PrivateAccessibilityLinkInfo).
 struct PP_PrivateAccessibilityLinkInfo {
   // URL of the link.
   const char* url;
@@ -101,7 +102,8 @@ struct PP_PrivateAccessibilityLinkInfo {
 };
 
 // This holds the image information provided by the PDF and will be used in
-// accessibility to provide the image information.
+// accessibility to provide the image information. Needs to stay in sync with
+// C++ versions (PdfAccessibilityImageInfo and PrivateAccessibilityImageInfo).
 struct PP_PrivateAccessibilityImageInfo {
   // Alternate text for the image provided by PDF.
   const char* alt_text;
@@ -112,6 +114,17 @@ struct PP_PrivateAccessibilityImageInfo {
   uint32_t text_run_index;
   // Bounding box of the image.
   struct PP_FloatRect bounds;
+};
+
+// Holds links and images within a PDF page so that IPC messages
+// passing accessibility objects do not have too many parameters.
+// Needs to stay in sync with C++ versions (PdfAccessibilityPageObjects and
+// PrivateAccessibilityPageObjects).
+struct PP_PrivateAccessibilityPageObjects {
+  struct PP_PrivateAccessibilityLinkInfo* links;
+  uint32_t link_count;
+  struct PP_PrivateAccessibilityImageInfo* images;
+  uint32_t image_count;
 };
 
 struct PPB_PDF {
@@ -182,23 +195,22 @@ struct PPB_PDF {
   // support.
   void (*SetAccessibilityViewportInfo)(
       PP_Instance instance,
-      struct PP_PrivateAccessibilityViewportInfo* viewport_info);
+      const struct PP_PrivateAccessibilityViewportInfo* viewport_info);
 
   // Sends information about the PDF document to the renderer for accessibility
   // support.
   void (*SetAccessibilityDocInfo)(
       PP_Instance instance,
-      struct PP_PrivateAccessibilityDocInfo* doc_info);
+      const struct PP_PrivateAccessibilityDocInfo* doc_info);
 
   // Sends information about one page in a PDF document to the renderer for
   // accessibility support.
   void (*SetAccessibilityPageInfo)(
       PP_Instance instance,
-      struct PP_PrivateAccessibilityPageInfo* page_info,
-      struct PP_PrivateAccessibilityTextRunInfo text_runs[],
-      struct PP_PrivateAccessibilityCharInfo chars[],
-      struct PP_PrivateAccessibilityLinkInfo links[],
-      struct PP_PrivateAccessibilityImageInfo images[]);
+      const struct PP_PrivateAccessibilityPageInfo* page_info,
+      const struct PP_PrivateAccessibilityTextRunInfo text_runs[],
+      const struct PP_PrivateAccessibilityCharInfo chars[],
+      const struct PP_PrivateAccessibilityPageObjects* page_objects);
 
   // Sends information about the PDF's URL and the embedder's URL.
   void (*SetCrashData)(PP_Instance instance,

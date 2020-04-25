@@ -8,6 +8,7 @@
 #include <fuchsia/web/cpp/fidl.h>
 #include <lib/fidl/cpp/binding_set.h>
 #include <lib/zx/channel.h>
+
 #include <list>
 #include <map>
 #include <memory>
@@ -21,6 +22,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "fuchsia/engine/browser/discarding_event_filter.h"
 #include "fuchsia/engine/browser/navigation_controller_impl.h"
+#include "fuchsia/engine/browser/url_request_rewrite_rules_manager.h"
 #include "fuchsia/engine/on_load_script_injector.mojom.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/wm/core/focus_controller.h"
@@ -47,8 +49,10 @@ class FrameImpl : public fuchsia::web::Frame,
   ~FrameImpl() override;
 
   zx::unowned_channel GetBindingChannelForTest() const;
-  content::WebContents* web_contents_for_test() { return web_contents_.get(); }
-  bool has_view_for_test() { return window_tree_host_ != nullptr; }
+  content::WebContents* web_contents_for_test() const {
+    return web_contents_.get();
+  }
+  bool has_view_for_test() const { return window_tree_host_ != nullptr; }
   void set_javascript_console_message_hook_for_test(
       base::RepeatingCallback<void(base::StringPiece)> hook) {
     console_log_message_hook_ = std::move(hook);
@@ -126,6 +130,9 @@ class FrameImpl : public fuchsia::web::Frame,
   void SetPopupFrameCreationListener(
       fidl::InterfaceHandle<fuchsia::web::PopupFrameCreationListener> listener)
       override;
+  void SetUrlRequestRewriteRules(
+      std::vector<fuchsia::web::UrlRequestRewriteRule> rules,
+      SetUrlRequestRewriteRulesCallback callback) override;
 
   // content::WebContentsDelegate implementation.
   void CloseContents(content::WebContents* source) override;
@@ -134,19 +141,12 @@ class FrameImpl : public fuchsia::web::Frame,
                               const base::string16& message,
                               int32_t line_no,
                               const base::string16& source_id) override;
-  bool ShouldCreateWebContents(
-      content::WebContents* web_contents,
-      content::RenderFrameHost* opener,
+  bool IsWebContentsCreationOverridden(
       content::SiteInstance* source_site_instance,
-      int32_t route_id,
-      int32_t main_frame_route_id,
-      int32_t main_frame_widget_route_id,
       content::mojom::WindowContainerType window_container_type,
       const GURL& opener_url,
       const std::string& frame_name,
-      const GURL& target_url,
-      const std::string& partition_id,
-      content::SessionStorageNamespace* session_storage_namespace) override;
+      const GURL& target_url) override;
   void WebContentsCreated(content::WebContents* source_contents,
                           int opener_render_process_id,
                           int opener_render_frame_id,
@@ -177,6 +177,7 @@ class FrameImpl : public fuchsia::web::Frame,
   std::map<uint64_t, OriginScopedScript> before_load_scripts_;
   std::vector<uint64_t> before_load_scripts_order_;
   base::RepeatingCallback<void(base::StringPiece)> console_log_message_hook_;
+  UrlRequestRewriteRulesManager url_request_rewrite_rules_manager_;
 
   // Used for receiving and dispatching popup created by this Frame.
   fuchsia::web::PopupFrameCreationListenerPtr popup_listener_;
@@ -187,6 +188,5 @@ class FrameImpl : public fuchsia::web::Frame,
 
   DISALLOW_COPY_AND_ASSIGN(FrameImpl);
 };
-
 
 #endif  // FUCHSIA_ENGINE_BROWSER_FRAME_IMPL_H_

@@ -189,6 +189,20 @@ class SearchBox : public content::RenderFrameObserver,
   // Confirms applied theme changes.
   void ConfirmThemeChanges();
 
+  // Queries the autocomplete backend for realbox results for |input| as a
+  // search term. Handled by |QueryAutocompleteResult|.
+  void QueryAutocomplete(const base::string16& input);
+
+  // Deletes |AutocompleteMatch| by index of the result.
+  void DeleteAutocompleteMatch(uint8_t line);
+
+  // Cancels the current autocomplete query. Clears the result set if
+  // |clear_result| is true.
+  void StopAutocomplete(bool clear_result);
+
+  // Called when a user dismisses a promo.
+  void BlocklistPromo(const std::string& promo_id);
+
   bool is_focused() const { return is_focused_; }
   bool is_input_in_progress() const { return is_input_in_progress_; }
   bool is_key_capture_enabled() const { return is_key_capture_enabled_; }
@@ -215,6 +229,14 @@ class SearchBox : public content::RenderFrameObserver,
 
   // Returns the URL of the Most Visited item specified by the |item_id|.
   GURL GetURLForMostVisitedItem(InstantRestrictedID item_id) const;
+
+  // Asynchronous callback for autocomplete query results. Sends to renderer.
+  void QueryAutocompleteResult(chrome::mojom::AutocompleteResultPtr result);
+
+  // Asynchronous callback for results of attempting to delete an autocomplete
+  // result.
+  void OnDeleteAutocompleteMatch(
+      chrome::mojom::DeleteAutocompleteMatchResultPtr result);
 
   // The connection to the EmbeddedSearch service in the browser process.
   chrome::mojom::EmbeddedSearchAssociatedPtr embedded_search_service_;

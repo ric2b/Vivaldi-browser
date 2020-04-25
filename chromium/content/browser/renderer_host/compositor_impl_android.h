@@ -37,7 +37,6 @@
 #include "ui/android/window_android.h"
 #include "ui/android/window_android_compositor.h"
 #include "ui/compositor/compositor_lock.h"
-#include "ui/compositor/external_begin_frame_client.h"
 #include "ui/display/display_observer.h"
 
 struct ANativeWindow;
@@ -46,10 +45,6 @@ namespace cc {
 class AnimationHost;
 class Layer;
 class LayerTreeHost;
-}
-
-namespace ui {
-class ExternalBeginFrameControllerClientImpl;
 }
 
 namespace viz {
@@ -103,6 +98,7 @@ class CONTENT_EXPORT CompositorImpl
   void SetWindowBounds(const gfx::Size& size) override;
   void SetRequiresAlphaChannel(bool flag) override;
   void SetNeedsComposite() override;
+  void SetNeedsRedraw() override;
   ui::UIResourceProvider& GetUIResourceProvider() override;
   ui::ResourceManager& GetResourceManager() override;
   void CacheBackBufferForCurrentSurface() override;
@@ -140,6 +136,8 @@ class CONTENT_EXPORT CompositorImpl
       const gfx::PresentationFeedback& feedback) override {}
   void RecordStartOfFrameMetrics() override {}
   void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time) override {}
+  std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
+      override;
 
   // LayerTreeHostSingleThreadClient implementation.
   void DidSubmitCompositorFrame() override;

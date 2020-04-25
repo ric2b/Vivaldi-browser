@@ -29,10 +29,11 @@ const size_t kDefaultMaxProgramCacheMemoryBytes = 2 * 1024 * 1024;
 const size_t kLowEndMaxProgramCacheMemoryBytes = 128 * 1024;
 #endif
 
-enum VulkanImplementationName : uint32_t {
+enum class VulkanImplementationName : uint32_t {
   kNone = 0,
   kNative = 1,
-  kSwiftshader = 2,
+  kForcedNative = 2,  // Cannot override by GPU blacklist.
+  kSwiftshader = 3,
   kLast = kSwiftshader,
 };
 

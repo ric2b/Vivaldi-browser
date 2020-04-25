@@ -4,9 +4,10 @@
 
 #include "ash/system/unified/unified_system_tray_bubble.h"
 
-#include "ash/public/cpp/app_list/app_list_features.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
+#include "ash/system/message_center/unified_message_center_bubble.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_event_filter.h"
@@ -113,7 +114,7 @@ UnifiedSystemTrayBubble::UnifiedSystemTrayBubble(UnifiedSystemTray* tray,
   TrayBackgroundView::InitializeBubbleAnimations(bubble_widget_);
   bubble_view_->InitializeAndShowBubble();
 
-  if (app_list_features::IsBackgroundBlurEnabled()) {
+  if (features::IsBackgroundBlurEnabled()) {
     bubble_widget_->client_view()->layer()->SetBackgroundBlur(
         kUnifiedMenuBackgroundBlur);
   }
@@ -164,6 +165,15 @@ void UnifiedSystemTrayBubble::CloseNow() {
   bubble_widget_ = nullptr;
 }
 
+void UnifiedSystemTrayBubble::EnsureCollapsed() {
+  if (!bubble_widget_)
+    return;
+
+  DCHECK(unified_view_);
+  DCHECK(controller_);
+  controller_->EnsureCollapsed();
+}
+
 void UnifiedSystemTrayBubble::EnsureExpanded() {
   if (!bubble_widget_)
     return;
@@ -173,6 +183,14 @@ void UnifiedSystemTrayBubble::EnsureExpanded() {
   controller_->EnsureExpanded();
 }
 
+void UnifiedSystemTrayBubble::CollapseMessageCenter() {
+  tray_->CollapseMessageCenter();
+}
+
+void UnifiedSystemTrayBubble::ExpandMessageCenter() {
+  tray_->ExpandMessageCenter();
+}
+
 void UnifiedSystemTrayBubble::ShowAudioDetailedView() {
   if (!bubble_widget_)
     return;
@@ -180,6 +198,15 @@ void UnifiedSystemTrayBubble::ShowAudioDetailedView() {
   DCHECK(unified_view_);
   DCHECK(controller_);
   controller_->ShowAudioDetailedView();
+}
+
+void UnifiedSystemTrayBubble::ShowNetworkDetailedView(bool force) {
+  if (!bubble_widget_)
+    return;
+
+  DCHECK(unified_view_);
+  DCHECK(controller_);
+  controller_->ShowNetworkDetailedView(force);
 }
 
 void UnifiedSystemTrayBubble::UpdateBubble() {
@@ -252,6 +279,14 @@ int UnifiedSystemTrayBubble::CalculateMaxHeight() const {
   return free_space_height_above_anchor - kUnifiedMenuPadding * 2;
 }
 
+bool UnifiedSystemTrayBubble::FocusOut(bool reverse) {
+  return tray_->FocusMessageCenter(reverse);
+}
+
+void UnifiedSystemTrayBubble::FocusEntered(bool reverse) {
+  unified_view_->FocusEntered(reverse);
+}
+
 void UnifiedSystemTrayBubble::OnDisplayConfigurationChanged() {
   UpdateBubbleBounds();
 }
@@ -277,6 +312,21 @@ void UnifiedSystemTrayBubble::OnWindowActivated(ActivationReason reason,
       (lost_active && ::wm::HasTransientAncestor(
                           lost_active, bubble_widget_->GetNativeWindow()))) {
     return;
+  }
+
+  // Don't close the bubble if the message center is gaining or losing
+  // activation.
+  if (features::IsUnifiedMessageCenterRefactorEnabled() &&
+      tray_->IsMessageCenterBubbleShown()) {
+    views::Widget* message_center_widget =
+        tray_->message_center_bubble()->GetBubbleWidget();
+    if (message_center_widget ==
+            views::Widget::GetWidgetForNativeView(gained_active) ||
+        (lost_active &&
+         message_center_widget ==
+             views::Widget::GetWidgetForNativeView(lost_active))) {
+      return;
+    }
   }
 
   tray_->CloseBubble();
@@ -315,7 +365,7 @@ void UnifiedSystemTrayBubble::UpdateBubbleBounds() {
 }
 
 void UnifiedSystemTrayBubble::CreateBlurLayerForAnimation() {
-  if (!app_list_features::IsBackgroundBlurEnabled())
+  if (!features::IsBackgroundBlurEnabled())
     return;
 
   if (blur_layer_)
@@ -342,7 +392,7 @@ void UnifiedSystemTrayBubble::CreateBlurLayerForAnimation() {
 }
 
 void UnifiedSystemTrayBubble::DestroyBlurLayerForAnimation() {
-  if (!app_list_features::IsBackgroundBlurEnabled())
+  if (!features::IsBackgroundBlurEnabled())
     return;
 
   if (!blur_layer_)

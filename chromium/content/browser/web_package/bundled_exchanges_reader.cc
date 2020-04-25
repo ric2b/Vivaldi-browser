@@ -23,16 +23,14 @@
 
 namespace content {
 
-BundledExchangesReader::SharedFile::SharedFile(const base::FilePath& file_path)
-    : file_path_(file_path) {
+BundledExchangesReader::SharedFile::SharedFile(
+    std::unique_ptr<BundledExchangesSource> source) {
   base::PostTaskAndReplyWithResult(
       FROM_HERE, {base::ThreadPool(), base::MayBlock()},
       base::BindOnce(
-          [](const base::FilePath& file_path) -> std::unique_ptr<base::File> {
-            return std::make_unique<base::File>(
-                file_path, base::File::FLAG_OPEN | base::File::FLAG_READ);
-          },
-          file_path_),
+          [](std::unique_ptr<BundledExchangesSource> source)
+              -> std::unique_ptr<base::File> { return source->OpenFile(); },
+          std::move(source)),
       base::BindOnce(&SharedFile::SetFile, base::RetainedRef(this)));
 }
 
@@ -138,11 +136,12 @@ class BundledExchangesReader::SharedFileDataSource final
 };
 
 BundledExchangesReader::BundledExchangesReader(
-    const BundledExchangesSource& source)
-    : parser_(ServiceManagerConnection::GetForProcess()
+    std::unique_ptr<BundledExchangesSource> source)
+    : source_(std::move(source)),
+      parser_(ServiceManagerConnection::GetForProcess()
                   ? ServiceManagerConnection::GetForProcess()->GetConnector()
                   : nullptr),
-      file_(base::MakeRefCounted<SharedFile>(source.file_path)) {}
+      file_(base::MakeRefCounted<SharedFile>(source_->Clone())) {}
 
 BundledExchangesReader::~BundledExchangesReader() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -153,8 +152,8 @@ void BundledExchangesReader::ReadMetadata(MetadataCallback callback) {
   DCHECK(!metadata_ready_);
 
   file_->DuplicateFile(
-      base::BindOnce(&BundledExchangesReader::ReadMetadataInternal,
-                     weak_factory_.GetWeakPtr(), std::move(callback)));
+      base::BindOnce(&BundledExchangesReader::ReadMetadataInternal, this,
+                     std::move(callback)));
 }
 
 void BundledExchangesReader::ReadResponse(const GURL& url,
@@ -164,7 +163,13 @@ void BundledExchangesReader::ReadResponse(const GURL& url,
 
   auto it = entries_.find(net::SimplifyUrlForRequest(url));
   if (it == entries_.end() || it->second->response_locations.empty()) {
-    PostTask(FROM_HERE, base::BindOnce(std::move(callback), nullptr));
+    PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            std::move(callback), nullptr,
+            data_decoder::mojom::BundleResponseParseError::New(
+                data_decoder::mojom::BundleParseErrorType::kParserInternalError,
+                "Not found in Web Bundle file.")));
     return;
   }
 
@@ -212,6 +217,11 @@ const GURL& BundledExchangesReader::GetPrimaryURL() const {
   return primary_url_;
 }
 
+const BundledExchangesSource& BundledExchangesReader::source() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return *source_;
+}
+
 void BundledExchangesReader::SetBundledExchangesParserFactoryForTesting(
     mojo::Remote<data_decoder::mojom::BundledExchangesParserFactory> factory) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -223,7 +233,7 @@ void BundledExchangesReader::ReadMetadataInternal(MetadataCallback callback,
                                                   base::File file) {
   base::File::Error error = parser_.OpenFile(std::move(file));
   if (base::File::FILE_OK != error) {
-    base::PostTaskWithTraits(
+    base::PostTask(
         FROM_HERE, {BrowserThread::UI},
         base::BindOnce(
             std::move(callback),
@@ -260,8 +270,7 @@ void BundledExchangesReader::OnResponseParsed(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(metadata_ready_);
 
-  // TODO(crbug.com/966753): Handle |error|.
-  std::move(callback).Run(std::move(response));
+  std::move(callback).Run(std::move(response), std::move(error));
 }
 
 }  // namespace content

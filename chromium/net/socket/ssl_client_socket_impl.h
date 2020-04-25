@@ -136,6 +136,7 @@ class SSLClientSocketImpl : public SSLClientSocket,
   int DoHandshakeLoop(int last_io_result);
   int DoPayloadRead(IOBuffer* buf, int buf_len);
   int DoPayloadWrite();
+  void DoPeek();
 
   // Called when an asynchronous event completes which may have blocked the
   // pending Connect, Read or Write calls, if any. Retries all state machines
@@ -200,6 +201,11 @@ class SSLClientSocketImpl : public SSLClientSocket,
   // in a UMA histogram.
   void RecordNegotiatedProtocol() const;
 
+  // Records the result of a handshake where early data was requested
+  // in the corresponding UMA histogram.  This will happen at most once
+  // during the lifetime of the socket.
+  void MaybeRecordEarlyDataResult();
+
   // Returns the net error corresponding to the most recent OpenSSL
   // error. ssl_error is the output of SSL_get_error.
   int MapLastOpenSSLError(int ssl_error,
@@ -218,6 +224,10 @@ class SSLClientSocketImpl : public SSLClientSocket,
   scoped_refptr<IOBuffer> user_write_buf_;
   int user_write_buf_len_;
   bool first_post_handshake_write_ = true;
+
+  // True if we've already recorded the result of our attempt to
+  // use early data.
+  bool recorded_early_data_result_ = false;
 
   // Used by DoPayloadRead() when attempting to fill the caller's buffer with
   // as much data as possible without blocking.
@@ -271,6 +281,9 @@ class SSLClientSocketImpl : public SSLClientSocket,
 
   // True if we are currently confirming the handshake.
   bool in_confirm_handshake_;
+
+  // True if the post-handshake SSL_peek has completed.
+  bool peek_complete_;
 
   // True if the socket has been disconnected.
   bool disconnected_;

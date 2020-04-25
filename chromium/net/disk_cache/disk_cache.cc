@@ -121,7 +121,7 @@ net::Error CacheCreator::Run() {
       simple_cache->set_app_status_listener(app_status_listener_);
 #endif
     return simple_cache->Init(
-        base::Bind(&CacheCreator::OnIOComplete, base::Unretained(this)));
+        base::BindOnce(&CacheCreator::OnIOComplete, base::Unretained(this)));
   }
 
 // Avoid references to blockfile functions on Android to reduce binary size.
@@ -134,7 +134,7 @@ net::Error CacheCreator::Run() {
   created_cache_.reset(new_cache);
   new_cache->SetMaxSize(max_bytes_);
   net::Error rv = new_cache->Init(
-      base::Bind(&CacheCreator::OnIOComplete, base::Unretained(this)));
+      base::BindOnce(&CacheCreator::OnIOComplete, base::Unretained(this)));
   DCHECK_EQ(net::ERR_IO_PENDING, rv);
   return rv;
 #endif
@@ -243,7 +243,7 @@ net::Error CreateCacheBackendImpl(
       std::move(app_status_listener),
 #endif
       net_log, backend, std::move(post_cleanup_callback), std::move(callback));
-  if (type == net::DISK_CACHE || type == net::MEDIA_CACHE) {
+  if (type == net::DISK_CACHE) {
     DCHECK(!had_post_cleanup_callback);
     return creator->Run();
   }

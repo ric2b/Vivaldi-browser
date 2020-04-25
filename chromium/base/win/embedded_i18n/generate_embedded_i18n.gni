@@ -114,6 +114,7 @@ template("generate_embedded_i18n") {
         xtb_relative_path,
       ]
 
+      xtb_locales = []
       xtb_locales = grd_file_info[3]
 
       foreach (locale, xtb_locales) {

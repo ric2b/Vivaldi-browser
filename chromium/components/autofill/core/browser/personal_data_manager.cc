@@ -47,6 +47,7 @@
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/autofill_util.h"
@@ -639,6 +640,13 @@ void PersonalDataManager::RecordUseOf(const AutofillDataModel& data_model) {
         break;
     }
   }
+}
+
+void PersonalDataManager::AddVPA(const std::string& vpa_id) {
+  DCHECK(!vpa_id.empty());
+  if (is_off_the_record_ || !database_helper_->GetLocalDatabase())
+    return;
+  database_helper_->GetLocalDatabase()->AddVPA(vpa_id);
 }
 
 void PersonalDataManager::AddProfile(const AutofillProfile& profile) {
@@ -1305,7 +1313,7 @@ bool PersonalDataManager::ShouldSuggestServerCards() const {
     // seeing them in the dropdown.
     if (!prefs::IsUserOptedInWalletSyncTransport(
             pref_service_,
-            sync_service_->GetAuthenticatedAccountInfo().account_id)) {
+            sync_service_->GetAuthenticatedAccountInfo().account_id.id)) {
       return false;
     }
   }
@@ -1349,7 +1357,6 @@ void PersonalDataManager::ClearProfileNonSettingsOrigins() {
       UpdateProfileInDB(*profile, /*enforced=*/true);
     }
   }
-
 }
 
 void PersonalDataManager::ClearCreditCardNonSettingsOrigins() {
@@ -1367,35 +1374,6 @@ void PersonalDataManager::ClearCreditCardNonSettingsOrigins() {
   // was made.
   if (has_updated)
     Refresh();
-}
-
-void PersonalDataManager::MoveJapanCityToStreetAddress() {
-  if (!database_helper_->GetLocalDatabase())
-    return;
-
-  // Don't run if the migration has already been performed.
-  if (pref_service_->GetBoolean(prefs::kAutofillJapanCityFieldMigrated))
-    return;
-
-  base::string16 japan_country_code = base::ASCIIToUTF16("JP");
-  base::string16 line_separator = base::ASCIIToUTF16("\n");
-  for (AutofillProfile* profile : GetProfiles()) {
-    base::string16 country_code = profile->GetRawInfo(ADDRESS_HOME_COUNTRY);
-    base::string16 city = profile->GetRawInfo(ADDRESS_HOME_CITY);
-    if (country_code == japan_country_code && !city.empty()) {
-      base::string16 street_address =
-          profile->GetRawInfo(ADDRESS_HOME_STREET_ADDRESS);
-      street_address = street_address.empty()
-                           ? city
-                           : street_address + line_separator + city;
-      profile->SetRawInfo(ADDRESS_HOME_STREET_ADDRESS, street_address);
-      profile->SetRawInfo(ADDRESS_HOME_CITY, base::string16());
-      UpdateProfileInDB(*profile, /*enforced=*/true);
-    }
-  }
-
-  // Set the pref so that this migration is never run again.
-  pref_service_->SetBoolean(prefs::kAutofillJapanCityFieldMigrated, true);
 }
 
 void PersonalDataManager::OnValidated(const AutofillProfile* profile) {
@@ -1450,94 +1428,6 @@ const ProfileValidityMap& PersonalDataManager::GetProfileValidityByGUID(
   }
 
   return empty_validity_map;
-}
-
-// static
-std::string PersonalDataManager::MergeProfile(
-    const AutofillProfile& new_profile,
-    std::vector<std::unique_ptr<AutofillProfile>>* existing_profiles,
-    const std::string& app_locale,
-    std::vector<AutofillProfile>* merged_profiles) {
-  merged_profiles->clear();
-
-  // Sort the existing profiles in decreasing order of frecency, so the "best"
-  // profiles are checked first. Put the verified profiles last so the non
-  // verified profiles get deduped among themselves before reaching the verified
-  // profiles.
-  // TODO(crbug.com/620521): Remove the check for verified from the sort.
-  base::Time comparison_time = AutofillClock::Now();
-  std::sort(existing_profiles->begin(), existing_profiles->end(),
-            [comparison_time](const std::unique_ptr<AutofillProfile>& a,
-                              const std::unique_ptr<AutofillProfile>& b) {
-              if (a->IsVerified() != b->IsVerified())
-                return !a->IsVerified();
-              return a->HasGreaterFrecencyThan(b.get(), comparison_time);
-            });
-
-  // Set to true if |existing_profiles| already contains an equivalent profile.
-  bool matching_profile_found = false;
-  std::string guid = new_profile.guid();
-
-  // If we have already saved this address, merge in any missing values.
-  // Only merge with the first match. Merging the new profile into the existing
-  // one preserves the validity of credit card's billing address reference.
-  AutofillProfileComparator comparator(app_locale);
-  for (const auto& existing_profile : *existing_profiles) {
-    if (!matching_profile_found &&
-        comparator.AreMergeable(new_profile, *existing_profile) &&
-        existing_profile->SaveAdditionalInfo(new_profile, app_locale)) {
-      // Unverified profiles should always be updated with the newer data,
-      // whereas verified profiles should only ever be overwritten by verified
-      // data.  If an automatically aggregated profile would overwrite a
-      // verified profile, just drop it.
-      matching_profile_found = true;
-      guid = existing_profile->guid();
-
-      // We set the modification date so that immediate requests for profiles
-      // will properly reflect the fact that this profile has been modified
-      // recently. After writing to the database and refreshing the local copies
-      // the profile will have a very slightly newer time reflecting what's
-      // actually stored in the database.
-      existing_profile->set_modification_date(AutofillClock::Now());
-    }
-    merged_profiles->push_back(*existing_profile);
-  }
-
-  // If the new profile was not merged with an existing one, add it to the list.
-  if (!matching_profile_found) {
-    merged_profiles->push_back(new_profile);
-    // Similar to updating merged profiles above, set the modification date on
-    // new profiles.
-    merged_profiles->back().set_modification_date(AutofillClock::Now());
-    AutofillMetrics::LogProfileActionOnFormSubmitted(
-        AutofillMetrics::NEW_PROFILE_CREATED);
-  }
-
-  return guid;
-}
-
-bool PersonalDataManager::IsCountryOfInterest(
-    const std::string& country_code) const {
-  DCHECK_EQ(2U, country_code.size());
-
-  const std::vector<AutofillProfile*>& profiles = GetProfiles();
-  std::list<std::string> country_codes;
-  for (size_t i = 0; i < profiles.size(); ++i) {
-    country_codes.push_back(base::ToLowerASCII(
-        base::UTF16ToASCII(profiles[i]->GetRawInfo(ADDRESS_HOME_COUNTRY))));
-  }
-
-  std::string timezone_country = CountryCodeForCurrentTimezone();
-  if (!timezone_country.empty())
-    country_codes.push_back(base::ToLowerASCII(timezone_country));
-
-  // Only take the locale into consideration if all else fails.
-  if (country_codes.empty()) {
-    country_codes.push_back(base::ToLowerASCII(
-        AutofillCountry::CountryCodeForLocale(app_locale())));
-  }
-
-  return base::Contains(country_codes, base::ToLowerASCII(country_code));
 }
 
 const std::string& PersonalDataManager::GetDefaultCountryCodeForNewAddress()
@@ -1762,8 +1652,8 @@ std::string PersonalDataManager::SaveImportedProfile(
     return std::string();
 
   std::vector<AutofillProfile> profiles;
-  std::string guid =
-      MergeProfile(imported_profile, &web_profiles_, app_locale_, &profiles);
+  std::string guid = AutofillProfileComparator::MergeProfile(
+      imported_profile, &web_profiles_, app_locale_, &profiles);
   SetProfiles(&profiles);
   return guid;
 }
@@ -1799,6 +1689,10 @@ std::string PersonalDataManager::SaveImportedCreditCard(
     credit_cards.push_back(imported_card);
 
   SetCreditCards(&credit_cards);
+
+  // After a card is saved locally, notifies the observers.
+  OnCreditCardSaved(/*is_local_card=*/true);
+
   return guid;
 }
 
@@ -1945,7 +1839,8 @@ bool PersonalDataManager::ShouldShowCardsFromAccountOption() const {
       features::kAutofillEnableAccountWalletStorage));
 
   bool is_opted_in = prefs::IsUserOptedInWalletSyncTransport(
-      pref_service_, sync_service_->GetAuthenticatedAccountInfo().account_id);
+      pref_service_,
+      sync_service_->GetAuthenticatedAccountInfo().account_id.id);
 
   AutofillMetrics::LogWalletSyncTransportCardsOptIn(is_opted_in);
 
@@ -1957,7 +1852,7 @@ void PersonalDataManager::OnUserAcceptedCardsFromAccountOption() {
   DCHECK_EQ(AutofillSyncSigninState::kSignedInAndWalletSyncTransportEnabled,
             GetSyncSigninState());
   prefs::SetUserOptedInWalletSyncTransport(
-      pref_service_, sync_service_->GetAuthenticatedAccountInfo().account_id,
+      pref_service_, sync_service_->GetAuthenticatedAccountInfo().account_id.id,
       /*opted_in=*/true);
 }
 
@@ -2014,7 +1909,8 @@ void PersonalDataManager::OnUserAcceptedUpstreamOffer() {
   if (GetSyncSigninState() ==
       AutofillSyncSigninState::kSignedInAndWalletSyncTransportEnabled) {
     prefs::SetUserOptedInWalletSyncTransport(
-        pref_service_, sync_service_->GetAuthenticatedAccountInfo().account_id,
+        pref_service_,
+        sync_service_->GetAuthenticatedAccountInfo().account_id.id,
         /*opted_in=*/true);
   }
 }
@@ -2031,6 +1927,16 @@ void PersonalDataManager::NotifyPersonalDataObserver() {
       observer.OnPersonalDataFinishedProfileTasks();
     }
   }
+}
+
+void PersonalDataManager::OnCreditCardSaved(bool is_local_card) {
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillCreditCardUploadFeedback)) {
+    return;
+  }
+  for (PersonalDataManagerObserver& observer : observers_)
+    observer.OnCreditCardSaved(
+        /*should_show_sign_in_promo_if_applicable=*/is_local_card);
 }
 
 std::vector<Suggestion> PersonalDataManager::GetSuggestionsForCards(
@@ -2421,9 +2327,6 @@ void PersonalDataManager::ApplyAddressFixesAndCleanups() {
 
   // Ran everytime it is called.
   ClearProfileNonSettingsOrigins();
-
-  // One-time fix, otherwise NOP.
-  MoveJapanCityToStreetAddress();
 }
 
 void PersonalDataManager::ApplyCardFixesAndCleanups() {

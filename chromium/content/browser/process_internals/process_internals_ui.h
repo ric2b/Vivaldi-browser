@@ -5,9 +5,16 @@
 #ifndef CONTENT_BROWSER_PROCESS_INTERNALS_PROCESS_INTERNALS_UI_H_
 #define CONTENT_BROWSER_PROCESS_INTERNALS_PROCESS_INTERNALS_UI_H_
 
+#include <memory>
+#include <string>
+#include <utility>
+
 #include "content/browser/process_internals/process_internals.mojom.h"
+#include "content/common/frame.mojom.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui_controller.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace content {
@@ -26,13 +33,14 @@ class ProcessInternalsUI : public WebUIController, public WebContentsObserver {
       content::RenderFrameHost* render_frame_host,
       const std::string& interface_name,
       mojo::ScopedMessagePipeHandle* interface_pipe) override;
+  void RenderFrameCreated(RenderFrameHost* render_frame_host) override;
 
   template <typename Binder>
   void AddHandlerToRegistry(Binder binder) {
     registry_.AddInterface(std::move(binder));
   }
   void BindProcessInternalsHandler(
-      ::mojom::ProcessInternalsHandlerRequest request,
+      mojo::PendingReceiver<::mojom::ProcessInternalsHandler> receiver,
       RenderFrameHost* render_frame_host);
 
  private:

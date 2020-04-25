@@ -39,6 +39,8 @@ class DialogClientViewTest : public test::WidgetTest,
   void SetUp() override {
     WidgetTest::SetUp();
 
+    DialogDelegate::set_use_custom_frame(false);
+
     // Note: not using DialogDelegate::CreateDialogWidget(..), since that can
     // alter the frame type according to the platform.
     widget_ = new views::Widget;
@@ -57,12 +59,6 @@ class DialogClientViewTest : public test::WidgetTest,
   gfx::Size CalculatePreferredSize() const override { return preferred_size_; }
   gfx::Size GetMinimumSize() const override { return min_size_; }
   gfx::Size GetMaximumSize() const override { return max_size_; }
-  ClientView* CreateClientView(Widget* widget) override {
-    client_view_ = new DialogClientView(widget, this);
-    return client_view_;
-  }
-
-  bool ShouldUseCustomFrame() const override { return false; }
 
   void DeleteDelegate() override {
     // DialogDelegateView would delete this, but |this| is owned by the test.
@@ -72,17 +68,7 @@ class DialogClientViewTest : public test::WidgetTest,
     return std::move(next_extra_view_);
   }
 
-  bool GetExtraViewPadding(int* padding) override {
-    if (extra_view_padding_)
-      *padding = *extra_view_padding_;
-    return extra_view_padding_.get() != nullptr;
-  }
-
   int GetDialogButtons() const override { return dialog_buttons_; }
-  int GetDefaultDialogButton() const override {
-    return default_button_.value_or(
-        DialogDelegateView::GetDefaultDialogButton());
-  }
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override {
     return button == ui::DIALOG_BUTTON_CANCEL && !cancel_label_.empty()
                ? cancel_label_
@@ -91,9 +77,9 @@ class DialogClientViewTest : public test::WidgetTest,
 
  protected:
   gfx::Rect GetUpdatedClientBounds() {
-    client_view_->SizeToPreferredSize();
-    client_view_->Layout();
-    return client_view_->bounds();
+    client_view()->SizeToPreferredSize();
+    client_view()->Layout();
+    return client_view()->bounds();
   }
 
   // Makes sure that the content view is sized correctly. Width must be at least
@@ -123,13 +109,6 @@ class DialogClientViewTest : public test::WidgetTest,
     EXPECT_FALSE(next_extra_view_);
   }
 
-  // Sets the extra view padding.
-  void SetExtraViewPadding(int padding) {
-    DCHECK(!extra_view_padding_);
-    extra_view_padding_ = std::make_unique<int>(padding);
-    DialogModelChanged();
-  }
-
   void SetSizeConstraints(const gfx::Size& min_size,
                           const gfx::Size& preferred_size,
                           const gfx::Size& max_size) {
@@ -152,9 +131,9 @@ class DialogClientViewTest : public test::WidgetTest,
     cancel_label_ = base::ASCIIToUTF16("Cancel Cancel Cancel");
   }
 
-  void set_default_button(int button) { default_button_ = button; }
-
-  DialogClientView* client_view() { return client_view_; }
+  DialogClientView* client_view() {
+    return static_cast<DialogClientView*>(widget_->client_view());
+  }
 
   Widget* widget() { return widget_; }
 
@@ -162,23 +141,17 @@ class DialogClientViewTest : public test::WidgetTest,
   // The dialog Widget.
   Widget* widget_ = nullptr;
 
-  // The DialogClientView that's being tested. Owned by |widget_|.
-  DialogClientView* client_view_;
-
   // The bitmask of buttons to show in the dialog.
   int dialog_buttons_ = ui::DIALOG_BUTTON_NONE;
 
   // Set and cleared in SetExtraView().
   std::unique_ptr<View> next_extra_view_;
 
-  std::unique_ptr<int> extra_view_padding_;
-
   gfx::Size preferred_size_;
   gfx::Size min_size_;
   gfx::Size max_size_;
 
   base::string16 cancel_label_;  // If set, the label for the Cancel button.
-  base::Optional<int> default_button_;
 
   DISALLOW_COPY_AND_ASSIGN(DialogClientViewTest);
 };
@@ -309,22 +282,17 @@ TEST_F(DialogClientViewTest, LayoutWithButtons) {
   SetExtraView(extra_view);
   CheckContentsIsSetToPreferredSize();
   EXPECT_GT(client_view()->bounds().height(), no_extra_view_size.height());
-  const int width_of_dialog_small_padding = client_view()->width();
 
-  // Try with an adjusted padding for the extra view.
-  SetExtraViewPadding(250);
-  CheckContentsIsSetToPreferredSize();
-  EXPECT_GT(client_view()->bounds().width(), width_of_dialog_small_padding);
-
+  // The dialog is bigger with the extra view than without it.
   const gfx::Size with_extra_view_size = client_view()->size();
   EXPECT_NE(no_extra_view_size, with_extra_view_size);
 
-  // Hiding the extra view removes it as well as the extra padding.
+  // Hiding the extra view removes it.
   extra_view->SetVisible(false);
   CheckContentsIsSetToPreferredSize();
   EXPECT_EQ(no_extra_view_size, client_view()->size());
 
-  // Making it visible again adds it all back.
+  // Making it visible again adds it back.
   extra_view->SetVisible(true);
   CheckContentsIsSetToPreferredSize();
   EXPECT_EQ(with_extra_view_size, client_view()->size());

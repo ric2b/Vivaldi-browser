@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/ui/tabs/tab_group_visual_data.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/views/tabs/tab_drag_context.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
@@ -236,6 +237,16 @@ class TabDragController : public views::WidgetObserver {
     // Is the tab pinned?
     bool pinned;
 
+    // Contains the information for the tab's group at the start of the drag.
+    struct TabGroupData {
+      TabGroupId group_id;
+      TabGroupVisualData group_visual_data;
+    };
+
+    // Stores the information of the group the tab is in, or nullopt if tab is
+    // not grouped.
+    base::Optional<TabGroupData> tab_group_data;
+
    private:
     DISALLOW_COPY_AND_ASSIGN(TabDragData);
   };
@@ -305,13 +316,8 @@ class TabDragController : public views::WidgetObserver {
 
   // If necessary starts the |move_stacked_timer_|. The timer is started if
   // close enough to an edge with stacked tabs.
-  void StartMoveStackedTimerIfNecessary(
-      const gfx::Point& point_in_screen,
-      int delay_ms);
-
-  // Returns the TabDragContext for the specified window, or NULL if
-  // one doesn't exist or isn't compatible.
-  TabDragContext* GetContextForWindow(gfx::NativeWindow window);
+  void StartMoveStackedTimerIfNecessary(const gfx::Point& point_in_screen,
+                                        base::TimeDelta delay);
 
   // Returns the compatible TabDragContext to drag to at the
   // specified point (screen coordinates), or nullptr if there is none.
@@ -489,21 +495,24 @@ class TabDragController : public views::WidgetObserver {
 
   DragState current_state_;
 
-  // Whether a drag to |window| should be blocked (for example, if the window
-  // is showing a modal).
-  bool ShouldDisallowDrag(gfx::NativeWindow window);
+  // Tests whether a drag can be attached to a |window|.  Drags may be
+  // disallowed for reasons such as the target: does not support tabs, is
+  // showing a modal, has a different profile, is a different browser type
+  // (NORMAL vs APP).
+  bool CanAttachTo(gfx::NativeWindow window);
 
   // Helper method for TabDragController::MoveAttached to update the tab group
-  // membership of selected tabs.
-  // TODO (cyan): Make this work for dragging into a tab group.
-  void UpdateGroupForDraggedTabs(int to_index);
+  // membership of selected tabs. UpdateGroupForDraggedTabs should be called
+  // after the tabs move in a drag so the first selected index is the target
+  // index of the move.
+  void UpdateGroupForDraggedTabs();
 
   // Helper method for TabDragController::UpdateGroupForDraggedTabs to decide if
   // a dragged tab should stay in the tab group. Returns base::nullopt if the
-  // tab should not be in a group. Otherwise returns TabGroupId of the group
-  // being selected.
-  base::Optional<TabGroupId> GetTabGroupForTargetIndex(int index_of_selected,
-                                                       int to_index);
+  // tab should not be in a group. Otherwise returns TabGroupId of the group the
+  // selected tabs should join.
+  base::Optional<TabGroupId> GetTabGroupForTargetIndex(
+      const std::vector<int>& selected);
 
   EventSource event_source_;
 

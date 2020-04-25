@@ -77,6 +77,9 @@ android_resources("java_resources") {
 
 android_library("java") {
   java_files = [
+    "java/src/org/chromium/chrome/browser/tasks/MostVisitedListCoordinator.java",
+    "java/src/org/chromium/chrome/browser/tasks/MostVisitedListViewBinder.java",
+    "java/src/org/chromium/chrome/browser/tasks/TasksSurfaceMediator.java",
     "java/src/org/chromium/chrome/browser/tasks/TasksSurfaceCoordinator.java",
     "java/src/org/chromium/chrome/browser/tasks/TasksView.java",
     "java/src/org/chromium/chrome/browser/tasks/TasksViewBinder.java",
@@ -86,6 +89,9 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/tasks/tab_management/SelectableTabGridView.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridDialogCoordinator.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridDialogMediator.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridDialogMenuCoordinator.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridDialogMenuItemBinder.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridDialogMenuItemProperties.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridDialogParent.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridIphItemCoordinator.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridIphItemMediator.java",
@@ -93,13 +99,18 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridIphItemView.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridIphItemViewBinder.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridItemTouchHelperCallback.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridPanelProperties.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridPanelToolbarCoordinator.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridPanelViewBinder.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridMessageCardViewProperties.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridMessageCardView.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridMessageCardViewBinder.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridSheetCoordinator.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridSheetMediator.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridSheetContent.java",
-    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridSheetProperties.java",
-    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridSheetToolbarCoordinator.java",
-    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridSheetViewBinder.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridViewBinder.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupPopupUiCoordinator.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupTitleEditor.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupUiCoordinator.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupUiMediator.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGroupUiToolbarView.java",
@@ -113,6 +124,7 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabListRecyclerView.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabManagementDelegateImpl.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabProperties.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabSelectionEditorActionProvider.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabSelectionEditorCoordinator.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabSelectionEditorLayout.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabSelectionEditorLayoutBinder.java",
@@ -128,8 +140,13 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/tasks/tab_management/UndoGroupSnackbarController.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/suggestions/TabSuggestionProvider.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/suggestions/StaleTabSuggestionProvider.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/suggestions/TabContextObserver.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/suggestions/TabSuggestionsRanker.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/suggestions/TabSuggestionProviderConfiguration.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/suggestions/TabSuggestionsFetcher.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/suggestions/TabSuggestionsOrchestrator.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/suggestions/TabSuggestionsFetcherResults.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/suggestions/TabSuggestionsClientFetcher.java",
   ]
 
   deps = [
@@ -141,8 +158,9 @@ android_library("java") {
     "//chrome/android/features/start_surface/internal:java",
     "//chrome/android/public/profiles:java",
     "//chrome/app:java_strings_grd",
+    "//chrome/browser/ui/android/widget:java",
+    "//chrome/browser/util/android:java",
     "//chrome/lib/lifecycle/public/android:java",
-    "//chrome/lib/util/public/android:java",
     "//components/embedder_support/android:web_contents_delegate_java",
     "//components/feature_engagement:feature_engagement_java",
     "//components/policy/android:policy_java",
@@ -152,14 +170,11 @@ android_library("java") {
     "//third_party/android_deps:android_arch_lifecycle_runtime_java",
     "//third_party/android_deps:android_arch_lifecycle_viewmodel_java",
     "//third_party/android_deps:android_support_v7_appcompat_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//third_party/android_deps:com_android_support_design_java",
     "//third_party/android_deps:com_android_support_recyclerview_v7_java",
-    "//third_party/android_deps:com_android_support_support_annotations_java",
     "//third_party/android_deps:com_android_support_support_compat_java",
     "//third_party/android_deps:com_android_support_support_v13_java",
     "//ui/android:ui_java",
   ]
-
-  if (async_tab_ui) {
-    proguard_configs = [ "//base/android/proguard/chromium_code.flags" ]
-  }
 }

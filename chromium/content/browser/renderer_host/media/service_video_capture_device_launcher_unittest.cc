@@ -14,6 +14,8 @@
 #include "content/public/test/browser_task_environment.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/video_capture/public/cpp/mock_push_subscription.h"
 #include "services/video_capture/public/cpp/mock_video_source.h"
 #include "services/video_capture/public/cpp/mock_video_source_provider.h"
@@ -93,13 +95,15 @@ class ServiceVideoCaptureDeviceLauncherTest : public testing::Test {
 
     ON_CALL(mock_source_, DoCreatePushSubscription(_, _, _, _, _))
         .WillByDefault(Invoke(
-            [this](video_capture::mojom::ReceiverPtr& subscriber,
-                   const media::VideoCaptureParams& requested_settings,
-                   bool force_reopen_with_new_settings,
-                   video_capture::mojom::PushVideoStreamSubscriptionRequest&
-                       subscription,
-                   video_capture::mojom::VideoSource::
-                       CreatePushSubscriptionCallback& callback) {
+            [this](
+                mojo::PendingRemote<video_capture::mojom::Receiver> subscriber,
+                const media::VideoCaptureParams& requested_settings,
+                bool force_reopen_with_new_settings,
+                mojo::PendingReceiver<
+                    video_capture::mojom::PushVideoStreamSubscription>
+                    subscription,
+                video_capture::mojom::VideoSource::
+                    CreatePushSubscriptionCallback& callback) {
               subscription_bindings_.AddBinding(&mock_subscription_,
                                                 std::move(subscription));
               std::move(callback).Run(
@@ -202,10 +206,11 @@ void ServiceVideoCaptureDeviceLauncherTest::RunLaunchingDeviceIsAbortedTest(
       .WillOnce(Invoke(
           [&create_push_subscription_success_answer_cb, &step_1_run_loop,
            service_result_code](
-              video_capture::mojom::ReceiverPtr& subscriber,
+              mojo::PendingRemote<video_capture::mojom::Receiver> subscriber,
               const media::VideoCaptureParams& requested_settings,
               bool force_reopen_with_new_settings,
-              video_capture::mojom::PushVideoStreamSubscriptionRequest&
+              mojo::PendingReceiver<
+                  video_capture::mojom::PushVideoStreamSubscription>
                   subscription,
               video_capture::mojom::VideoSource::CreatePushSubscriptionCallback&
                   callback) {
@@ -256,10 +261,11 @@ TEST_F(ServiceVideoCaptureDeviceLauncherTest,
 
   EXPECT_CALL(mock_source_, DoCreatePushSubscription(_, _, _, _, _))
       .WillOnce(Invoke(
-          [](video_capture::mojom::ReceiverPtr& subscriber,
+          [](mojo::PendingRemote<video_capture::mojom::Receiver> subscriber,
              const media::VideoCaptureParams& requested_settings,
              bool force_reopen_with_new_settings,
-             video_capture::mojom::PushVideoStreamSubscriptionRequest&
+             mojo::PendingReceiver<
+                 video_capture::mojom::PushVideoStreamSubscription>
                  subscription,
              video_capture::mojom::VideoSource::CreatePushSubscriptionCallback&
                  callback) {
@@ -268,7 +274,8 @@ TEST_F(ServiceVideoCaptureDeviceLauncherTest,
             base::ThreadTaskRunnerHandle::Get()->PostTask(
                 FROM_HERE,
                 base::BindOnce(
-                    [](video_capture::mojom::ReceiverPtr subscriber,
+                    [](mojo::PendingRemote<video_capture::mojom::Receiver>
+                           subscriber,
                        const media::VideoCaptureParams& requested_settings,
                        video_capture::mojom::PushVideoStreamSubscriptionRequest
                            subscription,
@@ -334,10 +341,11 @@ TEST_F(ServiceVideoCaptureDeviceLauncherTest,
   EXPECT_CALL(mock_source_, DoCreatePushSubscription(_, _, _, _, _))
       .WillOnce(Invoke(
           [&create_subscription_cb](
-              video_capture::mojom::ReceiverPtr& subscriber,
+              mojo::PendingRemote<video_capture::mojom::Receiver> subscriber,
               const media::VideoCaptureParams& requested_settings,
               bool force_reopen_with_new_settings,
-              video_capture::mojom::PushVideoStreamSubscriptionRequest&
+              mojo::PendingReceiver<
+                  video_capture::mojom::PushVideoStreamSubscription>
                   subscription,
               video_capture::mojom::VideoSource::CreatePushSubscriptionCallback&
                   callback) {

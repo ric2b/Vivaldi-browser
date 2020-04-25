@@ -4,14 +4,14 @@
 
 #include "third_party/blink/renderer/core/paint/compositing/compositing_reason_finder.h"
 
-#include "third_party/blink/renderer/core/animation/scroll_timeline.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/core/page/scrolling/root_scroller_util.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 
@@ -70,12 +70,6 @@ CompositingReasonFinder::PotentialCompositingReasonsFromStyle(
   reasons |= CompositingReasonsForAnimation(style);
   reasons |= CompositingReasonsForWillChange(style);
 
-  if (style.UsedTransformStyle3D() == ETransformStyle3D::kPreserve3d)
-    reasons |= CompositingReason::kPreserve3DWith3DDescendants;
-
-  if (style.HasPerspective())
-    reasons |= CompositingReason::kPerspectiveWith3DDescendants;
-
   // If the implementation of CreatesGroup changes, we need to be aware of that
   // in this part of code.
   DCHECK((style.HasOpacity() || layout_object.HasMask() ||
@@ -124,7 +118,9 @@ CompositingReasons CompositingReasonFinder::DirectReasonsForPaintProperties(
 
   auto* layer = ToLayoutBoxModelObject(object).Layer();
   if (layer->Has3DTransformedDescendant()) {
-    if (style.HasPerspective())
+    // Perspective (specified either by perspective or transform properties)
+    // with 3d descendants need a render surface for flattening purposes.
+    if (style.HasPerspective() || style.Transform().HasPerspective())
       reasons |= CompositingReason::kPerspectiveWith3DDescendants;
     if (style.Preserves3D())
       reasons |= CompositingReason::kPreserve3DWith3DDescendants;
@@ -133,11 +129,11 @@ CompositingReasons CompositingReasonFinder::DirectReasonsForPaintProperties(
   if (RequiresCompositingForRootScroller(*layer))
     reasons |= CompositingReason::kRootScroller;
 
-  if (RequiresCompositingForScrollTimeline(*layer))
-    reasons |= CompositingReason::kScrollTimelineTarget;
-
   if (RequiresCompositingForScrollDependentPosition(*layer))
     reasons |= CompositingReason::kScrollDependentPosition;
+
+  if (style.HasBackdropFilter())
+    reasons |= CompositingReason::kBackdropFilter;
 
   return reasons;
 }
@@ -148,7 +144,7 @@ bool CompositingReasonFinder::RequiresCompositingFor3DTransform(
   // may have transforms, but the layoutObject may be an inline that doesn't
   // support them.
   return layout_object.HasTransformRelatedProperty() &&
-         layout_object.StyleRef().Has3DTransform() &&
+         layout_object.StyleRef().Has3DTransformOperation() &&
          // Don't composite "trivial" 3D transforms such as translateZ(0) on
          // low-end devices. These devices are much more sensitive to memory
          // and per-composited-layer commit overhead.
@@ -169,9 +165,6 @@ CompositingReasons CompositingReasonFinder::NonStyleDeterminedDirectReasons(
   if (RequiresCompositingForRootScroller(layer))
     direct_reasons |= CompositingReason::kRootScroller;
 
-  if (RequiresCompositingForScrollTimeline(layer))
-    direct_reasons |= CompositingReason::kScrollTimelineTarget;
-
   // Composite |layer| if it is inside of an ancestor scrolling layer, but that
   // scrolling layer is not on the stacking context ancestor chain of |layer|.
   // See the definition of the scrollParent property in Layer for more detail.
@@ -190,6 +183,15 @@ CompositingReasons CompositingReasonFinder::NonStyleDeterminedDirectReasons(
   if (layer.CompositingContainer() &&
       layer.CompositingContainer()->GetLayoutObject().IsVideo())
     direct_reasons |= CompositingReason::kVideoOverlay;
+
+  // Special case for immersive-ar DOM overlay mode, see also
+  // PaintLayerCompositor::ApplyXrImmersiveDomOverlayIfNeeded()
+  if (const Node* node = layer.GetLayoutObject().GetNode()) {
+    if (node->IsElementNode() && node->GetDocument().IsImmersiveArOverlay() &&
+        node == Fullscreen::FullscreenElementFrom(node->GetDocument())) {
+      direct_reasons |= CompositingReason::kImmersiveArOverlay;
+    }
+  }
 
   if (layer.IsRootLayer() &&
       (RequiresCompositingForScrollableFrame(*layout_object.View()) ||
@@ -252,15 +254,6 @@ bool CompositingReasonFinder::RequiresCompositingForRootScroller(
     return false;
 
   return layer.GetLayoutObject().IsGlobalRootScroller();
-}
-
-bool CompositingReasonFinder::RequiresCompositingForScrollTimeline(
-    const PaintLayer& layer) {
-  // TODO(crbug.com/839341): Remove once we support main-thread AnimationWorklet
-  // and don't need to promote the scroll-source.
-  return layer.GetScrollableArea() && layer.GetLayoutObject().GetNode() &&
-         ScrollTimeline::HasActiveScrollTimeline(
-             layer.GetLayoutObject().GetNode());
 }
 
 bool CompositingReasonFinder::RequiresCompositingForScrollDependentPosition(

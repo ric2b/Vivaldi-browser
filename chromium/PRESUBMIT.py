@@ -22,6 +22,7 @@ _EXCLUDED_PATHS = (
     r"^v8[\\/].*",
     r".*MakeFile$",
     r".+_autogen\.h$",
+    r".+_pb2\.py$",
     r".+[\\/]pnacl_shim\.c$",
     r"^gpu[\\/]config[\\/].*_list_json\.cc$",
     r"^chrome[\\/]browser[\\/]resources[\\/]pdf[\\/]index.js",
@@ -260,7 +261,6 @@ _NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK = '|'.join((
   '^android_webview/browser/',
   '^apps/',
   '^ash/',
-  '^base/',
   '^base/callback.h',  # Intentional.
   '^chrome/app/',
   '^chrome/browser/',
@@ -380,7 +380,6 @@ _NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK = '|'.join((
   '^components/variations/',
   '^components/visitedlink/',
   '^components/web_cache/',
-  '^components/web_resource/',
   '^components/webcrypto/',
   '^components/webdata/',
   '^components/webdata_services/',
@@ -1047,7 +1046,8 @@ _BANNED_CPP_FUNCTIONS = (
       'GetAddressOf',
       (
         'Improper use of Microsoft::WRL::ComPtr<T>::GetAddressOf() has been ',
-        'implicated in a few leaks. Use operator& instead.'
+        'implicated in a few leaks. Use operator& instead. See ',
+        'http://crbug.com/914910 for more conversion guidance.'
       ),
       True,
       (),
@@ -1122,12 +1122,134 @@ _BANNED_CPP_FUNCTIONS = (
       ),
       False,
       (
+        r'^fuchsia/engine/browser/url_request_rewrite_rules_manager\.cc$',
+        r'^fuchsia/engine/url_request_rewrite_type_converters\.cc$',
         r'^third_party/blink/.*\.(cc|h)$',
         r'^content/renderer/.*\.(cc|h)$',
       ),
     ),
 )
 
+# Format: Sequence of tuples containing:
+# * String pattern or, if starting with a slash, a regular expression.
+# * Sequence of strings to show when the pattern matches.
+_DEPRECATED_MOJO_TYPES = (
+    (
+      r'/\bmojo::AssociatedBinding\b',
+      (
+        'mojo::AssociatedBinding<Interface> is deprecated.',
+        'Use mojo::AssociatedReceiver<Interface> instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::AssociatedBindingSet\b',
+      (
+        'mojo::AssociatedBindingSet<Interface> is deprecated.',
+        'Use mojo::AssociatedReceiverSet<Interface> instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::AssociatedInterfacePtr\b',
+      (
+        'mojo::AssociatedInterfacePtr<Interface> is deprecated.',
+        'Use mojo::AssociatedRemote<Interface> instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::AssociatedInterfacePtrInfo\b',
+      (
+        'mojo::AssociatedInterfacePtrInfo<Interface> is deprecated.',
+        'Use mojo::PendingAssociatedRemote<Interface> instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::AssociatedInterfaceRequest\b',
+      (
+        'mojo::AssociatedInterfaceRequest<Interface> is deprecated.',
+        'Use mojo::PendingAssociatedReceiver<Interface> instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::Binding\b',
+      (
+        'mojo::Binding<Interface> is deprecated.',
+        'Use mojo::Receiver<Interface> instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::BindingSet\b',
+      (
+        'mojo::BindingSet<Interface> is deprecated.',
+        'Use mojo::ReceiverSet<Interface> instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::InterfacePtr\b',
+      (
+        'mojo::InterfacePtr<Interface> is deprecated.',
+        'Use mojo::Remote<Interface> instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::InterfacePtrInfo\b',
+      (
+        'mojo::InterfacePtrInfo<Interface> is deprecated.',
+        'Use mojo::PendingRemote<Interface> instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::InterfaceRequest\b',
+      (
+        'mojo::InterfaceRequest<Interface> is deprecated.',
+        'Use mojo::PendingReceiver<Interface> instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::MakeRequest\b',
+      (
+        'mojo::MakeRequest is deprecated.',
+        'Use mojo::Remote::BindNewPipeAndPassReceiver() instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::MakeRequestAssociatedWithDedicatedPipe\b',
+      (
+        'mojo::MakeRequest is deprecated.',
+        'Use mojo::AssociatedRemote::'
+        'BindNewEndpointAndPassDedicatedReceiverForTesting() instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::MakeStrongBinding\b',
+      (
+        'mojo::MakeStrongBinding is deprecated.',
+        'Either migrate to mojo::UniqueReceiverSet, if possible, or use',
+        'mojo::MakeSelfOwnedReceiver() instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::MakeStrongAssociatedBinding\b',
+      (
+        'mojo::MakeStrongAssociatedBinding is deprecated.',
+        'Either migrate to mojo::UniqueAssociatedReceiverSet, if possible, or',
+        'use mojo::MakeSelfOwnedAssociatedReceiver() instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::StrongAssociatedBindingSet\b',
+      (
+        'mojo::StrongAssociatedBindingSet<Interface> is deprecated.',
+        'Use mojo::UniqueAssociatedReceiverSet<Interface> instead.',
+      ),
+    ),
+    (
+      r'/\bmojo::StrongBindingSet\b',
+      (
+        'mojo::StrongBindingSet<Interface> is deprecated.',
+        'Use mojo::UniqueReceiverSet<Interface> instead.',
+      ),
+    ),
+)
 
 _IPC_ENUM_TRAITS_DEPRECATED = (
     'You are using IPC_ENUM_TRAITS() in your code. It has been deprecated.\n'
@@ -1232,15 +1354,17 @@ _ANDROID_SPECIFIC_PYDEPS_FILES = [
     'build/protoc_java.pydeps',
     'chrome/android/features/create_stripped_java_factory.pydeps',
     'net/tools/testserver/testserver.pydeps',
+    'testing/scripts/run_android_wpt.pydeps',
     'third_party/android_platform/development/scripts/stack.pydeps',
 ]
 
 
 _GENERIC_PYDEPS_FILES = [
-    'chrome/test/chromedriver/test/run_py_tests.pydeps',
     'chrome/test/chromedriver/log_replay/client_replay_unittest.pydeps',
+    'chrome/test/chromedriver/test/run_py_tests.pydeps',
     'third_party/blink/renderer/bindings/scripts/build_web_idl_database.pydeps',
     'third_party/blink/renderer/bindings/scripts/collect_idl_files.pydeps',
+    'third_party/blink/renderer/bindings/scripts/generate_bindings.pydeps',
     'tools/binary_size/sizes.pydeps',
     'tools/binary_size/supersize.pydeps',
 ]
@@ -1694,6 +1818,31 @@ def _CheckValidHostsInDEPS(input_api, output_api):
         long_text=error.output)]
 
 
+def _GetMessageForMatchingType(input_api, affected_file, line_number, line,
+                               type_name, message):
+  """Helper method for _CheckNoBannedFunctions and _CheckNoDeprecatedMojoTypes.
+
+  Returns an string composed of the name of the file, the line number where the
+  match has been found and the additional text passed as |message| in case the
+  target type name matches the text inside the line passed as parameter.
+  """
+  matched = False
+  if type_name[0:1] == '/':
+    regex = type_name[1:]
+    if input_api.re.search(regex, line):
+      matched = True
+  elif type_name in line:
+    matched = True
+
+  result = []
+  if matched:
+    result.append('    %s:%d:' % (affected_file.LocalPath(), line_number))
+    for message_line in message:
+      result.append('      %s' % message_line)
+
+  return result
+
+
 def _CheckNoBannedFunctions(input_api, output_api):
   """Make sure that banned functions are not used."""
   warnings = []
@@ -1719,20 +1868,13 @@ def _CheckNoBannedFunctions(input_api, output_api):
     return False
 
   def CheckForMatch(affected_file, line_num, line, func_name, message, error):
-    matched = False
-    if func_name[0:1] == '/':
-      regex = func_name[1:]
-      if input_api.re.search(regex, line):
-        matched = True
-    elif func_name in line:
-      matched = True
-    if matched:
-      problems = warnings
+    problems = _GetMessageForMatchingType(input_api, f, line_num, line,
+                                          func_name, message)
+    if problems:
       if error:
-        problems = errors
-      problems.append('    %s:%d:' % (affected_file.LocalPath(), line_num))
-      for message_line in message:
-        problems.append('      %s' % message_line)
+        errors.extend(problems)
+      else:
+        warnings.extend(problems)
 
   file_filter = lambda f: f.LocalPath().endswith(('.java'))
   for f in input_api.AffectedFiles(file_filter=file_filter):
@@ -1772,6 +1914,30 @@ def _CheckNoBannedFunctions(input_api, output_api):
   if (errors):
     result.append(output_api.PresubmitError(
         'Banned functions were used.\n' + '\n'.join(errors)))
+  return result
+
+
+def _CheckNoDeprecatedMojoTypes(input_api, output_api):
+  """Make sure that old Mojo types are not used."""
+  warnings = []
+
+  file_filter = lambda f: f.LocalPath().endswith(('.cc', '.mm', '.h'))
+  for f in input_api.AffectedFiles(file_filter=file_filter):
+    # Only need to check Blink for warnings for now.
+    if not f.LocalPath().startswith('third_party/blink'):
+      continue
+
+    for line_num, line in f.ChangedContents():
+      for func_name, message in _DEPRECATED_MOJO_TYPES:
+        problems = _GetMessageForMatchingType(input_api, f, line_num, line,
+                                              func_name, message)
+        if problems:
+            warnings.extend(problems)
+
+  result = []
+  if (warnings):
+    result.append(output_api.PresubmitPromptWarning(
+        'Banned Mojo types were used.\n' + '\n'.join(warnings)))
   return result
 
 
@@ -2665,9 +2831,9 @@ def _GetOwnersFilesToCheckForIpcOwners(input_api):
       'third_party/protobuf/benchmarks/python/*',
       'third_party/third_party/blink/renderer/platform/bindings/*',
       'third_party/win_build_output/*',
-      # These aidl files are just used to communicate between class loaders
-      # running in the same process.
-      'weblayer/browser/java/org/chromium/weblayer_private/aidl/*',
+      # These files are just used to communicate between class loaders running
+      # in the same process.
+      'weblayer/browser/java/org/chromium/weblayer_private/interfaces/*',
   ]
 
   # Dictionary mapping an OWNERS file path to Patterns.
@@ -3140,7 +3306,8 @@ def _CheckAndroidNewMdpiAssetLocation(input_api, output_api):
 
 def _CheckAndroidWebkitImports(input_api, output_api):
   """Checks that code uses org.chromium.base.Callback instead of
-     android.widget.ValueCallback except in the WebView glue layer.
+     android.webview.ValueCallback except in the WebView glue layer
+     and WebLayer.
   """
   valuecallback_import_pattern = input_api.re.compile(
       r'^import android\.webkit\.ValueCallback;$')
@@ -3152,7 +3319,8 @@ def _CheckAndroidWebkitImports(input_api, output_api):
       black_list=(_EXCLUDED_PATHS +
                   _TEST_CODE_EXCLUDED_PATHS +
                   input_api.DEFAULT_BLACK_LIST +
-                  (r'^android_webview[\\/]glue[\\/].*',)),
+                  (r'^android_webview[\\/]glue[\\/].*',
+                   r'^weblayer[\\/].*',)),
       white_list=[r'.*\.java$'])
 
   for f in input_api.AffectedSourceFiles(sources):
@@ -3864,6 +4032,7 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckNoNewWStrings(input_api, output_api))
   results.extend(_CheckNoDEPSGIT(input_api, output_api))
   results.extend(_CheckNoBannedFunctions(input_api, output_api))
+  results.extend(_CheckNoDeprecatedMojoTypes(input_api, output_api))
   results.extend(_CheckNoPragmaOnce(input_api, output_api))
   results.extend(_CheckNoTrinaryTrueFalse(input_api, output_api))
   results.extend(_CheckUnwantedDependencies(input_api, output_api))
@@ -4203,7 +4372,7 @@ def _CheckForIncludeGuards(input_api, output_api):
               errors.append(output_api.PresubmitPromptWarning(
                 'Header using the wrong include guard name %s' % guard_name,
                 ['%s:%d' % (f.LocalPath(), line_number + 1)],
-                'Expected: %r\nFound: %r' % (expected_guard, guard_name)))
+                'Expected: %r\nFound:    %r' % (expected_guard, guard_name)))
       else:
         # The line after #ifndef should have a #define of the same name.
         if line_number == guard_line_number + 1:
@@ -4335,6 +4504,8 @@ def CheckChangeOnCommit(input_api, output_api):
       input_api.canned_checks.CheckPatchFormatted(input_api, output_api))
   results.extend(input_api.canned_checks.CheckChangeHasBugField(
       input_api, output_api))
+  results.extend(input_api.canned_checks.CheckChangeHasNoUnwantedTags(
+      input_api, output_api))
   results.extend(input_api.canned_checks.CheckChangeHasDescription(
       input_api, output_api))
   return results
@@ -4440,7 +4611,7 @@ def _CheckTranslationScreenshots(input_api, output_api):
   def _CheckScreenshotRemoved(screenshots_dir, message_id):
     sha1_path = input_api.os_path.join(
         screenshots_dir, message_id + '.png.sha1')
-    if sha1_path not in removed_paths:
+    if input_api.os_path.exists(sha1_path) and sha1_path not in removed_paths:
       unnecessary_sha1_files.append(sha1_path)
 
 

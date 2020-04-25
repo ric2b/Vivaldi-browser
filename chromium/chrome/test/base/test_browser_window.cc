@@ -73,6 +73,10 @@ gfx::NativeWindow TestBrowserWindow::GetNativeWindow() const {
   return NULL;
 }
 
+bool TestBrowserWindow::IsOnCurrentWorkspace() const {
+  return true;
+}
+
 void TestBrowserWindow::SetTopControlsShownRatio(
     content::WebContents* web_contents,
     float ratio) {}
@@ -139,14 +143,12 @@ LocationBar* TestBrowserWindow::GetLocationBar() const {
   return const_cast<TestLocationBar*>(&location_bar_);
 }
 
-PageActionIconContainer*
-TestBrowserWindow::GetOmniboxPageActionIconContainer() {
-  return &omnibox_page_action_icon_container_;
+bool TestBrowserWindow::UpdatePageActionIcon(PageActionIconType type) {
+  return false;
 }
 
-PageActionIconContainer*
-TestBrowserWindow::GetToolbarPageActionIconContainer() {
-  return nullptr;
+autofill::AutofillBubbleHandler* TestBrowserWindow::GetAutofillBubbleHandler() {
+  return &autofill_bubble_handler_;
 }
 
 ToolbarActionsBar* TestBrowserWindow::GetToolbarActionsBar() {
@@ -198,24 +200,17 @@ ShowTranslateBubbleResult TestBrowserWindow::ShowTranslateBubble(
   return ShowTranslateBubbleResult::SUCCESS;
 }
 
-autofill::SaveCardBubbleView* TestBrowserWindow::ShowSaveCreditCardBubble(
+qrcode_generator::QRCodeGeneratorBubbleView*
+TestBrowserWindow::ShowQRCodeGeneratorBubble(
     content::WebContents* contents,
-    autofill::SaveCardBubbleController* controller,
-    bool user_gesture) {
+    qrcode_generator::QRCodeGeneratorBubbleController* controller,
+    const GURL& url) {
   return nullptr;
 }
 
 SharingDialog* TestBrowserWindow::ShowSharingDialog(
     content::WebContents* web_contents,
-    SharingUiController* controller) {
-  return nullptr;
-}
-
-autofill::LocalCardMigrationBubble*
-TestBrowserWindow::ShowLocalCardMigrationBubble(
-    content::WebContents* contents,
-    autofill::LocalCardMigrationBubbleController* controller,
-    bool user_gesture) {
+    SharingDialogData data) {
   return nullptr;
 }
 

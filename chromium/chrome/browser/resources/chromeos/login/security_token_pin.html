@@ -44,15 +44,18 @@
 
   <template>
 
-    <oobe-dialog class="gaia-dialog" has-buttons>
+    <oobe-dialog class="gaia-dialog" has-buttons role="dialog"
+        aria-labelledby="title" aria-describedby="description">
       <hd-iron-icon slot="oobe-icon" icon1x="security-token-pin-dialog-32:lock"
           icon2x="security-token-pin-dialog-64:lock">
       </hd-iron-icon>
-      <h1 slot="title">
+      <h1 slot="title" id="title">
         [[i18nDynamic(locale, 'securityTokenPinDialogTitle')]]
       </h1>
-      <div slot="subtitle">
-        [[i18nDynamic(locale, 'securityTokenPinDialogSubtitle')]]
+      <div slot="subtitle" id="subtitle">
+        <span id="description">
+          [[i18nDynamic(locale, 'securityTokenPinDialogSubtitle')]]
+        </span>
         <a href="#" id="learnMore">
           [[i18nDynamic(locale, 'learnMoreButton')]]
         </a>
@@ -61,6 +64,8 @@
         <div id="pinKeyboardContainer">
           <pin-keyboard id="pinKeyboard"
               has-error="[[hasError_(parameters, userEdited_)]]"
+              aria-label="[[getAriaLabel_(locale, parameters, errorLabelId_,
+                                          userEdited_)]]"
               on-pin-change="onPinChange_">
             <div id="errorContainer" problem
                 hidden="[[!hasError_(parameters, userEdited_)]]">

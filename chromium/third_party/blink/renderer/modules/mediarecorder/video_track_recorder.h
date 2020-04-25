@@ -73,7 +73,7 @@ class Thread;
 // thread but that pass frames on Render IO thread. It has an internal Encoder
 // with its own threading subtleties, see the implementation file.
 class MODULES_EXPORT VideoTrackRecorder
-    : public GarbageCollectedFinalized<VideoTrackRecorder>,
+    : public GarbageCollected<VideoTrackRecorder>,
       public WebMediaStreamSink {
   USING_PRE_FINALIZER(VideoTrackRecorder, Prefinalize);
 
@@ -183,6 +183,13 @@ class MODULES_EXPORT VideoTrackRecorder
 
     // Called when the frame reference is released after encode.
     void FrameReleased(scoped_refptr<media::VideoFrame> frame);
+
+    // A helper function to convert the given |frame| to an I420 video frame.
+    // Used mainly by the software encoders since I420 is the only supported
+    // pixel format.  The function is best-effort.  If for any reason the
+    // conversion fails, the original |frame| will be returned.
+    static scoped_refptr<media::VideoFrame> ConvertToI420ForSoftwareEncoder(
+        scoped_refptr<media::VideoFrame> frame);
 
     // Used to shutdown properly on the same thread we were created.
     const scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;

@@ -33,6 +33,10 @@ import org.chromium.components.bookmarks.BookmarkId;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.common.VivaldiBookmarkUtils;
+import org.vivaldi.browser.common.VivaldiUtils;
+
 /**
  * Dialog for moving bookmarks from one folder to another. A list of folders are shown and the
  * hierarchy of bookmark model is presented by indentation of list items. This dialog can be shown
@@ -102,7 +106,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
      */
     public static void startNewFolderSelectActivity(
             BookmarkAddEditFolderActivity activity, List<BookmarkId> bookmarks) {
-        assert bookmarks.size() > 0;
+        assert ChromeApplication.isVivaldi() || bookmarks.size() > 0;
         Intent intent = new Intent(activity, BookmarkFolderSelectActivity.class);
         intent.putExtra(INTENT_IS_CREATING_FOLDER, true);
         ArrayList<String> bookmarkStrings = new ArrayList<>(bookmarks.size());
@@ -163,6 +167,8 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        if (ChromeApplication.isVivaldi())
+            getSupportActionBar().setHomeAsUpIndicator(getResources().getDrawable(R.drawable.vivaldi_nav_button_back));
 
         updateFolderList();
 
@@ -176,6 +182,12 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
                             ? View.VISIBLE
                             : View.GONE);
         });
+
+        if (ChromeApplication.isVivaldi()) {
+            VivaldiUtils.updateStatusBar(this);
+            getWindow().setStatusBarColor(
+                    getResources().getColor(android.R.color.transparent));
+        }
     }
 
     private void updateFolderList() {
@@ -363,6 +375,9 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
 
             Drawable iconDrawable;
             if (entry.mType == FolderListEntry.TYPE_NORMAL) {
+                if (ChromeApplication.isVivaldi())
+                    iconDrawable = VivaldiBookmarkUtils.getFolderIcon(view.getContext());
+                else
                 iconDrawable = BookmarkUtils.getFolderIcon(view.getContext());
             } else {
                 // For new folder, start_icon is different.
@@ -386,4 +401,10 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
                     view.getPaddingBottom());
         }
     }
+
+    // Vivaldi
+    public static String getBookmarksToMoveIntentString() {
+        return INTENT_BOOKMARKS_TO_MOVE;
+    }
+    public static int getCreateFolderRequestCode() { return CREATE_FOLDER_REQUEST_CODE; }
 }

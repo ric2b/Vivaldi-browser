@@ -99,6 +99,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
 
   // GLES2Interface implementation
   void FreeSharedMemory(void*) override;
+  GLboolean DidGpuSwitch() final;
 
   // Include the auto-generated part of this class. We split this because
   // it means we can easily edit the non-auto generated parts right here in
@@ -143,8 +144,10 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
       const std::vector<std::pair<uint32_t, uint32_t>>& entries) override;
   void DeleteTransferCacheEntry(uint32_t type, uint32_t id) override;
   unsigned int GetTransferBufferFreeSize() const override;
+  bool IsJpegDecodeAccelerationSupported() const override;
+  bool IsWebPDecodeAccelerationSupported() const override;
   bool CanDecodeWithHardwareAcceleration(
-      base::span<const uint8_t> encoded_data) const override;
+      const cc::ImageHeaderMetadata* image_metadata) const override;
 
   // InterfaceBase implementation.
   void GenSyncTokenCHROMIUM(GLbyte* sync_token) override;
@@ -397,6 +400,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
   void OnGpuControlErrorMessage(const char* message, int32_t id) final;
   void OnGpuControlSwapBuffersCompleted(
       const SwapBuffersCompleteParams& params) final;
+  void OnGpuSwitched() final;
   void OnSwapBufferPresented(uint64_t swap_id,
                              const gfx::PresentationFeedback& feedback) final;
   void OnGpuControlReturnData(base::span<const uint8_t> data) final;

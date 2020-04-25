@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser.feed;
 
 import android.app.Activity;
-import android.support.annotation.IntDef;
+
+import androidx.annotation.IntDef;
 
 import com.google.android.libraries.feed.api.client.lifecycle.AppLifecycleListener;
 
@@ -180,7 +181,7 @@ public class FeedAppLifecycle
             mDelayedInitializeStarted = true;
             boolean initFeed = ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                     ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS, "init_feed_after_startup",
-                    true);
+                    false);
             if (initFeed) {
                 DeferredStartupHandler.getInstance().addDeferredTask(() -> {
                     // Since this is being run asynchronously, it's possible #destroy() is called

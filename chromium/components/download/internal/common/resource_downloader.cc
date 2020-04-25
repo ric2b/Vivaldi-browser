@@ -145,7 +145,7 @@ void ResourceDownloader::Start(
     std::unique_ptr<DownloadUrlParameters> download_url_parameters,
     bool is_parallel_request,
     bool is_background_mode) {
-  callback_ = download_url_parameters->callback();
+  callback_ = std::move(download_url_parameters->callback());
   upload_callback_ = download_url_parameters->upload_callback();
   guid_ = download_url_parameters->guid();
   is_content_initiated_ = download_url_parameters->content_initiated();
@@ -157,7 +157,7 @@ void ResourceDownloader::Start(
           download_url_parameters->GetSaveInfo()),
       is_parallel_request, download_url_parameters->is_transient(),
       download_url_parameters->fetch_error_body(),
-      download_url_parameters->follow_cross_origin_redirects(),
+      download_url_parameters->cross_origin_redirects(),
       download_url_parameters->request_headers(),
       download_url_parameters->request_origin(),
       download_url_parameters->download_source(),
@@ -198,7 +198,7 @@ void ResourceDownloader::InterceptResponse(
       false, /* is_parallel_request */
       false, /* is_transient */
       false, /* fetch_error_body */
-      true,  /* follow_cross_origin_redirects */
+      network::mojom::RedirectMode::kFollow,
       download::DownloadUrlParameters::RequestHeadersType(),
       std::string(), /* request_origin */
       download::DownloadSource::NAVIGATION, std::move(url_chain),
@@ -240,7 +240,7 @@ void ResourceDownloader::OnResponseStarted(
           URLLoaderFactoryProvider::URLLoaderFactoryProviderPtr(
               new URLLoaderFactoryProvider(url_loader_factory_),
               base::OnTaskRunnerDeleter(base::ThreadTaskRunnerHandle::Get())),
-          this, callback_));
+          this, std::move(callback_)));
 }
 
 void ResourceDownloader::OnReceiveRedirect() {

@@ -135,10 +135,11 @@ void ElementFinder::Start(Callback callback) {
     SendResult(ClientStatus(INVALID_SELECTOR));
     return;
   }
+
   devtools_client_->GetRuntime()->Evaluate(
-      std::string(kGetDocumentElement),
+      std::string(kGetDocumentElement), /* node_frame_id= */ std::string(),
       base::BindOnce(&ElementFinder::OnGetDocumentElement,
-                     weak_ptr_factory_.GetWeakPtr()));
+                     weak_ptr_factory_.GetWeakPtr(), 0));
 }
 
 void ElementFinder::SendResult(const ClientStatus& status) {
@@ -148,6 +149,7 @@ void ElementFinder::SendResult(const ClientStatus& status) {
 }
 
 void ElementFinder::OnGetDocumentElement(
+    size_t index,
     const DevtoolsClient::ReplyStatus& reply_status,
     std::unique_ptr<runtime::EvaluateResult> result) {
   ClientStatus status =
@@ -163,10 +165,14 @@ void ElementFinder::OnGetDocumentElement(
     SendResult(ClientStatus(ELEMENT_RESOLUTION_FAILED));
     return;
   }
-  element_result_->container_frame_host = web_contents_->GetMainFrame();
-  element_result_->container_frame_selector_index = 0;
-  element_result_->object_id = "";
-  RecursiveFindElement(object_id, 0);
+
+  element_result_->container_frame_selector_index = index;
+  if (element_result_->container_frame_host == nullptr) {
+    // Don't overwrite results from previous OOPIF passes.
+    element_result_->container_frame_host = web_contents_->GetMainFrame();
+  }
+  element_result_->object_id = std::string();
+  RecursiveFindElement(object_id, index);
 }
 
 void ElementFinder::RecursiveFindElement(const std::string& object_id,
@@ -214,6 +220,7 @@ void ElementFinder::RecursiveFindElement(const std::string& object_id,
           .SetArguments(std::move(argument))
           .SetFunctionDeclaration(function)
           .Build(),
+      element_result_->node_frame_id,
       base::BindOnce(&ElementFinder::OnQuerySelectorAll,
                      weak_ptr_factory_.GetWeakPtr(), index));
 }
@@ -273,6 +280,7 @@ void ElementFinder::OnQuerySelectorAll(
 
     devtools_client_->GetDOM()->DescribeNode(
         dom::DescribeNodeParams::Builder().SetObjectId(object_id).Build(),
+        element_result_->node_frame_id,
         base::BindOnce(&ElementFinder::OnDescribeNodeForPseudoElement,
                        weak_ptr_factory_.GetWeakPtr(), pseudo_type));
     return;
@@ -280,6 +288,7 @@ void ElementFinder::OnQuerySelectorAll(
 
   devtools_client_->GetDOM()->DescribeNode(
       dom::DescribeNodeParams::Builder().SetObjectId(object_id).Build(),
+      element_result_->node_frame_id,
       base::BindOnce(&ElementFinder::OnDescribeNode,
                      weak_ptr_factory_.GetWeakPtr(), object_id, index));
 }
@@ -303,6 +312,7 @@ void ElementFinder::OnDescribeNodeForPseudoElement(
             dom::ResolveNodeParams::Builder()
                 .SetBackendNodeId(pseudo_element->GetBackendNodeId())
                 .Build(),
+            element_result_->node_frame_id,
             base::BindOnce(&ElementFinder::OnResolveNodeForPseudoElement,
                            weak_ptr_factory_.GetWeakPtr()));
         return;
@@ -336,39 +346,67 @@ void ElementFinder::OnDescribeNode(
 
   auto* node = result->GetNode();
   std::vector<int> backend_ids;
+
   if (node->HasContentDocument()) {
+    // If the frame has a ContentDocument, it's considered a local frame.
+    // We need to resolve the RenderFrameHost for autofill.
+
     backend_ids.emplace_back(node->GetContentDocument()->GetBackendNodeId());
 
     element_result_->container_frame_selector_index = index;
 
-    // Find out the corresponding render frame host through document url and
-    // name.
-    // TODO(crbug.com/806868): Use more attributes to find out the render frame
-    // host if name and document url are not enough to uniquely identify it.
-    std::string frame_name;
-    if (node->HasAttributes()) {
-      const std::vector<std::string>* attributes = node->GetAttributes();
-      for (size_t i = 0; i < attributes->size();) {
-        if ((*attributes)[i] == "name") {
-          frame_name = (*attributes)[i + 1];
-          break;
+    if (node->HasFrameId()) {
+      element_result_->container_frame_host =
+          FindCorrespondingRenderFrameHost(node->GetFrameId());
+    } else {
+      // TODO(b/143318024): Remove the fallback.
+      std::string frame_name;
+      if (node->HasAttributes()) {
+        const std::vector<std::string>* attributes = node->GetAttributes();
+        for (size_t i = 0; i < attributes->size();) {
+          if ((*attributes)[i] == "name") {
+            frame_name = (*attributes)[i + 1];
+            break;
+          }
+          // Jump two positions since attribute name and value are always
+          // paired.
+          i = i + 2;
         }
-        // Jump two positions since attribute name and value are always paired.
-        i = i + 2;
       }
+      element_result_->container_frame_host = FindCorrespondingRenderFrameHost(
+          frame_name, node->GetContentDocument()->GetDocumentURL());
     }
-    element_result_->container_frame_host = FindCorrespondingRenderFrameHost(
-        frame_name, node->GetContentDocument()->GetDocumentURL());
+
     if (!element_result_->container_frame_host) {
       DVLOG(1) << __func__ << " Failed to find corresponding owner frame.";
-      SendResult(
-          UnexpectedDevtoolsErrorStatus(reply_status, __FILE__, __LINE__));
+      SendResult(ClientStatus(FRAME_HOST_NOT_FOUND));
       return;
     }
   } else if (node->HasFrameId()) {
-    // TODO(crbug.com/806868): Support out-of-process iframe.
-    DVLOG(3) << "Warning (unsupported): the element is inside an OOPIF.";
-    SendResult(ClientStatus(UNSUPPORTED));
+    // If the frame has no ContentDocument, it's considered an
+    // OutOfProcessIFrame.
+    // See https://www.chromium.org/developers/design-documents/oop-iframes for
+    // full documentation.
+    // We need to assign the frame id, such that devtools can resolve the
+    // session calls should be executed on. We also need to resolve the
+    // RenderFrameHost for autofill.
+
+    element_result_->node_frame_id = node->GetFrameId();
+    element_result_->container_frame_selector_index = index;
+    element_result_->container_frame_host =
+        FindCorrespondingRenderFrameHost(node->GetFrameId());
+
+    if (!element_result_->container_frame_host) {
+      DVLOG(1) << __func__ << " Failed to find corresponding owner frame.";
+      SendResult(ClientStatus(FRAME_HOST_NOT_FOUND));
+      return;
+    }
+
+    // Kick off another find element chain to walk down the OOP iFrame.
+    devtools_client_->GetRuntime()->Evaluate(
+        std::string(kGetDocumentElement), element_result_->node_frame_id,
+        base::BindOnce(&ElementFinder::OnGetDocumentElement,
+                       weak_ptr_factory_.GetWeakPtr(), index + 1));
     return;
   }
 
@@ -383,6 +421,7 @@ void ElementFinder::OnDescribeNode(
         dom::ResolveNodeParams::Builder()
             .SetBackendNodeId(backend_ids[0])
             .Build(),
+        element_result_->node_frame_id,
         base::BindOnce(&ElementFinder::OnResolveNode,
                        weak_ptr_factory_.GetWeakPtr(), index));
     return;
@@ -402,6 +441,17 @@ void ElementFinder::OnResolveNode(
   }
 
   RecursiveFindElement(result->GetObject()->GetObjectId(), ++index);
+}
+
+content::RenderFrameHost* ElementFinder::FindCorrespondingRenderFrameHost(
+    std::string frame_id) {
+  for (auto* frame : web_contents_->GetAllFrames()) {
+    if (frame->GetDevToolsFrameToken().ToString() == frame_id) {
+      return frame;
+    }
+  }
+
+  return nullptr;
 }
 
 content::RenderFrameHost* ElementFinder::FindCorrespondingRenderFrameHost(

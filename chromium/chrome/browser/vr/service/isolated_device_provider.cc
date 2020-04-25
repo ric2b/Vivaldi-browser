@@ -19,12 +19,11 @@ namespace vr {
 void IsolatedVRDeviceProvider::Initialize(
     base::RepeatingCallback<void(device::mojom::XRDeviceId,
                                  device::mojom::VRDisplayInfoPtr,
-                                 device::mojom::XRRuntimePtr)>
+                                 mojo::PendingRemote<device::mojom::XRRuntime>)>
         add_device_callback,
     base::RepeatingCallback<void(device::mojom::XRDeviceId)>
         remove_device_callback,
     base::OnceClosure initialization_complete) {
-
   add_device_callback_ = std::move(add_device_callback);
   remove_device_callback_ = std::move(remove_device_callback);
   initialization_complete_ = std::move(initialization_complete);
@@ -37,9 +36,10 @@ bool IsolatedVRDeviceProvider::Initialized() {
 }
 
 void IsolatedVRDeviceProvider::OnDeviceAdded(
-    device::mojom::XRRuntimePtr device,
-    device::mojom::IsolatedXRGamepadProviderFactoryPtr gamepad_factory,
-    device::mojom::XRCompositorHostPtr compositor_host,
+    mojo::PendingRemote<device::mojom::XRRuntime> device,
+    mojo::PendingRemote<device::mojom::IsolatedXRGamepadProviderFactory>
+        gamepad_factory,
+    mojo::PendingRemote<device::mojom::XRCompositorHost> compositor_host,
     device::mojom::XRDeviceId device_id) {
   add_device_callback_.Run(device_id, nullptr, std::move(device));
 
@@ -77,7 +77,7 @@ void IsolatedVRDeviceProvider::OnServerError() {
     OnDevicesEnumerated();
   } else {
     device_provider_.reset();
-    binding_.Close();
+    receiver_.reset();
     retry_count_++;
     SetupDeviceProvider();
   }
@@ -98,16 +98,14 @@ void IsolatedVRDeviceProvider::OnDevicesEnumerated() {
 
 void IsolatedVRDeviceProvider::SetupDeviceProvider() {
   GetXRDeviceService()->BindRuntimeProvider(
-      mojo::MakeRequest(&device_provider_));
-  device_provider_.set_connection_error_handler(base::BindOnce(
+      device_provider_.BindNewPipeAndPassReceiver());
+  device_provider_.set_disconnect_handler(base::BindOnce(
       &IsolatedVRDeviceProvider::OnServerError, base::Unretained(this)));
 
-  device::mojom::IsolatedXRRuntimeProviderClientPtr client;
-  binding_.Bind(mojo::MakeRequest(&client));
-  device_provider_->RequestDevices(std::move(client));
+  device_provider_->RequestDevices(receiver_.BindNewPipeAndPassRemote());
 }
 
-IsolatedVRDeviceProvider::IsolatedVRDeviceProvider() : binding_(this) {}
+IsolatedVRDeviceProvider::IsolatedVRDeviceProvider() = default;
 
 IsolatedVRDeviceProvider::~IsolatedVRDeviceProvider() {
   for (auto& entry : ui_host_map_) {

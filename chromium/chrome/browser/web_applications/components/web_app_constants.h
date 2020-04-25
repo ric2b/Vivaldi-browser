@@ -7,17 +7,26 @@
 
 namespace web_app {
 
-// How the app will be launched after installation.
-enum class LaunchContainer {
-  // When `kDefault` is used, the app will launch in a window if the site is
-  // "installable" (also referred to as Progressive Web App) and in a tab if
-  // the site is not "installable".
+// Install sources are listed in the order of priority (from top to bottom).
+//
+// This enum should be zero based: values are used as index in a bitset.
+// We don't use this enum values in prefs or metrics: enumerators can be
+// reordered. This enum is not strongly typed enum class: it supports implicit
+// conversion to int and <> comparison operators.
+namespace Source {
+enum Type {
+  kMinValue = 0,
+  kSystem = kMinValue,
+  kPolicy,
+  kWebAppStore,
+  // We sync only regular user-installed apps from the open web. For
+  // user-installed apps without overlaps this is the only source that will be
+  // set.
+  kSync,
   kDefault,
-  kTab,
-  kWindow,
+  kMaxValue
 };
-
-const char* LaunchContainerEnumToStr(LaunchContainer launch_container);
+}  // namespace Source
 
 // The result of an attempted web app installation, uninstallation or update.
 //
@@ -54,7 +63,11 @@ enum class InstallResultCode {
   kIntentToPlayStore = 11,
   // A web app has been disabled by device policy or by other reasons.
   kWebAppDisabled = 12,
-  kMaxValue = kWebAppDisabled
+  // The network request for the install URL was redirected.
+  kInstallURLRedirected = 13,
+  // The network request for the install URL failed or timed out.
+  kInstallURLLoadFailed = 14,
+  kMaxValue = kInstallURLLoadFailed
 };
 
 // Checks if InstallResultCode is not a failure.

@@ -11,7 +11,6 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
-#include "chrome/common/extensions/chrome_extension_messages.h"
 #include "chrome/common/url_constants.h"
 #include "components/rappor/rappor_service_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -28,6 +27,7 @@
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/switches.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/autoplay/autoplay.mojom.h"
 
@@ -207,7 +207,7 @@ void ChromeExtensionWebContentsObserver::ReadyToCommitNavigation(
                  ? navigation_handle->GetURL()
                  : navigation_handle->GetWebContents()->GetLastCommittedURL();
   if (is_kiosk || registry->enabled_extensions().GetExtensionOrAppByURL(url)) {
-    blink::mojom::AutoplayConfigurationClientAssociatedPtr client;
+    mojo::AssociatedRemote<blink::mojom::AutoplayConfigurationClient> client;
     navigation_handle->GetRenderFrameHost()
         ->GetRemoteAssociatedInterfaces()
         ->GetInterface(&client);

@@ -5,14 +5,17 @@
 package org.chromium.chrome.browser.compositor.layouts;
 
 import android.content.Context;
-import android.support.annotation.Nullable;
 import android.view.ViewGroup;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.chrome.browser.accessibility_tab_switcher.OverviewListLayout;
 import org.chromium.chrome.browser.compositor.TitleCache;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior.OverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
@@ -35,7 +38,6 @@ import org.chromium.chrome.browser.tasks.tab_management.TabManagementModuleProvi
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.chrome.browser.widget.OverviewListLayout;
 import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
@@ -92,6 +94,14 @@ public class LayoutManagerChrome extends LayoutManager implements OverviewModeCo
                 TabManagementDelegate tabManagementDelegate =
                         TabManagementModuleProvider.getDelegate();
                 assert tabManagementDelegate != null;
+                startSurface.setStateChangeObserver(new StartSurface.StateObserver() {
+                    @Override
+                    public void onStateChanged(boolean shouldShowTabSwitcherToolbar) {
+                        for (OverviewModeObserver observer : mOverviewModeObservers) {
+                            observer.onOverviewModeStateChanged(shouldShowTabSwitcherToolbar);
+                        }
+                    }
+                });
                 mOverviewLayout = tabManagementDelegate.createStartSurfaceLayout(
                         context, this, renderHost, startSurface);
             } else {

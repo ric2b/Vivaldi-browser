@@ -14,8 +14,6 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_fetcher_delegate.h"
 #include "remoting/base/constants.h"
 #include "remoting/base/fake_oauth_token_getter.h"
 #include "remoting/host/gcd_rest_client.h"
@@ -67,7 +65,6 @@ class GcdStateUpdaterTest : public testing::Test {
  protected:
   base::test::TaskEnvironment task_environment_;
   base::SimpleTestClock test_clock_;
-  net::TestURLFetcherFactory url_fetcher_factory_;
   network::TestURLLoaderFactory test_url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory>
       test_shared_url_loader_factory_;
@@ -166,14 +163,14 @@ TEST_F(GcdStateUpdaterTest, Retry) {
 
   auto* request = GetPendingRequest(0);
   test_url_loader_factory_.SimulateResponseWithoutRemovingFromPendingList(
-      request, network::ResourceResponseHead(), std::string(),
+      request, network::mojom::URLResponseHead::New(), std::string(),
       network::URLLoaderCompletionStatus(net::ERR_FAILED));
 
   task_environment_.FastForwardBy(base::TimeDelta::FromSeconds(1));
 
   request = GetPendingRequest(1);
   test_url_loader_factory_.SimulateResponseWithoutRemovingFromPendingList(
-      request, network::CreateResourceResponseHead(net::HTTP_OK), std::string(),
+      request, network::CreateURLResponseHead(net::HTTP_OK), std::string(),
       network::URLLoaderCompletionStatus());
   EXPECT_EQ(1, on_success_count_);
 
@@ -193,7 +190,7 @@ TEST_F(GcdStateUpdaterTest, UnknownHost) {
 
   auto* request = GetPendingRequest(0);
   test_url_loader_factory_.SimulateResponseWithoutRemovingFromPendingList(
-      request, network::CreateResourceResponseHead(net::HTTP_NOT_FOUND),
+      request, network::CreateURLResponseHead(net::HTTP_NOT_FOUND),
       std::string(), network::URLLoaderCompletionStatus(net::OK));
   EXPECT_EQ(0, on_success_count_);
   EXPECT_EQ(1, on_host_id_error_count_);

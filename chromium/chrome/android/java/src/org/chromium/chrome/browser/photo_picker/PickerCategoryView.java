@@ -62,7 +62,7 @@ public class PickerCategoryView extends RelativeLayout
      * A container class for keeping track of the data we need to show a photo/video tile in the
      * photo picker (the data we store in the cache).
      */
-    static public class Thumbnail {
+    public static class Thumbnail {
         public List<Bitmap> bitmaps;
         public String videoDuration;
 
@@ -161,7 +161,8 @@ public class PickerCategoryView extends RelativeLayout
      * @param multiSelectionAllowed Whether to allow the user to select more than one image.
      */
     @SuppressWarnings("unchecked") // mSelectableListLayout
-    public PickerCategoryView(Context context, boolean multiSelectionAllowed) {
+    public PickerCategoryView(Context context, boolean multiSelectionAllowed,
+            PhotoPickerToolbar.PhotoPickerToolbarDelegate delegate) {
         super(context);
         mActivity = (ChromeActivity) context;
         mMultiSelectionAllowed = multiSelectionAllowed;
@@ -184,6 +185,7 @@ public class PickerCategoryView extends RelativeLayout
                 R.layout.photo_picker_toolbar, mSelectionDelegate, titleId, 0, 0, null, false,
                 false);
         toolbar.setNavigationOnClickListener(this);
+        toolbar.setDelegate(delegate);
         Button doneButton = (Button) toolbar.findViewById(R.id.done);
         doneButton.setOnClickListener(this);
         mVideoView = findViewById(R.id.video_player);

@@ -299,6 +299,8 @@ Polymer({
 
     this.authenticator_.confirmPasswordCallback =
         this.onAuthConfirmPassword_.bind(this);
+    this.authenticator_.onePasswordCallback =
+        this.onAuthOnePassword_.bind(this);
     this.authenticator_.noPasswordCallback = this.onAuthNoPassword_.bind(this);
     this.authenticator_.insecureContentBlockedCallback =
         this.onInsecureContentBlocked_.bind(this);
@@ -804,6 +806,7 @@ Polymer({
     this.email_ = '';
     this.authCompleted_ = false;
     this.lastBackMessageValue_ = false;
+    this.setBackNavigationVisibility_(true);
 
     // Reset SAML
     this.isSaml_ = false;
@@ -1104,9 +1107,9 @@ Polymer({
   },
 
   /**
-   * Invoked when the user has successfully authenticated via SAML, the
-   * principals API was not used and the authenticator needs the user to confirm
-   * the scraped password.
+   * Invoked when the user has successfully authenticated via SAML,
+   * the Chrome Credentials Passing API was not used and the authenticator needs
+   * the user to confirm the scraped password.
    * @param {string} email The authenticated user's e-mail.
    * @param {number} passwordCount The number of passwords that were scraped.
    * @private
@@ -1131,6 +1134,16 @@ Polymer({
   },
 
   /**
+   * Invoked when the user has successfully authenticated via SAML,
+   * the Chrome Credentials Passing API was not used and exactly one password
+   * was scraped (so we didn't have to ask the user to confirm their password).
+   * @private
+   */
+  onAuthOnePassword_: function() {
+    chrome.send('scrapedPasswordCount', [1]);
+  },
+
+  /**
    * Invoked when the confirm password screen is dismissed.
    * @param {string} password The password entered at the confirm screen.
    * @private
@@ -1145,7 +1158,8 @@ Polymer({
 
   /**
    * Invoked when the user has successfully authenticated via SAML, the
-   * principals API was not used and no passwords could be scraped.
+   * Chrome Credentials Passing API was not used and no passwords
+   * could be scraped.
    * The user will be asked to pick a manual password for the device.
    * @param {string} email The authenticated user's e-mail.
    * @private
@@ -1205,10 +1219,11 @@ Polymer({
 
   /**
    * Record that SAML API was used during sign-in.
+   * @param {boolean} isThirdPartyIdP is login flow SAML with external IdP
    * @private
    */
-  samlApiUsed_: function() {
-    chrome.send('usingSAMLAPI');
+  samlApiUsed_: function(isThirdPartyIdP) {
+    chrome.send('usingSAMLAPI', [isThirdPartyIdP]);
   },
 
   /**
@@ -1239,13 +1254,10 @@ Polymer({
     }
 
     this.isLoadingUiShown_ = true;
+
     // Hide the back button and the border line as they are not useful when
     // the loading screen is shown.
-    this.$['signin-back-button'].hidden = true;
-    this.$['signin-frame-dialog'].setAttribute('hide-shadow', true);
-    // Also hide the primary and secondary action buttons
-    this.primaryActionButtonLabel_ = null;
-    this.secondaryActionButtonLabel_ = null;
+    this.setBackNavigationVisibility_(false);
 
     // Clear any error messages that were shown before login.
     Oobe.clearErrors();
@@ -1447,6 +1459,21 @@ Polymer({
   },
 
   /**
+   * Show/Hide back navigation during post-authentication.
+   * @param {boolean} visible Show/hide back navigation.
+   * @private
+   */
+  setBackNavigationVisibility_: function(visible) {
+    this.$['signin-back-button'].hidden = !visible;
+    this.$['signin-frame-dialog'].setAttribute('hide-shadow', !visible);
+    if (!visible) {
+      // Also hide the primary and secondary action buttons
+      this.primaryActionButtonLabel_ = null;
+      this.secondaryActionButtonLabel_ = null;
+    }
+  },
+
+  /**
    * @param {string} username
    * @param {ACTIVE_DIRECTORY_ERROR_STATE} errorState
    */
@@ -1516,6 +1543,7 @@ Polymer({
    */
   onPinDialogCanceled_: function(e) {
     this.closePinDialog();
+    this.cancel();
   },
 
   /**

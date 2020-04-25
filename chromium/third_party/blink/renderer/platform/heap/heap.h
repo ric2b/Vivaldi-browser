@@ -36,10 +36,12 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "third_party/blink/renderer/platform/heap/finalizer_traits.h"
 #include "third_party/blink/renderer/platform/heap/gc_info.h"
 #include "third_party/blink/renderer/platform/heap/heap_page.h"
 #include "third_party/blink/renderer/platform/heap/process_heap.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
+#include "third_party/blink/renderer/platform/heap/thread_state_statistics.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
 #include "third_party/blink/renderer/platform/heap/worklist.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
@@ -55,6 +57,7 @@ class IncrementalMarkingScopeBase;
 }  // namespace incremental_marking_test
 
 class AddressCache;
+class ConcurrentMarkingVisitor;
 class ThreadHeapStatsCollector;
 class PagePool;
 class ProcessHeapReporter;
@@ -172,6 +175,14 @@ class ObjectAliveTrait<T, true> {
   }
 };
 
+template <typename T, typename = int>
+struct IsGarbageCollectedContainer : std::false_type {};
+
+template <typename T>
+struct IsGarbageCollectedContainer<
+    T,
+    typename T::IsGarbageCollectedCollectionTypeMarker> : std::true_type {};
+
 }  // namespace internal
 
 class PLATFORM_EXPORT ThreadHeap {
@@ -282,6 +293,9 @@ class PLATFORM_EXPORT ThreadHeap {
   bool AdvanceMarking(MarkingVisitor*, base::TimeTicks deadline);
   void VerifyMarking();
 
+  // Returns true if marker is done
+  bool AdvanceConcurrentMarking(ConcurrentMarkingVisitor*, base::TimeTicks);
+
   // Conservatively checks whether an address is a pointer in any of the
   // thread heaps.  If so marks the object pointed to as live.
   Address CheckAndMarkPointer(MarkingVisitor*, Address);
@@ -372,17 +386,15 @@ class PLATFORM_EXPORT ThreadHeap {
 
   void Compact();
 
-  bool AdvanceLazySweep(base::TimeTicks deadline);
-
-  void ConcurrentSweep();
+  enum class SweepingType : uint8_t { kMutator, kConcurrent };
+  bool AdvanceSweep(SweepingType sweeping_type, base::TimeTicks deadline);
 
   void PrepareForSweep();
   void RemoveAllPages();
   void InvokeFinalizersOnSweptPages();
   void CompleteSweep();
 
-  enum SnapshotType { kHeapSnapshot, kFreelistSnapshot };
-  void TakeSnapshot(SnapshotType);
+  void CollectStatistics(ThreadState::Statistics* statistics);
 
   ThreadHeapStatsCollector* stats_collector() const {
     return heap_stats_collector_.get();
@@ -412,7 +424,7 @@ class PLATFORM_EXPORT ThreadHeap {
 
   void InvokeEphemeronCallbacks(MarkingVisitor*);
 
-  void FlushV8References(MarkingVisitor*);
+  void FlushV8References();
 
   ThreadState* thread_state_;
   std::unique_ptr<ThreadHeapStatsCollector> heap_stats_collector_;
@@ -533,6 +545,13 @@ template <typename T, typename... Args>
 T* MakeGarbageCollected(Args&&... args) {
   static_assert(WTF::IsGarbageCollectedType<T>::value,
                 "T needs to be a garbage collected object");
+  static_assert(std::is_trivially_destructible<T>::value ||
+                    std::has_virtual_destructor<T>::value ||
+                    std::is_final<T>::value ||
+                    internal::IsGarbageCollectedContainer<T>::value ||
+                    internal::HasFinalizeGarbageCollectedObject<T>::value,
+                "Finalized GarbageCollected class should either have a virtual "
+                "destructor or be marked as final.");
   void* memory = T::AllocateObject(sizeof(T));
   HeapObjectHeader* header = HeapObjectHeader::FromPayload(memory);
   // Placement new as regular operator new() is deleted.
@@ -553,6 +572,13 @@ template <typename T, typename... Args>
 T* MakeGarbageCollected(AdditionalBytes additional_bytes, Args&&... args) {
   static_assert(WTF::IsGarbageCollectedType<T>::value,
                 "T needs to be a garbage collected object");
+  static_assert(std::is_trivially_destructible<T>::value ||
+                    std::has_virtual_destructor<T>::value ||
+                    std::is_final<T>::value ||
+                    internal::IsGarbageCollectedContainer<T>::value ||
+                    internal::HasFinalizeGarbageCollectedObject<T>::value,
+                "Finalized GarbageCollected class should either have a virtual "
+                "destructor or be marked as final.");
   void* memory = T::AllocateObject(sizeof(T) + additional_bytes.value);
   HeapObjectHeader* header = HeapObjectHeader::FromPayload(memory);
   // Placement new as regular operator new() is deleted.

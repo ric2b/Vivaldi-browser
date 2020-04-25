@@ -123,6 +123,7 @@ cca.views.camera.Preview.prototype.toString = function() {
 cca.views.camera.Preview.prototype.setSource_ = function(stream) {
   var video = document.createElement('video');
   video.id = 'preview-video';
+  video.classList = this.video_.classList;
   video.muted = true; // Mute to avoid echo from the captured audio.
   return new Promise((resolve) => {
     var handler = () => {
@@ -187,27 +188,6 @@ cca.views.camera.Preview.prototype.stop = function() {
 };
 
 /**
- * Creates an image blob of the current frame.
- * @return {!Promise<Blob>} Promise for the result.
- */
-cca.views.camera.Preview.prototype.toImage = function() {
-  var canvas = document.createElement('canvas');
-  var ctx = canvas.getContext('2d');
-  canvas.width = this.video_.videoWidth;
-  canvas.height = this.video_.videoHeight;
-  ctx.drawImage(this.video_, 0, 0);
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) {
-        resolve(blob);
-      } else {
-        reject(new Error('Photo blob error.'));
-      }
-    }, 'image/jpeg');
-  });
-};
-
-/**
  * Checks preview whether to show preview metadata or not.
  * @private
  */
@@ -243,6 +223,31 @@ cca.views.camera.Preview.prototype.enableShowMetadata_ = async function() {
     element.textContent = val;
   };
 
+  const buildInverseTable = (obj, prefix) => {
+    const tbl = {};
+    for (const [key, val] of Object.entries(obj)) {
+      if (!key.startsWith(prefix)) {
+        continue;
+      }
+      if (tbl.hasOwnProperty(val)) {
+        console.error(`Duplicated value: ${val}`);
+        continue;
+      }
+      tbl[val] = key.slice(prefix.length);
+    }
+    return tbl;
+  };
+
+  const afStateName = buildInverseTable(
+      cros.mojom.AndroidControlAfState, 'ANDROID_CONTROL_AF_STATE_');
+  const aeStateName = buildInverseTable(
+      cros.mojom.AndroidControlAeState, 'ANDROID_CONTROL_AE_STATE_');
+  const awbStateName = buildInverseTable(
+      cros.mojom.AndroidControlAwbState, 'ANDROID_CONTROL_AWB_STATE_');
+  const aeAntibandingModeName = buildInverseTable(
+      cros.mojom.AndroidControlAeAntibandingMode,
+      'ANDROID_CONTROL_AE_ANTIBANDING_MODE_');
+
   const tag = cros.mojom.CameraMetadataTag;
   const metadataEntryHandlers = {
     [tag.ANDROID_LENS_FOCUS_DISTANCE]: ([value]) => {
@@ -253,31 +258,35 @@ cca.views.camera.Preview.prototype.enableShowMetadata_ = async function() {
       const focusDistance = (100 / value).toFixed(1);
       showValue('#preview-focus-distance', `${focusDistance} cm`);
     },
-    [tag.ANDROID_LENS_FOCAL_LENGTH]: ([value]) => {
-      const focalLength = value.toFixed(1);
-      showValue('#preview-focal-length', `${focalLength} mm`);
-    },
-    [tag.ANDROID_LENS_APERTURE]: ([value]) => {
-      const aperture = value.toFixed(1);
-      showValue('#preview-aperture', `f/${aperture}`);
+    [tag.ANDROID_CONTROL_AF_STATE]: ([value]) => {
+      showValue('#preview-af-state', afStateName[value]);
     },
     [tag.ANDROID_SENSOR_SENSITIVITY]: ([value]) => {
       const sensitivity = value;
       showValue('#preview-sensitivity', `ISO ${sensitivity}`);
     },
     [tag.ANDROID_SENSOR_EXPOSURE_TIME]: ([value]) => {
-      const shutterSpeed = Math.round(1e9 / value).toFixed(0);
+      const shutterSpeed = Math.round(1e9 / value);
       showValue('#preview-exposure-time', `1/${shutterSpeed}`);
     },
     [tag.ANDROID_SENSOR_FRAME_DURATION]: ([value]) => {
       const frameFrequency = Math.round(1e9 / value);
       showValue('#preview-frame-duration', `${frameFrequency} Hz`);
     },
+    [tag.ANDROID_CONTROL_AE_ANTIBANDING_MODE]: ([value]) => {
+      showValue('#preview-ae-antibanding-mode', aeAntibandingModeName[value]);
+    },
+    [tag.ANDROID_CONTROL_AE_STATE]: ([value]) => {
+      showValue('#preview-ae-state', aeStateName[value]);
+    },
     [tag.ANDROID_COLOR_CORRECTION_GAINS]: ([valueRed, , , valueBlue]) => {
       const wbGainRed = valueRed.toFixed(2);
       showValue('#preview-wb-gain-red', `${wbGainRed}x`);
       const wbGainBlue = valueBlue.toFixed(2);
       showValue('#preview-wb-gain-blue', `${wbGainBlue}x`);
+    },
+    [tag.ANDROID_CONTROL_AWB_STATE]: ([value]) => {
+      showValue('#preview-awb-state', awbStateName[value]);
     },
     [tag.ANDROID_CONTROL_AF_MODE]: ([value]) => {
       displayCategory('#preview-af', value !== tag.CONTROL_AF_MODE_OFF);
@@ -290,7 +299,29 @@ cca.views.camera.Preview.prototype.enableShowMetadata_ = async function() {
     },
   };
 
+  // Currently there is no easy way to calculate the fps of a video element.
+  // Here we use the metadata events to calculate a reasonable approximation.
+  const updateFps = (() => {
+    const FPS_MEASURE_FRAMES = 100;
+    const timestamps = [];
+    return () => {
+      const now = performance.now();
+      timestamps.push(now);
+      if (timestamps.length > FPS_MEASURE_FRAMES) {
+        timestamps.shift();
+      }
+      if (timestamps.length === 1) {
+        return null;
+      }
+      return (timestamps.length - 1) / (now - timestamps[0]) * 1000;
+    };
+  })();
+
   const callback = (metadata) => {
+    const fps = updateFps();
+    if (fps !== null) {
+      showValue('#preview-fps', `${fps.toFixed(0)} FPS`);
+    }
     for (const entry of metadata.entries) {
       if (entry.count === 0) {
         continue;
@@ -423,16 +454,16 @@ cca.views.camera.Preview.prototype.onFocusClicked_ = function(event) {
   this.cancelFocus_();
 
   // Normalize to square space coordinates by W3C spec.
-  var x = event.offsetX / this.video_.width;
-  var y = event.offsetY / this.video_.height;
-  var constraints = {advanced: [{pointsOfInterest: [{x, y}]}]};
-  var track = this.video_.srcObject.getVideoTracks()[0];
-  var focus = track.applyConstraints(constraints).then(() => {
+  const x = event.offsetX / this.video_.offsetWidth;
+  const y = event.offsetY / this.video_.offsetHeight;
+  const constraints = {advanced: [{pointsOfInterest: [{x, y}]}]};
+  const track = this.video_.srcObject.getVideoTracks()[0];
+  const focus = track.applyConstraints(constraints).then(() => {
     if (focus != this.focus_) {
       return; // Focus was cancelled.
     }
-    var aim = document.querySelector('#preview-focus-aim');
-    var clone = aim.cloneNode(true);
+    const aim = document.querySelector('#preview-focus-aim');
+    const clone = aim.cloneNode(true);
     clone.style.left = `${event.offsetX + this.video_.offsetLeft}px`;
     clone.style.top = `${event.offsetY + this.video_.offsetTop}px`;
     clone.hidden = false;

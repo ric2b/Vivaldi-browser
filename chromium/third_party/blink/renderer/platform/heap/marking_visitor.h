@@ -21,9 +21,6 @@ class PLATFORM_EXPORT MarkingVisitorBase : public Visitor {
     // This is a default visitor. This is used for MarkingType=kAtomicMarking
     // and MarkingType=kIncrementalMarking.
     kGlobalMarking,
-    // This visitor just marks objects and ignores weak processing.
-    // This is used for MarkingType=kTakeSnapshot.
-    kSnapshotMarking,
     // Perform global marking along with preparing for additional sweep
     // compaction of heap arenas afterwards. Compared to the GlobalMarking
     // visitor, this visitor will also register references to objects
@@ -57,7 +54,8 @@ class PLATFORM_EXPORT MarkingVisitorBase : public Visitor {
     // ensures that any newly set value after this point is kept alive and does
     // not require the callback.
     if (desc.base_object_payload != BlinkGC::kNotFullyConstructedObject &&
-        HeapObjectHeader::FromPayload(desc.base_object_payload)->IsMarked())
+        HeapObjectHeader::FromPayload(desc.base_object_payload)
+            ->IsMarked<HeapObjectHeader::AccessMode::kAtomic>())
       return;
     RegisterWeakCallback(object_weak_ref, callback);
   }
@@ -109,8 +107,6 @@ class PLATFORM_EXPORT MarkingVisitorBase : public Visitor {
 
   // Flush private segments remaining in visitor's worklists to global pools.
   void FlushCompactionWorklists();
-
-  void FlushWeakTableCallbacks();
 
   size_t marked_bytes() const { return marked_bytes_; }
 
@@ -164,7 +160,7 @@ inline bool MarkingVisitorBase::MarkHeaderNoTracing(HeapObjectHeader* header) {
   // freed backing store.
   DCHECK(!header->IsFree());
 
-  if (header->TryMark()) {
+  if (header->TryMark<HeapObjectHeader::AccessMode::kAtomic>()) {
     AccountMarkedBytes(header);
     return true;
   }
@@ -176,7 +172,7 @@ inline void MarkingVisitorBase::MarkHeader(HeapObjectHeader* header,
   DCHECK(header);
   DCHECK(callback);
 
-  if (header->IsInConstruction()) {
+  if (header->IsInConstruction<HeapObjectHeader::AccessMode::kAtomic>()) {
     not_fully_constructed_worklist_.Push(header->Payload());
   } else if (MarkHeaderNoTracing(header)) {
     marking_worklist_.Push(
@@ -214,6 +210,8 @@ class PLATFORM_EXPORT MarkingVisitor : public MarkingVisitorBase {
   // to be in construction.
   void DynamicallyMarkAddress(Address);
 
+  void FlushMarkingWorklist();
+
  private:
   // Exact version of the marking write barriers.
   static bool WriteBarrierSlow(void*);
@@ -243,6 +241,8 @@ class PLATFORM_EXPORT ConcurrentMarkingVisitor : public MarkingVisitorBase {
  public:
   ConcurrentMarkingVisitor(ThreadState*, MarkingMode, int);
   ~ConcurrentMarkingVisitor() override = default;
+
+  virtual void FlushWorklists();
 };
 
 }  // namespace blink

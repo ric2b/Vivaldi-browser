@@ -12,8 +12,11 @@
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "components/viz/service/viz_service_export.h"
+#include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/service/sequence_id.h"
 #include "gpu/ipc/common/surface_handle.h"
+
+class GURL;
 
 namespace gl {
 class GLSurface;
@@ -21,7 +24,9 @@ class GLSurface;
 
 namespace gpu {
 
+class DisplayContext;
 class GpuDriverBugWorkarounds;
+class ImageFactory;
 class ImageTransportSurfaceDelegate;
 class MailboxManager;
 class SharedContextState;
@@ -69,6 +74,8 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceDependency {
   virtual const gpu::GpuPreferences& GetGpuPreferences() = 0;
   virtual const gpu::GpuFeatureInfo& GetGpuFeatureInfo() = 0;
   virtual gpu::MailboxManager* GetMailboxManager() = 0;
+  // May return null.
+  virtual gpu::ImageFactory* GetGpuImageFactory() = 0;
   // Note it is possible for IsOffscreen to be false and GetSurfaceHandle to
   // return kNullSurfaceHandle.
   virtual bool IsOffscreen() = 0;
@@ -83,6 +90,13 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceDependency {
       gpu::SurfaceHandle parent_window,
       gpu::SurfaceHandle child_window) = 0;
 #endif
+
+  virtual void RegisterDisplayContext(gpu::DisplayContext* display_context) = 0;
+  virtual void UnregisterDisplayContext(
+      gpu::DisplayContext* display_context) = 0;
+  virtual void DidLoseContext(bool offscreen,
+                              gpu::error::ContextLostReason reason,
+                              const GURL& active_url) = 0;
 };
 
 }  // namespace viz

@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.share;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.PendingIntent;
+import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ComponentName;
@@ -24,7 +25,6 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
-import android.support.annotation.Nullable;
 import android.support.v7.app.AlertDialog;
 import android.text.TextUtils;
 import android.util.Pair;
@@ -33,6 +33,8 @@ import android.view.View;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
@@ -40,6 +42,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.ContentUriUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
+import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.StreamUtil;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.VisibleForTesting;
@@ -99,11 +102,22 @@ public class ShareHelper {
 
     /** Force the use of a Chrome-specific intent chooser, not the system chooser. */
     private static boolean sForceCustomChooserForTesting;
+    private static boolean sIgnoreActivityNotFoundException;
 
     /** If non-null, will be used instead of the real activity. */
     private static FakeIntentReceiver sFakeIntentReceiverForTesting;
 
     private ShareHelper() {}
+
+    /*
+     * If true, dont throw an ActivityNotFoundException if it is fired when attempting
+     * to intent into lens.
+     * @param shouldIgnore Whether to catch the exception.
+     */
+    @VisibleForTesting
+    public static void setIgnoreActivityNotFoundExceptionForTesting(boolean shouldIgnore) {
+        sIgnoreActivityNotFoundException = shouldIgnore;
+    }
 
     /**
      * Fire the intent to share content with the target app.
@@ -319,8 +333,6 @@ public class ShareHelper {
      * sharing.
      * @param activity The activity used to trigger the share action.
      * @param jpegImageData The image data to be shared in jpeg format.
-     * @param name When this is not null, it will share the image directly with the
-     *             {@link ComponentName}
      * @param callback A provided callback function which will act on the generated URI.
      */
     public static void generateUriFromData(
@@ -403,7 +415,14 @@ public class ShareHelper {
     public static void shareImageWithGoogleLens(
             final Activity activity, Uri imageUri, boolean isIncognito) {
         Intent shareIntent = LensUtils.getShareWithGoogleLensIntent(imageUri, isIncognito);
-        fireIntent(activity, shareIntent, /* allowIdentification= */ true);
+        try {
+            fireIntent(activity, shareIntent, /* allowIdentification= */ true);
+        } catch (ActivityNotFoundException e) {
+            // The initial version check should guarantee that the activity is available. However,
+            // the exception may be thrown in test environments after mocking out the version check.
+            if (Boolean.TRUE.equals(sIgnoreActivityNotFoundException)) return;
+            throw e;
+        }
     }
 
     private static class ExternallyVisibleUriCallback implements Callback<String> {
@@ -477,7 +496,7 @@ public class ShareHelper {
         final TargetChosenCallback callback = params.getCallback();
         Intent intent = getShareLinkAppCompatibilityIntent();
         PackageManager manager = activity.getPackageManager();
-        List<ResolveInfo> resolveInfoList = manager.queryIntentActivities(intent, 0);
+        List<ResolveInfo> resolveInfoList = PackageManagerUtils.queryIntentActivities(intent, 0);
         assert resolveInfoList.size() > 0;
         if (resolveInfoList.size() == 0) return;
         Collections.sort(resolveInfoList, new ResolveInfo.DisplayNameComparator(manager));
@@ -579,8 +598,8 @@ public class ShareHelper {
         boolean isComponentValid = false;
         if (component != null) {
             shareIntent.setPackage(component.getPackageName());
-            PackageManager manager = ContextUtils.getApplicationContext().getPackageManager();
-            List<ResolveInfo> resolveInfoList = manager.queryIntentActivities(shareIntent, 0);
+            List<ResolveInfo> resolveInfoList =
+                    PackageManagerUtils.queryIntentActivities(shareIntent, 0);
             for (ResolveInfo info : resolveInfoList) {
                 ActivityInfo ai = info.activityInfo;
                 if (component.equals(new ComponentName(ai.applicationInfo.packageName, ai.name))) {

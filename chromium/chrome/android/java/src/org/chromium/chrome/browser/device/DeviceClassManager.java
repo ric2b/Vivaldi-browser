@@ -11,6 +11,8 @@ import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.ui.base.DeviceFormFactor;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * This class is used to turn on and off certain features for different types of
  * devices.
@@ -58,6 +60,11 @@ public class DeviceClassManager {
         }
 
         if (DeviceFormFactor.isTablet()) {
+            mEnableAccessibilityLayout = false;
+        }
+
+        if (ChromeApplication.isVivaldi()) {
+            mEnableSnapshots = true;
             mEnableAccessibilityLayout = false;
         }
 

@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_picture_in_picture_button_element.h"
 
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/html/media/html_media_source.h"
@@ -51,16 +52,15 @@ void MediaControlPictureInPictureButtonElement::UpdateDisplayType() {
   MediaControlInputElement::UpdateDisplayType();
 }
 
-WebLocalizedString::Name
-MediaControlPictureInPictureButtonElement::GetOverflowStringName() const {
+int MediaControlPictureInPictureButtonElement::GetOverflowStringId() const {
   DCHECK(MediaElement().IsHTMLVideoElement());
   bool isInPictureInPicture =
       PictureInPictureController::IsElementInPictureInPicture(
           &ToHTMLVideoElement(MediaElement()));
 
   return isInPictureInPicture
-             ? WebLocalizedString::kOverflowMenuExitPictureInPicture
-             : WebLocalizedString::kOverflowMenuEnterPictureInPicture;
+             ? IDS_MEDIA_OVERFLOW_MENU_EXIT_PICTURE_IN_PICTURE
+             : IDS_MEDIA_OVERFLOW_MENU_ENTER_PICTURE_IN_PICTURE;
 }
 
 bool MediaControlPictureInPictureButtonElement::HasOverflowButton() const {
@@ -102,10 +102,9 @@ void MediaControlPictureInPictureButtonElement::UpdateAriaString(
     bool isInPictureInPicture) {
   String aria_string =
       isInPictureInPicture
-          ? GetLocale().QueryString(
-                WebLocalizedString::kAXMediaExitPictureInPictureButton)
+          ? GetLocale().QueryString(IDS_AX_MEDIA_EXIT_PICTURE_IN_PICTURE_BUTTON)
           : GetLocale().QueryString(
-                WebLocalizedString::kAXMediaEnterPictureInPictureButton);
+                IDS_AX_MEDIA_ENTER_PICTURE_IN_PICTURE_BUTTON);
 
   setAttribute(html_names::kAriaLabelAttr, WTF::AtomicString(aria_string));
 }

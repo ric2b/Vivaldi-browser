@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="iw">
+<translation id="1181037720776840403">הסרה</translation>
 <translation id="125153950246128346">יש להקיש כדי לראות כרטיסייה אחרת</translation>
 <translation id="1869137256605757565">{TABS_COUNT,plural, =1{כרטיסייה אחת (<ph name="TABS_COUNT_ONE" />)}two{<ph name="TABS_COUNT_MANY" /> כרטיסיות}many{<ph name="TABS_COUNT_MANY" /> כרטיסיות}other{<ph name="TABS_COUNT_MANY" /> כרטיסיות}}</translation>
 <translation id="257674075312929031">קבוצה</translation>
@@ -19,6 +20,7 @@
 <translation id="6615455863669487791">הראה לי</translation>
 <translation id="6803423358608456383">כרטיסיות שנפתחו בחצי מהגובה</translation>
 <translation id="6840760312327750441">כדי לקבץ כרטיסיות, יש ללחוץ לחיצה ארוכה על כרטיסייה. בזמן הלחיצה, יש לגרור אותה אל כרטיסייה אחרת.</translation>
+<translation id="7151209024774799310">הסרת כרטיסיות מהקבוצה</translation>
 <translation id="7559245342362162951">הצגת כרטיסיות הקבוצה ברשת מסך מלא</translation>
 <translation id="8582216581279205169">כרטיסיות שנפתחו בגובה מלא</translation>
 <translation id="9150694013019234766">מעבר בין כרטיסיות בקבוצת הכרטיסיות שבחלק התחתון של המסך</translation>

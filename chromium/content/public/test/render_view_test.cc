@@ -17,6 +17,7 @@
 #include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
 #include "content/common/renderer.mojom.h"
+#include "content/common/view_messages.h"
 #include "content/common/visual_properties.h"
 #include "content/common/widget_messages.h"
 #include "content/public/browser/content_browser_client.h"
@@ -447,7 +448,7 @@ void RenderViewTest::SetUp() {
   view_params->proxy_routing_id = MSG_ROUTING_NONE;
   view_params->hidden = false;
   view_params->never_visible = false;
-  view_params->visual_properties = *InitialVisualProperties();
+  view_params->visual_properties = InitialVisualProperties();
 
   RenderViewImpl* view_impl = RenderViewImpl::Create(
       compositor_deps_.get(), std::move(view_params),
@@ -507,7 +508,6 @@ void RenderViewTest::TearDown() {
           EXPECT_EQ(0u, result->number_of_live_resources);
           EXPECT_EQ(0u,
                     result->number_of_live_context_lifecycle_state_observers);
-          EXPECT_EQ(0u, result->number_of_live_script_promises);
           EXPECT_EQ(0u, result->number_of_live_frames);
           EXPECT_EQ(0u, result->number_of_live_v8_per_context_data);
           EXPECT_EQ(0u, result->number_of_worker_global_scopes);
@@ -688,6 +688,9 @@ void RenderViewTest::Reload(const GURL& url) {
 
 void RenderViewTest::Resize(gfx::Size new_size,
                             bool is_fullscreen_granted) {
+  RenderViewImpl* view = static_cast<RenderViewImpl*>(view_);
+  RenderWidget* render_widget = view->GetWidget();
+
   VisualProperties visual_properties;
   visual_properties.screen_info = ScreenInfo();
   visual_properties.new_size = new_size;
@@ -695,12 +698,11 @@ void RenderViewTest::Resize(gfx::Size new_size,
   visual_properties.top_controls_height = 0.f;
   visual_properties.browser_controls_shrink_blink_size = false;
   visual_properties.is_fullscreen_granted = is_fullscreen_granted;
-  visual_properties.display_mode = blink::kWebDisplayModeBrowser;
-  std::unique_ptr<IPC::Message> resize_message(
-      new WidgetMsg_SynchronizeVisualProperties(0, visual_properties));
-  RenderWidget* render_widget =
-      static_cast<RenderViewImpl*>(view_)->GetWidget();
-  render_widget->OnMessageReceived(*resize_message);
+  visual_properties.display_mode = blink::mojom::DisplayMode::kBrowser;
+
+  WidgetMsg_UpdateVisualProperties resize_msg(render_widget->routing_id(),
+                                              visual_properties);
+  render_widget->OnMessageReceived(resize_msg);
 }
 
 void RenderViewTest::SimulateUserTypingASCIICharacter(char ascii_character,
@@ -789,11 +791,11 @@ ContentRendererClient* RenderViewTest::CreateContentRendererClient() {
   return new ContentRendererClient;
 }
 
-std::unique_ptr<VisualProperties> RenderViewTest::InitialVisualProperties() {
-  auto initial_visual_properties = std::make_unique<VisualProperties>();
+VisualProperties RenderViewTest::InitialVisualProperties() {
+  VisualProperties initial_visual_properties;
   // Ensure the view has some size so tests involving scrolling bounds work.
-  initial_visual_properties->new_size = gfx::Size(400, 300);
-  initial_visual_properties->visible_viewport_size = gfx::Size(400, 300);
+  initial_visual_properties.new_size = gfx::Size(400, 300);
+  initial_visual_properties.visible_viewport_size = gfx::Size(400, 300);
   return initial_visual_properties;
 }
 

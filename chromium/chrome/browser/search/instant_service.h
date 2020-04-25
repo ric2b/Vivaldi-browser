@@ -17,6 +17,7 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "build/build_config.h"
+#include "chrome/browser/search/background/ntp_background_service.h"
 #include "chrome/browser/search/background/ntp_background_service_observer.h"
 #include "chrome/browser/search/search_provider_observer.h"
 #include "components/history/core/browser/history_types.h"
@@ -38,7 +39,6 @@
 
 class InstantIOContext;
 class InstantServiceObserver;
-class NtpBackgroundService;
 class Profile;
 struct CollectionImage;
 struct InstantMostVisitedInfo;
@@ -282,6 +282,10 @@ class InstantService : public KeyedService,
   // Requests a new background image if it hasn't been updated in >24 hours.
   void RefreshBackgroundIfNeeded();
 
+  // Sets NTP elements theme info that are overridden when custom
+  // background is used.
+  void SetNtpElementsThemeInfo();
+
   Profile* const profile_;
 
   // The process ids associated with Instant processes.
@@ -310,10 +314,11 @@ class InstantService : public KeyedService,
 
   PrefService* pref_service_;
 
-  ScopedObserver<ui::NativeTheme, InstantService> theme_observer_;
+  ScopedObserver<ui::NativeTheme, ui::NativeThemeObserver> theme_observer_{
+      this};
 
   ScopedObserver<NtpBackgroundService, NtpBackgroundServiceObserver>
-      background_service_observer_;
+      background_service_observer_{this};
 
   ui::NativeTheme* native_theme_;
 

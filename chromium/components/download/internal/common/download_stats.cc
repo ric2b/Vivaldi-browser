@@ -1061,6 +1061,11 @@ void RecordParallelDownloadAddStreamSuccess(bool success,
   }
 }
 
+void RecordParallelRequestCreationFailure(DownloadInterruptReason reason) {
+  base::UmaHistogramSparse("Download.ParallelDownload.CreationFailureReason",
+                           reason);
+}
+
 void RecordParallelizableContentLength(int64_t content_length) {
   UMA_HISTOGRAM_CUSTOM_COUNTS("Download.ContentLength.Parallelizable",
                               content_length / 1024, 1, kMaxFileSizeKb, 50);
@@ -1276,6 +1281,17 @@ void RecordDownloadConnectionInfo(
   base::UmaHistogramEnumeration(
       "Download.ConnectionInfo", connection_info,
       net::HttpResponseInfo::ConnectionInfo::NUM_OF_CONNECTION_INFOS);
+}
+
+void RecordDownloadManagerCreationTimeSinceStartup(
+    base::TimeDelta elapsed_time) {
+  base::UmaHistogramLongTimes("Download.DownloadManager.CreationDelay",
+                              elapsed_time);
+}
+
+void RecordDownloadManagerMemoryUsage(size_t bytes_used) {
+  base::UmaHistogramMemoryKB("Download.DownloadManager.MemoryUsage",
+                             bytes_used / 1000);
 }
 
 #if defined(OS_ANDROID)

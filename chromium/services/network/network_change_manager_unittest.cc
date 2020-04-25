@@ -10,6 +10,8 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
+#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/network_change_notifier.h"
 #include "services/network/public/mojom/network_change_manager.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -38,15 +40,14 @@ class TestNetworkChangeManagerClient
         notification_type_to_wait_(NONE),
         connection_type_(mojom::ConnectionType::CONNECTION_UNKNOWN),
         binding_(this) {
-    mojom::NetworkChangeManagerPtr manager_ptr;
-    mojom::NetworkChangeManagerRequest request(mojo::MakeRequest(&manager_ptr));
-    network_change_manager->AddRequest(std::move(request));
+    mojo::Remote<mojom::NetworkChangeManager> manager;
+    network_change_manager->AddReceiver(manager.BindNewPipeAndPassReceiver());
 
     mojom::NetworkChangeManagerClientPtr client_ptr;
     mojom::NetworkChangeManagerClientRequest client_request(
         mojo::MakeRequest(&client_ptr));
     binding_.Bind(std::move(client_request));
-    manager_ptr->RequestNotifications(std::move(client_ptr));
+    manager->RequestNotifications(std::move(client_ptr));
   }
 
   ~TestNetworkChangeManagerClient() override {}
@@ -92,7 +93,7 @@ class NetworkChangeManagerTest : public testing::Test {
  public:
   NetworkChangeManagerTest()
       : network_change_manager_(new NetworkChangeManager(
-            net::NetworkChangeNotifier::CreateMock())) {
+            net::NetworkChangeNotifier::CreateMockIfNeeded())) {
     network_change_manager_client_ =
         std::make_unique<TestNetworkChangeManagerClient>(
             network_change_manager_.get());

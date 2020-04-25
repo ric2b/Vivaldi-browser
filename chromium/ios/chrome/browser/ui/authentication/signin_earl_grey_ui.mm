@@ -11,10 +11,13 @@
 #import "ios/chrome/browser/ui/authentication/unified_consent/identity_chooser/identity_chooser_cell.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/identity_picker_view.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/unified_consent_view_controller.h"
+#import "ios/chrome/browser/ui/signin_interaction/signin_interaction_controller_egtest_util.h"
 #import "ios/chrome/browser/ui/util/transparent_link_button.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
+#import "ios/chrome/test/earl_grey/chrome_matchers_app_interface.h"
+#import "ios/chrome/test/scoped_eg_synchronization_disabler.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service.h"
 
@@ -44,16 +47,22 @@ id<GREYMatcher> ContentViewSmallerThanScrollView() {
 }  // namespace
 
 using chrome_test_util::AccountConsistencyConfirmationOkButton;
-using chrome_test_util::AccountConsistencySetupSigninButton;
 using chrome_test_util::ButtonWithAccessibilityLabel;
 using chrome_test_util::PrimarySignInButton;
 using chrome_test_util::SecondarySignInButton;
+using chrome_test_util::SettingsAccountButton;
 using chrome_test_util::SettingsDoneButton;
+using chrome_test_util::SignOutAccountsButton;
 using chrome_test_util::UnifiedConsentAddAccountButton;
 
 @implementation SigninEarlGreyUI
 
 + (void)signinWithIdentity:(ChromeIdentity*)identity {
+  [self signinWithIdentity:(ChromeIdentity*)identity isManagedAccount:NO];
+}
+
++ (void)signinWithIdentity:(ChromeIdentity*)identity
+          isManagedAccount:(BOOL)isManagedAccount {
   ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
       identity);
 
@@ -62,6 +71,9 @@ using chrome_test_util::UnifiedConsentAddAccountButton;
       tapSettingsMenuButton:chrome_test_util::SecondarySignInButton()];
   [self selectIdentityWithEmail:identity.userEmail];
   [self confirmSigninConfirmationDialog];
+  if (isManagedAccount) {
+    [self confirmSigninWithManagedAccount];
+  }
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
   [SigninEarlGreyUtils checkSignedInWithIdentity:identity];
@@ -86,6 +98,17 @@ using chrome_test_util::UnifiedConsentAddAccountButton;
       onElementWithMatcher:grey_accessibilityID(
                                kUnifiedConsentScrollViewIdentifier)]
       performAction:grey_tap()];
+}
+
++ (void)confirmSigninWithManagedAccount {
+  // Synchronization off due to an infinite spinner, in the user consent view,
+  // under the managed consent dialog. This spinner is started by the sign-in
+  // process.
+  ScopedSynchronizationDisabler disabler;
+  id<GREYMatcher> acceptButton = [ChromeMatchersAppInterface
+      buttonWithAccessibilityLabelID:IDS_IOS_MANAGED_SIGNIN_ACCEPT_BUTTON];
+  WaitForMatcher(acceptButton);
+  [[EarlGrey selectElementWithMatcher:acceptButton] performAction:grey_tap()];
 }
 
 + (void)confirmSigninConfirmationDialog {
@@ -196,6 +219,27 @@ using chrome_test_util::UnifiedConsentAddAccountButton;
       selectElementWithMatcher:grey_allOf(SecondarySignInButton(),
                                           grey_sufficientlyVisible(), nil)]
       assertWithMatcher:grey_nil()];
+}
+
++ (void)signOutWithManagedAccount:(BOOL)isManagedAccount {
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
+  [ChromeEarlGreyUI tapAccountsMenuButton:SignOutAccountsButton()];
+  int confirmationLabelID = 0;
+  if (isManagedAccount) {
+    confirmationLabelID = IDS_IOS_MANAGED_DISCONNECT_DIALOG_ACCEPT_UNITY;
+  } else {
+    confirmationLabelID = IDS_IOS_DISCONNECT_DIALOG_CONTINUE_BUTTON_MOBILE;
+  }
+  id<GREYMatcher> confirmationButtonMatcher = [ChromeMatchersAppInterface
+      buttonWithAccessibilityLabelID:confirmationLabelID];
+  [[EarlGrey selectElementWithMatcher:confirmationButtonMatcher]
+      performAction:grey_tap()];
+  // Wait until the user is signed out.
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
+      performAction:grey_tap()];
+  [SigninEarlGreyUtils checkSignedOut];
 }
 
 @end

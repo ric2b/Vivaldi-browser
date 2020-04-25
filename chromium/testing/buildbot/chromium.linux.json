@@ -295,6 +295,21 @@
             }
           ]
         },
+        "test": "color_unittests"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ]
+        },
         "test": "components_browsertests"
       },
       {
@@ -328,26 +343,6 @@
             }
           ],
           "shards": 6
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--disable-perfetto",
-          "--gtest_filter=TracingControllerTest.*:BackgroundTracingManagerBrowserTest.*"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "nonperfetto_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
         },
         "test": "content_browsertests"
       },
@@ -1097,6 +1092,21 @@
             }
           ]
         },
+        "test": "color_unittests"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ]
+        },
         "test": "components_browsertests"
       },
       {
@@ -1130,26 +1140,6 @@
             }
           ],
           "shards": 6
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--disable-perfetto",
-          "--gtest_filter=TracingControllerTest.*:BackgroundTracingManagerBrowserTest.*"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "nonperfetto_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
         },
         "test": "content_browsertests"
       },
@@ -2596,6 +2586,22 @@
             }
           ]
         },
+        "test": "color_unittests"
+      },
+      {
+        "isolate_coverage_data": true,
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ]
+        },
         "test": "components_browsertests"
       },
       {
@@ -2643,34 +2649,14 @@
               "os": "Ubuntu-16.04"
             }
           ],
+          "idempotent": false,
           "shards": 6
         },
         "test": "content_browsertests"
       },
       {
         "args": [
-          "--disable-perfetto",
-          "--gtest_filter=TracingControllerTest.*:BackgroundTracingManagerBrowserTest.*"
-        ],
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "nonperfetto_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--enable-features=VizDisplayCompositor,UseSkiaRenderer",
+          "--enable-features=UseSkiaRenderer",
           "--test-launcher-filter-file=../../testing/buildbot/filters/skia_renderer.content_browsertests.filter"
         ],
         "isolate_coverage_data": true,
@@ -3094,22 +3080,6 @@
           ]
         },
         "test": "latency_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "leveldb_service_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3685,6 +3655,22 @@
             }
           ]
         },
+        "test": "weblayer_browsertests"
+      },
+      {
+        "isolate_coverage_data": true,
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ]
+        },
         "test": "wm_unittests"
       },
       {
@@ -3911,7 +3897,7 @@
         "args": [
           "--num-retries=3",
           "--additional-driver-flag=--enable-gpu-rasterization",
-          "--additional-driver-flag=--enable-features=VizDisplayCompositor,UseSkiaRenderer",
+          "--additional-driver-flag=--enable-features=UseSkiaRenderer",
           "--additional-driver-flag=--use-gl=swiftshader",
           "--additional-driver-flag=--force-gpu-rasterization",
           "--additional-driver-flag=--enable-oop-rasterization",
@@ -4031,7 +4017,7 @@
         "args": [
           "--num-retries=3",
           "--additional-driver-flag=--enable-gpu-rasterization",
-          "--additional-driver-flag=--enable-features=VizDisplayCompositor,UseSkiaRenderer",
+          "--additional-driver-flag=--enable-features=UseSkiaRenderer",
           "--additional-driver-flag=--force-gpu-rasterization",
           "--additional-driver-flag=--enable-oop-rasterization",
           "--additional-driver-flag=--use-vulkan=swiftshader",
@@ -4461,6 +4447,21 @@
             }
           ]
         },
+        "test": "color_unittests"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ]
+        },
         "test": "components_browsertests"
       },
       {
@@ -4511,27 +4512,7 @@
       },
       {
         "args": [
-          "--disable-perfetto",
-          "--gtest_filter=TracingControllerTest.*:BackgroundTracingManagerBrowserTest.*"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "nonperfetto_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--enable-features=VizDisplayCompositor,UseSkiaRenderer",
+          "--enable-features=UseSkiaRenderer",
           "--test-launcher-filter-file=../../testing/buildbot/filters/skia_renderer.content_browsertests.filter"
         ],
         "merge": {
@@ -4929,21 +4910,6 @@
           ]
         },
         "test": "latency_unittests"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "leveldb_service_unittests"
       },
       {
         "merge": {
@@ -5484,6 +5450,21 @@
             }
           ]
         },
+        "test": "weblayer_browsertests"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ]
+        },
         "test": "wm_unittests"
       },
       {
@@ -5770,6 +5751,11 @@
       "cast_test_lists"
     ]
   },
+  "fuchsia-x64-dbg": {
+    "additional_compile_targets": [
+      "all"
+    ]
+  },
   "linux-gcc-rel": {
     "additional_compile_targets": [
       "empty_main"
@@ -5808,7 +5794,6 @@
         "args": [
           "--ozone-platform=x11"
         ],
-        "experiment_percentage": 100,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5868,6 +5853,26 @@
           ]
         },
         "test": "services_unittests"
+      },
+      {
+        "args": [
+          "--ozone-platform=x11",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.x11_views_unittests.filter"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "x11_views_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ]
+        },
+        "test": "views_unittests"
       }
     ]
   },
@@ -6211,6 +6216,21 @@
             }
           ]
         },
+        "test": "color_unittests"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-14.04"
+            }
+          ]
+        },
         "test": "components_browsertests"
       },
       {
@@ -6261,27 +6281,7 @@
       },
       {
         "args": [
-          "--disable-perfetto",
-          "--gtest_filter=TracingControllerTest.*:BackgroundTracingManagerBrowserTest.*"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "nonperfetto_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-14.04"
-            }
-          ]
-        },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--enable-features=VizDisplayCompositor,UseSkiaRenderer",
+          "--enable-features=UseSkiaRenderer",
           "--test-launcher-filter-file=../../testing/buildbot/filters/skia_renderer.content_browsertests.filter"
         ],
         "merge": {
@@ -6679,21 +6679,6 @@
           ]
         },
         "test": "latency_unittests"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-14.04"
-            }
-          ]
-        },
-        "test": "leveldb_service_unittests"
       },
       {
         "merge": {
@@ -7233,6 +7218,21 @@
             }
           ]
         },
+        "test": "weblayer_browsertests"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-14.04"
+            }
+          ]
+        },
         "test": "wm_unittests"
       },
       {
@@ -7446,7 +7446,7 @@
         "args": [
           "--num-retries=3",
           "--additional-driver-flag=--enable-gpu-rasterization",
-          "--additional-driver-flag=--enable-features=VizDisplayCompositor,UseSkiaRenderer",
+          "--additional-driver-flag=--enable-features=UseSkiaRenderer",
           "--additional-driver-flag=--use-gl=swiftshader",
           "--additional-driver-flag=--force-gpu-rasterization",
           "--additional-driver-flag=--enable-oop-rasterization",
@@ -7561,7 +7561,7 @@
         "args": [
           "--num-retries=3",
           "--additional-driver-flag=--enable-gpu-rasterization",
-          "--additional-driver-flag=--enable-features=VizDisplayCompositor,UseSkiaRenderer",
+          "--additional-driver-flag=--enable-features=UseSkiaRenderer",
           "--additional-driver-flag=--force-gpu-rasterization",
           "--additional-driver-flag=--enable-oop-rasterization",
           "--additional-driver-flag=--use-vulkan=swiftshader",

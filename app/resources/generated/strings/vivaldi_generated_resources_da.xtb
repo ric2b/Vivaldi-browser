@@ -3,7 +3,9 @@
 <translationbundle lang="da">
 <translation id="1017280919048282932">&amp;Tilføj til ordbog</translation>
 <translation id="1031362278801463162">Indlæser eksempel</translation>
+<translation id="1047431265488717055">Kopiér linkte&amp;kst</translation>
 <translation id="1049795001945932310">&amp;Sprogindstillinger</translation>
+<translation id="1054153489933238809">Åbn originalt &amp;billede på ny fane</translation>
 <translation id="1056898198331236512">Advarsel</translation>
 <translation id="1084824384139382525">Kopier linkadr&amp;esse</translation>
 <translation id="1128109161498068552">Tillad ikke, at websites bruger interne systemmeddelelser til at få adgang til MIDI-enheder</translation>
@@ -23,22 +25,30 @@
 <translation id="1430915738399379752">Udskriv</translation>
 <translation id="1433811987160647649">Spørg, før der gives adgang</translation>
 <translation id="1451375123200651445">Webside, enkelt fil</translation>
+<translation id="1465176863081977902">K&amp;opiér webadressen til lyden</translation>
 <translation id="1476607407192946488">&amp;Sprogindstillinger</translation>
 <translation id="150411034776756821">Fjern <ph name="SITE" /></translation>
 <translation id="1546280085599573572">Denne udvidelse har ændret, hvilken side der vises, når du klikker på knappen Startside.</translation>
 <translation id="15662109988763471">Den valgte printer er ikke tilgængelig eller ikke installeret korrekt. Tjek din printer, eller vælg en anden printer.</translation>
 <translation id="1588438908519853928">Normal</translation>
+<translation id="1588870296199743671">Åbn link med...</translation>
+<translation id="159359590073980872">Billedcache</translation>
 <translation id="1601560923496285236">Anvend</translation>
 <translation id="1603914832182249871">(privat)</translation>
 <translation id="1620510694547887537">Kamera</translation>
+<translation id="1627276047960621195">Filbeskrivelser</translation>
 <translation id="1635033183663317347">Installeret af din tilsynsførende.</translation>
 <translation id="1682548588986054654">Nyt privat-vindue</translation>
 <translation id="1698122934742150150">Kun for den aktuelle inkognitosession</translation>
 <translation id="1706625117072057435">Zoomniveauer</translation>
 <translation id="1708338024780164500">(inaktiv)</translation>
 <translation id="1723824996674794290">&amp;Nyt vindue</translation>
+<translation id="1725149567830788547">Vis &amp;kontroller</translation>
 <translation id="1729533290416704613">Den styrer også, hvilken side der vises, når du søger via omnifeltet.</translation>
 <translation id="1744108098763830590">baggrundsside</translation>
+<translation id="176587472219019965">&amp;Nyt vindue</translation>
+<translation id="1769104665586091481">Åbn link i nyt &amp;vindue</translation>
+<translation id="1815083418640426271">Indsæt som almindelig tekst</translation>
 <translation id="1828901632669367785">Udskriv ved brug af systemets dialogboks...</translation>
 <translation id="1850508293116537636">Roter med &amp;uret</translation>
 <translation id="1886996562706621347">Tillad, at websites må bede om at håndtere protokoller som standard (anbefales)</translation>
@@ -46,11 +56,15 @@
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Slet alle</translation>
 <translation id="1994173015038366702">Webadresse</translation>
+<translation id="2019718679933488176">&amp;Åbn lyd på ny fane</translation>
 <translation id="2050339315714019657">Stående</translation>
 <translation id="2076269580855484719">Skjul dette plugin</translation>
 <translation id="2087822576218954668">Udskrift: <ph name="PRINT_NAME" /></translation>
+<translation id="2114326799768592691">Genindlæs &amp;ramme</translation>
+<translation id="2142328300403846845">Åbn linket som</translation>
 <translation id="2148892889047469596">Cast fanen</translation>
 <translation id="2150139952286079145">Søg efter destinationer</translation>
+<translation id="215753907730220065">Afslut fuld skærm</translation>
 <translation id="2177950615300672361">Inkognitofane: <ph name="TAB_NAME" /></translation>
 <translation id="218070003709087997">Brug et tal til at angive, hvor mange kopier der skal udskrives (1 til 999).</translation>
 <translation id="219008588003277019">Native Client-modul: <ph name="NEXE_NAME" /></translation>
@@ -82,9 +96,10 @@
 <translation id="2476578072172137802">Indstillinger for website</translation>
 <translation id="2482878487686419369">Underretninger</translation>
 <translation id="2509495747794740764">Skaleringsværdien skal være et tal mellem 10 og 200.</translation>
-<translation id="253557089021624350">Antal aktiviteter, der bruger udvidelsen</translation>
+<translation id="253557089021624350">Optælling af Keepalive</translation>
 <translation id="2546283357679194313">Cookies og websidedata</translation>
 <translation id="2550212893339833758">Ombyttet hukommelse</translation>
+<translation id="2553440850688409052">Skjul dette plugin</translation>
 <translation id="2580924999637585241">I alt: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Tillad ingen websites at håndtere protokoller</translation>
 <translation id="2662876636500006917">Chromes netbutik</translation>
@@ -95,17 +110,22 @@
 <translation id="2812989263793994277">Vis ikke billeder</translation>
 <translation id="2850541429955027218">Tilføj tema</translation>
 <translation id="2861941300086904918">Sikkerhedsadministrator for Native Client</translation>
+<translation id="2881076733170862447">Når du klikker på udvidelsen</translation>
 <translation id="2889064240420137087">Åbn link med...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> kunne ikke kommunikere med denne printer. Sørg for, at printeren er tilsluttet, og prøv igen.</translation>
 <translation id="2904456025988372123">Spørg om tilladelse, når et website automatisk forsøger at downloade flere filer efter den første fil</translation>
 <translation id="2913331724188855103">Tillad, at websites gemmer og læser cookiedata (anbefales)</translation>
+<translation id="2931157624143513983">Tilpas til området, der kan udskrives</translation>
+<translation id="2932085390869194046">Foreslå adgangskode...</translation>
 <translation id="2932883381142163287">Rapportér misbrug</translation>
 <translation id="2941112035454246133">Lav</translation>
 <translation id="2972581237482394796">&amp;Annuller fortryd</translation>
 <translation id="299483336428448530">Installeret af din forælder.</translation>
+<translation id="3003623123441819449">CSS-cache</translation>
+<translation id="3008272652534848354">Nulstil tilladelser</translation>
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3013291976881901233">MIDI-enheder</translation>
-<translation id="302620147503052030">Vis knap</translation>
+<translation id="3021678814754966447">&amp;Vis rammens kilde</translation>
 <translation id="3036546437875325427">Aktivér Flash</translation>
 <translation id="3038675903128704560">Tillad ikke, at websites anvender et plugin til at få adgang til din computer</translation>
 <translation id="3046910703532196514">Webside, komplet</translation>
@@ -122,10 +142,13 @@
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Vælg rodmappen for udvidelsen, der skal pakkes. Opdater en udvidelse ved også at vælge den private nøglefil til genbrug.</translation>
 <translation id="3280237271814976245">Gem &amp;som...</translation>
+<translation id="3285322247471302225">Ny &amp;fane</translation>
 <translation id="3288047731229977326">Udvidelser, der kører i udviklertilstand, kan skade din computer. Hvis du ikke er udvikler, skal du deaktivere udvidelserne, der kører i udviklertilstand, af hensyn til sikkerheden.</translation>
 <translation id="329838636886466101">Reparer</translation>
+<translation id="33022249435934718">GDI-håndtag</translation>
 <translation id="3303818374450886607">Kopier</translation>
 <translation id="3305661444342691068">Åbn PDF i Billedfremviser</translation>
+<translation id="3308134619352333507">Skjul knap</translation>
 <translation id="3317459757438853210">To-sidet</translation>
 <translation id="3341703758641437857">Tillad adgang til fil-URL'er</translation>
 <translation id="3347086966102161372">K&amp;opiér webadressen til billedet</translation>
@@ -137,19 +160,22 @@
 <translation id="345693547134384690">Åbn &amp;billede på ny fane</translation>
 <translation id="3494769164076977169">Spørg om tilladelse, når et website automatisk forsøger at downloade flere filer efter den første fil (anbefales)</translation>
 <translation id="3505030558724226696">Tilbagekald adgang til enhed</translation>
+<translation id="3511307672085573050">Kopier linkadr&amp;esse</translation>
 <translation id="3523642406908660543">Spørg om tilladelse, når et website ønsker at anvende et plugin til at få adgang til din computer (anbefales)</translation>
 <translation id="354068948465830244">Den kan læse og ændre websitedata</translation>
 <translation id="3560034655160545939">&amp;Stavekontrol</translation>
 <translation id="3574917942258583917">Vil du afslutte inkognitotilstand alligevel?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vil dele printeren &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; med en gruppe du ejer: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Hvis du accepterer dette, vil alle gruppens medlemmer kunne udskrive til denne printer.</translation>
 <translation id="3587482841069643663">Alle</translation>
-<translation id="3627588569887975815">Åbn link i inkognitovindue</translation>
+<translation id="3627588569887975815">Åbn link i inko&amp;gnitovindue</translation>
 <translation id="3668823961463113931">Håndtering</translation>
 <translation id="3678156199662914018">Udvidelse: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> anmoder om at dele din skærm</translation>
+<translation id="3711931198657368127">Ind&amp;sæt, og gå til <ph name="URL" /></translation>
 <translation id="3725367690636977613">sider</translation>
 <translation id="3727187387656390258">Undersøg popup-vindue</translation>
 <translation id="3744111561329211289">Synkronisering i baggrunden</translation>
+<translation id="3760460896538743390">Undersøg &amp;baggrundsside</translation>
 <translation id="3797900183766075808">&amp;Søg på <ph name="SEARCH_ENGINE" /> efter "<ph name="SEARCH_TERMS" />"</translation>
 <translation id="3800806661949714323">Vis alle (anbefales)</translation>
 <translation id="3810973564298564668">Håndter</translation>
@@ -163,10 +189,13 @@
 <translation id="3927932062596804919">TIllad ikke</translation>
 <translation id="3936390757709632190">&amp;Åbn lyd på ny fane</translation>
 <translation id="3943582379552582368">&amp;Tilbage</translation>
+<translation id="3948116654032448504">&amp;Søg efter billedet på <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Tillad, at websites afspiller beskyttet indhold (anbefales)</translation>
 <translation id="3979395879372752341">Ny udvidelse er tilføjet (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
+<translation id="4022426551683927403">&amp;Føj til ordbog</translation>
 <translation id="407520071244661467">Skaler</translation>
+<translation id="4079140982534148664">Brug forbedret stavekontrol</translation>
 <translation id="4087089424473531098">Oprettede udvidelsen:
 
 <ph name="EXTENSION_FILE" /></translation>
@@ -181,6 +210,7 @@
 <translation id="4176463684765177261">Deaktiveret</translation>
 <translation id="4200983522494130825">Ny &amp;fane</translation>
 <translation id="4225397296022057997">På alle websites</translation>
+<translation id="4256316378292851214">Ge&amp;m video som...</translation>
 <translation id="4278390842282768270">Tilladt</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K bruges)</translation>
 <translation id="4345587454538109430">Konfigurer...</translation>
@@ -189,23 +219,27 @@
 <translation id="4384652540891215547">Aktivér udvidelsen</translation>
 <translation id="4394049700291259645">Deaktiver</translation>
 <translation id="4409697491990005945">Margener</translation>
+<translation id="4423376891418188461">Gendan indstillinger</translation>
 <translation id="4434045419905280838">Pop op-vinduer og omdirigeringer</translation>
+<translation id="4478664379124702289">Gem lin&amp;k som...</translation>
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535"><ph name="HOST_NAME" /> kunne ikke castes.</translation>
 <translation id="4593021220803146968">&amp;Gå til <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apps og udvidelser kan kun ændres af administratoren (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">En udvidelse har ændret, hvilken side der vises, når du åbner en ny fane.</translation>
+<translation id="4643612240819915418">&amp;Åbn video på ny fane</translation>
 <translation id="4677772697204437347">GPU-hukommelse</translation>
-<translation id="4681930562518940301">Åbn originalbillede på ny fane</translation>
+<translation id="4681930562518940301">Åbn originalt &amp;billede på ny fane</translation>
 <translation id="4711638718396952945">Gendan indstillinger</translation>
 <translation id="4726710629007580002">Der opstod advarsler under forsøget på at installere udvidelsen:</translation>
 <translation id="479536056609751218">Webside, kun HTML</translation>
-<translation id="4816492930507672669">Tilpas til siden</translation>
 <translation id="4839303808932127586">&amp;Gem video som ...</translation>
 <translation id="488785315393301722">Vis detaljer</translation>
 <translation id="4907306957610201395">Tilladelseskategori</translation>
+<translation id="4912643508233590958">Aktivering efter dvale</translation>
 <translation id="4918086044614829423">Accepter</translation>
 <translation id="4927753642311223124">Intet at se her, gå videre.</translation>
+<translation id="4930714375720679147">Aktivér</translation>
 <translation id="4988526792673242964">Sider</translation>
 <translation id="49896407730300355">Roter m&amp;od uret</translation>
 <translation id="4989966318180235467">Undersøg &amp;baggrundsside</translation>
@@ -217,25 +251,35 @@
 <translation id="5057110919553308744">Når du klikker på udvidelsen</translation>
 <translation id="5063480226653192405">Forbrug</translation>
 <translation id="5068918910148307423">Tillad ikke, at nyligt lukkede websites færdiggør afsendelse og modtagelse af data</translation>
+<translation id="5116628073786783676">Ge&amp;m lyd som...</translation>
 <translation id="5143374789336132547">Udvidelsen <ph name="EXTENSION_NAME" /> har ændret, hvilken side der vises, når du klikker på knappen Startside.</translation>
 <translation id="5154108062446123722">Avancerede indstillinger for <ph name="PRINTING_DESTINATION" /></translation>
+<translation id="5171343362375269016">Ombyttet hukommelse</translation>
 <translation id="5233019165164992427">NaCl-fejlretningsport</translation>
 <translation id="5233231016133573565">Behandling af ID</translation>
 <translation id="5233736638227740678">&amp;Indsæt</translation>
+<translation id="5256861893479663409">På alle websites</translation>
 <translation id="5265562206369321422">Offline i mere end en uge</translation>
 <translation id="5269977353971873915">Udskrift mislykkedes</translation>
+<translation id="5284445933715251131">Fortsæt download</translation>
 <translation id="52912272896845572">Den private nøglefil er ugyldig.</translation>
 <translation id="5301954838959518834">OK, det er forstået</translation>
 <translation id="5317780077021120954">Gem</translation>
+<translation id="5334142896108694079">Scriptcache</translation>
 <translation id="5355926466126177564">Udvidelsen <ph name="EXTENSION_NAME" /> har ændret, hvilken side der vises, når du søger via omnifeltet.</translation>
+<translation id="5360150013186312835">Vis på værktøjslinjen</translation>
 <translation id="5362741141255528695">Vælg privat nøglefil.</translation>
 <translation id="5370819323174483825">&amp;Opdater</translation>
 <translation id="5398572795982417028">Sidereferencen er ugyldig. Grænsen er <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Fortsæt download</translation>
+<translation id="5427459444770871191">Roter med &amp;uret</translation>
 <translation id="5431318178759467895">Farve</translation>
+<translation id="5472133193607270166">Når dette er slået til, kan websites ikke anvende din browseraktivitet på andre websites til at tilpasse annoncer. Nogle websites vil muligvis ikke fungere korrekt.</translation>
 <translation id="5483785310822538350">Tilbagekald adgang til fil og enhed</translation>
 <translation id="5485102783864353244">Tilføj app</translation>
+<translation id="5486561344817861625">Simuler genstart af browser</translation>
 <translation id="5487521232677179737">Ryd data</translation>
+<translation id="5509693895992845810">Gem &amp;som...</translation>
 <translation id="5521078259930077036">Var det den startside, du forventede?</translation>
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Genindlæs</translation>
@@ -260,7 +304,9 @@
 <translation id="583281660410589416">Ukendt</translation>
 <translation id="5838456317242088717">Aktuel inkognitosession</translation>
 <translation id="5860491529813859533">Aktivér</translation>
+<translation id="5867841422488265304">Søg, eller skriv webadresse</translation>
 <translation id="5908769186679515905">Bloker websites fra at køre Flash</translation>
+<translation id="5910363049092958439">Ge&amp;m billede som...</translation>
 <translation id="5956585768868398362">Var det den søgeside, du havde forventet?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (maks. <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Den styrer også, hvilken side der vises, når du klikker på knappen Startside eller søger via omnifeltet.</translation>
@@ -278,15 +324,19 @@
 <translation id="6169666352732958425">Skrivebordet kunne ikke castes.</translation>
 <translation id="6196640612572343990">Bloker tredjeparts-cookies</translation>
 <translation id="6196854373336333322">Udvidelsen <ph name="EXTENSION_NAME" /> har taget kontrol over dine proxyindstillinger, hvilket betyder, at den kan ændre, ødelægge eller aflytte alt, hvad du foretager dig på nettet. Hvis du ikke er sikker på, hvorfor denne ændring er sket, er den sandsynligvis uønsket.</translation>
+<translation id="6206311232642889873">Kop&amp;ier billede</translation>
 <translation id="6239558157302047471">Genindlæs &amp;ramme</translation>
 <translation id="6247802389331535091">System: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6248988683584659830">Søg i indstillinger</translation>
 <translation id="6251870443722440887">GDI-håndtag</translation>
+<translation id="6264365405983206840">Vælg &amp;alle</translation>
 <translation id="6268252012308737255">Åbn med <ph name="APP" /></translation>
 <translation id="6273677812470008672">Kvalitet</translation>
 <translation id="6295158916970320988">Alle websites</translation>
 <translation id="6295855836753816081">Gemmer...</translation>
 <translation id="6308937455967653460">Gem lin&amp;k som...</translation>
+<translation id="6326855256003666642">Optælling af Keepalive</translation>
+<translation id="6374469231428023295">Prøv igen</translation>
 <translation id="6385543213911723544">Websites kan gemme og læse cookiedata</translation>
 <translation id="6398765197997659313">Afslut fuld skærm</translation>
 <translation id="6406303162637086258">Simuler genstart af browser</translation>
@@ -296,37 +346,43 @@
 <translation id="6498249116389603658">&amp;Alle dine sprog</translation>
 <translation id="6503077044568424649">Mest besøgte</translation>
 <translation id="6508261954199872201">Program: <ph name="APP_NAME" /></translation>
-<translation id="6516243500644829484">Nyt &amp;privat-vindue</translation>
-<translation id="6518014396551869914">Ko&amp;pier billede</translation>
+<translation id="6518014396551869914">Kop&amp;ier billede</translation>
 <translation id="6550675742724504774">Valgmuligheder</translation>
 <translation id="6612358246767739896">Beskyttet indhold</translation>
 <translation id="6639554308659482635">SQLite-hukommelse</translation>
 <translation id="6686817083349815241">Gem din adgangskode</translation>
 <translation id="6691936601825168937">&amp;Frem</translation>
 <translation id="6723354935081862304">Udskriv til Google Docs og andre cloud-destinationer. <ph name="BEGIN_LINK" />Log ind<ph name="END_LINK" /> for at udskrive til Google Cloud-printer.</translation>
-<translation id="6782111308708962316">Undgå, at tredjepartswebsites gemmer og læser cookiedata</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Behold ændringer</translation>
 <translation id="6817174620439930047">Spørg mig, når et website vil anvende interne systemmeddelelser til at få adgang til MIDI-enheder (anbefales)</translation>
 <translation id="682123305478866682">Cast skrivebordet</translation>
+<translation id="6824564591481349393">Kopier mailadress&amp;e</translation>
 <translation id="6840155290835956714">Spørg, før der sendes</translation>
 <translation id="6886871292305414135">Åbn link i ny &amp;fane</translation>
+<translation id="6892812721183419409">Åbn linket som <ph name="USER" /></translation>
 <translation id="6900284862687837908">Baggrundsapp: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Tilbagekald filadgang</translation>
+<translation id="6916590542764765824">Administrer udvidelser</translation>
 <translation id="6945221475159498467">Vælg</translation>
+<translation id="6955446738988643816">Undersøg popup-vindue</translation>
 <translation id="6970856801391541997">Udskriv bestemte sider</translation>
 <translation id="6991665348624301627">Vælg en destination</translation>
 <translation id="7005848115657603926">Ugyldigt sideinterval, brug <ph name="EXAMPLE_PAGE_RANGE" /></translation>
 <translation id="7006634003215061422">Bund-margen</translation>
 <translation id="7053983685419859001">Bloker</translation>
+<translation id="7070484045139057854">Udvidelsen kan læse og ændre websitedata</translation>
 <translation id="708060913198414444">K&amp;opiér webadressen til lyden</translation>
 <translation id="7175353351958621980">Indlæst fra:</translation>
+<translation id="7186088072322679094">Behold på værktøjslinjen</translation>
 <translation id="7270858098575133036">Spørg mig, når et website vil anvende interne systemmeddelelser til at få adgang til MIDI-enheder</translation>
 <translation id="7287143125007575591">Adgang nægtet.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Vis &amp;knapper</translation>
 <translation id="7311079019872751559">Adgang til plugin, der ikke er gemt i sandbox</translation>
 <translation id="7385854874724088939">Der gik noget galt, da du prøvede at udskrive. Tjek din printer, og prøv igen.</translation>
+<translation id="7412226954991670867">GPU-hukommelse</translation>
+<translation id="7421925624202799674">&amp;Vis sidens kilde</translation>
 <translation id="7423098979219808738">Spørg først</translation>
 <translation id="7427348830195639090">Baggrundsside: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Ved at vælge denne printer giver du følgende udvidelser adgang til din printer:</translation>
@@ -338,8 +394,10 @@
 <translation id="7658239707568436148">Annuller</translation>
 <translation id="7661259717474717992">Tillad, at websites gemmer og læser cookiedata</translation>
 <translation id="7663719505383602579">Modtager: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="7684212569183643648">Installeret af din administrator</translation>
 <translation id="7685049629764448582">JavaScript-hukommelse</translation>
 <translation id="7701040980221191251">Ingen</translation>
+<translation id="7701869757853594372">BRUGER-håndtag</translation>
 <translation id="7704305437604973648">Opgave</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>
 <translation id="7750228210027921155">Integreret billede</translation>
@@ -347,18 +405,25 @@
 <translation id="7760004034676677601">Var det den opstartsside, du havde forventet?</translation>
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7782102568078991263">Ikke flere forslag fra Google</translation>
+<translation id="7786889348652477777">&amp;Genindlæs app</translation>
 <translation id="7791543448312431591">Tilføj</translation>
+<translation id="7800518121066352902">Roter m&amp;od uret</translation>
 <translation id="7814458197256864873">&amp;Kopier</translation>
 <translation id="7818135753970109980">Nyt tema er tilføjet (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">K&amp;opiér webadressen til videoen</translation>
+<translation id="7849264908733290972">Åbn &amp;billede på ny fane</translation>
 <translation id="7857949311770343000">Er dette den forventede side Ny fane?</translation>
 <translation id="786073089922909430">Tjeneste: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">Seneste destinationer</translation>
 <translation id="7898627924844766532">Behold i værktøjslinje</translation>
 <translation id="7903925330883316394">Værktøj: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">I øjeblikket offline</translation>
+<translation id="7947962633355574091">K&amp;opiér webadressen til videoen</translation>
+<translation id="7966241909927244760">K&amp;opiér billedets webadresse</translation>
+<translation id="7973394300052703468">Nyt &amp;privat vindue</translation>
 <translation id="7978412674231730200">Privat nøgle</translation>
 <translation id="7982789257301363584">Netværk</translation>
+<translation id="7997826902155442747">Procesprioritet</translation>
 <translation id="7999229196265990314">Oprettede følgende filer:
         
 Udvidelse: <ph name="EXTENSION_FILE" />
@@ -370,7 +435,7 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8032244173881942855">Fanen kunne ikke castes.</translation>
 <translation id="8071432093239591881">Udskriv i billedformat</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
-<translation id="8137559199583651773">Håndter udvidelser</translation>
+<translation id="8137559199583651773">Administrer udvidelser</translation>
 <translation id="8180239481735238521">side</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
          =1 {Download er i gang} other {Downloads er i gang}}</translation>
@@ -381,12 +446,19 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8351419472474436977">En udvidelse har taget kontrol over dine proxyindstillinger, hvilket betyder, at den kan ændre, ødelægge eller aflytte alt, hvad du foretager dig på nettet. Hvis du ikke er sikker på, hvorfor denne ændring er sket, er den sandsynligvis uønsket.</translation>
 <translation id="8382913212082956454">Kopier &amp;email-adresse</translation>
 <translation id="8413385045638830869">Spørg først (anbefales)</translation>
+<translation id="8434480141477525001">NaCl-fejlretningsport</translation>
+<translation id="8449008133205184768">Indsæt og match stil</translation>
+<translation id="8496717697661868878">Kør dette plugin</translation>
+<translation id="8512476990829870887">Afslut proces</translation>
+<translation id="8523493869875972733">Behold ændringerne</translation>
 <translation id="8546306075665861288">Billedcache</translation>
 <translation id="8569682776816196752">Der blev ikke fundet nogen destinationer</translation>
 <translation id="857943718398505171">Tilladt (anbefales)</translation>
 <translation id="8584280235376696778">&amp;Åbn video på ny fane</translation>
+<translation id="8605428685123651449">SQLite-hukommelse</translation>
 <translation id="8615618338313291042">Inkognitoprogram: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">CSS-cache</translation>
+<translation id="8661290697478713397">Åbn link i inko&amp;gnitovindue</translation>
 <translation id="8664389313780386848">&amp;Vis kildetekst</translation>
 <translation id="8708000541097332489">Ryd ved lukning</translation>
 <translation id="8714838604780058252">Baggrundsgrafik</translation>
@@ -405,11 +477,13 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8910146161325739742">Del din skærm</translation>
 <translation id="8915370057835397490">Indlæser forslag</translation>
 <translation id="8916476537757519021">Underramme for inkognitotilstand: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="895944840846194039">JavaScript-hukommelse</translation>
 <translation id="8962083179518285172">Skjul detaljer</translation>
 <translation id="8973557916016709913">Fjern zoomniveau</translation>
 <translation id="897939795688207351">På <ph name="ORIGIN" /></translation>
 <translation id="8996526648899750015">Tilføj konto...</translation>
 <translation id="9003647077635673607">Tillad på alle websider</translation>
+<translation id="9027459031423301635">Åbn link på ny &amp;fane</translation>
 <translation id="9056810968620647706">Der blev ikke fundet resultater.</translation>
 <translation id="9137916601698928395">Åbn linket som <ph name="USER" /></translation>
 <translation id="916607977885256133">Integreret billede</translation>

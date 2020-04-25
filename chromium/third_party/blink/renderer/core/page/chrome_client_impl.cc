@@ -429,7 +429,8 @@ void ChromeClientImpl::InvalidateRect(const IntRect& update_rect) {
     web_view_->InvalidateRect(update_rect);
 }
 
-void ChromeClientImpl::ScheduleAnimation(const LocalFrameView* frame_view) {
+void ChromeClientImpl::ScheduleAnimation(const LocalFrameView* frame_view,
+                                         base::TimeDelta delay) {
   LocalFrame& frame = frame_view->GetFrame();
   WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(frame);
   DCHECK(web_frame);
@@ -440,9 +441,13 @@ void ChromeClientImpl::ScheduleAnimation(const LocalFrameView* frame_view) {
   // WebFrameWidget needs to be initialized before initializing the core frame?
   WebFrameWidgetBase* widget = web_frame->LocalRootFrameWidget();
   if (widget) {
-    // LocalRootFrameWidget() is a WebWidget, its client is the embedder.
-    WebWidgetClient* web_widget_client = widget->Client();
-    web_widget_client->ScheduleAnimation();
+    if (delay.is_zero()) {
+      // LocalRootFrameWidget() is a WebWidget, its client is the embedder.
+      WebWidgetClient* web_widget_client = widget->Client();
+      web_widget_client->ScheduleAnimation();
+    } else {
+      widget->RequestAnimationAfterDelay(delay);
+    }
   }
 }
 
@@ -467,31 +472,30 @@ IntRect ChromeClientImpl::ViewportToScreen(
   return screen_rect;
 }
 
-float ChromeClientImpl::WindowToViewportScalar(const float scalar_value) const {
-  // TODO(darin): Change callers to pass a LocalFrame.
-  return WindowToViewportScalar(web_view_->MainFrameImpl()
-                                    ? web_view_->MainFrameImpl()->GetFrame()
-                                    : nullptr,
-                                scalar_value);
-}
-
 float ChromeClientImpl::WindowToViewportScalar(LocalFrame* frame,
                                                const float scalar_value) const {
-  // Note, FrameWidgetImpl() can be null during Scrollbar() construction.
-  WebLocalFrameImpl* local_frame = WebLocalFrameImpl::FromFrame(frame);
-  if (!local_frame || !local_frame->FrameWidgetImpl())
+
+  // TODO(darin): Clean up callers to not pass null. E.g., VisualViewport::
+  // ScrollbarThickness() is one such caller. See https://pastebin.com/axgctw0N
+  // for a sample call stack.
+  if (!frame) {
+    DLOG(WARNING) << "LocalFrame is null!";
     return scalar_value;
+  }
 
   WebFloatRect viewport_rect(0, 0, scalar_value, 0);
-  local_frame->FrameWidgetImpl()->Client()->ConvertWindowToViewport(
-      &viewport_rect);
+  WebLocalFrameImpl::FromFrame(frame)
+      ->LocalRootFrameWidget()
+      ->Client()
+      ->ConvertWindowToViewport(&viewport_rect);
   return viewport_rect.width;
 }
 
-WebScreenInfo ChromeClientImpl::GetScreenInfo() const {
-  if (!web_view_->Client())
-    return {};
-  return web_view_->Client()->GetScreenInfo();
+WebScreenInfo ChromeClientImpl::GetScreenInfo(LocalFrame& frame) const {
+  WebWidgetClient* client =
+      WebLocalFrameImpl::FromFrame(frame)->LocalRootFrameWidget()->Client();
+  DCHECK(client);
+  return client->GetScreenInfo();
 }
 
 void ChromeClientImpl::OverrideVisibleRectForMainFrame(
@@ -1253,11 +1257,6 @@ void ChromeClientImpl::SelectFieldOptionsChanged(
 void ChromeClientImpl::AjaxSucceeded(LocalFrame* frame) {
   if (auto* fill_client = AutofillClientFromFrame(frame))
     fill_client->AjaxSucceeded();
-}
-
-void ChromeClientImpl::RegisterViewportLayers() const {
-  if (web_view_->RootGraphicsLayer())
-    web_view_->RegisterViewportLayersWithCompositor();
 }
 
 TransformationMatrix ChromeClientImpl::GetDeviceEmulationTransform() const {

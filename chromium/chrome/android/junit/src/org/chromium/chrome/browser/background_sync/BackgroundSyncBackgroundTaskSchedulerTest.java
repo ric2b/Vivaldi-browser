@@ -55,7 +55,7 @@ public class BackgroundSyncBackgroundTaskSchedulerTest {
     private static final long ONE_WEEK_IN_MILLISECONDS = TimeUnit.DAYS.toMillis(7);
 
     @Before
-    public void setUp() throws Exception {
+    public void setUp() {
         MockitoAnnotations.initMocks(this);
         BackgroundTaskSchedulerFactory.setSchedulerForTesting(mTaskScheduler);
         ChromeBackgroundTaskFactory.setAsDefault();
@@ -77,6 +77,7 @@ public class BackgroundSyncBackgroundTaskSchedulerTest {
         assertEquals(taskClass, info.getBackgroundTaskClass());
         assertTrue(info.isPersisted());
         assertFalse(info.isPeriodic());
+        assertTrue(info.getOneOffInfo().expiresAfterWindowEndTime());
         assertEquals(TaskInfo.NetworkType.ANY, info.getRequiredNetworkType());
 
         long expectedSoonestDelayTime = info.getExtras().getLong(

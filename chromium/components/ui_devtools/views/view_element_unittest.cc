@@ -290,8 +290,8 @@ TEST_F(ViewElementTest, GetSources) {
   // ViewElement should have two sources: from NamedTestView and from View.
   EXPECT_EQ(sources.size(), 2U);
   EXPECT_EQ(sources[0].path_,
-            "chromium/components/ui_devtools/views/view_element_unittest.cc");
-  EXPECT_EQ(sources[1].path_, "chromium\\ui/views/view.h");
+            "components/ui_devtools/views/view_element_unittest.cc");
+  EXPECT_EQ(sources[1].path_, "ui/views/view.h");
 }
 
 }  // namespace ui_devtools

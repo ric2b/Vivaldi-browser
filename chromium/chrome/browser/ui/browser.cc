@@ -65,7 +65,6 @@
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
-#include "chrome/browser/page_load_metrics/metrics_web_contents_observer.h"
 #include "chrome/browser/pepper_broker_infobar_delegate.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
@@ -134,7 +133,7 @@
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/ui/javascript_dialogs/javascript_dialog_tab_helper.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/page_action/page_action_icon_container.h"
+#include "chrome/browser/ui/page_action/page_action_icon_type.h"
 #include "chrome/browser/ui/permission_bubble/chooser_bubble_delegate.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
 #include "chrome/browser/ui/singleton_tabs.h"
@@ -154,6 +153,7 @@
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/custom_handlers/protocol_handler.h"
 #include "chrome/common/pref_names.h"
@@ -171,6 +171,7 @@
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/omnibox/browser/location_bar_model_impl.h"
+#include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/triggers/ad_redirect_trigger.h"
 #include "components/search/search.h"
@@ -250,15 +251,13 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
+
 #if !defined(OS_ANDROID)
 #include "sync/vivaldi_browser_synced_window_delegate.h"
 #endif
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "ui/vivaldi_browser_window.h"
-#endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
+#include "ui/vivaldi_browser_window.h"
 #endif // ENABLE_EXTENSIONS
 
 using base::TimeDelta;
@@ -329,7 +328,8 @@ bool IsOnKioskSplashScreen() {
   if (!user_manager->IsLoggedInAsKioskApp() &&
       !user_manager->IsLoggedInAsArcKioskApp())
     return false;
-  if (session_manager->session_state() != session_manager::SessionState::LOGIN_PRIMARY)
+  if (session_manager->session_state() !=
+      session_manager::SessionState::LOGIN_PRIMARY)
     return false;
   return true;
 #else
@@ -348,22 +348,10 @@ Browser::CreateParams::CreateParams(Profile* profile, bool user_gesture)
 Browser::CreateParams::CreateParams(Type type,
                                     Profile* profile,
                                     bool user_gesture)
-    : type(type), profile(profile),
-      is_vivaldi(vivaldi::IsVivaldiRunning()),
-      user_gesture(user_gesture) {}
-
-Browser::CreateParams::CreateParams(Type type,
-                                    Profile* profile,
-                                    bool user_gesture,
-                                    bool in_tab_dragging)
-    : type(type),
-      profile(profile),
-      user_gesture(user_gesture),
-      in_tab_dragging(in_tab_dragging) {}
+    : type(type), profile(profile), user_gesture(user_gesture),
+      is_vivaldi(vivaldi::IsVivaldiRunning()) {}
 
 Browser::CreateParams::CreateParams(const CreateParams& other) = default;
-
-Browser::CreateParams::~CreateParams() = default;
 
 // static
 Browser::CreateParams Browser::CreateParams::CreateForApp(
@@ -389,16 +377,6 @@ Browser::CreateParams Browser::CreateParams::CreateForDevTools(
   params.app_name = DevToolsWindow::kDevToolsApp;
   params.trusted_source = true;
   params.is_vivaldi = false;
-  return params;
-}
-
-// static
-Browser::CreateParams Browser::CreateParams::CreateForDevToolsForVivaldi(
-  Profile* profile) {
-  CreateParams params(TYPE_POPUP, profile, true);
-  params.app_name = DevToolsWindow::kDevToolsApp;
-  params.trusted_source = true;
-  params.is_vivaldi = true;
   return params;
 }
 
@@ -439,7 +417,8 @@ Browser* Browser::Create(const CreateParams& params) {
 }
 
 Browser::Browser(const CreateParams& params)
-    : type_(params.type),
+    : create_params_(params),
+      type_(params.type),
       profile_(params.profile),
       window_(nullptr),
       tab_strip_model_delegate_(
@@ -450,8 +429,6 @@ Browser::Browser(const CreateParams& params)
       app_name_(params.app_name),
       is_trusted_source_(params.trusted_source),
       is_focus_mode_(params.is_focus_mode),
-      is_vivaldi_(params.is_vivaldi),
-      ext_data_(params.ext_data),
       session_id_(SessionID::NewUnique()),
       cancel_download_confirmation_state_(NOT_PROMPTED),
       override_bounds_(params.initial_bounds),
@@ -480,6 +457,9 @@ Browser::Browser(const CreateParams& params)
       extension_browser_window_helper_(
           std::make_unique<extensions::ExtensionBrowserWindowHelper>(this))
 #endif
+      ,
+      is_vivaldi_(params.is_vivaldi),
+      ext_data_(params.ext_data)
 {
   // If this causes a crash then a window is being opened using a profile type
   // that is disallowed by policy. The crash prevents the disabled window type
@@ -565,6 +545,11 @@ Browser::~Browser() {
   // calls to Browser:: should be avoided while it is being torn down.
   registrar_.RemoveAll();
   extension_browser_window_helper_.reset();
+
+  // Like above, cancel delayed method calls into |this| to avoid re-entrancy.
+  // This is necessary because ~TestingProfile (called below for incognito
+  // |profile_|) spins a RunLoop.
+  weak_factory_.InvalidateWeakPtrs();
 
   // The tab strip should not have any tabs at this point.
   DCHECK(tab_strip_model_->empty());
@@ -686,15 +671,6 @@ FindBarController* Browser::GetFindBarController() {
 bool Browser::HasFindBarController() const {
   return find_bar_controller_.get() != NULL;
 }
-
-void Browser::set_ext_data(const std::string& ext_data) {
-  ext_data_ = ext_data;
-
-  SessionService* session_service =
-    SessionServiceFactory::GetForProfile(profile());
-  if (session_service)
-    session_service->SetWindowExtData(session_id(), ext_data_);
-  }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Browser, State Storage and Retrieval for UI:
@@ -876,16 +852,6 @@ void Browser::OnWindowClosing() {
   tab_strip_model_->CloseAllTabs();
 }
 
-void Browser::DoBeforeUnloadFired(content::WebContents* web_contents,
-                                  bool proceed,
-                                  bool* proceed_to_fire_unload) {
-  BeforeUnloadFired(web_contents, proceed, proceed_to_fire_unload);
-}
-
-void Browser::DoCloseContents(content::WebContents* source) {
-  CloseContents(source);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // In-progress download termination handling:
 
@@ -967,8 +933,7 @@ void Browser::FullscreenTopUIStateChanged() {
 }
 
 void Browser::OnFindBarVisibilityChanged() {
-  window()->GetOmniboxPageActionIconContainer()->UpdatePageActionIcon(
-      PageActionIconType::kFind);
+  window()->UpdatePageActionIcon(PageActionIconType::kFind);
   command_controller_->FindBarVisibilityChanged();
 }
 
@@ -1273,7 +1238,7 @@ bool Browser::CanDragEnter(content::WebContents* source,
   return true;
 }
 
-blink::WebSecurityStyle Browser::GetSecurityStyle(
+blink::SecurityStyle Browser::GetSecurityStyle(
     WebContents* web_contents,
     content::SecurityStyleExplanations* security_style_explanations) {
   SecurityStateTabHelper* helper =
@@ -1343,24 +1308,34 @@ bool Browser::ShouldAllowRunningInsecureContent(
   // ContentSettingsObserver::allowRunningInsecureContent.
   FilteredReportInsecureContentRan(resource_url);
 
+  if (allowed_per_prefs)
+    return true;
+
+  if (base::FeatureList::IsEnabled(features::kMixedContentSiteSetting)) {
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents->GetBrowserContext());
+    HostContentSettingsMap* content_settings =
+        HostContentSettingsMapFactory::GetForProfile(profile);
+    return content_settings->GetContentSetting(
+               web_contents->GetLastCommittedURL(), GURL(),
+               CONTENT_SETTINGS_TYPE_MIXEDSCRIPT,
+               std::string()) == CONTENT_SETTING_ALLOW;
+  }
   MixedContentSettingsTabHelper* mixed_content_settings =
       MixedContentSettingsTabHelper::FromWebContents(web_contents);
   DCHECK(mixed_content_settings);
-  if (allowed_per_prefs ||
-      mixed_content_settings->is_running_insecure_content_allowed()) {
-    return true;
-  }
-
-  // Note: this is a browser-side-translation of the call to DidBlockContentType
-  // from inside ContentSettingsObserver::allowRunningInsecureContent.
-  if (!origin.host().empty()) {
+  bool allowed = mixed_content_settings->is_running_insecure_content_allowed();
+  if (!allowed && !origin.host().empty()) {
+    // Note: this is a browser-side-translation of the call to
+    // DidBlockContentType from inside
+    // ContentSettingsObserver::allowRunningInsecureContent.
     TabSpecificContentSettings* tab_settings =
         TabSpecificContentSettings::FromWebContents(web_contents);
     DCHECK(tab_settings);
     tab_settings->OnContentBlockedWithDetail(CONTENT_SETTINGS_TYPE_MIXEDSCRIPT,
                                              base::UTF8ToUTF16(origin.host()));
   }
-  return false;
+  return allowed;
 }
 
 void Browser::OnDidBlockNavigation(content::WebContents* web_contents,
@@ -1412,6 +1387,11 @@ std::unique_ptr<content::WebContents> Browser::SwapWebContents(
     if (old_view && new_view)
       new_view->TakeFallbackContentFrom(old_view);
   }
+
+  DevToolsWindow* dev_tools_window =
+      DevToolsWindow::GetInstanceForInspectedWebContents(old_contents);
+  if (dev_tools_window)
+    dev_tools_window->UpdateInspectedWebContents(new_contents.get());
 
   // TODO(crbug.com/836409): TabLoadTracker should not rely on being notified
   // directly about tab contents swaps.
@@ -1471,25 +1451,13 @@ WebContents* Browser::OpenURLFromTab(WebContents* source,
   nav_params.tabstrip_add_types = TabStripModel::ADD_NONE;
   if (params.user_gesture)
     nav_params.window_action = NavigateParams::SHOW_WINDOW;
-  nav_params.user_gesture = params.user_gesture;
-  nav_params.blob_url_loader_factory = params.blob_url_loader_factory;
-  nav_params.href_translate = params.href_translate;
   bool is_popup = source && ConsiderForPopupBlocking(params.disposition);
-  if (is_popup && MaybeBlockPopup(source, base::Optional<GURL>(), &nav_params,
-                                  &params, blink::mojom::WindowFeatures())) {
+  if (is_popup && MaybeBlockPopup(source, nullptr, &nav_params, &params,
+                                  blink::mojom::WindowFeatures())) {
     return nullptr;
   }
 
-  if (base::FeatureList::IsEnabled(features::kTabGroups)) {
-    if (source &&
-        (nav_params.disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB ||
-         nav_params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB)) {
-      const int source_index = tab_strip_model()->GetIndexOfWebContents(source);
-      nav_params.group = tab_strip_model()->GetTabGroupForTab(source_index);
-      if (!nav_params.group)
-        nav_params.group = tab_strip_model()->AddToNewGroup({source_index});
-    }
-  }
+  ConfigureTabGroupForNavigation(source, &nav_params);
 
   if (vivaldi::IsVivaldiRunning()) {
     nav_params.should_create_guestframe = true;
@@ -1501,7 +1469,7 @@ WebContents* Browser::OpenURLFromTab(WebContents* source,
     auto* tracker = PopupTracker::CreateForWebContents(
         nav_params.navigated_or_inserted_contents, source);
     tracker->set_is_trusted(params.triggering_event_info !=
-                            blink::WebTriggeringEventInfo::kFromUntrustedEvent);
+                            blink::TriggeringEventInfo::kFromUntrustedEvent);
   }
 
   return nav_params.navigated_or_inserted_contents;
@@ -1667,29 +1635,34 @@ void Browser::ShowRepostFormWarningDialog(WebContents* source) {
       std::make_unique<RepostFormWarningController>(source), source);
 }
 
-bool Browser::ShouldCreateWebContents(
-    content::WebContents* web_contents,
+bool Browser::IsWebContentsCreationOverridden(
+    content::SiteInstance* source_site_instance,
+    content::mojom::WindowContainerType window_container_type,
+    const GURL& opener_url,
+    const std::string& frame_name,
+    const GURL& target_url) {
+  return window_container_type ==
+             content::mojom::WindowContainerType::BACKGROUND &&
+         ShouldCreateBackgroundContents(source_site_instance, opener_url,
+                                        frame_name);
+}
+
+WebContents* Browser::CreateCustomWebContents(
     content::RenderFrameHost* opener,
     content::SiteInstance* source_site_instance,
-    int32_t route_id,
-    int32_t main_frame_route_id,
-    int32_t main_frame_widget_route_id,
-    content::mojom::WindowContainerType window_container_type,
+    bool is_new_browsing_instance,
     const GURL& opener_url,
     const std::string& frame_name,
     const GURL& target_url,
     const std::string& partition_id,
     content::SessionStorageNamespace* session_storage_namespace) {
-  if (window_container_type ==
-      content::mojom::WindowContainerType::BACKGROUND) {
-    // If a BackgroundContents is created, suppress the normal WebContents.
-    return !MaybeCreateBackgroundContents(
-        source_site_instance, opener, opener_url, route_id, main_frame_route_id,
-        main_frame_widget_route_id, frame_name, target_url, partition_id,
-        session_storage_namespace);
+  BackgroundContents* background_contents = CreateBackgroundContents(
+      source_site_instance, opener, opener_url, is_new_browsing_instance,
+      frame_name, target_url, partition_id, session_storage_namespace);
+  if (background_contents) {
+    return background_contents->web_contents();
   }
-
-  return true;
+  return nullptr;
 }
 
 void Browser::WebContentsCreated(WebContents* source_contents,
@@ -1772,7 +1745,7 @@ bool Browser::EmbedsFullscreenWidget() {
 void Browser::EnterFullscreenModeForTab(
     WebContents* web_contents,
     const GURL& origin,
-    const blink::WebFullscreenOptions& options) {
+    const blink::mojom::FullscreenOptions& options) {
   exclusive_access_manager_->fullscreen_controller()->EnterFullscreenModeForTab(
       web_contents, origin);
 }
@@ -1787,14 +1760,15 @@ bool Browser::IsFullscreenForTabOrPending(const WebContents* web_contents) {
       ->IsFullscreenForTabOrPending(web_contents);
 }
 
-blink::WebDisplayMode Browser::GetDisplayMode(const WebContents* web_contents) {
+blink::mojom::DisplayMode Browser::GetDisplayMode(
+    const WebContents* web_contents) {
   if (window_->IsFullscreen())
-    return blink::kWebDisplayModeFullscreen;
+    return blink::mojom::DisplayMode::kFullscreen;
 
   if (is_type_app() || is_type_devtools())
-    return blink::kWebDisplayModeStandalone;
+    return blink::mojom::DisplayMode::kStandalone;
 
-  return blink::kWebDisplayModeBrowser;
+  return blink::mojom::DisplayMode::kBrowser;
 }
 
 void Browser::RegisterProtocolHandler(WebContents* web_contents,
@@ -2158,6 +2132,13 @@ void Browser::OnTabInsertedAt(WebContents* contents, int index) {
 }
 
 void Browser::OnTabClosing(WebContents* contents) {
+  // When this function is called |contents| has been removed from the
+  // TabStripModel. Some of the following code may trigger calling to the
+  // WebContentsDelegate, which is |this|, which may try to look for the
+  // WebContents in the TabStripModel, and fail because the WebContents has
+  // been removed. To avoid these problems the delegate is reset now.
+  SetAsDelegate(contents, false);
+
   // Typically, ModalDialogs are closed when the WebContents is destroyed.
   // However, when the tab is being closed, we must first close the dialogs [to
   // give them an opportunity to clean up after themselves] while the state
@@ -2372,12 +2353,14 @@ void Browser::UpdateToolbar(bool should_restore_state) {
 
 void Browser::ScheduleUIUpdate(WebContents* source, unsigned changed_flags) {
   DCHECK(source);
-  int index = tab_strip_model_->GetIndexOfWebContents(source);
-  if(index == TabStripModel::kNoTab) {
-    // |source| has already been removed from tabstrip, bail.
+  // WebContents may in some rare cases send updates after they've been detached
+  // from the tabstrip but before they are deleted, causing a potential crash if
+  // we proceed. For now bail out.
+  // TODO(crbug.com/1007379) Figure out a safe way to detach browser delegate
+  // from WebContents when it's removed so this doesn't happen - then put a
+  // DCHECK back here.
+  if (tab_strip_model_->GetIndexOfWebContents(source) == TabStripModel::kNoTab)
     return;
-  }
-  DCHECK_NE(TabStripModel::kNoTab, index);
 
   // Do some synchronous updates.
   if (changed_flags & content::INVALIDATE_TYPE_URL) {
@@ -2468,8 +2451,8 @@ void Browser::ProcessPendingUIUpdates() {
     }
 
     // Updates that don't depend upon the selected state go here.
-    if (flags &
-        (content::INVALIDATE_TYPE_TAB | content::INVALIDATE_TYPE_TITLE)) {
+    if (flags & (content::INVALIDATE_TYPE_TAB | content::INVALIDATE_TYPE_TITLE |
+                 content::INVALIDATE_TYPE_AUDIO)) {
       tab_strip_model_->UpdateWebContentsStateAt(
           tab_strip_model_->GetIndexOfWebContents(contents),
           TabChangeType::kAll);
@@ -2493,6 +2476,31 @@ void Browser::RemoveScheduledUpdatesFor(WebContents* contents) {
   auto i = scheduled_updates_.find(contents);
   if (i != scheduled_updates_.end())
     scheduled_updates_.erase(i);
+}
+
+void Browser::ConfigureTabGroupForNavigation(content::WebContents* source,
+                                             NavigateParams* nav_params) {
+  if (!base::FeatureList::IsEnabled(features::kTabGroups))
+    return;
+
+  if (!source)
+    return;
+
+  if (!SupportsWindowFeature(WindowFeature::FEATURE_TABSTRIP))
+    return;
+
+  const int source_index = tab_strip_model_->GetIndexOfWebContents(source);
+
+  // If the source tab is pinned, don't create a group.
+  if (tab_strip_model_->IsTabPinned(source_index))
+    return;
+
+  if (nav_params->disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB ||
+      nav_params->disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB) {
+    nav_params->group = tab_strip_model_->GetTabGroupForTab(source_index);
+    if (!nav_params->group)
+      nav_params->group = tab_strip_model_->AddToNewGroup({source_index});
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2541,8 +2549,9 @@ void Browser::SyncHistoryWithTabs(int index) {
 // Browser, In-progress download termination handling (private):
 
 bool Browser::CanCloseWithInProgressDownloads() {
-#if defined(OS_MACOSX)
-  // On Mac, non-incognito download can still continue after window is closed.
+#if defined(OS_MACOSX) || defined(OS_CHROMEOS)
+  // On Mac and ChromeOS, non-incognito download can still continue after window
+  // is closed.
   if (!profile_->IsOffTheRecord())
     return true;
 #endif
@@ -2874,17 +2883,10 @@ bool Browser::ShouldStartShutdown() const {
   return BrowserList::GetInstance()->size() == closing_browsers_count + 1u;
 }
 
-bool Browser::MaybeCreateBackgroundContents(
+bool Browser::ShouldCreateBackgroundContents(
     content::SiteInstance* source_site_instance,
-    content::RenderFrameHost* opener,
     const GURL& opener_url,
-    int32_t route_id,
-    int32_t main_frame_route_id,
-    int32_t main_frame_widget_route_id,
-    const std::string& frame_name,
-    const GURL& target_url,
-    const std::string& partition_id,
-    content::SessionStorageNamespace* session_storage_namespace) {
+    const std::string& frame_name) {
   extensions::ExtensionService* extensions_service =
       extensions::ExtensionSystem::Get(profile_)->extension_service();
 
@@ -2916,46 +2918,59 @@ bool Browser::MaybeCreateBackgroundContents(
     return false;
   }
 
-  // Only allow a single background contents per app.
+  return true;
+}
+
+BackgroundContents* Browser::CreateBackgroundContents(
+    content::SiteInstance* source_site_instance,
+    content::RenderFrameHost* opener,
+    const GURL& opener_url,
+    bool is_new_browsing_instance,
+    const std::string& frame_name,
+    const GURL& target_url,
+    const std::string& partition_id,
+    content::SessionStorageNamespace* session_storage_namespace) {
+  BackgroundContentsService* service =
+      BackgroundContentsServiceFactory::GetForProfile(profile_);
+  const Extension* extension = extensions::ExtensionRegistry::Get(profile_)
+                                   ->enabled_extensions()
+                                   .GetHostedAppByURL(opener_url);
   bool allow_js_access = extensions::BackgroundInfo::AllowJSAccess(extension);
+  // Only allow a single background contents per app.
   BackgroundContents* existing =
       service->GetAppBackgroundContents(extension->id());
   if (existing) {
     // For non-scriptable background contents, ignore the request altogether,
-    // (returning true, so that a regular WebContents isn't created either).
+    // Note that ShouldCreateBackgroundContents() returning true will also
+    // suppress creation of the normal WebContents.
     if (!allow_js_access)
-      return true;
+      return nullptr;
     // For scriptable background pages, if one already exists, close it (even
     // if it was specified in the manifest).
-    delete existing;
+    service->DeleteBackgroundContents(existing);
   }
 
   // Passed all the checks, so this should be created as a BackgroundContents.
-  BackgroundContents* contents = nullptr;
   if (allow_js_access) {
-    contents = service->CreateBackgroundContents(
-        source_site_instance, opener, route_id, main_frame_route_id,
-        main_frame_widget_route_id, profile_, frame_name, extension->id(),
-        partition_id, session_storage_namespace);
-  } else {
-    // If script access is not allowed, create the the background contents in a
-    // new SiteInstance, so that a separate process is used. We must not use any
-    // of the passed-in routing IDs, as they are objects in the opener's
-    // process.
-    contents = service->CreateBackgroundContents(
-        content::SiteInstance::Create(
-            source_site_instance->GetBrowserContext()),
-        nullptr, MSG_ROUTING_NONE, MSG_ROUTING_NONE, MSG_ROUTING_NONE, profile_,
-        frame_name, extension->id(), partition_id, session_storage_namespace);
-
-    // When a separate process is used, the original renderer cannot access the
-    // new window later, thus we need to navigate the window now.
-    if (contents) {
-      contents->web_contents()->GetController().LoadURL(
-          target_url, content::Referrer(), ui::PAGE_TRANSITION_LINK,
-          std::string());  // No extra headers.
-    }
+    return service->CreateBackgroundContents(
+        source_site_instance, opener, is_new_browsing_instance, frame_name,
+        extension->id(), partition_id, session_storage_namespace);
   }
 
-  return contents != NULL;
+  // If script access is not allowed, create the the background contents in a
+  // new SiteInstance, so that a separate process is used. We must not use any
+  // of the passed-in routing IDs, as they are objects in the opener's
+  // process.
+  BackgroundContents* contents = service->CreateBackgroundContents(
+      content::SiteInstance::Create(source_site_instance->GetBrowserContext()),
+      nullptr, is_new_browsing_instance, frame_name, extension->id(),
+      partition_id, session_storage_namespace);
+
+  // When a separate process is used, the original renderer cannot access the
+  // new window later, thus we need to navigate the window now.
+  contents->web_contents()->GetController().LoadURL(
+      target_url, content::Referrer(), ui::PAGE_TRANSITION_LINK,
+      std::string());  // No extra headers.
+
+  return contents;
 }

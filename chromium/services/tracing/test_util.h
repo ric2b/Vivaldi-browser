@@ -10,7 +10,8 @@
 
 #include "base/trace_event/trace_log.h"
 #include "base/values.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/tracing/public/mojom/tracing.mojom.h"
 
 namespace base {
@@ -24,7 +25,7 @@ class MockAgent : public mojom::Agent {
   MockAgent();
   ~MockAgent() override;
 
-  mojom::AgentPtr CreateAgentPtr();
+  mojo::PendingRemote<mojom::Agent> CreateAgentRemote();
 
   std::vector<std::string> call_stat() const { return call_stat_; }
 
@@ -39,10 +40,10 @@ class MockAgent : public mojom::Agent {
   void StartTracing(const std::string& config,
                     base::TimeTicks coordinator_time,
                     StartTracingCallback cb) override;
-  void StopAndFlush(mojom::RecorderPtr recorder) override;
+  void StopAndFlush(mojo::PendingRemote<mojom::Recorder> recorder) override;
   void RequestBufferStatus(RequestBufferStatusCallback cb) override;
 
-  mojo::Binding<mojom::Agent> binding_;
+  mojo::Receiver<mojom::Agent> receiver_{this};
   std::vector<std::string> call_stat_;
 };
 

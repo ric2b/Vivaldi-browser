@@ -5,20 +5,21 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_NETWORK_SERVICE_AW_PROXYING_URL_LOADER_FACTORY_H_
 #define ANDROID_WEBVIEW_BROWSER_NETWORK_SERVICE_AW_PROXYING_URL_LOADER_FACTORY_H_
 
-#include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
-#include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/memory/weak_ptr.h"
-#include "base/optional.h"
-#include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
-#include "net/traffic_annotation/network_traffic_annotation.h"
-#include "services/network/public/cpp/resource_request.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
-#include "url/gurl.h"
+
+namespace net {
+struct MutableNetworkTrafficAnnotationTag;
+}
+
+namespace network {
+struct ResourceRequest;
+}
 
 namespace android_webview {
 
@@ -57,7 +58,7 @@ class AwProxyingURLLoaderFactory : public network::mojom::URLLoaderFactory {
   // target factory.
   AwProxyingURLLoaderFactory(
       int process_id,
-      network::mojom::URLLoaderFactoryRequest loader_request,
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
       network::mojom::URLLoaderFactoryPtrInfo target_factory_info,
       bool intercept_only);
 
@@ -66,7 +67,7 @@ class AwProxyingURLLoaderFactory : public network::mojom::URLLoaderFactory {
   // static
   static void CreateProxy(
       int process_id,
-      network::mojom::URLLoaderFactoryRequest loader,
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader,
       network::mojom::URLLoaderFactoryPtrInfo target_factory_info);
 
   void CreateLoaderAndStart(network::mojom::URLLoaderRequest loader,
@@ -78,14 +79,15 @@ class AwProxyingURLLoaderFactory : public network::mojom::URLLoaderFactory {
                             const net::MutableNetworkTrafficAnnotationTag&
                                 traffic_annotation) override;
 
-  void Clone(network::mojom::URLLoaderFactoryRequest loader_request) override;
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory>
+                 loader_receiver) override;
 
  private:
   void OnTargetFactoryError();
   void OnProxyBindingError();
 
   const int process_id_;
-  mojo::BindingSet<network::mojom::URLLoaderFactory> proxy_bindings_;
+  mojo::ReceiverSet<network::mojom::URLLoaderFactory> proxy_receivers_;
   network::mojom::URLLoaderFactoryPtr target_factory_;
 
   // When true the loader resulting from this factory will only execute

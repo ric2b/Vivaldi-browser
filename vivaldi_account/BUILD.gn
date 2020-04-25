@@ -14,4 +14,15 @@ source_set("vivaldi_account") {
     "//base",
     "//chrome/browser",
   ]
+
+  if (is_android) {
+    sources += [
+      "vivaldi_account_manager_android.cc",
+      "vivaldi_account_manager_android.h",
+    ]
+
+    deps += [
+      "//chrome/android:jni_headers",
+    ]
+  }
 }

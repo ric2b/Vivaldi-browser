@@ -15,22 +15,22 @@ const base::Feature kIgnoresViewportScaleLimits{
     "IgnoresViewportScaleLimits", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSlimNavigationManager{"SlimNavigationManager",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kWKHTTPSystemCookieStore{"WKHTTPSystemCookieStore",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kCrashOnUnexpectedURLChange{
     "CrashOnUnexpectedURLChange", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kHistoryClobberWorkaround{
-    "WKWebViewHistoryClobberWorkaround", base::FEATURE_ENABLED_BY_DEFAULT};
+    "WKWebViewHistoryClobberWorkaround", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kBlockUniversalLinksInOffTheRecordMode{
     "BlockUniversalLinksInOffTheRecord", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kKeepsRenderProcessAlive{"KeepsRenderProcessAlive",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kClearOldNavigationRecordsWorkaround{
+    "ClearOldNavigationRecordsWorkaround", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSSLCommittedInterstitials{
     "SSLCommittedInterstitials", base::FEATURE_DISABLED_BY_DEFAULT};

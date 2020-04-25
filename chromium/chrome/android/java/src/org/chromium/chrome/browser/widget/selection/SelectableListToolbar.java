@@ -9,8 +9,6 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.CallSuper;
-import android.support.annotation.StringRes;
 import android.support.v4.graphics.drawable.DrawableCompat;
 import android.support.v4.view.ViewCompat;
 import android.support.v7.content.res.AppCompatResources;
@@ -33,24 +31,40 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.TextView.OnEditorActionListener;
 
+import androidx.annotation.CallSuper;
+import androidx.annotation.IntDef;
+import androidx.annotation.StringRes;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.toolbar.top.ActionModeController;
 import org.chromium.chrome.browser.toolbar.top.ToolbarActionModeCallback;
+import org.chromium.chrome.browser.ui.widget.TintedDrawable;
+import org.chromium.chrome.browser.ui.widget.displaystyle.DisplayStyleObserver;
+import org.chromium.chrome.browser.ui.widget.displaystyle.HorizontalDisplayStyle;
+import org.chromium.chrome.browser.ui.widget.displaystyle.UiConfig;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.vr.VrModeObserver;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.chrome.browser.widget.NumberRollView;
-import org.chromium.chrome.browser.widget.TintedDrawable;
-import org.chromium.chrome.browser.widget.displaystyle.DisplayStyleObserver;
-import org.chromium.chrome.browser.widget.displaystyle.HorizontalDisplayStyle;
-import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate.SelectionObserver;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.UiUtils;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.List;
+
+import android.content.res.Resources;
+import android.os.Build;
+import android.support.v4.content.ContextCompat;
+import android.support.v4.widget.ImageViewCompat;
+import android.support.v4.widget.TextViewCompat;
+import android.util.TypedValue;
+import android.widget.ImageView;
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * A toolbar that changes its view depending on whether a selection is established. The toolbar
@@ -76,6 +90,14 @@ public class SelectableListToolbar<E>
          * Called when a search is ended.
          */
         void onEndSearch();
+    }
+
+    @IntDef({ViewType.NORMAL_VIEW, ViewType.SELECTION_VIEW, ViewType.SEARCH_VIEW})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ViewType {
+        int NORMAL_VIEW = 0;
+        int SELECTION_VIEW = 1;
+        int SEARCH_VIEW = 2;
     }
 
     /** No navigation button is displayed. **/
@@ -132,6 +154,9 @@ public class SelectableListToolbar<E>
     private int mHideInfoStringId;
     private int mExtraMenuItemId;
 
+    // current view type that SelectableListToolbar is showing
+    private int mViewType;
+
     /**
      * Constructor for inflating from XML.
      */
@@ -184,6 +209,10 @@ public class SelectableListToolbar<E>
         mModernToolbarSearchIconOffsetPx = getResources().getDimensionPixelSize(
                 R.dimen.selectable_list_search_icon_end_padding);
 
+        if (ChromeApplication.isVivaldi()) // TODO: Change param!
+            mNormalBackgroundColor = ApiCompatibilityUtils.getColor(getResources(),
+                    android.R.color.transparent);
+        else
         mNormalBackgroundColor =
                 ApiCompatibilityUtils.getColor(getResources(), R.color.modern_primary_color);
         setBackgroundColor(mNormalBackgroundColor);
@@ -197,6 +226,14 @@ public class SelectableListToolbar<E>
                 getContext(), R.color.default_icon_color_inverse);
 
         setTitleTextAppearance(getContext(), R.style.TextAppearance_BlackHeadline);
+        if (ChromeApplication.isVivaldi()) {
+            Resources.Theme themes = getContext().getTheme();
+            TypedValue storedValueInTheme = new TypedValue();
+            if (themes.resolveAttribute(R.attr.vivaldiTextItemTitle, storedValueInTheme, true)) {
+                setTitleTextColor(storedValueInTheme.data);
+            }
+        }
+
         if (mTitleResId != 0) setTitle(mTitleResId);
 
         // TODO(twellington): add the concept of normal & selected tint to apply to all toolbar
@@ -205,8 +242,14 @@ public class SelectableListToolbar<E>
                 getContext(), R.drawable.ic_more_vert_24dp, R.color.standard_mode_tint);
         mSelectionMenuButton = UiUtils.getTintedDrawable(
                 getContext(), R.drawable.ic_more_vert_24dp, R.color.default_icon_color_inverse);
+        if (!ChromeApplication.isVivaldi())
         mNavigationIconDrawable = UiUtils.getTintedDrawable(
                 getContext(), R.drawable.ic_arrow_back_white_24dp, R.color.standard_mode_tint);
+        else {
+            mNavigationIconDrawable = UiUtils.getTintedDrawable(
+                    getContext(), R.drawable.vivaldi_nav_button_back, R.color.standard_mode_tint);
+            DrawableCompat.setTintList(mNavigationIconDrawable, mDarkIconColorList);
+        }
 
         VrModuleProvider.registerVrModeObserver(this);
         if (VrModuleProvider.getDelegate().isInVr()) onEnterVr();
@@ -255,6 +298,7 @@ public class SelectableListToolbar<E>
         mSearchDelegate = searchDelegate;
         mSearchMenuItemId = searchMenuItemId;
         mSearchBackgroundColor = Color.WHITE;
+        if (ChromeApplication.isVivaldi()) mSearchBackgroundColor = Color.TRANSPARENT;
 
         LayoutInflater.from(getContext()).inflate(R.layout.search_toolbar, this);
 
@@ -370,18 +414,44 @@ public class SelectableListToolbar<E>
             case NAVIGATION_BUTTON_NONE:
                 break;
             case NAVIGATION_BUTTON_BACK:
-                DrawableCompat.setTintList(mNavigationIconDrawable, mDarkIconColorList);
                 contentDescriptionId = R.string.accessibility_toolbar_btn_back;
+                if (ChromeApplication.isVivaldi() && contentDescriptionId != 0) {
+                    DrawableCompat.setTintList(mNavigationIconDrawable, mDarkIconColorList);
+                    setNavigationIcon(
+                            getResources().getDrawable(R.drawable.vivaldi_nav_button_back));
+                    Resources.Theme themes = getContext().getTheme();
+                    TypedValue storedValueInTheme = new TypedValue();
+                    if (themes.resolveAttribute(R.attr.vivaldiIconTint, storedValueInTheme,
+                            true)) {
+                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
+                            getNavigationIcon().setTint(storedValueInTheme.data);
+                    }
+                }
                 break;
             case NAVIGATION_BUTTON_SELECTION_BACK:
                 DrawableCompat.setTintList(mNavigationIconDrawable, mLightIconColorList);
                 contentDescriptionId = R.string.accessibility_cancel_selection;
+                if (ChromeApplication.isVivaldi() && contentDescriptionId != 0) {
+                    setNavigationIcon(
+                            getResources().getDrawable(R.drawable.vivaldi_nav_button_select_back));
+                    Resources.Theme themes = getContext().getTheme();
+                    TypedValue storedValueInTheme = new TypedValue();
+                    if (themes.resolveAttribute(R.attr.vivaldiSelectIconTint, storedValueInTheme,
+                            true)) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
+                            getNavigationIcon().setTint(storedValueInTheme.data);
+                    }
+
+                }
                 break;
             default:
                 assert false : "Incorrect navigationButton argument";
         }
 
+        if (!ChromeApplication.isVivaldi())
         setNavigationIcon(contentDescriptionId == 0 ? null : mNavigationIconDrawable);
+        else if (contentDescriptionId == 0)
+            setNavigationIcon(null);
         setNavigationContentDescription(contentDescriptionId);
 
         updateDisplayStyleIfNecessary();
@@ -454,7 +524,12 @@ public class SelectableListToolbar<E>
 
         if (mIsDestroyed) return;
 
+        // NOTE (david@vivaldi.com): Do not clear the selection list in Vivaldi, since we are using
+        // the toolbar within a recycler view, where the view gets detached from window while
+        // swiping (VB-58957). We want to save the selection even in detached state.
+        if (!ChromeApplication.isVivaldi()) {
         mSelectionDelegate.clearSelection();
+        }
         if (mIsSearching) hideSearchView();
     }
 
@@ -484,7 +559,7 @@ public class SelectableListToolbar<E>
 
         if (newDisplayStyle.horizontal == HorizontalDisplayStyle.WIDE
                 && !(mIsSearching || mIsSelectionEnabled
-                           || mNavigationButton != NAVIGATION_BUTTON_NONE)) {
+                            || mNavigationButton != NAVIGATION_BUTTON_NONE)) {
             // The title in the wide display should be aligned with the texts of the list elements.
             paddingStartOffset = mWideDisplayStartOffsetPx;
         }
@@ -503,6 +578,7 @@ public class SelectableListToolbar<E>
         // and the list item icon aligned.
         int navigationButtonStartOffsetPx =
                 mNavigationButton != NAVIGATION_BUTTON_NONE ? mModernNavButtonStartOffsetPx : 0;
+        if (ChromeApplication.isVivaldi()) navigationButtonStartOffsetPx = 0;
 
         int actionMenuBarEndOffsetPx = mIsSelectionEnabled ? mModernToolbarActionMenuEndOffsetPx
                                                            : mModernToolbarSearchIconOffsetPx;
@@ -526,6 +602,10 @@ public class SelectableListToolbar<E>
     }
 
     protected void showNormalView() {
+        // hide overflow menu explicitly: crbug.com/999269
+        hideOverflowMenu();
+
+        mViewType = ViewType.NORMAL_VIEW;
         getMenu().setGroupVisible(mNormalGroupResId, true);
         getMenu().setGroupVisible(mSelectedGroupResId, false);
         if (mHasSearchView) {
@@ -545,6 +625,8 @@ public class SelectableListToolbar<E>
     }
 
     protected void showSelectionView(List<E> selectedItems, boolean wasSelectionEnabled) {
+        mViewType = ViewType.SELECTION_VIEW;
+
         getMenu().setGroupVisible(mNormalGroupResId, false);
         getMenu().setGroupVisible(mSelectedGroupResId, true);
         getMenu().setGroupEnabled(mSelectedGroupResId, !selectedItems.isEmpty());
@@ -562,12 +644,15 @@ public class SelectableListToolbar<E>
     }
 
     private void showSearchViewInternal() {
+        mViewType = ViewType.SEARCH_VIEW;
+
         getMenu().setGroupVisible(mNormalGroupResId, false);
         getMenu().setGroupVisible(mSelectedGroupResId, false);
         mNumberRollView.setVisibility(View.GONE);
         mSearchView.setVisibility(View.VISIBLE);
 
         setNavigationButton(NAVIGATION_BUTTON_BACK);
+        if (!ChromeApplication.isVivaldi())
         setBackgroundResource(R.drawable.search_toolbar_modern_bg);
         updateStatusBarColor(mSearchBackgroundColor);
 
@@ -755,5 +840,10 @@ public class SelectableListToolbar<E>
             if ((child instanceof Button)) continue;
             child.setFocusableInTouchMode(true);
         }
+    }
+
+    @VisibleForTesting
+    public @ViewType int getCurrentViewType() {
+        return mViewType;
     }
 }

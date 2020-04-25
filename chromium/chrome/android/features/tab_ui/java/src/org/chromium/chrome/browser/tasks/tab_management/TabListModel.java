@@ -39,7 +39,10 @@ class TabListModel extends ModelList {
      * @param index         The index of the item in {@link TabListModel} that needs to be updated.
      */
     void updateTabListModelIdForGroup(Tab selectedTab, int index) {
+        // NOTE(david@vivaldi.com) We need to check the size here, can be empty.
+        if (size() > 0) {
         get(index).model.set(TabProperties.TAB_ID, selectedTab.getId());
+        }
     }
 
     /**

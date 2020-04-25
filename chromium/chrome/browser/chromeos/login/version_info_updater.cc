@@ -14,6 +14,7 @@
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/grit/chromium_strings.h"
@@ -32,11 +33,9 @@ namespace chromeos {
 namespace {
 
 const char* const kReportingFlags[] = {
-  chromeos::kReportDeviceVersionInfo,
-  chromeos::kReportDeviceActivityTimes,
-  chromeos::kReportDeviceBootMode,
-  chromeos::kReportDeviceLocation,
-};
+    chromeos::kReportDeviceVersionInfo, chromeos::kReportDeviceActivityTimes,
+    chromeos::kReportDeviceBootMode, chromeos::kReportDeviceLocation,
+    chromeos::kDeviceLoginScreenSystemInfoEnforced};
 
 // Strings used to generate the serial number part of the version string.
 const char kSerialNumberPrefix[] = "SN:";
@@ -65,7 +64,8 @@ void VersionInfoUpdater::StartUpdate(bool is_official_build) {
   if (base::SysInfo::IsRunningOnChromeOS()) {
     base::PostTaskAndReplyWithResult(
         FROM_HERE,
-        {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+        {base::ThreadPool(), base::MayBlock(),
+         base::TaskPriority::USER_VISIBLE},
         base::Bind(&version_loader::GetVersion,
                    is_official_build ? version_loader::VERSION_SHORT_WITH_DATE
                                      : version_loader::VERSION_FULL),
@@ -98,6 +98,15 @@ void VersionInfoUpdater::StartUpdate(bool is_official_build) {
   // Update device bluetooth info.
   device::BluetoothAdapterFactory::GetAdapter(base::BindOnce(
       &VersionInfoUpdater::OnGetAdapter, weak_pointer_factory_.GetWeakPtr()));
+}
+
+base::Optional<bool> VersionInfoUpdater::IsSystemInfoEnforced() const {
+  bool is_system_info_enforced = false;
+  if (cros_settings_->GetBoolean(chromeos::kDeviceLoginScreenSystemInfoEnforced,
+                                 &is_system_info_enforced)) {
+    return is_system_info_enforced;
+  }
+  return base::nullopt;
 }
 
 void VersionInfoUpdater::UpdateVersionLabel() {

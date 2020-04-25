@@ -1,4 +1,33 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sr">
+<translation id="3830627370375585318">Дозволи Vivaldi прегледачу приступ мрежи у подешавањима заштитног зида или антивируса.</translation>
+<translation id="4200102020577305737">Идите у
+          Vivaldi мени &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Подешавања локалне мреже
+          и опозовите избор опције „Користи прокси сервер за локалну мрежу".</translation>
+<translation id="4932161901409251843">Идите у
+          Vivaldi мени &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          и проверите да ли је конфигурација подешена на „без проксија“  или „директно“.</translation>
+<translation id="5248344925342018662">Гледате безбедну Vivaldi страницу</translation>
+<translation id="7023871570427738255">Идите у
+          Vivaldi мени &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          и опозовите избор опције „<ph name="NO_PREFETCH_DESCRIPTION" />“.
+          Ако вам то не реши проблем, препоручујемо да поново изаберете
+          ову опцију ради бољих перформанси.</translation>
+<translation id="8187289872471304532">Идите на Апликације &gt; Подешавања система &gt; Мрежа &gt; Више опција &gt; Проксији и опозовите избор свих проксија који су изабрани.</translation>
 </translationbundle>

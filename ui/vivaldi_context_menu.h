@@ -32,6 +32,7 @@ class Widget;
 }
 
 namespace vivaldi {
+class ContextMenuPostitionDelegate;
 class VivaldiBookmarkMenu;
 class VivaldiContextMenu;
 class VivaldiMenubarMenu;
@@ -116,7 +117,8 @@ VivaldiContextMenu* CreateVivaldiContextMenu(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
     const gfx::Rect& rect,
-    bool force_views);
+    bool force_views,
+    vivaldi::ContextMenuPostitionDelegate* delegate);
 
 VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     content::WebContents* web_contents,

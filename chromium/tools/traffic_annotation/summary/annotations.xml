@@ -29,7 +29,7 @@ Refer to README.md for content description and update process.
  <item id="blob_reader" hash_code="5154306" type="0" deprecated="2018-06-14" content_hash_code="39702178" file_path=""/>
  <item id="bluetooth_socket" hash_code="94099818" type="0" content_hash_code="30932349" os_list="linux,windows" file_path="device/bluetooth/bluetooth_socket_net.cc"/>
  <item id="brandcode_config" hash_code="109679553" type="0" content_hash_code="128843792" os_list="linux,windows" file_path="chrome/browser/profile_resetter/brandcode_config_fetcher.cc"/>
- <item id="browser_switcher_ieem_sitelist" hash_code="97159948" type="0" content_hash_code="40881413" os_list="linux,windows" file_path="chrome/browser/browser_switcher/browser_switcher_service.cc"/>
+ <item id="browser_switcher_ieem_sitelist" hash_code="97159948" type="0" content_hash_code="129062966" os_list="linux,windows" file_path="chrome/browser/browser_switcher/browser_switcher_service.cc"/>
  <item id="bundled_exchanges_start_url_loader" hash_code="105810794" type="0" content_hash_code="20630448" os_list="linux,windows" file_path="content/browser/web_package/bundled_exchanges_handle.cc"/>
  <item id="captive_portal_service" hash_code="88754904" type="0" content_hash_code="70737580" os_list="linux,windows" file_path="chrome/browser/captive_portal/captive_portal_service.cc"/>
  <item id="cast_channel_send" hash_code="103172229" type="0" deprecated="2018-08-23" content_hash_code="33946302" file_path=""/>
@@ -64,7 +64,7 @@ Refer to README.md for content description and update process.
  <item id="cryptauth_get_my_devices" hash_code="136498680" type="1" second_id="29188932" deprecated="2018-04-04" content_hash_code="73842435" file_path=""/>
  <item id="cryptauth_toggle_easyunlock" hash_code="25204343" type="1" second_id="29188932" deprecated="2018-04-04" content_hash_code="13570943" file_path=""/>
  <item id="data_reduction_proxy_config" hash_code="485305" type="0" content_hash_code="134075813" os_list="linux,windows" file_path="components/data_reduction_proxy/core/browser/data_reduction_proxy_config_service_client.cc"/>
- <item id="data_reduction_proxy_pingback" hash_code="68561428" type="0" content_hash_code="78407792" os_list="linux,windows" file_path="components/data_reduction_proxy/content/browser/data_reduction_proxy_pingback_client_impl.cc"/>
+ <item id="data_reduction_proxy_pingback" hash_code="68561428" type="0" deprecated="2019-09-17" content_hash_code="78407792" file_path="components/data_reduction_proxy/content/browser/data_reduction_proxy_pingback_client_impl.cc"/>
  <item id="data_reduction_proxy_secure_proxy_check" hash_code="131236802" type="0" content_hash_code="122297136" os_list="linux,windows" file_path="components/data_reduction_proxy/core/browser/secure_proxy_checker.cc"/>
  <item id="data_reduction_proxy_warmup" hash_code="8250451" type="0" content_hash_code="6321249" os_list="linux,windows" file_path="components/data_reduction_proxy/core/browser/warmup_url_fetcher.cc"/>
  <item id="desktop_ios_promotion" hash_code="13694792" type="0" deprecated="2018-11-04" content_hash_code="19776951" file_path=""/>
@@ -133,7 +133,7 @@ Refer to README.md for content description and update process.
  <item id="history_notice_utils_popup" hash_code="80832574" type="1" second_id="110307337" content_hash_code="30618510" os_list="linux,windows" semantics_fields="2,3,4" policy_fields="4" file_path="components/browsing_data/core/history_notice_utils.cc"/>
  <item id="history_ui_favicon_request_handler_get_favicon" hash_code="17562717" type="0" content_hash_code="64054629" os_list="linux,windows" file_path="components/favicon/core/history_ui_favicon_request_handler_impl.cc"/>
  <item id="http_server_error_response" hash_code="32197336" type="0" content_hash_code="61082230" os_list="linux,windows" file_path="net/server/http_server.cc"/>
- <item id="https_server_previews_navigation" hash_code="35725390" type="0" content_hash_code="84423109" os_list="linux,windows" file_path="chrome/browser/previews/previews_lite_page_serving_url_loader.cc"/>
+ <item id="https_server_previews_navigation" hash_code="35725390" type="0" content_hash_code="84423109" os_list="linux,windows" file_path="chrome/browser/previews/previews_lite_page_redirect_serving_url_loader.cc"/>
  <item id="icon_cacher" hash_code="103133150" type="0" content_hash_code="116368348" os_list="linux,windows" file_path="components/ntp_tiles/icon_cacher_impl.cc"/>
  <item id="icon_catcher_get_large_icon" hash_code="44494884" type="0" content_hash_code="98262037" os_list="linux,windows" file_path="components/ntp_tiles/icon_cacher_impl.cc"/>
  <item id="image_annotation" hash_code="107881858" type="0" content_hash_code="96203979" os_list="linux,windows" file_path="services/image_annotation/annotator.cc"/>
@@ -157,6 +157,7 @@ Refer to README.md for content description and update process.
  <item id="network_location_provider" hash_code="23472048" type="1" second_id="96590038" content_hash_code="41087976" os_list="linux,windows" semantics_fields="1" policy_fields="3,4" file_path="services/device/geolocation/network_location_provider.cc"/>
  <item id="network_location_request" hash_code="96590038" type="2" content_hash_code="80741011" os_list="linux,windows" semantics_fields="2,3,4,5" policy_fields="-1" file_path="services/device/geolocation/network_location_request.cc"/>
  <item id="network_time_component" hash_code="46188932" type="0" content_hash_code="28051857" os_list="linux,windows" file_path="components/network_time/network_time_tracker.cc"/>
+ <item id="notification_client" hash_code="78479125" type="0" content_hash_code="61551920" os_list="linux,windows" file_path="remoting/client/notification/notification_client.cc"/>
  <item id="ntp_contextual_suggestions_fetch" hash_code="95711309" type="0" deprecated="2019-04-18" content_hash_code="107035434" file_path=""/>
  <item id="ntp_custom_background" hash_code="92125886" type="0" content_hash_code="61176452" os_list="linux,windows" file_path="chrome/browser/search/instant_service.cc"/>
  <item id="ntp_custom_link_checker_request" hash_code="78408551" type="0" deprecated="2018-10-26" content_hash_code="13407730" file_path=""/>
@@ -179,6 +180,7 @@ Refer to README.md for content description and update process.
  <item id="one_google_bar_service" hash_code="78917933" type="0" content_hash_code="46527252" os_list="linux,windows" file_path="chrome/browser/search/one_google_bar/one_google_bar_loader_impl.cc"/>
  <item id="open_screen_message" hash_code="95250780" type="0" deprecated="2019-09-05" content_hash_code="39027953" file_path=""/>
  <item id="open_search" hash_code="107267424" type="0" content_hash_code="83025542" os_list="linux,windows" file_path="components/search_engines/template_url_fetcher.cc"/>
+ <item id="optimization_guide_model" hash_code="106373593" type="0" content_hash_code="32403047" os_list="linux,windows" file_path="chrome/browser/optimization_guide/prediction/prediction_model_fetcher.cc"/>
  <item id="origin_policy_loader" hash_code="6483617" type="0" content_hash_code="20680909" os_list="linux,windows" file_path="services/network/origin_policy/origin_policy_fetcher.cc"/>
  <item id="parallel_download_job" hash_code="135118587" type="0" content_hash_code="105330419" os_list="linux,windows" file_path="components/download/internal/common/parallel_download_job.cc"/>
  <item id="password_protection_request" hash_code="66322287" type="0" content_hash_code="25596947" os_list="linux,windows" file_path="components/safe_browsing/password_protection/password_protection_request.cc"/>
@@ -201,7 +203,7 @@ Refer to README.md for content description and update process.
  <item id="prefetch_download" hash_code="44583172" type="0" content_hash_code="21424542" os_list="linux,windows" file_path="components/offline_pages/core/prefetch/prefetch_downloader_impl.cc"/>
  <item id="prefetch_visuals" hash_code="91068704" type="0" content_hash_code="90439946" os_list="linux,windows" file_path="components/offline_pages/core/prefetch/visuals_fetch_by_url.cc"/>
  <item id="previews_litepage_origin_prober" hash_code="33703614" type="0" content_hash_code="116235355" os_list="linux,windows" file_path="chrome/browser/previews/previews_lite_page_redirect_url_loader.cc"/>
- <item id="previews_litepage_prober" hash_code="33813109" type="0" content_hash_code="52572789" os_list="linux,windows" file_path="chrome/browser/previews/previews_lite_page_decider.cc"/>
+ <item id="previews_litepage_prober" hash_code="33813109" type="0" content_hash_code="52572789" os_list="linux,windows" file_path="chrome/browser/previews/previews_lite_page_redirect_decider.cc"/>
  <item id="previews_prober" hash_code="41010697" type="0" deprecated="2019-07-24" content_hash_code="51581107" file_path=""/>
  <item id="printer_job_handler" hash_code="67638271" type="1" second_id="111712433" content_hash_code="75712693" os_list="linux,windows" semantics_fields="2,3,4" file_path="chrome/service/cloud_print/printer_job_handler.cc"/>
  <item id="privet_http_impl" hash_code="71251498" type="0" content_hash_code="107348604" os_list="linux,windows" file_path="chrome/browser/printing/cloud_print/privet_http_impl.cc"/>
@@ -222,7 +224,7 @@ Refer to README.md for content description and update process.
  <item id="refresh_token_annotation_request" hash_code="7433837" type="1" second_id="29188932" deprecated="2018-01-17" content_hash_code="137103383" file_path=""/>
  <item id="remote_suggestions_provider" hash_code="49544361" type="0" content_hash_code="126329742" os_list="linux,windows" file_path="components/ntp_snippets/remote/cached_image_fetcher.cc"/>
  <item id="render_view_context_menu" hash_code="25844439" type="0" content_hash_code="69471170" os_list="linux,windows" file_path="chrome/browser/renderer_context_menu/render_view_context_menu.cc"/>
- <item id="renderer_initiated_download" hash_code="116443055" type="0" content_hash_code="37846436" os_list="linux,windows" file_path="content/browser/frame_host/render_frame_message_filter.cc"/>
+ <item id="renderer_initiated_download" hash_code="116443055" type="0" content_hash_code="37846436" os_list="linux,windows" file_path="content/browser/frame_host/render_frame_host_impl.cc"/>
  <item id="reporting" hash_code="109891200" type="0" content_hash_code="125758928" os_list="linux,windows" file_path="net/reporting/reporting_uploader.cc"/>
  <item id="resource_dispatcher_host" hash_code="81157007" type="0" deprecated="2019-07-30" content_hash_code="35725167" file_path=""/>
  <item id="resource_prefetch" hash_code="110815970" type="0" deprecated="2018-02-28" content_hash_code="39251261" file_path=""/>
@@ -281,7 +283,7 @@ Refer to README.md for content description and update process.
  <item id="ui_devtools_server" hash_code="4986170" type="0" content_hash_code="62670263" os_list="linux,windows" file_path="components/ui_devtools/devtools_server.cc"/>
  <item id="undefined" hash_code="45578882" type="0" reserved="1" os_list="linux,windows" file_path=""/>
  <item id="unwanted_software_report" hash_code="43759504" type="0" content_hash_code="43217092" os_list="windows" file_path="chrome/chrome_cleaner/logging/reporter_logging_service.cc"/>
- <item id="update_client" hash_code="54845618" type="0" content_hash_code="33566159" os_list="linux,windows" file_path="components/update_client/net/network_impl.cc"/>
+ <item id="update_client" hash_code="54845618" type="0" content_hash_code="86129031" os_list="linux,windows" file_path="components/update_client/net/network_impl.cc"/>
  <item id="url_fetcher_downloader" hash_code="113231892" type="0" deprecated="2019-02-09" content_hash_code="61085066" file_path=""/>
  <item id="url_prevision_fetcher" hash_code="118389509" type="0" content_hash_code="66145513" os_list="linux,windows" file_path="content/browser/media/url_provision_fetcher.cc"/>
  <item id="user_info_fetcher" hash_code="22265491" type="0" content_hash_code="72016232" os_list="linux,windows" file_path="components/policy/core/common/cloud/user_info_fetcher.cc"/>
@@ -295,7 +297,7 @@ Refer to README.md for content description and update process.
  <item id="web_push_message" hash_code="39886742" type="0" content_hash_code="110064650" os_list="linux,windows" file_path="components/gcm_driver/web_push_sender.cc"/>
  <item id="webrtc_event_log_uploader" hash_code="24186190" type="0" content_hash_code="11005245" os_list="linux,windows" file_path="chrome/browser/media/webrtc/webrtc_event_log_uploader.cc"/>
  <item id="webrtc_log_upload" hash_code="62443804" type="0" content_hash_code="33661169" os_list="linux,windows" file_path="chrome/browser/media/webrtc/webrtc_log_uploader.cc"/>
- <item id="webrtc_peer_connection" hash_code="63497370" type="0" content_hash_code="60553259" os_list="linux,windows" file_path="content/renderer/media/webrtc/peer_connection_dependency_factory.cc"/>
+ <item id="webrtc_peer_connection" hash_code="63497370" type="0" content_hash_code="60553259" os_list="linux,windows" file_path="third_party/blink/renderer/modules/peerconnection/peer_connection_dependency_factory.cc"/>
  <item id="websocket_basic_stream" hash_code="51586722" type="0" content_hash_code="68121427" os_list="linux,windows" file_path="net/websockets/websocket_basic_stream.cc"/>
  <item id="websocket_stream" hash_code="17188928" type="0" content_hash_code="7250776" os_list="linux,windows" file_path="net/websockets/websocket_stream.cc"/>
  <item id="webstore_data_fetcher" hash_code="26302604" type="0" content_hash_code="24000746" os_list="linux,windows" file_path="chrome/browser/extensions/webstore_data_fetcher.cc"/>

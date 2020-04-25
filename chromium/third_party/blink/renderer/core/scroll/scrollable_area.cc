@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_shift_tracker.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
+#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/scroll/programmatic_scroll_animator.h"
 #include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
@@ -52,10 +53,11 @@
 
 namespace blink {
 
-int ScrollableArea::PixelsPerLineStep(ChromeClient* host) {
-  if (!host)
+int ScrollableArea::PixelsPerLineStep(LocalFrame* frame) {
+  if (!frame)
     return kPixelsPerLineStep;
-  return host->WindowToViewportScalar(kPixelsPerLineStep);
+  return frame->GetPage()->GetChromeClient().WindowToViewportScalar(
+      frame, kPixelsPerLineStep);
 }
 
 float ScrollableArea::MinFractionToStepWhenPaging() {
@@ -131,10 +133,6 @@ ProgrammaticScrollAnimator& ScrollableArea::GetProgrammaticScrollAnimator()
   }
 
   return *programmatic_scroll_animator_;
-}
-
-GraphicsLayer* ScrollableArea::LayerForContainer() const {
-  return LayerForScrolling() ? LayerForScrolling()->Parent() : nullptr;
 }
 
 ScrollbarOrientation ScrollableArea::ScrollbarOrientationFromDirection(
@@ -389,10 +387,7 @@ void ScrollableArea::ScrollOffsetChanged(const ScrollOffset& offset,
         GetScrollOffset() - old_offset, scroll_type);
   }
 
-  if (GetLayoutBox() &&
-      (RuntimeEnabledFeatures::FirstContentfulPaintPlusPlusEnabled() ||
-       RuntimeEnabledFeatures::ElementTimingEnabled(
-           &GetLayoutBox()->GetDocument()))) {
+  if (GetLayoutBox()) {
     if (offset_changed && GetLayoutBox()->GetFrameView() &&
         GetLayoutBox()
             ->GetFrameView()
@@ -754,7 +749,7 @@ ScrollOffset ScrollableArea::ClampScrollOffset(
 }
 
 int ScrollableArea::LineStep(ScrollbarOrientation) const {
-  return PixelsPerLineStep(GetChromeClient());
+  return PixelsPerLineStep(GetLayoutBox()->GetFrame());
 }
 
 int ScrollableArea::PageStep(ScrollbarOrientation orientation) const {
@@ -824,7 +819,7 @@ CompositorElementId ScrollableArea::GetScrollbarElementId(
           ? CompositorElementIdNamespace::kHorizontalScrollbar
           : CompositorElementIdNamespace::kVerticalScrollbar;
   return CompositorElementIdFromUniqueObjectId(
-      scrollable_element_id.GetInternalValue(), element_id_namespace);
+      scrollable_element_id.GetStableId(), element_id_namespace);
 }
 
 void ScrollableArea::OnScrollFinished() {

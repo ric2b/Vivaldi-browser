@@ -57,7 +57,7 @@ TEST_F(DisplayUtilTest, DisplayZooms) {
 }
 
 TEST_F(DisplayUtilTest, DisplayZoomsWithInternalDsf) {
-  std::vector<float> kDsfs = {1.25f, 1.6f, 2.f, 2.25f, 2.5f};
+  std::vector<float> kDsfs = {1.25f, 1.6f, 1.77777f, 2.f, 2.25f, 2.66666f};
 
   for (const auto& dsf : kDsfs) {
     SCOPED_TRACE(base::StringPrintf("dsf=%f", dsf));
@@ -69,6 +69,7 @@ TEST_F(DisplayUtilTest, DisplayZoomsWithInternalDsf) {
         checks |= 0x01;
       if (WithinEpsilon(zoom_values[j], 1.f))
         checks |= 0x02;
+      EXPECT_LT(0.0f, zoom_values[j]);
     }
     EXPECT_TRUE(checks & 0x01) << "Inverse of " << dsf << " not on the list.";
     EXPECT_TRUE(checks & 0x02) << "Zoom level of unity is not on the list.";

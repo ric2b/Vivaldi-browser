@@ -6,8 +6,8 @@
 
 #import "base/logging.h"
 #import "ios/chrome/browser/ui/badges/badge_button.h"
-#import "ios/chrome/browser/ui/badges/badge_button_action_handler.h"
 #import "ios/chrome/browser/ui/badges/badge_constants.h"
+#import "ios/chrome/browser/ui/badges/badge_delegate.h"
 #import "ios/chrome/common/colors/dynamic_color_util.h"
 #import "ios/chrome/common/colors/semantic_color_names.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -17,22 +17,7 @@
 #error "This file requires ARC support."
 #endif
 
-@interface BadgeButtonFactory ()
-
-// Action handlers for the buttons.
-@property(nonatomic, strong) BadgeButtonActionHandler* actionHandler;
-
-@end
-
 @implementation BadgeButtonFactory
-
-- (instancetype)initWithActionHandler:(BadgeButtonActionHandler*)actionHandler {
-  self = [super init];
-  if (self) {
-    _actionHandler = actionHandler;
-  }
-  return self;
-}
 
 - (BadgeButton*)getBadgeButtonForBadgeType:(BadgeType)badgeType {
   switch (badgeType) {
@@ -43,6 +28,8 @@
       return [self passwordsUpdateBadgeButton];
     case BadgeType::kBadgeTypeIncognito:
       return [self incognitoBadgeButton];
+    case BadgeType::kBadgeTypeOverflow:
+      return [self overflowBadgeButton];
     case BadgeType::kBadgeTypeNone:
       NOTREACHED() << "A badge should not have kBadgeTypeNone";
       return nil;
@@ -56,7 +43,7 @@
       [self createButtonForType:BadgeType::kBadgeTypePasswordSave
                      imageNamed:@"infobar_passwords_icon"
                   renderingMode:UIImageRenderingModeAlwaysTemplate];
-  [button addTarget:self.actionHandler
+  [button addTarget:self.delegate
                 action:@selector(passwordsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
   button.accessibilityIdentifier =
@@ -71,7 +58,7 @@
       [self createButtonForType:BadgeType::kBadgeTypePasswordUpdate
                      imageNamed:@"infobar_passwords_icon"
                   renderingMode:UIImageRenderingModeAlwaysTemplate];
-  [button addTarget:self.actionHandler
+  [button addTarget:self.delegate
                 action:@selector(passwordsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
   button.accessibilityIdentifier =
@@ -96,6 +83,20 @@
   button.accessibilityIdentifier = kBadgeButtonIncognitoAccessibilityIdentifier;
   button.accessibilityLabel =
       l10n_util::GetNSString(IDS_IOS_BADGE_INCOGNITO_HINT);
+  return button;
+}
+
+- (BadgeButton*)overflowBadgeButton {
+  BadgeButton* button =
+      [self createButtonForType:BadgeType::kBadgeTypeOverflow
+                     imageNamed:@"wrench_badge"
+                  renderingMode:UIImageRenderingModeAlwaysTemplate];
+  [button addTarget:self.delegate
+                action:@selector(overflowBadgeButtonTapped:)
+      forControlEvents:UIControlEventTouchUpInside];
+  button.accessibilityIdentifier = kBadgeButtonOverflowAccessibilityIdentifier;
+  button.accessibilityLabel =
+      l10n_util::GetNSString(IDS_IOS_OVERFLOW_BADGE_HINT);
   return button;
 }
 

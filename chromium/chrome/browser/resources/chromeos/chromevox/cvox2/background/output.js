@@ -138,6 +138,16 @@ Output.ROLE_INFO_ = {
   alert: {msgId: 'role_alert'},
   alertDialog: {msgId: 'role_alertdialog', outputContextFirst: true},
   article: {msgId: 'role_article', inherits: 'abstractItem'},
+  annotationAttribution:
+      {msgId: 'role_annotation_attribution', inherits: 'abstractContainer'},
+  annotationCommentary:
+      {msgId: 'role_annotation_commentary', inherits: 'abstractContainer'},
+  annotationPresence:
+      {msgId: 'role_annotation_presence', inherits: 'abstractContainer'},
+  annotationRevision:
+      {msgId: 'role_annotation_revision', inherits: 'abstractContainer'},
+  annotationSuggestion:
+      {msgId: 'role_annotation_suggestion', inherits: 'abstractContainer'},
   application: {msgId: 'role_application', inherits: 'abstractContainer'},
   banner: {msgId: 'role_banner', inherits: 'abstractContainer'},
   button: {msgId: 'role_button', earconId: 'BUTTON'},
@@ -1158,9 +1168,11 @@ Output.prototype = {
    * @param {!Array<Spannable>} buff Buffer to receive rendered output.
    * @param {!OutputRulesStr} ruleStr
    * @param {!AutomationNode=} opt_prevNode
+   * @param {!Object<string,(string|number|boolean|Function|Array<string>)>=}
+   *     opt_properties
    * @private
    */
-  format_: function(node, format, buff, ruleStr, opt_prevNode) {
+  format_: function(node, format, buff, ruleStr, opt_prevNode, opt_properties) {
     var tokens = [];
     var args = null;
 
@@ -1172,7 +1184,7 @@ Output.prototype = {
       tokens = [format];
     }
 
-    var speechProps = null;
+    var speechProps = opt_properties || null;
     tokens.forEach(function(token) {
       // Ignore empty tokens.
       if (!token)
@@ -1220,7 +1232,8 @@ Output.prototype = {
             }
           }
           options.annotation.push(token);
-          if (selectedText && !this.formatOptions_.braille) {
+          if (selectedText && !this.formatOptions_.braille &&
+              node.state[StateType.FOCUSED]) {
             this.append_(buff, selectedText, options);
             this.append_(buff, Msgs.getMsg('selected'));
             ruleStr.writeTokenWithValue(token, selectedText);
@@ -1248,13 +1261,12 @@ Output.prototype = {
              * Appends outputString to the output buffer in newLanguage.
              * @param {!Array<Spannable>} buff
              * @param {{isUnique: (boolean|undefined),
-             *      annotation: !Array<*>}} opt_options
+             *      annotation: !Array<*>}} options
              * @param {string} newLanguage
              * @param {string} outputString
              */
             var appendStringWithLanguage = function(
-                                               buff, options, newLanguage,
-                                               outputString) {
+                buff, options, newLanguage, outputString) {
               var speechProps = new Output.SpeechProperties();
               // Set output language.
               speechProps['lang'] = newLanguage;
@@ -1263,10 +1275,11 @@ Output.prototype = {
               // Attach associated SpeechProperties if the buffer is non-empty.
               if (buff.length > 0)
                 buff[buff.length - 1].setSpan(speechProps, 0, 0);
-            }.bind(this, buff, options);
+            };
             // Cut up node name into multiple spans with different languages.
             LanguageSwitching.assignLanguagesForStringAttribute(
-                node, 'name', appendStringWithLanguage);
+                node, 'name',
+                appendStringWithLanguage.bind(this, buff, options));
           } else {
             // Append entire node name.
             // TODO(akihiroota): Follow-up with dtseng about why we append empty
@@ -1479,10 +1492,10 @@ Output.prototype = {
           } else {
             ruleStr.write(token);
             this.format_(
-                node, ` @cell_summary($if($ariaCellRowIndex, $ariaCellRowIndex,
-                    $tableCellRowIndex),
-                $if($ariaCellColumnIndex, $ariaCellColumnIndex,
-                     $tableCellColumnIndex))`,
+                node, `@cell_summary($if($tableCellAriaRowIndex,
+                               $tableCellAriaRowIndex, $tableCellRowIndex),
+                    $if($tableCellAriaColumnIndex, $tableCellAriaColumnIndex,
+                        $tableCellColumnIndex))`,
                 buff, ruleStr);
           }
         } else if (token == 'node') {
@@ -1631,7 +1644,8 @@ Output.prototype = {
       } else if (prefix == '@') {
         ruleStr.write(' @');
         if (this.formatOptions_.auralStyle) {
-          speechProps = new Output.SpeechProperties();
+          if (!speechProps)
+            speechProps = new Output.SpeechProperties();
           speechProps['relativePitch'] = -0.2;
         }
         var isPluralized = (token[0] == '@');
@@ -2095,6 +2109,10 @@ Output.prototype = {
       return;
     }
 
+    // Hints should be delayed.
+    var hintProperties = new Output.SpeechProperties();
+    hintProperties['delay'] = true;
+
     ruleStr.write('hint_: ');
     if (EventSourceState.get() == EventSourceType.TOUCH_GESTURE) {
       if (node.state[StateType.EDITABLE]) {
@@ -2102,44 +2120,62 @@ Output.prototype = {
             node,
             node.state[StateType.FOCUSED] ? '@hint_is_editing' :
                                             '@hint_double_tap_to_edit',
-            buff, ruleStr);
+            buff, ruleStr, undefined, hintProperties);
         return;
       }
 
       var isWithinVirtualKeyboard = AutomationUtil.getAncestors(node).find(
           (n) => n.role == RoleType.KEYBOARD);
       if (node.defaultActionVerb != 'none' && !isWithinVirtualKeyboard)
-        this.format_(node, '@hint_double_tap', buff, ruleStr);
+        this.format_(
+            node, '@hint_double_tap', buff, ruleStr, undefined, hintProperties);
 
       var enteredVirtualKeyboard =
           uniqueAncestors.find((n) => n.role == RoleType.KEYBOARD);
       if (enteredVirtualKeyboard)
-        this.format_(node, '@hint_touch_type', buff, ruleStr);
+        this.format_(
+            node, '@hint_touch_type', buff, ruleStr, undefined, hintProperties);
 
       return;
     }
 
     if (node.state[StateType.EDITABLE] && cvox.ChromeVox.isStickyPrefOn)
-      this.format_(node, '@sticky_mode_enabled', buff, ruleStr);
+      this.format_(
+          node, '@sticky_mode_enabled', buff, ruleStr, undefined,
+          hintProperties);
 
     if (node.state[StateType.EDITABLE] && node.state[StateType.FOCUSED] &&
         !this.formatOptions_.braille) {
       if (node.state[StateType.MULTILINE] ||
           node.state[StateType.RICHLY_EDITABLE])
-        this.format_(node, '@hint_search_within_text_field', buff, ruleStr);
+        this.format_(
+            node, '@hint_search_within_text_field', buff, ruleStr, undefined,
+            hintProperties);
     }
 
+    if (node.placeholder)
+      this.append_(buff, node.placeholder);
+
+    if (node.tooltip)
+      this.append_(buff, node.tooltip);
+
     if (AutomationPredicate.checkable(node))
-      this.format_(node, '@hint_checkable', buff, ruleStr);
+      this.format_(
+          node, '@hint_checkable', buff, ruleStr, undefined, hintProperties);
     else if (AutomationPredicate.clickable(node))
-      this.format_(node, '@hint_clickable', buff, ruleStr);
+      this.format_(
+          node, '@hint_clickable', buff, ruleStr, undefined, hintProperties);
 
     if (node.autoComplete == 'list' || node.autoComplete == 'both' ||
         node.state[StateType.AUTOFILL_AVAILABLE]) {
-      this.format_(node, '@hint_autocomplete_list', buff, ruleStr);
+      this.format_(
+          node, '@hint_autocomplete_list', buff, ruleStr, undefined,
+          hintProperties);
     }
     if (node.autoComplete == 'inline' || node.autoComplete == 'both')
-      this.format_(node, '@hint_autocomplete_inline', buff, ruleStr);
+      this.format_(
+          node, '@hint_autocomplete_inline', buff, ruleStr, undefined,
+          hintProperties);
     if (node.accessKey) {
       this.append_(buff, Msgs.getMsg('access_key', [node.accessKey]));
       ruleStr.write(Msgs.getMsg('access_key', [node.accessKey]));
@@ -2148,14 +2184,17 @@ Output.prototype = {
     // Ancestry based hints.
     if (uniqueAncestors.find(
             /** @type {function(?) : boolean} */ (AutomationPredicate.table)))
-      this.format_(node, '@hint_table', buff, ruleStr);
+      this.format_(
+          node, '@hint_table', buff, ruleStr, undefined, hintProperties);
     if (uniqueAncestors.find(/** @type {function(?) : boolean} */ (
             AutomationPredicate.roles([RoleType.MENU, RoleType.MENU_BAR]))))
-      this.format_(node, '@hint_menu', buff, ruleStr);
+      this.format_(
+          node, '@hint_menu', buff, ruleStr, undefined, hintProperties);
     if (uniqueAncestors.find(/** @type {function(?) : boolean} */ (function(n) {
           return !!n.details;
         })))
-      this.format_(node, '@hint_details', buff, ruleStr);
+      this.format_(
+          node, '@hint_details', buff, ruleStr, undefined, hintProperties);
   },
 
   /**

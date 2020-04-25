@@ -46,11 +46,7 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/api/tabs/tabs_private_api.h"
-#include "extensions/browser/guest_view/web_view/web_view_constants.h"
-#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
-
-using extensions::WebViewGuest;
 #endif
 
 namespace {
@@ -226,8 +222,17 @@ void PermissionContextBase::RequestPermission(
   PermissionUmaUtil::RecordEmbargoPromptSuppression(
       PermissionEmbargoStatus::NOT_EMBARGOED);
 
+  // Vivaldi does the permission handling in WebViewPermissionHelper, not
+  // PermissionManager, except for geolocation, notifications and plugins which
+  // we do in |PermissionContextBase::DecidePermission|.
+  if (vivaldi::IsVivaldiRunning()) {
+    PermissionContextBase::DecidePermission(web_contents, id, requesting_origin,
+      embedding_origin, user_gesture,
+      std::move(callback));
+  } else {
   DecidePermission(web_contents, id, requesting_origin, embedding_origin,
                    user_gesture, std::move(callback));
+  }
 }
 
 void PermissionContextBase::UserMadePermissionDecision(
@@ -375,11 +380,7 @@ void PermissionContextBase::DecidePermission(
 
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  // NOTE(yngve) extensions are not allowed to create webviews when running as
-  // Vivaldi, so this is only non-null for Vivaldi, but adding check of Vivaldi
-  // just to be on the safe side
-  WebViewGuest *guest = WebViewGuest::FromWebContents(web_contents);
-  if (guest && vivaldi::IsVivaldiRunning()) {
+  if (vivaldi::IsVivaldiRunning()) {
     extensions::WebViewPermissionHelper* web_view_permission_helper =
         extensions::WebViewPermissionHelper::FromWebContents(web_contents);
     WebViewPermissionType helper_permission_type =
@@ -426,7 +427,7 @@ void PermissionContextBase::DecidePermission(
     }
     return;
   }
-#endif
+#endif // ENABLE_EXTENSIONS
 
   PermissionRequestManager* permission_request_manager =
       PermissionRequestManager::FromWebContents(web_contents);
@@ -451,39 +452,6 @@ void PermissionContextBase::DecidePermission(
           .second;
   DCHECK(inserted) << "Duplicate id " << id.ToString();
   permission_request_manager->AddRequest(request);
-}
-
-int PermissionContextBase::RemoveBridgeID(int bridge_id) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  std::map<int, int>::iterator bridge_itr =
-      bridge_id_to_request_id_map_.find(bridge_id);
-
-  if (bridge_itr == bridge_id_to_request_id_map_.end())
-    return webview::kInvalidPermissionRequestID;
-
-  int request_id = bridge_itr->second;
-  bridge_id_to_request_id_map_.erase(bridge_itr);
-#else
-  int request_id = 0;
-#endif
-  return request_id;
-}
-
-void PermissionContextBase::OnPermissionRequestResponse(
-        const PermissionRequestID& id,
-        const GURL& requesting_origin,
-        const GURL& embedding_origin,
-        bool user_gesture,
-        BrowserPermissionCallback callback,
-        bool allowed,
-        const std::string &user_input
-    ) {
-  RemoveBridgeID(id.request_id());
-  PermissionDecided(id,
-                    requesting_origin,
-                    embedding_origin,
-                    std::move(callback),
-                    allowed ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
 }
 
 void PermissionContextBase::PermissionDecided(

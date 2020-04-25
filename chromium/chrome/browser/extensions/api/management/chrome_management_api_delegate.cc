@@ -227,7 +227,7 @@ class ChromeAppForLinkDelegate : public extensions::AppForLinkDelegate {
     web_app_info->open_as_window = false;
 
     if (!image_result.image.IsEmpty()) {
-      WebApplicationInfo::IconInfo icon;
+      WebApplicationIconInfo icon;
       icon.data = image_result.image.AsBitmap();
       icon.width = icon.data.width();
       icon.height = icon.data.height();
@@ -305,10 +305,10 @@ void ChromeManagementAPIDelegate::LaunchAppFunctionDelegate(
   extensions::LaunchContainer launch_container =
       GetLaunchContainer(extensions::ExtensionPrefs::Get(context), extension);
   Profile* profile = Profile::FromBrowserContext(context);
-  apps::LaunchService::Get(profile)->OpenApplication(
-      AppLaunchParams(profile, extension->id(), launch_container,
-                      WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                      apps::mojom::AppLaunchSource::kSourceManagementApi));
+  apps::LaunchService::Get(profile)->OpenApplication(apps::AppLaunchParams(
+      extension->id(), launch_container,
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      apps::mojom::AppLaunchSource::kSourceManagementApi));
 
 #if defined(OS_CHROMEOS)
   chromeos::DemoSession::RecordAppLaunchSourceIfInDemoMode(

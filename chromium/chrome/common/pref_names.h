@@ -270,7 +270,10 @@ extern const char kHatsDeviceIsSelected[];
 extern const char kQuickUnlockPinSecret[];
 extern const char kQuickUnlockFingerprintRecord[];
 extern const char kEolStatus[];
+extern const char kEndOfLifeDate[];
 extern const char kEolNotificationDismissed[];
+extern const char kFirstEolWarningDismissed[];
+extern const char kSecondEolWarningDismissed[];
 extern const char kPinUnlockFeatureNotificationShown[];
 extern const char kFingerprintUnlockFeatureNotificationShown[];
 extern const char kQuickUnlockModeWhitelist[];
@@ -316,6 +319,7 @@ extern const char kStartupBrowserWindowLaunchSuppressed[];
 extern const char kLoginExtensionApiDataForNextLoginAttempt[];
 extern const char kSettingsShowBrowserBanner[];
 extern const char kSettingsShowOSBanner[];
+extern const char kDeviceLoginScreenWebUsbAllowDevicesForUrls[];
 #endif  // defined(OS_CHROMEOS)
 extern const char kShowHomeButton[];
 extern const char kSpeechRecognitionFilterProfanities[];
@@ -414,6 +418,7 @@ extern const char kPrintPreviewUseSystemDefaultPrinter[];
 #endif
 
 #if defined(OS_CHROMEOS)
+extern const char kExternalPrintServersWhitelist[];
 extern const char kRecommendedNativePrinters[];
 extern const char kRecommendedNativePrintersAccessMode[];
 extern const char kRecommendedNativePrintersBlacklist[];
@@ -423,12 +428,15 @@ extern const char kUserNativePrintersAllowed[];
 extern const char kPrintingAllowedColorModes[];
 extern const char kPrintingAllowedDuplexModes[];
 extern const char kPrintingAllowedPinModes[];
+extern const char kPrintingAllowedBackgroundGraphicsModes[];
 extern const char kPrintingAllowedPageSizes[];
 extern const char kPrintingColorDefault[];
 extern const char kPrintingDuplexDefault[];
 extern const char kPrintingPinDefault[];
+extern const char kPrintingBackgroundGraphicsDefault[];
 extern const char kPrintingSizeDefault[];
 extern const char kPrintingSendUsernameAndFilenameEnabled[];
+extern const char kPrintJobHistoryExpirationPeriod[];
 #endif  // OS_CHROMEOS
 
 extern const char kDefaultSupervisedUserFilteringBehavior[];
@@ -465,15 +473,16 @@ extern const char kWebRTCNonProxiedUdpEnabled[];
 extern const char kWebRTCIPHandlingPolicy[];
 extern const char kWebRTCUDPPortRange[];
 extern const char kWebRtcEventLogCollectionAllowed[];
+extern const char kWebRtcLocalIpsAllowedUrls[];
 
 #if !defined(OS_ANDROID)
 extern const char kHasSeenWelcomePage[];
-extern const char kShowFirstRunDefaultSearchShortcut[];
 #endif
 
-#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if defined(OS_WIN)
+// Only used in branded builds.
 extern const char kNaviOnboardGroup[];
-#endif  // defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#endif  // defined(OS_WIN)
 
 // Deprecated preference for metric / crash reporting on Android. Use
 // kMetricsReportingEnabled instead.
@@ -485,6 +494,9 @@ extern const char kProfileLastUsed[];
 extern const char kProfilesLastActive[];
 extern const char kProfilesNumCreated[];
 extern const char kProfileInfoCache[];
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+extern const char kLegacyProfileNamesMigrated[];
+#endif  // !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 extern const char kProfileCreatedByVersion[];
 extern const char kProfilesDeleted[];
 
@@ -526,6 +538,12 @@ extern const char kAllowFileSelectionDialogs[];
 extern const char kDefaultTasksByMimeType[];
 extern const char kDefaultTasksBySuffix[];
 
+extern const char kSharedClipboardEnabled[];
+
+#if BUILDFLAG(ENABLE_CLICK_TO_CALL)
+extern const char kClickToCallEnabled[];
+#endif  // BUILDFLAG(ENABLE_CLICK_TO_CALL)
+
 extern const char kSelectFileLastDirectory[];
 
 extern const char kExcludedSchemes[];
@@ -557,6 +575,7 @@ extern const char kNtpCollapsedSyncPromo[];
 #else
 extern const char kNtpCustomBackgroundDict[];
 extern const char kNtpCustomBackgroundLocalToDevice[];
+extern const char kNtpPromoBlocklist[];
 extern const char kNtpSearchSuggestionsBlocklist[];
 extern const char kNtpSearchSuggestionsImpressions[];
 extern const char kNtpSearchSuggestionsOptOut[];
@@ -699,6 +718,8 @@ extern const char kTabStripStackedLayout[];
 
 extern const char kRegisteredBackgroundContents[];
 
+extern const char kTotalMemoryLimitMb[];
+
 extern const char kAuthSchemes[];
 extern const char kDisableAuthNegotiateCnameLookup[];
 extern const char kEnableAuthNegotiatePort[];
@@ -727,6 +748,7 @@ extern const char kSSLVersionMax[];
 extern const char kCipherSuiteBlacklist[];
 extern const char kH2ClientCertCoalescingHosts[];
 extern const char kHSTSPolicyBypassList[];
+extern const char kTLS13HardeningForLocalAnchorsEnabled[];
 
 extern const char kBuiltInDnsClientEnabled[];
 extern const char kDnsOverHttpsMode[];
@@ -831,6 +853,8 @@ extern const char kRegisteredSupervisedUserWhitelists[];
 
 #if !defined(OS_ANDROID)
 extern const char kCloudReportingEnabled[];
+extern const char kCloudExtensionRequestEnabled[];
+extern const char kCloudExtensionRequestIds[];
 #endif
 
 #if BUILDFLAG(ENABLE_BACKGROUND_MODE)
@@ -884,11 +908,10 @@ extern const char kDSEWasDisabledByPolicy[];
 extern const char kWebShareVisitedTargets[];
 
 #if defined(OS_WIN)
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+// Only used in branded builds.
 extern const char kIncompatibleApplications[];
 extern const char kModuleBlacklistCacheMD5Digest[];
 extern const char kThirdPartyBlockingEnabled[];
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #endif  // defined(OS_WIN)
 
 // Windows mitigation policies.
@@ -948,7 +971,7 @@ extern const char kBlockAutoplayEnabled[];
 extern const char kNotificationNextPersistentId[];
 extern const char kNotificationNextTriggerTime[];
 
-extern const char kTabLifecyclesEnabled[];
+extern const char kTabFreezingEnabled[];
 
 extern const char kEnterpriseHardwarePlatformAPIEnabled[];
 
@@ -965,16 +988,25 @@ extern const char kUsageStatsEnabled[];
 #if defined(OS_CHROMEOS)
 extern const char kClientCertificateManagementAllowed[];
 extern const char kCACertificateManagementAllowed[];
+#endif
+
+#if BUILDFLAG(BUILTIN_CERT_VERIFIER_POLICY_SUPPORTED)
 extern const char kBuiltinCertificateVerifierEnabled[];
 #endif
 
 extern const char kSharingVapidKey[];
 extern const char kSharingSyncedDevices[];
 extern const char kSharingFCMRegistration[];
+extern const char kSharingLocalSharingInfo[];
 
 #if !defined(OS_ANDROID)
 extern const char kHatsSurveyMetadata[];
 #endif  // !defined(OS_ANDROID)
+
+extern const char kCorsMitigationList[];
+extern const char kCorsLegacyModeEnabled[];
+
+extern const char kExternalProtocolDialogShowAlwaysOpenCheckbox[];
 
 }  // namespace prefs
 

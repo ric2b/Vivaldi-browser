@@ -28,6 +28,8 @@ import org.chromium.chrome.browser.usage_stats.UsageStatsConsentDialog;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * Fragment to keep track of the all the privacy related preferences.
  */
@@ -38,6 +40,8 @@ public class PrivacyPreferences
     private static final String PREF_USAGE_STATS = "usage_stats_reporting";
     private static final String PREF_DO_NOT_TRACK = "do_not_track";
     private static final String PREF_SYNC_AND_SERVICES_LINK = "sync_and_services_link";
+    // Vivaldi
+    private static final String PREF_CONTEXTUAL_SEARCH = "contextual_search";
 
     private ManagedPreferenceDelegate mManagedPreferenceDelegate;
 
@@ -61,7 +65,9 @@ public class PrivacyPreferences
         networkPredictionPref.setChecked(prefServiceBridge.getNetworkPredictionEnabled());
         networkPredictionPref.setOnPreferenceChangeListener(this);
         networkPredictionPref.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
-
+        if (ChromeApplication.isVivaldi())
+            getPreferenceScreen().removePreference(findPreference(PREF_SYNC_AND_SERVICES_LINK));
+        else {
         Preference syncAndServicesLink = findPreference(PREF_SYNC_AND_SERVICES_LINK);
         NoUnderlineClickableSpan linkSpan = new NoUnderlineClickableSpan(getResources(), view -> {
             PreferencesLauncher.launchSettingsPage(getActivity(), SyncAndServicesPreferences.class,
@@ -70,7 +76,7 @@ public class PrivacyPreferences
         syncAndServicesLink.setSummary(
                 SpanApplier.applySpans(getString(R.string.privacy_sync_and_services_link),
                         new SpanApplier.SpanInfo("<link>", "</link>", linkSpan)));
-
+        }
         updateSummaries();
     }
 
@@ -99,9 +105,6 @@ public class PrivacyPreferences
     public void updateSummaries() {
         PrefServiceBridge prefServiceBridge = PrefServiceBridge.getInstance();
 
-        CharSequence textOn = getActivity().getResources().getText(R.string.text_on);
-        CharSequence textOff = getActivity().getResources().getText(R.string.text_off);
-
         CheckBoxPreference canMakePaymentPref =
                 (CheckBoxPreference) findPreference(PREF_CAN_MAKE_PAYMENT);
         if (canMakePaymentPref != null) {
@@ -111,7 +114,8 @@ public class PrivacyPreferences
 
         Preference doNotTrackPref = findPreference(PREF_DO_NOT_TRACK);
         if (doNotTrackPref != null) {
-            doNotTrackPref.setSummary(prefServiceBridge.isDoNotTrackEnabled() ? textOn : textOff);
+            doNotTrackPref.setSummary(
+                    prefServiceBridge.isDoNotTrackEnabled() ? R.string.text_on : R.string.text_off);
         }
 
         Preference usageStatsPref = findPreference(PREF_USAGE_STATS);
@@ -132,6 +136,12 @@ public class PrivacyPreferences
                 getPreferenceScreen().removePreference(usageStatsPref);
             }
         }
+        // Vivaldi
+        Preference contextualPref = findPreference(PREF_CONTEXTUAL_SEARCH);
+        if (contextualPref != null)
+            contextualPref.setSummary(
+                    prefServiceBridge.isContextualSearchDisabled() ?
+                            R.string.text_off : R.string.text_on);
     }
 
     private ManagedPreferenceDelegate createManagedPreferenceDelegate() {
@@ -157,9 +167,8 @@ public class PrivacyPreferences
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.menu_id_targeted_help) {
-            HelpAndFeedback.getInstance(getActivity())
-                    .show(getActivity(), getString(R.string.help_context_privacy),
-                            Profile.getLastUsedProfile(), null);
+            HelpAndFeedback.getInstance().show(getActivity(),
+                    getString(R.string.help_context_privacy), Profile.getLastUsedProfile(), null);
             return true;
         }
         return false;

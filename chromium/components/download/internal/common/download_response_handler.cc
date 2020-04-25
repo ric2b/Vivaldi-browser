@@ -54,7 +54,7 @@ DownloadResponseHandler::DownloadResponseHandler(
     bool is_parallel_request,
     bool is_transient,
     bool fetch_error_body,
-    bool follow_cross_origin_redirects,
+    network::mojom::RedirectMode cross_origin_redirects,
     const DownloadUrlParameters::RequestHeadersType& request_headers,
     const std::string& request_origin,
     DownloadSource download_source,
@@ -69,7 +69,7 @@ DownloadResponseHandler::DownloadResponseHandler(
       referrer_policy_(resource_request->referrer_policy),
       is_transient_(is_transient),
       fetch_error_body_(fetch_error_body),
-      follow_cross_origin_redirects_(follow_cross_origin_redirects),
+      cross_origin_redirects_(cross_origin_redirects),
       first_origin_(url::Origin::Create(resource_request->url)),
       request_headers_(request_headers),
       request_origin_(request_origin),
@@ -158,29 +158,40 @@ DownloadResponseHandler::CreateDownloadCreateInfo(
 void DownloadResponseHandler::OnReceiveRedirect(
     const net::RedirectInfo& redirect_info,
     network::mojom::URLResponseHeadPtr head) {
-  if (!follow_cross_origin_redirects_ &&
-      !first_origin_.IsSameOriginWith(
-          url::Origin::Create(redirect_info.new_url))) {
-    abort_reason_ = DOWNLOAD_INTERRUPT_REASON_SERVER_CROSS_ORIGIN_REDIRECT;
-    url_chain_.push_back(redirect_info.new_url);
-    method_ = redirect_info.new_method;
-    referrer_ = GURL(redirect_info.new_referrer);
-    referrer_policy_ = redirect_info.new_referrer_policy;
+  // Check if redirect URL is web safe.
+  if (delegate_ && !delegate_->CanRequestURL(redirect_info.new_url)) {
+    abort_reason_ = DOWNLOAD_INTERRUPT_REASON_NETWORK_INVALID_REQUEST;
     OnComplete(network::URLLoaderCompletionStatus(net::OK));
     return;
   }
+
+  if (!first_origin_.IsSameOriginWith(
+          url::Origin::Create(redirect_info.new_url))) {
+    // Cross-origin redirect.
+    switch (cross_origin_redirects_) {
+      case network::mojom::RedirectMode::kFollow:
+        // Pretend we didn't notice, and keep going.
+        break;
+      case network::mojom::RedirectMode::kManual:
+        abort_reason_ = DOWNLOAD_INTERRUPT_REASON_SERVER_CROSS_ORIGIN_REDIRECT;
+        url_chain_.push_back(redirect_info.new_url);
+        method_ = redirect_info.new_method;
+        referrer_ = GURL(redirect_info.new_referrer);
+        referrer_policy_ = redirect_info.new_referrer_policy;
+        OnComplete(network::URLLoaderCompletionStatus(net::OK));
+        return;
+      case network::mojom::RedirectMode::kError:
+        abort_reason_ = DOWNLOAD_INTERRUPT_REASON_NETWORK_INVALID_REQUEST;
+        OnComplete(network::URLLoaderCompletionStatus(net::OK));
+        return;
+    }
+  }
+
   if (is_partial_request_) {
     // A redirect while attempting a partial resumption indicates a potential
     // middle box. Trigger another interruption so that the
     // DownloadItem can retry.
     abort_reason_ = DOWNLOAD_INTERRUPT_REASON_SERVER_UNREACHABLE;
-    OnComplete(network::URLLoaderCompletionStatus(net::OK));
-    return;
-  }
-
-  // Check if redirect URL is web safe.
-  if (delegate_ && !delegate_->CanRequestURL(redirect_info.new_url)) {
-    abort_reason_ = DOWNLOAD_INTERRUPT_REASON_NETWORK_INVALID_REQUEST;
     OnComplete(network::URLLoaderCompletionStatus(net::OK));
     return;
   }
@@ -214,7 +225,7 @@ void DownloadResponseHandler::OnStartLoadingResponseBody(
   mojom::DownloadStreamHandlePtr stream_handle =
       mojom::DownloadStreamHandle::New();
   stream_handle->stream = std::move(body);
-  stream_handle->client_request = mojo::MakeRequest(&client_ptr_);
+  stream_handle->client_receiver = client_remote_.BindNewPipeAndPassReceiver();
   OnResponseStarted(std::move(stream_handle));
 }
 
@@ -228,8 +239,8 @@ void DownloadResponseHandler::OnComplete(
       static_cast<net::Error>(status.error_code), has_strong_validators_,
       cert_status_, is_partial_request_, abort_reason_);
 
-  if (client_ptr_) {
-    client_ptr_->OnStreamCompleted(
+  if (client_remote_) {
+    client_remote_->OnStreamCompleted(
         ConvertInterruptReasonToMojoNetworkRequestStatus(reason));
   }
 

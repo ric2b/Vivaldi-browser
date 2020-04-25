@@ -16,8 +16,7 @@ AnimationEvent::AnimationEvent(AnimationEvent::Type type,
       group_id(group_id),
       target_property(target_property),
       monotonic_time(monotonic_time),
-      is_impl_only(false),
-      opacity(0.f) {}
+      is_impl_only(false) {}
 
 AnimationEvent::AnimationEvent(const AnimationEvent& other) {
   type = other.type;
@@ -26,9 +25,6 @@ AnimationEvent::AnimationEvent(const AnimationEvent& other) {
   target_property = other.target_property;
   monotonic_time = other.monotonic_time;
   is_impl_only = other.is_impl_only;
-  opacity = other.opacity;
-  transform = other.transform;
-  filters = other.filters;
   animation_start_time = other.animation_start_time;
   if (other.curve)
     curve = other.curve->Clone();
@@ -41,9 +37,6 @@ AnimationEvent& AnimationEvent::operator=(const AnimationEvent& other) {
   target_property = other.target_property;
   monotonic_time = other.monotonic_time;
   is_impl_only = other.is_impl_only;
-  opacity = other.opacity;
-  transform = other.transform;
-  filters = other.filters;
   animation_start_time = other.animation_start_time;
   if (other.curve)
     curve = other.curve->Clone();

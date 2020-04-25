@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="el">
+<translation id="1029351048239796117">Ο Vivaldi χρειάζεται άδεια πρόσβασης στο μικρόφωνό σας για αυτόν τον ιστότοπο.</translation>
+<translation id="1063227610401477317">Εφαρμογή Αλλαγών</translation>
+<translation id="1067048845568873861">Δημιουργήθηκε</translation>
+<translation id="1151669774236491028">Το Vivaldi.net αντιμετωπίζει προβλήματα: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="1193152013480891461">Δημιουργήστε έναν Λογαριασμό Vivaldi</translation>
+<translation id="119944043368869598">Εκκαθάριση όλων</translation>
+<translation id="1228311134236651326">Δεν βρέθηκαν σημειώσεις</translation>
+<translation id="1243314992276662751">Μεταφόρτωση</translation>
+<translation id="1249276067323441352">Δεδομένα για Συγχρονισμό</translation>
+<translation id="1302932907222175914">Αναζήτηση στις σημειώσεις σας</translation>
+<translation id="1644574205037202324">Ιστορικό</translation>
+<translation id="1689333818294560261">Ψευδώνυμο</translation>
+<translation id="1799160781006135561">Ο Κωδικός Πρόσβασης Κρυπτογράφησης Δεν έχει Καθοριστεί</translation>
+<translation id="1887193815546011584">Νέα Ταχεία Κλήση</translation>
+<translation id="1984391066297619717">Αυτόματος Συγχρονισμός</translation>
+<translation id="2071726368047511075">Καταγραφή σελίδας</translation>
+<translation id="2199644148227291099">Είστε βέβαιοι ότι θέλετε να χρησιμοποιήσετε τον κωδικό πρόσβασής σας για κρυπτογράφηση; Αυτό μειώνει σημαντικά την ασφάλεια των συγχρονισμένων δεδομένων σας στο διαδίκτυο.</translation>
+<translation id="2243210264130642074">Η σημείωση αποθηκεύτηκε</translation>
+<translation id="2359808026110333948">Συνέχεια</translation>
+<translation id="2526968784648867272">Καταγραφή Σελίδας...</translation>
+<translation id="2709516037105925701">Αυτόματη συμπλήρωση</translation>
+<translation id="271033894570825754">Νέο</translation>
+<translation id="2745324713975967671">Κωδικός πρόσβασης κρυπτογράφησης</translation>
+<translation id="2818042133587341562">Ο Vivaldi χρειάζεται άδεια πρόσβασης στην κάμερά σας για αυτόν τον ιστότοπο.</translation>
+<translation id="2842985007712546952">Γονικός φάκελος</translation>
+<translation id="2850144663494818309">Αρχικοποίηση του συγχρονισμού ...</translation>
+<translation id="2873951654529031587">Κάδος απορριμμάτων</translation>
+<translation id="2915527103487649658">Συγχρονισμός Όλων των Δεδομένων</translation>
+<translation id="2953995378235516294">Τα δεδομένα του λογαριασμού σας συγχρονισμού είναι κρυπτογραφημένα. Καταχωρίστε τον κωδικό κρυπτογράφησης για να αποκρυπτογραφήσετε.</translation>
+<translation id="2996809686854298943">Απαιτείται διεύθυνση URL</translation>
+<translation id="3177673846235066154">Ο διακομιστής αρνήθηκε τα διαπιστευτήριά σας.</translation>
+<translation id="3183006304368105350">Κλωνοποίηση καρτέλας</translation>
+<translation id="3271422135763022755">Ξεκινήστε να πληκτρολογείτε...</translation>
+<translation id="3335772982573114336">Νέα σημείωση</translation>
+<translation id="33451081266695216">Η σύνδεση τερματίζεται από το διακομιστή.</translation>
+<translation id="3377025655491224618">Ιδιωτική Καρτέλα</translation>
+<translation id="3513566764071045027">Αποσύνδεση</translation>
+<translation id="3723593528923555236">Συνεχίστε Χωρίς Ξεχωριστό Κωδικό Πρόσβασης</translation>
+<translation id="3838463869765243557">Όνομα συσκευής (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">Περιγραφή</translation>
+<translation id="3897711243931585177">ΓΕΝΙΚΑ</translation>
+<translation id="4014682279600355881">Σας συνιστούμε να δημιουργήσετε έναν ισχυρό ξεχωριστό κωδικό κρυπτογράφησης. Ωστόσο, μπορείτε να το αφήσετε κενό - οπότε θα χρησιμοποιήσουμε ξανά τον αποθηκευμένο κωδικό πρόσβασης του λογαριασμού σας.</translation>
+<translation id="4073968054795398875">Ο διακομιστής συγχρονισμού αντιμετωπίζει προβλήματα. Επανάληψη προετοιμασίας συγχρονισμού σύντομα...</translation>
+<translation id="4082980568238151037">Ρυθμίστε τον κωδικό κρυπτογράφησης.</translation>
+<translation id="4145489350420416595">Απρόσμενο σφάλμα.</translation>
+<translation id="4268574628540273656">URL:</translation>
+<translation id="4304224509867189079">Σύνδεση</translation>
+<translation id="4435780204941264251">Εκκαθάριση Δεδομένων Συγχρονισμού</translation>
+<translation id="4532845899244822526">Επιλέξτε φάκελο</translation>
+<translation id="4579489600439872414">Ο συγχρονισμός είναι απενεργοποιημένος στις ρυθμίσεις του Android.</translation>
+<translation id="4589558845651536280">Σε εξέλιξη...</translation>
+<translation id="4752136117982598343">Η σημείωση αποθηκεύτηκε στο <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">Λήψεις</translation>
+<translation id="4833044618885331665">Πρέπει να αναβαθμίσετε το Vivaldi για να χρησιμοποιήσετε το συγχρονισμό.</translation>
+<translation id="4847896847259487518">Αποθήκευση σελίδας στους σελιδοδείκτες</translation>
+<translation id="4890701585167892790">Δεν υπάρχουν σημειώσεις εδώ</translation>
+<translation id="4936710149174207991">Δεν Συγχρονίστηκε</translation>
+<translation id="4954427294703861104">Νέος στο Vivaldi; Δημιουργήστε ένα λογαριασμό.</translation>
+<translation id="504986598654589766">Η περιήγηση σε μια ιδιωτική καρτέλα σημαίνει ότι οι αναζητήσεις, οι επισκέψεις που επισκέπτονται, τα cookies και τα προσωρινά αρχεία δεν θα αποθηκευτούν από τον Vivaldi. Δεν κρυπτογραφεί ή τροποποιεί τη σύνδεσή σας με άλλο τρόπο.</translation>
+<translation id="5161254044473106830">Απαιτείται τίτλος</translation>
+<translation id="5186185447130319458">Ιδιωτικό</translation>
+<translation id="5271549068863921519">Αποθήκευση κωδικού</translation>
+<translation id="5286002386457946212">Σφάλμα πελάτη.</translation>
+<translation id="5290452628447338707">Δεν υπάρχουν σημειώσεις</translation>
+<translation id="5351912500249789547">Το Vivaldi.net απέρριψε τα διαπιστευτήριά σας: Κωδικός λάθους <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">Άνοιγμα Εικόνας</translation>
+<translation id="5421638721143596928">Αποτυχία αποκρυπτογράφησης των διαπιστευτηρίων σας. Παρακαλώ συνδεθείτε ξανά.</translation>
+<translation id="5443210757369395869">Καταγραφή Ορατής Περιοχής</translation>
+<translation id="5448025735280530073">Το Vivaldi χρειάζεται πρόσβαση στην τοποθεσία σας για να μοιραστεί την τοποθεσία σας με αυτόν τον ιστότοπο.</translation>
+<translation id="5510723066938954312">Σελιδοδείκτες και Ταχεία Κλήση</translation>
+<translation id="5525981542754785361">Η σημείωση αποθηκεύτηκε στο <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">Αντιγραφή σε σημείωση</translation>
+<translation id="5765833063161370062">Μετακίνηση σημειώσεων</translation>
+<translation id="5790085346892983794">Επιτυχία</translation>
+<translation id="5803562371819294631">Αυτό θα καταργήσει όλα τα δεδομένα συγχρονισμού που είναι αποθηκευμένα στο διακομιστή συγχρονισμού, θα επαναφέρει τον κωδικό κρυπτογράφησης και θα σας αποσυνδέσει. Είσαι σίγουρος?</translation>
+<translation id="5823830882692559950">Το Vivaldi.net απέρριψε τα διαπιστευτήριά σας: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5841317974325635710">Δημιουργήθηκε Νέα Σημείωση</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> σημείωση}
+          other {<ph name="NOTES_COUNT_MANY" /> σημειώσεις}}</translation>
+<translation id="6012194412768958291">Δεν είναι δυνατή η σύνδεση με το vivaldi.net.</translation>
+<translation id="6027204815015935175">Απαιτείται κωδικός πρόσβασης για αποκρυπτογράφηση.</translation>
+<translation id="6059232451013891645">Φάκελος:</translation>
+<translation id="6077943432358741146">Ταχεία Κλήση</translation>
+<translation id="6091125352818749975">Εκκαθάριση Απομακρυσμένων Συγχρονισμένων Δεδομένων.</translation>
+<translation id="6179463181009746489">Διαγραφή σημειώσεων</translation>
+<translation id="6231148928368101651">Πίνακες</translation>
+<translation id="6406506848690869874">Συγχρονισμός</translation>
+<translation id="6657585470893396449">Κωδικός πρόσβασης</translation>
+<translation id="6682232524697939870">Ο Vivaldi χρειάζεται άδεια πρόσβασης στην κάμερα και το μικρόφωνο για αυτόν τον ιστότοπο.</translation>
+<translation id="6698381487523150993">Δημιουργήθηκε:</translation>
+<translation id="6786747875388722282">Επεκτάσεις</translation>
+<translation id="6887143077297974801">Ο συγχρονισμός απέτυχε να ξεκινήσει.</translation>
+<translation id="6945221475159498467">Επιλογή</translation>
+<translation id="6960734555676205519">Τελευταίος Συγχρονισμός</translation>
+<translation id="7029809446516969842">Κωδικοί πρόσβασης</translation>
+<translation id="7075547914712055886">Επανεκκίνηση Συγχρονισμού</translation>
+<translation id="7222342267839079597">Επιλέξτε έναν ισχυρό κωδικό πρόσβασης κρυπτογράφησης για την προστασία των δεδομένων σας.</translation>
+<translation id="7492794630657957996">Επιβεβαιώστε τον Συγχρονισμό Δεδομένων για να ολοκληρώσετε τη ρύθμιση</translation>
+<translation id="7514365320538308">Λήψη</translation>
+<translation id="7547490097772831952">Καταγραφή Πλήρους Σελίδας</translation>
+<translation id="7725641807765767506">Δεν βρέθηκε ταχεία κλήση</translation>
+<translation id="7765158879357617694">Μετακίνηση</translation>
+<translation id="7822864833609233785">ΓΙΑ ΠΡΟΧΩΡΗΜΕΝΟΥΣ</translation>
+<translation id="798930073512159071">
+
+Γράψτε την Πρώτη σας Σημείωση
+
+Για να αρχίσετε, πατήστε το εικονίδιο Νέα Σημείωση ή επιλέξτε κείμενο σε οποιαδήποτε ιστοσελίδα και δημιουργήστε μια σημείωση από το αναδυόμενο μενού.</translation>
+<translation id="8028021641083150097">Για να ανακτήσετε την πρόσβαση στο λογαριασμό σας, πρέπει να επαναφέρετε όλα τα δεδομένα απομακρυσμένου συγχρονισμού. Στη συνέχεια, μπορείτε να ξεκινήσετε νέο συγχρονισμό χρησιμοποιώντας τα τρέχοντα δεδομένα του προγράμματος περιήγησης.</translation>
+<translation id="8035133914807600019">Νέος φάκελος…</translation>
+<translation id="8066170816074394954">Σφάλμα διακομιστή.</translation>
+<translation id="8123787473700925741">Το Vivaldi.net αντιμετωπίζει προβλήματα: Κωδικός λάθους <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">Έναρξη Συγχρονισμού</translation>
+<translation id="8206267832882844324">Επεξεργασία σημείωσης</translation>
+<translation id="8225478925744929238">Αφαίρεση από τους σελιδοδείκτες</translation>
+<translation id="8233521945095997439">Καμία ταχεία κλήση εδώ</translation>
+<translation id="8257908958623224237">Σύγκρουση με δεδομένα άλλου προγράμματος πελάτη.</translation>
+<translation id="8261506727792406068">Διαγραφή</translation>
+<translation id="8305137170060620165">Πληκτρολογημένο Ιστορικό και Απομακρυσμένες Περίοδοι Σύνδεσης</translation>
+<translation id="8414685983518053656">Σημειώσεις</translation>
+<translation id="8422778094137438683">Πρέπει να χρησιμοποιήσετε έναν λογαριασμό χρήστη στο vivaldi.net για να συνδεθείτε.</translation>
+<translation id="8428213095426709021">Ρυθμίσεις</translation>
+<translation id="8462396943848220200">Επανάληψη σε <ph name="TIME" /></translation>
+<translation id="8480556999740355963">Συνδεθήκατε ως <ph name="USERNAME" /> στο <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">Σύνδεση στο Vivaldi.net ως <ph name="USERNAME" />. Παρακαλώ περιμένετε.</translation>
+<translation id="8503813439785031346">Όνομα χρήστη</translation>
+<translation id="8661216209723599816">Επαναφορά Απομακρυσμένων Δεδομένων</translation>
+<translation id="8721244337025311110">Νέος σελιδοδείκτης</translation>
+<translation id="8724114686743788114">Δεν είναι Δυνατή η Εμφάνιση της Εικόνας</translation>
+<translation id="8730621377337864115">Ολοκληρώθηκε</translation>
+<translation id="8738958257180686306">Δημιουργήθηκε: <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Ο Vivaldi χρειάζεται πρόσβαση στον αποθηκευτικό χώρο για λήψη αρχείων.</translation>
+<translation id="8808060551076378370">Αποτυχία προσθήκης σημείωσης.</translation>
+<translation id="8817201557520703060">Η Σελίδα Καταγράφηκε</translation>
+<translation id="8820817407110198400">Σελιδοδείκτες</translation>
+<translation id="895749247724466293">Αναζητήστε τις ταχείες κλήσεις σας</translation>
+<translation id="8959245489304000426">Έχω Χάσει τον Κωδικό Μου</translation>
+<translation id="8979401359137062629">Σημείωση:</translation>
+<translation id="9028089729841356743">Σφάλμα δικτύου.</translation>
+<translation id="9065203028668620118">Επεξεργασία</translation>
+<translation id="9148058034647219655">Έξοδος</translation>
+<translation id="9173575361559252669">Η Καταγραφή της Σελίδας Απέτυχε</translation>
+</translationbundle>

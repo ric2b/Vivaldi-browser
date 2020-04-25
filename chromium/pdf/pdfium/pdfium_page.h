@@ -53,6 +53,22 @@ class PDFiumPage {
   uint32_t GetCharUnicode(int char_index);
   // Get the bounds of a character in page pixels.
   pp::FloatRect GetCharBounds(int char_index);
+  // Gets the number of links in the page.
+  uint32_t GetLinkCount();
+  // Given a link index, gets the url, underlying text range and bounding
+  // box. Returns false if the link index is invalid.
+  bool GetLinkInfo(uint32_t link_index,
+                   std::string* out_url,
+                   int* out_start_char_index,
+                   int* out_char_count,
+                   pp::FloatRect* out_bounds);
+  // Gets the number of images in the page.
+  uint32_t GetImageCount();
+  // Given an image index, gets the alt text and bounding box. Returns false if
+  // the image index is invalid.
+  bool GetImageInfo(uint32_t image_index,
+                    std::string* out_alt_text,
+                    pp::FloatRect* out_bounds);
 
   enum Area {
     NONSELECTABLE_AREA,
@@ -75,12 +91,23 @@ class PDFiumPage {
 
     // Valid for DOCLINK_AREA only.
     int page;
-    // Valid for DOCLINK_AREA only. From the top of the page.
+    // Valid for DOCLINK_AREA only. From the top-left of the page.
+    base::Optional<float> x_in_pixels;
     base::Optional<float> y_in_pixels;
+    // Valid for DOCLINK_AREA only.
+    base::Optional<float> zoom;
   };
 
-  // Returns the (x, y) position of a destination in page coordinates.
-  base::Optional<gfx::PointF> GetPageXYTarget(FPDF_DEST destination);
+  // Given a |link_index|, returns the type of underlying area and the link
+  // target. |target| must be valid. Returns NONSELECTABLE_AREA if
+  // |link_index| is invalid.
+  Area GetLinkTargetAtIndex(int link_index, LinkTarget* target);
+
+  // Fills the output params with the (x, y) position in page coordinates and
+  // zoom value of a destination.
+  void GetPageDestinationTarget(FPDF_DEST destination,
+                                base::Optional<gfx::PointF>* xy,
+                                base::Optional<float>* zoom_value);
 
   // Transforms an (x, y) position in page coordinates to screen coordinates.
   gfx::PointF TransformPageToScreenXY(const gfx::PointF& xy);
@@ -144,6 +171,8 @@ class PDFiumPage {
   friend class PDFiumTestBase;
 
   FRIEND_TEST_ALL_PREFIXES(PDFiumPageImageTest, TestCalculateImages);
+  FRIEND_TEST_ALL_PREFIXES(PDFiumPageLinkTest, TestAnnotLinkGeneration);
+  FRIEND_TEST_ALL_PREFIXES(PDFiumPageImageTest, TestImageAltText);
   FRIEND_TEST_ALL_PREFIXES(PDFiumPageLinkTest, TestLinkGeneration);
 
   // Returns a link index if the given character index is over a link, or -1
@@ -151,6 +180,10 @@ class PDFiumPage {
   int GetLink(int char_index, LinkTarget* target);
   // Calculate the locations of any links on the page.
   void CalculateLinks();
+  // Populates weblinks on the page.
+  void PopulateWebLinks();
+  // Populates annotation links on the page.
+  void PopulateAnnotationLinks();
   // Calculate the locations of images on the page.
   void CalculateImages();
   // Returns link type and fills target associated with a link. Returns
@@ -204,9 +237,7 @@ class PDFiumPage {
     // Represents the number of characters that the link overlaps with.
     int32_t char_count = 0;
     std::vector<pp::Rect> bounding_rects;
-
-    // Valid for links with external urls only.
-    std::string url;
+    LinkTarget target;
   };
 
   // Represents an Image inside the page.

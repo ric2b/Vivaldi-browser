@@ -25,12 +25,10 @@ bool g_load_secondary_locale_paks = false;
 // ResourceBundle singleton never closes the handles.
 int g_chrome_100_percent_fd = -1;
 int g_resources_pack_fd = -1;
-int g_dev_ui_resources_pack_fd = -1;
 int g_locale_pack_fd = -1;
 int g_secondary_locale_pack_fd = -1;
 base::MemoryMappedFile::Region g_chrome_100_percent_region;
 base::MemoryMappedFile::Region g_resources_pack_region;
-base::MemoryMappedFile::Region g_dev_ui_resources_pack_region;
 base::MemoryMappedFile::Region g_locale_pack_region;
 base::MemoryMappedFile::Region g_secondary_locale_pack_region;
 
@@ -179,17 +177,12 @@ void LoadMainAndroidPackFile(const char* path_within_apk,
   }
 }
 
-void LoadAndroidDevUiPackFile(const char* path_within_apk,
-                              const base::FilePath& disk_file_path) {
-  if (LoadFromApkOrFile(path_within_apk, &disk_file_path,
-                        &g_dev_ui_resources_pack_fd,
-                        &g_dev_ui_resources_pack_region)) {
-    ResourceBundle::GetSharedInstance().AddDataPackFromFileRegion(
-        base::File(g_dev_ui_resources_pack_fd), g_dev_ui_resources_pack_region,
-        SCALE_FACTOR_NONE);
-  } else {
-    NOTREACHED() << "Failed to load DevUI resources.";
-  }
+void LoadPackFileFromApk(const std::string& path) {
+  base::MemoryMappedFile::Region region;
+  int fd = base::android::OpenApkAsset(path, &region);
+  CHECK_GE(fd, 0) << "Could not find " << path << " in APK.";
+  ui::ResourceBundle::GetSharedInstance().AddDataPackFromFileRegion(
+      base::File(fd), region, ui::SCALE_FACTOR_NONE);
 }
 
 int GetMainAndroidPackFd(base::MemoryMappedFile::Region* out_region) {

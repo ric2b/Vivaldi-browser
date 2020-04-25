@@ -14,6 +14,7 @@
 #include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -692,7 +693,7 @@ IN_PROC_BROWSER_TEST_F(PolicyUITest, MAYBE_ExtensionLoadAndSendPolicy) {
   auto object_value = std::make_unique<base::DictionaryValue>();
   object_value->SetKey("objectProperty", base::Value(true));
   auto array_value = std::make_unique<base::ListValue>();
-  array_value->GetList().push_back(base::Value(true));
+  array_value->Append(base::Value(true));
 
   policy::PolicyMap values;
   values.Set(kNormalBooleanPolicy, policy::POLICY_LEVEL_MANDATORY,

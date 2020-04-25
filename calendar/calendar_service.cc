@@ -67,22 +67,22 @@ class CalendarService::CalendarBackendDelegate
         FROM_HERE, base::Bind(&CalendarService::OnDBLoaded, calendar_service_));
   }
 
-  void NotifyEventCreated(const EventRow& row) override {
+  void NotifyEventCreated(const EventResult& event) override {
     service_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&CalendarService::OnEventCreated, calendar_service_, row));
+        base::Bind(&CalendarService::OnEventCreated, calendar_service_, event));
   }
 
-  void NotifyEventModified(const EventRow& row) override {
+  void NotifyEventModified(const EventResult& event) override {
     service_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&CalendarService::OnEventChanged, calendar_service_, row));
+        base::Bind(&CalendarService::OnEventChanged, calendar_service_, event));
   }
 
-  void NotifyEventDeleted(const EventRow& row) override {
+  void NotifyEventDeleted(const EventResult& event) override {
     service_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&CalendarService::OnEventDeleted, calendar_service_, row));
+        base::Bind(&CalendarService::OnEventDeleted, calendar_service_, event));
   }
 
   void NotifyCalendarCreated(const CalendarRow& row) override {
@@ -159,7 +159,7 @@ bool CalendarService::Init(
     }
     backend_task_runner_ = thread_->task_runner();
   } else {
-    backend_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
+    backend_task_runner_ = base::CreateSequencedTaskRunner(
         base::TaskTraits(base::ThreadPool(), base::TaskPriority::USER_BLOCKING,
                          base::TaskShutdownBehavior::BLOCK_SHUTDOWN,
                          base::MayBlock(), base::WithBaseSyncPrimitives()));
@@ -503,21 +503,21 @@ void CalendarService::NotifyCalendarServiceBeingDeleted() {
     observer.CalendarServiceBeingDeleted(this);*/
 }
 
-void CalendarService::OnEventCreated(const EventRow& row) {
+void CalendarService::OnEventCreated(const EventResult& event) {
   for (CalendarModelObserver& observer : observers_) {
-    observer.OnEventCreated(this, row);
+    observer.OnEventCreated(this, event);
   }
 }
 
-void CalendarService::OnEventDeleted(const EventRow& row) {
+void CalendarService::OnEventDeleted(const EventResult& event) {
   for (CalendarModelObserver& observer : observers_) {
-    observer.OnEventDeleted(this, row);
+    observer.OnEventDeleted(this, event);
   }
 }
 
-void CalendarService::OnEventChanged(const EventRow& row) {
+void CalendarService::OnEventChanged(const EventResult& event) {
   for (CalendarModelObserver& observer : observers_) {
-    observer.OnEventChanged(this, row);
+    observer.OnEventChanged(this, event);
   }
 }
 

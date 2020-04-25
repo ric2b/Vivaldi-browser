@@ -28,7 +28,7 @@ std::unique_ptr<RenderFrameAudioOutputStreamFactoryHandle,
 RenderFrameAudioOutputStreamFactoryHandle::CreateFactory(
     RendererAudioOutputStreamFactoryContext* context,
     int render_frame_id,
-    mojom::RendererAudioOutputStreamFactoryRequest request) {
+    mojo::PendingReceiver<mojom::RendererAudioOutputStreamFactory> receiver) {
   std::unique_ptr<RenderFrameAudioOutputStreamFactoryHandle,
                   BrowserThread::DeleteOnIOThread>
       handle(new RenderFrameAudioOutputStreamFactoryHandle(context,
@@ -38,7 +38,7 @@ RenderFrameAudioOutputStreamFactoryHandle::CreateFactory(
   base::PostTask(
       FROM_HERE, {BrowserThread::IO},
       base::BindOnce(&RenderFrameAudioOutputStreamFactoryHandle::Init,
-                     base::Unretained(handle.get()), std::move(request)));
+                     base::Unretained(handle.get()), std::move(receiver)));
   return handle;
 }
 
@@ -51,12 +51,12 @@ RenderFrameAudioOutputStreamFactoryHandle::
     RenderFrameAudioOutputStreamFactoryHandle(
         RendererAudioOutputStreamFactoryContext* context,
         int render_frame_id)
-    : impl_(render_frame_id, context), binding_(&impl_) {}
+    : impl_(render_frame_id, context), receiver_(&impl_) {}
 
 void RenderFrameAudioOutputStreamFactoryHandle::Init(
-    mojom::RendererAudioOutputStreamFactoryRequest request) {
+    mojo::PendingReceiver<mojom::RendererAudioOutputStreamFactory> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  binding_.Bind(std::move(request));
+  receiver_.Bind(std::move(receiver));
 }
 
 OldRenderFrameAudioOutputStreamFactory::OldRenderFrameAudioOutputStreamFactory(
@@ -76,7 +76,8 @@ OldRenderFrameAudioOutputStreamFactory::
 }
 
 void OldRenderFrameAudioOutputStreamFactory::RequestDeviceAuthorization(
-    media::mojom::AudioOutputStreamProviderRequest stream_provider_request,
+    mojo::PendingReceiver<media::mojom::AudioOutputStreamProvider>
+        stream_provider_receiver,
     const base::Optional<base::UnguessableToken>& session_id,
     const std::string& device_id,
     RequestDeviceAuthorizationCallback callback) {
@@ -89,12 +90,12 @@ void OldRenderFrameAudioOutputStreamFactory::RequestDeviceAuthorization(
       base::BindOnce(
           &OldRenderFrameAudioOutputStreamFactory::AuthorizationCompleted,
           weak_ptr_factory_.GetWeakPtr(), auth_start_time,
-          std::move(stream_provider_request), std::move(callback)));
+          std::move(stream_provider_receiver), std::move(callback)));
 }
 
 void OldRenderFrameAudioOutputStreamFactory::AuthorizationCompleted(
     base::TimeTicks auth_start_time,
-    media::mojom::AudioOutputStreamProviderRequest request,
+    mojo::PendingReceiver<media::mojom::AudioOutputStreamProvider> receiver,
     RequestDeviceAuthorizationCallback callback,
     media::OutputDeviceStatus status,
     const media::AudioParameters& params,
@@ -119,7 +120,7 @@ void OldRenderFrameAudioOutputStreamFactory::AuthorizationCompleted(
   // unretained is safe.
   stream_providers_.insert(
       std::make_unique<media::MojoAudioOutputStreamProvider>(
-          std::move(request),
+          std::move(receiver),
           base::BindOnce(
               &RendererAudioOutputStreamFactoryContext::CreateDelegate,
               base::Unretained(context_), raw_device_id, render_frame_id_,

@@ -17,6 +17,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_sub_menu_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
+#include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_observer.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/compositor/compositor.h"
@@ -126,7 +127,7 @@ class OmniboxViewViews : public OmniboxView,
                           base::string16::size_type* end) const override;
   void SelectAll(bool reversed) override;
   void RevertAll() override;
-  void SetFocus() override;
+  void SetFocus(bool is_user_initiated) override;
   bool IsImeComposing() const override;
   gfx::NativeView GetRelativeWindowForPopup() const override;
   bool IsImeShowingPopup() const override;
@@ -340,6 +341,10 @@ class OmniboxViewViews : public OmniboxView,
   // and gets a tap. So we use this variable to remember focus state before tap.
   bool select_all_on_gesture_tap_ = false;
 
+  // True if we should suppress on-focus suggestions, because we are currently
+  // processing a focus ovent that we know the user didn't explicitly initiate.
+  bool suppress_on_focus_suggestions_ = false;
+
   // The time of the first character insert operation that has not yet been
   // painted. Used to measure omnibox responsiveness with a histogram.
   base::TimeTicks insert_char_time_;
@@ -366,9 +371,9 @@ class OmniboxViewViews : public OmniboxView,
   int friendly_suggestion_text_prefix_length_;
 
   ScopedObserver<ui::Compositor, ui::CompositorObserver>
-      scoped_compositor_observer_;
+      scoped_compositor_observer_{this};
   ScopedObserver<TemplateURLService, TemplateURLServiceObserver>
-      scoped_template_url_service_observer_;
+      scoped_template_url_service_observer_{this};
 
   // Send tab to self submenu.
   std::unique_ptr<send_tab_to_self::SendTabToSelfSubMenuModel>

@@ -151,12 +151,6 @@ std::unique_ptr<views::View> BookmarkBubbleView::CreateExtraView() {
   return edit_button;
 }
 
-bool BookmarkBubbleView::GetExtraViewPadding(int* padding) {
-  *padding = ChromeLayoutProvider::Get()->GetDistanceMetric(
-      DISTANCE_UNRELATED_CONTROL_HORIZONTAL_LARGE);
-  return true;
-}
-
 std::unique_ptr<views::View> BookmarkBubbleView::CreateFootnoteView() {
 #if defined(OS_CHROMEOS)
   // ChromeOS does not show the signin promo.
@@ -199,11 +193,10 @@ bool BookmarkBubbleView::Close() {
   return true;
 }
 
-void BookmarkBubbleView::UpdateButton(views::LabelButton* button,
-                                      ui::DialogButton type) {
-  LocationBarBubbleDelegateView::UpdateButton(button, type);
-  if (type == ui::DIALOG_BUTTON_CANCEL)
-    button->AddAccelerator(ui::Accelerator(ui::VKEY_R, ui::EF_ALT_DOWN));
+void BookmarkBubbleView::OnDialogInitialized() {
+  views::Button* cancel = GetCancelButton();
+  if (cancel)
+    cancel->AddAccelerator(ui::Accelerator(ui::VKEY_R, ui::EF_ALT_DOWN));
 }
 
 // views::View -----------------------------------------------------------------

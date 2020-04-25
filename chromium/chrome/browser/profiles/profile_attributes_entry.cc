@@ -11,6 +11,7 @@
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/signin/signin_util.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -43,10 +44,15 @@ int NextAvailableMetricsBucketIndex() {
 
 }  // namespace
 
+const base::Feature kPersistUPAInProfileInfoCache{
+    "PersistUPAInProfileInfoCache", base::FEATURE_ENABLED_BY_DEFAULT};
+
 const char ProfileAttributesEntry::kAvatarIconKey[] = "avatar_icon";
 const char ProfileAttributesEntry::kBackgroundAppsKey[] = "background_apps";
 const char ProfileAttributesEntry::kProfileIsEphemeral[] = "is_ephemeral";
 const char ProfileAttributesEntry::kUserNameKey[] = "user_name";
+const char ProfileAttributesEntry::kIsConsentedPrimaryAccountKey[] =
+    "is_consented_primary_account";
 
 // static
 void ProfileAttributesEntry::RegisterLocalStatePrefs(
@@ -60,6 +66,11 @@ ProfileAttributesEntry::ProfileAttributesEntry()
     : profile_info_cache_(nullptr),
       prefs_(nullptr),
       profile_path_(base::FilePath()) {}
+
+// static
+bool ProfileAttributesEntry::ShouldConcatenateGaiaAndProfileName() {
+  return base::FeatureList::IsEnabled(features::kProfileMenuRevamp);
+}
 
 void ProfileAttributesEntry::Initialize(ProfileInfoCache* cache,
                                         const base::FilePath& path,
@@ -79,6 +90,14 @@ void ProfileAttributesEntry::Initialize(ProfileInfoCache* cache,
   DCHECK(profile_info_cache_->GetUserDataDir() == profile_path_.DirName());
   storage_key_ = profile_path_.BaseName().MaybeAsASCII();
 
+  const base::Value* entry_data = GetEntryData();
+  if (entry_data) {
+    if (!entry_data->FindKey(kIsConsentedPrimaryAccountKey)) {
+      SetBool(kIsConsentedPrimaryAccountKey,
+              !GetGAIAId().empty() || !GetUserName().empty());
+    }
+  }
+
   is_force_signin_enabled_ = signin_util::IsForceSigninEnabled();
   if (is_force_signin_enabled_) {
     if (!IsAuthenticated())
@@ -89,14 +108,105 @@ void ProfileAttributesEntry::Initialize(ProfileInfoCache* cache,
     // left-overs from legacy supervised users. Just unlock them, so users can
     // keep using them.
     SetLocalAuthCredentials(std::string());
-    SetAuthInfo(std::string(), base::string16());
+    SetAuthInfo(std::string(), base::string16(), false);
     SetIsSigninRequired(false);
 #endif
   }
+
+  DCHECK(last_name_to_display_.empty());
+  last_name_to_display_ = GetName();
+}
+
+base::string16 ProfileAttributesEntry::GetLocalProfileName() const {
+  return GetString16(ProfileInfoCache::kNameKey);
+}
+
+base::string16 ProfileAttributesEntry::GetGAIANameToDisplay() const {
+  base::string16 gaia_given_name =
+      GetString16(ProfileInfoCache::kGAIAGivenNameKey);
+  return gaia_given_name.empty() ? GetString16(ProfileInfoCache::kGAIANameKey)
+                                 : gaia_given_name;
+}
+
+bool ProfileAttributesEntry::ShouldShowProfileLocalName(
+    const base::string16& gaia_name_to_display) const {
+  // Never show the profile name if it is equal to GAIA given name,
+  // e.g. Matt (Matt), in that case we should only show the GAIA name.
+  if (base::EqualsCaseInsensitiveASCII(gaia_name_to_display,
+                                       GetLocalProfileName())) {
+    return false;
+  }
+
+  // Customized profile name that is not equal to Gaia name, e.g. Matt (Work).
+  if (!IsUsingDefaultName())
+    return true;
+
+  // The profile local name is a default profile name : Person n.
+  std::vector<ProfileAttributesEntry*> entries =
+      profile_info_cache_->GetAllProfilesAttributes();
+
+  for (ProfileAttributesEntry* entry : entries) {
+    if (entry == this)
+      continue;
+
+    base::string16 other_gaia_name_to_display = entry->GetGAIANameToDisplay();
+    if (other_gaia_name_to_display.empty() ||
+        other_gaia_name_to_display != gaia_name_to_display)
+      continue;
+
+    // Another profile with the same GAIA name.
+    bool other_profile_name_equal_GAIA_name = base::EqualsCaseInsensitiveASCII(
+        other_gaia_name_to_display, entry->GetLocalProfileName());
+    // If for the other profile, the profile name is equal to GAIA name then it
+    // will not be shown. For disambiguation, show for the current profile the
+    // profile name even if it is Person n.
+    if (other_profile_name_equal_GAIA_name)
+      return true;
+
+    bool other_is_using_default_name = entry->IsUsingDefaultName();
+    // Both profiles have a default profile name,
+    // e.g. Matt (Person 1), Matt (Person 2).
+    if (other_is_using_default_name) {
+      return true;
+    }
+  }
+  return false;
+}
+
+base::string16 ProfileAttributesEntry::GetNameToDisplay() const {
+  DCHECK(ProfileAttributesEntry::ShouldConcatenateGaiaAndProfileName);
+  base::string16 name_to_display = GetGAIANameToDisplay();
+
+  base::string16 local_profile_name = GetLocalProfileName();
+  if (name_to_display.empty())
+    return local_profile_name;
+
+  if (!ShouldShowProfileLocalName(name_to_display))
+    return name_to_display;
+
+  name_to_display.append(base::UTF8ToUTF16(" ("));
+  name_to_display.append(local_profile_name);
+  name_to_display.append(base::UTF8ToUTF16(")"));
+  return name_to_display;
+}
+
+base::string16 ProfileAttributesEntry::GetLastNameToDisplay() const {
+  return last_name_to_display_;
+}
+
+bool ProfileAttributesEntry::HasProfileNameChanged() {
+  base::string16 name = GetName();
+  if (last_name_to_display_ == name)
+    return false;
+
+  last_name_to_display_ = name;
+  return true;
 }
 
 base::string16 ProfileAttributesEntry::GetName() const {
-  return profile_info_cache_->GetNameOfProfileAtIndex(profile_index());
+  return ShouldConcatenateGaiaAndProfileName()
+             ? GetNameToDisplay()
+             : profile_info_cache_->GetNameOfProfileAtIndex(profile_index());
 }
 
 base::string16 ProfileAttributesEntry::GetShortcutName() const {
@@ -212,12 +322,19 @@ bool ProfileAttributesEntry::IsUsingDefaultName() const {
   return profile_info_cache_->ProfileIsUsingDefaultNameAtIndex(profile_index());
 }
 
+SigninState ProfileAttributesEntry::GetSigninState() const {
+  bool is_consented_primary_account = GetBool(kIsConsentedPrimaryAccountKey);
+  if (!GetGAIAId().empty() || !GetUserName().empty()) {
+    return is_consented_primary_account
+               ? SigninState::kSignedInWithConsentedPrimaryAccount
+               : SigninState::kSignedInWithUnconsentedPrimaryAccount;
+  }
+  DCHECK(!is_consented_primary_account);
+  return SigninState::kNotSignedIn;
+}
+
 bool ProfileAttributesEntry::IsAuthenticated() const {
-  // The profile is authenticated if the gaia_id of the info is not empty.
-  // If it is empty, also check if the user name is not empty.  This latter
-  // check is needed in case the profile has not been loaded yet and the
-  // gaia_id property has not yet been written.
-  return !GetGAIAId().empty() || !GetUserName().empty();
+  return GetBool(kIsConsentedPrimaryAccountKey);
 }
 
 bool ProfileAttributesEntry::IsUsingDefaultAvatar() const {
@@ -247,8 +364,9 @@ size_t ProfileAttributesEntry::GetMetricsBucketIndex() {
   return bucket_index;
 }
 
-void ProfileAttributesEntry::SetName(const base::string16& name) {
-  profile_info_cache_->SetNameOfProfileAtIndex(profile_index(), name);
+void ProfileAttributesEntry::SetLocalProfileName(const base::string16& name) {
+  profile_info_cache_->SetLocalProfileNameOfProfileAtIndex(profile_index(),
+                                                           name);
 }
 
 void ProfileAttributesEntry::SetShortcutName(const base::string16& name) {
@@ -361,10 +479,11 @@ void ProfileAttributesEntry::SetAvatarIconIndex(size_t icon_index) {
   profile_info_cache_->NotifyOnProfileAvatarChanged(profile_path);
 }
 
-void ProfileAttributesEntry::SetAuthInfo(
-    const std::string& gaia_id, const base::string16& user_name) {
+void ProfileAttributesEntry::SetAuthInfo(const std::string& gaia_id,
+                                         const base::string16& user_name,
+                                         bool is_consented_primary_account) {
   profile_info_cache_->SetAuthInfoOfProfileAtIndex(
-      profile_index(), gaia_id, user_name);
+      profile_index(), gaia_id, user_name, is_consented_primary_account);
 }
 
 size_t ProfileAttributesEntry::profile_index() const {

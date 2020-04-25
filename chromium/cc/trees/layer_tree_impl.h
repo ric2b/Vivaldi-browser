@@ -162,15 +162,17 @@ class CC_EXPORT LayerTreeImpl {
 
   // Other public methods
   // ---------------------------------------------------------------------------
-  LayerImpl* root_layer_for_testing() {
-    return layer_list_.empty() ? nullptr : layer_list_[0];
+  LayerImpl* root_layer() {
+    return layer_list_.empty() ? nullptr : layer_list_[0].get();
   }
   const RenderSurfaceImpl* RootRenderSurface() const;
   bool LayerListIsEmpty() const;
   void SetRootLayerForTesting(std::unique_ptr<LayerImpl>);
   void OnCanDrawStateChangedForTree();
   bool IsRootLayer(const LayerImpl* layer) const;
-  std::unique_ptr<OwnedLayerImplList> DetachLayers();
+
+  OwnedLayerImplList DetachLayers();
+  OwnedLayerImplList DetachLayersKeepingRootLayerForTesting();
 
   void SetPropertyTrees(PropertyTrees* property_trees);
   PropertyTrees* property_trees() {
@@ -189,12 +191,36 @@ class CC_EXPORT LayerTreeImpl {
 
   void ForceRecalculateRasterScales();
 
-  LayerImplList::const_iterator begin() const;
-  LayerImplList::const_iterator end() const;
-  LayerImplList::const_reverse_iterator rbegin() const;
-  LayerImplList::const_reverse_iterator rend() const;
-  LayerImplList::reverse_iterator rbegin();
-  LayerImplList::reverse_iterator rend();
+  // Adapts an iterator of std::unique_ptr<LayerImpl> to an iterator of
+  // LayerImpl*.
+  template <typename Iterator>
+  class IteratorAdapter
+      : public std::iterator<std::forward_iterator_tag, LayerImpl*> {
+   public:
+    explicit IteratorAdapter(Iterator it) : it_(it) {}
+    bool operator==(IteratorAdapter o) const { return it_ == o.it_; }
+    bool operator!=(IteratorAdapter o) const { return !(*this == o); }
+    LayerImpl* operator*() const { return it_->get(); }
+    LayerImpl* operator->() const { return it_->get(); }
+    IteratorAdapter& operator++() {
+      ++it_;
+      return *this;
+    }
+
+   private:
+    Iterator it_;
+  };
+  using const_iterator = IteratorAdapter<OwnedLayerImplList::const_iterator>;
+  using const_reverse_iterator =
+      IteratorAdapter<OwnedLayerImplList::const_reverse_iterator>;
+  const_iterator begin() const { return const_iterator(layer_list_.cbegin()); }
+  const_iterator end() const { return const_iterator(layer_list_.cend()); }
+  const_reverse_iterator rbegin() const {
+    return const_reverse_iterator(layer_list_.crbegin());
+  }
+  const_reverse_iterator rend() const {
+    return const_reverse_iterator(layer_list_.crend());
+  }
 
   void SetTransformMutated(ElementId element_id,
                            const gfx::Transform& transform);
@@ -251,55 +277,29 @@ class CC_EXPORT LayerTreeImpl {
     return !presentation_callbacks_.empty();
   }
 
-  ScrollNode* CurrentlyScrollingNode();
-  const ScrollNode* CurrentlyScrollingNode() const;
-  int LastScrolledScrollNodeIndex() const;
-  void SetCurrentlyScrollingNode(const ScrollNode* node);
-  void ClearCurrentlyScrollingNode();
+  using ViewportPropertyIds = LayerTreeHost::ViewportPropertyIds;
+  void SetViewportPropertyIds(const ViewportPropertyIds& ids);
 
-  struct ViewportLayerIds {
-    ElementId overscroll_elasticity_element_id;
-    int page_scale = Layer::INVALID_ID;
-    int inner_viewport_container = Layer::INVALID_ID;
-    int outer_viewport_container = Layer::INVALID_ID;
-    int inner_viewport_scroll = Layer::INVALID_ID;
-    int outer_viewport_scroll = Layer::INVALID_ID;
-
-    bool operator==(const ViewportLayerIds& other) {
-      return overscroll_elasticity_element_id ==
-                 other.overscroll_elasticity_element_id &&
-             page_scale == other.page_scale &&
-             inner_viewport_container == other.inner_viewport_container &&
-             outer_viewport_container == other.outer_viewport_container &&
-             inner_viewport_scroll == other.inner_viewport_scroll &&
-             outer_viewport_scroll == other.outer_viewport_scroll;
-    }
-  };
-  void SetViewportLayersFromIds(const ViewportLayerIds& viewport_layer_ids);
-  void ClearViewportLayers();
-  ElementId OverscrollElasticityElementId() const {
-    return viewport_layer_ids_.overscroll_elasticity_element_id;
+  const TransformNode* OverscrollElasticityTransformNode() const;
+  TransformNode* OverscrollElasticityTransformNode() {
+    return const_cast<TransformNode*>(
+        const_cast<const LayerTreeImpl*>(this)
+            ->OverscrollElasticityTransformNode());
   }
-  LayerImpl* PageScaleLayer() const {
-    return LayerById(viewport_layer_ids_.page_scale);
+  const TransformNode* PageScaleTransformNode() const;
+  TransformNode* PageScaleTransformNode() {
+    return const_cast<TransformNode*>(
+        const_cast<const LayerTreeImpl*>(this)->PageScaleTransformNode());
   }
-  LayerImpl* InnerViewportContainerLayer() const {
-    return LayerById(viewport_layer_ids_.inner_viewport_container);
-  }
-  LayerImpl* OuterViewportContainerLayer() const {
-    return LayerById(viewport_layer_ids_.outer_viewport_container);
-  }
-  LayerImpl* InnerViewportScrollLayer() const {
-    return LayerById(viewport_layer_ids_.inner_viewport_scroll);
-  }
-  LayerImpl* OuterViewportScrollLayer() const {
-    return LayerById(viewport_layer_ids_.outer_viewport_scroll);
-  }
-
   const ScrollNode* InnerViewportScrollNode() const;
   ScrollNode* InnerViewportScrollNode() {
     return const_cast<ScrollNode*>(
         const_cast<const LayerTreeImpl*>(this)->InnerViewportScrollNode());
+  }
+  const ClipNode* OuterViewportClipNode() const;
+  ClipNode* OuterViewportClipNode() {
+    return const_cast<ClipNode*>(
+        const_cast<const LayerTreeImpl*>(this)->OuterViewportClipNode());
   }
   const ScrollNode* OuterViewportScrollNode() const;
   ScrollNode* OuterViewportScrollNode() {
@@ -307,10 +307,17 @@ class CC_EXPORT LayerTreeImpl {
         const_cast<const LayerTreeImpl*>(this)->OuterViewportScrollNode());
   }
 
-  void set_viewport_property_ids(
-      const LayerTreeHost::ViewportPropertyIds& ids) {
-    viewport_property_ids_ = ids;
+  LayerTreeHost::ViewportPropertyIds ViewportPropertyIdsForTesting() const {
+    return viewport_property_ids_;
   }
+  LayerImpl* InnerViewportScrollLayerForTesting() const;
+  LayerImpl* OuterViewportScrollLayerForTesting() const;
+
+  ScrollNode* CurrentlyScrollingNode();
+  const ScrollNode* CurrentlyScrollingNode() const;
+  int LastScrolledScrollNodeIndex() const;
+  void SetCurrentlyScrollingNode(const ScrollNode* node);
+  void ClearCurrentlyScrollingNode();
 
   void ApplySentScrollAndScaleDeltasFromAbortedCommit();
 
@@ -408,16 +415,19 @@ class CC_EXPORT LayerTreeImpl {
   const SyncedBrowserControls* top_controls_shown_ratio() const {
     return top_controls_shown_ratio_.get();
   }
+  gfx::Vector2dF current_elastic_overscroll() const {
+    return elastic_overscroll()->Current(IsActiveTree());
+  }
 
   void SetElementIdsForTesting();
 
   // Updates draw properties and render surface layer list, as well as tile
   // priorities. Returns false if it was unable to update.  Updating lcd
   // text may cause invalidations, so should only be done after a commit.
-  bool UpdateDrawProperties(bool update_image_animation_controller = true);
+  bool UpdateDrawProperties(
+      bool update_image_animation_controller = true,
+      LayerImplList* output_update_layer_list_for_testing = nullptr);
   void UpdateCanUseLCDText();
-  void BuildPropertyTreesForTesting();
-  void BuildLayerListAndPropertyTreesForTesting();
 
   void set_needs_update_draw_properties() {
     needs_update_draw_properties_ = true;
@@ -462,8 +472,6 @@ class CC_EXPORT LayerTreeImpl {
   LayerImpl* ScrollableLayerByElementId(ElementId element_id) const;
 
   bool IsElementInPropertyTree(ElementId element_id) const;
-  void AddToElementPropertyTreeList(ElementId element_id);
-  void RemoveFromElementPropertyTreeList(ElementId element_id);
 
   void AddToElementLayerList(ElementId element_id, LayerImpl* layer);
   void RemoveFromElementLayerList(ElementId element_id);
@@ -484,9 +492,8 @@ class CC_EXPORT LayerTreeImpl {
   void RegisterLayer(LayerImpl* layer);
   void UnregisterLayer(LayerImpl* layer);
 
-  // These manage ownership of the LayerImpl.
+  // Append a layer to the list.
   void AddLayer(std::unique_ptr<LayerImpl> layer);
-  std::unique_ptr<LayerImpl> RemoveLayer(int id);
 
   size_t NumLayers();
 
@@ -646,12 +653,6 @@ class CC_EXPORT LayerTreeImpl {
 
   void ResetAllChangeTracking();
 
-  void AddToLayerList(LayerImpl* layer);
-
-  void ClearLayerList();
-
-  void BuildLayerListForTesting();
-
   void HandleTickmarksVisibilityChange();
   void HandleScrollbarShowRequestsFromMain();
 
@@ -663,12 +664,13 @@ class CC_EXPORT LayerTreeImpl {
   LayerTreeLifecycle& lifecycle() { return lifecycle_; }
 
   std::string LayerListAsJson() const;
-  // TODO(pdr): This should be removed because there is no longer a tree
-  // of layers, only a list.
-  std::string LayerTreeAsJson() const;
 
   AnimatedPaintWorkletTracker& paint_worklet_tracker() {
     return host_impl_->paint_worklet_tracker();
+  }
+
+  const gfx::Transform& DrawTransform() const {
+    return host_impl_->DrawTransform();
   }
 
  protected:
@@ -685,7 +687,6 @@ class CC_EXPORT LayerTreeImpl {
  private:
   friend class LayerTreeHost;
 
-  TransformNode* PageScaleTransformNode();
   void UpdatePageScaleNode();
 
   ElementListType GetElementTypeForAnimation() const;
@@ -698,14 +699,12 @@ class CC_EXPORT LayerTreeImpl {
   LayerTreeHostImpl* host_impl_;
   int source_frame_number_;
   int is_first_frame_after_commit_tracker_;
-  LayerImpl* root_layer_for_testing_;
   HeadsUpDisplayLayerImpl* hud_layer_;
   PropertyTrees property_trees_;
   SkColor background_color_;
 
   int last_scrolled_scroll_node_index_;
 
-  ViewportLayerIds viewport_layer_ids_;
   LayerTreeHost::ViewportPropertyIds viewport_property_ids_;
 
   LayerSelection selection_;
@@ -728,9 +727,13 @@ class CC_EXPORT LayerTreeImpl {
 
   scoped_refptr<SyncedElasticOverscroll> elastic_overscroll_;
 
-  std::unique_ptr<OwnedLayerImplList> layers_;
+  // TODO(wangxianzhu): Combine layers_ and layer_list_ when we remove
+  // support of mask layers.
+
+  OwnedLayerImplList layer_list_;
+  // Maps from layer id to layer.
   LayerImplMap layer_id_map_;
-  LayerImplList layer_list_;
+
   // Set of layers that need to push properties.
   base::flat_set<LayerImpl*> layers_that_should_push_properties_;
 

@@ -9,6 +9,7 @@
 #include "components/optimization_guide/hints_processing_util.h"
 #include "components/optimization_guide/optimization_guide_decider.h"
 #include "components/optimization_guide/proto/hints.pb.h"
+#include "components/optimization_guide/proto/models.pb.h"
 #include "components/previews/content/previews_user_data.h"
 #include "components/previews/core/previews_experiments.h"
 #include "components/previews/core/previews_switches.h"
@@ -44,9 +45,9 @@ ConvertPreviewsTypeToOptimizationType(PreviewsType previews_type) {
 
 // Returns the optimization types to register with the Optimization Guide
 // Decider based on which Previews are enabled for the session.
-std::unordered_set<optimization_guide::proto::OptimizationType>
+base::flat_set<optimization_guide::proto::OptimizationType>
 GetOptimizationTypesToRegister() {
-  std::unordered_set<optimization_guide::proto::OptimizationType>
+  base::flat_set<optimization_guide::proto::OptimizationType>
       optimization_types;
 
   if (params::IsNoScriptPreviewsEnabled())
@@ -88,10 +89,11 @@ PreviewsOptimizationGuideDecider::PreviewsOptimizationGuideDecider(
       registered_optimization_types_(GetOptimizationTypesToRegister()) {
   DCHECK(optimization_guide_decider_);
 
-  optimization_guide_decider_->RegisterOptimizationTypes(
+  optimization_guide_decider_->RegisterOptimizationTypesAndTargets(
       std::vector<optimization_guide::proto::OptimizationType>(
           registered_optimization_types_.begin(),
-          registered_optimization_types_.end()));
+          registered_optimization_types_.end()),
+      {optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD});
 }
 
 PreviewsOptimizationGuideDecider::~PreviewsOptimizationGuideDecider() = default;
@@ -125,7 +127,7 @@ bool PreviewsOptimizationGuideDecider::CanApplyPreview(
   optimization_guide::OptimizationGuideDecision decision =
       optimization_guide_decider_->CanApplyOptimization(
           navigation_handle,
-          optimization_guide::OptimizationTarget::kPainfulPageLoad,
+          optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
           *optimization_type, &optimization_metadata);
 
   // Return false if we are even unsure if we can apply the optimization (i.e.
@@ -172,7 +174,7 @@ bool PreviewsOptimizationGuideDecider::MaybeLoadOptimizationHints(
 
     if (optimization_guide_decider_->CanApplyOptimization(
             navigation_handle,
-            optimization_guide::OptimizationTarget::kPainfulPageLoad,
+            optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
             optimization_type,
             /*optimization_metadata=*/nullptr) !=
         optimization_guide::OptimizationGuideDecision::kFalse) {

@@ -98,26 +98,22 @@ def main():
       translations[clique.GetId()] = {"node":node,
                                       "translations":string_node_node}
     except:
-      translations[clique.GetId()] = {"node":node}
-
-  for tid, item in resources.UberClique().additional_translations_.get(locale, {}).items():
-    if tid not in translations:
-      translations[tid] = {"translations": item}
+      pass
 
   pofile = polib.pofile(options.po_file)
 
   for entry in pofile.translated_entries():
     update_translation(options, resources, translations, entry)
 
+  if not translations:
+    return
+
   with open(options.xtb_file, "w") as xtbfile:
     print(("""<?xml version="1.0" encoding="utf-8" ?>\n"""
                   """<!DOCTYPE translationbundle>\n"""
                   """<translationbundle lang="%s">""" % locale), file=xtbfile)
     for msgid, nodes in sorted(translations.items()):
-      if "translations" in nodes and type(nodes["translations"]) is tclib.Translation:
-        text = xml_escape(nodes["translations"].GetRealContent())
-      else:
-         continue
+      text = xml_escape(nodes["translations"].GetRealContent())
 
       # unescape <ph/> and \"
       text = text.replace("&lt;ph", "<ph").replace("/&gt;", "/>").replace('\"', '"')

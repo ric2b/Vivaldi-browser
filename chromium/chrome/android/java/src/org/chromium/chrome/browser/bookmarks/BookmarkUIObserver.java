@@ -12,6 +12,7 @@ import org.chromium.components.bookmarks.BookmarkId;
  * event that affects UI. All bookmark UI components are expected to implement this and
  * update themselves correctly on each event.
  */
+public /** Public to make accessible outside package for Vivaldi **/
 interface BookmarkUIObserver extends SelectionObserver<BookmarkId> {
     /**
      * Called when the entire UI is being destroyed and will be no longer in use.

@@ -24,6 +24,7 @@
 #include "components/omnibox/browser/answers_cache.h"
 #include "components/omnibox/browser/base_search_provider.h"
 #include "components/search_engines/template_url.h"
+#include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_observer.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 
@@ -31,7 +32,6 @@ class AutocompleteProviderClient;
 class AutocompleteProviderListener;
 class AutocompleteResult;
 class SearchProviderTest;
-class TemplateURLService;
 
 namespace history {
 struct KeywordSearchTermVisit;
@@ -76,6 +76,9 @@ class SearchProvider : public BaseSearchProvider,
 
   // AutocompleteProvider:
   void ResetSession() override;
+
+  // The verbatim score for an input which is not an URL.
+  static const int kNonURLVerbatimRelevance = 1300;
 
  protected:
   ~SearchProvider() override;
@@ -434,7 +437,8 @@ class SearchProvider : public BaseSearchProvider,
   AnswersCache answers_cache_;  // Cache for last answers seen.
   AnswersQueryData prefetch_data_;  // Data to use for query prefetching.
 
-  ScopedObserver<TemplateURLService, TemplateURLServiceObserver> observer_;
+  ScopedObserver<TemplateURLService, TemplateURLServiceObserver> observer_{
+      this};
 
   DISALLOW_COPY_AND_ASSIGN(SearchProvider);
 };

@@ -24,12 +24,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "ppapi/buildflags/buildflags.h"
 
-#include "base/task/post_task.h"
-#include "chrome/browser/notifications/notification_permission_context.h"
 #include "components/guest_view/vivaldi_guest_view_constants.h"
-#include "content/public/browser/browser_task_traits.h"
-#include "content/public/browser/browser_thread.h"
-#include "content/public/browser/permission_type.h"
 
 namespace extensions {
 
@@ -225,77 +220,6 @@ void ChromeWebViewPermissionHelperDelegate::OnGeolocationPermissionResponse(
 }
 
 void ChromeWebViewPermissionHelperDelegate::CancelGeolocationPermissionRequest(
-    int bridge_id) {
-  int request_id = RemoveBridgeID(bridge_id);
-  web_view_permission_helper()->CancelPendingPermissionRequest(request_id);
-}
-
-void ChromeWebViewPermissionHelperDelegate::RequestNotificationPermission(
-    int bridge_id,
-    const GURL& requesting_frame,
-    bool user_gesture,
-    const base::Callback<void(bool)>& callback) {
-  base::DictionaryValue request_info;
-  request_info.SetString(guest_view::kUrl, requesting_frame.spec());
-  request_info.SetBoolean(guest_view::kUserGesture, user_gesture);
-
-  // It is safe to hold an unretained pointer to
-  // ChromeWebViewPermissionHelperDelegate because this callback is called from
-  // ChromeWebViewPermissionHelperDelegate::SetPermission.
-  WebViewPermissionHelper::PermissionResponseCallback permission_callback =
-          base::BindOnce(&ChromeWebViewPermissionHelperDelegate::
-                         OnNotificationPermissionResponse,
-                     weak_factory_.GetWeakPtr(), bridge_id, user_gesture,
-                     base::Bind(&CallbackWrapper, callback));
-  int request_id = web_view_permission_helper()->RequestPermission(
-      WEB_VIEW_PERMISSION_TYPE_NOTIFICATION,
-      request_info,
-      std::move(permission_callback),
-      false /* allowed_by_default */);
-  bridge_id_to_request_id_map_[bridge_id] = request_id;
-}
-
-void ChromeWebViewPermissionHelperDelegate::OnNotificationPermissionResponse(
-    int bridge_id,
-    bool user_gesture,
-    const base::Callback<void(ContentSetting)>& callback,
-    bool allow,
-    const std::string& user_input) {
-  // The <webview> embedder has allowed the permission. We now need to make sure
-  // that the embedder has notifications permission.
-  RemoveBridgeID(bridge_id);
-
-  if (!allow || !web_view_guest()->attached()) {
-    callback.Run(CONTENT_SETTING_BLOCK);
-    return;
-  }
-
-  content::WebContents* web_contents =
-      web_view_guest()->embedder_web_contents();
-  int render_process_id = web_contents->GetMainFrame()->GetProcess()->GetID();
-  int render_frame_id = web_contents->GetMainFrame()->GetRoutingID();
-
-  const PermissionRequestID request_id(
-      render_process_id,
-      render_frame_id,
-      // The notification permission request here is not initiated
-      // through WebGeolocationPermissionRequest. We are only interested
-      // in the fact whether the embedder/app has notifications
-      // permission. Therefore we use an invalid |bridge_id|.
-      -1);
-
-  Profile* profile = Profile::FromBrowserContext(
-      web_view_guest()->browser_context());
-  PermissionManager::Get(profile)->RequestPermission(
-      CONTENT_SETTINGS_TYPE_NOTIFICATIONS, web_contents->GetMainFrame(),
-      web_view_guest()
-          ->embedder_web_contents()
-          ->GetLastCommittedURL()
-          .GetOrigin(),
-      user_gesture, callback);
-}
-
-void ChromeWebViewPermissionHelperDelegate::CancelNotificationPermissionRequest(
     int bridge_id) {
   int request_id = RemoveBridgeID(bridge_id);
   web_view_permission_helper()->CancelPendingPermissionRequest(request_id);

@@ -20,8 +20,6 @@
 #include <sys/utsname.h>
 #endif
 
-#include "components/version_info/version_info_values.h"
-
 namespace content {
 
 namespace {
@@ -32,7 +30,7 @@ const base::Feature kAndroidUserAgentStringContainsBuildId{
 #endif  // defined(OS_ANDROID)
 
 std::string GetUserAgentPlatform() {
-#if defined(OS_WIN) || defined(OS_FUCHSIA)
+#if defined(OS_WIN)
   return "";
 #elif defined(OS_MACOSX)
   return "Macintosh; ";
@@ -40,6 +38,10 @@ std::string GetUserAgentPlatform() {
   return "X11; ";  // strange, but that's what Firefox uses
 #elif defined(OS_ANDROID)
   return "Linux; ";
+#elif defined(OS_FUCHSIA)
+  // TODO(https://crbug.com/1010256): Sites get confused into serving mobile
+  // content if we report only "Fuchsia".
+  return "X11; ";
 #elif defined(OS_POSIX)
   return "Unknown; ";
 #endif
@@ -191,14 +193,13 @@ std::string BuildUserAgentFromOSAndProduct(const std::string& os_info,
   std::string user_agent;
   base::StringAppendF(
       &user_agent,
-      "Mozilla/5.0 (%s) AppleWebKit/%d.%d (KHTML, like Gecko) %s Safari/%d.%d Vivaldi/%s",
+      "Mozilla/5.0 (%s) AppleWebKit/%d.%d (KHTML, like Gecko) %s Safari/%d.%d",
       os_info.c_str(),
       WEBKIT_VERSION_MAJOR,
       WEBKIT_VERSION_MINOR,
       product.c_str(),
       WEBKIT_VERSION_MAJOR,
-      WEBKIT_VERSION_MINOR,
-      VIVALDI_UA_VERSION);
+      WEBKIT_VERSION_MINOR);
   return user_agent;
 }
 

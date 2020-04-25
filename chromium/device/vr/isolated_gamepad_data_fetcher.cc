@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/trace_event/trace_event.h"
 #include "build/buildflag.h"
 #include "device/vr/buildflags/buildflags.h"
 #include "device/vr/vr_device.h"
@@ -69,15 +70,17 @@ GamepadSource GamepadSourceFromDeviceId(device::mojom::XRDeviceId id) {
 
 IsolatedGamepadDataFetcher::Factory::Factory(
     device::mojom::XRDeviceId display_id,
-    device::mojom::IsolatedXRGamepadProviderFactoryPtr factory)
+    mojo::PendingRemote<device::mojom::IsolatedXRGamepadProviderFactory>
+        factory)
     : display_id_(display_id), factory_(std::move(factory)) {}
 
 IsolatedGamepadDataFetcher::Factory::~Factory() {}
 
 std::unique_ptr<GamepadDataFetcher>
 IsolatedGamepadDataFetcher::Factory::CreateDataFetcher() {
-  device::mojom::IsolatedXRGamepadProviderPtr provider;
-  factory_->GetIsolatedXRGamepadProvider(mojo::MakeRequest(&provider));
+  mojo::PendingRemote<device::mojom::IsolatedXRGamepadProvider> provider;
+  factory_->GetIsolatedXRGamepadProvider(
+      provider.InitWithNewPipeAndPassReceiver());
   return std::make_unique<IsolatedGamepadDataFetcher>(display_id_,
                                                       std::move(provider));
 }
@@ -88,11 +91,11 @@ GamepadSource IsolatedGamepadDataFetcher::Factory::source() {
 
 IsolatedGamepadDataFetcher::IsolatedGamepadDataFetcher(
     device::mojom::XRDeviceId display_id,
-    device::mojom::IsolatedXRGamepadProviderPtr provider)
+    mojo::PendingRemote<device::mojom::IsolatedXRGamepadProvider> provider)
     : display_id_(display_id) {
   // We bind provider_ on the poling thread, but we're created on the main UI
   // thread.
-  provider_info_ = provider.PassInterface();
+  pending_provider_ = std::move(provider);
 }
 
 IsolatedGamepadDataFetcher::~IsolatedGamepadDataFetcher() = default;
@@ -161,8 +164,8 @@ GamepadPose GamepadPoseFromXRPose(device::mojom::VRPose* pose) {
 }
 
 void IsolatedGamepadDataFetcher::GetGamepadData(bool devices_changed_hint) {
-  if (!provider_ && provider_info_) {
-    provider_.Bind(std::move(provider_info_));
+  if (!provider_ && pending_provider_) {
+    provider_.Bind(std::move(pending_provider_));
   }
 
   // If we don't have a provider, we can't give out data.
@@ -289,7 +292,8 @@ void IsolatedGamepadDataFetcher::Factory::RemoveGamepad(
 
 void IsolatedGamepadDataFetcher::Factory::AddGamepad(
     device::mojom::XRDeviceId device_id,
-    device::mojom::IsolatedXRGamepadProviderFactoryPtr gamepad_factory) {
+    mojo::PendingRemote<device::mojom::IsolatedXRGamepadProviderFactory>
+        gamepad_factory) {
   if (!IsValidDeviceId(device_id))
     return;
 

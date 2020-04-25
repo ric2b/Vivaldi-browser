@@ -12,12 +12,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/numerics/checked_math.h"
 #include "base/trace_event/traced_value.h"
-#include "cc/layers/layer_impl.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/effect_node.h"
-#include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/property_tree.h"
+#include "cc/trees/scroll_and_scale_set.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
@@ -130,47 +129,6 @@ void TransformTree::set_needs_update(bool needs_update) {
   if (needs_update && !PropertyTree<TransformNode>::needs_update())
     property_trees()->UpdateTransformTreeUpdateNumber();
   PropertyTree<TransformNode>::set_needs_update(needs_update);
-}
-
-bool TransformTree::ComputeTranslation(int source_id,
-                                       int dest_id,
-                                       gfx::Transform* transform) const {
-  transform->MakeIdentity();
-  if (source_id == dest_id)
-    return true;
-
-  const TransformNode* dest = Node(dest_id);
-  if (!dest->ancestors_are_invertible)
-    return false;
-  if (source_id != kInvalidNodeId)
-    transform->ConcatTransform(ToScreen(source_id));
-  if (dest_id != kInvalidNodeId) {
-    if (dest->local.IsFlat() && (dest->node_and_ancestors_are_flat ||
-                                 dest->flattens_inherited_transform)) {
-      // In this case, flattenning will not affect the result, so we can use the
-      // FromScreen transform of the dest node.
-      transform->ConcatTransform(FromScreen(dest_id));
-    } else {
-      // In this case, some node between source and destination flattens
-      // inherited transform. Consider the tree R->A->B->C->D, where D is the
-      // source, A is the destination and C flattens inherited transform. The
-      // expected result is D * C * flattened(B). D's ToScreen will be D * C *
-      // flattened(B * A * R), but as the source to destination transform is
-      // at most translation, C and B cannot be non-flat and so flattened(B * A
-      // * R) = B * flattened(A * R). So, to get the expected result we have to
-      // multiply D's ToScreen transform with flattened(A * R)^{-1}, which is
-      // the inverse of flattened ToScreen of destination.
-      gfx::Transform to_screen = ToScreen(dest_id);
-      to_screen.FlattenTo2d();
-      gfx::Transform from_screen;
-      bool success = to_screen.GetInverse(&from_screen);
-      if (!success)
-        return false;
-      transform->ConcatTransform(from_screen);
-    }
-  }
-
-  return true;
 }
 
 TransformNode* TransformTree::FindNodeFromElementId(ElementId id) {
@@ -708,7 +666,6 @@ int EffectTree::Insert(const EffectNode& tree_node, int parent_id) {
 
 void EffectTree::clear() {
   PropertyTree<EffectNode>::clear();
-  mask_layer_ids_.clear();
   render_surfaces_.clear();
   render_surfaces_.push_back(nullptr);
 
@@ -1024,10 +981,6 @@ int EffectTree::LowestCommonAncestorWithRenderSurface(int id_1,
   return id_1;
 }
 
-void EffectTree::AddMaskLayerId(int id) {
-  mask_layer_ids_.push_back(id);
-}
-
 bool EffectTree::ContributesToDrawnSurface(int id) {
   // All drawn nodes contribute to drawn surface.
   // Exception : Nodes that are hidden and are drawn only for the sake of
@@ -1138,7 +1091,7 @@ bool EffectTree::HitTestMayBeAffectedByMask(int effect_id) const {
   for (; effect_node->id != kContentsRootNodeId;
        effect_node = Node(effect_node->parent_id)) {
     if (!effect_node->rounded_corner_bounds.IsEmpty() ||
-        effect_node->has_masking_child || effect_node->is_masked)
+        effect_node->has_masking_child)
       return true;
   }
   return false;
@@ -1176,7 +1129,6 @@ bool ClipTree::operator==(const ClipTree& other) const {
 EffectTree& EffectTree::operator=(const EffectTree& from) {
   PropertyTree::operator=(from);
   render_surfaces_.resize(size());
-  mask_layer_ids_ = from.mask_layer_ids_;
   // copy_requests_ are omitted here, since these need to be moved rather
   // than copied or assigned.
 
@@ -1184,8 +1136,7 @@ EffectTree& EffectTree::operator=(const EffectTree& from) {
 }
 
 bool EffectTree::operator==(const EffectTree& other) const {
-  return PropertyTree::operator==(other) &&
-         mask_layer_ids_ == other.mask_layer_ids_;
+  return PropertyTree::operator==(other);
 }
 
 ScrollTree::ScrollTree()
@@ -1478,10 +1429,7 @@ void ScrollTree::CollectScrollDeltas(ScrollAndScaleSet* scroll_info,
         scroll_info->inner_viewport_scroll.element_id = id;
         scroll_info->inner_viewport_scroll.scroll_delta = scroll_delta;
       } else {
-        LayerTreeHostCommon::ScrollUpdateInfo scroll;
-        scroll.element_id = id;
-        scroll.scroll_delta = scroll_delta;
-        scroll_info->scrolls.push_back(scroll);
+        scroll_info->scrolls.push_back({id, scroll_delta});
       }
     }
   }
@@ -1735,8 +1683,6 @@ PropertyTrees& PropertyTrees::operator=(const PropertyTrees& from) {
       from.inner_viewport_container_bounds_delta();
   outer_viewport_container_bounds_delta_ =
       from.outer_viewport_container_bounds_delta();
-  inner_viewport_scroll_bounds_delta_ =
-      from.inner_viewport_scroll_bounds_delta();
   transform_tree.SetPropertyTrees(this);
   effect_tree.SetPropertyTrees(this);
   clip_tree.SetPropertyTrees(this);
@@ -1908,11 +1854,6 @@ void PropertyTrees::AnimationScalesChanged(ElementId element_id,
     transform_node->starting_animation_scale = starting_scale;
     UpdateTransformTreeUpdateNumber();
   }
-}
-
-void PropertyTrees::SetInnerViewportScrollBoundsDelta(
-    gfx::Vector2dF bounds_delta) {
-  inner_viewport_scroll_bounds_delta_ = bounds_delta;
 }
 
 void PropertyTrees::UpdateChangeTracking() {

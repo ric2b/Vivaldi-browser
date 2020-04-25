@@ -2,9 +2,19 @@
 <grit latest_public_release="0" current_release="1">
   <release seq="1" allow_pseudo="false">
     <structures fallback_to_low_resolution="true">
-      <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_16" file="vivaldi/product_logo_16.png" />
-      <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="vivaldi/product_logo_32.png" />
-      <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_WHITE" file="vivaldi/product_logo_white.png" />
+      <if expr="vivaldi_release_final">
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_16" file="vivaldi_final/product_logo_16.png" />
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="vivaldi_final/product_logo_32.png" />
+      </if>
+      <if expr="vivaldi_release_snapshot">
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_16" file="vivaldi_snapshot/product_logo_16.png" />
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="vivaldi_snapshot/product_logo_32.png" />
+      </if>
+      <if expr="vivaldi_release_sopranos">
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_16" file="vivaldi_sopranos/product_logo_16.png" />
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="vivaldi_sopranos/product_logo_32.png" />
+      </if>
+      <!-- The Avatar images needs to be here, unless we want to patch chromium/chrome/browser/resources_util.cc -->
       <structure type="chrome_scaled_image" name="IDR_ERROR_NETWORK_OFFLINE" file="vivaldi/error_network_offline.png" />
       <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_0" file="vivaldi/avatars/landscape_1.png" />
       <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_1" file="vivaldi/avatars/landscape_2.png" />

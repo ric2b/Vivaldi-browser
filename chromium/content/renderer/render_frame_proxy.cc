@@ -35,15 +35,16 @@
 #include "content/renderer/render_widget.h"
 #include "content/renderer/resource_timing_info_conversions.h"
 #include "ipc/ipc_message_macros.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "printing/buildflags/buildflags.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/common/navigation/triggering_event_info.h"
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_resource_timing_info.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_local_frame.h"
-#include "third_party/blink/public/web/web_triggering_event_info.h"
 #include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -99,7 +100,7 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
           ? frame_to_replace->GetLocalRootRenderWidget()
           : RenderFrameProxy::FromWebFrame(
                 frame_to_replace->GetWebFrame()->Parent()->ToWebRemoteFrame())
-                ->render_widget();
+                ->render_widget_;
   proxy->Init(web_frame, frame_to_replace->render_view(), widget,
               parent_is_local);
   return proxy.release();
@@ -134,13 +135,6 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
     web_frame = blink::WebRemoteFrame::CreateMainFrame(
         render_view->GetWebView(), proxy.get(), opener);
     render_widget = render_view->GetWidget();
-
-    // If the RenderView is reused by this proxy after having been used for a
-    // pending RenderFrame that was discarded, its widget needs to be frozen, as
-    // the OnSwapOut flow which normally does this won't happen in that case.
-    // See https://crbug.com/653746 and https://crbug.com/651980.
-    if (!render_widget->is_frozen())
-      render_widget->SetIsFrozen(true);
   } else {
     // Create a frame under an existing parent. The parent is always expected
     // to be a RenderFrameProxy, because navigations initiated by local frames
@@ -152,7 +146,7 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
         replicated_state.frame_owner_element_type, proxy.get(), opener);
     proxy->unique_name_ = replicated_state.unique_name;
     render_view = parent->render_view();
-    render_widget = parent->render_widget();
+    render_widget = parent->render_widget_;
   }
 
   proxy->Init(web_frame, render_view, render_widget, false);
@@ -227,7 +221,8 @@ RenderFrameProxy::RenderFrameProxy(int routing_id)
 }
 
 RenderFrameProxy::~RenderFrameProxy() {
-  render_widget_->UnregisterRenderFrameProxy(this);
+  if (render_widget_)
+    render_widget_->UnregisterRenderFrameProxy(this);
 
   CHECK(!web_frame_);
   RenderThread::Get()->RemoveRoute(routing_id_);
@@ -240,13 +235,21 @@ void RenderFrameProxy::Init(blink::WebRemoteFrame* web_frame,
                             bool parent_is_local) {
   CHECK(web_frame);
   CHECK(render_view);
-  CHECK(render_widget);
 
   web_frame_ = web_frame;
   render_view_ = render_view;
   render_widget_ = render_widget;
 
-  render_widget_->RegisterRenderFrameProxy(this);
+  // |render_widget_| can be null if this is a proxy for a remote main frame, or
+  // a subframe of that proxy. We don't need to register as an observer [since
+  // the RenderWidget is undead/won't exist]. The observer is used to propagate
+  // VisualProperty changes down the frame/process hierarchy. Remote main frame
+  // proxies do not participate in this flow.
+  if (render_widget_) {
+    render_widget_->RegisterRenderFrameProxy(this);
+    pending_visual_properties_.screen_info =
+        render_widget_->GetOriginalScreenInfo();
+  }
 
   std::pair<FrameProxyMap::iterator, bool> result =
       g_frame_proxy_map.Get().insert(std::make_pair(web_frame_, this));
@@ -254,9 +257,6 @@ void RenderFrameProxy::Init(blink::WebRemoteFrame* web_frame,
 
   if (parent_is_local)
     compositing_helper_ = std::make_unique<ChildFrameCompositingHelper>(this);
-
-  pending_visual_properties_.screen_info =
-      render_widget_->GetOriginalScreenInfo();
 }
 
 void RenderFrameProxy::ResendVisualProperties() {
@@ -375,7 +375,9 @@ void RenderFrameProxy::OnDidSetFramePolicyHeaders(
 }
 
 bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
-  // Forward Page IPCs to the RenderView.
+  // Page IPCs are routed via the main frame (both local and remote) and then
+  // forwarded to the RenderView. See comment in
+  // RenderFrameHostManager::SendPageMessage() for more information.
   if ((IPC_MESSAGE_CLASS(msg) == PageMsgStart)) {
     if (render_view())
       return render_view()->OnMessageReceived(msg);
@@ -795,7 +797,7 @@ void RenderFrameProxy::Navigate(
   params.disposition = WindowOpenDisposition::CURRENT_TAB;
   params.should_replace_current_entry = should_replace_current_entry;
   params.user_gesture = request.HasUserGesture();
-  params.triggering_event_info = blink::WebTriggeringEventInfo::kUnknown;
+  params.triggering_event_info = blink::TriggeringEventInfo::kUnknown;
   params.blob_url_token = blob_url_token.release();
 
   // Note: For the AdFrame download policy here it only covers the case where
@@ -816,8 +818,10 @@ void RenderFrameProxy::FrameRectsChanged(
   pending_visual_properties_.screen_space_rect = gfx::Rect(screen_space_rect);
   pending_visual_properties_.local_frame_size =
       gfx::Size(local_frame_rect.width, local_frame_rect.height);
-  pending_visual_properties_.screen_info =
-      render_widget_->GetOriginalScreenInfo();
+  if (render_widget_) {
+    pending_visual_properties_.screen_info =
+        render_widget_->GetOriginalScreenInfo();
+  }
   if (crashed_) {
     // Update the sad page to match the current size.
     compositing_helper_->ChildFrameGone(local_frame_size(),
@@ -944,18 +948,19 @@ const viz::LocalSurfaceId& RenderFrameProxy::GetLocalSurfaceId() const {
 }
 
 mojom::RenderFrameProxyHost* RenderFrameProxy::GetFrameProxyHost() {
-  if (!frame_proxy_host_ptr_.is_bound())
-    GetRemoteAssociatedInterfaces()->GetInterface(&frame_proxy_host_ptr_);
-  return frame_proxy_host_ptr_.get();
+  if (!frame_proxy_host_remote_.is_bound())
+    GetRemoteAssociatedInterfaces()->GetInterface(&frame_proxy_host_remote_);
+  return frame_proxy_host_remote_.get();
 }
 
 blink::AssociatedInterfaceProvider*
 RenderFrameProxy::GetRemoteAssociatedInterfaces() {
   if (!remote_associated_interfaces_) {
     ChildThreadImpl* thread = ChildThreadImpl::current();
-    blink::mojom::AssociatedInterfaceProviderAssociatedPtr remote_interfaces;
+    mojo::PendingAssociatedRemote<blink::mojom::AssociatedInterfaceProvider>
+        remote_interfaces;
     thread->GetRemoteRouteProvider()->GetRoute(
-        routing_id_, mojo::MakeRequest(&remote_interfaces));
+        routing_id_, remote_interfaces.InitWithNewEndpointAndPassReceiver());
     remote_associated_interfaces_ =
         std::make_unique<blink::AssociatedInterfaceProvider>(
             std::move(remote_interfaces));

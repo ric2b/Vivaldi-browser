@@ -40,6 +40,12 @@ public class BottomSheetTestRule extends ChromeTabbedActivityTestRule {
         /** A {@link CallbackHelper} that can wait for the onSheetContentChanged event. */
         public final CallbackHelper mContentChangedCallbackHelper = new CallbackHelper();
 
+        /** A {@link CallbackHelper} that can wait for the sheet to be in its full state. */
+        public final CallbackHelper mFullCallbackHelper = new CallbackHelper();
+
+        /** A {@link CallbackHelper} that can wait for the sheet to be hidden. */
+        public final CallbackHelper mHiddenCallbackHelper = new CallbackHelper();
+
         /** The last value that the onOffsetChanged event sent. */
         private float mLastOffsetChangedValue;
 
@@ -64,6 +70,15 @@ public class BottomSheetTestRule extends ChromeTabbedActivityTestRule {
             mContentChangedCallbackHelper.notifyCalled();
         }
 
+        @Override
+        public void onSheetStateChanged(int newState) {
+            if (newState == BottomSheet.SheetState.HIDDEN) {
+                mHiddenCallbackHelper.notifyCalled();
+            } else if (newState == BottomSheet.SheetState.FULL) {
+                mFullCallbackHelper.notifyCalled();
+            }
+        }
+
         /** @return The last value passed in to {@link #onSheetOffsetChanged(float)}. */
         public float getLastOffsetChangedValue() {
             return mLastOffsetChangedValue;
@@ -85,7 +100,9 @@ public class BottomSheetTestRule extends ChromeTabbedActivityTestRule {
                                    .getLayoutInflater()
                                    .inflate(R.layout.bottom_sheet, coordinator)
                                    .findViewById(R.id.bottom_sheet);
-            mBottomSheet.init(coordinator, getActivity());
+            mBottomSheet.init(coordinator, getActivity().getActivityTabProvider(),
+                    getActivity().getFullscreenManager(), getActivity().getWindow(),
+                    getActivity().getWindowAndroid().getKeyboardDelegate());
         });
 
         mObserver = new Observer();

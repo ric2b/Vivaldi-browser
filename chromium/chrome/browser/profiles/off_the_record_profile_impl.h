@@ -108,6 +108,7 @@ class OffTheRecordProfileImpl : public Profile {
   content::BrowserPluginGuestManager* GetGuestManager() override;
   storage::SpecialStoragePolicy* GetSpecialStoragePolicy() override;
   content::PushMessagingService* GetPushMessagingService() override;
+  content::StorageNotificationService* GetStorageNotificationService() override;
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionControllerDelegate* GetPermissionControllerDelegate()
       override;
@@ -124,6 +125,7 @@ class OffTheRecordProfileImpl : public Profile {
       std::vector<network::mojom::CorsOriginPatternPtr> block_patterns,
       base::OnceClosure closure) override;
   content::SharedCorsOriginAccessList* GetSharedCorsOriginAccessList() override;
+  bool ShouldEnableOutOfBlinkCors() override;
   content::NativeFileSystemPermissionContext*
   GetNativeFileSystemPermissionContext() override;
 

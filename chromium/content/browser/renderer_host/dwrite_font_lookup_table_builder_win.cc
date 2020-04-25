@@ -32,6 +32,7 @@
 #include "content/browser/renderer_host/dwrite_font_proxy_impl_win.h"
 #include "content/browser/renderer_host/dwrite_font_uma_logging_win.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "third_party/blink/public/common/font_unique_name_lookup/font_table_matcher.h"
 #include "third_party/blink/public/common/font_unique_name_lookup/font_table_persistence.h"
@@ -39,9 +40,6 @@
 #include "ui/gfx/win/direct_write.h"
 
 namespace content {
-
-using namespace dwrite_font_file_util;
-using namespace dwrite_font_uma_logging;
 
 namespace {
 
@@ -388,6 +386,11 @@ void DWriteFontLookupTableBuilder::PrepareFontUniqueNameTable() {
         FROM_HERE, base::BlockingType::MAY_BLOCK);
 
     outstanding_family_results_ = collection_->GetFontFamilyCount();
+    family_results_empty_ = 0;
+    family_results_non_empty_ = 0;
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        "DirectWrite.Fonts.Proxy.FamilyCountIndexingStart",
+        outstanding_family_results_, 1, 5000, 50);
   }
   for (UINT32 family_index = 0; family_index < outstanding_family_results_;
        ++family_index) {
@@ -400,9 +403,8 @@ void DWriteFontLookupTableBuilder::PrepareFontUniqueNameTable() {
          base::ThreadPolicy::MUST_USE_FOREGROUND,
          base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
         base::BindOnce(
-            &DWriteFontLookupTableBuilder::ExtractPathAndNamesFromFamily,
-            collection_, family_index, start_time_table_build_,
-            slow_down_mode_for_testing_,
+            &ExtractPathAndNamesFromFamily, collection_, family_index,
+            start_time_table_build_, slow_down_mode_for_testing_,
             OptionalOrNullptr(hang_event_for_testing_), IndexingTimeout()),
         base::BindOnce(&DWriteFontLookupTableBuilder::
                            AppendFamilyResultAndFinalizeIfNeeded,
@@ -554,6 +556,11 @@ void DWriteFontLookupTableBuilder::AppendFamilyResultAndFinalizeIfNeeded(
   if (font_table_built_.IsSignaled())
     return;
 
+  if (!family_result.size())
+    family_results_empty_++;
+  else
+    family_results_non_empty_++;
+
   for (const FontFileWithUniqueNames& font_of_family : family_result) {
     blink::FontUniqueNameTable_UniqueFont* added_unique_font =
         font_unique_name_table_->add_fonts();
@@ -596,6 +603,13 @@ void DWriteFontLookupTableBuilder::FinalizeFontTable() {
   }
   UMA_HISTOGRAM_BOOLEAN("DirectWrite.Fonts.Proxy.TableBuildTimedOut",
                         timed_out);
+
+  int empty_family_results_percentage =
+      round(((family_results_empty_ * 1.0f) /
+             (family_results_empty_ + family_results_non_empty_)) *
+            100.0);
+  UMA_HISTOGRAM_PERCENTAGE("DirectWrite.Fonts.Proxy.EmptyFamilyResultsRatio",
+                           empty_family_results_percentage);
 
   unsigned num_font_files = font_unique_name_table->fonts_size();
 

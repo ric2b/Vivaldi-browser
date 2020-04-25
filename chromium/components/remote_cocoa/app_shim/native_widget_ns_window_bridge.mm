@@ -28,7 +28,7 @@
 #import "components/remote_cocoa/app_shim/views_nswindow_delegate.h"
 #import "components/remote_cocoa/app_shim/window_move_loop.h"
 #include "components/remote_cocoa/common/native_widget_ns_window_host.mojom.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/constrained_window/constrained_window_animation.h"
@@ -315,9 +315,11 @@ NativeWidgetNSWindowBridge::NativeWidgetNSWindowBridge(
       bridge_mojo_binding_(this) {
   DCHECK(GetIdToWidgetImplMap().find(id_) == GetIdToWidgetImplMap().end());
   GetIdToWidgetImplMap().insert(std::make_pair(id_, this));
+  display::Screen::GetScreen()->AddObserver(this);
 }
 
 NativeWidgetNSWindowBridge::~NativeWidgetNSWindowBridge() {
+  display::Screen::GetScreen()->RemoveObserver(this);
   // The delegate should be cleared already. Note this enforces the precondition
   // that -[NSWindow close] is invoked on the hosted window before the
   // destructor is called.
@@ -390,10 +392,10 @@ void NativeWidgetNSWindowBridge::SetParent(uint64_t new_parent_id) {
 }
 
 void NativeWidgetNSWindowBridge::CreateSelectFileDialog(
-    mojom::SelectFileDialogRequest request) {
-  mojo::MakeStrongBinding(
+    mojo::PendingReceiver<mojom::SelectFileDialog> receiver) {
+  mojo::MakeSelfOwnedReceiver(
       std::make_unique<remote_cocoa::SelectFileDialogBridge>(window_),
-      std::move(request));
+      std::move(receiver));
 }
 
 void NativeWidgetNSWindowBridge::StackAbove(uint64_t sibling_id) {
@@ -424,6 +426,7 @@ void NativeWidgetNSWindowBridge::InitWindow(
   is_translucent_window_ = params->is_translucent;
   widget_is_top_level_ = params->widget_is_top_level;
   position_window_in_screen_coords_ = params->position_window_in_screen_coords;
+  pending_restoration_data_ = params->state_restoration_data;
 
   // Register for application hide notifications so that visibility can be
   // properly tracked. This is not done in the delegate so that the lifetime is
@@ -599,7 +602,7 @@ void NativeWidgetNSWindowBridge::CloseWindow() {
   // it and properly increment the reference count bound to the posted task.
   NSWindow* window = ns_window();
 
-  if (IsWindowModalSheet()) {
+  if (IsWindowModalSheet() && [ns_window() isSheet]) {
     // Sheets can't be closed normally. This starts the sheet closing. Once the
     // sheet has finished animating, it will call sheetDidEnd: on the parent
     // window's delegate. Note it still needs to be asynchronous, since code
@@ -614,7 +617,8 @@ void NativeWidgetNSWindowBridge::CloseWindow() {
   }
 
   // For other modal types, animate the close.
-  if (ShouldRunCustomAnimationFor(VisibilityTransition::kHide)) {
+  if (ShouldRunCustomAnimationFor(VisibilityTransition::kHide) &&
+      [ns_window() isVisible]) {
     [ViewsNSWindowCloseAnimator closeWindowWithAnimation:window];
     return;
   }
@@ -702,6 +706,22 @@ void NativeWidgetNSWindowBridge::SetVisibilityState(
       return;
   }
 
+  if (!pending_restoration_data_.empty()) {
+    NSData* restore_ns_data =
+        [NSData dataWithBytes:pending_restoration_data_.data()
+                       length:pending_restoration_data_.size()];
+    base::scoped_nsobject<NSKeyedUnarchiver> decoder(
+        [[NSKeyedUnarchiver alloc] initForReadingWithData:restore_ns_data]);
+    [window_ restoreStateWithCoder:decoder];
+    pending_restoration_data_.clear();
+
+    // When first showing a window with restoration data, don't activate it.
+    // This avoids switching spaces or un-miniaturizing it right away.
+    // Additional activations act normally.
+    if (new_state == WindowVisibilityState::kShowAndActivateWindow)
+      new_state = WindowVisibilityState::kShowInactive;
+  }
+
   if (IsWindowModalSheet()) {
     ShowAsModalSheet();
     return;
@@ -713,8 +733,11 @@ void NativeWidgetNSWindowBridge::SetVisibilityState(
   if (new_state == WindowVisibilityState::kShowAndActivateWindow) {
     [window_ makeKeyAndOrderFront:nil];
     [NSApp activateIgnoringOtherApps:YES];
-  } else if (!parent_) {
-    [window_ orderFront:nil];
+  } else if (!parent_ && ![window_ isMiniaturized]) {
+    // When showing a window without activation, avoid making it the front
+    // window (with e.g. orderFront:), which can cause a space switch.
+    [window_ orderWindow:NSWindowBelow
+              relativeTo:NSApp.mainWindow.windowNumber];
   }
 
   // For non-sheet modal types, use the constrained window animations to make
@@ -1109,7 +1132,17 @@ DragDropClient* NativeWidgetNSWindowBridge::drag_drop_client() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// NativeWidgetNSWindowBridge, ui::CATransactionObserver
+// NativeWidgetNSWindowBridge, display::DisplayObserver:
+
+void NativeWidgetNSWindowBridge::OnDisplayAdded(
+    const display::Display& display) {
+  UpdateWindowDisplay();
+}
+
+void NativeWidgetNSWindowBridge::OnDisplayRemoved(
+    const display::Display& display) {
+  UpdateWindowDisplay();
+}
 
 void NativeWidgetNSWindowBridge::OnDisplayMetricsChanged(
     const display::Display& display,
@@ -1191,6 +1224,17 @@ void NativeWidgetNSWindowBridge::SetMiniaturized(bool miniaturized) {
 
 void NativeWidgetNSWindowBridge::SetOpacity(float opacity) {
   [window_ setAlphaValue:opacity];
+}
+
+void NativeWidgetNSWindowBridge::SetWindowLevel(int32_t level) {
+  [window_ setLevel:level];
+
+  // Windows that have a higher window level than NSNormalWindowLevel default to
+  // NSWindowCollectionBehaviorTransient. Set the value explicitly here to match
+  // normal windows.
+  NSWindowCollectionBehavior behavior =
+      [window_ collectionBehavior] | NSWindowCollectionBehaviorManaged;
+  [window_ setCollectionBehavior:behavior];
 }
 
 void NativeWidgetNSWindowBridge::SetContentAspectRatio(

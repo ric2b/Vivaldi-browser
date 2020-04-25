@@ -186,24 +186,25 @@ void CameraHalDispatcherImpl::RegisterServer(
 
 void CameraHalDispatcherImpl::RegisterClient(
     cros::mojom::CameraHalClientPtr client) {
-  DCHECK(proxy_task_runner_->BelongsToCurrentThread());
-  auto client_observer =
-      std::make_unique<MojoCameraClientObserver>(std::move(client));
-  client_observer->client().set_connection_error_handler(base::BindOnce(
-      &CameraHalDispatcherImpl::OnCameraHalClientConnectionError,
-      base::Unretained(this), base::Unretained(client_observer.get())));
-  AddClientObserver(std::move(client_observer));
-  VLOG(1) << "Camera HAL client registered";
+  // RegisterClient can be called locally by ArcCameraBridge. Unretained
+  // reference is safe here because CameraHalDispatcherImpl owns
+  // |proxy_thread_|.
+  proxy_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&CameraHalDispatcherImpl::RegisterClientOnProxyThread,
+                     base::Unretained(this), client.PassInterface()));
 }
 
 void CameraHalDispatcherImpl::GetJpegDecodeAccelerator(
-    chromeos_camera::mojom::MjpegDecodeAcceleratorRequest jda_request) {
-  jda_factory_.Run(std::move(jda_request));
+    mojo::PendingReceiver<chromeos_camera::mojom::MjpegDecodeAccelerator>
+        jda_receiver) {
+  jda_factory_.Run(std::move(jda_receiver));
 }
 
 void CameraHalDispatcherImpl::GetJpegEncodeAccelerator(
-    chromeos_camera::mojom::JpegEncodeAcceleratorRequest jea_request) {
-  jea_factory_.Run(std::move(jea_request));
+    mojo::PendingReceiver<chromeos_camera::mojom::JpegEncodeAccelerator>
+        jea_receiver) {
+  jea_factory_.Run(std::move(jea_receiver));
 }
 
 void CameraHalDispatcherImpl::OnTraceLogEnabled() {
@@ -329,6 +330,19 @@ void CameraHalDispatcherImpl::StartServiceLoop(base::ScopedFD socket_fd,
       }
     }
   }
+}
+
+void CameraHalDispatcherImpl::RegisterClientOnProxyThread(
+    mojo::InterfacePtrInfo<cros::mojom::CameraHalClient> client_ptr_info) {
+  DCHECK(proxy_task_runner_->BelongsToCurrentThread());
+  cros::mojom::CameraHalClientPtr client_ptr(std::move(client_ptr_info));
+  auto client_observer =
+      std::make_unique<MojoCameraClientObserver>(std::move(client_ptr));
+  client_observer->client().set_connection_error_handler(base::BindOnce(
+      &CameraHalDispatcherImpl::OnCameraHalClientConnectionError,
+      base::Unretained(this), base::Unretained(client_observer.get())));
+  AddClientObserver(std::move(client_observer));
+  VLOG(1) << "Camera HAL client registered";
 }
 
 void CameraHalDispatcherImpl::AddClientObserverOnProxyThread(

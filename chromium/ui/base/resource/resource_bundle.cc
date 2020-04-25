@@ -644,19 +644,20 @@ base::StringPiece ResourceBundle::GetRawDataResourceForScale(
   return base::StringPiece();
 }
 
-std::string ResourceBundle::DecompressDataResource(int resource_id) {
+std::string ResourceBundle::DecompressDataResource(int resource_id) const {
   return DecompressDataResourceScaled(resource_id, ui::SCALE_FACTOR_NONE);
 }
 
 std::string ResourceBundle::DecompressDataResourceScaled(
     int resource_id,
-    ScaleFactor scaling_factor) {
+    ScaleFactor scaling_factor) const {
   std::string output;
   Decompress(GetRawDataResourceForScale(resource_id, scaling_factor), &output);
   return output;
 }
 
-std::string ResourceBundle::DecompressLocalizedDataResource(int resource_id) {
+std::string ResourceBundle::DecompressLocalizedDataResource(
+    int resource_id) const {
   base::AutoLock lock_scope(*locale_resources_data_lock_);
   base::StringPiece data;
   if (!(locale_resources_data_.get() &&
@@ -702,6 +703,30 @@ base::string16 ResourceBundle::GetLocalizedString(int resource_id) {
   }
 #endif
   return GetLocalizedStringImpl(resource_id);
+}
+
+base::RefCountedMemory* ResourceBundle::LoadLocalizedResourceBytes(
+    int resource_id) {
+  {
+    base::AutoLock lock_scope(*locale_resources_data_lock_);
+    base::StringPiece data;
+
+    if (locale_resources_data_.get() &&
+        locale_resources_data_->GetStringPiece(
+            static_cast<uint16_t>(resource_id), &data) &&
+        !data.empty()) {
+      return new base::RefCountedStaticMemory(data.data(), data.length());
+    }
+
+    if (secondary_locale_resources_data_.get() &&
+        secondary_locale_resources_data_->GetStringPiece(
+            static_cast<uint16_t>(resource_id), &data) &&
+        !data.empty()) {
+      return new base::RefCountedStaticMemory(data.data(), data.length());
+    }
+  }
+  // Release lock_scope and fall back to main data pack.
+  return LoadDataResourceBytes(resource_id);
 }
 
 const gfx::FontList& ResourceBundle::GetFontListWithDelta(

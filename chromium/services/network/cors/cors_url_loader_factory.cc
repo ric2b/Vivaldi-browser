@@ -30,11 +30,13 @@ namespace network {
 
 namespace cors {
 
+bool CorsURLLoaderFactory::allow_external_preflights_for_testing_ = false;
+
 CorsURLLoaderFactory::CorsURLLoaderFactory(
     NetworkContext* context,
     mojom::URLLoaderFactoryParamsPtr params,
     scoped_refptr<ResourceSchedulerClient> resource_scheduler_client,
-    mojom::URLLoaderFactoryRequest request,
+    mojo::PendingReceiver<mojom::URLLoaderFactory> receiver,
     const OriginAccessList* origin_access_list,
     std::unique_ptr<mojom::URLLoaderFactory> network_loader_factory_for_testing)
     : context_(context),
@@ -60,8 +62,8 @@ CorsURLLoaderFactory::CorsURLLoaderFactory(
                 context, std::move(params),
                 std::move(resource_scheduler_client), this);
 
-  bindings_.AddBinding(this, std::move(request));
-  bindings_.set_connection_error_handler(base::BindRepeating(
+  receivers_.Add(this, std::move(receiver));
+  receivers_.set_disconnect_handler(base::BindRepeating(
       &CorsURLLoaderFactory::DeleteIfNeeded, base::Unretained(this)));
 }
 
@@ -92,19 +94,19 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
     const ResourceRequest& resource_request,
     mojom::URLLoaderClientPtr client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
-  if (!IsSane(context_, resource_request)) {
+  if (!IsSane(context_, resource_request, options)) {
     client->OnComplete(URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
     return;
   }
 
-  if (features::ShouldEnableOutOfBlinkCors() && !disable_web_security_) {
+  if (context_->IsCorsEnabled() && !disable_web_security_) {
     auto loader = std::make_unique<CorsURLLoader>(
         std::move(request), routing_id, request_id, options,
         base::BindOnce(&CorsURLLoaderFactory::DestroyURLLoader,
                        base::Unretained(this)),
         resource_request, std::move(client), traffic_annotation,
-        network_loader_factory_.get(), request_initiator_site_lock_,
-        origin_access_list_, factory_bound_origin_access_list_.get(),
+        network_loader_factory_.get(), origin_access_list_,
+        factory_bound_origin_access_list_.get(),
         context_->cors_preflight_controller());
     auto* raw_loader = loader.get();
     OnLoaderCreated(std::move(loader));
@@ -116,24 +118,26 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
   }
 }
 
-void CorsURLLoaderFactory::Clone(mojom::URLLoaderFactoryRequest request) {
+void CorsURLLoaderFactory::Clone(
+    mojo::PendingReceiver<mojom::URLLoaderFactory> receiver) {
   // The cloned factories stop working when this factory is destructed.
-  bindings_.AddBinding(this, std::move(request));
+  receivers_.Add(this, std::move(receiver));
 }
 
 void CorsURLLoaderFactory::ClearBindings() {
-  bindings_.CloseAllBindings();
+  receivers_.Clear();
 }
 
 void CorsURLLoaderFactory::DeleteIfNeeded() {
   if (!context_)
     return;
-  if (bindings_.empty() && loaders_.empty())
+  if (receivers_.empty() && loaders_.empty())
     context_->DestroyURLLoaderFactory(this);
 }
 
 bool CorsURLLoaderFactory::IsSane(const NetworkContext* context,
-                                  const ResourceRequest& request) {
+                                  const ResourceRequest& request,
+                                  uint32_t options) {
   // CORS needs a proper origin (including a unique opaque origin). If the
   // request doesn't have one, CORS cannot work.
   if (!request.request_initiator && !IsNavigationRequestMode(request.mode) &&
@@ -204,7 +208,6 @@ bool CorsURLLoaderFactory::IsSane(const NetworkContext* context,
   switch (initiator_lock_compatibility) {
     case InitiatorLockCompatibility::kCompatibleLock:
     case InitiatorLockCompatibility::kBrowserProcess:
-    case InitiatorLockCompatibility::kExcludedScheme:
     case InitiatorLockCompatibility::kExcludedUniversalAccessPlugin:
       break;
 
@@ -276,6 +279,16 @@ bool CorsURLLoaderFactory::IsSane(const NetworkContext* context,
     mojo::ReportBadMessage(
         "CorsURLLoaderFactory: unsupported credentials mode on navigation");
     return false;
+  }
+
+  if (!allow_external_preflights_for_testing_) {
+    // kURLLoadOptionAsCorsPreflight should be set only by the network service.
+    // Otherwise the network service will be confused.
+    if (options & mojom::kURLLoadOptionAsCorsPreflight) {
+      mojo::ReportBadMessage(
+          "CorsURLLoaderFactory: kURLLoadOptionAsCorsPreflight is set");
+      return false;
+    }
   }
 
   // TODO(yhirano): If the request mode is "no-cors", the redirect mode should

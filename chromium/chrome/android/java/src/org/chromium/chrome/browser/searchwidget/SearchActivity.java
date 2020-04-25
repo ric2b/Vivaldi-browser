@@ -48,6 +48,8 @@ import org.chromium.ui.base.ActivityKeyboardVisibilityDelegate;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
+import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
+
 /** Queries the user's default search engine and shows autocomplete suggestions. */
 public class SearchActivity extends AsyncInitializationActivity
         implements SnackbarManageable, SearchActivityLocationBarLayout.Delegate {
@@ -172,10 +174,6 @@ public class SearchActivity extends AsyncInitializationActivity
     public void finishNativeInitialization() {
         super.finishNativeInitialization();
 
-        mTab = new TabBuilder()
-                       .setWindow(getWindowAndroid())
-                       .setLaunchType(TabLaunchType.FROM_EXTERNAL_APP)
-                       .build();
         TabDelegateFactory factory = new TabDelegateFactory() {
             @Override
             public TabWebContentsDelegateAndroid createWebContentsDelegate(Tab tab) {
@@ -218,8 +216,12 @@ public class SearchActivity extends AsyncInitializationActivity
                 return null;
             }
         };
-        mTab.initialize(
-                WebContentsFactory.createWebContents(false, false), factory, false, null, false);
+        mTab = new TabBuilder()
+                       .setWindow(getWindowAndroid())
+                       .setLaunchType(TabLaunchType.FROM_EXTERNAL_APP)
+                       .setWebContents(WebContentsFactory.createWebContents(false, false))
+                       .setDelegateFactory(factory)
+                       .build();
         mTab.loadUrl(new LoadUrlParams(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL));
 
         mSearchBoxDataProvider.onNativeLibraryReady(mTab);
@@ -297,6 +299,9 @@ public class SearchActivity extends AsyncInitializationActivity
 
     @Override
     protected void onDestroy() {
+        // Vivaldi - reset default search engine icon when application closes. This is required when
+        // we are using shortcuts in the widget.
+        SearchEngineIconHandler.get().restoreDSE();
         if (mTab != null && mTab.isInitialized()) mTab.destroy();
         super.onDestroy();
     }

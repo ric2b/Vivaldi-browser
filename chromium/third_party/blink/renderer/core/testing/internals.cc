@@ -178,7 +178,7 @@
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
 #include "third_party/blink/renderer/platform/text/layout_locale.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
-#include "third_party/blink/renderer/platform/wtf/dtoa/dtoa.h"
+#include "third_party/blink/renderer/platform/wtf/dtoa.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_encoding_registry.h"
 #include "v8/include/v8.h"
@@ -847,7 +847,7 @@ void Internals::endColorChooser(Element* element) {
 bool Internals::hasAutofocusRequest(Document* document) {
   if (!document)
     document = document_;
-  return document->AutofocusElement();
+  return document->HasAutofocusCandidates();
 }
 
 bool Internals::hasAutofocusRequest() {
@@ -1324,7 +1324,7 @@ String Internals::suggestedValue(Element* element,
   if (auto* textarea = ToHTMLTextAreaElementOrNull(*element))
     return textarea->SuggestedValue();
 
-  if (auto* select = ToHTMLSelectElementOrNull(*element))
+  if (auto* select = DynamicTo<HTMLSelectElement>(*element))
     return select->SuggestedValue();
 
   return suggested_value;
@@ -1347,7 +1347,7 @@ void Internals::setSuggestedValue(Element* element,
   if (auto* textarea = ToHTMLTextAreaElementOrNull(*element))
     textarea->SetSuggestedValue(value);
 
-  if (auto* select = ToHTMLSelectElementOrNull(*element))
+  if (auto* select = DynamicTo<HTMLSelectElement>(*element))
     select->SetSuggestedValue(value);
 }
 
@@ -1377,7 +1377,7 @@ void Internals::setAutofilledValue(Element* element,
         *Event::CreateBubble(event_type_names::kKeyup));
   }
 
-  if (auto* select = ToHTMLSelectElementOrNull(*element))
+  if (auto* select = DynamicTo<HTMLSelectElement>(*element))
     select->setValue(value, true /* send_events */);
 
   To<HTMLFormControlElement>(element)->SetAutofillState(
@@ -1798,9 +1798,9 @@ static void AccumulateTouchActionRectList(
   const cc::TouchActionRegion& touch_action_region =
       graphics_layer->CcLayer()->touch_action_region();
   if (!touch_action_region.GetAllRegions().IsEmpty()) {
-    const auto& layer_position = graphics_layer->CcLayer()->position();
+    const auto& layer_position = graphics_layer->GetOffsetFromTransformNode();
     const auto& layer_bounds = graphics_layer->CcLayer()->bounds();
-    IntRect layer_rect(layer_position.x(), layer_position.y(),
+    IntRect layer_rect(layer_position.X(), layer_position.Y(),
                        layer_bounds.width(), layer_bounds.height());
 
     Vector<IntRect> layer_hit_test_rects;
@@ -2226,44 +2226,32 @@ DOMRectList* Internals::nonFastScrollableRects(
   frame->View()->UpdateAllLifecyclePhases(
       DocumentLifecycle::LifecycleUpdateReason::kTest);
 
-  if (RuntimeEnabledFeatures::PaintNonFastScrollableRegionsEnabled()) {
-    auto* pac = document->View()->GetPaintArtifactCompositor();
-    auto* layer_tree_host = pac->RootLayer()->layer_tree_host();
-    // Ensure |cc::TransformTree| has updated the correct ToScreen transforms.
-    layer_tree_host->UpdateLayers();
+  auto* pac = document->View()->GetPaintArtifactCompositor();
+  auto* layer_tree_host = pac->RootLayer()->layer_tree_host();
+  // Ensure |cc::TransformTree| has updated the correct ToScreen transforms.
+  layer_tree_host->UpdateLayers();
 
-    Vector<IntRect> layer_non_fast_scrollable_rects;
-    for (auto* layer : *layer_tree_host) {
-      const cc::Region& non_fast_region = layer->non_fast_scrollable_region();
-      for (const gfx::Rect& non_fast_rect : non_fast_region) {
-        gfx::RectF layer_rect(non_fast_rect);
+  Vector<IntRect> layer_non_fast_scrollable_rects;
+  for (auto* layer : *layer_tree_host) {
+    const cc::Region& non_fast_region = layer->non_fast_scrollable_region();
+    for (const gfx::Rect& non_fast_rect : non_fast_region) {
+      gfx::RectF layer_rect(non_fast_rect);
 
-        // Map |layer_rect| into screen space.
-        layer_rect.Offset(layer->offset_to_transform_parent());
-        auto& transform_tree =
-            layer->layer_tree_host()->property_trees()->transform_tree;
-        transform_tree.UpdateTransforms(layer->transform_tree_index());
-        const gfx::Transform& to_screen =
-            transform_tree.ToScreen(layer->transform_tree_index());
-        to_screen.TransformRect(&layer_rect);
+      // Map |layer_rect| into screen space.
+      layer_rect.Offset(layer->offset_to_transform_parent());
+      auto& transform_tree =
+          layer->layer_tree_host()->property_trees()->transform_tree;
+      transform_tree.UpdateTransforms(layer->transform_tree_index());
+      const gfx::Transform& to_screen =
+          transform_tree.ToScreen(layer->transform_tree_index());
+      to_screen.TransformRect(&layer_rect);
 
-        layer_non_fast_scrollable_rects.push_back(
-            IntRect(ToEnclosingRect(layer_rect)));
-      }
+      layer_non_fast_scrollable_rects.push_back(
+          IntRect(ToEnclosingRect(layer_rect)));
     }
-
-    return DOMRectList::Create(layer_non_fast_scrollable_rects);
   }
 
-  GraphicsLayer* layer = frame->View()->LayoutViewport()->LayerForScrolling();
-  if (!layer)
-    return DOMRectList::Create();
-  const cc::Region& region = layer->CcLayer()->non_fast_scrollable_region();
-  Vector<IntRect> rects;
-  rects.ReserveCapacity(region.GetRegionComplexity());
-  for (const gfx::Rect& rect : region)
-    rects.push_back(IntRect(rect));
-  return DOMRectList::Create(rects);
+  return DOMRectList::Create(layer_non_fast_scrollable_rects);
 }
 
 void Internals::evictAllResources() const {
@@ -2947,34 +2935,34 @@ String Internals::selectMenuListText(HTMLSelectElement* select) {
 
 bool Internals::isSelectPopupVisible(Node* node) {
   DCHECK(node);
-  if (auto* select = ToHTMLSelectElementOrNull(*node))
+  if (auto* select = DynamicTo<HTMLSelectElement>(*node))
     return select->PopupIsVisible();
   return false;
 }
 
 bool Internals::selectPopupItemStyleIsRtl(Node* node, int item_index) {
-  if (!node || !IsHTMLSelectElement(*node))
+  auto* select = DynamicTo<HTMLSelectElement>(node);
+  if (!select)
     return false;
 
-  HTMLSelectElement& select = ToHTMLSelectElement(*node);
   if (item_index < 0 ||
-      static_cast<wtf_size_t>(item_index) >= select.GetListItems().size())
+      static_cast<wtf_size_t>(item_index) >= select->GetListItems().size())
     return false;
   const ComputedStyle* item_style =
-      select.ItemComputedStyle(*select.GetListItems()[item_index]);
+      select->ItemComputedStyle(*select->GetListItems()[item_index]);
   return item_style && item_style->Direction() == TextDirection::kRtl;
 }
 
 int Internals::selectPopupItemStyleFontHeight(Node* node, int item_index) {
-  if (!node || !IsHTMLSelectElement(*node))
+  auto* select = DynamicTo<HTMLSelectElement>(node);
+  if (!select)
     return false;
 
-  HTMLSelectElement& select = ToHTMLSelectElement(*node);
   if (item_index < 0 ||
-      static_cast<wtf_size_t>(item_index) >= select.GetListItems().size())
+      static_cast<wtf_size_t>(item_index) >= select->GetListItems().size())
     return false;
   const ComputedStyle* item_style =
-      select.ItemComputedStyle(*select.GetListItems()[item_index]);
+      select->ItemComputedStyle(*select->GetListItems()[item_index]);
 
   if (item_style) {
     const SimpleFontData* font_data = item_style->GetFont().PrimaryFont();
@@ -3017,13 +3005,6 @@ void Internals::forceCompositingUpdate(Document* document,
       DocumentLifecycle::LifecycleUpdateReason::kTest);
 }
 
-void Internals::setZoomFactor(float factor) {
-  if (!GetFrame())
-    return;
-
-  GetFrame()->SetPageZoomFactor(factor);
-}
-
 void Internals::setShouldRevealPassword(Element* element,
                                         bool reveal,
                                         ExceptionState& exception_state) {
@@ -3056,7 +3037,7 @@ class AddOneFunction : public ScriptFunction {
     int32_t int_value =
         static_cast<int32_t>(v8_value.As<v8::Integer>()->Value());
     return ScriptValue(
-        GetScriptState(),
+        GetScriptState()->GetIsolate(),
         v8::Integer::New(GetScriptState()->GetIsolate(), int_value + 1));
   }
 };

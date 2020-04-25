@@ -15,6 +15,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 
 #if !defined(OS_IOS)
@@ -241,7 +242,7 @@ const char* BaseBundleID() {
 
 #if defined(VIVALDI_BUILD)
   return "com.vivaldi.Vivaldi";
-#elif defined(GOOGLE_CHROME_BUILD)
+#elif BUILDFLAG(GOOGLE_CHROME_BRANDING)
   return "com.google.Chrome";
 #else
   return "org.chromium.Chromium";

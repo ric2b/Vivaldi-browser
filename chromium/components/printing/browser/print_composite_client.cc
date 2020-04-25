@@ -67,7 +67,7 @@ void BindDiscardableSharedMemoryManagerOnIOThread(
         discardable_memory::mojom::DiscardableSharedMemoryManager> receiver) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   discardable_memory::DiscardableSharedMemoryManager::Get()->Bind(
-      std::move(receiver), {});
+      std::move(receiver));
 }
 
 }  // namespace

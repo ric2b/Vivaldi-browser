@@ -187,8 +187,9 @@ TEST(EmplaceHelper, EmplacePromiseResult) {
 TEST(EmplaceHelper, EmplacePromise) {
   scoped_refptr<AbstractPromise> promise =
       DoNothingPromiseBuilder(FROM_HERE).SetCanResolve(true);
-  scoped_refptr<AbstractPromise> curried = DoNothingPromiseBuilder(FROM_HERE);
 
+  PassedPromise curried = NoOpPromiseExecutor::Create(
+      FROM_HERE, false, false, RejectPolicy::kCatchNotRequired);
   EmplaceHelper<Resolved<int>, Rejected<NoReject>>::Emplace(
       promise.get(), Promise<int>(std::move(curried)));
 
@@ -243,8 +244,8 @@ TEST(RunHelper, CallbackVoidArgumentIntResult) {
   scoped_refptr<AbstractPromise> result =
       DoNothingPromiseBuilder(FROM_HERE).SetCanResolve(true);
 
-  RunHelper<OnceCallback<int()>, Resolved<void>, Resolved<int>,
-            Rejected<std::string>>::Run(BindOnce([]() { return 123; }),
+  RunHelper<RepeatingCallback<int()>, Resolved<void>, Resolved<int>,
+            Rejected<std::string>>::Run(BindRepeating([]() { return 123; }),
                                         arg.get(), result.get());
 
   EXPECT_EQ(result->value().template Get<Resolved<int>>()->value, 123);
@@ -255,8 +256,8 @@ TEST(RunHelper, CallbackVoidArgumentVoidResult) {
   scoped_refptr<AbstractPromise> result =
       DoNothingPromiseBuilder(FROM_HERE).SetCanResolve(true);
 
-  RunHelper<OnceCallback<void()>, Resolved<void>, Resolved<void>,
-            Rejected<std::string>>::Run(BindOnce([]() {}), arg.get(),
+  RunHelper<RepeatingCallback<void()>, Resolved<void>, Resolved<void>,
+            Rejected<std::string>>::Run(BindRepeating([]() {}), arg.get(),
                                         result.get());
 
   EXPECT_TRUE(result->value().ContainsResolved());
@@ -268,8 +269,8 @@ TEST(RunHelper, CallbackIntArgumentIntResult) {
       DoNothingPromiseBuilder(FROM_HERE).SetCanResolve(true);
   arg->emplace(Resolved<int>(123));
 
-  RunHelper<OnceCallback<int(int)>, Resolved<int>, Resolved<int>,
-            Rejected<std::string>>::Run(BindOnce([](int value) {
+  RunHelper<RepeatingCallback<int(int)>, Resolved<int>, Resolved<int>,
+            Rejected<std::string>>::Run(BindRepeating([](int value) {
                                           return value + 1;
                                         }),
                                         arg.get(), result.get());
@@ -284,7 +285,7 @@ TEST(RunHelper, CallbackIntArgumentArgumentVoidResult) {
   arg->emplace(Resolved<int>(123));
 
   int value;
-  RunHelper<OnceCallback<void(int)>, Resolved<int>, Resolved<void>,
+  RunHelper<RepeatingCallback<void(int)>, Resolved<int>, Resolved<void>,
             Rejected<std::string>>::Run(BindLambdaForTesting([&](int arg) {
                                           value = arg;
                                         }),

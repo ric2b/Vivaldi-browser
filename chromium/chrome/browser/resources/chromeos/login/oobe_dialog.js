@@ -55,11 +55,6 @@ Polymer({
       reflectToAttribute: true,
       observer: 'onfullScreenDialogChanged_',
     },
-
-    android: {
-      type: Boolean,
-      value: false,
-    },
   },
 
   focus: function() {
@@ -78,6 +73,14 @@ Polymer({
         Oobe.getInstance().displayType == DISPLAY_TYPE.OOBE;
     if (isOobe || document.documentElement.hasAttribute('full-screen-dialog'))
       this.fullScreenDialog = true;
+  },
+
+  /**
+   * Scroll to the bottom of footer container.
+   */
+  scrollToBottom: function() {
+    var el = this.$$('#footer-container');
+    el.scrollTop = el.scrollHeight;
   },
 
   /**

@@ -80,10 +80,6 @@
 #define MAYBE_TEXT(test) test
 #endif
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_MACOSX)
-#include "base/mac/mac_util.h"
-#endif
-
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::AtLeast;
@@ -908,7 +904,15 @@ TEST_F(PipelineIntegrationTest, TrackStatusChangesAfterPipelineEnded) {
   OnSelectedVideoTrackChanged(MediaTrack::Id("1"));
 }
 
-TEST_F(PipelineIntegrationTest, TrackStatusChangesWhileSuspended) {
+// TODO(https://crbug.com/1009964): Enable test when MacOS flake is fixed.
+#if defined(OS_MACOSX)
+#define MAYBE_TrackStatusChangesWhileSuspended \
+  DISABLED_TrackStatusChangesWhileSuspended
+#else
+#define MAYBE_TrackStatusChangesWhileSuspended TrackStatusChangesWhileSuspended
+#endif
+
+TEST_F(PipelineIntegrationTest, MAYBE_TrackStatusChangesWhileSuspended) {
   ASSERT_EQ(PIPELINE_OK, Start("bear-320x240.webm", kNoClockless));
   Play();
 
@@ -2605,7 +2609,7 @@ TEST_F(PipelineIntegrationTest, MSE_BasicPlayback_VideoOnly_MP4_HEVC) {
   const char kMp4HevcVideoOnly[] = "video/mp4; codecs=\"hvc1.1.6.L93.B0\"";
   TestMediaSource source("bear-320x240-v_frag-hevc.mp4", kMp4HevcVideoOnly,
                          kAppendWholeFile);
-#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
   PipelineStatus status = StartPipelineWithMediaSource(&source);
   EXPECT_TRUE(status == PIPELINE_OK || status == DECODER_ERROR_NOT_SUPPORTED);
 #else
@@ -2620,7 +2624,7 @@ TEST_F(PipelineIntegrationTest, MSE_BasicPlayback_VideoOnly_MP4_HEV1) {
   const char kMp4Hev1VideoOnly[] = "video/mp4; codecs=\"hev1.1.6.L93.B0\"";
   TestMediaSource source("bear-320x240-v_frag-hevc.mp4", kMp4Hev1VideoOnly,
                          kAppendWholeFile);
-#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
   PipelineStatus status = StartPipelineWithMediaSource(&source);
   EXPECT_TRUE(status == PIPELINE_OK || status == DECODER_ERROR_NOT_SUPPORTED);
 #else

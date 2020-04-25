@@ -275,8 +275,16 @@ const char* ToString(ax::mojom::Role role) {
       return "alert";
     case ax::mojom::Role::kAnchor:
       return "anchor";
-    case ax::mojom::Role::kAnnotation:
-      return "annotation";
+    case ax::mojom::Role::kAnnotationAttribution:
+      return "annotationAttribution";
+    case ax::mojom::Role::kAnnotationCommentary:
+      return "annotationCommentary";
+    case ax::mojom::Role::kAnnotationPresence:
+      return "annotationPresence";
+    case ax::mojom::Role::kAnnotationRevision:
+      return "annotationRevision";
+    case ax::mojom::Role::kAnnotationSuggestion:
+      return "annotationSuggestion";
     case ax::mojom::Role::kApplication:
       return "application";
     case ax::mojom::Role::kArticle:
@@ -431,6 +439,8 @@ const char* ToString(ax::mojom::Role role) {
       return "figure";
     case ax::mojom::Role::kFooter:
       return "footer";
+    case ax::mojom::Role::kFooterAsNonLandmark:
+      return "footerAsNonLandmark";
     case ax::mojom::Role::kForm:
       return "form";
     case ax::mojom::Role::kGenericContainer:
@@ -445,6 +455,10 @@ const char* ToString(ax::mojom::Role role) {
       return "grid";
     case ax::mojom::Role::kGroup:
       return "group";
+    case ax::mojom::Role::kHeader:
+      return "header";
+    case ax::mojom::Role::kHeaderAsNonLandmark:
+      return "headerAsNonLandmark";
     case ax::mojom::Role::kHeading:
       return "heading";
     case ax::mojom::Role::kIframe:
@@ -549,6 +563,10 @@ const char* ToString(ax::mojom::Role role) {
       return "row";
     case ax::mojom::Role::kRuby:
       return "ruby";
+    case ax::mojom::Role::kRubyAnnotation:
+      return "rubyAnnotation";
+    case ax::mojom::Role::kSection:
+      return "section";
     case ax::mojom::Role::kSvgRoot:
       return "svgRoot";
     case ax::mojom::Role::kScrollBar:
@@ -633,8 +651,16 @@ ax::mojom::Role ParseRole(const char* role) {
     return ax::mojom::Role::kAlert;
   if (0 == strcmp(role, "anchor"))
     return ax::mojom::Role::kAnchor;
-  if (0 == strcmp(role, "annotation"))
-    return ax::mojom::Role::kAnnotation;
+  if (0 == strcmp(role, "annotationAttribution"))
+    return ax::mojom::Role::kAnnotationAttribution;
+  if (0 == strcmp(role, "annotationCommentary"))
+    return ax::mojom::Role::kAnnotationCommentary;
+  if (0 == strcmp(role, "annotationPresence"))
+    return ax::mojom::Role::kAnnotationPresence;
+  if (0 == strcmp(role, "annotationRevision"))
+    return ax::mojom::Role::kAnnotationRevision;
+  if (0 == strcmp(role, "annotationSuggestion"))
+    return ax::mojom::Role::kAnnotationSuggestion;
   if (0 == strcmp(role, "application"))
     return ax::mojom::Role::kApplication;
   if (0 == strcmp(role, "article"))
@@ -789,6 +815,8 @@ ax::mojom::Role ParseRole(const char* role) {
     return ax::mojom::Role::kFigure;
   if (0 == strcmp(role, "footer"))
     return ax::mojom::Role::kFooter;
+  if (0 == strcmp(role, "footerAsNonLandmark"))
+    return ax::mojom::Role::kFooterAsNonLandmark;
   if (0 == strcmp(role, "form"))
     return ax::mojom::Role::kForm;
   if (0 == strcmp(role, "genericContainer"))
@@ -805,6 +833,10 @@ ax::mojom::Role ParseRole(const char* role) {
     return ax::mojom::Role::kGroup;
   if (0 == strcmp(role, "heading"))
     return ax::mojom::Role::kHeading;
+  if (0 == strcmp(role, "header"))
+    return ax::mojom::Role::kHeader;
+  if (0 == strcmp(role, "headerAsNonLandmark"))
+    return ax::mojom::Role::kHeaderAsNonLandmark;
   if (0 == strcmp(role, "iframe"))
     return ax::mojom::Role::kIframe;
   if (0 == strcmp(role, "iframePresentational"))
@@ -907,6 +939,10 @@ ax::mojom::Role ParseRole(const char* role) {
     return ax::mojom::Role::kRow;
   if (0 == strcmp(role, "ruby"))
     return ax::mojom::Role::kRuby;
+  if (0 == strcmp(role, "rubyAnnotation"))
+    return ax::mojom::Role::kRubyAnnotation;
+  if (0 == strcmp(role, "section"))
+    return ax::mojom::Role::kSection;
   if (0 == strcmp(role, "svgRoot"))
     return ax::mojom::Role::kSvgRoot;
   if (0 == strcmp(role, "scrollBar"))

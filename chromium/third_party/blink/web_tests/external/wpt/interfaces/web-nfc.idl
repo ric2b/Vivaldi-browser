@@ -6,17 +6,12 @@
 [Exposed=Window]
 interface NDEFMessage {
   constructor(NDEFMessageInit messageInit);
-
-  readonly attribute USVString url;
   readonly attribute FrozenArray<NDEFRecord> records;
 };
 
 dictionary NDEFMessageInit {
-  USVString url;
-  sequence<NDEFRecordInit> records;
+  required sequence<NDEFRecordInit> records;
 };
-
-typedef any NDEFRecordData;
 
 [Exposed=Window]
 interface NDEFRecord {
@@ -26,18 +21,18 @@ interface NDEFRecord {
   readonly attribute USVString mediaType;
   readonly attribute USVString id;
 
-  USVString? toText();
-  [NewObject] ArrayBuffer? toArrayBuffer();
-  [NewObject] any toJSON();
+  USVString? text();
+  [NewObject] ArrayBuffer? arrayBuffer();
+  [NewObject] any json();
   sequence<NDEFRecord> toRecords();
 };
 
 dictionary NDEFRecordInit {
-  NDEFRecordType recordType;
+  required NDEFRecordType recordType;
   USVString mediaType;
   USVString id;
 
-  NDEFRecordData data;
+  any data;
 };
 
 typedef DOMString NDEFRecordType;
@@ -89,6 +84,7 @@ dictionary NFCPushOptions {
   NFCPushTarget target = "any";
   unrestricted double timeout = Infinity;
   boolean ignoreRead = true;
+  boolean overwrite = true;
   AbortSignal? signal;
 };
 
@@ -99,7 +95,7 @@ enum NFCPushTarget {
 };
 
 dictionary NFCScanOptions {
-  USVString url = "";
+  USVString id = "";
   NDEFRecordType recordType;
   USVString mediaType = "";
   AbortSignal? signal;

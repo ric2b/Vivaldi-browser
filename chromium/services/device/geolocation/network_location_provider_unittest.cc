@@ -284,7 +284,7 @@ class GeolocationNetworkProviderTest : public testing::Test {
     }
   }
 
-  const base::test::TaskEnvironment task_environment_;
+  const base::test::SingleThreadTaskEnvironment task_environment_;
   network::TestURLLoaderFactory test_url_loader_factory_;
   const scoped_refptr<MockWifiDataProvider> wifi_data_provider_;
   FakePositionCache position_cache_;
@@ -457,7 +457,7 @@ TEST_F(GeolocationNetworkProviderTest, MultipleWifiScansComplete) {
   const GURL& request_url_3 =
       test_url_loader_factory_.pending_requests()->back().request.url;
   test_url_loader_factory_.AddResponse(
-      request_url_3, network::ResourceResponseHead(), std::string(),
+      request_url_3, network::mojom::URLResponseHead::New(), std::string(),
       network::URLLoaderCompletionStatus(net::ERR_FAILED));
   base::RunLoop().RunUntilIdle();
 

@@ -138,37 +138,6 @@ void WebRequestProxyingWebSocket::OnOpeningHandshakeStarted(
   forwarding_handshake_client_->OnOpeningHandshakeStarted(std::move(request));
 }
 
-void WebRequestProxyingWebSocket::OnResponseReceived(
-    network::mojom::WebSocketHandshakeResponsePtr response) {
-  DCHECK(forwarding_handshake_client_);
-
-  // response_.headers will be set in OnBeforeSendHeaders if
-  // |receiver_as_header_client_| is set.
-  if (!receiver_as_header_client_.is_bound()) {
-    response_.headers =
-        base::MakeRefCounted<net::HttpResponseHeaders>(base::StringPrintf(
-            "HTTP/%d.%d %d %s", response->http_version.major_value(),
-            response->http_version.minor_value(), response->status_code,
-            response->status_text.c_str()));
-    for (const auto& header : response->headers)
-      response_.headers->AddHeader(header->name + ": " + header->value);
-  }
-
-  response_.remote_endpoint = response->remote_endpoint;
-
-  // TODO(yhirano): OnResponseReceived is called with the original
-  // response headers. That means if OnHeadersReceived modified them the
-  // renderer won't see that modification. This is the opposite of http(s)
-  // requests.
-  forwarding_handshake_client_->OnResponseReceived(std::move(response));
-
-  if (!receiver_as_header_client_.is_bound() || response_.headers) {
-    ContinueToHeadersReceived();
-  } else {
-    waiting_for_header_client_headers_received_ = true;
-  }
-}
-
 void WebRequestProxyingWebSocket::ContinueToHeadersReceived() {
   auto continuation = base::BindRepeating(
       &WebRequestProxyingWebSocket::OnHeadersReceivedComplete,
@@ -195,16 +164,47 @@ void WebRequestProxyingWebSocket::OnConnectionEstablished(
     mojo::PendingReceiver<network::mojom::WebSocketClient> client_receiver,
     const std::string& selected_protocol,
     const std::string& extensions,
+    network::mojom::WebSocketHandshakeResponsePtr response,
     mojo::ScopedDataPipeConsumerHandle readable) {
   DCHECK(forwarding_handshake_client_);
   DCHECK(!is_done_);
   is_done_ = true;
+  websocket_ = std::move(websocket);
+  client_receiver_ = std::move(client_receiver);
+  selected_protocol_ = selected_protocol;
+  extensions_ = extensions;
+  handshake_response_ = std::move(response);
+  readable_ = std::move(readable);
+
+  response_.remote_endpoint = handshake_response_->remote_endpoint;
+
+  // response_.headers will be set in OnBeforeSendHeaders if
+  // |receiver_as_header_client_| is set.
+  if (receiver_as_header_client_.is_bound()) {
+    ContinueToCompleted();
+    return;
+  }
+
+  response_.headers =
+      base::MakeRefCounted<net::HttpResponseHeaders>(base::StringPrintf(
+          "HTTP/%d.%d %d %s", handshake_response_->http_version.major_value(),
+          handshake_response_->http_version.minor_value(),
+          handshake_response_->status_code,
+          handshake_response_->status_text.c_str()));
+  for (const auto& header : handshake_response_->headers)
+    response_.headers->AddHeader(header->name + ": " + header->value);
+
+  ContinueToHeadersReceived();
+}
+
+void WebRequestProxyingWebSocket::ContinueToCompleted() {
+  DCHECK(forwarding_handshake_client_);
+  DCHECK(is_done_);
   ExtensionWebRequestEventRouter::GetInstance()->OnCompleted(
       browser_context_, &info_, net::ERR_WS_UPGRADE);
-
   forwarding_handshake_client_->OnConnectionEstablished(
-      std::move(websocket), std::move(client_receiver), selected_protocol,
-      extensions, std::move(readable));
+      std::move(websocket_), std::move(client_receiver_), selected_protocol_,
+      extensions_, std::move(handshake_response_), std::move(readable_));
 
   // Deletes |this|.
   proxies_->RemoveProxy(this);
@@ -256,19 +256,13 @@ void WebRequestProxyingWebSocket::OnBeforeSendHeaders(
 
 void WebRequestProxyingWebSocket::OnHeadersReceived(
     const std::string& headers,
+    const net::IPEndPoint& endpoint,
     OnHeadersReceivedCallback callback) {
   DCHECK(receiver_as_header_client_.is_bound());
 
-  // Note: since there are different pipes used for WebSocketClient and
-  // TrustedHeaderClient, there are no guarantees whether this or
-  // OnResponseReceived are called first.
   on_headers_received_callback_ = std::move(callback);
   response_.headers = base::MakeRefCounted<net::HttpResponseHeaders>(headers);
 
-  if (!waiting_for_header_client_headers_received_)
-    return;
-
-  waiting_for_header_client_headers_received_ = false;
   ContinueToHeadersReceived();
 }
 
@@ -360,6 +354,11 @@ void WebRequestProxyingWebSocket::OnBeforeSendHeadersComplete(
 }
 
 void WebRequestProxyingWebSocket::ContinueToStartRequest(int error_code) {
+  if (error_code != net::OK) {
+    OnError(error_code);
+    return;
+  }
+
   base::flat_set<std::string> used_header_names;
   std::vector<network::mojom::HttpHeaderPtr> additional_headers;
   for (net::HttpRequestHeaders::Iterator it(request_headers_); it.GetNext();) {
@@ -417,22 +416,29 @@ void WebRequestProxyingWebSocket::OnHeadersReceivedComplete(int error_code) {
   info_.AddResponseInfoFromResourceResponse(response_);
   ExtensionWebRequestEventRouter::GetInstance()->OnResponseStarted(
       browser_context_, &info_, net::OK);
+
+  if (!receiver_as_header_client_.is_bound())
+    ContinueToCompleted();
 }
 
 void WebRequestProxyingWebSocket::OnAuthRequiredComplete(
-    net::NetworkDelegate::AuthRequiredResponse rv) {
+    ExtensionWebRequestEventRouter::AuthRequiredResponse rv) {
   DCHECK(auth_required_callback_);
   ResumeIncomingMethodCallProcessing();
   switch (rv) {
-    case net::NetworkDelegate::AUTH_REQUIRED_RESPONSE_NO_ACTION:
-    case net::NetworkDelegate::AUTH_REQUIRED_RESPONSE_CANCEL_AUTH:
+    case ExtensionWebRequestEventRouter::AuthRequiredResponse::
+        AUTH_REQUIRED_RESPONSE_NO_ACTION:
+    case ExtensionWebRequestEventRouter::AuthRequiredResponse::
+        AUTH_REQUIRED_RESPONSE_CANCEL_AUTH:
       std::move(auth_required_callback_).Run(base::nullopt);
       break;
 
-    case net::NetworkDelegate::AUTH_REQUIRED_RESPONSE_SET_AUTH:
+    case ExtensionWebRequestEventRouter::AuthRequiredResponse::
+        AUTH_REQUIRED_RESPONSE_SET_AUTH:
       std::move(auth_required_callback_).Run(auth_credentials_);
       break;
-    case net::NetworkDelegate::AUTH_REQUIRED_RESPONSE_IO_PENDING:
+    case ExtensionWebRequestEventRouter::AuthRequiredResponse::
+        AUTH_REQUIRED_RESPONSE_IO_PENDING:
       NOTREACHED();
       break;
   }
@@ -455,8 +461,10 @@ void WebRequestProxyingWebSocket::OnHeadersReceivedCompleteForAuth(
       browser_context_, &info_, auth_info, std::move(continuation),
       &auth_credentials_);
   PauseIncomingMethodCallProcessing();
-  if (auth_rv == net::NetworkDelegate::AUTH_REQUIRED_RESPONSE_IO_PENDING)
+  if (auth_rv == ExtensionWebRequestEventRouter::AuthRequiredResponse::
+                     AUTH_REQUIRED_RESPONSE_IO_PENDING) {
     return;
+  }
 
   OnAuthRequiredComplete(auth_rv);
 }

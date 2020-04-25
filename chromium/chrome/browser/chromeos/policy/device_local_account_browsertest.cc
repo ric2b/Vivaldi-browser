@@ -41,6 +41,7 @@
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/launch_service/launch_service.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/extensions/device_local_account_external_policy_loader.h"
 #include "chrome/browser/chromeos/extensions/external_cache.h"
@@ -906,7 +907,14 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, PRE_DataIsRemoved) {
   given_name_update->SetKey("sanity.check@example.com", base::Value("Anne"));
 }
 
-IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, DataIsRemoved) {
+// Disabled on ASan and LSAn builds due to a consistent failure. See
+// crbug.com/1004228
+#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
+#define MAYBE_DataIsRemoved DISABLED_DataIsRemoved
+#else
+#define MAYBE_DataIsRemoved DataIsRemoved
+#endif
+IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, MAYBE_DataIsRemoved) {
   // The device local account should have been removed.
   EXPECT_FALSE(g_browser_process->local_state()
                    ->GetDictionary("UserGivenName")
@@ -1172,12 +1180,11 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsUncached) {
   ASSERT_TRUE(profile);
   extensions::ExtensionRegistry* extension_registry =
       extensions::ExtensionRegistry::Get(profile);
-  EXPECT_TRUE(extension_registry->GetExtensionById(
-      kHostedAppID, extensions::ExtensionRegistry::COMPATIBILITY));
+  EXPECT_TRUE(extension_registry->enabled_extensions().GetByID(kHostedAppID));
 
   // Verify that the extension was not installed.
   EXPECT_FALSE(extension_registry->GetExtensionById(
-      kGoodExtensionID, extensions::ExtensionRegistry::COMPATIBILITY));
+      kGoodExtensionID, extensions::ExtensionRegistry::EVERYTHING));
 
   // Verify that the app was downloaded to the account's extension cache.
   base::FilePath test_dir;
@@ -1258,12 +1265,11 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsCached) {
   ASSERT_TRUE(profile);
   extensions::ExtensionRegistry* extension_registry =
       extensions::ExtensionRegistry::Get(profile);
-  EXPECT_TRUE(extension_registry->GetExtensionById(
-      kHostedAppID, extensions::ExtensionRegistry::COMPATIBILITY));
+  EXPECT_TRUE(extension_registry->enabled_extensions().GetByID(kHostedAppID));
 
   // Verify that the extension was not installed.
   EXPECT_FALSE(extension_registry->GetExtensionById(
-      kGoodExtensionID, extensions::ExtensionRegistry::COMPATIBILITY));
+      kGoodExtensionID, extensions::ExtensionRegistry::EVERYTHING));
 
   // Verify that the app is still in the account's extension cache.
   {
@@ -1641,8 +1647,8 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, LastWindowClosedLogoutReminder) {
 
   // Start the platform app, causing it to open a window.
   run_loop_.reset(new base::RunLoop);
-  apps::LaunchService::Get(profile)->OpenApplication(AppLaunchParams(
-      profile, app->id(), apps::mojom::LaunchContainer::kLaunchContainerNone,
+  apps::LaunchService::Get(profile)->OpenApplication(apps::AppLaunchParams(
+      app->id(), apps::mojom::LaunchContainer::kLaunchContainerNone,
       WindowOpenDisposition::NEW_WINDOW,
       apps::mojom::AppLaunchSource::kSourceTest));
   run_loop_->Run();
@@ -2345,8 +2351,8 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, PolicyForExtensions) {
   ASSERT_TRUE(profile);
   extensions::ExtensionRegistry* extension_registry =
       extensions::ExtensionRegistry::Get(profile);
-  EXPECT_TRUE(extension_registry->GetExtensionById(
-      kShowManagedStorageID, extensions::ExtensionRegistry::COMPATIBILITY));
+  EXPECT_TRUE(
+      extension_registry->enabled_extensions().GetByID(kShowManagedStorageID));
 
   // Wait for the app policy if it hasn't been fetched yet.
   ProfilePolicyConnector* connector = profile->GetProfilePolicyConnector();

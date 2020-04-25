@@ -62,7 +62,7 @@ void HttpAuthManagerImpl::SetObserverAndDeliverCredentials(
   form_manager_ = std::make_unique<PasswordFormManager>(
       client_, PasswordStore::FormDigest(observed_form),
       nullptr, /* form_fetcher */
-      std::make_unique<FormSaverImpl>(client_->GetPasswordStore()));
+      std::make_unique<FormSaverImpl>(client_->GetProfilePasswordStore()));
 }
 
 void HttpAuthManagerImpl::ProvisionallySaveForm(
@@ -127,6 +127,13 @@ void HttpAuthManagerImpl::OnLoginSuccesfull() {
   // not in submitted state. Do nothing in that case.
   if (!form_manager_->is_submitted())
     return;
+
+  if (form_manager_->GetFormFetcher()->GetState() ==
+      FormFetcher::State::WAITING) {
+    // We have a provisional save manager, but it didn't finish matching yet.
+    // We just give up.
+    return;
+  }
 
   // TODO(crbug/831123) Move the logic into the PasswordFormManager.
   bool is_update = form_manager_->IsPasswordUpdate();

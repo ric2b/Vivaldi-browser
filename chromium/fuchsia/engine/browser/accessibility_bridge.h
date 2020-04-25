@@ -11,6 +11,7 @@
 #include <lib/fidl/cpp/binding.h>
 
 #include "base/macros.h"
+#include "fuchsia/engine/web_engine_export.h"
 
 // This class is the intermediate for accessibility between Chrome and Fuchsia.
 // It handles registration to the Fuchsia Semantics Manager, translating events
@@ -19,7 +20,7 @@
 // The lifetime of an instance of AccessibilityBridge is the same as that of a
 // View created by FrameImpl. This class refers to the View via the
 // caller-supplied ViewRef.
-class AccessibilityBridge
+class WEB_ENGINE_EXPORT AccessibilityBridge
     : public fuchsia::accessibility::semantics::SemanticListener {
  public:
   AccessibilityBridge(

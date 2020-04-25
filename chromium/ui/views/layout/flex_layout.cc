@@ -20,22 +20,13 @@
 #include "ui/events/event_target_iterator.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/layout/flex_layout_types.h"
-#include "ui/views/layout/flex_layout_types_internal.h"
+#include "ui/views/layout/normalized_geometry.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
 
 // Module-private declarations -------------------------------------------------
 
 namespace views {
-
-using internal::NormalizedInsets;
-using internal::NormalizedPoint;
-using internal::NormalizedRect;
-using internal::NormalizedSize;
-using internal::NormalizedSizeBounds;
-
-using internal::Denormalize;
-using internal::Normalize;
 
 namespace {
 
@@ -326,7 +317,15 @@ FlexLayout& FlexLayout::SetMinimumCrossAxisSize(int size) {
   return *this;
 }
 
-LayoutManagerBase::ProposedLayout FlexLayout::CalculateProposedLayout(
+FlexLayout& FlexLayout::SetBetweenChildSpacing(int between_child_spacing) {
+  if (between_child_spacing_ != between_child_spacing) {
+    between_child_spacing_ = between_child_spacing;
+    InvalidateHost(true);
+  }
+  return *this;
+}
+
+ProposedLayout FlexLayout::CalculateProposedLayout(
     const SizeBounds& size_bounds) const {
   FlexLayoutData data;
 
@@ -378,7 +377,7 @@ LayoutManagerBase::ProposedLayout FlexLayout::CalculateProposedLayout(
 }
 
 void FlexLayout::InitializeChildData(
-    const internal::NormalizedSizeBounds& bounds,
+    const NormalizedSizeBounds& bounds,
     FlexLayoutData* data,
     FlexOrderToViewIndexMap* flex_order_to_index) const {
   // Step through the children, creating placeholder layout view elements
@@ -422,8 +421,7 @@ void FlexLayout::InitializeChildData(
 
       // Keep track of non-hidden flex controls.
       const bool can_flex =
-          (flex_child.flex.weight() > 0 &&
-           flex_child.preferred_size.main() > 0) ||
+          flex_child.flex.weight() > 0 ||
           flex_child.current_size.main() < flex_child.preferred_size.main();
       if (can_flex)
         (*flex_order_to_index)[flex_child.flex.order()].push_back(view_index);
@@ -471,6 +469,14 @@ void FlexLayout::CalculateChildBounds(const SizeBounds& size_bounds,
       FlexChildData& flex_child = data->child_data[i];
       NormalizedRect actual = flex_child.actual_bounds;
       actual.Offset(start.main(), start.cross());
+      if (actual.size_main() > flex_child.preferred_size.main() &&
+          flex_child.flex.alignment() != LayoutAlignment::kStretch) {
+        Span container{actual.origin_main(), actual.size_main()};
+        Span new_main{0, flex_child.preferred_size.main()};
+        new_main.Align(container, flex_child.flex.alignment());
+        actual.set_origin_main(new_main.start());
+        actual.set_size_main(new_main.length());
+      }
       child_layout.bounds = Denormalize(orientation(), actual);
     }
   }
@@ -492,9 +498,10 @@ Inset1D FlexLayout::GetCrossAxisMargins(const FlexLayoutData& layout,
 
 int FlexLayout::CalculateMargin(int margin1,
                                 int margin2,
-                                int internal_padding) const {
-  const int result =
-      collapse_margins() ? std::max(margin1, margin2) : margin1 + margin2;
+                                int internal_padding,
+                                int spacing) const {
+  const int result = collapse_margins() ? std::max({margin1, margin2, spacing})
+                                        : margin1 + margin2 + spacing;
   return std::max(0, result - internal_padding);
 }
 
@@ -539,7 +546,8 @@ int FlexLayout::CalculateChildSpacing(
       child2 ? child2->internal_padding.main_leading() : 0;
 
   return CalculateMargin(left_margin, right_margin,
-                         left_padding + right_padding);
+                         left_padding + right_padding,
+                         (child1 && child2) ? between_child_spacing() : 0);
 }
 
 void FlexLayout::UpdateLayoutFromChildren(

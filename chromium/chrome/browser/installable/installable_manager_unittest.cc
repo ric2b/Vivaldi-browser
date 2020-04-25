@@ -6,7 +6,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/manifest/web_display_mode.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 
 using IconPurpose = blink::Manifest::ImageResource::Purpose;
 
@@ -25,7 +25,7 @@ class InstallableManagerUnitTest : public testing::Test {
     manifest.name = ToNullableUTF16("foo");
     manifest.short_name = ToNullableUTF16("bar");
     manifest.start_url = GURL("http://example.com");
-    manifest.display = blink::kWebDisplayModeStandalone;
+    manifest.display = blink::mojom::DisplayMode::kStandalone;
 
     blink::Manifest::ImageResource primary_icon;
     primary_icon.type = base::ASCIIToUTF16("image/png");
@@ -211,32 +211,58 @@ TEST_F(InstallableManagerUnitTest, ManifestRequiresMinimalSize) {
   manifest.icons[0].sizes[1] = gfx::Size(0, 0);
   EXPECT_TRUE(IsManifestValid(manifest));
   EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
+
+  // When preferring maskable icons, both non-maskable and maskable
+  // icons are smaller than required.
+  manifest.icons[0].sizes.clear();
+  manifest.icons[0].sizes.push_back(gfx::Size(1, 1));
+
+  blink::Manifest::ImageResource maskable_icon;
+  maskable_icon.type = base::ASCIIToUTF16("image/png");
+  maskable_icon.sizes.push_back(gfx::Size(82, 82));
+  maskable_icon.purpose.push_back(IconPurpose::MASKABLE);
+  manifest.icons.push_back(maskable_icon);
+  EXPECT_FALSE(IsManifestValid(manifest, true, true));
+  EXPECT_EQ(MANIFEST_MISSING_SUITABLE_ICON, GetErrorCode());
+
+  // When preferring maskable icons, the maskable icon is smaller than required.
+  manifest.icons[0].sizes[0] = gfx::Size(144, 144);
+  manifest.icons[1].sizes[0] = gfx::Size(82, 82);
+  EXPECT_TRUE(IsManifestValid(manifest, true, true));
+  EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
+
+  // When preferring maskable icons, the maskable icon satisfies the size
+  // requirement though the non maskable one doesn't
+  manifest.icons[0].sizes[0] = gfx::Size(1, 1);
+  manifest.icons[1].sizes[0] = gfx::Size(83, 83);
+  EXPECT_TRUE(IsManifestValid(manifest, true, true));
+  EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
 }
 
 TEST_F(InstallableManagerUnitTest, ManifestDisplayModes) {
   blink::Manifest manifest = GetValidManifest();
 
-  manifest.display = blink::kWebDisplayModeUndefined;
+  manifest.display = blink::mojom::DisplayMode::kUndefined;
   EXPECT_TRUE(
       IsManifestValid(manifest, false /* check_webapp_manifest_display */));
   EXPECT_FALSE(IsManifestValid(manifest));
   EXPECT_EQ(MANIFEST_DISPLAY_NOT_SUPPORTED, GetErrorCode());
 
-  manifest.display = blink::kWebDisplayModeBrowser;
+  manifest.display = blink::mojom::DisplayMode::kBrowser;
   EXPECT_TRUE(
       IsManifestValid(manifest, false /* check_webapp_manifest_display */));
   EXPECT_FALSE(IsManifestValid(manifest));
   EXPECT_EQ(MANIFEST_DISPLAY_NOT_SUPPORTED, GetErrorCode());
 
-  manifest.display = blink::kWebDisplayModeMinimalUi;
+  manifest.display = blink::mojom::DisplayMode::kMinimalUi;
   EXPECT_TRUE(IsManifestValid(manifest));
   EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
 
-  manifest.display = blink::kWebDisplayModeStandalone;
+  manifest.display = blink::mojom::DisplayMode::kStandalone;
   EXPECT_TRUE(IsManifestValid(manifest));
   EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
 
-  manifest.display = blink::kWebDisplayModeFullscreen;
+  manifest.display = blink::mojom::DisplayMode::kFullscreen;
   EXPECT_TRUE(IsManifestValid(manifest));
   EXPECT_EQ(NO_ERROR_DETECTED, GetErrorCode());
 }

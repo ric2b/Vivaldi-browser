@@ -9,6 +9,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/global_media_controls/media_dialog_delegate.h"
+#include "chrome/browser/ui/global_media_controls/media_notification_container_impl.h"
 #include "chrome/browser/ui/global_media_controls/media_toolbar_button_controller_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/media_message_center/media_notification_item.h"
@@ -19,6 +20,9 @@
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace {
+
+constexpr base::TimeDelta kInactiveTimerDelay =
+    base::TimeDelta::FromMinutes(60);
 
 // Here we check to see if the WebContents is focused. Note that since Session
 // is a WebContentsObserver, we could in theory listen for
@@ -46,16 +50,28 @@ MediaToolbarButtonController::Session::Session(
     MediaToolbarButtonController* owner,
     const std::string& id,
     std::unique_ptr<media_message_center::MediaNotificationItem> item,
-    content::WebContents* web_contents)
+    content::WebContents* web_contents,
+    const Browser* browser,
+    mojo::Remote<media_session::mojom::MediaController> controller)
     : content::WebContentsObserver(web_contents),
       owner_(owner),
       id_(id),
-      item_(std::move(item)) {
+      item_(std::move(item)),
+      browser_(browser) {
   DCHECK(owner_);
   DCHECK(item_);
+
+  SetController(std::move(controller));
 }
 
-MediaToolbarButtonController::Session::~Session() = default;
+MediaToolbarButtonController::Session::~Session() {
+  // ~WebContentsObserver is ran after all the member's destructors. When
+  // `item_` is destroyed, it triggers a list of destruction which ends up
+  // re-entering and attempts to call a WebContentsObserver callback which
+  // fails. In order to avoid this from happening, the destructor stops
+  // observing before the implicit destructors are run.
+  Observe(nullptr);
+}
 
 void MediaToolbarButtonController::Session::WebContentsDestroyed() {
   // If the WebContents is destroyed, then we should just remove the item
@@ -63,11 +79,86 @@ void MediaToolbarButtonController::Session::WebContentsDestroyed() {
   owner_->RemoveItem(id_);
 }
 
+void MediaToolbarButtonController::Session::OnWebContentsFocused(
+    content::RenderWidgetHost*) {
+  OnSessionInteractedWith();
+}
+
+void MediaToolbarButtonController::Session::MediaSessionInfoChanged(
+    media_session::mojom::MediaSessionInfoPtr session_info) {
+  bool playing =
+      session_info && session_info->playback_state ==
+                          media_session::mojom::MediaPlaybackState::kPlaying;
+
+  // If we've started playing, we don't want the inactive timer to be running.
+  if (playing) {
+    inactive_timer_.Stop();
+    return;
+  }
+
+  // If the timer is already running, we don't need to do anything.
+  if (inactive_timer_.IsRunning())
+    return;
+
+  StartInactiveTimer();
+}
+
+void MediaToolbarButtonController::Session::MediaSessionPositionChanged(
+    const base::Optional<media_session::MediaPosition>& position) {
+  OnSessionInteractedWith();
+}
+
+void MediaToolbarButtonController::Session::SetController(
+    mojo::Remote<media_session::mojom::MediaController> controller) {
+  if (controller.is_bound()) {
+    observer_receiver_.reset();
+    controller->AddObserver(observer_receiver_.BindNewPipeAndPassRemote());
+  }
+}
+
+void MediaToolbarButtonController::Session::OnSessionInteractedWith() {
+  // If we're not currently tracking inactive time, then no action is needed.
+  if (!inactive_timer_.IsRunning())
+    return;
+
+  // Otherwise, reset the timer.
+  inactive_timer_.Stop();
+  StartInactiveTimer();
+}
+
+void MediaToolbarButtonController::Session::StartInactiveTimer() {
+  DCHECK(!inactive_timer_.IsRunning());
+  // Using |base::Unretained()| here is okay since |this| owns
+  // |inactive_timer_|.
+  inactive_timer_.Start(
+      FROM_HERE, kInactiveTimerDelay,
+      base::BindOnce(
+          &MediaToolbarButtonController::Session::OnInactiveTimerFired,
+          base::Unretained(this)));
+}
+
+void MediaToolbarButtonController::Session::OnInactiveTimerFired() {
+  // If the session has been paused and inactive for long enough, then
+  // dismiss it. To prevent issues, only the MediaToolbarButtonController for
+  // same window as the session will do the dismissing and record metrics.
+  if (IsSameWindow())
+    item_->Dismiss();
+}
+
+bool MediaToolbarButtonController::Session::IsSameWindow() {
+  if (!web_contents() || !browser_)
+    return false;
+
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  return browser_ == browser;
+}
+
 MediaToolbarButtonController::MediaToolbarButtonController(
     const base::UnguessableToken& source_id,
     service_manager::Connector* connector,
-    MediaToolbarButtonControllerDelegate* delegate)
-    : connector_(connector), delegate_(delegate) {
+    MediaToolbarButtonControllerDelegate* delegate,
+    const Browser* browser)
+    : connector_(connector), delegate_(delegate), browser_(browser) {
   DCHECK(delegate_);
 
   // |connector| can be null in tests.
@@ -92,7 +183,10 @@ MediaToolbarButtonController::MediaToolbarButtonController(
           weak_ptr_factory_.GetWeakPtr()));
 }
 
-MediaToolbarButtonController::~MediaToolbarButtonController() = default;
+MediaToolbarButtonController::~MediaToolbarButtonController() {
+  for (auto container_pair : observed_containers_)
+    container_pair.second->RemoveObserver(this);
+}
 
 void MediaToolbarButtonController::OnFocusGained(
     media_session::mojom::AudioFocusRequestStatePtr session) {
@@ -104,19 +198,23 @@ void MediaToolbarButtonController::OnFocusGained(
   if (it != sessions_.end() && !it->second.item()->frozen())
     return;
 
-  mojo::Remote<media_session::mojom::MediaController> controller;
+  mojo::Remote<media_session::mojom::MediaController> item_controller;
+  mojo::Remote<media_session::mojom::MediaController> session_controller;
 
   // |controller_manager_remote_| may be null in tests where connector is
   // unavailable.
   if (controller_manager_remote_) {
     controller_manager_remote_->CreateMediaControllerForSession(
-        controller.BindNewPipeAndPassReceiver(), *session->request_id);
+        item_controller.BindNewPipeAndPassReceiver(), *session->request_id);
+    controller_manager_remote_->CreateMediaControllerForSession(
+        session_controller.BindNewPipeAndPassReceiver(), *session->request_id);
   }
 
   if (it != sessions_.end()) {
     // If the notification was previously frozen then we should reset the
     // controller because the mojo pipe would have been reset.
-    it->second.item()->SetController(std::move(controller),
+    it->second.SetController(std::move(session_controller));
+    it->second.item()->SetController(std::move(item_controller),
                                      std::move(session->session_info));
     active_controllable_session_ids_.insert(id);
     frozen_session_ids_.erase(id);
@@ -128,9 +226,10 @@ void MediaToolbarButtonController::OnFocusGained(
             this, id,
             std::make_unique<media_message_center::MediaNotificationItem>(
                 this, id, session->source_name.value_or(std::string()),
-                std::move(controller), std::move(session->session_info)),
+                std::move(item_controller), std::move(session->session_info)),
             content::MediaSession::GetWebContentsFromRequestId(
-                *session->request_id)));
+                *session->request_id),
+            browser_, std::move(session_controller)));
   }
 }
 
@@ -161,7 +260,14 @@ void MediaToolbarButtonController::ShowNotification(const std::string& id) {
   if (it != sessions_.end())
     item = it->second.item()->GetWeakPtr();
 
-  dialog_delegate_->ShowMediaSession(id, item);
+  MediaNotificationContainerImpl* container =
+      dialog_delegate_->ShowMediaSession(id, item);
+
+  // Observe the container for dismissal.
+  if (container) {
+    container->AddObserver(this);
+    observed_containers_[id] = container;
+  }
 }
 
 void MediaToolbarButtonController::HideNotification(const std::string& id) {
@@ -202,6 +308,36 @@ void MediaToolbarButtonController::LogMediaSessionActionButtonPressed(
                             IsWebContentsFocused(web_contents));
 }
 
+void MediaToolbarButtonController::OnContainerClicked(const std::string& id) {
+  auto it = sessions_.find(id);
+  if (it == sessions_.end())
+    return;
+
+  content::WebContents* web_contents = it->second.web_contents();
+  if (!web_contents)
+    return;
+
+  content::WebContentsDelegate* delegate = web_contents->GetDelegate();
+  if (!delegate)
+    return;
+
+  delegate->ActivateContents(web_contents);
+}
+
+void MediaToolbarButtonController::OnContainerDismissed(const std::string& id) {
+  auto it = sessions_.find(id);
+  if (it != sessions_.end())
+    it->second.item()->Dismiss();
+}
+
+void MediaToolbarButtonController::OnContainerDestroyed(const std::string& id) {
+  auto iter = observed_containers_.find(id);
+  DCHECK(iter != observed_containers_.end());
+
+  iter->second->RemoveObserver(this);
+  observed_containers_.erase(iter);
+}
+
 void MediaToolbarButtonController::SetDialogDelegate(
     MediaDialogDelegate* delegate) {
   DCHECK(!delegate || !dialog_delegate_);
@@ -219,7 +355,14 @@ void MediaToolbarButtonController::SetDialogDelegate(
     if (it != sessions_.end())
       item = it->second.item()->GetWeakPtr();
 
-    dialog_delegate_->ShowMediaSession(id, item);
+    MediaNotificationContainerImpl* container =
+        dialog_delegate_->ShowMediaSession(id, item);
+
+    // Observe the container for dismissal.
+    if (container) {
+      container->AddObserver(this);
+      observed_containers_[id] = container;
+    }
   }
 
   media_message_center::RecordConcurrentNotificationCount(

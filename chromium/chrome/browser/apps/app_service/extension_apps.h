@@ -12,12 +12,18 @@
 #include "base/scoped_observer.h"
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/icon_key_util.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/services/app_service/public/mojom/app_service.mojom.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_prefs_observer.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
-#include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/public/cpp/bindings/interface_ptr_set.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/remote_set.h"
 
 class Profile;
 
@@ -38,25 +44,29 @@ class ExtensionAppsEnableFlow;
 class ExtensionApps : public apps::mojom::Publisher,
                       public extensions::ExtensionPrefsObserver,
                       public extensions::ExtensionRegistryObserver,
-                      public content_settings::Observer {
+                      public content_settings::Observer,
+                      public ArcAppListPrefs::Observer {
  public:
-  ExtensionApps();
+  ExtensionApps(const mojo::Remote<apps::mojom::AppService>& app_service,
+                Profile* profile,
+                apps::mojom::AppType app_type);
   ~ExtensionApps() override;
 
-  void Initialize(const apps::mojom::AppServicePtr& app_service,
-                  Profile* profile,
-                  apps::mojom::AppType type);
+  void FlushMojoCallsForTesting();
+
   void Shutdown();
 
-  void ApplyChromeBadge(const std::string& app_id);
+  void ObserveArc();
 
  private:
+  void Initialize(const mojo::Remote<apps::mojom::AppService>& app_service);
+
   // Determines whether the given extension should be treated as type app_type_,
   // and should therefore by handled by this publisher.
   bool Accepts(const extensions::Extension* extension);
 
   // apps::mojom::Publisher overrides.
-  void Connect(apps::mojom::SubscriberPtr subscriber,
+  void Connect(mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote,
                apps::mojom::ConnectOptionsPtr opts) override;
   void LoadIcon(const std::string& app_id,
                 apps::mojom::IconKeyPtr icon_key,
@@ -68,9 +78,16 @@ class ExtensionApps : public apps::mojom::Publisher,
               int32_t event_flags,
               apps::mojom::LaunchSource launch_source,
               int64_t display_id) override;
+  void LaunchAppWithIntent(const std::string& app_id,
+                           apps::mojom::IntentPtr intent,
+                           apps::mojom::LaunchSource launch_source,
+                           int64_t display_id) override;
   void SetPermission(const std::string& app_id,
                      apps::mojom::PermissionPtr permission) override;
-  void Uninstall(const std::string& app_id) override;
+  void PromptUninstall(const std::string& app_id) override;
+  void Uninstall(const std::string& app_id,
+                 bool clear_site_data,
+                 bool report_abuse) override;
   void OpenNativeSettings(const std::string& app_id) override;
 
   // content_settings::Observer overrides.
@@ -87,12 +104,25 @@ class ExtensionApps : public apps::mojom::Publisher,
       extensions::ExtensionPrefs* prefs) override;
 
   // extensions::ExtensionRegistryObserver overrides.
+  void OnExtensionLoaded(content::BrowserContext* browser_context,
+                         const extensions::Extension* extension) override;
+  void OnExtensionUnloaded(content::BrowserContext* browser_context,
+                           const extensions::Extension* extension,
+                           extensions::UnloadedExtensionReason reason) override;
   void OnExtensionInstalled(content::BrowserContext* browser_context,
                             const extensions::Extension* extension,
                             bool is_update) override;
   void OnExtensionUninstalled(content::BrowserContext* browser_context,
                               const extensions::Extension* extension,
                               extensions::UninstallReason reason) override;
+
+  // ArcAppListPrefs::Observer overrides.
+  void OnPackageInstalled(
+      const arc::mojom::ArcPackageInfo& package_info) override;
+  void OnPackageRemoved(const std::string& package_name,
+                        bool uninstalled) override;
+  void OnPackageListInitialRefreshed() override;
+  void OnArcAppListPrefsDestroyed() override;
 
   void Publish(apps::mojom::AppPtr app);
 
@@ -114,23 +144,35 @@ class ExtensionApps : public apps::mojom::Publisher,
 
   void PopulatePermissions(const extensions::Extension* extension,
                            std::vector<mojom::PermissionPtr>* target);
+  void PopulateIntentFilters(const base::Optional<GURL>& app_scope,
+                             std::vector<mojom::IntentFilterPtr>* target);
   apps::mojom::AppPtr Convert(const extensions::Extension* extension,
                               apps::mojom::Readiness readiness);
   void ConvertVector(const extensions::ExtensionSet& extensions,
                      apps::mojom::Readiness readiness,
                      std::vector<apps::mojom::AppPtr>* apps_out);
-  IconEffects GetIconEffect(const extensions::Extension* extension);
 
-  mojo::Binding<apps::mojom::Publisher> binding_;
-  mojo::InterfacePtrSet<apps::mojom::Subscriber> subscribers_;
+  // Calculate the icon effects for the extension.
+  IconEffects GetIconEffects(const extensions::Extension* extension);
+
+  // Get the equivalent Chrome app from |arc_package_name| and set the Chrome
+  // app badge on the icon effects for the equivalent Chrome apps. If the
+  // equivalent ARC app is installed, add the Chrome app badge, otherwise,
+  // remove the Chrome app badge.
+  void ApplyChromeBadge(const std::string& arc_package_name);
+
+  mojo::Receiver<apps::mojom::Publisher> receiver_{this};
+  mojo::RemoteSet<apps::mojom::Subscriber> subscribers_;
 
   Profile* profile_;
 
   ScopedObserver<extensions::ExtensionPrefs, extensions::ExtensionPrefsObserver>
-      prefs_observer_;
+      prefs_observer_{this};
   ScopedObserver<extensions::ExtensionRegistry,
                  extensions::ExtensionRegistryObserver>
-      registry_observer_;
+      registry_observer_{this};
+  ScopedObserver<HostContentSettingsMap, content_settings::Observer>
+      content_settings_observer_{this};
 
   apps_util::IncrementingIconKeyFactory icon_key_factory_;
 
@@ -138,6 +180,8 @@ class ExtensionApps : public apps::mojom::Publisher,
 
   using EnableFlowPtr = std::unique_ptr<ExtensionAppsEnableFlow>;
   std::map<std::string, EnableFlowPtr> enable_flow_map_;
+
+  ArcAppListPrefs* arc_prefs_ = nullptr;
 
   base::WeakPtrFactory<ExtensionApps> weak_factory_{this};
 

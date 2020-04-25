@@ -8,14 +8,14 @@
 #include "cc/cc_export.h"
 #include "cc/input/scrollbar.h"
 #include "cc/layers/layer.h"
-#include "cc/layers/scrollbar_layer_interface.h"
-#include "cc/layers/scrollbar_theme_painter.h"
+#include "cc/layers/scrollbar_layer_base.h"
 #include "cc/resources/scoped_ui_resource.h"
 
 namespace cc {
 
-class CC_EXPORT PaintedOverlayScrollbarLayer : public ScrollbarLayerInterface,
-                                               public Layer {
+// For composited overlay scrollbars with nine-patch thumb. For overlay
+// scrollbars whose thumb is not nine-patch, use PaintedScrollbarLayer.
+class CC_EXPORT PaintedOverlayScrollbarLayer : public ScrollbarLayerBase {
  public:
   std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
 
@@ -23,22 +23,15 @@ class CC_EXPORT PaintedOverlayScrollbarLayer : public ScrollbarLayerInterface,
   PaintedOverlayScrollbarLayer& operator=(const PaintedOverlayScrollbarLayer&) =
       delete;
   static scoped_refptr<PaintedOverlayScrollbarLayer> Create(
-      std::unique_ptr<Scrollbar> scrollbar,
-      ElementId scroll_element_id = ElementId());
+      std::unique_ptr<Scrollbar> scrollbar);
 
   bool OpacityCanAnimateOnImplThread() const override;
-
-  // ScrollbarLayerInterface
-  void SetScrollElementId(ElementId element_id) override;
-
-  // Layer interface
   bool Update() override;
   void SetLayerTreeHost(LayerTreeHost* host) override;
   void PushPropertiesTo(LayerImpl* layer) override;
 
  protected:
-  PaintedOverlayScrollbarLayer(std::unique_ptr<Scrollbar> scrollbar,
-                               ElementId scroll_element_id);
+  explicit PaintedOverlayScrollbarLayer(std::unique_ptr<Scrollbar> scrollbar);
   ~PaintedOverlayScrollbarLayer() override;
 
  private:
@@ -57,7 +50,6 @@ class CC_EXPORT PaintedOverlayScrollbarLayer : public ScrollbarLayerInterface,
   bool PaintTickmarks();
 
   std::unique_ptr<Scrollbar> scrollbar_;
-  ElementId scroll_element_id_;
 
   int thumb_thickness_;
   int thumb_length_;

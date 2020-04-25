@@ -3,8 +3,8 @@
   <dependency>
   <dependentAssembly>
     <assemblyIdentity type='win32'
-      name='@VIVALDI_MAJOR@.@VIVALDI_MINOR@.@VIVALDI_NIGHTLY@.@VIVALDI_BUILD@'
-      version='@VIVALDI_MAJOR@.@VIVALDI_MINOR@.@VIVALDI_NIGHTLY@.@VIVALDI_BUILD@' language='*'/>
+      name='@MAJOR@.@MINOR@.@BUILD@.@PATCH@'
+      version='@MAJOR@.@MINOR@.@BUILD@.@PATCH@' language='*'/>
   </dependentAssembly>
   </dependency>
 </assembly>

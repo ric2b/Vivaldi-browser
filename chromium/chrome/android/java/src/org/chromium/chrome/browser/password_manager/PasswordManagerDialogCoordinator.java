@@ -5,9 +5,10 @@
 package org.chromium.chrome.browser.password_manager;
 
 import android.content.Context;
-import android.support.annotation.DrawableRes;
 import android.view.LayoutInflater;
 import android.view.View;
+
+import androidx.annotation.DrawableRes;
 
 import org.chromium.base.Callback;
 import org.chromium.base.VisibleForTesting;
@@ -28,10 +29,13 @@ public class PasswordManagerDialogCoordinator {
 
     PasswordManagerDialogCoordinator(Context context, ModalDialogManager modalDialogManager,
             View androidContentView, ChromeFullscreenManager fullscreenManager,
-            int containerHeightResource) {
+            int containerHeightResource, boolean withHelpIcon) {
         PropertyModel mModel = PasswordManagerDialogProperties.defaultModelBuilder().build();
-        View customView =
-                LayoutInflater.from(context).inflate(R.layout.password_manager_dialog, null);
+        View customView = withHelpIcon
+                ? LayoutInflater.from(context).inflate(
+                        R.layout.password_manager_dialog_with_help_button, null)
+                : LayoutInflater.from(context).inflate(R.layout.password_manager_dialog, null);
+
         mMediator = new PasswordManagerDialogMediator(mModel, createDialogModelBuilder(customView),
                 modalDialogManager, androidContentView, customView.getResources(),
                 fullscreenManager, containerHeightResource);
@@ -53,6 +57,10 @@ public class PasswordManagerDialogCoordinator {
             boolean primaryButtonFilled, @ModalDialogManager.ModalDialogType int type) {
         showDialog(title, details, 0, 0, drawableId, positiveButtonText, negativeButtonText,
                 onClick, primaryButtonFilled, type);
+    }
+
+    public void addHelpButton(Runnable callback) {
+        mMediator.setHelpButtonCallback(callback);
     }
 
     public void dismissDialog(@DialogDismissalCause int dismissalCause) {

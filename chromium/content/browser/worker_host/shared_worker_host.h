@@ -20,6 +20,7 @@
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/shared_worker_instance.h"
+#include "media/mojo/mojom/video_decode_perf_history.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -28,6 +29,7 @@
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom.h"
+#include "third_party/blink/public/mojom/payments/payment_app.mojom-forward.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom.h"
 #include "third_party/blink/public/mojom/worker/shared_worker.mojom.h"
 #include "third_party/blink/public/mojom/worker/shared_worker_client.mojom.h"
@@ -73,7 +75,7 @@ class CONTENT_EXPORT SharedWorkerHost
   // This method must be called either on the UI thread or before threads start.
   // This callback is run on the UI thread.
   using CreateNetworkFactoryCallback = base::RepeatingCallback<void(
-      network::mojom::URLLoaderFactoryRequest request,
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
       int worker_process_id,
       network::mojom::URLLoaderFactoryPtrInfo original_factory)>;
   static void SetNetworkFactoryForSubresourcesForTesting(
@@ -107,8 +109,14 @@ class CONTENT_EXPORT SharedWorkerHost
   void AllowCacheStorage(const GURL& url,
                          base::OnceCallback<void(bool)> callback);
 
+  void BindVideoDecodePerfHistory(
+      mojo::PendingReceiver<media::mojom::VideoDecodePerfHistory> receiver);
   void CreateAppCacheBackend(
       mojo::PendingReceiver<blink::mojom::AppCacheBackend> receiver);
+  void CreatePaymentManager(
+      mojo::PendingReceiver<payments::mojom::PaymentManager> receiver);
+  void CreateIDBFactory(
+      mojo::PendingReceiver<blink::mojom::IDBFactory> receiver);
 
   // Causes this instance to be deleted, which will terminate the worker. May
   // be done based on a UI action.
@@ -123,6 +131,9 @@ class CONTENT_EXPORT SharedWorkerHost
       std::unique_ptr<AppCacheNavigationHandle> appcache_handle);
   void SetServiceWorkerHandle(
       std::unique_ptr<ServiceWorkerNavigationHandle> service_worker_handle);
+
+  // Returns true if this worker is connected to at least one client.
+  bool HasClients() const;
 
   const SharedWorkerInstance& instance() const { return instance_; }
   int worker_process_id() const { return worker_process_id_; }

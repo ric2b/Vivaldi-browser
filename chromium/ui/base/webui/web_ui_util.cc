@@ -16,6 +16,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "net/base/escape.h"
+#include "third_party/modp_b64/modp_b64.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/template_expressions.h"
@@ -32,20 +33,39 @@
 #endif
 
 namespace webui {
+namespace {
+std::string GetWebUiCssTextDefaults(const std::string& css_template) {
+  ui::TemplateReplacements placeholders;
+  placeholders["textDirection"] = GetTextDirection();
+  placeholders["fontFamily"] = GetFontFamily();
+  placeholders["fontSize"] = GetFontSize();
+  return ui::ReplaceTemplateExpressions(css_template, placeholders);
+}
+}  // namespace
 
 std::string GetBitmapDataUrl(const SkBitmap& bitmap) {
-  TRACE_EVENT2("oobe", "GetImageDataUrl",
-               "width", bitmap.width(), "height", bitmap.height());
+  TRACE_EVENT2("ui", "GetBitmapDataUrl", "width", bitmap.width(), "height",
+               bitmap.height());
   std::vector<unsigned char> output;
   gfx::PNGCodec::EncodeBGRASkBitmap(bitmap, false, &output);
   return GetPngDataUrl(output.data(), output.size());
 }
 
 std::string GetPngDataUrl(const unsigned char* data, size_t size) {
-  std::string str_url(reinterpret_cast<const char*>(data), size);
-  base::Base64Encode(str_url, &str_url);
-  str_url.insert(0, "data:image/png;base64,");
-  return str_url;
+  constexpr char kPrefix[] = "data:image/png;base64,";
+  constexpr size_t kPrefixLen = base::size(kPrefix) - 1;
+  // Includes room for trailing null byte.
+  size_t max_encode_len = modp_b64_encode_len(size);
+  std::string output;
+  // This initializes the characters in the string, but there's no good way to
+  // avoid that and maintain a std::string API.
+  output.resize(kPrefixLen + max_encode_len);
+  memcpy(&output[0], kPrefix, kPrefixLen);
+  // |max_encode_len| is >= 1, so &output[kPrefixLen] is valid.
+  size_t actual_encode_len = modp_b64_encode(
+      &output[kPrefixLen], reinterpret_cast<const char*>(data), size);
+  output.resize(kPrefixLen + actual_encode_len);
+  return output;
 }
 
 WindowOpenDisposition GetDispositionFromClick(const base::ListValue* args,
@@ -182,26 +202,18 @@ void SetLoadTimeDataDefaults(const std::string& app_locale,
   (*replacements)["textdirection"] = GetTextDirection();
 }
 
-std::string GetWebUiCssTextDefaults(base::StringPiece css_template) {
-  ui::TemplateReplacements placeholders;
-  placeholders["textDirection"] = GetTextDirection();
-  placeholders["fontFamily"] = GetFontFamily();
-  placeholders["fontSize"] = GetFontSize();
-  return ui::ReplaceTemplateExpressions(css_template, placeholders);
-}
-
 std::string GetWebUiCssTextDefaults() {
   const ui::ResourceBundle& resource_bundle =
       ui::ResourceBundle::GetSharedInstance();
   return GetWebUiCssTextDefaults(
-      resource_bundle.GetRawDataResource(IDR_WEBUI_CSS_TEXT_DEFAULTS));
+      resource_bundle.DecompressDataResource(IDR_WEBUI_CSS_TEXT_DEFAULTS));
 }
 
 std::string GetWebUiCssTextDefaultsMd() {
   const ui::ResourceBundle& resource_bundle =
       ui::ResourceBundle::GetSharedInstance();
   return GetWebUiCssTextDefaults(
-      resource_bundle.GetRawDataResource(IDR_WEBUI_CSS_TEXT_DEFAULTS_MD));
+      resource_bundle.DecompressDataResource(IDR_WEBUI_CSS_TEXT_DEFAULTS_MD));
 }
 
 void AppendWebUiCssTextDefaults(std::string* html) {

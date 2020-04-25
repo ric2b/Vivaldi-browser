@@ -39,6 +39,7 @@
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_spacing.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_view.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
+#include "third_party/blink/renderer/platform/wtf/text/string_buffer.h"
 
 namespace blink {
 
@@ -208,7 +209,6 @@ class ReusingTextShaper final {
                return item.EndOffset() <= offset;
              });
          item != reusable_items_->end(); ++item) {
-      DCHECK_LE(start_offset, item->StartOffset());
       if (end_offset <= item->StartOffset())
         break;
       if (item->EndOffset() < start_offset)
@@ -398,7 +398,10 @@ inline bool ShouldBreakShapingAfterBox(const NGInlineItem& item,
 }
 
 inline bool NeedsShaping(const NGInlineItem& item) {
-  return item.Type() == NGInlineItem::kText && !item.TextShapeResult();
+  return item.Type() == NGInlineItem::kText && !item.TextShapeResult() &&
+         // Text item with length==0 exists to maintain LayoutObject states such
+         // as ClearNeedsLayout, but not needed to shape.
+         item.Length();
 }
 
 // Determine if reshape is needed for ::first-line style.
@@ -477,7 +480,7 @@ void NGInlineNode::PrepareLayout(
   DCHECK(data);
   CollectInlines(data, previous_data.get(), dirty_lines);
   SegmentText(data);
-  ShapeText(data, &previous_data->text_content);
+  ShapeText(data, previous_data ? &previous_data->text_content : nullptr);
   ShapeTextForFirstLineIfNeeded(data);
   AssociateItemsWithInlines(data);
   DCHECK_EQ(data, MutableData());
@@ -614,7 +617,6 @@ class NGInlineNodeDataEditor final {
     // Copy items after replaced range
     ++it;
     while (it != data_->items.end()) {
-      DCHECK_NE(it->layout_object_, layout_text_);
       DCHECK_LE(end_offset, it->start_offset_);
       items.push_back(*it);
       ShiftItem(&items.back(), diff);
@@ -1160,9 +1162,9 @@ void NGInlineNode::ShapeText(NGInlineItemsData* data,
     // If the text is from multiple items, split the ShapeResult to
     // corresponding items.
     DCHECK_GT(num_text_items, 0u);
-    std::unique_ptr<ShapeResult::ShapeRange[]> text_item_ranges =
-        std::make_unique<ShapeResult::ShapeRange[]>(num_text_items);
-    unsigned range_index = 0;
+    // "32" is heuristic, most major sites are up to 8 or so, wikipedia is 21.
+    Vector<ShapeResult::ShapeRange, 32> text_item_ranges;
+    text_item_ranges.ReserveInitialCapacity(num_text_items);
     for (; index < end_index; index++) {
       NGInlineItem& item = (*items)[index];
       if (item.Type() != NGInlineItem::kText || !item.Length())
@@ -1176,12 +1178,12 @@ void NGInlineNode::ShapeText(NGInlineItemsData* data,
       // item that has its first code unit keeps the glyph.
       scoped_refptr<ShapeResult> item_result =
           ShapeResult::CreateEmpty(*shape_result.get());
-      item.shape_result_ = item_result;
-      text_item_ranges[range_index++] = {item.StartOffset(), item.EndOffset(),
-                                         item_result.get()};
+      text_item_ranges.emplace_back(item.StartOffset(), item.EndOffset(),
+                                    item_result.get());
+      item.shape_result_ = std::move(item_result);
     }
-    DCHECK_EQ(range_index, num_text_items);
-    shape_result->CopyRanges(&text_item_ranges[0], num_text_items);
+    DCHECK_EQ(text_item_ranges.size(), num_text_items);
+    shape_result->CopyRanges(text_item_ranges.data(), text_item_ranges.size());
   }
 
 #if DCHECK_IS_ON()
@@ -1431,6 +1433,50 @@ bool NGInlineNode::MarkLineBoxesDirty(LayoutBlockFlow* block_flow,
   return !builder.ShouldAbort();
 }
 
+namespace {
+
+template <typename CharType>
+scoped_refptr<StringImpl> CreateTextContentForStickyImagesQuirk(
+    const CharType* text,
+    unsigned length,
+    base::span<const NGInlineItem> items) {
+  StringBuffer<CharType> buffer(length);
+  CharType* characters = buffer.Characters();
+  memcpy(characters, text, length * sizeof(CharType));
+  for (const NGInlineItem& item : items) {
+    if (item.Type() == NGInlineItem::kAtomicInline && item.IsImage()) {
+      DCHECK_EQ(characters[item.StartOffset()], kObjectReplacementCharacter);
+      characters[item.StartOffset()] = kNoBreakSpaceCharacter;
+    }
+  }
+  return buffer.Release();
+}
+
+}  // namespace
+
+// The stick images quirk changes the line breaking behavior around images. This
+// function returns a text content that has non-breaking spaces for images, so
+// that no changes are needed in the line breaking logic.
+// https://quirks.spec.whatwg.org/#the-table-cell-width-calculation-quirk
+// static
+String NGInlineNode::TextContentForStickyImagesQuirk(
+    const NGInlineItemsData& items_data) {
+  const String& text_content = items_data.text_content;
+  for (const NGInlineItem& item : items_data.items) {
+    if (item.Type() == NGInlineItem::kAtomicInline && item.IsImage()) {
+      if (text_content.Is8Bit()) {
+        return CreateTextContentForStickyImagesQuirk(
+            text_content.Characters8(), text_content.length(),
+            base::span<const NGInlineItem>(&item, items_data.items.end()));
+      }
+      return CreateTextContentForStickyImagesQuirk(
+          text_content.Characters16(), text_content.length(),
+          base::span<const NGInlineItem>(&item, items_data.items.end()));
+    }
+  }
+  return text_content;
+}
+
 static LayoutUnit ComputeContentSize(
     NGInlineNode node,
     WritingMode container_writing_mode,
@@ -1646,21 +1692,25 @@ static LayoutUnit ComputeContentSize(
   MaxSizeFromMinSize max_size_from_min_size(items_data, *max_size_cache,
                                             &floats_max_size);
 
-  Vector<LayoutObject*> floats_for_min_max;
   do {
-    floats_for_min_max.Shrink(0);
-
     NGLineInfo line_info;
-    line_breaker.NextLine(input.percentage_resolution_block_size,
-                          &floats_for_min_max, &line_info);
+    line_breaker.NextLine(input.percentage_resolution_block_size, &line_info);
     if (line_info.Results().IsEmpty())
       break;
 
     LayoutUnit inline_size = line_info.Width();
-    DCHECK_EQ(inline_size, line_info.ComputeWidth().ClampNegativeToZero());
+    // Text measurement is done using floats which may introduce small rounding
+    // errors for near-saturated values.
+    DCHECK_EQ(inline_size.Round(),
+              line_info.ComputeWidth().ClampNegativeToZero().Round());
 
-    for (auto* floating_object : floats_for_min_max) {
-      DCHECK(floating_object->IsFloating());
+    for (const NGInlineItemResult& item_result : line_info.Results()) {
+      DCHECK(item_result.item);
+      const NGInlineItem& item = *item_result.item;
+      if (item.Type() != NGInlineItem::kFloating)
+        continue;
+      LayoutObject* floating_object = item.GetLayoutObject();
+      DCHECK(floating_object && floating_object->IsFloating());
 
       NGBlockNode float_node(ToLayoutBox(floating_object));
       const ComputedStyle& float_style = float_node.Style();
@@ -1690,11 +1740,17 @@ static LayoutUnit ComputeContentSize(
   if (mode == NGLineBreakerMode::kMinContent) {
     *max_size_out = max_size_from_min_size.Finish(items_data.items.end());
     // Check the max size matches to the value computed from 2 pass.
-    DCHECK_EQ(**max_size_out,
-              ComputeContentSize(node, container_writing_mode, input,
-                                 NGLineBreakerMode::kMaxContent, max_size_cache,
-                                 nullptr))
-        << node.GetLayoutBox();
+#if DCHECK_IS_ON()
+    LayoutUnit content_size = ComputeContentSize(
+        node, container_writing_mode, input, NGLineBreakerMode::kMaxContent,
+        max_size_cache, nullptr);
+    bool values_might_be_saturated =
+        (*max_size_out)->MightBeSaturated() || content_size.MightBeSaturated();
+    if (!values_might_be_saturated) {
+      DCHECK_EQ((*max_size_out)->Round(), content_size.Round())
+          << node.GetLayoutBox();
+    }
+#endif
   }
 
   return result;

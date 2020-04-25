@@ -11,6 +11,7 @@ cr.define('print_preview_test_utils', function() {
       thousandsDelimiter: ',',
       decimalDelimiter: '.',
       unitType: 1,
+      previewIsPdf: false,
       previewModifiable: true,
       documentTitle: 'title',
       documentHasSelection: true,
@@ -148,6 +149,20 @@ cr.define('print_preview_test_utils', function() {
       type: 'TYPED_VALUE',
       typed_value_cap: {
         default: '',
+      }
+    });
+
+    if (numSettings < 4) {
+      return template;
+    }
+
+    template.capabilities.printer.vendor_capability.push({
+      display_name: 'Staple',
+      id: 'finishings/4',
+      type: 'TYPED_VALUE',
+      typed_value_cap: {
+        default: '',
+        value_type: 'BOOLEAN',
       }
     });
 

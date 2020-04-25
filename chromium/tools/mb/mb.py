@@ -399,34 +399,32 @@ class MetaBuildWrapper(object):
       return self._RunLocallyIsolated(self.args.path, self.args.target)
 
   def CmdZip(self):
-      ret = self.CmdIsolate()
-      if ret:
-          return ret
+    ret = self.CmdIsolate()
+    if ret:
+      return ret
 
-      zip_dir = None
-      try:
-          zip_dir = self.TempDir()
-          remap_cmd = [
-            self.executable,
-            self.PathJoin(self.chromium_src_dir, 'tools', 'swarming_client',
-                          'isolate.py'),
-            'remap',
-            '--collapse_symlinks',
-            '-s', self.PathJoin(self.args.path, self.args.target + '.isolated'),
-            '-o', zip_dir
-          ]
-          self.Run(remap_cmd)
+    zip_dir = None
+    try:
+      zip_dir = self.TempDir()
+      remap_cmd = [
+          self.executable,
+          self.PathJoin(self.chromium_src_dir, 'tools', 'swarming_client',
+                        'isolate.py'), 'remap', '--collapse_symlinks', '-s',
+          self.PathJoin(self.args.path, self.args.target + '.isolated'), '-o',
+          zip_dir
+      ]
+      self.Run(remap_cmd)
 
-          zip_path = self.args.zip_path
-          with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED,
-                               allowZip64=True) as fp:
-              for root, _, files in os.walk(zip_dir):
-                  for filename in files:
-                      path = self.PathJoin(root, filename)
-                      fp.write(path, self.RelPath(path, zip_dir))
-      finally:
-          if zip_dir:
-              self.RemoveDirectory(zip_dir)
+      zip_path = self.args.zip_path
+      with zipfile.ZipFile(
+          zip_path, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as fp:
+        for root, _, files in os.walk(zip_dir):
+          for filename in files:
+            path = self.PathJoin(root, filename)
+            fp.write(path, self.RelPath(path, zip_dir))
+    finally:
+      if zip_dir:
+        self.RemoveDirectory(zip_dir)
 
   @staticmethod
   def _AddBaseSoftware(cmd):
@@ -514,6 +512,7 @@ class MetaBuildWrapper(object):
           '-I', isolate_server,
           '--namespace', namespace,
           '-S', swarming_server,
+          '--tags=purpose:user-debug-mb',
       ] + dimensions
     self._AddBaseSoftware(cmd)
     if self.args.extra_args:
@@ -805,8 +804,8 @@ class MetaBuildWrapper(object):
         vals['cros_passthrough'] = mixin_vals['cros_passthrough']
       if 'args_file' in mixin_vals:
         if vals['args_file']:
-            raise MBErr('args_file specified multiple times in mixins '
-                        'for %s on %s' % (self.args.builder, self.args.master))
+          raise MBErr('args_file specified multiple times in mixins '
+                      'for %s on %s' % (self.args.builder, self.args.master))
         vals['args_file'] = mixin_vals['args_file']
       if 'gn_args' in mixin_vals:
         if vals['gn_args']:
@@ -887,10 +886,10 @@ class MetaBuildWrapper(object):
     ret, output, _ = self.Run(self.GNCmd('ls', build_dir),
                               force_verbose=False)
     if ret:
-        # If `gn ls` failed, we should exit early rather than trying to
-        # generate isolates.
-        self.Print('GN ls failed: %d' % ret)
-        return ret
+      # If `gn ls` failed, we should exit early rather than trying to
+      # generate isolates.
+      self.Print('GN ls failed: %d' % ret)
+      return ret
 
     # Create a reverse map from isolate label to isolate dict.
     isolate_map = self.ReadIsolateMap()
@@ -1115,7 +1114,7 @@ class MetaBuildWrapper(object):
       # Skip a few configs that need extra cleanup for now.
       # TODO(https://crbug.com/912946): Fix everything on all platforms and
       # enable check everywhere.
-      if is_android or is_cros or is_mac:
+      if is_android:
         break
 
       # Skip a few existing violations that need to be cleaned up. Each of
@@ -1126,7 +1125,38 @@ class MetaBuildWrapper(object):
           f == 'mr_extension/' or # https://crbug.com/997947
           f == 'locales/' or
           f.startswith('nacl_test_data/') or
-          f.startswith('ppapi_nacl_tests_libs/')):
+          f.startswith('ppapi_nacl_tests_libs/') or
+          (is_cros and f in (  # https://crbug.com/1002509
+              'chromevox_test_data/',
+              'gen/ui/file_manager/file_manager/',
+              'resources/chromeos/',
+              'resources/chromeos/autoclick/',
+              'resources/chromeos/chromevox/',
+              'resources/chromeos/select_to_speak/',
+              'test_data/chrome/browser/resources/chromeos/autoclick/',
+              'test_data/chrome/browser/resources/chromeos/chromevox/',
+              'test_data/chrome/browser/resources/chromeos/select_to_speak/',
+          )) or
+          (is_mac and f in (  # https://crbug.com/1000667
+              'AlertNotificationService.xpc/',
+              'Chromium Framework.framework/',
+              'Chromium Helper.app/',
+              'Chromium.app/',
+              'Content Shell.app/',
+              'Google Chrome Framework.framework/',
+              'Google Chrome Helper (GPU).app/',
+              'Google Chrome Helper (Plugin).app/',
+              'Google Chrome Helper (Renderer).app/',
+              'Google Chrome Helper.app/',
+              'Google Chrome.app/',
+              'blink_deprecated_test_plugin.plugin/',
+              'blink_test_plugin.plugin/',
+              'corb_test_plugin.plugin/',
+              'obj/tools/grit/brotli_mac_asan_workaround/',
+              'power_saver_test_plugin.plugin/',
+              'ppapi_tests.plugin/',
+              'ui_unittests Framework.framework/',
+          ))):
         continue
 
       # This runs before the build, so we can't use isdir(f). But
@@ -1275,17 +1305,22 @@ class MetaBuildWrapper(object):
     msan = 'is_msan=true' in vals['gn_args']
     tsan = 'is_tsan=true' in vals['gn_args']
     cfi_diag = 'use_cfi_diag=true' in vals['gn_args']
-    java_coverage = 'jacoco_coverage=true' in vals['gn_args']
+    java_coverage = 'use_jacoco_coverage=true' in vals['gn_args']
 
     test_type = isolate_map[target]['type']
+    use_python3 = isolate_map[target].get('use_python3', False)
 
     executable = isolate_map[target].get('executable', target)
     executable_suffix = isolate_map[target].get(
         'executable_suffix', '.exe' if is_win else '')
 
-    cmdline = []
-    extra_files = [
-      '../../.vpython',
+    if use_python3:
+      cmdline = [ 'vpython3' ]
+      extra_files = [ '../../.vpython3' ]
+    else:
+      cmdline = [ 'vpython' ]
+      extra_files = [ '../../.vpython' ]
+    extra_files += [
       '../../testing/test_env.py',
     ]
 
@@ -1297,19 +1332,18 @@ class MetaBuildWrapper(object):
       script = isolate_map[target]['script']
       if self.platform == 'win32':
         script += '.bat'
-      cmdline = [
+      cmdline += [
           '../../testing/test_env.py',
           script,
       ]
     elif test_type == 'fuzzer':
-      cmdline = [
+      cmdline += [
         '../../testing/test_env.py',
         '../../tools/code_coverage/run_fuzz_target.py',
         '--fuzzer', './' + target,
         '--output-dir', '${ISOLATED_OUTDIR}',
         '--timeout', '3600']
     elif is_android and test_type != "script":
-      cmdline = []
       if asan:
         cmdline += [os.path.join('bin', 'run_with_asan'), '--']
       cmdline += [
@@ -1321,20 +1355,20 @@ class MetaBuildWrapper(object):
       if java_coverage:
         cmdline += ['--coverage-dir', '${ISOLATED_OUTDIR}']
     elif is_fuchsia and test_type != 'script':
-      cmdline = [
+      cmdline += [
           '../../testing/test_env.py',
           os.path.join('bin', 'run_%s' % target),
           '--test-launcher-bot-mode',
           '--system-log-file', '${ISOLATED_OUTDIR}/system_log'
       ]
     elif is_simplechrome and test_type != 'script':
-      cmdline = [
+      cmdline += [
           '../../testing/test_env.py',
           os.path.join('bin', 'run_%s' % target),
       ]
     elif use_xvfb and test_type == 'windowed_test_launcher':
       extra_files.append('../../testing/xvfb.py')
-      cmdline = [
+      cmdline += [
           '../../testing/xvfb.py',
           './' + str(executable) + executable_suffix,
           '--test-launcher-bot-mode',
@@ -1349,7 +1383,7 @@ class MetaBuildWrapper(object):
           '--cfi-diag=%d' % cfi_diag,
       ]
     elif test_type in ('windowed_test_launcher', 'console_test_launcher'):
-      cmdline = [
+      cmdline += [
           '../../testing/test_env.py',
           './' + str(executable) + executable_suffix,
           '--test-launcher-bot-mode',
@@ -1364,7 +1398,6 @@ class MetaBuildWrapper(object):
           '--cfi-diag=%d' % cfi_diag,
       ]
     elif test_type == 'script':
-      cmdline = []
       # If we're testing a CrOS simplechrome build, assume we need to prepare a
       # DUT for testing. So prepend the command to run with the test wrapper.
       if is_simplechrome:

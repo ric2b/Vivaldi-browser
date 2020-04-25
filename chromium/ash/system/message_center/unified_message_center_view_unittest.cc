@@ -10,6 +10,7 @@
 #include "ash/shell.h"
 #include "ash/system/message_center/ash_message_center_lock_screen_controller.h"
 #include "ash/system/message_center/message_center_scroll_bar.h"
+#include "ash/system/message_center/stacked_notification_bar.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/unified/unified_system_tray_controller.h"
 #include "ash/system/unified/unified_system_tray_model.h"
@@ -43,7 +44,9 @@ class DummyEvent : public ui::Event {
 class TestUnifiedMessageCenterView : public UnifiedMessageCenterView {
  public:
   explicit TestUnifiedMessageCenterView(UnifiedSystemTrayModel* model)
-      : UnifiedMessageCenterView(nullptr, model) {}
+      : UnifiedMessageCenterView(nullptr /*parent*/,
+                                 model,
+                                 nullptr /*bubble*/) {}
 
   ~TestUnifiedMessageCenterView() override = default;
 
@@ -161,15 +164,15 @@ class UnifiedMessageCenterViewTest : public AshTestBase,
   }
 
   views::View* GetStackingCounter() {
-    return message_center_view()->stacking_counter_;
+    return message_center_view()->notification_bar_;
   }
 
   views::View* GetStackingCounterLabel() {
-    return message_center_view()->stacking_counter_->count_label_;
+    return message_center_view()->notification_bar_->count_label_;
   }
 
   views::View* GetStackingCounterClearAllButton() {
-    return message_center_view()->stacking_counter_->clear_all_button_;
+    return message_center_view()->notification_bar_->clear_all_button_;
   }
 
   message_center::MessageView* ToggleFocusToMessageView(size_t index,
@@ -352,7 +355,7 @@ TEST_F(UnifiedMessageCenterViewTest, ClearAllPressed) {
 
   // When Clear All button is pressed, all notifications are removed and the
   // view becomes invisible.
-  message_center_view()->ButtonPressed(nullptr, DummyEvent());
+  message_center_view()->ClearAllNotifications();
   AnimateMessageListUntilIdle();
   EXPECT_FALSE(message_center_view()->GetVisible());
 }
@@ -399,7 +402,7 @@ TEST_F(UnifiedMessageCenterViewTest, InitialPositionWithLargeNotification) {
             message_view_bounds.height());
 
   // Top of the second notification aligns with the top of MessageCenterView.
-  EXPECT_EQ(kStackingNotificationCounterHeight, message_view_bounds.y());
+  EXPECT_EQ(kStackedNotificationBarHeight, message_view_bounds.y());
 }
 
 TEST_F(UnifiedMessageCenterViewTest, ScrollPositionWhenResized) {
@@ -522,8 +525,7 @@ TEST_F(UnifiedMessageCenterViewTest, StackingCounterNotificationRemoval) {
 
   // The MessageCenterView should be tall enough to contain the bar, two
   // notifications, and extra padding.
-  EXPECT_EQ(kStackingNotificationCounterHeight +
-                GetMessageListView()->height() +
+  EXPECT_EQ(kStackedNotificationBarHeight + GetMessageListView()->height() +
                 kUnifiedNotificationCenterSpacing,
             message_center_view()->height());
 

@@ -15,6 +15,8 @@
 #include "ash/public/cpp/tablet_mode.h"
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/metrics_hashes.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -23,6 +25,7 @@
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
+#include "chrome/browser/ui/app_list/search/cros_action_history/cros_action_recorder.h"
 #include "chrome/browser/ui/app_list/search/search_provider.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/app_list_launch_recorder.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/histogram_util.h"
@@ -84,13 +87,13 @@ void SearchController::InitializeRankers(
           HistoryServiceFactory::GetForProfile(
               profile_, ServiceAccessType::EXPLICIT_ACCESS),
           connector);
-  ranker->InitializeRankers();
+  ranker->InitializeRankers(this);
   mixer_->SetNonAppSearchResultRanker(std::move(ranker));
 }
 
 void SearchController::Start(const base::string16& query) {
   dispatching_query_ = true;
-  RecordLauncherIssuedSearchQueryLength(query.length());
+  ash::RecordLauncherIssuedSearchQueryLength(query.length());
   for (const auto& provider : providers_)
     provider->Start(query);
 
@@ -154,8 +157,8 @@ void SearchController::OnResultsChanged() {
 
   size_t num_max_results =
       query_for_recommendation_
-          ? AppListConfig::instance().num_start_page_tiles()
-          : AppListConfig::instance().max_search_results();
+          ? ash::AppListConfig::instance().num_start_page_tiles()
+          : ash::AppListConfig::instance().max_search_results();
   mixer_->MixAndPublish(num_max_results, last_query_);
 }
 
@@ -174,6 +177,10 @@ void SearchController::OnSearchResultsDisplayed(
     const base::string16& trimmed_query,
     const ash::SearchResultIdWithPositionIndices& results,
     int launched_index) {
+  // Log the impression.
+  mixer_->GetNonAppSearchResultRanker()->LogSearchResults(
+      trimmed_query, results, launched_index);
+
   if (trimmed_query.empty()) {
     mixer_->GetNonAppSearchResultRanker()->ZeroStateResultsDisplayed(results);
 
@@ -193,7 +200,8 @@ ChromeSearchResult* SearchController::GetResultByTitleForTest(
   for (const auto& provider : providers_) {
     for (const auto& result : provider->results()) {
       if (result->title() == target_title &&
-          result->result_type() == ash::SearchResultType::kInstalledApp &&
+          result->result_type() ==
+              ash::AppListSearchResultType::kInstalledApp &&
           result->display_type() !=
               ash::SearchResultDisplayType::kRecommendation) {
         return result.get();
@@ -252,6 +260,14 @@ void SearchController::Train(AppLaunchData&& app_launch_data) {
           RemoveAppShortcutLabel(NormalizeId(app_launch_data.id));
     }
   }
+
+  // CrOS action recorder.
+  CrOSActionRecorder::GetCrosActionRecorder()->RecordAction(
+      {base::StrCat(
+          {"SearchResultLaunched-", NormalizeId(app_launch_data.id)})},
+      {{"ResultType", static_cast<int>(app_launch_data.ranking_item_type)},
+       {"Query", static_cast<int>(
+                     base::HashMetricName(base::UTF16ToUTF8(last_query_)))}});
 
   for (const auto& provider : providers_)
     provider->Train(app_launch_data.id, app_launch_data.ranking_item_type);

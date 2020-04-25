@@ -21,7 +21,6 @@
 #include "ipc/ipc_sync_message.h"
 #include "ipc/message_filter.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
@@ -50,14 +49,14 @@ class MockRenderMessageFilterImpl : public mojom::RenderMessageFilter {
   }
 
   void CreateNewWidget(int32_t opener_id,
-                       mojom::WidgetPtr widget,
+                       mojo::PendingRemote<mojom::Widget> widget,
                        CreateNewWidgetCallback callback) override {
     // See comment in CreateNewWindow().
     NOTREACHED();
   }
 
   bool CreateNewWidget(int32_t opener_id,
-                       mojom::WidgetPtr widget,
+                       mojo::PendingRemote<mojom::Widget> widget,
                        int32_t* route_id) override {
     thread_->OnCreateWidget(opener_id, route_id);
     return true;
@@ -65,7 +64,7 @@ class MockRenderMessageFilterImpl : public mojom::RenderMessageFilter {
 
   void CreateFullscreenWidget(
       int opener_id,
-      mojom::WidgetPtr widget,
+      mojo::PendingRemote<mojom::Widget> widget,
       CreateFullscreenWidgetCallback callback) override {
     NOTREACHED();
   }
@@ -251,14 +250,6 @@ void MockRenderThread::ReleaseCachedFonts() {
 
 ServiceManagerConnection* MockRenderThread::GetServiceManagerConnection() {
   return nullptr;
-}
-
-service_manager::Connector* MockRenderThread::GetConnector() {
-  if (!connector_) {
-    connector_ =
-        service_manager::Connector::Create(&pending_connector_request_);
-  }
-  return connector_.get();
 }
 
 void MockRenderThread::SetFieldTrialGroup(const std::string& trial_name,

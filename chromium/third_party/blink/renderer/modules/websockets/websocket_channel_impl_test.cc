@@ -14,6 +14,7 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/websockets/websocket_connector.mojom-blink.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/websocket_handshake_throttle.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -41,7 +42,7 @@ namespace blink {
 typedef testing::StrictMock<testing::MockFunction<void(int)>> Checkpoint;
 
 class MockWebSocketChannelClient
-    : public GarbageCollectedFinalized<MockWebSocketChannelClient>,
+    : public GarbageCollected<MockWebSocketChannelClient>,
       public WebSocketChannelClient {
   USING_GARBAGE_COLLECTED_MIXIN(MockWebSocketChannelClient);
 
@@ -112,8 +113,10 @@ class WebSocketChannelImplTest : public PageTestBase {
 
     void SendFrame(bool fin,
                    WebSocketMessageType type,
-                   const Vector<uint8_t>& data) override {
-      frames_.push_back(Frame{fin, type, data});
+                   base::span<const uint8_t> data) override {
+      Vector<uint8_t> data_to_pass;
+      data_to_pass.AppendRange(data.begin(), data.end());
+      frames_.push_back(Frame{fin, type, std::move(data_to_pass)});
     }
     void StartReceiving() override {
       DCHECK(!is_start_receiving_called_);
@@ -235,10 +238,14 @@ class WebSocketChannelImplTest : public PageTestBase {
     auto websocket = std::make_unique<TestWebSocket>(
         websocket_to_pass.InitWithNewPipeAndPassReceiver());
 
+    auto response = network::mojom::blink::WebSocketHandshakeResponse::New();
+    response->http_version = network::mojom::blink::HttpVersion::New();
+    response->status_text = "";
+    response->headers_text = "";
     handshake_client->OnConnectionEstablished(
         std::move(websocket_to_pass),
         client_remote.InitWithNewPipeAndPassReceiver(), selected_protocol,
-        extensions, std::move(readable));
+        extensions, std::move(response), std::move(readable));
     client->Bind(std::move(client_remote));
     return websocket;
   }

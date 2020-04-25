@@ -24,7 +24,12 @@
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/native_widget_types.h"
 
+namespace IPC {
+class Message;
+}  // namespace IPC
+
 namespace content {
+
 class BrowserPluginGuest;
 class RenderWidgetHost;
 class RenderWidgetHostImpl;
@@ -51,9 +56,6 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   static RenderWidgetHostViewBase* GetRootView(RenderWidgetHostViewBase* rwhv);
 
   ~RenderWidgetHostViewGuest() override;
-
-  RenderWidgetHostViewBase* GetPlatformView() const
-    { return platform_view_.get(); }
 
   bool OnMessageReceivedFromEmbedder(const IPC::Message& message,
                                      RenderWidgetHostImpl* embedder);
@@ -152,8 +154,6 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   void MaybeSendSyntheticTapGestureForTest(
       const blink::WebFloatPoint& position,
       const blink::WebFloatPoint& screen_position);
-
-  bool IsInVR() const override;
 
  private:
   friend class RenderWidgetHostView;

@@ -168,7 +168,7 @@ bool DownloadProtectionService::IsHashManuallyBlacklisted(
 
 void DownloadProtectionService::CheckClientDownload(
     download::DownloadItem* item,
-    CheckDownloadCallback callback) {
+    CheckDownloadRepeatingCallback callback) {
   if (item->GetDangerType() ==
       download::DOWNLOAD_DANGER_TYPE_WHITELISTED_BY_POLICY) {
     std::move(callback).Run(DownloadCheckResult::WHITELISTED_BY_POLICY);
@@ -525,7 +525,8 @@ void DownloadProtectionService::OnDangerousDownloadOpened(
   extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
       ->OnDangerousDownloadOpened(
           item->GetURL(), item->GetTargetFilePath().AsUTF8Unsafe(),
-          base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()));
+          base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()),
+          item->GetMimeType(), item->GetTotalBytes());
 }
 
 bool DownloadProtectionService::MaybeBeginFeedbackForDownload(

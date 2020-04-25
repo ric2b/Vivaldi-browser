@@ -166,7 +166,7 @@ void WindowEventDispatcher::DispatchGestureEvent(
   Window* target = ConsumerToWindow(raw_input_consumer);
   if (target) {
     event->ConvertLocationToTarget(window(), target);
-    DispatchDetails details = DispatchEvent(target, event);
+    details = DispatchEvent(target, event);
     if (details.dispatcher_destroyed)
       return;
   }
@@ -591,7 +591,8 @@ void WindowEventDispatcher::DispatchSyntheticTouchEvent(ui::TouchEvent* event) {
   // The synthetic event's location is based on the last known location of
   // the pointer, in dips. OnEventFromSource expects events with co-ordinates
   // in raw pixels, so we convert back to raw pixels here.
-  DCHECK(event->type() == ui::ET_TOUCH_CANCELLED);
+  DCHECK(event->type() == ui::ET_TOUCH_CANCELLED ||
+         event->type() == ui::ET_TOUCH_PRESSED);
   event->UpdateForRootTransform(
       host_->GetRootTransform(),
       host_->GetRootTransformForLocalEventCoordinates());
@@ -1032,6 +1033,14 @@ DispatchDetails WindowEventDispatcher::PreDispatchKeyEvent(
       !host_->ShouldSendKeyEventToIme()) {
     return DispatchDetails();
   }
+
+  // At this point (i.e: EP_PREDISPATCH), event target is still not set, so do
+  // it explicitly here thus making it possible for InputMethodContext
+  // implementation to retrieve target window through KeyEvent::target().
+  // Event::target is reset at WindowTreeHost::DispatchKeyEventPostIME(), just
+  // after key is processed by InputMethodContext.
+  ui::Event::DispatcherApi(event).set_target(window());
+
   DispatchDetails details = host_->GetInputMethod()->DispatchKeyEvent(event);
   event->StopPropagation();
   return details;

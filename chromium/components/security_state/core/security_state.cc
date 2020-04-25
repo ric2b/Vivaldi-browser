@@ -44,11 +44,14 @@ SecurityLevel GetSecurityLevelForNonSecureFieldTrial(
     if (parameter == features::kMarkHttpAsParameterDangerous) {
       return DANGEROUS;
     }
+    if (parameter == features::kMarkHttpAsParameterDangerWarning) {
+      return WARNING;
+    }
   }
 
   // Default to dangerous on editing form fields and otherwise
   // warning.
-  return input_events.insecure_field_edited ? DANGEROUS : HTTP_SHOW_WARNING;
+  return input_events.insecure_field_edited ? DANGEROUS : WARNING;
 }
 
 std::string GetHistogramSuffixForSecurityLevel(
@@ -60,8 +63,8 @@ std::string GetHistogramSuffixForSecurityLevel(
       return "SECURE";
     case NONE:
       return "NONE";
-    case HTTP_SHOW_WARNING:
-      return "HTTP_SHOW_WARNING";
+    case WARNING:
+      return "WARNING";
     case SECURE_WITH_POLICY_INSTALLED_CERT:
       return "SECURE_WITH_POLICY_INSTALLED_CERT";
     case DANGEROUS:
@@ -82,9 +85,42 @@ std::string GetHistogramSuffixForSafetyTipStatus(
       return "SafetyTip_BadReputation";
     case security_state::SafetyTipStatus::kLookalike:
       return "SafetyTip_Lookalike";
-  };
+    case security_state::SafetyTipStatus::kBadReputationIgnored:
+      return "SafetyTip_BadReputationIgnored";
+    case security_state::SafetyTipStatus::kLookalikeIgnored:
+      return "SafetyTip_LookalikeIgnored";
+    case security_state::SafetyTipStatus::kBadKeyword:
+      NOTREACHED();
+      return std::string();
+  }
   NOTREACHED();
   return std::string();
+}
+
+// Returns whether to set the security level based on the safety tip status.
+// Sets |level| to the right value if status should be set.
+bool ShouldSetSecurityLevelFromSafetyTip(security_state::SafetyTipStatus status,
+                                         SecurityLevel* level) {
+  if (!base::FeatureList::IsEnabled(security_state::features::kSafetyTipUI)) {
+    return false;
+  }
+
+  switch (status) {
+    case security_state::SafetyTipStatus::kBadReputation:
+      *level = security_state::NONE;
+      return true;
+    case security_state::SafetyTipStatus::kBadReputationIgnored:
+    case security_state::SafetyTipStatus::kLookalike:
+    case security_state::SafetyTipStatus::kLookalikeIgnored:
+    case security_state::SafetyTipStatus::kBadKeyword:
+      // TODO(crbug/1012982): Decide whether to degrade the indicator once the
+      // UI lands.
+    case security_state::SafetyTipStatus::kUnknown:
+    case security_state::SafetyTipStatus::kNone:
+      return false;
+  }
+  NOTREACHED();
+  return false;
 }
 
 }  // namespace
@@ -118,7 +154,7 @@ SecurityLevel GetSecurityLevel(
   //
   // Display a "Not secure" badge for all these URLs.
   if (url.SchemeIs(url::kDataScheme) || url.SchemeIs(url::kFtpScheme)) {
-    return HTTP_SHOW_WARNING;
+    return WARNING;
   }
 
   // Display DevTools pages as neutral since we can't be confident the page
@@ -150,6 +186,21 @@ SecurityLevel GetSecurityLevel(
   if (visible_security_state.ran_mixed_content ||
       visible_security_state.ran_content_with_cert_errors) {
     return kRanInsecureContentLevel;
+  }
+
+  // Downgrade the security level for pages loaded over legacy TLS versions.
+  if (base::FeatureList::IsEnabled(
+          security_state::features::kLegacyTLSWarnings) &&
+      visible_security_state.connection_used_legacy_tls &&
+      !visible_security_state.should_suppress_legacy_tls_warning) {
+    return WARNING;
+  }
+
+  // Downgrade the security level for pages that trigger a Safety Tip.
+  SecurityLevel safety_tip_level;
+  if (ShouldSetSecurityLevelFromSafetyTip(
+          visible_security_state.safety_tip_info.status, &safety_tip_level)) {
+    return safety_tip_level;
   }
 
   // In most cases, SHA1 use is treated as a certificate error, in which case
@@ -204,7 +255,6 @@ bool HasMajorCertificateError(
 
 VisibleSecurityState::VisibleSecurityState()
     : malicious_content_status(MALICIOUS_CONTENT_STATUS_NONE),
-      safety_tip_status(security_state::SafetyTipStatus::kUnknown),
       connection_info_initialized(false),
       cert_status(0),
       connection_status(0),
@@ -218,7 +268,14 @@ VisibleSecurityState::VisibleSecurityState()
       pkp_bypassed(false),
       is_error_page(false),
       is_view_source(false),
-      is_devtools(false) {}
+      is_devtools(false),
+      connection_used_legacy_tls(false),
+      should_suppress_legacy_tls_warning(false) {}
+
+VisibleSecurityState::VisibleSecurityState(const VisibleSecurityState& other) =
+    default;
+VisibleSecurityState& VisibleSecurityState::operator=(
+    const VisibleSecurityState& other) = default;
 
 VisibleSecurityState::~VisibleSecurityState() {}
 
@@ -244,6 +301,22 @@ std::string GetSecurityLevelHistogramName(
 std::string GetSafetyTipHistogramName(const std::string& prefix,
                                       SafetyTipStatus safety_tip_status) {
   return prefix + "." + GetHistogramSuffixForSafetyTipStatus(safety_tip_status);
+}
+
+bool GetLegacyTLSWarningStatus(
+    const VisibleSecurityState& visible_security_state) {
+  return visible_security_state.connection_used_legacy_tls &&
+         !visible_security_state.should_suppress_legacy_tls_warning;
+}
+
+std::string GetLegacyTLSHistogramName(
+    const std::string& prefix,
+    const VisibleSecurityState& visible_security_state) {
+  if (GetLegacyTLSWarningStatus(visible_security_state)) {
+    return prefix + "." + "LegacyTLS_Triggered";
+  } else {
+    return prefix + "." + "LegacyTLS_NotTriggered";
+  }
 }
 
 bool IsSHA1InChain(const VisibleSecurityState& visible_security_state) {

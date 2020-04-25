@@ -456,8 +456,8 @@ class SessionRestoreImpl : public BrowserListObserver {
       // the groups' visual data.
       if (base::FeatureList::IsEnabled(features::kTabGroups)) {
         for (auto& tab_group : (*i)->tab_groups) {
-          TabGroupVisualData restored_data(std::move(tab_group->title),
-                                           tab_group->color);
+          TabGroupVisualData restored_data(std::move(tab_group->metadata.title),
+                                           tab_group->metadata.color);
           browser->tab_strip_model()->SetVisualDataForGroup(
               TabGroupId::FromRawToken(tab_group->group_id),
               std::move(restored_data));
@@ -638,18 +638,12 @@ class SessionRestoreImpl : public BrowserListObserver {
     Browser::CreateParams params(type, profile_, false);
     params.initial_bounds = bounds;
 
-    // Only browsers of TYPE_NORMAL, and Chrome OS TYPE_APP are saved or
-    // restored.  See SessionService::ShouldRestoreWindowOfType.
 #if defined(OS_CHROMEOS)
-    DCHECK(type == Browser::Type::TYPE_NORMAL ||
-           type == Browser::Type::TYPE_APP);
     if (type == Browser::Type::TYPE_APP) {
       const bool trusted_source = true;  // We only store trusted app windows.
       params = Browser::CreateParams::CreateForApp(app_name, trusted_source,
                                                    bounds, profile_, false);
     }
-#else
-    DCHECK(type == Browser::Type::TYPE_NORMAL);
 #endif
 
     params.initial_show_state = show_state;

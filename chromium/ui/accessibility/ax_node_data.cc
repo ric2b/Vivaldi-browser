@@ -16,6 +16,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_enum_util.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_text_utils.h"
 #include "ui/gfx/transform.h"
 
@@ -199,7 +200,11 @@ bool IsNodeIdIntListAttribute(ax::mojom::IntListAttribute attr) {
   return false;
 }
 
-AXNodeData::AXNodeData() = default;
+AXNodeData::AXNodeData()
+    : role(ax::mojom::Role::kUnknown),
+      state(static_cast<uint32_t>(ax::mojom::State::kNone)),
+      actions(static_cast<uint32_t>(ax::mojom::Action::kNone)) {}
+
 AXNodeData::~AXNodeData() = default;
 
 AXNodeData::AXNodeData(const AXNodeData& other) {
@@ -581,17 +586,7 @@ void AXNodeData::SetNameExplicitlyEmpty() {
 }
 
 void AXNodeData::SetDescription(const std::string& description) {
-  auto iter = std::find_if(string_attributes.begin(), string_attributes.end(),
-                           [](const auto& string_attribute) {
-                             return string_attribute.first ==
-                                    ax::mojom::StringAttribute::kDescription;
-                           });
-  if (iter == string_attributes.end()) {
-    string_attributes.push_back(
-        std::make_pair(ax::mojom::StringAttribute::kDescription, description));
-  } else {
-    iter->second = description;
-  }
+  AddStringAttribute(ax::mojom::StringAttribute::kDescription, description);
 }
 
 void AXNodeData::SetDescription(const base::string16& description) {
@@ -599,17 +594,7 @@ void AXNodeData::SetDescription(const base::string16& description) {
 }
 
 void AXNodeData::SetValue(const std::string& value) {
-  auto iter = std::find_if(string_attributes.begin(), string_attributes.end(),
-                           [](const auto& string_attribute) {
-                             return string_attribute.first ==
-                                    ax::mojom::StringAttribute::kValue;
-                           });
-  if (iter == string_attributes.end()) {
-    string_attributes.push_back(
-        std::make_pair(ax::mojom::StringAttribute::kValue, value));
-  } else {
-    iter->second = value;
-  }
+  AddStringAttribute(ax::mojom::StringAttribute::kValue, value);
 }
 
 void AXNodeData::SetValue(const base::string16& value) {
@@ -1528,7 +1513,8 @@ std::string AXNodeData::ToString() const {
     }
   }
 
-  result += " actions=" + ActionsBitfieldToString(actions);
+  if (actions)
+    result += " actions=" + ActionsBitfieldToString(actions);
 
   if (!child_ids.empty())
     result += " child_ids=" + IntVectorToString(child_ids);

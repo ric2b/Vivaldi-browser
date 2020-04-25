@@ -115,10 +115,21 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="Loading.CacheBytes">
+    <obsolete>
+      Deprecated 09/2019. Replaced with Loading.CacheBytes2.
+    </obsolete>
     <summary>
       Bytes loaded from the cache for all resources loaded within the frame.
       This is rounded down to the nearest exponential bucket (with a bucket
       ratio of 1.3).
+    </summary>
+  </metric>
+  <metric name="Loading.CacheBytes2">
+    <summary>
+      Bytes loaded from the cache for all resources loaded within the frame.
+      This includes bytes loaded from both the HTTP cache and memory cache. This
+      is rounded down to the nearest exponential bucket (with a bucket ratio of
+      1.3).
     </summary>
   </metric>
   <metric name="Loading.ImageBytes">
@@ -213,7 +224,7 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
-<event name="AdPageLoad">
+<event name="AdPageLoad" singular="True">
   <owner>johnidel@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -1018,7 +1029,6 @@ be describing additional metrics about the same event.
     </summary>
     <aggregation>
       <history>
-        <index fields="metrics.PredictedType"/>
         <statistics>
           <enumeration/>
         </statistics>
@@ -1055,6 +1065,8 @@ be describing additional metrics about the same event.
     <aggregation>
       <history>
         <index fields="metrics.ActualType"/>
+        <index fields="metrics.ActualType,metrics.PredictionSource"/>
+        <index fields="metrics.PredictionSource"/>
         <statistics>
           <enumeration/>
         </statistics>
@@ -1065,6 +1077,15 @@ be describing additional metrics about the same event.
     <summary>
       The system which generated the prediction: heuristics, server, overall.
     </summary>
+    <aggregation>
+      <history>
+        <index fields="metrics.ActualType,metrics.PredictedType"/>
+        <index fields="metrics.PredictedType"/>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="ValidationEvent" enum="AutofillQualitiyMetricType">
     <summary>
@@ -2401,6 +2422,22 @@ be describing additional metrics about the same event.
     <summary>
       An enum that specifies how the near V8 heap limit event was handled. See
       blink::NearV8HeapLimitHandling for the enum elements.
+    </summary>
+  </metric>
+</event>
+
+<event name="ClickInput" singular="True">
+  <owner>dougarnett@chromium.org</owner>
+  <summary>
+    Metrics associated with user click input. In particular, captures when user
+    has a burst of clicks at the same location which may be a signal of user
+    unhappiness for an experiment if it differs from the baseline data for the
+    site.
+  </summary>
+  <metric name="Experimental.ClickInputBurst">
+    <summary>
+      The count of the largest burst of click inputs for a page load. Only
+      recorded if it meets a minimum threshold to be considered a burst.
     </summary>
   </metric>
 </event>
@@ -4898,7 +4935,7 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="NavigationPredictorAnchorElementMetrics">
-  <owner>ryansturm@chromium.com</owner>
+  <owner>ryansturm@chromium.org</owner>
   <summary>
     Metrics that describe an anchor element's data. This event is emitted at
     most 10 times per page load, once for each of the top n URLs on a page, and
@@ -4949,6 +4986,7 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="NavigationPredictorPageLinkClick">
+  <owner>ryansturm@chromium.org</owner>
   <summary>
     Sent on an in-page link click. An integer from 0-10 (1-indexed),
     corresponding to the index of that anchor element in the list of top ten
@@ -4959,7 +4997,7 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="NavigationPredictorPageLinkMetrics" singular="True">
-  <owner>ryansturm@chromium.com</owner>
+  <owner>ryansturm@chromium.org</owner>
   <summary>
     Metrics that describe aggregate information about the links within a page.
     Some anchor elements present on a page may not be represented in these
@@ -5558,6 +5596,25 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="InteractiveTiming.LongestInputDelay3">
+    <obsolete>
+      Removed on September 2019 in favor of InteractiveTiming.LongestInputDelay4
+      which includes events which otherwise would have been filtered.
+    </obsolete>
+    <summary>
+      Measures longest Input Delay, the longest duration between the hardware
+      timestamp and the start of event processing on the main thread for the
+      meaningful input per navigation. In ms.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="InteractiveTiming.LongestInputDelay4">
     <summary>
       Measures longest Input Delay, the longest duration between the hardware
       timestamp and the start of event processing on the main thread for the
@@ -5595,6 +5652,17 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="InteractiveTiming.LongestInputTimestamp3">
+    <obsolete>
+      Removed on February 2019 in favor of
+      InteractiveTiming.LongestInputTimestamp4 which includes inputs which would
+      have previously been filtered.
+    </obsolete>
+    <summary>
+      The duration between navigation start and the hardware timestamp of the
+      meaningful input with longest queuing delay per navigation. In ms.
+    </summary>
+  </metric>
+  <metric name="InteractiveTiming.LongestInputTimestamp4">
     <summary>
       The duration between navigation start and the hardware timestamp of the
       meaningful input with longest queuing delay per navigation. In ms.
@@ -6080,6 +6148,9 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="Generation.SpecPriority">
+    <obsolete>
+      Deprecated 09/2019.
+    </obsolete>
     <summary>
       Reports the priority of a PasswordGenerationRequirementsSpec for a
       generated password. This can be used for debugging as a 0 means that no
@@ -6103,6 +6174,9 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="ParsingComparison">
+    <obsolete>
+      Deprecated 09/2019.
+    </obsolete>
     <summary>
       Records comparison result of old and new password form parsing algorithms.
       Metric is recorded on a password form detection. Recorded values
@@ -6111,6 +6185,9 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="ParsingOnSavingDifference">
+    <obsolete>
+      Deprecated 09/2019.
+    </obsolete>
     <summary>
       Records the comparison of the old and new password form parsing for
       saving. Multiple values from the
@@ -7472,6 +7549,9 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="MRUIndex">
+    <obsolete>
+      Deprecated 10/2019 in favor MRUIndex in TabMetrics.
+    </obsolete>
     <summary>
       Index of the tab in most-recently-used order. A value of N means there are
       N tabs more recently used than the one that is being foregrounded or
@@ -7496,6 +7576,9 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="TotalTabCount">
+    <obsolete>
+      Deprecated 10/2019 in favor TotalTabCount in TabMetrics.
+    </obsolete>
     <summary>
       Total number of tabs open across all non-incognito browser windows. Helps
       contextualize the MRUIndex value.
@@ -7675,134 +7758,161 @@ be describing additional metrics about the same event.
     Collects information about when and why a lifecycle state change was
     attempted, and information about the outcome of the attempt.
   </summary>
-  <metric name="FailureGlobalBlacklist">
+  <metric name="FailureGlobalBlacklist" enum="Boolean">
     <summary>
       Boolean indicating that the tab was explicitly opted out of the
       intervention via the global blacklist.
     </summary>
   </metric>
-  <metric name="FailureHeuristicAudio">
+  <metric name="FailureHeuristicAudio" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the origin
       has historically been observed emitting audio while in the background.
     </summary>
   </metric>
-  <metric name="FailureHeuristicFavicon">
+  <metric name="FailureHeuristicFavicon" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the origin
       has historically been observed updating its favicon while in the
       background.
     </summary>
   </metric>
-  <metric name="FailureHeuristicInsufficientObservation">
+  <metric name="FailureHeuristicInsufficientObservation" enum="Boolean">
     <summary>
       Boolean indicating that the site is still being observed locally in order
       to determine which features are in use. In the meantime, it is protected
       from this intervention.
     </summary>
   </metric>
-  <metric name="FailureHeuristicNotifications">
+  <metric name="FailureHeuristicNotifications" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the origin
       has historically been observed making use of notifications while in the
       background.
     </summary>
   </metric>
-  <metric name="FailureHeuristicTitle">
+  <metric name="FailureHeuristicTitle" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the origin
       has historically been observed updating its tab title while in the
       background.
     </summary>
   </metric>
-  <metric name="FailureLifecyclesEnterprisePolicyOptOut">
+  <metric name="FailureLifecyclesEnterprisePolicyOptOut" enum="Boolean">
     <summary>
       Boolean indicating that the browser was explicitly opted out of the
       intervention via enterprise policy.
     </summary>
   </metric>
   <metric name="FailureLifecyclesFeaturePolicyOptOut">
+    <obsolete>
+      Deprecated 08/2019. Replaced with FailureOriginTrialOptOut.
+    </obsolete>
     <summary>
       Boolean indicating that the tab explicitly opted out of the intervention
       via feature policy.
     </summary>
   </metric>
-  <metric name="FailureLiveStateCapturing">
+  <metric name="FailureLiveStateCapturing" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the tab is
       currently capturing user media (making use of webcam or microphone, for
       example).
     </summary>
   </metric>
-  <metric name="FailureLiveStateDesktopCapture">
+  <metric name="FailureLiveStateDesktopCapture" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the tab is
       currently capturing a window or screen.
     </summary>
   </metric>
-  <metric name="FailureLiveStateDevToolsOpen">
+  <metric name="FailureLiveStateDevToolsOpen" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the tab is
       currently using DevTools.
     </summary>
   </metric>
-  <metric name="FailureLiveStateExtensionDisallowed">
+  <metric name="FailureLiveStateExtensionDisallowed" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed by an extension.
     </summary>
   </metric>
-  <metric name="FailureLiveStateFormEntry">
+  <metric name="FailureLiveStateFormEntry" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the tab
       currently contains text form entry.
     </summary>
   </metric>
-  <metric name="FailureLiveStateIsPDF">
+  <metric name="FailureLiveStateIsPDF" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the tab is
       currently hosting a PDF.
     </summary>
   </metric>
-  <metric name="FailureLiveStateMirroring">
+  <metric name="FailureLiveStateMirroring" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the tab is
       currently being mirrored (casting its contents, for example).
     </summary>
   </metric>
-  <metric name="FailureLiveStatePlayingAudio">
+  <metric name="FailureLiveStatePlayingAudio" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the tab is
       currently playing audio.
     </summary>
   </metric>
-  <metric name="FailureLiveStateSharingBrowsingInstance">
+  <metric name="FailureLiveStateSharingBrowsingInstance" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the tab is
       sharing its BrowsingInstance with at least one other tab.
     </summary>
   </metric>
-  <metric name="FailureLiveStateUsingBluetooth">
+  <metric name="FailureLiveStateUsingBluetooth" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the tab is
-      currently connnected to at least one bluetooth device.
+      currently connected to at least one bluetooth device.
     </summary>
   </metric>
-  <metric name="FailureLiveStateUsingWebSockets">
+  <metric name="FailureLiveStateUsingIndexedDBLock" enum="Boolean">
+    <summary>
+      Boolean indicating that the intervention was disallowed because the tab is
+      currently holding at least one IndexedDB lock.
+    </summary>
+  </metric>
+  <metric name="FailureLiveStateUsingWebLock" enum="Boolean">
+    <summary>
+      Boolean indicating that the intervention was disallowed because the tab is
+      currently holding at least one WebLock.
+    </summary>
+  </metric>
+  <metric name="FailureLiveStateUsingWebSockets" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the tab is
       currently using WebSockets.
     </summary>
   </metric>
-  <metric name="FailureLiveStateUsingWebUSB">
+  <metric name="FailureLiveStateUsingWebUSB" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the tab is
       currently using WebUSB.
     </summary>
   </metric>
-  <metric name="FailureLiveStateVisible">
+  <metric name="FailureLiveStateVisible" enum="Boolean">
     <summary>
       Boolean indicating that the intervention was disallowed because the tab is
       currently visible.
+    </summary>
+  </metric>
+  <metric name="FailureOriginTrialOptOut" enum="Boolean">
+    <summary>
+      Boolean indicating that the tab explicitly opted out of the intervention
+      via origin trial.
+    </summary>
+  </metric>
+  <metric name="FailureOriginTrialUnknown" enum="Boolean">
+    <summary>
+      Boolean indicating that the tab did not report its origin trial
+      opt-in/opt-out yet.
     </summary>
   </metric>
   <metric name="LifecycleStateChangeReason">
@@ -7825,7 +7935,7 @@ be describing additional metrics about the same event.
       lifecycle_unit_state.mojom.
     </summary>
   </metric>
-  <metric name="Outcome">
+  <metric name="Outcome" enum="Boolean">
     <summary>
       Whether or not the state change was successful. The various Failure and
       Success booleans encode the actual reasons for this outcome. Note that
@@ -7834,22 +7944,31 @@ be describing additional metrics about the same event.
       success bits are present the outcome is positive.
     </summary>
   </metric>
-  <metric name="SuccessGlobalWhitelist">
+  <metric name="SuccessGlobalWhitelist" enum="Boolean">
     <summary>
       Boolean indicating that the tab was explicitly opted in to the
       intervention via the global whitelist.
     </summary>
   </metric>
-  <metric name="SuccessHeuristic">
+  <metric name="SuccessHeuristic" enum="Boolean">
     <summary>
       Boolean indicating that the tab was deemed safe for the intervention via
       local observations and heuristics.
     </summary>
   </metric>
   <metric name="SuccessLifecyclesFeaturePolicyOptIn">
+    <obsolete>
+      Deprecated 08/2019. Replaced with SuccessOriginTrialOptIn.
+    </obsolete>
     <summary>
       Boolean indicating that the tab explicitly opted in to the intervention
       via feature policy.
+    </summary>
+  </metric>
+  <metric name="SuccessOriginTrialOptIn" enum="Boolean">
+    <summary>
+      Boolean indicating that the tab explicitly opted in to the intervention
+      via origin trial.
     </summary>
   </metric>
   <metric name="TimeSinceNavigationMs">
@@ -7864,7 +7983,7 @@ be describing additional metrics about the same event.
       visibility state change.
     </summary>
   </metric>
-  <metric name="TransitionForced">
+  <metric name="TransitionForced" enum="Boolean">
     <summary>
       This is set if the transition to the new lifecycle state was forced by the
       browser because the content took too long to respond to the lifecycle
@@ -8775,6 +8894,7 @@ be describing additional metrics about the same event.
 
 <event name="XR.PageSession" singular="True">
   <owner>offenwanger@chromium.org</owner>
+  <owner>xr-dev@chromium.org</owner>
   <summary>
     Records properties of page use in XR, including VR browsing and WebXR
     presentation.
@@ -8786,42 +8906,81 @@ be describing additional metrics about the same event.
       get rounded to minutes and then hours as they get larger. This is done by
       SessionTracker::GetRoundedDurationInSeconds.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="EnteredFullscreen">
+  <metric name="EnteredFullscreen" enum="Boolean">
     <summary>
       A boolean that is set to 1 if the user requested fullscreen while in XR on
       some element on the page.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="EnteredVROnPageReason">
+  <metric name="EnteredVROnPageReason" enum="VRStartReason">
     <summary>
       An enum that indicates that the user entered VR on this page and what
       triggered the entry into VR, where 1 means VR was entered through headset
       activation, and 2 means that request presentation triggered the entry into
       VR.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="TimeOnPage">
+    <obsolete>
+      Deprecated.
+    </obsolete>
     <summary>
       Deprecated.
     </summary>
   </metric>
-  <metric name="WasOmniboxNavigation">
+  <metric name="WasOmniboxNavigation" enum="Boolean">
     <summary>
       A boolean that is set to 1 if this page was entered into the omnibox,
       either manually or using autocomplete.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="WasVoiceSearchNavigation">
+  <metric name="WasVoiceSearchNavigation" enum="Boolean">
     <summary>
       A boolean that is set to 1 if this page was specifically requested and
       recognized by a voice search.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
 <event name="XR.WebXR" singular="True">
   <owner>billorr@chromium.org</owner>
+  <owner>xr-dev@chromium.org</owner>
   <summary>
     Records information about WebXR methods that were used in a single
     navigation. The event will be recorded as the WebXR functions are called -
@@ -8837,43 +8996,92 @@ be describing additional metrics about the same event.
       site.
     </summary>
   </metric>
-  <metric name="DidGetXRInputSources">
+  <metric name="DidGetXRInputSources" enum="Boolean">
     <summary>
       Boolean value that indicates that the WebXR input API was used.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="DidRequestAvailableDevices">
+  <metric name="DidRequestAvailableDevices" enum="Boolean">
     <summary>
       Boolean value that indicates that the API to enumerate devices was called.
       This API is only exposed through WebVR.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="DidRequestPose">
+  <metric name="DidRequestPose" enum="Boolean">
     <summary>
       Boolean value that indicates that poses were requested.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="DidRequestPresentation">
+  <metric name="DidRequestPresentation" enum="Boolean">
     <summary>
       Boolean value that indicates that presentation was requested.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="DidUseNavigatorXR">
+  <metric name="DidUseNavigatorXR" enum="Boolean">
     <summary>
       Boolean value that indicates that the WebXR Device API was used.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="ReturnedDevice">
+  <metric name="ReturnedDevice" enum="Boolean">
     <summary>
       Boolean value that indicates that a device was returned by the API to
       enumerate devices. This API is only exposed through WebVR.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="ReturnedPresentationCapableDevice">
+  <metric name="ReturnedPresentationCapableDevice" enum="Boolean">
     <summary>
       Boolean value that indicates that a device was returned by the API to
       enumerate devices, and that the device supports presentation.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -8924,19 +9132,40 @@ be describing additional metrics about the same event.
       get larger. This is done by SessionTracker::GetRoundedDurationInSeconds.
       For inline sessions, this might get pretty large.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="IsLegacyWebVR">
+  <metric name="IsLegacyWebVR" enum="Boolean">
     <summary>
       Boolean value indicating whether a session was created using the legacy
       WebVR API rather than WebXR.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="Mode">
+  <metric name="Mode" enum="XRSessionMode">
     <summary>
       An enum value specifying WebXR session's mode. See `device::SessionMode`
       for enum type declaration. 0: Unknown, catch all. 1: Inline session. 2:
       Immersive VR session. 3: Immersive AR session.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -8945,19 +9174,33 @@ be describing additional metrics about the same event.
   <summary>
     Recorded when promise returned by `requestSession` gets resolved / rejected.
   </summary>
-  <metric name="Mode">
+  <metric name="Mode" enum="XRSessionModeRequest">
     <summary>
       An enum value that indicates that the `requestSession` API was called to
       request session with this mode. See `device::SessionMode` for enum type
       declaration. 0: Unknown, catch all. 1: Inline session was requested. 2:
       Immersive VR session was requested. 3: Immersive AR session was requested.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="Status">
+  <metric name="Status" enum="XRSessionRequestStatus">
     <summary>
       An enum value that describes the result of the call to `requestSession`
       method. See `` for enum type declaration. 0: Success. 1: Other failure.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 

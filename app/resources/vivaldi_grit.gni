@@ -1,29 +1,15 @@
 import("//tools/grit/grit_rule.gni")
-
-gritinfo_cmd = "//tools/grit/grit_info.py"
-_default_grit_resource_ids = "//tools/gritsettings/resource_ids"
+import("//vivaldi/app/resources/untranslated.gni")
 
 template("single_grit_action") {
   assert(defined(invoker.source))
   forward_variables_from(invoker,
                          [
-                           "grit_out_dir",
                            "have_strings",
-                           "grit_resource_ids",
-                           "grit_additional_defines",
                          ])
 
-  if (!defined(grit_out_dir)) {
-    grit_out_dir = "$root_gen_dir/chrome"
-  }
-  if (!defined(grit_resource_ids)) {
-    grit_resource_ids = _default_grit_resource_ids
-  }
   if (!defined(have_strings)) {
     have_strings = false
-  }
-  if (!defined(grit_additional_defines)) {
-    grit_additional_defines = []
   }
   deps_list = []
 
@@ -32,29 +18,20 @@ template("single_grit_action") {
     deps_list += [ ":" + name ]
     vivaldi_extract_untranslated(name) {
       source = invoker.source
+      source_translations = invoker.source_translations
     }
   }
 
   name = "grit_$target_name"
   deps_list += [ ":" + name ]
   grit(name) {
-    source = invoker.source
-    outputs = []
-    foreach(file,
-            exec_script(gritinfo_cmd,
-                        grit_defines + grit_additional_defines + [
-                              "--outputs",
-                              ".",
-                              rebase_path(source, root_build_dir),
-                              "-f",
-                              rebase_path(grit_resource_ids, root_build_dir),
-                            ],
-                        "list lines")) {
-      outputs += [ "$grit_out_dir/$file" ]
-    }
-    output_dir = grit_out_dir
-
-    resource_ids = grit_resource_ids
+    forward_variables_from(invoker, [
+                             "inputs",
+                             "output_dir",
+                             "outputs",
+                             "source",
+                             "resource_ids",
+                           ])
   }
 
   group(target_name) {

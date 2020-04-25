@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.download;
 import static org.chromium.chrome.browser.preferences.download.DownloadDirectoryAdapter.NO_SELECTED_ITEM_ID;
 
 import android.content.Context;
-import android.support.annotation.Nullable;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.CheckBox;
@@ -17,9 +16,11 @@ import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.download.DownloadDirectoryAdapter;
-import org.chromium.chrome.browser.widget.AlertDialogEditText;
+import org.chromium.chrome.browser.ui.widget.text.AlertDialogEditText;
 import org.chromium.chrome.download.R;
 
 import java.io.File;

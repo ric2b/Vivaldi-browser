@@ -115,7 +115,7 @@ class CookieSettings : public CookieSettingsBase,
   bool ShouldBlockThirdPartyCookies() const;
 
   // content_settings::CookieSettingsBase:
-  void GetSettingForLegacyCookieAccess(const GURL& cookie_domain,
+  void GetSettingForLegacyCookieAccess(const std::string& cookie_domain,
                                        ContentSetting* setting) const override;
 
   // Detaches the |CookieSettings| from |PrefService|. This methods needs to be
@@ -127,8 +127,10 @@ class CookieSettings : public CookieSettingsBase,
 
   void AddObserver(Observer* obs) { observers_.AddObserver(obs); }
 
-  void RemoveObserver(const Observer* obs) { observers_.RemoveObserver(obs); }
+  void RemoveObserver(Observer* obs) { observers_.RemoveObserver(obs); }
 
+  // Returns true when the improved cookie control UI should be shown.
+  // TODO(dullweber): Fix grammar.
   bool IsCookieControlsEnabled();
 
  private:

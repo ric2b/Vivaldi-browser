@@ -7,14 +7,19 @@
       "backgroundColor": "#FFFFFF"
     },
     {
-      "name": "LayoutBlockFlow DIV id='scroller'",
+      "name": "LayoutNGBlockFlow DIV id='scroller'",
       "bounds": [185, 552],
       "backgroundColor": "#0000FF",
       "paintInvalidations": [
         {
-          "object": "Scrolling background of LayoutBlockFlow DIV id='scroller'",
+          "object": "Scrolling background of LayoutNGBlockFlow DIV id='scroller'",
           "rect": [0, 0, 185, 552],
           "reason": "background"
+        },
+        {
+          "object": "LayoutNGBlockFlow DIV id='scroller'",
+          "rect": [0, 516, 79, 19],
+          "reason": "chunk disappeared"
         }
       ],
       "transform": 2
@@ -24,7 +29,7 @@
       "bounds": [200, 200],
       "paintInvalidations": [
         {
-          "object": "LayoutBlockFlow DIV id='scroller'",
+          "object": "LayoutNGBlockFlow DIV id='scroller'",
           "rect": [0, 0, 200, 200],
           "reason": "background"
         },
@@ -34,17 +39,25 @@
           "reason": "scroll control"
         },
         {
-          "object": "LayoutBlockFlow DIV id='scroller'",
-          "rect": [0, 149, 79, 19],
-          "reason": "paint property change"
-        },
-        {
           "object": "VerticalScrollbar",
           "rect": [185, 0, 15, 185],
           "reason": "scroll control"
         }
       ],
       "transform": 1
+    },
+    {
+      "name": "LayoutNGBlockFlow DIV id='scroller'",
+      "position": [0, 516],
+      "bounds": [79, 19],
+      "paintInvalidations": [
+        {
+          "object": "LayoutNGBlockFlow DIV id='scroller'",
+          "rect": [0, 0, 79, 19],
+          "reason": "full layer"
+        }
+      ],
+      "transform": 2
     }
   ],
   "transforms": [

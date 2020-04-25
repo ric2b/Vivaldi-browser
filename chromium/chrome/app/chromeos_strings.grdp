@@ -1246,6 +1246,12 @@
   <message name="IDS_NETWORK_LIST_INITIALIZING" desc="Text in the network list element when a Cellular network is initiailizing.">
     Initializing...
   </message>
+  <message name="IDS_NETWORK_LIST_NOT_AVAILABLE" desc="Text in the network list element when a network is not available to be selected but is still present in the list (e.g., if cellular activation is not allowed in the current context, this message is displayed next to unactivated cellular networks).">
+    Not available
+  </message>
+  <message name="IDS_NETWORK_LIST_SIM_CARD_LOCKED" desc="Text in the network list element when a Cellular network's SIM card is locked.">
+    SIM card is locked
+  </message>
   <message name="IDS_NETWORK_LIST_NOT_CONNECTED" desc="Text in the network list element when there is a network for the type, but it is not connected or connecting.">
     Not connected
   </message>
@@ -1604,9 +1610,6 @@
   <message name="IDS_CONTROLLED_SETTING_PARENT" desc="Text displayed in the controlled settings bubble when a setting's value is controlled by user's parent.">
     This setting is managed by a parent.
   </message>
-  <message name="IDS_CONTROLLED_SETTING_CHILD_RESTRICTION" desc="Text displayed in the controlled settings bubble when a setting's value is pre-set because the user is a child.">
-    This setting can't be changed by a child user.
-  </message>
   <message name="IDS_STATUSBAR_DISABLE_SPOKEN_FEEDBACK" desc="The menu option to disable spoken feedback accessibility feature.">
     Disable ChromeVox (spoken feedback)
   </message>
@@ -1812,11 +1815,8 @@
   <message name="IDS_LOGIN_ERROR_OFFLINE_FAILED_NETWORK_NOT_CONNECTED" desc="Couldn't sign in because offline sign-in has failed and network is not connected">
     Sorry, your email or password could not be verified. Try connecting to a network first.
   </message>
-  <message name="IDS_LOGIN_ERROR_KEYBOARD_SWITCH_HINT" desc="A hint text for the login and lock screens about layout switching">
-    Hit Control-Shift-Space to switch keyboard layout.
-  </message>
-  <message name="IDS_LOGIN_ERROR_CAPS_LOCK_HINT" desc="A hint text for the login and lock screens that Caps Lock is on">
-    Caps Lock is on.
+  <message name="IDS_LOGIN_ERROR_KEYBOARD_SWITCH_HINT" desc="A hint text for the login and lock screens about correct layout">
+    Check your keyboard layout and try again.
   </message>
   <message name="IDS_LOGIN_ERROR_CAPTIVE_PORTAL" desc="An error message shown when we suggest that user may be behind the captive portal.">
     Before signing in, please enter as Guest to activate the network <ph name="NETWORK_ID">$1<ex>Public Wifi</ex></ph>
@@ -2093,11 +2093,17 @@
   <message name="IDS_EOL_NOTIFICATION_TITLE" desc="Notification title shown to inform the user that this device is no longer supported.">
     Final software update
   </message>
-  <message name="IDS_EOL_NOTIFICATION_EOL" desc="Notification shown to inform the user that this device will no longer receive latest software updates.">
+  <message name="IDS_EOL_NOTIFICATION_EOL" desc="Notification message shown to inform the user that this device will no longer receive latest software updates.">
     This is the last automatic software and security update for this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>. To get future updates, upgrade to a newer model.
   </message>
   <message name="IDS_EOL_DISMISS_BUTTON" desc="A button label shown in the notification for eol status change to dismiss the notification.">
     Don't remind me again
+  </message>
+  <message name="IDS_PENDING_EOL_NOTIFICATION_TITLE" desc="Notification title shown to inform the user that this device will no longer be supported after a certain period of time.">
+    Updates end <ph name="MONTH_AND_YEAR">$1<ex>June 2020</ex></ph>
+  </message>
+  <message name="IDS_PENDING_EOL_NOTIFICATION_MESSAGE" desc="Notification message shown to inform the user that this device will no longer receive latest software updates after a certain period of time.">
+    You'll still be able to use this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> after that time, but it will no longer get automatic software and security updates
   </message>
 
   <!-- TPM Firmware Update Notification Strings -->
@@ -2664,7 +2670,8 @@
     <ph name="LICENSE_TYPE">$1<ex>Perpetual</ex></ph> (<ph name="LICENSE_COUNT">$2<ex>10</ex></ph> rem.)
   </message>
 
-  <!-- About network UI display strings -->
+  <!-- About network UI (chrome://network) display strings (for developer
+       debugging) -->
   <message name="IDS_NETWORK_UI_TITLE" desc="Title of the page">
     Network
   </message>
@@ -2703,6 +2710,9 @@
   </message>
   <message name="IDS_NETWORK_UI_FAVORITE_NETWORKS" desc="Label for list of favorite networks">
     Favorite Networks:
+  </message>
+  <message name="IDS_NETWORK_UI_ETHERNET_EAP" desc="Label for section with the EthernetEAP network">
+    Ethernet EAP:
   </message>
   <message name="IDS_NETWORK_UI_DEVICES" desc="Label for list of network devices, e.g. wifi or cellular">
     Devices:
@@ -3065,38 +3075,32 @@
   <message name="IDS_ARC_USB_ACCESS_PERMISSION_HEADING" desc="Heading text in the content area of the Android app USB device access permission prompt. Tells the user the app will be able to access the usb device if confirmed.">
     Allow "<ph name="APP_NAME">$1<ex>Gmail Checker</ex></ph>" to access:
   </message>
-  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_LOADING" desc="Loading message of the voice interaction value prop dialog.">
+  <message name="IDS_ASSISTANT_VALUE_PROP_LOADING" desc="Loading message of the voice interaction value prop dialog.">
     Loading Google Assistant...
   </message>
-  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_LOAD_ERROR_TITLE" desc="Load error title of the voice interaction value prop dialog.">
+  <message name="IDS_ASSISTANT_VALUE_PROP_LOAD_ERROR_TITLE" desc="Load error title of the voice interaction value prop dialog.">
     Google Assistant
   </message>
-  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_LOAD_ERROR_MESSAGE" desc="Load error message of the voice interaction value prop dialog.">
+  <message name="IDS_ASSISTANT_VALUE_PROP_LOAD_ERROR_MESSAGE" desc="Load error message of the voice interaction value prop dialog.">
     Google Assistant was unable to load, please check your network connection and retry.
   </message>
-  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_SKIP_BUTTON" desc="Button label for skipping voice interaction value prop upon error.">
+  <message name="IDS_ASSISTANT_VALUE_PROP_SKIP_BUTTON" desc="Button label for skipping voice interaction value prop upon error.">
     Skip
   </message>
-  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_RETRY_BUTTON" desc="Button label for retry loading voice interaction value prop.">
+  <message name="IDS_ASSISTANT_VALUE_PROP_RETRY_BUTTON" desc="Button label for retry loading voice interaction value prop.">
     Retry
-  </message>
-  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_NEXT_BUTTION" desc="Button label for accepting voice interaction value proposition.">
-    Next
-  </message>
-  <message name="IDS_WAIT_FOR_CONTAINER_READY_TITLE" desc="Title of the wait for container ready OOBE screen.">
-    Just a sec
   </message>
   <message name="IDS_WAIT_FOR_CONTAINER_READY_INTRO_MESSAGE" desc="Introduction message for the wait for container ready OOBE screen">
     Ask it questions. Tell it to do things. It's your personal Google, always ready to help.
   </message>
-  <message name="IDS_VOICE_INTERACTION_LOGO" desc="Logo label for voice interaction.">
+  <message name="IDS_ASSISTANT_LOGO" desc="Logo label for voice interaction.">
     Google assistant logo
   </message>
   <message name="IDS_ASSISTANT_SCREEN_CONTEXT_TITLE" desc="Title for assistant screen context optin. This is also used as the title for a toggle that lets the assistant use whats on the screen in Assistant settings page.">
     Related info
   </message>
   <message name="IDS_ASSISTANT_SCREEN_CONTEXT_DESC" desc="Description for assistant screen context optin. This is also used as the sub label for context-enable toggle in Assistant settings page.">
-    Let the Assistant show you info related to what's on your screen
+    Let your Assistant show you info related to what's on your screen
   </message>
   <message name="IDS_ASSISTANT_READY_SCREEN_TITLE" desc="Title for assistant ready screen.">
     Your Assistant is ready
@@ -3471,6 +3475,18 @@
   <message name="IDS_CROSTINI_UPGRADING_SUBTEXT" desc="Description for upgrade dialog warning user of delay starting container due to running upgrades.">
     Your app will open when the upgrade is finished. Upgrades can take a few minutes.
   </message>
+  <message name="IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_LABEL" translateable="false" desc="Label for dialog warning user of unavailable Linux container until software configurations are applied.">
+    Linux is being configured by your administrator
+  </message>
+  <message name="IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_SUBTEXT" translateable="false" desc="Description for dialog warning user of unavailable Linux container until software configurations are applied.">
+    Your app will open when configuration is finished. Configuration can take a few minutes.
+  </message>
+  <message name="IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_LABEL" translateable="false" desc="Label for Crostini software config dialog when there is an error in Ansible playbook application or installation.">
+    Error configuring Linux
+  </message>
+  <message name="IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_SUBTEXT" translateable="false" desc="Text shown for Crostini software config dialog when there is an error in Ansible playbook application or installation.">
+    There was an error configuring Linux. Please contact your administrator.
+  </message>
   <message name="IDS_CROSTINI_SHUT_DOWN_LINUX_MENU_ITEM" desc="Text shown in the context menu for the Linux terminal app, allowing users to shut down the Linux virtual machine.">
     Shut down Linux (Beta)
   </message>
@@ -3503,6 +3519,23 @@
   </message>
   <message name="IDS_CROSTINI_PACKAGE_INSTALL_NOTIFICATION_ERROR_MESSAGE" desc="Message in the Notification for Linux package installation when there is an error during installation.">
     An error occurred during installation of your Linux application.
+  </message>
+
+  <!-- Linux windows force closing messages -->
+  <message name="IDS_CROSTINI_FORCE_CLOSE_TITLE_UNKNOWN" desc="Title of the crostini force-close dialog, which is used to destroy windows which are not responding. This version is used when we don't know which app is not responding.">
+    Application not responding.
+  </message>
+  <message name="IDS_CROSTINI_FORCE_CLOSE_TITLE_KNOWN" desc="Title of the crostini force-close dialog, which is used to destroy windows which are not responding. This version is used when we know which app is not responding.">
+    <ph name="LINUX_APP_NAME">$1<ex>GIMP</ex></ph> not responding.
+  </message>
+  <message name="IDS_CROSTINI_FORCE_CLOSE_BODY_UNKNOWN" desc="Description used by crostini's force-close dialog. This version is used when we don't know which app is not responding.">
+    The application is not responding. Select "Force close" to close the app.
+  </message>
+  <message name="IDS_CROSTINI_FORCE_CLOSE_BODY_KNOWN" desc="Description used by crostini's force-close dialog. This version is used when we know which app is not responding.">
+    <ph name="LINUX_APP_NAME">$1<ex>GIMP</ex></ph> is not responding. Select "Force close" to close the app.
+  </message>
+  <message name="IDS_CROSTINI_FORCE_CLOSE_ACCEPT_BUTTON" desc="Label for the button in the force-close dialog that closes the window.">
+    Force close
   </message>
 
   <!-- Linux application uninstaller messages -->
@@ -3929,6 +3962,14 @@
     Contact the device admin for your organization
   </message>
 
+  <!-- Strings for Account Manager error screen -->
+  <message name="IDS_ACCOUNT_MANAGER_SECONDARY_ACCOUNTS_DISABLED_TITLE" desc="Title for the Chrome OS Account Manager error screen when addition of secondary Google Accounts is disabled.">
+    Addition of more Google Accounts is disabled
+  </message>
+  <message name="IDS_ACCOUNT_MANAGER_SECONDARY_ACCOUNTS_DISABLED_TEXT" desc="Text body for the Chrome OS Account Manager error screen when addition of secondary Google Accounts is disabled.">
+    Your administrator has disabled the addition of more Google Accounts
+  </message>
+
   <!-- Strings for Account Manager welcome screen -->
   <message name="IDS_ACCOUNT_MANAGER_WELCOME_TITLE" desc="Title for the Chrome OS Account Manager Welcome screen.">
     Sign-in has changed
@@ -3976,8 +4017,8 @@
   </message>
 
   <!-- Strings for Add Supervision screen -->
-  <message name="IDS_ADD_SUPERVISION_PAGE_TITLE" desc="Title for the Chrome OS Add Supervision screen.">
-    Add Supervision
+  <message name="IDS_ADD_SUPERVISION_PAGE_TITLE" desc="Title for the Chrome OS Add Supervision screen. Since the title bar is not visible, this string is only used by screen readers.">
+    Set Up Parental Controls
   </message>
   <message name="IDS_ADD_SUPERVISION_NETWORK_DOWN_HEADING" desc="Heading string shown in the Add Supervision page when the network is not available.">
     Can’t connect to the internet

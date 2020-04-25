@@ -12,6 +12,8 @@ import org.chromium.chrome.browser.widget.DateDividedAdapter.TimedItem;
 
 import java.util.Arrays;
 
+import org.vivaldi.browser.tasks.tab_management.TabSwitcherView;
+
 /** Contains information about a single browsing history item. */
 public class HistoryItem extends TimedItem {
     private final String mUrl;
@@ -102,6 +104,8 @@ public class HistoryItem extends TimedItem {
             mManager.recordUserActionWithOptionalSearch("OpenItem");
             mManager.recordOpenedItemMetrics(this);
             mManager.openUrl(mUrl, null, false);
+            // In Vivaldi close the Tab Switcher View.
+            TabSwitcherView.closeTabSwitcherView();
         }
     }
 

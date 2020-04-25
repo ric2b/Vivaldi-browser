@@ -13,6 +13,10 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
 
+namespace ash {
+class AssistantStateBase;
+}  // namespace ash
+
 namespace assistant_client {
 struct SpeakerIdEnrollmentStatus;
 struct SpeakerIdEnrollmentUpdate;
@@ -20,14 +24,22 @@ struct SpeakerIdEnrollmentUpdate;
 
 namespace chromeos {
 namespace assistant {
+namespace mojom {
+class AssistantController;
+}  // namespace mojom
+}  // namespace assistant
+}  // namespace chromeos
+
+namespace chromeos {
+namespace assistant {
 
 class AssistantManagerServiceImpl;
-class Service;
+class ServiceContext;
 
 class AssistantSettingsManagerImpl : public AssistantSettingsManager {
  public:
   AssistantSettingsManagerImpl(
-      Service* service,
+      ServiceContext* context,
       AssistantManagerServiceImpl* assistant_manager_service);
   ~AssistantSettingsManagerImpl() override;
 
@@ -48,6 +60,8 @@ class AssistantSettingsManagerImpl : public AssistantSettingsManager {
       StopSpeakerIdEnrollmentCallback callback) override;
   void SyncSpeakerIdEnrollmentStatus() override;
 
+  void SyncDeviceAppsStatus(base::OnceCallback<void(bool)> callback);
+
   void UpdateServerDeviceSettings();
 
  private:
@@ -56,8 +70,14 @@ class AssistantSettingsManagerImpl : public AssistantSettingsManager {
   void HandleStopSpeakerIdEnrollment(base::RepeatingCallback<void()> callback);
   void HandleSpeakerIdEnrollmentStatusSync(
       const assistant_client::SpeakerIdEnrollmentStatus& status);
+  void HandleDeviceAppsStatusSync(base::OnceCallback<void(bool)> callback,
+                                  const std::string& settings);
 
-  Service* const service_;
+  ash::AssistantStateBase* assistant_state();
+  mojom::AssistantController* assistant_controller();
+  scoped_refptr<base::SequencedTaskRunner> main_task_runner();
+
+  ServiceContext* const context_;
   AssistantManagerServiceImpl* const assistant_manager_service_;
   mojom::SpeakerIdEnrollmentClientPtr speaker_id_enrollment_client_;
 

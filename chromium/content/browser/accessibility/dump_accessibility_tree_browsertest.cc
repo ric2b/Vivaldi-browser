@@ -236,6 +236,15 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityCSSFontFamily) {
   RunCSSTest(FILE_PATH_LITERAL("font-family.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityCSSFontSize) {
+  RunCSSTest(FILE_PATH_LITERAL("font-size.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityCSSDisplayToNone) {
+  RunCSSTest(FILE_PATH_LITERAL("display-to-none.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityCSSDisplayToInline) {
   RunCSSTest(FILE_PATH_LITERAL("display-to-inline.html"));
@@ -277,6 +286,21 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityCSSVisibility) {
   RunCSSTest(FILE_PATH_LITERAL("visibility.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityCSSVisibilityToHidden) {
+  RunCSSTest(FILE_PATH_LITERAL("visibility-to-hidden.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityCSSVisibilityToCollapsed) {
+  RunCSSTest(FILE_PATH_LITERAL("visibility-to-collapsed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityCSSVisibilityToVisible) {
+  RunCSSTest(FILE_PATH_LITERAL("visibility-to-visible.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityA) {
   RunHtmlTest(FILE_PATH_LITERAL("a.html"));
 }
@@ -305,6 +329,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAddress) {
   RunHtmlTest(FILE_PATH_LITERAL("address.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAnnotationRoles) {
+  RunAriaTest(FILE_PATH_LITERAL("annotation-roles.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityArea) {
@@ -1667,9 +1696,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityLabel) {
   RunHtmlTest(FILE_PATH_LITERAL("label.html"));
 }
 
-// TODO(http://crubg/1000965): flaky.
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       DISABLED_AccessibilityLabelUpdates) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityLabelUpdates) {
   RunHtmlTest(FILE_PATH_LITERAL("label-updates.html"));
 }
 
@@ -1807,6 +1834,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityOptgroup) {
   RunHtmlTest(FILE_PATH_LITERAL("optgroup.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityOpenModal) {
+  RunHtmlTest(FILE_PATH_LITERAL("open-modal.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,

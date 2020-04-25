@@ -296,10 +296,6 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // are visible.
   bool IsDrawn() const;
 
-  // Returns true if this layer can have a texture (has_texture_ is true)
-  // and is not completely obscured by a child.
-  bool ShouldDraw() const;
-
   // If set to true, this layer can receive hit test events, this property does
   // not affect the layer's descendants.
   void SetAcceptEvents(bool accept_events);
@@ -470,6 +466,7 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // LayerClient implementation.
   std::unique_ptr<base::trace_event::TracedValue> TakeDebugInfo(
       const cc::Layer* layer) override;
+  std::string LayerDebugName(const cc::Layer* layer) const override;
   void DidChangeScrollbarsHiddenIfOverlay(bool) override;
 
   // Triggers a call to SwitchToLayer.
@@ -606,6 +603,8 @@ class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
   // Resets |subtree_reflected_layer_| and updates the reflected layer's
   // |subtree_reflecting_layers_| list accordingly.
   void ResetSubtreeReflectedLayer();
+
+  bool IsHitTestableForCC() const { return visible_ && accept_events_; }
 
   const LayerType type_;
 

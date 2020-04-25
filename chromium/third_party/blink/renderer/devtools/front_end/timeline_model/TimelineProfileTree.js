@@ -5,11 +5,16 @@
 TimelineModel.TimelineProfileTree = {};
 
 /**
+ * @typedef {Map<string|symbol, !TimelineModel.TimelineProfileTree.Node>}
+ */
+TimelineModel.TimelineProfileTree.ChildrenCache;
+
+/**
  * @unrestricted
  */
 TimelineModel.TimelineProfileTree.Node = class {
   /**
-   * @param {string} id
+   * @param {string|symbol} id
    * @param {?SDK.TracingModel.Event} event
    */
   constructor(id, event) {
@@ -17,7 +22,7 @@ TimelineModel.TimelineProfileTree.Node = class {
     this.totalTime = 0;
     /** @type {number} */
     this.selfTime = 0;
-    /** @type {string} */
+    /** @type {string|symbol} */
     this.id = id;
     /** @type {?SDK.TracingModel.Event} */
     this.event = event;
@@ -44,7 +49,7 @@ TimelineModel.TimelineProfileTree.Node = class {
   }
 
   /**
-   * @return {!Map<string, !TimelineModel.TimelineProfileTree.Node>}
+   * @return {!TimelineModel.TimelineProfileTree.ChildrenCache}
    */
   children() {
     throw 'Not implemented';
@@ -57,17 +62,19 @@ TimelineModel.TimelineProfileTree.Node = class {
    */
   searchTree(matchFunction, results) {
     results = results || [];
-    if (this.event && matchFunction(this.event))
+    if (this.event && matchFunction(this.event)) {
       results.push(this);
-    for (const child of this.children().values())
+    }
+    for (const child of this.children().values()) {
       child.searchTree(matchFunction, results);
+    }
     return results;
   }
 };
 
 TimelineModel.TimelineProfileTree.TopDownNode = class extends TimelineModel.TimelineProfileTree.Node {
   /**
-   * @param {string} id
+   * @param {string|symbol} id
    * @param {?SDK.TracingModel.Event} event
    * @param {?TimelineModel.TimelineProfileTree.TopDownNode} parent
    */
@@ -90,22 +97,23 @@ TimelineModel.TimelineProfileTree.TopDownNode = class extends TimelineModel.Time
 
   /**
    * @override
-   * @return {!Map<string, !TimelineModel.TimelineProfileTree.Node>}
+   * @return {!TimelineModel.TimelineProfileTree.ChildrenCache}
    */
   children() {
     return this._children || this._buildChildren();
   }
 
   /**
-   * @return {!Map<string, !TimelineModel.TimelineProfileTree.Node>}
+   * @return {!TimelineModel.TimelineProfileTree.ChildrenCache}
    */
   _buildChildren() {
     /** @type {!Array<!TimelineModel.TimelineProfileTree.TopDownNode>} */
     const path = [];
-    for (let node = this; node.parent && !node._isGroupNode; node = node.parent)
+    for (let node = this; node.parent && !node._isGroupNode; node = node.parent) {
       path.push(/** @type {!TimelineModel.TimelineProfileTree.TopDownNode} */ (node));
+    }
     path.reverse();
-    /** @type {!Map<string, !TimelineModel.TimelineProfileTree.Node>} */
+    /** @type {!TimelineModel.TimelineProfileTree.ChildrenCache} */
     const children = new Map();
     const self = this;
     const root = this._root;
@@ -125,13 +133,16 @@ TimelineModel.TimelineProfileTree.TopDownNode = class extends TimelineModel.Time
      */
     function onStartEvent(e) {
       ++depth;
-      if (depth > path.length + 2)
+      if (depth > path.length + 2) {
         return;
-      if (!matchPath(e))
+      }
+      if (!matchPath(e)) {
         return;
+      }
       const duration = Math.min(endTime, e.endTime) - Math.max(startTime, e.startTime);
-      if (duration < 0)
+      if (duration < 0) {
         console.error('Negative event duration');
+      }
       processEvent(e, duration);
     }
 
@@ -140,8 +151,9 @@ TimelineModel.TimelineProfileTree.TopDownNode = class extends TimelineModel.Time
      */
     function onInstantEvent(e) {
       ++depth;
-      if (matchedDepth === path.length && depth <= path.length + 2)
+      if (matchedDepth === path.length && depth <= path.length + 2) {
         processEvent(e, 0);
+      }
       --depth;
     }
 
@@ -162,8 +174,9 @@ TimelineModel.TimelineProfileTree.TopDownNode = class extends TimelineModel.Time
       } else {
         id = eventIdCallback(e);
         groupId = eventGroupIdCallback ? eventGroupIdCallback(e) : '';
-        if (groupId)
+        if (groupId) {
           id += '/' + groupId;
+        }
       }
       let node = children.get(id);
       if (!node) {
@@ -181,23 +194,29 @@ TimelineModel.TimelineProfileTree.TopDownNode = class extends TimelineModel.Time
      * @return {boolean}
      */
     function matchPath(e) {
-      if (matchedDepth === path.length)
+      if (matchedDepth === path.length) {
         return true;
-      if (matchedDepth !== depth - 1)
+      }
+      if (matchedDepth !== depth - 1) {
         return false;
-      if (!e.endTime)
+      }
+      if (!e.endTime) {
         return false;
+      }
       if (!eventIdCallback) {
-        if (e === path[matchedDepth].event)
+        if (e === path[matchedDepth].event) {
           ++matchedDepth;
+        }
         return false;
       }
       let id = eventIdCallback(e);
       const groupId = eventGroupIdCallback ? eventGroupIdCallback(e) : '';
-      if (groupId)
+      if (groupId) {
         id += '/' + groupId;
-      if (id === path[matchedDepth].id)
+      }
+      if (id === path[matchedDepth].id) {
         ++matchedDepth;
+      }
       return false;
     }
 
@@ -206,8 +225,9 @@ TimelineModel.TimelineProfileTree.TopDownNode = class extends TimelineModel.Time
      */
     function onEndEvent(e) {
       --depth;
-      if (matchedDepth > depth)
+      if (matchedDepth > depth) {
         matchedDepth = depth;
+      }
     }
 
     this._children = children;
@@ -239,21 +259,23 @@ TimelineModel.TimelineProfileTree.TopDownRootNode = class extends TimelineModel.
 
   /**
    * @override
-   * @return {!Map<string, !TimelineModel.TimelineProfileTree.Node>}
+   * @return {!TimelineModel.TimelineProfileTree.ChildrenCache}
    */
   children() {
     return this._children || this._grouppedTopNodes();
   }
 
   /**
-   * @return {!Map<string, !TimelineModel.TimelineProfileTree.Node>}
+   * @return {!TimelineModel.TimelineProfileTree.ChildrenCache}
    */
   _grouppedTopNodes() {
     const flatNodes = super.children();
-    for (const node of flatNodes.values())
+    for (const node of flatNodes.values()) {
       this.selfTime -= node.totalTime;
-    if (!this._eventGroupIdCallback)
+    }
+    if (!this._eventGroupIdCallback) {
       return flatNodes;
+    }
     const groupNodes = new Map();
     for (const node of flatNodes.values()) {
       const groupId = this._eventGroupIdCallback(/** @type {!SDK.TracingModel.Event} */ (node.event));
@@ -281,7 +303,7 @@ TimelineModel.TimelineProfileTree.BottomUpRootNode = class extends TimelineModel
    */
   constructor(events, textFilter, filters, startTime, endTime, eventGroupIdCallback) {
     super('', null);
-    /** @type {?Map<string, !TimelineModel.TimelineProfileTree.Node>} */
+    /** @type {?TimelineModel.TimelineProfileTree.ChildrenCache} */
     this._children = null;
     this._events = events;
     this._textFilter = textFilter;
@@ -301,35 +323,37 @@ TimelineModel.TimelineProfileTree.BottomUpRootNode = class extends TimelineModel
   }
 
   /**
-   * @param {!Map<string, !TimelineModel.TimelineProfileTree.Node>} children
-   * @return {!Map<string, !TimelineModel.TimelineProfileTree.Node>}
+   * @param {!TimelineModel.TimelineProfileTree.ChildrenCache} children
+   * @return {!TimelineModel.TimelineProfileTree.ChildrenCache}
    */
   _filterChildren(children) {
     for (const [id, child] of children) {
-      if (child.event && !this._textFilter.accept(child.event))
-        children.delete(/** @type {string} */ (id));
+      if (child.event && !this._textFilter.accept(child.event)) {
+        children.delete(/** @type {string|symbol} */ (id));
+      }
     }
     return children;
   }
 
   /**
    * @override
-   * @return {!Map<string, !TimelineModel.TimelineProfileTree.Node>}
+   * @return {!TimelineModel.TimelineProfileTree.ChildrenCache}
    */
   children() {
-    if (!this._children)
+    if (!this._children) {
       this._children = this._filterChildren(this._grouppedTopNodes());
+    }
     return this._children;
   }
 
   /**
-   * @return {!Map<string, !TimelineModel.TimelineProfileTree.Node>}
+   * @return {!TimelineModel.TimelineProfileTree.ChildrenCache}
    */
   _ungrouppedTopNodes() {
     const root = this;
     const startTime = this._startTime;
     const endTime = this._endTime;
-    /** @type {!Map<string, !TimelineModel.TimelineProfileTree.Node>} */
+    /** @type {!TimelineModel.TimelineProfileTree.ChildrenCache} */
     const nodeById = new Map();
     /** @type {!Array<number>} */
     const selfTimeStack = [endTime - startTime];
@@ -349,8 +373,9 @@ TimelineModel.TimelineProfileTree.BottomUpRootNode = class extends TimelineModel
       selfTimeStack.push(duration);
       const id = TimelineModel.TimelineProfileTree._eventId(e);
       const noNodeOnStack = !totalTimeById.has(id);
-      if (noNodeOnStack)
+      if (noNodeOnStack) {
         totalTimeById.set(id, duration);
+      }
       firstNodeStack.push(noNodeOnStack);
     }
 
@@ -369,25 +394,28 @@ TimelineModel.TimelineProfileTree.BottomUpRootNode = class extends TimelineModel
         node.totalTime += totalTimeById.get(id);
         totalTimeById.delete(id);
       }
-      if (firstNodeStack.length)
+      if (firstNodeStack.length) {
         node.setHasChildren();
+      }
     }
 
     this.selfTime = selfTimeStack.pop();
     for (const pair of nodeById) {
-      if (pair[1].selfTime <= 0)
+      if (pair[1].selfTime <= 0) {
         nodeById.delete(/** @type {string} */ (pair[0]));
+      }
     }
     return nodeById;
   }
 
   /**
-   * @return {!Map<string, !TimelineModel.TimelineProfileTree.Node>}
+   * @return {!TimelineModel.TimelineProfileTree.ChildrenCache}
    */
   _grouppedTopNodes() {
     const flatNodes = this._ungrouppedTopNodes();
-    if (!this._eventGroupIdCallback)
+    if (!this._eventGroupIdCallback) {
       return flatNodes;
+    }
     const groupNodes = new Map();
     for (const node of flatNodes.values()) {
       const groupId = this._eventGroupIdCallback(/** @type {!SDK.TracingModel.Event} */ (node.event));
@@ -438,7 +466,7 @@ TimelineModel.TimelineProfileTree.GroupNode = class extends TimelineModel.Timeli
 
   /**
    * @override
-   * @return {!Map<string, !TimelineModel.TimelineProfileTree.Node>}
+   * @return {!TimelineModel.TimelineProfileTree.ChildrenCache}
    */
   children() {
     return this._children;
@@ -458,7 +486,7 @@ TimelineModel.TimelineProfileTree.BottomUpNode = class extends TimelineModel.Tim
     this.parent = parent;
     this._root = root;
     this._depth = (parent._depth || 0) + 1;
-    /** @type {?Map<string, !TimelineModel.TimelineProfileTree.Node>} */
+    /** @type {?TimelineModel.TimelineProfileTree.ChildrenCache} */
     this._cachedChildren = null;
     this._hasChildren = hasChildren;
   }
@@ -477,18 +505,19 @@ TimelineModel.TimelineProfileTree.BottomUpNode = class extends TimelineModel.Tim
 
   /**
    * @override
-   * @return {!Map<string, !TimelineModel.TimelineProfileTree.Node>}
+   * @return {!TimelineModel.TimelineProfileTree.ChildrenCache}
    */
   children() {
-    if (this._cachedChildren)
+    if (this._cachedChildren) {
       return this._cachedChildren;
+    }
     /** @type {!Array<number>} */
     const selfTimeStack = [0];
     /** @type {!Array<string>} */
     const eventIdStack = [];
     /** @type {!Array<!SDK.TracingModel.Event>} */
     const eventStack = [];
-    /** @type {!Map<string, !TimelineModel.TimelineProfileTree.Node>} */
+    /** @type {!TimelineModel.TimelineProfileTree.ChildrenCache} */
     const nodeById = new Map();
     const startTime = this._root._startTime;
     const endTime = this._root._endTime;
@@ -502,8 +531,9 @@ TimelineModel.TimelineProfileTree.BottomUpNode = class extends TimelineModel.Tim
      */
     function onStartEvent(e) {
       const duration = Math.min(e.endTime, endTime) - Math.max(e.startTime, startTime);
-      if (duration < 0)
+      if (duration < 0) {
         console.assert(false, 'Negative duration of an event');
+      }
       selfTimeStack[selfTimeStack.length - 1] -= duration;
       selfTimeStack.push(duration);
       const id = TimelineModel.TimelineProfileTree._eventId(e);
@@ -520,11 +550,13 @@ TimelineModel.TimelineProfileTree.BottomUpNode = class extends TimelineModel.Tim
       eventStack.pop();
       let node;
       for (node = self; node._depth > 1; node = node.parent) {
-        if (node.id !== eventIdStack[eventIdStack.length + 1 - node._depth])
+        if (node.id !== eventIdStack[eventIdStack.length + 1 - node._depth]) {
           return;
+        }
       }
-      if (node.id !== id || eventIdStack.length < self._depth)
+      if (node.id !== id || eventIdStack.length < self._depth) {
         return;
+      }
       const childId = eventIdStack[eventIdStack.length - self._depth];
       node = nodeById.get(childId);
       if (!node) {
@@ -551,8 +583,9 @@ TimelineModel.TimelineProfileTree.BottomUpNode = class extends TimelineModel.Tim
    */
   searchTree(matchFunction, results) {
     results = results || [];
-    if (this.event && matchFunction(this.event))
+    if (this.event && matchFunction(this.event)) {
       results.push(this);
+    }
     return results;
   }
 };
@@ -563,13 +596,15 @@ TimelineModel.TimelineProfileTree.BottomUpNode = class extends TimelineModel.Tim
  */
 TimelineModel.TimelineProfileTree.eventURL = function(event) {
   const data = event.args['data'] || event.args['beginData'];
-  if (data && data['url'])
+  if (data && data['url']) {
     return data['url'];
+  }
   let frame = TimelineModel.TimelineProfileTree.eventStackFrame(event);
   while (frame) {
     const url = frame['url'];
-    if (url)
+    if (url) {
       return url;
+    }
     frame = frame.parent;
   }
   return null;
@@ -580,8 +615,9 @@ TimelineModel.TimelineProfileTree.eventURL = function(event) {
  * @return {?Protocol.Runtime.CallFrame}
  */
 TimelineModel.TimelineProfileTree.eventStackFrame = function(event) {
-  if (event.name === TimelineModel.TimelineModel.RecordType.JSFrame)
+  if (event.name === TimelineModel.TimelineModel.RecordType.JSFrame) {
     return /** @type {?Protocol.Runtime.CallFrame} */ (event.args['data'] || null);
+  }
   return TimelineModel.TimelineData.forEvent(event).topFrame();
 };
 
@@ -590,10 +626,12 @@ TimelineModel.TimelineProfileTree.eventStackFrame = function(event) {
  * @return {string}
  */
 TimelineModel.TimelineProfileTree._eventId = function(event) {
-  if (event.name === TimelineModel.TimelineModel.RecordType.TimeStamp)
+  if (event.name === TimelineModel.TimelineModel.RecordType.TimeStamp) {
     return `${event.name}:${event.args.data.message}`;
-  if (event.name !== TimelineModel.TimelineModel.RecordType.JSFrame)
+  }
+  if (event.name !== TimelineModel.TimelineModel.RecordType.JSFrame) {
     return event.name;
+  }
   const frame = event.args['data'];
   const location = frame['scriptId'] || frame['url'] || '';
   const functionName = frame['functionName'];

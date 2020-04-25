@@ -18,8 +18,6 @@
 #include "extensions/browser/extension_registry.h"
 #endif
 
-#include "app/vivaldi_apptools.h"
-
 using content::RenderFrameHost;
 using content::RenderViewHost;
 using content::SiteInstance;
@@ -58,12 +56,6 @@ scoped_refptr<SiteInstance> GetSiteInstanceForNewTab(Profile* profile,
           .GetHostedAppByURL(url))
     return SiteInstance::CreateForURL(profile, url);
 #endif
-
-   if (vivaldi::IsVivaldiRunning()) {
-     // We cannot start a new browsinginstance for our hiarchy, so we need a new
-     // siteinstance for Vivaldi
-     return SiteInstance::CreateForURL(profile, url);
-   }
 
   // We used to share the SiteInstance for same-site links opened in new tabs,
   // to leverage the in-memory cache and reduce process creation.  It now

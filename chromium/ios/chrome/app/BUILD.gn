@@ -152,6 +152,7 @@ source_set("app_internal") {
     "//components/browsing_data/core",
     "//components/component_updater",
     "//components/component_updater:crl_set_remover",
+    "//components/component_updater/installer_policies",
     "//components/content_settings/core/browser",
     "//components/crash/core/common",
     "//components/favicon/core",
@@ -199,6 +200,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/geolocation:geolocation_internal",
     "//ios/chrome/browser/history",
     "//ios/chrome/browser/mailto:feature_flags",
+    "//ios/chrome/browser/main",
     "//ios/chrome/browser/memory",
     "//ios/chrome/browser/metrics",
     "//ios/chrome/browser/metrics:metrics_internal",
@@ -227,6 +229,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/ui/first_run",
     "//ios/chrome/browser/ui/history",
     "//ios/chrome/browser/ui/main",
+    "//ios/chrome/browser/ui/main:scene",
     "//ios/chrome/browser/ui/promos",
     "//ios/chrome/browser/ui/settings",
     "//ios/chrome/browser/ui/settings:settings_root",
@@ -239,6 +242,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/ui/toolbar:toolbar_ui",
     "//ios/chrome/browser/ui/toolbar/public",
     "//ios/chrome/browser/ui/util",
+    "//ios/chrome/browser/ui/util:multiwindow_util",
     "//ios/chrome/browser/ui/webui:webui_internal",
     "//ios/chrome/browser/upgrade",
     "//ios/chrome/browser/url_loading",
@@ -275,8 +279,10 @@ source_set("app_internal") {
     "MediaPlayer.framework",
   ]
 
-  allow_circular_includes_from =
-      [ "//ios/chrome/app/application_delegate:application_delegate_internal" ]
+  allow_circular_includes_from = [
+    "//ios/chrome/app/application_delegate:application_delegate_internal",
+    "//ios/chrome/browser/ui/main:scene",
+  ]
 }
 
 source_set("mode") {

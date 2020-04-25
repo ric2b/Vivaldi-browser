@@ -1072,6 +1072,21 @@
       <message desc="This is an abbreviated ARIA widget role name shown on a braille display. When translating, try to find a contracted form of the translation for 'alert dialog' according to local conventions. If reasonable, use all lowercase and avoid punctuation to keep the number of characters as low as possible." name="IDS_CHROMEVOX_ROLE_ALERTDIALOG_BRL">
         alrt dlg
       </message>
+      <message  desc="Accessibility role description for attribution, meaning authoring information tied to specific content" name="IDS_CHROMEVOX_ROLE_ANNOTATION_ATTRIBUTION">
+        Authoring info
+      </message>
+      <message desc="Accessibility role description for commentary" name="IDS_CHROMEVOX_ROLE_ANNOTATION_COMMENTARY">
+        Comments
+      </message>
+      <message desc="Accessibility role description for presence, meaning information about another collaborator who is currently reviewing or editing this content" name="IDS_CHROMEVOX_ROLE_ANNOTATION_PRESENCE">
+        Live presence
+      </message>
+      <message desc="Accessibility role description for revision, meaining historical change info tied to this content" name="IDS_CHROMEVOX_ROLE_ANNOTATION_REVISION">
+        Revision
+      </message>
+      <message desc="Accessibility role description for suggestion, meaning a suggested change to some content" name="IDS_CHROMEVOX_ROLE_ANNOTATION_SUGGESTION" >
+        Suggestion
+      </message>
       <message desc="Describes an element with the ARIA role button." name="IDS_CHROMEVOX_ROLE_BUTTON">
         Button
       </message>
@@ -1900,6 +1915,8 @@
       <message desc="In an editable text box, describes a line with only whitespace." name="IDS_CHROMEVOX_TEXT_BOX_WHITESPACE" meaning="UI element">
         Space
       </message>
+      <!-- TODO(crbug.com/999781): The following 3 messages are combined with other message fragments. -->
+      <!-- Combining message fragments is a I18N code-smell.  Combine fragments into a single message. -->
       <message desc="Further describes a list-like element with a number of items. e.g. This will be combined with other messages to produce: List with 3 items." name="IDS_CHROMEVOX_LIST_WITH_ITEMS_NOT_PLURALIZED">
         with <ph name="num">$1</ph> items
       </message>
@@ -1907,10 +1924,11 @@
         +<ph name="num">$1</ph>
       </message>
       <message desc="Further describes a list-like element with a number of items. e.g. This will be combined with other messages to produce: List with 3 items." name="IDS_CHROMEVOX_LIST_WITH_ITEMS">
-        with {COUNT, plural, =1 {# item}other {# items}}
+        {COUNT, plural, =1{with # item} other{with # items}}
       </message>
+      <!-- TODO(crbug.com/999781): This should not need ICU msg format. Fix where the message is used. -->
       <message desc="Further describes a list-like element with a number of items in braille." name="IDS_CHROMEVOX_LIST_WITH_ITEMS_BRL">
-        +{COUNT, plural, =1 {#}other {#}}
+        {COUNT, plural, =1{+#} other{+#}}
       </message>
       <message desc="Describes the state of a progress bar, in percent." name="IDS_CHROMEVOX_STATE_PERCENT">
         <ph name="num">$1</ph>%
@@ -2274,6 +2292,12 @@
       </message>
       <message desc="The description of the next group command.  Displayed in the Options page." name="IDS_CHROMEVOX_NEXT_GROUP">
         Next Group
+      </message>
+      <message desc="The description of the previous similar command." name="IDS_CHROMEVOX_PREVIOUS_SIMILAR_ITEM">
+        Previous similar item
+      </message>
+      <message desc="The description of the next similar item command." name="IDS_CHROMEVOX_NEXT_SIMILAR_ITEM">
+        Next similar item
       </message>
       <message desc="Describes nodes or anything describing them as a landmark." name="IDS_CHROMEVOX_ROLE_LANDMARK">
         Landmark
@@ -3705,6 +3729,21 @@ If you're done with the tutorial, use ChromeVox to navigate to the Close button 
       </message>
       <message desc="Appends language in front of content." name="IDS_CHROMEVOX_LANGUAGE_SWITCH">
         <ph name="language">$1<ex>English</ex></ph>: <ph name="content">$2<ex>This is example content</ex></ph>
+      </message>
+      <message desc="The description of the readPhoneticPronunciation key. Displayed in the ChromeVox menu." name="IDS_CHROMEVOX_READ_PHONETIC_PRONUNCIATION">
+        Announce phonetic pronunciation for word
+      </message>
+      <message desc="Spoken to inform the user that the node's name is empty" name="IDS_CHROMEVOX_EMPTY_NAME">
+        No available text for this item
+      </message>
+      <message desc="The description of the announceBatteryDescription key. Displayed in the ChromeVox menu." name="IDS_CHROMEVOX_ANNOUNCE_BATTERY_DESCRIPTION">
+        Announce current battery status
+      </message>
+      <message desc="The description of the announceRichTextDescription key. Displayed in the ChromeVox menu." name="IDS_CHROMEVOX_ANNOUNCE_RICH_TEXT_DESCRIPTION">
+        Announce formatting for current item
+      </message>
+      <message desc="Announced when there is no available voice for a language." name="IDS_CHROMEVOX_VOICE_UNAVAILABLE_FOR_LANGUAGE">
+        No voice available for language: <ph name="language">$1<ex>English</ex></ph>
       </message>
     </messages>
   </release>

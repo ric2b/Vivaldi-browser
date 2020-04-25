@@ -31,44 +31,32 @@ std::unique_ptr<LayerImpl> PaintedOverlayScrollbarLayer::CreateLayerImpl(
 }
 
 scoped_refptr<PaintedOverlayScrollbarLayer>
-PaintedOverlayScrollbarLayer::Create(std::unique_ptr<Scrollbar> scrollbar,
-                                     ElementId scroll_element_id) {
-  return base::WrapRefCounted(new PaintedOverlayScrollbarLayer(
-      std::move(scrollbar), scroll_element_id));
+PaintedOverlayScrollbarLayer::Create(std::unique_ptr<Scrollbar> scrollbar) {
+  return base::WrapRefCounted(
+      new PaintedOverlayScrollbarLayer(std::move(scrollbar)));
 }
 
 PaintedOverlayScrollbarLayer::PaintedOverlayScrollbarLayer(
-    std::unique_ptr<Scrollbar> scrollbar,
-    ElementId scroll_element_id)
+    std::unique_ptr<Scrollbar> scrollbar)
     : scrollbar_(std::move(scrollbar)),
-      scroll_element_id_(scroll_element_id),
       thumb_thickness_(scrollbar_->ThumbThickness()),
       thumb_length_(scrollbar_->ThumbLength()) {
+  DCHECK(scrollbar_->HasThumb());
+  DCHECK(scrollbar_->IsOverlay());
   DCHECK(scrollbar_->UsesNinePatchThumbResource());
-  SetIsScrollbar(true);
 }
 
 PaintedOverlayScrollbarLayer::~PaintedOverlayScrollbarLayer() = default;
-
-void PaintedOverlayScrollbarLayer::SetScrollElementId(ElementId element_id) {
-  if (element_id == scroll_element_id_)
-    return;
-
-  scroll_element_id_ = element_id;
-  SetNeedsCommit();
-}
 
 bool PaintedOverlayScrollbarLayer::OpacityCanAnimateOnImplThread() const {
   return scrollbar_->IsOverlay();
 }
 
 void PaintedOverlayScrollbarLayer::PushPropertiesTo(LayerImpl* layer) {
-  Layer::PushPropertiesTo(layer);
+  ScrollbarLayerBase::PushPropertiesTo(layer);
 
   PaintedOverlayScrollbarLayerImpl* scrollbar_layer =
       static_cast<PaintedOverlayScrollbarLayerImpl*>(layer);
-
-  scrollbar_layer->SetScrollElementId(scroll_element_id_);
 
   scrollbar_layer->SetThumbThickness(thumb_thickness_);
   scrollbar_layer->SetThumbLength(thumb_length_);
@@ -106,7 +94,7 @@ void PaintedOverlayScrollbarLayer::SetLayerTreeHost(LayerTreeHost* host) {
     track_resource_.reset();
   }
 
-  Layer::SetLayerTreeHost(host);
+  ScrollbarLayerBase::SetLayerTreeHost(host);
 }
 
 gfx::Rect PaintedOverlayScrollbarLayer::OriginThumbRectForPainting() const {
@@ -117,9 +105,6 @@ bool PaintedOverlayScrollbarLayer::Update() {
   bool updated = false;
   updated |= Layer::Update();
 
-  DCHECK(scrollbar_->HasThumb());
-  DCHECK(scrollbar_->IsOverlay());
-  DCHECK(scrollbar_->UsesNinePatchThumbResource());
   updated |= UpdateProperty(scrollbar_->TrackRect(), &track_rect_);
   updated |= UpdateProperty(scrollbar_->Location(), &location_);
   updated |= UpdateProperty(scrollbar_->ThumbThickness(), &thumb_thickness_);
@@ -143,15 +128,9 @@ bool PaintedOverlayScrollbarLayer::PaintThumbIfNeeded() {
   SkBitmap skbitmap;
   skbitmap.allocN32Pixels(paint_rect.width(), paint_rect.height());
   SkiaPaintCanvas canvas(skbitmap);
+  canvas.clear(SK_ColorTRANSPARENT);
 
-  SkRect content_skrect = RectToSkRect(paint_rect);
-  PaintFlags flags;
-  flags.setAntiAlias(false);
-  flags.setBlendMode(SkBlendMode::kClear);
-  canvas.drawRect(content_skrect, flags);
-  canvas.clipRect(content_skrect);
-
-  scrollbar_->PaintPart(&canvas, THUMB, paint_rect);
+  scrollbar_->PaintPart(&canvas, THUMB);
   // Make sure that the pixels are no longer mutable to unavoid unnecessary
   // allocation and copying.
   skbitmap.setImmutable();
@@ -183,15 +162,9 @@ bool PaintedOverlayScrollbarLayer::PaintTickmarks() {
   SkBitmap skbitmap;
   skbitmap.allocN32Pixels(paint_rect.width(), paint_rect.height());
   SkiaPaintCanvas canvas(skbitmap);
+  canvas.clear(SK_ColorTRANSPARENT);
 
-  SkRect content_skrect = RectToSkRect(paint_rect);
-  PaintFlags flags;
-  flags.setAntiAlias(false);
-  flags.setBlendMode(SkBlendMode::kClear);
-  canvas.drawRect(content_skrect, flags);
-  canvas.clipRect(content_skrect);
-
-  scrollbar_->PaintPart(&canvas, TICKMARKS, paint_rect);
+  scrollbar_->PaintPart(&canvas, TICKMARKS);
   // Make sure that the pixels are no longer mutable to unavoid unnecessary
   // allocation and copying.
   skbitmap.setImmutable();

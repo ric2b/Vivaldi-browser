@@ -16,19 +16,23 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
+#include "fuchsia/engine/switches.h"
 #include "media/base/provision_fetcher.h"
 #include "media/fuchsia/cdm/service/fuchsia_cdm_manager.h"
 #include "media/fuchsia/mojom/fuchsia_cdm_provider.mojom.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "third_party/widevine/cdm/widevine_cdm_common.h"
 
 namespace {
+
 class FuchsiaCdmProviderImpl
     : public content::FrameServiceBase<media::mojom::FuchsiaCdmProvider> {
  public:
-  FuchsiaCdmProviderImpl(media::FuchsiaCdmManager* cdm_manager,
-                         media::CreateFetcherCB create_fetcher_cb,
-                         content::RenderFrameHost* render_frame_host,
-                         media::mojom::FuchsiaCdmProviderRequest request);
+  FuchsiaCdmProviderImpl(
+      media::FuchsiaCdmManager* cdm_manager,
+      media::CreateFetcherCB create_fetcher_cb,
+      content::RenderFrameHost* render_frame_host,
+      mojo::PendingReceiver<media::mojom::FuchsiaCdmProvider> receiver);
   ~FuchsiaCdmProviderImpl() final;
 
   // media::mojom::FuchsiaCdmProvider implementation.
@@ -48,8 +52,8 @@ FuchsiaCdmProviderImpl::FuchsiaCdmProviderImpl(
     media::FuchsiaCdmManager* cdm_manager,
     media::CreateFetcherCB create_fetcher_cb,
     content::RenderFrameHost* render_frame_host,
-    media::mojom::FuchsiaCdmProviderRequest request)
-    : FrameServiceBase(render_frame_host, std::move(request)),
+    mojo::PendingReceiver<media::mojom::FuchsiaCdmProvider> receiver)
+    : FrameServiceBase(render_frame_host, std::move(receiver)),
       cdm_manager_(cdm_manager),
       create_fetcher_cb_(std::move(create_fetcher_cb)) {
   DCHECK(cdm_manager_);
@@ -65,9 +69,10 @@ void FuchsiaCdmProviderImpl::CreateCdmInterface(
                                    std::move(request));
 }
 
-void BindFuchsiaCdmProvider(media::FuchsiaCdmManager* cdm_manager,
-                            media::mojom::FuchsiaCdmProviderRequest request,
-                            content::RenderFrameHost* const frame_host) {
+void BindFuchsiaCdmProvider(
+    media::FuchsiaCdmManager* cdm_manager,
+    mojo::PendingReceiver<media::mojom::FuchsiaCdmProvider> receiver,
+    content::RenderFrameHost* const frame_host) {
   scoped_refptr<network::SharedURLLoaderFactory> loader_factory =
       content::BrowserContext::GetDefaultStoragePartition(
           frame_host->GetProcess()->GetBrowserContext())
@@ -78,7 +83,7 @@ void BindFuchsiaCdmProvider(media::FuchsiaCdmManager* cdm_manager,
       cdm_manager,
       base::BindRepeating(&content::CreateProvisionFetcher,
                           std::move(loader_factory)),
-      frame_host, std::move(request));
+      frame_host, std::move(receiver));
 }
 
 class WidevineHandler : public media::FuchsiaCdmManager::KeySystemHandler {
@@ -107,13 +112,46 @@ class WidevineHandler : public media::FuchsiaCdmManager::KeySystemHandler {
   }
 };
 
+class PlayreadyHandler : public media::FuchsiaCdmManager::KeySystemHandler {
+ public:
+  PlayreadyHandler() = default;
+  ~PlayreadyHandler() override = default;
+
+  void CreateCdm(
+      fidl::InterfaceRequest<fuchsia::media::drm::ContentDecryptionModule>
+          request) override {
+    auto playready = base::fuchsia::ComponentContextForCurrentProcess()
+                         ->svc()
+                         ->Connect<fuchsia::media::drm::PlayReady>();
+    playready->CreateContentDecryptionModule(std::move(request));
+  }
+
+  fuchsia::media::drm::ProvisionerPtr CreateProvisioner() override {
+    // Provisioning is not required for PlayReady.
+    return fuchsia::media::drm::ProvisionerPtr();
+  }
+};
+
 // Supported key systems:
 std::unique_ptr<media::FuchsiaCdmManager> CreateCdmManager() {
   media::FuchsiaCdmManager::KeySystemHandlerMap handlers;
-  handlers.emplace(kWidevineKeySystem, std::make_unique<WidevineHandler>());
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableWidevine)) {
+    handlers.emplace(kWidevineKeySystem, std::make_unique<WidevineHandler>());
+  }
+
+  std::string playready_key_system =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kPlayreadyKeySystem);
+  if (!playready_key_system.empty()) {
+    handlers.emplace(playready_key_system,
+                     std::make_unique<PlayreadyHandler>());
+  }
 
   return std::make_unique<media::FuchsiaCdmManager>(std::move(handlers));
 }
+
 }  // namespace
 
 WebEngineCdmService::WebEngineCdmService(

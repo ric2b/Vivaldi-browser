@@ -4,11 +4,13 @@
 
 package org.chromium.chrome.browser.toolbar.bottom;
 
-import android.support.annotation.Nullable;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.View.OnLongClickListener;
 import android.view.ViewGroup;
 import android.view.ViewStub;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
@@ -32,6 +34,8 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 import org.chromium.ui.resources.ResourceManager;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * The root coordinator for the bottom controls component. This component is intended for use with
  * bottom UI that re-sizes the web contents, scrolls off-screen, and hides when the keyboard is
@@ -54,6 +58,9 @@ public class BottomControlsCoordinator {
     private @Nullable BottomToolbarCoordinator mBottomToolbarCoordinator;
     private @Nullable TabGroupUi mTabGroupUi;
 
+    //** Vivaldi **/
+    private @Nullable View mBottomContainerSlot;
+
     /**
      * Build the coordinator that manages the bottom controls.
      * @param fullscreenManager A {@link ChromeFullscreenManager} to update the bottom controls
@@ -69,6 +76,7 @@ public class BottomControlsCoordinator {
     public BottomControlsCoordinator(ChromeFullscreenManager fullscreenManager, ViewStub stub,
             ActivityTabProvider tabProvider, OnClickListener homeButtonListener,
             OnClickListener searchAcceleratorListener, OnClickListener shareButtonListener,
+            OnLongClickListener tabSwitcherLongClickListener,
             ThemeColorProvider themeColorProvider) {
         final ScrollingBottomViewResourceFrameLayout root =
                 (ScrollingBottomViewResourceFrameLayout) stub.inflate();
@@ -97,14 +105,31 @@ public class BottomControlsCoordinator {
                 root.getResources().getDimensionPixelOffset(bottomToolbarHeightWithShadowId));
 
         if (TabManagementModuleProvider.getDelegate() != null
-                && FeatureUtilities.isTabGroupsAndroidEnabled()) {
+                && FeatureUtilities.isTabGroupsAndroidEnabled()
+                && !(FeatureUtilities.isDuetTabStripIntegrationAndroidEnabled()
+                && FeatureUtilities.isBottomToolbarEnabled())) {
             mTabGroupUi = TabManagementModuleProvider.getDelegate().createTabGroupUi(
                     root.findViewById(R.id.bottom_container_slot), themeColorProvider);
+            if (ChromeApplication.isVivaldi()) {
+                ViewGroup.LayoutParams stubParam =
+                        root.findViewById(R.id.bottom_toolbar_stub).getLayoutParams();
+                stubParam.height =
+                        root.getResources().getDimensionPixelSize(R.dimen.min_touch_target_size);
+            }
         } else {
             mBottomToolbarCoordinator = new BottomToolbarCoordinator(
                     root.findViewById(R.id.bottom_toolbar_stub), tabProvider, homeButtonListener,
-                    searchAcceleratorListener, shareButtonListener, themeColorProvider);
+                    searchAcceleratorListener, shareButtonListener,
+                    themeColorProvider);
         }
+
+        // NOTE(david@vivaldi.com): In any case we always create the
+        // |BottomToolbarCoordinator|
+        if (ChromeApplication.isVivaldi() && mBottomToolbarCoordinator == null)
+            mBottomToolbarCoordinator = new BottomToolbarCoordinator(
+                    root.findViewById(R.id.bottom_toolbar_stub), tabProvider, homeButtonListener,
+                    searchAcceleratorListener, shareButtonListener, themeColorProvider);
+        mBottomContainerSlot = toolbar;
     }
 
     /**
@@ -220,6 +245,50 @@ public class BottomControlsCoordinator {
      */
     public void setToolbarSwipeLayout(ToolbarSwipeLayout layout) {
         mMediator.setToolbarSwipeLayout(layout);
+    }
+
+    /** Vivaldi. Update back button according to available back history. */
+    public void updateBackButtonVisibility(boolean canGoBack) {
+        if (mBottomToolbarCoordinator != null)
+            mBottomToolbarCoordinator.updateBackButtonVisibility(canGoBack);
+    }
+
+    /** Vivaldi. Update forward button according to available forward history. */
+    public void updateForwardButtonVisibility(boolean canGoForward) {
+        if (mBottomToolbarCoordinator != null)
+            mBottomToolbarCoordinator.updateForwardButtonVisibility(canGoForward);
+    }
+
+    /** Vivaldi. Update search / home button **/
+    public void updateCenterButton(boolean showSearch) {
+        if (mBottomToolbarCoordinator != null)
+            mBottomToolbarCoordinator.updateCenterButton(showSearch);
+    }
+
+    /**
+     * Vivaldi. Updates the visibility of the bottom toolbar without taking the top toolbar into
+     * account *
+     */
+    public void updateToolbarVisibility(boolean showToolbar) {
+        mMediator.setBottomControlsVisible(showToolbar);
+    }
+
+    /**
+     * Vivaldi. Updates the visibility of the TabGroupUi and will update the height of the
+     * AndroidView accordingly.
+     */
+    public void setTabGroupUiVisibility(boolean showToolbar) {
+        ViewGroup.LayoutParams params = mBottomContainerSlot.getLayoutParams();
+        View groupUiToolbar = ((ViewGroup) mBottomContainerSlot).getChildAt(1);
+        if (showToolbar) {
+            groupUiToolbar.setVisibility(View.VISIBLE);
+            params.height = mBottomContainerSlot.getLayoutParams().height * 2;
+        } else {
+            groupUiToolbar.setVisibility(View.GONE);
+            params.height = mBottomContainerSlot.getResources().getDimensionPixelSize(
+                    R.dimen.bottom_toolbar_height);
+        }
+        mMediator.updateBottomControls(showToolbar, params.height);
     }
 
     /**

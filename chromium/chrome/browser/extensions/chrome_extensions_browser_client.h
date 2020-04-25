@@ -143,6 +143,10 @@ class ChromeExtensionsBrowserClient : public ExtensionsBrowserClient {
   network::mojom::NetworkContext* GetSystemNetworkContext() override;
   UserScriptListener* GetUserScriptListener() override;
   std::string GetUserAgent() const override;
+  bool ShouldSchemeBypassNavigationChecks(
+      const std::string& scheme) const override;
+  bool ShouldForceWebRequestExtraHeaders(
+      content::BrowserContext* context) const override;
 
   static void set_did_chrome_update_for_testing(bool did_update);
 

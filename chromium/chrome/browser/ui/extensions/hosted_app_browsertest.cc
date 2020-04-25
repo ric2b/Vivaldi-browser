@@ -24,6 +24,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/banners/test_app_banner_manager_desktop.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -39,7 +40,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
@@ -47,8 +47,9 @@
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_menu_model.h"
-#include "chrome/browser/web_applications/components/web_app_constants.h"
+#include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/test/web_app_install_observer.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -83,7 +84,10 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
+#include "testing/gtest/include/gtest/gtest-param-test.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/gfx/geometry/rect.h"
@@ -411,6 +415,15 @@ class HostedAppTest : public extensions::ExtensionBrowserTest,
     return app_id;
   }
 
+  web_app::AppId InstallShortcutAppForCurrentUrl() {
+    chrome::SetAutoAcceptBookmarkAppDialogForTesting(true);
+    web_app::WebAppInstallObserver observer(profile());
+    CHECK(chrome::ExecuteCommand(browser(), IDC_CREATE_SHORTCUT));
+    web_app::AppId app_id = observer.AwaitNextInstall();
+    chrome::SetAutoAcceptBookmarkAppDialogForTesting(false);
+    return app_id;
+  }
+
   Browser* NavigateInNewWindowAndAwaitInstallabilityCheck(const GURL& url) {
     Browser* new_browser = new Browser(
         Browser::CreateParams(Browser::TYPE_NORMAL, profile(), true));
@@ -464,6 +477,18 @@ class HostedAppTest : public extensions::ExtensionBrowserTest,
         browser()->tab_strip_model()->GetActiveWebContents();
     EXPECT_NE(initial_tab, new_tab);
     EXPECT_EQ(target_url, new_tab->GetLastCommittedURL());
+  }
+
+  web_app::AppRegistrar& registrar() {
+    auto* provider = web_app::WebAppProviderBase::GetProviderBase(profile());
+    CHECK(provider);
+    return provider->registrar();
+  }
+
+  web_app::AppRegistryController& registry_controller() {
+    auto* provider = web_app::WebAppProviderBase::GetProviderBase(profile());
+    CHECK(provider);
+    return provider->registry_controller();
   }
 
   Browser* app_browser_;
@@ -1210,35 +1235,12 @@ IN_PROC_BROWSER_TEST_P(SharedPWATest, InstallInstallableSite) {
   ASSERT_TRUE(https_server()->Start());
   NavigateToURLAndWait(browser(), GetInstallableAppURL());
 
-  chrome::SetAutoAcceptPWAInstallConfirmationForTesting(/*auto_accept*/ true);
-
-  web_app::AppId app_id;
-
-  base::RunLoop run_loop;
-  web_app::SetInstalledCallbackForTesting(
-      base::BindLambdaForTesting([&](const web_app::AppId& installed_app_id,
-                                     web_app::InstallResultCode code) {
-        EXPECT_EQ(web_app::InstallResultCode::kSuccessNewInstall, code);
-        app_id = installed_app_id;
-        run_loop.Quit();
-      }));
-
-  chrome::ExecuteCommand(browser(), IDC_INSTALL_PWA);
-  run_loop.Run();
-
-  chrome::SetAutoAcceptPWAInstallConfirmationForTesting(/*auto_accept*/ false);
-
-  const extensions::Extension* app =
-      extensions::ExtensionRegistry::Get(browser()->profile())
-          ->enabled_extensions()
-          .GetByID(app_id);
-  ASSERT_TRUE(app);
-  EXPECT_EQ(app->name(), GetInstallableAppName());
+  web_app::AppId app_id = InstallPwaForCurrentUrl();
+  EXPECT_EQ(registrar().GetAppShortName(app_id), GetInstallableAppName());
 
   // Installed PWAs should launch in their own window.
-  EXPECT_EQ(extensions::GetLaunchContainer(
-                extensions::ExtensionPrefs::Get(browser()->profile()), app),
-            extensions::LaunchContainer::kLaunchContainerWindow);
+  EXPECT_EQ(registrar().GetAppDisplayMode(app_id),
+            blink::mojom::DisplayMode::kStandalone);
 
   EXPECT_EQ(1, user_action_tester.GetActionCount("InstallWebAppFromMenu"));
   EXPECT_EQ(0, user_action_tester.GetActionCount("CreateShortcut"));
@@ -1249,22 +1251,81 @@ IN_PROC_BROWSER_TEST_P(SharedPWATest, CreateShortcutForInstallableSite) {
   ASSERT_TRUE(https_server()->Start());
   NavigateToURLAndWait(browser(), GetInstallableAppURL());
 
-  chrome::SetAutoAcceptBookmarkAppDialogForTesting(true);
-  chrome::ExecuteCommand(browser(), IDC_CREATE_SHORTCUT);
-  const extensions::Extension* app =
-      extensions::TestExtensionRegistryObserver(
-          extensions::ExtensionRegistry::Get(browser()->profile()))
-          .WaitForExtensionInstalled();
-  EXPECT_EQ(app->name(), GetInstallableAppName());
-  chrome::SetAutoAcceptBookmarkAppDialogForTesting(false);
-
+  web_app::AppId app_id = InstallShortcutAppForCurrentUrl();
+  EXPECT_EQ(registrar().GetAppShortName(app_id), GetInstallableAppName());
   // Bookmark apps to PWAs should launch in a tab.
-  EXPECT_EQ(extensions::GetLaunchContainer(
-                extensions::ExtensionPrefs::Get(browser()->profile()), app),
-            extensions::LaunchContainer::kLaunchContainerTab);
+  EXPECT_EQ(registrar().GetAppDisplayMode(app_id),
+            blink::mojom::DisplayMode::kBrowser);
 
   EXPECT_EQ(0, user_action_tester.GetActionCount("InstallWebAppFromMenu"));
   EXPECT_EQ(1, user_action_tester.GetActionCount("CreateShortcut"));
+}
+
+IN_PROC_BROWSER_TEST_P(SharedPWATest, CanInstallOverTabShortcutApp) {
+  ASSERT_TRUE(https_server()->Start());
+
+  NavigateToURLAndWait(browser(), GetInstallableAppURL());
+  InstallShortcutAppForCurrentUrl();
+
+  Browser* new_browser =
+      NavigateInNewWindowAndAwaitInstallabilityCheck(GetInstallableAppURL());
+
+  EXPECT_EQ(GetAppMenuCommandState(IDC_CREATE_SHORTCUT, new_browser), kEnabled);
+  EXPECT_EQ(GetAppMenuCommandState(IDC_INSTALL_PWA, new_browser), kEnabled);
+  EXPECT_EQ(GetAppMenuCommandState(IDC_OPEN_IN_PWA_WINDOW, new_browser),
+            kNotPresent);
+}
+
+IN_PROC_BROWSER_TEST_P(SharedPWATest, CanInstallOverTabPwa) {
+  ASSERT_TRUE(https_server()->Start());
+
+  NavigateToURLAndWait(browser(), GetInstallableAppURL());
+  web_app::AppId app_id = InstallPwaForCurrentUrl();
+  // Change display mode to open in tab.
+  registry_controller().SetAppDisplayMode(app_id,
+                                          blink::mojom::DisplayMode::kBrowser);
+
+  Browser* new_browser =
+      NavigateInNewWindowAndAwaitInstallabilityCheck(GetInstallableAppURL());
+
+  EXPECT_EQ(GetAppMenuCommandState(IDC_CREATE_SHORTCUT, new_browser), kEnabled);
+  EXPECT_EQ(GetAppMenuCommandState(IDC_INSTALL_PWA, new_browser), kEnabled);
+  EXPECT_EQ(GetAppMenuCommandState(IDC_OPEN_IN_PWA_WINDOW, new_browser),
+            kNotPresent);
+}
+
+IN_PROC_BROWSER_TEST_P(SharedPWATest, CannotInstallOverWindowShortcutApp) {
+  ASSERT_TRUE(https_server()->Start());
+
+  NavigateToURLAndWait(browser(), GetInstallableAppURL());
+  web_app::AppId app_id = InstallShortcutAppForCurrentUrl();
+  // Change launch container to open in window.
+  registry_controller().SetAppDisplayMode(
+      app_id, blink::mojom::DisplayMode::kStandalone);
+
+  Browser* new_browser =
+      NavigateInNewWindowAndAwaitInstallabilityCheck(GetInstallableAppURL());
+
+  EXPECT_EQ(GetAppMenuCommandState(IDC_CREATE_SHORTCUT, new_browser), kEnabled);
+  EXPECT_EQ(GetAppMenuCommandState(IDC_INSTALL_PWA, new_browser), kNotPresent);
+  EXPECT_EQ(GetAppMenuCommandState(IDC_OPEN_IN_PWA_WINDOW, new_browser),
+            kEnabled);
+}
+
+IN_PROC_BROWSER_TEST_P(SharedPWATest, CannotInstallOverWindowPwa) {
+  ASSERT_TRUE(https_server()->Start());
+
+  NavigateToURLAndWait(browser(), GetInstallableAppURL());
+  InstallPwaForCurrentUrl();
+
+  // Avoid any interference if active browser was changed by PWA install.
+  Browser* new_browser =
+      NavigateInNewWindowAndAwaitInstallabilityCheck(GetInstallableAppURL());
+
+  EXPECT_EQ(GetAppMenuCommandState(IDC_CREATE_SHORTCUT, new_browser), kEnabled);
+  EXPECT_EQ(GetAppMenuCommandState(IDC_INSTALL_PWA, new_browser), kNotPresent);
+  EXPECT_EQ(GetAppMenuCommandState(IDC_OPEN_IN_PWA_WINDOW, new_browser),
+            kEnabled);
 }
 
 // Tests that the command for OpenActiveTabInPwaWindow is available for secure
@@ -1485,6 +1546,7 @@ IN_PROC_BROWSER_TEST_P(SharedPWATest, UninstallPwaWithWindowOpened) {
 
   EXPECT_TRUE(IsBrowserOpen(app_browser_));
 
+  // TODO (crbug.com/876576): Remove references to extensions in SharedPWATest.
   UninstallExtension(app_->id());
   base::RunLoop().RunUntilIdle();
 
@@ -1528,6 +1590,7 @@ IN_PROC_BROWSER_TEST_P(SharedPWATest, CreatedForInstalledPwaForPwa) {
   web_app_info.app_url = GURL(kExampleURL);
   web_app_info.scope = GURL(kExampleURL);
 
+  // TODO (crbug.com/876576): Remove references to extensions in SharedPWATest.
   const extensions::Extension* app = InstallBookmarkApp(web_app_info);
   Browser* app_browser = LaunchAppBrowser(app);
 
@@ -1595,7 +1658,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, AppInfoOpensPageInfo) {
   GetPageInfoDialogCreatedCallbackForTesting() = base::BindOnce(
       [](bool* dialog_created) { *dialog_created = true; }, &dialog_created);
 
-  chrome::ExecuteCommand(app_browser, IDC_HOSTED_APP_MENU_APP_INFO);
+  chrome::ExecuteCommand(app_browser, IDC_WEB_APP_MENU_APP_INFO);
 
   EXPECT_TRUE(dialog_created);
 
@@ -2663,6 +2726,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest,
 }
 
 IN_PROC_BROWSER_TEST_P(SharedPWATest, ThemeColor) {
+  // TODO (crbug.com/876576): Remove references to extensions in SharedPWATest.
   {
     WebApplicationInfo web_app_info;
     web_app_info.app_url = GURL(kExampleURL);

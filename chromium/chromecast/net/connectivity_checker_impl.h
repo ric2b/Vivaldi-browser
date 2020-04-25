@@ -10,6 +10,7 @@
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "chromecast/net/connectivity_checker.h"
 #include "services/network/public/cpp/network_connection_tracker.h"
 
@@ -106,6 +107,9 @@ class ConnectivityCheckerImpl
   // Note: Cancelling this timeout can cause the destructor for this class to be
   // called.
   base::CancelableCallback<void()> timeout_;
+
+  base::WeakPtr<ConnectivityCheckerImpl> weak_this_;
+  base::WeakPtrFactory<ConnectivityCheckerImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ConnectivityCheckerImpl);
 };

@@ -4,7 +4,7 @@
 
 package org.chromium.content_public.browser;
 
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.VisibleForTesting;
 
@@ -171,6 +171,12 @@ public interface NavigationController {
      *         call discards any transient or pending entries.
      */
     public boolean removeEntryAtIndex(int index);
+
+    /**
+     * Discards any transient or pending entries, then discards all entries after the current entry
+     * index.
+     */
+    void pruneForwardEntries();
 
     /**
      * Gets extra data on the {@link NavigationEntry} at {@code index}.

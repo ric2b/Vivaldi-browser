@@ -29,6 +29,7 @@
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_view_host.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/load_states.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
 #include "third_party/blink/public/web/web_console_message.h"
@@ -76,6 +77,9 @@ class CONTENT_EXPORT RenderViewHostImpl
   // Convenience function, just like RenderViewHost::From.
   static RenderViewHostImpl* From(RenderWidgetHost* rwh);
 
+  static void GetPlatformSpecificPrefs(
+      blink::mojom::RendererPreferences* prefs);
+
   RenderViewHostImpl(SiteInstance* instance,
                      std::unique_ptr<RenderWidgetHostImpl> widget,
                      RenderViewHostDelegate* delegate,
@@ -93,14 +97,13 @@ class CONTENT_EXPORT RenderViewHostImpl
   void EnablePreferredSizeMode() override;
   void ExecutePluginActionAtLocation(
       const gfx::Point& location,
-      const blink::WebPluginAction& action) override;
+      const blink::PluginAction& action) override;
   RenderViewHostDelegate* GetDelegate() override;
   SiteInstanceImpl* GetSiteInstance() override;
   bool IsRenderViewLive() override;
   void NotifyMoveOrResizeStarted() override;
   void SetWebUIProperty(const std::string& name,
                         const std::string& value) override;
-  void SyncRendererPrefs() override;
   WebPreferences GetWebkitPreferences() override;
   void UpdateWebkitPreferences(const WebPreferences& prefs) override;
   void OnWebkitPreferencesChanged() override;
@@ -180,10 +183,12 @@ class CONTENT_EXPORT RenderViewHostImpl
   }
 
   // Creates a new RenderWidget with the given route id.
-  void CreateNewWidget(int32_t route_id, mojom::WidgetPtr widget);
+  void CreateNewWidget(int32_t route_id,
+                       mojo::PendingRemote<mojom::Widget> widget);
 
   // Creates a full screen RenderWidget.
-  void CreateNewFullscreenWidget(int32_t route_id, mojom::WidgetPtr widget);
+  void CreateNewFullscreenWidget(int32_t route_id,
+                                 mojo::PendingRemote<mojom::Widget> widget);
 
   // Send RenderViewReady to observers once the process is launched, but not
   // re-entrantly.
@@ -198,6 +203,15 @@ class CONTENT_EXPORT RenderViewHostImpl
   // Sets the routing id for the main frame. When set to MSG_ROUTING_NONE, the
   // view is not considered active.
   void SetMainFrameRoutingId(int routing_id);
+
+  // Called when the RenderFrameHostImpls/RenderFrameProxyHosts that own this
+  // RenderViewHost enter the BackForwardCache.
+  void EnterBackForwardCache();
+
+  // Called when the RenderFrameHostImpls/RenderFrameProxyHosts that own this
+  // RenderViewHost leave the BackForwardCache. This occurs immediately before a
+  // restored document is committed.
+  void LeaveBackForwardCache();
 
   // Called during frame eviction to return all SurfaceIds in the frame tree.
   // Marks all views in the frame tree as evicted.
@@ -222,7 +236,6 @@ class CONTENT_EXPORT RenderViewHostImpl
   void RenderWidgetDidInit() override;
   void RenderWidgetDidClose() override;
   void RenderWidgetDidFirstVisuallyNonEmptyPaint() override;
-  void RenderWidgetDidCommitAndDrawCompositorFrame() override;
   void RenderWidgetGotFocus() override;
   void RenderWidgetLostFocus() override;
   void RenderWidgetDidForwardMouseEvent(
@@ -236,6 +249,7 @@ class CONTENT_EXPORT RenderViewHostImpl
   bool IsNeverVisible() override;
   WebPreferences GetWebkitPreferencesForWidget() override;
   FrameTreeNode* GetFocusedFrame() override;
+
   void ShowContextMenu(RenderFrameHost* render_frame_host,
                        const ContextMenuParams& params) override;
 
@@ -324,10 +338,10 @@ class CONTENT_EXPORT RenderViewHostImpl
   // Set to true when waiting for a ViewHostMsg_ClosePageACK.
   // TODO(creis): Move to RenderFrameHost and RenderWidgetHost.
   // See http://crbug.com/418265.
-  bool is_waiting_for_close_ack_;
+  bool is_waiting_for_close_ack_ = false;
 
   // True if the render view can be shut down suddenly.
-  bool sudden_termination_allowed_;
+  bool sudden_termination_allowed_ = false;
 
   // This is updated every time UpdateWebkitPreferences is called. That method
   // is in turn called when any of the settings change that the WebPreferences
@@ -343,14 +357,17 @@ class CONTENT_EXPORT RenderViewHostImpl
   // This monitors input changes so they can be reflected to the interaction MQ.
   std::unique_ptr<InputDeviceChangeObserver> input_device_change_observer_;
 
-  bool updating_web_preferences_;
+  bool updating_web_preferences_ = false;
 
   // This tracks whether this RenderViewHost has notified observers about its
   // creation with RenderViewCreated.  RenderViewHosts may transition from
   // active (with a RenderFrameHost for the main frame) to inactive state and
   // then back to active, and for the latter transition, this avoids firing
   // duplicate RenderViewCreated events.
-  bool has_notified_about_creation_;
+  bool has_notified_about_creation_ = false;
+
+  // BackForwardCache:
+  bool is_in_back_forward_cache_ = false;
 
   base::WeakPtrFactory<RenderViewHostImpl> weak_factory_{this};
 

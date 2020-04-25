@@ -510,7 +510,7 @@ class RenderTextTest : public testing::Test {
                         internal::TextRunHarfBuzz* run) {
     internal::TextRunHarfBuzz::FontParams font_params = run->font_params;
     font_params.ComputeRenderParamsFontSizeAndBaselineOffset();
-    font_params.SetFontAndRenderParams(font, render_params);
+    font_params.SetRenderParamsRematchFont(font, render_params);
     run->shape.missing_glyph_count = static_cast<size_t>(-1);
     std::vector<internal::TextRunHarfBuzz*> runs = {run};
     GetRenderText()->ShapeRunsWithFont(text, font_params, &runs);
@@ -4746,6 +4746,39 @@ TEST_F(RenderTextTest, EmojiFlagGlyphCount) {
   // Elsewhere, the flags are not found, so each surrogate pair gets a
   // placeholder glyph. Eventually, all platforms should have 2 glyphs.
   EXPECT_EQ(4u, run_list->runs()[0]->shape.glyph_count);
+#endif
+}
+
+TEST_F(RenderTextTest, HarfBuzz_ShapeRunsWithMultipleFonts) {
+  RenderTextHarfBuzz* render_text = GetRenderText();
+
+  // The following text will be split in 3 runs:
+  //   1) u+1F3F3 u+FE0F u+FE0F  (Segoe UI Emoji)
+  //   2) u+0020                 (Segoe UI)
+  //   3) u+1F308 u+20E0 u+20E0  (Segoe UI Symbol)
+  // The three runs are shape in the same group but are mapped with three
+  // different fonts.
+  render_text->SetText(
+      UTF8ToUTF16(u8"\U0001F3F3\U0000FE0F\U00000020\U0001F308\U000020E0"));
+  test_api()->EnsureLayout();
+  std::vector<base::string16> expected;
+  expected.push_back(WideToUTF16(L"\U0001F3F3\U0000FE0F"));
+  expected.push_back(WideToUTF16(L" "));
+  expected.push_back(WideToUTF16(L"\U0001F308\U000020E0"));
+  EXPECT_EQ(expected, GetRunListStrings());
+  EXPECT_EQ("[0->2][3][4->6]", GetRunListStructureString());
+
+#if defined(OS_WIN)
+  std::vector<std::string> expected_fonts;
+  if (base::win::GetVersion() < base::win::Version::WIN10)
+    expected_fonts = {"Segoe UI", "Segoe UI", "Segoe UI Symbol"};
+  else
+    expected_fonts = {"Segoe UI Emoji", "Segoe UI", "Segoe UI Symbol"};
+
+  std::vector<std::string> mapped_fonts;
+  for (const auto& font_span : render_text->GetFontSpansForTesting())
+    mapped_fonts.push_back(font_span.first.GetFontName());
+  EXPECT_EQ(expected_fonts, mapped_fonts);
 #endif
 }
 

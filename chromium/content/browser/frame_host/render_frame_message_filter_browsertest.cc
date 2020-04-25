@@ -23,6 +23,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -182,8 +183,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameMessageFilterBrowserTest, Cookies) {
   // TLS page writes secure cookie.
   EXPECT_TRUE(ExecuteScript(web_contents_https->GetMainFrame(),
                             "document.cookie = 'C=3;secure;';"));
-  EXPECT_EQ("B=2; C=3",
-            GetCookieFromJS(web_contents_https->GetMainFrame()));
+  EXPECT_EQ("B=2; C=3", GetCookieFromJS(web_contents_https->GetMainFrame()));
   EXPECT_EQ("B=2", GetCookieFromJS(web_contents_http->GetMainFrame()));
 
   // TLS page writes not-secure cookie.
@@ -252,9 +252,9 @@ IN_PROC_BROWSER_TEST_F(RenderFrameMessageFilterBrowserTest, SameSiteCookies) {
   std::string a_hostname = "localhost";
   std::string b_hostname = "127.0.0.1";
   GURL url = a_server.GetURL(a_hostname, cookies_to_set);
-  NavigateToURL(shell(), url);
+  EXPECT_TRUE(NavigateToURL(shell(), url));
   url = b_server.GetURL(b_hostname, cookies_to_set);
-  NavigateToURL(shell(), url);
+  EXPECT_TRUE(NavigateToURL(shell(), url));
   // TODO(crbug.com/984685): Make it less painful to set up https cross-site
   // iframe tests.
   std::string a_hostname_and_port =
@@ -343,6 +343,8 @@ class CookieStoreContentBrowserClient : public ContentBrowserClient {
       network::mojom::RestrictedCookieManagerRole role,
       content::BrowserContext* browser_context,
       const url::Origin& origin,
+      const GURL& site_for_cookies,
+      const url::Origin& top_frame_origin,
       bool is_service_worker,
       int process_id,
       int routing_id,

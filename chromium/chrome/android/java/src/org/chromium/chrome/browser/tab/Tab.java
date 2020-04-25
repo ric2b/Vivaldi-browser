@@ -12,14 +12,15 @@ import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Browser;
-import android.support.annotation.IntDef;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.View.OnAttachStateChangeListener;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityEvent;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -29,6 +30,7 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.UserDataHost;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
@@ -74,15 +76,15 @@ import org.chromium.ui.base.WindowAndroid;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.speeddial.SpeedDialPage;
+
 /**
  * The basic Java representation of a tab.  Contains and manages a {@link ContentView}.
  * This class is not intended to be extended.
  */
 public class Tab {
     public static final int INVALID_TAB_ID = -1;
-
-    /** Return value from {@link #getBookmarkId()} if this tab is not bookmarked. */
-    public static final long INVALID_BOOKMARK_ID = -1;
 
     private static final long INVALID_TIMESTAMP = -1;
 
@@ -123,9 +125,6 @@ public class Tab {
 
     /** Gives {@link Tab} a way to interact with the Android window. */
     private WindowAndroid mWindowAndroid;
-
-    /** Whether or not this {@link Tab} is initialized and should be interacted with. */
-    private boolean mIsInitialized;
 
     /** The current native page (e.g. chrome-native://newtab), or {@code null} if there is none. */
     private NativePage mNativePage;
@@ -280,18 +279,13 @@ public class Tab {
      *
      * Package-private. Use {@link TabBuilder} to create an instance.
      *
-     * @param id            The id this tab should be identified with.
-     * @param parent        The tab that caused this tab to be opened.
-     * @param incognito     Whether or not this tab is incognito.
-     * @param window        An instance of a {@link WindowAndroid}.
-     * @param launchType    Type indicating how this tab was launched.
-     * @param creationState State in which the tab is created.
-     * @param loadUrlParams Parameters used for a lazily loaded Tab.
+     * @param id The id this tab should be identified with.
+     * @param parent The tab that caused this tab to be opened.
+     * @param incognito Whether or not this tab is incognito.
+     * @param launchType Type indicating how this tab was launched.
      */
     @SuppressLint("HandlerLeak")
-    Tab(int id, Tab parent, boolean incognito, WindowAndroid window,
-            @Nullable @TabLaunchType Integer launchType,
-            @Nullable @TabCreationState Integer creationState, LoadUrlParams loadUrlParams) {
+    Tab(int id, Tab parent, boolean incognito, @Nullable @TabLaunchType Integer launchType) {
         mId = TabIdManager.getInstance().generateValidId(id);
         mIncognito = incognito;
         if (parent == null) {
@@ -312,13 +306,7 @@ public class Tab {
                 ContextUtils.getApplicationContext(), ChromeActivity.getThemeId(),
                 false /*nightMode*/);
 
-        mWindowAndroid = window;
         mLaunchType = launchType;
-        mLaunchTypeAtCreation = launchType;
-        mPendingLoadParams = loadUrlParams;
-        if (loadUrlParams != null) mUrl = loadUrlParams.getUrl();
-
-        TabHelpers.initTabHelpers(this, parent, creationState);
 
         mAttachStateChangeListener = new OnAttachStateChangeListener() {
             @Override
@@ -369,6 +357,11 @@ public class Tab {
      * @return Whether or not this tab has a previous navigation entry.
      */
     public boolean canGoBack() {
+        if (ChromeApplication.isVivaldi()) {
+            if (mNativePage != null && mNativePage instanceof SpeedDialPage)
+                if (((SpeedDialPage) mNativePage).getManager() != null)
+                    return ((SpeedDialPage) mNativePage).getManager().canGoBack();
+        }
         return getWebContents() != null && getWebContents().getNavigationController().canGoBack();
     }
 
@@ -384,6 +377,13 @@ public class Tab {
      * Goes to the navigation entry before the current one.
      */
     public void goBack() {
+        if (ChromeApplication.isVivaldi()) {
+            if (mNativePage != null && mNativePage instanceof SpeedDialPage)
+                if (((SpeedDialPage) mNativePage).getManager() != null) {
+                    ((SpeedDialPage) mNativePage).getManager().goBack();
+                    return;
+                }
+        }
         if (getWebContents() != null) getWebContents().getNavigationController().goBack();
     }
 
@@ -405,7 +405,8 @@ public class Tab {
     public int loadUrl(LoadUrlParams params) {
         try {
             TraceEvent.begin("Tab.loadUrl");
-            // TODO(tedchoc): When showing the android NTP, delay the call to nativeLoadUrl until
+            // TODO(tedchoc): When showing the android NTP, delay the call to TabJni.get().loadUrl
+            // until
             //                the android view has entirely rendered.
             if (!mIsNativePageCommitPending) {
                 mIsNativePageCommitPending = maybeShowNativePage(params.getUrl(), false);
@@ -424,7 +425,7 @@ public class Tab {
 
             // We load the URL from the tab rather than directly from the ContentView so the tab has
             // a chance of using a prerenderer page is any.
-            int loadType = nativeLoadUrl(mNativeTabAndroid, params.getUrl(),
+            int loadType = TabJni.get().loadUrl(mNativeTabAndroid, Tab.this, params.getUrl(),
                     params.getInitiatorOrigin(), params.getVerbatimHeaders(), params.getPostData(),
                     params.getTransitionType(),
                     params.getReferrer() != null ? params.getReferrer().getUrl() : null,
@@ -466,7 +467,7 @@ public class Tab {
      * Load the original image (uncompressed by spdy proxy) in this tab.
      */
     void loadOriginalImage() {
-        if (mNativeTabAndroid != 0) nativeLoadOriginalImage(mNativeTabAndroid);
+        if (mNativeTabAndroid != 0) TabJni.get().loadOriginalImage(mNativeTabAndroid, Tab.this);
     }
 
     /**
@@ -543,8 +544,7 @@ public class Tab {
      */
     public ChromeActivity getActivity() {
         if (getWindowAndroid() == null) return null;
-        Activity activity = WindowAndroid.activityFromContext(
-                getWindowAndroid().getContext().get());
+        Activity activity = ContextUtils.activityFromContext(getWindowAndroid().getContext().get());
         if (activity instanceof ChromeActivity) return (ChromeActivity) activity;
         return null;
     }
@@ -626,8 +626,7 @@ public class Tab {
      * @return The profile associated with this tab.
      */
     public Profile getProfile() {
-        if (mNativeTabAndroid == 0) return null;
-        return nativeGetProfileAndroid(mNativeTabAndroid);
+        return Profile.fromWebContents(getWebContents());
     }
 
     /**
@@ -852,20 +851,29 @@ public class Tab {
     /**
      * Initializes {@link Tab} with {@code webContents}.  If {@code webContents} is {@code null} a
      * new {@link WebContents} will be created for this {@link Tab}.
-     * @param webContents       A {@link WebContents} object or {@code null} if one should be
-     *                          created.
-     * @param delegateFactory   The {@link TabDelegateFactory} to be used for delegate creation.
-     * @param initiallyHidden   Only used if {@code webContents} is {@code null}.  Determines
-     *                          whether or not the newly created {@link WebContents} will be hidden
-     *                          or not.
-     * @param tabState          State containing information about this Tab, if it was persisted.
-     * @param unfreeze          Whether there should be an attempt to restore state at the end of
-     *                          the initialization.
+     * @param parent The tab that caused this tab to be opened.
+     * @param creationState State in which the tab is created.
+     * @param loadUrlParams Parameters used for a lazily loaded Tab.
+     * @param webContents A {@link WebContents} object or {@code null} if one should be created.
+     * @param delegateFactory The {@link TabDelegateFactory} to be used for delegate creation.
+     * @param initiallyHidden Only used if {@code webContents} is {@code null}.  Determines
+     *        whether or not the newly created {@link WebContents} will be hidden or not.
+     * @param tabState State containing information about this Tab, if it was persisted.
+     * @param unfreeze Whether there should be an attempt to restore state at the end of
+     *        the initialization.
      */
-    public void initialize(WebContents webContents, @Nullable TabDelegateFactory delegateFactory,
-            boolean initiallyHidden, TabState tabState, boolean unfreeze) {
+    void initialize(Tab parent, @Nullable @TabCreationState Integer creationState,
+            LoadUrlParams loadUrlParams, WebContents webContents,
+            @Nullable TabDelegateFactory delegateFactory, boolean initiallyHidden,
+            TabState tabState, boolean unfreeze) {
         try {
             TraceEvent.begin("Tab.initialize");
+
+            mLaunchTypeAtCreation = mLaunchType;
+            mPendingLoadParams = loadUrlParams;
+            if (loadUrlParams != null) mUrl = loadUrlParams.getUrl();
+
+            TabHelpers.initTabHelpers(this, parent, creationState);
 
             if (tabState != null) restoreFieldsFromState(tabState);
 
@@ -1016,10 +1024,11 @@ public class Tab {
         // activity.
         maybeShowNativePage(getUrl(), true);
 
-        nativeAttachDetachedTab(mNativeTabAndroid);
+        assert mNativeTabAndroid != 0;
+        TabJni.get().attachDetachedTab(mNativeTabAndroid, Tab.this);
 
         if (getWebContents() != null) {
-            nativeUpdateDelegates(mNativeTabAndroid, mWebContentsDelegate,
+            TabJni.get().updateDelegates(mNativeTabAndroid, Tab.this, mWebContentsDelegate,
                     new TabContextMenuPopulator(
                             mDelegateFactory.createContextMenuPopulator(this), this));
         }
@@ -1053,7 +1062,7 @@ public class Tab {
         // is always non-null even when the tab is in detached state. See the comment in |detach()|.
         WindowAndroid window = getWebContents().getTopLevelNativeWindow();
         if (window == null) return true;
-        Activity activity = WindowAndroid.activityFromContext(window.getContext().get());
+        Activity activity = ContextUtils.activityFromContext(window.getContext().get());
         return !(activity instanceof ChromeActivity);
     }
 
@@ -1127,16 +1136,11 @@ public class Tab {
     }
 
     /**
-     * Builds the native counterpart to this class.  Meant to be overridden by subclasses to build
-     * subclass native counterparts instead.  Subclasses should not call this via super and instead
-     * rely on the native class to create the JNI association.
-     *
-     * TODO(dfalcantara): Make this function harder to access.
+     * Builds the native counterpart to this class.
      */
-    public void initializeNative() {
-        if (mNativeTabAndroid == 0) nativeInit();
+    private void initializeNative() {
+        if (mNativeTabAndroid == 0) TabJni.get().init(Tab.this);
         assert mNativeTabAndroid != 0;
-        mIsInitialized = true;
     }
 
     /**
@@ -1181,8 +1185,8 @@ public class Tab {
             mWebContentsDelegate = mDelegateFactory.createWebContentsDelegate(this);
 
             assert mNativeTabAndroid != 0;
-            nativeInitWebContents(mNativeTabAndroid, mIncognito, isDetached(), webContents,
-                    mSourceTabId, mWebContentsDelegate,
+            TabJni.get().initWebContents(mNativeTabAndroid, Tab.this, mIncognito, isDetached(),
+                    webContents, mSourceTabId, mWebContentsDelegate,
                     new TabContextMenuPopulator(
                             mDelegateFactory.createContextMenuPopulator(this), this));
 
@@ -1251,7 +1255,6 @@ public class Tab {
      * this method is called.  Once this call is made this {@link Tab} should no longer be used.
      */
     public void destroy() {
-        mIsInitialized = false;
         // Update the title before destroying the tab. http://b/5783092
         updateTitle();
 
@@ -1271,9 +1274,10 @@ public class Tab {
         // InfoBarContainer. The native tab should be destroyed before the infobar container as
         // destroying the native tab cleanups up any remaining infobars. The infobar container
         // expects all infobars to be cleaned up before its own destruction.
-        assert mNativeTabAndroid != 0;
-        nativeDestroy(mNativeTabAndroid);
-        assert mNativeTabAndroid == 0;
+        if (mNativeTabAndroid != 0) {
+            TabJni.get().destroy(mNativeTabAndroid, Tab.this);
+            assert mNativeTabAndroid == 0;
+        }
     }
 
     /**
@@ -1281,7 +1285,7 @@ public class Tab {
      *         {@link #initializeNative()} being called or after {@link #destroy()}.
      */
     public boolean isInitialized() {
-        return mIsInitialized;
+        return mNativeTabAndroid != 0;
     }
 
     /**
@@ -1579,9 +1583,9 @@ public class Tab {
         if (deleteNativeWebContents) {
             // Destruction of the native WebContents will call back into Java to destroy the Java
             // WebContents.
-            nativeDestroyWebContents(mNativeTabAndroid);
+            TabJni.get().destroyWebContents(mNativeTabAndroid, Tab.this);
         } else {
-            nativeReleaseWebContents(mNativeTabAndroid);
+            TabJni.get().releaseWebContents(mNativeTabAndroid, Tab.this);
             // Since the native WebContents is still alive, we need to clear its reference to the
             // Java WebContents. While doing so, it will also call back into Java to destroy the
             // Java WebContents.
@@ -1660,8 +1664,9 @@ public class Tab {
         webContents.setSize(originalWidth, originalHeight);
 
         if (!bounds.isEmpty()) {
-            nativeOnPhysicalBackingSizeChanged(
-                    mNativeTabAndroid, webContents, bounds.right, bounds.bottom);
+            assert mNativeTabAndroid != 0;
+            TabJni.get().onPhysicalBackingSizeChanged(
+                    mNativeTabAndroid, Tab.this, webContents, bounds.right, bounds.bottom);
         }
         webContents.onShow();
         initWebContents(webContents);
@@ -1691,6 +1696,7 @@ public class Tab {
 
     @CalledByNative
     private void setNativePtr(long nativePtr) {
+        assert nativePtr != 0;
         assert mNativeTabAndroid == 0;
         mNativeTabAndroid = nativePtr;
     }
@@ -1731,18 +1737,6 @@ public class Tab {
      */
     public long getTimestampMillis() {
         return mTimestampMillis;
-    }
-
-    /**
-     * Restores a tab either frozen or from state.
-     * TODO(aurimas): investigate reducing the visibility of this method after TabModel refactoring.
-     */
-    public void createHistoricalTab() {
-        if (!isFrozen()) {
-            nativeCreateHistoricalTab(mNativeTabAndroid);
-        } else if (mFrozenContentsState != null) {
-            mFrozenContentsState.createHistoricalTab();
-        }
     }
 
     /**
@@ -1817,24 +1811,8 @@ public class Tab {
      */
     void pushNativePageStateToNavigationEntry() {
         assert mNativeTabAndroid != 0 && getNativePage() != null;
-        nativeSetActiveNavigationEntryTitleForUrl(mNativeTabAndroid, getNativePage().getUrl(),
-                getNativePage().getTitle());
-    }
-
-    /**
-     * @return The ID of the bookmark associated with the current URL, or
-     *         {@link #INVALID_BOOKMARK_ID} if no such bookmark exists.
-     */
-    public long getBookmarkId() {
-        return isFrozen() ? INVALID_BOOKMARK_ID : nativeGetBookmarkId(mNativeTabAndroid, false);
-    }
-
-    /**
-     * Same as getBookmarkId() but never returns ids for managed bookmarks, or any other bookmarks
-     * that can't be edited by the user.
-     */
-    public long getUserBookmarkId() {
-        return isFrozen() ? INVALID_BOOKMARK_ID : nativeGetBookmarkId(mNativeTabAndroid, true);
+        TabJni.get().setActiveNavigationEntryTitleForUrl(
+                mNativeTabAndroid, Tab.this, getNativePage().getUrl(), getNativePage().getTitle());
     }
 
     /**
@@ -1851,11 +1829,6 @@ public class Tab {
     public void requestFocus() {
         View view = getView();
         if (view != null) view.requestFocus();
-    }
-
-    @VisibleForTesting
-    public boolean hasPrerenderedUrl(String url) {
-        return nativeHasPrerenderedUrl(mNativeTabAndroid, url);
     }
 
     /**
@@ -1903,36 +1876,28 @@ public class Tab {
         return mIsRendererUnresponsive;
     }
 
-    /**
-     * @return Whether input events from the renderer are ignored on the browser side.
-     */
-    public boolean areRendererInputEventsIgnored() {
-        return nativeAreRendererInputEventsIgnored(mNativeTabAndroid);
+    @NativeMethods
+    interface Natives {
+        void init(Tab caller);
+        void destroy(long nativeTabAndroid, Tab caller);
+        void initWebContents(long nativeTabAndroid, Tab caller, boolean incognito,
+                boolean isBackgroundTab, WebContents webContents, int parentTabId,
+                TabWebContentsDelegateAndroid delegate, ContextMenuPopulator contextMenuPopulator);
+        void updateDelegates(long nativeTabAndroid, Tab caller,
+                TabWebContentsDelegateAndroid delegate, ContextMenuPopulator contextMenuPopulator);
+        void destroyWebContents(long nativeTabAndroid, Tab caller);
+        void releaseWebContents(long nativeTabAndroid, Tab caller);
+        void onPhysicalBackingSizeChanged(
+                long nativeTabAndroid, Tab caller, WebContents webContents, int width, int height);
+        int loadUrl(long nativeTabAndroid, Tab caller, String url, String initiatorOrigin,
+                String extraHeaders, ResourceRequestBody postData, int transition,
+                String referrerUrl, int referrerPolicy, boolean isRendererInitiated,
+                boolean shoulReplaceCurrentEntry, boolean hasUserGesture,
+                boolean shouldClearHistoryList, long inputStartTimestamp,
+                long intentReceivedTimestamp);
+        void setActiveNavigationEntryTitleForUrl(
+                long nativeTabAndroid, Tab caller, String url, String title);
+        void loadOriginalImage(long nativeTabAndroid, Tab caller);
+        void attachDetachedTab(long nativeTabAndroid, Tab caller);
     }
-
-    private native void nativeInit();
-    private native void nativeDestroy(long nativeTabAndroid);
-    private native void nativeInitWebContents(long nativeTabAndroid, boolean incognito,
-            boolean isBackgroundTab, WebContents webContents, int parentTabId,
-            TabWebContentsDelegateAndroid delegate, ContextMenuPopulator contextMenuPopulator);
-    private native void nativeUpdateDelegates(long nativeTabAndroid,
-            TabWebContentsDelegateAndroid delegate, ContextMenuPopulator contextMenuPopulator);
-    private native void nativeDestroyWebContents(long nativeTabAndroid);
-    private native void nativeReleaseWebContents(long nativeTabAndroid);
-    private native void nativeOnPhysicalBackingSizeChanged(
-            long nativeTabAndroid, WebContents webContents, int width, int height);
-    private native Profile nativeGetProfileAndroid(long nativeTabAndroid);
-    private native int nativeLoadUrl(long nativeTabAndroid, String url, String initiatorOrigin,
-            String extraHeaders, ResourceRequestBody postData, int transition, String referrerUrl,
-            int referrerPolicy, boolean isRendererInitiated, boolean shoulReplaceCurrentEntry,
-            boolean hasUserGesture, boolean shouldClearHistoryList, long inputStartTimestamp,
-            long intentReceivedTimestamp);
-    private native void nativeSetActiveNavigationEntryTitleForUrl(long nativeTabAndroid, String url,
-            String title);
-    private native void nativeCreateHistoricalTab(long nativeTabAndroid);
-    private native void nativeLoadOriginalImage(long nativeTabAndroid);
-    private native long nativeGetBookmarkId(long nativeTabAndroid, boolean onlyEditable);
-    private native boolean nativeHasPrerenderedUrl(long nativeTabAndroid, String url);
-    private native void nativeAttachDetachedTab(long nativeTabAndroid);
-    private native boolean nativeAreRendererInputEventsIgnored(long nativeTabAndroid);
 }

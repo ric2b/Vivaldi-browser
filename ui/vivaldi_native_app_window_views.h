@@ -23,7 +23,6 @@
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/widget_observer.h"
 #include "ui/views/window/client_view.h"
-#include "ui/vivaldi_native_app_window.h"
 
 class SkRegion;
 class VivaldiBrowserWindow;
@@ -73,10 +72,13 @@ class VivaldiAppWindowClientView : public views::ClientView {
 // A VivaldiNativeAppWindow backed by a views::Widget and is based on the
 // NativeAppWindow, but decoupled from AppWindow. This is a merge of
 // NativeAppWindowViews and ChromeNativeAppWindowViews.
-class VivaldiNativeAppWindowViews : public VivaldiNativeAppWindow,
+class VivaldiNativeAppWindowViews : public extensions::NativeAppWindow,
                                     public views::WidgetDelegateView,
-                                    public views::WidgetObserver {
+                                    public views::WidgetObserver,
+                                    public content::WebContentsObserver {
  public:
+  static std::unique_ptr<VivaldiNativeAppWindowViews> Create();
+
   VivaldiNativeAppWindowViews();
   ~VivaldiNativeAppWindowViews() override;
 
@@ -94,9 +96,6 @@ class VivaldiNativeAppWindowViews : public VivaldiNativeAppWindow,
 
   views::Widget* widget() { return widget_; }
   const views::Widget* widget() const { return widget_; }
-
-  SkRegion* shape() { return shape_.get(); }
-  ShapeRects* shape_rects() { return shape_rects_.get(); }
 
   gfx::NativeView GetNativeView();
 
@@ -118,6 +117,9 @@ class VivaldiNativeAppWindowViews : public VivaldiNativeAppWindow,
       const extensions::AppWindow::CreateParams& create_params);
   virtual views::NonClientFrameView* CreateStandardDesktopAppFrame();
   virtual views::NonClientFrameView* CreateNonStandardAppFrame() = 0;
+  virtual bool IsOnCurrentWorkspace() const;
+  virtual void UpdateEventTargeterWithInset();
+  virtual void ShowEmojiPanel();
 
   // Initializes |widget_| for |window|.
   virtual void InitializeWindow(
@@ -222,9 +224,7 @@ class VivaldiNativeAppWindowViews : public VivaldiNativeAppWindow,
                                  const gfx::Size& max_size) override;
   bool CanHaveAlphaEnabled() const override;
   void SetVisibleOnAllWorkspaces(bool always_visible) override;
-  void UpdateEventTargeterWithInset() override;
   void SetActivateOnPointer(bool activate_on_pointer) override;
-  void ShowEmojiPanel() override;
 
   // web_modal::WebContentsModalDialogHost implementation.
   gfx::NativeView GetHostView() const override;
@@ -245,10 +245,6 @@ class VivaldiNativeAppWindowViews : public VivaldiNativeAppWindow,
 
   void OnImagesLoaded(gfx::ImageFamily image_family);
 
-  // Custom shape of the window. If this is not set then the window has a
-  // default shape, usually rectangular.
-  std::unique_ptr<SkRegion> shape_;
-  std::unique_ptr<ShapeRects> shape_rects_;
   bool has_frame_color_;
   SkColor active_frame_color_;
   SkColor inactive_frame_color_;

@@ -16,6 +16,7 @@
       <output filename="google_chrome_strings_hy.pak" type="data_package" lang="hy" />
       <output filename="google_chrome_strings_io.pak" type="data_package" lang="io" />
       <output filename="google_chrome_strings_is.pak" type="data_package" lang="is" />
+      <output filename="google_chrome_strings_ja-KS.pak" type="data_package" lang="ja-KS" />
       <output filename="google_chrome_strings_jbo.pak" type="data_package" lang="jbo" />
       <output filename="google_chrome_strings_ka.pak" type="data_package" lang="ka" />
       <output filename="google_chrome_strings_ku.pak" type="data_package" lang="ku" />
@@ -50,6 +51,7 @@
     <file path="strings/vivaldi_strings_id.xtb" lang="id" />
     <file path="strings/vivaldi_strings_it.xtb" lang="it" />
     <file path="strings/vivaldi_strings_ja.xtb" lang="ja" />
+    <file path="strings/vivaldi_strings_ja-KS.xtb" lang="ja-KS" />
     <file path="strings/vivaldi_strings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_strings_ko.xtb" lang="ko" />
     <file path="strings/vivaldi_strings_lt.xtb" lang="lt" />
@@ -105,30 +107,6 @@
       </message>
       <message name="IDS_ABOUT_VERSION_COPYRIGHT" desc="Copyright information on the about pages">
         Copyright <ph name="YEAR">{0,date,y}<ex>2016</ex></ph> Vivaldi Technologies AS. All rights reserved.
-      </message>
-      <if expr="is_win">
-        <!-- Necessary to avoid Hash collision errors; might be able to remove when google strings have been updated to match chromium strings -->
-        <message name="IDS_WIN_NOTIFICATION_SETTINGS_CONTEXT_MENU_ITEM_NAME" desc="The name of the button in Windows Notification Center which leads to Chrome notification settings.">
-          Go to Vivaldi notification settings
-        </message>
-      </if>
-      <message name="IDS_ACCESSIBLE_BETA_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for the accessible name of a tabbed browser window for the beta channel version of the browser">
-        <ph name="PAGE_TITLE">
-          $1<ex>Google</ex>
-        </ph> - Vivaldi Beta
-      </message>
-      <message name="IDS_ACCESSIBLE_DEV_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for the accessible name of a tabbed browser window for the developer (dev) channel version of the browser">
-        <ph name="PAGE_TITLE">
-          $1<ex>Google</ex>
-        </ph> - Vivaldi Dev
-      </message>
-      <message name="IDS_ACCESSIBLE_CANARY_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for the accessible name of a tabbed browser window for the canary (nightly build) channel version of the browser">
-        <ph name="PAGE_TITLE">
-          $1<ex>Google</ex>
-        </ph> - Vivaldi Canary
-      </message>
-      <message name="IDS_APP_SHORTCUTS_SUBDIR_NAME" desc="Name for the Vivaldi Apps Start Menu folder name.">
-        Vivaldi Apps
       </message>
     </messages>
   </release>

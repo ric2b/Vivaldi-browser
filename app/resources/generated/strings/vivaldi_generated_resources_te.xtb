@@ -1,41 +1,29 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="te">
-<translation id="1049795001945932310">&amp;భాష సెట్టింగ్‌లు</translation>
 <translation id="1056898198331236512">హెచ్చరిక</translation>
-<translation id="1084824384139382525">లింక్ చిరు&amp;నామాను కాపీ చెయ్యి</translation>
-<translation id="1163931534039071049">ఫ్రేమ్ మూలాన్ని &amp;వీక్షించండి</translation>
 <translation id="1165039591588034296">లోపం</translation>
 <translation id="1175364870820465910">&amp;ముద్రించు...</translation>
-<translation id="1187722533808055681">నిష్క్రియ మేల్కొలుపులు</translation>
 <translation id="1244303850296295656">పొడిగింపు లోపం</translation>
 <translation id="1546280085599573572">ఈ పొడిగింపు మీరు హోమ్ బటన్‌ను క్లిక్ చేసినప్పుడు చూపబడే పేజీని మార్చింది.</translation>
 <translation id="1588438908519853928">సాధారణ</translation>
 <translation id="1635033183663317347">మీ పర్యవేక్షకుడు ఇన్‌స్టాల్ చేసారు.</translation>
-<translation id="1723824996674794290">&amp;క్రొత్త విండో</translation>
 <translation id="1729533290416704613">ఇది ఓమ్నిపెట్టె నుండి శోధించేటప్పుడు చూపబడే పేజీని కూడా నియంత్రిస్తుంది.</translation>
-<translation id="1850508293116537636">&amp;సవ్యదిశలో తిప్పు</translation>
-<translation id="1901303067676059328">&amp;అన్నీ ఎంచుకోండి</translation>
 <translation id="2087822576218954668">ముద్రణ: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">అజ్ఞాత ట్యాబ్: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">ప్రాంతీయ క్లయింట్ మాడ్యూల్: <ph name="NEXE_NAME" /></translation>
-<translation id="2218515861914035131">సాధారణ వచనం వలె అతికించండి</translation>
 <translation id="2282146716419988068">GPU ప్రాసెస్</translation>
 <translation id="2301382460326681002">పొడిగింపు మూలం డైరెక్టరీ చెల్లదు.</translation>
-<translation id="2326931316514688470">అనువర్తనాన్ని &amp;మళ్లీ లోడ్ చేయి</translation>
 <translation id="2327492829706409234">అనువర్తనాన్ని ప్రారంభించు</translation>
 <translation id="2344028582131185878">స్వయంచాలక డౌన్‌లోడ్‌లు</translation>
 <translation id="2348176352564285430">అనువర్తనం: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">పొడిగింపు డైరెక్టరీని ఎంచుకోండి.</translation>
 <translation id="241082044617551207">తెలియని ప్లగిన్</translation>
-<translation id="2423578206845792524">చిత్రాన్ని ఇలా సే&amp;వ్ చెయ్యి...</translation>
 <translation id="2439110203301358333">మీ కంప్యూటర్‌లోని మరో ప్రోగ్రామ్ జోడించిన పొడిగింపు కారణంగా Vivaldi పని చేసే విధానం మారవచ్చు.</translation>
 <translation id="2445081178310039857">పొడిగింపు మూలం డైరెక్టరీ అవసరం.</translation>
 <translation id="2470702053775288986">మద్దతు లేని పొడిగింపులు నిలిపివేయబడ్డాయి</translation>
-<translation id="2550212893339833758">వినిమయం చేసిన మెమరీ</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">మళ్ళీ-ప్రారంభించు</translation>
-<translation id="2785873697295365461">ఫైల్ వివరణలు</translation>
 <translation id="2809586584051668049">ఇంకా మరో <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2850541429955027218">థీమ్‌ను జోడించు</translation>
 <translation id="2861941300086904918">దేశీయ క్లయింట్ భద్రతా సంచాలకులు</translation>
@@ -45,22 +33,16 @@
 <translation id="299483336428448530">మీ తల్లి/తండ్రి ఇన్‌స్టాల్ చేసారు.</translation>
 <translation id="3080207940057008665">మీ కంప్యూటర్‌లోని మరో ప్రోగ్రామ్ జోడించిన థీమ్ కారణంగా Vivaldi పని చేసే విధానం మారవచ్చు.</translation>
 <translation id="3122464029669770682">CPU</translation>
-<translation id="3124111068741548686">వినియోగదారు నిర్వహించేవి</translation>
 <translation id="3222066309010235055">ప్రిరెండర్: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">ప్యాక్ చెయ్యడానికి పొడిగింపు యొక్క మూలం డైరెక్టరీని ఎంచుకోండి. ఒక పొడిగింపును నవీకరించడానికి, మళ్ళీ ఉపయోగించడానికి వ్యక్తిగత కీ ఫైల్‌ను కూడా ఎంచుకోండి.</translation>
-<translation id="3280237271814976245">&amp;ఇలా సేవ్ చెయ్యి</translation>
 <translation id="3288047731229977326">డెవలపర్ మోడ్‌లో అమలవుతున్న పొడిగింపులు మీ కంప్యూటర్‌కు హాని కలిగించవచ్చు. మీరు డెవలపర్ కాకపోతే, సురక్షితంగా ఉంచడానికి డెవలపర్ మోడ్‌లో అమలవుతున్న ఈ పొడిగింపులను నిలిపివేయాలి.</translation>
-<translation id="3347086966102161372">చిత్రం చిరునామాను కా&amp;పీ చేయి</translation>
 <translation id="3378572629723696641">ఈ పొడిగింపు పాడై ఉండవచ్చు.</translation>
-<translation id="345693547134384690">క్రొత్త టాబ్‌లో &amp;చిత్రాన్ని తెరువు</translation>
 <translation id="3505030558724226696">పరికర ప్రాప్యతను ఉపసంహరించు</translation>
-<translation id="3627588569887975815">లింక్‌ను అజ్ఞా&amp;త విండోలో తెరువు</translation>
 <translation id="3678156199662914018">పొడిగింపు: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">అనువర్తనాన్ని సరి చేయి</translation>
 <translation id="3908501907586732282">పొడిగింపును ప్రారంభించు</translation>
 <translation id="3909791450649380159">క&amp;త్తిరించు</translation>
 <translation id="3927932062596804919">తిరస్కరించు</translation>
-<translation id="3936390757709632190">&amp;ఆడియోని క్రొత్త టాబ్లో తెరువు</translation>
 <translation id="3943582379552582368">&amp;వెనుకకు</translation>
 <translation id="3979395879372752341">క్రొత్త పొడిగింపు జోడించబడింది (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -71,23 +53,16 @@
 <translation id="4100839878934973028">మీ కంప్యూటర్‌లోని మరో ప్రోగ్రామ్ జోడించిన అనువర్తనం కారణంగా Vivaldi పని చేసే విధానం మారవచ్చు.</translation>
 <translation id="4130207949184424187">ఈ పొడిగింపు మీరు ఓమ్నిపెట్టె నుండి శోధించేటప్పుడు చూపబడే పేజీని మార్చింది.</translation>
 <translation id="4176463684765177261">ఆపివేయబడింది</translation>
-<translation id="4200983522494130825">క్రొత్త &amp;టాబ్</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K ప్రత్యక్షంగా)</translation>
 <translation id="4384652540891215547">పొడిగింపును సక్రియం చేయండి</translation>
 <translation id="4394049700291259645">ఆపివెయ్యి</translation>
 <translation id="4593021220803146968"><ph name="URL" />కు &amp;వెళ్ళండి</translation>
 <translation id="4595560905247879544">అనువర్తనాలు మరియు పొడిగింపులను నిర్వాహకుడు (<ph name="CUSTODIAN_NAME" />) మాత్రమే సవరించగలరు.</translation>
 <translation id="4613271546271159013">మీరు కొత్త ట్యాబ్‌ను తెరిచినప్పుడు చూపబడే పేజీని పొడిగింపు మార్చింది.</translation>
-<translation id="4677772697204437347">GPU మెమరీ</translation>
-<translation id="4711638718396952945">సెట్టింగ్‌లను పునరుద్ధరించు</translation>
-<translation id="4839303808932127586">వీడియోను ఇలా సే&amp;వ్ చెయ్యి...</translation>
 <translation id="488785315393301722">వివరాలను చూపించు</translation>
-<translation id="49896407730300355">అ&amp;పసవ్యదిశలో తిప్పు</translation>
-<translation id="4989966318180235467">&amp;నేపథ్య పేజీని పర్యవేక్షించు</translation>
 <translation id="5027562294707732951">పొడిగింపుని జోడించు</translation>
 <translation id="5039804452771397117">అనుమతించు</translation>
 <translation id="5143374789336132547">"<ph name="EXTENSION_NAME" />" పొడిగింపు మీరు హోమ్ బటన్‌ను క్లిక్ చేసినప్పుడు చూపబడే పేజీని మార్చింది.</translation>
-<translation id="5233019165164992427">NaCl డీబగ్ పోర్ట్</translation>
 <translation id="5233231016133573565">ప్రాసెస్ ID</translation>
 <translation id="52912272896845572">వ్యక్తిగతమైన కీ ఫైల్ చెల్లదు.</translation>
 <translation id="5301954838959518834">సరే, అర్థమైంది</translation>
@@ -102,48 +77,31 @@
 <translation id="5575473780076478375">అజ్ఞాత ఎక్స్‌టెన్‌షన్: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">ఇది హోమ్ బటన్‌ను క్లిక్ చేసేటప్పుడు చూపబడే పేజీని కూడా నియంత్రిస్తుంది.</translation>
 <translation id="5715711091495208045">ప్లగిన్ బ్రోకర్: <ph name="PLUGIN_NAME" /></translation>
-<translation id="5764483294734785780">ఆడియోని ఇలా సే&amp;వ్ చెయ్యి...</translation>
-<translation id="5780973441651030252">ప్రాసెస్ ప్రాధాన్యత</translation>
 <translation id="583281660410589416">తెలియని</translation>
 <translation id="5956585768868398362">మీరు ఆశిస్తున్న శోధన పేజీ ఇదేనా?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> మిగిలి ఉన్నాయి)</translation>
 <translation id="5965661248935608907">ఇది మీరు హోమ్ బటన్‌ను క్లిక్ చేసేటప్పుడు లేదా ఓమ్నిపెట్టె నుండి శోధించేటప్పుడు చూపబడే పేజీని కూడా నియంత్రిస్తుంది.</translation>
 <translation id="6101226222197207147">క్రొత్త అనువర్తనం జోడించబడింది (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">మీ ఇంటర్నెట్ కనెక్షన్ నియంత్రించబడుతోంది</translation>
-<translation id="6156863943908443225">లిపి కాష్</translation>
 <translation id="6196854373336333322">"<ph name="EXTENSION_NAME" />" పొడిగింపు మీ ప్రాక్సీ సెట్టింగ్‌లపై నియంత్రణను కలిగి ఉంది, అంటే ఇది మీరు ఆన్‌లైన్‌‍లో చేసే ప్రతిదీ మార్చగలదు, విచ్ఛిన్నం చేయగలదు లేదా మీకు తెలియకుండా గమనించగలదు. ఈ మార్పు ఎందుకు జరిగిందో మీకు సరిగ్గా తెలియదంటే, బహుశా మీరు ఇది కోరుకొని ఉండకపోవచ్చు.</translation>
-<translation id="6239558157302047471">&amp;ఫ్రేమ్ మళ్లీ లోడ్ చేయి</translation>
 <translation id="6247802389331535091">సిస్టమ్: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="6251870443722440887">GDI నిర్వహించేవి</translation>
-<translation id="6308937455967653460">లిం&amp;క్‌ను ఇలా సేవ్ చెయ్యి...</translation>
-<translation id="6398765197997659313">పూర్తి స్క్రీన్ నుండి నిష్క్రమించు</translation>
-<translation id="6406303162637086258">బ్రౌజర్ పునఃప్రారంభాన్ని ప్రారంభించు</translation>
 <translation id="6445450263907939268">మీరు ఈ మార్పులు అవసరం లేదని భావిస్తే, మీ మునుపటి సెట్టింగ్‌లను పునరుద్ధరించవచ్చు.</translation>
 <translation id="6447842834002726250">కుక్కీలు</translation>
 <translation id="6498249116389603658">&amp;మీ అన్ని భాషలు</translation>
 <translation id="6503077044568424649">ఎక్కువగా సందర్శించేవి</translation>
 <translation id="6508261954199872201">అనువర్తనం: <ph name="APP_NAME" /></translation>
-<translation id="6518014396551869914">చిత్రాన్ని కా&amp;పీ చెయ్యి</translation>
-<translation id="6639554308659482635">SQLite మెమరీ</translation>
 <translation id="6691936601825168937">&amp;ఫార్వార్డ్ చెయ్యి</translation>
 <translation id="6798954102094737107">ప్లగిన్: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6812841287760418429">మార్పులను ఉంచు</translation>
-<translation id="6886871292305414135">లింక్‌ను క్రొత్త &amp;ట్యాబ్‌లో తెరువు</translation>
 <translation id="6900284862687837908">నేపథ్య అనువర్తనం: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">ఫైల్ ప్రాప్యతను ఉపసంహరించు</translation>
-<translation id="708060913198414444">ఆడియో చిరునామాను కా&amp;పీ చేయి</translation>
 <translation id="7287143125007575591">ప్రాప్యత నిరాకరించబడింది.</translation>
-<translation id="7309257895202129721">&amp;నియంత్రణలను చూపించు</translation>
 <translation id="7427348830195639090">నేపథ్య పేజీ: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7564847347806291057">ప్రాసెస్‌ని ముగించు</translation>
 <translation id="7629827748548208700">టాబ్: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">స్వీకర్త: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7685049629764448582">JavaScript మెమరీ</translation>
 <translation id="7704305437604973648">విధి</translation>
 <translation id="7760004034676677601">మీరు ఆశిస్తున్న ప్రారంభ పేజీ ఇదేనా?</translation>
 <translation id="7791543448312431591">జోడించు</translation>
 <translation id="7818135753970109980">క్రొత్త థీమ్ జోడించబడింది (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="782057141565633384">వీడియో చిరునామాను కా&amp;పీ చేయండి</translation>
 <translation id="7857949311770343000">మీరు ఆశిస్తున్న కొత్త ట్యాబ్ పేజీ ఇదేనా?</translation>
 <translation id="786073089922909430">సేవ: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">యుటిలిటీ: <ph name="UTILITY_TYPE" /></translation>
@@ -156,14 +114,9 @@
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8261378640211443080">ఈ పొడిగింపు <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />లో జాబితా చేయబడలేదు మరియు మీకు తెలియకుండానే జోడించబడి ఉండవచ్చు.</translation>
 <translation id="8351419472474436977">ఈ పొడిగింపు మీ ప్రాక్సీ సెట్టింగ్‌లను దాని నియంత్రణలోకి తీసుకుంది, అది మీరు ఆన్‌లైన్‌లో ఏదైనా చేస్తుంటే దాన్ని మార్చడం, అంతరాయం కలిగించడం లేదా రహస్యంగా గమనించడం వంటివి చేయగలదని దీనర్థం. ఈ మార్పు ఎందుకు సంభవించిందో మీకు ఖచ్చితంగా తెలియలేదంటే బహుశా మీరు దాన్ని కోరుకొని ఉండకపోవచ్చు.</translation>
-<translation id="8546306075665861288">చిత్రం కాష్</translation>
-<translation id="8584280235376696778">&amp;వీడియోని క్రొత్త టాబ్లో తెరువు</translation>
 <translation id="8615618338313291042">అజ్ఞాత అనువర్తనం: <ph name="APP_NAME" /></translation>
-<translation id="862750493060684461">CSS కాష్</translation>
-<translation id="8664389313780386848">పేజీ మూలాన్ని &amp;వీక్షించండి</translation>
 <translation id="8808478386290700967">వెబ్ స్టోర్</translation>
 <translation id="8859174528519900719">సబ్‌ఫ్రేమ్: <ph name="SUBFRAME_SITE" /></translation>
-<translation id="8899851313684471736">లింక్‌ను క్రొత్త &amp;విండోలో తెరువు</translation>
 <translation id="8916476537757519021">అజ్ఞాత సబ్‌ఫ్రేమ్: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">వివరాలను దాచిపెట్టు</translation>
 <translation id="9170848237812810038">&amp;అన్డు</translation>

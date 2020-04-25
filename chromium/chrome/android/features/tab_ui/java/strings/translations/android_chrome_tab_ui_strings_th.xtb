@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="th">
+<translation id="1181037720776840403">นำออก</translation>
 <translation id="125153950246128346">แตะเพื่อดูแท็บอื่น</translation>
 <translation id="1869137256605757565">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> แท็บ}other{<ph name="TABS_COUNT_MANY" /> แท็บ}}</translation>
 <translation id="257674075312929031">กลุ่ม</translation>
@@ -19,6 +20,7 @@
 <translation id="6615455863669487791">แสดงให้ฉันเห็น</translation>
 <translation id="6803423358608456383">แท็บที่เปิดอยู่ที่ระดับความสูงครึ่งหนึ่งของหน้าจอ</translation>
 <translation id="6840760312327750441">หากต้องการจัดกลุ่มแท็บ ให้แตะแท็บหนึ่งค้างไว้ แล้วลากไปที่อีกแท็บ</translation>
+<translation id="7151209024774799310">นำแท็บออกจากกลุ่ม</translation>
 <translation id="7559245342362162951">แสดงแท็บของกลุ่มในตารางกริดแบบเต็มหน้าจอ</translation>
 <translation id="8582216581279205169">แท็บที่เปิดไว้เต็มความสูง</translation>
 <translation id="9150694013019234766">สลับไปมาระหว่างแท็บในกลุ่มแท็บบริเวณด้านล่างของหน้าจอ</translation>

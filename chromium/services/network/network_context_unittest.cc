@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "services/network/network_context.h"
+
 #include <algorithm>
 #include <map>
 #include <memory>
@@ -45,8 +47,6 @@
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/prefs/testing_pref_service.h"
 #include "crypto/sha2.h"
-#include "mojo/public/cpp/bindings/receiver.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "net/base/cache_type.h"
@@ -103,7 +103,6 @@
 #include "net/url_request/url_request_test_util.h"
 #include "services/network/cookie_manager.h"
 #include "services/network/net_log_exporter.h"
-#include "services/network/network_context.h"
 #include "services/network/network_qualities_pref_delegate.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/features.h"
@@ -156,6 +155,11 @@ constexpr char kCustomProxyResponse[] = "CustomProxyResponse";
 constexpr int kProcessId = 11;
 constexpr int kRouteId = 12;
 
+#if BUILDFLAG(ENABLE_REPORTING)
+const base::FilePath::CharType kFilename[] =
+    FILE_PATH_LITERAL("TempReportingAndNelStore");
+#endif  // BUILDFLAG(ENABLE_REPORTING)
+
 #if BUILDFLAG(IS_CT_SUPPORTED)
 void StoreBool(bool* result, const base::Closure& callback, bool value) {
   *result = value;
@@ -203,12 +207,15 @@ std::unique_ptr<TestURLLoaderClient> FetchRequest(
     NetworkContext* network_context,
     int url_loader_options = mojom::kURLLoadOptionNone,
     int process_id = mojom::kBrowserProcessId) {
-  mojom::URLLoaderFactoryPtr loader_factory;
+  mojo::Remote<mojom::URLLoaderFactory> loader_factory;
   auto params = mojom::URLLoaderFactoryParams::New();
   params->process_id = process_id;
   params->is_corb_enabled = false;
-  network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                          std::move(params));
+  params->network_isolation_key =
+      net::NetworkIsolationKey(url::Origin::Create(GURL("https://abc.com")),
+                               url::Origin::Create(GURL("https://xyz.com")));
+  network_context->CreateURLLoaderFactory(
+      loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
   auto client = std::make_unique<TestURLLoaderClient>();
   mojom::URLLoaderPtr loader;
@@ -227,12 +234,12 @@ std::unique_ptr<TestURLLoaderClient> FetchRedirectedRequest(
     size_t redirect_counts,
     const ResourceRequest& request,
     NetworkContext* network_context) {
-  mojom::URLLoaderFactoryPtr loader_factory;
+  mojo::Remote<mojom::URLLoaderFactory> loader_factory;
   auto params = mojom::URLLoaderFactoryParams::New();
   params->process_id = mojom::kBrowserProcessId;
   params->is_corb_enabled = false;
-  network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                          std::move(params));
+  network_context->CreateURLLoaderFactory(
+      loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
   auto client = std::make_unique<TestURLLoaderClient>();
   mojom::URLLoaderPtr loader;
@@ -297,17 +304,16 @@ std::unique_ptr<net::test_server::HttpResponse> CustomProxyResponse(
 // be received.
 class TestProxyLookupClient : public mojom::ProxyLookupClient {
  public:
-  TestProxyLookupClient() : binding_(this) {}
+  TestProxyLookupClient() = default;
   ~TestProxyLookupClient() override = default;
 
   void StartLookUpProxyForURL(const GURL& url,
                               mojom::NetworkContext* network_context) {
     // Make sure this method is called at most once.
-    EXPECT_FALSE(binding_.is_bound());
+    EXPECT_FALSE(receiver_.is_bound());
 
-    mojom::ProxyLookupClientPtr proxy_lookup_client;
-    binding_.Bind(mojo::MakeRequest(&proxy_lookup_client));
-    network_context->LookUpProxyForURL(url, std::move(proxy_lookup_client));
+    network_context->LookUpProxyForURL(url,
+                                       receiver_.BindNewPipeAndPassRemote());
   }
 
   void WaitForResult() { run_loop_.Run(); }
@@ -324,7 +330,7 @@ class TestProxyLookupClient : public mojom::ProxyLookupClient {
     is_done_ = true;
     proxy_info_ = proxy_info;
     net_error_ = net_error;
-    binding_.Close();
+    receiver_.reset();
     run_loop_.Quit();
   }
 
@@ -336,7 +342,7 @@ class TestProxyLookupClient : public mojom::ProxyLookupClient {
   bool is_done() const { return is_done_; }
 
  private:
-  mojo::Binding<mojom::ProxyLookupClient> binding_;
+  mojo::Receiver<mojom::ProxyLookupClient> receiver_{this};
 
   bool is_done_ = false;
   base::Optional<net::ProxyInfo> proxy_info_;
@@ -351,14 +357,17 @@ class NetworkContextTest : public testing::Test {
  public:
   NetworkContextTest()
       : task_environment_(base::test::TaskEnvironment::MainThreadType::IO),
-        network_change_notifier_(net::NetworkChangeNotifier::CreateMock()),
+        network_change_notifier_(
+            net::NetworkChangeNotifier::CreateMockIfNeeded()),
         network_service_(NetworkService::CreateForTesting()) {}
   ~NetworkContextTest() override {}
 
   std::unique_ptr<NetworkContext> CreateContextWithParams(
       mojom::NetworkContextParamsPtr context_params) {
+    network_context_remote_.reset();
     return std::make_unique<NetworkContext>(
-        network_service_.get(), mojo::MakeRequest(&network_context_ptr_),
+        network_service_.get(),
+        network_context_remote_.BindNewPipeAndPassReceiver(),
         std::move(context_params));
   }
 
@@ -445,9 +454,10 @@ class NetworkContextTest : public testing::Test {
   base::test::TaskEnvironment task_environment_;
   std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier_;
   std::unique_ptr<NetworkService> network_service_;
-  // Stores the NetworkContextPtr of the most recently created NetworkContext.
-  // Not strictly needed, but seems best to mimic real-world usage.
-  mojom::NetworkContextPtr network_context_ptr_;
+  // Stores the mojo::Remote<NetworkContext> of the most recently created
+  // NetworkContext. Not strictly needed, but seems best to mimic real-world
+  // usage.
+  mojo::Remote<mojom::NetworkContext> network_context_remote_;
 };
 
 TEST_F(NetworkContextTest, DestroyContextWithLiveRequest) {
@@ -462,13 +472,13 @@ TEST_F(NetworkContextTest, DestroyContextWithLiveRequest) {
   ResourceRequest request;
   request.url = test_server.GetURL("/hung-after-headers");
 
-  mojom::URLLoaderFactoryPtr loader_factory;
+  mojo::Remote<mojom::URLLoaderFactory> loader_factory;
   mojom::URLLoaderFactoryParamsPtr params =
       mojom::URLLoaderFactoryParams::New();
   params->process_id = mojom::kBrowserProcessId;
   params->is_corb_enabled = false;
-  network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                          std::move(params));
+  network_context->CreateURLLoaderFactory(
+      loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
   mojom::URLLoaderPtr loader;
   TestURLLoaderClient client;
@@ -658,13 +668,36 @@ TEST_F(NetworkContextTest, DisableReporting) {
   EXPECT_FALSE(network_context->url_request_context()->reporting_service());
 }
 
-TEST_F(NetworkContextTest, EnableReporting) {
+TEST_F(NetworkContextTest, EnableReportingWithoutStore) {
   base::test::ScopedFeatureList scoped_feature_list_;
   scoped_feature_list_.InitAndEnableFeature(features::kReporting);
 
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateContextParams());
   EXPECT_TRUE(network_context->url_request_context()->reporting_service());
+  EXPECT_FALSE(network_context->url_request_context()
+                   ->reporting_service()
+                   ->GetContextForTesting()
+                   ->store());
+}
+
+TEST_F(NetworkContextTest, EnableReportingWithStore) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndEnableFeature(features::kReporting);
+
+  mojom::NetworkContextParamsPtr context_params = CreateContextParams();
+
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  context_params->reporting_and_nel_store_path =
+      temp_dir.GetPath().Append(kFilename);
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(std::move(context_params));
+  EXPECT_TRUE(network_context->url_request_context()->reporting_service());
+  EXPECT_TRUE(network_context->url_request_context()
+                  ->reporting_service()
+                  ->GetContextForTesting()
+                  ->store());
 }
 
 TEST_F(NetworkContextTest, DisableNetworkErrorLogging) {
@@ -677,40 +710,50 @@ TEST_F(NetworkContextTest, DisableNetworkErrorLogging) {
       network_context->url_request_context()->network_error_logging_service());
 }
 
-TEST_F(NetworkContextTest, EnableNetworkErrorLogging) {
+TEST_F(NetworkContextTest, EnableNetworkErrorLoggingWithoutStore) {
   base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(features::kNetworkErrorLogging);
+  scoped_feature_list_.InitWithFeatures(
+      {features::kNetworkErrorLogging, features::kReporting}, {});
 
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateContextParams());
   EXPECT_TRUE(
       network_context->url_request_context()->network_error_logging_service());
+  EXPECT_FALSE(network_context->url_request_context()
+                   ->network_error_logging_service()
+                   ->GetPersistentNelStoreForTesting());
+  EXPECT_FALSE(network_context->url_request_context()
+                   ->network_error_logging_service()
+                   ->GetReportingServiceForTesting()
+                   ->GetContextForTesting()
+                   ->store());
+}
+
+TEST_F(NetworkContextTest, EnableNetworkErrorLoggingWithStore) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitWithFeatures(
+      {features::kNetworkErrorLogging, features::kReporting}, {});
+
+  mojom::NetworkContextParamsPtr context_params = CreateContextParams();
+
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  context_params->reporting_and_nel_store_path =
+      temp_dir.GetPath().Append(kFilename);
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(std::move(context_params));
+  EXPECT_TRUE(
+      network_context->url_request_context()->network_error_logging_service());
+  EXPECT_TRUE(network_context->url_request_context()
+                  ->network_error_logging_service()
+                  ->GetPersistentNelStoreForTesting());
+  EXPECT_TRUE(network_context->url_request_context()
+                  ->network_error_logging_service()
+                  ->GetReportingServiceForTesting()
+                  ->GetContextForTesting()
+                  ->store());
 }
 #endif  // BUILDFLAG(ENABLE_REPORTING)
-
-TEST_F(NetworkContextTest, Http09Disabled) {
-  mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  context_params->http_09_on_non_default_ports_enabled = false;
-  std::unique_ptr<NetworkContext> network_context =
-      CreateContextWithParams(std::move(context_params));
-  EXPECT_FALSE(network_context->url_request_context()
-                   ->http_transaction_factory()
-                   ->GetSession()
-                   ->params()
-                   .http_09_on_non_default_ports_enabled);
-}
-
-TEST_F(NetworkContextTest, Http09Enabled) {
-  mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  context_params->http_09_on_non_default_ports_enabled = true;
-  std::unique_ptr<NetworkContext> network_context =
-      CreateContextWithParams(std::move(context_params));
-  EXPECT_TRUE(network_context->url_request_context()
-                  ->http_transaction_factory()
-                  ->GetSession()
-                  ->params()
-                  .http_09_on_non_default_ports_enabled);
-}
 
 TEST_F(NetworkContextTest, DefaultHttpNetworkSessionParams) {
   std::unique_ptr<NetworkContext> network_context =
@@ -1091,13 +1134,13 @@ TEST_F(NetworkContextTest, CertReporting) {
     ResourceRequest request;
     request.url = pkp_test_server.GetURL(kPreloadedPKPHost, "/");
 
-    mojom::URLLoaderFactoryPtr loader_factory;
+    mojo::Remote<mojom::URLLoaderFactory> loader_factory;
     mojom::URLLoaderFactoryParamsPtr params =
         mojom::URLLoaderFactoryParams::New();
     params->process_id = mojom::kBrowserProcessId;
     params->is_corb_enabled = false;
-    network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                            std::move(params));
+    network_context->CreateURLLoaderFactory(
+        loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
     mojom::URLLoaderPtr loader;
     TestURLLoaderClient client;
@@ -1151,12 +1194,12 @@ TEST_F(NetworkContextTest, Referrers) {
       std::unique_ptr<NetworkContext> network_context =
           CreateContextWithParams(std::move(context_params));
 
-      mojom::URLLoaderFactoryPtr loader_factory;
+      mojo::Remote<mojom::URLLoaderFactory> loader_factory;
       mojom::URLLoaderFactoryParamsPtr params =
           mojom::URLLoaderFactoryParams::New();
       params->process_id = 0;
       network_context->CreateURLLoaderFactory(
-          mojo::MakeRequest(&loader_factory), std::move(params));
+          loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
       ResourceRequest request;
       request.url = test_server.GetURL("/echoheader?Referer");
@@ -1199,92 +1242,6 @@ TEST_F(NetworkContextTest, Referrers) {
         EXPECT_EQ(kReferrer.spec(), response_body);
       }
     }
-  }
-}
-
-TEST_F(NetworkContextTest, HttpRequestCompletionErrorCodes) {
-  net::EmbeddedTestServer test_server;
-  test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("services/test/data")));
-  ASSERT_TRUE(test_server.Start());
-
-  net::EmbeddedTestServer https_test_server(
-      net::test_server::EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("services/test/data")));
-  ASSERT_TRUE(https_test_server.Start());
-
-  const struct {
-    const char* path;
-    bool use_https;
-    bool is_main_frame;
-    int expected_net_error;
-    int expected_request_completion_count;
-    int expected_request_completion_main_frame_count;
-  } kTests[] = {
-      {"/", false /* use_https */, true /* is_main_frame */, net::OK,
-       1 /* expected_request_completion_count */,
-       1 /* expected_request_completion_main_frame_count */},
-      {"/close-socket", false /* use_https */, true /* is_main_frame */,
-       net::ERR_EMPTY_RESPONSE, 1 /* expected_request_completion_count */,
-       1 /* expected_request_completion_main_frame_count */},
-      {"/", false /* use_https */, false /* is_main_frame */, net::OK,
-       1 /* expected_request_completion_count */,
-       0 /* expected_request_completion_main_frame_count */},
-      {"/", true /* use_https */, true /* is_main_frame */, net::OK,
-       0 /* expected_request_completion_count */,
-       0 /* expected_request_completion_main_frame_count */},
-  };
-
-  const char kHttpRequestCompletionErrorCode[] =
-      "Net.HttpRequestCompletionErrorCodes";
-  const char kHttpRequestCompletionErrorCodeMainFrame[] =
-      "Net.HttpRequestCompletionErrorCodes.MainFrame";
-
-  for (const auto& test : kTests) {
-    base::HistogramTester histograms;
-
-    std::unique_ptr<NetworkContext> network_context =
-        CreateContextWithParams(CreateContextParams());
-
-    mojom::URLLoaderFactoryPtr loader_factory;
-    mojom::URLLoaderFactoryParamsPtr params =
-        mojom::URLLoaderFactoryParams::New();
-    params->process_id = mojom::kBrowserProcessId;
-    network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                            std::move(params));
-
-    ResourceRequest request;
-    if (!test.use_https) {
-      request.url = test_server.GetURL(test.path);
-    } else {
-      request.url = https_test_server.GetURL(test.path);
-    }
-    if (test.is_main_frame)
-      request.load_flags = net::LOAD_MAIN_FRAME_DEPRECATED;
-
-    mojom::URLLoaderPtr loader;
-    TestURLLoaderClient client;
-    loader_factory->CreateLoaderAndStart(
-        mojo::MakeRequest(&loader), 0 /* routing_id */, 0 /* request_id */,
-        0 /* options */, request, client.CreateInterfacePtr(),
-        net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
-
-    client.RunUntilComplete();
-    EXPECT_TRUE(client.has_received_completion());
-    EXPECT_EQ(test.expected_net_error, client.completion_status().error_code);
-
-    histograms.ExpectTotalCount(kHttpRequestCompletionErrorCode,
-                                test.expected_request_completion_count);
-    histograms.ExpectUniqueSample(kHttpRequestCompletionErrorCode,
-                                  -test.expected_net_error,
-                                  test.expected_request_completion_count);
-    histograms.ExpectTotalCount(
-        kHttpRequestCompletionErrorCodeMainFrame,
-        test.expected_request_completion_main_frame_count);
-    histograms.ExpectUniqueSample(
-        kHttpRequestCompletionErrorCodeMainFrame, -test.expected_net_error,
-        test.expected_request_completion_main_frame_count);
   }
 }
 
@@ -1409,10 +1366,14 @@ TEST_F(NetworkContextTest, NotifyExternalCacheHit) {
     network_context->NotifyExternalCacheHit(test_url, test_url.scheme(), key);
     EXPECT_EQ(i + 1, mock_cache.disk_cache()->GetExternalCacheHits().size());
 
-    // Potentially a brittle check as the value sent to disk_cache is a "key."
-    // This key just happens to be the same as the GURL from the test input.
-    // So if this breaks check HttpCache::GenerateCacheKey() for changes.
-    EXPECT_EQ(test_url, mock_cache.disk_cache()->GetExternalCacheHits().back());
+    // Note: if this breaks check HttpCache::GenerateCacheKey() for changes.
+    std::string expected_key_prefix =
+        base::FeatureList::IsEnabled(
+            net::features::kSplitCacheByNetworkIsolationKey)
+            ? base::StrCat({"_dk_", key.ToString(), " "})
+            : "";
+    EXPECT_EQ(expected_key_prefix + test_url.spec(),
+              mock_cache.disk_cache()->GetExternalCacheHits().back());
   }
 }
 
@@ -2204,9 +2165,9 @@ TEST_F(NetworkContextTest, ProxyConfig) {
     mojom::NetworkContextParamsPtr context_params = CreateContextParams();
     context_params->initial_proxy_config = net::ProxyConfigWithAnnotation(
         initial_proxy_config_set.proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS);
-    mojom::ProxyConfigClientPtr config_client;
-    context_params->proxy_config_client_request =
-        mojo::MakeRequest(&config_client);
+    mojo::Remote<mojom::ProxyConfigClient> config_client;
+    context_params->proxy_config_client_receiver =
+        config_client.BindNewPipeAndPassReceiver();
     std::unique_ptr<NetworkContext> network_context =
         CreateContextWithParams(std::move(context_params));
 
@@ -2289,9 +2250,9 @@ TEST_F(NetworkContextTest, StaticProxyConfig) {
 TEST_F(NetworkContextTest, NoInitialProxyConfig) {
   mojom::NetworkContextParamsPtr context_params = CreateContextParams();
   context_params->initial_proxy_config.reset();
-  mojom::ProxyConfigClientPtr config_client;
-  context_params->proxy_config_client_request =
-      mojo::MakeRequest(&config_client);
+  mojo::Remote<mojom::ProxyConfigClient> config_client;
+  context_params->proxy_config_client_receiver =
+      config_client.BindNewPipeAndPassReceiver();
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(std::move(context_params));
 
@@ -2337,9 +2298,9 @@ TEST_F(NetworkContextTest, DestroyedWithoutProxyConfig) {
   // Create a NetworkContext without an initial proxy configuration.
   mojom::NetworkContextParamsPtr context_params = CreateContextParams();
   context_params->initial_proxy_config.reset();
-  mojom::ProxyConfigClientPtr config_client;
-  context_params->proxy_config_client_request =
-      mojo::MakeRequest(&config_client);
+  mojo::Remote<mojom::ProxyConfigClient> config_client;
+  context_params->proxy_config_client_receiver =
+      config_client.BindNewPipeAndPassReceiver();
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(std::move(context_params));
 
@@ -2363,9 +2324,9 @@ TEST_F(NetworkContextTest, CancelPendingProxyLookup) {
   // Create a NetworkContext without an initial proxy configuration.
   mojom::NetworkContextParamsPtr context_params = CreateContextParams();
   context_params->initial_proxy_config.reset();
-  mojom::ProxyConfigClientPtr config_client;
-  context_params->proxy_config_client_request =
-      mojo::MakeRequest(&config_client);
+  mojo::Remote<mojom::ProxyConfigClient> config_client;
+  context_params->proxy_config_client_receiver =
+      config_client.BindNewPipeAndPassReceiver();
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(std::move(context_params));
 
@@ -2428,22 +2389,20 @@ TEST_F(NetworkContextTest, CreateUDPSocket) {
 
   // Create a server socket to listen for incoming datagrams.
   test::UDPSocketListenerImpl listener;
-  mojo::Binding<mojom::UDPSocketListener> listener_binding(&listener);
-  mojom::UDPSocketListenerPtr listener_interface_ptr;
-  listener_binding.Bind(mojo::MakeRequest(&listener_interface_ptr));
+  mojo::Receiver<mojom::UDPSocketListener> listener_receiver(&listener);
 
   net::IPEndPoint server_addr(GetLocalHostWithAnyPort());
-  mojom::UDPSocketPtr server_socket;
-  network_context->CreateUDPSocket(mojo::MakeRequest(&server_socket),
-                                   std::move(listener_interface_ptr));
+  mojo::Remote<mojom::UDPSocket> server_socket;
+  network_context->CreateUDPSocket(
+      server_socket.BindNewPipeAndPassReceiver(),
+      listener_receiver.BindNewPipeAndPassRemote());
   test::UDPSocketTestHelper helper(&server_socket);
   ASSERT_EQ(net::OK, helper.BindSync(server_addr, nullptr, &server_addr));
 
   // Create a client socket to send datagrams.
-  mojom::UDPSocketPtr client_socket;
-  mojom::UDPSocketRequest client_socket_request(
-      mojo::MakeRequest(&client_socket));
-  network_context->CreateUDPSocket(std::move(client_socket_request), nullptr);
+  mojo::Remote<mojom::UDPSocket> client_socket;
+  network_context->CreateUDPSocket(client_socket.BindNewPipeAndPassReceiver(),
+                                   mojo::NullRemote());
 
   net::IPEndPoint client_addr(GetLocalHostWithAnyPort());
   test::UDPSocketTestHelper client_helper(&client_socket);
@@ -2481,8 +2440,9 @@ TEST_F(NetworkContextTest, CreateNetLogExporter) {
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateContextParams());
 
-  mojom::NetLogExporterPtr net_log_exporter;
-  network_context->CreateNetLogExporter(mojo::MakeRequest(&net_log_exporter));
+  mojo::Remote<mojom::NetLogExporter> net_log_exporter;
+  network_context->CreateNetLogExporter(
+      net_log_exporter.BindNewPipeAndPassReceiver());
 
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
@@ -2531,8 +2491,9 @@ TEST_F(NetworkContextTest, CreateNetLogExporterUnbounded) {
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateContextParams());
 
-  mojom::NetLogExporterPtr net_log_exporter;
-  network_context->CreateNetLogExporter(mojo::MakeRequest(&net_log_exporter));
+  mojo::Remote<mojom::NetLogExporter> net_log_exporter;
+  network_context->CreateNetLogExporter(
+      net_log_exporter.BindNewPipeAndPassReceiver());
 
   base::FilePath temp_path;
   ASSERT_TRUE(base::CreateTemporaryFile(&temp_path));
@@ -2568,8 +2529,9 @@ TEST_F(NetworkContextTest, CreateNetLogExporterErrors) {
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateContextParams());
 
-  mojom::NetLogExporterPtr net_log_exporter;
-  network_context->CreateNetLogExporter(mojo::MakeRequest(&net_log_exporter));
+  mojo::Remote<mojom::NetLogExporter> net_log_exporter;
+  network_context->CreateNetLogExporter(
+      net_log_exporter.BindNewPipeAndPassReceiver());
 
   net::TestCompletionCallback stop_callback;
   net_log_exporter->Stop(base::Value(base::Value::Type::DICTIONARY),
@@ -2661,15 +2623,15 @@ net::IPEndPoint CreateExpectedEndPoint(const std::string& address,
 
 class TestResolveHostClient : public ResolveHostClientBase {
  public:
-  TestResolveHostClient(mojom::ResolveHostClientPtr* interface_ptr,
+  TestResolveHostClient(mojo::PendingRemote<mojom::ResolveHostClient>* remote,
                         base::RunLoop* run_loop)
-      : binding_(this, mojo::MakeRequest(interface_ptr)),
+      : receiver_(this, remote->InitWithNewPipeAndPassReceiver()),
         complete_(false),
         run_loop_(run_loop) {
     DCHECK(run_loop_);
   }
 
-  void CloseBinding() { binding_.Close(); }
+  void CloseReceiver() { receiver_.reset(); }
 
   void OnComplete(int error,
                   const base::Optional<net::AddressList>& addresses) override {
@@ -2694,7 +2656,7 @@ class TestResolveHostClient : public ResolveHostClientBase {
   }
 
  private:
-  mojo::Binding<mojom::ResolveHostClient> binding_;
+  mojo::Receiver<mojom::ResolveHostClient> receiver_;
 
   bool complete_;
   int result_error_;
@@ -2703,24 +2665,25 @@ class TestResolveHostClient : public ResolveHostClientBase {
 };
 
 TEST_F(NetworkContextTest, ResolveHost_Sync) {
+  auto resolver = std::make_unique<net::MockHostResolver>();
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateContextParams());
 
-  auto resolver = std::make_unique<net::MockHostResolver>();
   network_context->url_request_context()->set_host_resolver(resolver.get());
   resolver->set_synchronous_mode(true);
 
   base::RunLoop run_loop;
-  mojom::ResolveHostHandlePtr control_handle;
+  mojo::Remote<mojom::ResolveHostHandle> control_handle;
   mojom::ResolveHostParametersPtr optional_parameters =
       mojom::ResolveHostParameters::New();
-  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
-  mojom::ResolveHostClientPtr response_client_ptr;
-  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+  optional_parameters->control_handle =
+      control_handle.BindNewPipeAndPassReceiver();
+  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
+  TestResolveHostClient response_client(&pending_response_client, &run_loop);
 
   network_context->ResolveHost(net::HostPortPair("localhost", 160),
                                std::move(optional_parameters),
-                               std::move(response_client_ptr));
+                               std::move(pending_response_client));
   run_loop.Run();
 
   EXPECT_EQ(net::OK, response_client.result_error());
@@ -2732,29 +2695,30 @@ TEST_F(NetworkContextTest, ResolveHost_Sync) {
 }
 
 TEST_F(NetworkContextTest, ResolveHost_Async) {
+  auto resolver = std::make_unique<net::MockHostResolver>();
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateContextParams());
 
-  auto resolver = std::make_unique<net::MockHostResolver>();
   network_context->url_request_context()->set_host_resolver(resolver.get());
   resolver->set_synchronous_mode(false);
 
   base::RunLoop run_loop;
-  mojom::ResolveHostHandlePtr control_handle;
+  mojo::Remote<mojom::ResolveHostHandle> control_handle;
   mojom::ResolveHostParametersPtr optional_parameters =
       mojom::ResolveHostParameters::New();
-  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
-  mojom::ResolveHostClientPtr response_client_ptr;
-  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+  optional_parameters->control_handle =
+      control_handle.BindNewPipeAndPassReceiver();
+  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
+  TestResolveHostClient response_client(&pending_response_client, &run_loop);
 
   network_context->ResolveHost(net::HostPortPair("localhost", 160),
                                std::move(optional_parameters),
-                               std::move(response_client_ptr));
+                               std::move(pending_response_client));
 
   bool control_handle_closed = false;
   auto connection_error_callback =
       base::BindLambdaForTesting([&]() { control_handle_closed = true; });
-  control_handle.set_connection_error_handler(connection_error_callback);
+  control_handle.set_disconnect_handler(connection_error_callback);
   run_loop.Run();
 
   EXPECT_EQ(net::OK, response_client.result_error());
@@ -2767,25 +2731,26 @@ TEST_F(NetworkContextTest, ResolveHost_Async) {
 }
 
 TEST_F(NetworkContextTest, ResolveHost_Failure_Sync) {
+  auto resolver = std::make_unique<net::MockHostResolver>();
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateContextParams());
 
-  auto resolver = std::make_unique<net::MockHostResolver>();
   network_context->url_request_context()->set_host_resolver(resolver.get());
   resolver->rules()->AddSimulatedFailure("example.com");
   resolver->set_synchronous_mode(true);
 
   base::RunLoop run_loop;
-  mojom::ResolveHostHandlePtr control_handle;
+  mojo::Remote<mojom::ResolveHostHandle> control_handle;
   mojom::ResolveHostParametersPtr optional_parameters =
       mojom::ResolveHostParameters::New();
-  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
-  mojom::ResolveHostClientPtr response_client_ptr;
-  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+  optional_parameters->control_handle =
+      control_handle.BindNewPipeAndPassReceiver();
+  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
+  TestResolveHostClient response_client(&pending_response_client, &run_loop);
 
   network_context->ResolveHost(net::HostPortPair("example.com", 160),
                                std::move(optional_parameters),
-                               std::move(response_client_ptr));
+                               std::move(pending_response_client));
   run_loop.Run();
 
   EXPECT_EQ(net::ERR_NAME_NOT_RESOLVED, response_client.result_error());
@@ -2795,30 +2760,31 @@ TEST_F(NetworkContextTest, ResolveHost_Failure_Sync) {
 }
 
 TEST_F(NetworkContextTest, ResolveHost_Failure_Async) {
+  auto resolver = std::make_unique<net::MockHostResolver>();
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateContextParams());
 
-  auto resolver = std::make_unique<net::MockHostResolver>();
   network_context->url_request_context()->set_host_resolver(resolver.get());
   resolver->rules()->AddSimulatedFailure("example.com");
   resolver->set_synchronous_mode(false);
 
   base::RunLoop run_loop;
-  mojom::ResolveHostHandlePtr control_handle;
+  mojo::Remote<mojom::ResolveHostHandle> control_handle;
   mojom::ResolveHostParametersPtr optional_parameters =
       mojom::ResolveHostParameters::New();
-  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
-  mojom::ResolveHostClientPtr response_client_ptr;
-  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+  optional_parameters->control_handle =
+      control_handle.BindNewPipeAndPassReceiver();
+  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
+  TestResolveHostClient response_client(&pending_response_client, &run_loop);
 
   network_context->ResolveHost(net::HostPortPair("example.com", 160),
                                std::move(optional_parameters),
-                               std::move(response_client_ptr));
+                               std::move(pending_response_client));
 
   bool control_handle_closed = false;
   auto connection_error_callback =
       base::BindLambdaForTesting([&]() { control_handle_closed = true; });
-  control_handle.set_connection_error_handler(connection_error_callback);
+  control_handle.set_disconnect_handler(connection_error_callback);
   run_loop.Run();
 
   EXPECT_EQ(net::ERR_NAME_NOT_RESOLVED, response_client.result_error());
@@ -2833,13 +2799,13 @@ TEST_F(NetworkContextTest, ResolveHost_NoControlHandle) {
       CreateContextWithParams(CreateContextParams());
 
   base::RunLoop run_loop;
-  mojom::ResolveHostClientPtr response_client_ptr;
-  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
+  TestResolveHostClient response_client(&pending_response_client, &run_loop);
 
   // Resolve "localhost" because it should always resolve fast and locally, even
   // when using a real HostResolver.
   network_context->ResolveHost(net::HostPortPair("localhost", 80), nullptr,
-                               std::move(response_client_ptr));
+                               std::move(pending_response_client));
   run_loop.Run();
 
   EXPECT_EQ(net::OK, response_client.result_error());
@@ -2856,19 +2822,20 @@ TEST_F(NetworkContextTest, ResolveHost_CloseControlHandle) {
       CreateContextWithParams(CreateContextParams());
 
   base::RunLoop run_loop;
-  mojom::ResolveHostHandlePtr control_handle;
+  mojo::Remote<mojom::ResolveHostHandle> control_handle;
   mojom::ResolveHostParametersPtr optional_parameters =
       mojom::ResolveHostParameters::New();
-  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
-  mojom::ResolveHostClientPtr response_client_ptr;
-  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+  optional_parameters->control_handle =
+      control_handle.BindNewPipeAndPassReceiver();
+  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
+  TestResolveHostClient response_client(&pending_response_client, &run_loop);
 
   // Resolve "localhost" because it should always resolve fast and locally, even
   // when using a real HostResolver.
   network_context->ResolveHost(net::HostPortPair("localhost", 160),
                                std::move(optional_parameters),
-                               std::move(response_client_ptr));
-  control_handle = nullptr;
+                               std::move(pending_response_client));
+  control_handle.reset();
   run_loop.Run();
 
   EXPECT_EQ(net::OK, response_client.result_error());
@@ -2881,31 +2848,31 @@ TEST_F(NetworkContextTest, ResolveHost_CloseControlHandle) {
 }
 
 TEST_F(NetworkContextTest, ResolveHost_Cancellation) {
-  std::unique_ptr<NetworkContext> network_context =
-      CreateContextWithParams(CreateContextParams());
-
   // Override the HostResolver with a hanging one, so the test can ensure the
   // request won't be completed before the cancellation arrives.
   auto resolver = std::make_unique<net::HangingHostResolver>();
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
   network_context->url_request_context()->set_host_resolver(resolver.get());
 
   ASSERT_EQ(0, resolver->num_cancellations());
 
   base::RunLoop run_loop;
-  mojom::ResolveHostHandlePtr control_handle;
+  mojo::Remote<mojom::ResolveHostHandle> control_handle;
   mojom::ResolveHostParametersPtr optional_parameters =
       mojom::ResolveHostParameters::New();
-  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
-  mojom::ResolveHostClientPtr response_client_ptr;
-  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+  optional_parameters->control_handle =
+      control_handle.BindNewPipeAndPassReceiver();
+  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
+  TestResolveHostClient response_client(&pending_response_client, &run_loop);
 
   network_context->ResolveHost(net::HostPortPair("localhost", 80),
                                std::move(optional_parameters),
-                               std::move(response_client_ptr));
+                               std::move(pending_response_client));
   bool control_handle_closed = false;
   auto connection_error_callback =
       base::BindLambdaForTesting([&]() { control_handle_closed = true; });
-  control_handle.set_connection_error_handler(connection_error_callback);
+  control_handle.set_disconnect_handler(connection_error_callback);
 
   control_handle->Cancel(net::ERR_ABORTED);
   run_loop.Run();
@@ -2921,31 +2888,31 @@ TEST_F(NetworkContextTest, ResolveHost_Cancellation) {
 }
 
 TEST_F(NetworkContextTest, ResolveHost_DestroyContext) {
-  std::unique_ptr<NetworkContext> network_context =
-      CreateContextWithParams(CreateContextParams());
-
   // Override the HostResolver with a hanging one, so the test can ensure the
   // request won't be completed before the cancellation arrives.
   auto resolver = std::make_unique<net::HangingHostResolver>();
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
   network_context->url_request_context()->set_host_resolver(resolver.get());
 
   ASSERT_EQ(0, resolver->num_cancellations());
 
   base::RunLoop run_loop;
-  mojom::ResolveHostHandlePtr control_handle;
+  mojo::Remote<mojom::ResolveHostHandle> control_handle;
   mojom::ResolveHostParametersPtr optional_parameters =
       mojom::ResolveHostParameters::New();
-  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
-  mojom::ResolveHostClientPtr response_client_ptr;
-  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+  optional_parameters->control_handle =
+      control_handle.BindNewPipeAndPassReceiver();
+  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
+  TestResolveHostClient response_client(&pending_response_client, &run_loop);
 
   network_context->ResolveHost(net::HostPortPair("localhost", 80),
                                std::move(optional_parameters),
-                               std::move(response_client_ptr));
+                               std::move(pending_response_client));
   bool control_handle_closed = false;
   auto connection_error_callback =
       base::BindLambdaForTesting([&]() { control_handle_closed = true; });
-  control_handle.set_connection_error_handler(connection_error_callback);
+  control_handle.set_disconnect_handler(connection_error_callback);
 
   network_context = nullptr;
   run_loop.Run();
@@ -2959,33 +2926,33 @@ TEST_F(NetworkContextTest, ResolveHost_DestroyContext) {
 }
 
 TEST_F(NetworkContextTest, ResolveHost_CloseClient) {
-  std::unique_ptr<NetworkContext> network_context =
-      CreateContextWithParams(CreateContextParams());
-
   // Override the HostResolver with a hanging one, so the test can ensure the
   // request won't be completed before the cancellation arrives.
   auto resolver = std::make_unique<net::HangingHostResolver>();
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
   network_context->url_request_context()->set_host_resolver(resolver.get());
 
   ASSERT_EQ(0, resolver->num_cancellations());
 
   base::RunLoop run_loop;
-  mojom::ResolveHostHandlePtr control_handle;
+  mojo::Remote<mojom::ResolveHostHandle> control_handle;
   mojom::ResolveHostParametersPtr optional_parameters =
       mojom::ResolveHostParameters::New();
-  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
-  mojom::ResolveHostClientPtr response_client_ptr;
-  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+  optional_parameters->control_handle =
+      control_handle.BindNewPipeAndPassReceiver();
+  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
+  TestResolveHostClient response_client(&pending_response_client, &run_loop);
 
   network_context->ResolveHost(net::HostPortPair("localhost", 80),
                                std::move(optional_parameters),
-                               std::move(response_client_ptr));
+                               std::move(pending_response_client));
   bool control_handle_closed = false;
   auto connection_error_callback =
       base::BindLambdaForTesting([&]() { control_handle_closed = true; });
-  control_handle.set_connection_error_handler(connection_error_callback);
+  control_handle.set_disconnect_handler(connection_error_callback);
 
-  response_client.CloseBinding();
+  response_client.CloseReceiver();
   run_loop.RunUntilIdle();
 
   // Response pipe is closed, so no results to check. Internal request should be
@@ -3054,19 +3021,19 @@ TEST_F(NetworkContextTest, CreateHostResolver) {
   EXPECT_EQ(1u, factory->resolvers().size());
   factory->ForgetResolvers();
 
-  mojom::HostResolverPtr resolver;
+  mojo::Remote<mojom::HostResolver> resolver;
   network_context->CreateHostResolver(base::nullopt,
-                                      mojo::MakeRequest(&resolver));
+                                      resolver.BindNewPipeAndPassReceiver());
 
   // Expected to reuse shared (within the NetworkContext) internal HostResolver.
   EXPECT_TRUE(factory->resolvers().empty());
 
   base::RunLoop run_loop;
-  mojom::ResolveHostClientPtr response_client_ptr;
-  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
+  TestResolveHostClient response_client(&pending_response_client, &run_loop);
 
   resolver->ResolveHost(net::HostPortPair("localhost", 80), nullptr,
-                        std::move(response_client_ptr));
+                        std::move(pending_response_client));
   run_loop.Run();
 
   EXPECT_EQ(net::OK, response_client.result_error());
@@ -3079,38 +3046,38 @@ TEST_F(NetworkContextTest, CreateHostResolver) {
 }
 
 TEST_F(NetworkContextTest, CreateHostResolver_CloseResolver) {
-  std::unique_ptr<NetworkContext> network_context =
-      CreateContextWithParams(CreateContextParams());
-
   // Override the HostResolver with a hanging one, so the test can ensure the
   // request won't be completed before the cancellation arrives.
   auto internal_resolver = std::make_unique<net::HangingHostResolver>();
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
   network_context->url_request_context()->set_host_resolver(
       internal_resolver.get());
 
-  mojom::HostResolverPtr resolver;
+  mojo::Remote<mojom::HostResolver> resolver;
   network_context->CreateHostResolver(base::nullopt,
-                                      mojo::MakeRequest(&resolver));
+                                      resolver.BindNewPipeAndPassReceiver());
 
   ASSERT_EQ(0, internal_resolver->num_cancellations());
 
   base::RunLoop run_loop;
-  mojom::ResolveHostHandlePtr control_handle;
+  mojo::Remote<mojom::ResolveHostHandle> control_handle;
   mojom::ResolveHostParametersPtr optional_parameters =
       mojom::ResolveHostParameters::New();
-  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
-  mojom::ResolveHostClientPtr response_client_ptr;
-  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+  optional_parameters->control_handle =
+      control_handle.BindNewPipeAndPassReceiver();
+  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
+  TestResolveHostClient response_client(&pending_response_client, &run_loop);
 
   resolver->ResolveHost(net::HostPortPair("localhost", 80),
                         std::move(optional_parameters),
-                        std::move(response_client_ptr));
+                        std::move(pending_response_client));
   bool control_handle_closed = false;
   auto connection_error_callback =
       base::BindLambdaForTesting([&]() { control_handle_closed = true; });
-  control_handle.set_connection_error_handler(connection_error_callback);
+  control_handle.set_disconnect_handler(connection_error_callback);
 
-  resolver = nullptr;
+  resolver.reset();
   run_loop.Run();
 
   // On resolver destruction, should receive an ERR_FAILED result, and the
@@ -3122,32 +3089,32 @@ TEST_F(NetworkContextTest, CreateHostResolver_CloseResolver) {
 }
 
 TEST_F(NetworkContextTest, CreateHostResolver_CloseContext) {
-  std::unique_ptr<NetworkContext> network_context =
-      CreateContextWithParams(CreateContextParams());
-
   // Override the HostResolver with a hanging one, so the test can ensure the
   // request won't be completed before the cancellation arrives.
   auto internal_resolver = std::make_unique<net::HangingHostResolver>();
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateContextParams());
   network_context->url_request_context()->set_host_resolver(
       internal_resolver.get());
 
-  mojom::HostResolverPtr resolver;
+  mojo::Remote<mojom::HostResolver> resolver;
   network_context->CreateHostResolver(base::nullopt,
-                                      mojo::MakeRequest(&resolver));
+                                      resolver.BindNewPipeAndPassReceiver());
 
   ASSERT_EQ(0, internal_resolver->num_cancellations());
 
   base::RunLoop run_loop;
-  mojom::ResolveHostHandlePtr control_handle;
+  mojo::Remote<mojom::ResolveHostHandle> control_handle;
   mojom::ResolveHostParametersPtr optional_parameters =
       mojom::ResolveHostParameters::New();
-  optional_parameters->control_handle = mojo::MakeRequest(&control_handle);
-  mojom::ResolveHostClientPtr response_client_ptr;
-  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+  optional_parameters->control_handle =
+      control_handle.BindNewPipeAndPassReceiver();
+  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
+  TestResolveHostClient response_client(&pending_response_client, &run_loop);
 
   resolver->ResolveHost(net::HostPortPair("localhost", 80),
                         std::move(optional_parameters),
-                        std::move(response_client_ptr));
+                        std::move(pending_response_client));
   // Run a bit to ensure the resolve request makes it to the resolver. Otherwise
   // the resolver will be destroyed and close its pipe before it even knows
   // about the request to send a failure.
@@ -3156,11 +3123,11 @@ TEST_F(NetworkContextTest, CreateHostResolver_CloseContext) {
   bool control_handle_closed = false;
   auto connection_error_callback =
       base::BindLambdaForTesting([&]() { control_handle_closed = true; });
-  control_handle.set_connection_error_handler(connection_error_callback);
+  control_handle.set_disconnect_handler(connection_error_callback);
   bool resolver_closed = false;
   auto resolver_closed_callback =
       base::BindLambdaForTesting([&]() { resolver_closed = true; });
-  resolver.set_connection_error_handler(resolver_closed_callback);
+  resolver.set_disconnect_handler(resolver_closed_callback);
 
   network_context = nullptr;
   run_loop.Run();
@@ -3192,8 +3159,9 @@ TEST_F(NetworkContextTest, CreateHostResolverWithConfigOverrides) {
   overrides.nameservers = std::vector<net::IPEndPoint>{
       CreateExpectedEndPoint("100.100.100.100", 22)};
 
-  mojom::HostResolverPtr resolver;
-  network_context->CreateHostResolver(overrides, mojo::MakeRequest(&resolver));
+  mojo::Remote<mojom::HostResolver> resolver;
+  network_context->CreateHostResolver(overrides,
+                                      resolver.BindNewPipeAndPassReceiver());
 
   // Should create 1 private resolver with a DnsClient (if DnsClient is
   // enablable for the build config).
@@ -3238,11 +3206,11 @@ TEST_F(NetworkContextTest, CreateHostResolverWithConfigOverrides) {
       mojom::ResolveHostParameters::New();
   optional_parameters->dns_query_type = net::DnsQueryType::A;
   optional_parameters->source = net::HostResolverSource::DNS;
-  mojom::ResolveHostClientPtr response_client_ptr;
-  TestResolveHostClient response_client(&response_client_ptr, &run_loop);
+  mojo::PendingRemote<mojom::ResolveHostClient> pending_response_client;
+  TestResolveHostClient response_client(&pending_response_client, &run_loop);
   resolver->ResolveHost(net::HostPortPair(kQueryHostname, 80),
                         std::move(optional_parameters),
-                        std::move(response_client_ptr));
+                        std::move(pending_response_client));
   run_loop.Run();
 
   EXPECT_EQ(net::OK, response_client.result_error());
@@ -3665,12 +3633,14 @@ TEST_F(NetworkContextTest, PreconnectNetworkIsolationKey) {
 
   net::ClientSocketPool::GroupId group_id1(
       test_server.host_port_pair(), net::ClientSocketPool::SocketType::kHttp,
-      net::PrivacyMode::PRIVACY_MODE_ENABLED, kKey1);
+      net::PrivacyMode::PRIVACY_MODE_ENABLED, kKey1,
+      false /* disable_secure_dns */);
   EXPECT_EQ(
       1, GetSocketCountForGroup(network_context.get(), group_id1.ToString()));
   net::ClientSocketPool::GroupId group_id2(
       test_server.host_port_pair(), net::ClientSocketPool::SocketType::kHttp,
-      net::PrivacyMode::PRIVACY_MODE_ENABLED, kKey2);
+      net::PrivacyMode::PRIVACY_MODE_ENABLED, kKey2,
+      false /* disable_secure_dns */);
   EXPECT_EQ(
       2, GetSocketCountForGroup(network_context.get(), group_id2.ToString()));
 }
@@ -3797,7 +3767,7 @@ TEST_F(NetworkContextTest, TrustedParams) {
     std::unique_ptr<NetworkContext> network_context =
         CreateContextWithParams(CreateContextParams());
 
-    mojom::URLLoaderFactoryPtr loader_factory;
+    mojo::Remote<mojom::URLLoaderFactory> loader_factory;
     mojom::URLLoaderFactoryParamsPtr params =
         mojom::URLLoaderFactoryParams::New();
     params->process_id = mojom::kBrowserProcessId;
@@ -3805,8 +3775,8 @@ TEST_F(NetworkContextTest, TrustedParams) {
     // URLLoaderFactories should not be trusted by default.
     EXPECT_FALSE(params->is_trusted);
     params->is_trusted = trusted_factory;
-    network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                            std::move(params));
+    network_context->CreateURLLoaderFactory(
+        loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
     ResourceRequest request;
     request.url = test_server.GetURL("/echo");
@@ -4142,7 +4112,7 @@ class TestProxyErrorClient final : public mojom::ProxyErrorClient {
     std::string details;
   };
 
-  TestProxyErrorClient() : binding_(this) {}
+  TestProxyErrorClient() = default;
 
   ~TestProxyErrorClient() override {}
 
@@ -4163,14 +4133,13 @@ class TestProxyErrorClient final : public mojom::ProxyErrorClient {
     return on_pac_script_error_calls_;
   }
 
-  // Creates an InterfacePtrInfo, binds it to |*this| and returns it.
-  mojom::ProxyErrorClientPtrInfo CreateInterfacePtrInfo() {
-    mojom::ProxyErrorClientPtrInfo client_ptr_info;
-
-    binding_.Bind(mojo::MakeRequest(&client_ptr_info));
-    binding_.set_connection_error_handler(base::BindOnce(
+  // Creates an mojo::PendingRemote, binds it to |*this| and returns it.
+  mojo::PendingRemote<mojom::ProxyErrorClient> CreateRemote() {
+    mojo::PendingRemote<mojom::ProxyErrorClient> client_remote =
+        receiver_.BindNewPipeAndPassRemote();
+    receiver_.set_disconnect_handler(base::BindOnce(
         &TestProxyErrorClient::OnMojoPipeError, base::Unretained(this)));
-    return client_ptr_info;
+    return client_remote;
   }
 
   // Runs until the message pipe is closed due to an error.
@@ -4191,7 +4160,7 @@ class TestProxyErrorClient final : public mojom::ProxyErrorClient {
       std::move(quit_closure_for_on_mojo_pipe_error_).Run();
   }
 
-  mojo::Binding<mojom::ProxyErrorClient> binding_;
+  mojo::Receiver<mojom::ProxyErrorClient> receiver_{this};
 
   base::OnceClosure quit_closure_for_on_mojo_pipe_error_;
   bool has_received_mojo_pipe_error_ = false;
@@ -4229,8 +4198,7 @@ TEST_F(NetworkContextTest, ProxyErrorClientNotifiedOfProxyConnection) {
   TestProxyErrorClient proxy_error_client;
   mojom::NetworkContextParamsPtr context_params =
       mojom::NetworkContextParams::New();
-  context_params->proxy_error_client =
-      proxy_error_client.CreateInterfacePtrInfo();
+  context_params->proxy_error_client = proxy_error_client.CreateRemote();
   net::ProxyConfig proxy_config;
   // Set the proxy to an unreachable address (host resolution fails).
   proxy_config.proxy_rules().ParseFromString("proxy.bad.dns");
@@ -4244,12 +4212,12 @@ TEST_F(NetworkContextTest, ProxyErrorClientNotifiedOfProxyConnection) {
   ResourceRequest request;
   request.url = GURL("http://example.test");
 
-  mojom::URLLoaderFactoryPtr loader_factory;
+  mojo::Remote<mojom::URLLoaderFactory> loader_factory;
   mojom::URLLoaderFactoryParamsPtr loader_params =
       mojom::URLLoaderFactoryParams::New();
   loader_params->process_id = mojom::kBrowserProcessId;
-  network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                          std::move(loader_params));
+  network_context->CreateURLLoaderFactory(
+      loader_factory.BindNewPipeAndPassReceiver(), std::move(loader_params));
 
   mojom::URLLoaderPtr loader;
   TestURLLoaderClient client;
@@ -4291,8 +4259,7 @@ TEST_F(NetworkContextTest, ProxyErrorClientNotNotifiedOfUnreachableError) {
   // configuration.
   TestProxyErrorClient proxy_error_client;
   mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  context_params->proxy_error_client =
-      proxy_error_client.CreateInterfacePtrInfo();
+  context_params->proxy_error_client = proxy_error_client.CreateRemote();
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(std::move(context_params));
 
@@ -4300,12 +4267,12 @@ TEST_F(NetworkContextTest, ProxyErrorClientNotNotifiedOfUnreachableError) {
   ResourceRequest request;
   request.url = GURL("http://server.bad.dns/fail");
 
-  mojom::URLLoaderFactoryPtr loader_factory;
+  mojo::Remote<mojom::URLLoaderFactory> loader_factory;
   mojom::URLLoaderFactoryParamsPtr loader_params =
       mojom::URLLoaderFactoryParams::New();
   loader_params->process_id = mojom::kBrowserProcessId;
-  network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                          std::move(loader_params));
+  network_context->CreateURLLoaderFactory(
+      loader_factory.BindNewPipeAndPassReceiver(), std::move(loader_params));
 
   mojom::URLLoaderPtr loader;
   TestURLLoaderClient client;
@@ -4376,7 +4343,7 @@ class MockMojoProxyResolverFactory
     mojo::MakeSelfOwnedReceiver(
         std::make_unique<MockMojoProxyResolverFactory>(),
         remote.InitWithNewPipeAndPassReceiver());
-    return remote;
+    return std::move(remote);
   }
 
  private:
@@ -4411,8 +4378,7 @@ TEST_F(NetworkContextTest, ProxyErrorClientNotifiedOfPacError) {
   TestProxyErrorClient proxy_error_client;
   mojom::NetworkContextParamsPtr context_params =
       mojom::NetworkContextParams::New();
-  context_params->proxy_error_client =
-      proxy_error_client.CreateInterfacePtrInfo();
+  context_params->proxy_error_client = proxy_error_client.CreateRemote();
 
 #if defined(OS_CHROMEOS)
   context_params->dhcp_wpad_url_client =
@@ -4440,12 +4406,12 @@ TEST_F(NetworkContextTest, ProxyErrorClientNotifiedOfPacError) {
   ResourceRequest request;
   request.url = GURL("http://server.bad.dns");
 
-  mojom::URLLoaderFactoryPtr loader_factory;
+  mojo::Remote<mojom::URLLoaderFactory> loader_factory;
   mojom::URLLoaderFactoryParamsPtr loader_params =
       mojom::URLLoaderFactoryParams::New();
   loader_params->process_id = mojom::kBrowserProcessId;
-  network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                          std::move(loader_params));
+  network_context->CreateURLLoaderFactory(
+      loader_factory.BindNewPipeAndPassReceiver(), std::move(loader_params));
 
   mojom::URLLoaderPtr loader;
   TestURLLoaderClient client;
@@ -4512,18 +4478,18 @@ TEST_F(NetworkContextTest, EnsureProperProxyServerIsUsed) {
     mojom::NetworkContextParamsPtr context_params = CreateContextParams();
     context_params->initial_proxy_config = net::ProxyConfigWithAnnotation(
         proxy_data.proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS);
-    mojom::ProxyConfigClientPtr config_client;
-    context_params->proxy_config_client_request =
-        mojo::MakeRequest(&config_client);
+    mojo::Remote<mojom::ProxyConfigClient> config_client;
+    context_params->proxy_config_client_receiver =
+        config_client.BindNewPipeAndPassReceiver();
     std::unique_ptr<NetworkContext> network_context =
         CreateContextWithParams(std::move(context_params));
 
-    mojom::URLLoaderFactoryPtr loader_factory;
+    mojo::Remote<mojom::URLLoaderFactory> loader_factory;
     mojom::URLLoaderFactoryParamsPtr params =
         mojom::URLLoaderFactoryParams::New();
     params->process_id = 0;
-    network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                            std::move(params));
+    network_context->CreateURLLoaderFactory(
+        loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
     ResourceRequest request;
     request.url = proxy_data.url;
@@ -4538,7 +4504,7 @@ TEST_F(NetworkContextTest, EnsureProperProxyServerIsUsed) {
     client.RunUntilComplete();
 
     EXPECT_TRUE(client.has_received_completion());
-    EXPECT_EQ(client.response_head().proxy_server.scheme(),
+    EXPECT_EQ(client.response_head()->proxy_server.scheme(),
               proxy_data.expected_proxy_config_scheme);
   }
 }
@@ -4558,6 +4524,7 @@ class TestURLLoaderHeaderClient : public mojom::TrustedURLLoaderHeaderClient {
     }
 
     void OnHeadersReceived(const std::string& headers,
+                           const net::IPEndPoint& endpoint,
                            OnHeadersReceivedCallback callback) override {
       auto new_headers =
           base::MakeRefCounted<net::HttpResponseHeaders>(headers);
@@ -4599,6 +4566,11 @@ class TestURLLoaderHeaderClient : public mojom::TrustedURLLoaderHeaderClient {
       override {
     header_client_.Bind(std::move(receiver));
   }
+  void OnLoaderForCorsPreflightCreated(
+      const ResourceRequest& request,
+      mojo::PendingReceiver<mojom::TrustedHeaderClient> receiver) override {
+    header_client_.Bind(std::move(receiver));
+  }
 
   void set_on_before_send_headers_result(int result) {
     header_client_.set_on_before_send_headers_result(result);
@@ -4626,15 +4598,15 @@ TEST_F(NetworkContextTest, HeaderClientModifiesHeaders) {
   ResourceRequest request;
   request.url = test_server.GetURL("/echoheader?foo");
 
-  mojom::URLLoaderFactoryPtr loader_factory;
+  mojo::Remote<mojom::URLLoaderFactory> loader_factory;
   mojom::URLLoaderFactoryParamsPtr params =
       mojom::URLLoaderFactoryParams::New();
   params->process_id = mojom::kBrowserProcessId;
   params->is_corb_enabled = false;
   TestURLLoaderHeaderClient header_client(
       params->header_client.InitWithNewPipeAndPassReceiver());
-  network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                          std::move(params));
+  network_context->CreateURLLoaderFactory(
+      loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
   // First, do a request with kURLLoadOptionUseHeaderClient set.
   {
@@ -4656,7 +4628,7 @@ TEST_F(NetworkContextTest, HeaderClientModifiesHeaders) {
     EXPECT_EQ(response, "bar");
 
     // Make sure response header was modified.
-    EXPECT_TRUE(client.response_head().headers->HasHeaderValue("baz", "qux"));
+    EXPECT_TRUE(client.response_head()->headers->HasHeaderValue("baz", "qux"));
   }
 
   // Next, do a request without kURLLoadOptionUseHeaderClient set, headers
@@ -4678,7 +4650,7 @@ TEST_F(NetworkContextTest, HeaderClientModifiesHeaders) {
     EXPECT_EQ(response, "None");
 
     // Make sure response header was not set.
-    EXPECT_FALSE(client.response_head().headers->HasHeaderValue("foo", "bar"));
+    EXPECT_FALSE(client.response_head()->headers->HasHeaderValue("foo", "bar"));
   }
 }
 
@@ -4693,15 +4665,15 @@ TEST_F(NetworkContextTest, HeaderClientFailsRequest) {
   ResourceRequest request;
   request.url = test_server.GetURL("/echo");
 
-  mojom::URLLoaderFactoryPtr loader_factory;
+  mojo::Remote<mojom::URLLoaderFactory> loader_factory;
   mojom::URLLoaderFactoryParamsPtr params =
       mojom::URLLoaderFactoryParams::New();
   params->process_id = mojom::kBrowserProcessId;
   params->is_corb_enabled = false;
   TestURLLoaderHeaderClient header_client(
       params->header_client.InitWithNewPipeAndPassReceiver());
-  network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                          std::move(params));
+  network_context->CreateURLLoaderFactory(
+      loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
   // First, fail request on OnBeforeSendHeaders.
   {
@@ -4751,6 +4723,7 @@ class HangingTestURLLoaderHeaderClient
     }
 
     void OnHeadersReceived(const std::string& headers,
+                           const net::IPEndPoint& endpoint,
                            OnHeadersReceivedCallback callback) override {
       saved_received_headers_ = headers;
       saved_on_headers_received_callback_ = std::move(callback);
@@ -4805,6 +4778,11 @@ class HangingTestURLLoaderHeaderClient
       override {
     header_client_.Bind(std::move(receiver));
   }
+  void OnLoaderForCorsPreflightCreated(
+      const ResourceRequest& request,
+      mojo::PendingReceiver<mojom::TrustedHeaderClient> receiver) override {
+    header_client_.Bind(std::move(receiver));
+  }
 
   void CallOnBeforeSendHeadersCallback() {
     header_client_.CallOnBeforeSendHeadersCallback();
@@ -4841,15 +4819,15 @@ TEST_F(NetworkContextTest, HangingHeaderClientModifiesHeadersAsynchronously) {
   ResourceRequest request;
   request.url = test_server.GetURL("/echoheader?foo");
 
-  mojom::URLLoaderFactoryPtr loader_factory;
+  mojo::Remote<mojom::URLLoaderFactory> loader_factory;
   mojom::URLLoaderFactoryParamsPtr params =
       mojom::URLLoaderFactoryParams::New();
   params->process_id = mojom::kBrowserProcessId;
   params->is_corb_enabled = false;
   HangingTestURLLoaderHeaderClient header_client(
       params->header_client.InitWithNewPipeAndPassReceiver());
-  network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                          std::move(params));
+  network_context->CreateURLLoaderFactory(
+      loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
   mojom::URLLoaderPtr loader;
   TestURLLoaderClient client;
@@ -4876,7 +4854,7 @@ TEST_F(NetworkContextTest, HangingHeaderClientModifiesHeadersAsynchronously) {
   EXPECT_EQ(response, "bar");
 
   // Make sure response header was modified.
-  EXPECT_TRUE(client.response_head().headers->HasHeaderValue("baz", "qux"));
+  EXPECT_TRUE(client.response_head()->headers->HasHeaderValue("baz", "qux"));
 }
 
 // Test destroying the mojom::URLLoader after the OnBeforeSendHeaders event and
@@ -4892,15 +4870,15 @@ TEST_F(NetworkContextTest, HangingHeaderClientAbortDuringOnBeforeSendHeaders) {
   ResourceRequest request;
   request.url = test_server.GetURL("/echoheader?foo");
 
-  mojom::URLLoaderFactoryPtr loader_factory;
+  mojo::Remote<mojom::URLLoaderFactory> loader_factory;
   mojom::URLLoaderFactoryParamsPtr params =
       mojom::URLLoaderFactoryParams::New();
   params->process_id = mojom::kBrowserProcessId;
   params->is_corb_enabled = false;
   HangingTestURLLoaderHeaderClient header_client(
       params->header_client.InitWithNewPipeAndPassReceiver());
-  network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                          std::move(params));
+  network_context->CreateURLLoaderFactory(
+      loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
   mojom::URLLoaderPtr loader;
   TestURLLoaderClient client;
@@ -4923,7 +4901,7 @@ TEST_F(NetworkContextTest, HangingHeaderClientAbortDuringOnBeforeSendHeaders) {
 
   // The reported error differs, but eventually URLLoader returns
   // net::ERR_ABORTED once OOR-CORS clean-up is finished.
-  if (features::ShouldEnableOutOfBlinkCors())
+  if (features::ShouldEnableOutOfBlinkCorsForTesting())
     EXPECT_EQ(client.completion_status().error_code, net::ERR_ABORTED);
   else
     EXPECT_EQ(client.completion_status().error_code, net::ERR_FAILED);
@@ -4942,15 +4920,15 @@ TEST_F(NetworkContextTest, HangingHeaderClientAbortDuringOnHeadersReceived) {
   ResourceRequest request;
   request.url = test_server.GetURL("/echoheader?foo");
 
-  mojom::URLLoaderFactoryPtr loader_factory;
+  mojo::Remote<mojom::URLLoaderFactory> loader_factory;
   mojom::URLLoaderFactoryParamsPtr params =
       mojom::URLLoaderFactoryParams::New();
   params->process_id = mojom::kBrowserProcessId;
   params->is_corb_enabled = false;
   HangingTestURLLoaderHeaderClient header_client(
       params->header_client.InitWithNewPipeAndPassReceiver());
-  network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                          std::move(params));
+  network_context->CreateURLLoaderFactory(
+      loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
   mojom::URLLoaderPtr loader;
   TestURLLoaderClient client;
@@ -4976,7 +4954,7 @@ TEST_F(NetworkContextTest, HangingHeaderClientAbortDuringOnHeadersReceived) {
 
   // The reported error differs, but eventually URLLoader returns
   // net::ERR_ABORTED once OOR-CORS clean-up is finished.
-  if (features::ShouldEnableOutOfBlinkCors())
+  if (features::ShouldEnableOutOfBlinkCorsForTesting())
     EXPECT_EQ(client.completion_status().error_code, net::ERR_ABORTED);
   else
     EXPECT_EQ(client.completion_status().error_code, net::ERR_FAILED);
@@ -5056,7 +5034,7 @@ TEST_F(NetworkContextMockHostTest, CustomProxyAddsHeaders) {
   EXPECT_EQ(response, base::JoinString({"post_bar_value", "post_foo_value",
                                         "pre_bar_value", "pre_foo_value"},
                                        "\n"));
-  EXPECT_EQ(client->response_head().proxy_server, proxy_server);
+  EXPECT_EQ(client->response_head()->proxy_server, proxy_server);
 }
 
 // Tests that if using a custom proxy results in redirect loop, then
@@ -5196,7 +5174,7 @@ TEST_F(NetworkContextMockHostTest, CustomProxyHeadersAreMerged) {
             base::JoinString({"first_bar_key=value2, bar_next_key=value4",
                               "first_foo_key=value1, foo_next_key=value3"},
                              "\n"));
-  EXPECT_EQ(client->response_head().proxy_server, proxy_server);
+  EXPECT_EQ(client->response_head()->proxy_server, proxy_server);
 }
 
 TEST_F(NetworkContextMockHostTest, CustomProxyConfigHeadersAddedBeforeCache) {
@@ -5232,8 +5210,8 @@ TEST_F(NetworkContextMockHostTest, CustomProxyConfigHeadersAddedBeforeCache) {
       mojo::BlockingCopyToString(client->response_body_release(), &response));
 
   EXPECT_EQ(response, base::JoinString({"bar_value", "foo_value"}, "\n"));
-  EXPECT_EQ(client->response_head().proxy_server, proxy_server);
-  EXPECT_FALSE(client->response_head().was_fetched_via_cache);
+  EXPECT_EQ(client->response_head()->proxy_server, proxy_server);
+  EXPECT_FALSE(client->response_head()->was_fetched_via_cache);
 
   // post_cache_headers should not break caching.
   config->post_cache_headers.SetHeader("bar", "new_bar");
@@ -5245,7 +5223,7 @@ TEST_F(NetworkContextMockHostTest, CustomProxyConfigHeadersAddedBeforeCache) {
       mojo::BlockingCopyToString(client->response_body_release(), &response));
 
   EXPECT_EQ(response, base::JoinString({"bar_value", "foo_value"}, "\n"));
-  EXPECT_TRUE(client->response_head().was_fetched_via_cache);
+  EXPECT_TRUE(client->response_head()->was_fetched_via_cache);
 
   // pre_cache_headers should invalidate cache.
   config->pre_cache_headers.SetHeader("foo", "new_foo");
@@ -5257,8 +5235,8 @@ TEST_F(NetworkContextMockHostTest, CustomProxyConfigHeadersAddedBeforeCache) {
       mojo::BlockingCopyToString(client->response_body_release(), &response));
 
   EXPECT_EQ(response, base::JoinString({"new_bar", "new_foo"}, "\n"));
-  EXPECT_EQ(client->response_head().proxy_server, proxy_server);
-  EXPECT_FALSE(client->response_head().was_fetched_via_cache);
+  EXPECT_EQ(client->response_head()->proxy_server, proxy_server);
+  EXPECT_FALSE(client->response_head()->was_fetched_via_cache);
 }
 
 TEST_F(NetworkContextMockHostTest, CustomProxyRequestHeadersAddedBeforeCache) {
@@ -5294,8 +5272,8 @@ TEST_F(NetworkContextMockHostTest, CustomProxyRequestHeadersAddedBeforeCache) {
       mojo::BlockingCopyToString(client->response_body_release(), &response));
 
   EXPECT_EQ(response, base::JoinString({"bar_value", "foo_value"}, "\n"));
-  EXPECT_EQ(client->response_head().proxy_server, proxy_server);
-  EXPECT_FALSE(client->response_head().was_fetched_via_cache);
+  EXPECT_EQ(client->response_head()->proxy_server, proxy_server);
+  EXPECT_FALSE(client->response_head()->was_fetched_via_cache);
 
   // custom_proxy_post_cache_headers should not break caching.
   request.custom_proxy_post_cache_headers.SetHeader("bar", "new_bar");
@@ -5305,7 +5283,7 @@ TEST_F(NetworkContextMockHostTest, CustomProxyRequestHeadersAddedBeforeCache) {
       mojo::BlockingCopyToString(client->response_body_release(), &response));
 
   EXPECT_EQ(response, base::JoinString({"bar_value", "foo_value"}, "\n"));
-  EXPECT_TRUE(client->response_head().was_fetched_via_cache);
+  EXPECT_TRUE(client->response_head()->was_fetched_via_cache);
 
   // custom_proxy_pre_cache_headers should invalidate cache.
   request.custom_proxy_pre_cache_headers.SetHeader("foo", "new_foo");
@@ -5315,8 +5293,8 @@ TEST_F(NetworkContextMockHostTest, CustomProxyRequestHeadersAddedBeforeCache) {
       mojo::BlockingCopyToString(client->response_body_release(), &response));
 
   EXPECT_EQ(response, base::JoinString({"new_bar", "new_foo"}, "\n"));
-  EXPECT_EQ(client->response_head().proxy_server, proxy_server);
-  EXPECT_FALSE(client->response_head().was_fetched_via_cache);
+  EXPECT_EQ(client->response_head()->proxy_server, proxy_server);
+  EXPECT_FALSE(client->response_head()->was_fetched_via_cache);
 }
 
 TEST_F(NetworkContextMockHostTest,
@@ -5352,7 +5330,7 @@ TEST_F(NetworkContextMockHostTest,
       mojo::BlockingCopyToString(client->response_body_release(), &response));
 
   EXPECT_EQ(response, base::JoinString({"None", "None", "None", "None"}, "\n"));
-  EXPECT_TRUE(client->response_head().proxy_server.is_direct());
+  EXPECT_TRUE(client->response_head()->proxy_server.is_direct());
 }
 
 TEST_F(NetworkContextMockHostTest,
@@ -5397,7 +5375,7 @@ TEST_F(NetworkContextMockHostTest,
       mojo::BlockingCopyToString(client->response_body_release(), &response));
 
   EXPECT_EQ(response, base::JoinString({"None", "None", "None", "None"}, "\n"));
-  EXPECT_EQ(client->response_head().proxy_server,
+  EXPECT_EQ(client->response_head()->proxy_server,
             ConvertToProxyServer(proxy_test_server));
 }
 
@@ -5430,7 +5408,7 @@ TEST_F(NetworkContextMockHostTest, CustomProxyUsesSpecifiedProxyList) {
 
   // |invalid_server| has no handlers set up so would return an empty response.
   EXPECT_EQ(response, "Echo");
-  EXPECT_EQ(client->response_head().proxy_server,
+  EXPECT_EQ(client->response_head()->proxy_server,
             ConvertToProxyServer(proxy_test_server));
 }
 
@@ -5519,13 +5497,13 @@ TEST_F(NetworkContextTest, MaximumCount) {
       CreateContextWithParams(CreateContextParams());
   network_context->set_max_loaders_per_process_for_testing(2);
 
-  mojom::URLLoaderFactoryPtr loader_factory;
+  mojo::Remote<mojom::URLLoaderFactory> loader_factory;
   mojom::URLLoaderFactoryParamsPtr params =
       mojom::URLLoaderFactoryParams::New();
   params->process_id = mojom::kBrowserProcessId;
   params->is_corb_enabled = false;
-  network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                          std::move(params));
+  network_context->CreateURLLoaderFactory(
+      loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
   ResourceRequest request;
   request.url = test_server.GetURL(kPath1);
@@ -5597,7 +5575,6 @@ TEST_F(NetworkContextTest, AllowAllCookies) {
   ResourceRequest first_party_request;
   first_party_request.url = server_url;
   first_party_request.site_for_cookies = first_party_url;
-  first_party_request.top_frame_origin = url::Origin::Create(first_party_url);
 
   std::unique_ptr<TestURLLoaderClient> client = FetchRequest(
       first_party_request, network_context.get(), url_loader_options);
@@ -5611,7 +5588,6 @@ TEST_F(NetworkContextTest, AllowAllCookies) {
   ResourceRequest third_party_request;
   third_party_request.url = server_url;
   third_party_request.site_for_cookies = third_party_url;
-  third_party_request.top_frame_origin = url::Origin::Create(third_party_url);
 
   client = FetchRequest(third_party_request, network_context.get(),
                         url_loader_options);
@@ -5643,7 +5619,6 @@ TEST_F(NetworkContextTest, BlockThirdPartyCookies) {
   ResourceRequest first_party_request;
   first_party_request.url = server_url;
   first_party_request.site_for_cookies = first_party_url;
-  first_party_request.top_frame_origin = url::Origin::Create(first_party_url);
 
   std::unique_ptr<TestURLLoaderClient> client = FetchRequest(
       first_party_request, network_context.get(), url_loader_options);
@@ -5657,7 +5632,6 @@ TEST_F(NetworkContextTest, BlockThirdPartyCookies) {
   ResourceRequest third_party_request;
   third_party_request.url = server_url;
   third_party_request.site_for_cookies = third_party_url;
-  third_party_request.top_frame_origin = url::Origin::Create(third_party_url);
 
   client = FetchRequest(third_party_request, network_context.get(),
                         url_loader_options);
@@ -5689,7 +5663,6 @@ TEST_F(NetworkContextTest, BlockAllCookies) {
   ResourceRequest first_party_request;
   first_party_request.url = server_url;
   first_party_request.site_for_cookies = first_party_url;
-  first_party_request.top_frame_origin = url::Origin::Create(first_party_url);
 
   std::unique_ptr<TestURLLoaderClient> client = FetchRequest(
       first_party_request, network_context.get(), url_loader_options);
@@ -5703,7 +5676,6 @@ TEST_F(NetworkContextTest, BlockAllCookies) {
   ResourceRequest third_party_request;
   third_party_request.url = server_url;
   third_party_request.site_for_cookies = third_party_url;
-  third_party_request.top_frame_origin = url::Origin::Create(third_party_url);
 
   client = FetchRequest(third_party_request, network_context.get(),
                         url_loader_options);
@@ -5866,6 +5838,37 @@ TEST_F(NetworkContextTest, HSTSPolicyBypassList) {
   EXPECT_TRUE(transport_security_state->ShouldUpgradeToSSL("sub.example"));
 }
 
+#if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
+TEST_F(NetworkContextTest, UseCertVerifierBuiltin) {
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  net::test_server::RegisterDefaultHandlers(&test_server);
+  ASSERT_TRUE(test_server.Start());
+
+  // This just happens to be the only histogram that directly records which
+  // verifier was used.
+  const char kBuiltinVerifierHistogram[] =
+      "Net.CertVerifier.NameNormalizationPrivateRoots.Builtin";
+
+  for (bool builtin_verifier_enabled : {false, true}) {
+    SCOPED_TRACE(builtin_verifier_enabled);
+
+    mojom::NetworkContextParamsPtr params = CreateContextParams();
+    params->use_builtin_cert_verifier = builtin_verifier_enabled;
+    std::unique_ptr<NetworkContext> network_context =
+        CreateContextWithParams(std::move(params));
+
+    ResourceRequest request;
+    request.url = test_server.GetURL("/nocontent");
+    base::HistogramTester histogram_tester;
+    std::unique_ptr<TestURLLoaderClient> client =
+        FetchRequest(request, network_context.get());
+    EXPECT_EQ(net::OK, client->completion_status().error_code);
+    histogram_tester.ExpectTotalCount(kBuiltinVerifierHistogram,
+                                      builtin_verifier_enabled ? 1 : 0);
+  }
+}
+#endif
+
 static ResourceRequest CreateResourceRequest(const char* method,
                                              const GURL& url) {
   ResourceRequest request;
@@ -5912,7 +5915,7 @@ class NetworkContextSplitCacheTest : public NetworkContextTest {
     ResourceRequest request = CreateResourceRequest("GET", url);
     request.load_flags |= net::LOAD_SKIP_CACHE_VALIDATION;
 
-    mojom::URLLoaderFactoryPtr loader_factory;
+    mojo::Remote<mojom::URLLoaderFactory> loader_factory;
     auto params = mojom::URLLoaderFactoryParams::New();
     params->process_id = mojom::kBrowserProcessId;
     params->is_corb_enabled = false;
@@ -5929,8 +5932,8 @@ class NetworkContextSplitCacheTest : public NetworkContextTest {
                 update_network_isolation_key_on_redirect);
       params->network_isolation_key = key;
     }
-    network_context_->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                             std::move(params));
+    network_context_->CreateURLLoaderFactory(
+        loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
     auto client = std::make_unique<TestURLLoaderClient>();
     mojom::URLLoaderPtr loader;
     loader_factory->CreateLoaderAndStart(

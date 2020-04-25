@@ -38,16 +38,18 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom-blink.h"
+#include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/request_or_usv_string.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
+#include "third_party/blink/renderer/modules/service_worker/service_worker_installed_scripts_manager.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_timeout_timer.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
+#include "third_party/blink/renderer/platform/wtf/hash_set.h"
 
 namespace blink {
 
@@ -59,6 +61,7 @@ class ScriptPromise;
 class ScriptState;
 class ServiceWorker;
 class ServiceWorkerClients;
+class ServiceWorkerInstalledScriptsManager;
 class ServiceWorkerRegistration;
 class ServiceWorkerThread;
 class StringOrTrustedScriptURL;
@@ -83,13 +86,16 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   static ServiceWorkerGlobalScope* Create(
       ServiceWorkerThread*,
       std::unique_ptr<GlobalScopeCreationParams>,
+      std::unique_ptr<ServiceWorkerInstalledScriptsManager>,
       mojo::PendingRemote<mojom::blink::CacheStorage>,
       base::TimeTicks time_origin);
 
-  ServiceWorkerGlobalScope(std::unique_ptr<GlobalScopeCreationParams>,
-                           ServiceWorkerThread*,
-                           mojo::PendingRemote<mojom::blink::CacheStorage>,
-                           base::TimeTicks time_origin);
+  ServiceWorkerGlobalScope(
+      std::unique_ptr<GlobalScopeCreationParams>,
+      ServiceWorkerThread*,
+      std::unique_ptr<ServiceWorkerInstalledScriptsManager>,
+      mojo::PendingRemote<mojom::blink::CacheStorage>,
+      base::TimeTicks time_origin);
   ~ServiceWorkerGlobalScope() override;
 
   // ExecutionContext overrides:
@@ -103,33 +109,20 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
                   const Vector<CSPHeaderAndType>& response_csp_headers,
                   const Vector<String>* response_origin_trial_tokens,
                   int64_t appcache_id) override;
-  // Fetches and runs the top-level classic worker script for the 'new' or
-  // 'update' service worker cases.
+  // Fetches and runs the top-level classic worker script.
   void FetchAndRunClassicScript(
       const KURL& script_url,
       const FetchClientSettingsObjectSnapshot& outside_settings_object,
       WorkerResourceTimingNotifier& outside_resource_timing_notifier,
       const v8_inspector::V8StackTraceId& stack_id) override;
-  // Fetches and runs the top-level module worker script for the 'new' or
-  // 'update' service worker cases.
+  // Fetches and runs the top-level module worker script.
   void FetchAndRunModuleScript(
       const KURL& module_url_record,
       const FetchClientSettingsObjectSnapshot& outside_settings_object,
       WorkerResourceTimingNotifier& outside_resource_timing_notifier,
       network::mojom::CredentialsMode) override;
   void Dispose() override;
-
-  // Runs the installed top-level classic worker script for the 'installed'
-  // service worker case.
-  void RunInstalledClassicScript(const KURL& script_url,
-                                 const v8_inspector::V8StackTraceId& stack_id);
-
-  // Runs the installed top-level module worker script for the 'installed'
-  // service worker case.
-  void RunInstalledModuleScript(
-      const KURL& module_url_record,
-      const FetchClientSettingsObjectSnapshot& outside_settings_object,
-      network::mojom::CredentialsMode);
+  InstalledScriptsManager* GetInstalledScriptsManager() override;
 
   // Counts an evaluated script and its size. Called for the main worker script.
   void CountWorkerScript(size_t script_size, size_t cached_metadata_size);
@@ -144,6 +137,7 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   // ServiceWorkerGlobalScope.idl
   ServiceWorkerClients* clients();
   ServiceWorkerRegistration* registration();
+  ::blink::ServiceWorker* serviceWorker();
 
   ScriptPromise fetch(ScriptState*,
                       const RequestInfo&,
@@ -166,6 +160,12 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
                                    int64_t encoded_data_length,
                                    int64_t encoded_body_length,
                                    int64_t decoded_body_length);
+  // Pauses the toplevel script evaluation until ResumeEvaluation is called.
+  // Must be called before InitializeGlobalScope().
+  void PauseEvaluation();
+  // Resumes the toplevel script evaluation. Must be called only after
+  // PauseEvaluation() is called.
+  void ResumeEvaluation();
 
   // Creates a ServiceWorkerTimeoutTimer::StayAwakeToken to ensure that the idle
   // timer won't be triggered while any of these are alive.
@@ -215,10 +215,12 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   // native fetch.
   void RespondToFetchEventWithNoResponse(
       int fetch_event_id,
+      const KURL& request_url,
       base::TimeTicks event_dispatch_time,
       base::TimeTicks respond_with_settled_time);
   // Responds to the fetch event with |response|.
   void RespondToFetchEvent(int fetch_event_id,
+                           const KURL& request_url,
                            mojom::blink::FetchAPIResponsePtr,
                            base::TimeTicks event_dispatch_time,
                            base::TimeTicks respond_with_settled_time);
@@ -226,6 +228,7 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   // |body_as_stream|.
   void RespondToFetchEventWithResponseStream(
       int fetch_event_id,
+      const KURL& request_url,
       mojom::blink::FetchAPIResponsePtr,
       mojom::blink::ServiceWorkerStreamHandlePtr,
       base::TimeTicks event_dispatch_time,
@@ -277,15 +280,6 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
 
   mojom::blink::ServiceWorkerHost* GetServiceWorkerHost();
 
-  // Called when a task is going to be scheduled on the service worker.
-  // The service worker shouldn't request to be terminated until the task is
-  // finished. Returns an id for the task. The caller must call DidEndTask()
-  // with the returned id to notify that the task is finished.
-  int WillStartTask();
-  // Called when a task is finished. |task_id| must be a return value of
-  // WillStartTask().
-  void DidEndTask(int task_id);
-
   DEFINE_ATTRIBUTE_EVENT_LISTENER(install, kInstall)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(activate, kActivate)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(fetch, kFetch)
@@ -293,12 +287,23 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
 
   void Trace(blink::Visitor*) override;
 
+  // Returns true if a FetchEvent exists with the given request URL and
+  // is still waiting for a Response.
+  bool HasRelatedFetchEvent(const KURL& request_url) const;
+
  protected:
   // EventTarget
   bool AddEventListenerInternal(
       const AtomicString& event_type,
       EventListener*,
       const AddEventListenerOptionsResolved*) override;
+
+  // WorkerGlobalScope
+  bool FetchClassicImportedScript(
+      const KURL& script_url,
+      KURL* out_response_url,
+      String* out_source_code,
+      std::unique_ptr<Vector<uint8_t>>* out_cached_meta_data) override;
 
  private:
   void importScripts(const HeapVector<StringOrTrustedScriptURL>& urls,
@@ -312,6 +317,11 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
       WorkerClassicScriptLoader* classic_script_loader);
   void DidFetchClassicScript(WorkerClassicScriptLoader* classic_script_loader,
                              const v8_inspector::V8StackTraceId& stack_id);
+
+  // Loads and runs the installed top-level classic worker script.
+  void LoadAndRunInstalledClassicScript(
+      const KURL& script_url,
+      const v8_inspector::V8StackTraceId& stack_id);
 
   // https://w3c.github.io/ServiceWorker/#run-service-worker-algorithm
   void RunClassicScript(const KURL& response_url,
@@ -371,6 +381,7 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
       mojo::PendingAssociatedRemote<mojom::blink::ServiceWorkerHost>
           service_worker_host,
       mojom::blink::ServiceWorkerRegistrationObjectInfoPtr registration_info,
+      mojom::blink::ServiceWorkerObjectInfoPtr service_worker_info,
       mojom::blink::FetchHandlerExistence fetch_hander_existence) override;
   void DispatchInstallEvent(DispatchInstallEventCallback callback) override;
   void DispatchActivateEvent(DispatchActivateEventCallback callback) override;
@@ -388,10 +399,6 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
       DispatchBackgroundFetchSuccessEventCallback callback) override;
   void DispatchExtendableMessageEvent(
       mojom::blink::ExtendableMessageEventPtr event,
-      DispatchExtendableMessageEventCallback callback) override;
-  void DispatchExtendableMessageEventWithCustomTimeout(
-      mojom::blink::ExtendableMessageEventPtr event,
-      base::TimeDelta timeout,
       DispatchExtendableMessageEventCallback callback) override;
   void DispatchFetchEventForMainResource(
       mojom::blink::DispatchFetchEventParamsPtr params,
@@ -440,8 +447,7 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
           response_callback,
       DispatchPaymentRequestEventCallback callback) override;
   void DispatchCookieChangeEvent(
-      const WebCanonicalCookie& cookie,
-      ::network::mojom::blink::CookieChangeCause cause,
+      network::mojom::blink::CookieChangeInfoPtr change,
       DispatchCookieChangeEventCallback callback) override;
   void DispatchContentDeleteEvent(
       const String& id,
@@ -451,8 +457,13 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   void AddMessageToConsole(mojom::blink::ConsoleMessageLevel,
                            const String& message) override;
 
+  void NoteNewFetchEvent(const KURL& request_url);
+  void NoteRespondedToFetchEvent(const KURL& request_url);
+
   Member<ServiceWorkerClients> clients_;
   Member<ServiceWorkerRegistration> registration_;
+  Member<::blink::ServiceWorker> service_worker_;
+
   // Map from service worker version id to JavaScript ServiceWorker object in
   // current execution context.
   HeapHashMap<int64_t,
@@ -468,6 +479,10 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   size_t cache_storage_installed_script_count_ = 0;
   uint64_t cache_storage_installed_script_total_size_ = 0;
   uint64_t cache_storage_installed_script_metadata_total_size_ = 0;
+
+  // Non-null only when this service worker is already installed.
+  std::unique_ptr<ServiceWorkerInstalledScriptsManager>
+      installed_scripts_manager_;
 
   // May be provided in the constructor as an optimization so InterfaceProvider
   // doesn't need to be used. Taken at the initial call to
@@ -532,9 +547,22 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
 
   HeapHashMap<int, Member<FetchEvent>> pending_preload_fetch_events_;
 
+  // Track outstanding FetchEvent objects still waiting for a response by
+  // request URL.  This information can be used as a hint that cache_storage
+  // or fetch requests to the same URL is likely to be used to satisfy a
+  // FetchEvent.  This in turn can allow us to use more aggressive
+  // optimizations in these cases.
+  HashMap<KURL, int> unresponded_fetch_event_counts_;
+
   // Timer triggered when the service worker considers it should be stopped or
   // an event should be aborted.
   std::unique_ptr<ServiceWorkerTimeoutTimer> timeout_timer_;
+
+  // InitializeGlobalScope() pauses the top level script evaluation when this
+  // flag is true.
+  bool pause_evaluation_ = false;
+  // ResumeEvaluation() evaluates the top level script when this flag is true.
+  bool global_scope_initialized_ = false;
 
   // Connected by the ServiceWorkerProviderHost in the browser process and by
   // the controllees. |controller_bindings_| should be destroyed before

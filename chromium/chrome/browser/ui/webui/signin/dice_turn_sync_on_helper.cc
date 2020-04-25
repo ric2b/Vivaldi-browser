@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -19,6 +20,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
+#include "chrome/browser/policy/policy_conversions.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -31,6 +34,7 @@
 #include "chrome/browser/unified_consent/unified_consent_service_factory.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
+#include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/signin_pref_names.h"
@@ -72,7 +76,7 @@ class DiceTurnSyncOnHelperShutdownNotifierFactory
 };
 
 AccountInfo GetAccountInfo(signin::IdentityManager* identity_manager,
-                           const std::string& account_id) {
+                           const CoreAccountId& account_id) {
   auto maybe_account_info =
       identity_manager
           ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
@@ -104,7 +108,6 @@ class TokensLoadedCallbackRunner : public signin::IdentityManager::Observer {
                              KeyedServiceShutdownNotifier* shutdown_notifier,
                              base::OnceClosure callback)
       : identity_manager_(identity_manager),
-        scoped_identity_manager_observer_(this),
         callback_(std::move(callback)),
         shutdown_subscription_(shutdown_notifier->Subscribe(
             base::Bind(&TokensLoadedCallbackRunner::OnShutdown,
@@ -122,11 +125,13 @@ class TokensLoadedCallbackRunner : public signin::IdentityManager::Observer {
   void OnShutdown() { delete this; }
 
   signin::IdentityManager* identity_manager_;
-  ScopedObserver<signin::IdentityManager, TokensLoadedCallbackRunner>
-      scoped_identity_manager_observer_;
+  ScopedObserver<signin::IdentityManager, signin::IdentityManager::Observer>
+      scoped_identity_manager_observer_{this};
   base::OnceClosure callback_;
   std::unique_ptr<KeyedServiceShutdownNotifier::Subscription>
       shutdown_subscription_;
+
+  DISALLOW_COPY_AND_ASSIGN(TokensLoadedCallbackRunner);
 };
 
 }  // namespace
@@ -136,7 +141,7 @@ DiceTurnSyncOnHelper::DiceTurnSyncOnHelper(
     signin_metrics::AccessPoint signin_access_point,
     signin_metrics::PromoAction signin_promo_action,
     signin_metrics::Reason signin_reason,
-    const std::string& account_id,
+    const CoreAccountId& account_id,
     SigninAbortedMode signin_aborted_mode,
     std::unique_ptr<Delegate> delegate,
     base::OnceClosure callback)
@@ -199,7 +204,7 @@ DiceTurnSyncOnHelper::DiceTurnSyncOnHelper(
     signin_metrics::AccessPoint signin_access_point,
     signin_metrics::PromoAction signin_promo_action,
     signin_metrics::Reason signin_reason,
-    const std::string& account_id,
+    const CoreAccountId& account_id,
     SigninAbortedMode signin_aborted_mode)
     : DiceTurnSyncOnHelper(
           profile,
@@ -346,17 +351,38 @@ void DiceTurnSyncOnHelper::OnPolicyFetchComplete(bool success) {
   // PrimaryAccountMutator::ClearPrimaryAccount() here instead.
   DLOG_IF(ERROR, !success) << "Error fetching policy for user";
   DVLOG_IF(1, success) << "Policy fetch successful - completing signin";
+  if (VLOG_IS_ON(2)) {
+    // User cloud policies have been fetched from the server. Dump all policy
+    // values into log once these new policies are merged.
+    profile_->GetProfilePolicyConnector()
+        ->policy_service()
+        ->AddProviderUpdateObserver(this);
+  }
   SigninAndShowSyncConfirmationUI();
+}
+
+void DiceTurnSyncOnHelper::OnProviderUpdatePropagated(
+    policy::ConfigurationPolicyProvider* provider) {
+  if (provider != profile_->GetUserCloudPolicyManager())
+    return;
+  VLOG(2) << "Policies after sign in:";
+  VLOG(2) << policy::DictionaryPolicyConversions()
+                 .WithBrowserContext(profile_)
+                 .ToJSON();
+  profile_->GetProfilePolicyConnector()
+      ->policy_service()
+      ->RemoveProviderUpdateObserver(this);
 }
 
 void DiceTurnSyncOnHelper::CreateNewSignedInProfile() {
   // Create a new profile and have it call back when done so we can start the
   // signin flow.
-  size_t icon_index = g_browser_process->profile_manager()
-                          ->GetProfileAttributesStorage()
-                          .ChooseAvatarIconIndexForNewProfile();
+  ProfileAttributesStorage& storage =
+      g_browser_process->profile_manager()->GetProfileAttributesStorage();
+  size_t icon_index = storage.ChooseAvatarIconIndexForNewProfile();
+
   ProfileManager::CreateMultiProfileAsync(
-      base::UTF8ToUTF16(account_info_.email),
+      storage.ChooseNameForNewProfile(icon_index),
       profiles::GetDefaultAvatarIconUrl(icon_index),
       base::BindRepeating(&DiceTurnSyncOnHelper::OnNewProfileCreated,
                           weak_pointer_factory_.GetWeakPtr()));
@@ -490,7 +516,8 @@ void DiceTurnSyncOnHelper::FinishSyncSetupAndDelete(
     case LoginUIService::SYNC_WITH_DEFAULT_SETTINGS: {
       syncer::SyncService* sync_service = GetSyncService();
       if (sync_service)
-        sync_service->GetUserSettings()->SetFirstSetupComplete();
+        sync_service->GetUserSettings()->SetFirstSetupComplete(
+            syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
       if (consent_service)
         consent_service->SetUrlKeyedAnonymizedDataCollectionEnabled(true);
       break;

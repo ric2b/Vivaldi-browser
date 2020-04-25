@@ -280,10 +280,10 @@ HTMLDataListElement* HTMLOptionElement::OwnerDataListElement() const {
 HTMLSelectElement* HTMLOptionElement::OwnerSelectElement() const {
   if (!parentNode())
     return nullptr;
-  if (auto* select = ToHTMLSelectElementOrNull(*parentNode()))
+  if (auto* select = DynamicTo<HTMLSelectElement>(*parentNode()))
     return select;
-  if (IsHTMLOptGroupElement(*parentNode()))
-    return ToHTMLSelectElementOrNull(parentNode()->parentNode());
+  if (IsA<HTMLOptGroupElement>(*parentNode()))
+    return DynamicTo<HTMLSelectElement>(parentNode()->parentNode());
   return nullptr;
 }
 
@@ -302,7 +302,7 @@ void HTMLOptionElement::setLabel(const AtomicString& label) {
 
 String HTMLOptionElement::TextIndentedToRespectGroupLabel() const {
   ContainerNode* parent = parentNode();
-  if (parent && IsHTMLOptGroupElement(*parent))
+  if (parent && IsA<HTMLOptGroupElement>(*parent))
     return "    " + DisplayLabel();
   return DisplayLabel();
 }
@@ -315,7 +315,7 @@ bool HTMLOptionElement::IsDisabledFormControl() const {
   if (OwnElementDisabled())
     return true;
   if (Element* parent = parentElement())
-    return IsHTMLOptGroupElement(*parent) && parent->IsDisabledFormControl();
+    return IsA<HTMLOptGroupElement>(*parent) && parent->IsDisabledFormControl();
   return false;
 }
 
@@ -329,19 +329,20 @@ Node::InsertionNotificationRequest HTMLOptionElement::InsertedInto(
     ContainerNode& insertion_point) {
   HTMLElement::InsertedInto(insertion_point);
   if (HTMLSelectElement* select = OwnerSelectElement()) {
-    if (&insertion_point == select || (IsHTMLOptGroupElement(insertion_point) &&
-                                       insertion_point.parentNode() == select))
+    if (&insertion_point == select ||
+        (IsA<HTMLOptGroupElement>(insertion_point) &&
+         insertion_point.parentNode() == select))
       select->OptionInserted(*this, is_selected_);
   }
   return kInsertionDone;
 }
 
 void HTMLOptionElement::RemovedFrom(ContainerNode& insertion_point) {
-  if (auto* select = ToHTMLSelectElementOrNull(insertion_point)) {
-    if (!parentNode() || IsHTMLOptGroupElement(*parentNode()))
+  if (auto* select = DynamicTo<HTMLSelectElement>(insertion_point)) {
+    if (!parentNode() || IsA<HTMLOptGroupElement>(*parentNode()))
       select->OptionRemoved(*this);
-  } else if (IsHTMLOptGroupElement(insertion_point)) {
-    select = ToHTMLSelectElementOrNull(insertion_point.parentNode());
+  } else if (IsA<HTMLOptGroupElement>(insertion_point)) {
+    select = DynamicTo<HTMLSelectElement>(insertion_point.parentNode());
     if (select)
       select->OptionRemoved(*this);
   }

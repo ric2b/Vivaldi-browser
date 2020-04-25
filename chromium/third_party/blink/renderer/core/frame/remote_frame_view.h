@@ -7,7 +7,7 @@
 
 #include "cc/paint/paint_canvas.h"
 #include "third_party/blink/public/common/frame/occlusion_state.h"
-#include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/frame/frame_view.h"
 #include "third_party/blink/renderer/core/layout/intrinsic_sizing_info.h"
@@ -24,7 +24,7 @@ class GraphicsContext;
 class LocalFrameView;
 class RemoteFrame;
 
-class RemoteFrameView final : public GarbageCollectedFinalized<RemoteFrameView>,
+class RemoteFrameView final : public GarbageCollected<RemoteFrameView>,
                               public FrameView {
   USING_GARBAGE_COLLECTED_MIXIN(RemoteFrameView);
 

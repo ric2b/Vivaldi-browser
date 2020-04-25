@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "build/build_config.h"
+#include "third_party/blink/public/mojom/webauthn/authenticator.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/array_buffer_or_array_buffer_view.h"
 #include "third_party/blink/renderer/modules/credentialmanager/authenticator_selection_criteria.h"
 #include "third_party/blink/renderer/modules/credentialmanager/cable_authentication_data.h"
@@ -575,13 +576,18 @@ TypeConverter<PublicKeyCredentialRequestOptionsPtr,
     if (extensions->hasCableAuthentication()) {
       Vector<CableAuthenticationPtr> mojo_data;
       for (auto& data : extensions->cableAuthentication()) {
+        if (data->version() != 1) {
+          continue;
+        }
         CableAuthenticationPtr mojo_cable =
             CableAuthentication::From(data.Get());
         if (mojo_cable) {
           mojo_data.push_back(std::move(mojo_cable));
         }
       }
-      mojo_options->cable_authentication_data = std::move(mojo_data);
+      if (mojo_data.size() > 0) {
+        mojo_options->cable_authentication_data = std::move(mojo_data);
+      }
     }
 #if defined(OS_ANDROID)
     if (extensions->hasUvm()) {

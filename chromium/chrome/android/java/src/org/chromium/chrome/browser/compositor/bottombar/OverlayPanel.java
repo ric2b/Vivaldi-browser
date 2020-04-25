@@ -8,14 +8,16 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.RectF;
 import android.os.Handler;
-import android.support.annotation.IntDef;
 import android.view.ViewGroup;
+
+import androidx.annotation.IntDef;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager.PanelPriority;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
@@ -75,7 +77,8 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
             StateChangeReason.TAB_PROMOTION, StateChangeReason.CLICK, StateChangeReason.SWIPE,
             StateChangeReason.FLING, StateChangeReason.OPTIN, StateChangeReason.OPTOUT,
             StateChangeReason.CLOSE_BUTTON, StateChangeReason.PANEL_SUPPRESS,
-            StateChangeReason.PANEL_UNSUPPRESS, StateChangeReason.TAP_SUPPRESS})
+            StateChangeReason.PANEL_UNSUPPRESS, StateChangeReason.TAP_SUPPRESS,
+            StateChangeReason.NAVIGATION})
     @Retention(RetentionPolicy.SOURCE)
     public @interface StateChangeReason {
         int UNKNOWN = 0;
@@ -99,8 +102,9 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
         int PANEL_SUPPRESS = 18;
         int PANEL_UNSUPPRESS = 19;
         int TAP_SUPPRESS = 20;
+        int NAVIGATION = 21;
         // Always update MAX_VALUE to match the last StateChangeReason in the list.
-        int MAX_VALUE = 20;
+        int MAX_VALUE = 21;
     }
 
     /** The activity this panel is in. */
@@ -359,6 +363,12 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
      */
     public boolean isActive() {
         return mPanelShown;
+    }
+
+    /** @return Whether we're using the new Overlay layout feature. */
+    public static boolean isNewLayout() {
+        return ChromeFeatureList.isInitialized()
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.OVERLAY_NEW_LAYOUT);
     }
 
     // ============================================================================================

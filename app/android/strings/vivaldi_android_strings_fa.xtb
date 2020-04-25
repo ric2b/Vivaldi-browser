@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="fa">
+<translation id="1029351048239796117">ویوالدی به اجازه دسترسی به میکروفون شما برای این سایت نیاز دارد.</translation>
+<translation id="1063227610401477317">اعمال تغییرات</translation>
+<translation id="1067048845568873861">ایجاد شد</translation>
+<translation id="1151669774236491028">Vivaldi.net با مشکلاتی مواجه است: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="1193152013480891461">یک حساب ویوالدی ایجاد کنید</translation>
+<translation id="119944043368869598">همه را پاک کن</translation>
+<translation id="1228311134236651326">هیچ یادداشتی یافت نشد</translation>
+<translation id="1243314992276662751">بارگذاری</translation>
+<translation id="1249276067323441352">داده برای همگام‌سازی</translation>
+<translation id="1302932907222175914">یادداشت‌های خود را جستجو کنید</translation>
+<translation id="1644574205037202324">تاریخچه</translation>
+<translation id="1689333818294560261">نام مستعار</translation>
+<translation id="1721552494230946796">پوشه شماره‌گیر سریع جدید</translation>
+<translation id="1799160781006135561">رمزگذاری رمز عبور مشخص نشده است</translation>
+<translation id="1887193815546011584">تماس سریع جدید</translation>
+<translation id="1984391066297619717">همگام‌سازی خودکار</translation>
+<translation id="2030706494969937066">بازیابی اعتبارنامه شما ناموفق بود. لطفا دوباره وارد شوید.</translation>
+<translation id="2034405583989639424">ویرایش شماره‌گیر سریع</translation>
+<translation id="2071726368047511075">تصویربرداری از صفحه</translation>
+<translation id="2199644148227291099">آیا مطمئن هستید که می‌خواهید از رمز ورود برای رمزگذاری استفاده کنید؟ این به شدت امنیت داده‌های همگام‌سازی شده شما را به صورت آنلاین کاهش می‌دهد.</translation>
+<translation id="2243210264130642074">یادداشت ذخیره شد</translation>
+<translation id="2336309953058658733">خالی کردن سطل زباله</translation>
+<translation id="2359808026110333948">ادامه</translation>
+<translation id="2526968784648867272">در حال تصویربرداری از صفحه...</translation>
+<translation id="2709516037105925701">تکمیل خودکار</translation>
+<translation id="271033894570825754">جدید</translation>
+<translation id="2745324713975967671">رمزگذاری رمز عبور</translation>
+<translation id="2818042133587341562">ویوالدی دسترسی به دوربین شما برای این سایت نیاز دارد.</translation>
+<translation id="2842985007712546952">پوشه اصلی</translation>
+<translation id="2850144663494818309">آغاز همگام‌سازی...</translation>
+<translation id="2873951654529031587">زباله</translation>
+<translation id="2915527103487649658">همگام‌سازی تمام داده‌ها</translation>
+<translation id="2953995378235516294">داده‌های مربوط به حساب کاربری همگام‌سازی شما رمزگذاری شده‌اند. لطفا رمز عبور رمزگذاری خود را برای رمزگشایی آنها ارائه دهید.</translation>
+<translation id="2996809686854298943">آدرس اینترنتی الزامی است</translation>
+<translation id="3177673846235066154">سرور مجوزهای شما را رد کرد.</translation>
+<translation id="3183006304368105350">تکثیر زبانه</translation>
+<translation id="3271422135763022755">آغاز تایپ کردن...</translation>
+<translation id="3335772982573114336">یادداشت جدید</translation>
+<translation id="33451081266695216">اتصال توسط سرور خاتمه می‌یابد.</translation>
+<translation id="3377025655491224618">زبانه خصوصی</translation>
+<translation id="3513566764071045027">خروج</translation>
+<translation id="3596285013654573099">ورود برای همگام‌سازی</translation>
+<translation id="3611176835527015865">فقط روی صفحات داخلی ویوالدی تاثیر می‌گذارد، و نه وب‌سایت‌ها</translation>
+<translation id="3723593528923555236">بدون رمز عبور جداگانه ادامه دهید</translation>
+<translation id="3838463869765243557">نام دستگاه (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">توضیحات</translation>
+<translation id="3897711243931585177">عمومی</translation>
+<translation id="4014682279600355881">ما توصیه می‌کنیم یک رمز عبور رمزگذاری جداگانه قوی ایجاد کنید. با این حال، شما می‌توانید آن را خالی بگذارید - در این صورت ما دوباره از رمز عبور حساب کاربری ذخیره شده خود مجددا استفاده خواهیم کرد.</translation>
+<translation id="4073968054795398875">بروز خطا بر روی سرور همگام‌سازی. عملیات همگام‌سازی دوباره آغاز خواهد شد...</translation>
+<translation id="4082980568238151037">تنظیم رمز عبور رمزگذاری شده.</translation>
+<translation id="4145489350420416595">خطای غیرمنتظره.</translation>
+<translation id="4268574628540273656">آدرس اینترنتی:</translation>
+<translation id="4304224509867189079">ورود</translation>
+<translation id="4435780204941264251">پاک کردن داده همگام‌سازی</translation>
+<translation id="4532845899244822526">پوشه را انتخاب کنید</translation>
+<translation id="4579489600439872414">همگام‌سازی در تنظیمات اندروید غیرفعال است.</translation>
+<translation id="4589558845651536280">درحال انجام...</translation>
+<translation id="4752136117982598343">یادداشت در <ph name="FOLDER_NAME" /> ذخیره شد</translation>
+<translation id="4759238208242260848">دانلودها</translation>
+<translation id="4833044618885331665">برای استفاده از ویژگی همگام‌سازی باید ویوالدی را به‌روزرسانی نمایید.</translation>
+<translation id="4847896847259487518">صفحه نشانک</translation>
+<translation id="4890701585167892790">هیچ یادداشتی اینجا وجود ندارد</translation>
+<translation id="4892521078757281695">کشیدن صفحه برای بستن زبانه</translation>
+<translation id="4936710149174207991">همگام‌سازی نشد</translation>
+<translation id="4954427294703861104">کاربر جدید هستی؟ ایجاد حساب کاربری.</translation>
+<translation id="504986598654589766">مرور در یک زبانه خصوصی به این معنی است که جستجوها، سایت‌های بازدید شده، کوکی‌ها و فایل‌های موقت توسط ویوالدی ذخیره نخواهد شد. این کار اتصال شما را رمزگذاری نمی‌کند و یا در غیر این صورت آن را هم تغییر نمی‌دهد.</translation>
+<translation id="5161254044473106830">عنوان الزامی است</translation>
+<translation id="5186185447130319458">خصوصی</translation>
+<translation id="5271549068863921519">ذخیره رمز عبور</translation>
+<translation id="5286002386457946212">خطای مشتری.</translation>
+<translation id="5290452628447338707">یادداشتی وجود ندارد</translation>
+<translation id="5351912500249789547">Vivaldi.net اعتبار شما را رد کرد: کد خطا <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">باز کردن تصویر</translation>
+<translation id="5421638721143596928">رمزگشایی اعتبار شما ناموفق بود. لطفاً دوباره وارد شوید.</translation>
+<translation id="5443210757369395869">تصویربرداری از محیط در حال مشاهده</translation>
+<translation id="5448025735280530073">ویوالدی به دسترسی به مکان شما برای به اشتراک گذاشتن مکان خود را با این سایت نیاز دارد.</translation>
+<translation id="5510723066938954312">نشانک‌ها و شماره‌گیر سریع</translation>
+<translation id="5525981542754785361">یادداشت ذخیره شده در <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">کپی در یادداشت</translation>
+<translation id="5754087700864822036">صفحات وب</translation>
+<translation id="5765833063161370062">یادداشت‌ها را انتقال دهید</translation>
+<translation id="5790085346892983794">موفق</translation>
+<translation id="5803562371819294631">این کار تمام داده‌های همگام‌سازی ذخیره شده در سرور همگام‌سازی را حذف می‌کند، رمز عبور رمزگذاری را بازنشانی می‌کند و از حساب کاربری خارج می‌شود. شما مطمئن هستید؟</translation>
+<translation id="5823830882692559950">Vivaldi.net اعتبار شما را رد کرد: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5841317974325635710">یادداشت جدید ایجاد شد</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> یادداشت}
+          other {<ph name="NOTES_COUNT_MANY" /> یادداشت}}</translation>
+<translation id="6012194412768958291">قادر به اتصال به vivaldi.net نیست.</translation>
+<translation id="6027204815015935175">رمز عبور مورد نیاز برای رمزگشایی.</translation>
+<translation id="6059232451013891645">پوشه:</translation>
+<translation id="6077943432358741146">شماره‌گیر سریع</translation>
+<translation id="6091125352818749975">پاک کردن داده‌های همگام‌سازی شده از راه دور.</translation>
+<translation id="6135798666968342262">نمایش نوارهای پیمایش</translation>
+<translation id="6179463181009746489">حذف یادداشت‌ها</translation>
+<translation id="6231148928368101651">پنل‌ها</translation>
+<translation id="6406506848690869874">همگام‌سازی</translation>
+<translation id="6657585470893396449">رمز عبور</translation>
+<translation id="6682232524697939870">ویوالدی به اجازه دسترسی به دوربین و میکروفون شما برای این سایت نیاز دارد.</translation>
+<translation id="6698381487523150993">ایجاد شده:</translation>
+<translation id="6786747875388722282">افزونه‌ها</translation>
+<translation id="6887143077297974801">همگام‌سازی شروع نشد.</translation>
+<translation id="6945221475159498467">انتخاب کنید</translation>
+<translation id="6960734555676205519">آخرین همگام‌سازی</translation>
+<translation id="7029809446516969842">رمزهای عبور</translation>
+<translation id="7075547914712055886">راه‌اندازی مجدد همگام‌سازی</translation>
+<translation id="7222342267839079597">لطفا یک رمز عبور رمزگذاری قوی برای محافظت از داده‌های خود انتخاب کنید.</translation>
+<translation id="7228660378238874411">نمایش همیشگی سایت‌ها در حالت دسکتاپ</translation>
+<translation id="7390295729483215958">همگام‌سازی در حال انجام است...</translation>
+<translation id="7492794630657957996">تأیید همگام‌سازی اطلاعات به منظور تکمیل فرآیند</translation>
+<translation id="7514365320538308">دانلود</translation>
+<translation id="7547490097772831952">تصویربرداری از صفحه کامل</translation>
+<translation id="7725641807765767506">شماره‌گیر سریع یافت نشد</translation>
+<translation id="7765158879357617694">انتقال</translation>
+<translation id="7822864833609233785">پیشرفته</translation>
+<translation id="798930073512159071">
+
+اولین یادداشت خود را بنویسید
+
+برای شروع، آیکون یادداشت جدید را لمس کرده و یا متن مورد نظر خود را از سایت‌ها انتخاب و از منوی متنی گزینه‌ی ایجاد یادداشت را انتخاب کنید.</translation>
+<translation id="8004991133350335392">حداقل طول رمز عبور ۱۲ کاراکتر لازم است.</translation>
+<translation id="8028021641083150097">به منظور به دست آوردن مجدد دسترسی به حساب کاربری خود ، تمام داده‌های همگام‌سازی از راه دور باید بازنشانی شوند. پس از آن شما می‌توانید هماهنگ‌سازی جدید را با استفاده از داده‌های مرورگر فعلی خود شروع کنید.</translation>
+<translation id="8035133914807600019">پوشه جدید…</translation>
+<translation id="8066170816074394954">خطای سرور.</translation>
+<translation id="8123787473700925741">Vivaldi.net با مشکلاتی مواجه است: کد خطا <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">شروع همگام‌سازی</translation>
+<translation id="8206267832882844324">ویرایش یادداشت</translation>
+<translation id="8225478925744929238">حذف از نشانک‌ها</translation>
+<translation id="8233521945095997439">شماره‌گیر سریع در اینجا وجود ندارد</translation>
+<translation id="8257908958623224237">تضاد با داده‌های مشتری دیگری.</translation>
+<translation id="8261506727792406068">حذف</translation>
+<translation id="8305137170060620165">تاریخچه و جلسات راه دور تایپ شده</translation>
+<translation id="8414685983518053656">یادداشت</translation>
+<translation id="8422778094137438683">شما باید از یک حساب کاربری vivaldi.net برای ورود استفاده کنید.</translation>
+<translation id="8428213095426709021">تنظیمات</translation>
+<translation id="8462396943848220200">درحال تلاش مجدد در <ph name="TIME" /></translation>
+<translation id="8480556999740355963">به عنوان <ph name="USERNAME" /> در <ph name="DEVICE_NAME" /> وارد شده است</translation>
+<translation id="8489813444100643867">ورود به Vivaldi.net به عنوان <ph name="USERNAME" />. لطفاً منتظر بمانید.</translation>
+<translation id="8503813439785031346">نام‌کاربری</translation>
+<translation id="8661216209723599816">داده‌های از راه دور را بازنشانی کنید</translation>
+<translation id="8721244337025311110">نشانک جدید</translation>
+<translation id="8724114686743788114">تصویر را نمی‌توان نشان داد</translation>
+<translation id="8730621377337864115">انجام شد</translation>
+<translation id="8738958257180686306">ایجاد شده: <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">ویوالدی به دسترسی ‏فضای ذخیره‌سازی برای دانلود فایل‌ها نیاز دارد.</translation>
+<translation id="8808060551076378370">یادداشت اضافه نشد.</translation>
+<translation id="8817201557520703060">تصویربرداری از صفحه انجام شد</translation>
+<translation id="8820817407110198400">نشانک‌ها</translation>
+<translation id="8884751487662988673">برای مشاهده‌ی زبانه‌های همگام‌سازی شده، لطفا از طریق بخش تنظیمات وارد حساب همگام‌سازی خود شوید.</translation>
+<translation id="895749247724466293">جستجو در شماره‌گیر سریع خود</translation>
+<translation id="8959245489304000426">من رمز عبورام را فراموش کرده‌ام</translation>
+<translation id="8979401359137062629">یادداشت:</translation>
+<translation id="9028089729841356743">خطای شبکه.</translation>
+<translation id="9065203028668620118">ویرایش</translation>
+<translation id="9148058034647219655">خروج</translation>
+<translation id="9173575361559252669">تصویربرداری از صفحه انجام نشد</translation>
+</translationbundle>

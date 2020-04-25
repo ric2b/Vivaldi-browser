@@ -34,12 +34,11 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/synchronization/lock.h"
 #include "third_party/blink/renderer/platform/heap/atomic_entry_flag.h"
 #include "third_party/blink/renderer/platform/heap/blink_gc.h"
-#include "third_party/blink/renderer/platform/heap/cancelable_task_scheduler.h"
 #include "third_party/blink/renderer/platform/heap/threading_traits.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
-#include "third_party/blink/renderer/platform/scheduler/public/rail_mode_observer.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
@@ -59,9 +58,9 @@ namespace blink {
 
 namespace incremental_marking_test {
 class IncrementalMarkingScope;
-class IncrementalMarkingTestDriver;
 }  // namespace incremental_marking_test
 
+class CancelableTaskScheduler;
 class MarkingVisitor;
 class PersistentNode;
 class PersistentRegion;
@@ -126,7 +125,7 @@ class PLATFORM_EXPORT BlinkGCObserver {
   ThreadState* thread_state_;
 };
 
-class PLATFORM_EXPORT ThreadState final : private RAILModeObserver {
+class PLATFORM_EXPORT ThreadState final {
   USING_FAST_MALLOC(ThreadState);
 
  public:
@@ -182,6 +181,8 @@ class PLATFORM_EXPORT ThreadState final : private RAILModeObserver {
   class LsanDisabledScope;
   class MainThreadGCForbiddenScope;
   class NoAllocationScope;
+  class StatisticsCollector;
+  struct Statistics;
   class SweepForbiddenScope;
 
   using V8TraceRootsCallback = void (*)(v8::Isolate*, Visitor*);
@@ -199,12 +200,12 @@ class PLATFORM_EXPORT ThreadState final : private RAILModeObserver {
     return incremental_marking_flag_.MightBeEntered();
   }
 
-  static void AttachMainThread();
+  static ThreadState* AttachMainThread();
 
   // Associate ThreadState object with the current thread. After this
   // call thread can start using the garbage collected heap infrastructure.
   // It also has to periodically check for safepoints.
-  static void AttachCurrentThread();
+  static ThreadState* AttachCurrentThread();
 
   // Disassociate attached ThreadState from the current thread. The thread
   // can no longer use the garbage collected heap after this call.
@@ -253,7 +254,6 @@ class PLATFORM_EXPORT ThreadState final : private RAILModeObserver {
 
   void SchedulePreciseGC();
   void ScheduleIncrementalGC(BlinkGC::GCReason);
-  void ScheduleV8FollowupGCIfNeeded(BlinkGC::V8GCType);
   void ScheduleForcedGCForTesting();
   void ScheduleGCIfNeeded();
   void WillStartV8GC(BlinkGC::V8GCType);
@@ -297,8 +297,13 @@ class PLATFORM_EXPORT ThreadState final : private RAILModeObserver {
   void EnableIncrementalMarkingBarrier();
   void DisableIncrementalMarkingBarrier();
 
+  // Returns true if concurrent marking is finished (i.e. all current threads
+  // terminated and the worklist is empty)
+  bool ConcurrentMarkingStep();
+  void ScheduleConcurrentMarking();
+  void PerformConcurrentMark(int);
+
   void CompleteSweep();
-  void FinishSnapshot();
   void NotifySweepDone();
   void PostSweep();
 
@@ -341,19 +346,6 @@ class PLATFORM_EXPORT ThreadState final : private RAILModeObserver {
     return weak_persistent_region_.get();
   }
 
-  struct GCSnapshotInfo {
-    STACK_ALLOCATED();
-
-   public:
-    GCSnapshotInfo(wtf_size_t num_object_types);
-
-    // Map from gcInfoIndex (vector-index) to count/size.
-    Vector<int> live_count;
-    Vector<int> dead_count;
-    Vector<size_t> live_size;
-    Vector<size_t> dead_size;
-  };
-
   void RegisterStaticPersistentNode(PersistentNode*);
   void ReleaseStaticPersistentNodes();
   void FreePersistentNode(PersistentRegion*, PersistentNode*);
@@ -386,9 +378,6 @@ class PLATFORM_EXPORT ThreadState final : private RAILModeObserver {
     return current_gc_data_.visitor.get();
   }
 
-  // Implementation for RAILModeObserver
-  void OnRAILModeChanged(RAILMode new_mode) override;
-
   // Returns true if the marking verifier is enabled, false otherwise.
   bool IsVerifyMarkingEnabled() const;
 
@@ -413,7 +402,7 @@ class PLATFORM_EXPORT ThreadState final : private RAILModeObserver {
                                               intptr_t* end_of_stack);
 
   ThreadState();
-  ~ThreadState() override;
+  ~ThreadState();
 
   void EnterNoAllocationScope() { no_allocation_count_++; }
   void LeaveNoAllocationScope() { no_allocation_count_--; }
@@ -502,33 +491,6 @@ class PLATFORM_EXPORT ThreadState final : private RAILModeObserver {
   // See |DetachCurrentThread|.
   void RunTerminationGC();
 
-  // ShouldForceConservativeGC
-  // implements the heuristics that are used to determine when to collect
-  // garbage.
-  // If shouldForceConservativeGC returns true, we force the garbage
-  // collection immediately. Otherwise, if should*GC returns true, we
-  // record that we should garbage collect the next time we return
-  // to the event loop. If both return false, we don't need to
-  // collect garbage at this point.
-  bool ShouldForceConservativeGC();
-  // V8 minor or major GC is likely to drop a lot of references to objects
-  // on Oilpan's heap. We give a chance to schedule a GC.
-  bool ShouldScheduleV8FollowupGC();
-
-  // Internal helpers to handle memory pressure conditions.
-
-  // Returns true if memory use is in a near-OOM state
-  // (aka being under "memory pressure".)
-  bool ShouldForceMemoryPressureGC();
-
-  size_t EstimatedLiveSize(size_t current_size, size_t size_at_last_gc);
-  size_t TotalMemorySize();
-  double HeapGrowingRate();
-  double PartitionAllocGrowingRate();
-  bool JudgeGCThreshold(size_t allocated_object_size_threshold,
-                        size_t total_memory_size_threshold,
-                        double heap_growing_rate_threshold);
-
   void RunScheduledGC(BlinkGC::StackState);
 
   void UpdateIncrementalMarkingStepDuration();
@@ -536,8 +498,6 @@ class PLATFORM_EXPORT ThreadState final : private RAILModeObserver {
   void SynchronizeAndFinishConcurrentSweeping();
 
   void InvokePreFinalizers();
-
-  void ReportMemoryToV8();
 
   // Adds the given observer to the ThreadState's observer list. This doesn't
   // take ownership of the argument. The argument must not be null. The argument
@@ -613,7 +573,6 @@ class PLATFORM_EXPORT ThreadState final : private RAILModeObserver {
   // have to clear before initiating LSan's leak detection.
   HashSet<PersistentNode*> static_persistents_;
 
-  size_t reported_memory_to_v8_ = 0;
   int gc_age_ = 0;
 
   struct GCData {
@@ -624,11 +583,16 @@ class PLATFORM_EXPORT ThreadState final : private RAILModeObserver {
   };
   GCData current_gc_data_;
 
-  CancelableTaskScheduler sweeper_scheduler_;
+  std::unique_ptr<CancelableTaskScheduler> marker_scheduler_;
+  uint8_t active_markers_ = 0;
+  base::Lock active_concurrent_markers_lock_;
+  size_t concurrently_marked_bytes_ = 0;
+
+  std::unique_ptr<CancelableTaskScheduler> sweeper_scheduler_;
 
   friend class BlinkGCObserver;
   friend class incremental_marking_test::IncrementalMarkingScope;
-  friend class incremental_marking_test::IncrementalMarkingTestDriver;
+  friend class IncrementalMarkingTestDriver;
   friend class HeapAllocator;
   template <typename T>
   friend class PrefinalizerRegistration;

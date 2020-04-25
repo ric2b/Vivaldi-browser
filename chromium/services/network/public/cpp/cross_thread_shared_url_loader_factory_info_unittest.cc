@@ -15,6 +15,8 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/resource_response.h"
@@ -38,7 +40,7 @@ class CloneCheckingURLLoaderFactory : public TestURLLoaderFactory {
       scoped_refptr<base::SequencedTaskRunner> owning_thread)
       : owning_thread_(owning_thread) {}
 
-  void Clone(mojom::URLLoaderFactoryRequest request) override {
+  void Clone(mojo::PendingReceiver<mojom::URLLoaderFactory> receiver) override {
     EXPECT_TRUE(owning_thread_->RunsTasksInCurrentSequence());
   }
 
@@ -135,8 +137,8 @@ class CrossThreadSharedURLLoaderFactoryInfoTest : public ::testing::Test {
   }
 
   void TestClone(scoped_refptr<SharedURLLoaderFactory> factory) {
-    mojom::URLLoaderFactoryPtr factory_client;
-    factory->Clone(mojo::MakeRequest(&factory_client));
+    mojo::PendingRemote<mojom::URLLoaderFactory> factory_client;
+    factory->Clone(factory_client.InitWithNewPipeAndPassReceiver());
   }
 
   void TestLoadOnMainThread(scoped_refptr<SharedURLLoaderFactory> factory) {

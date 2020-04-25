@@ -17,7 +17,6 @@
 #include "base/metrics/histogram.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/optional.h"
-#include "base/system/sys_info.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/traced_value.h"
 #include "cc/base/devtools_instrumentation.h"
@@ -702,8 +701,6 @@ TileManager::PrioritizedWorkToSchedule TileManager::AssignGpuMemoryToTiles() {
         tile->use_picture_analysis() && kUseColorEstimator) {
       // We analyze for solid color here, to decide to continue
       // or drop the tile for scheduling and raster.
-      // TODO(sohanjg): Check if we could use a shared analysis
-      // canvas which is reset between tiles.
       tile->set_solid_color_analysis_performed(true);
       SkColor color = SK_ColorTRANSPARENT;
       bool is_solid_color =
@@ -848,13 +845,10 @@ TileManager::PrioritizedWorkToSchedule TileManager::AssignGpuMemoryToTiles() {
     }
   }
 
-  // The hard_limit for low-end devices is 8MB, so we set the max_value for the
-  // histogram to be 8200KB.
-  if (had_enough_memory_to_schedule_tiles_needed_now &&
-      base::SysInfo::AmountOfPhysicalMemoryMB() <= 512) {
+  if (had_enough_memory_to_schedule_tiles_needed_now) {
     int64_t tiles_gpu_memory_kb = memory_usage.memory_bytes() / 1024;
-    UMA_HISTOGRAM_CUSTOM_COUNTS("TileManager.TilesGPUMemoryUsage",
-                                tiles_gpu_memory_kb, 1, 8200, 100);
+    UMA_HISTOGRAM_MEMORY_KB("TileManager.TilesGPUMemoryUsage2",
+                            tiles_gpu_memory_kb);
   }
 
   UMA_HISTOGRAM_BOOLEAN("TileManager.ExceededMemoryBudget",

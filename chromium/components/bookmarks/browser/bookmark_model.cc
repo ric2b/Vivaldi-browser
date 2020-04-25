@@ -39,6 +39,7 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_resources.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
 
 using base::Time;
 
@@ -137,6 +138,11 @@ BookmarkModel::BookmarkModel(std::unique_ptr<BookmarkClient> client)
       empty_undo_delegate_(std::make_unique<EmptyUndoDelegate>()) {
   DCHECK(client_);
   client_->Init(this);
+
+  // TODO(igor@vivaldi.com): Figure out if there is a way to call this
+  // outside Chromium tree when we can guarantee that it will be called before
+  // any potential model mutation calls.
+  vivaldi_bookmark_kit::InitModelNonClonedKeys(this);
 }
 
 BookmarkModel::~BookmarkModel() {
@@ -213,6 +219,7 @@ void BookmarkModel::Remove(const BookmarkNode* node) {
   DCHECK(parent);
   size_t index = size_t{parent->GetIndexOf(node)};
   DCHECK_NE(size_t{-1}, index);
+  DCHECK(!is_permanent_node(node));
 
   for (BookmarkModelObserver& observer : observers_)
     observer.OnWillRemoveBookmarks(this, parent, index, node);
@@ -563,122 +570,64 @@ void BookmarkModel::GetBookmarks(std::vector<UrlAndTitle>* bookmarks) {
     url_index_->GetBookmarks(bookmarks);
 }
 
-
-// --- VIVALDI --- changed by Daniel Sig. @ 11-02-2015
-const BookmarkNode* BookmarkModel::AddFolder(const BookmarkNode* parent,
-                                             size_t index,
-                                             const base::string16& title,
-                                             const base::string16& nickname,
-                                             const base::string16& description,
-                                             const base::string16& partner,
-                                             bool speeddial,
-                                             bool bookmarkbar) {
-  return AddFolderWithMetaInfo(parent, index, title, nullptr,
-                               nickname, description, partner, speeddial,
-                               bookmarkbar);
-}
-
-const BookmarkNode* BookmarkModel::AddFolderWithMetaInfo(
+const BookmarkNode* BookmarkModel::AddFolder(
     const BookmarkNode* parent,
     size_t index,
     const base::string16& title,
     const BookmarkNode::MetaInfoMap* meta_info,
-    const base::string16& nickname,
-    const base::string16& description,
-    const base::string16& partner,
-    const bool speeddial,
-    const bool bookmarkbar) {
+    base::Optional<std::string> guid) {
   DCHECK(loaded_);
   DCHECK(!is_root_node(parent));
   DCHECK(IsValidIndex(parent, index, true));
 
-  std::unique_ptr<BookmarkNode> new_node = std::make_unique<BookmarkNode>(
-      generate_next_node_id(), base::GenerateGUID(), GURL());
+  if (guid)
+    DCHECK(base::IsValidGUID(*guid));
+  else
+    guid = base::GenerateGUID();
+
+  auto new_node =
+      std::make_unique<BookmarkNode>(generate_next_node_id(), *guid, GURL());
   new_node->set_date_folder_modified(Time::Now());
   // Folders shouldn't have line breaks in their titles.
-  // --- VIVALDI --- changed by Daniel Sig. @ 11-02-2015
-  if (!title.empty()) {
   new_node->SetTitle(title);
-  }
-  if (speeddial)
-    new_node->set_speeddial(speeddial);
-  if (bookmarkbar)
-    new_node->set_bookmarkbar(bookmarkbar);
-  if (!nickname.empty())
-    new_node->set_nickname(nickname);
-  if (!description.empty())
-    new_node->set_description(description);
-  if (!partner.empty())
-    new_node->set_partner(partner);
   if (meta_info)
     new_node->SetMetaInfoMap(*meta_info);
 
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
-const BookmarkNode* BookmarkModel::AddURL(const BookmarkNode* parent,
-                                          size_t index,
-                                          const base::string16& title,
-                                          const GURL& url,
-                                          const base::string16& nickname,
-                                          const base::string16& description,
-                                          const base::string16& thumbnail,
-                                          const base::string16& partner,
-                                          const bool speeddial
-                                       ) {
-  return AddURLWithCreationTimeAndMetaInfo(parent, index,
-                                title,
-                                url, Time::Now(),
-                                nullptr,
-                                nickname,
-                                description,
-                                thumbnail,
-                                partner,
-                                speeddial
-                               );
-}
-
-const BookmarkNode* BookmarkModel::AddURLWithCreationTimeAndMetaInfo(
+const BookmarkNode* BookmarkModel::AddURL(
     const BookmarkNode* parent,
     size_t index,
     const base::string16& title,
     const GURL& url,
-    const Time& creation_time,
     const BookmarkNode::MetaInfoMap* meta_info,
-    const base::string16 &nickname,
-    const base::string16 &description,
-    const base::string16 &thumbnail,
-    const base::string16& partner,
-    const bool speeddial,
-    const base::Time *visited_time) {
+    base::Optional<base::Time> creation_time,
+    base::Optional<std::string> guid) {
   DCHECK(loaded_);
   DCHECK(url.is_valid());
   DCHECK(!is_root_node(parent));
   DCHECK(IsValidIndex(parent, index, true));
 
-  // Syncing may result in dates newer than the last modified date.
-  if (creation_time > parent->date_folder_modified())
-    SetDateFolderModified(parent, creation_time);
+  if (guid)
+    DCHECK(base::IsValidGUID(*guid));
+  else
+    guid = base::GenerateGUID();
 
-  std::unique_ptr<BookmarkNode> new_node = std::make_unique<BookmarkNode>(
-      generate_next_node_id(), base::GenerateGUID(), url);
+  if (!creation_time)
+    creation_time = Time::Now();
+
+  // Syncing may result in dates newer than the last modified date.
+  if (*creation_time > parent->date_folder_modified())
+    SetDateFolderModified(parent, *creation_time);
+
+  auto new_node =
+      std::make_unique<BookmarkNode>(generate_next_node_id(), *guid, url);
   new_node->SetTitle(title);
-  new_node->set_date_added(creation_time);
+  new_node->set_date_added(*creation_time);
   if (meta_info)
     new_node->SetMetaInfoMap(*meta_info);
 
-  if (!nickname.empty())
-    new_node->set_nickname(nickname);
-  if (!description.empty())
-    new_node->set_description(description);
-  if (!thumbnail.empty())
-    new_node->set_thumbnail(thumbnail);
-  if (!partner.empty())
-    new_node->set_partner(partner);
-  if (speeddial)
-    new_node->set_speeddial(speeddial);
-  if (visited_time && !visited_time->is_null())
-    new_node->set_date_visited(*visited_time);
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 

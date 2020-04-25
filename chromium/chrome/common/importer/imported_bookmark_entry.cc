@@ -6,8 +6,7 @@
 
 ImportedBookmarkEntry::ImportedBookmarkEntry()
     : in_toolbar(false),
-      is_folder(false),
-      speeddial(false){}
+      is_folder(false) {}
 
 ImportedBookmarkEntry::ImportedBookmarkEntry(
     const ImportedBookmarkEntry& other) = default;
@@ -21,8 +20,10 @@ bool ImportedBookmarkEntry::operator==(
           url == other.url &&
           path == other.path &&
           title == other.title &&
+          // <Vivaldi
           nickname == other.nickname &&
           description == other.description &&
-          creation_time == other.creation_time &&
-          visited_time == other.visited_time);
+          visited_time == other.visited_time &&
+          // Vivaldi />
+          creation_time == other.creation_time);
 }

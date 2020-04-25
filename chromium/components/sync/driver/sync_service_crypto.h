@@ -7,10 +7,12 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
+#include "components/signin/public/identity_manager/account_info.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/engine/configure_reason.h"
 #include "components/sync/engine/sync_encryption_handler.h"
@@ -19,27 +21,36 @@
 namespace syncer {
 
 class CryptoSyncPrefs;
+class TrustedVaultClient;
 
 // This class functions as mostly independent component of SyncService that
 // handles things related to encryption, including holding lots of state and
 // encryption communications with the sync thread.
 class SyncServiceCrypto : public SyncEncryptionHandler::Observer {
  public:
+  // |sync_prefs| must not be null and must outlive this object.
+  // |trusted_vault_client| may be null, but if non-null, the pointee must
+  // outlive this object.
   SyncServiceCrypto(
       const base::RepeatingClosure& notify_observers,
       const base::RepeatingCallback<void(ConfigureReason)>& reconfigure,
-      CryptoSyncPrefs* sync_prefs);
+      CryptoSyncPrefs* sync_prefs,
+      TrustedVaultClient* trusted_vault_client);
   ~SyncServiceCrypto() override;
 
   void Reset();
 
   // See the SyncService header.
   base::Time GetExplicitPassphraseTime() const;
+  bool IsPassphraseRequired() const;
   bool IsUsingSecondaryPassphrase() const;
+  bool IsTrustedVaultKeyRequired() const;
   void EnableEncryptEverything();
   bool IsEncryptEverythingEnabled() const;
   void SetEncryptionPassphrase(const std::string& passphrase);
   bool SetDecryptionPassphrase(const std::string& passphrase);
+  void AddTrustedVaultDecryptionKeys(const std::string& gaia_id,
+                                     const std::vector<std::string>& keys);
 
   // Returns the actual passphrase type being used for encryption.
   PassphraseType GetPassphraseType() const;
@@ -53,27 +64,47 @@ class SyncServiceCrypto : public SyncEncryptionHandler::Observer {
       const KeyDerivationParams& key_derivation_params,
       const sync_pb::EncryptedData& pending_keys) override;
   void OnPassphraseAccepted() override;
+  void OnTrustedVaultKeyRequired() override;
+  void OnTrustedVaultKeyAccepted() override;
   void OnBootstrapTokenUpdated(const std::string& bootstrap_token,
                                BootstrapTokenType type) override;
   void OnEncryptedTypesChanged(ModelTypeSet encrypted_types,
                                bool encrypt_everything) override;
   void OnEncryptionComplete() override;
-  void OnCryptographerStateChanged(Cryptographer* cryptographer) override;
+  void OnCryptographerStateChanged(Cryptographer* cryptographer,
+                                   bool has_pending_keys) override;
   void OnPassphraseTypeChanged(PassphraseType type,
                                base::Time passphrase_time) override;
 
   // Used to provide the engine when it is initialized.
-  void SetSyncEngine(SyncEngine* engine) { state_.engine = engine; }
+  void SetSyncEngine(const CoreAccountInfo& account_info, SyncEngine* engine);
 
   // Creates a proxy observer object that will post calls to this thread.
   std::unique_ptr<SyncEncryptionHandler::Observer> GetEncryptionObserverProxy();
 
-  PassphraseRequiredReason passphrase_required_reason() const {
-    return state_.passphrase_required_reason;
-  }
   bool encryption_pending() const { return state_.encryption_pending; }
 
  private:
+  enum class RequiredUserAction {
+    kNone,
+    kPassphraseRequiredForDecryption,
+    kPassphraseRequiredForEncryption,
+    // Trusted vault keys are required but a silent attempt to fetch keys is in
+    // progress before prompting the user.
+    kFetchingTrustedVaultKeys,
+    // Silent attempt is completed and user action is definitely required to
+    // retrieve trusted vault keys.
+    kTrustedVaultKeyRequired,
+  };
+
+  // Reads trusted vault keys from the client and feeds them to the sync engine.
+  void FetchTrustedVaultKeys();
+
+  // Called at various stages of asynchronously fetching and processing trusted
+  // vault encryption keys.
+  void TrustedVaultKeysFetched(const std::vector<std::string>& keys);
+  void TrustedVaultKeysAdded();
+
   // Calls SyncServiceBase::NotifyObservers(). Never null.
   const base::RepeatingClosure notify_observers_;
 
@@ -82,6 +113,9 @@ class SyncServiceCrypto : public SyncEncryptionHandler::Observer {
   // A pointer to the crypto-relevant sync prefs. Never null and guaranteed to
   // outlive us.
   CryptoSyncPrefs* const sync_prefs_;
+
+  // Never null and guaranteed to outlive us.
+  TrustedVaultClient* const trusted_vault_client_;
 
   // All the mutable state is wrapped in a struct so that it can be easily
   // reset to its default values.
@@ -94,11 +128,10 @@ class SyncServiceCrypto : public SyncEncryptionHandler::Observer {
     // Not-null when the engine is initialized.
     SyncEngine* engine = nullptr;
 
-    // Was the last SYNC_PASSPHRASE_REQUIRED notification sent because it
-    // was required for encryption, decryption with a cached passphrase, or
-    // because a new passphrase is required?
-    PassphraseRequiredReason passphrase_required_reason =
-        REASON_PASSPHRASE_NOT_REQUIRED;
+    // Populated when the engine is initialized.
+    CoreAccountInfo account_info;
+
+    RequiredUserAction required_user_action = RequiredUserAction::kNone;
 
     // The current set of encrypted types. Always a superset of
     // Cryptographer::SensitiveTypes().
@@ -126,7 +159,7 @@ class SyncServiceCrypto : public SyncEncryptionHandler::Observer {
     // keys in the nigori node. Updated whenever a new nigori node arrives or
     // the user manually changes their passphrase state. Cached so we can
     // synchronously check it from the UI thread.
-    PassphraseType cached_passphrase_type = PassphraseType::IMPLICIT_PASSPHRASE;
+    PassphraseType cached_passphrase_type = PassphraseType::kImplicitPassphrase;
 
     // The key derivation params for the passphrase. We save them when we
     // receive a passphrase required event, as they are a necessary piece of

@@ -169,17 +169,19 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   bool TabsToLinks() override { return false; }
 
   void InvalidateRect(const IntRect&) override {}
-  void ScheduleAnimation(const LocalFrameView*) override {}
+  void ScheduleAnimation(const LocalFrameView*,
+                         base::TimeDelta = base::TimeDelta()) override {}
 
   IntRect ViewportToScreen(const IntRect& r,
                            const LocalFrameView*) const override {
     return r;
   }
-  float WindowToViewportScalar(const float s) const override { return s; }
   float WindowToViewportScalar(LocalFrame*, const float s) const override {
     return s;
   }
-  WebScreenInfo GetScreenInfo() const override { return WebScreenInfo(); }
+  WebScreenInfo GetScreenInfo(LocalFrame&) const override {
+    return WebScreenInfo();
+  }
   void ContentsSizeChanged(LocalFrame*, const IntSize&) const override {}
 
   void ShowMouseOverURL(const HitTestResult&) override {}
@@ -281,9 +283,6 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   void DispatchDidCommitLoad(HistoryItem*,
                              WebHistoryCommitType,
                              GlobalObjectReusePolicy) override {}
-  void DispatchDidFailProvisionalLoad(
-      const ResourceError&,
-      const AtomicString& http_method) override {}
   void DispatchDidFailLoad(const ResourceError&,
                            WebHistoryCommitType) override {}
   void DispatchDidFinishDocumentLoad() override {}
@@ -300,7 +299,7 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
       bool,
       WebFrameLoadType,
       bool,
-      WebTriggeringEventInfo,
+      TriggeringEventInfo,
       HTMLFormElement*,
       ContentSecurityPolicyDisposition,
       mojo::PendingRemote<mojom::blink::BlobURLToken>,
@@ -319,8 +318,7 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   void ForwardResourceTimingToParent(const WebResourceTimingInfo&) override {}
 
   void DownloadURL(const ResourceRequest&,
-                   DownloadCrossOriginRedirects) override {}
-  void LoadErrorPage(int reason) override {}
+                   network::mojom::RedirectMode) override {}
 
   DocumentLoader* CreateDocumentLoader(
       LocalFrame*,
@@ -340,9 +338,7 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
 
   void TransitionToCommittedForNewPage() override {}
 
-  bool NavigateBackForward(int offset, bool from_script) const override {
-    return false;
-  }
+  bool NavigateBackForward(int offset) const override { return false; }
   void DidDisplayInsecureContent() override {}
   void DidContainInsecureFormAction() override {}
   void DidRunInsecureContent(const SecurityOrigin*, const KURL&) override {}
@@ -396,6 +392,9 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   BrowserInterfaceBrokerProxy& GetBrowserInterfaceBroker() override {
     return GetEmptyBrowserInterfaceBroker();
   }
+
+  AssociatedInterfaceProvider* GetRemoteNavigationAssociatedInterfaces()
+      override;
 
   WebSpellCheckPanelHostClient* SpellCheckPanelHostClient() const override {
     return nullptr;

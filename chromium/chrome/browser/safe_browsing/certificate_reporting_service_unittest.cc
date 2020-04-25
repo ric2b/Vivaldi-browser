@@ -196,8 +196,8 @@ class CertificateReportingServiceReporterOnIOThreadTest
   }
 
  private:
-  base::test::TaskEnvironment task_environment_{
-      base::test::TaskEnvironment::MainThreadType::IO};
+  base::test::SingleThreadTaskEnvironment task_environment_{
+      base::test::SingleThreadTaskEnvironment::MainThreadType::IO};
 
   network::TestURLLoaderFactory test_url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
@@ -220,7 +220,7 @@ TEST_F(CertificateReportingServiceReporterOnIOThreadTest,
   const GURL kFailureURL("https://www.foo.com/");
 
   test_url_loader_factory()->AddResponse(
-      kFailureURL, network::ResourceResponseHead(), std::string(),
+      kFailureURL, network::mojom::URLResponseHead::New(), std::string(),
       network::URLLoaderCompletionStatus(net::ERR_SSL_PROTOCOL_ERROR));
 
   CertificateErrorReporter* certificate_error_reporter =
@@ -320,7 +320,7 @@ TEST_F(CertificateReportingServiceReporterOnIOThreadTest,
   const GURL kFailureURL("https://www.foo.com/");
 
   test_url_loader_factory()->AddResponse(
-      kFailureURL, network::ResourceResponseHead(), std::string(),
+      kFailureURL, network::mojom::URLResponseHead::New(), std::string(),
       network::URLLoaderCompletionStatus(net::ERR_SSL_PROTOCOL_ERROR));
 
   CertificateErrorReporter* certificate_error_reporter =

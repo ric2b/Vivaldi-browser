@@ -412,6 +412,7 @@ jumbo_component("base") {
     "//net",
     "//third_party/brotli:dec",
     "//third_party/icu",
+    "//third_party/modp_b64",
     "//third_party/zlib:zlib",
     "//third_party/zlib/google:compression_utils",
     "//ui/base/clipboard:clipboard_types",
@@ -1154,11 +1155,6 @@ test("ui_base_unittests") {
   }
   if (is_mac) {
     data += [ "$root_out_dir/ui_unittests Framework.framework/" ]
-
-    if (is_asan && symbol_level == 0) {
-      # TODO(crbug.com/330301): make this conditional on mac_strip_release.
-      # data += [ "$root_out_dir/ui_base_unittests.dSYM/" ]
-    }
   }
 }
 

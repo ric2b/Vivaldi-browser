@@ -4,17 +4,12 @@
 
 package org.chromium.chrome.browser.widget.bottomsheet;
 
-import android.app.Activity;
-
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ActivityTabProvider.HintlessActivityTabObserver;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
-import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager.OverlayPanelManagerObserver;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
-import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
@@ -46,9 +41,6 @@ public class BottomSheetController implements Destroyable {
     /** A handle to the {@link BottomSheet} that this class controls. */
     private final BottomSheet mBottomSheet;
 
-    /** A handle to the {@link SnackbarManager} that manages snackbars inside the bottom sheet. */
-    private final SnackbarManager mSnackbarManager;
-
     /** A {@link VrModeObserver} that observers events of entering and exiting VR mode. */
     private final VrModeObserver mVrModeObserver;
 
@@ -64,9 +56,6 @@ public class BottomSheetController implements Destroyable {
     /** The manager for overlay panels to attach listeners to. */
     private OverlayPanelManager mOverlayPanelManager;
 
-    /** Whether the bottom sheet should be suppressed when Contextual Search is showing. */
-    private boolean mSuppressSheetForContextualSearch;
-
     /** A means for getting the activity's current tab and observing change events. */
     private ActivityTabProvider mTabProvider;
 
@@ -75,26 +64,18 @@ public class BottomSheetController implements Destroyable {
 
     /**
      * Build a new controller of the bottom sheet.
-     * @param activity An activity for context.
      * @param lifecycleDispatcher The {@link ActivityLifecycleDispatcher} for the {@code activity}.
      * @param activityTabProvider The provider of the activity's current tab.
      * @param scrim The scrim that shows when the bottom sheet is opened.
      * @param bottomSheet The bottom sheet that this class will be controlling.
      * @param overlayManager The manager for overlay panels to attach listeners to.
-     * @param suppressSheetForContextualSearch Whether the bottom sheet should be suppressed when
-     *                                         Contextual Search is showing.
      */
-    public BottomSheetController(final Activity activity,
-            final ActivityLifecycleDispatcher lifecycleDispatcher,
+    public BottomSheetController(final ActivityLifecycleDispatcher lifecycleDispatcher,
             final ActivityTabProvider activityTabProvider, final ScrimView scrim,
-            BottomSheet bottomSheet, OverlayPanelManager overlayManager,
-            boolean suppressSheetForContextualSearch) {
+            BottomSheet bottomSheet, OverlayPanelManager overlayManager) {
         mBottomSheet = bottomSheet;
         mTabProvider = activityTabProvider;
         mOverlayPanelManager = overlayManager;
-        mSuppressSheetForContextualSearch = suppressSheetForContextualSearch;
-        mSnackbarManager = new SnackbarManager(
-                activity, mBottomSheet.findViewById(R.id.bottom_sheet_snackbar_container));
 
         // Initialize the queue with a comparator that checks content priority.
         mContentQueue = new PriorityQueue<>(INITIAL_QUEUE_CAPACITY,
@@ -115,7 +96,11 @@ public class BottomSheetController implements Destroyable {
 
             @Override
             public void onDestroyed(Tab tab) {
-                if (mLastActivityTab == tab) mLastActivityTab = null;
+                if (mLastActivityTab != tab) return;
+                mLastActivityTab = null;
+
+                // Remove the suppressed sheet if its lifecycle is tied to the tab being destroyed.
+                clearRequestsAndHide();
             }
         };
 
@@ -161,10 +146,7 @@ public class BottomSheetController implements Destroyable {
             public void onScrimClick() {
                 if (!mBottomSheet.isSheetOpen()) return;
                 mBottomSheet.setSheetState(
-                        mBottomSheet.getCurrentSheetContent().isPeekStateEnabled()
-                                ? BottomSheet.SheetState.PEEK
-                                : BottomSheet.SheetState.HIDDEN,
-                        true, StateChangeReason.TAP_SCRIM);
+                        mBottomSheet.getMinSwipableSheetState(), true, StateChangeReason.TAP_SCRIM);
             }
 
             @Override
@@ -210,26 +192,7 @@ public class BottomSheetController implements Destroyable {
                 mIsProcessingHideRequest = false;
                 showNextContent(true);
             }
-
-            @Override
-            public void onSheetOffsetChanged(float heightFraction, float offsetPx) {
-                mSnackbarManager.dismissAllSnackbars();
-            }
         });
-
-        if (mSuppressSheetForContextualSearch) {
-            mOverlayPanelManager.addObserver(new OverlayPanelManagerObserver() {
-                @Override
-                public void onOverlayPanelShown() {
-                    suppressSheet(StateChangeReason.COMPOSITED_UI);
-                }
-
-                @Override
-                public void onOverlayPanelHidden() {
-                    unsuppressSheet();
-                }
-            });
-        }
     }
 
     // Destroyable implementation.
@@ -261,7 +224,7 @@ public class BottomSheetController implements Destroyable {
         mIsSuppressed = false;
 
         if (mBottomSheet.getCurrentSheetContent() != null) {
-            mBottomSheet.setSheetState(BottomSheet.SheetState.PEEK, true);
+            mBottomSheet.setSheetState(mBottomSheet.getOpeningState(), true);
         } else {
             // In the event the previous content was hidden, try to show the next one.
             showNextContent(true);
@@ -273,13 +236,6 @@ public class BottomSheetController implements Destroyable {
      */
     public BottomSheet getBottomSheet() {
         return mBottomSheet;
-    }
-
-    /**
-     * @return The {@link SnackbarManager} that manages snackbars inside the bottom sheet.
-     */
-    public SnackbarManager getSnackbarManager() {
-        return mSnackbarManager;
     }
 
     /**
@@ -367,7 +323,7 @@ public class BottomSheetController implements Destroyable {
 
         BottomSheetContent nextContent = mContentQueue.poll();
         mBottomSheet.showContent(nextContent);
-        mBottomSheet.setSheetState(BottomSheet.SheetState.PEEK, animate);
+        mBottomSheet.setSheetState(mBottomSheet.getOpeningState(), animate);
     }
 
     /**

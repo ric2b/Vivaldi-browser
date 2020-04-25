@@ -15,6 +15,7 @@
 #include "base/time/default_clock.h"
 #include "content/browser/indexed_db/indexed_db_connection.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
+#include "content/browser/indexed_db/indexed_db_execution_context_connection_tracker.h"
 #include "content/browser/indexed_db/indexed_db_factory_impl.h"
 #include "content/browser/indexed_db/indexed_db_origin_state.h"
 #include "content/browser/indexed_db/leveldb/leveldb_env.h"
@@ -242,7 +243,6 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnDelete) {
       base::MakeRefCounted<ForceCloseDBCallbacks>(context(), kTestOrigin);
   base::FilePath test_path = context()->GetFilePathForTesting(kTestOrigin);
 
-  const int child_process_id = 0;
   const int64_t host_transaction_id = 0;
   const int64_t version = 0;
 
@@ -252,7 +252,9 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnDelete) {
       base::BindOnce(&CreateAndBindTransactionPlaceholder);
   factory->Open(base::ASCIIToUTF16("opendb"),
                 std::make_unique<IndexedDBPendingConnection>(
-                    open_callbacks, open_db_callbacks, child_process_id,
+                    open_callbacks, open_db_callbacks,
+                    IndexedDBExecutionContextConnectionTracker::Handle::
+                        CreateForTesting(),
                     host_transaction_id, version,
                     std::move(create_transaction_callback1)),
                 kTestOrigin, context()->data_path());
@@ -262,7 +264,9 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnDelete) {
       base::BindOnce(&CreateAndBindTransactionPlaceholder);
   factory->Open(base::ASCIIToUTF16("closeddb"),
                 std::make_unique<IndexedDBPendingConnection>(
-                    closed_callbacks, closed_db_callbacks, child_process_id,
+                    closed_callbacks, closed_db_callbacks,
+                    IndexedDBExecutionContextConnectionTracker::Handle::
+                        CreateForTesting(),
                     host_transaction_id, version,
                     std::move(create_transaction_callback2)),
                 kTestOrigin, context()->data_path());
@@ -310,7 +314,6 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailure) {
   auto* factory =
       static_cast<IndexedDBFactoryImpl*>(context()->GetIDBFactory());
 
-  const int child_process_id = 0;
   const int64_t transaction_id = 1;
 
   auto callbacks = base::MakeRefCounted<MockIndexedDBCallbacks>();
@@ -318,8 +321,9 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailure) {
   auto create_transaction_callback1 =
       base::BindOnce(&CreateAndBindTransactionPlaceholder);
   auto connection = std::make_unique<IndexedDBPendingConnection>(
-      callbacks, db_callbacks, child_process_id, transaction_id,
-      IndexedDBDatabaseMetadata::DEFAULT_VERSION,
+      callbacks, db_callbacks,
+      IndexedDBExecutionContextConnectionTracker::Handle::CreateForTesting(),
+      transaction_id, IndexedDBDatabaseMetadata::DEFAULT_VERSION,
       std::move(create_transaction_callback1));
   factory->Open(base::ASCIIToUTF16("db"), std::move(connection),
                 Origin(kTestOrigin), context()->data_path());

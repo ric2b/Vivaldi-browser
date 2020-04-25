@@ -10,9 +10,9 @@
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "gpu/command_buffer/service/mock_abstract_texture.h"
+#include "gpu/command_buffer/service/mock_texture_owner.h"
 #include "gpu/command_buffer/service/texture_manager.h"
-#include "gpu/ipc/common/android/mock_abstract_texture.h"
-#include "gpu/ipc/common/android/mock_texture_owner.h"
 #include "media/base/android/media_codec_bridge.h"
 #include "media/base/android/mock_media_codec_bridge.h"
 #include "media/gpu/android/codec_image.h"
@@ -82,7 +82,7 @@ class CodecImageTest : public testing::Test {
   enum ImageKind { kOverlay, kTextureOwner };
   scoped_refptr<CodecImage> NewImage(
       ImageKind kind,
-      CodecImage::DestructionCB destruction_cb = base::DoNothing()) {
+      CodecImage::UnusedCB unused_cb = base::DoNothing()) {
     std::unique_ptr<CodecOutputBuffer> buffer;
     wrapper_->DequeueOutputBuffer(nullptr, nullptr, &buffer);
     scoped_refptr<CodecImage> image = new CodecImage();
@@ -92,7 +92,7 @@ class CodecImageTest : public testing::Test {
         base::BindRepeating(&PromotionHintReceiver::OnPromotionHint,
                             base::Unretained(&promotion_hint_receiver_)));
 
-    image->SetDestructionCB(std::move(destruction_cb));
+    image->AddUnusedCB(std::move(unused_cb));
     return image;
   }
 
@@ -120,19 +120,37 @@ class CodecImageTestExplicitBind : public CodecImageTest {
   bool BindsTextureOnUpdate() override { return false; }
 };
 
-TEST_F(CodecImageTest, NowUnusedCBRuns) {
-  base::MockCallback<CodecImage::NowUnusedCB> cb;
+TEST_F(CodecImageTest, UnusedCBRunsOnDestruction) {
+  // Add multiple UnusedCBs and verify that they are all run when the CodecImage
+  // is destroyed.
+  base::MockCallback<CodecImage::UnusedCB> cb_1;
+  base::MockCallback<CodecImage::UnusedCB> cb_2;
   auto i = NewImage(kOverlay);
-  i->SetNowUnusedCB(cb.Get());
-  EXPECT_CALL(cb, Run(i.get()));
+  i->AddUnusedCB(cb_1.Get());
+  i->AddUnusedCB(cb_2.Get());
+  EXPECT_CALL(cb_1, Run(i.get()));
+  EXPECT_CALL(cb_2, Run(i.get()));
   i = nullptr;
 }
 
-TEST_F(CodecImageTest, DestructionCBRuns) {
-  base::MockCallback<CodecImage::DestructionCB> cb;
-  auto i = NewImage(kOverlay, cb.Get());
-  EXPECT_CALL(cb, Run(i.get()));
-  i = nullptr;
+TEST_F(CodecImageTest, UnusedCBRunsOnNotifyUnused) {
+  base::MockCallback<CodecImage::UnusedCB> cb_1;
+  base::MockCallback<CodecImage::UnusedCB> cb_2;
+  auto i = NewImage(kTextureOwner);
+  ASSERT_TRUE(i->get_codec_output_buffer_for_testing());
+  ASSERT_TRUE(i->is_texture_owner_backed());
+  i->AddUnusedCB(cb_1.Get());
+  i->AddUnusedCB(cb_2.Get());
+  EXPECT_CALL(cb_1, Run(i.get()));
+  EXPECT_CALL(cb_2, Run(i.get()));
+
+  // Also verify that the output buffer and texture owner are released.
+  i->NotifyUnused();
+  EXPECT_FALSE(i->get_codec_output_buffer_for_testing());
+  EXPECT_FALSE(i->is_texture_owner_backed());
+
+  // Verify that an additional call doesn't crash.  It should do nothing.
+  i->NotifyUnused();
 }
 
 TEST_F(CodecImageTest, ImageStartsUnrendered) {
@@ -384,6 +402,13 @@ TEST_F(CodecImageTest, GetAHardwareBuffer) {
                 ->get_a_hardware_buffer_count,
             1);
   EXPECT_TRUE(i->was_rendered_to_front_buffer());
+}
+
+TEST_F(CodecImageTest, GetAHardwareBufferAfterRelease) {
+  // Make sure that we get a nullptr AHB once we've marked the image as unused.
+  auto i = NewImage(kTextureOwner);
+  i->NotifyUnused();
+  EXPECT_FALSE(i->GetAHardwareBuffer());
 }
 
 }  // namespace media

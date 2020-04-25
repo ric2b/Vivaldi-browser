@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="gl">
+<translation id="1029351048239796117">Vivaldi necesita permiso de aceso ao teu micrófono para esta páxina.</translation>
+<translation id="1063227610401477317">Aplicar cambios</translation>
+<translation id="1067048845568873861">Creado</translation>
+<translation id="1151669774236491028">Vivaldi.net está a ter problemas: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="1193152013480891461">Crear unha conta Vivaldi</translation>
+<translation id="1228311134236651326">Non se atoparon notas</translation>
+<translation id="1243314992276662751">Cargar</translation>
+<translation id="1249276067323441352">Datos a sincronizar</translation>
+<translation id="1302932907222175914">Buscar nas notas</translation>
+<translation id="1644574205037202324">Historial</translation>
+<translation id="1689333818294560261">Alcume</translation>
+<translation id="1799160781006135561">Non se indicou contrasinal de cifrado</translation>
+<translation id="1887193815546011584">Novo marcado rápido</translation>
+<translation id="1984391066297619717">Sincronización automática</translation>
+<translation id="2071726368047511075">Capturar páxina</translation>
+<translation id="2199644148227291099">Seguro de usar o mesmo contrasinal da conta para o cifrado? Reduces enormemente a seguridade dos datos sincronizados en liña.</translation>
+<translation id="2243210264130642074">Nota gardada</translation>
+<translation id="2359808026110333948">Continuar</translation>
+<translation id="2526968784648867272">Capturando páxina...</translation>
+<translation id="2709516037105925701">Enchemento automático</translation>
+<translation id="2745324713975967671">Contrasinal de cifrado</translation>
+<translation id="2818042133587341562">Vivaldi necesita permiso de acceso á túa cámara para esta páxina.</translation>
+<translation id="2842985007712546952">Cartafol principal</translation>
+<translation id="2850144663494818309">Inicializando sincronización...</translation>
+<translation id="2915527103487649658">Sincronizar todos os datos</translation>
+<translation id="2996809686854298943">Requírese URL</translation>
+<translation id="3335772982573114336">Nova nota</translation>
+<translation id="3377025655491224618">Lapela privada</translation>
+<translation id="3513566764071045027">Saír</translation>
+<translation id="3723593528923555236">Continuar sen un contrasinal distinto</translation>
+<translation id="3838463869765243557">Nome do dispositivo (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">Descrición</translation>
+<translation id="3897711243931585177">XERAL</translation>
+<translation id="4073968054795398875">O servidor de sincronización está a ter problemas. Tentarase inicializar axiña...</translation>
+<translation id="4268574628540273656">URL:</translation>
+<translation id="4304224509867189079">Iniciar sesión</translation>
+<translation id="4435780204941264251">Borrar datos de sincronización</translation>
+<translation id="4532845899244822526">Escoller cartafol</translation>
+<translation id="4579489600439872414">Sync está desactivado nos axustes de Android.</translation>
+<translation id="4589558845651536280">En progreso...</translation>
+<translation id="4752136117982598343">Nota gardada en <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">Descargas</translation>
+<translation id="4833044618885331665">Tes que actualizar Vivaldi para poder usar Sync.</translation>
+<translation id="4847896847259487518">Páxina a marcador</translation>
+<translation id="4890701585167892790">Non hai notas</translation>
+<translation id="4936710149174207991">Non sincronizado</translation>
+<translation id="4954427294703861104">Novo en Vivaldi? Faite unha conta.</translation>
+<translation id="504986598654589766">Navegar nunha lapela privada significa que Vivaldi non ha gardar as buscas, páxinas visitadas, rastrexadores e ficheiros temporais. Non cifra nin modifica a túa conexión.</translation>
+<translation id="5161254044473106830">Requírese título</translation>
+<translation id="5271549068863921519">Gardar contrasinal</translation>
+<translation id="5290452628447338707">Sen notas</translation>
+<translation id="5351912500249789547">Vivaldi.net rexeita as túas credenciais: código de erro <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">Abrir imaxe</translation>
+<translation id="5421638721143596928">Erro ao cifrar as túas credenciais. Inicia sesión de novo.</translation>
+<translation id="5443210757369395869">Capturar área visible</translation>
+<translation id="5448025735280530073">Vivaldi necesita permiso de acceso á túa localización para compartila con esta páxina.</translation>
+<translation id="5510723066938954312">Marcadores e marcados rápidos</translation>
+<translation id="5525981542754785361">Nota gardada en <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">Copiar a nota</translation>
+<translation id="5765833063161370062">Mover notas</translation>
+<translation id="5790085346892983794">Con éxito</translation>
+<translation id="5803562371819294631">Isto ha eliminar todos os datos almacenados de sincronización no servidor de Sync, restablece o contrasinal de cifrado e pecha sesión. Estas seguro?</translation>
+<translation id="5823830882692559950">Vivaldi.net rexeita as túas credenciais: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5841317974325635710">Nova nota creada</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> nota}
+          other {<ph name="NOTES_COUNT_MANY" /> notas}}</translation>
+<translation id="6012194412768958291">Non se pode conectar a vivaldi.net.</translation>
+<translation id="6059232451013891645">Cartafol:</translation>
+<translation id="6077943432358741146">Marcado rápido</translation>
+<translation id="6091125352818749975">Borrando datos remotos sincronizados.</translation>
+<translation id="6179463181009746489">Eliminar notas</translation>
+<translation id="6231148928368101651">Paneis</translation>
+<translation id="6406506848690869874">Sync</translation>
+<translation id="6657585470893396449">Contrasinal</translation>
+<translation id="6682232524697939870">Vivaldi necesita permiso de acceso á túa cámara e micrófono para esta páxina.</translation>
+<translation id="6786747875388722282">Extensións</translation>
+<translation id="6887143077297974801">Erro ao iniciar a sincronización.</translation>
+<translation id="6945221475159498467">Seleccionar</translation>
+<translation id="6960734555676205519">Última sincronización</translation>
+<translation id="7029809446516969842">Contrasinais</translation>
+<translation id="7075547914712055886">Reiniciar Sync</translation>
+<translation id="7492794630657957996">Confirme a sincronización de datos para completar a configuración</translation>
+<translation id="7514365320538308">Descargar</translation>
+<translation id="7547490097772831952">Capturar toda a páxina</translation>
+<translation id="7725641807765767506">Non se atoparon marcados rápidos</translation>
+<translation id="7765158879357617694">Mover</translation>
+<translation id="7822864833609233785">AVANZADO</translation>
+<translation id="8028021641083150097">Para recuperar o acceso á túa conta, todos os datos sincronizados remotos teñen que restablecerse. Despois podes comezar unha nova sincronización usando os datos actuais do navegador.</translation>
+<translation id="8035133914807600019">Novo cartafol…</translation>
+<translation id="8123787473700925741">Vivaldi.net está a ter problemas: código de erro <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">Iniciar Sync</translation>
+<translation id="8206267832882844324">Editar nota</translation>
+<translation id="8225478925744929238">Eliminar dos marcadores</translation>
+<translation id="8233521945095997439">Non hai marcados rápidos</translation>
+<translation id="8261506727792406068">Eliminar</translation>
+<translation id="8305137170060620165">Historial escrito e sesións remotas</translation>
+<translation id="8414685983518053656">Notas</translation>
+<translation id="8422778094137438683">Precisas usar unha conta de usuario vivaldi.net para iniciar sesión.</translation>
+<translation id="8428213095426709021">Axustes</translation>
+<translation id="8462396943848220200">Tentando de novo en <ph name="TIME" /></translation>
+<translation id="8480556999740355963">Conectado como <ph name="USERNAME" /> en <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">Conectando a Vivaldi.net como <ph name="USERNAME" />. Agarda.</translation>
+<translation id="8503813439785031346">Usuario</translation>
+<translation id="8661216209723599816">Restablecer datos remotos</translation>
+<translation id="8721244337025311110">Novo marcador</translation>
+<translation id="8724114686743788114">Non se pode amosar a imaxe</translation>
+<translation id="8730621377337864115">Feito</translation>
+<translation id="8792189997982531874">Vivaldi necesita acceso ao almacenamento para descargar ficheiros.</translation>
+<translation id="8808060551076378370">Erro ao engadir nota.</translation>
+<translation id="8817201557520703060">Páxina capturada</translation>
+<translation id="8820817407110198400">Marcadores</translation>
+<translation id="895749247724466293">Buscar nos teus marcados rápidos</translation>
+<translation id="8959245489304000426">Perdín o meu contrasinal</translation>
+<translation id="8979401359137062629">Nota:</translation>
+<translation id="9065203028668620118">Editar</translation>
+<translation id="9148058034647219655">Saír</translation>
+<translation id="9173575361559252669">Erro ao capturar páxina</translation>
+</translationbundle>

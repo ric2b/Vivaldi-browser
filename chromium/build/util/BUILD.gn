@@ -9,7 +9,7 @@ action("webkit_version") {
 
   template_file = "webkit_version.h.in"
   inputs = [
-    lastchange_file,
+    lastchange_file+".chromium",
     template_file,
   ]
 
@@ -24,7 +24,8 @@ action("webkit_version") {
     "-e",
     "LASTCHANGE=LASTCHANGE[:LASTCHANGE.find('-')]",
     "-f",
-    rebase_path(lastchange_file, root_build_dir),
+    # Vivaldi update here because this is difficult to update any other way
+    rebase_path(lastchange_file+".chromium", root_build_dir),
     rebase_path(template_file, root_build_dir),
     rebase_path(output_file, root_build_dir),
   ]

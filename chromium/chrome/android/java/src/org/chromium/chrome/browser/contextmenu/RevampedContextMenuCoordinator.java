@@ -7,18 +7,19 @@ package org.chromium.chrome.browser.contextmenu;
 import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.IntDef;
 import android.support.v7.app.AlertDialog;
 import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.View;
+
+import androidx.annotation.IntDef;
 
 import org.chromium.base.Callback;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.share.ShareParams;
-import org.chromium.chrome.browser.widget.ContextMenuDialog;
+import org.chromium.chrome.browser.ui.widget.ContextMenuDialog;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.ModelListAdapter;

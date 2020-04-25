@@ -5,53 +5,6 @@
     "description": "Use the <code>vivaldi.calendar</code> API to manipulate calendar events.",
     "types": [
       {
-        "id": "OccurrenceFrequency",
-        "type": "string",
-        "enum": [ "", "days", "weeks", "months", "years" ],
-        "description": "Interval (none (empty string),days, weeks, months) when next event should reoccur."
-      },
-      {
-        "id": "RecurrencePattern",
-        "type": "object",
-        "description": "A pattern describing how a event should reoccur",
-        "properties": {
-          "frequency": {
-            "$ref": "OccurrenceFrequency",
-            "optional": true,
-            "description": "Interval (days, weeks, months, year) when next event should reoccur."
-          },
-          "number_of_occurrences": {
-            "type": "integer",
-            "optional": true,
-            "description": "How often the event shoud reoccur."
-          },
-          "interval": {
-            "type": "integer",
-            "optional": true,
-            "description": "How many (days, week, months) see interval, should be skipped until next event occurs."
-          },
-          "day_of_week": {
-            "type": "integer",
-            "optional": true,
-            "description": "Which day of the week the event takes place. Number 1,2,3,4,5,6,7 starting on monday"
-          },
-          "week_of_month": {
-            "type": "integer",
-            "optional": true,
-            "description": "Which week of the month the event takes place. 1,2,3,4. Negative numbers from end of month"
-          },
-          "day_of_month": {
-            "type": "integer",
-            "optional": true,
-            "description": "Which day of the month the event takes place. 1,2,3,..30. Negative numbers from end of month"
-          },
-          "month_of_year": {
-            "type": "integer",
-            "optional": true,
-            "description": "Which month of the year event takes place. 1,2,3,..12. Negative numbers from end of year"
-          }
-        }
-      }, {
         "id": "RecurrenceException",
         "type": "object",
         "description": "A object describing how an instance of event recurrence is changed",
@@ -75,6 +28,38 @@
             "type": "string",
             "optional": true,
             "description": "The id of the event that is parent to all the others events in the recurrence series"
+          }
+        }
+      },
+      {
+        "id": "EventException",
+        "type": "object",
+        "description": "A pattern describing how a event exception occurs. Used during import and create.",
+        "properties": {
+          "title": {
+            "type": "string",
+            "optional": true,
+            "description": "Title of event."
+          },
+          "description": {
+            "type": "string",
+            "optional": true,
+            "description": "The event description."
+          },
+          "start": {
+            "type": "number",
+            "optional": true,
+            "description": "When this event starts, in milliseconds since the epoch."
+          },
+          "end": {
+            "type": "number",
+            "optional": true,
+            "description": "When this event ends, in milliseconds since the epoch."
+          },
+          "exceptionDate": {
+            "type": "number",
+            "optional": true,
+            "description": "The date an exception should be added to. In milliseconds since the epoch"
           }
         }
       },
@@ -152,11 +137,6 @@
             "type": "string",
             "optional": true
           },
-          "recurrence": {
-            "$ref": "RecurrencePattern",
-            "optional": true,
-            "description": "How this event reoccurs."
-          },
           "etag": {
             "description": "The CalDAV etag id of the event.",
             "type": "string",
@@ -206,6 +186,11 @@
             "type": "string",
             "optional": true,
             "description": "The original ical message"
+          },
+          "rrule": {
+            "type": "string",
+            "optional": true,
+            "description": "The recurring rule. In iCalendar format"
           },
           "recurrenceExceptions": {
             "description": "List of recurrence exceptions.",
@@ -271,11 +256,6 @@
             "type": "string",
             "optional": true
           },
-          "recurrence": {
-            "$ref": "RecurrencePattern",
-            "optional": true,
-            "description": "How this event reoccurs."
-          },
           "calendarId": {
             "type": "string",
             "description": "The calendar id of the event."
@@ -315,10 +295,23 @@
             "optional": true,
             "description": "The original ical message"
           },
+          "rrule": {
+            "type": "string",
+            "optional": true,
+            "description": "The recurring rule. In iCalendar format"
+          },
           "eventTypeId": {
             "type": "string",
             "optional": true,
             "description": "The event type id of the event."
+          },
+          "eventExceptions": {
+            "description": "List of recurrence exceptions.",
+            "type": "array",
+            "optional": true,
+            "items": {
+              "$ref": "EventException"
+            }
           }
         }
       },
@@ -345,11 +338,6 @@
             "type": "integer",
             "optional": true,
             "description": "The event type icon index."
-          },
-          "recurrence": {
-            "$ref": "RecurrencePattern",
-            "optional": true,
-            "description": "How this event type reoccurs."
           }
         }
       },
@@ -372,11 +360,6 @@
             "type": "integer",
             "optional": true,
             "description": "The event type iconindex."
-          },
-          "recurrence": {
-            "$ref": "RecurrencePattern",
-            "optional": true,
-            "description": "How this event type reoccurs."
           }
         }
       },
@@ -445,6 +428,21 @@
             "type": "string",
             "optional": true,
             "description": "The CalDav authentication username."
+          },
+          "type": {
+            "type": "integer",
+            "optional": true,
+            "description": "The type of calendar. 0: Local. 1: Vivaldi.net calendar. 2: Google Calendar. 3: CalDAV.  4: Read only iCal"
+          },
+          "interval": {
+            "type": "integer",
+            "optional": true,
+            "description": "The interval how often this calendar should poll. In seconds."
+          },
+          "lastChecked": {
+            "type": "number",
+            "optional": true,
+            "description": "When this calendar last checked for updates.  In milliseconds since the epoch."
           }
         }
       },
@@ -507,6 +505,21 @@
             "type": "string",
             "optional": true,
             "description": "The CalDav authentication username."
+          },
+          "type": {
+            "type": "integer",
+            "optional": true,
+            "description": "The type of calendar. 0: Local. 1: Vivaldi.net calendar. 2: Google Calendar. 3: CalDAV.  4: Read only iCal"
+          },
+          "interval": {
+            "type": "integer",
+            "optional": true,
+            "description": "The interval how often this calendar should poll. In seconds."
+          },
+          "lastChecked": {
+            "type": "number",
+            "optional": true,
+            "description": "When this calendar last checked for updates.  In milliseconds since the epoch."
           }
         }
       }
@@ -706,11 +719,6 @@
                 "type": "string",
                 "optional": true
               },
-              "recurrence": {
-                "$ref": "RecurrencePattern",
-                "optional": true,
-                "description": "How this event reoccurs."
-              },
               "uid": {
                 "description": "The event uid",
                 "type": "string",
@@ -745,6 +753,11 @@
                 "type": "string",
                 "optional": true,
                 "description": "The original ical message"
+              },
+              "rrule": {
+                "type": "string",
+                "optional": true,
+                "description": "The recurring rule. In iCalendar format"
               }
             }
           },
@@ -893,6 +906,21 @@
                 "description": "The CalDav authentication username.",
                 "type": "string",
                 "optional": true
+              },
+              "type": {
+                "type": "integer",
+                "optional": true,
+                "description": "The type of calendar. 0: Local. 1: Vivaldi.net calendar. 2: Google Calendar. 3: CalDAV.  4: Read only iCal"
+              },
+              "interval": {
+                "type": "integer",
+                "optional": true,
+                "description": "The interval how often this calendar should poll. In seconds."
+              },
+              "lastChecked": {
+                "type": "number",
+                "optional": true,
+                "description": "When this calendar last checked for updates.  In milliseconds since the epoch."
               }
             }
           }

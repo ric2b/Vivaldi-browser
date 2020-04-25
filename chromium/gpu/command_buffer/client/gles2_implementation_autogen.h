@@ -892,6 +892,12 @@ void DispatchCompute(GLuint num_groups_x,
 
 void DispatchComputeIndirect(GLintptr offset) override;
 
+void DrawArraysIndirect(GLenum mode, const void* offset) override;
+
+void DrawElementsIndirect(GLenum mode,
+                          GLenum type,
+                          const void* offset) override;
+
 void GetProgramInterfaceiv(GLuint program,
                            GLenum program_interface,
                            GLenum pname,
@@ -1271,6 +1277,8 @@ void ProgramPathFragmentInputGenCHROMIUM(GLuint program,
                                          GLenum genMode,
                                          GLint components,
                                          const GLfloat* coeffs) override;
+
+void ContextVisibilityHintCHROMIUM(GLboolean visibility) override;
 
 void CoverageModulationCHROMIUM(GLenum components) override;
 

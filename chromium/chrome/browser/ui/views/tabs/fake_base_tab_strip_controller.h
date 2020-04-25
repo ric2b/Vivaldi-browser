@@ -23,7 +23,6 @@ class FakeBaseTabStripController : public TabStripController {
 
   void AddTab(int index, bool is_active);
   void AddPinnedTab(int index, bool is_active);
-  void MoveTab(int from_index, int to_index);
   void RemoveTab(int index);
 
   void MoveTabIntoGroup(int index, base::Optional<TabGroupId> new_group);
@@ -46,6 +45,7 @@ class FakeBaseTabStripController : public TabStripController {
   void AddSelectionFromAnchorTo(int index) override;
   bool BeforeCloseTab(int index, CloseTabSource source) override;
   void CloseTab(int index, CloseTabSource source) override;
+  void MoveTab(int from_index, int to_index) override;
   void ShowContextMenuForTab(Tab* tab,
                              const gfx::Point& p,
                              ui::MenuSourceType source_type) override;
@@ -56,6 +56,7 @@ class FakeBaseTabStripController : public TabStripController {
   void StackedLayoutMaybeChanged() override;
   void OnStartedDraggingTabs() override;
   void OnStoppedDraggingTabs() override;
+  void OnKeyboardFocusedTabChanged(base::Optional<int> index) override;
   const TabGroupVisualData* GetVisualDataForGroup(
       TabGroupId group_id) const override;
   void SetVisualDataForGroup(TabGroupId group,
@@ -66,12 +67,10 @@ class FakeBaseTabStripController : public TabStripController {
   bool EverHasVisibleBackgroundTabShapes() const override;
   bool ShouldPaintAsActiveFrame() const override;
   bool CanDrawStrokes() const override;
-  SkColor GetFrameColor(
-      BrowserNonClientFrameView::ActiveState active_state =
-          BrowserNonClientFrameView::kUseCurrent) const override;
+  SkColor GetFrameColor(BrowserFrameActiveState active_state) const override;
   SkColor GetToolbarTopSeparatorColor() const override;
   base::Optional<int> GetCustomBackgroundId(
-      BrowserNonClientFrameView::ActiveState active_state) const override;
+      BrowserFrameActiveState active_state) const override;
   base::string16 GetAccessibleTabName(const Tab* tab) const override;
   Profile* GetProfile() const override;
 

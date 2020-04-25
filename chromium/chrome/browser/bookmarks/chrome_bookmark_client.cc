@@ -95,7 +95,8 @@ bool ChromeBookmarkClient::IsPermanentNodeVisible(
   if (bookmarks::IsManagedNode(node, managed_bookmark_service_))
     return false;
 #if defined(OS_ANDROID)
-  return node->type() == bookmarks::BookmarkNode::MOBILE;
+  return node->type() == bookmarks::BookmarkNode::MOBILE ||
+         node->type() == bookmarks::BookmarkNode::TRASH;
 #else
   return node->type() != bookmarks::BookmarkNode::MOBILE;
 #endif

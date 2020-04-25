@@ -417,6 +417,8 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
   ext.b_GL_KHR_parallel_shader_compile =
       gfx::HasExtension(extensions, "GL_KHR_parallel_shader_compile");
   ext.b_GL_KHR_robustness = gfx::HasExtension(extensions, "GL_KHR_robustness");
+  ext.b_GL_MESA_framebuffer_flip_y =
+      gfx::HasExtension(extensions, "GL_MESA_framebuffer_flip_y");
   ext.b_GL_NV_blend_equation_advanced =
       gfx::HasExtension(extensions, "GL_NV_blend_equation_advanced");
   ext.b_GL_NV_fence = gfx::HasExtension(extensions, "GL_NV_fence");
@@ -436,6 +438,8 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
       gfx::HasExtension(extensions, "GL_OES_vertex_array_object");
   ext.b_GL_OVR_multiview = gfx::HasExtension(extensions, "GL_OVR_multiview");
   ext.b_GL_OVR_multiview2 = gfx::HasExtension(extensions, "GL_OVR_multiview2");
+  ext.b_GL_QCOM_tiled_rendering =
+      gfx::HasExtension(extensions, "GL_QCOM_tiled_rendering");
 
   if (ver->IsAtLeastGL(4u, 1u) || ver->IsAtLeastGLES(3u, 1u)) {
     fn.glActiveShaderProgramFn = reinterpret_cast<glActiveShaderProgramProc>(
@@ -898,6 +902,12 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
         reinterpret_cast<glDepthRangefProc>(GetGLProcAddress("glDepthRangef"));
   }
 
+  if (ext.b_GL_ANGLE_request_extension) {
+    fn.glDisableExtensionANGLEFn =
+        reinterpret_cast<glDisableExtensionANGLEProc>(
+            GetGLProcAddress("glDisableExtensionANGLE"));
+  }
+
   if (ext.b_GL_EXT_discard_framebuffer) {
     fn.glDiscardFramebufferEXTFn =
         reinterpret_cast<glDiscardFramebufferEXTProc>(
@@ -998,6 +1008,11 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
         reinterpret_cast<glEndQueryProc>(GetGLProcAddress("glEndQueryEXT"));
   }
 
+  if (ext.b_GL_QCOM_tiled_rendering) {
+    fn.glEndTilingQCOMFn = reinterpret_cast<glEndTilingQCOMProc>(
+        GetGLProcAddress("glEndTilingQCOM"));
+  }
+
   if (ver->IsAtLeastGL(3u, 0u) || ver->IsAtLeastGLES(3u, 0u)) {
     fn.glEndTransformFeedbackFn = reinterpret_cast<glEndTransformFeedbackProc>(
         GetGLProcAddress("glEndTransformFeedback"));
@@ -1042,6 +1057,10 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
     fn.glFramebufferParameteriFn =
         reinterpret_cast<glFramebufferParameteriProc>(
             GetGLProcAddress("glFramebufferParameteri"));
+  } else if (ext.b_GL_MESA_framebuffer_flip_y) {
+    fn.glFramebufferParameteriFn =
+        reinterpret_cast<glFramebufferParameteriProc>(
+            GetGLProcAddress("glFramebufferParameteriMESA"));
   }
 
   if (ver->IsAtLeastGL(3u, 0u) || ver->is_es) {
@@ -2432,6 +2451,11 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
         GetGLProcAddress("glSignalSemaphoreEXT"));
   }
 
+  if (ext.b_GL_QCOM_tiled_rendering) {
+    fn.glStartTilingQCOMFn = reinterpret_cast<glStartTilingQCOMProc>(
+        GetGLProcAddress("glStartTilingQCOM"));
+  }
+
   if (ext.b_GL_NV_path_rendering) {
     fn.glStencilFillPathInstancedNVFn =
         reinterpret_cast<glStencilFillPathInstancedNVProc>(
@@ -3470,6 +3494,10 @@ void GLApiBase::glDisableFn(GLenum cap) {
   driver_->fn.glDisableFn(cap);
 }
 
+void GLApiBase::glDisableExtensionANGLEFn(const char* name) {
+  driver_->fn.glDisableExtensionANGLEFn(name);
+}
+
 void GLApiBase::glDisableVertexAttribArrayFn(GLuint index) {
   driver_->fn.glDisableVertexAttribArrayFn(index);
 }
@@ -3564,6 +3592,10 @@ void GLApiBase::glEnableVertexAttribArrayFn(GLuint index) {
 
 void GLApiBase::glEndQueryFn(GLenum target) {
   driver_->fn.glEndQueryFn(target);
+}
+
+void GLApiBase::glEndTilingQCOMFn(GLbitfield preserveMask) {
+  driver_->fn.glEndTilingQCOMFn(preserveMask);
 }
 
 void GLApiBase::glEndTransformFeedbackFn(void) {
@@ -5305,6 +5337,14 @@ void GLApiBase::glSignalSemaphoreEXTFn(GLuint semaphore,
                                      numTextureBarriers, textures, dstLayouts);
 }
 
+void GLApiBase::glStartTilingQCOMFn(GLuint x,
+                                    GLuint y,
+                                    GLuint width,
+                                    GLuint height,
+                                    GLbitfield preserveMask) {
+  driver_->fn.glStartTilingQCOMFn(x, y, width, height, preserveMask);
+}
+
 void GLApiBase::glStencilFillPathInstancedNVFn(GLsizei numPaths,
                                                GLenum pathNameType,
                                                const void* paths,
@@ -6782,6 +6822,11 @@ void TraceGLApi::glDisableFn(GLenum cap) {
   gl_api_->glDisableFn(cap);
 }
 
+void TraceGLApi::glDisableExtensionANGLEFn(const char* name) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glDisableExtensionANGLE")
+  gl_api_->glDisableExtensionANGLEFn(name);
+}
+
 void TraceGLApi::glDisableVertexAttribArrayFn(GLuint index) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glDisableVertexAttribArray")
   gl_api_->glDisableVertexAttribArrayFn(index);
@@ -6897,6 +6942,11 @@ void TraceGLApi::glEnableVertexAttribArrayFn(GLuint index) {
 void TraceGLApi::glEndQueryFn(GLenum target) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glEndQuery")
   gl_api_->glEndQueryFn(target);
+}
+
+void TraceGLApi::glEndTilingQCOMFn(GLbitfield preserveMask) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glEndTilingQCOM")
+  gl_api_->glEndTilingQCOMFn(preserveMask);
 }
 
 void TraceGLApi::glEndTransformFeedbackFn(void) {
@@ -8956,6 +9006,15 @@ void TraceGLApi::glSignalSemaphoreEXTFn(GLuint semaphore,
                                   numTextureBarriers, textures, dstLayouts);
 }
 
+void TraceGLApi::glStartTilingQCOMFn(GLuint x,
+                                     GLuint y,
+                                     GLuint width,
+                                     GLuint height,
+                                     GLbitfield preserveMask) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glStartTilingQCOM")
+  gl_api_->glStartTilingQCOMFn(x, y, width, height, preserveMask);
+}
+
 void TraceGLApi::glStencilFillPathInstancedNVFn(
     GLsizei numPaths,
     GLenum pathNameType,
@@ -10775,6 +10834,12 @@ void DebugGLApi::glDisableFn(GLenum cap) {
   gl_api_->glDisableFn(cap);
 }
 
+void DebugGLApi::glDisableExtensionANGLEFn(const char* name) {
+  GL_SERVICE_LOG("glDisableExtensionANGLE"
+                 << "(" << name << ")");
+  gl_api_->glDisableExtensionANGLEFn(name);
+}
+
 void DebugGLApi::glDisableVertexAttribArrayFn(GLuint index) {
   GL_SERVICE_LOG("glDisableVertexAttribArray"
                  << "(" << index << ")");
@@ -10922,6 +10987,12 @@ void DebugGLApi::glEndQueryFn(GLenum target) {
   GL_SERVICE_LOG("glEndQuery"
                  << "(" << GLEnums::GetStringEnum(target) << ")");
   gl_api_->glEndQueryFn(target);
+}
+
+void DebugGLApi::glEndTilingQCOMFn(GLbitfield preserveMask) {
+  GL_SERVICE_LOG("glEndTilingQCOM"
+                 << "(" << preserveMask << ")");
+  gl_api_->glEndTilingQCOMFn(preserveMask);
 }
 
 void DebugGLApi::glEndTransformFeedbackFn(void) {
@@ -13661,6 +13732,17 @@ void DebugGLApi::glSignalSemaphoreEXTFn(GLuint semaphore,
                                   numTextureBarriers, textures, dstLayouts);
 }
 
+void DebugGLApi::glStartTilingQCOMFn(GLuint x,
+                                     GLuint y,
+                                     GLuint width,
+                                     GLuint height,
+                                     GLbitfield preserveMask) {
+  GL_SERVICE_LOG("glStartTilingQCOM"
+                 << "(" << x << ", " << y << ", " << width << ", " << height
+                 << ", " << preserveMask << ")");
+  gl_api_->glStartTilingQCOMFn(x, y, width, height, preserveMask);
+}
+
 void DebugGLApi::glStencilFillPathInstancedNVFn(
     GLsizei numPaths,
     GLenum pathNameType,
@@ -15399,6 +15481,10 @@ void NoContextGLApi::glDisableFn(GLenum cap) {
   NoContextHelper("glDisable");
 }
 
+void NoContextGLApi::glDisableExtensionANGLEFn(const char* name) {
+  NoContextHelper("glDisableExtensionANGLE");
+}
+
 void NoContextGLApi::glDisableVertexAttribArrayFn(GLuint index) {
   NoContextHelper("glDisableVertexAttribArray");
 }
@@ -15493,6 +15579,10 @@ void NoContextGLApi::glEnableVertexAttribArrayFn(GLuint index) {
 
 void NoContextGLApi::glEndQueryFn(GLenum target) {
   NoContextHelper("glEndQuery");
+}
+
+void NoContextGLApi::glEndTilingQCOMFn(GLbitfield preserveMask) {
+  NoContextHelper("glEndTilingQCOM");
 }
 
 void NoContextGLApi::glEndTransformFeedbackFn(void) {
@@ -17213,6 +17303,14 @@ void NoContextGLApi::glSignalSemaphoreEXTFn(GLuint semaphore,
                                             const GLuint* textures,
                                             const GLenum* dstLayouts) {
   NoContextHelper("glSignalSemaphoreEXT");
+}
+
+void NoContextGLApi::glStartTilingQCOMFn(GLuint x,
+                                         GLuint y,
+                                         GLuint width,
+                                         GLuint height,
+                                         GLbitfield preserveMask) {
+  NoContextHelper("glStartTilingQCOM");
 }
 
 void NoContextGLApi::glStencilFillPathInstancedNVFn(

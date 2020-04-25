@@ -16,9 +16,9 @@
 #include "base/task/post_task.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
 #include "content/browser/data_url_loader_factory.h"
-#include "content/browser/file_url_loader_factory.h"
 #include "content/browser/fileapi/file_system_url_loader_factory.h"
 #include "content/browser/loader/browser_initiated_resource_request.h"
+#include "content/browser/loader/file_url_loader_factory.h"
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_navigation_handle.h"
@@ -37,6 +37,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/shared_cors_origin_access_list.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/referrer.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -98,12 +99,12 @@ void WorkerScriptFetchInitiator::Start(
   // subresource loading.
   std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
       factory_bundle_for_browser = CreateFactoryBundle(
-          worker_process_id, storage_partition, storage_domain,
-          constructor_uses_file_url, filesystem_url_support);
+          LoaderType::kMainResource, worker_process_id, storage_partition,
+          storage_domain, constructor_uses_file_url, filesystem_url_support);
   std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
       subresource_loader_factories = CreateFactoryBundle(
-          worker_process_id, storage_partition, storage_domain,
-          constructor_uses_file_url, filesystem_url_support);
+          LoaderType::kSubResource, worker_process_id, storage_partition,
+          storage_domain, constructor_uses_file_url, filesystem_url_support);
 
   // Create a resource request for initiating worker script fetch from the
   // browser process.
@@ -177,6 +178,7 @@ void WorkerScriptFetchInitiator::Start(
 
 std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
 WorkerScriptFetchInitiator::CreateFactoryBundle(
+    LoaderType loader_type,
     int worker_process_id,
     StoragePartitionImpl* storage_partition,
     const std::string& storage_domain,
@@ -196,10 +198,21 @@ WorkerScriptFetchInitiator::CreateFactoryBundle(
             worker_process_id, RenderFrameHost::kNoFrameTreeNodeId,
             storage_partition->GetFileSystemContext(), storage_domain);
   }
-  GetContentClient()
-      ->browser()
-      ->RegisterNonNetworkSubresourceURLLoaderFactories(
-          worker_process_id, MSG_ROUTING_NONE, &non_network_factories);
+
+  switch (loader_type) {
+    case LoaderType::kMainResource:
+      GetContentClient()
+          ->browser()
+          ->RegisterNonNetworkWorkerMainResourceURLLoaderFactories(
+              storage_partition->browser_context(), &non_network_factories);
+      break;
+    case LoaderType::kSubResource:
+      GetContentClient()
+          ->browser()
+          ->RegisterNonNetworkSubresourceURLLoaderFactories(
+              worker_process_id, MSG_ROUTING_NONE, &non_network_factories);
+      break;
+  }
 
   auto factory_bundle = std::make_unique<blink::URLLoaderFactoryBundleInfo>();
   for (auto& pair : non_network_factories) {
@@ -310,7 +323,6 @@ void WorkerScriptFetchInitiator::CreateScriptLoader(
     // network service after a crash, but it's OK since it's used only for a
     // single request to fetch the worker's main script during startup. If the
     // network service crashes, worker startup should simply fail.
-    network::mojom::URLLoaderFactoryPtr network_factory_ptr;
     auto network_factory =
         storage_partition->GetURLLoaderFactoryForBrowserProcess();
     network_factory->Clone(std::move(default_factory_receiver));

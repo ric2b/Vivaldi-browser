@@ -5,9 +5,10 @@
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import android.content.Context;
-import android.support.annotation.Nullable;
 import android.view.LayoutInflater;
 import android.view.View;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.tab.Tab;
@@ -31,14 +32,34 @@ class TabSelectionEditorCoordinator {
      */
     interface TabSelectionEditorController {
         /**
-         * Shows the TabSelectionEditor.
+         * Shows the TabSelectionEditor with the given {@link Tab}s.
+         * @param tabs List of {@link Tab}s to show.
          */
-        void show();
+        void show(List<Tab> tabs);
+
+        /**
+         * Hides the TabSelectionEditor.
+         */
+        void hide();
 
         /**
          * @return Whether or not the TabSelectionEditor consumed the event.
          */
         boolean handleBackPressed();
+
+        /**
+         * Configure the Toolbar for TabSelectionEditor. The default button text is "Group".
+         * @param actionButtonText Button text for the action button.
+         * @param actionProvider The {@link TabSelectionEditorActionProvider} that specifies the
+         *         action when action button gets clicked.
+         * @param actionButtonEnablingThreshold The minimum threshold to enable the action button.
+         *         If it's -1 use the default value.
+         * @param navigationButtonOnClickListener Click listener for the navigation button.
+         */
+        void configureToolbar(@Nullable String actionButtonText,
+                @Nullable TabSelectionEditorActionProvider actionProvider,
+                int actionButtonEnablingThreshold,
+                @Nullable View.OnClickListener navigationButtonOnClickListener);
     }
 
     private final Context mContext;
@@ -52,7 +73,9 @@ class TabSelectionEditorCoordinator {
     private final TabSelectionEditorMediator mTabSelectionEditorMediator;
 
     public TabSelectionEditorCoordinator(Context context, View parentView,
-            TabModelSelector tabModelSelector, TabContentManager tabContentManager) {
+            TabModelSelector tabModelSelector, TabContentManager tabContentManager,
+            @Nullable TabSelectionEditorMediator
+                    .TabSelectionEditorPositionProvider positionProvider) {
         mContext = context;
         mParentView = parentView;
         mTabModelSelector = tabModelSelector;
@@ -71,8 +94,8 @@ class TabSelectionEditorCoordinator {
         mTabSelectionEditorLayoutChangeProcessor = PropertyModelChangeProcessor.create(
                 mModel, mTabSelectionEditorLayout, TabSelectionEditorLayoutBinder::bind);
 
-        mTabSelectionEditorMediator = new TabSelectionEditorMediator(
-                mContext, mTabModelSelector, this::resetWithListOfTabs, mModel, mSelectionDelegate);
+        mTabSelectionEditorMediator = new TabSelectionEditorMediator(mContext, mTabModelSelector,
+                this::resetWithListOfTabs, mModel, mSelectionDelegate, positionProvider);
     }
 
     /**
@@ -102,6 +125,7 @@ class TabSelectionEditorCoordinator {
      */
     public void destroy() {
         mTabListCoordinator.destroy();
+        mTabSelectionEditorLayout.destroy();
         mTabSelectionEditorMediator.destroy();
         mTabSelectionEditorLayoutChangeProcessor.destroy();
     }

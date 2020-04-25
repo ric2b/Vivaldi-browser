@@ -8,6 +8,7 @@
 
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/editing/surrounding_text.h"
+#include "third_party/blink/renderer/core/frame/intervention.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -48,6 +49,13 @@ FrameImpl::~FrameImpl() = default;
 void FrameImpl::GetTextSurroundingSelection(
     uint32_t max_length,
     GetTextSurroundingSelectionCallback callback) {
+  // Early return on detached frames to avoid crashing if a request for
+  // surrounding text gets received at this point.
+  if (!GetSupplementable()->IsAttached()) {
+    std::move(callback).Run(g_empty_string, 0, 0);
+    return;
+  }
+
   blink::SurroundingText surrounding_text(GetSupplementable(), max_length);
 
   // |surrounding_text| might not be correctly initialized, for example if
@@ -63,6 +71,11 @@ void FrameImpl::GetTextSurroundingSelection(
   std::move(callback).Run(surrounding_text.TextContent(),
                           surrounding_text.StartOffsetInTextContent(),
                           surrounding_text.EndOffsetInTextContent());
+}
+
+void FrameImpl::SendInterventionReport(const String& id,
+                                       const String& message) {
+  Intervention::GenerateReport(GetSupplementable(), id, message);
 }
 
 }  // namespace blink

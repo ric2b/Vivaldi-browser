@@ -135,6 +135,16 @@ class PointerLockBrowserTest : public ContentBrowserTest {
   MockPointerLockWebContentsDelegate web_contents_delegate_;
 };
 
+class PointerLockBrowserTestWithOptions : public PointerLockBrowserTest {
+ public:
+  PointerLockBrowserTestWithOptions() {
+    feature_list_.InitAndEnableFeature(features::kPointerLockOptions);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
 IN_PROC_BROWSER_TEST_F(PointerLockBrowserTest, PointerLockBasic) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b)"));
@@ -616,10 +626,9 @@ IN_PROC_BROWSER_TEST_F(PointerLockBrowserTest, PointerLockWidgetHidden) {
   EXPECT_EQ(nullptr, web_contents()->GetMouseLockWidget());
 }
 
-IN_PROC_BROWSER_TEST_F(PointerLockBrowserTest,
-                       PointerLockRequestUnadjustedMovement) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(features::kPointerLockOptions);
+// Flaky. https://crbug.com/1014324
+IN_PROC_BROWSER_TEST_F(PointerLockBrowserTestWithOptions,
+                       DISABLED_PointerLockRequestUnadjustedMovement) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b)"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -667,9 +676,7 @@ IN_PROC_BROWSER_TEST_F(PointerLockBrowserTest,
 }
 
 #if defined(USE_AURA)
-IN_PROC_BROWSER_TEST_F(PointerLockBrowserTest, UnadjustedMovement) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(features::kPointerLockOptions);
+IN_PROC_BROWSER_TEST_F(PointerLockBrowserTestWithOptions, UnadjustedMovement) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b)"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));

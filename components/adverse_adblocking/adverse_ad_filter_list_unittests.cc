@@ -12,6 +12,7 @@
 #include "components/adverse_adblocking/vivaldi_content_browser_client.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_client.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
+#include "content/public/common/content_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 

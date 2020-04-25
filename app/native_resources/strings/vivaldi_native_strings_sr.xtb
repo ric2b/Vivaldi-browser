@@ -2,12 +2,12 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sr">
 <translation id="1033008476608128425">Пејзаж 3</translation>
-<translation id="1055184225775184556">Опозови додавање</translation>
 <translation id="1118377629180821201">Пејзаж 12</translation>
-<translation id="1158503667684816647">Не приказуј потврду затварања поново</translation>
+<translation id="1158503667684816647">Не приказуј поново потврду</translation>
 <translation id="1276145862619442150">Брза бирања</translation>
 <translation id="1281950884873973195">Животиња 6</translation>
 <translation id="1411638389238344450">Пошаљи везу поштом</translation>
+<translation id="1454726940098520109">Не приказуј поново потврду</translation>
 <translation id="1462666970065907900">Да ли заиста желите да затворите овај прозор?</translation>
 <translation id="1657174850639146440">Чудовиште 9</translation>
 <translation id="1676595396635191120">Нови приватни прозор</translation>
@@ -16,17 +16,17 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Својства слике...</translation>
 <translation id="1920297417712412573">Копирај у белешку</translation>
+<translation id="1921101374471252440">&amp;Поново учитај слику</translation>
 <translation id="1924750141060565109">Пејзаж 15</translation>
 <translation id="19598411548897379">Опште</translation>
 <translation id="2079036669923635404">Кликните овде да бисте ажурирали Vivaldi на верзију <ph name="VERSION" />.</translation>
 <translation id="2441056087170876076">Чудовиште 2</translation>
 <translation id="2444387452209867610">Убаци белешку</translation>
 <translation id="2486841023299517366">Животиња 4</translation>
-<translation id="2556876185419854533">Опозови уређивање</translation>
 <translation id="2848085334714181751">Животиња 3</translation>
 <translation id="2873951654529031587">Отпад</translation>
 <translation id="292258461174562431">Чудовиште 4</translation>
-<translation id="2972581237482394796">Понови</translation>
+<translation id="2923448633003185837">Налепи и иди</translation>
 <translation id="2977472760057091832">Отвори везу у приватном прозору</translation>
 <translation id="2989805286512600854">Отвори у новој картици</translation>
 <translation id="3027988479108856431">На жалост, подешавања Yandex прегледача нису доступна док је прегледач покренут. За увоз тих подешавања у Vivaldi, сачувајте ваш рад и затворите све прозоре Yandex прегледача. Након тога кликните на Настави.</translation>
@@ -34,16 +34,15 @@
 <translation id="3127383884976966729">Животиња 7</translation>
 <translation id="3156398087075132709">Нови обележивач</translation>
 <translation id="3259769196742189631">Провери ваљаност на W3C</translation>
-<translation id="3270847123878663523">Опозови промену редоследа</translation>
 <translation id="3302905971452834934">Чудовиште 1</translation>
 <translation id="3334610655141903168">(без наслова)</translation>
 <translation id="3402602684546832928">Изаберите датотеку са обележивачима из Opera</translation>
-<translation id="3427342743765426898">Понови уређивање</translation>
 <translation id="3451317331714872347">Пејзаж 8</translation>
+<translation id="3457498675806041407">Потврда затварања прегледача</translation>
 <translation id="3516213908976398531">Пејзаж 11</translation>
+<translation id="3521635864657970829">Да ли заиста желите да затворите овај прозор?</translation>
 <translation id="3540597690227428180">Животиња 9</translation>
 <translation id="3542768452570884558">Отвори везу у новом прозору</translation>
-<translation id="3583757800736429874">Понови премештање</translation>
 <translation id="3588820906588687999">Отвори слику у новој картици</translation>
 <translation id="3601066750251199488">Чудовиште 3</translation>
 <translation id="366643050267431920">Додај као догађај</translation>
@@ -65,15 +64,17 @@
 <translation id="4512900838580567989">Отвори везу у новој картици у позадини</translation>
 <translation id="4515472507709384008">Opera 15+</translation>
 <translation id="4548358047305717967">Отвори слику у новој картици у позадини</translation>
-<translation id="4594403342090139922">Опозови брисање</translation>
+<translation id="4582480609585453144">Отвори везу у картици у позадини</translation>
 <translation id="4636708767492582204">Пошаљи поштом</translation>
 <translation id="4677434526832593569">Животиња 8</translation>
 <translation id="4881695831933465202">Отвори</translation>
+<translation id="4973311370126107785">Извршавање JavaScript-е преко AppleScript је искључено. Да бисте га укључили, на траци менија идите на Алати &gt; Дозволи JavaScript из Apple Events.</translation>
 <translation id="5014281392052865061">Увезено брзо бирање</translation>
 <translation id="5092656712000637858">Додај страницу као веб панел</translation>
 <translation id="5177818338935286353">Чудовиште 7</translation>
 <translation id="5213743983876949565">Животиња 1</translation>
 <translation id="5238244642230426581">Увезени обележивачи</translation>
+<translation id="5305569355661722298">Потврда затварања прозора</translation>
 <translation id="5388358297987318779">Отвори слику</translation>
 <translation id="5416008465899576639">Нова верзија Vivaldi прегледача је доступна.</translation>
 <translation id="5497042274492038489">Потврда затварања прозора</translation>
@@ -87,12 +88,10 @@
 <translation id="5916080360077521750">На жалост, подешавања Chrome прегледача нису доступна док је прегледач покренут. За увоз тих подешавања у Vivaldi, сачувајте ваш рад и затворите све прозоре Chrome прегледача. Након тога кликните на Настави.</translation>
 <translation id="6229528619562190452">Кликните овде да бисте ажурирали Vivaldi.</translation>
 <translation id="6234173136417926046">Користи слику као позадину брзог бирања</translation>
-<translation id="6259156558325130047">Понови промену редоследа</translation>
 <translation id="630690498669249215">Датотека са обележивачима из Opera</translation>
 <translation id="6438786710866753178">Пејзаж 4</translation>
 <translation id="6477028720702061455">Изаберите фасциклу профила Opera прегледача за увоз</translation>
 <translation id="6510706699590490869">Ажурирај Vivaldi</translation>
-<translation id="6529602333819889595">Понови брисање</translation>
 <translation id="6538338088414940408">Отвори везу у картици у позадини</translation>
 <translation id="6551219277044048123">Додај као претраживач...</translation>
 <translation id="6630781781151951863">Пејзаж 18</translation>
@@ -101,13 +100,13 @@
 <translation id="7086554968911045110">Пејзаж 7</translation>
 <translation id="7111492742514999492">Пејзаж 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
+<translation id="7496505986576158197">Vivaldi су омогућили пројекат отвореног кода <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />  и други <ph name="BEGIN_LINK_OSS" />софтвер отвореног кода<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">Игнориши ажурирање</translation>
 <translation id="7724603315864178912">Исеци</translation>
 <translation id="7865983598101744945">Потврда затварања прегледача</translation>
 <translation id="7957213167373139414">Мој календар</translation>
 <translation id="8027581147000338959">Отвори у новом прозору</translation>
 <translation id="8099620695029051217">Копирај адресу странице</translation>
-<translation id="8194797478851900357">Опозови премештање</translation>
 <translation id="8197810018650377191">Додај страницу у обележиваче</translation>
 <translation id="8261506727792406068">Избриши</translation>
 <translation id="8331671104904436324">Отвори у картици у позадини</translation>
@@ -122,11 +121,11 @@
 <translation id="8768970203213061953">Пејзаж 14</translation>
 <translation id="8773635261052182196">Више нећете видети ова обавештења. Можете их омогућити поново у подешавањима Vivaldi прегледача.</translation>
 <translation id="8894900864683381599">Додај везу као веб панел</translation>
+<translation id="8912720443398351457">Да ли заиста желите да затворите Vivaldi?</translation>
 <translation id="8947109330183116400">Изаберите HTML датотеку са обележивачима</translation>
 <translation id="9017566390391482291">Изаберите фасциклу профила Vivaldi прегледача за увоз</translation>
 <translation id="9065203028668620118">Уреди</translation>
 <translation id="9157539936604258187">Отвори везу</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
-<translation id="9170848237812810038">Опозови</translation>
 <translation id="970294721402795299">Пејзаж 16</translation>
 </translationbundle>

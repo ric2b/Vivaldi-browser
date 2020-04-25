@@ -23,6 +23,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "extensions/buildflags/buildflags.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "net/cookies/cookie_store.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/service_manager/public/mojom/service.mojom.h"
@@ -44,16 +45,16 @@ class ZoomLevelDelegate;
 #endif  // !defined(OS_ANDROID)
 }  // namespace content
 
+namespace net {
+class CookieStore;
+}
+
 namespace policy {
 class PolicyService;
 class ProfilePolicyConnector;
 class SchemaRegistryService;
 class UserCloudPolicyManager;
 }  // namespace policy
-
-namespace service_manager {
-class Service;
-}
 
 namespace storage {
 class SpecialStoragePolicy;
@@ -102,6 +103,10 @@ class TestingProfile : public Profile {
     void AddTestingFactory(
         BrowserContextKeyedServiceFactory* service_factory,
         BrowserContextKeyedServiceFactory::TestingFactory testing_factory);
+
+    // Add multiple testing factories to the TestingProfile. These testing
+    // factories are applied before the ProfileKeyedServices are created.
+    void AddTestingFactories(const TestingFactories& testing_factories);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     // Sets the ExtensionSpecialStoragePolicy to be returned by
@@ -282,6 +287,7 @@ class TestingProfile : public Profile {
   content::BrowserPluginGuestManager* GetGuestManager() override;
   storage::SpecialStoragePolicy* GetSpecialStoragePolicy() override;
   content::PushMessagingService* GetPushMessagingService() override;
+  content::StorageNotificationService* GetStorageNotificationService() override;
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionControllerDelegate* GetPermissionControllerDelegate()
       override;
@@ -296,9 +302,6 @@ class TestingProfile : public Profile {
       std::vector<network::mojom::CorsOriginPatternPtr> allow_patterns,
       std::vector<network::mojom::CorsOriginPatternPtr> block_patterns,
       base::OnceClosure closure) override;
-  std::unique_ptr<service_manager::Service> HandleServiceRequest(
-      const std::string& service_name,
-      service_manager::mojom::ServiceRequest request) override;
 
   TestingProfile* AsTestingProfile() override;
 
@@ -307,7 +310,7 @@ class TestingProfile : public Profile {
   ProfileType GetProfileType() const override;
 
   Profile* GetOffTheRecordProfile() override;
-  void DestroyOffTheRecordProfile() override {}
+  void DestroyOffTheRecordProfile() override;
   bool HasOffTheRecordProfile() override;
   Profile* GetOriginalProfile() override;
   const Profile* GetOriginalProfile() const override;
@@ -354,7 +357,7 @@ class TestingProfile : public Profile {
   bool IsNewProfile() override;
   void SetExitType(ExitType exit_type) override {}
   ExitType GetLastSessionExitType() override;
-  network::mojom::NetworkContextPtr CreateNetworkContext(
+  mojo::Remote<network::mojom::NetworkContext> CreateNetworkContext(
       bool in_memory,
       const base::FilePath& relative_partition_path) override;
 
@@ -375,6 +378,7 @@ class TestingProfile : public Profile {
   GURL GetHomePage() override;
 
   void SetCreationTimeForTesting(base::Time creation_time) override;
+  bool ShouldEnableOutOfBlinkCors() override;
 
   PrefService* GetOffTheRecordPrefs() override;
 

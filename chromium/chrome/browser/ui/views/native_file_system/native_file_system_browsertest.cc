@@ -13,9 +13,10 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
-#include "chrome/browser/ui/views/page_action/omnibox_page_action_icon_container_view.h"
+#include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/test/browser_test_utils.h"
 #include "third_party/blink/public/common/features.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/shell_dialogs/select_file_dialog_factory.h"
@@ -99,6 +100,12 @@ class NativeFileSystemBrowserTest : public InProcessBrowserTest {
     ui::SelectFileDialog::SetFactory(nullptr);
   }
 
+  bool IsFullscreen() {
+    content::WebContents* web_contents =
+        browser()->tab_strip_model()->GetActiveWebContents();
+    return web_contents->IsFullscreenForCurrentTab();
+  }
+
   base::FilePath CreateTestFile(const std::string& contents) {
     base::ScopedAllowBlockingForTesting allow_blocking;
     base::FilePath result;
@@ -111,7 +118,6 @@ class NativeFileSystemBrowserTest : public InProcessBrowserTest {
   bool IsUsageIndicatorVisible() {
     auto* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
     auto* icon_view = browser_view->toolbar_button_provider()
-                          ->GetOmniboxPageActionIconContainerView()
                           ->GetPageActionIconView(
                               PageActionIconType::kNativeFileSystemAccess);
     return icon_view && icon_view->GetVisible();
@@ -214,6 +220,54 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest, OpenFile) {
     EXPECT_TRUE(base::ReadFileToString(test_file, &read_contents));
     EXPECT_EQ(file_contents, read_contents);
   }
+}
+
+IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest, FullscreenOpenFile) {
+  const base::FilePath test_file = CreateTestFile("");
+  const std::string file_contents = "file contents to write";
+  GURL frame_url = embedded_test_server()->GetURL("/title1.html");
+
+  ui::SelectFileDialog::SetFactory(
+      new FakeSelectFileDialogFactory({test_file}));
+  ui_test_utils::NavigateToURL(browser(),
+                               embedded_test_server()->GetURL("/title1.html"));
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  NativeFileSystemPermissionRequestManager::FromWebContents(web_contents)
+      ->set_auto_response_for_test(PermissionAction::GRANTED);
+
+  EXPECT_EQ(test_file.BaseName().AsUTF8Unsafe(),
+            content::EvalJs(web_contents,
+                            "(async () => {"
+                            "  let e = await self.chooseFileSystemEntries("
+                            "      {type: 'openFile'});"
+                            "  self.entry = e;"
+                            "  return e.name; })()"));
+
+  EXPECT_TRUE(
+      content::ExecuteScript(web_contents,
+                             "(async () => {"
+                             "  await document.body.requestFullscreen();"
+                             "})()"));
+
+  // Wait until the fullscreen operation completes.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(IsFullscreen());
+
+  EXPECT_TRUE(content::ExecuteScript(
+      web_contents,
+      "(async () => {"
+      "  let fsChangePromise = new Promise((resolve) => {"
+      "    document.onfullscreenchange = resolve;"
+      "  });"
+      "  const w = await self.entry.createWriter();"
+      "  await fsChangePromise;"
+      "  return; })()"));
+
+  // Wait until the fullscreen exit operation completes.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(IsFullscreen());
 }
 
 IN_PROC_BROWSER_TEST_F(NativeFileSystemBrowserTest, SafeBrowsing) {

@@ -19,6 +19,7 @@
 #include "content/public/test/web_contents_tester.h"
 #include "content/test/test_render_frame_host.h"
 #include "content/test/test_render_view_host.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/mojom/loader/pause_subresource_loading_handle.mojom.h"
 #include "ui/base/page_transition_types.h"
@@ -177,20 +178,20 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
 
  private:
   // WebContentsImpl overrides
-  void CreateNewWindow(
+  RenderFrameHostDelegate* CreateNewWindow(
       RenderFrameHost* opener,
-      int32_t route_id,
-      int32_t main_frame_route_id,
-      int32_t main_frame_widget_route_id,
       const mojom::CreateNewWindowParams& params,
+      bool is_new_browsing_instance,
       bool has_user_gesture,
       SessionStorageNamespace* session_storage_namespace) override;
   void CreateNewWidget(int32_t render_process_id,
                        int32_t route_id,
-                       mojom::WidgetPtr widget) override;
+                       mojo::PendingRemote<mojom::Widget> widget,
+                       RenderViewHostImpl* render_view_host) override;
   void CreateNewFullscreenWidget(int32_t render_process_id,
                                  int32_t route_id,
-                                 mojom::WidgetPtr widget) override;
+                                 mojo::PendingRemote<mojom::Widget> widget,
+                                 RenderViewHostImpl* render_view_host) override;
   void ShowCreatedWindow(int process_id,
                          int route_id,
                          WindowOpenDisposition disposition,

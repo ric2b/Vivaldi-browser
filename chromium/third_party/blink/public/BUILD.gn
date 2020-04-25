@@ -34,6 +34,7 @@ group("test_support") {
     ":test_headers",
     "//third_party/blink/renderer/modules/exported:test_support",
     "//third_party/blink/renderer/modules/mediastream:test_support",
+    "//third_party/blink/renderer/modules/peerconnection:test_support",
     "//third_party/blink/renderer/platform:test_support",
   ]
 }
@@ -73,7 +74,6 @@ buildflag_header("buildflags") {
 if (is_android) {
   java_cpp_enum("blink_headers_java_enums_srcjar") {
     sources = [
-      "./common/manifest/web_display_mode.h",
       "./platform/web_focus_type.h",
       "./platform/web_input_event.h",
       "./platform/web_text_input_mode.h",
@@ -104,12 +104,25 @@ source_set("test_headers") {
     "web/modules/mediastream/mock_media_stream_registry.h",
     "web/modules/mediastream/mock_media_stream_video_sink.h",
     "web/modules/mediastream/mock_media_stream_video_source.h",
+
+    # TODO(crbug.com/787254): Remove the group of mock_.h files
+    # below when content/renderer/media/webrtc Onion souping is
+    # done.
+    "web/modules/peerconnection/fake_rtc_rtp_transceiver_impl.h",
+    "web/modules/peerconnection/mock_data_channel_impl.h",
+    "web/modules/peerconnection/mock_peer_connection_dependency_factory.h",
+    "web/modules/peerconnection/mock_peer_connection_impl.h",
+    "web/modules/peerconnection/mock_web_rtc_peer_connection_handler_client.h",
+    "web/modules/peerconnection/webrtc_stats_report_obtainer.h",
   ]
   deps = [
     ":blink_headers",
     "//base:base",
     "//cc:cc",
     "//testing/gmock:gmock",
+    "//third_party/webrtc/api:libjingle_peerconnection_api",
+    "//third_party/webrtc/api:media_stream_interface",
+    "//third_party/webrtc/api:rtc_stats_api",
   ]
 }
 
@@ -134,13 +147,6 @@ source_set("blink_headers") {
     "platform/mac/web_scrollbar_theme.h",
     "platform/media/webmediaplayer_delegate.h",
     "platform/modules/indexeddb/web_idb_database_exception.h",
-    "platform/modules/media_capabilities/web_audio_configuration.h",
-    "platform/modules/media_capabilities/web_media_capabilities_decoding_info.h",
-    "platform/modules/media_capabilities/web_media_capabilities_info.h",
-    "platform/modules/media_capabilities/web_media_capabilities_key_system_configuration.h",
-    "platform/modules/media_capabilities/web_media_configuration.h",
-    "platform/modules/media_capabilities/web_media_decoding_configuration.h",
-    "platform/modules/media_capabilities/web_video_configuration.h",
     "platform/modules/mediastream/media_stream_audio_deliverer.h",
     "platform/modules/mediastream/media_stream_audio_level_calculator.h",
     "platform/modules/mediastream/media_stream_audio_processor_options.h",
@@ -159,8 +165,6 @@ source_set("blink_headers") {
     "platform/modules/peerconnection/audio_codec_factory.h",
     "platform/modules/peerconnection/rtc_event_log_output_sink.h",
     "platform/modules/peerconnection/rtc_event_log_output_sink_proxy_util.h",
-    "platform/modules/peerconnection/rtc_video_decoder_factory_util.h",
-    "platform/modules/peerconnection/rtc_video_encoder_factory_util.h",
     "platform/modules/peerconnection/two_keys_adapter_map.h",
     "platform/modules/peerconnection/webrtc_audio_sink.h",
     "platform/modules/peerconnection/webrtc_util.h",
@@ -235,6 +239,7 @@ source_set("blink_headers") {
     "platform/web_encrypted_media_key_information.h",
     "platform/web_encrypted_media_request.h",
     "platform/web_encrypted_media_types.h",
+    "platform/web_fetch_client_settings_object.h",
     "platform/web_file_system_type.h",
     "platform/web_float_point.h",
     "platform/web_float_point_3d.h",
@@ -265,9 +270,7 @@ source_set("blink_headers") {
     "platform/web_isolated_world_ids.h",
     "platform/web_isolated_world_info.h",
     "platform/web_keyboard_event.h",
-    "platform/web_loading_behavior_flag.h",
     "platform/web_loading_hints_provider.h",
-    "platform/web_localized_string.h",
     "platform/web_media_constraints.h",
     "platform/web_media_key_system_configuration.h",
     "platform/web_media_key_system_media_capability.h",
@@ -301,7 +304,6 @@ source_set("blink_headers") {
     "platform/web_resource_timing_info.h",
     "platform/web_rtc_answer_options.h",
     "platform/web_rtc_api_name.h",
-    "platform/web_rtc_certificate_generator.h",
     "platform/web_rtc_data_channel_init.h",
     "platform/web_rtc_dtmf_sender_handler.h",
     "platform/web_rtc_dtmf_sender_handler_client.h",
@@ -330,7 +332,6 @@ source_set("blink_headers") {
     "platform/web_scrollbar_buttons_placement.h",
     "platform/web_scrollbar_overlay_color_theme.h",
     "platform/web_security_origin.h",
-    "platform/web_security_style.h",
     "platform/web_set_sink_id_callbacks.h",
     "platform/web_size.h",
     "platform/web_source_buffer.h",
@@ -349,7 +350,6 @@ source_set("blink_headers") {
     "platform/web_touch_action.h",
     "platform/web_touch_event.h",
     "platform/web_touch_point.h",
-    "platform/web_transmission_encoding_info_handler.h",
     "platform/web_url.h",
     "platform/web_url_error.h",
     "platform/web_url_load_timing.h",
@@ -384,6 +384,14 @@ source_set("blink_headers") {
     "web/modules/mediastream/web_media_stream_utils.h",
     "web/modules/mediastream/webmediaplayer_ms.h",
     "web/modules/peerconnection/media_stream_remote_video_source.h",
+    "web/modules/peerconnection/media_stream_video_webrtc_sink.h",
+    "web/modules/peerconnection/peer_connection_dependency_factory.h",
+    "web/modules/peerconnection/rtc_rtp_receiver_impl.h",
+    "web/modules/peerconnection/rtc_rtp_sender_impl.h",
+    "web/modules/peerconnection/rtc_rtp_transceiver_impl.h",
+    "web/modules/peerconnection/transceiver_state_surfacer.h",
+    "web/modules/peerconnection/webrtc_media_stream_track_adapter.h",
+    "web/modules/peerconnection/webrtc_media_stream_track_adapter_map.h",
     "web/modules/service_worker/web_service_worker_context_client.h",
     "web/modules/service_worker/web_service_worker_context_proxy.h",
     "web/modules/webrtc/webrtc_audio_device_impl.h",
@@ -467,14 +475,12 @@ source_set("blink_headers") {
     "web/web_pepper_socket_client.h",
     "web/web_performance.h",
     "web/web_plugin.h",
-    "web/web_plugin_action.h",
     "web/web_plugin_container.h",
     "web/web_plugin_document.h",
     "web/web_plugin_params.h",
     "web/web_plugin_script_forbidden_scope.h",
     "web/web_popup_menu_info.h",
     "web/web_prerenderer_client.h",
-    "web/web_presentation_receiver_flags.h",
     "web/web_print_params.h",
     "web/web_print_preset_options.h",
     "web/web_print_scaling_option.h",
@@ -503,7 +509,6 @@ source_set("blink_headers") {
     "web/web_text_decoration_type.h",
     "web/web_text_direction.h",
     "web/web_tree_scope_type.h",
-    "web/web_triggering_event_info.h",
     "web/web_user_gesture_indicator.h",
     "web/web_user_gesture_token.h",
     "web/web_user_media_request.h",
@@ -549,6 +554,8 @@ source_set("blink_headers") {
     "//services/network/public/mojom",
     "//third_party/blink/renderer/platform/wtf:wtf",
     "//third_party/webrtc/api:libjingle_peerconnection_api",
+    "//third_party/webrtc/api:media_stream_interface",
+    "//third_party/webrtc/api:rtc_error",
     "//third_party/webrtc/api:rtc_stats_api",
     "//third_party/webrtc/api:rtp_parameters",
     "//third_party/webrtc/api:scoped_refptr",
@@ -560,30 +567,40 @@ source_set("blink_headers") {
     "//third_party/webrtc/modules/audio_device:audio_device_api",
     "//third_party/webrtc/modules/audio_processing:api",
     "//third_party/webrtc/modules/video_coding:video_codec_interface",
+    "//third_party/webrtc/p2p:libstunprober",
     "//third_party/webrtc/pc:peerconnection",
     "//third_party/webrtc/rtc_base:rtc_base",
     "//third_party/webrtc/rtc_base:rtc_task_queue",
+
+    # TODO(titovartem) remove dependency on WebRTC internals.
+    "//third_party/webrtc/rtc_base/third_party/sigslot:sigslot",
     "//third_party/webrtc_overrides:init_webrtc",
     "//ui/base:base",
     "//v8:v8_headers",
   ]
 }
 
+if (external_devtools_frontend) {
+  devtools_frontend_path = "//third_party/devtools-frontend"
+} else {
+  devtools_frontend_path = "//third_party/blink/renderer/devtools"
+}
+
 group("blink_devtools_frontend_resources") {
   public_deps = [
-    "//third_party/blink/renderer/devtools:devtools_frontend_resources",
+    "$devtools_frontend_path:devtools_frontend_resources",
   ]
 }
 
 group("blink_devtools_frontend_resources_files") {
   data_deps = [
-    "//third_party/blink/renderer/devtools:devtools_all_files",
+    "$devtools_frontend_path:devtools_all_files",
   ]
 }
 
 group("blink_generate_devtools_grd") {
   public_deps = [
-    "//third_party/blink/renderer/devtools:generate_devtools_grd",
+    "$devtools_frontend_path:generate_devtools_grd",
   ]
 }
 
@@ -596,9 +613,6 @@ grit("resources") {
     "grit/blink_resources.h",
     "blink_resources.pak",
   ]
-  if (is_android) {
-    defines = [ "notouch_build=$notouch_build" ]
-  }
   html_min_css = "$blink_core_output_dir/html.css"
   grit_flags = [
     "-E",
@@ -624,10 +638,6 @@ group("scaled_resources") {
     ":image_resources",
     "//third_party/blink/renderer/modules/media_controls:media_controls_resources",
   ]
-
-  if (is_android && notouch_build) {
-    public_deps += [ "//third_party/blink/renderer/modules/media_controls:media_controls_touchless_resources" ]
-  }
 }
 
 repack("scaled_resources_100_percent") {
@@ -636,9 +646,6 @@ repack("scaled_resources_100_percent") {
     "$root_gen_dir/third_party/blink/public/resources/blink_image_resources_100_percent.pak",
     "$root_gen_dir/third_party/blink/renderer/modules/media_controls/resources/media_controls_resources_100_percent.pak",
   ]
-  if (is_android && notouch_build) {
-    sources += [ "$root_gen_dir/third_party/blink/renderer/modules/media_controls/touchless/resources/media_controls_touchless_resources.pak" ]
-  }
   deps = [
     ":scaled_resources",
   ]
@@ -650,9 +657,6 @@ repack("scaled_resources_200_percent") {
     "$root_gen_dir/third_party/blink/public/resources/blink_image_resources_200_percent.pak",
     "$root_gen_dir/third_party/blink/renderer/modules/media_controls/resources/media_controls_resources_200_percent.pak",
   ]
-  if (is_android && notouch_build) {
-    sources += [ "$root_gen_dir/third_party/blink/renderer/modules/media_controls/touchless/resources/media_controls_touchless_resources.pak" ]
-  }
   deps = [
     ":scaled_resources",
   ]

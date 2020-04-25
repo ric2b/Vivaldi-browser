@@ -405,7 +405,7 @@ class HttpNetworkTransactionTest : public PlatformTest,
     base::RunLoop().RunUntilIdle();
     // Set an initial delay to ensure that the first call to TimeTicks::Now()
     // before incrementing the counter does not return a null value.
-    FastForwardBy(TimeDelta::FromSeconds(1));
+    FastForwardBy(base::TimeDelta::FromSeconds(1));
   }
 
   void TearDown() override {
@@ -869,39 +869,6 @@ TEST_F(HttpNetworkTransactionTest, SimpleGETNoReadDestroyRequestInfo) {
   }  // Let request info be destroyed.
 
   trans.reset();
-}
-
-// Response with no status line, and a weird port.  Option to allow weird ports
-// enabled.
-TEST_F(HttpNetworkTransactionTest, SimpleGETNoHeadersWeirdPortAllowed) {
-  MockRead data_reads[] = {
-      MockRead("hello world"), MockRead(SYNCHRONOUS, OK),
-  };
-
-  StaticSocketDataProvider data(data_reads, base::span<MockWrite>());
-  session_deps_.socket_factory->AddSocketDataProvider(&data);
-  session_deps_.http_09_on_non_default_ports_enabled = true;
-  std::unique_ptr<HttpNetworkSession> session(CreateSession(&session_deps_));
-
-  HttpRequestInfo request;
-  auto trans =
-      std::make_unique<HttpNetworkTransaction>(DEFAULT_PRIORITY, session.get());
-
-  request.method = "GET";
-  request.url = GURL("http://www.example.com:2000/");
-  request.traffic_annotation =
-      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS);
-
-  TestCompletionCallback callback;
-  int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
-  EXPECT_THAT(callback.GetResult(rv), IsOk());
-
-  const HttpResponseInfo* info = trans->GetResponseInfo();
-  ASSERT_TRUE(info->headers);
-  EXPECT_EQ("HTTP/0.9 200 OK", info->headers->GetStatusLine());
-
-  // Don't bother to read the body - that's verified elsewhere, important thing
-  // is that the option to allow HTTP/0.9 on non-default ports is respected.
 }
 
 // Allow up to 4 bytes of junk to precede status line.
@@ -5521,7 +5488,8 @@ TEST_F(HttpNetworkTransactionTest, HttpsProxySpdyGetWithSessionRace) {
   session_deps_.host_resolver->set_ondemand_mode(false);
   SpdySessionKey key(HostPortPair("proxy", 70), ProxyServer::Direct(),
                      PRIVACY_MODE_DISABLED,
-                     SpdySessionKey::IsProxySession::kTrue, SocketTag());
+                     SpdySessionKey::IsProxySession::kTrue, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */);
   base::WeakPtr<SpdySession> spdy_session =
       CreateSpdySession(session.get(), key, log.bound());
 
@@ -11367,7 +11335,9 @@ TEST_F(HttpNetworkTransactionTest, GroupIdForDirectConnections) {
           "http://www.example.org/direct",
           ClientSocketPool::GroupId(HostPortPair("www.example.org", 80),
                                     ClientSocketPool::SocketType::kHttp,
-                                    PrivacyMode::PRIVACY_MODE_DISABLED),
+                                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                                    NetworkIsolationKey(),
+                                    false /* disable_secure_dns */),
           false,
       },
       {
@@ -11375,7 +11345,9 @@ TEST_F(HttpNetworkTransactionTest, GroupIdForDirectConnections) {
           "http://[2001:1418:13:1::25]/direct",
           ClientSocketPool::GroupId(HostPortPair("2001:1418:13:1::25", 80),
                                     ClientSocketPool::SocketType::kHttp,
-                                    PrivacyMode::PRIVACY_MODE_DISABLED),
+                                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                                    NetworkIsolationKey(),
+                                    false /* disable_secure_dns */),
           false,
       },
 
@@ -11385,7 +11357,9 @@ TEST_F(HttpNetworkTransactionTest, GroupIdForDirectConnections) {
           "https://www.example.org/direct_ssl",
           ClientSocketPool::GroupId(HostPortPair("www.example.org", 443),
                                     ClientSocketPool::SocketType::kSsl,
-                                    PrivacyMode::PRIVACY_MODE_DISABLED),
+                                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                                    NetworkIsolationKey(),
+                                    false /* disable_secure_dns */),
           true,
       },
       {
@@ -11393,7 +11367,9 @@ TEST_F(HttpNetworkTransactionTest, GroupIdForDirectConnections) {
           "https://[2001:1418:13:1::25]/direct",
           ClientSocketPool::GroupId(HostPortPair("2001:1418:13:1::25", 443),
                                     ClientSocketPool::SocketType::kSsl,
-                                    PrivacyMode::PRIVACY_MODE_DISABLED),
+                                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                                    NetworkIsolationKey(),
+                                    false /* disable_secure_dns */),
           true,
       },
       {
@@ -11401,7 +11377,9 @@ TEST_F(HttpNetworkTransactionTest, GroupIdForDirectConnections) {
           "https://host.with.alternate/direct",
           ClientSocketPool::GroupId(HostPortPair("host.with.alternate", 443),
                                     ClientSocketPool::SocketType::kSsl,
-                                    PrivacyMode::PRIVACY_MODE_DISABLED),
+                                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                                    NetworkIsolationKey(),
+                                    false /* disable_secure_dns */),
           true,
       },
   };
@@ -11436,7 +11414,9 @@ TEST_F(HttpNetworkTransactionTest, GroupIdForHTTPProxyConnections) {
           "http://www.example.org/http_proxy_normal",
           ClientSocketPool::GroupId(HostPortPair("www.example.org", 80),
                                     ClientSocketPool::SocketType::kHttp,
-                                    PrivacyMode::PRIVACY_MODE_DISABLED),
+                                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                                    NetworkIsolationKey(),
+                                    false /* disable_secure_dns */),
           false,
       },
 
@@ -11446,7 +11426,9 @@ TEST_F(HttpNetworkTransactionTest, GroupIdForHTTPProxyConnections) {
           "https://www.example.org/http_connect_ssl",
           ClientSocketPool::GroupId(HostPortPair("www.example.org", 443),
                                     ClientSocketPool::SocketType::kSsl,
-                                    PrivacyMode::PRIVACY_MODE_DISABLED),
+                                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                                    NetworkIsolationKey(),
+                                    false /* disable_secure_dns */),
           true,
       },
 
@@ -11455,7 +11437,9 @@ TEST_F(HttpNetworkTransactionTest, GroupIdForHTTPProxyConnections) {
           "https://host.with.alternate/direct",
           ClientSocketPool::GroupId(HostPortPair("host.with.alternate", 443),
                                     ClientSocketPool::SocketType::kSsl,
-                                    PrivacyMode::PRIVACY_MODE_DISABLED),
+                                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                                    NetworkIsolationKey(),
+                                    false /* disable_secure_dns */),
           true,
       },
   };
@@ -11492,7 +11476,9 @@ TEST_F(HttpNetworkTransactionTest, GroupIdForSOCKSConnections) {
           "http://www.example.org/socks4_direct",
           ClientSocketPool::GroupId(HostPortPair("www.example.org", 80),
                                     ClientSocketPool::SocketType::kHttp,
-                                    PrivacyMode::PRIVACY_MODE_DISABLED),
+                                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                                    NetworkIsolationKey(),
+                                    false /* disable_secure_dns */),
           false,
       },
       {
@@ -11500,7 +11486,9 @@ TEST_F(HttpNetworkTransactionTest, GroupIdForSOCKSConnections) {
           "http://www.example.org/socks5_direct",
           ClientSocketPool::GroupId(HostPortPair("www.example.org", 80),
                                     ClientSocketPool::SocketType::kHttp,
-                                    PrivacyMode::PRIVACY_MODE_DISABLED),
+                                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                                    NetworkIsolationKey(),
+                                    false /* disable_secure_dns */),
           false,
       },
 
@@ -11510,7 +11498,9 @@ TEST_F(HttpNetworkTransactionTest, GroupIdForSOCKSConnections) {
           "https://www.example.org/socks4_ssl",
           ClientSocketPool::GroupId(HostPortPair("www.example.org", 443),
                                     ClientSocketPool::SocketType::kSsl,
-                                    PrivacyMode::PRIVACY_MODE_DISABLED),
+                                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                                    NetworkIsolationKey(),
+                                    false /* disable_secure_dns */),
           true,
       },
       {
@@ -11518,7 +11508,9 @@ TEST_F(HttpNetworkTransactionTest, GroupIdForSOCKSConnections) {
           "https://www.example.org/socks5_ssl",
           ClientSocketPool::GroupId(HostPortPair("www.example.org", 443),
                                     ClientSocketPool::SocketType::kSsl,
-                                    PrivacyMode::PRIVACY_MODE_DISABLED),
+                                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                                    NetworkIsolationKey(),
+                                    false /* disable_secure_dns */),
           true,
       },
 
@@ -11527,7 +11519,9 @@ TEST_F(HttpNetworkTransactionTest, GroupIdForSOCKSConnections) {
           "https://host.with.alternate/direct",
           ClientSocketPool::GroupId(HostPortPair("host.with.alternate", 443),
                                     ClientSocketPool::SocketType::kSsl,
-                                    PrivacyMode::PRIVACY_MODE_DISABLED),
+                                    PrivacyMode::PRIVACY_MODE_DISABLED,
+                                    NetworkIsolationKey(),
+                                    false /* disable_secure_dns */),
           true,
       },
   };
@@ -12637,7 +12631,8 @@ TEST_F(HttpNetworkTransactionTest, IdentifyQuicBroken) {
       server, NetworkIsolationKey(), alternative_service, expiration,
       HttpNetworkSession::Params().quic_params.supported_versions);
   // Mark the QUIC alternative service as broken.
-  http_server_properties->MarkAlternativeServiceBroken(alternative_service);
+  http_server_properties->MarkAlternativeServiceBroken(alternative_service,
+                                                       NetworkIsolationKey());
 
   HttpRequestInfo request;
   HttpNetworkTransaction trans(DEFAULT_PRIORITY, session.get());
@@ -12711,7 +12706,8 @@ TEST_F(HttpNetworkTransactionTest, IdentifyQuicNotBroken) {
       server, NetworkIsolationKey(), alternative_service_info_vector);
 
   // Mark one of the QUIC alternative service as broken.
-  http_server_properties->MarkAlternativeServiceBroken(alternative_service1);
+  http_server_properties->MarkAlternativeServiceBroken(alternative_service1,
+                                                       NetworkIsolationKey());
   EXPECT_EQ(2u, http_server_properties
                     ->GetAlternativeServiceInfos(server, NetworkIsolationKey())
                     .size());
@@ -12791,8 +12787,8 @@ TEST_F(HttpNetworkTransactionTest, MarkBrokenAlternateProtocolAndFallback) {
   ASSERT_EQ(1u, alternative_service_info_vector.size());
   EXPECT_EQ(alternative_service,
             alternative_service_info_vector[0].alternative_service());
-  EXPECT_TRUE(
-      http_server_properties->IsAlternativeServiceBroken(alternative_service));
+  EXPECT_TRUE(http_server_properties->IsAlternativeServiceBroken(
+      alternative_service, NetworkIsolationKey()));
 }
 
 // Ensure that we are not allowed to redirect traffic via an alternate protocol
@@ -13643,7 +13639,8 @@ TEST_F(HttpNetworkTransactionTest,
   HostPortPair host_port_pair("www.example.org", 443);
   SpdySessionKey key(host_port_pair, ProxyServer::Direct(),
                      PRIVACY_MODE_DISABLED,
-                     SpdySessionKey::IsProxySession::kFalse, SocketTag());
+                     SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */);
   base::WeakPtr<SpdySession> spdy_session =
       CreateSpdySession(session.get(), key, NetLogWithSource());
 
@@ -14704,7 +14701,8 @@ TEST_F(HttpNetworkTransactionTest, MultiRoundAuth) {
 
   const ClientSocketPool::GroupId kSocketGroup(
       HostPortPair("www.example.com", 80), ClientSocketPool::SocketType::kHttp,
-      PrivacyMode::PRIVACY_MODE_DISABLED);
+      PrivacyMode::PRIVACY_MODE_DISABLED, NetworkIsolationKey(),
+      false /* disable_secure_dns */);
 
   // First round of authentication.
   auth_handler->SetGenerateExpectation(false, OK);
@@ -15314,7 +15312,8 @@ TEST_F(HttpNetworkTransactionTest, PreconnectWithExistingSpdySession) {
   HostPortPair host_port_pair("www.example.org", 443);
   SpdySessionKey key(host_port_pair, ProxyServer::Direct(),
                      PRIVACY_MODE_DISABLED,
-                     SpdySessionKey::IsProxySession::kFalse, SocketTag());
+                     SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+                     NetworkIsolationKey(), false /* disable_secure_dns */);
   base::WeakPtr<SpdySession> spdy_session =
       CreateSpdySession(session.get(), key, NetLogWithSource());
 
@@ -16526,8 +16525,8 @@ TEST_F(HttpNetworkTransactionTest, FailedAlternativeServiceIsNotUserVisible) {
 
   // Alternative should be marked as broken, because HTTP/1.1 is not sufficient
   // for alternative service.
-  EXPECT_TRUE(
-      http_server_properties->IsAlternativeServiceBroken(alternative_service));
+  EXPECT_TRUE(http_server_properties->IsAlternativeServiceBroken(
+      alternative_service, NetworkIsolationKey()));
 
   // Since |alternative_service| is broken, a second transaction to server
   // should not start an alternate Job.  It should pool to existing connection
@@ -17071,7 +17070,8 @@ TEST_F(HttpNetworkTransactionTest, CloseIdleSpdySessionToOpenNewOne) {
   HostPortPair host_port_pair_a("www.a.com", 443);
   SpdySessionKey spdy_session_key_a(
       host_port_pair_a, ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-      SpdySessionKey::IsProxySession::kFalse, SocketTag());
+      SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+      NetworkIsolationKey(), false /* disable_secure_dns */);
   EXPECT_FALSE(
       HasSpdySession(session->spdy_session_pool(), spdy_session_key_a));
 
@@ -17106,7 +17106,8 @@ TEST_F(HttpNetworkTransactionTest, CloseIdleSpdySessionToOpenNewOne) {
   HostPortPair host_port_pair_b("www.b.com", 443);
   SpdySessionKey spdy_session_key_b(
       host_port_pair_b, ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-      SpdySessionKey::IsProxySession::kFalse, SocketTag());
+      SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+      NetworkIsolationKey(), false /* disable_secure_dns */);
   EXPECT_FALSE(
       HasSpdySession(session->spdy_session_pool(), spdy_session_key_b));
   HttpRequestInfo request2;
@@ -17138,7 +17139,8 @@ TEST_F(HttpNetworkTransactionTest, CloseIdleSpdySessionToOpenNewOne) {
   HostPortPair host_port_pair_a1("www.a.com", 80);
   SpdySessionKey spdy_session_key_a1(
       host_port_pair_a1, ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
-      SpdySessionKey::IsProxySession::kFalse, SocketTag());
+      SpdySessionKey::IsProxySession::kFalse, SocketTag(),
+      NetworkIsolationKey(), false /* disable_secure_dns */);
   EXPECT_FALSE(
       HasSpdySession(session->spdy_session_pool(), spdy_session_key_a1));
   HttpRequestInfo request3;

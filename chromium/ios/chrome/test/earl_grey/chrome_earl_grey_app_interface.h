@@ -106,6 +106,18 @@
 // Navigates forward to the next page without waiting for the page to load.
 + (void)startGoingForward;
 
+// Returns the title of the current selected tab.
++ (NSString*)currentTabTitle;
+
+// Returns the title of the next tab. Assumes that there is a next tab.
++ (NSString*)nextTabTitle;
+
+// Returns a unique identifier for the current Tab.
++ (NSString*)currentTabID;
+
+// Returns a unique identifier for the next Tab.
++ (NSString*)nextTabID;
+
 #pragma mark - WebState Utilities (EG2)
 
 // Attempts to tap the element with |element_id| within window.frames[0] of the
@@ -154,6 +166,16 @@
 // Returns the current WebState's VisibleURL.
 + (NSString*)webStateVisibleURL;
 
+// Purges cached web view pages in the current web state, so the next time back
+// navigation will not use a cached page. Browsers don't have to use a fresh
+// version for back/forward navigation for HTTP pages and may serve a version
+// from the cache even if the Cache-Control response header says otherwise.
++ (void)purgeCachedWebViewPages;
+
+// Returns YES if the current WebState's navigation manager is currently
+// restoring session state.
++ (BOOL)isRestoreSessionInProgress;
+
 #pragma mark - Sync Utilities (EG2)
 
 // Clears the autofill profile for the given |GUID|.
@@ -179,6 +201,17 @@
 // Clears bookmarks. If not succeed returns an NSError indicating  why the
 // operation failed, otherwise nil.
 + (NSError*)clearBookmarks;
+
+#pragma mark - URL Utilities (EG2)
+
+// Returns the title string to be used for a page with |URL| if that page
+// doesn't specify a title.
++ (NSString*)displayTitleForURL:(NSString*)URL;
+
+#pragma mark - Autofill Utilities (EG2)
+
+// Removes the stored credit cards.
++ (void)clearCreditCards;
 
 #pragma mark - Sync Utilities (EG2)
 
@@ -285,6 +318,17 @@
 
 // Returns YES if WebPaymentsModifiers feature is enabled.
 + (BOOL)isWebPaymentsModifiersEnabled WARN_UNUSED_RESULT;
+
+// Returns YES if SettingsAddPaymentMethod feature is enabled.
++ (BOOL)isSettingsAddPaymentMethodEnabled WARN_UNUSED_RESULT;
+
+// Returns YES if CreditCardScanner feature is enabled.
++ (BOOL)isCreditCardScannerEnabled WARN_UNUSED_RESULT;
+
+// Returns YES if custom WebKit frameworks were properly loaded, rather than
+// system frameworks. Always returns YES if the app was not requested to run
+// with custom WebKit frameworks.
++ (BOOL)isCustomWebKitLoadedIfRequested WARN_UNUSED_RESULT;
 
 #pragma mark - Popup Blocking
 

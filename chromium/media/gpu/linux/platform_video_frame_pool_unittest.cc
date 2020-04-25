@@ -11,7 +11,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
-#include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/gpu/linux/platform_video_frame_pool.h"
@@ -29,11 +28,13 @@ base::ScopedFD CreateTmpHandle() {
   return base::ScopedFD(file.TakePlatformFile());
 }
 
-scoped_refptr<VideoFrame> CreateDmabufVideoFrame(VideoPixelFormat format,
-                                                 const gfx::Size& coded_size,
-                                                 const gfx::Rect& visible_rect,
-                                                 const gfx::Size& natural_size,
-                                                 base::TimeDelta timestamp) {
+scoped_refptr<VideoFrame> CreateDmabufVideoFrame(
+    gpu::GpuMemoryBufferFactory* factory,
+    VideoPixelFormat format,
+    const gfx::Size& coded_size,
+    const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
+    base::TimeDelta timestamp) {
   base::Optional<VideoFrameLayout> layout =
       VideoFrameLayout::Create(format, coded_size);
   DCHECK(layout);
@@ -51,13 +52,14 @@ scoped_refptr<VideoFrame> CreateDmabufVideoFrame(VideoPixelFormat format,
 class PlatformVideoFramePoolTest
     : public ::testing::TestWithParam<VideoPixelFormat> {
  public:
-  using DmabufId = PlatformVideoFramePool::DmabufId;
+  using DmabufId = DmabufVideoFramePool::DmabufId;
 
   PlatformVideoFramePoolTest()
       : task_environment_(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
     pool_.reset(new PlatformVideoFramePool(
-        base::BindRepeating(&CreateDmabufVideoFrame), &test_clock_));
+        base::BindRepeating(&CreateDmabufVideoFrame)));
     pool_->set_parent_task_runner(base::ThreadTaskRunnerHandle::Get());
+    pool_->SetMaxNumFrames(10);
   }
 
   void SetFrameFormat(VideoPixelFormat format) {
@@ -86,11 +88,8 @@ class PlatformVideoFramePoolTest
     EXPECT_EQ(size, pool_->GetPoolSizeForTesting());
   }
 
-  DmabufId GetDmabufId(const VideoFrame& frame) { return &(frame.DmabufFds()); }
-
  protected:
   base::test::TaskEnvironment task_environment_;
-  base::SimpleTestTickClock test_clock_;
   std::unique_ptr<PlatformVideoFramePool,
                   std::default_delete<DmabufVideoFramePool>>
       pool_;
@@ -109,7 +108,7 @@ INSTANTIATE_TEST_SUITE_P(,
 TEST_F(PlatformVideoFramePoolTest, SingleFrameReuse) {
   SetFrameFormat(PIXEL_FORMAT_I420);
   scoped_refptr<VideoFrame> frame = GetFrame(10);
-  DmabufId id = GetDmabufId(*frame);
+  DmabufId id = DmabufVideoFramePool::GetDmabufId(*frame);
 
   // Clear frame reference to return the frame to the pool.
   frame = nullptr;
@@ -117,25 +116,25 @@ TEST_F(PlatformVideoFramePoolTest, SingleFrameReuse) {
 
   // Verify that the next frame from the pool uses the same memory.
   scoped_refptr<VideoFrame> new_frame = GetFrame(20);
-  EXPECT_EQ(id, GetDmabufId(*new_frame));
+  EXPECT_EQ(id, DmabufVideoFramePool::GetDmabufId(*new_frame));
 }
 
 TEST_F(PlatformVideoFramePoolTest, MultipleFrameReuse) {
   SetFrameFormat(PIXEL_FORMAT_I420);
   scoped_refptr<VideoFrame> frame1 = GetFrame(10);
   scoped_refptr<VideoFrame> frame2 = GetFrame(20);
-  DmabufId id1 = GetDmabufId(*frame1);
-  DmabufId id2 = GetDmabufId(*frame2);
+  DmabufId id1 = DmabufVideoFramePool::GetDmabufId(*frame1);
+  DmabufId id2 = DmabufVideoFramePool::GetDmabufId(*frame2);
 
   frame1 = nullptr;
   task_environment_.RunUntilIdle();
   frame1 = GetFrame(30);
-  EXPECT_EQ(id1, GetDmabufId(*frame1));
+  EXPECT_EQ(id1, DmabufVideoFramePool::GetDmabufId(*frame1));
 
   frame2 = nullptr;
   task_environment_.RunUntilIdle();
   frame2 = GetFrame(40);
-  EXPECT_EQ(id2, GetDmabufId(*frame2));
+  EXPECT_EQ(id2, DmabufVideoFramePool::GetDmabufId(*frame2));
 
   frame1 = nullptr;
   frame2 = nullptr;
@@ -163,33 +162,11 @@ TEST_F(PlatformVideoFramePoolTest, FormatChange) {
   CheckPoolSize(0u);
 }
 
-TEST_F(PlatformVideoFramePoolTest, StaleFramesAreExpired) {
-  SetFrameFormat(PIXEL_FORMAT_I420);
-  scoped_refptr<VideoFrame> frame_1 = GetFrame(10);
-  scoped_refptr<VideoFrame> frame_2 = GetFrame(10);
-  EXPECT_NE(frame_1.get(), frame_2.get());
-  CheckPoolSize(0u);
-
-  // Drop frame and verify that resources are still available for reuse.
-  frame_1 = nullptr;
-  task_environment_.RunUntilIdle();
-  CheckPoolSize(1u);
-
-  // Advance clock far enough to hit stale timer; ensure only frame_1 has its
-  // resources released.
-  base::TimeDelta time_forward = base::TimeDelta::FromMinutes(1);
-  test_clock_.Advance(time_forward);
-  task_environment_.FastForwardBy(time_forward);
-  frame_2 = nullptr;
-  task_environment_.RunUntilIdle();
-  CheckPoolSize(1u);
-}
-
 TEST_F(PlatformVideoFramePoolTest, UnwrapVideoFrame) {
   SetFrameFormat(PIXEL_FORMAT_I420);
   scoped_refptr<VideoFrame> frame_1 = GetFrame(10);
   scoped_refptr<VideoFrame> frame_2 = VideoFrame::WrapVideoFrame(
-      *frame_1, frame_1->format(), frame_1->visible_rect(),
+      frame_1, frame_1->format(), frame_1->visible_rect(),
       frame_1->natural_size());
   EXPECT_EQ(pool_->UnwrapFrame(*frame_1), pool_->UnwrapFrame(*frame_2));
   EXPECT_TRUE(frame_1->IsSameDmaBufsAs(*frame_2));

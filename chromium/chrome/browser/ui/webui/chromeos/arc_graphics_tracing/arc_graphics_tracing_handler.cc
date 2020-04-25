@@ -404,9 +404,16 @@ void ArcGraphicsTracingHandler::StartTracing() {
 
   base::trace_event::TraceConfig config(
       "-*,exo,viz,toplevel,gpu,cc,blink,disabled-by-default-android "
-      "gfx,disabled-by-default-android hal,disabled-by-default-android view",
+      "gfx,disabled-by-default-android view",
       base::trace_event::RECORD_CONTINUOUSLY);
   config.EnableSystrace();
+  // By default, systracing starts pre-defined set of categories with predefined
+  // set of events in each category. Limit events to what we actually analyze in
+  // ArcTracingModel.
+  config.EnableSystraceEvent("i915:intel_gpu_freq_change");
+  config.EnableSystraceEvent("power:cpu_idle");
+  config.EnableSystraceEvent("sched:sched_wakeup");
+  config.EnableSystraceEvent("sched:sched_switch");
   tracing_active_ = true;
   if (jank_detector_)
     jank_detector_->Reset();
@@ -434,8 +441,8 @@ void ArcGraphicsTracingHandler::StopTracing() {
     return;
 
   controller->StopTracing(content::TracingController::CreateStringEndpoint(
-      base::BindRepeating(&ArcGraphicsTracingHandler::OnTracingStopped,
-                          weak_ptr_factory_.GetWeakPtr())));
+      base::BindOnce(&ArcGraphicsTracingHandler::OnTracingStopped,
+                     weak_ptr_factory_.GetWeakPtr())));
 }
 
 void ArcGraphicsTracingHandler::SetStatus(const std::string& status) {
@@ -452,10 +459,9 @@ void ArcGraphicsTracingHandler::OnTracingStarted() {
 }
 
 void ArcGraphicsTracingHandler::OnTracingStopped(
-    std::unique_ptr<const base::DictionaryValue> metadata,
-    base::RefCountedString* trace_data) {
+    std::unique_ptr<std::string> trace_data) {
   std::string string_data;
-  string_data.swap(trace_data->data());
+  string_data.swap(*trace_data);
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},

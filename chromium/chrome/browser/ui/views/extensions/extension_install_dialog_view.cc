@@ -29,6 +29,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/geometry/insets.h"
@@ -239,6 +240,8 @@ ExtensionInstallDialogView::ExtensionInstallDialogView(
       scroll_view_(nullptr),
       handled_result_(false),
       install_button_enabled_(false) {
+  DialogDelegate::set_default_button(ui::DIALOG_BUTTON_CANCEL);
+  DialogDelegate::set_draggable(true);
   set_close_on_deactivate(false);
   CreateContents();
 
@@ -394,23 +397,12 @@ bool ExtensionInstallDialogView::Accept() {
   return true;
 }
 
-// parent_window() may be null if an upgrade permissions prompt is triggered
-// when launching via a desktop shortcut. In that case, there is no browser
-// window to move (which would move the dialog), so allow dragging in this case.
-bool ExtensionInstallDialogView::IsDialogDraggable() const {
-  return !parent_window();
-}
-
 int ExtensionInstallDialogView::GetDialogButtons() const {
   int buttons = prompt_->GetDialogButtons();
   // Simply having just an OK button is *not* supported. See comment on function
   // GetDialogButtons in dialog_delegate.h for reasons.
   DCHECK_GT(buttons & ui::DIALOG_BUTTON_CANCEL, 0);
   return buttons;
-}
-
-int ExtensionInstallDialogView::GetDefaultDialogButton() const {
-  return ui::DIALOG_BUTTON_CANCEL;
 }
 
 base::string16 ExtensionInstallDialogView::GetDialogButtonLabel(

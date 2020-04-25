@@ -8,17 +8,16 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.os.Build;
 import android.util.Pair;
 
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
-import org.chromium.chrome.browser.document.DocumentUtils;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.TabState;
 import org.chromium.chrome.browser.tabmodel.TabbedModeTabPersistencePolicy;
+import org.chromium.chrome.browser.util.AndroidTaskUtils;
 
 import java.io.File;
 import java.util.HashSet;
@@ -47,13 +46,12 @@ public class IncognitoUtils {
         Context context = ContextUtils.getApplicationContext();
         ActivityManager manager =
                 (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-        PackageManager pm = context.getPackageManager();
 
         Set<Integer> tabbedModeTaskIds = new HashSet<>();
         for (ActivityManager.AppTask task : manager.getAppTasks()) {
-            ActivityManager.RecentTaskInfo info = DocumentUtils.getTaskInfoFromTask(task);
+            ActivityManager.RecentTaskInfo info = AndroidTaskUtils.getTaskInfoFromTask(task);
             if (info == null) continue;
-            String componentName = DocumentUtils.getTaskComponentName(task, pm);
+            String componentName = AndroidTaskUtils.getTaskComponentName(task);
 
             if (ChromeTabbedActivity.isTabbedModeComponentName(componentName)) {
                 tabbedModeTaskIds.add(info.id);

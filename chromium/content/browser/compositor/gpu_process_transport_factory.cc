@@ -67,7 +67,6 @@
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/compositor.h"
-#include "ui/compositor/host/external_begin_frame_controller_client_impl.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display_switches.h"
 #include "ui/display/types/display_snapshot.h"
@@ -115,7 +114,7 @@ viz::FrameSinkManagerImpl* GetFrameSinkManager() {
   return content::BrowserMainLoop::GetInstance()->GetFrameSinkManager();
 }
 
-#if defined(USE_X11)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 class HostDisplayClient : public viz::HostDisplayClient {
  public:
   explicit HostDisplayClient(ui::Compositor* compositor)
@@ -156,8 +155,6 @@ struct GpuProcessTransportFactory::PerCompositorData {
   std::unique_ptr<viz::SyntheticBeginFrameSource> synthetic_begin_frame_source;
   std::unique_ptr<viz::ExternalBeginFrameSourceMojo>
       external_begin_frame_source_mojo;
-  std::unique_ptr<ui::ExternalBeginFrameControllerClientImpl>
-      external_begin_frame_controller_client;
   ReflectorImpl* reflector = nullptr;
   std::unique_ptr<viz::Display> display;
   std::unique_ptr<viz::mojom::DisplayClient> display_client;
@@ -216,7 +213,7 @@ GpuProcessTransportFactory::CreateSoftwareOutputDevice(
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kHeadless))
-    return base::WrapUnique(new viz::SoftwareOutputDevice);
+    return std::make_unique<viz::SoftwareOutputDevice>();
 
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 #if defined(USE_OZONE)
@@ -225,15 +222,16 @@ GpuProcessTransportFactory::CreateSoftwareOutputDevice(
   std::unique_ptr<ui::PlatformWindowSurface> platform_window_surface =
       factory->CreatePlatformWindowSurface(widget);
   std::unique_ptr<ui::SurfaceOzoneCanvas> surface_ozone =
-      factory->CreateCanvasForWidget(widget);
+      factory->CreateCanvasForWidget(widget, task_runner.get());
   CHECK(surface_ozone);
   return std::make_unique<viz::SoftwareOutputDeviceOzone>(
       std::move(platform_window_surface), std::move(surface_ozone));
 #elif defined(USE_X11)
-  return std::make_unique<viz::SoftwareOutputDeviceX11>(widget);
+  return std::make_unique<viz::SoftwareOutputDeviceX11>(widget,
+                                                        task_runner.get());
 #else
   NOTREACHED();
-  return std::unique_ptr<viz::SoftwareOutputDevice>();
+  return nullptr;
 #endif
 }
 
@@ -422,22 +420,15 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
   std::unique_ptr<viz::SyntheticBeginFrameSource> synthetic_begin_frame_source;
   std::unique_ptr<viz::ExternalBeginFrameSourceMojo>
       external_begin_frame_source_mojo;
-  std::unique_ptr<ui::ExternalBeginFrameControllerClientImpl>
-      external_begin_frame_controller_client;
-
   viz::BeginFrameSource* begin_frame_source = nullptr;
-  if (compositor->external_begin_frame_client()) {
-    external_begin_frame_controller_client =
-        std::make_unique<ui::ExternalBeginFrameControllerClientImpl>(
-            compositor->external_begin_frame_client());
+  if (compositor->use_external_begin_frame_control()) {
     // We don't bind the controller mojo interface, since we only use the
     // ExternalBeginFrameSourceMojo directly and not via mojo (plus, as it
     // is an associated interface, binding it would require a separate pipe).
     viz::mojom::ExternalBeginFrameControllerAssociatedRequest request = nullptr;
     external_begin_frame_source_mojo =
         std::make_unique<viz::ExternalBeginFrameSourceMojo>(
-            std::move(request),
-            external_begin_frame_controller_client->GetBoundPtr(),
+            GetFrameSinkManager(), std::move(request),
             viz::BeginFrameSource::kNotRestartableId);
     begin_frame_source = external_begin_frame_source_mojo.get();
   } else if (disable_frame_rate_limit_) {
@@ -482,8 +473,6 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
   data->synthetic_begin_frame_source = std::move(synthetic_begin_frame_source);
   data->external_begin_frame_source_mojo =
       std::move(external_begin_frame_source_mojo);
-  data->external_begin_frame_controller_client =
-      std::move(external_begin_frame_controller_client);
   if (data->external_begin_frame_source_mojo)
     data->external_begin_frame_source_mojo->SetDisplay(data->display.get());
 
@@ -718,14 +707,17 @@ void GpuProcessTransportFactory::SetDisplayVSyncParameters(
 
 void GpuProcessTransportFactory::IssueExternalBeginFrame(
     ui::Compositor* compositor,
-    const viz::BeginFrameArgs& args) {
+    const viz::BeginFrameArgs& args,
+    bool force,
+    base::OnceCallback<void(const viz::BeginFrameAck&)> callback) {
   auto it = per_compositor_data_.find(compositor);
   if (it == per_compositor_data_.end())
     return;
   PerCompositorData* data = it->second.get();
   DCHECK(data);
   DCHECK(data->external_begin_frame_source_mojo);
-  data->external_begin_frame_source_mojo->IssueExternalBeginFrame(args);
+  data->external_begin_frame_source_mojo->IssueExternalBeginFrame(
+      args, force, std::move(callback));
 }
 
 void GpuProcessTransportFactory::SetOutputIsSecure(ui::Compositor* compositor,

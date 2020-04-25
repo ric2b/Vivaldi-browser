@@ -110,7 +110,6 @@ CONTENT_EXPORT extern const char kEnableAggressiveDOMStorageFlushing[];
 CONTENT_EXPORT extern const char kEnableAutomation[];
 CONTENT_EXPORT extern const char kEnablePreferCompositingToLCDText[];
 CONTENT_EXPORT extern const char kEnableBlinkFeatures[];
-CONTENT_EXPORT extern const char kEnableCanvas2dSwapChain[];
 CONTENT_EXPORT extern const char kEnableCaretBrowsing[];
 CONTENT_EXPORT extern const char kEnableDisplayList2dCanvas[];
 CONTENT_EXPORT extern const char kEnableExperimentalWebAssemblyFeatures[];
@@ -142,7 +141,6 @@ CONTENT_EXPORT extern const char kEnableUseZoomForDSF[];
 CONTENT_EXPORT extern const char kEnableViewport[];
 CONTENT_EXPORT extern const char kEnableVtune[];
 CONTENT_EXPORT extern const char kEnableWebAuthTestingAPI[];
-CONTENT_EXPORT extern const char kEnableWebBluetoothScanning[];
 CONTENT_EXPORT extern const char kEnableWebGL2ComputeContext[];
 CONTENT_EXPORT extern const char kEnableWebGLDraftExtensions[];
 CONTENT_EXPORT extern const char kEnableWebGLImageChromium[];
@@ -155,7 +153,6 @@ CONTENT_EXPORT extern const char kForceGpuRasterization[];
 CONTENT_EXPORT extern const char kDisableOopRasterization[];
 CONTENT_EXPORT extern const char kEnableOopRasterization[];
 CONTENT_EXPORT extern const char kEnableOopRasterizationDDL[];
-CONTENT_EXPORT extern const char kEnableWebGLSwapChain[];
 CONTENT_EXPORT extern const char kForceOverlayFullscreenVideo[];
 CONTENT_EXPORT extern const char kForcePresentationReceiverForTesting[];
 CONTENT_EXPORT extern const char kForceRendererAccessibility[];
@@ -170,6 +167,7 @@ CONTENT_EXPORT extern const char kIPCConnectionTimeout[];
 CONTENT_EXPORT extern const char kIsolateOrigins[];
 CONTENT_EXPORT extern const char kJavaScriptFlags[];
 CONTENT_EXPORT extern const char kJavaScriptHarmony[];
+CONTENT_EXPORT extern const char kLaunchAsBrowser[];
 CONTENT_EXPORT extern const char kLitePagesServerSubresourceHost[];
 CONTENT_EXPORT extern const char kLogGpuControlListDecisions[];
 CONTENT_EXPORT extern const char kLoggingLevel[];
@@ -228,7 +226,7 @@ CONTENT_EXPORT extern const char kTouchEventFeatureDetectionAuto[];
 CONTENT_EXPORT extern const char kTouchEventFeatureDetectionEnabled[];
 CONTENT_EXPORT extern const char kTouchEventFeatureDetectionDisabled[];
 CONTENT_EXPORT extern const char kTouchTextSelectionStrategy[];
-CONTENT_EXPORT extern const char kTrustableBundledExchangesFile[];
+CONTENT_EXPORT extern const char kTrustableBundledExchangesFileUrl[];
 CONTENT_EXPORT extern const char kUseFakeCodecForPeerConnection[];
 CONTENT_EXPORT extern const char kUseFakeUIForMediaStream[];
 CONTENT_EXPORT extern const char kVideoImageTextureTarget[];
@@ -251,6 +249,7 @@ CONTENT_EXPORT extern const char kEnableWebRtcSrtpEncryptedHeaders[];
 CONTENT_EXPORT extern const char kEnableWebRtcStunOrigin[];
 CONTENT_EXPORT extern const char kEnforceWebRtcIPPermissionCheck[];
 CONTENT_EXPORT extern const char kForceWebRtcIPHandlingPolicy[];
+CONTENT_EXPORT extern const char kWaitForDebuggerWebUI[];
 extern const char kWebRtcMaxCaptureFramerate[];
 extern const char kWebRtcMaxCpuConsumptionPercentage[];
 CONTENT_EXPORT extern const char kWebRtcStunProbeTrialParameter[];
@@ -272,10 +271,6 @@ CONTENT_EXPORT extern const char kRendererWaitForJavaDebugger[];
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 CONTENT_EXPORT extern const char kEnableSpeechDispatcher[];
-#endif
-
-#if defined(OS_CHROMEOS)
-CONTENT_EXPORT extern const char kCrashLoopBefore[];
 #endif
 
 #if defined(OS_WIN)

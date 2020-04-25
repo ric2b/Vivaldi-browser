@@ -36,6 +36,7 @@ ScenicWindow::ScenicWindow(ScenicWindowManager* window_manager,
             std::move(view_ref_pair.view_ref),
             "chromium window"),
       node_(&scenic_session_),
+      input_node_(&scenic_session_),
       render_node_(&scenic_session_) {
   scenic_session_.set_error_handler(
       fit::bind_member(this, &ScenicWindow::OnScenicError));
@@ -46,6 +47,9 @@ ScenicWindow::ScenicWindow(ScenicWindowManager* window_manager,
   // Subscribe to metrics events from the node. These events are used to
   // get the device pixel ratio for the screen.
   node_.SetEventMask(fuchsia::ui::gfx::kMetricsEventMask);
+
+  // Add input shape.
+  node_.AddChild(input_node_);
 
   // Add rendering subtree. Hit testing is disabled to prevent GPU process from
   // receiving input.
@@ -84,7 +88,7 @@ void ScenicWindow::SetTitle(const base::string16& title) {
   NOTIMPLEMENTED();
 }
 
-void ScenicWindow::Show() {
+void ScenicWindow::Show(bool inactive) {
   view_.AddChild(node_);
 
   // Call Present() to ensure that the scenic session commands are processed,
@@ -100,6 +104,11 @@ void ScenicWindow::Hide() {
 void ScenicWindow::Close() {
   Hide();
   delegate_->OnClosed();
+}
+
+bool ScenicWindow::IsVisible() const {
+  NOTIMPLEMENTED_LOG_ONCE();
+  return true;
 }
 
 void ScenicWindow::PrepareForShutdown() {
@@ -149,6 +158,11 @@ void ScenicWindow::Deactivate() {
 
 void ScenicWindow::SetUseNativeFrame(bool use_native_frame) {}
 
+bool ScenicWindow::ShouldUseNativeFrame() const {
+  NOTIMPLEMENTED_LOG_ONCE();
+  return false;
+}
+
 void ScenicWindow::SetCursor(PlatformCursor cursor) {
   NOTIMPLEMENTED_LOG_ONCE();
 }
@@ -170,6 +184,15 @@ gfx::Rect ScenicWindow::GetRestoredBoundsInPixels() const {
   return gfx::Rect();
 }
 
+void ScenicWindow::SetWindowIcons(const gfx::ImageSkia& window_icon,
+                                  const gfx::ImageSkia& app_icon) {
+  NOTIMPLEMENTED();
+}
+
+void ScenicWindow::SizeConstraintsChanged() {
+  NOTIMPLEMENTED();
+}
+
 void ScenicWindow::UpdateSize() {
   gfx::SizeF scaled = ScaleSize(size_dips_, device_pixel_ratio_);
   size_pixels_ = gfx::Size(ceilf(scaled.width()), ceilf(scaled.height()));
@@ -188,6 +211,10 @@ void ScenicWindow::UpdateSize() {
   // Scale the render node so that surface rect can always be 1x1.
   render_node_.SetScale(size_dips_.width(), size_dips_.height(), 1.f);
 
+  // Resize input node to cover the whole surface.
+  input_node_.SetShape(scenic::Rectangle(&scenic_session_, size_dips_.width(),
+                                         size_dips_.height()));
+
   // This is necessary when using vulkan because ImagePipes are presented
   // separately and we need to make sure our sizes change is committed.
   scenic_session_.Present(
@@ -195,7 +222,6 @@ void ScenicWindow::UpdateSize() {
 
   delegate_->OnBoundsChanged(size_rect);
 }
-
 
 void ScenicWindow::OnScenicError(zx_status_t status) {
   LOG(ERROR) << "scenic::Session failed with code " << status << ".";

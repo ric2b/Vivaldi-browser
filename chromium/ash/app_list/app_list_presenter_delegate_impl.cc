@@ -5,8 +5,8 @@
 #include "ash/app_list/app_list_presenter_delegate_impl.h"
 
 #include "ash/app_list/app_list_controller_impl.h"
+#include "ash/app_list/app_list_presenter_impl.h"
 #include "ash/app_list/app_list_util.h"
-#include "ash/app_list/presenter/app_list_presenter_impl.h"
 #include "ash/app_list/views/app_list_main_view.h"
 #include "ash/app_list/views/app_list_view.h"
 #include "ash/app_list/views/contents_view.h"
@@ -82,12 +82,11 @@ AppListPresenterDelegateImpl::~AppListPresenterDelegateImpl() {
 }
 
 void AppListPresenterDelegateImpl::SetPresenter(
-    app_list::AppListPresenterImpl* presenter) {
+    AppListPresenterImpl* presenter) {
   presenter_ = presenter;
 }
 
-void AppListPresenterDelegateImpl::Init(app_list::AppListView* view,
-                                        int64_t display_id) {
+void AppListPresenterDelegateImpl::Init(AppListView* view, int64_t display_id) {
   view_ = view;
   view->InitView(IsTabletMode(),
                  controller_->GetContainerForDisplayId(display_id));
@@ -143,8 +142,7 @@ bool AppListPresenterDelegateImpl::IsTabletMode() const {
   return Shell::Get()->tablet_mode_controller()->InTabletMode();
 }
 
-app_list::AppListViewDelegate*
-AppListPresenterDelegateImpl::GetAppListViewDelegate() {
+AppListViewDelegate* AppListPresenterDelegateImpl::GetAppListViewDelegate() {
   return controller_;
 }
 
@@ -159,11 +157,16 @@ aura::Window* AppListPresenterDelegateImpl::GetRootWindowForDisplayId(
 
 void AppListPresenterDelegateImpl::OnVisibilityChanged(bool visible,
                                                        int64_t display_id) {
-  controller_->NotifyAppListVisibilityChanged(visible, display_id);
+  controller_->OnVisibilityChanged(visible, display_id);
 }
 
-void AppListPresenterDelegateImpl::OnTargetVisibilityChanged(bool visible) {
-  controller_->NotifyAppListTargetVisibilityChanged(visible);
+void AppListPresenterDelegateImpl::OnVisibilityWillChange(bool visible,
+                                                          int64_t display_id) {
+  controller_->OnVisibilityWillChange(visible, display_id);
+}
+
+bool AppListPresenterDelegateImpl::IsVisible() {
+  return controller_->IsVisible();
 }
 
 void AppListPresenterDelegateImpl::OnDisplayMetricsChanged(
@@ -230,7 +233,7 @@ void AppListPresenterDelegateImpl::ProcessLocatedEvent(
 
   aura::Window* window = view_->GetWidget()->GetNativeView()->parent();
   if (!window->Contains(target) && !presenter_->HandleCloseOpenFolder() &&
-      !app_list::switches::ShouldNotDismissOnBlur() && !IsTabletMode()) {
+      !switches::ShouldNotDismissOnBlur() && !IsTabletMode()) {
     const aura::Window* status_window =
         shelf->shelf_widget()->status_area_widget()->GetNativeWindow();
     // Don't dismiss the auto-hide shelf if event happened in status area. Then
@@ -290,7 +293,7 @@ void AppListPresenterDelegateImpl::OnKeyEvent(ui::KeyEvent* event) {
     return;
 
   // If the home launcher is not shown in tablet mode, ignore events.
-  if (IsTabletMode() && !presenter_->home_launcher_shown())
+  if (IsTabletMode() && !IsVisible())
     return;
 
   // Don't absorb the first event for the search box while it is open
@@ -298,8 +301,7 @@ void AppListPresenterDelegateImpl::OnKeyEvent(ui::KeyEvent* event) {
     return;
 
   // Arrow keys or Tab will engage the traversal mode.
-  if ((app_list::IsUnhandledArrowKeyEvent(*event) ||
-       event->key_code() == ui::VKEY_TAB)) {
+  if ((IsUnhandledArrowKeyEvent(*event) || event->key_code() == ui::VKEY_TAB)) {
     // Handle the first arrow key event to just show the focus rings.
     event->SetHandled();
     controller_->SetKeyboardTraversalMode(true);

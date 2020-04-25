@@ -12,7 +12,7 @@ var tests = [
       'viewer-pdf-toolbar',
       'viewer-zoom-toolbar',
       'viewer-password-screen',
-      'viewer-error-screen'
+      'viewer-error-screen',
     ];
     for (var i = 0; i < elementNames.length; i++) {
       var elements = document.body.querySelectorAll(elementNames[i]);
@@ -67,25 +67,24 @@ var tests = [
 
     // Clicking on the plugin should close the bookmarks menu.
     chrome.test.assertFalse(dropdown.dropdownOpen);
-    MockInteractions.tap(dropdown.$.button);
+    dropdown.$.button.click();
     chrome.test.assertTrue(dropdown.dropdownOpen);
     // Generate pointer event manually, as MockInteractions doesn't include
     // this.
     plugin.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-    chrome.test.assertFalse(dropdown.dropdownOpen,
-        "Clicking plugin closes dropdown");
+    chrome.test.assertFalse(
+        dropdown.dropdownOpen, 'Clicking plugin closes dropdown');
 
-    MockInteractions.tap(dropdown.$.button);
+    dropdown.$.button.click();
     chrome.test.assertTrue(dropdown.dropdownOpen);
     MockInteractions.pressAndReleaseKeyOn(document, ESC_KEY);
-    chrome.test.assertFalse(dropdown.dropdownOpen,
-        "Escape key closes dropdown");
-    chrome.test.assertTrue(toolbar.opened,
-        "First escape key does not close toolbar");
+    chrome.test.assertFalse(
+        dropdown.dropdownOpen, 'Escape key closes dropdown');
+    chrome.test.assertTrue(
+        toolbar.opened, 'First escape key does not close toolbar');
 
     MockInteractions.pressAndReleaseKeyOn(document, ESC_KEY);
-    chrome.test.assertFalse(toolbar.opened,
-        "Second escape key closes toolbar");
+    chrome.test.assertFalse(toolbar.opened, 'Second escape key closes toolbar');
 
     chrome.test.succeed();
   },

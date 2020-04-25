@@ -2,12 +2,12 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="da">
 <translation id="1033008476608128425">Landskab 3</translation>
-<translation id="1055184225775184556">&amp;Fortryd tilføjelse</translation>
 <translation id="1118377629180821201">Landskab 12</translation>
-<translation id="1158503667684816647">Vis ikke bekræftelsen igen</translation>
+<translation id="1158503667684816647">Vis ikke bekræftelse igen</translation>
 <translation id="1276145862619442150">Hurtigkald</translation>
 <translation id="1281950884873973195">Dyr 6</translation>
 <translation id="1411638389238344450">Send link via mail</translation>
+<translation id="1454726940098520109">Vi ikke bekræftelse igen</translation>
 <translation id="1462666970065907900">Vil du virkelig lukke vinduet?</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nyt privat vindue</translation>
@@ -16,17 +16,17 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Billedegenskaber...</translation>
 <translation id="1920297417712412573">Kopier til note</translation>
+<translation id="1921101374471252440">&amp;Genindlæs billede</translation>
 <translation id="1924750141060565109">Landskab 15</translation>
 <translation id="19598411548897379">Generisk</translation>
 <translation id="2079036669923635404">Klik her for at opdatere Vivaldi til version <ph name="VERSION" />.</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Indsæt note</translation>
 <translation id="2486841023299517366">Dyr 4</translation>
-<translation id="2556876185419854533">&amp;Fortryd redigering</translation>
 <translation id="2848085334714181751">Dyr 3</translation>
 <translation id="2873951654529031587">Papirkurv</translation>
 <translation id="292258461174562431">Monster 4</translation>
-<translation id="2972581237482394796">&amp;Annuller fortryd</translation>
+<translation id="2923448633003185837">Indsæt og gå til</translation>
 <translation id="2977472760057091832">Åbn link i privat-vindue</translation>
 <translation id="2989805286512600854">Åbn i ny fane</translation>
 <translation id="3027988479108856431">Trist, dine Yandex-indstillinger er ikke tilgængelige mens den browser kører. For at importere disse indstillinger til Vivaldi skal du gemme dit arbejde og lukke alle Yandex-vinduer. Klik derefter på Fortsæt.</translation>
@@ -34,16 +34,15 @@
 <translation id="3127383884976966729">Dyr 7</translation>
 <translation id="3156398087075132709">Nyt bogmærke</translation>
 <translation id="3259769196742189631">Validér</translation>
-<translation id="3270847123878663523">&amp;Fortryd omorganisering</translation>
 <translation id="3302905971452834934">Monster 1</translation>
 <translation id="3334610655141903168">(ingen titel)</translation>
 <translation id="3402602684546832928">Vælg Opera bogmærke-fil</translation>
-<translation id="3427342743765426898">&amp;Gentag redigering</translation>
 <translation id="3451317331714872347">Landskab 8</translation>
+<translation id="3457498675806041407">Bekræft lukning</translation>
 <translation id="3516213908976398531">Landskab 11</translation>
+<translation id="3521635864657970829">Vil du virkelig lukke dette vindue?</translation>
 <translation id="3540597690227428180">Dyr 9</translation>
 <translation id="3542768452570884558">Åbn link i nyt vindue</translation>
-<translation id="3583757800736429874">&amp;Gentag flytning</translation>
 <translation id="3588820906588687999">Åbn &amp;billede på ny fane</translation>
 <translation id="3601066750251199488">Monster 3</translation>
 <translation id="366643050267431920">Tilføj som begivenhed</translation>
@@ -65,15 +64,17 @@
 <translation id="4512900838580567989">Åbn link i ny baggrundsfane</translation>
 <translation id="4515472507709384008">Opera version 15+</translation>
 <translation id="4548358047305717967">Åbn billede på ny baggrundsfane</translation>
-<translation id="4594403342090139922">&amp;Annuller sletning</translation>
+<translation id="4582480609585453144">Åbn linket i baggrundsfane</translation>
 <translation id="4636708767492582204">Send via mail</translation>
 <translation id="4677434526832593569">Dyr 8</translation>
 <translation id="4881695831933465202">Åbn</translation>
+<translation id="4973311370126107785">Kørsel af JavaScript gemmen AppleScript er slået fra. For at slå det til fra menulinjen, gå til Værktøjer &gt; Tillad JavaScript fra Apple Events.</translation>
 <translation id="5014281392052865061">Importerede Kvikknapper</translation>
 <translation id="5092656712000637858">Tilføj side som Net-panel</translation>
 <translation id="5177818338935286353">Monster 7</translation>
 <translation id="5213743983876949565">Dyr 1</translation>
 <translation id="5238244642230426581">Importerede bogmærker</translation>
+<translation id="5305569355661722298">Bekræft lukning af vindue</translation>
 <translation id="5388358297987318779">Åbn billede</translation>
 <translation id="5416008465899576639">En ny version af Vivaldi er tilgængelig.</translation>
 <translation id="5497042274492038489">Bekræft lukning af vindue</translation>
@@ -87,12 +88,10 @@
 <translation id="5916080360077521750">Trist, dine Chrome-indstillinger er ikke tilgængelige mens den browser kører. For at importere disse indstillinger til Vivaldi skal du gamme dit arbejde og lukke alle Chrome-vinduer. Klik derefter på Fortsæt.</translation>
 <translation id="6229528619562190452">Klik her for at opdatere Vivaldi.</translation>
 <translation id="6234173136417926046">Brug billede som baggrund på Vivaldi-startsiden</translation>
-<translation id="6259156558325130047">&amp;Gentag omorganisering</translation>
 <translation id="630690498669249215">Opera bogmærker-fil</translation>
 <translation id="6438786710866753178">Landskab 4</translation>
 <translation id="6477028720702061455">Vælg Opera-profilmappe der skal importeres</translation>
 <translation id="6510706699590490869">&amp;Opdater Vivaldi</translation>
-<translation id="6529602333819889595">&amp;Gentag sletning</translation>
 <translation id="6538338088414940408">Åbn link i baggrundsfane</translation>
 <translation id="6551219277044048123">Tilføj som søgemas&amp;kine...</translation>
 <translation id="6630781781151951863">Landskab 18</translation>
@@ -101,13 +100,13 @@
 <translation id="7086554968911045110">Landskab 7</translation>
 <translation id="7111492742514999492">Landskab 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
+<translation id="7496505986576158197">Vivaldi er gjort mulig af <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source-projektet og anden <ph name="BEGIN_LINK_OSS" />open source software<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Ignorer opdatering</translation>
 <translation id="7724603315864178912">Klip</translation>
 <translation id="7865983598101744945">Bekræft lukning</translation>
 <translation id="7957213167373139414">Min kalender</translation>
 <translation id="8027581147000338959">Åben i nyt vindue</translation>
 <translation id="8099620695029051217">Kopiér side-adressen</translation>
-<translation id="8194797478851900357">&amp;Fortryd flytning</translation>
 <translation id="8197810018650377191">Gem side som bogmærke</translation>
 <translation id="8261506727792406068">Slet</translation>
 <translation id="8331671104904436324">Åbn i baggrunds-fane</translation>
@@ -122,11 +121,11 @@
 <translation id="8768970203213061953">Landskab 14</translation>
 <translation id="8773635261052182196">Du vil ikke se disse notifikationer længere. Du kan aktivere dem igen fra Vivaldi's indstillinger.</translation>
 <translation id="8894900864683381599">Tilføj link som Net-panel</translation>
+<translation id="8912720443398351457">Vil du virkelig lukke Vivaldi?</translation>
 <translation id="8947109330183116400">Vælg HTML bogmærke-fil</translation>
 <translation id="9017566390391482291">Vælg Vivaldi-profilmappe der skal importeres</translation>
 <translation id="9065203028668620118">Rediger</translation>
 <translation id="9157539936604258187">Åbn link</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
-<translation id="9170848237812810038">&amp;Fortryd</translation>
 <translation id="970294721402795299">Landskab 16</translation>
 </translationbundle>

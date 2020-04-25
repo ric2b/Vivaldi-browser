@@ -23,13 +23,13 @@ bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
   results->clear();
 
   std::string sql("SELECT u.url, u.title, ");
-  sql.append("k.url_id IS NOT NULL, k.keyword_id, k.lower_term ");
+  sql.append("k.url_id IS NOT NULL, k.keyword_id, k.normalized_term ");
   sql.append("FROM urls AS u ");
   sql.append("LEFT JOIN keyword_search_terms AS k ON u.id = k.url_id ");
   sql.append("WHERE (u.typed_count > 0 AND u.url LIKE ?) ");
-  sql.append("OR k.lower_term LIKE ? ");
+  sql.append("OR k.normalized_term LIKE ? ");
   if (prefix_keyword != -1)
-    sql.append("OR (k.keyword_id = ? AND k.lower_term LIKE ?) ");
+    sql.append("OR (k.keyword_id = ? AND k.normalized_term LIKE ?) ");
   sql.append("ORDER BY u.last_visit_time DESC LIMIT ?");
 
   base::string16 lower_query(base::i18n::ToLower(base::UTF8ToUTF16(query)));

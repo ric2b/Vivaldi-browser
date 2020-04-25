@@ -62,7 +62,7 @@ enum ResizerHitTestType { kResizerForPointer, kResizerForTouch };
 class ComputedStyle;
 class HitTestResult;
 class LayoutBox;
-class LayoutScrollbarPart;
+class LayoutCustomScrollbarPart;
 struct PaintInvalidatorContext;
 class PaintLayer;
 class ScrollingCoordinator;
@@ -75,6 +75,8 @@ struct CORE_EXPORT PaintLayerScrollableAreaRareData {
   PaintLayerScrollableAreaRareData();
 
   StickyConstraintsMap sticky_constraints_map_;
+  base::Optional<cc::SnapContainerData> snap_container_data_;
+
   DISALLOW_COPY_AND_ASSIGN(PaintLayerScrollableAreaRareData);
 };
 
@@ -105,16 +107,16 @@ struct CORE_EXPORT PaintLayerScrollableAreaRareData {
 // This only happens if the associated PaintLayer is itself composited.
 //
 //
-// ***** OVERLAY SCROLLBARS *****
-// Overlay scrollbars are painted on top of the box's content. As such they
-// don't use any space in the box. Software overlay scrollbars are painted by
-// PaintLayerPainter::paintOverlayScrollbars after all content as part of a
-// separate tree traversal. The reason for this 2nd traversal is that they need
-// to be painted on top of everything. Hardware accelerated overlay scrollbars
-// are painted by their associated GraphicsLayer that sets the paint flag
-// PaintLayerPaintingOverlayScrollbars.
+// ***** OVERLAY OVERFLOW CONTROLS *****
+// Overlay overflow controls are painted on top of the box's content. As such
+// they don't use any space in the box. Software overlay overflow controls are
+// painted by PaintLayerPainter::PaintOverlayOverflowControlsForFragments after
+// all content as part of a separate tree traversal. The reason for this 2nd
+// traversal is that they need to be painted on top of everything. Hardware
+// accelerated overlay overflow controls are painted into their associated
+// GraphicsLayers by CompositedLayerMapping::PaintScrollableArea.
 class CORE_EXPORT PaintLayerScrollableArea final
-    : public GarbageCollectedFinalized<PaintLayerScrollableArea>,
+    : public GarbageCollected<PaintLayerScrollableArea>,
       public ScrollableArea {
   USING_GARBAGE_COLLECTED_MIXIN(PaintLayerScrollableArea);
   friend class Internals;
@@ -328,7 +330,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool ScrollbarsCanBeActive() const override;
   void ScrollbarVisibilityChanged() override;
   void ScrollbarFrameRectChanged() override;
-  IntRect ScrollableAreaBoundingBox() const override;
   void RegisterForAnimation() override;
   void DeregisterForAnimation() override;
   bool UserInputScrollable(ScrollbarOrientation) const override;
@@ -338,7 +339,8 @@ class CORE_EXPORT PaintLayerScrollableArea final
   WebColorScheme UsedColorScheme() const override;
   cc::AnimationHost* GetCompositorAnimationHost() const override;
   CompositorAnimationTimeline* GetCompositorAnimationTimeline() const override;
-  void GetTickmarks(Vector<IntRect>&) const override;
+  bool HasTickmarks() const override;
+  Vector<IntRect> GetTickmarks() const override;
 
   void VisibleSizeChanged();
 
@@ -382,11 +384,15 @@ class CORE_EXPORT PaintLayerScrollableArea final
   // specific pseudo styles but there can still be a scroll corner control or
   // resize control without these custom styled scrollbar parts.
   bool HasOverflowControls() const;
+
+  bool HasOverlayOverflowControls() const;
+  bool HasNonOverlayOverflowControls() const;
+
   bool HasOverflow() const {
     return HasHorizontalOverflow() || HasVerticalOverflow();
   }
 
-  LayoutScrollbarPart* ScrollCorner() const { return scroll_corner_; }
+  LayoutCustomScrollbarPart* ScrollCorner() const { return scroll_corner_; }
 
   void Resize(const IntPoint& pos, const LayoutSize& old_offset);
   IntSize OffsetFromResizeCorner(const IntPoint& absolute_point) const;
@@ -443,7 +449,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   PaintLayer* Layer() const override;
 
-  LayoutScrollbarPart* Resizer() const { return resizer_; }
+  LayoutCustomScrollbarPart* Resizer() const { return resizer_; }
 
   IntRect RectForHorizontalScrollbar(const IntRect& border_box_rect) const;
   IntRect RectForVerticalScrollbar(const IntRect& border_box_rect) const;
@@ -545,6 +551,9 @@ class CORE_EXPORT PaintLayerScrollableArea final
     return scrolling_background_display_item_client_;
   }
 
+  const cc::SnapContainerData* GetSnapContainerData() const override;
+  void SetSnapContainerData(base::Optional<cc::SnapContainerData>) override;
+
   void DisposeImpl() override;
 
  private:
@@ -587,8 +596,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
   LayoutSize MinimumSizeForResizing(float zoom_factor);
   PhysicalRect LayoutContentRect(IncludeScrollbarsInRect) const;
 
-  // See comments on isPointInResizeControl.
-  void UpdateResizerAreaSet();
   void UpdateResizerStyle(const ComputedStyle* old_style);
 
   void UpdateScrollableAreaSet();
@@ -648,6 +655,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   unsigned needs_relayout_ : 1;
   unsigned had_horizontal_scrollbar_before_relayout_ : 1;
   unsigned had_vertical_scrollbar_before_relayout_ : 1;
+  unsigned had_resizer_before_relayout_ : 1;
   unsigned scroll_origin_changed_ : 1;
 
   // There are 6 possible combinations of writing mode and direction. Scroll
@@ -675,10 +683,10 @@ class CORE_EXPORT PaintLayerScrollableArea final
   ScrollOffset scroll_offset_;
 
   // LayoutObject to hold our custom scroll corner.
-  LayoutScrollbarPart* scroll_corner_;
+  LayoutCustomScrollbarPart* scroll_corner_;
 
   // LayoutObject to hold our custom resizer.
-  LayoutScrollbarPart* resizer_;
+  LayoutCustomScrollbarPart* resizer_;
 
   ScrollAnchor scroll_anchor_;
 

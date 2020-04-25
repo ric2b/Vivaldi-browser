@@ -2,12 +2,31 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
+html {
+  --google-grey-200: rgb(232, 234, 237);
+  --google-grey-900: rgb(32, 33, 36);
+
+  --primary-color: var(--google-grey-900);
+  background: white;
+}
+
+@media (prefers-color-scheme: dark) {
+  html, body {
+    --primary-color: var(--google-grey-200);
+    background: var(--google-grey-900);
+  }
+  a:-webkit-any-link {
+    color: white;
+  }
+  #slogan, #useragent, .version {
+    color: #ccc;
+  }
+}
+
 body {
-  background-color: white;
-  color: black;
+  color: var(--primary-color);
   font-size: 100%;
   margin: 0;
-  background-color: #f6f6f6;
 
 }
 
@@ -19,7 +38,6 @@ body {
   min-width: 800px;
   width: 60%;
   min-height: 500px;
-  background-color: white;
   border-radius: 5px;
 }
 
@@ -62,23 +80,27 @@ body {
   margin-top: 0;
   font-weight: 400;
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
   color: #999999;
 }
 
 #copyright {
   font-size: 0.7em;
   text-align: center;
+  line-height: 1.5;
+  margin-bottom: 12px;
 }
 
 #product-license {
   font-size: 0.7em;
   text-align: center;
+  line-height: 1.5;
 }
 
 #product-tos {
   font-size: 0.7em;
   text-align: center;
+  margin-bottom: 12px;
 }
 
 #useragent {

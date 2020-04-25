@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja">
 <translation id="1038842779957582377">不明な名前</translation>
+<translation id="1089439967362294234">パスワードを変更</translation>
 <translation id="1110994991967754504"><ph name="PERMISSION_NAME" /> の権限を選択します</translation>
 <translation id="1152921474424827756"><ph name="URL" />の<ph name="BEGIN_LINK" />キャッシュコピー<ph name="END_LINK" />にアクセスします</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" />により途中で接続が切断されました。</translation>
@@ -24,7 +25,7 @@
 <translation id="194030505837763158"><ph name="LINK" />に移動します</translation>
 <translation id="1974060860693918893">詳細</translation>
 <translation id="2030481566774242610">もしかして: <ph name="LINK" />？</translation>
-<translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシとファイアウォールを確認する<ph name="END_LINK" /></translation>
+<translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォールを確認する<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">音声</translation>
 <translation id="2119505898009119320">発行先: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2147827593068025794">バックグラウンド同期</translation>
@@ -48,17 +49,21 @@
 <translation id="2649204054376361687"><ph name="COUNTRY" /> <ph name="CITY" /></translation>
 <translation id="2650446666397867134">ファイルへのアクセスが拒否されました</translation>
 <translation id="2705137772291741111">このサイトの保存(キャッシュ)されたコピーを読み取れませんでした。</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />接続診断ツールを実行する<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">接続がリセットされました。</translation>
 <translation id="2826760142808435982">接続は <ph name="CIPHER" /> を使用して暗号化および認証されており、<ph name="KX" /> が鍵交換メカニズムとして使用されています。</translation>
 <translation id="2856444702002559011"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />では、悪意のあるユーザーによって、パスワード、メッセージ、クレジットカードなどの情報が盗まれる可能性があります。<ph name="BEGIN_LEARN_MORE_LINK" />詳しい情報<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">ネットワークの変更が検出されました。</translation>
+<translation id="2948083400971632585">接続用に構成したプロキシーは、設定ページから無効にすることができます。</translation>
 <translation id="2991571918955627853"><ph name="SITE" />ではHSTSが使用されているため、現在アクセスできません。通常、ネットワークエラーやネットワークへの攻撃は一時的なものです。しばらくするとページにアクセスできるようになります。</translation>
 <translation id="3005723025932146533">保存済みのコピーを表示</translation>
 <translation id="301521992641321250">自動ブロックされました</translation>
+<translation id="3041612393474885105">証明書情報</translation>
 <translation id="3109728660330352905">このページを表示する権限がありません。</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />接続診断ツールを実行してみてください<ph name="END_LINK" />。</translation>
 <translation id="3154506275960390542">このページのフォームは安全に送信されない可能性があります。送信したデータを途中で他者に閲覧されたり、悪意のあるユーザーによってサーバーが受信するデータを書き換えられたりする可能性があります。</translation>
-<translation id="3176929007561373547">プロキシの設定を確認するか、ネットワーク管理者に問い合わせて、プロキシサーバーが正常に
-      動作しているかどうかを確認してください。プロキシサーバーを使用していない場合は
+<translation id="3176929007561373547">プロキシーの設定を確認するか、ネットワーク管理者に問い合わせて、プロキシーサーバーが正常に
+      動作しているかどうかを確認してください。プロキシーサーバーを使用していない場合は
       次の方法をお試しください。
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">ページの読み込みに必要なデータを再送信するため、再読み込みボタンを押してください。</translation>
@@ -69,6 +74,7 @@
 <translation id="3447661539832366887">このデバイスの所有者が恐竜ゲームを無効にしています。</translation>
 <translation id="3447884698081792621">証明書（発行元: <ph name="ISSUER" />）を表示</translation>
 <translation id="3462200631372590220">詳細を表示しない</translation>
+<translation id="3484560055331845446">Googleアカウントにアクセスできなくなる可能性があります。Chromeで今すぐパスワードを変更することをおすすめします。変更の際には、ログインするよう求められます。</translation>
 <translation id="3566021033012934673">この接続ではプライバシーが保護されません</translation>
 <translation id="3574305903863751447"><ph name="COUNTRY" /> <ph name="STATE" /> <ph name="CITY" /></translation>
 <translation id="3586931643579894722">詳細を非表示</translation>
@@ -76,8 +82,8 @@
       いったんリストから削除し、もう一度追加してみてください。</translation>
 <translation id="3658742229777143148">変更履歴</translation>
 <translation id="3681007416295224113">証明書情報</translation>
-<translation id="3717027428350673159"><ph name="BEGIN_LINK" />プロキシ、ファイアウォール、DNSの設定を確認する<ph name="END_LINK" /></translation>
-<translation id="382518646247711829">プロキシサーバーを使用している場合...</translation>
+<translation id="3717027428350673159"><ph name="BEGIN_LINK" />プロキシー、ファイアウォール、DNSの設定を確認する<ph name="END_LINK" /></translation>
+<translation id="382518646247711829">プロキシーサーバーを使用している場合...</translation>
 <translation id="3950820424414687140">ログイン</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" />はブロックされています</translation>
 <translation id="3987940399970879459">1 MB未満</translation>
@@ -108,10 +114,12 @@
 <translation id="4744603770635761495">実行ファイルのパス</translation>
 <translation id="4750917950439032686">このサイトに送信した情報（パスワード、クレジット カード番号など）が第三者に見られることはありません。</translation>
 <translation id="4764776831041365478"><ph name="URL" />のウェブページは一時的に停止しているか、新しいウェブアドレスに移動した可能性があります。</translation>
+<translation id="4943872375798546930">結果はありません</translation>
 <translation id="4974590756084640048">警告を再度有効にする</translation>
 <translation id="5023310440958281426">管理者のポリシーを確認してください</translation>
 <translation id="5039804452771397117">許可</translation>
-<translation id="5070335125961472645"><ph name="BEGIN_LINK" />プロキシアドレスを確認する<ph name="END_LINK" /></translation>
+<translation id="5068778127327928576">{NUM_COOKIES,plural, =1{（1 個が使用中）}other{（# 個が使用中）}}</translation>
+<translation id="5070335125961472645"><ph name="BEGIN_LINK" />プロキシーアドレスを確認する<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
 <translation id="5287240709317226393">Cookie を表示</translation>
 <translation id="5355557959165512791"><ph name="SITE" />は証明書が失効しているため、現在アクセスできません。通常、ネットワークエラーやネットワークへの攻撃は一時的なものです。しばらくするとページにアクセスできるようになります。</translation>
@@ -124,7 +132,6 @@
     システム管理者にお問い合わせください。</translation>
 <translation id="5510766032865166053">移動または削除された可能性があります。</translation>
 <translation id="5556459405103347317">再読み込み</translation>
-<translation id="5571347317547569613">（{NUM_COOKIES,plural, =1{1 個が使用中}other{# 個が使用中}}）</translation>
 <translation id="5610142619324316209">接続を確認する</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" />でリダイレクトが繰り返し行われました。</translation>
 <translation id="5675650730144413517">このページは動作していません</translation>
@@ -158,7 +165,7 @@
 <translation id="6569060085658103619">拡張機能のページを表示しています</translation>
 <translation id="6657585470893396449">パスワード</translation>
 <translation id="6685834062052613830">ログアウトして設定を完了してください</translation>
-<translation id="6711464428925977395">プロキシサーバーに問題がある、またはアドレスが正しくありません。</translation>
+<translation id="6711464428925977395">プロキシーサーバーに問題がある、またはアドレスが正しくありません。</translation>
 <translation id="6757797048963528358">端末がスリープ状態でした。</translation>
 <translation id="6897140037006041989">ユーザーエージェント</translation>
 <translation id="7053983685419859001">ブロック</translation>
@@ -201,14 +208,16 @@
 <translation id="8225771182978767009">このサイトは、このパソコンを設定したユーザーによってブロックされています。</translation>
 <translation id="8241707690549784388">あなたが戻ろうとしているページは、入力した情報を使用しています。このページに戻った場合、操作のやり直しが発生する可能性があります。続行しますか？</translation>
 <translation id="8241712895048303527">このサイトでブロック</translation>
+<translation id="8286036467436129157">ログイン</translation>
 <translation id="8288807391153049143">証明書を表示</translation>
 <translation id="8289355894181816810">確認方法がわからない場合は、ネットワーク管理者までお問い合わせください。</translation>
 <translation id="8332188693563227489"><ph name="HOST_NAME" />へのアクセスが拒否されました</translation>
-<translation id="8498891568109133222"><ph name="HOST_NAME" />からの応答時間が長すぎます。</translation>
+<translation id="8498891568109133222"><ph name="HOST_NAME" />からの応答がタイムアウトしました。</translation>
 <translation id="8503813439785031346">ユーザー名</translation>
 <translation id="8703575177326907206"><ph name="DOMAIN" /> への接続は暗号化されていません。</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />の&lt;abbr id="dnsDefinition"&gt;DNSアドレス&lt;/abbr&gt;が見つかりませんでした。問題を診断しています。</translation>
-<translation id="9001074447101275817">プロキシ <ph name="DOMAIN" />にはユーザー名とパスワードが必要です。</translation>
+<translation id="8820817407110198400">ブックマーク</translation>
+<translation id="9001074447101275817">プロキシー <ph name="DOMAIN" />にはユーザー名とパスワードが必要です。</translation>
 <translation id="9008201768610948239">無視する</translation>
 <translation id="9011424611726486705">サイトの設定を開きます</translation>
 <translation id="9025348182339809926">（無効）</translation>

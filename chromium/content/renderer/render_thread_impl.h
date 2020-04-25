@@ -23,9 +23,7 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
-#include "base/threading/thread_checker.h"
 #include "base/time/time.h"
-#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "content/child/child_thread_impl.h"
 #include "content/common/content_export.h"
@@ -44,8 +42,12 @@
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ipc/ipc_sync_channel.h"
 #include "media/media_buildflags.h"
-#include "mojo/public/cpp/bindings/associated_binding.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/thread_safe_interface_ptr.h"
 #include "net/base/network_change_notifier.h"
 #include "net/nqe/effective_connection_type.h"
@@ -61,12 +63,12 @@
 #include "third_party/blink/public/web/web_memory_statistics.h"
 #include "ui/gfx/native_widget_types.h"
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
-#endif
-
 #if defined(OS_MACOSX)
 #include "third_party/blink/public/platform/mac/web_scrollbar_theme.h"
+#endif
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
 #endif
 
 class SkBitmap;
@@ -81,8 +83,6 @@ class Thread;
 }
 
 namespace cc {
-class BeginFrameSource;
-class SyntheticBeginFrameSource;
 class TaskGraphRunner;
 }
 
@@ -94,20 +94,11 @@ namespace gpu {
 class GpuChannelHost;
 }
 
-namespace IPC {
-class MessageFilter;
-}
-
 namespace media {
 class GpuVideoAcceleratorFactories;
 }
 
-namespace v8 {
-class Extension;
-}
-
 namespace viz {
-class BeginFrameSource;
 class ContextProviderCommandBuffer;
 class Gpu;
 class RasterContextProvider;
@@ -120,8 +111,6 @@ class BrowserPluginManager;
 class CategorizedWorkerPool;
 class GpuVideoAcceleratorFactoriesImpl;
 class LowMemoryModeController;
-class P2PSocketDispatcher;
-class PeerConnectionDependencyFactory;
 class PeerConnectionTracker;
 class RenderThreadObserver;
 class RendererBlinkPlatformImpl;
@@ -231,18 +220,20 @@ class CONTENT_EXPORT RenderThreadImpl
   GetCompositorMainThreadTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner>
   GetCompositorImplThreadTaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> GetCleanupTaskRunner() override;
   blink::scheduler::WebThreadScheduler* GetWebMainThreadScheduler() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
   bool IsScrollAnimatorEnabled() override;
   std::unique_ptr<cc::UkmRecorderFactory> CreateUkmRecorderFactory() override;
   void RequestNewLayerTreeFrameSink(
-      int widget_routing_id,
+      RenderWidget* render_widget,
       scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue,
       const GURL& url,
       LayerTreeFrameSinkCallback callback,
-      mojom::RenderFrameMetadataObserverClientRequest
-          render_frame_metadata_observer_client_request,
-      mojom::RenderFrameMetadataObserverPtr render_frame_metadata_observer_ptr,
+      mojo::PendingReceiver<mojom::RenderFrameMetadataObserverClient>
+          render_frame_metadata_observer_client_receiver,
+      mojo::PendingRemote<mojom::RenderFrameMetadataObserver>
+          render_frame_metadata_observer_remote,
       const char* client_name) override;
 #ifdef OS_ANDROID
   bool UsingSynchronousCompositing() override;
@@ -263,9 +254,6 @@ class CONTENT_EXPORT RenderThreadImpl
   // If there is a pending asynchronous request, it will be completed by the
   // time this routine returns.
   scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync();
-
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  scoped_refptr<gpu::GpuChannelHost> EstablishForcedGpuChannelSync();
 
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager();
 
@@ -311,16 +299,8 @@ class CONTENT_EXPORT RenderThreadImpl
     return browser_plugin_manager_.get();
   }
 
-  // Returns a factory used for creating RTC PeerConnection objects.
-  PeerConnectionDependencyFactory* GetPeerConnectionDependencyFactory();
-
   PeerConnectionTracker* peer_connection_tracker() {
     return peer_connection_tracker_.get();
-  }
-
-  // Current P2PSocketDispatcher. Set to NULL if P2P API is disabled.
-  P2PSocketDispatcher* p2p_socket_dispatcher() {
-    return p2p_socket_dispatcher_.get();
   }
 
   blink::WebVideoCaptureImplManager* video_capture_impl_manager() const {
@@ -372,11 +352,6 @@ class CONTENT_EXPORT RenderThreadImpl
   // instances shared based on configured audio parameters.  Lazily created on
   // first call.
   AudioRendererMixerManager* GetAudioRendererMixerManager();
-
-#if defined(OS_WIN)
-  void PreCacheFontCharacters(const LOGFONT& log_font,
-                              const base::string16& str);
-#endif
 
   class UnfreezableMessageFilter : public IPC::MessageFilter {
    public:
@@ -460,7 +435,7 @@ class CONTENT_EXPORT RenderThreadImpl
   void RegisterPendingFrameCreate(
       const service_manager::BindSourceInfo& source_info,
       int routing_id,
-      mojom::FrameRequest frame);
+      mojo::PendingReceiver<mojom::Frame> frame);
 
   mojom::RendererHost* GetRendererHost();
 
@@ -493,6 +468,9 @@ class CONTENT_EXPORT RenderThreadImpl
       scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
     video_frame_compositor_task_runner_ = task_runner;
   }
+
+  // FEATURE_FORCE_ACCESS_TO_GPU
+  scoped_refptr<gpu::GpuChannelHost> EstablishForcedGpuChannelSync();
 
  private:
   friend class RenderThreadImplBrowserTest;
@@ -528,9 +506,6 @@ class CONTENT_EXPORT RenderThreadImpl
       int32_t parent_routing_id,
       const FrameReplicationState& replicated_state,
       const base::UnguessableToken& devtools_frame_token) override;
-  void SetUpEmbeddedWorkerChannelForServiceWorker(
-      mojo::PendingReceiver<blink::mojom::EmbeddedWorkerInstanceClient>
-          client_receiver) override;
   void OnNetworkConnectionChanged(
       net::NetworkChangeNotifier::ConnectionType type,
       double max_bandwidth_mbps) override;
@@ -579,7 +554,9 @@ class CONTENT_EXPORT RenderThreadImpl
   std::unique_ptr<viz::SyntheticBeginFrameSource>
   CreateSyntheticBeginFrameSource();
 
-  void OnRendererInterfaceRequest(mojom::RendererAssociatedRequest request);
+  void OnRendererInterfaceReceiver(
+      mojo::PendingAssociatedReceiver<mojom::Renderer> receiver);
+
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   std::unique_ptr<media::IPCMediaPipelineHost> CreateIPCMediaPipelineHost(
       media::GpuVideoAcceleratorFactories* factories,
@@ -598,14 +575,9 @@ class CONTENT_EXPORT RenderThreadImpl
 
   std::unique_ptr<BrowserPluginManager> browser_plugin_manager_;
 
-  std::unique_ptr<PeerConnectionDependencyFactory> peer_connection_factory_;
-
   // This is used to communicate to the browser process the status
   // of all the peer connections created in the renderer.
   std::unique_ptr<PeerConnectionTracker> peer_connection_tracker_;
-
-  // Dispatches all P2P sockets.
-  scoped_refptr<P2PSocketDispatcher> p2p_socket_dispatcher_;
 
   // Filter out unfreezable messages and pass it to unfreezable task runners.
   scoped_refptr<UnfreezableMessageFilter> unfreezable_message_filter_;
@@ -708,12 +680,14 @@ class CONTENT_EXPORT RenderThreadImpl
    public:
     PendingFrameCreate(const service_manager::BindSourceInfo& source_info,
                        int routing_id,
-                       mojom::FrameRequest frame_request);
+                       mojo::PendingReceiver<mojom::Frame> frame_receiver);
 
     const service_manager::BindSourceInfo& browser_info() const {
       return browser_info_;
     }
-    mojom::FrameRequest TakeFrameRequest() { return std::move(frame_request_); }
+    mojo::PendingReceiver<mojom::Frame> TakeFrameReceiver() {
+      return std::move(frame_receiver_);
+    }
 
    private:
     friend class base::RefCounted<PendingFrameCreate>;
@@ -725,7 +699,7 @@ class CONTENT_EXPORT RenderThreadImpl
 
     service_manager::BindSourceInfo browser_info_;
     int routing_id_;
-    mojom::FrameRequest frame_request_;
+    mojo::PendingReceiver<mojom::Frame> frame_receiver_;
   };
 
   using PendingFrameCreateMap =
@@ -736,7 +710,7 @@ class CONTENT_EXPORT RenderThreadImpl
 
   blink::AssociatedInterfaceRegistry associated_interfaces_;
 
-  mojo::AssociatedBinding<mojom::Renderer> renderer_binding_;
+  mojo::AssociatedReceiver<mojom::Renderer> renderer_receiver_{this};
 
   mojom::RenderMessageFilterAssociatedPtr render_message_filter_;
 
@@ -748,14 +722,14 @@ class CONTENT_EXPORT RenderThreadImpl
 
   int32_t client_id_;
 
-  mojom::FrameSinkProviderPtr frame_sink_provider_;
+  mojo::Remote<mojom::FrameSinkProvider> frame_sink_provider_;
 
   // A mojo connection to the CompositingModeReporter service.
   viz::mojom::CompositingModeReporterPtr compositing_mode_reporter_;
   // The class is a CompositingModeWatcher, which is bound to mojo through
   // this member.
-  mojo::Binding<viz::mojom::CompositingModeWatcher>
-      compositing_mode_watcher_binding_;
+  mojo::Receiver<viz::mojom::CompositingModeWatcher>
+      compositing_mode_watcher_receiver_{this};
 
   base::WeakPtrFactory<RenderThreadImpl> weak_factory_{this};
 

@@ -6,7 +6,7 @@
 
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_constants.h"
 #import "ios/chrome/browser/ui/infobars/modals/infobar_modal_constants.h"
-#import "ios/showcase/infobars/sc_infobar_banner_coordinator.h"
+#import "ios/showcase/infobars/sc_infobar_container_view_controller.h"
 #import "ios/showcase/test/showcase_eg_utils.h"
 #import "ios/showcase/test/showcase_test_case.h"
 
@@ -73,7 +73,7 @@ using ::showcase_utils::Close;
       assertWithMatcher:grey_nil()];
 }
 
-// Tests that the InfobarBanner is dismissed correctly when its swiped up.
+// Tests that the InfobarBanner is dismissed correctly when is swiped up.
 - (void)testInfobarBannerDismissSwipe {
   // Check Banner was presented.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
@@ -89,8 +89,8 @@ using ::showcase_utils::Close;
       assertWithMatcher:grey_nil()];
 }
 
-// Tests that the InfobarModal is presented when the Banner its swiped down.
-- (void)testInfobarBannerSwipeDown {
+// Tests that the InfobarModal is not presented when the Banner is swiped down.
+- (void)testInfobarBannerCantSwipeDown {
   // Check Banner was presented.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                           kInfobarBannerViewIdentifier)]
@@ -99,24 +99,21 @@ using ::showcase_utils::Close;
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                           kInfobarBannerViewIdentifier)]
       performAction:grey_swipeFastInDirection(kGREYDirectionDown)];
-  // Check Modal was presented.
+  // Check the Modal is not presented.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                           kInfobarBannerPresentedModalLabel)]
-      assertWithMatcher:grey_notNil()];
-  // Dismiss Modal.
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(kInfobarModalCancelButton)]
-      performAction:grey_tap()];
-  // Check neither the Banner nor Modal are presented.
+      assertWithMatcher:grey_nil()];
+  // Check the banner is still interactable by swiping it up.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kInfobarBannerViewIdentifier)]
+      performAction:grey_swipeFastInDirection(kGREYDirectionUp)];
+  // Check Banner was dismissed.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                           kInfobarBannerViewIdentifier)]
       assertWithMatcher:grey_nil()];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kInfobarBannerPresentedModalLabel)]
-      assertWithMatcher:grey_nil()];
 }
 
-// Tests that the InfobarModal is presented when the Banner its tapped.
+// Tests that the InfobarModal is not presented when the Banner is tapped.
 - (void)testInfobarBannerTapped {
   // Check Banner was presented.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
@@ -125,6 +122,32 @@ using ::showcase_utils::Close;
   // Tap Banner.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                           kInfobarBannerViewIdentifier)]
+      performAction:grey_tap()];
+  // Check the Modal is not presented.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kInfobarBannerPresentedModalLabel)]
+      assertWithMatcher:grey_nil()];
+  // Check the banner is still interactable by swiping it up.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kInfobarBannerViewIdentifier)]
+      performAction:grey_swipeFastInDirection(kGREYDirectionUp)];
+  // Check Banner was dismissed.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kInfobarBannerViewIdentifier)]
+      assertWithMatcher:grey_nil()];
+}
+
+// Tests that the InfobarModal is presented when the Open Modal button is
+// tapped.
+- (void)testInfobarBannerGearTapped {
+  // Check Banner was presented.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kInfobarBannerViewIdentifier)]
+      assertWithMatcher:grey_notNil()];
+  // Tap Gear Button.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(
+                                   kInfobarBannerOpenModalButtonIdentifier)]
       performAction:grey_tap()];
   // Check Modal was presented.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(

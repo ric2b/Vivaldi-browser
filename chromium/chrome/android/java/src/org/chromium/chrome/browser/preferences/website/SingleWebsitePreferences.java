@@ -8,12 +8,10 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.res.Resources;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.support.annotation.Nullable;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.preference.ListPreference;
 import android.support.v7.preference.Preference;
@@ -21,6 +19,8 @@ import android.support.v7.preference.PreferenceFragmentCompat;
 import android.support.v7.preference.PreferenceScreen;
 import android.text.format.Formatter;
 import android.view.View;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.VisibleForTesting;
@@ -433,9 +433,7 @@ public class SingleWebsitePreferences extends PreferenceFragmentCompat
         if (managedBy != null) {
             final Intent notificationSettingsIntent =
                     getNotificationSettingsIntent(manager.getDelegatePackageName(origin));
-            String summaryText = String.format(
-                    getResources().getString(R.string.website_notification_managed_by_app),
-                    managedBy);
+            String summaryText = getString(R.string.website_notification_managed_by_app, managedBy);
             ChromeImageViewPreference newPreference =
                     replaceWithReadOnlyCopyOf(preference, summaryText);
             setupNotificationManagedByPreference(newPreference, notificationSettingsIntent);
@@ -458,13 +456,11 @@ public class SingleWebsitePreferences extends PreferenceFragmentCompat
             String overrideSummary;
             if (isPermissionControlledByDSE(
                         ContentSettingsType.CONTENT_SETTINGS_TYPE_NOTIFICATIONS)) {
-                overrideSummary = getResources().getString(
-                        value != null && value == ContentSettingValues.ALLOW
+                overrideSummary = getString(value != null && value == ContentSettingValues.ALLOW
                                 ? R.string.website_settings_permissions_allow_dse
                                 : R.string.website_settings_permissions_block_dse);
             } else {
-                overrideSummary =
-                        getResources().getString(ContentSettingsResources.getSiteSummary(value));
+                overrideSummary = getString(ContentSettingsResources.getSiteSummary(value));
             }
 
             // On Android O this preference is read-only, so we replace the existing pref with a
@@ -536,7 +532,7 @@ public class SingleWebsitePreferences extends PreferenceFragmentCompat
             int newPermission = mSite.getPermission(PermissionInfo.Type.NOTIFICATION);
             if (mPreviousNotificationPermission == ContentSettingValues.ALLOW
                     && newPermission != ContentSettingValues.ALLOW) {
-                WebsitePreferenceBridge.nativeReportNotificationRevokedForOrigin(
+                WebsitePreferenceBridgeJni.get().reportNotificationRevokedForOrigin(
                         mSite.getAddress().getOrigin(), newPermission,
                         mSite.getPermissionInfo(PermissionInfo.Type.NOTIFICATION).isIncognito());
                 mPreviousNotificationPermission = null;
@@ -706,10 +702,10 @@ public class SingleWebsitePreferences extends PreferenceFragmentCompat
         CharSequence[] descriptions = new String[2];
         keys[0] = ContentSetting.toString(ContentSettingValues.ALLOW);
         keys[1] = ContentSetting.toString(ContentSettingValues.BLOCK);
-        descriptions[0] = getResources().getString(
-                ContentSettingsResources.getSiteSummary(ContentSettingValues.ALLOW));
-        descriptions[1] = getResources().getString(
-                ContentSettingsResources.getSiteSummary(ContentSettingValues.BLOCK));
+        descriptions[0] =
+                getString(ContentSettingsResources.getSiteSummary(ContentSettingValues.ALLOW));
+        descriptions[1] =
+                getString(ContentSettingsResources.getSiteSummary(ContentSettingValues.BLOCK));
         listPreference.setEntryValues(keys);
         listPreference.setEntries(descriptions);
         // TODO(crbug.com/735110): Figure out if this is the correct thing to do - here we are
@@ -814,10 +810,9 @@ public class SingleWebsitePreferences extends PreferenceFragmentCompat
 
         // The subresource filter permission has a custom BLOCK string.
         ListPreference listPreference = (ListPreference) preference;
-        Resources res = getResources();
         listPreference.setEntries(
-                new String[] {res.getString(R.string.website_settings_permissions_allow),
-                        res.getString(R.string.website_settings_permissions_ads_block)});
+                new String[] {getString(R.string.website_settings_permissions_allow),
+                        getString(R.string.website_settings_permissions_ads_block)});
         listPreference.setValueIndex(permission == ContentSettingValues.ALLOW ? 0 : 1);
     }
 
@@ -837,10 +832,9 @@ public class SingleWebsitePreferences extends PreferenceFragmentCompat
      */
     private void updatePreferenceForDSESetting(Preference preference) {
         ListPreference listPreference = (ListPreference) preference;
-        Resources res = getResources();
         listPreference.setEntries(new String[] {
-                res.getString(R.string.website_settings_permissions_allow_dse),
-                res.getString(R.string.website_settings_permissions_block_dse),
+                getString(R.string.website_settings_permissions_allow_dse),
+                getString(R.string.website_settings_permissions_block_dse),
         });
     }
 

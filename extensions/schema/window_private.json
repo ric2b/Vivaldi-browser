@@ -272,17 +272,6 @@
         ]
       },
       {
-        "name": "onBeforeUnloadDialogOpened",
-        "type": "function",
-        "description": "Fired when a beforeunload dialog is shown for a tab.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "tabId"
-          }
-        ]
-      },
-      {
         "name": "onWindowCreated",
         "type": "function",
         "description": "Fired when a window is created, even for guest windows.",
@@ -290,6 +279,21 @@
           {
             "type": "integer",
             "name": "windowId"
+          }
+        ]
+      },
+      {
+        "name": "onBeforeUnloadDialogOpened",
+        "type": "function",
+        "description": "Fired when a beforeunload dialog is shown for a tab.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          },
+          {
+            "type": "integer",
+            "name": "tabId"
           }
         ]
       },

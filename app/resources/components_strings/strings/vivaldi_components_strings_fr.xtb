@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fr">
 <translation id="1038842779957582377">Nom inconnu</translation>
+<translation id="1089439967362294234">Modifier le mot de passe</translation>
 <translation id="1110994991967754504">Sélectionner une autorisation pour <ph name="PERMISSION_NAME" /></translation>
 <translation id="1152921474424827756">Accéder à une <ph name="BEGIN_LINK" />copie mise en cache<ph name="END_LINK" /> de <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> a mis fin à la connexion de manière inattendue.</translation>
@@ -48,14 +49,18 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Accès au fichier refusé</translation>
 <translation id="2705137772291741111">La copie enregistrée (en cache) de ce site est illisible.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Exécuter les diagnostics de connectivité<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">La connexion a été réinitialisée.</translation>
 <translation id="2826760142808435982">La connexion est chiffrée et authentifiée avec la clé <ph name="CIPHER" />. La méthode d’échange de clés utilisée est <ph name="KX" />.</translation>
 <translation id="2856444702002559011">Des individus malveillants tentent peut-être de subtiliser vos informations personnelles sur le site <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (mots de passe, messages ou numéros de carte de crédit, par exemple). <ph name="BEGIN_LEARN_MORE_LINK" />En savoir plus<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Un changement de réseau a été détecté.</translation>
+<translation id="2948083400971632585">Vous pouvez désactiver le proxy configuré pour une connexion depuis les Réglages &gt; Réseau.</translation>
 <translation id="2991571918955627853">Le site <ph name="SITE" /> est actuellement inaccessible, car il utilise la technologie HSTS. Les erreurs réseau et les attaques sont généralement temporaires. Vous devriez donc pouvoir accéder à cette page plus tard.</translation>
 <translation id="3005723025932146533">Afficher la copie enregistrée</translation>
 <translation id="301521992641321250">Bloquée automatiquement</translation>
+<translation id="3041612393474885105">Informations relatives au certificat</translation>
 <translation id="3109728660330352905">Vous n’êtes pas autorisé à consulter cette page.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Essayez d’exécuter les diagnostics de connectivité<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Cette page inclut un formulaire dont la transmission n’est peut-être pas sécurisée. Les données envoyées pourront être vues par d’autres personnes pendant leur transfert ou modifiées par un pirate informatique afin de changer le message reçu par le serveur.</translation>
 <translation id="3176929007561373547">Vérifiez vos paramètres de proxy ou contactez votre administrateur réseau pour
       vous assurer que le serveur proxy fonctionne. Si vous
@@ -69,6 +74,7 @@
 <translation id="3447661539832366887">Le propriétaire de cet appareil a désactivé le jeu avec Antonio, la boule de lave.</translation>
 <translation id="3447884698081792621">Afficher le certificat (émis par <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Masquer les paramètres avancés</translation>
+<translation id="3484560055331845446">Vous pourriez perdre l’accès à votre compte Google. L’équipe Chrome vous recommande de modifier votre mot de passe maintenant. Vous devrez vous connecter.</translation>
 <translation id="3566021033012934673">Votre connexion n’est pas privée</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Masquer les détails</translation>
@@ -108,9 +114,11 @@
 <translation id="4744603770635761495">Chemin d’accès à l’exécutable</translation>
 <translation id="4750917950439032686">Vos informations, par exemple vos mots de passe ou vos numéros de carte de paiement, sont privées lorsqu'elles sont transmises à ce site.</translation>
 <translation id="4764776831041365478">Il se peut que la page Web à l’adresse <ph name="URL" /> soit temporairement inaccessible ou qu'elle ait été déplacée de façon permanente à une autre adresse Web.</translation>
+<translation id="4943872375798546930">Aucun résultat</translation>
 <translation id="4974590756084640048">Réactiver les avertissements</translation>
 <translation id="5023310440958281426">Vérifiez les règles définies par votre administrateur</translation>
 <translation id="5039804452771397117">Autoriser</translation>
+<translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 en cours d’utilisation)} other {(# en cours d’utilisation)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Vérifier l’adresse du proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bits)</translation>
 <translation id="5287240709317226393">Afficher les cookies</translation>
@@ -124,7 +132,6 @@
     Essayez de contacter votre administrateur système.</translation>
 <translation id="5510766032865166053">Il a peut-être été déplacé ou supprimé.</translation>
 <translation id="5556459405103347317">Recharger</translation>
-<translation id="5571347317547569613">({NUM_COOKIES,plural, =1 {1 en cours d’utilisation} other {# en cours d’utilisation}})</translation>
 <translation id="5610142619324316209">Vérifier la connexion</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> vous a redirigé à de trop nombreuses reprises.</translation>
 <translation id="5675650730144413517">Cette page ne fonctionne pas</translation>
@@ -201,6 +208,7 @@
 <translation id="8225771182978767009">La personne qui a configuré cet ordinateur a choisi de bloquer ce site.</translation>
 <translation id="8241707690549784388">La page que vous recherchez a utilisé des informations que vous avez envoyées. Si vous revenez sur cette page, chaque action précédemment effectuée sera répétée. Souhaitez-vous continuer ?</translation>
 <translation id="8241712895048303527">Bloquer sur ce site</translation>
+<translation id="8286036467436129157">Connexion</translation>
 <translation id="8288807391153049143">Afficher le certificat</translation>
 <translation id="8289355894181816810">Contactez votre administrateur réseau si vous n’êtes pas sûr(e) de vous.</translation>
 <translation id="8332188693563227489">L’accès à <ph name="HOST_NAME" /> a été refusé</translation>
@@ -208,6 +216,7 @@
 <translation id="8503813439785031346">Nom d’utilisateur</translation>
 <translation id="8703575177326907206">Votre connexion à <ph name="DOMAIN" /> n’est pas chiffrée.</translation>
 <translation id="8740359287975076522">L’&lt;abbr id="dnsDefinition"&gt;adresse DNS&lt;/abbr&gt; de <ph name="HOST_NAME" /> est introuvable. Diagnostic du problème en cours…</translation>
+<translation id="8820817407110198400">Signets</translation>
 <translation id="9001074447101275817">Le proxy <ph name="DOMAIN" /> nécessite un nom d’utilisateur et un mot de passe.</translation>
 <translation id="9008201768610948239">Ignorer</translation>
 <translation id="9011424611726486705">Ouvrir les paramètres du site</translation>

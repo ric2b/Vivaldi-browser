@@ -46,6 +46,8 @@ CrSettingsSyncPageTest.prototype = {
 
   /** @override */
   extraLibraries: CrSettingsInteractiveUITest.prototype.extraLibraries.concat([
+    '../test_browser_proxy.js',
+    'test_sync_browser_proxy.js',
     'people_page_sync_page_interactive_test.js',
   ]),
 };

@@ -103,28 +103,28 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
     date_folder_modified_ = date;
   }
 
-  // Returns the time the node was last visited.
-  const base::Time date_visited() const;
-  void set_date_visited(const base::Time& date);
-
-  base::string16 GetNickName() const override;
+  // <-- Vivaldi
+  base::string16 GetNickName() const;
   void set_nickname(const base::string16 &nick);
 
   base::string16 GetThumbnail() const;
-  void set_thumbnail(const base::string16 &thumbnail);
 
   base::string16 GetPartner() const;
-  void set_partner(const base::string16 &partner);
 
   bool GetBookmarkbar() const;
-  void set_bookmarkbar(const bool bookmarkbar);
 
   bool GetSpeeddial() const;
-  void set_speeddial(const bool speeddial);
 
-  base::string16 GetDescription() const override;
+  base::string16 GetDescription() const;
   void set_description(const base::string16 &desc);
 
+  base::string16 GetDefaultFaviconUri() const;
+
+  // Returns the time the node was last visited.
+  const base::Time date_visited() const;
+
+  bool is_separator() const;
+  // Vivaldi -->
 
   // Convenience for testing if this node represents a folder. A folder is a
   // node whose type is not URL.
@@ -158,6 +158,9 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   // TitledUrlNode interface methods.
   const base::string16& GetTitledUrlNodeTitle() const override;
   const GURL& GetTitledUrlNodeUrl() const override;
+  // Vivaldi: TitledUrlNode interface methods.
+  const base::string16 GetTitledUrlNodeNickName() const override;
+  const base::string16 GetTitledUrlNodeDescription() const override;
 
   // TODO(sky): Consider adding last visit time here, it'll greatly simplify
   // HistoryContentsProvider.

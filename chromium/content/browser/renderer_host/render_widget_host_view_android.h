@@ -20,12 +20,12 @@
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
 #include "base/time/time.h"
+#include "cc/trees/render_frame_metadata.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_timing_details_map.h"
 #include "components/viz/common/quads/selection.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
-#include "content/browser/devtools/devtools_frame_metadata.h"
 #include "content/browser/renderer_host/input/mouse_wheel_phase_handler.h"
 #include "content/browser/renderer_host/input/stylus_text_selector.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
@@ -194,7 +194,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   viz::ScopedSurfaceIdAllocator DidUpdateVisualProperties(
       const cc::RenderFrameMetadata& metadata) override;
   void GetScreenInfo(ScreenInfo* screen_info) override;
-  void CancelActiveTouches() override;
+  std::vector<std::unique_ptr<ui::TouchEvent>> ExtractAndCancelActiveTouches()
+      override;
+  void TransferTouches(
+      const std::vector<std::unique_ptr<ui::TouchEvent>>& touches) override;
 
   // ui::EventHandlerAndroid implementation.
   bool OnTouchEvent(const ui::MotionEventAndroid& m) override;
@@ -369,13 +372,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       jint x,
       jint y);
 
-  // Insets the Visual Viewport's bottom by the amount given.  The adjustment
-  // is specified in pixels and should not be negative.  An adjustment of 0
-  // returns the Visual Viewport to a non-inset viewport that matches the
-  // Layout Viewport.
-  void InsetViewportBottom(JNIEnv* env,
-                           const base::android::JavaParamRef<jobject>& obj,
-                           jint bottom_adjust_px);
+  // Notifies that the Visual Viewport's inset bottom has changed.
+  void OnViewportInsetBottomChanged(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
 
   void WriteContentBitmapToDiskAsync(
       JNIEnv* env,
@@ -564,8 +564,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   gfx::Point prev_mousedown_point_;
   int left_click_count_ = 0;
 
-  gfx::Insets insets_;
-
   viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
 
@@ -586,9 +584,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // TODO(ericrk): Make this more robust.
   bool in_sync_copy_contents_ = false;
 
-  // A cached copy of the most up to date DevToolsFrameMetadata, computed from
-  // either RenderFrameMetadata or CompositorFrameMetadata.
-  base::Optional<DevToolsFrameMetadata> last_devtools_frame_metadata_;
+  // A cached copy of the most up to date RenderFrameMetadata.
+  base::Optional<cc::RenderFrameMetadata> last_render_frame_metadata_;
 
   WebContentsAccessibilityAndroid* web_contents_accessibility_ = nullptr;
 

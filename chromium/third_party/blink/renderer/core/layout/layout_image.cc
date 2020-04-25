@@ -142,7 +142,7 @@ void LayoutImage::ImageChanged(WrappedImagePtr new_image,
 }
 
 void LayoutImage::UpdateIntrinsicSizeIfNeeded(const LayoutSize& new_size) {
-  if (image_resource_->ErrorOccurred() || !image_resource_->HasImage())
+  if (image_resource_->ErrorOccurred())
     return;
   SetIntrinsicSize(new_size);
 }
@@ -347,7 +347,7 @@ bool LayoutImage::OverrideIntrinsicSizingInfo(
 
 void LayoutImage::ComputeIntrinsicSizingInfo(
     IntrinsicSizingInfo& intrinsic_sizing_info) const {
-  DCHECK(!ShouldApplySizeContainment() && !DisplayLockInducesSizeContainment());
+  DCHECK(!ShouldApplySizeContainment());
   if (!OverrideIntrinsicSizingInfo(intrinsic_sizing_info)) {
     if (SVGImage* svg_image = EmbeddedSVGImage()) {
       svg_image->GetIntrinsicSizingInfo(intrinsic_sizing_info);

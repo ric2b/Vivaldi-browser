@@ -48,10 +48,6 @@
 #include "net/url_request/url_request_throttler_manager.h"
 #include "url/url_constants.h"
 
-#if !BUILDFLAG(DISABLE_FILE_SUPPORT)
-#include "net/url_request/file_protocol_handler.h"  // nogncheck
-#endif
-
 #if !BUILDFLAG(DISABLE_FTP_SUPPORT)
 #include "net/ftp/ftp_auth_cache.h"                // nogncheck
 #include "net/ftp/ftp_network_layer.h"             // nogncheck
@@ -87,14 +83,12 @@ class BasicNetworkDelegate : public NetworkDelegateImpl {
     return OK;
   }
 
-  void OnStartTransaction(URLRequest* request,
-                          const HttpRequestHeaders& headers) override {}
-
   int OnHeadersReceived(
       URLRequest* request,
       CompletionOnceCallback callback,
       const HttpResponseHeaders* original_response_headers,
       scoped_refptr<HttpResponseHeaders>* override_response_headers,
+      const IPEndPoint& endpoint,
       GURL* allowed_unsafe_redirect_url) override {
     return OK;
   }
@@ -111,14 +105,6 @@ class BasicNetworkDelegate : public NetworkDelegateImpl {
   void OnPACScriptError(int line_number, const base::string16& error) override {
   }
 
-  NetworkDelegate::AuthRequiredResponse OnAuthRequired(
-      URLRequest* request,
-      const AuthChallengeInfo& auth_info,
-      AuthCallback callback,
-      AuthCredentials* credentials) override {
-    return NetworkDelegate::AUTH_REQUIRED_RESPONSE_NO_ACTION;
-  }
-
   bool OnCanGetCookies(const URLRequest& request,
                        const CookieList& cookie_list,
                        bool allowed_from_caller) override {
@@ -130,12 +116,6 @@ class BasicNetworkDelegate : public NetworkDelegateImpl {
                       CookieOptions* options,
                       bool allowed_from_caller) override {
     return allowed_from_caller;
-  }
-
-  bool OnCanAccessFile(const URLRequest& request,
-                       const base::FilePath& original_path,
-                       const base::FilePath& absolute_path) const override {
-    return true;
   }
 
   DISALLOW_COPY_AND_ASSIGN(BasicNetworkDelegate);
@@ -172,12 +152,13 @@ class ContainerURLRequestContext final : public URLRequestContext {
     // down before this cancels the ProxyResolutionService's URLRequests.
     proxy_resolution_service()->OnShutdown();
 
+    DCHECK(host_resolver());
+    host_resolver()->OnShutdown();
+
     AssertNoURLRequests();
   }
 
-  URLRequestContextStorage* storage() {
-    return &storage_;
-  }
+  URLRequestContextStorage* storage() { return &storage_; }
 
   void set_transport_security_persister(
       std::unique_ptr<TransportSecurityPersister>
@@ -195,8 +176,7 @@ class ContainerURLRequestContext final : public URLRequestContext {
 }  // namespace
 
 URLRequestContextBuilder::HttpCacheParams::HttpCacheParams()
-    : type(IN_MEMORY),
-      max_size(0) {}
+    : type(IN_MEMORY), max_size(0) {}
 URLRequestContextBuilder::HttpCacheParams::~HttpCacheParams() = default;
 
 URLRequestContextBuilder::URLRequestContextBuilder() = default;
@@ -296,6 +276,13 @@ void URLRequestContextBuilder::set_reporting_policy(
     std::unique_ptr<ReportingPolicy> reporting_policy) {
   reporting_policy_ = std::move(reporting_policy);
 }
+
+void URLRequestContextBuilder::set_persistent_reporting_and_nel_store(
+    std::unique_ptr<PersistentReportingAndNelStore>
+        persistent_reporting_and_nel_store) {
+  persistent_reporting_and_nel_store_ =
+      std::move(persistent_reporting_and_nel_store);
+}
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
 void URLRequestContextBuilder::SetInterceptors(
@@ -352,12 +339,6 @@ void URLRequestContextBuilder::set_host_resolver_factory(
   host_resolver_factory_ = factory;
 }
 
-void URLRequestContextBuilder::SetCreateLayeredNetworkDelegateCallback(
-    CreateLayeredNetworkDelegate create_layered_network_delegate_callback) {
-  create_layered_network_delegate_callback_ =
-      std::move(create_layered_network_delegate_callback);
-}
-
 void URLRequestContextBuilder::set_proxy_delegate(
     std::unique_ptr<ProxyDelegate> proxy_delegate) {
   proxy_delegate_ = std::move(proxy_delegate);
@@ -399,11 +380,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   }
 
   if (!network_delegate_)
-    network_delegate_.reset(new BasicNetworkDelegate);
-  if (create_layered_network_delegate_callback_) {
-    network_delegate_ = std::move(create_layered_network_delegate_callback_)
-                            .Run(std::move(network_delegate_));
-  }
+    network_delegate_ = std::make_unique<BasicNetworkDelegate>();
   storage->set_network_delegate(std::move(network_delegate_));
 
   if (net_log_) {
@@ -544,18 +521,21 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   // Note: ReportingService::Create and NetworkErrorLoggingService::Create can
   // both return nullptr if the corresponding base::Feature is disabled.
 
-  // TODO(chlily): Use a real one to enable persistent storage. (This is just a
-  // placeholder for now.)
-  PersistentReportingAndNelStore* store = nullptr;
-
   if (reporting_policy_) {
     storage->set_reporting_service(
-        ReportingService::Create(*reporting_policy_, context.get(), store));
+        ReportingService::Create(*reporting_policy_, context.get(),
+                                 persistent_reporting_and_nel_store_.get()));
   }
 
   if (network_error_logging_enabled_) {
     storage->set_network_error_logging_service(
-        NetworkErrorLoggingService::Create(store));
+        NetworkErrorLoggingService::Create(
+            persistent_reporting_and_nel_store_.get()));
+  }
+
+  if (persistent_reporting_and_nel_store_) {
+    storage->set_persistent_reporting_and_nel_store(
+        std::move(persistent_reporting_and_nel_store_));
   }
 
   // If both Reporting and Network Error Logging are actually enabled, then
@@ -640,17 +620,6 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   if (data_enabled_)
     job_factory->SetProtocolHandler(url::kDataScheme,
                                     std::make_unique<DataProtocolHandler>());
-
-#if !BUILDFLAG(DISABLE_FILE_SUPPORT)
-  if (file_enabled_) {
-    job_factory->SetProtocolHandler(
-        url::kFileScheme,
-        std::make_unique<FileProtocolHandler>(base::CreateTaskRunner(
-            {base::ThreadPool(), base::MayBlock(),
-             base::TaskPriority::USER_BLOCKING,
-             base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})));
-  }
-#endif  // !BUILDFLAG(DISABLE_FILE_SUPPORT)
 
 #if !BUILDFLAG(DISABLE_FTP_SUPPORT)
   if (ftp_enabled_) {

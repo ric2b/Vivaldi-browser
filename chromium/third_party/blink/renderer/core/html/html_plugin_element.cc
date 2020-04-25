@@ -22,6 +22,7 @@
 
 #include "third_party/blink/renderer/core/html/html_plugin_element.h"
 
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
@@ -52,6 +53,7 @@
 #include "third_party/blink/renderer/core/page/scrolling/scrolling_coordinator.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_from_url.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
@@ -580,6 +582,16 @@ bool HTMLPlugInElement::RequestObject(const PluginParameters& plugin_params) {
     ResetInstance();
   if (object_type == ObjectContentType::kFrame ||
       object_type == ObjectContentType::kImage || handled_externally) {
+    if (object_type == ObjectContentType::kFrame) {
+      UseCounter::Count(GetDocument(),
+                        WebFeature::kPluginElementLoadedDocument);
+    } else if (object_type == ObjectContentType::kImage) {
+      UseCounter::Count(GetDocument(), WebFeature::kPluginElementLoadedImage);
+    } else {
+      UseCounter::Count(GetDocument(),
+                        WebFeature::kPluginElementLoadedExternal);
+    }
+
     if (ContentFrame() && ContentFrame()->IsRemoteFrame()) {
       // During lazy reattaching, the plugin element loses EmbeddedContentView.
       // Since the ContentFrame() is not torn down the options here are to

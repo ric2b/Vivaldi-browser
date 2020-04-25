@@ -18,4 +18,7 @@
          content:// URIs for downloads. This may no longer work if/when users
          are allowed to save files elsewhere. -->
     <external-path name="downloads" path="Download/" />
+    <!-- Note(david@vivaldi.com): We need to share access to the external
+         pictures folder for Vivaldi. -->
+    <external-path name="pictures" path="Pictures/" />
 </paths>

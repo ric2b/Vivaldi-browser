@@ -6,22 +6,25 @@
 // permissionrequest <webview> events.
 
 var logging = requireNative('logging');
-var GuestViewInternalNatives = requireNative('guest_view_internal');
 var MessagingNatives = requireNative('messaging_natives');
 var WebViewConstants = require('webViewConstants').WebViewConstants;
 var WebViewInternal = getInternalApi('webViewInternal');
 
+var GuestViewInternalNatives = requireNative('guest_view_internal');
+
 var PERMISSION_TYPES = ['media',
-                        'camera',
-                        'microphone',
-                        'microphone_and_camera',
                         'geolocation',
                         'pointerLock',
                         'download',
                         'loadplugin',
                         'filesystem',
-                        'fullscreen',
-                        'notifications'];
+                        // Vivaldi
+                        'camera',
+                        'microphone',
+                        'microphone_and_camera',
+                        'notifications',
+                        // Vivaldi end
+                        'fullscreen'];
 
 // The browser will kill us if we send it a bad instance ID.
 // TODO(780728): Remove once the cause of the bad ID is known.

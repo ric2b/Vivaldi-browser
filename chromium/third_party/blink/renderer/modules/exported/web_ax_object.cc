@@ -281,11 +281,11 @@ bool WebAXObject::IsAutofillAvailable() const {
   return private_->IsAutofillAvailable();
 }
 
-WebString WebAXObject::AriaAutoComplete() const {
+WebString WebAXObject::AutoComplete() const {
   if (IsDetached())
     return WebString();
 
-  return private_->AriaAutoComplete();
+  return private_->AutoComplete();
 }
 
 ax::mojom::AriaCurrentState WebAXObject::AriaCurrentState() const {
@@ -1445,6 +1445,7 @@ static ax::mojom::MarkerType ToAXMarkerType(
       return ax::mojom::MarkerType::kSpelling;
     case DocumentMarker::kGrammar:
       return ax::mojom::MarkerType::kGrammar;
+    case DocumentMarker::kTextFragment:
     case DocumentMarker::kTextMatch:
       return ax::mojom::MarkerType::kTextMatch;
     case DocumentMarker::kActiveSuggestion:
@@ -1630,11 +1631,12 @@ void WebAXObject::Swap(WebAXObject& other) {
   other = temp;
 }
 
-void WebAXObject::HandleAutofillStateChanged(bool suggestions_available) const {
+void WebAXObject::HandleAutofillStateChanged(
+    const blink::WebAXAutofillState state) const {
   if (IsDetached() || !private_->IsAXLayoutObject())
     return;
 
-  private_->HandleAutofillStateChanged(suggestions_available);
+  private_->HandleAutofillStateChanged(state);
 }
 
 WebString WebAXObject::ToString() const {

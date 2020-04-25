@@ -92,7 +92,7 @@ enum class PaintPhase {
   kDescendantOutlinesOnly,
 
   // The below are auxiliary phases which are used to paint special effects.
-  kOverlayScrollbars,
+  kOverlayOverflowControls,
   kSelection,
   kTextClip,
   kMask,
@@ -134,13 +134,15 @@ enum GlobalPaintFlag {
   // into the topmost layer.
   kGlobalPaintFlattenCompositingLayers = 1 << 1,
   // Used when printing in order to adapt the output to the medium, for
-  // instance by not painting shadows and selections on text, and add
-  // URL metadata for links.
+  // instance by not painting shadows and selections on text.
   kGlobalPaintPrinting = 1 << 2,
+  // Used when printing or painting a preview to in order to add URL
+  // metadata for links.
+  kGlobalPaintAddUrlMetadata = 1 << 3
 
   // NOTE(igor@vivaldi.com): This is used for the full page capture
   // including areas outside the scroll view.
-  kGlobalPaintWholePage = 1 << 31
+  , kGlobalPaintWholePage = 1 << 31
 };
 
 typedef unsigned GlobalPaintFlags;

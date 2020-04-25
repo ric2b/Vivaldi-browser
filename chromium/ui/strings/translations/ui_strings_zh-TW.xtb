@@ -7,6 +7,7 @@
 <translation id="1156623771253174079">{SECONDS,plural, =1{1 分鐘前}other{# 分鐘前}}</translation>
 <translation id="1169783199079129864">{MINUTES,plural, =1{1 分鐘}other{# 分鐘}}</translation>
 <translation id="1181037720776840403">移除</translation>
+<translation id="1201402288615127009">繼續</translation>
 <translation id="1243314992276662751">上傳</translation>
 <translation id="1266864766717917324">無法分享<ph name="CONTENT_TYPE" /></translation>
 <translation id="1269641567813814718">Windows 鍵</translation>
@@ -51,6 +52,7 @@
 <translation id="2289052229480071835">輕觸畫面上的觸控目標。</translation>
 <translation id="2295140143284145483">問卷調查</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/秒</translation>
+<translation id="2353636109065292463">檢查你的網際網路連線</translation>
 <translation id="2388990488038464401">要透過你的手機撥打這個號碼嗎？</translation>
 <translation id="24452542372838207">展開通知</translation>
 <translation id="2445449901874883781">使用高密度模式</translation>
@@ -81,7 +83,6 @@
 <translation id="3295886253693811851">透過以下應用程式撥打電話：</translation>
 <translation id="335581015389089642">語音</translation>
 <translation id="3389286852084373014">文字過多</translation>
-<translation id="3443810440409579745">已收到分頁。</translation>
 <translation id="3479552764303398839">現在不要</translation>
 <translation id="348799646910989694">自動隱藏檔案櫃</translation>
 <translation id="3600566671520689681">{DAYS,plural, =1{還剩 1 天}other{還剩 # 天}}</translation>
@@ -111,14 +112,11 @@
 <translation id="4724120544754982507">通知中心，<ph name="UNREAD_NOTIFICATION_COUNT" /> 則未讀通知</translation>
 <translation id="4730374152663651037">常用的應用程式</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{還剩 1 個月}other{還剩 # 個月}}</translation>
-<translation id="4841881773802181781">插入</translation>
-<translation id="4881695831933465202">開啟</translation>
 <translation id="4888938634149558681">撥打電話</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 秒}other{# 秒}}</translation>
 <translation id="4971687151119236543">上一首媒體曲目</translation>
 <translation id="5046499563572181734">輕觸這裡</translation>
 <translation id="5076340679995252485">貼上(&amp;P)</translation>
-<translation id="5137751499640340777">開啟 Google 助理</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">顯示/隱藏三角標記</translation>
 <translation id="5278860589123563674">無法傳送</translation>
@@ -155,6 +153,7 @@
 <translation id="6394627529324717982">逗號</translation>
 <translation id="6397363302884558537">Stop Speaking</translation>
 <translation id="6404817160109697034">{SECONDS,plural, =1{1 秒前}other{# 秒前}}</translation>
+<translation id="6417265370957905582">Google 助理</translation>
 <translation id="6430678249303439055">一律封鎖來自這個應用程式的通知</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 秒前}other{# 秒前}}</translation>
 <translation id="6539092367496845964">發生錯誤，請稍後再試。</translation>
@@ -165,7 +164,7 @@
 <translation id="6620110761915583480">儲存檔案</translation>
 <translation id="6656912866303152668">請確認「<ph name="TARGET_DEVICE_NAME" />」已開啟了 Chrome 的同步功能，然後再傳送一次。</translation>
 <translation id="6699343763173986273">下一首媒體曲目</translation>
-<translation id="673773751041746814">刪除</translation>
+<translation id="6710213216561001401">返回</translation>
 <translation id="6779314412797872738">如要將號碼從這個裝置傳送到你的 Android 手機，請在這兩個裝置的設定中<ph name="TROUBLESHOOT_LINK" />。</translation>
 <translation id="6786750046913594791">關閉資料夾</translation>
 <translation id="6808150112686056157">停止媒體播放</translation>
@@ -183,6 +182,7 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{還剩 1 分鐘}other{還剩 # 分鐘}}</translation>
 <translation id="7319740667687257810">啟動器，部分檢視</translation>
+<translation id="7352651011704765696">發生錯誤</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{1 分鐘前}other{# 分鐘前}}</translation>
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{還剩 1 分鐘}other{還剩 # 分鐘}}</translation>
@@ -198,9 +198,10 @@
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{超過 1 則未讀通知}other{超過 # 則未讀通知}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{1 分鐘內}other{# 分鐘內}}</translation>
 <translation id="8087772101393322318"><ph name="KEY_MODIFIER_NAME" /> + <ph name="KEY_COMBO_NAME" /></translation>
-<translation id="8098075892845277643">使用 Google 助理進行語音查詢</translation>
+<translation id="8090736967111090568">從 <ph name="ORIGIN" /> 撥打的號碼</translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{1 小時前}other{# 小時前}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{還剩 1 秒}other{還剩 # 秒}}</translation>
+<translation id="8134065097954893699">重新載入這個頁面</translation>
 <translation id="8144660977431427332">你的搜尋結果由 Google 助理提供。<ph name="LEARN_MORE" /></translation>
 <translation id="8152264887680882389"><ph name="TEXT" />，自動完成</translation>
 <translation id="815598010540052116">向下捲動</translation>

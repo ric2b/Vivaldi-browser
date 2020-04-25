@@ -386,6 +386,19 @@ void GLES2Implementation::OnGpuControlSwapBuffersCompleted(
   std::move(callback).Run(params);
 }
 
+void GLES2Implementation::OnGpuSwitched() {
+  share_group_->SetGpuSwitched(true);
+}
+
+GLboolean GLES2Implementation::DidGpuSwitch() {
+  // TODO(zmo): Redesign this code; it works for now because the share group
+  // only contains one context but in the future only the first OpenGL context
+  // in the share group will receive GL_TRUE as the return value.
+  bool gpu_changed = share_group_->GetGpuSwitched();
+  share_group_->SetGpuSwitched(false);
+  return gpu_changed ? GL_TRUE : GL_FALSE;
+}
+
 void GLES2Implementation::SendErrorMessage(std::string message, int32_t id) {
   if (error_message_callback_.is_null())
     return;
@@ -1359,6 +1372,33 @@ void GLES2Implementation::DrawElementsImpl(GLenum mode,
   }
   helper_->DrawElements(mode, count, type, offset);
   RestoreElementAndArrayBuffers(simulated);
+  CheckGLError();
+}
+
+void GLES2Implementation::DrawElementsIndirect(GLenum mode,
+                                               GLenum type,
+                                               const void* offset) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glDrawElementsIndirect("
+                     << GLES2Util::GetStringDrawMode(mode) << ", "
+                     << GLES2Util::GetStringIndexType(type) << ", " << offset
+                     << ")");
+  if (!ValidateOffset("glDrawElementsIndirect",
+                      reinterpret_cast<GLintptr>(offset))) {
+    return;
+  }
+  // This is for WebGL 2.0 Compute which doesn't support client side arrays
+  if (vertex_array_object_manager_->bound_element_array_buffer() == 0) {
+    SetGLError(GL_INVALID_OPERATION, "glDrawElementsIndirect",
+               "No element array buffer");
+    return;
+  }
+  if (vertex_array_object_manager_->SupportsClientSideBuffers()) {
+    SetGLError(GL_INVALID_OPERATION, "glDrawElementsIndirect",
+               "Missing array buffer for vertex attribute");
+    return;
+  }
+  helper_->DrawElementsIndirect(mode, type, ToGLuint(offset));
   CheckGLError();
 }
 
@@ -5193,6 +5233,25 @@ void GLES2Implementation::DrawArrays(GLenum mode, GLint first, GLsizei count) {
   CheckGLError();
 }
 
+void GLES2Implementation::DrawArraysIndirect(GLenum mode, const void* offset) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glDrawArraysIndirect("
+                     << GLES2Util::GetStringDrawMode(mode) << ", " << offset
+                     << ")");
+  if (!ValidateOffset("glDrawArraysIndirect",
+                      reinterpret_cast<GLintptr>(offset))) {
+    return;
+  }
+  // This is for WebGL 2.0 Compute which doesn't support client side arrays
+  if (vertex_array_object_manager_->SupportsClientSideBuffers()) {
+    SetGLError(GL_INVALID_OPERATION, "glDrawArraysIndirect",
+               "Missing array buffer for vertex attribute");
+    return;
+  }
+  helper_->DrawArraysIndirect(mode, ToGLuint(offset));
+  CheckGLError();
+}
+
 void GLES2Implementation::GetVertexAttribfv(GLuint index,
                                             GLenum pname,
                                             GLfloat* params) {
@@ -6718,8 +6777,18 @@ unsigned int GLES2Implementation::GetTransferBufferFreeSize() const {
   return 0;
 }
 
+bool GLES2Implementation::IsJpegDecodeAccelerationSupported() const {
+  NOTREACHED();
+  return false;
+}
+
+bool GLES2Implementation::IsWebPDecodeAccelerationSupported() const {
+  NOTREACHED();
+  return false;
+}
+
 bool GLES2Implementation::CanDecodeWithHardwareAcceleration(
-    base::span<const uint8_t> encoded_data) const {
+    const cc::ImageHeaderMetadata* image_metadata) const {
   NOTREACHED();
   return false;
 }

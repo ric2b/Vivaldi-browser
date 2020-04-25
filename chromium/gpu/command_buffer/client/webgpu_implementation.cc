@@ -37,6 +37,17 @@ WebGPUImplementation::~WebGPUImplementation() {
   // commands are still in flight.
   Flush();
   helper_->Finish();
+
+#if BUILDFLAG(USE_DAWN)
+  // Now that commands are finished, free the wire client.
+  wire_client_.reset();
+
+  // All client-side Dawn objects are now destroyed.
+  // Shared memory allocations for buffers that were still mapped at the time
+  // of destruction can now be safely freed.
+  memory_transfer_service_->FreeHandlesPendingToken(helper_->InsertToken());
+  helper_->Finish();
+#endif
 }
 
 gpu::ContextResult WebGPUImplementation::Initialize(
@@ -153,8 +164,16 @@ unsigned int WebGPUImplementation::GetTransferBufferFreeSize() const {
   NOTREACHED();
   return 0;
 }
+bool WebGPUImplementation::IsJpegDecodeAccelerationSupported() const {
+  NOTREACHED();
+  return false;
+}
+bool WebGPUImplementation::IsWebPDecodeAccelerationSupported() const {
+  NOTREACHED();
+  return false;
+}
 bool WebGPUImplementation::CanDecodeWithHardwareAcceleration(
-    base::span<const uint8_t> encoded_data) const {
+    const cc::ImageHeaderMetadata* image_metadata) const {
   NOTREACHED();
   return false;
 }
@@ -323,6 +342,13 @@ ReservedTexture WebGPUImplementation::ReserveTexture(DawnDevice device) {
   NOTREACHED();
   return {};
 #endif
+}
+
+void WebGPUImplementation::RequestAdapter(PowerPreference power_preference) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] wgRequestAdapter("
+                     << static_cast<uint32_t>(power_preference) << ")");
+  helper_->RequestAdapter(static_cast<uint32_t>(power_preference));
 }
 
 }  // namespace webgpu

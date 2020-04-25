@@ -62,7 +62,6 @@
 #endif
 
 #if defined(OS_ANDROID)
-#include "chrome/browser/android/feature_utilities.h"
 #include "chrome/browser/download/download_prompt_status.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "components/infobars/core/infobar.h"
@@ -852,14 +851,7 @@ TEST_F(ChromeDownloadManagerDelegateTest, BlockedAsActiveContent_HttpPageOk) {
 }
 
 #if defined(OS_ANDROID)
-#if defined(DISABLE_OFFLINE_PAGES_TOUCHLESS)
-#define MAYBE_InterceptDownloadByOfflinePages \
-  DISABLED_InterceptDownloadByOfflinePages
-#else
-#define MAYBE_InterceptDownloadByOfflinePages InterceptDownloadByOfflinePages
-#endif
-TEST_F(ChromeDownloadManagerDelegateTest,
-       MAYBE_InterceptDownloadByOfflinePages) {
+TEST_F(ChromeDownloadManagerDelegateTest, InterceptDownloadByOfflinePages) {
   const GURL kUrl("http://example.com/foo");
   std::string mime_type = "text/html";
   bool should_intercept = delegate()->InterceptDownloadIfApplicable(
@@ -1083,7 +1075,7 @@ class TestDownloadProtectionService
 
   void CheckClientDownload(
       DownloadItem* download_item,
-      safe_browsing::CheckDownloadCallback callback) override {
+      safe_browsing::CheckDownloadRepeatingCallback callback) override {
     std::move(callback).Run(MockCheckClientDownload());
   }
   MOCK_METHOD0(MockCheckClientDownload, safe_browsing::DownloadCheckResult());
@@ -1346,23 +1338,17 @@ TEST_P(ChromeDownloadManagerDelegateTestWithSafeBrowsing, CheckClientDownload) {
         .SetDangerLevel(kParameters.initial_danger_level);
   }
 
-  if (kParameters.expected_danger_type !=
-      download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS) {
-    if (kParameters.blocked) {
-      EXPECT_CALL(*download_item,
-                  OnContentCheckCompleted(
-                      // Specifying a dangerous type here would take precendence
-                      // over the blocking of the file.
-                      download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
-                      download::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED));
-    } else {
-      EXPECT_CALL(
-          *download_item,
-          OnContentCheckCompleted(kParameters.expected_danger_type,
-                                  download::DOWNLOAD_INTERRUPT_REASON_NONE));
-    }
+  if (kParameters.blocked) {
+    EXPECT_CALL(*download_item,
+                OnContentCheckCompleted(
+                    // Specifying a dangerous type here would take precedence
+                    // over the blocking of the file.
+                    download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
+                    download::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED));
   } else {
-    EXPECT_CALL(*download_item, OnContentCheckCompleted(_, _)).Times(0);
+    EXPECT_CALL(*download_item, OnContentCheckCompleted(
+                                    kParameters.expected_danger_type,
+                                    download::DOWNLOAD_INTERRUPT_REASON_NONE));
   }
 
   pref_service()->SetInteger(
@@ -1596,11 +1582,6 @@ TEST_F(ChromeDownloadManagerDelegateTest, RequestConfirmation_Android) {
 
 TEST_F(ChromeDownloadManagerDelegateTest,
        RequestConfirmation_Android_WithLocationChangeEnabled) {
-#if defined(OS_ANDROID)
-  // We do not prompt for location in this case.
-  if (chrome::android::IsNoTouchModeEnabled())
-    return;
-#endif
   DeleteContents();
   SetContents(CreateTestWebContents());
 

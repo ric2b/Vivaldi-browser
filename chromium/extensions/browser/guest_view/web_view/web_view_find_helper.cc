@@ -10,6 +10,9 @@
 #include "components/guest_view/browser/guest_view_event.h"
 #include "extensions/browser/api/guest_view/web_view/web_view_internal_api.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
+#include "ui/gfx/geometry/dip_util.h"
 
 using guest_view::GuestViewEvent;
 
@@ -206,7 +209,16 @@ void WebViewFindHelper::FindResults::AggregateResults(
     // No match found, so the selection rectangle is empty.
     selection_rect_ = gfx::Rect();
   } else if (!selection_rect.IsEmpty()) {
-    selection_rect_ = selection_rect;
+    double scale = 1.0f;
+    display::Screen* screen = display::Screen::GetScreen();
+    if (screen) {
+      scale = screen
+                  ->GetDisplayNearestPoint(
+                      gfx::Point(selection_rect.x(), selection_rect.y()))
+                  .device_scale_factor();
+    }
+    selection_rect_ = gfx::ConvertRectToDIP(scale, selection_rect);
+
   }
 }
 

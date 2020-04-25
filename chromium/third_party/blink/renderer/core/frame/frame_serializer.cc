@@ -30,6 +30,8 @@
 
 #include "third_party/blink/renderer/core/frame/frame_serializer.h"
 
+#include "base/feature_list.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/css/css_font_face_rule.h"
 #include "third_party/blink/renderer/core/css/css_font_face_src_value.h"
 #include "third_party/blink/renderer/core/css/css_image_value.h"
@@ -149,8 +151,8 @@ bool SerializerMarkupAccumulator::ShouldIgnoreElement(
     return true;
   if (IsHTMLNoScriptElement(element))
     return true;
-  if (IsHTMLMetaElement(element) &&
-      ToHTMLMetaElement(element).ComputeEncoding().IsValid()) {
+  auto* meta = DynamicTo<HTMLMetaElement>(element);
+  if (meta && meta->ComputeEncoding().IsValid()) {
     return true;
   }
   // This is done in serializing document.StyleSheets.
@@ -384,7 +386,7 @@ void FrameSerializer::AddResourceForElement(Document& document,
   if (const auto* image = ToHTMLImageElementOrNull(element)) {
     AtomicString image_url_value;
     const Element* parent = element.parentElement();
-    if (parent && IsHTMLPictureElement(parent)) {
+    if (parent && IsA<HTMLPictureElement>(parent)) {
       // If parent element is <picture>, use ImageSourceURL() to get best fit
       // image URL from sibling source.
       image_url_value = image->ImageSourceURL();
@@ -534,7 +536,6 @@ void FrameSerializer::SerializeCSSRule(CSSRule* rule) {
     case CSSRule::kKeyframeRule:
     case CSSRule::kNamespaceRule:
     case CSSRule::kViewportRule:
-    case CSSRule::kFontFeatureValuesRule:
       break;
   }
 }
@@ -631,7 +632,19 @@ void FrameSerializer::RetrieveResourcesForCSSValue(const CSSValue& css_value,
     if (font_face_src_value->IsLocal())
       return;
 
-    AddFontToResources(font_face_src_value->Fetch(&document, nullptr));
+    if (base::FeatureList::IsEnabled(
+            features::kHtmlImportsRequestInitiatorLock)) {
+      if (Document* context_document = document.ContextDocument()) {
+        // For @imports from HTML imported Documents, we use the
+        // context document for getting origin and ResourceFetcher to use the
+        // main Document's origin, while using the element document for
+        // CompleteURL() to use imported Documents' base URLs.
+        AddFontToResources(
+            font_face_src_value->Fetch(context_document, nullptr));
+      }
+    } else {
+      AddFontToResources(font_face_src_value->Fetch(&document, nullptr));
+    }
   } else if (const auto* css_value_list = DynamicTo<CSSValueList>(css_value)) {
     for (unsigned i = 0; i < css_value_list->length(); i++)
       RetrieveResourcesForCSSValue(css_value_list->Item(i), document);

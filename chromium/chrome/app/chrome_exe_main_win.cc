@@ -176,7 +176,7 @@ int main() {
   HINSTANCE instance = GetModuleHandle(nullptr);
 #endif
   install_static::InitializeFromPrimaryModule();
-  //SignalInitializeCrashReporting();  // moved after command line initi
+  SignalInitializeCrashReporting();
 
   // Done here to ensure that OOMs that happen early in process initialization
   // are correctly signaled to the OS.
@@ -186,8 +186,6 @@ int main() {
   base::CommandLine::Init(0, nullptr);
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
-
-  SignalInitializeCrashReporting(); // Vivaldi need the command line set
 
   const std::string process_type =
       command_line->GetSwitchValueASCII(switches::kProcessType);

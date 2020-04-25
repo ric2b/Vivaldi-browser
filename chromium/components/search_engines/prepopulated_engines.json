@@ -23,12 +23,12 @@
     // When adding new engines, increment this number and use it as the new
     // max ID. This is used by UMA stats and must be updated to include the full
     // range or else not all engines will be counted in stats.
-    "kMaxPrepopulatedEngineID": 94,
+    "kMaxPrepopulatedEngineID": 103,
 
     // Increment this if you change the data in ways that mean users with
     // existing data should get a new version. Otherwise, existing data may
     // continue to be used and updates made here will not always appear.
-    "kCurrentDataVersion": 116
+    "kCurrentDataVersion": 117
   },
 
   // The following engines are included in country lists and are added to the
@@ -130,7 +130,7 @@
       "alternate_urls": [
         "https://go.mail.ru/msearch?q={searchTerms}&{mailru:referralID}"
       ],
-      "encoding": "windows-1251",
+      "new_tab_url": "https://go.mail.ru/chrome/newtab/",
       "suggest_url": "https://suggests.go.mail.ru/chrome?q={searchTerms}",
       "type": "SEARCH_ENGINE_MAILRU",
       "id": 83
@@ -635,6 +635,7 @@
       "alternate_urls": [
 	"http://hladaj.atlas.sk/fulltext/?phrase={searchTerms}"
       ],
+      "type": "SEARCH_ENGINE_ATLAS",
       "id": 27
     },
 
@@ -1008,6 +1009,104 @@
       "encoding": "windows-1250",
       "type": "SEARCH_ENGINE_ZOZNAM",
       "id": 85
+    },
+
+    "bing_viv": {
+      "name": "Bing",
+      "keyword": "bing.com",
+      "favicon_url": "https://www.bing.com/sa/simg/bing_p_rr_teal_min.ico",
+      "search_url": "https://www.bing.com/search?FORM=INCOH2&PC=IFJ4&PTAG=ICO-ab81662d&q={searchTerms}",
+      "suggest_url": "https://www.bing.com/osjson.aspx?query={searchTerms}&language={language}&PC=U316",
+      "image_url": "https://www.bing.com/images/detail/search?iss=sbi&FORM=INCOH2&PC=IFJ1&PTAG=ICO-c9d0fc87#enterInsights",
+      "image_url_post_params": "imgurl={google:imageURL}",
+      "type": "SEARCH_ENGINE_BING_VIV",
+      "id": 95
+    },
+
+    "yahoo_viv": {
+      "name": "Yahoo!",
+      "keyword": "yahoo.com",
+      "favicon_url": "https://search.yahoo.com/favicon.ico",
+      "search_url": "https://vivaldi-search.com/?a=gsp_vivaldi_00_00&q={searchTerms}",
+      "suggest_url": "https://search.yahoo.com/sugg/chrome?output=fxjson&appid=crmas&command={searchTerms}",
+      "type": "SEARCH_ENGINE_YAHOO_VIV",
+      "id": 96
+    },
+
+    "startpage_viv": {
+      "name": "Startpage.com",
+      "keyword": "startpage.com",
+      "favicon_url": "https://www.startpage.com/favicon.ico",
+      "search_url": "https://www.startpage.com/rvd/search?query={searchTerms}&language=auto",
+      "suggest_url": "https://www.startpage.com/cgi-bin/csuggest?query={searchTerms}&limit=10&lang=english&format=json",
+      "type": "SEARCH_ENGINE_STARTPAGE_COM_VIV",
+      "id": 97
+    },
+
+    "duckduckgo_viv": {
+      "name": "DuckDuckGo",
+      "keyword": "duckduckgo.com",
+      "favicon_url": "https://duckduckgo.com/favicon.ico",
+      "search_url": "https://duckduckgo.com/?q={searchTerms}&t=vivaldi",
+      "suggest_url": "https://duckduckgo.com/ac/?q={searchTerms}&type=list",
+      "type": "SEARCH_ENGINE_DUCKDUCKGO_VIV",
+      "id": 98
+    },
+
+    "ecosia_viv": {
+      "name": "Ecosia",
+      "keyword": "ecosia.org",
+      "favicon_url": "https://www.ecosia.org/favicon.ico",
+      "search_url": "https://www.ecosia.org/search?tt=vivaldi&q={searchTerms}",
+      "type": "SEARCH_ENGINE_ECOSIA_VIV",
+      "id": 99
+    },
+
+    "wikipedia_viv": {
+      "name": "Wikipedia",
+      "keyword": "wikipedia.org",
+      "favicon_url": "https://en.wikipedia.org/favicon.ico",
+      "search_url": "https://en.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://en.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "type": "SEARCH_ENGINE_WIKIPEDIA_VIV",
+      "id": 100
+    },
+
+    "google_viv": {
+      "name": "Google",
+      "keyword": "google.com",
+      "favicon_url": "https://www.google.com/images/branding/product/ico/googleg_lodp.ico",
+      "search_url": "{google:baseURL}search?q={searchTerms}&{google:RLZ}{google:originalQueryForSuggestion}{google:assistedQueryStats}{google:searchFieldtrialParameter}{google:iOSSearchLanguage}{google:searchClient}{google:sourceId}{google:contextualSearchVersion}ie={inputEncoding}",
+      "suggest_url": "{google:baseSuggestURL}search?{google:searchFieldtrialParameter}client={google:suggestClient}&gs_ri={google:suggestRid}&xssi=t&q={searchTerms}&{google:inputType}{google:cursorPosition}{google:currentPageUrl}{google:pageClassification}{google:searchVersion}{google:sessionToken}{google:prefetchQuery}sugkey={google:suggestAPIKeyParameter}",
+      "type": "SEARCH_ENGINE_GOOGLE_VIV",
+      "id": 101
+    },
+
+    "qwant_viv": {
+      "name": "Qwant",
+      "keyword": "qwant.com",
+      "favicon_url": "https://www.qwant.com/favicon.ico",
+      "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}",
+      "suggest_url": "https://api.qwant.com/api/suggest/?q={searchTerms}&client=opensearch",
+      "type": "SEARCH_ENGINE_QWANT_VIV",
+      "id": 102
+    },
+
+    "yandex_ru_viv": {
+      "name": "\u042f\u043d\u0434\u0435\u043a\u0441",
+      "keyword": "yandex.ru",
+      "favicon_url": "https://yastatic.net/lego/_/pDu9OWAQKB0s2J9IojKpiS_Eho.ico",
+      "logo_url": "https://storage.ape.yandex.net/get/browser/Doodles/yandex/drawable-xxhdpi/yandex.png",
+      "search_url": "https://yandex.ru/search/?text={searchTerms}&from=os&clid=2358106",
+      "suggest_url": "https://suggest.yandex.ru/suggest-ff.cgi?part={searchTerms}",
+      "image_url": "https://yandex.ru/images/search/?rpt=imageview",
+      "image_url_post_params": "upfile={google:imageThumbnail},original_width={google:imageOriginalWidth},original_height={google:imageOriginalHeight},prg=1",
+      "type": "SEARCH_ENGINE_YANDEX_VIV",
+      "id": 103
     }
+  },
+
+  "generate_array": {
+    "array_name": "kAllEngines"
   }
 }

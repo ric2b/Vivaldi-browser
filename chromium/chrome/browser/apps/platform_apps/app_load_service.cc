@@ -147,7 +147,7 @@ void AppLoadService::OnExtensionUnloaded(
       attempts--;
 
       const int kRestartAppDelaySec = 4; // wait until app unloading done
-      base::PostDelayedTaskWithTraits(
+      base::PostDelayedTask(
           FROM_HERE, {content::BrowserThread::UI},
           base::Bind(&AppLoadService::RestartApplication,
                      base::Unretained(this), extension->id()),

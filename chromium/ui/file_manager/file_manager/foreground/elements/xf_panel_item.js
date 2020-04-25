@@ -81,6 +81,10 @@ class PanelItem extends HTMLElement {
                   white-space: nowrap;
               }
 
+              .xf-panel-label-text {
+                  outline: none;
+              }
+
               :host([panel-type='3']) .xf-panel-label-text {
                   display: -webkit-box;
                   -webkit-line-clamp: 2;
@@ -146,7 +150,7 @@ class PanelItem extends HTMLElement {
                 <xf-circular-progress id='indicator'>
                 </xf-circular-progress>
                 <div class='xf-panel-text'>
-                    <span class='xf-panel-label-text'>
+                    <span class='xf-panel-label-text' tabindex='0'>
                     </span>
                     <br class='xf-linebreaker'/>
                 </div>
@@ -162,6 +166,7 @@ class PanelItem extends HTMLElement {
 
   /**
    * Remove an element from the panel using it's id.
+   * @return {?Element}
    * @private
    */
   removePanelElementById_(id) {
@@ -169,6 +174,7 @@ class PanelItem extends HTMLElement {
     if (element) {
       element.remove();
     }
+    return element;
   }
 
   /**
@@ -184,8 +190,14 @@ class PanelItem extends HTMLElement {
 
     // Remove the indicators/buttons that can change.
     this.removePanelElementById_('#indicator');
-    this.removePanelElementById_('#primary-action');
-    this.removePanelElementById_('#secondary-action');
+    let element = this.removePanelElementById_('#primary-action');
+    if (element) {
+      element.onclick = null;
+    }
+    element = this.removePanelElementById_('#secondary-action');
+    if (element) {
+      element.onclick = null;
+    }
 
     // Mark the indicator as empty so it recreates on setAttribute.
     this.setAttribute('indicator', 'empty');
@@ -334,6 +346,8 @@ class PanelItem extends HTMLElement {
         textNode = this.shadowRoot.querySelector('.xf-panel-label-text');
         if (textNode) {
           textNode.textContent = newValue;
+          // Set the aria labels for the activity and cancel button.
+          this.setAttribute('aria-label', /** @type {string} */ (newValue));
         }
         break;
       case 'secondary-text':
@@ -363,6 +377,16 @@ class PanelItem extends HTMLElement {
    */
   connectedCallback() {
     this.onclick = this.onClicked_.bind(this);
+
+    // Set click event handler references.
+    let button = this.shadowRoot.querySelector('#primary-action');
+    if (button) {
+      button.onclick = this.onclick;
+    }
+    button = this.shadowRoot.querySelector('#secondary-action');
+    if (button) {
+      button.onclick = this.onclick;
+    }
   }
 
   /**
@@ -488,6 +512,17 @@ class PanelItem extends HTMLElement {
    */
   get secondaryButton() {
     return this.shadowRoot.querySelector('#secondary-action');
+  }
+
+  /**
+   * Setter to replace the default aria-label on any close button.
+   * @param {string} text Text to set for the 'aria-label'.
+   */
+  set closeButtonAriaLabel(text) {
+    let action = this.shadowRoot.querySelector('#secondary-action');
+    if (action && action.dataset.category === 'cancel') {
+      action.setAttribute('aria-label', text);
+    }
   }
 }
 

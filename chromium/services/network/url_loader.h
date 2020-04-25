@@ -80,6 +80,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       const mojom::URLLoaderFactoryParams* factory_params,
       uint32_t request_id,
+      int keepalive_request_size,
       scoped_refptr<ResourceSchedulerClient> resource_scheduler_client,
       base::WeakPtr<KeepaliveStatisticsRecorder> keepalive_statistics_recorder,
       base::WeakPtr<NetworkUsageAccumulator> network_usage_accumulator,
@@ -119,6 +120,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       net::CompletionOnceCallback callback,
       const net::HttpResponseHeaders* original_response_headers,
       scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
+      const net::IPEndPoint& endpoint,
       GURL* allowed_unsafe_redirect_url);
 
   // mojom::AuthChallengeResponder:
@@ -130,7 +132,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       const scoped_refptr<net::X509Certificate>& x509_certificate,
       const std::string& provider_name,
       const std::vector<uint16_t>& algorithm_preferences,
-      mojom::SSLPrivateKeyPtr ssl_private_key) override;
+      mojo::PendingRemote<mojom::SSLPrivateKey> ssl_private_key) override;
   void ContinueWithoutCertificate() override;
   void CancelRequest() override;
 
@@ -262,6 +264,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   int render_frame_id_;
   uint32_t request_id_;
+  const int keepalive_request_size_;
   const bool keepalive_;
   const bool do_not_prompt_for_login_;
   std::unique_ptr<net::URLRequest> url_request_;
@@ -341,8 +344,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   mojom::RequestMode request_mode_;
 
   scoped_refptr<ResourceSchedulerClient> resource_scheduler_client_;
-
-  mojom::SSLPrivateKeyPtr ssl_private_key_;
 
   base::WeakPtr<KeepaliveStatisticsRecorder> keepalive_statistics_recorder_;
 

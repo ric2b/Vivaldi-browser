@@ -138,14 +138,16 @@ MediaRouterMojoImpl::~MediaRouterMojoImpl() {
 
 void MediaRouterMojoImpl::RegisterMediaRouteProvider(
     MediaRouteProviderId provider_id,
-    mojom::MediaRouteProviderPtr media_route_provider_ptr,
+    mojo::PendingRemote<mojom::MediaRouteProvider> media_route_provider_remote,
     mojom::MediaRouter::RegisterMediaRouteProviderCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(!base::Contains(media_route_providers_, provider_id));
-  media_route_provider_ptr.set_connection_error_handler(
+  mojo::Remote<mojom::MediaRouteProvider> bound_remote(
+      std::move(media_route_provider_remote));
+  bound_remote.set_disconnect_handler(
       base::BindOnce(&MediaRouterMojoImpl::OnProviderConnectionError,
                      weak_factory_.GetWeakPtr(), provider_id));
-  media_route_providers_[provider_id] = std::move(media_route_provider_ptr);
+  media_route_providers_[provider_id] = std::move(bound_remote);
   std::move(callback).Run(instance_id_, mojom::MediaRouteProviderConfig::New());
 }
 
@@ -439,7 +441,7 @@ void MediaRouterMojoImpl::SearchSinks(
 void MediaRouterMojoImpl::GetMediaController(
     const MediaRoute::Id& route_id,
     mojo::PendingReceiver<mojom::MediaController> controller,
-    mojom::MediaStatusObserverPtr observer) {
+    mojo::PendingRemote<mojom::MediaStatusObserver> observer) {
   auto* route = GetRoute(route_id);
   base::Optional<MediaRouteProviderId> provider_id =
       GetProviderIdForRoute(route_id);
@@ -912,8 +914,9 @@ void MediaRouterMojoImpl::OnProviderConnectionError(
 
 void MediaRouterMojoImpl::OnMediaRemoterCreated(
     int32_t tab_id,
-    media::mojom::MirrorServiceRemoterPtr remoter,
-    media::mojom::MirrorServiceRemotingSourceRequest source_request) {
+    mojo::PendingRemote<media::mojom::MirrorServiceRemoter> remoter,
+    mojo::PendingReceiver<media::mojom::MirrorServiceRemotingSource>
+        source_receiver) {
   DVLOG_WITH_INSTANCE(1) << __func__ << ": tab_id = " << tab_id;
 
   auto it = remoting_sources_.find(SessionID::FromSerializedValue(tab_id));
@@ -924,7 +927,7 @@ void MediaRouterMojoImpl::OnMediaRemoterCreated(
   }
 
   CastRemotingConnector* connector = it->second;
-  connector->ConnectToService(std::move(source_request), std::move(remoter));
+  connector->ConnectToService(std::move(source_receiver), std::move(remoter));
 }
 
 void MediaRouterMojoImpl::GetMediaSinkServiceStatus(
@@ -935,42 +938,42 @@ void MediaRouterMojoImpl::GetMediaSinkServiceStatus(
 
 void MediaRouterMojoImpl::GetMirroringServiceHostForTab(
     int32_t target_tab_id,
-    mirroring::mojom::MirroringServiceHostRequest request) {
+    mojo::PendingReceiver<mirroring::mojom::MirroringServiceHost> receiver) {
   if (ShouldUseMirroringService()) {
     mirroring::CastMirroringServiceHost::GetForTab(
         GetWebContentsFromId(target_tab_id, context_,
                              true /* include_incognito */),
-        std::move(request));
+        std::move(receiver));
   }
 }
 
 void MediaRouterMojoImpl::GetMirroringServiceHostForDesktop(
     int32_t initiator_tab_id,
     const std::string& desktop_stream_id,
-    mirroring::mojom::MirroringServiceHostRequest request) {
+    mojo::PendingReceiver<mirroring::mojom::MirroringServiceHost> receiver) {
   if (ShouldUseMirroringService()) {
     // TODO(crbug.com/974335): Remove this code once we fully launch the native
     // Cast Media Route Provider.
     mirroring::CastMirroringServiceHost::GetForDesktop(
         EventPageRequestManagerFactory::GetApiForBrowserContext(context_)
             ->GetEventPageWebContents(),
-        desktop_stream_id, std::move(request));
+        desktop_stream_id, std::move(receiver));
   }
 }
 
 void MediaRouterMojoImpl::GetMirroringServiceHostForOffscreenTab(
     const GURL& presentation_url,
     const std::string& presentation_id,
-    mirroring::mojom::MirroringServiceHostRequest request) {
+    mojo::PendingReceiver<mirroring::mojom::MirroringServiceHost> receiver) {
   if (ShouldUseMirroringService() && IsValidPresentationUrl(presentation_url)) {
     mirroring::CastMirroringServiceHost::GetForOffscreenTab(
-        context_, presentation_url, presentation_id, std::move(request));
+        context_, presentation_url, presentation_id, std::move(receiver));
   }
 }
 
-void MediaRouterMojoImpl::BindToMojoRequest(
-    mojo::InterfaceRequest<mojom::MediaRouter> request) {
-  bindings_.AddBinding(this, std::move(request));
+void MediaRouterMojoImpl::BindToMojoReceiver(
+    mojo::PendingReceiver<mojom::MediaRouter> receiver) {
+  receivers_.Add(this, std::move(receiver));
 }
 
 base::Optional<MediaRouteProviderId> MediaRouterMojoImpl::GetProviderIdForRoute(

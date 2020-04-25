@@ -8,8 +8,9 @@
 #include <memory>
 #include <utility>
 
-#include "device/vr/public/mojom/vr_service.mojom-blink.h"
+#include "device/vr/public/mojom/vr_service.mojom-blink-forward.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_frame_request_callback.h"
@@ -45,9 +46,8 @@ class WebGLRenderingContextBase;
 
 // Wrapper class to allow the VRDisplay to distinguish between immersive and
 // non-immersive XRSession events.
-class SessionClientBinding
-    : public GarbageCollectedFinalized<SessionClientBinding>,
-      public device::mojom::blink::XRSessionClient {
+class SessionClientBinding : public GarbageCollected<SessionClientBinding>,
+                             public device::mojom::blink::XRSessionClient {
  public:
   enum class SessionBindingType {
     kImmersive = 0,
@@ -66,8 +66,8 @@ class SessionClientBinding
  private:
   void OnChanged(device::mojom::blink::VRDisplayInfoPtr) override;
   void OnExitPresent() override;
-  void OnBlur() override;
-  void OnFocus() override;
+  void OnVisibilityStateChanged(
+      device::mojom::blink::XRVisibilityState) override;
 
   // VRDisplay keeps all references to SessionClientBinding, so as soon as
   // VRDisplay is destroyed, so is the SessionClientBinding.
@@ -262,7 +262,8 @@ class VRDisplay final : public EventTargetWithInlineData,
   bool did_log_requestPresent_ = false;
 
   bool non_immersive_session_initialized_ = false;
-  device::mojom::blink::XRFrameDataProviderPtr non_immersive_provider_;
+  mojo::Remote<device::mojom::blink::XRFrameDataProvider>
+      non_immersive_provider_;
 
   bool present_image_needs_copy_ = false;
 
@@ -270,8 +271,10 @@ class VRDisplay final : public EventTargetWithInlineData,
   Member<SessionClientBinding> immersive_client_binding_;
   mojo::Receiver<device::mojom::blink::VRDisplayClient>
       display_client_receiver_{this};
-  device::mojom::blink::XRFrameDataProviderPtr vr_presentation_data_provider_;
-  device::mojom::blink::XRPresentationProviderPtr vr_presentation_provider_;
+  mojo::Remote<device::mojom::blink::XRFrameDataProvider>
+      vr_presentation_data_provider_;
+  mojo::Remote<device::mojom::blink::XRPresentationProvider>
+      vr_presentation_provider_;
 
   HeapDeque<Member<ScriptPromiseResolver>> pending_present_resolvers_;
 };

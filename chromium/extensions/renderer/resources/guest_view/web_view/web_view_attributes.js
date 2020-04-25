@@ -7,9 +7,10 @@
 var $Element = require('safeMethods').SafeMethods.$Element;
 var $MutationObserver = require('safeMethods').SafeMethods.$MutationObserver;
 var GuestViewAttributes = require('guestViewAttributes').GuestViewAttributes;
-var GuestViewInternalNatives = requireNative('guest_view_internal');
 var WebViewConstants = require('webViewConstants').WebViewConstants;
 var WebViewInternal = getInternalApi('webViewInternal');
+
+var GuestViewInternalNatives = requireNative('guest_view_internal');
 var WebViewAttributesPrivate = require('webViewAttributesPrivate');
 
 // -----------------------------------------------------------------------------

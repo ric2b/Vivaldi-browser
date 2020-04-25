@@ -97,7 +97,8 @@ RenderFrameHostDelegate::GetGeolocationContext() {
 }
 
 #if defined(OS_ANDROID)
-void RenderFrameHostDelegate::GetNFC(device::mojom::NFCRequest request) {}
+void RenderFrameHostDelegate::GetNFC(
+    mojo::PendingReceiver<device::mojom::NFC> receiver) {}
 #endif
 
 bool RenderFrameHostDelegate::ShouldRouteMessageEvent(
@@ -111,8 +112,21 @@ RenderFrameHostDelegate::GetFocusedFrameIncludingInnerWebContents() {
   return nullptr;
 }
 
+RenderFrameHostImpl* RenderFrameHostDelegate::GetMainFrame() {
+  return nullptr;
+}
+
 std::unique_ptr<WebUIImpl>
 RenderFrameHostDelegate::CreateWebUIForRenderFrameHost(const GURL& url) {
+  return nullptr;
+}
+
+RenderFrameHostDelegate* RenderFrameHostDelegate::CreateNewWindow(
+    RenderFrameHost* opener,
+    const mojom::CreateNewWindowParams& params,
+    bool is_new_browsing_instance,
+    bool has_user_gesture,
+    SessionStorageNamespace* session_storage_namespace) {
   return nullptr;
 }
 

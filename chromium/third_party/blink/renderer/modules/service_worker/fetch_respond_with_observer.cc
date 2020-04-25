@@ -125,9 +125,8 @@ bool IsClientRequest(network::mojom::RequestContextFrameType frame_type,
 // Notifies the result of FetchDataLoader to |callback_|, the other endpoint
 // for which is passed to the browser process via
 // blink.mojom.ServiceWorkerFetchResponseCallback.OnResponseStream().
-class FetchLoaderClient final
-    : public GarbageCollectedFinalized<FetchLoaderClient>,
-      public FetchDataLoader::Client {
+class FetchLoaderClient final : public GarbageCollected<FetchLoaderClient>,
+                                public FetchDataLoader::Client {
   USING_GARBAGE_COLLECTED_MIXIN(FetchLoaderClient);
 
  public:
@@ -217,7 +216,7 @@ void FetchRespondWithObserver::OnResponseRejected(
   response->status_text = "";
   response->error = error;
   To<ServiceWorkerGlobalScope>(GetExecutionContext())
-      ->RespondToFetchEvent(event_id_, std::move(response),
+      ->RespondToFetchEvent(event_id_, request_url_, std::move(response),
                             event_dispatch_time_, base::TimeTicks::Now());
 }
 
@@ -324,8 +323,8 @@ void FetchRespondWithObserver::OnResponseFulfilled(
       // Handle the blob response body.
       fetch_api_response->blob = blob_data_handle;
       service_worker_global_scope->RespondToFetchEvent(
-          event_id_, std::move(fetch_api_response), event_dispatch_time_,
-          base::TimeTicks::Now());
+          event_id_, request_url_, std::move(fetch_api_response),
+          event_dispatch_time_, base::TimeTicks::Now());
       return;
     }
 
@@ -350,19 +349,20 @@ void FetchRespondWithObserver::OnResponseFulfilled(
     }
 
     service_worker_global_scope->RespondToFetchEventWithResponseStream(
-        event_id_, std::move(fetch_api_response), std::move(stream_handle),
-        event_dispatch_time_, base::TimeTicks::Now());
+        event_id_, request_url_, std::move(fetch_api_response),
+        std::move(stream_handle), event_dispatch_time_, base::TimeTicks::Now());
     return;
   }
   service_worker_global_scope->RespondToFetchEvent(
-      event_id_, std::move(fetch_api_response), event_dispatch_time_,
-      base::TimeTicks::Now());
+      event_id_, request_url_, std::move(fetch_api_response),
+      event_dispatch_time_, base::TimeTicks::Now());
 }
 
 void FetchRespondWithObserver::OnNoResponse() {
   DCHECK(GetExecutionContext());
   To<ServiceWorkerGlobalScope>(GetExecutionContext())
-      ->RespondToFetchEventWithNoResponse(event_id_, event_dispatch_time_,
+      ->RespondToFetchEventWithNoResponse(event_id_, request_url_,
+                                          event_dispatch_time_,
                                           base::TimeTicks::Now());
 }
 

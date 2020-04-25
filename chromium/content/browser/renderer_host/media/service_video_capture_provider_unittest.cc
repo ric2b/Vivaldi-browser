@@ -17,6 +17,8 @@
 #include "content/public/test/browser_task_environment.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/video_capture/public/cpp/mock_push_subscription.h"
 #include "services/video_capture/public/cpp/mock_video_capture_service.h"
 #include "services/video_capture/public/cpp/mock_video_source.h"
@@ -101,15 +103,17 @@ class ServiceVideoCaptureProviderTest : public testing::Test {
 
     ON_CALL(mock_source_, DoCreatePushSubscription(_, _, _, _, _))
         .WillByDefault(Invoke(
-            [this](video_capture::mojom::ReceiverPtr& subscriber,
-                   const media::VideoCaptureParams& requested_settings,
-                   bool force_reopen_with_new_settings,
-                   video_capture::mojom::PushVideoStreamSubscriptionRequest&
-                       subscription,
-                   video_capture::mojom::VideoSource::
-                       CreatePushSubscriptionCallback& callback) {
-              subscription_bindings_.AddBinding(&mock_subscription_,
-                                                std::move(subscription));
+            [this](
+                mojo::PendingRemote<video_capture::mojom::Receiver> subscriber,
+                const media::VideoCaptureParams& requested_settings,
+                bool force_reopen_with_new_settings,
+                mojo::PendingReceiver<
+                    video_capture::mojom::PushVideoStreamSubscription>
+                    subscription,
+                video_capture::mojom::VideoSource::
+                    CreatePushSubscriptionCallback& callback) {
+              subscription_receivers_.Add(&mock_subscription_,
+                                          std::move(subscription));
               std::move(callback).Run(
                   video_capture::mojom::CreatePushSubscriptionResultCode::
                       kCreatedWithRequestedSettings,
@@ -127,8 +131,8 @@ class ServiceVideoCaptureProviderTest : public testing::Test {
   video_capture::MockVideoSource mock_source_;
   mojo::BindingSet<video_capture::mojom::VideoSource> source_bindings_;
   video_capture::MockPushSubcription mock_subscription_;
-  mojo::BindingSet<video_capture::mojom::PushVideoStreamSubscription>
-      subscription_bindings_;
+  mojo::ReceiverSet<video_capture::mojom::PushVideoStreamSubscription>
+      subscription_receivers_;
   std::unique_ptr<ServiceVideoCaptureProvider> provider_;
   base::MockCallback<VideoCaptureProvider::GetDeviceInfosCallback> results_cb_;
   base::MockCallback<

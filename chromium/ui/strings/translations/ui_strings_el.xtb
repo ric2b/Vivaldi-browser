@@ -7,6 +7,7 @@
 <translation id="1156623771253174079">{SECONDS,plural, =1{Πριν από 1 λεπτό}other{Πριν από # λεπτά}}</translation>
 <translation id="1169783199079129864">{MINUTES,plural, =1{1λ.}other{#λ.}}</translation>
 <translation id="1181037720776840403">Κατάργηση</translation>
+<translation id="1201402288615127009">Επόμενο</translation>
 <translation id="1243314992276662751">Μεταφόρτωση</translation>
 <translation id="1266864766717917324">Δεν ήταν δυνατή η κοινοποίηση <ph name="CONTENT_TYPE" /></translation>
 <translation id="1269641567813814718">Win</translation>
@@ -51,6 +52,7 @@
 <translation id="2289052229480071835">Πατήστε τους στόχους αφής στην οθόνη σας.</translation>
 <translation id="2295140143284145483">Έρευνα</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="2353636109065292463">Έλεγχος της σύνδεσής σας στο διαδίκτυο</translation>
 <translation id="2388990488038464401">Θέλετε να καλέσετε αυτόν τον αριθμό στο τηλέφωνό σας;</translation>
 <translation id="24452542372838207">Ανάπτυξη ειδοποίησης</translation>
 <translation id="2445449901874883781">Χρήση υψηλής πυκνότητας</translation>
@@ -81,7 +83,6 @@
 <translation id="3295886253693811851">Πραγματοποιήστε κλήση από</translation>
 <translation id="335581015389089642">Ομιλία</translation>
 <translation id="3389286852084373014">Το κείμενο είναι υπερβολικά μεγάλο</translation>
-<translation id="3443810440409579745">Η καρτέλα λήφθηκε.</translation>
 <translation id="3479552764303398839">Όχι τώρα</translation>
 <translation id="348799646910989694">Αυτόματη απόκρυψη ραφιού</translation>
 <translation id="3600566671520689681">{DAYS,plural, =1{Απομένει 1 ημέρα}other{Απομένουν # ημέρες}}</translation>
@@ -111,14 +112,11 @@
 <translation id="4724120544754982507">Κέντρο ειδοποιήσεων, <ph name="UNREAD_NOTIFICATION_COUNT" /> μη αναγνωσμένες ειδοποιήσεις</translation>
 <translation id="4730374152663651037">ΣΥΧΝΗ ΧΡΗΣΗ</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{Απομένει 1 μήνας}other{Απομένουν # μήνες}}</translation>
-<translation id="4841881773802181781">Εισαγωγή</translation>
-<translation id="4881695831933465202">Άνοιγμα</translation>
 <translation id="4888938634149558681">Πραγματοποίηση κλήσης</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 δευτερόλεπτο}other{# δευτερόλεπτα}}</translation>
 <translation id="4971687151119236543">Προηγούμενο κομμάτι πολυμέσων</translation>
 <translation id="5046499563572181734">Πατήστε εδώ</translation>
 <translation id="5076340679995252485">&amp;Επικόλληση</translation>
-<translation id="5137751499640340777">Έναρξη Βοηθού Google</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5266161281976477809">Τρίγωνο αποκάλυψης</translation>
 <translation id="5278860589123563674">Αποτυχία αποστολής</translation>
@@ -155,6 +153,7 @@
 <translation id="6394627529324717982">Κόμμα</translation>
 <translation id="6397363302884558537">Διακοπή ομιλίας</translation>
 <translation id="6404817160109697034">{SECONDS,plural, =1{Πριν από 1 δευτερόλεπτο}other{Πριν από # δευτερόλεπτα}}</translation>
+<translation id="6417265370957905582">Βοηθός Google</translation>
 <translation id="6430678249303439055">Αποκλεισμός όλων των ειδοποιήσεων από αυτή την εφαρμογή</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{Πριν από 1 δευτερόλεπτο}other{Πριν από # δευτερόλεπτα}}</translation>
 <translation id="6539092367496845964">Παρουσιάστηκε κάποιο πρόβλημα. Δοκιμάστε ξανά αργότερα.</translation>
@@ -165,7 +164,7 @@
 <translation id="6620110761915583480">Αποθήκευση Αρχείου</translation>
 <translation id="6656912866303152668">Βεβαιωθείτε ότι ο συγχρονισμός στο Chrome έχει ενεργοποιηθεί για τη συσκευή <ph name="TARGET_DEVICE_NAME" /> και έπειτα δοκιμάστε ξανά την αποστολή.</translation>
 <translation id="6699343763173986273">Επόμενο κομμάτι πολυμέσων</translation>
-<translation id="673773751041746814">Διαγραφή</translation>
+<translation id="6710213216561001401">Προηγούμενο</translation>
 <translation id="6779314412797872738">Για να στείλετε έναν αριθμό από εδώ στο τηλέφωνό σας, <ph name="TROUBLESHOOT_LINK" /> και για τις δύο συσκευές στις ρυθμίσεις.</translation>
 <translation id="6786750046913594791">Κλείσιμο φακέλου</translation>
 <translation id="6808150112686056157">Διακοπή πολυμέσων</translation>
@@ -183,6 +182,7 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{Απομένει 1 λεπτό}other{Απομένουν # λεπτά}}</translation>
 <translation id="7319740667687257810">Εφαρμογή εκκίνησης, μερική προβολή</translation>
+<translation id="7352651011704765696">Παρουσιάστηκε κάποιο πρόβλημα</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{Πριν από 1 λεπτό}other{Πριν από # λεπτά}}</translation>
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{Απομένει 1 λεπτό}other{Απομένουν # λεπτά}}</translation>
@@ -198,9 +198,10 @@
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{Περισσότερες από 1 μη αναγνωσμένες ειδοποιήσεις}other{Περισσότερες από # μη αναγνωσμένες ειδοποιήσεις}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{σε 1 λ.}other{σε # λ.}}</translation>
 <translation id="8087772101393322318"><ph name="KEY_MODIFIER_NAME" />+<ph name="KEY_COMBO_NAME" /></translation>
-<translation id="8098075892845277643">Έναρξη φωνητικού ερωτήματος Βοηθού Google</translation>
+<translation id="8090736967111090568">Αριθμός από <ph name="ORIGIN" /></translation>
 <translation id="8106081041558092062">{HOURS,plural, =1{Πριν από 1 ώρα}other{Πριν από # ώρες}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{Απομένει 1 δευτερόλεπτο}other{Απομένουν # δευτερόλεπτα}}</translation>
+<translation id="8134065097954893699">Επαναφόρτωση αυτής της σελίδας</translation>
 <translation id="8144660977431427332">Οι αναζητήσεις σας παρέχονται από τον Βοηθό Google. <ph name="LEARN_MORE" /></translation>
 <translation id="8152264887680882389"><ph name="TEXT" />, αυτόματη συμπλήρωση</translation>
 <translation id="815598010540052116">Κύλιση κάτω</translation>

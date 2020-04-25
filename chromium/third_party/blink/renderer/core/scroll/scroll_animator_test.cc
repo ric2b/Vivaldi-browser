@@ -54,7 +54,7 @@ double NowTicksInSeconds(const base::TestMockTimeTaskRunner* task_runner) {
 }
 
 class MockScrollableAreaForAnimatorTest
-    : public GarbageCollectedFinalized<MockScrollableAreaForAnimatorTest>,
+    : public GarbageCollected<MockScrollableAreaForAnimatorTest>,
       public ScrollableArea {
   USING_GARBAGE_COLLECTED_MIXIN(MockScrollableAreaForAnimatorTest);
 
@@ -78,7 +78,6 @@ class MockScrollableAreaForAnimatorTest
   MOCK_CONST_METHOD1(VisibleContentRect, IntRect(IncludeScrollbarsInRect));
   MOCK_CONST_METHOD0(ContentsSize, IntSize());
   MOCK_CONST_METHOD0(ScrollbarsCanBeActive, bool());
-  MOCK_CONST_METHOD0(ScrollableAreaBoundingBox, IntRect());
   MOCK_METHOD0(RegisterForAnimation, void());
   MOCK_METHOD0(ScheduleAnimation, bool());
   MOCK_CONST_METHOD0(UsedColorScheme, WebColorScheme());
@@ -149,6 +148,8 @@ class MockScrollableAreaForAnimatorTest
   mutable scoped_refptr<base::SingleThreadTaskRunner> timer_task_runner_;
 };
 
+}  // namespace
+
 class TestScrollAnimator : public ScrollAnimator {
  public:
   TestScrollAnimator(ScrollableArea* scrollable_area,
@@ -176,8 +177,6 @@ class TestScrollAnimator : public ScrollAnimator {
  private:
   bool should_send_to_compositor_ = false;
 };
-
-}  // namespace
 
 static void Reset(ScrollAnimator& scroll_animator) {
   scroll_animator.ScrollToOffsetWithoutAnimation(ScrollOffset());

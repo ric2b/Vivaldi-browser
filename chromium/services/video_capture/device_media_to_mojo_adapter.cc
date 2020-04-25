@@ -5,8 +5,10 @@
 #include "services/video_capture/device_media_to_mojo_adapter.h"
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/media_switches.h"
 #include "media/capture/video/video_capture_buffer_pool_impl.h"
 #include "media/capture/video/video_capture_buffer_tracker_factory_impl.h"
 #include "media/capture/video/video_frame_receiver_on_task_runner.h"
@@ -61,11 +63,12 @@ DeviceMediaToMojoAdapter::~DeviceMediaToMojoAdapter() {
 
 void DeviceMediaToMojoAdapter::Start(
     const media::VideoCaptureParams& requested_settings,
-    mojom::ReceiverPtr receiver) {
+    mojo::PendingRemote<mojom::Receiver> receiver_pending_remote) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  receiver.set_connection_error_handler(
-      base::Bind(&DeviceMediaToMojoAdapter::OnClientConnectionErrorOrClose,
-                 weak_factory_.GetWeakPtr()));
+  mojo::Remote<mojom::Receiver> receiver(std::move(receiver_pending_remote));
+  receiver.set_disconnect_handler(
+      base::BindOnce(&DeviceMediaToMojoAdapter::OnClientConnectionErrorOrClose,
+                     weak_factory_.GetWeakPtr()));
 
   receiver_ = std::make_unique<ReceiverMojoToMediaAdapter>(std::move(receiver));
   auto media_receiver = std::make_unique<media::VideoFrameReceiverOnTaskRunner>(
@@ -73,6 +76,8 @@ void DeviceMediaToMojoAdapter::Start(
 
   if (requested_settings.buffer_type !=
           media::VideoCaptureBufferType::kSharedMemory &&
+      requested_settings.buffer_type !=
+          media::VideoCaptureBufferType::kGpuMemoryBuffer &&
       requested_settings.buffer_type !=
           media::VideoCaptureBufferType::kSharedMemoryViaRawFileDescriptor) {
     // Buffer types other than shared memory are not supported.
@@ -87,6 +92,7 @@ void DeviceMediaToMojoAdapter::Start(
       std::make_unique<media::VideoCaptureBufferTrackerFactoryImpl>();
   scoped_refptr<media::VideoCaptureBufferPool> buffer_pool(
       new media::VideoCaptureBufferPoolImpl(std::move(buffer_tracker_factory),
+                                            requested_settings.buffer_type,
                                             max_buffer_pool_buffer_count()));
 #if defined(OS_CHROMEOS)
   auto device_client = std::make_unique<media::VideoCaptureDeviceClient>(
@@ -168,7 +174,18 @@ int DeviceMediaToMojoAdapter::max_buffer_pool_buffer_count() {
   // The maximum number of video frame buffers in-flight at any one time.
   // If all buffers are still in use by consumers when new frames are produced
   // those frames get dropped.
-  static const int kMaxBufferCount = 3;
+  static int kMaxBufferCount = 3;
+
+#if defined(OS_CHROMEOS)
+  // On Chrome OS with MIPI cameras running on HAL v3, there can be three
+  // concurrent streams of camera pipeline depth ~6. We allow at most 24 buffers
+  // here to take into account the delay caused by the consumer (e.g. display or
+  // video encoder).
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kVideoCaptureUseGpuMemoryBuffer)) {
+    kMaxBufferCount = 24;
+  }
+#endif
 
   return kMaxBufferCount;
 }

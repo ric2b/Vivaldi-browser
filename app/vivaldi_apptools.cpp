@@ -3,8 +3,8 @@
 #include "app/vivaldi_apptools.h"
 
 #include "app/vivaldi_constants.h"
-#include "base/stl_util.h"
 #include "base/lazy_instance.h"
+#include "base/stl_util.h"
 
 namespace vivaldi {
 
@@ -25,6 +25,7 @@ const char *vivaldi_extra_locales_array[] = {
   "hy",
   "io",
   "is",
+  "ja-KS",
   "jbo",
   "ka",
   "ku",

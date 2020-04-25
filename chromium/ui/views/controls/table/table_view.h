@@ -155,10 +155,6 @@ class VIEWS_EXPORT TableView
   // Returns whether an active row and column have been set.
   bool GetHasFocusIndicator() const;
 
-  // Moves the focus ring to its new location if the active cell has changed, or
-  // hides the focus ring if the table is not focused.
-  void ResetFocusIndicator();
-
   void set_observer(TableViewObserver* observer) { observer_ = observer; }
   TableViewObserver* observer() const { return observer_; }
 
@@ -237,6 +233,8 @@ class VIEWS_EXPORT TableView
 
  private:
   friend class TableViewTestHelper;
+
+  class HighlightPathGenerator;
   struct GroupSortHelper;
   struct SortHelper;
 
@@ -282,6 +280,9 @@ class VIEWS_EXPORT TableView
   // Returns the bounds of the specified cell. |visible_column_index| indexes
   // into |visible_columns_|.
   gfx::Rect GetCellBounds(int row, int visible_column_index) const;
+
+  // Returns the bounds of the active cell.
+  gfx::Rect GetActiveCellBounds() const;
 
   // Adjusts |bounds| based on where the text should be painted. |bounds| comes
   // from GetCellBounds() and |visible_column_index| is the corresponding column
@@ -369,7 +370,7 @@ class VIEWS_EXPORT TableView
   int active_visible_column_index_ = -1;
 
   // Used to draw a focus indicator around the active cell.
-  std::unique_ptr<FocusRing> focus_ring_;
+  std::unique_ptr<FocusRing> focus_ring_ = FocusRing::Install(this);
 
   // The header. This is only created if more than one column is specified or
   // the first column has a non-empty title.

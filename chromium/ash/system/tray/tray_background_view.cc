@@ -10,9 +10,9 @@
 #include "ash/focus_cycler.h"
 #include "ash/login/ui/lock_screen.h"
 #include "ash/public/cpp/ash_constants.h"
+#include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shelf/login_shelf_view.h"
-#include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_focus_cycler.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
@@ -42,6 +42,7 @@
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_mask.h"
 #include "ui/views/background.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/painter.h"
 #include "ui/views/view_class_properties.h"
@@ -73,7 +74,8 @@ gfx::Insets GetMirroredBackgroundInsets(bool is_shelf_horizontal) {
   gfx::Insets insets;
   // "Primary" is the same direction as the shelf, "secondary" is orthogonal.
   const int primary_padding = 0;
-  const int secondary_padding = -ash::TrayConstants::hit_region_padding();
+  const int secondary_padding =
+      -ash::ShelfConfig::Get()->status_area_hit_region_padding();
 
   if (is_shelf_horizontal) {
     insets.Set(secondary_padding, primary_padding, secondary_padding,
@@ -114,44 +116,34 @@ class TrayBackgroundView::TrayWidgetObserver : public views::WidgetObserver {
   DISALLOW_COPY_AND_ASSIGN(TrayWidgetObserver);
 };
 
-class TrayBackground : public views::Background {
- public:
-  explicit TrayBackground(TrayBackgroundView* tray_background_view)
-      : tray_background_view_(tray_background_view) {}
-
-  ~TrayBackground() override = default;
-
- private:
-  // Overridden from views::Background.
-  void Paint(gfx::Canvas* canvas, views::View* view) const override {
-    gfx::ScopedCanvas scoped_canvas(canvas);
-    cc::PaintFlags background_flags;
-    background_flags.setAntiAlias(true);
-    int border_radius = kTrayRoundedBorderRadius;
-    background_flags.setColor(kShelfControlPermanentHighlightBackground);
-    border_radius = ShelfConstants::control_border_radius();
-
-    gfx::Rect bounds = tray_background_view_->GetBackgroundBounds();
-    const float dsf = canvas->UndoDeviceScaleFactor();
-    canvas->DrawRoundRect(gfx::ScaleToRoundedRect(bounds, dsf),
-                          border_radius * dsf, background_flags);
-  }
-
-  // Reference to the TrayBackgroundView for which this is a background.
-  TrayBackgroundView* tray_background_view_;
-
-  DISALLOW_COPY_AND_ASSIGN(TrayBackground);
-};
-
 ////////////////////////////////////////////////////////////////////////////////
 // TrayBackgroundView
+
+class TrayBackgroundView::HighlightPathGenerator
+    : public views::HighlightPathGenerator {
+ public:
+  HighlightPathGenerator() = default;
+
+  // HighlightPathGenerator:
+  SkPath GetHighlightPath(const views::View* view) override {
+    const int border_radius = ShelfConfig::Get()->control_border_radius();
+    SkPath path;
+    path.addRoundRect(
+        gfx::RectToSkRect(static_cast<const TrayBackgroundView*>(view)
+                              ->GetBackgroundBounds()),
+        border_radius, border_radius);
+    return path;
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(HighlightPathGenerator);
+};
 
 TrayBackgroundView::TrayBackgroundView(Shelf* shelf)
     // Note the ink drop style is ignored.
     : ActionableView(TrayPopupInkDropStyle::FILL_BOUNDS),
       shelf_(shelf),
       tray_container_(new TrayContainer(shelf)),
-      background_(new TrayBackground(this)),
       is_active_(false),
       separator_visible_(true),
       visible_preferred_(false),
@@ -159,21 +151,28 @@ TrayBackgroundView::TrayBackgroundView(Shelf* shelf)
       widget_observer_(new TrayWidgetObserver(this)) {
   DCHECK(shelf_);
   set_notify_enter_exit_on_child(true);
-  set_ink_drop_base_color(kShelfInkDropBaseColor);
-  set_ink_drop_visible_opacity(kShelfInkDropVisibleOpacity);
+  set_ink_drop_base_color(ShelfConfig::Get()->shelf_ink_drop_base_color());
+  set_ink_drop_visible_opacity(
+      ShelfConfig::Get()->shelf_ink_drop_visible_opacity());
 
   SetLayoutManager(std::make_unique<views::FillLayout>());
-  SetBackground(std::unique_ptr<views::Background>(background_));
   SetInstallFocusRingOnFocus(true);
-  focus_ring()->SetColor(kShelfFocusBorderColor);
+  focus_ring()->SetColor(ShelfConfig::Get()->shelf_focus_border_color());
   SetFocusPainter(nullptr);
+  views::HighlightPathGenerator::Install(
+      this, std::make_unique<HighlightPathGenerator>());
 
   AddChildView(tray_container_);
 
   tray_event_filter_.reset(new TrayEventFilter);
 
-  SetPaintToLayer();
+  // Use layer color to provide background color. Note that children views
+  // need to have their own layers to be visible.
+  SetPaintToLayer(ui::LAYER_SOLID_COLOR);
   layer()->SetFillsBoundsOpaquely(false);
+
+  UpdateBackground();
+
   // Start the tray items not visible, because visibility changes are animated.
   views::View::SetVisible(false);
 }
@@ -438,13 +437,9 @@ gfx::Rect TrayBackgroundView::GetBackgroundBounds() const {
 }
 
 void TrayBackgroundView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
-  const int border_radius = ShelfConstants::control_border_radius();
-  auto path = std::make_unique<SkPath>();
-  path->addRoundRect(gfx::RectToSkRect(GetBackgroundBounds()), border_radius,
-                     border_radius);
-  SetProperty(views::kHighlightPathKey, path.release());
-  // Bypass ActionableView::OnBoundsChanged which sets its own highlight path.
-  Button::OnBoundsChanged(previous_bounds);
+  UpdateBackground();
+
+  ActionableView::OnBoundsChanged(previous_bounds);
 }
 
 bool TrayBackgroundView::ShouldEnterPushedState(const ui::Event& event) {
@@ -482,6 +477,16 @@ gfx::Insets TrayBackgroundView::GetBackgroundInsets() const {
   insets += local_contents_insets;
 
   return insets;
+}
+
+void TrayBackgroundView::UpdateBackground() {
+  const int radius = ShelfConfig::Get()->control_border_radius();
+  gfx::RoundedCornersF rounded_corners = {radius, radius, radius, radius};
+  layer()->SetRoundedCornerRadius(rounded_corners);
+  layer()->SetBackgroundBlur(
+      ShelfConfig::Get()->GetShelfControlButtonBlurRadius());
+  layer()->SetColor(ShelfConfig::Get()->GetShelfControlButtonColor());
+  layer()->SetClipRect(GetBackgroundBounds());
 }
 
 }  // namespace ash

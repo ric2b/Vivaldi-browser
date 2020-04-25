@@ -22,6 +22,7 @@
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/all_password_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_injection_handler.h"
+#import "ios/chrome/browser/ui/badges/badge_popup_menu_coordinator.h"
 #import "ios/chrome/browser/ui/browser_container/browser_container_coordinator.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller+private.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller.h"
@@ -29,10 +30,12 @@
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/commands/infobar_commands.h"
 #import "ios/chrome/browser/ui/download/ar_quick_look_coordinator.h"
 #import "ios/chrome/browser/ui/download/pass_kit_coordinator.h"
 #import "ios/chrome/browser/ui/open_in/open_in_mediator.h"
 #import "ios/chrome/browser/ui/page_info/page_info_legacy_coordinator.h"
+#import "ios/chrome/browser/ui/passwords/password_breach_coordinator.h"
 #import "ios/chrome/browser/ui/print/print_controller.h"
 #import "ios/chrome/browser/ui/qr_scanner/qr_scanner_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
@@ -49,7 +52,6 @@
 #include "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 #include "ios/chrome/grit/ios_strings.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -90,6 +92,10 @@
 @property(nonatomic, strong)
     AutofillAddCreditCardCoordinator* addCreditCardCoordinator;
 
+// Coordinator for the badge popup menu.
+@property(nonatomic, strong)
+    BadgePopupMenuCoordinator* badgePopupMenuCoordinator;
+
 // Coordinator in charge of the presenting autofill options above the
 // keyboard.
 @property(nonatomic, strong)
@@ -108,6 +114,10 @@
 
 // Coordinator for the PassKit UI presentation.
 @property(nonatomic, strong) PassKitCoordinator* passKitCoordinator;
+
+// Coordinator for the password breach UI presentation.
+@property(nonatomic, strong)
+    PasswordBreachCoordinator* passwordBreachCoordinator;
 
 // Used to display the Print UI. Nil if not visible.
 // TODO(crbug.com/910017): Convert to coordinator.
@@ -209,8 +219,19 @@
   [self.readingListCoordinator stop];
   self.readingListCoordinator = nil;
 
+  [self.passwordBreachCoordinator stop];
+
   [self.viewController clearPresentedStateWithCompletion:completion
                                           dismissOmnibox:dismissOmnibox];
+}
+
+- (void)displayPopupMenuWithBadgeItems:(NSArray<id<BadgeItem>>*)badgeItems {
+  self.badgePopupMenuCoordinator = [[BadgePopupMenuCoordinator alloc]
+      initWithBaseViewController:self.viewController];
+  self.badgePopupMenuCoordinator.dispatcher =
+      static_cast<id<InfobarCommands>>(self.dispatcher);
+  [self.badgePopupMenuCoordinator setBadgeItemsToShow:badgeItems];
+  [self.badgePopupMenuCoordinator start];
 }
 
 #pragma mark - Private
@@ -298,8 +319,11 @@
   self.passKitCoordinator = [[PassKitCoordinator alloc]
       initWithBaseViewController:self.viewController];
 
-  self.printController = [[PrintController alloc]
-      initWithContextGetter:self.browserState->GetRequestContext()];
+  self.passwordBreachCoordinator = [[PasswordBreachCoordinator alloc]
+      initWithBaseViewController:self.viewController];
+  self.passwordBreachCoordinator.dispatcher = self.dispatcher;
+
+  self.printController = [[PrintController alloc] init];
 
   self.qrScannerCoordinator = [[QRScannerLegacyCoordinator alloc]
       initWithBaseViewController:self.viewController];
@@ -345,6 +369,9 @@
 
   [self.passKitCoordinator stop];
   self.passKitCoordinator = nil;
+
+  [self.passwordBreachCoordinator stop];
+  self.passwordBreachCoordinator = nil;
 
   self.printController = nil;
 
@@ -439,6 +466,7 @@
 }
 
 - (void)showAddCreditCard {
+  [self.formInputAccessoryCoordinator reset];
   [self.addCreditCardCoordinator start];
 }
 

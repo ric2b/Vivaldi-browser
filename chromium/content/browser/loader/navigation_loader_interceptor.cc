@@ -20,7 +20,12 @@ bool NavigationLoaderInterceptor::MaybeCreateLoaderForResponse(
     network::mojom::URLLoaderPtr* loader,
     network::mojom::URLLoaderClientRequest* client_request,
     ThrottlingURLLoader* url_loader,
-    bool* skip_other_interceptors) {
+    bool* skip_other_interceptors,
+    bool* will_return_unsafe_redirect) {
+  return false;
+}
+
+bool NavigationLoaderInterceptor::ShouldBypassRedirectChecks() {
   return false;
 }
 

@@ -14,6 +14,7 @@
 namespace blink {
 
 class ExceptionState;
+class ScriptState;
 class TransformStreamDefaultControllerInterface;
 class Visitor;
 
@@ -27,7 +28,7 @@ class Visitor;
 // uncollectable cycles implementations must not directly or indirectly strongly
 // reference any JS object.
 class CORE_EXPORT TransformStreamTransformer
-    : public GarbageCollectedFinalized<TransformStreamTransformer> {
+    : public GarbageCollected<TransformStreamTransformer> {
  public:
   TransformStreamTransformer() = default;
   virtual ~TransformStreamTransformer() = default;

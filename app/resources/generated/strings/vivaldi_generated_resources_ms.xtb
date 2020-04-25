@@ -1,41 +1,29 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ms">
-<translation id="1049795001945932310">&amp;Tetapan bahasa</translation>
 <translation id="1056898198331236512">Amaran</translation>
-<translation id="1084824384139382525">Salin alamat pau&amp;tan</translation>
-<translation id="1163931534039071049">&amp;Lihat sumber bingkai</translation>
 <translation id="1165039591588034296">Ralat</translation>
 <translation id="1175364870820465910">&amp;Cetak...</translation>
-<translation id="1187722533808055681">Bangkit daripada melahu</translation>
 <translation id="1244303850296295656">Ralat sambungan</translation>
 <translation id="1546280085599573572">Sambungan ini telah menukar halaman yang ditunjukkan apabila anda mengklik butang Laman Utama.</translation>
 <translation id="1588438908519853928">Biasa</translation>
 <translation id="1635033183663317347">Dipasang oleh penjaga anda.</translation>
-<translation id="1723824996674794290">&amp;Tetingkap baharu</translation>
 <translation id="1729533290416704613">Sambungan turut mengawal halaman yang ditunjukkan apabila anda membuat carian dari Kotak Omni.</translation>
-<translation id="1850508293116537636">Putar &amp;ikut arah jam</translation>
-<translation id="1901303067676059328">Pilih &amp;semua</translation>
 <translation id="2087822576218954668">Cetak: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">Tab Inkognito: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modul Klien Asli: <ph name="NEXE_NAME" /></translation>
-<translation id="2218515861914035131">Tampalkan sebagai teks kosong</translation>
 <translation id="2282146716419988068">Proses GPU</translation>
 <translation id="2301382460326681002">Direktori akar sambungan adalah tidak sah.</translation>
-<translation id="2326931316514688470">&amp;Muat semula apl</translation>
 <translation id="2327492829706409234">Dayakan apl</translation>
 <translation id="2344028582131185878">Muat Turun Automatik</translation>
 <translation id="2348176352564285430">Apl: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Pilih direktori sambungan.</translation>
 <translation id="241082044617551207">Pemalam tidak diketahui</translation>
-<translation id="2423578206845792524">Si&amp;mpan imej sebagai...</translation>
 <translation id="2439110203301358333">Program lain pada komputer anda menambah sambungan yang boleh mengubah cara Vivaldi berfungsi.</translation>
 <translation id="2445081178310039857">Direktori akar sambungan adalah diperlukan.</translation>
 <translation id="2470702053775288986">Pelanjutan yang tidak disokong dilumpuhkan</translation>
-<translation id="2550212893339833758">Memori ditukar</translation>
 <translation id="2662876636500006917">Kedai Web Vivaldi</translation>
 <translation id="2678063897982469759">Dayakan semula</translation>
-<translation id="2785873697295365461">Pemerihal fail</translation>
 <translation id="2809586584051668049">dan <ph name="NUMBER_ADDITIONAL_DISABLED" /> lagi</translation>
 <translation id="2850541429955027218">Tambahkan tema</translation>
 <translation id="2861941300086904918">Pengurus keselamatan Klien Asli</translation>
@@ -45,22 +33,16 @@
 <translation id="299483336428448530">Dipasang oleh ibu bapa anda.</translation>
 <translation id="3080207940057008665">Program lain pada komputer anda menambah tema yang boleh mengubah cara Vivaldi berfungsi.</translation>
 <translation id="3122464029669770682">CPU</translation>
-<translation id="3124111068741548686">Pemegang USER</translation>
 <translation id="3222066309010235055">Prapaparan: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Pilih direktori akar bagi sambungan untuk pek. Untuk mengemas kini sambungan, pilih kunci persendirian untuk gunakan semula juga.</translation>
-<translation id="3280237271814976245">Simpan &amp;sebagai...</translation>
 <translation id="3288047731229977326">Sambungan yang dijalankan dalam mod pembangun boleh membahayakan komputer anda. Jika anda bukan pembangun, anda harus melumpuhkan sambungan yang dijalankan dalam mod pembangun ini supaya kekal selamat.</translation>
-<translation id="3347086966102161372">S&amp;alin alamat imej</translation>
 <translation id="3378572629723696641">Sambungan ini mungkin telah tercemar.</translation>
-<translation id="345693547134384690">Buka &amp;imej dalam tab baharu</translation>
 <translation id="3505030558724226696">Batalkan akses peranti</translation>
-<translation id="3627588569887975815">Buka pautan dalam tetingkap inko&amp;gnito</translation>
 <translation id="3678156199662914018">Sambungan: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">Baiki apl</translation>
 <translation id="3908501907586732282">Dayakan sambungan</translation>
 <translation id="3909791450649380159">Po&amp;tong</translation>
 <translation id="3927932062596804919">Nafikan</translation>
-<translation id="3936390757709632190">&amp;Buka audio di tab baharu</translation>
 <translation id="3943582379552582368">&amp;Kembali</translation>
 <translation id="3979395879372752341">Sambungan baharu ditambah (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -71,25 +53,17 @@
 <translation id="4100839878934973028">Program lain pada komputer anda menambah apl yang boleh mengubah cara Vivaldi berfungsi.</translation>
 <translation id="4130207949184424187">Sambungan ini telah menukar halaman yang ditunjukkan apabila anda membuat carian daripada Kotak Omni.</translation>
 <translation id="4176463684765177261">Dilumpuhkan</translation>
-<translation id="4200983522494130825">Tab &amp;baharu</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K langsung)</translation>
 <translation id="4384652540891215547">Aktifkan sambungan</translation>
 <translation id="4394049700291259645">Lumpuhkan</translation>
 <translation id="4593021220803146968">&amp;Pergi ke <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apl dan sambungan hanya boleh diubah suai oleh pengurus (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Sambungan telah menukar halaman yang ditunjukkan apabila anda membuka halaman baharu.</translation>
-<translation id="4677772697204437347">Memori GPU</translation>
-<translation id="4711638718396952945">Pulihkan tetapan</translation>
-<translation id="4839303808932127586">Si&amp;mpan video sebagai...</translation>
 <translation id="488785315393301722">Tunjukkan Butiran</translation>
-<translation id="49896407730300355">Putar m&amp;elawan arah jam</translation>
-<translation id="4989966318180235467">Halaman periksa &amp;latar belakang</translation>
 <translation id="5027562294707732951">Tambahkan sambungan</translation>
 <translation id="5039804452771397117">Benarkan</translation>
 <translation id="5143374789336132547">Sambungan "<ph name="EXTENSION_NAME" />" telah menukar halaman yang ditunjukkan apabila anda mengklik butang Laman Utama.</translation>
-<translation id="5233019165164992427">Port nyahpepijat NaCl</translation>
 <translation id="5233231016133573565">ID Proses</translation>
-<translation id="5233736638227740678">&amp;Tampal</translation>
 <translation id="52912272896845572">Fail penting persendirian adalah tidak sah.</translation>
 <translation id="5301954838959518834">OK, faham</translation>
 <translation id="5355926466126177564">Sambungan "<ph name="EXTENSION_NAME" />" telah menukar halaman yang ditunjukkan apabila anda membuat carian daripada Kotak Omni.</translation>
@@ -103,50 +77,33 @@
 <translation id="5575473780076478375">Sambungan Inkognito: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">Sambungan turut mengawal halaman yang ditunjukkan apabila anda mengklik butang Laman Utama.</translation>
 <translation id="5715711091495208045">Broker Pemalam: <ph name="PLUGIN_NAME" /></translation>
-<translation id="5764483294734785780">Si&amp;mpan audio sebagai...</translation>
-<translation id="5780973441651030252">Keutamaan proses</translation>
 <translation id="583281660410589416">Tidak diketahui</translation>
 <translation id="5956585768868398362">Adakah ini halaman carian yang anda jangkakan?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> puncak)</translation>
 <translation id="5965661248935608907">Sambungan turut mengawal halaman yang ditunjukkan apabila anda mengklik butang Laman Utama atau membuat carian dari Kotak Omni.</translation>
 <translation id="6101226222197207147">Apl baharu ditambah (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Sambungan Internet anda sedang dikawal</translation>
-<translation id="6156863943908443225">Cache skrip</translation>
 <translation id="6196854373336333322">Sambungan "<ph name="EXTENSION_NAME" />" telah mengambil alih kawalan tetapan proksi anda, yang bermakna sambungan ini boleh mengubah, menghentikan atau mencuri dengar apa-apa sahaja yang anda lakukan dalam talian. Jika anda tidak pasti mengapa perubahan ini berlaku, anda mungkin tidak mahukannya.</translation>
-<translation id="6239558157302047471">Muat semula &amp;bingkai</translation>
 <translation id="6247802389331535091">Sistem: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="6251870443722440887">Pemegang GDI</translation>
-<translation id="6308937455967653460">Simpan pau&amp;tan sebagai...</translation>
-<translation id="6398765197997659313">Keluar daripada skrin penuh</translation>
-<translation id="6406303162637086258">Rangsang mula semula penyemak imbas</translation>
 <translation id="6445450263907939268">Jika anda tidak mahu perubahan ini, anda boleh mengembalikan tetapan anda yang terdahulu.</translation>
 <translation id="6447842834002726250">Kuki</translation>
 <translation id="6498249116389603658">&amp;Semua bahasa anda</translation>
 <translation id="6503077044568424649">Paling kerap dilawati</translation>
 <translation id="6508261954199872201">Apl: <ph name="APP_NAME" /></translation>
-<translation id="6518014396551869914">Sal&amp;in imej</translation>
-<translation id="6639554308659482635">Memori SQLite</translation>
 <translation id="6691936601825168937">&amp;Majukan</translation>
 <translation id="6798954102094737107">Pemalam: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6812841287760418429">Simpan perubahan</translation>
-<translation id="6886871292305414135">Buka pautan dalam &amp;tab baharu</translation>
 <translation id="6900284862687837908">Apl Latar Belakang: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Batalkan Akses Fail</translation>
-<translation id="708060913198414444">S&amp;alin alamat audio</translation>
 <translation id="7287143125007575591">Akses ditolak.</translation>
-<translation id="7309257895202129721">Paparkan &amp;kawalan</translation>
 <translation id="7427348830195639090">Halaman Latar Belakang: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7564847347806291057">Proses akhir</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">Penerima: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7685049629764448582">Memori JavaScript</translation>
 <translation id="7704305437604973648">Tugas</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>
 <translation id="7760004034676677601">Adakah ini halaman permulaan yang anda jangkakan?</translation>
 <translation id="7791543448312431591">Tambah</translation>
 <translation id="7814458197256864873">&amp;Salin</translation>
 <translation id="7818135753970109980">Tema baharu ditambah (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="782057141565633384">Salin alamat video</translation>
 <translation id="7857949311770343000">Adakah ini halaman tab baharu yang anda jangkakan?</translation>
 <translation id="786073089922909430">Perkhidmatan: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">Utiliti: <ph name="UTILITY_TYPE" /></translation>
@@ -163,14 +120,9 @@ Simpan fail kunci anda di tempat selamat. Anda akan memerlukannya untuk mencipta
 <translation id="8261378640211443080">Sambungan ini tidak disenaraikan dalam <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> dan mungkin telah ditambahkan tanpa pengetahuan anda.</translation>
 <translation id="8351419472474436977">Pelanjutan telah mengambil alih kawalan tetapan proksi anda, yang bermakna pelanjutan ini boleh mengubah, menghentikan atau mendengar secara senyap terhadap apa sahaja yang anda lakukan dalam talian. Jika anda tidak pasti mengapa 
 perubahan ini berlaku, anda mungkin tidak mahukannya.</translation>
-<translation id="8546306075665861288">Cache imej</translation>
-<translation id="8584280235376696778">&amp;Buka video dalam tab baharu</translation>
 <translation id="8615618338313291042">Apl Inkognito: <ph name="APP_NAME" /></translation>
-<translation id="862750493060684461">Cache CSS</translation>
-<translation id="8664389313780386848">&amp;Lihat sumber halaman</translation>
 <translation id="8808478386290700967">Kedai Web</translation>
 <translation id="8859174528519900719">Subbingkai: <ph name="SUBFRAME_SITE" /></translation>
-<translation id="8899851313684471736">Buka pautan dalam tetingkap &amp;baharu</translation>
 <translation id="8916476537757519021">Subbingkai Inkognito: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Sembunyikan Butiran</translation>
 <translation id="9170848237812810038">&amp;Buat asal</translation>

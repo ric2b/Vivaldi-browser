@@ -51,6 +51,8 @@ const double kLoadingProgressDone = 1.0;
 
 }  // namespace
 
+const int FrameTreeNode::kFrameTreeNodeInvalidId = -1;
+
 // This observer watches the opener of its owner FrameTreeNode and clears the
 // owner's opener if the opener is destroyed.
 class FrameTreeNode::OpenerDestroyedObserver : public FrameTreeNode::Observer {
@@ -430,7 +432,7 @@ void FrameTreeNode::CreatedNavigationRequest(
   // RenderFrameHostManager will take care of updates to the speculative
   // RenderFrameHost in DidCreateNavigationRequest below.
   if (was_previously_loading) {
-    if (navigation_request_ && navigation_request_->navigation_handle()) {
+    if (navigation_request_ && navigation_request_->IsNavigationStarted()) {
       // Mark the old request as aborted.
       navigation_request_->set_net_error(net::ERR_ABORTED);
     }
@@ -548,15 +550,8 @@ void FrameTreeNode::DidChangeLoadProgress(double load_progress) {
 }
 
 bool FrameTreeNode::StopLoading() {
-  if (navigation_request_) {
-    int expected_pending_nav_entry_id = navigation_request_->nav_entry_id();
-    if (navigation_request_->navigation_handle()) {
-      navigation_request_->set_net_error(net::ERR_ABORTED);
-      expected_pending_nav_entry_id =
-          navigation_request_->navigation_handle()->pending_nav_entry_id();
-    }
-    navigator_->DiscardPendingEntryIfNeeded(expected_pending_nav_entry_id);
-  }
+  if (navigation_request_ && navigation_request_->IsNavigationStarted())
+    navigation_request_->set_net_error(net::ERR_ABORTED);
   ResetNavigationRequest(false, true);
 
   // TODO(nasko): see if child frames should send IPCs in site-per-process

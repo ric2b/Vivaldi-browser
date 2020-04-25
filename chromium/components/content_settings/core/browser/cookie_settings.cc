@@ -17,6 +17,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/buildflags/buildflags.h"
+#include "net/cookies/cookie_util.h"
 #include "url/gurl.h"
 
 namespace content_settings {
@@ -61,7 +62,9 @@ void CookieSettings::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterIntegerPref(
       prefs::kCookieControlsMode,
-      static_cast<int>(CookieControlsMode::kIncognitoOnly),
+      static_cast<int>(kImprovedCookieControlsDefaultInIncognito.Get()
+                           ? CookieControlsMode::kIncognitoOnly
+                           : CookieControlsMode::kOff),
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }
 
@@ -120,12 +123,17 @@ bool CookieSettings::IsStorageDurable(const GURL& origin) const {
 }
 
 void CookieSettings::GetSettingForLegacyCookieAccess(
-    const GURL& cookie_domain,
+    const std::string& cookie_domain,
     ContentSetting* setting) const {
   DCHECK(setting);
 
+  // The content setting patterns are treated as domains, not URLs, so the
+  // scheme is irrelevant (so we can just arbitrarily pass false).
+  GURL cookie_domain_url = net::cookie_util::CookieOriginToURL(
+      cookie_domain, false /* secure scheme */);
+
   *setting = host_content_settings_map_->GetContentSetting(
-      cookie_domain, GURL(), CONTENT_SETTINGS_TYPE_LEGACY_COOKIE_ACCESS,
+      cookie_domain_url, GURL(), CONTENT_SETTINGS_TYPE_LEGACY_COOKIE_ACCESS,
       std::string() /* resource_identifier */);
 }
 
@@ -183,6 +191,13 @@ CookieSettings::~CookieSettings() {
 }
 
 bool CookieSettings::IsCookieControlsEnabled() {
+  if (base::FeatureList::IsEnabled(
+          kImprovedCookieControlsForThirdPartyCookieBlocking) &&
+      pref_change_registrar_.prefs()->GetBoolean(
+          prefs::kBlockThirdPartyCookies)) {
+    return true;
+  }
+
   if (!base::FeatureList::IsEnabled(kImprovedCookieControls))
     return false;
 

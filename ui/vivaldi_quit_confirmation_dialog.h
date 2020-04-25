@@ -52,7 +52,6 @@ class VivaldiQuitConfirmationDialog : public views::DialogDelegateView {
   bool Accept() override;
   bool Cancel() override;
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
-  bool ShouldUseCustomFrame() const override;
   std::unique_ptr<View> CreateExtraView() override;
 
   // views::WidgetDelegate:

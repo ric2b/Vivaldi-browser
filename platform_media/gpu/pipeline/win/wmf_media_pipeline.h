@@ -72,7 +72,7 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
   ReadDataCB read_video_data_cb_;
   SeekCB seek_cb_;
 
-  scoped_refptr<WMFByteStream> byte_stream_;
+  Microsoft::WRL::ComPtr<WMFByteStream> byte_stream_;
 
   class ThreadedImpl {
    public:

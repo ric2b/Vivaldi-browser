@@ -10,8 +10,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.annotation.IdRes;
-import android.support.annotation.StringRes;
 import android.support.v4.app.Fragment;
 import android.support.v7.content.res.AppCompatResources;
 import android.text.InputType;
@@ -27,9 +25,13 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 import android.widget.ImageButton;
 import android.widget.TextView;
+
+import androidx.annotation.IdRes;
+import androidx.annotation.StringRes;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordHistogram;
@@ -353,6 +355,8 @@ public class PasswordEntryViewer
     }
 
     private void hidePassword() {
+        getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+
         changeHowPasswordIsDisplayed(R.drawable.ic_visibility_black,
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD
                         | InputType.TYPE_TEXT_FLAG_MULTI_LINE,

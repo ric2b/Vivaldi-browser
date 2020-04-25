@@ -90,14 +90,6 @@ class AXFragmentRootPlatformNodeWin : public AXPlatformNodeWin,
     return S_OK;
   }
 
-  STDMETHOD(GetRuntimeId)(SAFEARRAY** runtime_id) {
-    UIA_VALIDATE_CALL_1_ARG(runtime_id);
-
-    // UIA obtains a runtime ID for a fragment root from the associated HWND.
-    *runtime_id = nullptr;
-    return S_OK;
-  }
-
   //
   // IRawElementProviderFragmentRoot methods.
   //
@@ -270,6 +262,16 @@ const ui::AXUniqueId& AXFragmentRootWin::GetUniqueId() const {
 gfx::AcceleratedWidget
 AXFragmentRootWin::GetTargetForNativeAccessibilityEvent() {
   return widget_;
+}
+
+AXPlatformNode* AXFragmentRootWin::GetFromTreeIDAndNodeID(
+    const ui::AXTreeID& ax_tree_id,
+    int32_t node_id) {
+  AXPlatformNodeDelegate* child_delegate = GetChildNodeDelegate();
+  if (child_delegate)
+    return child_delegate->GetFromTreeIDAndNodeID(ax_tree_id, node_id);
+
+  return nullptr;
 }
 
 AXPlatformNodeDelegate* AXFragmentRootWin::GetChildNodeDelegate() {

@@ -7,17 +7,18 @@
 #include <string>
 #include <utility>
 
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/tracing/public/mojom/tracing.mojom.h"
 
 namespace tracing {
 
-MockAgent::MockAgent() : binding_(this) {}
+MockAgent::MockAgent() {}
 
 MockAgent::~MockAgent() = default;
 
-mojom::AgentPtr MockAgent::CreateAgentPtr() {
-  mojom::AgentPtr agent_proxy;
-  binding_.Bind(mojo::MakeRequest(&agent_proxy));
+mojo::PendingRemote<mojom::Agent> MockAgent::CreateAgentRemote() {
+  mojo::PendingRemote<mojom::Agent> agent_proxy;
+  receiver_.Bind(agent_proxy.InitWithNewPipeAndPassReceiver());
   return agent_proxy;
 }
 
@@ -28,7 +29,9 @@ void MockAgent::StartTracing(const std::string& config,
   std::move(cb).Run(true);
 }
 
-void MockAgent::StopAndFlush(mojom::RecorderPtr recorder) {
+void MockAgent::StopAndFlush(
+    mojo::PendingRemote<mojom::Recorder> pending_recorder) {
+  mojo::Remote<mojom::Recorder> recorder(std::move(pending_recorder));
   call_stat_.push_back("StopAndFlush");
   if (!metadata_.empty())
     recorder->AddMetadata(metadata_.Clone());

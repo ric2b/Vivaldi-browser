@@ -40,6 +40,12 @@ gfx::PointF ComputeEventLocation(const blink::WebInputEvent& event) {
   return gfx::PointF();
 }
 
+bool IsMouseMiddleClick(const blink::WebInputEvent& event) {
+  return (event.GetType() == blink::WebInputEvent::Type::kMouseDown &&
+          static_cast<const blink::WebMouseEvent&>(event).button ==
+              blink::WebPointerProperties::Button::kMiddle);
+}
+
 constexpr const char kTracingCategory[] = "input,latency";
 
 }  // namespace
@@ -255,8 +261,14 @@ void RenderWidgetTargeter::ResolveTargetingRequest(TargetingRequest request) {
 
   RenderWidgetTargetResult result;
   if (request.IsWebInputEventRequest()) {
-    result = delegate_->FindTargetSynchronously(request.GetRootView(),
-                                                request.GetEvent());
+    result = is_autoscroll_in_progress_
+                 ? middle_click_result_
+                 : delegate_->FindTargetSynchronously(request.GetRootView(),
+                                                      request.GetEvent());
+    if (!is_autoscroll_in_progress_ && IsMouseMiddleClick(request.GetEvent())) {
+      if (!result.should_query_view)
+        middle_click_result_ = result;
+    }
   } else {
     result = delegate_->FindTargetSynchronouslyAtPoint(request.GetRootView(),
                                                        request.GetLocation());
@@ -273,7 +285,7 @@ void RenderWidgetTargeter::ResolveTargetingRequest(TargetingRequest request) {
 
   RenderWidgetHostViewBase* target = result.view;
   async_depth_ = 0;
-  if (result.should_query_view) {
+  if (!is_autoscroll_in_progress_ && result.should_query_view) {
     TRACE_EVENT_WITH_FLOW2(
         "viz,benchmark", "Event.Pipeline", TRACE_ID_GLOBAL(trace_id_),
         TRACE_EVENT_FLAG_FLOW_OUT, "step", "QueryClient(Start)",
@@ -302,6 +314,11 @@ void RenderWidgetTargeter::ResolveTargetingRequest(TargetingRequest request) {
 
 void RenderWidgetTargeter::ViewWillBeDestroyed(RenderWidgetHostViewBase* view) {
   unresponsive_views_.erase(view);
+
+  if (is_autoscroll_in_progress_ && middle_click_result_.view == view) {
+    SetIsAutoScrollInProgress(false);
+  }
+
   if (vivaldi::IsVivaldiRunning() && vivaldi_active_down_target_ == view) {
     vivaldi_active_down_target_ = nullptr;
   }
@@ -309,6 +326,15 @@ void RenderWidgetTargeter::ViewWillBeDestroyed(RenderWidgetHostViewBase* view) {
 
 bool RenderWidgetTargeter::HasEventsPendingDispatch() const {
   return request_in_flight_ || !requests_.empty();
+}
+
+void RenderWidgetTargeter::SetIsAutoScrollInProgress(
+    bool autoscroll_in_progress) {
+  is_autoscroll_in_progress_ = autoscroll_in_progress;
+
+  // If middle click autoscroll ends, reset |middle_click_result_|.
+  if (!autoscroll_in_progress)
+    middle_click_result_ = RenderWidgetTargetResult();
 }
 
 void RenderWidgetTargeter::QueryClientInternal(
@@ -470,6 +496,11 @@ void RenderWidgetTargeter::FoundFrameSinkId(
       TRACE_EVENT_WITH_FLOW1("viz,benchmark", "Event.Pipeline",
                              TRACE_ID_GLOBAL(trace_id_),
                              TRACE_EVENT_FLAG_FLOW_IN, "step", "FoundTarget");
+    }
+
+    if (request.IsWebInputEventRequest() &&
+        IsMouseMiddleClick(request.GetEvent())) {
+      middle_click_result_ = {view, false, transformed_location, false, false};
     }
 
     FoundTarget(view, transformed_location, false, &request);

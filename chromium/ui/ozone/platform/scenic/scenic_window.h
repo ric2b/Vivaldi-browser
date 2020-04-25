@@ -21,7 +21,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/native_widget_types.h"
-#include "ui/platform_window/platform_window.h"
+#include "ui/platform_window/platform_window_base.h"
 #include "ui/platform_window/platform_window_delegate.h"
 
 namespace ui {
@@ -29,7 +29,7 @@ namespace ui {
 class ScenicWindowManager;
 
 class COMPONENT_EXPORT(OZONE) ScenicWindow
-    : public PlatformWindow,
+    : public PlatformWindowBase,
       public InputEventDispatcherDelegate {
  public:
   // Both |window_manager| and |delegate| must outlive the ScenicWindow.
@@ -50,9 +50,10 @@ class COMPONENT_EXPORT(OZONE) ScenicWindow
   gfx::Rect GetBounds() override;
   void SetBounds(const gfx::Rect& bounds) override;
   void SetTitle(const base::string16& title) override;
-  void Show() override;
+  void Show(bool inactive) override;
   void Hide() override;
   void Close() override;
+  bool IsVisible() const override;
   void PrepareForShutdown() override;
   void SetCapture() override;
   void ReleaseCapture() override;
@@ -65,11 +66,15 @@ class COMPONENT_EXPORT(OZONE) ScenicWindow
   void Activate() override;
   void Deactivate() override;
   void SetUseNativeFrame(bool use_native_frame) override;
+  bool ShouldUseNativeFrame() const override;
   void SetCursor(PlatformCursor cursor) override;
   void MoveCursorTo(const gfx::Point& location) override;
   void ConfineCursorToBounds(const gfx::Rect& bounds) override;
   void SetRestoredBoundsInPixels(const gfx::Rect& bounds) override;
   gfx::Rect GetRestoredBoundsInPixels() const override;
+  void SetWindowIcons(const gfx::ImageSkia& window_icon,
+                      const gfx::ImageSkia& app_icon) override;
+  void SizeConstraintsChanged() override;
 
  private:
   // Callbacks for |scenic_session_|.
@@ -103,6 +108,9 @@ class COMPONENT_EXPORT(OZONE) ScenicWindow
 
   // Entity node for the |view_|.
   scenic::EntityNode node_;
+
+  // Node in |scenic_session_| for receiving input that hits within our View.
+  scenic::ShapeNode input_node_;
 
   // Node in |scenic_session_| for rendering (hit testing disabled).
   scenic::EntityNode render_node_;

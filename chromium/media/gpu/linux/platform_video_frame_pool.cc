@@ -9,7 +9,6 @@
 #include "base/logging.h"
 #include "base/optional.h"
 #include "base/task/post_task.h"
-#include "base/time/default_tick_clock.h"
 #include "media/gpu/linux/platform_video_frame_utils.h"
 #include "media/gpu/macros.h"
 
@@ -17,56 +16,31 @@ namespace media {
 
 namespace {
 
-// The lifespan for stale frames. If a frame is not used for 10 seconds, then
-// drop the frame to reduce memory usage.
-constexpr base::TimeDelta kStaleFrameLimit = base::TimeDelta::FromSeconds(10);
-
-// The default maximum number of frames.
-constexpr size_t kDefaultMaxNumFrames = 64;
-
 // The default method to create frames.
-scoped_refptr<VideoFrame> DefaultCreateFrame(VideoPixelFormat format,
-                                             const gfx::Size& coded_size,
-                                             const gfx::Rect& visible_rect,
-                                             const gfx::Size& natural_size,
-                                             base::TimeDelta timestamp) {
-  return CreatePlatformVideoFrame(format, coded_size, visible_rect,
-                                  natural_size, timestamp,
+scoped_refptr<VideoFrame> DefaultCreateFrame(
+    gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
+    VideoPixelFormat format,
+    const gfx::Size& coded_size,
+    const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
+    base::TimeDelta timestamp) {
+  return CreatePlatformVideoFrame(gpu_memory_buffer_factory, format, coded_size,
+                                  visible_rect, natural_size, timestamp,
                                   gfx::BufferUsage::SCANOUT_VDA_WRITE);
-}
-
-// Get the identifier of |frame|. Calling this method with the frames backed
-// by the same Dmabuf should return the same result.
-PlatformVideoFramePool::DmabufId GetDmabufId(const VideoFrame& frame) {
-  return &(frame.DmabufFds());
 }
 
 }  // namespace
 
-struct PlatformVideoFramePool::FrameEntry {
-  base::TimeTicks last_use_time;
-  scoped_refptr<VideoFrame> frame;
-
-  FrameEntry(base::TimeTicks time, scoped_refptr<VideoFrame> frame)
-      : last_use_time(time), frame(std::move(frame)) {}
-  FrameEntry(const FrameEntry& other) {
-    last_use_time = other.last_use_time;
-    frame = other.frame;
-  }
-  ~FrameEntry() = default;
-};
-
-PlatformVideoFramePool::PlatformVideoFramePool()
-    : PlatformVideoFramePool(base::BindRepeating(&DefaultCreateFrame),
-                             base::DefaultTickClock::GetInstance()) {}
-
 PlatformVideoFramePool::PlatformVideoFramePool(
-    CreateFrameCB cb,
-    const base::TickClock* tick_clock)
-    : create_frame_cb_(std::move(cb)),
-      tick_clock_(tick_clock),
-      max_num_frames_(kDefaultMaxNumFrames),
-      weak_this_factory_(this) {
+    gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory)
+    : create_frame_cb_(base::BindRepeating(&DefaultCreateFrame)),
+      gpu_memory_buffer_factory_(gpu_memory_buffer_factory) {
+  DVLOGF(4);
+  weak_this_ = weak_this_factory_.GetWeakPtr();
+}
+
+PlatformVideoFramePool::PlatformVideoFramePool(CreateFrameCB cb)
+    : create_frame_cb_(std::move(cb)) {
   DVLOGF(4);
   weak_this_ = weak_this_factory_.GetWeakPtr();
 }
@@ -101,9 +75,9 @@ scoped_refptr<VideoFrame> PlatformVideoFramePool::GetFrame() {
     // VideoFrame::WrapVideoFrame() will check whether the updated visible_rect
     // is sub rect of the original visible_rect. Therefore we set visible_rect
     // as large as coded_size to guarantee this condition.
-    scoped_refptr<VideoFrame> new_frame =
-        create_frame_cb_.Run(format, coded_size, gfx::Rect(coded_size),
-                             coded_size, base::TimeDelta());
+    scoped_refptr<VideoFrame> new_frame = create_frame_cb_.Run(
+        gpu_memory_buffer_factory_, format, coded_size, gfx::Rect(coded_size),
+        coded_size, base::TimeDelta());
     if (!new_frame)
       return nullptr;
 
@@ -111,13 +85,13 @@ scoped_refptr<VideoFrame> PlatformVideoFramePool::GetFrame() {
   }
 
   DCHECK(!free_frames_.empty());
-  scoped_refptr<VideoFrame> origin_frame = std::move(free_frames_.back().frame);
+  scoped_refptr<VideoFrame> origin_frame = std::move(free_frames_.back());
   free_frames_.pop_back();
   DCHECK_EQ(origin_frame->format(), format);
   DCHECK_EQ(origin_frame->coded_size(), coded_size);
 
   scoped_refptr<VideoFrame> wrapped_frame = VideoFrame::WrapVideoFrame(
-      *origin_frame, format, visible_rect_, natural_size_);
+      origin_frame, format, visible_rect_, natural_size_);
   DCHECK(wrapped_frame);
   frames_in_use_.emplace(GetDmabufId(*wrapped_frame), origin_frame.get());
   wrapped_frame->AddDestructionObserver(
@@ -128,34 +102,6 @@ scoped_refptr<VideoFrame> PlatformVideoFramePool::GetFrame() {
   // unrelated metadata.
   wrapped_frame->metadata()->Clear();
   return wrapped_frame;
-}
-
-void PlatformVideoFramePool::set_parent_task_runner(
-    scoped_refptr<base::SequencedTaskRunner> parent_task_runner) {
-  DCHECK(!parent_task_runner_);
-
-  parent_task_runner_ = std::move(parent_task_runner);
-  parent_task_runner_->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&PlatformVideoFramePool::PurgeStaleFrames, weak_this_),
-      kStaleFrameLimit);
-}
-
-void PlatformVideoFramePool::PurgeStaleFrames() {
-  DCHECK(parent_task_runner_->RunsTasksInCurrentSequence());
-  DVLOGF(4);
-  base::AutoLock auto_lock(lock_);
-
-  const base::TimeTicks now = tick_clock_->NowTicks();
-  while (!free_frames_.empty() &&
-         now - free_frames_.front().last_use_time > kStaleFrameLimit) {
-    free_frames_.pop_front();
-  }
-
-  parent_task_runner_->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&PlatformVideoFramePool::PurgeStaleFrames, weak_this_),
-      kStaleFrameLimit);
 }
 
 void PlatformVideoFramePool::SetMaxNumFrames(size_t max_num_frames) {
@@ -190,9 +136,9 @@ base::Optional<VideoFrameLayout> PlatformVideoFramePool::NegotiateFrameFormat(
 
   // Create a temporary frame in order to know VideoFrameLayout that VideoFrame
   // that will be allocated in GetFrame() has.
-  auto frame =
-      create_frame_cb_.Run(layout.format(), layout.coded_size(), visible_rect,
-                           natural_size_, base::TimeDelta());
+  auto frame = create_frame_cb_.Run(gpu_memory_buffer_factory_, layout.format(),
+                                    layout.coded_size(), visible_rect,
+                                    natural_size_, base::TimeDelta());
   if (!frame) {
     VLOGF(1) << "Failed to create video frame";
     return base::nullopt;
@@ -276,7 +222,7 @@ void PlatformVideoFramePool::InsertFreeFrame_Locked(
   lock_.AssertAcquired();
 
   if (GetTotalNumFrames_Locked() < max_num_frames_)
-    free_frames_.push_back({tick_clock_->NowTicks(), std::move(frame)});
+    free_frames_.push_back(std::move(frame));
 }
 
 size_t PlatformVideoFramePool::GetTotalNumFrames_Locked() const {

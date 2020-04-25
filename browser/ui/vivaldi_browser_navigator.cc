@@ -21,8 +21,9 @@ void LoadURLAsPendingEntry(WebContents* target_contents,
       content::NavigationEntryImpl::FromNavigationEntry(
           controller->CreateNavigationEntry(
               url, params->referrer, params->initiator_origin,
-              params->transition, params->is_renderer_initiated,
-              params->extra_headers, controller->GetBrowserContext(),
+              nullptr /* source_site_instance */, params->transition,
+              params->is_renderer_initiated, params->extra_headers,
+              controller->GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
 
   controller->SetPendingEntry(std::move(entry));

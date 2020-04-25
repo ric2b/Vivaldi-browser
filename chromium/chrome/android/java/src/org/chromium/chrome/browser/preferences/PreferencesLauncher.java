@@ -9,8 +9,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
+
+import androidx.annotation.Nullable;
 
 import com.google.android.gms.common.ConnectionResult;
 
@@ -27,8 +28,6 @@ import org.chromium.chrome.browser.preferences.password.SavePasswordsPreferences
 import org.chromium.chrome.browser.preferences.website.SettingsNavigationSource;
 import org.chromium.chrome.browser.preferences.website.SingleWebsitePreferences;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
-import org.chromium.chrome.browser.touchless.TouchlessDelegate;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.sync.ModelType;
@@ -103,9 +102,7 @@ public class PreferencesLauncher {
     public static Intent createIntentForSettingsPage(
             Context context, @Nullable String fragmentName, @Nullable Bundle fragmentArgs) {
         Intent intent = new Intent();
-        intent.setClass(context, FeatureUtilities.isNoTouchModeEnabled()
-                        ? TouchlessDelegate.getTouchlessPreferencesClass()
-                        : Preferences.class);
+        intent.setClass(context, Preferences.class);
         if (!(context instanceof Activity)) {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -203,8 +200,9 @@ public class PreferencesLauncher {
                 GOOGLE_ACCOUNT_PWM_UI, MIN_GOOGLE_PLAY_SERVICES_VERSION_PARAM,
                 DEFAULT_MIN_GOOGLE_PLAY_SERVICES_APK_VERSION);
         if (AppHooks.get().isGoogleApiAvailableWithMinApkVersion(minGooglePlayServicesVersion)
-                != ConnectionResult.SUCCESS)
+                != ConnectionResult.SUCCESS) {
             return false;
+        }
 
         if (!ChromeFeatureList.isEnabled(GOOGLE_ACCOUNT_PWM_UI)) return false;
 

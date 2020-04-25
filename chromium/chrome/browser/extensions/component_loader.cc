@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -44,13 +43,13 @@
 #include "extensions/common/manifest_constants.h"
 #include "pdf/buildflags.h"
 #include "printing/buildflags/buildflags.h"
-#include "storage/browser/fileapi/file_system_features.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/keyboard/ui/grit/keyboard_resources.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/site_instance.h"
@@ -530,14 +529,16 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
   }
 
 #if defined(OS_CHROMEOS) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  // Since this is a v2 app it has a background page.
-  AddWithNameAndDescription(
-      IDR_GENIUS_APP_MANIFEST,
-      base::FilePath(
-          FILE_PATH_LITERAL("/usr/share/chromeos-assets/genius_app")),
-      l10n_util::GetStringUTF8(IDS_GENIUS_APP_NAME),
-      l10n_util::GetStringFUTF8(IDS_GENIUS_APP_DESCRIPTION,
-                                ui::GetChromeOSDeviceName()));
+  if (!base::FeatureList::IsEnabled(chromeos::features::kHelpAppV2)) {
+    // Since this is a v2 Chrome app it has a background page.
+    AddWithNameAndDescription(
+        IDR_GENIUS_APP_MANIFEST,
+        base::FilePath(
+            FILE_PATH_LITERAL("/usr/share/chromeos-assets/genius_app")),
+        l10n_util::GetStringUTF8(IDS_GENIUS_APP_NAME),
+        l10n_util::GetStringFUTF8(IDS_GENIUS_APP_DESCRIPTION,
+                                  ui::GetChromeOSDeviceName()));
+  }
 #endif
 
   if (!skip_session_components) {
@@ -565,10 +566,17 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
 #endif  // BUILDFLAG(ENABLE_NACL)
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-    std::string id = Add(IDR_QUICKOFFICE_MANIFEST,
-                         base::FilePath(FILE_PATH_LITERAL(
-                             "/usr/share/chromeos-assets/quickoffice")));
-    EnableFileSystemInGuestMode(id);
+    if (!base::FeatureList::IsEnabled(
+            chromeos::features::kDisableOfficeEditingComponentApp)) {
+      Add(IDR_QUICKOFFICE_MANIFEST,
+          base::FilePath(
+              FILE_PATH_LITERAL("/usr/share/chromeos-assets/quickoffice")));
+    }
+
+    // TODO(https://crbug.com/1005083): Force the off the record profile to be
+    // created to allow the virtual keyboard to work in guest mode.
+    if (!IsNormalSession())
+      ExtensionsBrowserClient::Get()->GetOffTheRecordContext(profile_);
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
     Add(IDR_ECHO_MANIFEST,
@@ -679,29 +687,6 @@ void ComponentLoader::AddChromeOsSpeechSynthesisExtensions() {
                           extension_misc::kEspeakSpeechSynthesisExtensionId));
 }
 
-void ComponentLoader::EnableFileSystemInGuestMode(const std::string& id) {
-  if (!IsNormalSession()) {
-    // TODO(dpolukhin): Hack to enable HTML5 temporary file system for
-    // the extension. Some component extensions don't work without temporary
-    // file system access. Make sure temporary file system is enabled in the off
-    // the record browser context (as that is the one used in guest session).
-    content::BrowserContext* off_the_record_context =
-        ExtensionsBrowserClient::Get()->GetOffTheRecordContext(profile_);
-    GURL site = content::SiteInstance::GetSiteForURL(
-        off_the_record_context, Extension::GetBaseURLFromExtensionId(id));
-    storage::FileSystemContext* file_system_context =
-        content::BrowserContext::GetStoragePartitionForSite(
-            off_the_record_context, site)
-            ->GetFileSystemContext();
-    // Incognito file system is enabled by default. This function can be removed
-    // when the feature flag is removed.
-    if (!base::FeatureList::IsEnabled(
-            storage::features::kEnableFilesystemInIncognito)) {
-      file_system_context->EnableTemporaryFileSystemInIncognito();
-    }
-  }
-}
-
 void ComponentLoader::FinishAddComponentFromDir(
     const base::FilePath& root_directory,
     const char* extension_id,
@@ -730,8 +715,6 @@ void ComponentLoader::FinishAddComponentFromDir(
 
 void ComponentLoader::FinishLoadSpeechSynthesisExtension(
     const char* extension_id) {
-  EnableFileSystemInGuestMode(extension_id);
-
   // TODO(https://crbug.com/947305): mitigation for extension not awake after
   // load.
   extensions::ProcessManager::Get(profile_)->WakeEventPage(extension_id,

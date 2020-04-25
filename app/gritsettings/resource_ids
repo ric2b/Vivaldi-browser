@@ -18,4 +18,63 @@
     "includes": [36500],
     "structures": [36600],
   },
+  "app/android/vivaldi_android_strings.grd": {
+    "messages": [36700],
+  },
+  "app/resources/strings/vivaldi_strings.grd": {
+    "messages": [400],
+  },
+  "app/resources/generated/vivaldi_generated_resources.grd": {
+    "messages": [800],
+  },
+  "app/resources/locale/vivaldi_locale_settings.grd": {
+    "messages": [10000],
+  },
+  "app/resources/theme/vivaldi_unscaled_resources.grd": {
+    "includes": [10150],
+  },
+  "app/resources/theme/vivaldi_theme_resources.grd": {
+    "structures": [10250],
+  },
+  "app/resources/components_strings/vivaldi_components_strings.grd": {
+    "messages": [15120],
+  },
+  "app/resources/components_locale_settings/vivaldi_components_locale_settings.grd": {
+    "includes": [15080],
+    "messages": [15090],
+  },
+  "app/resources/components/vivaldi_components.grd": {
+    "messages": [15060],
+  },
+  "app/resources/components_resources/vivaldi_components.grd": {
+    "includes": [17230],
+  },
+  "app/resources/components_scaled/vivaldi_components_scaled.grd": {
+    "structures": [17400],
+  },
+  "app/resources/content/vivaldi_content_strings.grd": {
+    "messages": [25600],
+  },
+  "app/resources/android/vivaldi_android_chrome_strings.grd": {
+    "messages": [38000]
+  },
+  "app/resources/renderer/vivaldi_renderer_resources.grd": {
+    "includes": [14250],
+    "structures": [14360],
+  },
+  "app/resources/platform_locale_settings/vivaldi_platform_locale_settings.grd": {
+    "messages": [10100],
+  },
+  "app/resources/ui/vivaldi_ui_resources.grd": {
+    "structures": [27000],
+  },
+  "app/resources/ui_strings/vivaldi_ui_strings.grd": {
+    "messages": [27350],
+  },
+  "app/resources/theme/vivaldi_theme.grd": {
+    "structures": [10250],
+  },
+  "app/resources/locale/vivaldi_locale_strings.grd": {
+    "messages": [10000],
+  }
 }

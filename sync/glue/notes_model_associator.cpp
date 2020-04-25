@@ -957,7 +957,7 @@ bool NotesModelAssociator::CryptoReadyIfNecessary() {
   syncer::ReadTransaction trans(FROM_HERE, user_share_);
   const syncer::ModelTypeSet encrypted_types = trans.GetEncryptedTypes();
   return !encrypted_types.Has(syncer::NOTES) ||
-         trans.GetCryptographer()->is_ready();
+         trans.GetCryptographer()->CanEncrypt();
 }
 
 syncer::SyncError NotesModelAssociator::CheckModelSyncState(
@@ -973,9 +973,9 @@ syncer::SyncError NotesModelAssociator::CheckModelSyncState(
     if (native_version == sync_version) {
       context->set_native_model_sync_state(IN_SYNC);
     } else {
-      UMA_HISTOGRAM_ENUMERATION("Sync.LocalModelOutOfSync",
-                                ModelTypeToHistogramInt(syncer::NOTES),
-                                static_cast<int>(syncer::ModelType::NUM_ENTRIES));
+      UMA_HISTOGRAM_ENUMERATION(
+          "Sync.LocalModelOutOfSync", ModelTypeHistogramValue(syncer::NOTES),
+          static_cast<int>(syncer::ModelType::NUM_ENTRIES));
 
       // Clear version on notes model so that we only report error once.
       notes_model_->SetNodeSyncTransactionVersion(

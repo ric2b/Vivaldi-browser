@@ -11,6 +11,7 @@
 goog.provide('cvox.TtsBackground');
 
 goog.require('PanelCommand');
+goog.require('PhoneticData');
 goog.require('cvox.AbstractTts');
 goog.require('cvox.ChromeTtsBase');
 goog.require('cvox.ChromeVox');
@@ -97,22 +98,10 @@ cvox.TtsBackground = function() {
   this.retainPunctuation_ = [';', '?', '!', '\''];
 
   /**
-   * The id of a callback returned from setTimeout.
+   * The id of a callback returned by setTimeout.
    * @type {number|undefined}
    */
   this.timeoutId_;
-
-  try {
-    /**
-     * @type {Object<string>}
-     * @private
-     * @const
-     */
-    this.PHONETIC_MAP_ =
-        /** @type {Object<string>} */ (JSON.parse(Msgs.getMsg('phonetic_map')));
-  } catch (e) {
-    console.log('Error; unable to parse phonetic map msg.');
-  }
 
   /**
    * Capturing tts event listeners.
@@ -194,13 +183,12 @@ goog.inherits(cvox.TtsBackground, cvox.ChromeTtsBase);
 
 
 /**
- * The amount of time to wait before speaking a phonetic word for a
- * letter.
+ * The amount of time to wait before speaking a hint.
  * @type {number}
  * @private
  * @const
  */
-cvox.TtsBackground.PHONETIC_DELAY_MS_ = 1000;
+cvox.TtsBackground.HINT_DELAY_MS_ = 1000;
 
 /**
  * The list of properties allowed to be passed to the chrome.tts.speak API.
@@ -297,6 +285,9 @@ cvox.TtsBackground.prototype.speak = function(
 
   var utterance = new cvox.Utterance(textString, mergedProperties);
   this.speakUsingQueue_(utterance, queueMode);
+  // Attempt to queue phonetic speech with property['delay']. This ensures that
+  // phonetic hints are delayed when we process them.
+  this.pronouncePhonetically_(textString, properties);
   return this;
 };
 
@@ -315,6 +306,8 @@ cvox.TtsBackground.prototype.speakUsingQueue_ = function(utterance, queueMode) {
     (new PanelCommand(PanelCommandType.CLEAR_SPEECH)).send();
 
     if (this.shouldCancel_(this.currentUtterance_, utterance, queueMode)) {
+      // Clear timeout in case currentUtterance_ is a delayed utterance.
+      this.clearTimeout_();
       this.cancelUtterance_(this.currentUtterance_);
       this.currentUtterance_ = null;
     }
@@ -354,6 +347,21 @@ cvox.TtsBackground.prototype.startSpeakingNextItemInQueue_ = function() {
   // There is no voice to speak with (e.g. the tts system has not fully
   // initialized).
   if (!this.currentVoice) {
+    return;
+  }
+
+  // Clear timeout for delayed utterances (hints and phonetic speech).
+  this.clearTimeout_();
+
+  // Check top of utteranceQueue for delayed utterance.
+  if (this.utteranceQueue_[0].properties['delay']) {
+    // Remove 'delay' property and set a timeout to process this utterance after
+    // the delay has passed.
+    delete this.utteranceQueue_[0].properties['delay'];
+    this.timeoutId_ = setTimeout(
+        () => this.startSpeakingNextItemInQueue_(),
+        cvox.TtsBackground.HINT_DELAY_MS_);
+
     return;
   }
 
@@ -585,14 +593,6 @@ cvox.TtsBackground.prototype.preprocess = function(text, properties) {
   }
   text = text.replace(pE.regexp, this.createPunctuationReplace_(pE.clear));
 
-  // Try pronouncing phonetically for single characters. Cancel previous calls
-  // to pronouncePhonetically_ if we fail to pronounce on this invokation or if
-  // this text is math which should never be pronounced phonetically.
-  if (properties.math || !properties['phoneticCharacters'] ||
-      !this.pronouncePhonetically_(text)) {
-    this.clearTimeout_();
-  }
-
   //  Remove all whitespace from the beginning and end, and collapse all
   // inner strings of whitespace to a single space.
   text = text.replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
@@ -677,26 +677,28 @@ cvox.TtsBackground.prototype.createPunctuationReplace_ = function(clear) {
 
 
 /**
- * Pronounces single letters phonetically after some timeout.
- * @param {string} text The text.
- * @return {boolean} True if the text resulted in speech.
+ * Queues phonetic disambiguation for characters if disambiguation is found.
+ * @param {string} text The text for which we want to get phonetic data.
+ * @param {Object} properties Speech properties to use for this utterance.
  * @private
  */
-cvox.TtsBackground.prototype.pronouncePhonetically_ = function(text) {
-  if (!this.PHONETIC_MAP_) {
-    return false;
-  }
+cvox.TtsBackground.prototype.pronouncePhonetically_ = function(
+    text, properties) {
+  // Math should never be pronounced phonetically.
+  if (properties.math)
+    return;
+
   text = text.toLowerCase();
-  text = this.PHONETIC_MAP_[text];
-  if (text) {
-    this.clearTimeout_();
-    var self = this;
-    this.timeoutId_ = setTimeout(function() {
-      self.speak(text, cvox.QueueMode.QUEUE);
-    }, cvox.TtsBackground.PHONETIC_DELAY_MS_);
-    return true;
+  // If undefined language, use the UI language of the browser as a best guess.
+  if (!properties['lang'])
+    properties['lang'] = chrome.i18n.getUILanguage();
+
+  var phoneticText =
+      PhoneticData.getPhoneticDisambiguation(properties['lang'], text);
+  if (phoneticText) {
+    properties['delay'] = true;
+    this.speak(phoneticText, cvox.QueueMode.QUEUE, properties);
   }
-  return false;
 };
 
 

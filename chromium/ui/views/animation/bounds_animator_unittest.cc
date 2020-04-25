@@ -77,11 +77,12 @@ class TestView : public View {
 class BoundsAnimatorTest : public testing::Test {
  public:
   BoundsAnimatorTest()
-      : task_environment_(base::test::TaskEnvironment::MainThreadType::UI),
+      : task_environment_(
+            base::test::SingleThreadTaskEnvironment::MainThreadType::UI),
         child_(new TestView()),
         animator_(&parent_) {
     parent_.AddChildView(child_);
-    animator_.SetAnimationDuration(10);
+    animator_.SetAnimationDuration(base::TimeDelta::FromMilliseconds(10));
   }
 
   TestView* parent() { return &parent_; }
@@ -89,7 +90,7 @@ class BoundsAnimatorTest : public testing::Test {
   BoundsAnimator* animator() { return &animator_; }
 
  private:
-  base::test::TaskEnvironment task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
   TestView parent_;
   TestView* child_;  // Owned by |parent_|.
   BoundsAnimator animator_;

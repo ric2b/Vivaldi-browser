@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
+#include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -60,10 +61,6 @@ class ScriptWrappable;
 // The getter's name for a private property.
 #define V8_PRIVATE_PROPERTY_GETTER_NAME(InterfaceName, PrivateKeyName) \
   Get##InterfaceName##PrivateKeyName
-
-// The member variable's name for a private property.
-#define V8_PRIVATE_PROPERTY_MEMBER_NAME(InterfaceName, PrivateKeyName) \
-  m_symbol##InterfaceName##PrivateKeyName
 
 // The string used to create a private symbol.  Must be unique per V8 instance.
 #define V8_PRIVATE_PROPERTY_SYMBOL_STRING(InterfaceName, PrivateKeyName) \
@@ -148,20 +145,15 @@ class PLATFORM_EXPORT V8PrivateProperty {
     v8::Isolate* isolate_;
   };
 
-#define V8_PRIVATE_PROPERTY_DEFINE_GETTER(InterfaceName, KeyName)              \
-  static Symbol V8_PRIVATE_PROPERTY_GETTER_NAME(/* // NOLINT */                \
-                                                InterfaceName, KeyName)(       \
-      v8::Isolate * isolate) {                                                 \
-    V8PrivateProperty* private_prop =                                          \
-        V8PerIsolateData::From(isolate)->PrivateProperty();                    \
-    v8::Eternal<v8::Private>& property_handle =                                \
-        private_prop->V8_PRIVATE_PROPERTY_MEMBER_NAME(InterfaceName, KeyName); \
-    if (UNLIKELY(property_handle.IsEmpty())) {                                 \
-      property_handle.Set(                                                     \
-          isolate, CreateV8Private(isolate, V8_PRIVATE_PROPERTY_SYMBOL_STRING( \
-                                                InterfaceName, KeyName)));     \
-    }                                                                          \
-    return Symbol(isolate, property_handle.Get(isolate));                      \
+#define V8_PRIVATE_PROPERTY_DEFINE_GETTER(InterfaceName, KeyName)        \
+  static Symbol V8_PRIVATE_PROPERTY_GETTER_NAME(/* // NOLINT */          \
+                                                InterfaceName, KeyName)( \
+      v8::Isolate * isolate) {                                           \
+    /* This key is used for uniquely identifying v8::Private. */         \
+    static int private_property_key;                                     \
+    return GetSymbol(                                                    \
+        isolate, &private_property_key,                                  \
+        V8_PRIVATE_PROPERTY_SYMBOL_STRING(InterfaceName, KeyName));      \
   }
 
   V8_PRIVATE_PROPERTY_FOR_EACH(V8_PRIVATE_PROPERTY_DEFINE_GETTER)
@@ -196,8 +188,34 @@ class PLATFORM_EXPORT V8PrivateProperty {
     return GetSymbol(isolate, "unexpected cached accessor");
   }
 
+  // This is a hack for PopStateEvent to get the same private property of
+  // History, named State.
+  static Symbol GetHistoryStateSymbol(v8::Isolate* isolate) {
+    // This key is used for uniquely identifying v8::Private.
+    static int private_property_key;
+    return GetSymbol(isolate, &private_property_key, "History#State");
+  }
+
   static Symbol GetSymbol(v8::Isolate* isolate, const char* symbol) {
     return Symbol(isolate, CreateCachedV8Private(isolate, symbol));
+  }
+
+  // Returns a Symbol to access a private property. Symbol instances from same
+  // |key|s are guaranteed to access the same property. |desc| is a description
+  // of the property.
+  static Symbol GetSymbol(v8::Isolate* isolate, void* key, const char* desc) {
+    V8PrivateProperty* private_prop =
+        V8PerIsolateData::From(isolate)->PrivateProperty();
+    auto& symbol_map = private_prop->symbol_map_;
+    auto iter = symbol_map.find(key);
+    v8::Local<v8::Private> v8_private;
+    if (UNLIKELY(iter == symbol_map.end())) {
+      v8_private = CreateV8Private(isolate, desc);
+      symbol_map.insert(key, v8::Eternal<v8::Private>(isolate, v8_private));
+    } else {
+      v8_private = iter->value.Get(isolate);
+    }
+    return Symbol(isolate, v8_private);
   }
 
  private:
@@ -207,17 +225,13 @@ class PLATFORM_EXPORT V8PrivateProperty {
   static v8::Local<v8::Private> CreateCachedV8Private(v8::Isolate*,
                                                       const char* symbol);
 
-#define V8_PRIVATE_PROPERTY_DECLARE_MEMBER(InterfaceName, KeyName) \
-  v8::Eternal<v8::Private> V8_PRIVATE_PROPERTY_MEMBER_NAME(        \
-      InterfaceName, KeyName);  // NOLINT(readability/naming/underscores)
-  V8_PRIVATE_PROPERTY_FOR_EACH(V8_PRIVATE_PROPERTY_DECLARE_MEMBER)
-#undef V8_PRIVATE_PROPERTY_DECLARE_MEMBER
-
   // TODO(peria): Do not use this specialized hack for
   // Window#DocumentCachedAccessor. This is required to put v8::Private key in
   // a snapshot, and it cannot be a v8::Eternal<> due to V8 serializer's
   // requirement.
   ScopedPersistent<v8::Private> symbol_window_document_cached_accessor_;
+
+  WTF::HashMap<void*, v8::Eternal<v8::Private>> symbol_map_;
 
   DISALLOW_COPY_AND_ASSIGN(V8PrivateProperty);
 };

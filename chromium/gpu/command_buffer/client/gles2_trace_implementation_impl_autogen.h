@@ -1848,6 +1848,19 @@ void GLES2TraceImplementation::DispatchComputeIndirect(GLintptr offset) {
   gl_->DispatchComputeIndirect(offset);
 }
 
+void GLES2TraceImplementation::DrawArraysIndirect(GLenum mode,
+                                                  const void* offset) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::DrawArraysIndirect");
+  gl_->DrawArraysIndirect(mode, offset);
+}
+
+void GLES2TraceImplementation::DrawElementsIndirect(GLenum mode,
+                                                    GLenum type,
+                                                    const void* offset) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::DrawElementsIndirect");
+  gl_->DrawElementsIndirect(mode, type, offset);
+}
+
 void GLES2TraceImplementation::GetProgramInterfaceiv(GLuint program,
                                                      GLenum program_interface,
                                                      GLenum pname,
@@ -2571,6 +2584,13 @@ void GLES2TraceImplementation::ProgramPathFragmentInputGenCHROMIUM(
       "gpu", "GLES2Trace::ProgramPathFragmentInputGenCHROMIUM");
   gl_->ProgramPathFragmentInputGenCHROMIUM(program, location, genMode,
                                            components, coeffs);
+}
+
+void GLES2TraceImplementation::ContextVisibilityHintCHROMIUM(
+    GLboolean visibility) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
+                                "GLES2Trace::ContextVisibilityHintCHROMIUM");
+  gl_->ContextVisibilityHintCHROMIUM(visibility);
 }
 
 void GLES2TraceImplementation::CoverageModulationCHROMIUM(GLenum components) {

@@ -38,7 +38,7 @@ bool TopSitesDatabase::ConvertThumbnailData(
       }
       int64_t bookmark_id = 0;
       if (!url.empty() && base::StringToInt64(url, &bookmark_id)) {
-        base::PostTaskWithTraits(
+        base::PostTask(
             FROM_HERE, {content::BrowserThread::UI},
             base::Bind(callback, path, bookmark_id, std::move(thumbnail)));
       } else {

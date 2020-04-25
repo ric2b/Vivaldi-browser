@@ -11,6 +11,7 @@
 #include "mojo/public/cpp/base/file_path_mojom_traits.h"
 #include "mojo/public/cpp/base/time_mojom_traits.h"
 #include "mojo/public/cpp/bindings/array_traits_wtf_vector.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/string_traits_wtf.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/data_pipe_getter.mojom-blink.h"
@@ -66,29 +67,32 @@ StructTraits<blink::mojom::FetchAPIDataElementDataView,
 }
 
 // static
-network::mojom::blink::DataPipeGetterPtrInfo StructTraits<
+mojo::PendingRemote<network::mojom::blink::DataPipeGetter> StructTraits<
     blink::mojom::FetchAPIDataElementDataView,
     blink::FormDataElement>::data_pipe_getter(const blink::FormDataElement&
                                                   data) {
   if (data.type_ == blink::FormDataElement::kDataPipe) {
     if (!data.data_pipe_getter_)
-      return nullptr;
-    network::mojom::blink::DataPipeGetterPtr data_pipe_getter;
-    (*data.data_pipe_getter_->GetPtr())
-        ->Clone(mojo::MakeRequest(&data_pipe_getter));
-    return data_pipe_getter.PassInterface();
+      return mojo::NullRemote();
+    mojo::PendingRemote<network::mojom::blink::DataPipeGetter> data_pipe_getter;
+    data.data_pipe_getter_->GetDataPipeGetter()->Clone(
+        data_pipe_getter.InitWithNewPipeAndPassReceiver());
+    return data_pipe_getter;
   }
   if (data.type_ == blink::FormDataElement::kEncodedBlob) {
     if (data.optional_blob_data_handle_) {
-      blink::mojom::blink::BlobPtr blob_ptr(blink::mojom::blink::BlobPtrInfo(
-          data.optional_blob_data_handle_->CloneBlobRemote().PassPipe(),
-          blink::mojom::blink::Blob::Version_));
-      network::mojom::blink::DataPipeGetterPtr data_pipe_getter_ptr;
-      blob_ptr->AsDataPipeGetter(MakeRequest(&data_pipe_getter_ptr));
-      return data_pipe_getter_ptr.PassInterface();
+      mojo::Remote<blink::mojom::blink::Blob> blob_remote(
+          mojo::PendingRemote<blink::mojom::blink::Blob>(
+              data.optional_blob_data_handle_->CloneBlobRemote().PassPipe(),
+              blink::mojom::blink::Blob::Version_));
+      mojo::PendingRemote<network::mojom::blink::DataPipeGetter>
+          data_pipe_getter_remote;
+      blob_remote->AsDataPipeGetter(
+          data_pipe_getter_remote.InitWithNewPipeAndPassReceiver());
+      return data_pipe_getter_remote;
     }
   }
-  return nullptr;
+  return mojo::NullRemote();
 }
 
 // static
@@ -139,15 +143,13 @@ bool StructTraits<blink::mojom::FetchAPIDataElementDataView,
     }
     case network::mojom::DataElementType::kDataPipe: {
       out->type_ = blink::FormDataElement::kDataPipe;
-      auto data_pipe_ptr_info = data.TakeDataPipeGetter<
-          network::mojom::blink::DataPipeGetterPtrInfo>();
-      DCHECK(data_pipe_ptr_info.is_valid());
+      auto data_pipe_ptr_remote = data.TakeDataPipeGetter<
+          mojo::PendingRemote<network::mojom::blink::DataPipeGetter>>();
+      DCHECK(data_pipe_ptr_remote.is_valid());
 
-      network::mojom::blink::DataPipeGetterPtr data_pipe_getter;
-      data_pipe_getter.Bind(std::move(data_pipe_ptr_info));
       out->data_pipe_getter_ =
           base::MakeRefCounted<blink::WrappedDataPipeGetter>(
-              std::move(data_pipe_getter));
+              std::move(data_pipe_ptr_remote));
       break;
     }
     case network::mojom::DataElementType::kBlob:

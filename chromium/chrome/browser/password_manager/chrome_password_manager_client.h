@@ -20,6 +20,7 @@
 #include "components/password_manager/core/browser/http_auth_manager.h"
 #include "components/password_manager/core/browser/http_auth_manager_impl.h"
 #include "components/password_manager/core/browser/manage_passwords_referrer.h"
+#include "components/password_manager/core/browser/password_feature_manager_impl.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
@@ -110,8 +111,7 @@ class ChromePasswordManagerClient
       std::unique_ptr<password_manager::PasswordFormManagerForUI>
           saved_form_manager) override;
   void PasswordWasAutofilled(
-      const std::map<base::string16, const autofill::PasswordForm*>&
-          best_matches,
+      const std::vector<const autofill::PasswordForm*>& best_matches,
       const GURL& origin,
       const std::vector<const autofill::PasswordForm*>* federated_matches)
       override;
@@ -124,12 +124,15 @@ class ChromePasswordManagerClient
   bool IsIsolationForPasswordSitesEnabled() const override;
 
   PrefService* GetPrefs() const override;
-  password_manager::PasswordStore* GetPasswordStore() const override;
+  password_manager::PasswordStore* GetProfilePasswordStore() const override;
+  password_manager::PasswordStore* GetAccountPasswordStore() const override;
   password_manager::SyncState GetPasswordSyncState() const override;
   bool WasLastNavigationHTTPError() const override;
   net::CertStatus GetMainFrameCertStatus() const override;
   bool IsIncognito() const override;
   const password_manager::PasswordManager* GetPasswordManager() const override;
+  const password_manager::PasswordFeatureManager* GetPasswordFeatureManager()
+      const override;
   password_manager::HttpAuthManager* GetHttpAuthManager() override;
   autofill::AutofillDownloadManager* GetAutofillDownloadManager() override;
   const GURL& GetMainFrameURL() const override;
@@ -174,6 +177,8 @@ class ChromePasswordManagerClient
       std::unique_ptr<password_manager::PasswordFormManagerForUI> form_to_save,
       std::unique_ptr<password_manager::SavingFlowMetricsRecorder>
           saving_flow_recorder);
+
+  void OnImeTextCommittedEvent(const base::string16& text_str) override;
 #endif  // defined(OS_ANDROID)
 
 #if defined(ON_FOCUS_PING_ENABLED)
@@ -189,7 +194,9 @@ class ChromePasswordManagerClient
       const std::string& username,
       const std::vector<std::string>& matching_domains,
       bool password_field_exists) override;
+#endif
 
+#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
   void LogPasswordReuseDetectedEvent() override;
 #endif
 
@@ -242,16 +249,15 @@ class ChromePasswordManagerClient
       content::NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+// TODO(crbug.com/1006430): Paste event is not captured on Android.
+#if !defined(OS_ANDROID)
   void OnPaste() override;
 #endif
 
-// TODO(crbug.com/706392): Fix password reuse detection for Android.
-#if !defined(OS_ANDROID)
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
+
   // content::RenderWidgetHost::InputEventObserver overrides.
   void OnInputEvent(const blink::WebInputEvent&) override;
-#endif
 
   // Given |bounds| in the renderers coordinate system, return the same bounds
   // in the screens coordinate system.
@@ -288,9 +294,9 @@ class ChromePasswordManagerClient
   Profile* const profile_;
 
   password_manager::PasswordManager password_manager_;
+  const password_manager::PasswordFeatureManagerImpl password_feature_manager_;
   password_manager::HttpAuthManagerImpl httpauth_manager_;
 
-// TODO(crbug.com/706392): Fix password reuse detection for Android.
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
   password_manager::PasswordReuseDetectionManager
       password_reuse_detection_manager_;

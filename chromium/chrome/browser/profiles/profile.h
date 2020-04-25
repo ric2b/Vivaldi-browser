@@ -10,16 +10,16 @@
 #include <memory>
 #include <string>
 
-#include "base/logging.h"
+#include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/observer_list.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "chrome/browser/profiles/profile_key.h"
-#include "components/domain_reliability/clear_mode.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/content_browser_client.h"
-#include "services/network/public/mojom/network_service.mojom-forward.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "services/network/public/mojom/network_context.mojom-forward.h"
+#include "url/gurl.h"
 
 #if !defined(OS_ANDROID)
 class ChromeZoomLevelPrefs;
@@ -28,6 +28,7 @@ class ChromeZoomLevelPrefs;
 class ExtensionSpecialStoragePolicy;
 class PrefService;
 class PrefStore;
+class ProfileKey;
 class TestingProfile;
 
 namespace base {
@@ -64,6 +65,7 @@ class PrefRegistrySyncable;
 }
 
 class OffTheRecordProfileIOData;
+class ProfileObserver;
 
 // Instead of adding more members to Profile, consider creating a
 // KeyedService. See
@@ -141,6 +143,9 @@ class Profile : public content::BrowserContext {
 
   // Returns the profile corresponding to the given WebUI.
   static Profile* FromWebUI(content::WebUI* web_ui);
+
+  void AddObserver(ProfileObserver* observer);
+  void RemoveObserver(ProfileObserver* observer);
 
   // content::BrowserContext implementation ------------------------------------
 
@@ -375,7 +380,7 @@ class Profile : public content::BrowserContext {
 
   // Creates NetworkContext for the specified isolated app (or for the profile
   // itself, if |relative_path| is empty).
-  virtual network::mojom::NetworkContextPtr CreateNetworkContext(
+  virtual mojo::Remote<network::mojom::NetworkContext> CreateNetworkContext(
       bool in_memory,
       const base::FilePath& relative_partition_path);
 
@@ -413,7 +418,9 @@ class Profile : public content::BrowserContext {
   // ProfileDestroyer, but in tests, some are not.
   void MaybeSendDestroyedNotification();
 
-  // Creates an OffTheRecordProfile which points to this Profile.
+  // Creates an OffTheRecordProfile which points to this Profile. The caller is
+  // responsible for sending a NOTIFICATION_PROFILE_CREATED when the profile is
+  // correctly assigned to its owner.
   Profile* CreateOffTheRecordProfile();
 
 #if !defined(OS_ANDROID)
@@ -447,6 +454,8 @@ class Profile : public content::BrowserContext {
                                              bool incognito_pref_store);
 
  private:
+  void NotifyOffTheRecordProfileCreated(Profile* off_the_record);
+
   bool restored_last_session_;
 
   // Used to prevent the notification that this Profile is destroyed from
@@ -463,6 +472,8 @@ class Profile : public content::BrowserContext {
 
   // A non-browsing profile not associated to a user. Sample use: User-Manager.
   bool is_system_profile_;
+
+  base::ObserverList<ProfileObserver> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(Profile);
 };

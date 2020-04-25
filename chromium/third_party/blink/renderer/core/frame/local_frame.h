@@ -33,15 +33,15 @@
 
 #include "base/macros.h"
 #include "base/time/default_tick_clock.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
 #include "third_party/blink/public/common/frame/occlusion_state.h"
 #include "third_party/blink/public/mojom/ad_tagging/ad_frame.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/document_interface_broker.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/loader/pause_subresource_loading_handle.mojom-blink-forward.h"
-#include "third_party/blink/public/mojom/loader/previews_resource_loading_hints.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/reporting/reporting.mojom-blink.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -100,7 +100,6 @@ class Node;
 class NodeTraversal;
 class PerformanceMonitor;
 class PluginData;
-class ResourceRequest;
 class ScriptController;
 class SmoothScrollSequencer;
 class SpellChecker;
@@ -142,8 +141,6 @@ class CORE_EXPORT LocalFrame final : public Frame,
   bool DetachDocument() override;
   void CheckCompleted() override;
   void DidChangeVisibilityState() override;
-  void DidFreeze() override;
-  void DidResume() override;
   void HookBackForwardCacheEviction() override;
   void RemoveBackForwardCacheEviction() override;
   // This sets the is_inert_ flag and also recurses through this frame's
@@ -274,6 +271,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void RemoveSpellingMarkersUnderWords(const Vector<String>& words);
 
   bool ShouldThrottleRendering() const;
+  void DispatchBeforeUnloadEventForFreeze();
 
   // Returns frame scheduler for this frame.
   // FrameScheduler is destroyed during frame detach and nullptr will be
@@ -322,9 +320,6 @@ class CORE_EXPORT LocalFrame final : public Frame,
   IdlenessDetector* GetIdlenessDetector() { return idleness_detector_; }
   AdTracker* GetAdTracker() { return ad_tracker_; }
   void SetAdTrackerForTesting(AdTracker* ad_tracker);
-
-  // Returns true if Client Lo-Fi should be used for this request.
-  bool IsClientLoFiAllowed(const ResourceRequest&) const;
 
   enum class LazyLoadImageSetting {
     kDisabled,
@@ -378,10 +373,6 @@ class CORE_EXPORT LocalFrame final : public Frame,
   // be removed.
   bool IsProvisional() const;
 
-  // Returns whether the frame is trying to save network data by showing a
-  // preview.
-  bool IsUsingDataSavingPreview() const;
-
   // True if AdTracker heuristics have determined that this frame is an ad.
   // Calculated in the constructor but LocalFrames created on behalf of OOPIF
   // aren't set until just before commit (ReadyToCommitNavigation time) by the
@@ -407,14 +398,13 @@ class CORE_EXPORT LocalFrame final : public Frame,
     return client_hints_preferences_;
   }
 
-  void BindPreviewsResourceLoadingHintsReceiver(
-      mojo::PendingReceiver<
-          blink::mojom::blink::PreviewsResourceLoadingHintsReceiver> receiver);
-
   SmoothScrollSequencer& GetSmoothScrollSequencer();
 
   const mojo::Remote<mojom::blink::ReportingServiceProxy>& GetReportingService()
       const;
+
+  // Returns the frame host ptr.
+  mojom::blink::LocalFrameHost& GetLocalFrameHostRemote();
 
   // Overlays a color on top of this LocalFrameView if it is associated with
   // the main frame. Should not have multiple consumers.
@@ -461,6 +451,8 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void SetIsCapturingMediaCallback(IsCapturingMediaCallback callback);
   bool IsCapturingMedia() const;
 
+  void DidChangeVisibleToHitTesting() override;
+
  private:
   friend class FrameNavigationDisabler;
 
@@ -506,6 +498,8 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   void SetFrameColorOverlay(SkColor color);
 
+  void DidFreeze();
+  void DidResume();
   void PauseContext();
   void UnpauseContext();
 
@@ -575,9 +569,6 @@ class CORE_EXPORT LocalFrame final : public Frame,
   // Per-frame URLLoader factory.
   std::unique_ptr<WebURLLoaderFactory> url_loader_factory_;
 
-  std::unique_ptr<mojom::blink::PreviewsResourceLoadingHintsReceiver>
-      previews_resource_loading_hints_receiver_;
-
   ClientHintsPreferences client_hints_preferences_;
 
   // The value of |is_save_data_enabled_| is read once per frame from
@@ -596,6 +587,8 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   mojom::FrameLifecycleState lifecycle_state_;
   base::Optional<mojom::FrameLifecycleState> pending_lifecycle_state_;
+
+  mojo::AssociatedRemote<mojom::blink::LocalFrameHost> local_frame_host_remote_;
 };
 
 inline FrameLoader& LocalFrame::Loader() const {

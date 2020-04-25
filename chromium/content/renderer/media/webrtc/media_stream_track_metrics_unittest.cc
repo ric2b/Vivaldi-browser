@@ -9,9 +9,9 @@
 #include "base/test/task_environment.h"
 #include "base/threading/thread.h"
 #include "content/renderer/media/webrtc/media_stream_track_metrics.h"
-#include "content/renderer/media/webrtc/mock_peer_connection_dependency_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/web/modules/peerconnection/mock_peer_connection_dependency_factory.h"
 #include "third_party/webrtc/api/media_stream_interface.h"
 
 using webrtc::AudioSourceInterface;
@@ -85,12 +85,13 @@ class MockMediaStreamTrackMetrics : public MediaStreamTrackMetrics {
 class MediaStreamTrackMetricsTest : public testing::Test {
  public:
   MediaStreamTrackMetricsTest()
-      : task_environment_(base::test::TaskEnvironment::MainThreadType::UI),
+      : task_environment_(
+            base::test::SingleThreadTaskEnvironment::MainThreadType::UI),
         signaling_thread_("signaling_thread") {}
 
   void SetUp() override {
     metrics_.reset(new MockMediaStreamTrackMetrics());
-    stream_ = new rtc::RefCountedObject<MockMediaStream>("stream");
+    stream_ = new rtc::RefCountedObject<blink::MockMediaStream>("stream");
     signaling_thread_.Start();
   }
 
@@ -150,7 +151,7 @@ class MediaStreamTrackMetricsTest : public testing::Test {
   std::unique_ptr<MockMediaStreamTrackMetrics> metrics_;
   scoped_refptr<MediaStreamInterface> stream_;
 
-  base::test::TaskEnvironment task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
   base::Thread signaling_thread_;
 };
 

@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/paint/largest_contentful_paint_calculator.h"
-
+#include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/paint/image_element_timing.h"
 
 namespace blink {
@@ -123,10 +123,12 @@ void LargestContentfulPaintCalculator::UpdateLargestContentfulPaint(
     const KURL& url = cached_image->Url();
     auto* document = window_performance_->GetExecutionContext();
     bool expose_paint_time_to_api = true;
+    bool tainted = false;
     if (!url.ProtocolIsData() &&
-        (!document || !Performance::PassesTimingAllowCheck(
-                          cached_image->GetResponse(),
-                          *document->GetSecurityOrigin(), document))) {
+        (!document ||
+         !Performance::PassesTimingAllowCheck(cached_image->GetResponse(),
+                                              *document->GetSecurityOrigin(),
+                                              document, &tainted))) {
       expose_paint_time_to_api = false;
     }
     const String& image_url =
@@ -189,6 +191,9 @@ LargestContentfulPaintCalculator::TextCandidateTraceData() {
   value->SetInteger("candidateIndex", ++count_candidates_);
   value->SetBoolean("isMainFrame",
                     window_performance_->GetFrame()->IsMainFrame());
+  auto* document = window_performance_->DomWindow()->document();
+  value->SetString("navigationId",
+                   IdentifiersFactory::LoaderId(document->Loader()));
   return value;
 }
 
@@ -201,6 +206,10 @@ LargestContentfulPaintCalculator::ImageCandidateTraceData() {
   value->SetInteger("candidateIndex", ++count_candidates_);
   value->SetBoolean("isMainFrame",
                     window_performance_->GetFrame()->IsMainFrame());
+  auto* document = window_performance_->DomWindow()->document();
+  value->SetString("navigationId",
+                   IdentifiersFactory::LoaderId(document->Loader()));
+
   return value;
 }
 
@@ -210,6 +219,10 @@ LargestContentfulPaintCalculator::InvalidationTraceData() {
   value->SetInteger("candidateIndex", ++count_candidates_);
   value->SetBoolean("isMainFrame",
                     window_performance_->GetFrame()->IsMainFrame());
+  auto* document = window_performance_->DomWindow()->document();
+  value->SetString("navigationId",
+                   IdentifiersFactory::LoaderId(document->Loader()));
+
   return value;
 }
 

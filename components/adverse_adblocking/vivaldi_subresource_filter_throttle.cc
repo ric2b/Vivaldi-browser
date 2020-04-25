@@ -82,9 +82,8 @@ void VivaldiSubresourceFilterAdblockingThrottle::CheckCurrentUrl() {
         safe_browsing::SBThreatType::SB_THREAT_TYPE_SUBRESOURCE_FILTER;
     result->threat_metadata.subresource_filter_match =
         safe_browsing::SubresourceFilterMatch(
-            {{{safe_browsing::SubresourceFilterType::ABUSIVE,
-               safe_browsing::SubresourceFilterLevel::ENFORCE}},
-             base::KEEP_FIRST_OF_DUPES});
+            {{safe_browsing::SubresourceFilterType::ABUSIVE,
+               safe_browsing::SubresourceFilterLevel::ENFORCE}});
   } else {
     result->threat_type = safe_browsing::SBThreatType::SB_THREAT_TYPE_SAFE;
   }

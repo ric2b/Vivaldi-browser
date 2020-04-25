@@ -81,7 +81,7 @@ void TraceEventAgent::AddMetadataGeneratorFunction(
 void TraceEventAgent::StartTracing(const std::string& config,
                                    base::TimeTicks coordinator_time,
                                    StartTracingCallback callback) {
-  DCHECK(!IsBoundForTesting() || !TracingUsesPerfettoBackend());
+  DCHECK(!IsBoundForTesting());
   DCHECK(!recorder_);
 #if defined(__native_client__)
   // NaCl and system times are offset by a bit, so subtract some time from
@@ -99,11 +99,12 @@ void TraceEventAgent::StartTracing(const std::string& config,
   std::move(callback).Run(true);
 }
 
-void TraceEventAgent::StopAndFlush(mojom::RecorderPtr recorder) {
-  DCHECK(!IsBoundForTesting() || !TracingUsesPerfettoBackend());
+void TraceEventAgent::StopAndFlush(
+    mojo::PendingRemote<mojom::Recorder> recorder) {
+  DCHECK(!IsBoundForTesting());
   DCHECK(!recorder_);
 
-  recorder_ = std::move(recorder);
+  recorder_.Bind(std::move(recorder));
   base::trace_event::TraceLog::GetInstance()->SetDisabled(
       enabled_tracing_modes_);
   enabled_tracing_modes_ = 0;
@@ -113,13 +114,13 @@ void TraceEventAgent::StopAndFlush(mojom::RecorderPtr recorder) {
       recorder_->AddMetadata(std::move(*metadata));
   }
 
-  base::trace_event::TraceLog::GetInstance()->Flush(
-      base::Bind(&TraceEventAgent::OnTraceLogFlush, base::Unretained(this)));
+  base::trace_event::TraceLog::GetInstance()->Flush(base::BindRepeating(
+      &TraceEventAgent::OnTraceLogFlush, base::Unretained(this)));
 }
 
 void TraceEventAgent::RequestBufferStatus(
     RequestBufferStatusCallback callback) {
-  DCHECK(!IsBoundForTesting() || !TracingUsesPerfettoBackend());
+  DCHECK(!IsBoundForTesting());
   base::trace_event::TraceLogStatus status =
       base::trace_event::TraceLog::GetInstance()->GetStatus();
   std::move(callback).Run(status.event_capacity, status.event_count);

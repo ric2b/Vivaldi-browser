@@ -40,10 +40,10 @@ Network.BinaryResourceView = class extends UI.VBox {
           this._binaryResourceViewFactory.utf8.bind(this._binaryResourceViewFactory)),
     ];
     this._binaryViewTypeSetting = Common.settings.createSetting('binaryViewType', 'hex');
-    this._binaryViewTypeCombobox = new UI.ToolbarComboBox(this._binaryViewTypeChanged.bind(this));
+    this._binaryViewTypeCombobox = new UI.ToolbarComboBox(this._binaryViewTypeChanged.bind(this), ls`Binary view type`);
     for (const viewObject of this._binaryViewObjects) {
       this._binaryViewTypeCombobox.addOption(
-          this._binaryViewTypeCombobox.createOption(viewObject.label, viewObject.label, viewObject.type));
+          this._binaryViewTypeCombobox.createOption(viewObject.label, viewObject.type));
     }
     this._toolbar.appendToolbarItem(this._binaryViewTypeCombobox);
 
@@ -78,7 +78,7 @@ Network.BinaryResourceView = class extends UI.VBox {
 
   async _copySelectedViewToClipboard() {
     const viewObject = this._getCurrentViewObject();
-    InspectorFrontendHost.copyText(await viewObject.content());
+    Host.InspectorFrontendHost.copyText((await viewObject.content()).content);
     this._copiedText.setText(viewObject.copiedMessage);
     this._copiedText.element.classList.remove('fadeout');
     /**
@@ -98,21 +98,25 @@ Network.BinaryResourceView = class extends UI.VBox {
    * @override
    */
   wasShown() {
-    if (!this._empty)
+    if (!this._empty) {
       this._updateView();
+    }
   }
 
   _updateView() {
     const newViewObject = this._getCurrentViewObject();
-    if (!newViewObject)
+    if (!newViewObject) {
       return;
+    }
 
     const newView = newViewObject.getView();
-    if (newView === this._lastView)
+    if (newView === this._lastView) {
       return;
+    }
 
-    if (this._lastView)
+    if (this._lastView) {
       this._lastView.detach();
+    }
     this._lastView = newView;
 
     newView.show(this.element, this._toolbar.element);
@@ -121,8 +125,9 @@ Network.BinaryResourceView = class extends UI.VBox {
 
   _binaryViewTypeChanged() {
     const newViewType = this._binaryViewTypeCombobox.selectedOption().value;
-    if (this._binaryViewTypeSetting.get() === newViewType)
+    if (this._binaryViewTypeSetting.get() === newViewType) {
       return;
+    }
     this._binaryViewTypeSetting.set(newViewType);
     this._updateView();
   }
@@ -132,17 +137,24 @@ Network.BinaryResourceView = class extends UI.VBox {
    * @param {string} submenuItemText
    */
   addCopyToContextMenu(contextMenu, submenuItemText) {
-    if (this._empty)
+    if (this._empty) {
       return;
+    }
     const copyMenu = contextMenu.clipboardSection().appendSubMenuItem(submenuItemText);
     const footerSection = copyMenu.footerSection();
 
-    footerSection.appendItem(
-        ls`Copy as Base64`, async () => InspectorFrontendHost.copyText(await this._binaryResourceViewFactory.base64()));
-    footerSection.appendItem(
-        ls`Copy as Hex`, async () => InspectorFrontendHost.copyText(await this._binaryResourceViewFactory.hex()));
-    footerSection.appendItem(
-        ls`Copy as UTF-8`, async () => InspectorFrontendHost.copyText(await this._binaryResourceViewFactory.utf8()));
+    footerSection.appendItem(ls`Copy as Base64`, async () => {
+      const content = await this._binaryResourceViewFactory.base64();
+      Host.InspectorFrontendHost.copyText(content.content);
+    });
+    footerSection.appendItem(ls`Copy as Hex`, async () => {
+      const content = await this._binaryResourceViewFactory.hex();
+      Host.InspectorFrontendHost.copyText(content.content);
+    });
+    footerSection.appendItem(ls`Copy as UTF-8`, async () => {
+      const content = await this._binaryResourceViewFactory.utf8();
+      Host.InspectorFrontendHost.copyText(content.content);
+    });
   }
 };
 
@@ -152,13 +164,13 @@ Network.BinaryResourceView.BinaryViewObject = class {
    * @param {string} label
    * @param {string} copiedMessage
    * @param {function():!UI.Widget} createViewFn
-   * @param {function():Promise<string>} content
+   * @param {function():Promise<!Common.DeferredContent>} deferredContent
    */
-  constructor(type, label, copiedMessage, createViewFn, content) {
+  constructor(type, label, copiedMessage, createViewFn, deferredContent) {
     this.type = type;
     this.label = label;
     this.copiedMessage = copiedMessage;
-    this.content = content;
+    this.content = deferredContent;
     this._createViewFn = createViewFn;
 
     /** @type {?UI.Widget} */
@@ -169,8 +181,9 @@ Network.BinaryResourceView.BinaryViewObject = class {
    * @return {!UI.Widget}
    */
   getView() {
-    if (!this._view)
+    if (!this._view) {
       this._view = this._createViewFn();
+    }
     return this._view;
   }
 };

@@ -162,7 +162,7 @@ void WidgetInputHandlerManager::InitInputHandler() {
   uses_input_handler_ = true;
   base::OnceClosure init_closure = base::BindOnce(
       &WidgetInputHandlerManager::InitOnInputHandlingThread, this,
-      render_widget_->layer_tree_view()->GetInputHandler(),
+      render_widget_->layer_tree_host()->GetInputHandler(),
       render_widget_->compositor_deps()->IsScrollAnimatorEnabled(),
       sync_compositing);
   InputThreadTaskRunner()->PostTask(FROM_HERE, std::move(init_closure));
@@ -356,7 +356,7 @@ void WidgetInputHandlerManager::DispatchEvent(
   // move event.
   // We don't want users interacting with stuff they can't see, so we drop it.
   // We allow moves because we need to keep the current pointer location up
-  // to date. Tests can allow pre-commit input through the
+  // to date. Tests and other code can allow pre-commit input through the
   // "allow-pre-commit-input" command line flag.
   // TODO(schenney): Also allow scrolls? This would make some tests not flaky,
   // it seems, because they sometimes crash on seeing a scroll update/end
@@ -567,8 +567,7 @@ void WidgetInputHandlerManager::HandleInputEvent(
     const ui::WebScopedInputEvent& event,
     const ui::LatencyInfo& latency,
     mojom::WidgetInputHandler::DispatchEventCallback callback) {
-  if (!render_widget_ || render_widget_->is_frozen() ||
-      render_widget_->is_closing()) {
+  if (!render_widget_ || render_widget_->IsUndeadOrProvisional()) {
     if (callback) {
       std::move(callback).Run(InputEventAckSource::MAIN_THREAD, latency,
                               INPUT_EVENT_ACK_STATE_NOT_CONSUMED, base::nullopt,

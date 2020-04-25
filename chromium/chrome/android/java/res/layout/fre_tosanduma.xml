@@ -43,7 +43,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="@dimen/fre_image_height"
                     tools:ignore="ContentDescription"
-                    android:src="@drawable/fre_product_logo" />
+                    android:src="@drawable/ic_launcher_round" />
 
                 <LinearLayout
                     android:id="@+id/fre_content_wrapper"

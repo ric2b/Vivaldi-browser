@@ -9,6 +9,7 @@
 
 #include "base/barrier_closure.h"
 #include "base/run_loop.h"
+#include "base/test/bind_test_util.h"
 #include "base/time/time.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
@@ -26,7 +27,8 @@
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/transferrable_url_loader.mojom.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/io_buffer.h"
 #include "net/base/test_completion_callback.h"
 #include "net/http/http_response_info.h"
@@ -55,7 +57,8 @@ class MockSharedURLLoaderFactory final
     client->OnComplete(
         network::URLLoaderCompletionStatus(net::ERR_NOT_IMPLEMENTED));
   }
-  void Clone(network::mojom::URLLoaderFactoryRequest request) override {
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
+      override {
     NOTREACHED();
   }
 
@@ -99,7 +102,7 @@ class FakeNavigationClient : public mojom::NavigationClient {
   ~FakeNavigationClient() override = default;
 
  private:
-  // mojom::NavigationClientPtr implementation:
+  // mojom::NavigationClient implementation:
   void CommitNavigation(
       mojom::CommonNavigationParamsPtr common_params,
       mojom::CommitNavigationParamsPtr commit_params,
@@ -209,7 +212,7 @@ void ServiceWorkerRemoteProviderEndpoint::BindForWindow(
   // crash.
   blink::mojom::ServiceWorkerProviderInfoForClientPtr received_info;
   base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
-  mojo::MakeStrongBinding(
+  mojo::MakeSelfOwnedReceiver(
       std::make_unique<FakeNavigationClient>(base::BindOnce(
           [](base::OnceClosure quit_closure,
              blink::mojom::ServiceWorkerProviderInfoForClientPtr* out_info,
@@ -218,7 +221,7 @@ void ServiceWorkerRemoteProviderEndpoint::BindForWindow(
             std::move(quit_closure).Run();
           },
           loop.QuitClosure(), &received_info)),
-      mojo::MakeRequest(&navigation_client_));
+      navigation_client_.BindNewPipeAndPassReceiver());
   navigation_client_->CommitNavigation(
       CreateCommonNavigationParams(), CreateCommitNavigationParams(),
       network::ResourceResponseHead(), mojo::ScopedDataPipeConsumerHandle(),
@@ -295,6 +298,26 @@ ReceiveServiceWorkerStatus(base::Optional<blink::ServiceWorkerStatusCode>* out,
       std::move(quit_closure), out);
 }
 
+blink::ServiceWorkerStatusCode StartServiceWorker(
+    ServiceWorkerVersion* version) {
+  blink::ServiceWorkerStatusCode status;
+  base::RunLoop run_loop;
+  version->StartWorker(ServiceWorkerMetrics::EventType::UNKNOWN,
+                       base::BindLambdaForTesting(
+                           [&](blink::ServiceWorkerStatusCode result_status) {
+                             status = result_status;
+                             run_loop.Quit();
+                           }));
+  run_loop.Run();
+  return status;
+}
+
+void StopServiceWorker(ServiceWorkerVersion* version) {
+  base::RunLoop run_loop;
+  version->StopWorker(run_loop.QuitClosure());
+  run_loop.Run();
+}
+
 base::WeakPtr<ServiceWorkerProviderHost>
 CreateProviderHostForServiceWorkerContext(
     int process_id,
@@ -305,7 +328,7 @@ CreateProviderHostForServiceWorkerContext(
   auto provider_info =
       blink::mojom::ServiceWorkerProviderInfoForStartWorker::New();
   base::WeakPtr<ServiceWorkerProviderHost> host =
-      ServiceWorkerProviderHost::PreCreateForController(
+      ServiceWorkerProviderHost::CreateForServiceWorker(
           std::move(context), base::WrapRefCounted(hosted_version),
           &provider_info);
 

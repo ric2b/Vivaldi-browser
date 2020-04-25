@@ -18,13 +18,13 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/numerics/ranges.h"
 #include "base/task/post_task.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "components/network_session_configurator/common/network_features.h"
 #include "components/os_crypt/os_crypt.h"
 #include "mojo/core/embedder/embedder.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/logging_network_change_observer.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/network_change_notifier_posix.h"
@@ -92,25 +92,14 @@ constexpr auto kUpdateLoadStatesInterval =
 
 std::unique_ptr<net::NetworkChangeNotifier> CreateNetworkChangeNotifierIfNeeded(
     net::NetworkChangeNotifier::ConnectionType initial_connection_type,
-    net::NetworkChangeNotifier::ConnectionSubtype initial_connection_subtype) {
+    net::NetworkChangeNotifier::ConnectionSubtype initial_connection_subtype,
+    bool mock_network_change_notifier) {
   // There is a global singleton net::NetworkChangeNotifier if NetworkService
   // is running inside of the browser process.
-  if (!net::NetworkChangeNotifier::HasNetworkChangeNotifier()) {
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
-    // On Android and ChromeOS, network change events are synced from the
-    // browser process.
-    return std::make_unique<net::NetworkChangeNotifierPosix>(
-        initial_connection_type, initial_connection_subtype);
-#elif defined(OS_IOS)
-    // iOS doesn't embed //content.
-    // TODO(xunjieli): Figure out what to do for iOS.
-    NOTIMPLEMENTED();
-    return nullptr;
-#else
-    return net::NetworkChangeNotifier::Create();
-#endif
-  }
-  return nullptr;
+  if (mock_network_change_notifier)
+    return net::NetworkChangeNotifier::CreateMockIfNeeded();
+  return net::NetworkChangeNotifier::CreateIfNeeded(initial_connection_type,
+                                                    initial_connection_subtype);
 }
 
 void OnGetNetworkList(std::unique_ptr<net::NetworkInterfaceList> networks,
@@ -207,35 +196,28 @@ void HandleBadMessage(const std::string& error) {
 
 NetworkService::NetworkService(
     std::unique_ptr<service_manager::BinderRegistry> registry,
-    mojom::NetworkServiceRequest request,
-    service_manager::mojom::ServiceRequest service_request,
+    mojo::PendingReceiver<mojom::NetworkService> receiver,
     bool delay_initialization_until_set_client)
-    : net_log_(GetNetLog()), registry_(std::move(registry)), binding_(this) {
+    : net_log_(GetNetLog()), registry_(std::move(registry)) {
   DCHECK(!g_network_service);
   g_network_service = this;
-
-  // In testing environments, |service_request| may not be provided.
-  if (service_request.is_pending())
-    service_binding_.Bind(std::move(service_request));
 
   // |registry_| is nullptr when an in-process NetworkService is
   // created directly, like in most unit tests.
   if (registry_) {
     mojo::core::SetDefaultProcessErrorCallback(
         base::BindRepeating(&HandleBadMessage));
-
-    DCHECK(!request.is_pending());
-    registry_->AddInterface<mojom::NetworkService>(
-        base::BindRepeating(&NetworkService::Bind, base::Unretained(this)));
-  } else if (request.is_pending()) {
-    Bind(std::move(request));
   }
+
+  if (receiver.is_valid())
+    Bind(std::move(receiver));
 
   if (!delay_initialization_until_set_client)
     Initialize(mojom::NetworkServiceParams::New());
 }
 
-void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params) {
+void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
+                                bool mock_network_change_notifier) {
   if (initialized_)
     return;
 
@@ -276,7 +258,8 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params) {
           net::NetworkChangeNotifier::ConnectionType(
               params->initial_connection_type),
           net::NetworkChangeNotifier::ConnectionSubtype(
-              params->initial_connection_subtype)));
+              params->initial_connection_subtype),
+          mock_network_change_notifier));
 
   trace_net_log_observer_.WatchForTraceStart(net_log_);
 
@@ -327,21 +310,13 @@ void NetworkService::set_os_crypt_is_configured() {
 }
 
 std::unique_ptr<NetworkService> NetworkService::Create(
-    mojom::NetworkServiceRequest request,
-    service_manager::mojom::ServiceRequest service_request) {
-  return std::make_unique<NetworkService>(nullptr, std::move(request),
-                                          std::move(service_request));
+    mojo::PendingReceiver<mojom::NetworkService> receiver) {
+  return std::make_unique<NetworkService>(nullptr, std::move(receiver));
 }
 
 std::unique_ptr<NetworkService> NetworkService::CreateForTesting() {
-  return CreateForTesting(nullptr);
-}
-
-std::unique_ptr<NetworkService> NetworkService::CreateForTesting(
-    service_manager::mojom::ServiceRequest service_request) {
   return std::make_unique<NetworkService>(
-      std::make_unique<service_manager::BinderRegistry>(),
-      nullptr /* request */, std::move(service_request));
+      std::make_unique<service_manager::BinderRegistry>());
 }
 
 void NetworkService::RegisterNetworkContext(NetworkContext* network_context) {
@@ -395,9 +370,10 @@ void NetworkService::CreateNetLogEntriesForActiveObjects(
   return net::CreateNetLogEntriesForActiveObjects(contexts, observer);
 }
 
-void NetworkService::SetClient(mojom::NetworkServiceClientPtr client,
-                               mojom::NetworkServiceParamsPtr params) {
-  client_ = std::move(client);
+void NetworkService::SetClient(
+    mojo::PendingRemote<mojom::NetworkServiceClient> client,
+    mojom::NetworkServiceParamsPtr params) {
+  client_.Bind(std::move(client));
   Initialize(std::move(params));
 }
 
@@ -533,7 +509,7 @@ void NetworkService::SetMaxConnectionsPerProxy(int32_t max_connections) {
   int max_limit = 99;
   int min_limit = net::ClientSocketPoolManager::max_sockets_per_group(
       net::HttpNetworkSession::NORMAL_SOCKET_POOL);
-  new_limit = std::max(std::min(new_limit, max_limit), min_limit);
+  new_limit = base::ClampToRange(new_limit, min_limit, max_limit);
 
   // Assign the global limit.
   net::ClientSocketPoolManager::set_max_sockets_per_proxy_server(
@@ -556,18 +532,18 @@ net::NetLog* NetworkService::net_log() const {
 }
 
 void NetworkService::GetNetworkChangeManager(
-    mojom::NetworkChangeManagerRequest request) {
-  network_change_manager_->AddRequest(std::move(request));
+    mojo::PendingReceiver<mojom::NetworkChangeManager> receiver) {
+  network_change_manager_->AddReceiver(std::move(receiver));
 }
 
 void NetworkService::GetNetworkQualityEstimatorManager(
-    mojom::NetworkQualityEstimatorManagerRequest request) {
-  network_quality_estimator_manager_->AddRequest(std::move(request));
+    mojo::PendingReceiver<mojom::NetworkQualityEstimatorManager> receiver) {
+  network_quality_estimator_manager_->AddReceiver(std::move(receiver));
 }
 
 void NetworkService::GetDnsConfigChangeManager(
-    mojom::DnsConfigChangeManagerRequest request) {
-  dns_config_change_manager_->AddBinding(std::move(request));
+    mojo::PendingReceiver<mojom::DnsConfigChangeManager> receiver) {
+  dns_config_change_manager_->AddReceiver(std::move(receiver));
 }
 
 void NetworkService::GetTotalNetworkUsages(
@@ -633,14 +609,6 @@ void NetworkService::AddExtraMimeTypesForCorb(
   CrossOriginReadBlocking::AddExtraMimeTypesForCorb(mime_types);
 }
 
-void NetworkService::ExcludeSchemeFromRequestInitiatorSiteLockChecks(
-    const std::string& scheme,
-    mojom::NetworkService::
-        ExcludeSchemeFromRequestInitiatorSiteLockChecksCallback callback) {
-  network::ExcludeSchemeFromRequestInitiatorSiteLockChecks(scheme);
-  std::move(callback).Run();
-}
-
 void NetworkService::OnMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
   base::MemoryPressureListener::NotifyMemoryPressure(memory_pressure_level);
@@ -678,6 +646,14 @@ void NetworkService::DumpWithoutCrashing(base::Time dump_request_time) {
 }
 #endif
 
+void NetworkService::BindTestInterface(
+    mojo::PendingReceiver<mojom::NetworkServiceTest> receiver) {
+  if (registry_) {
+    auto pipe = receiver.PassPipe();
+    registry_->TryBindInterface(mojom::NetworkServiceTest::Name_, &pipe);
+  }
+}
+
 std::unique_ptr<net::HttpAuthHandlerFactory>
 NetworkService::CreateHttpAuthHandlerFactory(NetworkContext* network_context) {
   if (!http_auth_static_params_) {
@@ -705,13 +681,6 @@ NetworkService::CreateHttpAuthHandlerFactory(NetworkContext* network_context) {
 
 void NetworkService::OnBeforeURLRequest() {
   MaybeStartUpdateLoadInfoTimer();
-}
-
-void NetworkService::OnBindInterface(
-    const service_manager::BindSourceInfo& source_info,
-    const std::string& interface_name,
-    mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_->BindInterface(interface_name, std::move(interface_pipe));
 }
 
 void NetworkService::DestroyNetworkContexts() {
@@ -827,9 +796,10 @@ void NetworkService::AckUpdateLoadInfo() {
   MaybeStartUpdateLoadInfoTimer();
 }
 
-void NetworkService::Bind(mojom::NetworkServiceRequest request) {
-  DCHECK(!binding_.is_bound());
-  binding_.Bind(std::move(request));
+void NetworkService::Bind(
+    mojo::PendingReceiver<mojom::NetworkService> receiver) {
+  DCHECK(!receiver_.is_bound());
+  receiver_.Bind(std::move(receiver));
 }
 
 // static

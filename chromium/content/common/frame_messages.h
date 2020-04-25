@@ -59,8 +59,11 @@
 #include "third_party/blink/public/common/frame/user_activation_update_type.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/public/common/messaging/transferable_message.h"
+#include "third_party/blink/public/common/navigation/triggering_event_info.h"
+#include "third_party/blink/public/common/sudden_termination_disabler_type.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
@@ -69,12 +72,9 @@
 #include "third_party/blink/public/platform/web_intrinsic_sizing_info.h"
 #include "third_party/blink/public/platform/web_scroll_into_view_params.h"
 #include "third_party/blink/public/platform/web_scroll_types.h"
-#include "third_party/blink/public/platform/web_sudden_termination_disabler_type.h"
 #include "third_party/blink/public/web/web_frame_owner_properties.h"
-#include "third_party/blink/public/web/web_fullscreen_options.h"
 #include "third_party/blink/public/web/web_media_player_action.h"
 #include "third_party/blink/public/web/web_tree_scope_type.h"
-#include "third_party/blink/public/web/web_triggering_event_info.h"
 #include "ui/events/types/scroll_types.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -138,8 +138,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::FeaturePolicyFeature,
                           blink::mojom::FeaturePolicyFeature::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(content::CSPDisposition,
                           content::CSPDisposition::LAST)
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebTriggeringEventInfo,
-                          blink::WebTriggeringEventInfo::kMaxValue)
+IPC_ENUM_TRAITS_MAX_VALUE(blink::TriggeringEventInfo,
+                          blink::TriggeringEventInfo::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::UserActivationUpdateType,
                           blink::UserActivationUpdateType::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebMediaPlayerAction::Type,
@@ -178,10 +178,6 @@ IPC_STRUCT_TRAITS_BEGIN(blink::WebIntrinsicSizingInfo)
   IPC_STRUCT_TRAITS_MEMBER(aspect_ratio)
   IPC_STRUCT_TRAITS_MEMBER(has_width)
   IPC_STRUCT_TRAITS_MEMBER(has_height)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(blink::WebFullscreenOptions)
-  IPC_STRUCT_TRAITS_MEMBER(prefers_navigation_bar)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(blink::WebScrollIntoViewParams::Alignment)
@@ -508,20 +504,18 @@ IPC_STRUCT_BEGIN(FrameHostMsg_OpenURL_Params)
   IPC_STRUCT_MEMBER(WindowOpenDisposition, disposition)
   IPC_STRUCT_MEMBER(bool, should_replace_current_entry)
   IPC_STRUCT_MEMBER(bool, user_gesture)
-  IPC_STRUCT_MEMBER(blink::WebTriggeringEventInfo, triggering_event_info)
+  IPC_STRUCT_MEMBER(blink::TriggeringEventInfo, triggering_event_info)
   IPC_STRUCT_MEMBER(mojo::MessagePipeHandle, blob_url_token)
   IPC_STRUCT_MEMBER(std::string, href_translate)
   IPC_STRUCT_MEMBER(content::NavigationDownloadPolicy, download_policy)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(FrameHostMsg_DownloadUrl_Params)
-  IPC_STRUCT_MEMBER(int, render_view_id)
-  IPC_STRUCT_MEMBER(int, render_frame_id)
   IPC_STRUCT_MEMBER(GURL, url)
   IPC_STRUCT_MEMBER(content::Referrer, referrer)
   IPC_STRUCT_MEMBER(url::Origin, initiator_origin)
   IPC_STRUCT_MEMBER(base::string16, suggested_name)
-  IPC_STRUCT_MEMBER(bool, follow_cross_origin_redirects)
+  IPC_STRUCT_MEMBER(network::mojom::RedirectMode, cross_origin_redirects)
   IPC_STRUCT_MEMBER(mojo::MessagePipeHandle, blob_url_token)
 IPC_STRUCT_END()
 
@@ -708,10 +702,6 @@ IPC_MESSAGE_ROUTED0(FrameMsg_ChildFrameProcessGone)
 IPC_MESSAGE_ROUTED1(FrameMsg_ContextMenuClosed,
                     content::CustomContextMenuContext /* custom_context */)
 
-// Reloads all the Lo-Fi images in the RenderFrame. Ignores the cache and
-// reloads from the network.
-IPC_MESSAGE_ROUTED0(FrameMsg_ReloadLoFiImages)
-
 // Executes custom context menu action that was provided from Blink.
 IPC_MESSAGE_ROUTED2(FrameMsg_CustomContextMenuAction,
                     content::CustomContextMenuContext /* custom_context */,
@@ -767,10 +757,9 @@ IPC_MESSAGE_ROUTED3(FrameMsg_AddMessageToConsole,
                     std::string /* message */,
                     bool /* discard_duplicates */)
 
-// Tells the renderer to reload the frame, optionally bypassing the cache while
-// doing so.
-IPC_MESSAGE_ROUTED1(FrameMsg_Reload,
-                    bool /* bypass_cache */)
+// TODO(https://crbug.com/995428): Deprecated.
+// Tells the renderer to reload the frame.
+IPC_MESSAGE_ROUTED0(FrameMsg_Reload)
 
 // Change the accessibility mode in the renderer process.
 IPC_MESSAGE_ROUTED1(FrameMsg_SetAccessibilityMode, ui::AXMode)
@@ -1059,15 +1048,13 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_DidFinishLoad,
                     GURL /* validated_url */)
 
 // Initiates a download based on user actions like 'ALT+click'.
-IPC_MESSAGE_CONTROL(FrameHostMsg_DownloadUrl, FrameHostMsg_DownloadUrl_Params)
+IPC_MESSAGE_ROUTED1(FrameHostMsg_DownloadUrl, FrameHostMsg_DownloadUrl_Params)
 
 // Asks the browser to save a image (for <canvas> or <img>) from a data URL.
 // Note: |data_url| is the contents of a data:URL, and that it's represented as
 // a string only to work around size limitations for GURLs in IPC messages.
-IPC_MESSAGE_CONTROL3(FrameHostMsg_SaveImageFromDataURL,
-                     int /* render_view_id */,
-                     int /* render_frame_id */,
-                     std::string /* data_url */)
+IPC_MESSAGE_ROUTED1(FrameHostMsg_SaveImageFromDataURL,
+                    std::string /* data_url */)
 
 // Notifies that the initial empty document of a view has been accessed.
 // After this, it is no longer safe to show a pending navigation's URL without
@@ -1356,10 +1343,6 @@ IPC_SYNC_MESSAGE_ROUTED1_2(FrameHostMsg_RunBeforeUnloadConfirm,
                            bool /* out - success */,
                            base::string16 /* out - This is ignored.*/)
 
-// Notify browser the theme color has been changed.
-IPC_MESSAGE_ROUTED1(FrameHostMsg_DidChangeThemeColor,
-                    base::Optional<SkColor> /* theme_color */)
-
 // Register a new handler for URL requests with the given scheme.
 IPC_MESSAGE_ROUTED4(FrameHostMsg_RegisterProtocolHandler,
                     std::string /* scheme */,
@@ -1398,19 +1381,11 @@ IPC_MESSAGE_ROUTED0(FrameHostMsg_AbortNavigation)
 // The message is delivered using RenderWidget::QueueMessage.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_VisualStateResponse, uint64_t /* id */)
 
-// Puts the browser into "tab fullscreen" mode for the sending renderer.
-// See the comment in chrome/browser/ui/browser.h for more details.
-IPC_MESSAGE_ROUTED1(FrameHostMsg_EnterFullscreen, blink::WebFullscreenOptions)
-
-// Exits the browser from "tab fullscreen" mode for the sending renderer.
-// See the comment in chrome/browser/ui/browser.h for more details.
-IPC_MESSAGE_ROUTED0(FrameHostMsg_ExitFullscreen)
-
 // Sent when a new sudden termination disabler condition is either introduced or
 // removed.
 IPC_MESSAGE_ROUTED2(FrameHostMsg_SuddenTerminationDisablerChanged,
                     bool /* present */,
-                    blink::WebSuddenTerminationDisablerType /* disabler_type */)
+                    blink::SuddenTerminationDisablerType /* disabler_type */)
 
 // Requests that the resource timing info be added to the performance entries of
 // a remote parent frame.
@@ -1524,10 +1499,9 @@ IPC_MESSAGE_ROUTED0(FrameHostMsg_RenderFallbackContentInParentProcess)
 // Used to go to the session history entry at the given offset (ie, -1 will
 // return the "back" item). This message affects a view and not just a frame,
 // but is sent on the frame channel for attribution purposes.
-IPC_MESSAGE_ROUTED3(FrameHostMsg_GoToEntryAtOffset,
+IPC_MESSAGE_ROUTED2(FrameHostMsg_GoToEntryAtOffset,
                     int /* offset (from current) of history item to get */,
-                    bool /* has_user_gesture */,
-                    bool /* from_script */)
+                    bool /* has_user_gesture */)
 
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
 

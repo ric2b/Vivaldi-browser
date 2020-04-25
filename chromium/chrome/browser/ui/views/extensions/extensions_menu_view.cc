@@ -13,13 +13,16 @@
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/extensions/extensions_menu_item_view.h"
 #include "chrome/browser/ui/views/hover_button.h"
+#include "chrome/browser/ui/views/hover_button_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/vector_icons/vector_icons.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/animation/ink_drop_host_view.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
+#include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/separator.h"
@@ -31,8 +34,18 @@ namespace {
 ExtensionsMenuView* g_extensions_dialog = nullptr;
 
 constexpr int EXTENSIONS_SETTINGS_ID = 42;
-
 }  // namespace
+
+constexpr gfx::Size ExtensionsMenuView::kExtensionsMenuIconSize;
+
+ExtensionsMenuView::ButtonListener::ButtonListener(Browser* browser)
+    : browser_(browser) {}
+
+void ExtensionsMenuView::ButtonListener::ButtonPressed(views::Button* sender,
+                                                       const ui::Event& event) {
+  DCHECK_EQ(sender->GetID(), EXTENSIONS_SETTINGS_ID);
+  chrome::ShowExtensions(browser_, std::string());
+}
 
 ExtensionsMenuView::ExtensionsMenuView(
     views::View* anchor_view,
@@ -43,7 +56,8 @@ ExtensionsMenuView::ExtensionsMenuView(
       browser_(browser),
       extensions_container_(extensions_container),
       model_(ToolbarActionsModel::Get(browser_->profile())),
-      model_observer_(this) {
+      model_observer_(this),
+      button_listener_(browser_) {
   model_observer_.Add(model_);
   set_margins(gfx::Insets(0));
 
@@ -60,12 +74,6 @@ ExtensionsMenuView::~ExtensionsMenuView() {
   extensions_menu_items_.clear();
 }
 
-void ExtensionsMenuView::ButtonPressed(views::Button* sender,
-                                       const ui::Event& event) {
-  DCHECK_EQ(sender->GetID(), EXTENSIONS_SETTINGS_ID);
-  chrome::ShowExtensions(browser_, std::string());
-}
-
 base::string16 ExtensionsMenuView::GetWindowTitle() const {
   return l10n_util::GetStringUTF16(IDS_EXTENSIONS_MENU_TITLE);
 }
@@ -78,8 +86,11 @@ int ExtensionsMenuView::GetDialogButtons() const {
   return ui::DIALOG_BUTTON_NONE;
 }
 
-bool ExtensionsMenuView::ShouldSnapFrameWidth() const {
-  return true;
+gfx::Size ExtensionsMenuView::CalculatePreferredSize() const {
+  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
+                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
+                    margins().width();
+  return gfx::Size(width, GetHeightForWidth(width));
 }
 
 void ExtensionsMenuView::Repopulate() {
@@ -96,14 +107,29 @@ void ExtensionsMenuView::Repopulate() {
   AddChildView(std::move(scroll_view));
 
   AddChildView(std::make_unique<views::Separator>());
-  auto icon_view = CreateFixedSizeIconView();
-  icon_view->SetImage(
+
+  constexpr gfx::Insets kDefaultBorderInsets = gfx::Insets(12);
+  auto footer = std::make_unique<views::LabelButton>(
+      &button_listener_, l10n_util::GetStringUTF16(IDS_MANAGE_EXTENSION),
+      views::style::CONTEXT_BUTTON);
+  footer->SetButtonController(std::make_unique<HoverButtonController>(
+      footer.get(), &button_listener_,
+      std::make_unique<views::Button::DefaultButtonControllerDelegate>(
+          footer.get())));
+  footer->SetImage(
+      views::Button::STATE_NORMAL,
       gfx::CreateVectorIcon(vector_icons::kSettingsIcon, 16,
                             GetNativeTheme()->GetSystemColor(
                                 ui::NativeTheme::kColorId_DefaultIconColor)));
-  auto footer = std::make_unique<HoverButton>(
-      this, std::move(icon_view),
-      l10n_util::GetStringUTF16(IDS_MANAGE_EXTENSION), base::string16());
+
+  // Items within a menu should not show focus rings.
+  footer->SetInstallFocusRingOnFocus(false);
+  footer->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
+  footer->SetBorder(views::CreateEmptyBorder(kDefaultBorderInsets));
+  footer->SetInkDropMode(views::InkDropHostView::InkDropMode::ON);
+  footer->set_ink_drop_base_color(HoverButton::GetInkDropColor(footer.get()));
+  footer->SetImageLabelSpacing(ChromeLayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_BUTTON_HORIZONTAL_PADDING));
   footer->SetID(EXTENSIONS_SETTINGS_ID);
   manage_extensions_button_for_testing_ = footer.get();
   AddChildView(std::move(footer));
@@ -266,7 +292,7 @@ ExtensionsMenuView::CreateFixedSizeIconView() {
   // Note that this size is larger than the 16dp extension icons as it needs to
   // accommodate 24dp click-to-script badging and surrounding shadows.
   auto image_view = std::make_unique<views::ImageView>();
-  image_view->SetPreferredSize(gfx::Size(28, 28));
+  image_view->SetPreferredSize(kExtensionsMenuIconSize);
   return image_view;
 }
 

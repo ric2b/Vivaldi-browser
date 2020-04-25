@@ -29,6 +29,7 @@ import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.RenderCoordinates;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
+import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.base.ViewAndroidDelegate;
 
 /**
@@ -197,6 +198,11 @@ public class OverlayPanelContent {
             }
 
             @Override
+            public void visibleSSLStateChanged() {
+                mContentDelegate.onSSLStateUpdated();
+            }
+
+            @Override
             public void enterFullscreenModeForTab(boolean prefersNavigationBar) {
                 mIsFullscreen = true;
             }
@@ -209,6 +215,12 @@ public class OverlayPanelContent {
             @Override
             public boolean isFullscreenForTabOrPending() {
                 return mIsFullscreen;
+            }
+
+            @Override
+            public void openNewTab(String url, String extraHeaders, ResourceRequestBody postData,
+                    int disposition, boolean isRendererInitiated) {
+                mContentDelegate.onOpenNewTabRequested(url);
             }
 
             @Override
@@ -345,12 +357,18 @@ public class OverlayPanelContent {
                     }
 
                     @Override
+                    public void titleWasSet(String title) {
+                        mContentDelegate.onTitleUpdated(title);
+                    }
+
+                    @Override
                     public void didFinishNavigation(NavigationHandle navigation) {
                         if (navigation.hasCommitted() && navigation.isInMainFrame()) {
                             mIsProcessingPendingNavigation = false;
                             mContentDelegate.onMainFrameNavigation(navigation.getUrl(),
                                     !TextUtils.equals(navigation.getUrl(), mLoadedUrl),
-                                    isHttpFailureCode(navigation.httpStatusCode()));
+                                    isHttpFailureCode(navigation.httpStatusCode()),
+                                    navigation.isErrorPage());
                         }
                     }
                 };
@@ -488,11 +506,17 @@ public class OverlayPanelContent {
         mNativeOverlayPanelContentPtr = 0;
     }
 
-    protected WebContents getWebContents() {
+    /**
+     * @return The associated {@link WebContents}.
+     */
+    public WebContents getWebContents() {
         return mWebContents;
     }
 
-    ViewGroup getContainerView() {
+    /**
+     * @return The associated {@link ContentView}.
+     */
+    public ViewGroup getContainerView() {
         return mContainerView;
     }
 

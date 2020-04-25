@@ -24,6 +24,7 @@
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
 #include "chrome/common/web_application_info.h"
 #include "content/public/browser/browser_thread.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 
 namespace web_app {
 
@@ -86,10 +87,20 @@ void PendingAppInstallTask::Install(content::WebContents* web_contents,
     return;
   }
 
+  // Avoid counting an error if we are shutting down. This matches later
+  // stages of install where if the WebContents is destroyed we return early.
+  if (load_url_result == WebAppUrlLoader::Result::kFailedWebContentsDestroyed)
+    return;
+
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(result_callback),
-                                Result(InstallResultCode::kFailedUnknownReason,
-                                       base::nullopt)));
+      FROM_HERE,
+      base::BindOnce(
+          std::move(result_callback),
+          Result(
+              load_url_result == WebAppUrlLoader::Result::kRedirectedUrlLoaded
+                  ? InstallResultCode::kInstallURLRedirected
+                  : InstallResultCode::kInstallURLLoadFailed,
+              base::nullopt)));
 }
 
 void PendingAppInstallTask::UninstallPlaceholderApp(
@@ -164,12 +175,14 @@ void PendingAppInstallTask::InstallPlaceholder(ResultCallback callback) {
   web_app_info.title = base::UTF8ToUTF16(install_options_.url.spec());
   web_app_info.app_url = install_options_.url;
 
-  switch (install_options_.launch_container) {
-    case LaunchContainer::kDefault:
-    case LaunchContainer::kTab:
+  switch (install_options_.display_mode) {
+    case blink::mojom::DisplayMode::kUndefined:
+    case blink::mojom::DisplayMode::kBrowser:
       web_app_info.open_as_window = false;
       break;
-    case LaunchContainer::kWindow:
+    case blink::mojom::DisplayMode::kMinimalUi:
+    case blink::mojom::DisplayMode::kStandalone:
+    case blink::mojom::DisplayMode::kFullscreen:
       web_app_info.open_as_window = true;
       break;
   }

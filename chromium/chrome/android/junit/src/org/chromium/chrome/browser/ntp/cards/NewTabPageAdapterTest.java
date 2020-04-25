@@ -31,13 +31,13 @@ import static org.chromium.chrome.test.util.browser.suggestions.ContentSuggestio
 import static org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.registerCategory;
 
 import android.content.res.Resources;
-import android.support.annotation.Nullable;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.AdapterDataObserver;
 import android.view.View;
 
+import androidx.annotation.Nullable;
+
 import org.junit.After;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -77,7 +77,6 @@ import org.chromium.chrome.browser.suggestions.DestructionObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsEventReporter;
 import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.test.support.DisableHistogramsRule;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.browser.Features;
@@ -85,6 +84,7 @@ import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.CategoryInfoBuilder;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
 import org.chromium.components.signin.AccountManagerFacade;
+import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.modelutil.RecyclerViewAdapter;
 
@@ -120,6 +120,8 @@ public class NewTabPageAdapterTest {
 
     private FakeSuggestionsSource mSource;
     private NewTabPageAdapter mAdapter;
+    @Mock
+    private IdentityManager mMockIdentityManager;
     @Mock
     private SigninManager mMockSigninManager;
     @Mock
@@ -299,9 +301,6 @@ public class NewTabPageAdapterTest {
 
     @Before
     public void setUp() {
-        // These tests fail on touchless builds, see https://crbug.com/981870.
-        Assume.assumeFalse(FeatureUtilities.isNoTouchModeEnabled());
-
         MockitoAnnotations.initMocks(this);
 
         // Ensure that NetworkChangeNotifier is initialized.
@@ -316,7 +315,8 @@ public class NewTabPageAdapterTest {
         // Set up test account and initialize the sign in state. We will be signed in by default
         // in the tests.
         NewTabPageTestUtils.setUpTestAccount();
-        when(mMockSigninManager.isSignedInOnNative()).thenReturn(true);
+        when(mMockSigninManager.getIdentityManager()).thenReturn(mMockIdentityManager);
+        when(mMockIdentityManager.hasPrimaryAccount()).thenReturn(true);
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
 
         mSource = new FakeSuggestionsSource();
@@ -958,7 +958,7 @@ public class NewTabPageAdapterTest {
         useArticleCategory();
 
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
-        when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
+        when(mMockIdentityManager.hasPrimaryAccount()).thenReturn(false);
         resetUiDelegate();
         reloadNtp();
 
@@ -997,7 +997,7 @@ public class NewTabPageAdapterTest {
     @Feature({"Ntp"})
     public void testSigninPromoSuppressionActive() {
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
-        when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
+        when(mMockIdentityManager.hasPrimaryAccount()).thenReturn(false);
         useArticleCategory();
 
         // Suppress promo.
@@ -1013,7 +1013,7 @@ public class NewTabPageAdapterTest {
     @Feature({"Ntp"})
     public void testSigninPromoSuppressionExpired() {
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
-        when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
+        when(mMockIdentityManager.hasPrimaryAccount()).thenReturn(false);
         useArticleCategory();
 
         // Suppress promo.
@@ -1039,7 +1039,7 @@ public class NewTabPageAdapterTest {
                 .thenReturn(signInPromoText);
 
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
-        when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
+        when(mMockIdentityManager.hasPrimaryAccount()).thenReturn(false);
         ChromePreferenceManager.getInstance().writeBoolean(
                 ChromePreferenceManager.NTP_SIGNIN_PROMO_DISMISSED, false);
         useArticleCategory();
@@ -1064,7 +1064,7 @@ public class NewTabPageAdapterTest {
     public void testSigninPromoAccountsNotReady() {
         useArticleCategory();
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
-        when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
+        when(mMockIdentityManager.hasPrimaryAccount()).thenReturn(false);
         resetUiDelegate();
         reloadNtp();
         assertFalse(isSignInPromoVisible());
@@ -1087,7 +1087,7 @@ public class NewTabPageAdapterTest {
         Callback<String> itemDismissedCallback = mock(Callback.class);
 
         // On signed out, the promo should be shown.
-        when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
+        when(mMockIdentityManager.hasPrimaryAccount()).thenReturn(false);
         signinObserver.onSignedOut();
 
         // By default, there is no All Dismissed item.

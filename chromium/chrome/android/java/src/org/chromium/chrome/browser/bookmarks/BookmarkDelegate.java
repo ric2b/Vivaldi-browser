@@ -5,7 +5,7 @@
 package org.chromium.chrome.browser.bookmarks;
 
 import org.chromium.chrome.browser.favicon.LargeIconBridge;
-import org.chromium.chrome.browser.widget.dragreorder.DragStateDelegate;
+import org.chromium.chrome.browser.ui.widget.dragreorder.DragStateDelegate;
 import org.chromium.chrome.browser.widget.selection.SelectableListLayout;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
 import org.chromium.components.bookmarks.BookmarkId;
@@ -14,7 +14,8 @@ import org.chromium.components.bookmarks.BookmarkId;
  * Interface used by UI components in the main bookmarks UI to broadcast UI change notifications
  * and get bookmark data model.
  */
-interface BookmarkDelegate {
+// Vivaldi: public for access outside package
+public interface BookmarkDelegate {
 
     /**
      * Delegate used to open urls for main fragment on tablet.

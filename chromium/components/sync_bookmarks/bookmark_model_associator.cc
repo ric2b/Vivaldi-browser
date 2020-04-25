@@ -969,7 +969,7 @@ bool BookmarkModelAssociator::CryptoReadyIfNecessary() {
   syncer::ReadTransaction trans(FROM_HERE, user_share_);
   const syncer::ModelTypeSet encrypted_types = trans.GetEncryptedTypes();
   return !encrypted_types.Has(syncer::BOOKMARKS) ||
-      trans.GetCryptographer()->is_ready();
+         trans.GetCryptographer()->CanEncrypt();
 }
 
 syncer::SyncError BookmarkModelAssociator::CheckModelSyncState(
@@ -986,12 +986,6 @@ syncer::SyncError BookmarkModelAssociator::CheckModelSyncState(
     if (native_version == sync_version) {
       context->set_native_model_sync_state(IN_SYNC);
     } else {
-      // TODO(wychen): enum uma should be strongly typed. crbug.com/661401
-      UMA_HISTOGRAM_ENUMERATION(
-          "Sync.LocalModelOutOfSync",
-          ModelTypeToHistogramInt(syncer::BOOKMARKS),
-          static_cast<int>(syncer::ModelType::NUM_ENTRIES));
-
       // Clear version on bookmark model so that we only report error once.
       bookmark_model_->SetNodeSyncTransactionVersion(
           bookmark_model_->root_node(),

@@ -34,6 +34,7 @@ class SourceStream;
 
 namespace network {
 class SharedURLLoaderFactory;
+class SourceStreamToDataPipe;
 }  // namespace network
 
 namespace content {
@@ -44,7 +45,6 @@ class SignedExchangeHandlerFactory;
 class SignedExchangePrefetchMetricRecorder;
 class SignedExchangeReporter;
 class SignedExchangeValidityPinger;
-class SourceStreamToDataPipe;
 
 // SignedExchangeLoader handles an origin-signed HTTP exchange response. It is
 // created when a SignedExchangeRequestHandler recieves an origin-signed HTTP
@@ -72,7 +72,7 @@ class CONTENT_EXPORT SignedExchangeLoader final
       std::unique_ptr<SignedExchangeReporter> reporter,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       URLLoaderThrottlesGetter url_loader_throttles_getter,
-      base::RepeatingCallback<int(void)> frame_tree_node_id_getter,
+      int frame_tree_node_id,
       scoped_refptr<SignedExchangePrefetchMetricRecorder> metric_recorder,
       const std::string& accept_langs);
   ~SignedExchangeLoader() override;
@@ -161,7 +161,7 @@ class CONTENT_EXPORT SignedExchangeLoader final
   network::mojom::URLLoaderClientRequest pending_client_request_;
 
   std::unique_ptr<SignedExchangeHandler> signed_exchange_handler_;
-  std::unique_ptr<SourceStreamToDataPipe> body_data_pipe_adapter_;
+  std::unique_ptr<network::SourceStreamToDataPipe> body_data_pipe_adapter_;
 
   // Kept around until ProceedWithResponse is called.
   mojo::ScopedDataPipeConsumerHandle pending_body_consumer_;
@@ -172,7 +172,7 @@ class CONTENT_EXPORT SignedExchangeLoader final
   std::unique_ptr<SignedExchangeReporter> reporter_;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   URLLoaderThrottlesGetter url_loader_throttles_getter_;
-  base::RepeatingCallback<int(void)> frame_tree_node_id_getter_;
+  const int frame_tree_node_id_;
   scoped_refptr<SignedExchangePrefetchMetricRecorder> metric_recorder_;
 
   base::Optional<net::SSLInfo> ssl_info_;

@@ -63,19 +63,19 @@ Polymer({
     },
 
     /** @private */
-    enableBluetoothScanningContentSetting_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('enableBluetoothScanningContentSetting');
-      }
-    },
-
-    /** @private */
     enableNativeFileSystemWriteContentSetting_: {
       type: Boolean,
       value: function() {
         return loadTimeData.getBoolean(
             'enableNativeFileSystemWriteContentSetting');
+      }
+    },
+
+    /** @private */
+    enableInsecureContentContentSetting_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableInsecureContentContentSetting');
       }
     },
   },
@@ -185,7 +185,9 @@ Polymer({
           exceptionList.forEach((exception, i) => {
             // |exceptionList| should be in the same order as
             // |categoryList|.
-            permissionsMap[categoryList[i]].site = exception;
+            if (permissionsMap[categoryList[i]]) {
+              permissionsMap[categoryList[i]].site = exception;
+            }
           });
 
           // The displayName won't change, so just use the first

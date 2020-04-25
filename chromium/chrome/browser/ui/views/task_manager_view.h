@@ -65,10 +65,8 @@ class TaskManagerView : public TableViewDelegate,
   bool Accept() override;
   bool Close() override;
   int GetDialogButtons() const override;
-  base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   bool IsDialogButtonEnabled(ui::DialogButton button) const override;
   void WindowClosing() override;
-  bool ShouldUseCustomFrame() const override;
 
   // views::TableGrouper:
   void GetGroupRange(int model_index, views::GroupRange* range) override;

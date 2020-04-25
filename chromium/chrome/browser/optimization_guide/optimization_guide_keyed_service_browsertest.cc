@@ -4,15 +4,16 @@
 
 #include "base/base64.h"
 #include "base/run_loop.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/data_saver/data_saver_top_host_provider.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_hints_manager.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
+#include "chrome/browser/optimization_guide/optimization_guide_top_host_provider.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -84,7 +85,7 @@ class OptimizationGuideConsumerWebContentsObserver
             Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
     last_optimization_guide_decision_ = service->CanApplyOptimization(
         navigation_handle,
-        optimization_guide::OptimizationTarget::kPainfulPageLoad,
+        optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
         optimization_guide::proto::NOSCRIPT, /*optimization_metadata=*/nullptr);
   }
 
@@ -102,26 +103,40 @@ class OptimizationGuideConsumerWebContentsObserver
 
 }  // namespace
 
-using OptimizationGuideKeyedServiceDisabledBrowserTest = InProcessBrowserTest;
+class OptimizationGuideKeyedServiceDisabledBrowserTest
+    : public InProcessBrowserTest {
+ public:
+  OptimizationGuideKeyedServiceDisabledBrowserTest() {
+    feature_list_.InitWithFeatures(
+        {optimization_guide::features::kOptimizationHints},
+        {optimization_guide::features::kOptimizationGuideKeyedService});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
 
 IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceDisabledBrowserTest,
                        KeyedServiceNotEnabledButOptimizationHintsEnabled) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {optimization_guide::features::kOptimizationHints},
-      {optimization_guide::features::kOptimizationGuideKeyedService});
-
   EXPECT_EQ(nullptr, OptimizationGuideKeyedServiceFactory::GetForProfile(
                          browser()->profile()));
 }
 
-IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceDisabledBrowserTest,
-                       KeyedServiceEnabledButOptimizationHintsDisabled) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {optimization_guide::features::kOptimizationGuideKeyedService},
-      {optimization_guide::features::kOptimizationHints});
+class OptimizationGuideKeyedServiceHintsDisabledBrowserTest
+    : public InProcessBrowserTest {
+ public:
+  OptimizationGuideKeyedServiceHintsDisabledBrowserTest() {
+    feature_list_.InitWithFeatures(
+        {optimization_guide::features::kOptimizationGuideKeyedService},
+        {optimization_guide::features::kOptimizationHints});
+  }
 
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceHintsDisabledBrowserTest,
+                       KeyedServiceEnabledButOptimizationHintsDisabled) {
   EXPECT_EQ(nullptr, OptimizationGuideKeyedServiceFactory::GetForProfile(
                          browser()->profile()));
 }
@@ -129,17 +144,14 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceDisabledBrowserTest,
 class OptimizationGuideKeyedServiceBrowserTest
     : public OptimizationGuideKeyedServiceDisabledBrowserTest {
  public:
-  OptimizationGuideKeyedServiceBrowserTest() = default;
-  ~OptimizationGuideKeyedServiceBrowserTest() override = default;
-
-  void SetUp() override {
+  OptimizationGuideKeyedServiceBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
         {optimization_guide::features::kOptimizationHints,
          optimization_guide::features::kOptimizationGuideKeyedService},
         {});
-
-    OptimizationGuideKeyedServiceDisabledBrowserTest::SetUp();
   }
+
+  ~OptimizationGuideKeyedServiceBrowserTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* cmd) override {
     cmd->AppendSwitch(optimization_guide::switches::kPurgeHintCacheStore);
@@ -175,7 +187,8 @@ class OptimizationGuideKeyedServiceBrowserTest
 
   void RegisterWithKeyedService() {
     OptimizationGuideKeyedServiceFactory::GetForProfile(browser()->profile())
-        ->RegisterOptimizationTypes({optimization_guide::proto::NOSCRIPT});
+        ->RegisterOptimizationTypesAndTargets(
+            {optimization_guide::proto::NOSCRIPT}, /*optimization_targets=*/{});
   }
 
   void PushHintsComponentAndWaitForCompletion() {
@@ -237,6 +250,13 @@ class OptimizationGuideKeyedServiceBrowserTest
 };
 
 IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
+                       PredictionManagerNotCreatedIfFeatureDisabled) {
+  ASSERT_FALSE(
+      OptimizationGuideKeyedServiceFactory::GetForProfile(browser()->profile())
+          ->GetPredictionManager());
+}
+
+IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
                        TopHostProviderNotSetIfNotAllowed) {
   ASSERT_FALSE(
       OptimizationGuideKeyedServiceFactory::GetForProfile(browser()->profile())
@@ -278,6 +298,8 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
   // Make sure hint cache match UMA was logged.
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HasHint.BeforeCommit", true, 1);
+  histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", true, 1);
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HasHint.AtCommit", true, 1);
   histogram_tester.ExpectUniqueSample(
@@ -377,6 +399,8 @@ IN_PROC_BROWSER_TEST_F(
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HasHint.BeforeCommit", true, 1);
   histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", true, 1);
+  histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HasHint.AtCommit", true, 1);
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HostMatch.AtCommit", true, 1);
@@ -429,6 +453,8 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HasHint.BeforeCommit", false, 1);
   histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", false, 1);
+  histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HasHint.AtCommit", false, 1);
   histogram_tester.ExpectTotalCount(
       "OptimizationGuide.HintCache.HostMatch.AtCommit", 0);
@@ -473,6 +499,8 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HasHint.BeforeCommit", true, 1);
   histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", true, 1);
+  histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HasHint.AtCommit", true, 1);
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HostMatch.AtCommit", true, 1);
@@ -516,6 +544,8 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HasHint.BeforeCommit", true, 1);
   histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", true, 1);
+  histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HasHint.AtCommit", true, 1);
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HostMatch.AtCommit", true, 1);
@@ -533,6 +563,19 @@ class OptimizationGuideKeyedServiceDataSaverUserWithInfobarShownTest
   OptimizationGuideKeyedServiceDataSaverUserWithInfobarShownTest() = default;
   ~OptimizationGuideKeyedServiceDataSaverUserWithInfobarShownTest() override =
       default;
+
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        optimization_guide::features::kOptimizationHintsFetching);
+
+    OptimizationGuideKeyedServiceBrowserTest::SetUp();
+  }
+
+  void TearDown() override {
+    OptimizationGuideKeyedServiceBrowserTest::TearDown();
+
+    scoped_feature_list_.Reset();
+  }
 
   void SetUpOnMainThread() override {
     OptimizationGuideKeyedServiceBrowserTest::SetUpOnMainThread();
@@ -580,6 +623,8 @@ class OptimizationGuideKeyedServiceDataSaverUserWithInfobarShownTest
                          optimization_guide::prefs::
                              HintsFetcherTopHostBlacklistState::kInitialized));
   }
+
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(
@@ -592,9 +637,10 @@ IN_PROC_BROWSER_TEST_F(
       keyed_service->GetTopHostProvider();
   ASSERT_TRUE(top_host_provider);
 
-  std::vector<std::string> top_hosts = top_host_provider->GetTopHosts(1);
-  EXPECT_EQ(1ul, top_hosts.size());
+  std::vector<std::string> top_hosts = top_host_provider->GetTopHosts();
+  EXPECT_EQ(2ul, top_hosts.size());
   EXPECT_EQ("myfavoritesite.com", top_hosts[0]);
+  EXPECT_EQ("myotherfavoritesite.com", top_hosts[1]);
 }
 
 class OptimizationGuideKeyedServiceCommandLineOverridesTest
@@ -621,7 +667,66 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceCommandLineOverridesTest,
       keyed_service->GetTopHostProvider();
   ASSERT_TRUE(top_host_provider);
 
-  std::vector<std::string> top_hosts = top_host_provider->GetTopHosts(1);
-  EXPECT_EQ(1ul, top_hosts.size());
+  std::vector<std::string> top_hosts = top_host_provider->GetTopHosts();
+  EXPECT_EQ(2ul, top_hosts.size());
   EXPECT_EQ("whatever.com", top_hosts[0]);
+  EXPECT_EQ("somehost.com", top_hosts[1]);
+}
+
+class OptimizationGuideKeyedServiceTargetPredictionEnabledBrowserTest
+    : public OptimizationGuideKeyedServiceBrowserTest {
+ public:
+  OptimizationGuideKeyedServiceTargetPredictionEnabledBrowserTest() = default;
+  ~OptimizationGuideKeyedServiceTargetPredictionEnabledBrowserTest() override =
+      default;
+
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        optimization_guide::features::kOptimizationTargetPrediction);
+
+    OptimizationGuideKeyedServiceBrowserTest::SetUp();
+  }
+
+  void TearDown() override {
+    OptimizationGuideKeyedServiceBrowserTest::TearDown();
+
+    scoped_feature_list_.Reset();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(
+    OptimizationGuideKeyedServiceTargetPredictionEnabledBrowserTest,
+    PredictionManagerIsCreated) {
+  ASSERT_TRUE(
+      OptimizationGuideKeyedServiceFactory::GetForProfile(browser()->profile())
+          ->GetPredictionManager());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    OptimizationGuideKeyedServiceTargetPredictionEnabledBrowserTest,
+    PredictionManagerDecisionOverridesHintsManager) {
+  PushHintsComponentAndWaitForCompletion();
+  RegisterWithKeyedService();
+
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  base::HistogramTester histogram_tester;
+
+  ui_test_utils::NavigateToURL(browser(), url_with_hints());
+
+  EXPECT_EQ(RetryForHistogramUntilCountReached(
+                histogram_tester, "OptimizationGuide.LoadedHint.Result", 1),
+            1);
+  // There should be a hint that matches this URL.
+  histogram_tester.ExpectUniqueSample("OptimizationGuide.LoadedHint.Result",
+                                      true, 1);
+  EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kFalse,
+            last_consumer_decision());
+  histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.TargetDecision.PainfulPageLoad",
+      static_cast<int>(optimization_guide::OptimizationTargetDecision::
+                           kModelNotAvailableOnClient),
+      1);
 }

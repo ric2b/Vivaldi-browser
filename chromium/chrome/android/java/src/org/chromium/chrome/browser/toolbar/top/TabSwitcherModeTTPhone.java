@@ -9,12 +9,12 @@ import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
-import android.support.annotation.Nullable;
 import android.support.v7.content.res.AppCompatResources;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewStub;
-import android.view.animation.LinearInterpolator;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
@@ -24,17 +24,19 @@ import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.chrome.browser.toolbar.IncognitoStateProvider;
 import org.chromium.chrome.browser.toolbar.IncognitoToggleTabLayout;
 import org.chromium.chrome.browser.toolbar.MenuButton;
 import org.chromium.chrome.browser.toolbar.NewTabButton;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
+import org.chromium.chrome.browser.ui.widget.animation.CancelAwareAnimatorListener;
+import org.chromium.chrome.browser.ui.widget.animation.Interpolators;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.chrome.browser.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.widget.OptimizedFrameLayout;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /** The tab switcher mode top toolbar shown on phones. */
 public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
@@ -104,8 +106,7 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
             mNewTabViewButton.setOnClickListener(this);
         }
 
-        if ((usingHorizontalTabSwitcher() || FeatureUtilities.isGridTabSwitcherEnabled()
-                    || FeatureUtilities.isStartSurfaceEnabled())
+        if ((usingHorizontalTabSwitcher() || FeatureUtilities.isGridTabSwitcherEnabled())
                 && PrefServiceBridge.getInstance().isIncognitoModeEnabled()) {
             updateTabSwitchingElements(true);
         }
@@ -168,7 +169,7 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
         if (showZoomingAnimation && inTabSwitcherMode) {
             mVisiblityAnimator.setStartDelay(duration);
         }
-        mVisiblityAnimator.setInterpolator(new LinearInterpolator());
+        mVisiblityAnimator.setInterpolator(Interpolators.LINEAR_INTERPOLATOR);
 
         // TODO(https://crbug.com/914868): Use consistent logic here for setting clickable/enabled
         // on mIncognitoToggleTabLayout & mNewTabButton?
@@ -177,12 +178,6 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
         } else {
             if (mNewTabImageButton != null) mNewTabImageButton.setEnabled(true);
             if (mNewTabViewButton != null) mNewTabViewButton.setEnabled(true);
-            if (ReturnToChromeExperimentsUtil.shouldShowOmniboxOnTabSwitcher()) {
-                // Bump this down by the height of the toolbar so the omnibox can be visible.
-                MarginLayoutParams params = (MarginLayoutParams) getLayoutParams();
-                params.topMargin =
-                        getResources().getDimensionPixelSize(R.dimen.toolbar_height_no_shadow);
-            }
         }
 
         mVisiblityAnimator.addListener(new CancelAwareAnimatorListener() {
@@ -268,8 +263,9 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
         mIncognitoStateProvider = provider;
         mIncognitoStateProvider.addIncognitoStateObserverAndTrigger(this);
 
-        if (mNewTabImageButton != null)
+        if (mNewTabImageButton != null) {
             mNewTabImageButton.setIncognitoStateProvider(mIncognitoStateProvider);
+        }
     }
 
     @Override
@@ -292,6 +288,9 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
     }
 
     private void updatePrimaryColorAndTint() {
+        // NOTE(david@vivaldi.com) In Vivaldi we don't update the appearance.
+        if (ChromeApplication.isVivaldi()) return;
+
         int primaryColor = getToolbarColorForCurrentState();
         if (mPrimaryColor != primaryColor) {
             mPrimaryColor = primaryColor;
@@ -393,8 +392,7 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
                             .getFieldTrialParamByFeature(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
                                     "tab_grid_layout_android_new_tab")
                             .equals("NewTabVariation")
-                || FeatureUtilities.isBottomToolbarEnabled()
-                || !FeatureUtilities.isStartSurfaceEnabled() || mIncognitoToggleTabLayout == null) {
+                || FeatureUtilities.isBottomToolbarEnabled() || mIncognitoToggleTabLayout == null) {
             return;
         }
         boolean hasIncognitoTabs = hasIncognitoTabs();

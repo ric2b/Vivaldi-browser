@@ -127,7 +127,6 @@ extern const char kMonitoringDestinationID[];
 extern const char kNativeMessagingConnectHost[];
 extern const char kNativeMessagingConnectExtension[];
 extern const char kNativeMessagingConnectId[];
-extern const char kNewNetErrorPageUI[];
 extern const char kNoDefaultBrowserCheck[];
 extern const char kNoExperiments[];
 extern const char kNoFirstRun[];
@@ -269,9 +268,9 @@ extern const char kEnableNewAppMenuIcon[];
 extern const char kGuest[];
 #endif
 
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && \
-    !defined(GOOGLE_CHROME_BUILD)
-extern const char kEnableMachineLevelUserCloudPolicy[];
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+// Only has an effect in branded builds.
+extern const char kEnableChromeBrowserCloudManagement[];
 #endif
 
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)

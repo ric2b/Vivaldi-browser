@@ -125,6 +125,8 @@ VideoTrackRecorder::CodecEnumerator::CodecEnumerator(
       if (codec >= codec_id_and_profile.min_profile &&
           codec <= codec_id_and_profile.max_profile) {
         DVLOG(2) << "Accelerated codec found: " << media::GetProfileName(codec)
+                 << ", min_resolution: "
+                 << supported_profile.min_resolution.ToString()
                  << ", max_resolution: "
                  << supported_profile.max_resolution.ToString()
                  << ", max_framerate: "
@@ -243,7 +245,9 @@ void VideoTrackRecorder::Encoder::StartFrameEncode(
     return;
   }
 
-  if (video_frame->HasTextures()) {
+  if (video_frame->HasTextures() &&
+      video_frame->storage_type() !=
+          media::VideoFrame::STORAGE_GPU_MEMORY_BUFFER) {
     PostCrossThreadTask(
         *main_task_runner_.get(), FROM_HERE,
         CrossThreadBindOnce(&Encoder::RetrieveFrameOnMainThread,
@@ -253,28 +257,27 @@ void VideoTrackRecorder::Encoder::StartFrameEncode(
     return;
   }
 
-  scoped_refptr<media::VideoFrame> wrapped_frame;
-  // Drop alpha channel if the encoder does not support it yet.
-  if (!CanEncodeAlphaChannel() &&
-      video_frame->format() == media::PIXEL_FORMAT_I420A) {
-    wrapped_frame = media::WrapAsI420VideoFrame(video_frame);
-  } else {
-    wrapped_frame = media::VideoFrame::WrapVideoFrame(
-        *video_frame, video_frame->format(), video_frame->visible_rect(),
-        video_frame->natural_size());
+  scoped_refptr<media::VideoFrame> frame = video_frame;
+  if (frame->storage_type() != media::VideoFrame::STORAGE_GPU_MEMORY_BUFFER) {
+    // Drop alpha channel if the encoder does not support it yet.
+    if (!CanEncodeAlphaChannel() &&
+        video_frame->format() == media::PIXEL_FORMAT_I420A) {
+      frame = media::WrapAsI420VideoFrame(video_frame);
+    } else {
+      frame = media::VideoFrame::WrapVideoFrame(
+          video_frame, video_frame->format(), video_frame->visible_rect(),
+          video_frame->natural_size());
+    }
   }
-  wrapped_frame->AddDestructionObserver(media::BindToCurrentLoop(
+  frame->AddDestructionObserver(media::BindToCurrentLoop(
       WTF::Bind(&VideoTrackRecorder::Counter::DecreaseCount,
                 num_frames_in_encode_->GetWeakPtr())));
-  wrapped_frame->AddDestructionObserver(ConvertToBaseOnceCallback(
-      CrossThreadBindOnce([](scoped_refptr<VideoFrame> video_frame) {},
-                          std::move(video_frame))));
   num_frames_in_encode_->IncreaseCount();
 
-  PostCrossThreadTask(*encoding_task_runner_.get(), FROM_HERE,
-                      CrossThreadBindOnce(&Encoder::EncodeOnEncodingTaskRunner,
-                                          WrapRefCounted(this), wrapped_frame,
-                                          capture_timestamp));
+  PostCrossThreadTask(
+      *encoding_task_runner_.get(), FROM_HERE,
+      CrossThreadBindOnce(&Encoder::EncodeOnEncodingTaskRunner,
+                          WrapRefCounted(this), frame, capture_timestamp));
 }
 
 void VideoTrackRecorder::Encoder::RetrieveFrameOnMainThread(
@@ -393,6 +396,37 @@ bool VideoTrackRecorder::Encoder::CanEncodeAlphaChannel() {
 }
 
 // static
+scoped_refptr<media::VideoFrame>
+VideoTrackRecorder::Encoder::ConvertToI420ForSoftwareEncoder(
+    scoped_refptr<media::VideoFrame> frame) {
+  DCHECK_EQ(frame->storage_type(),
+            media::VideoFrame::STORAGE_GPU_MEMORY_BUFFER);
+  // NV12 is currently the only supported pixel format for GpuMemoryBuffer.
+  DCHECK_EQ(frame->format(), media::VideoPixelFormat::PIXEL_FORMAT_NV12);
+
+  auto* gmb = frame->GetGpuMemoryBuffer();
+  if (!gmb->Map())
+    return frame;
+  scoped_refptr<media::VideoFrame> i420_frame = media::VideoFrame::CreateFrame(
+      media::VideoPixelFormat::PIXEL_FORMAT_I420, frame->coded_size(),
+      frame->visible_rect(), frame->natural_size(), frame->timestamp());
+  auto ret = libyuv::NV12ToI420(
+      static_cast<const uint8_t*>(gmb->memory(0)), gmb->stride(0),
+      static_cast<const uint8_t*>(gmb->memory(1)), gmb->stride(1),
+      i420_frame->data(media::VideoFrame::kYPlane),
+      i420_frame->stride(media::VideoFrame::kYPlane),
+      i420_frame->data(media::VideoFrame::kUPlane),
+      i420_frame->stride(media::VideoFrame::kUPlane),
+      i420_frame->data(media::VideoFrame::kVPlane),
+      i420_frame->stride(media::VideoFrame::kVPlane),
+      frame->coded_size().width(), frame->coded_size().height());
+  gmb->Unmap();
+  if (ret)
+    return frame;
+  return i420_frame;
+}
+
+// static
 VideoTrackRecorder::CodecId VideoTrackRecorder::GetPreferredCodecId() {
   return GetCodecEnumerator()->GetPreferredCodecId();
 }
@@ -413,16 +447,20 @@ bool VideoTrackRecorder::CanUseAcceleratedEncoder(CodecId codec,
   if (profile.profile == media::VIDEO_CODEC_PROFILE_UNKNOWN)
     return false;
 
+  const gfx::Size& min_resolution = profile.min_resolution;
+  const size_t min_width = static_cast<size_t>(
+      std::max(kVEAEncoderMinResolutionWidth, min_resolution.width()));
+  const size_t min_height = static_cast<size_t>(
+      std::max(kVEAEncoderMinResolutionHeight, min_resolution.height()));
+
   const gfx::Size& max_resolution = profile.max_resolution;
   DCHECK_GE(max_resolution.width(), 0);
   const size_t max_width = static_cast<size_t>(max_resolution.width());
   DCHECK_GE(max_resolution.height(), 0);
   const size_t max_height = static_cast<size_t>(max_resolution.height());
 
-  const bool width_within_range =
-      max_width >= width && width >= kVEAEncoderMinResolutionWidth;
-  const bool height_within_range =
-      max_height >= height && height >= kVEAEncoderMinResolutionHeight;
+  const bool width_within_range = max_width >= width && width >= min_width;
+  const bool height_within_range = max_height >= height && height >= min_height;
   const bool valid_framerate = framerate * profile.max_framerate_denominator <=
                                profile.max_framerate_numerator;
   return width_within_range && height_within_range && valid_framerate;
@@ -505,11 +543,14 @@ void VideoTrackRecorder::InitializeEncoder(
     UMA_HISTOGRAM_BOOLEAN("Media.MediaRecorder.VEAUsed", true);
     const auto vea_profile =
         GetCodecEnumerator()->GetFirstSupportedVideoCodecProfile(codec);
+    bool use_import_mode =
+        frame->storage_type() == media::VideoFrame::STORAGE_GPU_MEMORY_BUFFER;
     encoder_ = VEAEncoder::Create(
         on_encoded_video_callback,
         media::BindToCurrentLoop(WTF::BindRepeating(
             &VideoTrackRecorder::OnError, WrapWeakPersistent(this))),
-        bits_per_second, vea_profile, input_size, main_task_runner_);
+        bits_per_second, vea_profile, input_size, use_import_mode,
+        main_task_runner_);
   } else {
     UMA_HISTOGRAM_BOOLEAN("Media.MediaRecorder.VEAUsed", false);
     switch (codec) {

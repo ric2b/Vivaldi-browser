@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="no">
+<translation id="1029351048239796117">Vivaldi trenger tillatelse for å få tilgang til mikrofonen din for dette nettstedet.</translation>
+<translation id="1063227610401477317">Lagre endringer</translation>
+<translation id="1067048845568873861">Opprettet</translation>
+<translation id="1151669774236491028">Vivaldi.net har noen problemer: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="1193152013480891461">Opprett en Vivaldi-konto</translation>
+<translation id="119944043368869598">Slett alt</translation>
+<translation id="1228311134236651326">Ingen notater funnet</translation>
+<translation id="1243314992276662751">Opplasting</translation>
+<translation id="1249276067323441352">Synkroniseringsdata</translation>
+<translation id="1302932907222175914">Søk i notater</translation>
+<translation id="1644574205037202324">Historikk</translation>
+<translation id="1689333818294560261">Alias</translation>
+<translation id="1721552494230946796">Ny hurtigvalgmappe</translation>
+<translation id="1799160781006135561">Krypteringspassord ikke spesifisert</translation>
+<translation id="1887193815546011584">Nytt hurtigvalg</translation>
+<translation id="1984391066297619717">Automatisk</translation>
+<translation id="2030706494969937066">Kunne ikke hente innloggingsinformasjonen. Vennligst logg inn igjen.</translation>
+<translation id="2034405583989639424">Rediger hurtigvalg</translation>
+<translation id="2071726368047511075">Ta skjermbilde</translation>
+<translation id="2199644148227291099">Er du sikker på at du vil bruke innloggingspassordet ditt for kryptering? Dette reduserer sikkerheten til de synkroniserte dataene dine online.</translation>
+<translation id="2243210264130642074">Notat lagret</translation>
+<translation id="2336309953058658733">Tøm søppel</translation>
+<translation id="2359808026110333948">Fortsett</translation>
+<translation id="2526968784648867272">Tar skjermbilde...</translation>
+<translation id="2709516037105925701">Autoutfylling</translation>
+<translation id="271033894570825754">Nytt</translation>
+<translation id="2745324713975967671">Krypteringspassord</translation>
+<translation id="2818042133587341562">Vivaldi trenger tillatelse for å få tilgang til kameraet ditt for dette nettstedet.</translation>
+<translation id="2842985007712546952">Overordnet mappe</translation>
+<translation id="2850144663494818309">Starter synkronisering...</translation>
+<translation id="2873951654529031587">Søppel</translation>
+<translation id="2915527103487649658">Synkroniser alle data</translation>
+<translation id="2953995378235516294">Data i synkroniseringskontoen din er kryptert. Vennligst oppgi krypteringspassordet ditt for å dekryptere.</translation>
+<translation id="2996809686854298943">URL kreves</translation>
+<translation id="3177673846235066154">Tjeneren godkjente ikke innloggingsdetaljene dine.</translation>
+<translation id="3183006304368105350">Dupliser fane</translation>
+<translation id="3271422135763022755">Skriv her...</translation>
+<translation id="3335772982573114336">Nytt notat</translation>
+<translation id="33451081266695216">Forbindelsen ble strupt av tjeneren.</translation>
+<translation id="3377025655491224618">Privat fane</translation>
+<translation id="3513566764071045027">Logg ut</translation>
+<translation id="3596285013654573099">Logg på Synkronisering</translation>
+<translation id="3611176835527015865">Påvirker bare Vivaldis interne sider, ikke nettsteder</translation>
+<translation id="3723593528923555236">Fortsett uten et separat passord</translation>
+<translation id="3838463869765243557">Enhetsnavn (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">Beskrivelse</translation>
+<translation id="3897711243931585177">GENERELT</translation>
+<translation id="4014682279600355881">Vi anbefaler at du oppretter et sterkt separat krypteringspassord. Du kan imidlertid la det være tomt - i så fall vil vi gjenbruke det lagrede kontopassordet ditt.</translation>
+<translation id="4073968054795398875">Synkroniseringsserveren opplever problemer. Prøver på nytt snart...</translation>
+<translation id="4082980568238151037">Sett opp krypteringspassord.</translation>
+<translation id="4145489350420416595">Uventet feil.</translation>
+<translation id="4268574628540273656">Adresse (URL):</translation>
+<translation id="4304224509867189079">Logg inn</translation>
+<translation id="4435780204941264251">Slett synkroniseringsdata</translation>
+<translation id="4532845899244822526">Velg mappe</translation>
+<translation id="4579489600439872414">Synkronisering er deaktivert i Android-innstillinger.</translation>
+<translation id="4589558845651536280">Pågår...</translation>
+<translation id="4752136117982598343">Notat lagret i <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">Nedlastinger</translation>
+<translation id="4833044618885331665">Vivaldi må oppgraderes for å bruke synkronisering.</translation>
+<translation id="4847896847259487518">Legg til bokmerke</translation>
+<translation id="4890701585167892790">Det er ingen notater her</translation>
+<translation id="4892521078757281695">Sveip for å lukke fanen</translation>
+<translation id="4936710149174207991">Ikke synkronisert</translation>
+<translation id="4954427294703861104">Ny Vivaldi-bruker? Opprett en konto.</translation>
+<translation id="504986598654589766">Nettsurfing i en privat fane betyr at søk, besøkte sider, informasjonskapsler og midlertidige filer ikke blir lagret av Vivaldi. Den krypterer ikke eller på annen måte endrer tilkoblingen din.</translation>
+<translation id="5161254044473106830">Tittel kreves</translation>
+<translation id="5186185447130319458">Privat</translation>
+<translation id="5271549068863921519">Lagre passord</translation>
+<translation id="5286002386457946212">Klientfeil.</translation>
+<translation id="5290452628447338707">Det er ingen notater her</translation>
+<translation id="5351912500249789547">Vivaldi.net godtok ikke dine innloggingsdetaljer: Error code <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">Vis bilde</translation>
+<translation id="5421638721143596928">Kan ikke dekryptere innloggingsdetaljene dine. Vennligst logg inn igjen.</translation>
+<translation id="5443210757369395869">Ta skjermbilde av vist innhold</translation>
+<translation id="5448025735280530073">Vivaldi trenger tilgang til din plassering for å dele posisjonen din med dette nettstedet.</translation>
+<translation id="5510723066938954312">Bokmerker og hurtigvalg</translation>
+<translation id="5525981542754785361">Notat lagret i <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">Kopier til notat</translation>
+<translation id="5754087700864822036">NETTSIDER</translation>
+<translation id="5765833063161370062">Flytt notater</translation>
+<translation id="5790085346892983794">Suksess</translation>
+<translation id="5803562371819294631">Dette fjerner alle synkroniseringsdataene som er lagret på serveren, tilbakestill krypteringspassordet ditt og logger deg ut. Er du sikker?</translation>
+<translation id="5823830882692559950">Vivaldi.net godtok ikke dine innloggingsdetaljer: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5841317974325635710">Nytt notat opprettet</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> notat}
+          other {<ph name="NOTES_COUNT_MANY" /> notater}}</translation>
+<translation id="6012194412768958291">Kan ikke koble til vivaldi.net.</translation>
+<translation id="6027204815015935175">Passord kreves for dekryptering.</translation>
+<translation id="6059232451013891645">Mappe:</translation>
+<translation id="6077943432358741146">Hurtigvalg</translation>
+<translation id="6091125352818749975">Sletting av eksterne synkroniserte data.</translation>
+<translation id="6135798666968342262">Vis scrollbar</translation>
+<translation id="6179463181009746489">Slett notater</translation>
+<translation id="6231148928368101651">Paneler</translation>
+<translation id="6406506848690869874">Synkronisering</translation>
+<translation id="6657585470893396449">Passord</translation>
+<translation id="6682232524697939870">Vivaldi trenger tillatelse for å få tilgang til kameraet og mikrofonen for dette nettstedet.</translation>
+<translation id="6698381487523150993">Opprettet dato:</translation>
+<translation id="6786747875388722282">Utvidelser</translation>
+<translation id="6887143077297974801">Synkronisering kunne ikke starte.</translation>
+<translation id="6945221475159498467">Velg</translation>
+<translation id="6960734555676205519">Sist synkronisert</translation>
+<translation id="7029809446516969842">Passord</translation>
+<translation id="7075547914712055886">Omstart av synkronisering</translation>
+<translation id="7222342267839079597">Vennligst velg et sterkt krypteringspassord for å beskytte dataene dine.</translation>
+<translation id="7228660378238874411">Bruk alltid skrivebordsversjon</translation>
+<translation id="7390295729483215958">Synkronisering pågår...</translation>
+<translation id="7492794630657957996">Bekreft datasynkronisering for å fullføre oppsettet</translation>
+<translation id="7514365320538308">Nedlasting</translation>
+<translation id="7547490097772831952">Ta skjermbilde av hele siden</translation>
+<translation id="7725641807765767506">Hurtigvalg tom</translation>
+<translation id="7765158879357617694">Flytt</translation>
+<translation id="7822864833609233785">AVANSERT</translation>
+<translation id="798930073512159071">
+
+Skriv ditt første notat
+
+For å begynne, trykker du på ikonet for nytt notat eller velger tekst på en hvilken som helst nettside og oppretter et notat fra hurtigmenyen.</translation>
+<translation id="8004991133350335392">Minimum passordlengde på 12 tegn kreves.</translation>
+<translation id="8028021641083150097">For å gjenvinne tilgang til kontoen din, må alle synkroniserte eksterne data tilbakestilles. Du kan da starte ny synkronisering ved hjelp av dine nåværende nettleserdata.</translation>
+<translation id="8035133914807600019">Ny mappe…</translation>
+<translation id="8066170816074394954">Tjenerfeil.</translation>
+<translation id="8123787473700925741">Vivaldi.net har problemer: Error code <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">Start synkronisering</translation>
+<translation id="8206267832882844324">Rediger notat</translation>
+<translation id="8225478925744929238">Fjern fra bokmerker</translation>
+<translation id="8233521945095997439">Ingen hurtigvalg</translation>
+<translation id="8257908958623224237">Konflikt med en annen klients data.</translation>
+<translation id="8261506727792406068">Slett</translation>
+<translation id="8305137170060620165">Inntastet historie og eksterne økter</translation>
+<translation id="8414685983518053656">Notater</translation>
+<translation id="8422778094137438683">Du må bruke en vivaldi.net brukerkonto for å logge inn.</translation>
+<translation id="8428213095426709021">Innstillinger</translation>
+<translation id="8462396943848220200">Prøver på nytt om <ph name="TIME" /></translation>
+<translation id="8480556999740355963">Logget inn som <ph name="USERNAME" /> på <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">Logger inn på Vivaldi.net som <ph name="USERNAME" />. Vennligst vent.</translation>
+<translation id="8503813439785031346">Brukernavn</translation>
+<translation id="8661216209723599816">Tilbakestill fjerndata</translation>
+<translation id="8721244337025311110">Nytt bokmerke</translation>
+<translation id="8724114686743788114">Kan ikke vise bilde</translation>
+<translation id="8730621377337864115">Ferdig</translation>
+<translation id="8738958257180686306">Opprettet i <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Vivaldi trenger lagringsadgang for å laste ned filer.</translation>
+<translation id="8808060551076378370">Lagre notat feilet.</translation>
+<translation id="8817201557520703060">Skjermbilde tatt</translation>
+<translation id="8820817407110198400">Bokmerker</translation>
+<translation id="8884751487662988673">For å se synkroniserte faner, vennligst logg på Synkronisering i Innstillinger.</translation>
+<translation id="895749247724466293">Søk i hurtigvalg</translation>
+<translation id="8959245489304000426">Jeg har mistet passordet mitt</translation>
+<translation id="8979401359137062629">Notat:</translation>
+<translation id="9028089729841356743">Nettverksfeil.</translation>
+<translation id="9065203028668620118">Rediger</translation>
+<translation id="9148058034647219655">Avslutt</translation>
+<translation id="9173575361559252669">Ta skjermbilde feilet</translation>
+</translationbundle>

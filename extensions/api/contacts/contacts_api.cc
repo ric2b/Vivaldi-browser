@@ -21,8 +21,8 @@
 using contact::ContactPropertyNameEnum;
 using contact::ContactService;
 using contact::ContactServiceFactory;
-using vivaldi::MilliSecondsFromTime;
 using vivaldi::GetTime;
+using vivaldi::MilliSecondsFromTime;
 
 namespace extensions {
 
@@ -706,6 +706,45 @@ void ContactsAddEmailAddressFunction::AddEmailAddressComplete(
   }
 }
 
+ExtensionFunction::ResponseAction ContactsRemoveEmailAddressFunction::Run() {
+  std::unique_ptr<vivaldi::contacts::RemoveEmailAddress::Params> params(
+      vivaldi::contacts::RemoveEmailAddress::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  contact::ContactID contact_id;
+  contact::EmailAddressID email_address_id;
+
+  if (!GetIdAsInt64(params->remove_email.contact_id, &contact_id)) {
+    return RespondNow(Error("Error. Invalid contact id"));
+  }
+
+  if (!GetIdAsInt64(params->remove_email.email_address_id, &email_address_id)) {
+    return RespondNow(Error("Error. Invalid email address id"));
+  }
+
+  ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
+
+  model->RemoveEmailAddress(
+      contact_id, email_address_id,
+      base::Bind(
+          &ContactsRemoveEmailAddressFunction::RemoveEmailAddressComplete,
+          this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void ContactsRemoveEmailAddressFunction::RemoveEmailAddressComplete(
+    std::shared_ptr<contact::ContactResults> results) {
+  if (!results->success) {
+    Respond(Error("Error removings email address"));
+  } else {
+    extensions::vivaldi::contacts::Contact ev = GetContact(results->contact);
+    Respond(ArgumentList(
+        extensions::vivaldi::contacts::RemoveEmailAddress::Results::Create(
+            ev)));
+  }
+}
+
 ExtensionFunction::ResponseAction ContactsUpdateEmailAddressFunction::Run() {
   std::unique_ptr<vivaldi::contacts::UpdateEmailAddress::Params> params(
       vivaldi::contacts::UpdateEmailAddress::Params::Create(*args_));
@@ -726,7 +765,6 @@ ExtensionFunction::ResponseAction ContactsUpdateEmailAddressFunction::Run() {
   }
 
   updated_email.set_email_address_id(email_address_id);
-
 
   if (params->email_to_update.email_address.get()) {
     base::string16 email_address;

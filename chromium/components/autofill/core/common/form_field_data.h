@@ -18,9 +18,11 @@
 namespace base {
 class Pickle;
 class PickleIterator;
-}
+}  // namespace base
 
 namespace autofill {
+
+class LogBuffer;
 
 // The flags describing form field properties.
 enum FieldPropertiesFlags {
@@ -59,7 +61,10 @@ struct FormFieldData {
       std::numeric_limits<uint32_t>::max();
 
   FormFieldData();
-  FormFieldData(const FormFieldData& other);
+  FormFieldData(const FormFieldData&);
+  FormFieldData& operator=(const FormFieldData&);
+  FormFieldData(FormFieldData&&);
+  FormFieldData& operator=(FormFieldData&&);
   ~FormFieldData();
 
   // Returns true if two form fields are the same, not counting the value.
@@ -81,10 +86,18 @@ struct FormFieldData {
   // a textarea.
   bool IsTextInputElement() const;
 
+  bool IsPasswordInputElement() const;
+
   // Returns true if the field is visible to the user.
   bool IsVisible() const {
     return is_focusable && role != RoleAttribute::kPresentation;
   }
+
+  // These functions do not work for Autofill code.
+  // TODO(https://crbug.com/1006745): Fix this.
+  bool DidUserType() const;
+  bool HadFocus() const;
+  bool WasAutofilled() const;
 
   // Note: operator==() performs a full-field-comparison(byte by byte), this is
   // different from SameFieldAs(), which ignores comparison for those "values"
@@ -201,6 +214,9 @@ std::ostream& operator<<(std::ostream& os, const FormFieldData& field);
     EXPECT_EQ(expected.id_attribute, actual.id_attribute);                     \
     EXPECT_EQ(expected.name_attribute, actual.name_attribute);                 \
   } while (0)
+
+// Produces a <table> element with information about the form.
+LogBuffer& operator<<(LogBuffer& buffer, const FormFieldData& form);
 
 }  // namespace autofill
 

@@ -4,11 +4,12 @@
 
 #include "device/vr/openxr/openxr_render_loop.h"
 
-#include <directxmath.h>
-
 #include "device/vr/openxr/openxr_api_wrapper.h"
-#include "device/vr/openxr/openxr_gamepad_helper.h"
+#include "device/vr/openxr/openxr_input_helper.h"
 #include "device/vr/util/transform_utils.h"
+#include "ui/gfx/geometry/angle_conversions.h"
+#include "ui/gfx/transform.h"
+#include "ui/gfx/transform_util.h"
 
 namespace device {
 
@@ -40,10 +41,13 @@ mojom::XRFrameDataPtr OpenXrRenderLoop::GetNextFrameData() {
   frame_data->time_delta =
       base::TimeDelta::FromNanoseconds(openxr_->GetPredictedDisplayTime());
 
+  frame_data->pose = mojom::VRPose::New();
+  frame_data->pose->input_state =
+      input_helper_->GetInputState(openxr_->GetPredictedDisplayTime());
+
   base::Optional<gfx::Quaternion> orientation;
   base::Optional<gfx::Point3F> position;
   if (XR_SUCCEEDED(openxr_->GetHeadPose(&orientation, &position))) {
-    frame_data->pose = mojom::VRPose::New();
 
     if (orientation.has_value())
       frame_data->pose->orientation = orientation;
@@ -78,12 +82,12 @@ mojom::XRFrameDataPtr OpenXrRenderLoop::GetNextFrameData() {
 }
 
 mojom::XRGamepadDataPtr OpenXrRenderLoop::GetNextGamepadData() {
-  return gamepad_helper_->GetGamepadData(openxr_->GetPredictedDisplayTime());
+  return input_helper_->GetGamepadData(openxr_->GetPredictedDisplayTime());
 }
 
 bool OpenXrRenderLoop::StartRuntime() {
   DCHECK(!openxr_);
-  DCHECK(!gamepad_helper_);
+  DCHECK(!input_helper_);
   DCHECK(!current_display_info_);
 
   // The new wrapper object is stored in a temporary variable instead of
@@ -100,7 +104,7 @@ bool OpenXrRenderLoop::StartRuntime() {
       !texture_helper_.SetAdapterLUID(luid) ||
       !texture_helper_.EnsureInitialized() ||
       XR_FAILED(
-          openxr->InitSession(texture_helper_.GetDevice(), &gamepad_helper_))) {
+          openxr->InitSession(texture_helper_.GetDevice(), &input_helper_))) {
     texture_helper_.Reset();
     return false;
   }
@@ -111,16 +115,16 @@ bool OpenXrRenderLoop::StartRuntime() {
   texture_helper_.SetDefaultSize(GetViewSize());
 
   DCHECK(openxr_);
-  DCHECK(gamepad_helper_);
+  DCHECK(input_helper_);
 
   return true;
 }
 
 void OpenXrRenderLoop::StopRuntime() {
-  // Has to reset gamepad_helper_ before reset openxr_. If we destroy openxr_
-  // first, gamepad_helper_destructor will try to call the actual openxr runtime
+  // Has to reset input_helper_ before reset openxr_. If we destroy openxr_
+  // first, input_helper_destructor will try to call the actual openxr runtime
   // rather than the mock in tests.
-  gamepad_helper_.reset();
+  input_helper_.reset();
   openxr_ = nullptr;
   current_display_info_ = nullptr;
   texture_helper_.Reset();
@@ -202,27 +206,19 @@ bool OpenXrRenderLoop::UpdateEyeParameters() {
     changed = true;
   }
 
-  const XrView left = openxr_->GetView(0);
-  const XrView right = openxr_->GetView(1);
-
-  gfx::Point3F center =
-      gfx::Point3F((left.pose.position.x + right.pose.position.x) / 2,
-                   (left.pose.position.y + right.pose.position.y) / 2,
-                   (left.pose.position.z + right.pose.position.z) / 2);
-
+  XrView left;
+  XrView right;
+  openxr_->GetHeadFromEyes(&left, &right);
   gfx::Size view_size = GetViewSize();
 
-  changed |=
-      UpdateEye(left, center, view_size, &current_display_info_->left_eye);
+  changed |= UpdateEye(left, view_size, &current_display_info_->left_eye);
 
-  changed |=
-      UpdateEye(right, center, view_size, &current_display_info_->right_eye);
+  changed |= UpdateEye(right, view_size, &current_display_info_->right_eye);
 
   return changed;
 }
 
-bool OpenXrRenderLoop::UpdateEye(const XrView& view,
-                                 const gfx::Point3F& center,
+bool OpenXrRenderLoop::UpdateEye(const XrView& view_head,
                                  const gfx::Size& view_size,
                                  mojom::VREyeParametersPtr* eye) const {
   bool changed = false;
@@ -231,8 +227,8 @@ bool OpenXrRenderLoop::UpdateEye(const XrView& view,
   // that instead of just building a transformation matrix from the translation
   // component.
   gfx::Transform head_from_eye = vr_utils::MakeTranslationTransform(
-      view.pose.position.x - center.x(), view.pose.position.y - center.y(),
-      view.pose.position.z - center.z());
+      view_head.pose.position.x, view_head.pose.position.y,
+      view_head.pose.position.z);
 
   if ((*eye)->head_from_eye != head_from_eye) {
     (*eye)->head_from_eye = head_from_eye;
@@ -249,11 +245,11 @@ bool OpenXrRenderLoop::UpdateEye(const XrView& view,
     changed = true;
   }
 
-  mojom::VRFieldOfViewPtr fov = mojom::VRFieldOfView::New(
-      DirectX::XMConvertToDegrees(view.fov.angleUp),
-      -DirectX::XMConvertToDegrees(view.fov.angleDown),
-      -DirectX::XMConvertToDegrees(view.fov.angleLeft),
-      DirectX::XMConvertToDegrees(view.fov.angleRight));
+  mojom::VRFieldOfViewPtr fov =
+      mojom::VRFieldOfView::New(gfx::RadToDeg(view_head.fov.angleUp),
+                                gfx::RadToDeg(-view_head.fov.angleDown),
+                                gfx::RadToDeg(-view_head.fov.angleLeft),
+                                gfx::RadToDeg(view_head.fov.angleRight));
   if (!(*eye)->field_of_view || !fov->Equals(*(*eye)->field_of_view)) {
     (*eye)->field_of_view = std::move(fov);
     changed = true;
@@ -265,8 +261,8 @@ bool OpenXrRenderLoop::UpdateEye(const XrView& view,
 bool OpenXrRenderLoop::UpdateStageParameters() {
   bool changed = false;
   XrExtent2Df stage_bounds;
-  gfx::Transform transform;
-  if (openxr_->GetStageParameters(&stage_bounds, &transform)) {
+  gfx::Transform local_from_stage;
+  if (openxr_->GetStageParameters(&stage_bounds, &local_from_stage)) {
     if (!current_display_info_->stage_parameters) {
       current_display_info_->stage_parameters = mojom::VRStageParameters::New();
       changed = true;
@@ -281,8 +277,9 @@ bool OpenXrRenderLoop::UpdateStageParameters() {
     }
 
     if (current_display_info_->stage_parameters->standing_transform !=
-        transform) {
-      current_display_info_->stage_parameters->standing_transform = transform;
+        local_from_stage) {
+      current_display_info_->stage_parameters->standing_transform =
+          local_from_stage;
       changed = true;
     }
   } else if (current_display_info_->stage_parameters) {

@@ -38,15 +38,14 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
 
   bool has_touch_action_rect = layout_view_.HasEffectiveAllowedTouchAction();
   bool paints_scroll_hit_test =
-      RuntimeEnabledFeatures::PaintNonFastScrollableRegionsEnabled() &&
-      (layout_view_.GetScrollableArea() &&
-       layout_view_.GetScrollableArea()->ScrollsOverflow());
+      layout_view_.GetScrollableArea() &&
+      layout_view_.GetScrollableArea()->ScrollsOverflow();
   if (!layout_view_.HasBoxDecorationBackground() && !has_touch_action_rect &&
       !paints_scroll_hit_test)
     return;
 
   // The background rect always includes at least the visible content size.
-  IntRect background_rect(PixelSnappedIntRect(layout_view_.BackgroundRect()));
+  PhysicalRect background_rect(layout_view_.BackgroundRect());
 
   // When printing, paint the entire unclipped scrolling content area.
   if (paint_info.IsPrinting())
@@ -56,7 +55,7 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
   // the same thing as for printing as we need to include the scrolled
   // out parts beyond layout_view_.DocumentRect().
   if (paint_info.GetGlobalPaintFlags() & kGlobalPaintWholePage)
-    background_rect = LayoutRect::InfiniteIntRect();
+    background_rect = PhysicalRect(LayoutRect::InfiniteIntRect());
 
   const DisplayItemClient* background_client = &layout_view_;
 
@@ -70,7 +69,7 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
     // DocumentRect is relative to ScrollOrigin. Add ScrollOrigin to let it be
     // in the space of ContentsProperties(). See ScrollTranslation in
     // object_paint_properties.h for details.
-    document_rect.MoveBy(layout_view_.ScrollOrigin());
+    document_rect.Move(PhysicalOffset(layout_view_.ScrollOrigin()));
     background_rect.Unite(document_rect);
     background_client = &layout_view_.GetScrollableArea()
                              ->GetScrollingBackgroundDisplayItemClient();
@@ -81,41 +80,40 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
   }
 
   if (layout_view_.HasBoxDecorationBackground()) {
-    PaintBoxDecorationBackgroundInternal(paint_info, background_rect,
-                                         *background_client);
+    PaintBoxDecorationBackgroundInternal(
+        paint_info, PixelSnappedIntRect(background_rect), *background_client);
   }
   if (has_touch_action_rect) {
     BoxPainter(layout_view_)
-        .RecordHitTestData(paint_info, PhysicalRect(background_rect),
+        .RecordHitTestData(paint_info,
+                           PhysicalRect(PixelSnappedIntRect(background_rect)),
                            *background_client);
   }
 
-  if (RuntimeEnabledFeatures::PaintNonFastScrollableRegionsEnabled()) {
-    bool needs_scroll_hit_test = true;
-    if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
-      // Pre-CompositeAfterPaint, there is no need to emit scroll hit test
-      // display items for composited scrollers because these display items are
-      // only used to create non-fast scrollable regions for non-composited
-      // scrollers. With CompositeAfterPaint, we always paint the scroll hit
-      // test display items but ignore the non-fast region if the scroll was
-      // composited in PaintArtifactCompositor::UpdateNonFastScrollableRegions.
-      if (layout_view_.HasLayer() &&
-          layout_view_.Layer()->GetCompositedLayerMapping() &&
-          layout_view_.Layer()
-              ->GetCompositedLayerMapping()
-              ->HasScrollingLayer()) {
-        needs_scroll_hit_test = false;
-      }
+  bool needs_scroll_hit_test = true;
+  if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
+    // Pre-CompositeAfterPaint, there is no need to emit scroll hit test
+    // display items for composited scrollers because these display items are
+    // only used to create non-fast scrollable regions for non-composited
+    // scrollers. With CompositeAfterPaint, we always paint the scroll hit
+    // test display items but ignore the non-fast region if the scroll was
+    // composited in PaintArtifactCompositor::UpdateNonFastScrollableRegions.
+    if (layout_view_.HasLayer() &&
+        layout_view_.Layer()->GetCompositedLayerMapping() &&
+        layout_view_.Layer()
+            ->GetCompositedLayerMapping()
+            ->HasScrollingLayer()) {
+      needs_scroll_hit_test = false;
     }
+  }
 
-    // Record the scroll hit test after the non-scrolling background so
-    // background squashing is not affected. Hit test order would be equivalent
-    // if this were immediately before the non-scrolling background.
-    if (paints_scroll_hit_test && !painting_scrolling_background &&
-        needs_scroll_hit_test) {
-      BoxPainter(layout_view_)
-          .RecordScrollHitTestData(paint_info, *background_client);
-    }
+  // Record the scroll hit test after the non-scrolling background so
+  // background squashing is not affected. Hit test order would be equivalent
+  // if this were immediately before the non-scrolling background.
+  if (paints_scroll_hit_test && !painting_scrolling_background &&
+      needs_scroll_hit_test) {
+    BoxPainter(layout_view_)
+        .RecordScrollHitTestData(paint_info, *background_client);
   }
 }
 

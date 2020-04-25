@@ -36,6 +36,7 @@
 #include "storage/browser/quota/special_storage_policy.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+#include "url/url_util.h"
 
 using base::UserMetricsAction;
 
@@ -360,7 +361,12 @@ void BrowsingDataRemoverImpl::RemoveImpl(
     storage_partition_remove_mask |=
         StoragePartition::REMOVE_DATA_MASK_BACKGROUND_FETCH;
   }
-
+  if (remove_mask & DATA_TYPE_CACHE) {
+    // Tell the shader disk cache to clear.
+    base::RecordAction(UserMetricsAction("ClearBrowsingData_ShaderCache"));
+    storage_partition_remove_mask |=
+        StoragePartition::REMOVE_DATA_MASK_SHADER_CACHE;
+  }
   // Content Decryption Modules used by Encrypted Media store licenses in a
   // private filesystem. These are different than content licenses used by
   // Flash (which are deleted father down in this method).
@@ -447,11 +453,6 @@ void BrowsingDataRemoverImpl::RemoveImpl(
 
     // Clears the PrefetchedSignedExchangeCache of all RenderFrameHostImpls.
     RenderFrameHostImpl::ClearAllPrefetchedSignedExchangeCache();
-
-    // Tell the shader disk cache to clear.
-    base::RecordAction(UserMetricsAction("ClearBrowsingData_ShaderCache"));
-    storage_partition_remove_mask |=
-        StoragePartition::REMOVE_DATA_MASK_SHADER_CACHE;
   }
 
 #if BUILDFLAG(ENABLE_REPORTING)
@@ -500,8 +501,8 @@ void BrowsingDataRemoverImpl::RemoveObserver(Observer* observer) {
 }
 
 void BrowsingDataRemoverImpl::SetWouldCompleteCallbackForTesting(
-    const base::Callback<void(const base::Closure& continue_to_completion)>&
-        callback) {
+    const base::RepeatingCallback<
+        void(base::OnceClosure continue_to_completion)>& callback) {
   would_complete_callback_ = callback;
 }
 
@@ -612,7 +613,7 @@ void BrowsingDataRemoverImpl::OnTaskComplete(TracingDataType data_type) {
 
   if (!would_complete_callback_.is_null()) {
     would_complete_callback_.Run(
-        base::Bind(&BrowsingDataRemoverImpl::Notify, GetWeakPtr()));
+        base::BindOnce(&BrowsingDataRemoverImpl::Notify, GetWeakPtr()));
     return;
   }
 

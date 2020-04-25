@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 
 namespace network {
@@ -75,7 +76,8 @@ class URLLoaderFactoryGetter
   // When NetworkService is disabled, this clones the non-NetworkService direct
   // network factory.
   CONTENT_EXPORT void CloneNetworkFactory(
-      network::mojom::URLLoaderFactoryRequest network_factory_request);
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory>
+          network_factory_receiver);
 
   // Overrides the network URLLoaderFactory for subsequent requests. Passing a
   // null pointer will restore the default behavior.
@@ -98,7 +100,7 @@ class URLLoaderFactoryGetter
   // called either on the IO thread or before threads start. This callback is
   // run on the IO thread.
   using GetNetworkFactoryCallback = base::RepeatingCallback<void(
-      URLLoaderFactoryGetter* url_loader_factory_getter)>;
+      scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter)>;
   CONTENT_EXPORT static void SetGetNetworkFactoryCallbackForTesting(
       const GetNetworkFactoryCallback& get_network_factory_callback);
 
@@ -125,7 +127,8 @@ class URLLoaderFactoryGetter
 
   // Send |network_factory_request| to cached |StoragePartitionImpl|.
   void HandleNetworkFactoryRequestOnUIThread(
-      network::mojom::URLLoaderFactoryRequest network_factory_request,
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory>
+          network_factory_receiver,
       bool is_corb_enabled);
 
   // Called on the IO thread to get the URLLoaderFactory to the network service.

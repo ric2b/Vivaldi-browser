@@ -47,13 +47,11 @@ class PasswordDataForUI : public PasswordFormManagerForUI {
 
   // PasswordFormManagerForUI:
   const GURL& GetOrigin() const override;
-  const std::map<base::string16, const PasswordForm*>& GetBestMatches()
-      const override;
+  const std::vector<const PasswordForm*>& GetBestMatches() const override;
   std::vector<const PasswordForm*> GetFederatedMatches() const override;
   const PasswordForm& GetPendingCredentials() const override;
-  metrics_util::CredentialSourceType GetCredentialSource() override;
+  metrics_util::CredentialSourceType GetCredentialSource() const override;
   PasswordFormMetricsRecorder* GetMetricsRecorder() override;
-  base::span<const PasswordForm* const> GetBlacklistedMatches() const override;
   base::span<const InteractionsStats> GetInteractionsStats() const override;
   bool IsBlacklisted() const override;
   void Save() override;
@@ -68,8 +66,7 @@ class PasswordDataForUI : public PasswordFormManagerForUI {
 
  private:
   PasswordForm pending_form_;
-  // TODO(https://crbug.com/831123): switch to vector.
-  std::map<base::string16, const PasswordForm*> matches_;
+  std::vector<const PasswordForm*> matches_;
   const std::vector<PasswordForm> federated_matches_;
   const std::vector<PasswordForm> non_federated_matches_;
 
@@ -90,15 +87,15 @@ PasswordDataForUI::PasswordDataForUI(
       non_federated_matches_(DeepCopyVector(matches)),
       bubble_interaction_cb_(std::move(bubble_interaction)) {
   for (const PasswordForm& form : non_federated_matches_)
-    matches_[form.username_value] = &form;
+    matches_.push_back(&form);
 }
 
 const GURL& PasswordDataForUI::GetOrigin() const {
   return pending_form_.origin;
 }
 
-const std::map<base::string16, const PasswordForm*>&
-PasswordDataForUI::GetBestMatches() const {
+const std::vector<const PasswordForm*>& PasswordDataForUI::GetBestMatches()
+    const {
   return matches_;
 }
 
@@ -115,17 +112,13 @@ const PasswordForm& PasswordDataForUI::GetPendingCredentials() const {
   return pending_form_;
 }
 
-metrics_util::CredentialSourceType PasswordDataForUI::GetCredentialSource() {
+metrics_util::CredentialSourceType PasswordDataForUI::GetCredentialSource()
+    const {
   return metrics_util::CredentialSourceType::kPasswordManager;
 }
 
 PasswordFormMetricsRecorder* PasswordDataForUI::GetMetricsRecorder() {
   return nullptr;
-}
-
-base::span<const PasswordForm* const> PasswordDataForUI::GetBlacklistedMatches()
-    const {
-  return {};
 }
 
 base::span<const InteractionsStats> PasswordDataForUI::GetInteractionsStats()

@@ -249,8 +249,7 @@ void CrostiniPackageService::QueueInstallLinuxPackage(
 }
 
 void CrostiniPackageService::OnInstallLinuxPackageProgress(
-    const std::string& vm_name,
-    const std::string& container_name,
+    const ContainerId& container_id,
     InstallLinuxPackageProgressStatus status,
     int progress_percent) {
   // Linux package install has two phases, downloading and installing, which we
@@ -260,19 +259,16 @@ void CrostiniPackageService::OnInstallLinuxPackageProgress(
   if (status == InstallLinuxPackageProgressStatus::INSTALLING)
     display_progress += 50;  // Second phase
 
-  UpdatePackageOperationStatus(std::make_pair(vm_name, container_name),
-                               InstallStatusToOperationStatus(status),
-                               display_progress);
+  UpdatePackageOperationStatus(
+      container_id, InstallStatusToOperationStatus(status), display_progress);
 }
 
 void CrostiniPackageService::OnUninstallPackageProgress(
-    const std::string& vm_name,
-    const std::string& container_name,
+    const ContainerId& container_id,
     UninstallPackageProgressStatus status,
     int progress_percent) {
-  UpdatePackageOperationStatus(ContainerId(vm_name, container_name),
-                               UninstallStatusToOperationStatus(status),
-                               progress_percent);
+  UpdatePackageOperationStatus(
+      container_id, UninstallStatusToOperationStatus(status), progress_percent);
 }
 
 void CrostiniPackageService::OnVmShutdown(const std::string& vm_name) {
@@ -282,7 +278,7 @@ void CrostiniPackageService::OnVmShutdown(const std::string& vm_name) {
   std::vector<ContainerId> to_remove;
   for (auto iter = running_notifications_.begin();
        iter != running_notifications_.end(); iter++) {
-    if (iter->first.first == vm_name) {
+    if (iter->first.vm_name == vm_name) {
       to_remove.push_back(iter->first);
     }
   }
@@ -395,13 +391,11 @@ void CrostiniPackageService::UpdatePackageOperationStatus(
   // Update the notification window, if any.
   auto it = running_notifications_.find(container_id);
   if (it == running_notifications_.end()) {
-    LOG(ERROR) << ContainerIdToString(container_id)
-               << " has no notification to update";
+    LOG(ERROR) << container_id << " has no notification to update";
     return;
   }
   if (it->second == nullptr) {
-    LOG(ERROR) << ContainerIdToString(container_id)
-               << " has null notification pointer";
+    LOG(ERROR) << container_id << " has null notification pointer";
     running_notifications_.erase(it);
     return;
   }
@@ -431,11 +425,8 @@ void CrostiniPackageService::UpdatePackageOperationStatus(
 }
 
 void CrostiniPackageService::OnPendingAppListUpdates(
-    const std::string& vm_name,
-    const std::string& container_name,
+    const ContainerId& container_id,
     int count) {
-  const ContainerId container_id(vm_name, container_name);
-
   if (count != 0) {
     has_pending_app_list_updates_.insert(container_id);
   } else {
@@ -508,8 +499,8 @@ void CrostiniPackageService::OnCrostiniRunningForUninstall(
                                  0);
     return;
   }
-  const std::string& vm_name = container_id.first;
-  const std::string& container_name = container_id.second;
+  const std::string& vm_name = container_id.vm_name;
+  const std::string& container_name = container_id.container_name;
 
   CrostiniManager::GetForProfile(profile_)->UninstallPackageOwningFile(
       vm_name, container_name, desktop_file_id,
@@ -563,10 +554,14 @@ void CrostiniPackageService::StartQueuedOperation(
                                    PackageOperationStatus::SUCCEEDED, 100);
     }
 
-    // Clean up memory.
-    if (uninstall_queue.empty()) {
+    // As recursive calls to StartQueuedOperation might delete |uninstall_queue|
+    // and invalidate |uninstall_queue_iter| we must look it up again.
+    uninstall_queue_iter = queued_uninstalls_.find(container_id);
+    if (uninstall_queue_iter != queued_uninstalls_.end() &&
+        uninstall_queue_iter->second.empty()) {
+      // Clean up memory.
       queued_uninstalls_.erase(uninstall_queue_iter);
-      // Invalidates uninstall_queue.
+      // Invalidates |uninstall_queue_iter|.
     }
     return;
   }
@@ -590,8 +585,8 @@ void CrostiniPackageService::StartQueuedOperation(
       install_queue.pop();  // Invalidates |next|
     }
 
-    std::string vm_name = container_id.first;
-    std::string container_name = container_id.second;
+    std::string vm_name = container_id.vm_name;
+    std::string container_name = container_id.container_name;
 
     CrostiniManager::GetForProfile(profile_)->InstallLinuxPackage(
         vm_name, container_name, package_path,
@@ -599,10 +594,15 @@ void CrostiniPackageService::StartQueuedOperation(
                        weak_ptr_factory_.GetWeakPtr(), vm_name, container_name,
                        std::move(callback)));
 
-    // Clean up memory.
-    if (install_queue.empty()) {
+    // InstallLinuxPackage shouldn't be able to recursively call this method,
+    // but as future proofing consider |install_queue_iter| to be invalidated
+    // anyway.
+    install_queue_iter = queued_installs_.find(container_id);
+    if (install_queue_iter != queued_installs_.end() &&
+        install_queue_iter->second.empty()) {
+      // Clean up memory.
       queued_installs_.erase(install_queue_iter);
-      // Invalidates install_queue.
+      // Invalidates |install_queue_iter|.
     }
     return;
   }

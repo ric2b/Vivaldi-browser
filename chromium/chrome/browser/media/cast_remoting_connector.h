@@ -16,7 +16,10 @@
 #include "media/mojo/mojom/mirror_service_remoting.mojom.h"
 #include "media/mojo/mojom/remoting.mojom.h"
 #include "media/mojo/mojom/remoting_common.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 
 namespace content {
 class RenderFrameHost;
@@ -98,15 +101,17 @@ class CastRemotingConnector : public base::SupportsUserData::Data,
   // call connects the CastRemotingConnector with the MediaRemoter. Remoting
   // sessions can only be started after this is called.
   void ConnectToService(
-      media::mojom::MirrorServiceRemotingSourceRequest source_request,
-      media::mojom::MirrorServiceRemoterPtr remoter);
+      mojo::PendingReceiver<media::mojom::MirrorServiceRemotingSource>
+          source_receiver,
+      mojo::PendingRemote<media::mojom::MirrorServiceRemoter> remoter);
 
   // Called at the start of mirroring to reset the permission.
   void ResetRemotingPermission();
 
   // Used by Mirroring Service to connect the media remoter with this source.
-  void ConnectWithMediaRemoter(media::mojom::RemoterPtr remoter,
-                               media::mojom::RemotingSourceRequest request);
+  void ConnectWithMediaRemoter(
+      mojo::PendingRemote<media::mojom::Remoter> remoter,
+      mojo::PendingReceiver<media::mojom::RemotingSource> receiver);
 
  private:
   // Allow unit tests access to the private constructor and CreateBridge()
@@ -169,8 +174,10 @@ class CastRemotingConnector : public base::SupportsUserData::Data,
       RemotingBridge* bridge,
       mojo::ScopedDataPipeConsumerHandle audio_pipe,
       mojo::ScopedDataPipeConsumerHandle video_pipe,
-      media::mojom::RemotingDataStreamSenderRequest audio_sender_request,
-      media::mojom::RemotingDataStreamSenderRequest video_sender_request);
+      mojo::PendingReceiver<media::mojom::RemotingDataStreamSender>
+          audio_sender_receiver,
+      mojo::PendingReceiver<media::mojom::RemotingDataStreamSender>
+          video_sender_receiver);
   void StopRemoting(RemotingBridge* bridge,
                     media::mojom::RemotingStopReason reason,
                     bool is_initiated_by_source);
@@ -229,11 +236,12 @@ class CastRemotingConnector : public base::SupportsUserData::Data,
   RemotingBridge* active_bridge_;
 
   // TODO(xjz): Remove these after Mirroring Service is launched.
-  mojo::Binding<media::mojom::MirrorServiceRemotingSource> deprecated_binding_;
-  media::mojom::MirrorServiceRemoterPtr deprecated_remoter_;
+  mojo::Receiver<media::mojom::MirrorServiceRemotingSource>
+      deprecated_receiver_{this};
+  mojo::Remote<media::mojom::MirrorServiceRemoter> deprecated_remoter_;
 
-  mojo::Binding<media::mojom::RemotingSource> binding_;
-  media::mojom::RemoterPtr remoter_;
+  mojo::Receiver<media::mojom::RemotingSource> receiver_{this};
+  mojo::Remote<media::mojom::Remoter> remoter_;
 
   // Permission is checked the first time remoting requested to start for each
   // casting session.

@@ -25,21 +25,17 @@ void InlinePainter::Paint(const PaintInfo& paint_info) {
   const auto& local_paint_info = paint_state.GetPaintInfo();
 
   if (local_paint_info.phase == PaintPhase::kForeground &&
-      local_paint_info.IsPrinting()) {
+      local_paint_info.ShouldAddUrlMetadata()) {
     ObjectPainter(layout_inline_)
-        .AddPDFURLRectIfNeeded(local_paint_info, paint_offset);
+        .AddURLRectIfNeeded(local_paint_info, paint_offset);
   }
 
   ScopedPaintTimingDetectorBlockPaintHook
       scoped_paint_timing_detector_block_paint_hook;
-  if (RuntimeEnabledFeatures::FirstContentfulPaintPlusPlusEnabled() ||
-      RuntimeEnabledFeatures::ElementTimingEnabled(
-          &layout_inline_.GetDocument())) {
-    if (paint_info.phase == PaintPhase::kForeground) {
-      scoped_paint_timing_detector_block_paint_hook.EmplaceIfNeeded(
-          layout_inline_, paint_info.context.GetPaintController()
-                              .CurrentPaintChunkProperties());
-    }
+  if (paint_info.phase == PaintPhase::kForeground) {
+    scoped_paint_timing_detector_block_paint_hook.EmplaceIfNeeded(
+        layout_inline_,
+        paint_info.context.GetPaintController().CurrentPaintChunkProperties());
   }
 
   if (layout_inline_.IsInLayoutNGInlineFormattingContext()) {
@@ -50,7 +46,9 @@ void InlinePainter::Paint(const PaintInfo& paint_info) {
                           fragment->Offset();
 
       if (fragment->PhysicalFragment().IsText()) {
-        NGTextFragmentPainter(*fragment).Paint(paint_info, child_offset);
+        NGTextPainterCursor cursor(*fragment);
+        NGTextFragmentPainter<NGTextPainterCursor>(cursor).Paint(paint_info,
+                                                                 child_offset);
       } else {
         NGInlineBoxFragmentPainter(*fragment).Paint(paint_info, child_offset);
       }

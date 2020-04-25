@@ -26,12 +26,13 @@ CredentialManagerPasswordFormManager::CredentialManagerPasswordFormManager(
     CredentialManagerPasswordFormManagerDelegate* delegate,
     std::unique_ptr<FormSaver> form_saver,
     std::unique_ptr<FormFetcher> form_fetcher)
-    : PasswordFormManager(client,
-                          std::move(saved_form),
-                          std::move(form_fetcher),
-                          (form_saver ? std::move(form_saver)
-                                      : std::make_unique<FormSaverImpl>(
-                                            client->GetPasswordStore()))),
+    : PasswordFormManager(
+          client,
+          std::move(saved_form),
+          std::move(form_fetcher),
+          (form_saver ? std::move(form_saver)
+                      : std::make_unique<FormSaverImpl>(
+                            client->GetProfilePasswordStore()))),
       delegate_(delegate) {}
 
 CredentialManagerPasswordFormManager::~CredentialManagerPasswordFormManager() =
@@ -41,19 +42,11 @@ void CredentialManagerPasswordFormManager::OnFetchCompleted() {
   PasswordFormManager::OnFetchCompleted();
 
   CreatePendingCredentials();
-
-  // Notify the delegate. This might result in deleting |this|, while
-  // OnFetchCompleted is being called from FormFetcherImpl, owned by |this|. If
-  // done directly, once OnFetchCompleted returns, the FormFetcherImpl will be
-  // used after free. Therefore the call is posted to a separate task.
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&CredentialManagerPasswordFormManager::NotifyDelegate,
-                     weak_factory_.GetWeakPtr()));
+  NotifyDelegate();
 }
 
 metrics_util::CredentialSourceType
-CredentialManagerPasswordFormManager::GetCredentialSource() {
+CredentialManagerPasswordFormManager::GetCredentialSource() const {
   return metrics_util::CredentialSourceType::kCredentialManagementAPI;
 }
 

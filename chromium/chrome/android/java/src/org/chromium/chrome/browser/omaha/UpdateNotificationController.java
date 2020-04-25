@@ -15,17 +15,16 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
-import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.init.BrowserParts;
@@ -211,13 +210,8 @@ public class UpdateNotificationController implements Destroyable {
             };
 
             // Try to load native.
-            try {
-                ChromeBrowserInitializer.getInstance().handlePreNativeStartup(parts);
-                ChromeBrowserInitializer.getInstance().handlePostNativeStartup(true, parts);
-            } catch (ProcessInitException e) {
-                Log.e(TAG, "Unable to load native library after clicking update notification.", e);
-                ChromeApplication.reportStartupErrorAndExit(e);
-            }
+            ChromeBrowserInitializer.getInstance().handlePreNativeStartup(parts);
+            ChromeBrowserInitializer.getInstance().handlePostNativeStartup(true, parts);
         }
 
         private void handleUpdateIntent(Context context, Intent intent) {

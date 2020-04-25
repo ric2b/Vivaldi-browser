@@ -312,9 +312,6 @@ class AutofillManager : public AutofillHandler,
   }
 
   // Exposed for testing.
-  AutofillExternalDelegate* external_delegate() { return external_delegate_; }
-
-  // Exposed for testing.
   void set_download_manager(AutofillDownloadManager* manager) {
     download_manager_.reset(manager);
   }
@@ -673,6 +670,8 @@ class AutofillManager : public AutofillHandler,
                            CreditCardSelectedFormEvents);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsIFrameTest,
                            CreditCardFilledFormEvents);
+  FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest,
+                           CreditCardUnmaskingPreflightCall);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, CreditCardGetRealPanDuration);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsIFrameTest,
                            CreditCardWillSubmitFormEvents);

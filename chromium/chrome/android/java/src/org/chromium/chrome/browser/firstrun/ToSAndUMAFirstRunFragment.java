@@ -24,6 +24,8 @@ import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * The First Run Experience fragment that allows the user to accept Terms of Service ("ToS") and
  * Privacy Notice, and to opt-in to the usage statistics and crash reports collection ("UMA",
@@ -75,7 +77,7 @@ public class ToSAndUMAFirstRunFragment extends Fragment implements FirstRunFragm
             }
         });
 
-        if (ChromeVersionInfo.isOfficialBuild()) {
+        if (ChromeVersionInfo.isOfficialBuild() && !ChromeApplication.isVivaldi()) {
             int paddingStart = getResources().getDimensionPixelSize(
                     R.dimen.fre_tos_checkbox_padding);
             ViewCompat.setPaddingRelative(mSendReportCheckBox,

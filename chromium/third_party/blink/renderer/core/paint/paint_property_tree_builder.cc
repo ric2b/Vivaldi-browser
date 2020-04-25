@@ -10,7 +10,6 @@
 #include "cc/input/overscroll_behavior.h"
 #include "third_party/blink/renderer/core/animation/element_animations.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
-#include "third_party/blink/renderer/core/frame/link_highlights.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -28,6 +27,7 @@
 #include "third_party/blink/renderer/core/layout/svg/svg_layout_support.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources_cache.h"
+#include "third_party/blink/renderer/core/page/link_highlight.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/scrolling/snap_coordinator.h"
 #include "third_party/blink/renderer/core/page/scrolling/top_document_root_scroller_controller.h"
@@ -275,9 +275,6 @@ static bool NeedsScrollNode(const LayoutObject& object,
       return true;
   }
 
-  if (direct_compositing_reasons & CompositingReason::kScrollTimelineTarget)
-    return true;
-
   return ToLayoutBox(object).GetScrollableArea()->ScrollsOverflow();
 }
 
@@ -496,9 +493,14 @@ void FragmentPaintPropertyTreeBuilder::UpdatePaintOffsetTranslation(
     const base::Optional<IntPoint>& paint_offset_translation) {
   DCHECK(properties_);
 
+  FloatSize old_translation;
+  if (auto* translation = properties_->PaintOffsetTranslation()) {
+    old_translation = translation->Translation2D();
+  }
+
   if (paint_offset_translation) {
-    TransformPaintPropertyNode::State state{
-        FloatSize(ToIntSize(*paint_offset_translation))};
+    FloatSize new_translation(ToIntSize(*paint_offset_translation));
+    TransformPaintPropertyNode::State state{new_translation};
     state.flags.flattens_inherited_transform =
         context_.current.should_flatten_inherited_transform;
     state.flags.affected_by_outer_viewport_bounds_delta =
@@ -515,8 +517,11 @@ void FragmentPaintPropertyTreeBuilder::UpdatePaintOffsetTranslation(
           properties_->PaintOffsetTranslation();
       context_.fixed_position.transform = properties_->PaintOffsetTranslation();
     }
+
+    context_.paint_offset_delta = old_translation - new_translation;
   } else {
     OnClear(properties_->ClearPaintOffsetTranslation());
+    context_.paint_offset_delta = FloatSize();
   }
 }
 
@@ -780,7 +785,8 @@ void FragmentPaintPropertyTreeBuilder::UpdateTransform() {
       // TODO(crbug.com/953322): We need to fix this to work with CAP as well.
       if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
           effective_change_type ==
-              PaintPropertyChangeType::kChangedOnlySimpleValues) {
+              PaintPropertyChangeType::kChangedOnlySimpleValues &&
+          properties_->Transform()->HasDirectCompositingReasons()) {
         if (auto* paint_artifact_compositor =
                 object_.GetFrameView()->GetPaintArtifactCompositor()) {
           bool updated = paint_artifact_compositor->DirectlyUpdateTransform(
@@ -1080,7 +1086,8 @@ void FragmentPaintPropertyTreeBuilder::UpdateEffect() {
       // TODO(crbug.com/953322): We need to fix this to work with CAP as well.
       if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
           effective_change_type ==
-              PaintPropertyChangeType::kChangedOnlySimpleValues) {
+              PaintPropertyChangeType::kChangedOnlySimpleValues &&
+          properties_->Effect()->HasDirectCompositingReasons()) {
         if (auto* paint_artifact_compositor =
                 object_.GetFrameView()->GetPaintArtifactCompositor()) {
           bool updated =
@@ -1144,7 +1151,7 @@ void FragmentPaintPropertyTreeBuilder::UpdateEffect() {
 
 static bool NeedsLinkHighlightEffect(const LayoutObject& object) {
   auto* page = object.GetFrame()->GetPage();
-  return page->GetLinkHighlights().NeedsHighlightEffect(object);
+  return page->GetLinkHighlight().NeedsHighlightEffect(object);
 }
 
 // TODO(crbug.com/900241): Remove this function and let the caller use
@@ -1865,10 +1872,12 @@ void FragmentPaintPropertyTreeBuilder::UpdateScrollAndScrollTranslation() {
           static_cast<cc::OverscrollBehavior::OverscrollBehaviorType>(
               box.StyleRef().OverscrollBehaviorY()));
 
-      auto* snap_coordinator = box.GetDocument().GetSnapCoordinator();
-      if (snap_coordinator) {
-        state.snap_container_data = snap_coordinator->GetSnapContainerData(box);
-      }
+      state.snap_container_data =
+          box.GetScrollableArea() &&
+                  box.GetScrollableArea()->GetSnapContainerData()
+              ? base::Optional<cc::SnapContainerData>(
+                    *box.GetScrollableArea()->GetSnapContainerData())
+              : base::nullopt;
 
       OnUpdateScroll(properties_->UpdateScroll(*context_.current.scroll,
                                                std::move(state)));
@@ -1927,15 +1936,20 @@ void FragmentPaintPropertyTreeBuilder::UpdateScrollAndScrollTranslation() {
       state.direct_compositing_reasons =
           full_context_.direct_compositing_reasons &
           (CompositingReason::kRootScroller |
-           CompositingReason::kScrollTimelineTarget);
+           CompositingReasonsForTransformProperty());
       state.rendering_context_id = context_.current.rendering_context_id;
       state.scroll = properties_->Scroll();
       auto effective_change_type = properties_->UpdateScrollTranslation(
           *context_.current.transform, std::move(state));
+      bool known_to_be_composited =
+          RuntimeEnabledFeatures::CompositeAfterPaintEnabled()
+              ? properties_->ScrollTranslation()->HasDirectCompositingReasons()
+              : box.GetScrollableArea()->NeedsCompositedScrolling();
       // TODO(crbug.com/953322): We need to fix this to work with CAP as well.
       if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
           effective_change_type ==
-              PaintPropertyChangeType::kChangedOnlySimpleValues) {
+              PaintPropertyChangeType::kChangedOnlySimpleValues &&
+          known_to_be_composited) {
         if (auto* paint_artifact_compositor =
                 object_.GetFrameView()->GetPaintArtifactCompositor()) {
           bool updated =
@@ -2453,6 +2467,8 @@ void FragmentPaintPropertyTreeBuilder::UpdateForSelf() {
     // Update of PaintOffsetTranslation is checked by
     // FindPaintOffsetNeedingUpdateScope.
     UpdatePaintOffsetTranslation(paint_offset_translation);
+  } else {
+    context_.paint_offset_delta = FloatSize();
   }
 
 #if DCHECK_IS_ON()
@@ -3085,6 +3101,14 @@ void PaintPropertyTreeBuilder::CreateFragmentContextsInFlowThread(
   if (fragments_changed) {
     object_.GetMutableForPainting().AddSubtreePaintPropertyUpdateReason(
         SubtreePaintPropertyUpdateReason::kFragmentsChanged);
+    if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
+        NeedsLinkHighlightEffect(object_)) {
+      // We need to recollect the foreign layers for link highlight for the
+      // changed fragments. CompositeAfterPaint doesn't need this because we
+      // collect foreign layers during LocalFrameView::PaintTree() which is not
+      // controlled by the flag.
+      object_.GetFrameView()->SetForeignLayerListNeedsUpdate();
+    }
   }
 }
 

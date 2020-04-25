@@ -160,7 +160,12 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   void DrawYUVVideoQuad(const YUVVideoDrawQuad* quad, DrawQuadParams* params);
   void DrawUnsupportedQuad(const DrawQuad* quad, DrawQuadParams* params);
 
-  const TileDrawQuad* CanPassBeDrawnDirectly(const RenderPass* pass) override;
+  // Schedule overlay candidates for presentation at next SwapBuffers().
+  void ScheduleDCLayers();
+
+  // skia_renderer can draw most single-quad passes directly, regardless of
+  // blend mode or image filtering.
+  const DrawQuad* CanPassBeDrawnDirectly(const RenderPass* pass) override;
 
   // Get corresponding GrContext. Returns nullptr when there is no GrContext.
   // TODO(weiliangc): This currently only returns nullptr. If SKPRecord isn't
@@ -252,6 +257,12 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   // It is only used with DDL.
   base::Optional<DisplayResourceProvider::LockSetForExternalUse>
       lock_set_for_external_use_;
+
+  bool has_locked_overlay_resources_ = false;
+
+  base::circular_deque<
+      base::Optional<DisplayResourceProvider::ScopedReadLockSharedImage>>
+      overlay_resource_locks_;
 
   // Specific for SkPRecord.
   std::unique_ptr<SkPictureRecorder> root_recorder_;

@@ -491,10 +491,12 @@ class HeapHashMap : public HashMap<KeyArg,
                                    KeyTraitsArg,
                                    MappedTraitsArg,
                                    HeapAllocator> {
-  IS_GARBAGE_COLLECTED_TYPE();
+  IS_GARBAGE_COLLECTED_CONTAINER_TYPE();
   DISALLOW_NEW();
 
   static void CheckType() {
+    static_assert(std::is_trivially_destructible<HeapHashMap>::value,
+                  "HeapHashMap must be trivially destructible.");
     static_assert(
         IsAllowedInContainer<KeyArg>::value,
         "Not allowed to directly nest type. Use Member<> indirection instead.");
@@ -504,7 +506,7 @@ class HeapHashMap : public HashMap<KeyArg,
     static_assert(
         WTF::IsTraceable<KeyArg>::value || WTF::IsTraceable<MappedArg>::value,
         "For hash maps without traceable elements, use HashMap<> "
-        "instead of HeapHashMap<>");
+        "instead of HeapHashMap<>.");
   }
 
  public:
@@ -522,16 +524,18 @@ template <typename ValueArg,
           typename TraitsArg = HashTraits<ValueArg>>
 class HeapHashSet
     : public HashSet<ValueArg, HashArg, TraitsArg, HeapAllocator> {
-  IS_GARBAGE_COLLECTED_TYPE();
+  IS_GARBAGE_COLLECTED_CONTAINER_TYPE();
   DISALLOW_NEW();
 
   static void CheckType() {
+    static_assert(std::is_trivially_destructible<HeapHashSet>::value,
+                  "HeapHashSet must be trivially destructible.");
     static_assert(
         IsAllowedInContainer<ValueArg>::value,
         "Not allowed to directly nest type. Use Member<> indirection instead.");
     static_assert(WTF::IsTraceable<ValueArg>::value,
                   "For hash sets without traceable elements, use HashSet<> "
-                  "instead of HeapHashSet<>");
+                  "instead of HeapHashSet<>.");
   }
 
  public:
@@ -548,7 +552,7 @@ template <typename ValueArg,
           typename TraitsArg = HashTraits<ValueArg>>
 class HeapLinkedHashSet
     : public LinkedHashSet<ValueArg, HashArg, TraitsArg, HeapAllocator> {
-  IS_GARBAGE_COLLECTED_TYPE();
+  IS_GARBAGE_COLLECTED_CONTAINER_TYPE();
   DISALLOW_NEW();
   // HeapLinkedHashSet is using custom callbacks for compaction that rely on the
   // fact that the container itself does not move.
@@ -560,7 +564,7 @@ class HeapLinkedHashSet
         "Not allowed to directly nest type. Use Member<> indirection instead.");
     static_assert(WTF::IsTraceable<ValueArg>::value,
                   "For sets without traceable elements, use LinkedHashSet<> "
-                  "instead of HeapLinkedHashSet<>");
+                  "instead of HeapLinkedHashSet<>.");
   }
 
  public:
@@ -582,16 +586,18 @@ class HeapListHashSet
                          inlineCapacity,
                          HashArg,
                          HeapListHashSetAllocator<ValueArg, inlineCapacity>> {
-  IS_GARBAGE_COLLECTED_TYPE();
+  IS_GARBAGE_COLLECTED_CONTAINER_TYPE();
   DISALLOW_NEW();
 
   static void CheckType() {
+    static_assert(std::is_trivially_destructible<HeapListHashSet>::value,
+                  "HeapListHashSet must be trivially destructible.");
     static_assert(
         IsAllowedInContainer<ValueArg>::value,
         "Not allowed to directly nest type. Use Member<> indirection instead.");
     static_assert(WTF::IsTraceable<ValueArg>::value,
                   "For sets without traceable elements, use ListHashSet<> "
-                  "instead of HeapListHashSet<>");
+                  "instead of HeapListHashSet<>.");
   }
 
  public:
@@ -608,16 +614,18 @@ template <typename Value,
           typename Traits = HashTraits<Value>>
 class HeapHashCountedSet
     : public HashCountedSet<Value, HashFunctions, Traits, HeapAllocator> {
-  IS_GARBAGE_COLLECTED_TYPE();
+  IS_GARBAGE_COLLECTED_CONTAINER_TYPE();
   DISALLOW_NEW();
 
   static void CheckType() {
+    static_assert(std::is_trivially_destructible<HeapHashCountedSet>::value,
+                  "HeapHashCountedSet must be trivially destructible.");
     static_assert(
         IsAllowedInContainer<Value>::value,
         "Not allowed to directly nest type. Use Member<> indirection instead.");
     static_assert(WTF::IsTraceable<Value>::value,
                   "For counted sets without traceable elements, use "
-                  "HashCountedSet<> instead of HeapHashCountedSet<>");
+                  "HashCountedSet<> instead of HeapHashCountedSet<>.");
   }
 
  public:
@@ -631,16 +639,19 @@ class HeapHashCountedSet
 
 template <typename T, wtf_size_t inlineCapacity = 0>
 class HeapVector : public Vector<T, inlineCapacity, HeapAllocator> {
-  IS_GARBAGE_COLLECTED_TYPE();
+  IS_GARBAGE_COLLECTED_CONTAINER_TYPE();
   DISALLOW_NEW();
 
   static void CheckType() {
+    static_assert(
+        std::is_trivially_destructible<HeapVector>::value || inlineCapacity,
+        "HeapVector must be trivially destructible.");
     static_assert(
         IsAllowedInContainer<T>::value,
         "Not allowed to directly nest type. Use Member<> indirection instead.");
     static_assert(WTF::IsTraceable<T>::value,
                   "For vectors without traceable elements, use Vector<> "
-                  "instead of HeapVector<>");
+                  "instead of HeapVector<>.");
   }
 
  public:
@@ -679,10 +690,13 @@ class HeapVector : public Vector<T, inlineCapacity, HeapAllocator> {
 
 template <typename T, wtf_size_t inlineCapacity = 0>
 class HeapDeque : public Deque<T, inlineCapacity, HeapAllocator> {
-  IS_GARBAGE_COLLECTED_TYPE();
+  IS_GARBAGE_COLLECTED_CONTAINER_TYPE();
   DISALLOW_NEW();
 
   static void CheckType() {
+    static_assert(
+        std::is_trivially_destructible<HeapDeque>::value || inlineCapacity,
+        "HeapDeque must be trivially destructible.");
     static_assert(
         IsAllowedInContainer<T>::value,
         "Not allowed to directly nest type. Use Member<> indirection instead.");
@@ -698,7 +712,7 @@ class HeapDeque : public Deque<T, inlineCapacity, HeapAllocator> {
     // VectorTraits<T>::kNeedsDestruction case for now.
     static_assert(inlineCapacity == 0 || !VectorTraits<T>::kNeedsDestruction,
                   "on-heap HeapDeque<> should not have an inline capacity");
-    return ThreadHeap::Allocate<HeapVector<T, inlineCapacity>>(size);
+    return ThreadHeap::Allocate<HeapDeque<T, inlineCapacity>>(size);
   }
 
   HeapDeque() { CheckType(); }

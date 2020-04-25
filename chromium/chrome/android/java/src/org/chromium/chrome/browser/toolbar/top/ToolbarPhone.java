@@ -23,12 +23,8 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.SystemClock;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
-import android.support.annotation.StringRes;
 import android.support.v4.graphics.drawable.DrawableCompat;
 import android.support.v4.view.ViewCompat;
-import android.support.v4.view.animation.FastOutSlowInInterpolator;
 import android.support.v7.graphics.drawable.DrawableWrapper;
 import android.util.AttributeSet;
 import android.util.Property;
@@ -41,12 +37,14 @@ import android.view.ViewDebug;
 import android.view.ViewGroup;
 import android.view.ViewStub;
 import android.view.ViewTreeObserver;
-import android.view.animation.Interpolator;
-import android.view.animation.LinearInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.TraceEvent;
@@ -54,11 +52,13 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.Invalidator;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.omnibox.LocationBarPhone;
+import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -69,11 +69,12 @@ import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.TabCountProvider.TabCountObserver;
 import org.chromium.chrome.browser.toolbar.TabSwitcherDrawable;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator.UrlExpansionObserver;
+import org.chromium.chrome.browser.ui.widget.animation.CancelAwareAnimatorListener;
+import org.chromium.chrome.browser.ui.widget.animation.Interpolators;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.chrome.browser.util.ViewUtils;
-import org.chromium.chrome.browser.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
@@ -82,6 +83,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Phone specific toolbar implementation.
@@ -123,9 +126,6 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             })
 
     static final int LOCATION_BAR_TRANSPARENT_BACKGROUND_ALPHA = 51;
-
-    private static final Interpolator NTP_SEARCH_BOX_EXPANSION_INTERPOLATOR =
-            new FastOutSlowInInterpolator();
 
     private TabCountProvider mTabCountProvider;
 
@@ -377,6 +377,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             if (getMenuButtonWrapper() != null && !mIsBottomToolbarVisible) {
                 getMenuButtonWrapper().setVisibility(View.VISIBLE);
             }
+            else if (getMenuButtonWrapper() != null && ChromeApplication.isVivaldi())
+                getMenuButtonWrapper().setVisibility(View.VISIBLE);
 
             inflateTabSwitchingResources();
 
@@ -496,7 +498,6 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             });
         }
         onHomeButtonUpdate(HomepageManager.isHomepageEnabled()
-                || FeatureUtilities.isNewTabPageButtonEnabled()
                 || FeatureUtilities.isBottomToolbarEnabled());
 
         setTabSwitcherAnimationMenuDrawable();
@@ -615,6 +616,9 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             for (int i = 0; i < mLocationBar.getChildCount(); i++) {
                 View child = mLocationBar.getChildAt(i);
                 if (child == mLocationBar.getFirstViewVisibleWhenFocused()) break;
+                if (ChromeApplication.isVivaldi()) {
+                    if (child == findViewById(R.id.location_bar_status)) break;
+                }
                 if (child.getVisibility() == GONE) continue;
                 priorVisibleWidth += child.getMeasuredWidth();
             }
@@ -995,6 +999,16 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
                     getViewBoundsLeftOfLocationBar(mVisualState) - mUnfocusedLocationBarLayoutLeft;
         }
 
+        // When the dse icon is visible, the LocationBar needs additional translation to compensate
+        // for the dse icon being laid out when focused. This also affects the UrlBar, which is
+        // handled below. See comments in LocationBar#getLocationBarOffsetForFocusAnimation() for
+        // implementation details.
+        boolean isIncognito = getToolbarDataProvider().isIncognito();
+        if (SearchEngineLogoUtils.shouldShowSearchEngineLogo(isIncognito)) {
+            locationBarBaseTranslationX +=
+                    mLocationBar.getLocationBarOffsetForFocusAnimation(hasFocus());
+        }
+
         boolean isLocationBarRtl = mLocationBar.getLayoutDirection() == LAYOUT_DIRECTION_RTL;
         if (isLocationBarRtl) {
             locationBarBaseTranslationX += mUnfocusedLocationBarLayoutWidth - currentWidth;
@@ -1033,6 +1047,17 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         }
 
         mLocationBar.setTranslationX(locationBarTranslationX);
+
+        // When the dse icon is enabled, the UrlBar needs additional translation to compensate for
+        // the additional translation applied to the LocationBar. See comments in
+        // LocationBar#getUrlBarTranslationXForToolbarAnimation() for implementation details.
+        if (SearchEngineLogoUtils.shouldShowSearchEngineLogo(isIncognito)) {
+            mUrlBar.setTranslationX(mLocationBar.getUrlBarTranslationXForToolbarAnimation(
+                    mUrlExpansionPercent, hasFocus()));
+        } else if (SearchEngineLogoUtils.isSearchEngineLogoEnabled()) {
+            mUrlBar.setTranslationX(0);
+        }
+
         if (!mExperimentalButtonAnimationRunning) {
             mUrlActionContainer.setTranslationX(getUrlActionsTranslationXForExpansionAnimation(
                     isLocationBarRtl, locationBarBaseTranslationX));
@@ -1149,8 +1174,9 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         // Linearly interpolate between the bounds of the search box on the NTP and the omnibox
         // background bounds. |shrinkage| is the scaling factor for the offset -- if it's 1, we are
         // shrinking the omnibox down to the size of the search box.
-        float shrinkage =
-                1f - NTP_SEARCH_BOX_EXPANSION_INTERPOLATOR.getInterpolation(mUrlExpansionPercent);
+        float shrinkage = 1f
+                - Interpolators.FAST_OUT_SLOW_IN_INTERPOLATOR.getInterpolation(
+                        mUrlExpansionPercent);
 
         int leftBoundDifference = mNtpSearchBoxBounds.left - mLocationBarBackgroundBounds.left;
         int rightBoundDifference = mNtpSearchBoxBounds.right - mLocationBarBackgroundBounds.right;
@@ -1235,7 +1261,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         previousAlpha = mLocationBar.getAlpha();
         mLocationBar.setAlpha(previousAlpha * floatAlpha);
         // If the location bar is now fully transparent, do not bother drawing it.
-        if (mLocationBar.getAlpha() != 0) {
+        if (mLocationBar.getAlpha() != 0 && isLocationBarCurrentlyShown()) {
             drawChild(canvas, mLocationBar, SystemClock.uptimeMillis());
         }
         mLocationBar.setAlpha(previousAlpha);
@@ -1300,6 +1326,23 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
         // Draw the menu button if necessary.
         final ImageButton menuButton = getMenuButton();
+        // NOTE(david@vivaldi.com): In Vivaldi we always draw the menu button and also use different
+        // bounds in order to prevent the menu button from being squashed (VB-50041).
+        if (ChromeApplication.isVivaldi()) {
+            if (menuButton != null && !isShowingAppMenuUpdateBadge()
+                    && mTabSwitcherAnimationMenuDrawable != null && mUrlExpansionPercent != 1f) {
+                int offset =
+                        (menuButton.getDrawable().getMinimumWidth() - menuButton.getWidth()) / 2;
+                mTabSwitcherAnimationMenuDrawable.setBounds(menuButton.getPaddingLeft() - offset,
+                        menuButton.getPaddingTop(), menuButton.getWidth() + offset,
+                        menuButton.getHeight());
+                translateCanvasToView(mToolbarButtonsContainer, menuButton, canvas);
+                mTabSwitcherAnimationMenuDrawable.setAlpha(rgbAlpha);
+                int color = useLight() ? mLightModeDefaultColor : mDarkModeDefaultColor;
+                mTabSwitcherAnimationMenuDrawable.setColorFilter(color, PorterDuff.Mode.SRC_IN);
+                mTabSwitcherAnimationMenuDrawable.draw(canvas);
+            }
+        } else
         if (menuButton != null && !mIsBottomToolbarVisible && !isShowingAppMenuUpdateBadge()
                 && mTabSwitcherAnimationMenuDrawable != null && mUrlExpansionPercent != 1f) {
             mTabSwitcherAnimationMenuDrawable.setBounds(menuButton.getPaddingLeft(),
@@ -1475,9 +1518,20 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             }
             if (mExperimentalButtonAnimationRunning) {
                 if (mLocationBar.getLayoutDirection() == LAYOUT_DIRECTION_RTL) {
-                    locationBarClipLeft += ViewCompat.getPaddingStart(mLocationBar);
+                    locationBarClipLeft += mLocationBar.getPaddingStart();
                 } else {
-                    locationBarClipRight -= ViewCompat.getPaddingEnd(mLocationBar);
+                    locationBarClipRight -= mLocationBar.getPaddingEnd();
+                }
+            }
+
+            // Offset the clip rect by a set amount to ensure the Google G is completely inside the
+            // omnibox background when animating in.
+            if (SearchEngineLogoUtils.shouldShowSearchEngineLogo(isIncognito())
+                    && isLocationBarShownInNTP() && urlHasFocus() && mUrlFocusChangeInProgress) {
+                if (mLocationBar.getLayoutDirection() == LAYOUT_DIRECTION_RTL) {
+                    locationBarClipRight -= mLocationBar.getPaddingStart();
+                } else {
+                    locationBarClipLeft += mLocationBar.getPaddingStart();
                 }
             }
 
@@ -1586,6 +1640,11 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
     }
 
     @Override
+    public void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior) {
+        mLocationBar.setOverviewModeBehavior(overviewModeBehavior);
+    }
+
+    @Override
     public void finishAnimations() {
         mClipRect = null;
         if (mTabSwitcherModeAnimation != null) {
@@ -1624,11 +1683,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
     public void updateButtonVisibility() {
         if (mHomeButton == null) return;
 
-        boolean isNTP = getToolbarDataProvider().getNewTabPageForCurrentTab() != null;
-        boolean hideHomeButton = FeatureUtilities.isNewTabPageButtonEnabled()
-                ? isNTP || isIncognito()
-                : !mIsHomeButtonEnabled;
-        if (mIsBottomToolbarVisible) hideHomeButton = true;
+        boolean hideHomeButton = !mIsHomeButtonEnabled || mIsBottomToolbarVisible
+                || FeatureUtilities.isStartSurfaceEnabled();
         if (hideHomeButton) {
             removeHomeButton();
         } else {
@@ -1669,7 +1725,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
                 ObjectAnimator.ofFloat(this, mTabSwitcherModePercentProperty, 1.f);
         enterAnimation.setDuration(
                 TopToolbarCoordinator.TAB_SWITCHER_MODE_NORMAL_ANIMATION_DURATION_MS);
-        enterAnimation.setInterpolator(new LinearInterpolator());
+        enterAnimation.setInterpolator(Interpolators.LINEAR_INTERPOLATOR);
 
         return enterAnimation;
     }
@@ -1680,7 +1736,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         exitAnimation.setDuration(animateNormalToolbar
                         ? TopToolbarCoordinator.TAB_SWITCHER_MODE_NORMAL_ANIMATION_DURATION_MS
                         : TAB_SWITCHER_MODE_EXIT_FADE_ANIMATION_DURATION_MS);
-        exitAnimation.setInterpolator(new LinearInterpolator());
+        exitAnimation.setInterpolator(Interpolators.LINEAR_INTERPOLATOR);
         exitAnimation.addListener(new CancelAwareAnimatorListener() {
             @Override
             public void onEnd(Animator animation) {
@@ -1941,6 +1997,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
     @Override
     public boolean shouldIgnoreSwipeGesture() {
+        // NOTE(david@vivaldi.com): In Vivaldi we don't allow gesture when in Tab Switcher Mode
+        if (ChromeApplication.isVivaldi() && isInTabSwitcherMode()) return true;
         return super.shouldIgnoreSwipeGesture() || mUrlExpansionPercent > 0f
                 || mNtpSearchBoxTranslation.y < 0f;
     }
@@ -1985,6 +2043,9 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         for (int i = 0; i < mLocationBar.getChildCount(); i++) {
             View childView = mLocationBar.getChildAt(i);
             if (childView == mLocationBar.getFirstViewVisibleWhenFocused()) break;
+            if (ChromeApplication.isVivaldi()) {
+                if (childView == findViewById(R.id.location_bar_status)) break;
+            }
             animator = ObjectAnimator.ofFloat(childView, ALPHA, 0);
             animator.setDuration(URL_FOCUS_CHANGE_ANIMATION_DURATION_MS);
             animator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
@@ -2097,6 +2158,9 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         for (int i = 0; i < mLocationBar.getChildCount(); i++) {
             View childView = mLocationBar.getChildAt(i);
             if (childView == mLocationBar.getFirstViewVisibleWhenFocused()) break;
+            if (ChromeApplication.isVivaldi()) {
+                if (childView == findViewById(R.id.location_bar_status)) break;
+            }
             animator = ObjectAnimator.ofFloat(childView, ALPHA, 1);
             animator.setStartDelay(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
             animator.setDuration(URL_CLEAR_FOCUS_MENU_DELAY_MS);
@@ -2173,10 +2237,6 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
                 if (getToolbarDataProvider().shouldShowLocationBarInOverviewMode()) {
                     mLocationBar.updateStatusIcon();
-
-                    if (getToolbarDataProvider().isInOverviewAndShowingOmnibox()) {
-                        mUrlBar.setText("");
-                    }
                 }
             }
         });
@@ -2362,6 +2422,11 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         return ntp != null && ntp.isLocationBarShownInNTP();
     }
 
+    private boolean isLocationBarCurrentlyShown() {
+        NewTabPage ntp = getToolbarDataProvider().getNewTabPageForCurrentTab();
+        return ntp == null || !isLocationBarShownInNTP() || mUrlExpansionPercent > 0;
+    }
+
     /**
      * Update the visibility of the toolbar shadow.
      */
@@ -2507,6 +2572,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
         if (getMenuButtonWrapper() != null) {
             setMenuButtonHighlightDrawable();
+            if (ChromeApplication.isVivaldi()) getMenuButtonWrapper().setVisibility(View.VISIBLE);
+            else
             if (!mIsBottomToolbarVisible) getMenuButtonWrapper().setVisibility(View.VISIBLE);
         }
 
@@ -2723,10 +2790,17 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
     }
 
     private void setTabSwitcherAnimationMenuDrawable() {
+        if (!ChromeApplication.isVivaldi())
         mTabSwitcherAnimationMenuDrawable =
                 ApiCompatibilityUtils
                         .getDrawable(getResources(), R.drawable.ic_more_vert_24dp_on_dark_bg)
                         .mutate();
+        else
+            mTabSwitcherAnimationMenuDrawable = ApiCompatibilityUtils
+                .getDrawable(getResources(),
+                       R.drawable.vivaldi_menu_icon_56x56dp)
+                .mutate();
+        if (!ChromeApplication.isVivaldi())
         ((BitmapDrawable) mTabSwitcherAnimationMenuDrawable).setGravity(Gravity.CENTER);
     }
 
@@ -2805,7 +2879,9 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
         final int visibility = isVisible ? GONE : VISIBLE;
         mToggleTabStackButton.setVisibility(visibility);
-        getMenuButtonWrapper().setVisibility(visibility);
+        if (ChromeApplication.isVivaldi()) getMenuButtonWrapper().setVisibility(VISIBLE);
+        else
+        getMenuButtonWrapper().setVisibility(ChromeApplication.isVivaldi() ? VISIBLE : visibility);
         updateButtonVisibility();
         mToolbarButtonsContainer.requestLayout();
     }

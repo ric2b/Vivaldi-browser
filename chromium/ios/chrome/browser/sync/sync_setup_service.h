@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sync/base/model_type.h"
+#include "components/sync/driver/sync_user_settings.h"
 
 namespace syncer {
 class SyncService;
@@ -99,15 +100,10 @@ class SyncSetupService : public KeyedService {
   // changes. PrepareForFirstSyncSetup() needs to be called before. This flag is
   // not set if the user didn't turn on sync.
   // This method should only be used with UnifiedConsent flag.
-  void SetFirstSetupComplete();
+  void SetFirstSetupComplete(syncer::SyncFirstSetupCompleteSource source);
 
   // Returns true if the user finished the Sync setup flow.
   bool IsFirstSetupComplete() const;
-
-  // Commits the current state of the configuration to the sync backend.
-  // This method should only be used with UnifiedConsent flag off. This method
-  // is kept to not change the pre-Unity behavior.
-  void PreUnityCommitChanges();
 
   // Commits all the pending configuration changes to Sync.
   // This method should only be used with UnifiedConsent flag.

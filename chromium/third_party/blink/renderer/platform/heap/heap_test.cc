@@ -70,7 +70,7 @@ namespace {
 
 class HeapTest : public TestSupportingGC {};
 
-class IntWrapper : public GarbageCollectedFinalized<IntWrapper> {
+class IntWrapper : public GarbageCollected<IntWrapper> {
  public:
   virtual ~IntWrapper() {
     destructor_calls_.fetch_add(1, std::memory_order_relaxed);
@@ -145,7 +145,7 @@ class KeyWithCopyingMoveConstructor final {
   }
   KeyWithCopyingMoveConstructor(const KeyWithCopyingMoveConstructor&) = default;
   // The move constructor delegates to the copy constructor intentionally.
-  KeyWithCopyingMoveConstructor(KeyWithCopyingMoveConstructor&& x) noexcept
+  KeyWithCopyingMoveConstructor(KeyWithCopyingMoveConstructor&& x)
       : KeyWithCopyingMoveConstructor(x) {}
   KeyWithCopyingMoveConstructor& operator=(
       const KeyWithCopyingMoveConstructor&) = default;
@@ -415,8 +415,7 @@ class SimpleObject : public GarbageCollected<SimpleObject> {
   char payload[64];
 };
 
-class HeapTestSuperClass
-    : public GarbageCollectedFinalized<HeapTestSuperClass> {
+class HeapTestSuperClass : public GarbageCollected<HeapTestSuperClass> {
  public:
   HeapTestSuperClass() = default;
   virtual ~HeapTestSuperClass() { ++destructor_calls_; }
@@ -605,11 +604,6 @@ class ThreadedHeapTester : public ThreadedTesterBase {
           gc_count_.fetch_add(1, std::memory_order_release);
         }
 
-        // Taking snapshot shouldn't have any bad side effect.
-        // TODO(haraken): This snapshot GC causes crashes, so disable
-        // it at the moment. Fix the crash and enable it.
-        // ThreadHeap::collectGarbage(BlinkGC::NoHeapPointersOnStack,
-        //                            BlinkGC::TakeSnapshot, BlinkGC::ForcedGC);
         TestSupportingGC::PreciselyCollectGarbage();
         EXPECT_EQ(wrapper->Value(), 0x0bbac0de);
         EXPECT_EQ((*global_persistent)->Value(), 0x0ed0cabb);
@@ -644,11 +638,6 @@ class ThreadedWeaknessTester : public ThreadedTesterBase {
           gc_count_.fetch_add(1, std::memory_order_release);
         }
 
-        // Taking snapshot shouldn't have any bad side effect.
-        // TODO(haraken): This snapshot GC causes crashes, so disable
-        // it at the moment. Fix the crash and enable it.
-        // ThreadHeap::collectGarbage(BlinkGC::NoHeapPointersOnStack,
-        //                            BlinkGC::TakeSnapshot, BlinkGC::ForcedGC);
         TestSupportingGC::PreciselyCollectGarbage();
         EXPECT_TRUE(weak_map->IsEmpty());
       }
@@ -690,7 +679,7 @@ class ThreadPersistentHeapTester : public ThreadedTesterBase {
     Persistent<PersistentChain> persistent_chain_;
   };
 
-  class PersistentChain : public GarbageCollectedFinalized<PersistentChain> {
+  class PersistentChain final : public GarbageCollected<PersistentChain> {
    public:
     explicit PersistentChain(int count) {
       ref_counted_chain_ = base::AdoptRef(RefCountedChain::Create(count));
@@ -721,7 +710,7 @@ void CheckWithSlack(T expected, T actual, int slack) {
   EXPECT_GE((intptr_t)expected + slack, (intptr_t)actual);
 }
 
-class TraceCounter : public GarbageCollectedFinalized<TraceCounter> {
+class TraceCounter final : public GarbageCollected<TraceCounter> {
  public:
   TraceCounter() : trace_count_(0) {}
 
@@ -755,8 +744,8 @@ class ClassWithMember : public GarbageCollected<ClassWithMember> {
   Member<TraceCounter> trace_counter_;
 };
 
-class SimpleFinalizedObject
-    : public GarbageCollectedFinalized<SimpleFinalizedObject> {
+class SimpleFinalizedObject final
+    : public GarbageCollected<SimpleFinalizedObject> {
  public:
   SimpleFinalizedObject() = default;
   ~SimpleFinalizedObject() { ++destructor_calls_; }
@@ -798,7 +787,7 @@ class IntNode : public GarbageCollected<IntNode> {
   int value_;
 };
 
-class Bar : public GarbageCollectedFinalized<Bar> {
+class Bar : public GarbageCollected<Bar> {
  public:
   Bar() : magic_(kMagic) { live_++; }
 
@@ -887,7 +876,7 @@ class ConstructorAllocation : public GarbageCollected<ConstructorAllocation> {
   Member<IntWrapper> int_wrapper_;
 };
 
-class LargeHeapObject : public GarbageCollectedFinalized<LargeHeapObject> {
+class LargeHeapObject final : public GarbageCollected<LargeHeapObject> {
  public:
   LargeHeapObject() { int_wrapper_ = MakeGarbageCollected<IntWrapper>(23); }
   ~LargeHeapObject() { destructor_calls_++; }
@@ -917,8 +906,8 @@ int LargeHeapObject::destructor_calls_ = 0;
 // "keep alive" persistent reference that is set & cleared across
 // ref-counting operations.
 //
-class RefCountedAndGarbageCollected
-    : public GarbageCollectedFinalized<RefCountedAndGarbageCollected> {
+class RefCountedAndGarbageCollected final
+    : public GarbageCollected<RefCountedAndGarbageCollected> {
  public:
   RefCountedAndGarbageCollected() : keep_alive_(PERSISTENT_FROM_HERE) {}
   ~RefCountedAndGarbageCollected() { ++destructor_calls_; }
@@ -951,9 +940,9 @@ class RefCountedAndGarbageCollected
 
 int RefCountedAndGarbageCollected::destructor_calls_ = 0;
 
-class RefCountedAndGarbageCollected2
+class RefCountedAndGarbageCollected2 final
     : public HeapTestOtherSuperClass,
-      public GarbageCollectedFinalized<RefCountedAndGarbageCollected2> {
+      public GarbageCollected<RefCountedAndGarbageCollected2> {
  public:
   RefCountedAndGarbageCollected2() : keep_alive_(PERSISTENT_FROM_HERE) {}
   ~RefCountedAndGarbageCollected2() { ++destructor_calls_; }
@@ -1027,7 +1016,7 @@ class WithWeakMember : public Bar {
   WeakMember<Bar> weak_bar_;
 };
 
-class Observable : public GarbageCollectedFinalized<Observable> {
+class Observable final : public GarbageCollected<Observable> {
   USING_PRE_FINALIZER(Observable, WillFinalize);
 
  public:
@@ -1051,8 +1040,8 @@ class Observable : public GarbageCollectedFinalized<Observable> {
 
 bool Observable::will_finalize_was_called_ = false;
 
-class ObservableWithPreFinalizer
-    : public GarbageCollectedFinalized<ObservableWithPreFinalizer> {
+class ObservableWithPreFinalizer final
+    : public GarbageCollected<ObservableWithPreFinalizer> {
   USING_PRE_FINALIZER(ObservableWithPreFinalizer, Dispose);
 
  public:
@@ -1075,7 +1064,7 @@ bool g_dispose_was_called_for_pre_finalizer_base = false;
 bool g_dispose_was_called_for_pre_finalizer_mixin = false;
 bool g_dispose_was_called_for_pre_finalizer_sub_class = false;
 
-class PreFinalizerBase : public GarbageCollectedFinalized<PreFinalizerBase> {
+class PreFinalizerBase : public GarbageCollected<PreFinalizerBase> {
   USING_PRE_FINALIZER(PreFinalizerBase, Dispose);
 
  public:
@@ -1210,7 +1199,7 @@ Persistent<FinalizationObserverWithHashMap::ObserverMap>*
 
 class SuperClass;
 
-class PointsBack : public GarbageCollectedFinalized<PointsBack> {
+class PointsBack final : public GarbageCollected<PointsBack> {
  public:
   PointsBack() : back_pointer_(nullptr) { ++alive_count_; }
   ~PointsBack() { --alive_count_; }
@@ -1231,7 +1220,7 @@ class PointsBack : public GarbageCollectedFinalized<PointsBack> {
 
 int PointsBack::alive_count_ = 0;
 
-class SuperClass : public GarbageCollectedFinalized<SuperClass> {
+class SuperClass : public GarbageCollected<SuperClass> {
  public:
   explicit SuperClass(PointsBack* points_back) : points_back_(points_back) {
     points_back_->SetBackPointer(this);
@@ -1258,7 +1247,7 @@ class SuperClass : public GarbageCollectedFinalized<SuperClass> {
 };
 
 int SuperClass::alive_count_ = 0;
-class SubData : public GarbageCollectedFinalized<SubData> {
+class SubData final : public GarbageCollected<SubData> {
  public:
   SubData() { ++alive_count_; }
   ~SubData() { --alive_count_; }
@@ -1377,7 +1366,7 @@ WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(blink::VectorObjectNoTrace)
 
 namespace blink {
 
-class OneKiloByteObject : public GarbageCollectedFinalized<OneKiloByteObject> {
+class OneKiloByteObject final : public GarbageCollected<OneKiloByteObject> {
  public:
   ~OneKiloByteObject() { destructor_calls_++; }
   char* Data() { return data_; }
@@ -1408,8 +1397,8 @@ class DynamicallySizedObject : public GarbageCollected<DynamicallySizedObject> {
   DynamicallySizedObject() = default;
 };
 
-class FinalizationAllocator
-    : public GarbageCollectedFinalized<FinalizationAllocator> {
+class FinalizationAllocator final
+    : public GarbageCollected<FinalizationAllocator> {
  public:
   FinalizationAllocator(Persistent<IntWrapper>* wrapper) : wrapper_(wrapper) {}
 
@@ -1428,8 +1417,8 @@ class FinalizationAllocator
   Persistent<IntWrapper>* wrapper_;
 };
 
-class PreFinalizerBackingShrinkForbidden
-    : public GarbageCollectedFinalized<PreFinalizerBackingShrinkForbidden> {
+class PreFinalizerBackingShrinkForbidden final
+    : public GarbageCollected<PreFinalizerBackingShrinkForbidden> {
   USING_PRE_FINALIZER(PreFinalizerBackingShrinkForbidden, Dispose);
 
  public:
@@ -1485,9 +1474,8 @@ TEST_F(HeapTest, PreFinalizerBackingShrinkForbidden) {
   PreciselyCollectGarbage();
 }
 
-class PreFinalizerVectorBackingExpandForbidden
-    : public GarbageCollectedFinalized<
-          PreFinalizerVectorBackingExpandForbidden> {
+class PreFinalizerVectorBackingExpandForbidden final
+    : public GarbageCollected<PreFinalizerVectorBackingExpandForbidden> {
   USING_PRE_FINALIZER(PreFinalizerVectorBackingExpandForbidden, Dispose);
 
  public:
@@ -1515,9 +1503,8 @@ TEST(HeapDeathTest, PreFinalizerVectorBackingExpandForbidden) {
   TestSupportingGC::PreciselyCollectGarbage();
 }
 
-class PreFinalizerHashTableBackingExpandForbidden
-    : public GarbageCollectedFinalized<
-          PreFinalizerHashTableBackingExpandForbidden> {
+class PreFinalizerHashTableBackingExpandForbidden final
+    : public GarbageCollected<PreFinalizerHashTableBackingExpandForbidden> {
   USING_PRE_FINALIZER(PreFinalizerHashTableBackingExpandForbidden, Dispose);
 
  public:
@@ -1547,7 +1534,7 @@ TEST(HeapDeathTest, PreFinalizerHashTableBackingExpandForbidden) {
 #endif  // DCHECK_IS_ON()
 
 class PreFinalizerAllocationForbidden
-    : public GarbageCollectedFinalized<PreFinalizerAllocationForbidden> {
+    : public GarbageCollected<PreFinalizerAllocationForbidden> {
   USING_PRE_FINALIZER(PreFinalizerAllocationForbidden, Dispose);
 
  public:
@@ -2369,7 +2356,7 @@ typedef std::pair<Member<IntWrapper>, WeakMember<IntWrapper>> PairStrongWeak;
 typedef std::pair<WeakMember<IntWrapper>, int> PairWeakUnwrapped;
 typedef std::pair<int, WeakMember<IntWrapper>> PairUnwrappedWeak;
 
-class Container : public GarbageCollected<Container> {
+class Container final : public GarbageCollected<Container> {
  public:
   HeapHashMap<Member<IntWrapper>, Member<IntWrapper>> map;
   HeapHashSet<Member<IntWrapper>> set;
@@ -4282,7 +4269,7 @@ WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(blink::InlinedVectorObject)
 namespace blink {
 
 class InlinedVectorObjectWrapper final
-    : public GarbageCollectedFinalized<InlinedVectorObjectWrapper> {
+    : public GarbageCollected<InlinedVectorObjectWrapper> {
  public:
   InlinedVectorObjectWrapper() {
     InlinedVectorObject i1, i2;
@@ -4307,7 +4294,7 @@ class InlinedVectorObjectWrapper final
 };
 
 class InlinedVectorObjectWithVtableWrapper final
-    : public GarbageCollectedFinalized<InlinedVectorObjectWithVtableWrapper> {
+    : public GarbageCollected<InlinedVectorObjectWithVtableWrapper> {
  public:
   InlinedVectorObjectWithVtableWrapper() {
     InlinedVectorObjectWithVtable i1, i2;
@@ -5318,8 +5305,8 @@ static bool AllocateAndReturnBool() {
 }
 
 template <typename T>
-class TraceIfNeededTester
-    : public GarbageCollectedFinalized<TraceIfNeededTester<T>> {
+class TraceIfNeededTester final
+    : public GarbageCollected<TraceIfNeededTester<T>> {
  public:
   TraceIfNeededTester() = default;
   explicit TraceIfNeededTester(const T& obj) : obj_(obj) {}
@@ -5465,7 +5452,7 @@ TEST_F(HeapTest, PartObjectWithVirtualMethod) {
 }
 
 class AllocInSuperConstructorArgumentSuper
-    : public GarbageCollectedFinalized<AllocInSuperConstructorArgumentSuper> {
+    : public GarbageCollected<AllocInSuperConstructorArgumentSuper> {
  public:
   AllocInSuperConstructorArgumentSuper(bool value) : value_(value) {}
   virtual ~AllocInSuperConstructorArgumentSuper() = default;
@@ -5492,8 +5479,8 @@ TEST_F(HeapTest, AllocationInSuperConstructorArgument) {
   ThreadState::Current()->CollectAllGarbageForTesting();
 }
 
-class NonNodeAllocatingNodeInDestructor
-    : public GarbageCollectedFinalized<NonNodeAllocatingNodeInDestructor> {
+class NonNodeAllocatingNodeInDestructor final
+    : public GarbageCollected<NonNodeAllocatingNodeInDestructor> {
  public:
   ~NonNodeAllocatingNodeInDestructor() {
     node_ = new Persistent<IntNode>(IntNode::Create(10));
@@ -5853,8 +5840,7 @@ class ThreadedClearOnShutdownTester : public ThreadedTesterBase {
 };
 
 class ThreadedClearOnShutdownTester::HeapObject final
-    : public GarbageCollectedFinalized<
-          ThreadedClearOnShutdownTester::HeapObject> {
+    : public GarbageCollected<ThreadedClearOnShutdownTester::HeapObject> {
  public:
   explicit HeapObject(bool test_destructor)
       : test_destructor_(test_destructor) {}
@@ -5957,7 +5943,7 @@ TEST_F(HeapTest, IsGarbageCollected) {
   static_assert(WTF::IsGarbageCollectedType<const SimpleObject>::value,
                 "const GarbageCollected<>");
   static_assert(WTF::IsGarbageCollectedType<IntWrapper>::value,
-                "GarbageCollectedFinalized<>");
+                "GarbageCollected<>");
   static_assert(WTF::IsGarbageCollectedType<GarbageCollectedMixin>::value,
                 "GarbageCollectedMixin");
   static_assert(WTF::IsGarbageCollectedType<const GarbageCollectedMixin>::value,
@@ -6014,86 +6000,6 @@ TEST_F(HeapTest, HeapHashMapCallsDestructor) {
   EXPECT_TRUE(string.Impl()->HasOneRef());
 }
 
-TEST_F(HeapTest, PromptlyFreeStackAllocatedHeapVector) {
-  NormalPageArena* normal_arena;
-  Address before;
-  {
-    HeapVector<Member<IntWrapper>> vector;
-    vector.push_back(MakeGarbageCollected<IntWrapper>(0));
-    NormalPage* normal_page =
-        static_cast<NormalPage*>(PageFromObject(vector.data()));
-    normal_arena = normal_page->ArenaForNormalPage();
-    CHECK(normal_arena);
-    before = normal_arena->CurrentAllocationPoint();
-  }
-  Address after = normal_arena->CurrentAllocationPoint();
-  // We check the allocation point to see if promptly freed
-  EXPECT_NE(after, before);
-}
-
-TEST_F(HeapTest, PromptlyFreeStackAllocatedHeapDeque) {
-  NormalPageArena* normal_arena;
-  Address before;
-  {
-    HeapDeque<Member<IntWrapper>> deque;
-    deque.push_back(MakeGarbageCollected<IntWrapper>(0));
-    NormalPage* normal_page =
-        static_cast<NormalPage*>(PageFromObject(&deque.front()));
-    normal_arena = normal_page->ArenaForNormalPage();
-    CHECK(normal_arena);
-    before = normal_arena->CurrentAllocationPoint();
-  }
-  Address after = normal_arena->CurrentAllocationPoint();
-  // We check the allocation point to see if promptly freed
-  EXPECT_NE(after, before);
-}
-
-TEST_F(HeapTest, PromptlyFreeStackAllocatedHeapHashSet) {
-  NormalPageArena* normal_arena = static_cast<NormalPageArena*>(
-      ThreadState::Current()->Heap().Arena(BlinkGC::kHashTableArenaIndex));
-  CHECK(normal_arena);
-  Address before;
-  {
-    HeapHashSet<Member<IntWrapper>> hash_set;
-    hash_set.insert(MakeGarbageCollected<IntWrapper>(0));
-    before = normal_arena->CurrentAllocationPoint();
-  }
-  Address after = normal_arena->CurrentAllocationPoint();
-  // We check the allocation point to see if promptly freed
-  EXPECT_NE(after, before);
-}
-
-TEST_F(HeapTest, PromptlyFreeStackAllocatedHeapListHashSet) {
-  ClearOutOldGarbage();
-  NormalPageArena* normal_arena = static_cast<NormalPageArena*>(
-      ThreadState::Current()->Heap().Arena(BlinkGC::kHashTableArenaIndex));
-  CHECK(normal_arena);
-  Address before;
-  {
-    HeapListHashSet<Member<IntWrapper>> list_hash_set;
-    list_hash_set.insert(MakeGarbageCollected<IntWrapper>(0));
-    before = normal_arena->CurrentAllocationPoint();
-  }
-  Address after = normal_arena->CurrentAllocationPoint();
-  // We check the allocation point to see if promptly freed
-  EXPECT_NE(after, before);
-}
-
-TEST_F(HeapTest, PromptlyFreeStackAllocatedHeapLinkedHashSet) {
-  NormalPageArena* normal_arena = static_cast<NormalPageArena*>(
-      ThreadState::Current()->Heap().Arena(BlinkGC::kHashTableArenaIndex));
-  CHECK(normal_arena);
-  Address before;
-  {
-    HeapLinkedHashSet<Member<IntWrapper>> linked_hash_set;
-    linked_hash_set.insert(MakeGarbageCollected<IntWrapper>(0));
-    before = normal_arena->CurrentAllocationPoint();
-  }
-  Address after = normal_arena->CurrentAllocationPoint();
-  // We check the allocation point to see if promptly freed
-  EXPECT_NE(after, before);
-}
-
 TEST_F(HeapTest, ShrinkVector) {
   // Regression test: https://crbug.com/823289
 
@@ -6145,7 +6051,7 @@ TEST_F(HeapTest, PersistentAssignsDeletedValue) {
   PreciselyCollectGarbage();
 }
 
-struct HeapHashMapWrapper : GarbageCollectedFinalized<HeapHashMapWrapper> {
+struct HeapHashMapWrapper final : GarbageCollected<HeapHashMapWrapper> {
   HeapHashMapWrapper() {
     for (int i = 0; i < 100; ++i) {
       map_.insert(MakeGarbageCollected<IntWrapper>(i),
@@ -6187,7 +6093,7 @@ TEST_F(HeapTest, AccessDeletedBackingStore) {
   }
   BaseArena* map_arena = PageFromObject(map)->Arena();
   // Sweep normal arena, but don't call finalizers.
-  map_arena->SweepOnConcurrentThread();
+  map_arena->ConcurrentSweepWithDeadline(base::TimeTicks::Max());
   // Now complete sweeping with PerformIdleLazySweep and call finalizers.
   while (thread_state->IsSweepingInProgress()) {
     thread_state->PerformIdleLazySweep(base::TimeTicks::Max());

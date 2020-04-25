@@ -9,28 +9,17 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "browser/stats_reporter.h"
-#include "calendar/calendar_model_loaded_observer.h"
 #include "calendar/calendar_service_factory.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
 #include "components/datasource/vivaldi_data_source_api.h"
-#include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/translate_language_list.h"
-#include "components/translate/core/browser/translate_pref_names.h"
-#include "contact/contact_model_loaded_observer.h"
 #include "contact/contact_service_factory.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/buildflags/buildflags.h"
 #include "notes/notes_factory.h"
-#include "notes/notes_model.h"
-#include "notes/notes_model_loaded_observer.h"
-#include "notes/notesnode.h"
 #include "ui/lazy_load_service_factory.h"
-#include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
-#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/api/bookmark_context_menu/bookmark_context_menu_api.h"
@@ -103,6 +92,11 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
 void VivaldiBrowserMainExtraParts::
     EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   translate::TranslateLanguageList::DisableUpdate();
+#if !defined(OS_ANDROID)
+  vivaldi::NotesModelFactory::GetInstance();
+  calendar::CalendarServiceFactory::GetInstance();
+  contact::ContactServiceFactory::GetInstance();
+#endif
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::BookmarkContextMenuAPI::GetFactoryInstance();
   extensions::CalendarAPI::GetFactoryInstance();
@@ -125,54 +119,23 @@ void VivaldiBrowserMainExtraParts::
   extensions::HistoryPrivateAPI::GetFactoryInstance();
 #endif
   VivaldiAdverseAdFilterListFactory::GetFactoryInstance();
+  if (!vivaldi::IsVivaldiRunning())
+    return;
+
+#if !defined(OS_ANDROID)
+  vivaldi::LazyLoadServiceFactory::GetInstance();
+#endif
 }
 
 void VivaldiBrowserMainExtraParts::PreProfileInit() {
   EnsureBrowserContextKeyedServiceFactoriesBuilt();
 }
 
-// static
-void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile) {
+void VivaldiBrowserMainExtraParts::PostProfileInit() {
 #if !defined(OS_ANDROID)
-  vivaldi::Notes_Model* notes_model =
-      vivaldi::NotesModelFactory::GetForBrowserContext(profile);
-  notes_model->AddObserver(new vivaldi::NotesModelLoadedObserver(profile));
-
-  calendar::CalendarService* calendar_service =
-      calendar::CalendarServiceFactory::GetForProfile(profile);
-  calendar_service->AddObserver(new calendar::CalendarModelLoadedObserver());
-
-  contact::ContactService* contact_service =
-      contact::ContactServiceFactory::GetForProfile(profile);
-  contact_service->AddObserver(new contact::ContactModelLoadedObserver());
-
-  extensions::VivaldiUtilitiesAPI::GetFactoryInstance()
-      ->Get(profile)
-      ->PostProfileSetup();
-
   if (!vivaldi::IsVivaldiRunning())
     return;
 
-  vivaldi::LazyLoadServiceFactory::GetForProfile(profile);
-
-  PrefService* pref_service = profile->GetPrefs();
-  pref_service->SetBoolean(prefs::kOfferTranslateEnabled, false);
-
-  if (pref_service->GetBoolean(vivaldiprefs::kWebpagesSmoothScrollingEnabled) ==
-      false) {
-    vivaldi::CommandLineAppendSwitchNoDup(
-        base::CommandLine::ForCurrentProcess(),
-        switches::kDisableSmoothScrolling);
-  }
-  int spatnav =
-      pref_service->GetInteger(vivaldiprefs::kWebpagesSpatialNavigationMethod);
-  if (spatnav ==
-      static_cast<int>(
-          vivaldiprefs::WebpagesSpatialNavigationMethodValues::BLINK)) {
-    vivaldi::CommandLineAppendSwitchNoDup(
-        base::CommandLine::ForCurrentProcess(),
-        switches::kEnableSpatialNavigation);
-  }
   vivaldi::CommandLineAppendSwitchNoDup(base::CommandLine::ForCurrentProcess(),
                                         switches::kSavePageAsMHTML);
 #endif

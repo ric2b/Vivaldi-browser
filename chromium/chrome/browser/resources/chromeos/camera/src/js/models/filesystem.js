@@ -31,10 +31,23 @@ cca.models.FileSystem = function() {
 cca.models.FileSystem.THUMBNAIL_PREFIX = 'thumb-';
 
 /**
+ * Width of thumbnail.
+ * @type {number}
+ * @const
+ */
+cca.models.FileSystem.THUMBNAIL_WIDTH = 480;
+
+/**
  * Directory in the internal file system.
  * @type {DirectoryEntry}
  */
 cca.models.FileSystem.internalDir = null;
+
+/**
+ * Temporary directory in the internal file system.
+ * @type {DirectoryEntry}
+ */
+cca.models.FileSystem.internalTempDir = null;
 
 /**
  * Directory in the external file system.
@@ -49,7 +62,21 @@ cca.models.FileSystem.externalDir = null;
  */
 cca.models.FileSystem.initInternalDir_ = function() {
   return new Promise((resolve, reject) => {
-    webkitRequestFileSystem(window.PERSISTENT, 768 * 1024 * 1024 /* 768MB */,
+    webkitRequestFileSystem(
+        window.PERSISTENT, 768 * 1024 * 1024 /* 768MB */,
+        (fs) => resolve(fs.root), reject);
+  });
+};
+
+/**
+ * Initializes the temporary directory in the internal file system.
+ * @return {!Promise<DirectoryEntry>} Promise for the directory result.
+ * @private
+ */
+cca.models.FileSystem.initInternalTempDir_ = function() {
+  return new Promise((resolve, reject) => {
+    webkitRequestFileSystem(
+        window.TEMPORARY, 768 * 1024 * 1024 /* 768MB */,
         (fs) => resolve(fs.root), reject);
   });
 };
@@ -118,48 +145,59 @@ cca.models.FileSystem.initialize = function(promptMigrate) {
   var doneMigrate = () => chrome.chromeosInfoPrivate &&
       chrome.chromeosInfoPrivate.set('cameraMediaConsolidated', true);
 
-  return Promise.all([
-    cca.models.FileSystem.initInternalDir_(),
-    cca.models.FileSystem.initExternalDir_(),
-    checkAcked,
-    checkMigrated,
-  ]).then(([internalDir, externalDir, acked, migrated]) => {
-    cca.models.FileSystem.internalDir = internalDir;
-    cca.models.FileSystem.externalDir = externalDir;
-    if (migrated && !externalDir) {
-      throw new Error('External file system should be available.');
-    }
-    // Check if acknowledge-prompt and migrate-pictures are needed.
-    if (migrated || !cca.models.FileSystem.externalDir) {
-      return [false, false];
-    }
-    // Check if any internal picture other than thumbnail needs migration.
-    // Pictures taken by old Camera App may not have IMG_ or VID_ prefix.
-    var dir = cca.models.FileSystem.internalDir;
-    return cca.models.FileSystem.readDir_(dir).then((entries) => {
-      return entries.some(
-          (entry) => !cca.models.FileSystem.hasThumbnailPrefix_(entry));
-    }).then((migrateNeeded) => {
-      if (migrateNeeded) {
-        return [!acked, true];
-      }
-      // If the external file system is supported and there is already no
-      // picture in the internal file system, it implies done migration and
-      // then doesn't need acknowledge-prompt.
-      ackMigrate();
-      doneMigrate();
-      return [false, false];
-    });
-  }).then(([promptNeeded, migrateNeeded]) => { // Prompt to migrate if needed.
-    return !promptNeeded ? migrateNeeded : promptMigrate().then(() => {
-      ackMigrate();
-      return migrateNeeded;
-    });
-  }).then((migrateNeeded) => { // Migrate pictures if needed.
-    const external = cca.models.FileSystem.externalDir != null;
-    return !migrateNeeded ? external : cca.models.FileSystem.migratePictures()
-        .then(doneMigrate).then(() => external);
-  });
+  return Promise
+      .all([
+        cca.models.FileSystem.initInternalDir_(),
+        cca.models.FileSystem.initInternalTempDir_(),
+        cca.models.FileSystem.initExternalDir_(),
+        checkAcked,
+        checkMigrated,
+      ])
+      .then(([internalDir, internalTempDir, externalDir, acked, migrated]) => {
+        cca.models.FileSystem.internalDir = internalDir;
+        cca.models.FileSystem.internalTempDir = internalTempDir;
+        cca.models.FileSystem.externalDir = externalDir;
+        if (migrated && !externalDir) {
+          throw new Error('External file system should be available.');
+        }
+        // Check if acknowledge-prompt and migrate-pictures are needed.
+        if (migrated || !cca.models.FileSystem.externalDir) {
+          return [false, false];
+        }
+        // Check if any internal picture other than thumbnail needs migration.
+        // Pictures taken by old Camera App may not have IMG_ or VID_ prefix.
+        var dir = cca.models.FileSystem.internalDir;
+        return cca.models.FileSystem.readDir_(dir)
+            .then((entries) => {
+              return entries.some(
+                  (entry) => !cca.models.FileSystem.hasThumbnailPrefix_(entry));
+            })
+            .then((migrateNeeded) => {
+              if (migrateNeeded) {
+                return [!acked, true];
+              }
+              // If the external file system is supported and there is already
+              // no picture in the internal file system, it implies done
+              // migration and then doesn't need acknowledge-prompt.
+              ackMigrate();
+              doneMigrate();
+              return [false, false];
+            });
+      })
+      .then(
+          ([promptNeeded, migrateNeeded]) => {  // Prompt to migrate if needed.
+            return !promptNeeded ? migrateNeeded : promptMigrate().then(() => {
+              ackMigrate();
+              return migrateNeeded;
+            });
+          })
+      .then((migrateNeeded) => {  // Migrate pictures if needed.
+        const external = cca.models.FileSystem.externalDir != null;
+        return !migrateNeeded ? external :
+                                cca.models.FileSystem.migratePictures()
+                                    .then(doneMigrate)
+                                    .then(() => external);
+      });
 };
 
 /**
@@ -303,6 +341,26 @@ cca.models.FileSystem.createTempVideoFile = async function() {
 };
 
 /**
+ * @const {string}
+ */
+cca.models.FileSystem.PRIVATE_TEMPFILE_NAME = 'video-intent.mkv';
+
+/**
+ * @return {!Promise<!FileEntry>} Newly created temporary file.
+ * @throws {Error} If failed to create video temp file.
+ */
+cca.models.FileSystem.createPrivateTempVideoFile = async function() {
+  // TODO(inker): Handles running out of space case.
+  const dir = cca.models.FileSystem.internalTempDir;
+  const file = await cca.models.FileSystem.getFile(
+      dir, cca.models.FileSystem.PRIVATE_TEMPFILE_NAME, true);
+  if (file === null) {
+    throw new Error('Failed to create private video temp file.');
+  }
+  return file;
+};
+
+/**
  * Saves temporary video file to predefined default location.
  * @param {FileEntry} tempfile Temporary video file to be saved.
  * @param {string} filename Filename to be saved.
@@ -321,48 +379,12 @@ cca.models.FileSystem.saveVideo = async function(tempfile, filename) {
   // Assuming content of tempfile contains all recorded chunks appended together
   // and is a well-formed video. The work needed here is just to move the file
   // to the correct directory and rename as the specified filename.
+  if (tempfile.name == filename) {
+    return tempfile;
+  }
   return new Promise(
       (resolve, reject) =>
           tempfile.moveTo(nonNullDir, filename, resolve, reject));
-};
-
-/**
- * Creates a thumbnail from the picture.
- * @param {boolean} isVideo Picture is a video.
- * @param {string} url Picture as an URL.
- * @return {!Promise<Blob>} Promise for the result.
- * @private
- */
-cca.models.FileSystem.createThumbnail_ = function(isVideo, url) {
-  const thumbnailWidth = 480;
-  var element = document.createElement(isVideo ? 'video' : 'img');
-  if (isVideo) {
-    element.preload = 'auto';
-  }
-  return new Promise((resolve, reject) => {
-    element.addEventListener(isVideo ? 'canplay' : 'load', resolve);
-    element.addEventListener('error', reject);
-    element.src = url;
-  }).then(() => {
-    var canvas = document.createElement('canvas');
-    var context = canvas.getContext('2d');
-    var ratio = isVideo ?
-        element.videoHeight / element.videoWidth :
-        element.height / element.width;
-    var thumbnailHeight = Math.round(thumbnailWidth * ratio);
-    canvas.width = thumbnailWidth;
-    canvas.height = thumbnailHeight;
-    context.drawImage(element, 0, 0, thumbnailWidth, thumbnailHeight);
-    return new Promise((resolve, reject) => {
-      canvas.toBlob((blob) => {
-        if (blob) {
-          resolve(blob);
-        } else {
-          reject(new Error('Failed to create thumbnail.'));
-        }
-      }, 'image/jpeg');
-    });
-  });
 };
 
 /**
@@ -383,13 +405,16 @@ cca.models.FileSystem.getThumbnailName = function(entry) {
  * @return {!Promise<FileEntry>} Promise for the result.
  */
 cca.models.FileSystem.saveThumbnail = function(isVideo, entry) {
-  return cca.models.FileSystem.pictureURL(entry).then((url) => {
-    return cca.models.FileSystem.createThumbnail_(isVideo, url);
-  }).then((blob) => {
-    var thumbnailName = cca.models.FileSystem.getThumbnailName(entry);
-    return cca.models.FileSystem.saveToFile_(
-        cca.models.FileSystem.internalDir, thumbnailName, blob);
-  });
+  return cca.models.FileSystem.pictureURL(entry)
+      .then((url) => {
+        return cca.util.scalePicture(
+            url, isVideo, cca.models.FileSystem.THUMBNAIL_WIDTH);
+      })
+      .then((blob) => {
+        var thumbnailName = cca.models.FileSystem.getThumbnailName(entry);
+        return cca.models.FileSystem.saveToFile_(
+            cca.models.FileSystem.internalDir, thumbnailName, blob);
+      });
 };
 
 /**

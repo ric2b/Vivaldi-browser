@@ -34,11 +34,6 @@ using content::WebContents;
 namespace {
 
 static Profile* FindProfile(jboolean is_incognito) {
-  if (g_browser_process == NULL ||
-      g_browser_process->profile_manager() == NULL) {
-    LOG(ERROR) << "Browser process or profile manager not initialized";
-    return NULL;
-  }
   Profile* profile = ProfileManager::GetActiveUserProfile();
   if (is_incognito)
     return profile->GetOffTheRecordProfile();
@@ -77,6 +72,9 @@ void TabModelJniBridge::TabAddedToModel(JNIEnv* env,
   TabAndroid* tab = TabAndroid::GetNativeTab(env, jtab);
   if (tab)
     tab->SetWindowSessionID(GetSessionId());
+
+  if (IsOffTheRecord())
+    UMA_HISTOGRAM_COUNTS_100("Tab.Count.Incognito", GetTabCount());
 }
 
 int TabModelJniBridge::GetTabCount() const {

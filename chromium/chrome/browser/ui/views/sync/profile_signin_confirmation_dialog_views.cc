@@ -52,6 +52,7 @@ ProfileSigninConfirmationDialogViews::ProfileSigninConfirmationDialogViews(
       username_(username),
       delegate_(std::move(delegate)),
       prompt_for_new_profile_(true) {
+  DialogDelegate::set_default_button(ui::DIALOG_BUTTON_NONE);
   chrome::RecordDialogCreation(
       chrome::DialogIdentifier::PROFILE_SIGNIN_CONFIRMATION);
 }
@@ -86,6 +87,10 @@ void ProfileSigninConfirmationDialogViews::ShowDialog(
 
 void ProfileSigninConfirmationDialogViews::Show(bool prompt_for_new_profile) {
   prompt_for_new_profile_ = prompt_for_new_profile;
+  if (prompt_for_new_profile) {
+    DialogDelegate::SetExtraView(views::MdTextButton::CreateSecondaryUiButton(
+        this, l10n_util::GetStringUTF16(IDS_ENTERPRISE_SIGNIN_CONTINUE)));
+  }
   constrained_window::CreateBrowserModalDialogViews(
       this, browser_->window()->GetNativeWindow())->Show();
 }
@@ -106,19 +111,6 @@ base::string16 ProfileSigninConfirmationDialogViews::GetDialogButtonLabel(
             IDS_ENTERPRISE_SIGNIN_CONTINUE);
   }
   return l10n_util::GetStringUTF16(IDS_ENTERPRISE_SIGNIN_CANCEL);
-}
-
-int ProfileSigninConfirmationDialogViews::GetDefaultDialogButton() const {
-  return ui::DIALOG_BUTTON_NONE;
-}
-
-std::unique_ptr<views::View>
-ProfileSigninConfirmationDialogViews::CreateExtraView() {
-  if (!prompt_for_new_profile_)
-    return nullptr;
-
-  return views::MdTextButton::CreateSecondaryUiButton(
-      this, l10n_util::GetStringUTF16(IDS_ENTERPRISE_SIGNIN_CONTINUE));
 }
 
 bool ProfileSigninConfirmationDialogViews::Accept() {

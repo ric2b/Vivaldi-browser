@@ -102,9 +102,7 @@ TEST_F(NetworkSessionConfiguratorTest, EnableQuicFromFieldTrialGroup) {
   ParseFieldTrials();
 
   EXPECT_TRUE(params_.enable_quic);
-  EXPECT_FALSE(params_.quic_params.mark_quic_broken_when_network_blackholes);
   EXPECT_TRUE(params_.quic_params.retry_without_alt_svc_on_quic_errors);
-  EXPECT_FALSE(params_.quic_params.support_ietf_format_quic_altsvc);
   EXPECT_EQ(1350u, params_.quic_params.max_packet_length);
   EXPECT_EQ(quic::QuicTagVector(), params_.quic_params.connection_options);
   EXPECT_EQ(quic::QuicTagVector(),
@@ -169,18 +167,6 @@ TEST_F(NetworkSessionConfiguratorTest, EnableQuicProxiesForHttpsUrls) {
   EXPECT_TRUE(params_.enable_quic_proxies_for_https_urls);
 }
 
-TEST_F(NetworkSessionConfiguratorTest,
-       MarkQuicBrokenWhenNetworkBlackholesFromFieldTrialParams) {
-  std::map<std::string, std::string> field_trial_params;
-  field_trial_params["mark_quic_broken_when_network_blackholes"] = "true";
-  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
-  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
-
-  ParseFieldTrials();
-
-  EXPECT_TRUE(params_.quic_params.mark_quic_broken_when_network_blackholes);
-}
-
 TEST_F(NetworkSessionConfiguratorTest, DisableRetryWithoutAltSvcOnQuicErrors) {
   std::map<std::string, std::string> field_trial_params;
   field_trial_params["retry_without_alt_svc_on_quic_errors"] = "false";
@@ -190,17 +176,6 @@ TEST_F(NetworkSessionConfiguratorTest, DisableRetryWithoutAltSvcOnQuicErrors) {
   ParseFieldTrials();
 
   EXPECT_FALSE(params_.quic_params.retry_without_alt_svc_on_quic_errors);
-}
-
-TEST_F(NetworkSessionConfiguratorTest, SupportIetfFormatQuicAltSvc) {
-  std::map<std::string, std::string> field_trial_params;
-  field_trial_params["support_ietf_format_quic_altsvc"] = "true";
-  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
-  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
-
-  ParseFieldTrials();
-
-  EXPECT_TRUE(params_.quic_params.support_ietf_format_quic_altsvc);
 }
 
 TEST_F(NetworkSessionConfiguratorTest,
@@ -471,15 +446,15 @@ TEST_F(
 }
 
 TEST_F(NetworkSessionConfiguratorTest,
-       QuicAllowServerMigrationFromFieldTrialParams) {
+       QuicAllowPortMigrationFromFieldTrialParams) {
   std::map<std::string, std::string> field_trial_params;
-  field_trial_params["allow_server_migration"] = "true";
+  field_trial_params["allow_port_migration"] = "true";
   variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
   base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
 
   ParseFieldTrials();
 
-  EXPECT_TRUE(params_.quic_params.allow_server_migration);
+  EXPECT_TRUE(params_.quic_params.allow_port_migration);
 }
 
 TEST_F(NetworkSessionConfiguratorTest, PacketLengthFromFieldTrialParams) {
@@ -618,18 +593,18 @@ TEST_F(NetworkSessionConfiguratorTest, QuicHostAllowlistEmpty) {
 }
 
 TEST_F(NetworkSessionConfiguratorTest, QuicFlags) {
-  FLAGS_quic_supports_tls_handshake = false;
+  FLAGS_quic_reloadable_flag_quic_supports_tls_handshake = false;
   FLAGS_quic_reloadable_flag_quic_enable_version_99 = false;
   std::map<std::string, std::string> field_trial_params;
   field_trial_params["set_quic_flags"] =
-      "FLAGS_quic_supports_tls_handshake=true,"
+      "FLAGS_quic_reloadable_flag_quic_supports_tls_handshake=true,"
       "FLAGS_quic_reloadable_flag_quic_enable_version_99=true";
   variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
   base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
 
   ParseFieldTrials();
 
-  EXPECT_TRUE(FLAGS_quic_supports_tls_handshake);
+  EXPECT_TRUE(FLAGS_quic_reloadable_flag_quic_supports_tls_handshake);
   EXPECT_TRUE(FLAGS_quic_reloadable_flag_quic_enable_version_99);
 }
 

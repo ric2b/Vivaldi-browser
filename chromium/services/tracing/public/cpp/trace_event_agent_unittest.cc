@@ -30,16 +30,16 @@ const char kTestMetadataKey[] = "TraceEventAgentTestMetadata";
 
 class MockRecorder : public mojom::Recorder {
  public:
-  explicit MockRecorder(mojom::RecorderRequest request)
-      : binding_(this, std::move(request)) {
-    binding_.set_connection_error_handler(base::BindRepeating(
+  explicit MockRecorder(mojo::PendingReceiver<mojom::Recorder> receiver)
+      : receiver_(this, std::move(receiver)) {
+    receiver_.set_disconnect_handler(base::BindRepeating(
         &MockRecorder::OnConnectionError, base::Unretained(this)));
   }
 
   std::string events() const { return events_; }
   std::string metadata() const { return metadata_; }
-  void set_quit_closure(base::Closure quit_closure) {
-    quit_closure_ = quit_closure;
+  void set_quit_closure(base::OnceClosure quit_closure) {
+    quit_closure_ = std::move(quit_closure);
   }
 
  private:
@@ -72,13 +72,13 @@ class MockRecorder : public mojom::Recorder {
 
   void OnConnectionError() {
     if (quit_closure_)
-      quit_closure_.Run();
+      std::move(quit_closure_).Run();
   }
 
-  mojo::Binding<mojom::Recorder> binding_;
+  mojo::Receiver<mojom::Recorder> receiver_;
   std::string events_;
   std::string metadata_;
-  base::Closure quit_closure_;
+  base::OnceClosure quit_closure_;
 };
 
 class TraceEventAgentTest : public testing::Test {
@@ -97,11 +97,12 @@ class TraceEventAgentTest : public testing::Test {
         base::BindRepeating([](bool success) { EXPECT_TRUE(success); }));
   }
 
-  void StopAndFlush(base::Closure quit_closure) {
-    mojom::RecorderPtr recorder_ptr;
-    recorder_.reset(new MockRecorder(MakeRequest(&recorder_ptr)));
-    recorder_->set_quit_closure(quit_closure);
-    TraceEventAgent::GetInstance()->StopAndFlush(std::move(recorder_ptr));
+  void StopAndFlush(base::OnceClosure quit_closure) {
+    mojo::PendingRemote<mojom::Recorder> recorder;
+    recorder_.reset(
+        new MockRecorder(recorder.InitWithNewPipeAndPassReceiver()));
+    recorder_->set_quit_closure(std::move(quit_closure));
+    TraceEventAgent::GetInstance()->StopAndFlush(std::move(recorder));
   }
 
   void AddMetadataGeneratorFunction(

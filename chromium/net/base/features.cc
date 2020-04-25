@@ -15,9 +15,6 @@ const base::Feature kCapRefererHeaderLength = {
 const base::FeatureParam<int> kMaxRefererHeaderLength = {
     &kCapRefererHeaderLength, "MaxRefererHeaderLength", 4096};
 
-const base::Feature kEnforceTLS13Downgrade{"EnforceTLS13Downgrade",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kEnableTLS13EarlyData{"EnableTLS13EarlyData",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -53,6 +50,9 @@ const base::Feature kSameSiteByDefaultCookies{
 
 const base::Feature kCookiesWithoutSameSiteMustBeSecure{
     "CookiesWithoutSameSiteMustBeSecure", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kShortLaxAllowUnsafeThreshold{
+    "ShortLaxAllowUnsafeThreshold", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
 const base::Feature kCertVerifierBuiltinFeature{

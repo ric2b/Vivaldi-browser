@@ -67,6 +67,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/origin_util.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/device/public/cpp/device_features.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -157,7 +158,7 @@ int GetIdForContentType(const ContentSettingsTypeIdEntry* entries,
 }
 
 void SetAllowRunningInsecureContent(content::RenderFrameHost* frame) {
-  chrome::mojom::ContentSettingsRendererAssociatedPtr renderer;
+  mojo::AssociatedRemote<chrome::mojom::ContentSettingsRenderer> renderer;
   frame->GetRemoteAssociatedInterfaces()->GetInterface(&renderer);
   renderer->SetAllowRunningInsecureContent();
 }
@@ -1271,10 +1272,10 @@ void ContentSettingMediaStreamBubbleModel::
       base::UserMetricsAction("Media.ShowSystemMediaPermissionBubble"));
   int title_id = 0;
   if (MicrophoneAccessed() && CameraAccessed() &&
-      system_media_permissions::CheckSystemVideoCapturePermission() ==
-          system_media_permissions::SystemPermission::kDenied &&
-      system_media_permissions::CheckSystemAudioCapturePermission() ==
-          system_media_permissions::SystemPermission::kDenied) {
+      (system_media_permissions::CheckSystemVideoCapturePermission() ==
+           system_media_permissions::SystemPermission::kDenied ||
+       system_media_permissions::CheckSystemAudioCapturePermission() ==
+           system_media_permissions::SystemPermission::kDenied)) {
     title_id = IDS_CAMERA_MIC_TURNED_OFF_IN_MACOS;
     AddListItem(ContentSettingBubbleModel::ListItem(
         &vector_icons::kVideocamIcon, l10n_util::GetStringUTF16(IDS_CAMERA),
@@ -1313,6 +1314,8 @@ bool ContentSettingMediaStreamBubbleModel::ShouldShowSystemMediaPermissions() {
            (system_media_permissions::CheckSystemAudioCapturePermission() ==
                 system_media_permissions::SystemPermission::kDenied &&
             MicrophoneAccessed() && !MicrophoneBlocked())) &&
+          !(CameraAccessed() && CameraBlocked()) &&
+          !(MicrophoneAccessed() && MicrophoneBlocked()) &&
           base::FeatureList::IsEnabled(
               ::features::kMacSystemMediaPermissionsInfoUi));
 #else

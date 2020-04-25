@@ -16,20 +16,19 @@ DnsConfigChangeManager::~DnsConfigChangeManager() {
   net::NetworkChangeNotifier::RemoveDNSObserver(this);
 }
 
-void DnsConfigChangeManager::AddBinding(
-    mojom::DnsConfigChangeManagerRequest request) {
-  bindings_.AddBinding(this, std::move(request));
+void DnsConfigChangeManager::AddReceiver(
+    mojo::PendingReceiver<mojom::DnsConfigChangeManager> receiver) {
+  receivers_.Add(this, std::move(receiver));
 }
 
 void DnsConfigChangeManager::RequestNotifications(
-    mojom::DnsConfigChangeManagerClientPtr client) {
-  clients_.AddPtr(std::move(client));
+    mojo::PendingRemote<mojom::DnsConfigChangeManagerClient> client) {
+  clients_.Add(std::move(client));
 }
 
 void DnsConfigChangeManager::OnDNSChanged() {
-  clients_.ForAllPtrs([](mojom::DnsConfigChangeManagerClient* client) {
+  for (const auto& client : clients_)
     client->OnSystemDnsConfigChanged();
-  });
 }
 
 void DnsConfigChangeManager::OnInitialDNSConfigRead() {

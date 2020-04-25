@@ -4,9 +4,16 @@
 
 package org.chromium.chrome.browser.autofill_assistant.user_data;
 
+import android.support.annotation.Nullable;
+
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
+import org.chromium.chrome.browser.autofill_assistant.user_data.additional_sections.AssistantAdditionalSectionFactory;
+import org.chromium.chrome.browser.autofill_assistant.user_data.additional_sections.AssistantStaticTextSection;
+import org.chromium.chrome.browser.autofill_assistant.user_data.additional_sections.AssistantTextInputSection;
+import org.chromium.chrome.browser.autofill_assistant.user_data.additional_sections.AssistantTextInputSection.TextInputFactory;
+import org.chromium.chrome.browser.autofill_assistant.user_data.additional_sections.AssistantTextInputType;
 import org.chromium.chrome.browser.payments.AutofillAddress;
 import org.chromium.chrome.browser.payments.AutofillContact;
 import org.chromium.chrome.browser.payments.AutofillPaymentInstrument;
@@ -104,6 +111,33 @@ public class AssistantCollectUserDataModel extends PropertyModel {
     public static final WritableObjectPropertyKey<String> BILLING_POSTAL_CODE_MISSING_TEXT =
             new WritableObjectPropertyKey<>();
 
+    public static final WritableBooleanPropertyKey REQUEST_DATE_RANGE =
+            new WritableBooleanPropertyKey();
+
+    public static final WritableObjectPropertyKey<AssistantDateChoiceOptions> DATE_RANGE_START =
+            new WritableObjectPropertyKey<>();
+
+    public static final WritableObjectPropertyKey<String> DATE_RANGE_START_LABEL =
+            new WritableObjectPropertyKey<>();
+
+    public static final WritableObjectPropertyKey<AssistantDateChoiceOptions> DATE_RANGE_END =
+            new WritableObjectPropertyKey<>();
+
+    public static final WritableObjectPropertyKey<String> DATE_RANGE_END_LABEL =
+            new WritableObjectPropertyKey<>();
+
+    public static final WritableObjectPropertyKey<List<AssistantAdditionalSectionFactory>>
+            PREPENDED_SECTIONS = new WritableObjectPropertyKey<>();
+
+    public static final WritableObjectPropertyKey<List<AssistantAdditionalSectionFactory>>
+            APPENDED_SECTIONS = new WritableObjectPropertyKey<>();
+
+    public static final WritableObjectPropertyKey<String> TERMS_REQUIRE_REVIEW_TEXT =
+            new WritableObjectPropertyKey<>();
+
+    public static final WritableObjectPropertyKey<String> THIRDPARTY_PRIVACY_NOTICE_TEXT =
+            new WritableObjectPropertyKey<>();
+
     public AssistantCollectUserDataModel() {
         super(DELEGATE, WEB_CONTENTS, VISIBLE, SHIPPING_ADDRESS, PAYMENT_METHOD, CONTACT_DETAILS,
                 LOGIN_SECTION_TITLE, SELECTED_LOGIN, TERMS_STATUS, DEFAULT_EMAIL, REQUEST_NAME,
@@ -111,7 +145,10 @@ public class AssistantCollectUserDataModel extends PropertyModel {
                 ACCEPT_TERMS_AND_CONDITIONS_TEXT, SHOW_TERMS_AS_CHECKBOX, REQUEST_LOGIN_CHOICE,
                 AVAILABLE_PROFILES, AVAILABLE_AUTOFILL_PAYMENT_METHODS,
                 SUPPORTED_BASIC_CARD_NETWORKS, SUPPORTED_PAYMENT_METHODS, AVAILABLE_LOGINS,
-                EXPANDED_SECTION, REQUIRE_BILLING_POSTAL_CODE, BILLING_POSTAL_CODE_MISSING_TEXT);
+                EXPANDED_SECTION, REQUIRE_BILLING_POSTAL_CODE, BILLING_POSTAL_CODE_MISSING_TEXT,
+                REQUEST_DATE_RANGE, DATE_RANGE_START, DATE_RANGE_START_LABEL, DATE_RANGE_END,
+                DATE_RANGE_END_LABEL, PREPENDED_SECTIONS, APPENDED_SECTIONS,
+                TERMS_REQUIRE_REVIEW_TEXT, THIRDPARTY_PRIVACY_NOTICE_TEXT);
 
         /**
          * Set initial state for basic type properties (others are implicitly null).
@@ -127,6 +164,10 @@ public class AssistantCollectUserDataModel extends PropertyModel {
         set(REQUEST_LOGIN_CHOICE, false);
         set(REQUIRE_BILLING_POSTAL_CODE, false);
         set(DEFAULT_EMAIL, "");
+        set(DATE_RANGE_START_LABEL, "");
+        set(DATE_RANGE_END_LABEL, "");
+        set(PREPENDED_SECTIONS, new ArrayList<>());
+        set(APPENDED_SECTIONS, new ArrayList<>());
     }
 
     @CalledByNative
@@ -209,22 +250,125 @@ public class AssistantCollectUserDataModel extends PropertyModel {
         set(DELEGATE, delegate);
     }
 
+    /** Creates a simple info popup with a title and some text. */
+    @CalledByNative
+    private static AssistantInfoPopup createInfoPopup(String title, String text) {
+        return new AssistantInfoPopup(title, text);
+    }
+
     /** Creates an empty list of login options. */
     @CalledByNative
     private static List<AssistantLoginChoice> createLoginChoiceList() {
         return new ArrayList<>();
     }
 
-    /** Appends a login choice to {@code logins}. */
+    /** Appends a login choice to {@code loginChoices}. */
     @CalledByNative
-    private void addLoginChoice(List<AssistantLoginChoice> loginChoices, String identifier,
-            String label, int priority) {
-        loginChoices.add(new AssistantLoginChoice(identifier, label, priority));
+    private static void addLoginChoice(List<AssistantLoginChoice> loginChoices, String identifier,
+            String label, String sublabel, String sublabelAccessibilityHint, int priority,
+            @Nullable AssistantInfoPopup infoPopup) {
+        loginChoices.add(new AssistantLoginChoice(
+                identifier, label, sublabel, sublabelAccessibilityHint, priority, infoPopup));
     }
 
     /** Sets the list of available login choices. */
     @CalledByNative
     private void setLoginChoices(List<AssistantLoginChoice> loginChoices) {
         set(AVAILABLE_LOGINS, loginChoices);
+    }
+
+    @CalledByNative
+    private void setRequestDateRange(boolean requestDateRange) {
+        set(REQUEST_DATE_RANGE, requestDateRange);
+    }
+
+    /** Create an instance of {@code AssistantDateTime}. */
+    @CalledByNative
+    private static AssistantDateTime createAssistantDateTime(
+            int year, int month, int day, int hour, int minute, int second) {
+        return new AssistantDateTime(year, month, day, hour, minute, second);
+    }
+
+    /** Configures the start of the date/time range. */
+    @CalledByNative
+    private void setDateTimeRangeStart(AssistantDateTime initialValue, AssistantDateTime minValue,
+            AssistantDateTime maxValue) {
+        AssistantDateChoiceOptions options =
+                new AssistantDateChoiceOptions(initialValue, minValue, maxValue);
+        set(DATE_RANGE_START, options);
+    }
+
+    /** Configures the end of the date/time range. */
+    @CalledByNative
+    private void setDateTimeRangeEnd(AssistantDateTime initialValue, AssistantDateTime minValue,
+            AssistantDateTime maxValue) {
+        AssistantDateChoiceOptions options =
+                new AssistantDateChoiceOptions(initialValue, minValue, maxValue);
+        set(DATE_RANGE_END, options);
+    }
+
+    @CalledByNative
+    private void setDateTimeRangeStartLabel(String label) {
+        set(DATE_RANGE_START_LABEL, label);
+    }
+
+    @CalledByNative
+    private void setDateTimeRangeEndLabel(String label) {
+        set(DATE_RANGE_END_LABEL, label);
+    }
+
+    @CalledByNative
+    private static List<AssistantAdditionalSectionFactory> createAdditionalSectionsList() {
+        return new ArrayList<>();
+    }
+
+    @CalledByNative
+    private static void appendStaticTextSection(
+            List<AssistantAdditionalSectionFactory> sections, String title, String text) {
+        sections.add(new AssistantStaticTextSection.Factory(title, text));
+    }
+
+    @CalledByNative
+    private static void appendTextInputSection(List<AssistantAdditionalSectionFactory> sections,
+            String title, List<TextInputFactory> inputs) {
+        sections.add(new AssistantTextInputSection.Factory(title, inputs));
+    }
+
+    @CalledByNative
+    private static List<TextInputFactory> createTextInputList() {
+        return new ArrayList<>();
+    }
+
+    @CalledByNative
+    private static void appendTextInput(List<TextInputFactory> inputs,
+            @AssistantTextInputType int type, String hint, String value, String key) {
+        inputs.add(new TextInputFactory(type, hint, value, key));
+    }
+
+    /** Configures the list of prepended sections. */
+    @CalledByNative
+    private void setPrependedSections(List<AssistantAdditionalSectionFactory> sections) {
+        set(PREPENDED_SECTIONS, sections);
+    }
+
+    /** Configures the list of appended sections. */
+    @CalledByNative
+    private void setAppendedSections(List<AssistantAdditionalSectionFactory> sections) {
+        set(APPENDED_SECTIONS, sections);
+    }
+
+    @CalledByNative
+    private void setTermsRequireReviewText(String text) {
+        set(TERMS_REQUIRE_REVIEW_TEXT, text);
+    }
+
+    @CalledByNative
+    private void setThirdPartyPrivacyNoticeText(String text) {
+        set(THIRDPARTY_PRIVACY_NOTICE_TEXT, text);
+    }
+
+    @CalledByNative
+    private void setDefaultEmail(String email) {
+        set(DEFAULT_EMAIL, email);
     }
 }

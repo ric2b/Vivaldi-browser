@@ -25,9 +25,12 @@
 #include "fuchsia/base/mem_buffer_util.h"
 #include "fuchsia/base/message_port.h"
 #include "fuchsia/engine/browser/context_impl.h"
+#include "fuchsia/engine/browser/web_engine_devtools_controller.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/logging/logging_utils.h"
+#include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host_platform.h"
@@ -50,8 +53,12 @@ class PopupFrameCreationInfoUserData : public base::SupportsUserData::Data {
   fuchsia::web::PopupFrameCreationInfo info;
 };
 
-// Layout manager that allows only one child window and stretches it to fill the
-// parent.
+// Layout manager used for the root window that hosts the WebContents window.
+// The main WebContents window is stretched to occupy the whole parent. Note
+// that the root window may host other windows (particularly menus for drop-down
+// boxes). These windows get the location and size they request. The main
+// window for the web content is identified by window.type() ==
+// WINDOW_TYPE_CONTROL (set in WebContentsViewAura).
 class LayoutManagerImpl : public aura::LayoutManager {
  public:
   LayoutManagerImpl() = default;
@@ -59,31 +66,43 @@ class LayoutManagerImpl : public aura::LayoutManager {
 
   // aura::LayoutManager implementation.
   void OnWindowResized() override {
-    // Resize the child to match the size of the parent
-    if (child_) {
-      SetChildBoundsDirect(child_,
-                           gfx::Rect(child_->parent()->bounds().size()));
+    // Resize the child to match the size of the parent.
+    if (main_child_) {
+      SetChildBoundsDirect(main_child_,
+                           gfx::Rect(main_child_->parent()->bounds().size()));
     }
   }
+
   void OnWindowAddedToLayout(aura::Window* child) override {
-    DCHECK(!child_);
-    child_ = child;
-    SetChildBoundsDirect(child_, gfx::Rect(child_->parent()->bounds().size()));
+    if (child->type() == aura::client::WINDOW_TYPE_CONTROL) {
+      DCHECK(!main_child_);
+      main_child_ = child;
+      SetChildBoundsDirect(main_child_,
+                           gfx::Rect(main_child_->parent()->bounds().size()));
+    }
   }
 
   void OnWillRemoveWindowFromLayout(aura::Window* child) override {
-    DCHECK_EQ(child, child_);
-    child_ = nullptr;
+    if (child->type() == aura::client::WINDOW_TYPE_CONTROL) {
+      DCHECK_EQ(child, main_child_);
+      main_child_ = nullptr;
+    }
   }
 
   void OnWindowRemovedFromLayout(aura::Window* child) override {}
+
   void OnChildWindowVisibilityChanged(aura::Window* child,
                                       bool visible) override {}
+
   void SetChildBounds(aura::Window* child,
-                      const gfx::Rect& requested_bounds) override {}
+                      const gfx::Rect& requested_bounds) override {
+    if (child != main_child_)
+      SetChildBoundsDirect(child, requested_bounds);
+  }
 
  private:
-  aura::Window* child_ = nullptr;
+  // The main window used for the WebContents.
+  aura::Window* main_child_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(LayoutManagerImpl);
 };
@@ -132,12 +151,36 @@ bool IsOriginWhitelisted(const GURL& url,
   return false;
 }
 
-class ScenicWindowTreeHost : public aura::WindowTreeHostPlatform {
+class WindowParentingClientImpl : public aura::client::WindowParentingClient {
  public:
-  explicit ScenicWindowTreeHost(ui::PlatformWindowInitProperties properties)
-      : aura::WindowTreeHostPlatform(std::move(properties)) {}
+  explicit WindowParentingClientImpl(aura::Window* root_window)
+      : root_window_(root_window) {
+    aura::client::SetWindowParentingClient(root_window_, this);
+  }
+  ~WindowParentingClientImpl() override {
+    aura::client::SetWindowParentingClient(root_window_, nullptr);
+  }
 
-  ~ScenicWindowTreeHost() override = default;
+  // WindowParentingClient implementation.
+  aura::Window* GetDefaultParent(aura::Window* window,
+                                 const gfx::Rect& bounds) override {
+    return root_window_;
+  }
+
+ private:
+  aura::Window* root_window_;
+
+  DISALLOW_COPY_AND_ASSIGN(WindowParentingClientImpl);
+};
+
+// WindowTreeHost that hosts web frames.
+class FrameWindowTreeHost : public aura::WindowTreeHostPlatform {
+ public:
+  explicit FrameWindowTreeHost(ui::PlatformWindowInitProperties properties)
+      : aura::WindowTreeHostPlatform(std::move(properties)),
+        window_parenting_client_(window()) {}
+
+  ~FrameWindowTreeHost() override = default;
 
   // Route focus & blur events to the window's focus observer and its
   // InputMethod.
@@ -152,7 +195,9 @@ class ScenicWindowTreeHost : public aura::WindowTreeHostPlatform {
   }
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(ScenicWindowTreeHost);
+  WindowParentingClientImpl window_parenting_client_;
+
+  DISALLOW_COPY_AND_ASSIGN(FrameWindowTreeHost);
 };
 
 logging::LogSeverity ConsoleLogLevelToLoggingSeverity(
@@ -184,9 +229,11 @@ FrameImpl::FrameImpl(std::unique_ptr<content::WebContents> web_contents,
       context_(context),
       navigation_controller_(web_contents_.get()),
       log_level_(kLogSeverityNone),
+      url_request_rewrite_rules_manager_(web_contents_.get()),
       binding_(this, std::move(frame_request)) {
   web_contents_->SetDelegate(this);
   Observe(web_contents_.get());
+
   binding_.set_error_handler([this](zx_status_t status) {
     ZX_LOG_IF(ERROR, status != ZX_ERR_PEER_CLOSED, status)
         << " Frame disconnected.";
@@ -199,6 +246,7 @@ FrameImpl::FrameImpl(std::unique_ptr<content::WebContents> web_contents,
 
 FrameImpl::~FrameImpl() {
   TearDownView();
+  context_->devtools_controller()->OnFrameDestroyed(web_contents_.get());
 }
 
 zx::unowned_channel FrameImpl::GetBindingChannelForTest() const {
@@ -295,27 +343,18 @@ void FrameImpl::ExecuteJavaScriptInternal(std::vector<std::string> origins,
   }
 }
 
-bool FrameImpl::ShouldCreateWebContents(
-    content::WebContents* web_contents,
-    content::RenderFrameHost* opener,
+bool FrameImpl::IsWebContentsCreationOverridden(
     content::SiteInstance* source_site_instance,
-    int32_t route_id,
-    int32_t main_frame_route_id,
-    int32_t main_frame_widget_route_id,
     content::mojom::WindowContainerType window_container_type,
     const GURL& opener_url,
     const std::string& frame_name,
-    const GURL& target_url,
-    const std::string& partition_id,
-    content::SessionStorageNamespace* session_storage_namespace) {
+    const GURL& target_url) {
   // Specify a generous upper bound for unacknowledged popup windows, so that we
   // can catch bad client behavior while not interfering with normal operation.
   constexpr size_t kMaxPendingWebContentsCount = 10;
 
-  DCHECK_EQ(web_contents, web_contents_.get());
-
   if (!popup_listener_)
-    return false;
+    return true;
 
   if (pending_popups_.size() >= kMaxPendingWebContentsCount) {
     // The content is producing popups faster than the embedder can process
@@ -323,10 +362,10 @@ bool FrameImpl::ShouldCreateWebContents(
     LOG(WARNING) << "Too many pending popups, ignoring request.";
 
     // Don't produce a WebContents for this popup.
-    return false;
+    return true;
   }
 
-  return true;
+  return false;
 }
 
 void FrameImpl::AddNewContents(
@@ -344,6 +383,12 @@ void FrameImpl::AddNewContents(
     case WindowOpenDisposition::NEW_BACKGROUND_TAB:
     case WindowOpenDisposition::NEW_POPUP:
     case WindowOpenDisposition::NEW_WINDOW: {
+      if (url_request_rewrite_rules_manager_.GetCachedRules()) {
+        // There is no support for URL request rules rewriting with popups.
+        *was_blocked = true;
+        return;
+      }
+
       PopupFrameCreationInfoUserData* popup_creation_info =
           reinterpret_cast<PopupFrameCreationInfoUserData*>(
               new_contents->GetUserData(kPopupCreationInfo));
@@ -421,7 +466,7 @@ void FrameImpl::CreateView(fuchsia::ui::views::ViewToken view_token) {
   properties.view_ref_pair = scenic::ViewRefPair::New();
 
   window_tree_host_ =
-      std::make_unique<ScenicWindowTreeHost>(std::move(properties));
+      std::make_unique<FrameWindowTreeHost>(std::move(properties));
   window_tree_host_->InitHost();
 
   window_tree_host_->window()->GetHost()->AddEventRewriter(
@@ -620,6 +665,15 @@ void FrameImpl::SetPopupFrameCreationListener(
       fit::bind_member(this, &FrameImpl::OnPopupListenerDisconnected));
 }
 
+void FrameImpl::SetUrlRequestRewriteRules(
+    std::vector<fuchsia::web::UrlRequestRewriteRule> rules,
+    SetUrlRequestRewriteRulesCallback callback) {
+  zx_status_t error = url_request_rewrite_rules_manager_.OnRulesUpdated(
+      std::move(rules), std::move(callback));
+  if (error != ZX_OK)
+    binding_.Close(error);
+}
+
 void FrameImpl::CloseContents(content::WebContents* source) {
   DCHECK_EQ(source, web_contents_.get());
   context_->DestroyFrame(this);
@@ -673,7 +727,8 @@ void FrameImpl::ReadyToCommitNavigation(
       navigation_handle->IsSameDocument() || navigation_handle->IsErrorPage())
     return;
 
-  mojom::OnLoadScriptInjectorAssociatedPtr before_load_script_injector;
+  mojo::AssociatedRemote<mojom::OnLoadScriptInjector>
+      before_load_script_injector;
   navigation_handle->GetRenderFrameHost()
       ->GetRemoteAssociatedInterfaces()
       ->GetInterface(&before_load_script_injector);
@@ -692,5 +747,5 @@ void FrameImpl::ReadyToCommitNavigation(
 
 void FrameImpl::DidFinishLoad(content::RenderFrameHost* render_frame_host,
                               const GURL& validated_url) {
-  context_->OnDebugDevToolsPortReady();
+  context_->devtools_controller()->OnFrameLoaded(web_contents_.get());
 }

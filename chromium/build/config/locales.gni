@@ -15,6 +15,9 @@ android_chrome_omitted_locales = [
   "ta",
   "te",
 ]
+if (is_vivaldi) {
+  android_chrome_omitted_locales -= [ "et" ]
+}
 
 # Chrome on iOS only ships with a subset of the locales supported by other
 # version of Chrome as the corresponding locales are not supported by the
@@ -37,12 +40,11 @@ ios_unsupported_locales = [
 ]
 
 # These list are defined even when not building for Android or iOS for the
-# sake of build/locale_tool.py. These asserts ensure that GN doesn't complain
-# about them being unused.
-assert(android_chrome_omitted_locales != [])
-assert(ios_unsupported_locales != [])
+# sake of build/locale_tool.py. Ensure that GN doesn't complain about them
+# being unused.
+not_needed([ "android_chrome_omitted_locales" ])
+not_needed([ "ios_unsupported_locales" ])
 
-# Note: keep in sync with below.
 locales = [
   "am",
   "ar",

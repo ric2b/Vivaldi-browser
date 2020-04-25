@@ -8,7 +8,7 @@
         "id": "ContactPropertyName",
         "type": "string",
         "enum": [ "postalAddress", "phoneNumber" ],
-        "description": "Property types for adding, updating and removing email address and phonenumbers for contacts."
+        "description": "Property types for adding, updating and removing postal address and phonenumbers for contacts."
       },
       {
         "id": "EmailAddress",
@@ -195,7 +195,7 @@
           "propertyName": {
             "$ref": "ContactPropertyName",
             "optional": false,
-            "description": "The type to add (email address, phone)."
+            "description": "The type to add (postal address, phone)."
           },
           "contactId": {
             "type": "string",
@@ -260,7 +260,7 @@
           "propertyName": {
             "$ref": "ContactPropertyName",
             "optional": false,
-            "description": "The property name to remove (email address, phone)."
+            "description": "The property name to remove (postal address, phone)."
           },
           "contactId": {
             "type": "string",
@@ -529,6 +529,41 @@
               }
             ]
           }
+        ]
+      },
+      {
+        "name": "removeEmailAddress",
+        "type": "function",
+        "description": "Removes an email address for a contact.",
+        "parameters": [
+          {
+            "type": "object",
+            "name": "removeEmail",
+            "description": "An object specifying properties to remove email address.",
+            "properties": {
+              "contactId": {
+                "type": "string",
+                "optional": false,
+                "description": "The contact id of which email address to remove."
+              },
+              "emailAddressId": {
+                "type": "string",
+                "optional": false,
+                "description": "The id of email address to remove"
+              }
+            }
+          },
+          {
+              "type": "function",
+              "name": "callback",
+              "optional": true,
+              "parameters": [
+                {
+                  "name": "result",
+                  "$ref": "Contact"
+                }
+              ]
+            }
         ]
       },
       {

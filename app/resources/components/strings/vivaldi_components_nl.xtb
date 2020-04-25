@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="nl">
+<translation id="3830627370375585318">Sta Vivaldi toe via je firewall- of antivirusinstellingen het netwerk te gebruiken.</translation>
+<translation id="5248344925342018662">Je bekijkt een beveiligde Vivaldi-pagina</translation>
+<translation id="7023871570427738255">Ga naar
+          het Vivaldi-menu &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          en verwijder het vinkje bij '<ph name="NO_PREFETCH_DESCRIPTION" />'.
+          Als het probleem aanhoudt, adviseren we deze optie weer aan te vinken
+          voor betere prestaties.</translation>
+<translation id="8187289872471304532">Ga naar het Vivaldi-menu &gt; Instellingen &gt; Netwerk &gt; Proxyinstellingen en schakel het proxyprotocol uit.</translation>
 </translationbundle>

@@ -4,10 +4,12 @@
 
 #include "chrome/browser/ui/views/global_media_controls/media_dialog_view.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/global_media_controls/media_toolbar_button_controller.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/global_media_controls/media_notification_container_impl.h"
+#include "chrome/browser/ui/views/global_media_controls/media_dialog_view_observer.h"
+#include "chrome/browser/ui/views/global_media_controls/media_notification_container_impl_view.h"
 #include "chrome/browser/ui/views/global_media_controls/media_notification_list_view.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "ui/views/background.h"
@@ -17,14 +19,11 @@
 
 using media_session::mojom::MediaSessionAction;
 
-namespace {
-
-constexpr int kMediaDialogCornerRadius = 8;
-
-}  // anonymous namespace
-
 // static
 MediaDialogView* MediaDialogView::instance_ = nullptr;
+
+// static
+bool MediaDialogView::has_been_opened_ = false;
 
 // static
 void MediaDialogView::ShowDialog(views::View* anchor_view,
@@ -37,6 +36,10 @@ void MediaDialogView::ShowDialog(views::View* anchor_view,
   views::Widget* widget =
       views::BubbleDialogDelegateView::CreateBubble(instance_);
   widget->Show();
+
+  base::UmaHistogramBoolean("Media.GlobalMediaControls.RepeatUsage",
+                            has_been_opened_);
+  has_been_opened_ = true;
 }
 
 // static
@@ -57,17 +60,34 @@ bool MediaDialogView::IsShowing() {
   return instance_ != nullptr;
 }
 
-void MediaDialogView::ShowMediaSession(
+MediaNotificationContainerImpl* MediaDialogView::ShowMediaSession(
     const std::string& id,
     base::WeakPtr<media_message_center::MediaNotificationItem> item) {
-  active_sessions_view_->ShowNotification(
-      id, std::make_unique<MediaNotificationContainerImpl>(this, item));
+  auto container =
+      std::make_unique<MediaNotificationContainerImplView>(id, item);
+  MediaNotificationContainerImplView* container_ptr = container.get();
+  container_ptr->AddObserver(this);
+  observed_containers_[id] = container_ptr;
+
+  active_sessions_view_->ShowNotification(id, std::move(container));
   OnAnchorBoundsChanged();
+
+  for (auto& observer : observers_)
+    observer.OnMediaSessionShown();
+
+  return container_ptr;
 }
 
 void MediaDialogView::HideMediaSession(const std::string& id) {
   active_sessions_view_->HideNotification(id);
-  OnAnchorBoundsChanged();
+
+  if (active_sessions_view_->empty())
+    HideDialog();
+  else
+    OnAnchorBoundsChanged();
+
+  for (auto& observer : observers_)
+    observer.OnMediaSessionHidden();
 }
 
 int MediaDialogView::GetDialogButtons() const {
@@ -79,9 +99,16 @@ bool MediaDialogView::Close() {
 }
 
 void MediaDialogView::AddedToWidget() {
+  int corner_radius =
+      views::LayoutProvider::Get()->GetCornerRadiusMetric(views::EMPHASIS_HIGH);
+
   views::BubbleFrameView* frame = GetBubbleFrameView();
-  if (frame)
-    frame->SetCornerRadius(kMediaDialogCornerRadius);
+  if (frame) {
+    frame->SetCornerRadius(corner_radius);
+  }
+
+  SetPaintToLayer();
+  layer()->SetRoundedCornerRadius(gfx::RoundedCornersF(corner_radius));
 
   controller_->SetDialogDelegate(this);
 }
@@ -94,7 +121,37 @@ gfx::Size MediaDialogView::CalculatePreferredSize() const {
   // Otherwise, use a standard size for bubble dialogs.
   const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
       DISTANCE_BUBBLE_PREFERRED_WIDTH);
-  return gfx::Size(width, GetHeightForWidth(width));
+  return gfx::Size(width, 1);
+}
+
+void MediaDialogView::OnContainerExpanded(bool expanded) {
+  OnAnchorBoundsChanged();
+}
+
+void MediaDialogView::OnContainerMetadataChanged() {
+  for (auto& observer : observers_)
+    observer.OnMediaSessionMetadataUpdated();
+}
+
+void MediaDialogView::OnContainerDestroyed(const std::string& id) {
+  auto iter = observed_containers_.find(id);
+  DCHECK(iter != observed_containers_.end());
+
+  iter->second->RemoveObserver(this);
+  observed_containers_.erase(iter);
+}
+
+void MediaDialogView::AddObserver(MediaDialogViewObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void MediaDialogView::RemoveObserver(MediaDialogViewObserver* observer) {
+  observers_.RemoveObserver(observer);
+}
+
+const std::map<const std::string, MediaNotificationContainerImplView*>&
+MediaDialogView::GetNotificationsForTesting() const {
+  return active_sessions_view_->notifications_for_testing();
 }
 
 MediaDialogView::MediaDialogView(views::View* anchor_view,
@@ -107,7 +164,10 @@ MediaDialogView::MediaDialogView(views::View* anchor_view,
   DCHECK(controller_);
 }
 
-MediaDialogView::~MediaDialogView() = default;
+MediaDialogView::~MediaDialogView() {
+  for (auto container_pair : observed_containers_)
+    container_pair.second->RemoveObserver(this);
+}
 
 void MediaDialogView::Init() {
   // Remove margins.

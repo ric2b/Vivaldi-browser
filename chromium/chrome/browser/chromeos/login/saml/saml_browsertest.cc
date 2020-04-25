@@ -28,6 +28,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
@@ -116,12 +117,6 @@
 
 namespace em = enterprise_management;
 
-using net::test_server::BasicHttpResponse;
-using net::test_server::HttpRequest;
-using net::test_server::HttpResponse;
-using testing::_;
-using testing::Return;
-
 namespace chromeos {
 
 namespace {
@@ -181,10 +176,11 @@ class FakeSamlIdp {
   void SetCookieValue(const std::string& cookie_value);
   void SetSamlResponseFile(const std::string& xml_file);
 
-  std::unique_ptr<HttpResponse> HandleRequest(const HttpRequest& request);
+  std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
+      const net::test_server::HttpRequest& request);
 
  private:
-  std::unique_ptr<HttpResponse> BuildHTMLResponse(
+  std::unique_ptr<net::test_server::HttpResponse> BuildHTMLResponse(
       const std::string& html_template,
       const std::string& relay_state,
       const std::string& next_path);
@@ -248,8 +244,8 @@ void FakeSamlIdp::SetCookieValue(const std::string& cookie_value) {
   cookie_value_ = cookie_value;
 }
 
-std::unique_ptr<HttpResponse> FakeSamlIdp::HandleRequest(
-    const HttpRequest& request) {
+std::unique_ptr<net::test_server::HttpResponse> FakeSamlIdp::HandleRequest(
+    const net::test_server::HttpRequest& request) {
   // The scheme and host of the URL is actually not important but required to
   // get a valid GURL in order to parse |request.relative_url|.
   GURL request_url = GURL("http://localhost").Resolve(request.relative_url);
@@ -264,7 +260,7 @@ std::unique_ptr<HttpResponse> FakeSamlIdp::HandleRequest(
 
   if (request_path != login_auth_path_) {
     // Request not understood.
-    return std::unique_ptr<HttpResponse>();
+    return nullptr;
   }
 
   std::string relay_state;
@@ -281,7 +277,7 @@ std::unique_ptr<HttpResponse> FakeSamlIdp::HandleRequest(
   redirect_url =
       net::AppendQueryParameter(redirect_url, kRelayState, relay_state);
 
-  std::unique_ptr<BasicHttpResponse> http_response(new BasicHttpResponse());
+  auto http_response = std::make_unique<net::test_server::BasicHttpResponse>();
   http_response->set_code(net::HTTP_TEMPORARY_REDIRECT);
   http_response->AddCustomHeader("Location", redirect_url.spec());
   http_response->AddCustomHeader(
@@ -289,7 +285,7 @@ std::unique_ptr<HttpResponse> FakeSamlIdp::HandleRequest(
   return std::move(http_response);
 }
 
-std::unique_ptr<HttpResponse> FakeSamlIdp::BuildHTMLResponse(
+std::unique_ptr<net::test_server::HttpResponse> FakeSamlIdp::BuildHTMLResponse(
     const std::string& html_template,
     const std::string& relay_state,
     const std::string& next_path) {
@@ -300,7 +296,7 @@ std::unique_ptr<HttpResponse> FakeSamlIdp::BuildHTMLResponse(
   base::ReplaceSubstringsAfterOffset(&response_html, 0, "$Refresh",
                                      refresh_url_.spec());
 
-  std::unique_ptr<BasicHttpResponse> http_response(new BasicHttpResponse());
+  auto http_response = std::make_unique<net::test_server::BasicHttpResponse>();
   http_response->set_code(net::HTTP_OK);
   http_response->set_content(response_html);
   http_response->set_content_type("text/html");
@@ -509,6 +505,7 @@ IN_PROC_BROWSER_TEST_F(SamlTest, SamlUI) {
 
 // Tests the sign-in flow when the credentials passing API is used.
 IN_PROC_BROWSER_TEST_F(SamlTest, CredentialPassingAPI) {
+  base::HistogramTester histogram_tester;
   fake_saml_idp()->SetLoginHTMLTemplate("saml_api_login.html");
   fake_saml_idp()->SetLoginAuthHTMLTemplate("saml_api_login_auth.html");
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
@@ -535,10 +532,13 @@ IN_PROC_BROWSER_TEST_F(SamlTest, CredentialPassingAPI) {
   EXPECT_TRUE(user_manager::known_user::GetIsUsingSAMLPrincipalsAPI(
       AccountId::FromUserEmailGaiaId(kFirstSAMLUserEmail,
                                      kFirstSAMLUserGaiaId)));
+
+  histogram_tester.ExpectUniqueSample("ChromeOS.SAML.APILogin", 1, 1);
 }
 
 // Tests the single password scraped flow.
 IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedSingle) {
+  base::HistogramTester histogram_tester;
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
 
@@ -568,6 +568,10 @@ IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedSingle) {
   EXPECT_FALSE(user_manager::known_user::GetIsUsingSAMLPrincipalsAPI(
       AccountId::FromUserEmailGaiaId(kFirstSAMLUserEmail,
                                      kFirstSAMLUserGaiaId)));
+
+  histogram_tester.ExpectUniqueSample("ChromeOS.SAML.APILogin", 2, 1);
+  histogram_tester.ExpectUniqueSample("ChromeOS.SAML.Scraping.PasswordCountAll",
+                                      1, 1);
 }
 
 // Tests password scraping from a dynamically created password field.
@@ -599,6 +603,7 @@ IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedDynamic) {
 
 // Tests the multiple password scraped flow.
 IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedMultiple) {
+  base::HistogramTester histogram_tester;
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login_two_passwords.html");
 
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
@@ -621,10 +626,15 @@ IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedMultiple) {
   EXPECT_FALSE(user_manager::known_user::GetIsUsingSAMLPrincipalsAPI(
       AccountId::FromUserEmailGaiaId(kFirstSAMLUserEmail,
                                      kFirstSAMLUserGaiaId)));
+
+  histogram_tester.ExpectUniqueSample("ChromeOS.SAML.APILogin", 2, 1);
+  histogram_tester.ExpectUniqueSample("ChromeOS.SAML.Scraping.PasswordCountAll",
+                                      2, 1);
 }
 
 // Tests the no password scraped flow.
 IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedNone) {
+  base::HistogramTester histogram_tester;
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login_no_passwords.html");
 
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
@@ -648,6 +658,10 @@ IN_PROC_BROWSER_TEST_F(SamlTest, ScrapedNone) {
   EXPECT_FALSE(user_manager::known_user::GetIsUsingSAMLPrincipalsAPI(
       AccountId::FromUserEmailGaiaId(kFirstSAMLUserEmail,
                                      kFirstSAMLUserGaiaId)));
+
+  histogram_tester.ExpectUniqueSample("ChromeOS.SAML.APILogin", 2, 1);
+  histogram_tester.ExpectUniqueSample("ChromeOS.SAML.Scraping.PasswordCountAll",
+                                      0, 1);
 }
 
 // Types |bob@corp.example.com| into the GAIA login form but then authenticates
@@ -866,9 +880,8 @@ void SAMLEnrollmentTest::StartSamlAndWaitForIdpPageLoad(
 }
 
 guest_view::TestGuestViewManager* SAMLEnrollmentTest::GetGuestViewManager() {
-  using namespace guest_view;
-  return static_cast<TestGuestViewManager*>(
-      TestGuestViewManager::FromBrowserContext(
+  return static_cast<guest_view::TestGuestViewManager*>(
+      guest_view::TestGuestViewManager::FromBrowserContext(
           ProfileHelper::GetSigninProfile()));
 }
 
@@ -989,8 +1002,8 @@ void SAMLPolicyTest::SetUpInProcessBrowserTestFixture() {
       &test_helper_, device_affiliation_ids)));
 
   // Initialize user policy.
-  EXPECT_CALL(provider_, IsInitializationComplete(_))
-      .WillRepeatedly(Return(true));
+  EXPECT_CALL(provider_, IsInitializationComplete(testing::_))
+      .WillRepeatedly(testing::Return(true));
   policy::BrowserPolicyConnector::SetPolicyProviderForTesting(&provider_);
 }
 
@@ -1482,6 +1495,9 @@ void SAMLPasswordAttributesTest::SetUpOnMainThread() {
 // Verifies that password attributes are extracted and stored during a
 // successful log in - but only if the appropriate policy is enabled.
 IN_PROC_BROWSER_TEST_P(SAMLPasswordAttributesTest, LoginSucceeded) {
+  // LoginDisplayHostMojo does not show Oobe dialog by default.
+  LoginDisplayHost::default_host()->ShowGaiaDialog(true, EmptyAccountId());
+
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   fake_saml_idp()->SetSamlResponseFile("saml_with_password_attributes.xml");
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);
@@ -1513,6 +1529,9 @@ IN_PROC_BROWSER_TEST_P(SAMLPasswordAttributesTest, LoginSucceeded) {
 
 // Verify that no password attributes are stored when login fails.
 IN_PROC_BROWSER_TEST_P(SAMLPasswordAttributesTest, LoginFailed) {
+  // LoginDisplayHostMojo does not show Oobe dialog by default.
+  LoginDisplayHost::default_host()->ShowGaiaDialog(true, EmptyAccountId());
+
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   fake_saml_idp()->SetSamlResponseFile("saml_with_password_attributes.xml");
   StartSamlAndWaitForIdpPageLoad(kFirstSAMLUserEmail);

@@ -34,7 +34,6 @@ import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.compositor.scene_layer.ToolbarSceneLayer;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
-import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.native_page.NativePageFactory;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.tab.SadTab;
@@ -59,6 +58,7 @@ import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.base.SPenSupport;
 import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
+import org.chromium.ui.util.TokenHolder;
 
 import java.util.List;
 
@@ -111,13 +111,14 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
 
     // Internal State
     private final SparseArray<LayoutTab> mTabCache = new SparseArray<>();
-    private int mControlsShowingToken = FullscreenManager.INVALID_TOKEN;
-    private int mControlsHidingToken = FullscreenManager.INVALID_TOKEN;
+    private int mControlsShowingToken = TokenHolder.INVALID_TOKEN;
+    private int mControlsHidingToken = TokenHolder.INVALID_TOKEN;
     private boolean mUpdateRequested;
     private final ContextualSearchPanel mContextualSearchPanel;
     private final EphemeralTabPanel mEphemeralTabPanel;
     private final OverlayPanelManager mOverlayPanelManager;
     private final ToolbarSceneLayer mToolbarOverlay;
+    private SceneOverlay mStatusIndicatorSceneOverlay;
 
     /** A delegate for interacting with the Contextual Search manager. */
     protected ContextualSearchManagementDelegate mContextualSearchDelegate;
@@ -855,6 +856,15 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
         // Nothing to do here yet.
     }
 
+    // TODO(crbug.com/1002519): This should be a temporary solution until the scene layer ownership
+    // is redone and the toolbar component owns its scene layer.
+    /**
+     * @return The {@link ToolbarSceneLayer}.
+     */
+    public ToolbarSceneLayer getToolbarSceneLayer() {
+        return mToolbarOverlay;
+    }
+
     /**
      * @return The {@link EdgeSwipeHandler} responsible for processing swipe events for the toolbar.
      *         By default this returns null.
@@ -869,6 +879,14 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
      */
     public boolean onBackPressed() {
         return getActiveLayout() != null && getActiveLayout().onBackPressed();
+    }
+
+    /**
+     * Set the status indicator {@link SceneOverlay} to be added to the layout.
+     * @param overlay The {@link SceneOverlay} to set.
+     */
+    public void setStatusIndicatorSceneOverlay(SceneOverlay overlay) {
+        mStatusIndicatorSceneOverlay = overlay;
     }
 
     /**
@@ -888,6 +906,9 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
      */
     protected void addAllSceneOverlays() {
         addGlobalSceneOverlay(mToolbarOverlay);
+        if (mStatusIndicatorSceneOverlay != null) {
+            addGlobalSceneOverlay(mStatusIndicatorSceneOverlay);
+        }
         mStaticLayout.addSceneOverlay(mContextualSearchPanel);
         if (mEphemeralTabPanel != null) mStaticLayout.addSceneOverlay(mEphemeralTabPanel);
     }

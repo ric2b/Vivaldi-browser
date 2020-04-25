@@ -65,6 +65,7 @@ CheckNativeFileSystemWriteRequest::CheckNativeFileSystemWriteRequest(
                                      item->target_file_path,
                                      item->full_path,
                                      TabUrlsFromWebContents(item->web_contents),
+                                     item->size,
                                      item->browser_context,
                                      std::move(callback),
                                      service,
@@ -150,7 +151,17 @@ void CheckNativeFileSystemWriteRequest::MaybeStorePingsForDownload(
   // TODO(https://crbug.com/996797): Integrate with DownloadFeedbackService.
 }
 
-void CheckNativeFileSystemWriteRequest::MaybeUploadBinary(
+bool CheckNativeFileSystemWriteRequest::ShouldReturnAsynchronousVerdict(
+    DownloadCheckResultReason reason) {
+  return false;
+}
+
+bool CheckNativeFileSystemWriteRequest::ShouldUploadBinary(
+    DownloadCheckResultReason reason) {
+  return false;
+}
+
+void CheckNativeFileSystemWriteRequest::UploadBinary(
     DownloadCheckResultReason reason) {}
 
 void CheckNativeFileSystemWriteRequest::NotifyRequestFinished(

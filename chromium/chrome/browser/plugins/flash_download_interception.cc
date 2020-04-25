@@ -59,6 +59,15 @@ const RE2& GetFlashURLSecondaryDownloadRegex() {
 const char kGetFlashURLSecondaryDownloadQuery[] =
     "P1_Prod_Version=ShockwaveFlash";
 
+bool InterceptNavigation(
+    const GURL& source_url,
+    content::WebContents* source,
+    const navigation_interception::NavigationParams& params) {
+  FlashDownloadInterception::InterceptFlashDownloadNavigation(source,
+                                                              source_url);
+  return true;
+}
+
 void PluginLoadResponse(content::WebContents* web_contents,
                         bool allow,
                         const std::string& /* user_input */) {
@@ -67,13 +76,21 @@ void PluginLoadResponse(content::WebContents* web_contents,
   }
 }
 
-bool InterceptNavigation(
-    const GURL& source_url,
-    content::WebContents* source,
-    const navigation_interception::NavigationParams& params) {
-  FlashDownloadInterception::InterceptFlashDownloadNavigation(source,
-                                                              source_url);
-  return true;
+bool CheckIfPluginForMimeIsAvailable(const std::string& mime_type) {
+  std::vector<content::WebPluginInfo> plugins;
+  content::PluginService::GetInstance()->GetInternalPlugins(&plugins);
+
+  for (size_t i = 0; i < plugins.size(); ++i) {
+    const content::WebPluginInfo& plugin = plugins[i];
+    const std::vector<content::WebPluginMimeType>& mime_types =
+      plugin.mime_types;
+    for (size_t j = 0; j < mime_types.size(); ++j) {
+      if (mime_types[j].mime_type == mime_type) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 }  // namespace
@@ -163,23 +180,6 @@ bool FlashDownloadInterception::ShouldStopFlashDownloadAction(
            flash_setting == CONTENT_SETTING_BLOCK;
   }
 
-  return false;
-}
-
-bool CheckIfPluginForMimeIsAvailable(const std::string& mime_type) {
-  std::vector<content::WebPluginInfo> plugins;
-  content::PluginService::GetInstance()->GetInternalPlugins(&plugins);
-
-  for (size_t i = 0; i < plugins.size(); ++i) {
-    const content::WebPluginInfo& plugin = plugins[i];
-    const std::vector<content::WebPluginMimeType>& mime_types =
-      plugin.mime_types;
-    for (size_t j = 0; j < mime_types.size(); ++j) {
-      if (mime_types[j].mime_type == mime_type) {
-        return true;
-      }
-    }
-  }
   return false;
 }
 

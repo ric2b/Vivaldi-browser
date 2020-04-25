@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fy">
 <translation id="1038842779957582377">ûnbekende namme</translation>
+<translation id="1089439967362294234">Wachtwurd feroarje</translation>
 <translation id="1110994991967754504">Foech selektearje foar <ph name="PERMISSION_NAME" /></translation>
 <translation id="1152921474424827756">In eksimplaar yn it <ph name="BEGIN_LINK" />lytsûnthâld<ph name="END_LINK" /> fan <ph name="URL" /> iepenje</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> hat de ferbining ûnferwachts ferbrutsen.</translation>
@@ -17,7 +18,7 @@
 <translation id="1710259589646384581">Bestjoeringssysteem</translation>
 <translation id="1728677426644403582">Jo besjogge de boarne fan in webstee</translation>
 <translation id="1734878702283171397">Besykje kontakt op te nimmen mei de systeembehearder.</translation>
-<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Besykje it útfieren fan de Oplosser foar netwurk<ph name="END_LINK" />.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Besykje it útfieren fan Windows netwurk diagnoaze<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Dizze webstee befettet skealike programma's</translation>
 <translation id="1916770123977586577">Ferfarskje dizze webstee opnij foar it tapassen fan de oanpaste ynstellings op dizze webstee</translation>
 <translation id="1919345977826869612">Advertinsjes</translation>
@@ -38,7 +39,7 @@
 <translation id="2355395290879513365">Oanfallers kinne mooglik de ôfbyldingen sjen dy jo op dizze webstee besjogge en jo ferrifelje troch har te feroarjen.</translation>
 <translation id="2356070529366658676">Freegje</translation>
 <translation id="2359808026110333948">Trochgean</translation>
-<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Oplosser foar netwurk útfiere<ph name="END_LINK" /></translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Netwurk diagnoaze útfiere<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notifikaasjes</translation>
 <translation id="2539524384386349900">Detektearje</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> stjoerde in ûnjildige reaksje.</translation>
@@ -48,14 +49,18 @@
 <translation id="2649204054376361687"><ph name="CITY" /><ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Tagong ta de triem is wegere</translation>
 <translation id="2705137772291741111">De bewarre kopy yn it lytsûnthâld fan dizze webstee is net te berikken.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Ferbining diagnoaze útfiere<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">De ferbining is reset.</translation>
 <translation id="2826760142808435982">De ferbining is fersifere en identifisearre mei <ph name="CIPHER" /> en brûkt <ph name="KX" /> as it meganisme foar kaai útwikseling.</translation>
 <translation id="2856444702002559011">Oanfollers besykje mooglik jo gegevens te stellen fan <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (bygelyks wachtwurden , berjochten, of kredytkaart gegevens). <ph name="BEGIN_LEARN_MORE_LINK" />Mear ynformaasje<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">In netwurk feroaring is ûntdutsen.</translation>
+<translation id="2948083400971632585">Jo kinne ynstelde ferbining proksy's útskeakelje yn de ynstellings menu.</translation>
 <translation id="2991571918955627853">Jo kinne <ph name="SITE" /> op it stuit net besykje omdat de webstee HSTS brûkt. Netwurk flaters en oanfollen binne meastentiids tydlik, dus dizze side wurket letter wierskynlik wer goed.</translation>
 <translation id="3005723025932146533">Bewarre kopy sjen litte</translation>
 <translation id="301521992641321250">Automatysk tsjinkeard</translation>
+<translation id="3041612393474885105">Sertifikaat ynformaasje</translation>
 <translation id="3109728660330352905">Jo ha gjin tastimming om dizze side te besjen.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Besykje it útfieren fan ferbining diagnoaze<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Dizze webstee befettet in formulier dat mooglik net befeilige ferstjoerd wurdt. Gegevens dy jo stjoere kinne besjoen wurde troch oaren of oanpast wurde troch in oanfaller om te feroarjen wat de tsjinner ûntfangt.</translation>
 <translation id="3176929007561373547">Kontrolearje jo proksy ynstellingen of nim kontakt op mei jo netwurkbehearder
  om te hifkjen dat de proksy tsjinner wurket. As jo tinke dat jo gjin proksy tsjinner
@@ -68,6 +73,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3447661539832366887">De eigner fan dit apparaat hat it spultsje dinosaurus útskeakele.</translation>
 <translation id="3447884698081792621">Sertifikaat sjen litte (útbrocht troch <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Avansearre ferbergje</translation>
+<translation id="3484560055331845446">Jo kinne tagong ta jo Google akkount ferlieze. Chrome ried oan om jo wachtwurd te feroarjen. Jo wurde freegje om yn te loggen op jo akkount.</translation>
 <translation id="3566021033012934673">Jo ferbining is net privee</translation>
 <translation id="3574305903863751447"><ph name="CITY" /><ph name="STATE" /><ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Details ferbergje</translation>
@@ -87,7 +93,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="4151403195736952345">Algemiene standert ynstelling brûke (Detektearje)</translation>
 <translation id="4165986682804962316">Webstee ynstellings</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Kontrolearje brânmuorre en anty-firus ynstellings<ph name="END_LINK" /></translation>
-<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Besykje it útfieren fan de oplosser foar netwurk<ph name="END_LINK" />.</translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Besykje it útfieren fan netwurk diagnoaze<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Jildich</translation>
 <translation id="4250431568374086873">Jo ferbining mei dizze webstee is net folslein feilich</translation>
 <translation id="4265872034478892965">Tastean troch jo behearder</translation>
@@ -103,13 +109,15 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="4690462567478992370">Ophâlde mei it brûken fan in ûnjildige sertifikaat</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /><ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Jo ferbining wie ûnderbrutsen</translation>
-<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows oplosser  foar netwurk útfiere<ph name="END_LINK" /></translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows netwurk diagnoaze útfiere<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Utfierber paad</translation>
 <translation id="4750917950439032686">Jo ynformaasje (lykas wachtwurden, of kredytkaart nûmers) binne privee as se ferstjoerd wurde nei dizze webstee.</translation>
 <translation id="4764776831041365478">De webstee op <ph name="URL" /> is mooglik tydlik út de loft of permanint ferpleatst nei in oar webadres.</translation>
-<translation id="4974590756084640048">Warskôgingen wer ynskeakeklje</translation>
+<translation id="4943872375798546930">Gjin resultaten</translation>
+<translation id="4974590756084640048">Warskôgingen wer ynskeakelje</translation>
 <translation id="5023310440958281426">Kontrolearje it belied fan jo behearder</translation>
 <translation id="5039804452771397117">Tastean</translation>
+<translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 in brûkme)} other {(# in brûkme)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Kontrolearje it proksy adres<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
 <translation id="5287240709317226393">Koekjes sjen litte</translation>
@@ -123,7 +131,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
     Nim kontakt op mei jo netwurkbehearder.</translation>
 <translation id="5510766032865166053">De triem is mooglik ferpleatst of wiske.</translation>
 <translation id="5556459405103347317">Ferfarskje</translation>
-<translation id="5571347317547569613">({NUM_COOKIES, plural, =1 {1 in brûkme} other {# in brûkme}})</translation>
 <translation id="5610142619324316209">Kontrolearje jo ferbining</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> hat jo tefolle omlaat.</translation>
 <translation id="5675650730144413517">Dizze webstee wurket net</translation>
@@ -200,6 +207,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="8225771182978767009">De persoan dy't dizze kompjûter opsetten hat, hat dizze webstee tsjinkeard.</translation>
 <translation id="8241707690549784388">De side dy't jo besjogge brûkt ynformaasje dy jo ynfierd ha. Weromgean nei dy side kin opdrachten dy't jo dien ha werhelje. Wolle jo trochgean?</translation>
 <translation id="8241712895048303527">Op dizze webstee tsjinkeare</translation>
+<translation id="8286036467436129157">Ynlogge</translation>
 <translation id="8288807391153049143">Sertifikaat sjen litte</translation>
 <translation id="8289355894181816810">Nim kontakt op mei jo netwurkbehearder as jo net wis binne wat dit ynhâld.</translation>
 <translation id="8332188693563227489">Tagong ta <ph name="HOST_NAME" /> is wegere</translation>
@@ -207,6 +215,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="8503813439785031346">Brûkersnamme</translation>
 <translation id="8703575177326907206">Jo ferbining mei <ph name="DOMAIN" /> is net fersifere.</translation>
 <translation id="8740359287975076522">It &lt;abbr id="dnsDefinition"&gt;DNS adres&lt;/abbr&gt; fan <ph name="HOST_NAME" /> koe net fûn wurde. De swierigens wurdt ûndersocht.</translation>
+<translation id="8820817407110198400">Blêdwizers</translation>
 <translation id="9001074447101275817">De proksy <ph name="DOMAIN" /> fereasket in brûkersnamme en wachtwurd.</translation>
 <translation id="9008201768610948239">Negearje</translation>
 <translation id="9011424611726486705">Webstee ynstellings iepenje</translation>

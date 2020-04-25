@@ -16,6 +16,7 @@
 #include "build/build_config.h"
 #include "device/vr/openvr/openvr_render_loop.h"
 #include "device/vr/openvr/openvr_type_converters.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/openvr/src/headers/openvr.h"
 #include "ui/gfx/geometry/angle_conversions.h"
 
@@ -122,10 +123,7 @@ mojom::VRDisplayInfoPtr CreateVRDisplayInfo(vr::IVRSystem* vr_system,
 
 OpenVRDevice::OpenVRDevice()
     : VRDeviceBase(device::mojom::XRDeviceId::OPENVR_DEVICE_ID),
-      main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      exclusive_controller_binding_(this),
-      gamepad_provider_factory_binding_(this),
-      compositor_host_binding_(this) {
+      main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
   render_loop_ = std::make_unique<OpenVRRenderLoop>();
 
   OnPollingEvents();
@@ -139,16 +137,14 @@ bool OpenVRDevice::IsApiAvailable() {
   return vr::VR_IsRuntimeInstalled();
 }
 
-mojom::IsolatedXRGamepadProviderFactoryPtr OpenVRDevice::BindGamepadFactory() {
-  mojom::IsolatedXRGamepadProviderFactoryPtr ret;
-  gamepad_provider_factory_binding_.Bind(mojo::MakeRequest(&ret));
-  return ret;
+mojo::PendingRemote<mojom::IsolatedXRGamepadProviderFactory>
+OpenVRDevice::BindGamepadFactory() {
+  return gamepad_provider_factory_receiver_.BindNewPipeAndPassRemote();
 }
 
-mojom::XRCompositorHostPtr OpenVRDevice::BindCompositorHost() {
-  mojom::XRCompositorHostPtr ret;
-  compositor_host_binding_.Bind(mojo::MakeRequest(&ret));
-  return ret;
+mojo::PendingRemote<mojom::XRCompositorHost>
+OpenVRDevice::BindCompositorHost() {
+  return compositor_host_receiver_.BindNewPipeAndPassRemote();
 }
 
 OpenVRDevice::~OpenVRDevice() {
@@ -167,7 +163,7 @@ void OpenVRDevice::RequestSession(
     mojom::XRRuntimeSessionOptionsPtr options,
     mojom::XRRuntime::RequestSessionCallback callback) {
   if (!EnsureValidDisplayInfo()) {
-    std::move(callback).Run(nullptr, nullptr);
+    std::move(callback).Run(nullptr, mojo::NullRemote());
     return;
   }
 
@@ -177,22 +173,22 @@ void OpenVRDevice::RequestSession(
     render_loop_->Start();
 
     if (!render_loop_->IsRunning()) {
-      std::move(callback).Run(nullptr, nullptr);
+      std::move(callback).Run(nullptr, mojo::NullRemote());
       return;
     }
 
-    if (provider_request_) {
+    if (provider_receiver_) {
       render_loop_->task_runner()->PostTask(
           FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestGamepadProvider,
                                     base::Unretained(render_loop_.get()),
-                                    std::move(provider_request_)));
+                                    std::move(provider_receiver_)));
     }
 
-    if (overlay_request_) {
+    if (overlay_receiver_) {
       render_loop_->task_runner()->PostTask(
           FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestOverlay,
                                     base::Unretained(render_loop_.get()),
-                                    std::move(overlay_request_)));
+                                    std::move(overlay_receiver_)));
     }
   }
 
@@ -207,10 +203,12 @@ void OpenVRDevice::RequestSession(
       &OpenVRDevice::OnPresentationEnded, weak_ptr_factory_.GetWeakPtr());
 
   render_loop_->task_runner()->PostTask(
-      FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestSession,
-                                base::Unretained(render_loop_.get()),
-                                std::move(on_presentation_ended),
-                                std::move(options), std::move(my_callback)));
+      FROM_HERE,
+      base::BindOnce(&XRCompositorCommon::RequestSession,
+                     base::Unretained(render_loop_.get()),
+                     std::move(on_presentation_ended),
+                     base::DoNothing::Repeatedly<mojom::XRVisibilityState>(),
+                     std::move(options), std::move(my_callback)));
   outstanding_session_requests_count_++;
 }
 
@@ -253,24 +251,23 @@ void OpenVRDevice::OnRequestSessionResult(
   outstanding_session_requests_count_--;
   if (!result) {
     OnPresentationEnded();
-    std::move(callback).Run(nullptr, nullptr);
+    std::move(callback).Run(nullptr, mojo::NullRemote());
     return;
   }
 
   OnStartPresenting();
 
-  mojom::XRSessionControllerPtr session_controller;
-  exclusive_controller_binding_.Bind(mojo::MakeRequest(&session_controller));
+  session->display_info = display_info_.Clone();
+
+  std::move(callback).Run(
+      std::move(session),
+      exclusive_controller_receiver_.BindNewPipeAndPassRemote());
 
   // Use of Unretained is safe because the callback will only occur if the
   // binding is not destroyed.
-  exclusive_controller_binding_.set_connection_error_handler(
+  exclusive_controller_receiver_.set_disconnect_handler(
       base::BindOnce(&OpenVRDevice::OnPresentingControllerMojoConnectionError,
                      base::Unretained(this)));
-
-  session->display_info = display_info_.Clone();
-
-  std::move(callback).Run(std::move(session), std::move(session_controller));
 }
 
 bool OpenVRDevice::IsAvailable() {
@@ -278,26 +275,26 @@ bool OpenVRDevice::IsAvailable() {
 }
 
 void OpenVRDevice::GetIsolatedXRGamepadProvider(
-    mojom::IsolatedXRGamepadProviderRequest provider_request) {
+    mojo::PendingReceiver<mojom::IsolatedXRGamepadProvider> provider_receiver) {
   if (render_loop_->IsRunning()) {
     render_loop_->task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestGamepadProvider,
                                   base::Unretained(render_loop_.get()),
-                                  std::move(provider_request)));
+                                  std::move(provider_receiver)));
   } else {
-    provider_request_ = std::move(provider_request);
+    provider_receiver_ = std::move(provider_receiver);
   }
 }
 
 void OpenVRDevice::CreateImmersiveOverlay(
-    mojom::ImmersiveOverlayRequest overlay_request) {
+    mojo::PendingReceiver<mojom::ImmersiveOverlay> overlay_receiver) {
   if (render_loop_->IsRunning()) {
     render_loop_->task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestOverlay,
                                   base::Unretained(render_loop_.get()),
-                                  std::move(overlay_request)));
+                                  std::move(overlay_receiver)));
   } else {
-    overlay_request_ = std::move(overlay_request);
+    overlay_receiver_ = std::move(overlay_receiver);
   }
 }
 
@@ -316,7 +313,7 @@ void OpenVRDevice::OnPresentingControllerMojoConnectionError() {
   // TODO(https://crbug.com/875187): Alternatively, we could recreate the
   // provider on the next session, or look into why the callback gets lost.
   OnExitPresent();
-  exclusive_controller_binding_.Close();
+  exclusive_controller_receiver_.reset();
 }
 
 // Only deal with events that will cause displayInfo changes for now.

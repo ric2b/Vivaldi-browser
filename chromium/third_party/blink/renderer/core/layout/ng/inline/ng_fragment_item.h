@@ -42,18 +42,20 @@ class CORE_EXPORT NGFragmentItem : public DisplayItemClient {
   struct LineItem {
     NGLineHeightMetrics metrics;
     scoped_refptr<const NGInlineBreakToken> inline_break_token;
-    wtf_size_t children_count;
+    wtf_size_t descendants_count;
   };
   // Represents a box fragment appeared in a line. This includes inline boxes
   // (e.g., <span>text</span>) and atomic inlines.
   struct BoxItem {
     // If this item is an inline box, its children are stored as following
-    // items. |children_count_| has the number of such items.
+    // items. |descendants_count_| has the number of such items.
     //
     // If this item is a root of another IFC/BFC, children are stored normally,
     // as children of |box_fragment|.
+    //
+    // Note:|box_fragment| can be null for <span>.
     scoped_refptr<const NGPhysicalBoxFragment> box_fragment;
-    wtf_size_t children_count;
+    wtf_size_t descendants_count;
   };
 
   enum ItemType { kText, kGeneratedText, kLine, kBox };
@@ -67,6 +69,7 @@ class CORE_EXPORT NGFragmentItem : public DisplayItemClient {
 
   ItemType Type() const { return static_cast<ItemType>(type_); }
 
+  bool IsAtomicInline() const;
   bool IsHiddenForPaint() const { return is_hidden_for_paint_; }
 
   NGStyleVariant StyleVariant() const {
@@ -85,6 +88,7 @@ class CORE_EXPORT NGFragmentItem : public DisplayItemClient {
     return layout_object_->EffectiveStyle(StyleVariant());
   }
   const LayoutObject* GetLayoutObject() const { return layout_object_; }
+  bool HasSameParent(const NGFragmentItem& other) const;
 
   const PhysicalRect& Rect() const { return rect_; }
   const PhysicalOffset& Offset() const { return rect_.offset; }
@@ -96,12 +100,12 @@ class CORE_EXPORT NGFragmentItem : public DisplayItemClient {
 
   // Count of following items that are descendants of this item in the box tree,
   // including this item. 1 means this is a box (box or line box) without
-  // children. 0 if this item type cannot have children.
-  wtf_size_t ChildrenCount() const {
+  // descendants. 0 if this item type cannot have children.
+  wtf_size_t DescendantsCount() const {
     if (Type() == kBox)
-      return box_.children_count;
+      return box_.descendants_count;
     if (Type() == kLine)
-      return line_.children_count;
+      return line_.descendants_count;
     return 0;
   }
 
@@ -112,11 +116,8 @@ class CORE_EXPORT NGFragmentItem : public DisplayItemClient {
     return nullptr;
   }
 
-  unsigned TextLength() const {
-    DCHECK_EQ(Type(), kText);
-    return text_.end_offset - text_.start_offset;
-  }
-  StringView Text(const NGFragmentItems& items) const;
+  Node* GetNode() const { return layout_object_->GetNode(); }
+
   NGTextFragmentPaintInfo TextPaintInfo(const NGFragmentItems& items) const;
 
   // DisplayItemClient overrides
@@ -187,6 +188,71 @@ class CORE_EXPORT NGFragmentItem : public DisplayItemClient {
     return MutableForPainting(*this);
   }
 
+  // Functions for |TextItem| and |GeneratedTextItem|
+
+  bool IsFlowControl() const {
+    DCHECK_EQ(Type(), kText);
+    return is_flow_control_;
+  }
+
+  bool IsHorizontal() const {
+    return IsHorizontalWritingMode(GetWritingMode());
+  }
+
+  WritingMode GetWritingMode() const {
+    DCHECK_EQ(Type(), kText);
+    return Style().GetWritingMode();
+  }
+
+  // TODO(yosin): We'll implement following functions.
+  bool IsLineBreak() const { return false; }
+  bool IsEllipsis() const { return false; }
+  bool IsSymbolMarker() const { return false; }
+
+  const ShapeResultView* TextShapeResult() const;
+
+  unsigned StartOffset() const;
+  unsigned EndOffset() const;
+  unsigned TextLength() const { return EndOffset() - StartOffset(); }
+  StringView Text(const NGFragmentItems& items) const;
+  String GeneratedText() const {
+    DCHECK_EQ(Type(), kGeneratedText);
+    return generated_text_.text;
+  }
+
+  // Compute the inline position from text offset, in logical coordinate
+  // relative to this fragment.
+  LayoutUnit InlinePositionForOffset(StringView text,
+                                     unsigned offset,
+                                     LayoutUnit (*round_function)(float),
+                                     AdjustMidCluster) const;
+
+  LayoutUnit InlinePositionForOffset(StringView text, unsigned offset) const;
+
+  // Compute line-relative coordinates for given offsets, this is not
+  // flow-relative:
+  // https://drafts.csswg.org/css-writing-modes-3/#line-directions
+  std::pair<LayoutUnit, LayoutUnit> LineLeftAndRightForOffsets(
+      StringView text,
+      unsigned start_offset,
+      unsigned end_offset) const;
+
+  // The layout box of text in (start, end) range in local coordinate.
+  // Start and end offsets must be between StartOffset() and EndOffset().
+  PhysicalRect LocalRect(StringView text,
+                         unsigned start_offset,
+                         unsigned end_offset) const;
+
+  // The base direction of line. Also known as the paragraph direction. This may
+  // be different from the direction of the container box when first-line style
+  // is used, or when 'unicode-bidi: plaintext' is used.
+  // Note: This is valid only for |LineItem|.
+  TextDirection BaseDirection() const;
+
+  // Direction of this item valid for |TextItem| and |IsAtomicInline()|.
+  // Note: <span> doesn't have text direction.
+  TextDirection ResolvedDirection() const;
+
  private:
   const LayoutObject* layout_object_;
 
@@ -221,9 +287,16 @@ class CORE_EXPORT NGFragmentItem : public DisplayItemClient {
   // Item index delta to the next item for the same |LayoutObject|.
   // wtf_size_t delta_to_next_for_same_layout_object_ = 0;
 
+  // Note: We should not add |bidi_level_| because it is used only for layout.
   unsigned type_ : 2;           // ItemType
   unsigned style_variant_ : 2;  // NGStyleVariant
+  // TODO(yosin): We will change |is_flow_control_| to call |IsLineBreak()| and
+  // |TextType() == kFlowControl|.
+  unsigned is_flow_control_ : 1;
   unsigned is_hidden_for_paint_ : 1;
+  // Note: For |TextItem| and |GeneratedTextItem|, |text_direction_| equals to
+  // |ShapeResult::Direction()|.
+  unsigned text_direction_ : 1;  // TextDirection.
 };
 
 }  // namespace blink

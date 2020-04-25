@@ -7,9 +7,10 @@ package org.chromium.chrome.browser.widget.bottomsheet;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
-import android.support.annotation.Nullable;
 import android.view.View;
 import android.view.ViewGroup;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.BottomSheetContent;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.ContentPriority;
@@ -29,6 +30,9 @@ public class TestBottomSheetContent implements BottomSheetContent {
     /** Whether this content is browser specific. */
     private boolean mHasCustomLifecycle;
 
+    /** The peek height of this content. */
+    private int mPeekHeight;
+
     /**
      * @param context A context to inflate views with.
      * @param priority The content's priority.
@@ -36,6 +40,7 @@ public class TestBottomSheetContent implements BottomSheetContent {
      */
     public TestBottomSheetContent(
             Context context, @ContentPriority int priority, boolean hasCustomLifecycle) {
+        mPeekHeight = BottomSheet.HeightMode.DEFAULT;
         mPriority = priority;
         mHasCustomLifecycle = hasCustomLifecycle;
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -51,6 +56,13 @@ public class TestBottomSheetContent implements BottomSheetContent {
             mContentView.setLayoutParams(params);
             mToolbarView.setBackground(new ColorDrawable(Color.WHITE));
         });
+    }
+
+    /**
+     * @param context A context to inflate views with.
+     */
+    public TestBottomSheetContent(Context context) {
+        this(/*TestBottomSheetContent(*/ context, ContentPriority.LOW, false);
     }
 
     @Override
@@ -82,9 +94,13 @@ public class TestBottomSheetContent implements BottomSheetContent {
         return false;
     }
 
+    public void setPeekHeight(int height) {
+        mPeekHeight = height;
+    }
+
     @Override
-    public boolean isPeekStateEnabled() {
-        return true;
+    public int getPeekHeight() {
+        return mPeekHeight;
     }
 
     @Override

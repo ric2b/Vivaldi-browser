@@ -25,6 +25,7 @@
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
@@ -392,7 +393,8 @@ class WebAuthBrowserTestBase : public content::ContentBrowserTest {
         new WebAuthBrowserTestContentBrowserClient(&test_state_));
     old_client_ = SetBrowserClientForTesting(test_client_.get());
 
-    NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title1.html"));
+    EXPECT_TRUE(
+        NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title1.html")));
   }
 
   void TearDown() override {
@@ -459,12 +461,11 @@ class WebAuthLocalClientBrowserTest : public WebAuthBrowserTestBase {
   }
 
   void ConnectToAuthenticator() {
-    auto* broker = static_cast<blink::mojom::DocumentInterfaceBroker*>(
-        static_cast<RenderFrameHostImpl*>(
-            shell()->web_contents()->GetMainFrame()));
+    auto* render_frame_host_impl = static_cast<RenderFrameHostImpl*>(
+        shell()->web_contents()->GetMainFrame());
     if (authenticator_remote_.is_bound())
       authenticator_remote_.reset();
-    broker->GetAuthenticator(
+    render_frame_host_impl->GetAuthenticator(
         authenticator_remote_.BindNewPipeAndPassReceiver());
   }
 
@@ -551,7 +552,8 @@ IN_PROC_BROWSER_TEST_F(WebAuthLocalClientBrowserTest,
                                   create_callback_receiver.callback());
 
   fake_hid_discovery->WaitForCallToStartAndSimulateSuccess();
-  NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title2.html"));
+  EXPECT_TRUE(
+      NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title2.html")));
   WaitForConnectionError();
 
   // The next active document should be able to successfully call
@@ -573,7 +575,8 @@ IN_PROC_BROWSER_TEST_F(WebAuthLocalClientBrowserTest,
                                 get_callback_receiver.callback());
 
   fake_hid_discovery->WaitForCallToStartAndSimulateSuccess();
-  NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title2.html"));
+  EXPECT_TRUE(
+      NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title2.html")));
   WaitForConnectionError();
 
   // The next active document should be able to successfully call
@@ -629,7 +632,8 @@ IN_PROC_BROWSER_TEST_F(WebAuthLocalClientBrowserTest,
           if (behavior == AttestationCallbackBehavior::BEFORE_NAVIGATION) {
             std::move(callback).Run(false);
           }
-          NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title2.html"));
+          EXPECT_TRUE(NavigateToURL(
+              shell(), GetHttpsURL("www.acme.com", "/title2.html")));
           if (behavior == AttestationCallbackBehavior::AFTER_NAVIGATION) {
             std::move(callback).Run(false);
           }
@@ -648,7 +652,9 @@ IN_PROC_BROWSER_TEST_F(WebAuthLocalClientBrowserTest,
   ScopedNavigationCancellingThrottleInstaller navigation_canceller(
       shell()->web_contents());
 
-  NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title2.html"));
+  // This navigation should be canceled and hence should not succeed.
+  EXPECT_FALSE(
+      NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title2.html")));
 
   auto* fake_hid_discovery = discovery_factory_->ForgeNextHidDiscovery();
   TestCreateCallbackReceiver create_callback_receiver;
@@ -672,7 +678,8 @@ IN_PROC_BROWSER_TEST_F(WebAuthLocalClientBrowserTest,
       }));
 
   auto* fake_hid_discovery = discovery_factory_->ForgeNextHidDiscovery();
-  NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title2.html"));
+  EXPECT_TRUE(
+      NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title2.html")));
   WaitForConnectionError();
 
   // Normally, when the request is serviced, the implementation retrieves the
@@ -1117,7 +1124,8 @@ IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
                        RequestsFromIFrames) {
   static constexpr char kOuterHost[] = "acme.com";
   static constexpr char kInnerHost[] = "notacme.com";
-  NavigateToURL(shell(), GetHttpsURL(kOuterHost, "/page_with_iframe.html"));
+  EXPECT_TRUE(NavigateToURL(shell(),
+                            GetHttpsURL(kOuterHost, "/page_with_iframe.html")));
 
   auto* virtual_device_factory = InjectVirtualFidoDeviceFactory();
   static constexpr uint8_t kOuterCredentialID = 1;
@@ -1193,7 +1201,8 @@ IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
         return true;
       });
 
-  NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/page_with_iframe.html"));
+  EXPECT_TRUE(NavigateToURL(
+      shell(), GetHttpsURL("www.acme.com", "/page_with_iframe.html")));
 
   // The plain ExecuteScriptAndExtractString cannot be used because
   // NavigateIframeToURL uses it internally and they get confused about which
@@ -1247,8 +1256,8 @@ IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
         },
         shell()->web_contents(), &prompt_callback_was_invoked, behavior);
 
-    NavigateToURL(shell(),
-                  GetHttpsURL("www.acme.com", "/page_with_iframe.html"));
+    EXPECT_TRUE(NavigateToURL(
+        shell(), GetHttpsURL("www.acme.com", "/page_with_iframe.html")));
 
     CreateParameters parameters;
     parameters.attestation = "direct";
@@ -1264,13 +1273,52 @@ IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
   }
 }
 
+IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
+                       BadCableExtensionVersions) {
+  // The caBLE extension should only contain v1 data. Test that nothing crashes
+  // if a site tries to set other versions.
+
+  InjectVirtualFidoDeviceFactory();
+  GetParameters parameters;
+  parameters.allow_credentials =
+      "allowCredentials: [{ type: 'public-key',"
+      "  id: new TextEncoder().encode('allowedCredential'),"
+      "  transports: ['cable']}],"
+      "extensions: {"
+      "  cableAuthentication: [{"
+      "    version: 1,"
+      "    clientEid: new Uint8Array(Array(16).fill(1)),"
+      "    authenticatorEid: new Uint8Array(Array(16).fill(2)),"
+      "    sessionPreKey: new Uint8Array(Array(32).fill(3)),"
+      "  },{"
+      "    version: 2,"
+      "    clientEid: new Uint8Array(Array(16).fill(1)),"
+      "    authenticatorEid: new Uint8Array(Array(16).fill(2)),"
+      "    sessionPreKey: new Uint8Array(Array(32).fill(3)),"
+      "  },{"
+      "    version: 3,"
+      "    clientEid: new Uint8Array(Array(16).fill(1)),"
+      "    authenticatorEid: new Uint8Array(Array(16).fill(2)),"
+      "    sessionPreKey: new Uint8Array(Array(32).fill(3)),"
+      "  }]"
+      "}";
+  std::string result;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
+      shell()->web_contents()->GetMainFrame(),
+      BuildGetCallWithParameters(parameters), &result));
+  ASSERT_EQ(kNotAllowedErrorMessage, result);
+}
+
 #if defined(OS_WIN)
 IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest, WinMakeCredential) {
-  NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title1.html"));
+  EXPECT_TRUE(
+      NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title1.html")));
 
-  device::ScopedFakeWinWebAuthnApi fake_api;
+  device::FakeWinWebAuthnApi fake_api;
   fake_api.set_is_uvpaa(true);
   fake_api.set_hresult(S_OK);
+  auto* virtual_device_factory = InjectVirtualFidoDeviceFactory();
+  virtual_device_factory->set_win_webauthn_api(&fake_api);
 
   base::Optional<std::string> result = ExecuteScriptAndExtractPrefixedString(
       shell()->web_contents(),
@@ -1281,8 +1329,11 @@ IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest, WinMakeCredential) {
 
 IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
                        WinMakeCredentialReturnCodeFailure) {
-  NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title1.html"));
-  device::ScopedFakeWinWebAuthnApi fake_api;
+  EXPECT_TRUE(
+      NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title1.html")));
+  device::FakeWinWebAuthnApi fake_api;
+  auto* virtual_device_factory = InjectVirtualFidoDeviceFactory();
+  virtual_device_factory->set_win_webauthn_api(&fake_api);
 
   // Errors documented for WebAuthNGetErrorName() in <webauthn.h>.
   const std::map<HRESULT, std::string> errors{
@@ -1315,10 +1366,13 @@ IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest, WinGetAssertion) {
-  NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title1.html"));
+  EXPECT_TRUE(
+      NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title1.html")));
 
-  device::ScopedFakeWinWebAuthnApi fake_api;
+  device::FakeWinWebAuthnApi fake_api;
   fake_api.set_hresult(S_OK);
+  auto* virtual_device_factory = InjectVirtualFidoDeviceFactory();
+  virtual_device_factory->set_win_webauthn_api(&fake_api);
 
   base::Optional<std::string> result = ExecuteScriptAndExtractPrefixedString(
       shell()->web_contents(), BuildGetCallWithParameters(GetParameters()),
@@ -1337,8 +1391,11 @@ IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest, WinGetAssertion) {
 
 IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
                        WinGetAssertionReturnCodeFailure) {
-  NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title1.html"));
-  device::ScopedFakeWinWebAuthnApi fake_api;
+  EXPECT_TRUE(
+      NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title1.html")));
+  device::FakeWinWebAuthnApi fake_api;
+  auto* virtual_device_factory = InjectVirtualFidoDeviceFactory();
+  virtual_device_factory->set_win_webauthn_api(&fake_api);
 
   // Errors documented for WebAuthNGetErrorName() in <webauthn.h>.
   const std::set<HRESULT> errors{

@@ -21,6 +21,7 @@
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
@@ -38,6 +39,7 @@
 #include "media/base/media_switches.h"
 #include "media/base/test_data_util.h"
 #include "media/mojo/buildflags.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -50,6 +52,93 @@
 namespace content {
 namespace {
 
+namespace {
+
+// Similar to net::test_server::DelayedHttpResponse, but the delay is resolved
+// through Resolver.
+class DelayedHttpResponseWithResolver final
+    : public net::test_server::BasicHttpResponse {
+ public:
+  struct ResponseWithCallbacks final {
+    net::test_server::SendBytesCallback send_callback;
+    net::test_server::SendCompleteCallback done_callback;
+    std::string response_string;
+  };
+
+  class Resolver final : public base::RefCountedThreadSafe<Resolver> {
+   public:
+    void Resolve() {
+      base::AutoLock auto_lock(lock_);
+      DCHECK(!resolved_);
+      resolved_ = true;
+
+      if (!task_runner_) {
+        return;
+      }
+
+      task_runner_->PostTask(
+          FROM_HERE,
+          base::BindOnce(&Resolver::ResolveInServerTaskRunner, this));
+    }
+
+    void Add(const ResponseWithCallbacks& response) {
+      base::AutoLock auto_lock(lock_);
+
+      if (resolved_) {
+        response.send_callback.Run(response.response_string,
+                                   response.done_callback);
+        return;
+      }
+
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+          base::ThreadTaskRunnerHandle::Get();
+      if (task_runner_) {
+        DCHECK_EQ(task_runner_, task_runner);
+      } else {
+        task_runner_ = std::move(task_runner);
+      }
+
+      responses_with_callbacks_.push_back(response);
+    }
+
+   private:
+    void ResolveInServerTaskRunner() {
+      auto responses_with_callbacks = std::move(responses_with_callbacks_);
+      for (const auto& response_with_callbacks : responses_with_callbacks) {
+        response_with_callbacks.send_callback.Run(
+            response_with_callbacks.response_string,
+            response_with_callbacks.done_callback);
+      }
+    }
+
+    friend class base::RefCountedThreadSafe<Resolver>;
+    ~Resolver() = default;
+
+    base::Lock lock_;
+
+    std::vector<ResponseWithCallbacks> responses_with_callbacks_;
+    bool resolved_ GUARDED_BY(lock_) = false;
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner_ GUARDED_BY(lock_);
+  };
+
+  explicit DelayedHttpResponseWithResolver(scoped_refptr<Resolver> resolver)
+      : resolver_(std::move(resolver)) {}
+
+  DelayedHttpResponseWithResolver(const DelayedHttpResponseWithResolver&) =
+      delete;
+  DelayedHttpResponseWithResolver& operator=(
+      const DelayedHttpResponseWithResolver&) = delete;
+
+  void SendResponse(
+      const net::test_server::SendBytesCallback& send,
+      const net::test_server::SendCompleteCallback& done) override {
+    resolver_->Add({send, done, ToResponseString()});
+  }
+
+ private:
+  const scoped_refptr<Resolver> resolver_;
+};
+
 std::unique_ptr<net::test_server::HttpResponse> HandleBeacon(
     const net::test_server::HttpRequest& request) {
   if (request.relative_url != "/beacon")
@@ -58,11 +147,25 @@ std::unique_ptr<net::test_server::HttpResponse> HandleBeacon(
 }
 
 std::unique_ptr<net::test_server::HttpResponse> HandleHungBeacon(
+    const base::RepeatingClosure& on_called,
     const net::test_server::HttpRequest& request) {
   if (request.relative_url != "/beacon")
     return nullptr;
+  if (on_called) {
+    on_called.Run();
+  }
   return std::make_unique<net::test_server::HungResponse>();
 }
+
+std::unique_ptr<net::test_server::HttpResponse> HandleHungBeaconWithResolver(
+    scoped_refptr<DelayedHttpResponseWithResolver::Resolver> resolver,
+    const net::test_server::HttpRequest& request) {
+  if (request.relative_url != "/beacon")
+    return nullptr;
+  return std::make_unique<DelayedHttpResponseWithResolver>(std::move(resolver));
+}
+
+}  // namespace
 
 class RenderProcessHostTest : public ContentBrowserTest,
                               public RenderProcessHostObserver {
@@ -235,9 +338,9 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, SpareRenderProcessHostKilled) {
 
   RenderProcessHost* spare_renderer =
       RenderProcessHostImpl::GetSpareRenderProcessHostForTesting();
-  mojom::TestServicePtr service;
+  mojo::Remote<mojom::TestService> service;
   ASSERT_NE(nullptr, spare_renderer);
-  BindInterface(spare_renderer, &service);
+  BindInterface(spare_renderer, service.BindNewPipeAndPassReceiver());
 
   base::RunLoop run_loop;
   set_process_exit_callback(run_loop.QuitClosure());
@@ -673,8 +776,8 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KillProcessOnBadMojoMessage) {
   process_exits_ = 0;
   rph->AddObserver(this);
 
-  mojom::TestServicePtr service;
-  BindInterface(rph, &service);
+  mojo::Remote<mojom::TestService> service;
+  BindInterface(rph, service.BindNewPipeAndPassReceiver());
 
   base::RunLoop run_loop;
   set_process_exit_callback(run_loop.QuitClosure());
@@ -752,8 +855,8 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KillProcessZerosAudioStreams) {
   process_exits_ = 0;
   rph->AddObserver(this);
 
-  mojom::TestServicePtr service;
-  BindInterface(rph, &service);
+  mojo::Remote<mojom::TestService> service;
+  BindInterface(rph, service.BindNewPipeAndPassReceiver());
 
   {
     // Force a bad message event to occur which will terminate the renderer.
@@ -855,8 +958,8 @@ IN_PROC_BROWSER_TEST_F(CaptureStreamRenderProcessHostTest,
   process_exits_ = 0;
   rph->AddObserver(this);
 
-  mojom::TestServicePtr service;
-  BindInterface(rph, &service);
+  mojo::Remote<mojom::TestService> service;
+  BindInterface(rph, service.BindNewPipeAndPassReceiver());
 
   {
     // Force a bad message event to occur which will terminate the renderer.
@@ -921,8 +1024,8 @@ IN_PROC_BROWSER_TEST_F(CaptureStreamRenderProcessHostTest,
   process_exits_ = 0;
   rph->AddObserver(this);
 
-  mojom::TestServicePtr service;
-  BindInterface(rph, &service);
+  mojo::Remote<mojom::TestService> service;
+  BindInterface(rph, service.BindNewPipeAndPassReceiver());
 
   {
     // Force a bad message event to occur which will terminate the renderer.
@@ -986,6 +1089,35 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KeepAliveRendererProcess) {
     rph->RemoveObserver(this);
 }
 
+IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
+                       KeepAliveRendererProcessWithServiceWorker) {
+  base::RunLoop run_loop;
+  embedded_test_server()->RegisterRequestHandler(
+      base::BindRepeating(HandleHungBeacon, run_loop.QuitClosure()));
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  EXPECT_TRUE(NavigateToURL(
+      shell(),
+      embedded_test_server()->GetURL("/workers/service_worker_setup.html")));
+  EXPECT_EQ("ok", EvalJs(shell(), "setup();"));
+
+  RenderProcessHostImpl* rph = static_cast<RenderProcessHostImpl*>(
+      shell()->web_contents()->GetMainFrame()->GetProcess());
+  // 1 for the service worker.
+  EXPECT_EQ(rph->keep_alive_ref_count(), 1u);
+
+  // We use /workers/send-beacon.html, not send-beacon.html, due to the
+  // service worker scope rule.
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("/workers/send-beacon.html")));
+
+  run_loop.Run();
+  // We are still using the same process.
+  ASSERT_EQ(shell()->web_contents()->GetMainFrame()->GetProcess(), rph);
+  // 1 for the service worker, 1 for the keepalive fetch.
+  EXPECT_EQ(rph->keep_alive_ref_count(), 2u);
+}
+
 // Test is flaky on Android builders: https://crbug.com/875179
 #if defined(OS_ANDROID)
 #define MAYBE_KeepAliveRendererProcess_Hung \
@@ -996,7 +1128,7 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KeepAliveRendererProcess) {
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
                        MAYBE_KeepAliveRendererProcess_Hung) {
   embedded_test_server()->RegisterRequestHandler(
-      base::BindRepeating(HandleHungBeacon));
+      base::BindRepeating(HandleHungBeacon, base::RepeatingClosure()));
   ASSERT_TRUE(embedded_test_server()->Start());
 
   EXPECT_TRUE(NavigateToURL(
@@ -1033,7 +1165,7 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
                        MAYBE_FetchKeepAliveRendererProcess_Hung) {
   embedded_test_server()->RegisterRequestHandler(
-      base::BindRepeating(HandleHungBeacon));
+      base::BindRepeating(HandleHungBeacon, base::RepeatingClosure()));
   ASSERT_TRUE(embedded_test_server()->Start());
 
   EXPECT_TRUE(NavigateToURL(
@@ -1057,6 +1189,48 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
   EXPECT_GE(base::TimeTicks::Now() - start, base::TimeDelta::FromSeconds(1));
   if (!host_destructions_)
     rph->RemoveObserver(this);
+}
+
+IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, ManyKeepaliveRequests) {
+  auto resolver =
+      base::MakeRefCounted<DelayedHttpResponseWithResolver::Resolver>();
+  embedded_test_server()->RegisterRequestHandler(
+      base::BindRepeating(HandleHungBeaconWithResolver, resolver));
+  const base::string16 title = base::ASCIIToUTF16("Resolved");
+  const base::string16 waiting = base::ASCIIToUTF16("Waiting");
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  EXPECT_TRUE(NavigateToURL(
+      shell(),
+      embedded_test_server()->GetURL("/fetch-keepalive.html?requests=256")));
+
+  {
+    // Wait for the page to make all the keepalive requests.
+    TitleWatcher watcher(shell()->web_contents(), waiting);
+    EXPECT_EQ(waiting, watcher.WaitAndGetTitle());
+  }
+
+  resolver->Resolve();
+
+  {
+    TitleWatcher watcher(shell()->web_contents(), title);
+    EXPECT_EQ(title, watcher.WaitAndGetTitle());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, TooManyKeepaliveRequests) {
+  embedded_test_server()->RegisterRequestHandler(
+      base::BindRepeating(HandleHungBeacon, base::RepeatingClosure()));
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const base::string16 title = base::ASCIIToUTF16("Rejected");
+
+  TitleWatcher watcher(shell()->web_contents(), title);
+
+  EXPECT_TRUE(NavigateToURL(
+      shell(),
+      embedded_test_server()->GetURL("/fetch-keepalive.html?requests=257")));
+
+  EXPECT_EQ(title, watcher.WaitAndGetTitle());
 }
 
 // This test verifies properties of RenderProcessHostImpl *before* Init method

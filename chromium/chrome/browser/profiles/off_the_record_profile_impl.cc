@@ -83,8 +83,6 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #else  // !defined(OS_ANDROID)
 #include "chrome/browser/ui/zoom/chrome_zoom_level_otr_delegate.h"
-#include "chrome/services/app_service/app_service.h"
-#include "chrome/services/app_service/public/mojom/constants.mojom.h"
 #include "components/zoom/zoom_event_manager.h"
 #include "content/public/browser/host_zoom_map.h"
 #endif  // defined(OS_ANDROID)
@@ -458,6 +456,11 @@ OffTheRecordProfileImpl::GetPushMessagingService() {
   return NULL;
 }
 
+content::StorageNotificationService*
+OffTheRecordProfileImpl::GetStorageNotificationService() {
+  return nullptr;
+}
+
 content::SSLHostStateDelegate*
 OffTheRecordProfileImpl::GetSSLHostStateDelegate() {
   return ChromeSSLHostStateDelegateFactory::GetForProfile(this);
@@ -538,9 +541,13 @@ OffTheRecordProfileImpl::GetSharedCorsOriginAccessList() {
   return profile_->GetSharedCorsOriginAccessList();
 }
 
+bool OffTheRecordProfileImpl::ShouldEnableOutOfBlinkCors() {
+  return profile_->ShouldEnableOutOfBlinkCors();
+}
+
 content::NativeFileSystemPermissionContext*
 OffTheRecordProfileImpl::GetNativeFileSystemPermissionContext() {
-  return NativeFileSystemPermissionContextFactory::GetForProfile(this).get();
+  return NativeFileSystemPermissionContextFactory::GetForProfile(this);
 }
 
 bool OffTheRecordProfileImpl::IsSameProfile(Profile* profile) {
@@ -632,18 +639,6 @@ class GuestSessionProfile : public OffTheRecordProfileImpl {
         this, user_manager::UserManager::Get()->GetActiveUser());
   }
 
-  std::unique_ptr<service_manager::Service> HandleServiceRequest(
-      const std::string& service_name,
-      service_manager::mojom::ServiceRequest request) override {
-    // Ensure apps are serviced in guest profiles.
-    if (service_name == apps::mojom::kServiceName) {
-      return std::make_unique<apps::AppService>(std::move(request));
-    }
-
-    return OffTheRecordProfileImpl::HandleServiceRequest(service_name,
-                                                         std::move(request));
-  }
-
  private:
   // The guest user should be able to customize Chrome OS preferences.
   std::unique_ptr<chromeos::Preferences> chromeos_preferences_;
@@ -659,6 +654,7 @@ Profile* Profile::CreateOffTheRecordProfile() {
   if (!profile)
     profile = new OffTheRecordProfileImpl(this);
   profile->Init();
+  NotifyOffTheRecordProfileCreated(profile);
   return profile;
 }
 

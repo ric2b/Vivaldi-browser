@@ -18,10 +18,12 @@
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/gfx/linux/client_native_pixmap_dmabuf.h"
 #include "ui/ozone/common/stub_overlay_manager.h"
+#include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/gpu/drm_render_node_path_finder.h"
 #include "ui/ozone/platform/wayland/gpu/wayland_buffer_manager_gpu.h"
 #include "ui/ozone/platform/wayland/gpu/wayland_surface_factory.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_connector.h"
+#include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_input_method_context_factory.h"
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
@@ -39,6 +41,8 @@
 #include "ui/events/ozone/layout/stub/stub_keyboard_layout_engine.h"
 #endif
 
+#include "ui/gfx/buffer_format_util.h"
+
 #if defined(WAYLAND_GBM)
 #include "ui/base/ui_base_features.h"
 #include "ui/ozone/common/linux/gbm_wrapper.h"
@@ -52,10 +56,11 @@ namespace {
 constexpr OzonePlatform::PlatformProperties kWaylandPlatformProperties = {
     /*needs_view_token=*/false,
 
-    // Supporting server-side decorations requires a support of xdg-decorations.
-    // But this protocol has been accepted into the upstream recently, and it
-    // will take time before it is taken by compositors. For now, always use
-    // custom frames and disallow switching to server-side frames.
+    // Supporting server-side decorations requires a support of
+    // xdg-decorations. But this protocol has been accepted into the upstream
+    // recently, and it will take time before it is taken by compositors. For
+    // now, always use custom frames and disallow switching to server-side
+    // frames.
     // https://github.com/wayland-project/wayland-protocols/commit/76d1ae8c65739eff3434ef219c58a913ad34e988
     /*custom_frame_pref_default=*/true,
     /*use_system_title_bar=*/false,
@@ -98,7 +103,7 @@ class OzonePlatformWayland : public OzonePlatform {
     return nullptr;
   }
 
-  std::unique_ptr<PlatformWindow> CreatePlatformWindow(
+  std::unique_ptr<PlatformWindowBase> CreatePlatformWindow(
       PlatformWindowDelegate* delegate,
       PlatformWindowInitProperties properties) override {
     auto window = std::make_unique<WaylandWindow>(delegate, connection_.get());
@@ -113,8 +118,8 @@ class OzonePlatformWayland : public OzonePlatform {
   }
 
   std::unique_ptr<PlatformScreen> CreateScreen() override {
-    // The WaylandConnection and the WaylandOutputManager must be created before
-    // PlatformScreen.
+    // The WaylandConnection and the WaylandOutputManager must be created
+    // before PlatformScreen.
     DCHECK(connection_ && connection_->wayland_output_manager());
     return connection_->wayland_output_manager()->CreateWaylandScreen(
         connection_.get());
@@ -127,17 +132,6 @@ class OzonePlatformWayland : public OzonePlatform {
 
   std::unique_ptr<InputMethod> CreateInputMethod(
       internal::InputMethodDelegate* delegate) override {
-    // Some unit tests may try to set custom input method context factory
-    // after InitializeUI. Thus instead of creating factory in InitializeUI
-    // it is set at this point if none exists
-    if (!LinuxInputMethodContextFactory::instance() &&
-        !input_method_context_factory_) {
-      input_method_context_factory_ =
-          std::make_unique<WaylandInputMethodContextFactory>(connection_.get());
-      LinuxInputMethodContextFactory::SetInstance(
-          input_method_context_factory_.get());
-    }
-
     return std::make_unique<InputMethodAuraLinux>(delegate);
   }
 
@@ -148,9 +142,8 @@ class OzonePlatformWayland : public OzonePlatform {
     if (path_finder_.GetDrmRenderNodePath().empty())
       return false;
 
-    if (std::find(supported_buffer_formats_.begin(),
-                  supported_buffer_formats_.end(),
-                  format) == supported_buffer_formats_.end()) {
+    if (supported_buffer_formats_.find(format) ==
+        supported_buffer_formats_.end()) {
       return false;
     }
 
@@ -176,7 +169,19 @@ class OzonePlatformWayland : public OzonePlatform {
     overlay_manager_ = std::make_unique<StubOverlayManager>();
     input_controller_ = CreateStubInputController();
     gpu_platform_support_host_.reset(CreateStubGpuPlatformSupportHost());
-    supported_buffer_formats_ = connection_->GetSupportedBufferFormats();
+
+    supported_buffer_formats_ =
+        connection_->buffer_manager_host()->GetSupportedBufferFormats();
+
+    // Instantiate and set LinuxInputMethodContextFactory unless it is already
+    // set (e.g: tests may have already set it).
+    if (!LinuxInputMethodContextFactory::instance() &&
+        !input_method_context_factory_) {
+      input_method_context_factory_ =
+          std::make_unique<WaylandInputMethodContextFactory>(connection_.get());
+      LinuxInputMethodContextFactory::SetInstance(
+          input_method_context_factory_.get());
+    }
   }
 
   void InitializeGPU(const InitParams& args) override {
@@ -213,8 +218,8 @@ class OzonePlatformWayland : public OzonePlatform {
   }
 
   void CreateWaylandBufferManagerGpuBinding(
-      ozone::mojom::WaylandBufferManagerGpuRequest request) {
-    buffer_manager_->AddBindingWaylandBufferManagerGpu(std::move(request));
+      mojo::PendingReceiver<ozone::mojom::WaylandBufferManagerGpu> receiver) {
+    buffer_manager_->AddBindingWaylandBufferManagerGpu(std::move(receiver));
   }
 
  private:
@@ -235,8 +240,9 @@ class OzonePlatformWayland : public OzonePlatform {
   // Objects, which solely live in the GPU process.
   std::unique_ptr<WaylandBufferManagerGpu> buffer_manager_;
 
-  // Provides supported buffer formats for native gpu memory buffers framework.
-  std::vector<gfx::BufferFormat> supported_buffer_formats_;
+  // Provides supported buffer formats for native gpu memory buffers
+  // framework.
+  wl::BufferFormatsWithModifiersMap supported_buffer_formats_;
 
   // This is used both in the gpu and browser processes to find out if a drm
   // render node is available.

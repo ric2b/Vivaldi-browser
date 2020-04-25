@@ -20,6 +20,7 @@
 <translation id="1087788677726983142">ઇવેન્ટ સ્ટ્રીમ ફિલ્ટર છુપાવો</translation>
 <translation id="1088219014394087294">કોઇ મથાળું નથી.</translation>
 <translation id="1106741348836243114">સાઉન્ડ પ્રતિસાદ (ઇઅરકોન્સ) ચાલુ અથવા બંધ કરો.</translation>
+<translation id="1114836634143403764">સૂચન</translation>
 <translation id="1120743664840974483">{"a": "આલ્ફા", "b": "બ્રાવો", "c": "ચાર્લી", "d": "ડેલ્ટા", "e": "ઇકો", "f": "ફોક્સટ્રોટ", "g": "ગોલ્ફ", "h": "હોટલ", "i": "ઇન્ડિયા", "j": "જુલિયેટ","k": "કિલો", "l": "લીમા", "m": "માઇક", "n": "નવેમ્બર", "o": "ઑસ્કાર","p": "પાપા", "q": "ક્વેબેક", "r": "રોમિયો", "s": "સિયેરા", "t": "ટેંગો", "u": "યુનિફોર્મ", "v": "વિક્ટર", "w": "વ્હિસ્કી","x": "એક્સરે", "y": "યેંકી", "z": "ઝુલુ"}</translation>
 <translation id="1120938014254001895">બે આંગળી ઉપરની બાજુ સ્વાઇપ કરો</translation>
 <translation id="1124771028211010580">વર્તમાન ડિસ્પ્લે શૈલી "સાથેસાથે" છે.</translation>
@@ -126,6 +127,7 @@
 <translation id="1845944666972354496">સક્રિય કરવા માટે બે વાર ટૅપ કરો</translation>
 <translation id="1846771122725914429">બ્લૂટૂથનું બ્રેઇલ પ્રદર્શન</translation>
 <translation id="1865601187525349519">ટેક્સ્ટના અંતે</translation>
+<translation id="1875375785454778375">લાઇવ ઉપસ્થિતિ</translation>
 <translation id="1876229593313240038">doc</translation>
 <translation id="188130072164734898">વર્તમાન સમય અને તારીખ બોલો.</translation>
 <translation id="1902396333223336119">કોષ</translation>
@@ -146,6 +148,7 @@
 <translation id="2009187674653301682">સુપરસ્ક્રિપ્ટ નથી</translation>
 <translation id="2010555995361223825">ChromeVox મેનૂઝ</translation>
 <translation id="2045490512405922022">ચૅક કરેલું નથી</translation>
+<translation id="2049107626739254612">ચોક્કસ કન્ટેન્ટ વિશેની માહિતી</translation>
 <translation id="20601713649439366">કોઈ પાછલું ગાણિતિક પદ નથી.</translation>
 <translation id="2063539687800151747">શિલાલેખ</translation>
 <translation id="207477615537953741">સિમેન્ટિક્સ બંધ</translation>
@@ -156,6 +159,7 @@
 <translation id="2110480898214777136">કોઈ પૃષ્ઠ, સંવાદ અથવા અન્ય કન્ટેનરની અંદર શરૂઆતથી અંત સુધી અથવા અંતથી શરૂઆત સુધી પૂર્ણ કરો</translation>
 <translation id="2119965627982867824">spnbtn</translation>
 <translation id="2121067395472282800">ઍક્સેસ કી:<ph name="KEY" /></translation>
+<translation id="2126597928985245619">આ આઇટમ માટે કોઈ ટેક્સ્ટ ઉપલબ્ધ નથી</translation>
 <translation id="2127747486437921899">ઇટાલિક</translation>
 <translation id="2138345533858834403">રિફ્રેશ કરી શકાય તેવા બ્રેઇલ ડિસ્પ્લેના આઉટપુટની નકલ
        સ્ક્રીનની ટોચે આવેલા ChromeVox પૅનલમાં પ્રસ્તુત કરે છે.</translation>
@@ -168,6 +172,7 @@
 <translation id="2203046366315513658">મૂલ્ય ઘટાડો</translation>
 <translation id="2220529011494928058">સમસ્યાની જાણ કરો</translation>
 <translation id="2223693656926968778">ચાલુ આઇટમ પર પગલા લો</translation>
+<translation id="224426591676115802">આ ભાષા માટે કોઈ વૉઇસ ઉપલબ્ધ નથી: <ph name="LANGUAGE" /></translation>
 <translation id="225732394367814946">ભાષણનો રેટ વધારો</translation>
 <translation id="2267538686624070261">ખોટી જોડણીવાળો શબ્દ છોડી દેવો</translation>
 <translation id="2267945578749931355">આગલો અક્ષર</translation>
@@ -209,7 +214,6 @@
 <translation id="2582407057977008361">એક તરફ</translation>
 <translation id="2592212930811759050">ફેરફાર શરૂ કરવા માટે બે વાર ટૅપ કરો</translation>
 <translation id="2598495320872286378">વ્યાકરણની ભૂલ</translation>
-<translation id="2606210917827248971">આ સાથેની {COUNT,plural, =1{# આઇટમ}one{# આઇટમ}other{# આઇટમ}}</translation>
 <translation id="2614981083756825552">ગણિત ML લેઆઉટ</translation>
 <translation id="2624431853467395961">જાણો મોડ ખોલો</translation>
 <translation id="2626530649491650971">ક્લિક કરી શકાય તેવા</translation>
@@ -236,6 +240,7 @@
 <translation id="27527859628328957">આગલી ફોકસ કરવા યોગ્ય આઇટમ પર જમ્પ કરો</translation>
 <translation id="2770781857296573485">સમૂહ અન્વેષણ દાખલ કરો</translation>
 <translation id="2777845298774924149">બહાર</translation>
+<translation id="2783001728278437613">{COUNT,plural, =1{+#}one{+#}other{+#}}</translation>
 <translation id="2784959586797362050">હંમેશની જેમ, તમે શોધ+a પછી i દબાવીને અમને સીધો જ પ્રતિસાદ મોકલી શકો છો. અમે તમારો પ્રતિસાદ મેળવવા આતુર છીએ.</translation>
 <translation id="2800204403141299078">કોઈ વધુ અલગ ઘટકો નથી.</translation>
 <translation id="2800780099804980316">કોઈ પાછલું લેવલ 1 શીર્ષક નથી.</translation>
@@ -261,6 +266,7 @@
 <translation id="2911433807131383493">ChromeVox ટ્યૂટોરિયલ ખોલો</translation>
 <translation id="2912405967290226587">ત્રણ આંગળી જમણી બાજુ સ્વાઇપ કરો</translation>
 <translation id="2932083475399492303">માળખાકીય અથવા લેઆઉટ વચ્ચે રેખા પ્રકાર ટોગલ કરો</translation>
+<translation id="293796669683825859">કૉમેન્ટ</translation>
 <translation id="2942710183375260152">ઘાટો સ્લેટ વાદળી</translation>
 <translation id="2943596527105977722">ઘેરો સોનેરી રૉડ</translation>
 <translation id="2944762337049891859">પૃષ્ઠ લોડ થઈ જાય તે પછી આપમેળે પૃષ્ઠને વાંચો.</translation>
@@ -322,6 +328,7 @@
 <translation id="3241052487511142956">પાછલી મુલાકાત લીધેલી લિંક</translation>
 <translation id="3241638166094654466">દરેક લાઇનમાંનાં કોષોની સંખ્યા:</translation>
 <translation id="3244209481693235975"><ph name="LANGUAGE" />: <ph name="CONTENT" /></translation>
+<translation id="3260949043575829030">આના જેવી જ અગાઉની આઇટમ</translation>
 <translation id="3286372614333682499">પોર્ટ્રેટ</translation>
 <translation id="3286390186030710347">સ્લાઇડર</translation>
 <translation id="3299925995433437805">કોઈ આગલી મુલાકાત લીધેલી લિંક નથી.</translation>
@@ -337,6 +344,7 @@
 <translation id="3324983252691184275">કિરમજી</translation>
 <translation id="3338224621010291843"><ph name="VALUE" /> <ph name="NAME" /> સ્લાઇડર</translation>
 <translation id="335581015389089642">ભાષા</translation>
+<translation id="3356951775008366684">શબ્દ માટે ફોનેટિક ઉચ્ચારણ ઉચ્ચારો</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{વત્તા}one{# વત્તાની નિશાની}other{# વત્તાની નિશાની}}</translation>
 <translation id="338583716107319301">વિભાજક</translation>
@@ -375,6 +383,7 @@
 <translation id="3646890046000188562">{COUNT,plural, =1{બેકટિક}one{# બેકટિક}other{# બેકટિક}}</translation>
 <translation id="3650317109285159359">chkmnuitm</translation>
 <translation id="3655855170848725876">{COUNT,plural, =1{ડૉલર}one{# ડૉલરની નિશાની}other{# ડૉલરની નિશાની}}</translation>
+<translation id="3658742229777143148">પુનરાવર્તન</translation>
 <translation id="3659787053479271466">alrt</translation>
 <translation id="3665563998540286755"><ph name="VALUE" />, સૂચિ બૉક્સ</translation>
 <translation id="3681531118904532409">પપાયા વ્હિપ</translation>
@@ -393,7 +402,6 @@
 <translation id="3781428340399460090">ચળકતો ગુલાબી</translation>
 <translation id="3783725005098956899">લૉગ બતાવો</translation>
 <translation id="3793710123303304873">સંવાદમાંથી બહાર થયા.</translation>
-<translation id="3795836767122514678">+{COUNT,plural, =1{#}one{#}other{#}}</translation>
 <translation id="3801735343383419236">સ્વતઃપૂર્ણ સૂચિ</translation>
 <translation id="3810838688059735925">વીડિયો</translation>
 <translation id="3813387282697781382">આછો લાલ</translation>
@@ -503,6 +511,7 @@
 <translation id="4517854969512651305">મૂલ્ય વધારો</translation>
 <translation id="4529987814483543472">ક્લાસિક કીમૅપ</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{સ્લેશ}one{# સ્લેશ}other{# સ્લેશ}}</translation>
+<translation id="4537277403911487429">આના જેવી જ આગલી આઇટમ</translation>
 <translation id="4547556996012970016">આગલા સ્તર 5 નું મથાળું</translation>
 <translation id="4562381607973973258">હેડર</translation>
 <translation id="4569941707103739422">નૅવિગેટ કરવા માટે ઉપર અથવા નીચેની Arrow કી દબાવો; ચાલુ કરવા માટે Enter કી દબાવો.</translation>
@@ -533,6 +542,7 @@
 <translation id="4763480195061959176">વીડિયો</translation>
 <translation id="4764692524839457597">ડિફૉલ્ટ</translation>
 <translation id="4772771694153161212">રેખાંકિત નથી</translation>
+<translation id="4787577491510559358">હાલની આઇટમ માટેનું ફોર્મેટ જણાવો</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">ડિસ્કનેક્ટ કરો</translation>
 <translation id="481165870889056555">ચાલુ પૃષ્ઠના શીર્ષકની ઘોષણા કરો</translation>
@@ -569,6 +579,7 @@
 <translation id="4983588134362688868">પૃષ્ઠની ટોચ પર જાઓ</translation>
 <translation id="4986606102545753256"><ph name="NAME" />, વિંડો</translation>
 <translation id="4993152509206108683">દર <ph name="PERCENT" /> ટકા</translation>
+<translation id="4994420463726586413">બૅટરીનું હાલનું સ્ટેટસ જણાવો</translation>
 <translation id="4996716799442435517">વિઝ્યૂલ</translation>
 <translation id="4997282455736854877"><ph name="NAME" />, રેડિયો બટન પસંદ કર્યું</translation>
 <translation id="4997475792277222884">આગલી આઇટમ નથી તે કોઈ લિંક નથી.</translation>
@@ -717,6 +728,7 @@
 <translation id="5956928062748260866">સંવાદ</translation>
 <translation id="5963413905009737549">સેક્શન</translation>
 <translation id="5968607524793740041">સંદર્ભ મેનૂ બતાવો</translation>
+<translation id="597121107011153418">{COUNT,plural, =1{# આઇટમ સાથે}one{# આઇટમ સાથે}other{# આઇટમ સાથે}}</translation>
 <translation id="5981446804259161541">આછો સ્યાન</translation>
 <translation id="5983179082906765664">નેવિગેશન ગ્રેન્યુલેરિટી વધારો</translation>
 <translation id="5992285135956208197">ગ્રાફિક્સ દસ્તાવેજ</translation>

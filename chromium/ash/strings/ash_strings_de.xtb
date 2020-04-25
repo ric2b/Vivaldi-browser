@@ -7,6 +7,7 @@
 <translation id="1037492556044956303"><ph name="DEVICE_NAME" /> hinzugefügt</translation>
 <translation id="1056775291175587022">Keine Netzwerke</translation>
 <translation id="1059194134494239015"><ph name="DISPLAY_NAME" />: <ph name="RESOLUTION" /></translation>
+<translation id="108486256082349153">Mobil: <ph name="ADDRESS" /></translation>
 <translation id="109942774857561566">Mir ist langweilig</translation>
 <translation id="1104084341931202936">Einstellungen für Bedienungshilfen anzeigen</translation>
 <translation id="1104621072296271835">Vorteile durch das Verbinden Ihrer Geräte</translation>
@@ -17,11 +18,13 @@
 <translation id="1195412055398077112">Overscan</translation>
 <translation id="119944043368869598">Alle löschen</translation>
 <translation id="1247372569136754018">Mikrofon (intern)</translation>
+<translation id="1249456112629248620"><ph name="FEATURE_NAME" /> Diese Einstellung wird von Ihrem Administrator erzwungen.</translation>
 <translation id="1252999807265626933">Wird über ein <ph name="POWER_SOURCE" /> aufgeladen</translation>
 <translation id="1255033239764210633">Wie ist das Wetter?</translation>
 <translation id="1267032506238418139">Änderung der Tastenkombination</translation>
 <translation id="1270290102613614947">Bildschirmtastatur deaktiviert</translation>
 <translation id="1272079795634619415">Stopp</translation>
+<translation id="1275285675049378717">Stromversorgung für <ph name="POWER_SOURCE" /></translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
 <translation id="1289185460362160437">Du darfst das Gerät am <ph name="COME_BACK_DAY_OF_WEEK" /> um <ph name="COME_BACK_TIME" /> wieder verwenden.</translation>
 <translation id="1290331692326790741">Schwaches Signal</translation>
@@ -41,6 +44,7 @@
 <translation id="1460620680449458626">Ton ist aus.</translation>
 <translation id="1467432559032391204">Links</translation>
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
+<translation id="1516740043221086139">"Bitte nicht stören" ist aktiviert.</translation>
 <translation id="1520303207432623762">{NUM_APPS,plural, =1{Benachrichtigungseinstellungen anzeigen. Benachrichtigungen sind für eine App deaktiviert.}other{Benachrichtigungseinstellungen anzeigen. Benachrichtigungen sind für # Apps deaktiviert.}}</translation>
 <translation id="1525508553941733066">SCHLIESSEN</translation>
 <translation id="1537254971476575106">Vollbildlupe</translation>
@@ -60,7 +64,6 @@
 <translation id="1761222317188459878">Netzwerkverbindung aktivieren/deaktivieren. <ph name="STATE_TEXT" /></translation>
 <translation id="1771761307086386028">Nach rechts scrollen</translation>
 <translation id="1812997170047690955">Was wird auf meinem Bildschirm angezeigt?</translation>
-<translation id="1820355135508821526"><ph name="FEATURE_NAME" /> wurde durch eine Richtlinie deaktiviert, die auf dieses Gerät angewendet wird. Bitten Sie Ihren Administrator, die erforderlichen Änderungen vorzunehmen.</translation>
 <translation id="1823873187264960516">Ethernet: <ph name="ADDRESS" /></translation>
 <translation id="1836215606488044471">Assistant (wird geladen…)</translation>
 <translation id="1838895407229022812">Nachtlicht ist ausgeschaltet.</translation>
@@ -74,6 +77,7 @@
 <translation id="1951012854035635156">Assistant</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1957958912175573503">Sprache festlegen</translation>
+<translation id="1962969542251276847">Gesperrter Bildschirm</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
 <translation id="1978498689038657292">Texteingabe</translation>
 <translation id="1993072747612765854">Weitere Informationen zum aktuellen <ph name="SYSTEM_APP_NAME" />-Update</translation>
@@ -104,7 +108,6 @@
 <translation id="2359808026110333948">Weiter</translation>
 <translation id="2365393535144473978">Bei Aktivierung der mobilen Daten wird auch Bluetooth aktiviert.</translation>
 <translation id="2391579633712104609">180°</translation>
-<translation id="239188844683466770">"Bitte nicht stören" aktivieren/deaktivieren</translation>
 <translation id="2412593942846481727">Update verfügbar</translation>
 <translation id="2413728805700750528"><ph name="DISPLAY_NAME" /> ist eine verwaltete Sitzung, die von <ph name="DOMAIN" /> verwaltet wird</translation>
 <translation id="2427507373259914951">Linksklick</translation>
@@ -116,6 +119,7 @@
 <translation id="2532589005999780174">Modus mit hohem Kontrast</translation>
 <translation id="2542089167727451762">Tippen Sie auf Ihr Profilbild</translation>
 <translation id="255671100581129685">In öffentlichen Sitzungen ist Google Assistant nicht verfügbar.</translation>
+<translation id="256712445991462162">die angedockte Lupe</translation>
 <translation id="2575685495496069081">Mehrfachanmeldung wurde deaktiviert</translation>
 <translation id="2582112259361606227">Zum Aktualisieren neu starten</translation>
 <translation id="2617342710774726426">SIM-Karte ist gesperrt</translation>
@@ -172,6 +176,7 @@
 <translation id="3364721542077212959">Eingabestift-Tools</translation>
 <translation id="3368922792935385530">Verbunden</translation>
 <translation id="3371140690572404006">USB-C-Gerät (Port vorne rechts)</translation>
+<translation id="3386978599540877378">die Vollbildlupe</translation>
 <translation id="3400357268283240774">Zusätzliche Einstellungen</translation>
 <translation id="3413817803639110246">Noch nichts zu sehen</translation>
 <translation id="343571671045587506">Erinnerung bearbeiten</translation>
@@ -229,17 +234,20 @@
 <translation id="4261870227682513959">Benachrichtigungseinstellungen anzeigen. Benachrichtigungen sind deaktiviert.</translation>
 <translation id="4269883910223712419">Der Administrator dieses Geräts kann Folgendes tun:</translation>
 <translation id="4279490309300973883">Spiegelung</translation>
-<translation id="4281007048406351813">Timer um 1 Min. verlängern</translation>
 <translation id="4296136865091727875">Alle <ph name="COUNT" /> Benachrichtigungen löschen</translation>
+<translation id="4303223480529385476">Statusbereich maximieren</translation>
 <translation id="4321179778687042513">Strg</translation>
 <translation id="4321776623976362024">Sie haben die Tastenkombination für den Modus "Hoher Kontrast" gedrückt. Möchten Sie ihn aktivieren?</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4338109981321384717">Lupe</translation>
 <translation id="4351433414020964307">Assistant wird geladen…</translation>
+<translation id="4356930093361201197">Modus mit hohem Kontrast</translation>
 <translation id="4378551569595875038">Verbindung wird hergestellt...</translation>
 <translation id="4379531060876907730">Dies sind Ihre Eingabestift-Tools</translation>
+<translation id="4383956581743965695">-<ph name="TIME_SINCE_EXPIRATION" /></translation>
 <translation id="4389184120735010762">Sie haben die Tastenkombination für den Modus "Angedockte Lupe" gedrückt. Möchten Sie ihn aktivieren?</translation>
 <translation id="4421231901400348175">Sie teilen sich die Bildschirmsteuerung mit <ph name="HELPER_NAME" /> per Remote-Unterstützung.</translation>
+<translation id="4430019312045809116">Lautstärke</translation>
 <translation id="4450893287417543264">Nicht mehr anzeigen</translation>
 <translation id="4477350412780666475">Nächster Titel</translation>
 <translation id="4479639480957787382">Ethernet</translation>
@@ -254,6 +262,7 @@
 <translation id="4585337515783392668">Streaming an unbekannten Empfänger beenden</translation>
 <translation id="4628757576491864469">Geräte</translation>
 <translation id="4659419629803378708">ChromeVox aktiviert</translation>
+<translation id="4665114317261903604">"Bitte nicht stören" aktivieren/deaktivieren. <ph name="STATE_TEXT" /></translation>
 <translation id="4696813013609194136">Gerät mit Elterncode entsperren</translation>
 <translation id="4731797938093519117">Elternfreigabe</translation>
 <translation id="4734965478015604180">Horizontal</translation>
@@ -262,9 +271,11 @@
 <translation id="4778095205580009397">In Demositzungen ist Google Assistant nicht verfügbar.</translation>
 <translation id="479989351350248267">Suchen</translation>
 <translation id="4804818685124855865">Verbindung trennen</translation>
+<translation id="4814539958450445987">Anmeldebildschirm</translation>
 <translation id="4831034276697007977">Möchten Sie automatische Klicks wirklich deaktivieren?</translation>
 <translation id="4849058404725798627">Objekt mit Tastaturfokus hervorheben</translation>
 <translation id="485592688953820832">Keine Aktion (Pause)</translation>
+<translation id="4868492592575313542">aktiviert</translation>
 <translation id="4872237917498892622">Alt+Suchen oder Umschalttaste</translation>
 <translation id="4890187583552566966">Google Assistant wurde von Ihrem Administrator deaktiviert.</translation>
 <translation id="4895488851634969361">Akku ist vollständig geladen.</translation>
@@ -342,7 +353,6 @@
 <translation id="6062360702481658777">Sie werden in <ph name="LOGOUT_TIME_LEFT" /> automatisch abgemeldet.</translation>
 <translation id="6064337552080329342">Ihr Passwort konnte nicht bestätigt werden. Bitte versuchen Sie es noch einmal.</translation>
 <translation id="607652042414456612">Ihr Computer kann von Bluetooth-Geräten in der näheren Umgebung erkannt werden. Er erscheint als "<ph name="NAME" />" mit der Adresse <ph name="ADDRESS" />.</translation>
-<translation id="6106745654298855237"><ph name="POWER_SOURCE" /> wird aufgeladen</translation>
 <translation id="612734058257491180">In Gastsitzungen ist Google Assistant nicht verfügbar.</translation>
 <translation id="615957422585914272">Bildschirmtastatur anzeigen</translation>
 <translation id="6164005077879661055">Durch das Entfernen des betreuten Nutzers werden alle mit ihm verknüpften Dateien und lokalen Daten endgültig gelöscht. Besuchte Websites und Einstellungen des betreuten Nutzers kann der Manager möglicherweise weiterhin unter <ph name="MANAGEMENT_URL" /> einsehen.</translation>
@@ -351,6 +361,7 @@
 <translation id="6254629735336163724">Nur horizontale Ausrichtung</translation>
 <translation id="6259254695169772643">Verwenden Sie den Eingabestift, um Ihre Auswahl zu treffen</translation>
 <translation id="6267036997247669271"><ph name="NAME" />: Wird aktiviert...</translation>
+<translation id="6283712521836204486">"Bitte nicht stören" ist deaktiviert.</translation>
 <translation id="6284232397434400372">Auflösung geändert</translation>
 <translation id="6297287540776456956">Eingabestift verwenden, um einen Bereich auszuwählen</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> wurde zu <ph name="ROTATION" /> gedreht.</translation>
@@ -388,11 +399,13 @@
 <translation id="6727969043791803658">Verbunden, Akkustand bei <ph name="BATTERY_PERCENTAGE" /> %</translation>
 <translation id="6751826523481687655">Leistungsverfolgung ist aktiviert</translation>
 <translation id="6752912906630585008">Arbeitsbereich <ph name="REMOVED_DESK" /> wurde entfernt und mit Arbeitsbereich <ph name="RECEIVE_DESK" /> zusammengeführt</translation>
+<translation id="6777216307882431711">Stromversorgung für verbundene USB-C-Geräte</translation>
 <translation id="6790428901817661496">Wiedergabe</translation>
 <translation id="6803622936009808957">Der Bildschirm konnte nicht gespiegelt werden, da die Auflösung nicht unterstützt wird. Stattdessen wurde der Modus für den erweiterten Desktop gestartet.</translation>
 <translation id="6820676911989879663">Zeit für eine Pause.</translation>
 <translation id="683971173229319003">Suche + L</translation>
 <translation id="6857811139397017780"><ph name="NETWORKSERVICE" /> aktivieren</translation>
+<translation id="6878400149835617132">Tastenkombination deaktiviert</translation>
 <translation id="6910714959251846841">Damit dieses Update installiert werden kann, muss auf Ihrem Gerät ein Powerwash durchgeführt werden. Informieren Sie sich über das aktuelle <ph name="SYSTEM_APP_NAME" />-Update.</translation>
 <translation id="6911468394164995108">Andere Netzwerke...</translation>
 <translation id="6919251195245069855">Ihre Smartcard wurde nicht erkannt. Bitte versuchen Sie es noch einmal.</translation>
@@ -402,6 +415,7 @@
 <translation id="7015766095477679451">Um <ph name="COME_BACK_TIME" /> kannst du weitermachen.</translation>
 <translation id="7025533177575372252"><ph name="DEVICE_NAME" /> mit Ihrem Smartphone verbinden</translation>
 <translation id="7029814467594812963">Sitzung beenden</translation>
+<translation id="7042322267639375032">Statusbereich minimieren</translation>
 <translation id="7066646422045619941">Dieses Netzwerk wurde von Ihrem Administrator deaktiviert.</translation>
 <translation id="7067196344162293536">Automatisch drehen</translation>
 <translation id="7068360136237591149">Dateien öffnen</translation>
@@ -413,7 +427,6 @@
 <translation id="7143207342074048698">Verbindung wird hergestellt.</translation>
 <translation id="7165278925115064263">Alt + Umschalttaste + K</translation>
 <translation id="7168224885072002358">Alte Auflösung wird in <ph name="TIMEOUT_SECONDS" /> wiederhergestellt.</translation>
-<translation id="7222902781030499995">Timer stoppen</translation>
 <translation id="7256634071279256947">Mikrofon auf der Rückseite</translation>
 <translation id="726276584504105859">Hierher ziehen, um den Bildschirm zu teilen</translation>
 <translation id="7262906531272962081">Erinnerung erstellen</translation>
@@ -423,7 +436,6 @@
 <translation id="735745346212279324">VPN-Verbindung getrennt</translation>
 <translation id="7377169924702866686">Feststelltaste An</translation>
 <translation id="7378594059915113390">Mediensteuerelemente</translation>
-<translation id="7384299914270925461"><ph name="SIGN" /><ph name="MINUTES_REMAINING" />:<ph name="SECONDS_REMAINING" /> Sek.</translation>
 <translation id="7398254312354928459">Netzwerkverbindung gewechselt</translation>
 <translation id="7405710164030118432">Wenn Sie das Gerät entsperren möchten, geben Sie Ihren Eltern-Zugangscode für Family Link ein</translation>
 <translation id="742594950370306541">Kamera wird verwendet.</translation>
@@ -439,11 +451,11 @@
 <translation id="7568294522609223312">Automatische Klicks deaktivieren</translation>
 <translation id="7569509451529460200">Braille und ChromeVox sind aktiviert</translation>
 <translation id="7593891976182323525">Suchen oder Umschalttaste</translation>
+<translation id="7600875258240007829">Alle Benachrichtigungen ansehen</translation>
 <translation id="7645176681409127223"><ph name="USER_NAME" /> (Eigentümer)</translation>
 <translation id="7647488630410863958">Gerät entsperren, um Benachrichtigungen zu sehen</translation>
 <translation id="7649070708921625228">Hilfe</translation>
 <translation id="7654687942625752712">Sie können gesprochenes Feedback deaktivieren, indem Sie die beiden Lautstärketasten fünf Sekunden lang gedrückt halten.</translation>
-<translation id="7692480393933218409">Verbundene USB-C-Geräte werden geladen</translation>
 <translation id="7705524343798198388">VPN</translation>
 <translation id="7723389094756330927">{NUM_NOTIFICATIONS,plural, =1{1 Benachrichtigung}other{# Benachrichtigungen}}</translation>
 <translation id="7749443890790263709">Maximale Anzahl von Arbeitsbereichen erreicht.</translation>
@@ -504,6 +516,7 @@
 <translation id="8452135315243592079">Keine SIM-Karte vorhanden</translation>
 <translation id="8454013096329229812">WLAN ist aktiviert.</translation>
 <translation id="847056008324733326">Einstellungen für Displaymaßstab</translation>
+<translation id="8473301994082929012"><ph name="ORGANIZATION_NAME" /> hat <ph name="FEATURE_NAME" /> <ph name="FEATURE_STATE" />.</translation>
 <translation id="8477270416194247200">Drücken Sie Alt + Such-Taste oder Umschalttaste, um die Aktivierung aufzuheben.</translation>
 <translation id="8513108775083588393">Automatisch drehen</translation>
 <translation id="8517041960877371778">Ihr <ph name="DEVICE_TYPE" /> wird möglicherweise nicht aufgeladen, wenn es eingeschaltet ist.</translation>
@@ -532,6 +545,7 @@
 <translation id="8909138438987180327">Akkustand: <ph name="PERCENTAGE" />.</translation>
 <translation id="8921554779039049422">H+</translation>
 <translation id="8921624153894383499">Google Assistant spricht diese Sprache nicht.</translation>
+<translation id="8936501819958976551">deaktiviert</translation>
 <translation id="8938800817013097409">USB-C-Gerät (rechter Port hinten)</translation>
 <translation id="8940956008527784070">Niedriger Akkustand (<ph name="PERCENTAGE" /> %)</translation>
 <translation id="8983038754672563810">HSPA</translation>

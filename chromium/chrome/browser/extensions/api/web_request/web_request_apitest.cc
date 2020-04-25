@@ -7,6 +7,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/extension_with_management_policy_apitest.h"
 #include "chrome/browser/extensions/scripting_permissions_modifier.h"
@@ -100,6 +102,7 @@
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_filter.h"
 #include "net/url_request/url_request_interceptor.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/test/test_url_loader_client.h"
@@ -139,6 +142,55 @@ class CancelLoginDialog : public content::NotificationObserver {
   content::NotificationRegistrar registrar_;
 
   DISALLOW_COPY_AND_ASSIGN(CancelLoginDialog);
+};
+
+// Observer that listens for messages from chrome.test.sendMessage to allow them
+// to be used to trigger browser initiated naviagations from the javascript for
+// testing purposes.
+class NavigateTabMessageHandler : public content::NotificationObserver {
+ public:
+  explicit NavigateTabMessageHandler(Profile* profile) : profile_(profile) {
+    registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_TEST_MESSAGE,
+                   content::NotificationService::AllSources());
+  }
+
+  ~NavigateTabMessageHandler() override {}
+
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override {
+    HandleNavigateTabMessage(type, source, details, profile_);
+  }
+
+ private:
+  void HandleNavigateTabMessage(int type,
+                                const content::NotificationSource& source,
+                                const content::NotificationDetails& details,
+                                Profile* profile) {
+    DCHECK_EQ(NOTIFICATION_EXTENSION_TEST_MESSAGE, type);
+    const auto message =
+        content::Details<std::pair<std::string, bool*>>(details)->first;
+    base::Optional<base::Value> command = base::JSONReader::Read(message);
+    if (command && command->is_dict()) {  // Check the message decoded from JSON
+      base::Value* data = command->FindDictKey("navigate");
+      if (data && data->is_dict()) {
+        int tab_id = *data->FindIntKey("tabId");
+        GURL url = GURL(*data->FindStringKey("url"));
+        ASSERT_TRUE(url.is_valid());
+
+        content::WebContents* contents = nullptr;
+        ExtensionTabUtil::GetTabById(
+            tab_id, profile, profile->HasOffTheRecordProfile(), &contents);
+        ASSERT_NE(contents, nullptr)
+            << "Could not find tab with id: " << tab_id;
+        content::NavigationController::LoadURLParams params(url);
+        contents->GetController().LoadURLWithParams(params);
+      }
+    }
+  }
+
+  content::NotificationRegistrar registrar_;
+  Profile* profile_;
 };
 
 // Sends an XHR request to the provided host, port, and path, and responds when
@@ -230,6 +282,7 @@ class ExtensionWebRequestApiTest : public ExtensionApiTest {
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
+    navigationHandler_ = std::make_unique<NavigateTabMessageHandler>(profile());
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -274,6 +327,7 @@ class ExtensionWebRequestApiTest : public ExtensionApiTest {
 
  private:
   std::vector<std::unique_ptr<TestExtensionDir>> test_dirs_;
+  std::unique_ptr<NavigateTabMessageHandler> navigationHandler_;
 };
 
 class DevToolsFrontendInWebRequestApiTest : public ExtensionApiTest {
@@ -287,6 +341,8 @@ class DevToolsFrontendInWebRequestApiTest : public ExtensionApiTest {
     url_loader_interceptor_ = std::make_unique<content::URLLoaderInterceptor>(
         base::BindRepeating(&DevToolsFrontendInWebRequestApiTest::OnIntercept,
                             base::Unretained(this), port));
+
+    navigationHandler_ = std::make_unique<NavigateTabMessageHandler>(profile());
   }
 
   void TearDownOnMainThread() override {
@@ -352,6 +408,7 @@ class DevToolsFrontendInWebRequestApiTest : public ExtensionApiTest {
 
   base::FilePath test_root_dir_;
   std::unique_ptr<content::URLLoaderInterceptor> url_loader_interceptor_;
+  std::unique_ptr<NavigateTabMessageHandler> navigationHandler_;
 };
 
 IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestApi) {
@@ -469,23 +526,30 @@ class ExtensionWebRequestApiAuthRequiredTest
   }
 };
 
+// Note: this is flaky on multiple platforms (crbug.com/1003598).
 IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiAuthRequiredTest,
-                       WebRequestAuthRequired) {
+                       DISABLED_WebRequestAuthRequired) {
   CancelLoginDialog login_dialog_helper;
 
   ASSERT_TRUE(StartEmbeddedTestServer());
+
+  // Pass "debug" as a custom arg to debug test flakiness.
   ASSERT_TRUE(RunExtensionSubtestWithArgAndFlags(
-      "webrequest", "test_auth_required.html", nullptr, GetFlags()))
+      "webrequest", "test_auth_required.html", "debug", GetFlags()))
       << message_;
 }
 
+// Note: this is flaky on multiple platforms (crbug.com/1003598). Temporarily
+// enabled to find flakiness cause.
 IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiAuthRequiredTest,
-                       WebRequestAuthRequiredAsync) {
+                       DISABLED_WebRequestAuthRequiredAsync) {
   CancelLoginDialog login_dialog_helper;
 
   ASSERT_TRUE(StartEmbeddedTestServer());
+
+  // Pass "debug" as a custom arg to debug test flakiness.
   ASSERT_TRUE(RunExtensionSubtestWithArgAndFlags(
-      "webrequest", "test_auth_required_async.html", nullptr, GetFlags()))
+      "webrequest", "test_auth_required_async.html", "debug", GetFlags()))
       << message_;
 }
 
@@ -535,7 +599,15 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
       << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestExtraHeaders) {
+// Flaky on ChromeOS: https://crbug.com/1003661 and Linux:
+// https://crbug.com/1864717
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+#define MAYBE_WebRequestExtraHeaders DISABLED_WebRequestExtraHeaders
+#else
+#define MAYBE_WebRequestExtraHeaders WebRequestExtraHeaders
+#endif
+IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
+                       MAYBE_WebRequestExtraHeaders) {
   CancelLoginDialog login_dialog_helper;
 
   ASSERT_TRUE(StartEmbeddedTestServer());
@@ -546,7 +618,12 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestExtraHeaders) {
 IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
                        WebRequestCORSWithExtraHeaders) {
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_cors.html")) << message_;
+  std::string test = "test_cors.html";
+  if (network::features::ShouldEnableOutOfBlinkCorsForTesting())
+    test += "?cors_mode=network_service";
+  else
+    test += "?cors_mode=blink";
+  ASSERT_TRUE(RunExtensionSubtest("webrequest", test)) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestRedirects) {
@@ -869,7 +946,12 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, ExtensionRequests) {
   // The extension frame does run in the extension's process. Any requests made
   // by it should not be visible to other extensions, since they won't have
   // access to the request initiator.
-  EXPECT_EQ("Did not intercept any requests.", listener_result.message());
+  //
+  // OTOH, the content script executes fetches/XHRs as-if they were initiated by
+  // the webpage that the content script got injected into.  Here, the webpage
+  // has origin of http://127.0.0.1:<some port>, and so the webRequest API
+  // extension should have access to the request.
+  EXPECT_EQ("Intercepted requests: ?contentscript", listener_result.message());
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, HostedAppRequest) {

@@ -20,7 +20,7 @@ namespace em = enterprise_management;
 namespace policy {
 
 const char RealtimeReportingJobConfiguration::kContextKey[] = "context";
-const char RealtimeReportingJobConfiguration::kEventKey[] = "event";
+const char RealtimeReportingJobConfiguration::kEventListKey[] = "eventList";
 
 const char RealtimeReportingJobConfiguration::kBrowserIdKey[] =
     "browser.browserId";
@@ -34,6 +34,15 @@ const char RealtimeReportingJobConfiguration::kMachineUserKey[] =
     "browser.machineUser";
 const char RealtimeReportingJobConfiguration::kOsVersionKey[] =
     "device.osVersion";
+
+base::Value RealtimeReportingJobConfiguration::BuildReport(
+    base::Value events,
+    base::Value context) {
+  base::Value value_report(base::Value::Type::DICTIONARY);
+  value_report.SetKey(kEventListKey, std::move(events));
+  value_report.SetKey(kContextKey, std::move(context));
+  return value_report;
+}
 
 RealtimeReportingJobConfiguration::RealtimeReportingJobConfiguration(
     CloudPolicyClient* client,
@@ -59,21 +68,19 @@ bool RealtimeReportingJobConfiguration::AddReport(base::Value report) {
     return false;
 
   base::Optional<base::Value> context = report.ExtractKey(kContextKey);
-  base::Optional<base::Value> event = report.ExtractKey(kEventKey);
-  if (!context || !event)
+  base::Optional<base::Value> event_list = report.ExtractKey(kEventListKey);
+  if (!context || !event_list || !event_list->is_list())
     return false;
 
   // Move context keys to the payload.  It is possible to add multiple reports
-  // to the payload in which case the context values are the same.  Only add
-  // any new values not already present.
-  for (const auto& item : context->DictItems()) {
-    if (!payload_.FindKey(item.first))
-      payload_.SetKey(item.first, item.second.Clone());
-  }
+  // to the payload in which case the context values are the same.
+  payload_.MergeDictionary(&*context);
 
-  // Append event to the list.
-  base::Value::ListStorage& list = payload_.FindListKey(kEventsKey)->GetList();
-  list.push_back(std::move(*event));
+  // Append event_list to the payload.
+  base::Value::ListStorage& to = payload_.FindListKey(kEventsKey)->GetList();
+  base::Value::ListStorage& from = event_list->GetList();
+  to.insert(to.end(), std::make_move_iterator(from.begin()),
+            std::make_move_iterator(from.end()));
   return true;
 }
 

@@ -42,7 +42,9 @@ class BackgroundSyncControllerImpl : public content::BackgroundSyncController,
  public:
   static const char kFieldTrialName[];
   static const char kDisabledParameterName[];
+  static const char kKeepBrowserAwakeParameterName[];
   static const char kMaxAttemptsParameterName[];
+  static const char kRelyOnAndroidNetworkDetection[];
   static const char kMaxAttemptsWithNotificationPermissionParameterName[];
   static const char kInitialRetryParameterName[];
   static const char kRetryDelayFactorParameterName[];
@@ -52,9 +54,8 @@ class BackgroundSyncControllerImpl : public content::BackgroundSyncController,
 
   static const int kEngagementLevelNonePenalty = 0;
   static const int kEngagementLevelHighOrMaxPenalty = 1;
-  static const int kEngagementLevelMediumPenalty = 2;
-  static const int kEngagementLevelLowPenalty = 3;
-  static const int kEngagementLevelMinimalPenalty = 4;
+  static const int kEngagementLevelLowOrMediumPenalty = 2;
+  static const int kEngagementLevelMinimalPenalty = 3;
 
 #if !defined(OS_ANDROID)
   class BackgroundSyncEventKeepAliveImpl : public BackgroundSyncEventKeepAlive {

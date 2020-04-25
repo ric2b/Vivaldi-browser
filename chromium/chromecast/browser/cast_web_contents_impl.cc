@@ -33,6 +33,8 @@
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/favicon_url.h"
 #include "content/public/common/resource_load_info.mojom.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/net_errors.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -365,23 +367,25 @@ void CastWebContentsImpl::RenderFrameCreated(
         render_frame_host->GetRemoteAssociatedInterfaces());
   }
 
-  chromecast::shell::mojom::FeatureManagerPtr feature_manager_ptr;
-  render_frame_host->GetRemoteInterfaces()->GetInterface(&feature_manager_ptr);
-  feature_manager_ptr->ConfigureFeatures(GetRendererFeatures());
+  mojo::Remote<chromecast::shell::mojom::FeatureManager> feature_manager_remote;
+  render_frame_host->GetRemoteInterfaces()->GetInterface(
+      feature_manager_remote.BindNewPipeAndPassReceiver());
+  feature_manager_remote->ConfigureFeatures(GetRendererFeatures());
 
-  chromecast::shell::mojom::MediaPlaybackOptionsAssociatedPtr
+  mojo::AssociatedRemote<chromecast::shell::mojom::MediaPlaybackOptions>
       media_playback_options;
   render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
       &media_playback_options);
   media_playback_options->SetUseCmaRenderer(use_cma_renderer_);
 
   // Send queryable values
-  chromecast::shell::mojom::QueryableDataStorePtr queryable_data_store_ptr;
+  mojo::Remote<chromecast::shell::mojom::QueryableDataStore>
+      queryable_data_store_remote;
   render_frame_host->GetRemoteInterfaces()->GetInterface(
-      &queryable_data_store_ptr);
+      queryable_data_store_remote.BindNewPipeAndPassReceiver());
   for (const auto& value : QueryableData::GetValues()) {
     // base::Value is not copyable.
-    queryable_data_store_ptr->Set(value.first, value.second.Clone());
+    queryable_data_store_remote->Set(value.first, value.second.Clone());
   }
 }
 
@@ -478,7 +482,7 @@ void CastWebContentsImpl::ReadyToCommitNavigation(
       navigation_handle->IsSameDocument() || navigation_handle->IsErrorPage())
     return;
 
-  chromecast::shell::mojom::OnLoadScriptInjectorAssociatedPtr
+  mojo::AssociatedRemote<chromecast::shell::mojom::OnLoadScriptInjector>
       before_load_script_injector;
   navigation_handle->GetRenderFrameHost()
       ->GetRemoteAssociatedInterfaces()
@@ -654,8 +658,6 @@ void CastWebContentsImpl::UpdatePageState() {
 }
 
 void CastWebContentsImpl::NotifyPageState() {
-  if (!delegate_)
-    return;
   // Don't notify if the page state didn't change.
   if (last_state_ == page_state_)
     return;

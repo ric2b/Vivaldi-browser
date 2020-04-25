@@ -210,34 +210,6 @@
         ]
       },
       {
-        "name": "getUniqueUserId",
-        "type": "function",
-        "description": "Obtains a unique identifier for the current user of the computer",
-        "parameters": [
-          {
-            "name": "legacyUserId",
-            "type": "string",
-            "description": "User Id obtained from the old implementation relying on local storage. It will be used if no other user id value is found."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "uniqueUserId",
-                "type": "string",
-                "description": "The user id as a 16-char hex string."
-              },
-              {
-                "name": "isNewUser",
-                "type": "boolean",
-                "description": "Whether a new user id was created or a previous one was found."
-              }
-            ]
-          }
-        ]
-      },
-      {
         "name": "isTabInLastSession",
         "type": "function",
         "description": "Checks whether a given tab is part of the last loaded session",
@@ -465,6 +437,24 @@
               {
                 "name": "result",
                 "$ref": "DateFormats"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getSystemCountry",
+        "type": "function",
+        "description": "Return the system settings for the country if available.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "country",
+                "type": "string",
+                "description": "2-letter ISO code for the country"
               }
             ]
           }
@@ -720,24 +710,6 @@
         ]
       },
       {
-        "name": "canShowWelcomePage",
-        "type": "function",
-        "description": "Checks whether showing the welcome page is allowed and is not disabled by --no-first-run or similar.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "boolean",
-                "description": "true if the welcome page can be shown, otherwise false."
-              }
-            ]
-          }
-        ]
-      },
-      {
         "name": "canShowWhatsNewPage",
         "type": "function",
         "description": "Checks whether showing the what new page is allowed.",
@@ -928,6 +900,52 @@
                 "description": "Where to set the setting (default: regular)."
               }
             }
+          }
+        ]
+      },
+      {
+        "name": "isDialogOpen",
+        "type": "function",
+        "description": "Checks whether the given native dialog is open.",
+        "parameters": [
+          {
+            "name": "dialogName",
+            "$ref": "DialogName",
+            "description": "Dialog name to check for visibility."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "isOpen",
+                "type": "boolean",
+                "description": "true if the dialog is open, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "focusDialog",
+        "type": "function",
+        "description": "Focus the named dialog so keyboard navigation within it is available.",
+        "parameters": [
+          {
+            "name": "dialogName",
+            "$ref": "DialogName",
+            "description": "Dialog name to check for visibility."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "wasFocused",
+                "type": "boolean",
+                "description": "true if the dialog was focused, otherwise false."
+              }
+            ]
           }
         ]
       }

@@ -40,7 +40,6 @@ class BaseMessage(object):
     self.dirty = True  # True if self.id is (or might be) wrong
     self.id = 0
     self.SetDescription(description)
-    self.name = None
 
     if text != '':
       if not placeholders or placeholders == []:
@@ -79,12 +78,6 @@ class BaseMessage(object):
               self.AppendText(chunk)
         for key in tag_map:
           assert tag_map[key][1] != 0
-
-  def SetName(self, name):
-    self.name = name
-
-  def GetName(self):
-    return self.name
 
   def GetRealContent(self, escaping_function=Identity):
     '''Returns the original content, i.e. what your application and users

@@ -235,8 +235,7 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
                              const IntRect& src_sub_rectangle,
                              SourceDrawingBuffer);
 
-  scoped_refptr<Uint8Array> PaintRenderingResultsToDataArray(
-      SourceDrawingBuffer);
+  sk_sp<SkData> PaintRenderingResultsToDataArray(SourceDrawingBuffer);
 
   int SampleCount() const { return sample_count_; }
   bool ExplicitResolveOfMultisampleData() const {
@@ -367,9 +366,6 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
     // situation (the alpha channel is zeroed), requiring more fixups.
     GLuint rgb_workaround_texture_id = 0;
 
-    // The mailbox for |rgb_workaround_texture_id|.
-    gpu::Mailbox rgb_workaround_mailbox;
-
     // The mailbox used to send this buffer to the compositor.
     gpu::Mailbox mailbox;
 
@@ -477,6 +473,10 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
   // an emulated RGB CHROMIUM_image back buffer.
   bool SetupRGBEmulationForBlitFramebuffer(bool is_user_draw_framebuffer_bound);
   void CleanupRGBEmulationForBlitFramebuffer();
+
+  // Reallocate Multisampled renderbuffer, used by explicit resolve when resize
+  // and GPU switch
+  bool ReallocateMultisampleRenderbuffer(const IntSize&);
 
   // Weak, reset by beginDestruction.
   Client* client_ = nullptr;

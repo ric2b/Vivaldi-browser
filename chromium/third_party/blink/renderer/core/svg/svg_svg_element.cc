@@ -559,13 +559,12 @@ bool SVGSVGElement::animationsPaused() const {
 }
 
 float SVGSVGElement::getCurrentTime() const {
-  return clampTo<float>(time_container_->Elapsed());
+  return clampTo<float>(time_container_->Elapsed().InSecondsF());
 }
 
 void SVGSVGElement::setCurrentTime(float seconds) {
   DCHECK(std::isfinite(seconds));
-  seconds = max(seconds, 0.0f);
-  time_container_->SetElapsed(seconds);
+  time_container_->SetElapsed(SMILTime::FromSecondsD(std::max(seconds, 0.0f)));
 }
 
 bool SVGSVGElement::SelfHasRelativeLengths() const {

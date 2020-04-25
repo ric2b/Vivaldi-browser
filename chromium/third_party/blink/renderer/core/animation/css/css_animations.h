@@ -102,8 +102,7 @@ class CORE_EXPORT CSSAnimations final {
   void Trace(blink::Visitor*);
 
  private:
-  class RunningAnimation final
-      : public GarbageCollectedFinalized<RunningAnimation> {
+  class RunningAnimation final : public GarbageCollected<RunningAnimation> {
    public:
     RunningAnimation(Animation* animation, NewCSSAnimation new_animation)
         : animation(animation),
@@ -202,10 +201,9 @@ class CORE_EXPORT CSSAnimations final {
     AnimationEventDelegate(Element* animation_target, const AtomicString& name)
         : animation_target_(animation_target),
           name_(name),
-          previous_phase_(Timing::kPhaseNone),
-          previous_iteration_(NullValue()) {}
+          previous_phase_(Timing::kPhaseNone) {}
     bool RequiresIterationEvents(const AnimationEffect&) override;
-    void OnEventCondition(const AnimationEffect&) override;
+    void OnEventCondition(const AnimationEffect&, Timing::Phase) override;
     void Trace(blink::Visitor*) override;
 
    private:
@@ -219,7 +217,7 @@ class CORE_EXPORT CSSAnimations final {
     Member<Element> animation_target_;
     const AtomicString name_;
     Timing::Phase previous_phase_;
-    double previous_iteration_;
+    base::Optional<double> previous_iteration_;
   };
 
   class TransitionEventDelegate final : public AnimationEffect::EventDelegate {
@@ -232,7 +230,7 @@ class CORE_EXPORT CSSAnimations final {
     bool RequiresIterationEvents(const AnimationEffect&) override {
       return false;
     }
-    void OnEventCondition(const AnimationEffect&) override;
+    void OnEventCondition(const AnimationEffect&, Timing::Phase) override;
     void Trace(blink::Visitor*) override;
 
    private:

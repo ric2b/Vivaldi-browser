@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -16,9 +18,14 @@
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/swap_result.h"
 
 namespace viz {
+
+OutputSurface::Capabilities::Capabilities() = default;
+OutputSurface::Capabilities::Capabilities(const Capabilities& capabilities) =
+    default;
 
 OutputSurface::OutputSurface() = default;
 
@@ -34,6 +41,10 @@ OutputSurface::OutputSurface(
 }
 
 OutputSurface::~OutputSurface() = default;
+
+gfx::Rect OutputSurface::GetCurrentFramebufferDamage() const {
+  return gfx::Rect();
+}
 
 SkiaOutputSurface* OutputSurface::AsSkiaOutputSurface() {
   return nullptr;

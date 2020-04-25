@@ -95,6 +95,12 @@ class ContactService : public KeyedService {
       const ContactCallback& callback,
       base::CancelableTaskTracker* tracker);
 
+  base::CancelableTaskTracker::TaskId RemoveEmailAddress(
+      ContactID contact_id,
+      EmailAddressID email_id,
+      const ContactCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
   base::CancelableTaskTracker::TaskId AddProperty(
       AddPropertyObject ev,
       const ContactCallback& callback,

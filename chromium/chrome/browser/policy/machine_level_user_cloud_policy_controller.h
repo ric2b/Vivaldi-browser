@@ -20,12 +20,16 @@ namespace network {
 class SharedURLLoaderFactory;
 }
 
+namespace enterprise_reporting {
+class ReportScheduler;
+}
+
 namespace policy {
+class ChromeBrowserCloudManagementRegistrar;
 class ConfigurationPolicyProvider;
 class MachineLevelUserCloudPolicyManager;
 class MachineLevelUserCloudPolicyFetcher;
-class MachineLevelUserCloudPolicyRegisterWatcher;
-class MachineLevelUserCloudPolicyRegistrar;
+class ChromeBrowserCloudManagementRegisterWatcher;
 
 // A class that setups and manages MachineLevelUserCloudPolicy.
 class MachineLevelUserCloudPolicyController {
@@ -90,21 +94,28 @@ class MachineLevelUserCloudPolicyController {
  private:
   bool GetEnrollmentTokenAndClientId(std::string* enrollment_token,
                                      std::string* client_id);
-  void RegisterForPolicyWithEnrollmentTokenCallback(
+  void RegisterForCloudManagementWithEnrollmentTokenCallback(
       const std::string& dm_token,
       const std::string& client_id);
 
+  void CreateReportSchedulerAsync(
+      scoped_refptr<base::SequencedTaskRunner> task_runner);
+  void CreateReportScheduler();
+
   base::ObserverList<Observer, true>::Unchecked observers_;
 
-  std::unique_ptr<MachineLevelUserCloudPolicyRegistrar> policy_registrar_;
+  std::unique_ptr<ChromeBrowserCloudManagementRegistrar>
+      cloud_management_registrar_;
   std::unique_ptr<MachineLevelUserCloudPolicyFetcher> policy_fetcher_;
     // This is an observer of the controller and needs to be declared after the
     // |observers_|.
-  std::unique_ptr<MachineLevelUserCloudPolicyRegisterWatcher>
-      policy_register_watcher_;
+  std::unique_ptr<ChromeBrowserCloudManagementRegisterWatcher>
+      cloud_management_register_watcher_;
 
   // Time at which the enrollment process was started.  Used to log UMA metric.
   base::Time enrollment_start_time_;
+
+  std::unique_ptr<enterprise_reporting::ReportScheduler> report_scheduler_;
 
   DISALLOW_COPY_AND_ASSIGN(MachineLevelUserCloudPolicyController);
 };

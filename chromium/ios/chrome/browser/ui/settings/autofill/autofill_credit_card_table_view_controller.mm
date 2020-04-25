@@ -38,6 +38,10 @@
 
 NSString* const kAutofillCreditCardTableViewId = @"kAutofillTableViewId";
 NSString* const kAutofillCreditCardSwitchViewId = @"cardItem_switch";
+NSString* const kAutofillPaymentMethodsToolbarId =
+    @"kAutofillPaymentMethodsToolbarId";
+NSString* const kSettingsAddPaymentMethodButtonId =
+    @"kSettingsAddPaymentMethodButtonId";
 
 namespace {
 
@@ -117,6 +121,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [super viewDidLoad];
   self.tableView.allowsMultipleSelectionDuringEditing = YES;
   self.tableView.accessibilityIdentifier = kAutofillCreditCardTableViewId;
+  self.navigationController.toolbar.accessibilityIdentifier =
+      kAutofillPaymentMethodsToolbarId;
 
   base::RecordAction(base::UserMetricsAction("AutofillCreditCardsViewed"));
   if (base::FeatureList::IsEnabled(kSettingsAddPaymentMethod)) {
@@ -147,9 +153,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (BOOL)shouldHideToolbar {
-  if (base::FeatureList::IsEnabled(kSettingsAddPaymentMethod)) {
+  // There is a bug from apple that this method might be called in this view
+  // controller even if it is not the top view controller.
+  if (self.navigationController.topViewController == self &&
+      base::FeatureList::IsEnabled(kSettingsAddPaymentMethod)) {
     return NO;
   }
+
   return [super shouldHideToolbar];
 }
 
@@ -384,6 +394,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     _personalDataManager->RemoveByGUID(item.GUID);
   }
 
+  self.editing = NO;
   __weak AutofillCreditCardTableViewController* weakSelf = self;
   [self.tableView
       performBatchUpdates:^{
@@ -430,6 +441,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // credit card details.
 - (void)handleAddPayment:(id)sender {
   DCHECK(base::FeatureList::IsEnabled(kSettingsAddPaymentMethod));
+  base::RecordAction(
+      base::UserMetricsAction("MobileAddCreditCard.AddPaymentMethodButton"));
 
   self.addCreditCardCoordinator = [[AutofillAddCreditCardCoordinator alloc]
       initWithBaseViewController:self
@@ -473,6 +486,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
                 style:UIBarButtonItemStylePlain
                target:self
                action:@selector(handleAddPayment:)];
+    _addPaymentMethodButton.accessibilityIdentifier =
+        kSettingsAddPaymentMethodButtonId;
   }
   return _addPaymentMethodButton;
 }

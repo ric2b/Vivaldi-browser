@@ -1,9 +1,8 @@
 <assembly
   xmlns='urn:schemas-microsoft-com:asm.v1' manifestVersion='1.0'>
   <assemblyIdentity
-      name='@VIVALDI_MAJOR@.@VIVALDI_MINOR@.@VIVALDI_NIGHTLY@.@VIVALDI_BUILD@'
-      version='@VIVALDI_MAJOR@.@VIVALDI_MINOR@.@VIVALDI_NIGHTLY@.@VIVALDI_BUILD@'
+      name='@MAJOR@.@MINOR@.@BUILD@.@PATCH@'
+      version='@MAJOR@.@MINOR@.@BUILD@.@PATCH@'
       type='win32'/>
-  <file name='vivaldi_elf.dll'/>
-  <file name='WinSparkle.dll'/>
+  <file name='chrome_elf.dll'/>
 </assembly>

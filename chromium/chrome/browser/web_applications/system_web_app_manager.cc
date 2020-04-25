@@ -9,6 +9,8 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/command_line.h"
+#include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/version.h"
@@ -24,10 +26,12 @@
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/content_switches.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "chrome/browser/chromeos/extensions/default_web_app_ids.h"
+#include "chromeos/components/media_app_ui/url_constants.h"
 #include "chromeos/constants/chromeos_features.h"
 #endif  // defined(OS_CHROMEOS)
 
@@ -47,7 +51,7 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps() {
     constexpr char kCameraAppPWAURL[] = "chrome://camera/pwa.html";
     infos[SystemAppType::CAMERA].install_url = GURL(kCameraAppPWAURL);
     infos[SystemAppType::CAMERA].uninstall_and_replace = {
-        app_list::kInternalAppIdCamera};
+        ash::kInternalAppIdCamera};
   }
 
   if (base::FeatureList::IsEnabled(chromeos::features::kSplitSettings)) {
@@ -55,16 +59,23 @@ base::flat_map<SystemAppType, SystemAppInfo> CreateSystemWebApps() {
     infos[SystemAppType::SETTINGS].install_url = GURL(kChromeSettingsPWAURL);
     infos[SystemAppType::SETTINGS].uninstall_and_replace = {
         chromeos::default_web_apps::kSettingsAppId,
-        app_list::kInternalAppIdSettings};
+        ash::kInternalAppIdSettings};
   } else {
     constexpr char kChromeSettingsPWAURL[] = "chrome://settings/pwa.html";
     infos[SystemAppType::SETTINGS].install_url = GURL(kChromeSettingsPWAURL);
     infos[SystemAppType::SETTINGS].uninstall_and_replace = {
-        app_list::kInternalAppIdSettings};
+        ash::kInternalAppIdSettings};
   }
+  // Large enough to see the heading text "Settings" in the top-left.
+  infos[SystemAppType::SETTINGS].minimum_window_size = {300, 100};
+
   if (SystemWebAppManager::IsAppEnabled(SystemAppType::TERMINAL)) {
     constexpr char kChromeTerminalPWAURL[] = "chrome://terminal/html/pwa.html";
     infos[SystemAppType::TERMINAL].install_url = GURL(kChromeTerminalPWAURL);
+  }
+  if (SystemWebAppManager::IsAppEnabled(SystemAppType::MEDIA)) {
+    constexpr char kChromeMediaAppURL[] = "chrome://media-app/pwa.html";
+    infos[SystemAppType::MEDIA].install_url = {GURL(kChromeMediaAppURL)};
   }
 #endif  // OS_CHROMEOS
 
@@ -77,7 +88,7 @@ ExternalInstallOptions CreateInstallOptionsForSystemApp(
   DCHECK_EQ(content::kChromeUIScheme, info.install_url.scheme());
 
   web_app::ExternalInstallOptions install_options(
-      info.install_url, LaunchContainer::kWindow,
+      info.install_url, blink::mojom::DisplayMode::kStandalone,
       ExternalInstallSource::kSystemInstalled);
   install_options.add_to_applications_menu = false;
   install_options.add_to_desktop = false;
@@ -115,6 +126,8 @@ bool SystemWebAppManager::IsAppEnabled(SystemAppType type) {
           chromeos::features::kCameraSystemWebApp);
     case SystemAppType::TERMINAL:
       return base::FeatureList::IsEnabled(features::kTerminalSystemApp);
+    case SystemAppType::MEDIA:
+      return base::FeatureList::IsEnabled(chromeos::features::kMediaApp);
   }
 #else
   return false;
@@ -188,9 +201,29 @@ base::Optional<AppId> SystemWebAppManager::GetAppIdForSystemApp(
   return registrar_->LookupExternalAppId(app_url_it->second.install_url);
 }
 
+base::Optional<SystemAppType> SystemWebAppManager::GetSystemAppTypeForAppId(
+    AppId app_id) const {
+  auto it = app_id_to_app_type_.find(app_id);
+  if (it == app_id_to_app_type_.end())
+    return base::nullopt;
+
+  return it->second;
+}
+
 bool SystemWebAppManager::IsSystemWebApp(const AppId& app_id) const {
   return registrar_->HasExternalAppWithInstallSource(
       app_id, ExternalInstallSource::kSystemInstalled);
+}
+
+gfx::Size SystemWebAppManager::GetMinimumWindowSize(const AppId& app_id) const {
+  auto app_type_it = app_id_to_app_type_.find(app_id);
+  if (app_type_it == app_id_to_app_type_.end())
+    return gfx::Size();
+  const SystemAppType& app_type = app_type_it->second;
+  auto app_info_it = system_app_infos_.find(app_type);
+  if (app_info_it == system_app_infos_.end())
+    return gfx::Size();
+  return app_info_it->second.minimum_window_size;
 }
 
 void SystemWebAppManager::SetSystemAppsForTesting(
@@ -227,6 +260,15 @@ void SystemWebAppManager::OnAppsSynchronized(
 
   RecordExternalAppInstallResultCode(kInstallResultHistogramName,
                                      install_results);
+
+  // Build the map from installed app id to app type.
+  for (const auto& it : system_app_infos_) {
+    const SystemAppType& app_type = it.first;
+    base::Optional<AppId> app_id =
+        registrar_->LookupExternalAppId(it.second.install_url);
+    if (app_id.has_value())
+      app_id_to_app_type_[app_id.value()] = app_type;
+  }
 
   // May be called more than once in tests.
   if (!on_apps_synchronized_->is_signaled())

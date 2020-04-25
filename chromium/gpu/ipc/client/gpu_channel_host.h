@@ -51,11 +51,10 @@ class GPU_EXPORT GpuChannelEstablishFactory {
 
   virtual void EstablishGpuChannel(GpuChannelEstablishedCallback callback) = 0;
   virtual scoped_refptr<GpuChannelHost> EstablishGpuChannelSync() = 0;
+  virtual GpuMemoryBufferManager* GetGpuMemoryBufferManager() = 0;
 
   // FEATURE_FORCE_ACCESS_TO_GPU
   virtual void SetForceAllowAccessToGpu(bool enable) = 0;
-
-  virtual GpuMemoryBufferManager* GetGpuMemoryBufferManager() = 0;
 };
 
 // Encapsulates an IPC channel between the client and one GPU process.

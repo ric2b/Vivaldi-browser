@@ -20,6 +20,7 @@
 #include "build/build_config.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/browser/frame_host/navigation_controller_impl.h"
+#include "content/browser/web_package/bundled_exchanges_navigation_info.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/navigation_params.h"
 #include "content/common/page_state_serialization.h"
@@ -65,10 +66,6 @@ void RecursivelyGenerateFrameEntries(
   EncodePageState(page_state, &data);
   DCHECK(!data.empty()) << "Shouldn't generate an empty PageState.";
 
-  // TODO(lukasza): https://crbug.com/976055: |initiator_origin| should be
-  // persisted across session restore.
-  base::Optional<url::Origin> initiator_origin = base::nullopt;
-
   node->frame_entry = base::MakeRefCounted<FrameNavigationEntry>(
       UTF16ToUTF8(state.target.value_or(base::string16())),
       state.item_sequence_number, state.document_sequence_number, nullptr,
@@ -78,7 +75,7 @@ void RecursivelyGenerateFrameEntries(
       nullptr /* origin */,
       Referrer(GURL(state.referrer.value_or(base::string16())),
                state.referrer_policy),
-      initiator_origin, std::vector<GURL>(),
+      state.initiator_origin, std::vector<GURL>(),
       PageState::CreateFromEncodedData(data), "GET", -1,
       nullptr /* blob_url_loader_factory */);
 
@@ -93,6 +90,12 @@ void RecursivelyGenerateFrameEntries(
     RecursivelyGenerateFrameEntries(child_state, empty_file_list,
                                     node->children.back().get());
   }
+}
+
+base::Optional<base::string16> UrlToOptionalString16(const GURL& url) {
+  if (!url.is_valid())
+    return base::nullopt;
+  return base::UTF8ToUTF16(url.spec());
 }
 
 void RecursivelyGenerateFrameState(
@@ -111,6 +114,34 @@ void RecursivelyGenerateFrameState(
 
   // Copy the FrameNavigationEntry's frame state into the destination state.
   *state = frame_state;
+
+  // Some data is stored *both* in 1) PageState/ExplodedFrameState and 2)
+  // FrameNavigationEntry.  We want to treat FrameNavigationEntry as the
+  // authoritative source of the data, so we clobber the ExplodedFrameState with
+  // the data taken from FrameNavigationEntry.
+  //
+  // The following ExplodedFrameState fields do not have an equivalent
+  // FrameNavigationEntry field:
+  // - target
+  // - state_object
+  // - document_state
+  // - scroll_restoration_type
+  // - did_save_scroll_or_scale_state
+  // - visual_viewport_scroll_offset
+  // - scroll_offset
+  // - page_scale_factor
+  // - http_body (FrameNavigationEntry::GetPostData extracts the body from
+  //   the ExplodedFrameState)
+  // - scroll_anchor_selector
+  // - scroll_anchor_offset
+  // - scroll_anchor_simhash
+  state->url_string = UrlToOptionalString16(node->frame_entry->url());
+  state->referrer = UrlToOptionalString16(node->frame_entry->referrer().url);
+  state->referrer_policy = node->frame_entry->referrer().policy;
+  state->item_sequence_number = node->frame_entry->item_sequence_number();
+  state->document_sequence_number =
+      node->frame_entry->document_sequence_number();
+  state->initiator_origin = node->frame_entry->initiator_origin();
 
   // Copy the frame's files into the PageState's |referenced_files|.
   referenced_files->reserve(referenced_files->size() +
@@ -155,8 +186,7 @@ NavigationEntryImpl::TreeNode::TreeNode(
     scoped_refptr<FrameNavigationEntry> frame_entry)
     : parent(parent), frame_entry(std::move(frame_entry)) {}
 
-NavigationEntryImpl::TreeNode::~TreeNode() {
-}
+NavigationEntryImpl::TreeNode::~TreeNode() {}
 
 bool NavigationEntryImpl::TreeNode::MatchesFrame(
     FrameTreeNode* frame_tree_node) const {
@@ -302,8 +332,7 @@ NavigationEntryImpl::NavigationEntryImpl(
       ssl_error_(false),
       should_skip_on_back_forward_ui_(false) {}
 
-NavigationEntryImpl::~NavigationEntryImpl() {
-}
+NavigationEntryImpl::~NavigationEntryImpl() {}
 
 int NavigationEntryImpl::GetUniqueID() {
   return unique_id_;
@@ -374,6 +403,8 @@ const base::string16& NavigationEntryImpl::GetTitle() {
 }
 
 void NavigationEntryImpl::SetPageState(const PageState& state) {
+  DCHECK(state.IsValid());
+
   // SetPageState should only be called before the NavigationEntry has been
   // loaded, such as for restore (when there are no subframe
   // FrameNavigationEntries yet).  However, some callers expect to call this
@@ -386,12 +417,10 @@ void NavigationEntryImpl::SetPageState(const PageState& state) {
   if (!frame_tree_->children.empty())
     frame_tree_->children.clear();
 
-  // If the PageState can't be parsed or has no children, just store it on the
-  // main frame's FrameNavigationEntry without recursively creating subframe
-  // entries.
+  // If the PageState can't be parsed, just store it on the main frame's
+  // FrameNavigationEntry without recursively creating subframe entries.
   ExplodedPageState exploded_state;
-  if (!DecodePageState(state.ToEncodedData(), &exploded_state) ||
-      exploded_state.top.children.size() == 0U) {
+  if (!DecodePageState(state.ToEncodedData(), &exploded_state)) {
     frame_tree_->frame_entry->SetPageState(state);
     return;
   }
@@ -401,14 +430,8 @@ void NavigationEntryImpl::SetPageState(const PageState& state) {
 }
 
 PageState NavigationEntryImpl::GetPageState() {
-  // Just return the main frame's state if there are no subframe
-  // FrameNavigationEntries.
-  if (frame_tree_->children.size() == 0U)
-    return frame_tree_->frame_entry->page_state();
-
-  // When we're using subframe entries, each FrameNavigationEntry has a
-  // frame-specific PageState.  We combine these into an ExplodedPageState tree
-  // and generate a full PageState from it.
+  // Each FrameNavigationEntry has a frame-specific PageState.  We combine these
+  // into an ExplodedPageState tree and generate a full PageState from it.
   ExplodedPageState exploded_state;
   RecursivelyGenerateFrameState(frame_tree_.get(), &exploded_state.top,
                                 &exploded_state.referenced_files);
@@ -662,6 +685,10 @@ std::unique_ptr<NavigationEntryImpl> NavigationEntryImpl::CloneAndReplace(
   copy->CloneDataFrom(*this);
   copy->replaced_entry_data_ = replaced_entry_data_;
   copy->should_skip_on_back_forward_ui_ = should_skip_on_back_forward_ui_;
+  if (bundled_exchanges_navigation_info_) {
+    copy->bundled_exchanges_navigation_info_ =
+        bundled_exchanges_navigation_info_->Clone();
+  }
 
   return copy;
 }
@@ -737,7 +764,8 @@ NavigationEntryImpl::ConstructCommitNavigationParams(
 #if defined(OS_ANDROID)
           std::string(),
 #endif
-          false, network::mojom::IPAddressSpace::kUnknown);
+          false, network::mojom::IPAddressSpace::kUnknown,
+          GURL() /* base_url_override_for_bundled_exchanges */);
 #if defined(OS_ANDROID)
   if (NavigationControllerImpl::ValidateDataURLAsString(GetDataURLAsString())) {
     commit_params->data_url_as_string = GetDataURLAsString()->data();
@@ -924,6 +952,18 @@ void NavigationEntryImpl::RemoveEntryForFrame(FrameTreeNode* frame_tree_node,
 
 GURL NavigationEntryImpl::GetHistoryURLForDataURL() {
   return GetBaseURLForDataURL().is_empty() ? GURL() : GetVirtualURL();
+}
+
+void NavigationEntryImpl::set_bundled_exchanges_navigation_info(
+    std::unique_ptr<BundledExchangesNavigationInfo>
+        bundled_exchanges_navigation_info) {
+  bundled_exchanges_navigation_info_ =
+      std::move(bundled_exchanges_navigation_info);
+}
+
+BundledExchangesNavigationInfo*
+NavigationEntryImpl::bundled_exchanges_navigation_info() const {
+  return bundled_exchanges_navigation_info_.get();
 }
 
 }  // namespace content

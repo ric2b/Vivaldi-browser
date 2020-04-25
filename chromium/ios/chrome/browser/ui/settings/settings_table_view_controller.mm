@@ -22,9 +22,9 @@
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/driver/sync_service.h"
-#include "components/unified_consent/feature.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/main/browser.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/search_engines/search_engine_observer_bridge.h"
@@ -171,7 +171,9 @@ NSString* kDevViewSourceKey = @"DevViewSource";
     SigninPresenter,
     SigninPromoViewConsumer,
     SyncObserverModelBridge> {
-  // The current browser state that hold the settings. Never off the record.
+  // The browser where the settings are being displayed.
+  Browser* _browser;
+  // The browser state for |_browser|. Never off the record.
   ios::ChromeBrowserState* _browserState;  // weak
   // Bridge for TemplateURLServiceObserver.
   std::unique_ptr<SearchEngineObserverBridge> _searchEngineObserverBridge;
@@ -245,17 +247,19 @@ NSString* kDevViewSourceKey = @"DevViewSource";
 
 #pragma mark Initialization
 
-- (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
-                          dispatcher:(id<ApplicationCommands, BrowserCommands>)
-                                         dispatcher {
-  DCHECK(!browserState->IsOffTheRecord());
+- (instancetype)initWithBrowser:(Browser*)browser
+                     dispatcher:
+                         (id<ApplicationCommands, BrowserCommands>)dispatcher {
+  DCHECK(browser);
+  DCHECK(!browser->GetBrowserState()->IsOffTheRecord());
   UITableViewStyle style = base::FeatureList::IsEnabled(kSettingsRefresh)
                                ? UITableViewStylePlain
                                : UITableViewStyleGrouped;
   self = [super initWithTableViewStyle:style
                            appBarStyle:ChromeTableViewControllerStyleNoAppBar];
   if (self) {
-    _browserState = browserState;
+    _browser = browser;
+    _browserState = _browser->GetBrowserState();
     self.title = l10n_util::GetNSStringWithFixup(IDS_IOS_SETTINGS_TITLE);
     _searchEngineObserverBridge.reset(new SearchEngineObserverBridge(
         self,
@@ -369,7 +373,7 @@ NSString* kDevViewSourceKey = @"DevViewSource";
         _signinPromoViewMediator.consumer = self;
       }
     } else {
-      [_signinPromoViewMediator signinPromoViewRemoved];
+      [_signinPromoViewMediator signinPromoViewIsRemoved];
       _signinPromoViewMediator = nil;
     }
     [model addItem:[self signInTextItem]
@@ -378,20 +382,18 @@ NSString* kDevViewSourceKey = @"DevViewSource";
     // Account section
     [model addSectionWithIdentifier:SectionIdentifierAccount];
     _hasRecordedSigninImpression = NO;
-    [_signinPromoViewMediator signinPromoViewRemoved];
+    [_signinPromoViewMediator signinPromoViewIsRemoved];
     _signinPromoViewMediator = nil;
     [model addItem:[self accountCellItem]
         toSectionWithIdentifier:SectionIdentifierAccount];
   }
-  if (unified_consent::IsUnifiedConsentFeatureEnabled()) {
-    if (![model hasSectionForSectionIdentifier:SectionIdentifierAccount]) {
-      // Add the Account section for the Google services cell, if the user is
-      // signed-out.
-      [model addSectionWithIdentifier:SectionIdentifierAccount];
-    }
-    [model addItem:[self googleServicesCellItem]
-        toSectionWithIdentifier:SectionIdentifierAccount];
+  if (![model hasSectionForSectionIdentifier:SectionIdentifierAccount]) {
+    // Add the Account section for the Google services cell, if the user is
+    // signed-out.
+    [model addSectionWithIdentifier:SectionIdentifierAccount];
   }
+  [model addItem:[self googleServicesCellItem]
+      toSectionWithIdentifier:SectionIdentifierAccount];
 
   // Basics section
   [model addSectionWithIdentifier:SectionIdentifierBasics];
@@ -454,17 +456,12 @@ NSString* kDevViewSourceKey = @"DevViewSource";
   if (_signinPromoViewMediator) {
     TableViewSigninPromoItem* signinPromoItem =
         [[TableViewSigninPromoItem alloc] initWithType:ItemTypeSigninPromo];
-    if (unified_consent::IsUnifiedConsentFeatureEnabled()) {
-      signinPromoItem.text =
-          l10n_util::GetNSString(IDS_IOS_SIGNIN_PROMO_SETTINGS_WITH_UNITY);
-    } else {
-      signinPromoItem.text =
-          l10n_util::GetNSString(IDS_IOS_SIGNIN_PROMO_SETTINGS);
-    }
+    signinPromoItem.text =
+        l10n_util::GetNSString(IDS_IOS_SIGNIN_PROMO_SETTINGS_WITH_UNITY);
     signinPromoItem.configurator =
         [_signinPromoViewMediator createConfigurator];
     signinPromoItem.delegate = _signinPromoViewMediator;
-    [_signinPromoViewMediator signinPromoViewVisible];
+    [_signinPromoViewMediator signinPromoViewIsVisible];
     return signinPromoItem;
   }
   if (!_hasRecordedSigninImpression) {
@@ -969,33 +966,7 @@ NSString* kDevViewSourceKey = @"DevViewSource";
   }
   identityAccountItem.image = [self userAccountImage];
   identityAccountItem.text = [_identity userFullName];
-  if (unified_consent::IsUnifiedConsentFeatureEnabled()) {
-    identityAccountItem.detailText = _identity.userEmail;
-    return;
-  }
-
-  SyncSetupService* syncSetupService =
-      SyncSetupServiceFactory::GetForBrowserState(_browserState);
-  if (!syncSetupService->HasFinishedInitialSetup()) {
-    identityAccountItem.detailText =
-        l10n_util::GetNSString(IDS_IOS_SYNC_SETUP_IN_PROGRESS);
-    identityAccountItem.shouldDisplayError = NO;
-    return;
-  }
-  identityAccountItem.shouldDisplayError =
-      !IsTransientSyncError(syncSetupService->GetSyncServiceState());
-  if (identityAccountItem.shouldDisplayError) {
-    identityAccountItem.detailText =
-        GetSyncErrorDescriptionForSyncSetupService(syncSetupService);
-  } else {
-    identityAccountItem.detailText =
-        syncSetupService->IsSyncEnabled()
-            ? l10n_util::GetNSStringF(
-                  IDS_IOS_SIGN_IN_TO_CHROME_SETTING_SYNCING,
-                  base::SysNSStringToUTF16([_identity userEmail]))
-            : l10n_util::GetNSString(
-                  IDS_IOS_SIGN_IN_TO_CHROME_SETTING_SYNC_OFF);
-  }
+  identityAccountItem.detailText = _identity.userEmail;
 }
 
 - (void)reloadAccountCell {
@@ -1130,7 +1101,7 @@ NSString* kDevViewSourceKey = @"DevViewSource";
   _googleServicesSettingsCoordinator = nil;
   _settingsHasBeenDismissed = YES;
   [self.signinInteractionCoordinator cancel];
-  [_signinPromoViewMediator signinPromoViewRemoved];
+  [_signinPromoViewMediator signinPromoViewIsRemoved];
   _signinPromoViewMediator = nil;
   [self stopBrowserStateServiceObservers];
 }
@@ -1138,11 +1109,7 @@ NSString* kDevViewSourceKey = @"DevViewSource";
 #pragma mark SyncObserverModelBridge
 
 - (void)onSyncStateChanged {
-  if (unified_consent::IsUnifiedConsentFeatureEnabled()) {
-    [self reloadGoogleServicesCell];
-  } else {
-    [self reloadAccountCell];
-  }
+  [self reloadGoogleServicesCell];
 }
 
 #pragma mark - IdentityRefreshLogic

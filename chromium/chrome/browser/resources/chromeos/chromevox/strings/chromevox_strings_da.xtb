@@ -20,6 +20,7 @@
 <translation id="1087788677726983142">Skjul filtre for begivenhedsstreaming</translation>
 <translation id="1088219014394087294">Ingen overskrifter.</translation>
 <translation id="1106741348836243114">Slå lydfeedback (earcons) til eller fra.</translation>
+<translation id="1114836634143403764">Forslag</translation>
 <translation id="1120743664840974483">{"a": "Adam", "b": "bravo", "c": "celcius", "d": "delta", "e": "Egon", "f": "foxtrot", "g": "golf", "h": "hotel", "i": "Ida", "j": "Julie","k": "kilo", "l": "lima", "m": "Mia", "n": "november", "o": "Ole","p": "pappa", "q": "quiz", "r": "Robert", "s": "Sigurd", "t": "tango", "u": "uniform", "v": "Viktor", "w": "whiskey","x": "Xerxes", "y": "ymer", "z": "zulu", "æ": "æble", "ø": "øre", "å": "Åse"}</translation>
 <translation id="1120938014254001895">Stryg opad med to fingre</translation>
 <translation id="1124771028211010580">Aktuelt visningsformat er side om side.</translation>
@@ -126,6 +127,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="1845944666972354496">Tryk to gange for at aktivere</translation>
 <translation id="1846771122725914429">Brailleskærm via Bluetooth</translation>
 <translation id="1865601187525349519">Slutning af ​​tekst</translation>
+<translation id="1875375785454778375">Aktiv bruger</translation>
 <translation id="1876229593313240038">dok</translation>
 <translation id="188130072164734898">Sig det aktuelle klokkeslæt og den aktuelle dato.</translation>
 <translation id="1902396333223336119">Celle</translation>
@@ -146,6 +148,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="2009187674653301682">Ikke hævet skrift</translation>
 <translation id="2010555995361223825">ChromeVox-menuer</translation>
 <translation id="2045490512405922022">ikke markeret</translation>
+<translation id="2049107626739254612">Godkendelsesoplysninger</translation>
 <translation id="20601713649439366">Der er ingen tidligere matematiske udtryk.</translation>
 <translation id="2063539687800151747">Motto</translation>
 <translation id="207477615537953741">Semantik fra</translation>
@@ -156,6 +159,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="2110480898214777136">Ombryd tekst fra begyndelsen til enden eller enden til begyndelsen af en side, dialogboks eller anden container.</translation>
 <translation id="2119965627982867824">spnbtn</translation>
 <translation id="2121067395472282800">hurtigtast:<ph name="KEY" /></translation>
+<translation id="2126597928985245619">Der er ingen tekst til dette element</translation>
 <translation id="2127747486437921899">Kursiv</translation>
 <translation id="2138345533858834403">Simulerer outputtet fra en brailleskærm, der kan opdateres.
         i ChromeVox-panelet øverst på skærmen.</translation>
@@ -168,6 +172,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="2203046366315513658">Sænk værdien</translation>
 <translation id="2220529011494928058">Rapportér et problem</translation>
 <translation id="2223693656926968778">Foretag handling på aktuelt element</translation>
+<translation id="224426591676115802">Der er ingen stemme tilgængelig for sproget: <ph name="LANGUAGE" /></translation>
 <translation id="225732394367814946">Skru op for talehastigheden</translation>
 <translation id="2267538686624070261">Går væk fra stavefejlen</translation>
 <translation id="2267945578749931355">Næste tegn</translation>
@@ -209,7 +214,6 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="2582407057977008361">Uden for</translation>
 <translation id="2592212930811759050">Tryk to gange for at redigere</translation>
 <translation id="2598495320872286378">Grammatikfejl</translation>
-<translation id="2606210917827248971">med {COUNT,plural, =1{# element}one{# element}other{# elementer}}</translation>
 <translation id="2614981083756825552">Math ML-layout</translation>
 <translation id="2624431853467395961">Åbn indlæringstilstanden</translation>
 <translation id="2626530649491650971">klikbart</translation>
@@ -236,6 +240,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="27527859628328957">Gå til næste element, der kan fokuseres på</translation>
 <translation id="2770781857296573485">Start udforskning af grupper</translation>
 <translation id="2777845298774924149">Lukket</translation>
+<translation id="2783001728278437613">{COUNT,plural, =1{+#}one{+#}other{+#}}</translation>
 <translation id="2784959586797362050">Du kan som altid sende os direkte feedback ved at trykke på søgetasten+a og derefter i. Vi glæder os til at høre fra dig.</translation>
 <translation id="2800204403141299078">Ikke flere anderledes elementer.</translation>
 <translation id="2800780099804980316">Ingen tidligere niveau 1-overskrifter.</translation>
@@ -261,6 +266,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="2911433807131383493">Åbn ChromeVox-selvstudie</translation>
 <translation id="2912405967290226587">Stryg til højre med tre fingre</translation>
 <translation id="2932083475399492303">Skift linjetype mellem strukturel eller layout</translation>
+<translation id="293796669683825859">Kommentarer</translation>
 <translation id="2942710183375260152">Mørk skiferblå</translation>
 <translation id="2943596527105977722">Mørk gyldenris</translation>
 <translation id="2944762337049891859">Læs siden automatisk, når den er indlæst.</translation>
@@ -322,6 +328,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="3241052487511142956">Tidligere besøgt link</translation>
 <translation id="3241638166094654466">Celler i hver linje:</translation>
 <translation id="3244209481693235975"><ph name="LANGUAGE" />: <ph name="CONTENT" /></translation>
+<translation id="3260949043575829030">Forrige lignende element</translation>
 <translation id="3286372614333682499">stående</translation>
 <translation id="3286390186030710347">Skyder</translation>
 <translation id="3299925995433437805">Intet næste besøgte link.</translation>
@@ -337,6 +344,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="3324983252691184275">Højrød</translation>
 <translation id="3338224621010291843"><ph name="VALUE" /> <ph name="NAME" /> skyder</translation>
 <translation id="335581015389089642">Tale</translation>
+<translation id="3356951775008366684">Oplæs fonetisk udtale af ord</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{plus}one{# plustegn}other{# plustegn}}</translation>
 <translation id="338583716107319301">Separator</translation>
@@ -375,6 +383,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="3646890046000188562">{COUNT,plural, =1{accent grave}one{# accent graver}other{# accent graver}}</translation>
 <translation id="3650317109285159359">chkmnuitm</translation>
 <translation id="3655855170848725876">{COUNT,plural, =1{dollar}one{# dollartegn}other{# dollartegn}}</translation>
+<translation id="3658742229777143148">Revision</translation>
 <translation id="3659787053479271466">advar</translation>
 <translation id="3665563998540286755">Listefeltet <ph name="VALUE" /></translation>
 <translation id="3681531118904532409">Lys varm orange</translation>
@@ -393,7 +402,6 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="3781428340399460090">Varm lyserød</translation>
 <translation id="3783725005098956899">Vis logfil</translation>
 <translation id="3793710123303304873">Dialogboks blev lukket.</translation>
-<translation id="3795836767122514678">+{COUNT,plural, =1{#}one{#}other{#}}</translation>
 <translation id="3801735343383419236">Autofuldførelsesliste</translation>
 <translation id="3810838688059735925">Video</translation>
 <translation id="3813387282697781382">Lys koralrød</translation>
@@ -503,6 +511,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="4517854969512651305">Hæv værdien</translation>
 <translation id="4529987814483543472">Klassisk tastaturoversigt</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{skråstreg}one{# skråstreger}other{# skråstreger}}</translation>
+<translation id="4537277403911487429">Næste lignende element</translation>
 <translation id="4547556996012970016">Næste niveau 5-overskrift</translation>
 <translation id="4562381607973973258">Overskrift</translation>
 <translation id="4569941707103739422">Tryk på pil op eller pil ned for at navigere. Tryk på Enter for at aktivere.</translation>
@@ -533,6 +542,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="4763480195061959176">video</translation>
 <translation id="4764692524839457597">standard</translation>
 <translation id="4772771694153161212">Ikke understregning</translation>
+<translation id="4787577491510559358">Oplæs formatering for aktuelt element</translation>
 <translation id="479989351350248267">søg</translation>
 <translation id="4804818685124855865">Afbryd</translation>
 <translation id="481165870889056555">Offentliggør titlen på den aktuelle side</translation>
@@ -569,6 +579,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="4983588134362688868">Gå til toppen af siden</translation>
 <translation id="4986606102545753256">Vinduet <ph name="NAME" /></translation>
 <translation id="4993152509206108683">Tempo <ph name="PERCENT" /> procent</translation>
+<translation id="4994420463726586413">Oplæs aktuel batteristatus</translation>
 <translation id="4996716799442435517">Visuel</translation>
 <translation id="4997282455736854877">Alternativknappen <ph name="NAME" /> er valgt</translation>
 <translation id="4997475792277222884">Ikke flere elementer, der ikke er links.</translation>
@@ -717,6 +728,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="5956928062748260866">Dialogboks</translation>
 <translation id="5963413905009737549">Afsnit</translation>
 <translation id="5968607524793740041">Vis genvejsmenu</translation>
+<translation id="597121107011153418">{COUNT,plural, =1{med # element}one{med # element}other{med # elementer}}</translation>
 <translation id="5981446804259161541">Lys cyanblå</translation>
 <translation id="5983179082906765664">Øg detaljegraden for navigation</translation>
 <translation id="5992285135956208197">Grafikdokument</translation>

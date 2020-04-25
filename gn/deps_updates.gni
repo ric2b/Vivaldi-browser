@@ -6,6 +6,7 @@ import("//build/config/features.gni")
 #import("//build/config/locales.gni")
 
 import("//vivaldi/app/deps_updates.gni")
+import("//vivaldi/base/deps_updates.gni")
 import("//vivaldi/browser/deps_updates.gni")
 import("//vivaldi/calendar/deps_updates.gni")
 import("//vivaldi/db/deps_updates.gni")
@@ -150,11 +151,5 @@ if (is_mac) {
       "--vivaldi-build",
       vivaldi_global_build_number,
     ]
-  }
-}
-
-if (is_win || is_mac) {
-  update_target("//chrome/test:unit_tests") {
-    deps -= ["//chrome/updater:updater_tests"]
   }
 }

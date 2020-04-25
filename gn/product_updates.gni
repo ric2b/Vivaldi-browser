@@ -118,16 +118,39 @@ if (is_win) {
   update_target("//chrome/installer/mini_installer:mini_installer") {
     output_name = "Vivaldi.${vivaldi_version_full}${_platform_suffix}"
   }
+
+  update_template_instance("//chrome:chrome_dll_version") {
+    sources -= ["app/chrome_dll.ver"]
+    sources += [
+      "//vivaldi/app/other_resources/vivaldi_dll.ver"
+    ]
+  }
+
+  update_template_instance("//chrome:chrome_exe_version") {
+    sources -= ["app/chrome_exe.ver"]
+    sources += [
+      "//vivaldi/app/other_resources/vivaldi_exe.ver"
+    ]
+  }
+
+  update_template_instance("//chrome/chrome_elf:chrome_elf_resources") {
+    sources -= ["chrome_elf.ver"]
+    sources += [
+      "//vivaldi/app/other_resources/vivaldi_elf.ver"
+    ]
+  }
+
+  update_template_instance("//chrome/chrome_watcher:chrome_watcher_resources") {
+    sources -= ["chrome_watcher.ver"]
+    sources += [
+      "//vivaldi/app/other_resources/vivaldi_watcher.ver"
+    ]
+  }
 }
 
 if (is_android) {
   update_template_instance("//chrome/android:chrome_public_apk") {
     apk_name = "Vivaldi.${vivaldi_version_full}"
-  }
-
-  update_template_instance("//chrome/android:chrome_public_apk_resources") {
-    resource_dirs = []
-    resource_dirs = [ "//vivaldi/android/java/res_vivaldi/final" ]
   }
 }
 
@@ -169,5 +192,8 @@ if (enable_resource_whitelist_generation && is_win) {
       inputs -= [ "$root_out_dir/chrome_child.dll.pdb" ]
       inputs += [ "$root_out_dir/vivaldi_child.dll.pdb" ]
     }
+    # Update notifier resources
+    inputs += [ "$root_out_dir/update_notifier.exe.pdb" ]
+    deps += [ "//vivaldi/update_notifier"]
   }
 }

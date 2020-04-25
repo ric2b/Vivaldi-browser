@@ -6,6 +6,14 @@ var lastChanged = null;
 var lastFocused = null;
 var restartButton = $('experiment-restart-button');
 
+/** @type {?function():void} */
+var experimentalFeaturesResolver = null;
+
+/** @type {!Promise} */
+var experimentalFeaturesReady = new Promise(resolve => {
+  experimentalFeaturesResolver = resolve;
+});
+
 /**
  * This variable structure is here to document the structure that the template
  * expects to correctly populate the page.
@@ -84,6 +92,7 @@ function renderTemplate(experimentalFeaturesData) {
         tabEls[j].parentNode.classList.toggle('selected', tabEls[j] == this);
         tabEls[j].setAttribute('aria-selected', tabEls[j] == this);
       }
+      FlagSearch.getInstance().announceSearchResults();
     });
   }
 
@@ -166,12 +175,22 @@ function restartBrowser() {
   chrome.send('restartBrowser');
 }
 
+/**
+ * Cause a text string to be announced by screen readers
+ * @param {string} text The text that should be announced.
+*/
+function announceStatus(text) {
+  $('screen-reader-status-message').innerHTML = '';
+  setTimeout(function() {
+    $('screen-reader-status-message').innerHTML = text;
+  }, 100);
+}
+
 /** Reset all flags to their default values and refresh the UI. */
 function resetAllFlags() {
   chrome.send('resetAllFlags');
-  $('reset-all-success-message').setAttribute("aria-disabled", "false");
-  // Updating the message in order for it to get announced by screen readers.
-  $('reset-all-success-message').innerHTML += "!";
+  FlagSearch.getInstance().clearSearch();
+  announceStatus(loadTimeData.getString("reset-acknowledged"));
   showRestartToast(true);
   requestExperimentalFeaturesData();
 }
@@ -182,6 +201,10 @@ function resetAllFlags() {
  */
 function showRestartToast(show) {
   $('needs-restart').classList.toggle('show', show);
+  var restartButton = $('experiment-restart-button');
+  if (restartButton) {
+    restartButton.setAttribute("tabindex", show ? '9' : '-1');
+  }
   if (show) {
     $('needs-restart').setAttribute("role", "alert");
   }
@@ -244,6 +267,8 @@ function returnExperimentalFeatures(experimentalFeaturesData) {
   if (ownerWarningDiv) {
     ownerWarningDiv.hidden = !experimentalFeaturesData.showOwnerWarning;
   }
+
+  experimentalFeaturesResolver();
 }
 
 /**
@@ -490,8 +515,7 @@ FlagSearch.prototype = {
    * Performs a search against the experiment title, description, permalink.
    */
   doSearch: function() {
-    var searchTerm =
-        this.searchBox_.value.trim().toLowerCase();
+    var searchTerm = this.searchBox_.value.trim().toLowerCase();
 
     if (searchTerm || searchTerm == '') {
       document.body.classList.toggle('searching', searchTerm);
@@ -501,9 +525,34 @@ FlagSearch.prototype = {
       // Unavailable experiments
       this.noMatchMsg_[1].classList.toggle('hidden',
           this.highlightAllMatches(this.unavailableExperiments_, searchTerm));
+      this.announceSearchResults();
     }
 
     this.searchIntervalId_ = null;
+  },
+
+  announceSearchResults: function() {
+    var searchTerm = this.searchBox_.value.trim().toLowerCase();
+    if (!searchTerm) {
+      return;
+    }
+
+    var tabAvailable = true;
+    var tabEls = document.getElementsByClassName('tab');
+    for (var i = 0; i < tabEls.length; ++i) {
+      if (tabEls[i].parentNode.classList.contains('selected')) {
+        tabAvailable = tabEls[i].id == 'tab-available';
+      }
+    }
+    var seletedTabId =
+        tabAvailable ? '#tab-content-available' : '#tab-content-unavailable';
+    var queryString = seletedTabId + ' .experiment:not(.hidden)';
+    const total = document.querySelectorAll(queryString).length;
+    if (total) {
+      announceStatus((total == 1) ?
+          loadTimeData.getStringF("searchResultsSingular", searchTerm) :
+          loadTimeData.getStringF("searchResultsPlural", total, searchTerm));
+    }
   },
 
   /**

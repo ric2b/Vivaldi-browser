@@ -62,10 +62,6 @@
 #include "content/public/test/test_renderer_host.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "net/base/net_errors.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_fetcher_delegate.h"
-#include "net/url_request/url_request_status.h"
-#include "net/url_request/url_request_test_util.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -251,7 +247,7 @@ class TranslateManagerRenderViewHostTest
     details.adopted_language = lang;
     ChromeTranslateClient::FromWebContents(web_contents())
         ->translate_driver()
-        ->RegisterPage(fake_page_.BindToNewPagePtr(), details,
+        ->RegisterPage(fake_page_.BindToNewPageRemote(), details,
                        page_translatable);
   }
 

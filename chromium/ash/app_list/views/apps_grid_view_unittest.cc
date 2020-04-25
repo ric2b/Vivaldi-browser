@@ -52,7 +52,7 @@
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/test/views_test_base.h"
 
-namespace app_list {
+namespace ash {
 namespace test {
 
 namespace {
@@ -303,6 +303,15 @@ class AppsGridViewTest : public views::ViewsTestBase,
   void SimulateKeyReleased(ui::KeyboardCode key_code, int flags) {
     ui::KeyEvent key_event(ui::ET_KEY_RELEASED, key_code, flags);
     apps_grid_view_->OnKeyReleased(key_event);
+  }
+
+  // Points are in |apps_grid_view_|'s coordinates, and fixed for RTL.
+  ui::GestureEvent SimulateTap(const gfx::Point& location) {
+    ui::GestureEvent gesture_event(
+        apps_grid_view_->GetMirroredXInView(location.x()), location.y(), 0,
+        base::TimeTicks(), ui::GestureEventDetails(ui::ET_GESTURE_TAP));
+    apps_grid_view_->OnGestureEvent(&gesture_event);
+    return gesture_event;
   }
 
   // Tests that the order of item views in the AppsGridView is in accordance
@@ -674,26 +683,21 @@ TEST_F(AppsGridViewTest, CloseFolderByClickingBackground) {
   EXPECT_FALSE(apps_container_view->IsInFolderView());
 }
 
-TEST_F(AppsGridViewTest, TapsBetweenAppsWontCloseAppList) {
+// Tests that taps between apps within the AppsGridView does not result in the
+// AppList closing.
+TEST_P(AppsGridViewTest, TapsBetweenAppsWontCloseAppList) {
   model_->PopulateApps(2);
   gfx::Point between_apps = GetItemRectOnCurrentPageAt(0, 0).right_center();
   gfx::Point empty_space = GetItemRectOnCurrentPageAt(0, 2).CenterPoint();
 
-  ui::GestureEvent tap_between(between_apps.x(), between_apps.y(), 0,
-                               base::TimeTicks(),
-                               ui::GestureEventDetails(ui::ET_GESTURE_TAP));
-  ui::GestureEvent tap_outside(empty_space.x(), empty_space.y(), 0,
-                               base::TimeTicks(),
-                               ui::GestureEventDetails(ui::ET_GESTURE_TAP));
-
   // Taps between apps should be handled to prevent them from going into
   // app_list
-  apps_grid_view_->OnGestureEvent(&tap_between);
+  ui::GestureEvent tap_between = SimulateTap(between_apps);
   EXPECT_TRUE(tap_between.handled());
 
   // Taps outside of occupied tiles should not be handled, that they may close
   // the app_list
-  apps_grid_view_->OnGestureEvent(&tap_outside);
+  ui::GestureEvent tap_outside = SimulateTap(empty_space);
   EXPECT_FALSE(tap_outside.handled());
 }
 
@@ -1695,7 +1699,9 @@ TEST_F(AppsGridViewTest, ControlShiftArrowFolderLastItemOnPage) {
 
 TEST_P(AppsGridViewTest, MouseDragFlipPage) {
   apps_grid_view_->set_page_flip_delay_in_ms_for_testing(10);
-  GetPaginationModel()->SetTransitionDurations(10, 10);
+  GetPaginationModel()->SetTransitionDurations(
+      base::TimeDelta::FromMilliseconds(10),
+      base::TimeDelta::FromMilliseconds(10));
 
   PageFlipWaiter page_flip_waiter(GetPaginationModel());
 
@@ -1860,7 +1866,9 @@ class AppsGridGapTest : public AppsGridViewTest {
   void SetUp() override {
     AppsGridViewTest::SetUp();
     apps_grid_view_->set_page_flip_delay_in_ms_for_testing(10);
-    GetPaginationModel()->SetTransitionDurations(10, 10);
+    GetPaginationModel()->SetTransitionDurations(
+        base::TimeDelta::FromMilliseconds(10),
+        base::TimeDelta::FromMilliseconds(10));
     page_flip_waiter_ = std::make_unique<PageFlipWaiter>(GetPaginationModel());
   }
 
@@ -2170,4 +2178,4 @@ TEST_P(AppsGridGapTest, MoveItemToPreviousFullPage) {
 }
 
 }  // namespace test
-}  // namespace app_list
+}  // namespace ash

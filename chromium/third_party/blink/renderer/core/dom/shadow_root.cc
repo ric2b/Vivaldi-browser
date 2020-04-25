@@ -141,6 +141,7 @@ void ShadowRoot::setInnerHTML(const StringOrTrustedHTML& stringOrHtml,
 void ShadowRoot::RecalcStyle(const StyleRecalcChange change) {
   // ShadowRoot doesn't support custom callbacks.
   DCHECK(!HasCustomStyleCallbacks());
+  DCHECK(!RuntimeEnabledFeatures::FlatTreeStyleRecalcEnabled());
 
   StyleRecalcChange child_change = change;
   if (GetStyleChangeType() == kSubtreeStyleChange)

@@ -32,6 +32,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "components/user_manager/user.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -63,16 +64,16 @@ constexpr const char kLoginAuthUserViewClassName[] = "LoginAuthUserView";
 
 // Distance between the user view (ie, the icon and name) and the password
 // textfield.
-const int kDistanceBetweenUserViewAndPasswordDp = 28;
+const int kDistanceBetweenUserViewAndPasswordDp = 24;
 
 // Distance between the password textfield and the the pin keyboard.
-const int kDistanceBetweenPasswordFieldAndPinKeyboardDp = 20;
+const int kDistanceBetweenPasswordFieldAndPinKeyboardDp = 16;
 
 // Distance from the end of pin keyboard to the bottom of the big user view.
 const int kDistanceFromPinKeyboardToBigUserViewBottomDp = 50;
 
 // Distance from the top of the user view to the user icon.
-constexpr int kDistanceFromTopOfBigUserViewToUserIconDp = 54;
+constexpr int kDistanceFromTopOfBigUserViewToUserIconDp = 24;
 
 constexpr SkColor kChallengeResponseArrowBackgroundColor =
     SkColorSetARGB(0x2B, 0xFF, 0xFF, 0xFF);

@@ -340,9 +340,6 @@ base::scoped_nsobject<NSMenuItem> BuildPeopleMenu(
     id app_delegate,
     const base::string16& product_name,
     bool is_pwa) {
-  if (is_pwa)
-    return base::scoped_nsobject<NSMenuItem>();
-
   base::scoped_nsobject<NSMenuItem> item = Item(IDS_PROFILES_OPTIONS_GROUP_NAME)
                                                .tag(IDC_PROFILE_MAIN_MENU)
                                                .submenu({})
@@ -405,8 +402,20 @@ base::scoped_nsobject<NSMenuItem> BuildTabMenu(
               Item(IDS_NEXT_TAB_MAC).command_id(IDC_SELECT_NEXT_TAB),
               Item(IDS_PREV_TAB_MAC).command_id(IDC_SELECT_PREVIOUS_TAB),
               Item(IDS_DUPLICATE_TAB_MAC).command_id(IDC_DUPLICATE_TAB),
+              Item(IDS_DUPLICATE_TARGET_TAB_MAC)
+                  .command_id(IDC_DUPLICATE_TARGET_TAB)
+                  .is_alternate()
+                  .key_equivalent(@"", NSAlternateKeyMask),
               Item(IDS_MUTE_SITE_MAC).command_id(IDC_WINDOW_MUTE_SITE),
+              Item(IDS_MUTE_TARGET_SITE_MAC)
+                  .command_id(IDC_MUTE_TARGET_SITE)
+                  .is_alternate()
+                  .key_equivalent(@"", NSAlternateKeyMask),
               Item(IDS_PIN_TAB_MAC).command_id(IDC_WINDOW_PIN_TAB),
+              Item(IDS_PIN_TARGET_TAB_MAC)
+                  .command_id(IDC_PIN_TARGET_TAB)
+                  .is_alternate()
+                  .key_equivalent(@"", NSAlternateKeyMask),
               Item().is_separator(),
           })
           .Build();

@@ -5,17 +5,7 @@
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
-  support_lazy_serialization = true
-
   sources = [
     "leveldb.mojom",
-  ]
-
-  deps = [
-    "//components/services/filesystem/public/mojom",
-  ]
-
-  public_deps = [
-    "//mojo/public/mojom/base",
   ]
 }

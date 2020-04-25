@@ -42,7 +42,7 @@ const CGFloat kActivityIndicatorDimensionIPhone = 56;
 }  // namespace
 
 NSString* const kSettingsToolbarDeleteButtonId =
-    @"PasswordsToolbarDeleteButtonId";
+    @"SettingsToolbarDeleteButtonId";
 
 @interface SettingsRootTableViewController ()
 
@@ -353,7 +353,10 @@ NSString* const kSettingsToolbarDeleteButtonId =
   self.savedBarButtonItemPosition = kUndefinedBarButtonItemPosition;
 }
 
-- (BOOL)shouldDismissViewControllerBySwipeDown {
+#pragma mark - UIAdaptivePresentationControllerDelegate
+
+- (BOOL)presentationControllerShouldDismiss:
+    (UIPresentationController*)presentationController {
   return YES;
 }
 

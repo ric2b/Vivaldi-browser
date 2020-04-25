@@ -331,8 +331,8 @@ class AccountTrackerTest : public testing::Test {
 
  private:
   // net:: stuff needs IO message loop.
-  base::test::TaskEnvironment task_environment_{
-      base::test::TaskEnvironment::MainThreadType::IO};
+  base::test::SingleThreadTaskEnvironment task_environment_{
+      base::test::SingleThreadTaskEnvironment::MainThreadType::IO};
   network::TestURLLoaderFactory test_url_loader_factory_;
   signin::IdentityTestEnvironment identity_test_env_;
 
@@ -345,7 +345,7 @@ void AccountTrackerTest::ReturnOAuthUrlFetchResults(
     const std::string& response_string) {
   EXPECT_TRUE(test_url_loader_factory()->SimulateResponseForPendingRequest(
       GURL(kOAuthURL), network::URLLoaderCompletionStatus(net::OK),
-      network::CreateResourceResponseHead(response_code), response_string));
+      network::CreateURLResponseHead(response_code), response_string));
 }
 
 void AccountTrackerTest::ReturnOAuthUrlFetchSuccess(

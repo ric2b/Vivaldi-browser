@@ -91,8 +91,7 @@ gfx::Rect WebContentsViewChildFrame::GetViewBounds() const {
   return gfx::Rect();
 }
 
-void WebContentsViewChildFrame::CreateView(const gfx::Size& initial_size,
-                                           gfx::NativeView context) {
+void WebContentsViewChildFrame::CreateView(gfx::NativeView context) {
   // The WebContentsViewChildFrame does not have a native view.
 }
 
@@ -150,7 +149,7 @@ DropData* WebContentsViewChildFrame::GetDropData() const {
   // handle drops.
   if (vivaldi::IsVivaldiRunning()) {
     WebContentsImpl* embedder_web_contents =
-      web_contents_->GetOuterWebContents();
+      web_contents_->GetOutermostWebContents();
     return embedder_web_contents ? embedder_web_contents->GetDropData()
       : nullptr;
   }

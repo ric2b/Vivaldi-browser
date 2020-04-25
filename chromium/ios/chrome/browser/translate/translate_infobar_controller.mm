@@ -192,6 +192,9 @@ enum class InfobarEvent {
 
 - (void)translateInfobarViewDidTapSourceLangugage:
     (TranslateInfobarView*)sender {
+  // If already showing original language, no need to revert translate.
+  if (sender.state == TranslateInfobarViewStateBeforeTranslate)
+    return;
   if ([self shouldIgnoreUserInteraction])
     return;
 
@@ -206,6 +209,9 @@ enum class InfobarEvent {
 
 - (void)translateInfobarViewDidTapTargetLangugage:
     (TranslateInfobarView*)sender {
+  // If already showing target language, no need to translate.
+  if (sender.state == TranslateInfobarViewStateAfterTranslate)
+    return;
   if ([self shouldIgnoreUserInteraction])
     return;
 

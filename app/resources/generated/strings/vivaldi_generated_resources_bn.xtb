@@ -1,41 +1,29 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="bn">
-<translation id="1049795001945932310">&amp;ভাষা সেটিংস</translation>
 <translation id="1056898198331236512">সতর্কতা</translation>
-<translation id="1084824384139382525">লিঙ্ক ঠি&amp;কানা কপি করুন</translation>
-<translation id="1163931534039071049">ফ্রেম উৎস &amp;দেখুন</translation>
 <translation id="1165039591588034296">ত্রুটি</translation>
 <translation id="1175364870820465910">&amp;মুদ্রণ...</translation>
-<translation id="1187722533808055681">নিষ্ক্রিয়তা সময়ের সমাপ্তি</translation>
 <translation id="1244303850296295656">এক্সটেনশন ত্রুটি</translation>
 <translation id="1546280085599573572">আপনি হোম বোতাম ক্লিক করলে কোন পৃষ্ঠা দেখানো হবে তা এই এক্সটেনশানটি দ্বারা পরিবর্তন করা করেছে।</translation>
 <translation id="1588438908519853928">সাধারণ</translation>
 <translation id="1635033183663317347">আপনার কাস্টডিয়ান দ্বারা এটি ইনস্টল করা হয়েছে।</translation>
-<translation id="1723824996674794290">&amp;নতুন উইন্ডো</translation>
 <translation id="1729533290416704613">আপনি Omnibox থেকে অনুসন্ধান করলে কোন পৃষ্ঠাটি দেখানো হবে তাও এটি নিয়ন্ত্রণ করে।</translation>
-<translation id="1850508293116537636">&amp;ঘড়ির কাঁটার দিকে ঘোরান</translation>
-<translation id="1901303067676059328">&amp;সকল নির্বাচন করুন</translation>
 <translation id="2087822576218954668">প্রিন্ট করুন: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">ছদ্মবেশী ট্যাব: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">স্থানীয় গ্রাহক মডিউল: <ph name="NEXE_NAME" /></translation>
-<translation id="2218515861914035131">সাধারণ পাঠ্য হিসাবে আটকে দিন  </translation>
 <translation id="2282146716419988068">GPU প্রক্রিয়া</translation>
 <translation id="2301382460326681002">এক্সটেনশন রুট ডিরেক্টরিটি অবৈধ৷</translation>
-<translation id="2326931316514688470">&amp;অ্যাপ্লিকেশান আবার লোড করুন</translation>
 <translation id="2327492829706409234">অ্যাপ্লিকেশন সক্ষম করুন</translation>
 <translation id="2344028582131185878">স্বয়ংক্রিয় ডাউনলোডগুলি</translation>
 <translation id="2348176352564285430">অ্যাপ্লিকেশান: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">এক্সটেনশন ডিরেক্টরিটি নির্বাচন করুন৷</translation>
 <translation id="241082044617551207">অজানা প্ল্যাগ ইন</translation>
-<translation id="2423578206845792524">এই রূপে ছবি সং&amp;রক্ষণ করুন...</translation>
 <translation id="2439110203301358333">আপনার কম্পিউটারের অন্য একটি প্রোগ্রাম একটি এক্সটেনশন জুড়েছে যা Vivaldi এর কাজ করার পদ্ধতিকে পাল্টে দিতে পারে৷</translation>
 <translation id="2445081178310039857">এক্সটেনশন রুট ডিরেক্টরি প্রয়োজন৷</translation>
 <translation id="2470702053775288986">অসমর্থিত এক্সটেনশানগুলি নিষ্ক্রিয় করা আছে</translation>
-<translation id="2550212893339833758">অদলবদল করা মেমরি</translation>
 <translation id="2662876636500006917">Vivaldi  ওয়েব বাজার</translation>
 <translation id="2678063897982469759">পুনঃ সক্ষম</translation>
-<translation id="2785873697295365461">ফাইল বর্ণনাকারী</translation>
 <translation id="2809586584051668049">এবং আরো <ph name="NUMBER_ADDITIONAL_DISABLED" />টি</translation>
 <translation id="2850541429955027218">থীম জুড়ুন</translation>
 <translation id="2861941300086904918">নেটিভ ক্লায়েন্ট সুরক্ষা পরিচালক</translation>
@@ -45,22 +33,16 @@
 <translation id="299483336428448530">আপনার পিতামাতার দ্বারা এটি ইনস্টল করা হয়েছে।</translation>
 <translation id="3080207940057008665">আপনার কম্পিউটারের অন্য একটি প্রোগ্রাম একটি থিম জুড়েছে যা Vivaldi এর কাজ করার পদ্ধতিকে পাল্টে দিতে পারে৷</translation>
 <translation id="3122464029669770682">CPU</translation>
-<translation id="3124111068741548686">ব্যবহারকারীর হ্যান্ডলগুলি</translation>
 <translation id="3222066309010235055">পূর্বউপস্থাপন: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">প্যাক করার জন্য এক্সটেনশনের রুট ডিরেক্টরিটি নির্বাচন করুন৷ কোন এক্সটেনশন আপডেট করতে, আবার ব্যবহার করার জন্য ব্যক্তিগত কী ফাইলটিও নির্বাচন করুন৷</translation>
-<translation id="3280237271814976245">এই &amp;রূপে সংরক্ষণ করুন...</translation>
 <translation id="3288047731229977326">বিকাশকারী মোডে চলমান এক্সটেনশানগুলি আপনার কম্পিউটারের ক্ষতি করতে পারে৷ যদি আপনি একজন বিকাশকারী না হন, তবে সুরক্ষিত থাকার জন্য আপনার এই এক্সটেনশানগুলিকে বিকাশকারী মোডে চালানো অক্ষম করা উচিৎ৷</translation>
-<translation id="3347086966102161372">চি&amp;ত্র ঠিকানা কপি করুন</translation>
 <translation id="3378572629723696641">এই এক্সটেনশানটি হয়ত ক্ষতিগ্রস্ত হয়েছে৷</translation>
-<translation id="345693547134384690">&amp;ছবি নতুন ট্যাবে খুলুন</translation>
 <translation id="3505030558724226696">ডিভাইসের অ্যাক্সেস প্রত্যাহার করুন</translation>
-<translation id="3627588569887975815">লিঙ্কটি ছ&amp;দ্মবেশী উইন্ডোতে খুলুন</translation>
 <translation id="3678156199662914018">এক্সটেনশন: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">অ্যাপ্লিকেশান মেরামত করুন</translation>
 <translation id="3908501907586732282">এক্সটেনশন সক্ষম করুন</translation>
 <translation id="3909791450649380159">ছেদ&amp;ন</translation>
 <translation id="3927932062596804919">অস্বীকার</translation>
-<translation id="3936390757709632190">অডিও নতুন ট্যাবে &amp;খুলুন</translation>
 <translation id="3943582379552582368">&amp;ফিরুন</translation>
 <translation id="3979395879372752341">নতুন এক্সটেনশন জোড়া হয়েছে (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -71,23 +53,16 @@
 <translation id="4100839878934973028">আপনার কম্পিউটারের অন্য একটি প্রোগ্রাম একটি অ্যাপ্লিকেশন জুড়েছে যা Vivaldi এর কাজ করার পদ্ধতিকে পাল্টে দিতে পারে৷</translation>
 <translation id="4130207949184424187">আপনি বহুউপযোগী ক্ষেত্র থেকে অনুসন্ধান করলে কোন পৃষ্ঠাটি দেখানো হবে তা এই এক্সটেনশানটি পরিবর্তন করেছে।</translation>
 <translation id="4176463684765177261">অক্ষম</translation>
-<translation id="4200983522494130825">নতুন &amp;ট্যাব</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K লাইভ)</translation>
 <translation id="4384652540891215547">এক্সটেনশন সক্রিয় করুন</translation>
 <translation id="4394049700291259645">অক্ষম</translation>
 <translation id="4593021220803146968">&amp;এখানে যান <ph name="URL" /></translation>
 <translation id="4595560905247879544">অ্যাপ্লিকেশান এবং এক্সটেনশানগুলি শুধুমাত্র পরিচালক (<ph name="CUSTODIAN_NAME" />) দ্বারা পরিবর্তন করা যাবে।</translation>
 <translation id="4613271546271159013">আপনি যখন একটি নতুন ট্যাব খুলবেন তখন কি পৃষ্ঠা দেখানো হবে, একটি এক্সটেনশান তার পরিবর্তন করেছে।</translation>
-<translation id="4677772697204437347">GPU মেমোরি</translation>
-<translation id="4711638718396952945">সেটিংস পুনরুদ্ধার করুন</translation>
-<translation id="4839303808932127586">এইরূপে ভিডিও সংর&amp;ক্ষণ করুন...</translation>
 <translation id="488785315393301722">বিশদ বিবরণ দেখান</translation>
-<translation id="49896407730300355">ঘড়ির কাঁটার &amp;বিপরীত দিকে ঘোরান</translation>
-<translation id="4989966318180235467">&amp;পশ্চাদপট পৃষ্ঠা পরিদর্শন করুন</translation>
 <translation id="5027562294707732951">এক্সটেনশান যোগ করুন</translation>
 <translation id="5039804452771397117">অনুমতি দিন</translation>
 <translation id="5143374789336132547">আপনি হোম বোতাম ক্লিক করলে কোন পৃষ্ঠা দেখানো হবে তা <ph name="EXTENSION_NAME" /> এক্সটেনশানটি পরিবর্তন করেছে।</translation>
-<translation id="5233019165164992427">NaCl ত্রুটিমুক্ত পোর্ট</translation>
 <translation id="5233231016133573565">প্রক্রিয়া ID</translation>
 <translation id="52912272896845572">ব্যক্তিগত কী ফাইলটি অবৈধ৷</translation>
 <translation id="5301954838959518834">আচ্ছা, বুঝেছি</translation>
@@ -102,48 +77,31 @@
 <translation id="5575473780076478375">ছদ্মবেশী এক্সটেনশান: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">আপনি হোম বোতামটি ক্লিক করলে কোন পৃষ্ঠাটি দেখানো হবে তাও এটি নিয়ন্ত্রণ করে।</translation>
 <translation id="5715711091495208045">প্লাগ ইন ব্রোকার: <ph name="PLUGIN_NAME" /></translation>
-<translation id="5764483294734785780">এইরূপে অডিও সংর&amp;ক্ষণ করুন...</translation>
-<translation id="5780973441651030252">প্রক্রিয়ার অগ্রাধিকার</translation>
 <translation id="583281660410589416">অজানা</translation>
 <translation id="5956585768868398362">আপনি কি এই পৃষ্ঠাটিকে অনুসন্ধান পৃষ্টা হিসেবে আশা করছিলেন?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> পিক)</translation>
 <translation id="5965661248935608907">আপনি হোম বোতাম ক্লিক করলে বা Omnibox থেকে অনুসন্ধান করলে কোন পৃষ্ঠাটি দেখানো হবে তাও এটি নিয়ন্ত্রণ করে।</translation>
 <translation id="6101226222197207147">নতুন অ্যাপ্লিকেশন জোড়া হয়েছে (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">আপনার ইন্টারনেট সংযোগ নিয়ন্ত্রিত হচ্ছে</translation>
-<translation id="6156863943908443225">স্ক্রিপ্ট  ক্যাশে</translation>
 <translation id="6196854373336333322">"<ph name="EXTENSION_NAME" />" এক্সটেনশান আপনার প্রক্সী সেটিংস নিয়ন্ত্রণ করছে, যার মানে হল আপনি অনলাইনে যাই করুন না কেন এটি তার পরিবর্তন করতে, সেখানে জোর করে প্রবেশ বা সেটি লুকিয়ে দেখতে পারবে। আপনি যদি বুঝতে না পারেন কেন এই পরিবর্তনটি হয়েছে তাহলে আপনি সম্ভবত এটি চাইছেন না।</translation>
-<translation id="6239558157302047471">আবার লোড করার &amp;ফ্রেম</translation>
 <translation id="6247802389331535091">সিস্টেম: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="6251870443722440887">GDI হ্যান্ডলগুলি</translation>
-<translation id="6308937455967653460">লি&amp;ঙ্ক এই রূপে সংরক্ষণ করুন...</translation>
-<translation id="6398765197997659313">পূর্ণ স্ক্রীণ বন্ধ করুন</translation>
-<translation id="6406303162637086258">ব্রাউজার আরম্ভ অনুকরণ করুন</translation>
 <translation id="6445450263907939268">এই পরিবর্তনগুলি না চাইলে আপনি আপনার পূর্ববর্তী সেটিংস পুনরুদ্ধার করতে পারেন।</translation>
 <translation id="6447842834002726250">কুকিজ</translation>
 <translation id="6498249116389603658">&amp;আপনার সব ভাষা</translation>
 <translation id="6503077044568424649">সর্বাধিক দেখা</translation>
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
-<translation id="6518014396551869914">ছবি অনুলি&amp;পি করুন</translation>
-<translation id="6639554308659482635">SQLite স্মৃতি</translation>
 <translation id="6691936601825168937">&amp;ফরওয়ার্ড</translation>
 <translation id="6798954102094737107">প্ল্যাগ ইন: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6812841287760418429">পরিবর্তন রাখুন</translation>
-<translation id="6886871292305414135">নতুন &amp;ট্যাবে লিঙ্ক খুলুন</translation>
 <translation id="6900284862687837908">পটভূমিতে কাজ করা অ্যাপ্লিকেশান: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">ফাইল অ্যাক্সেস প্রত্যাহার করুন</translation>
-<translation id="708060913198414444">অ&amp;ডিও ঠিকানা কপি করুন</translation>
 <translation id="7287143125007575591">অ্যাক্সেস অস্বীকার করা হয়েছে।</translation>
-<translation id="7309257895202129721">&amp;নিয়ন্ত্রণগুলি দেখান</translation>
 <translation id="7427348830195639090">ব্যাকগ্রাউন্ড পৃষ্ঠা:<ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7564847347806291057">সমাপ্তি প্রক্রিয়া</translation>
 <translation id="7629827748548208700">ট্যাব: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">গ্রাহক: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7685049629764448582">JavaScript স্মৃতি</translation>
 <translation id="7704305437604973648">কার্য</translation>
 <translation id="7760004034676677601">আপনি কি এই পৃষ্ঠাটিকে শুরুর পৃষ্টা হিসেবে আশা করছিলেন?</translation>
 <translation id="7791543448312431591">যুক্ত করুন</translation>
 <translation id="7818135753970109980">নতুন থিম জোড়া হয়েছে (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="782057141565633384">ভি&amp;ডিও ঠিকানা কপি করুন</translation>
 <translation id="7857949311770343000">আপনি কি এই পৃষ্ঠাটিকে নতুন ট্যাব পৃষ্ঠা হিসাবে আশা করছিলেন?</translation>
 <translation id="786073089922909430">পরিষেবা: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">উপযোগিতা: <ph name="UTILITY_TYPE" /></translation>
@@ -159,14 +117,9 @@
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8261378640211443080">এই এক্সটেনশানটি <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> এ তালিকাভুক্ত নেই এবং হয়ত আপনাকে না জানিয়ে যোগ করা হয়েছে৷</translation>
 <translation id="8351419472474436977">এই এক্সটেনশান আপনার প্রক্সি সেটিংস নিয়ন্ত্রণ করছে, যার মানে হল আপনি অনলাইনে যাই করুন না কেন এটি তার পরিবর্তন, নষ্ট বা লুকিয়ে দেখতে পারবে। আপনি যদি বুঝতে না পারেন কেন এই পরিবর্তনটি হয়েছে তাহলে আপনি সম্ভবত এটি চাইছেন না।</translation>
-<translation id="8546306075665861288">চিত্র ক্যাশে</translation>
-<translation id="8584280235376696778">ভিডিও নতুন ট্যাবে &amp;খুলুন</translation>
 <translation id="8615618338313291042">ছদ্মবেশী অ্যাপ্লিকেশান: <ph name="APP_NAME" /></translation>
-<translation id="862750493060684461">CSS ক্যাশে</translation>
-<translation id="8664389313780386848">পৃষ্ঠা উৎস &amp;দেখুন</translation>
 <translation id="8808478386290700967">ওয়েব দোকান</translation>
 <translation id="8859174528519900719">সাবফ্রেম: <ph name="SUBFRAME_SITE" /></translation>
-<translation id="8899851313684471736">নতুন &amp;উইন্ডোতে লিঙ্ক খুলুন</translation>
 <translation id="8916476537757519021">ছদ্মবেশী সাবফ্রেম: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">বিবরণ লুকান</translation>
 <translation id="9170848237812810038">&amp;পূর্বাবস্থায় ফিরুন</translation>

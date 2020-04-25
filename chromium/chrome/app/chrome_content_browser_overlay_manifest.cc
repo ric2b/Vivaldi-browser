@@ -47,6 +47,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/webui/chromeos/add_supervision/add_supervision.mojom.h"
+#include "chrome/browser/ui/webui/chromeos/crostini_installer/crostini_installer.mojom.h"
 #include "chrome/browser/ui/webui/chromeos/machine_learning/machine_learning_internals_page_handler.mojom.h"
 #include "chromeos/services/cellular_setup/public/mojom/cellular_setup.mojom.h"
 #include "chromeos/services/ime/public/mojom/input_engine.mojom.h"
@@ -55,6 +56,7 @@
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
 #include "chromeos/services/network_config/public/mojom/constants.mojom.h"  // nogncheck
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"  // nogncheck
+#include "components/chromeos_camera/common/camera_app_helper.mojom.h"
 #include "media/capture/video/chromeos/mojom/camera_app.mojom.h"
 #endif
 
@@ -66,26 +68,16 @@
 #include "chrome/browser/ui/webui/explore_sites_internals/explore_sites_internals.mojom.h"
 #else
 #include "chrome/browser/ui/webui/app_management/app_management.mojom.h"
-#include "chrome/services/app_service/public/cpp/manifest.h"
 #endif
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS)
-#include "chrome/browser/performance_manager/webui_graph_dump.mojom.h"  // nogncheck
 #include "chrome/browser/ui/webui/discards/discards.mojom.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/common/api/mime_handler.mojom.h"  // nogncheck
 #include "extensions/common/mojom/keep_alive.mojom.h"  // nogncheck
-#endif
-
-#if defined(BROWSER_MEDIA_CONTROLS_MENU)
-#include "third_party/blink/public/mojom/media_controls/touchless/media_controls.mojom.h"
-#endif
-
-#if defined(ENABLE_SPATIAL_NAVIGATION_HOST)
-#include "third_party/blink/public/mojom/page/spatial_navigation.mojom.h"
 #endif
 
 const service_manager::Manifest& GetChromeContentBrowserOverlayManifest() {
@@ -106,7 +98,6 @@ const service_manager::Manifest& GetChromeContentBrowserOverlayManifest() {
 #endif
                               rappor::mojom::RapporRecorder,
                               safe_browsing::mojom::SafeBrowsing>())
-        .RequireCapability("apps", "app_service")
         .RequireCapability("ash", "system_ui")
         .RequireCapability("ash", "test")
         .RequireCapability("ash", "display")
@@ -164,23 +155,16 @@ const service_manager::Manifest& GetChromeContentBrowserOverlayManifest() {
             service_manager::Manifest::InterfaceList<
                 autofill::mojom::AutofillDriver,
                 autofill::mojom::PasswordManagerDriver,
-                blink::mojom::BadgeService, blink::mojom::InstalledAppProvider,
-#if defined(BROWSER_MEDIA_CONTROLS_MENU)
-                blink::mojom::MediaControlsMenuHost,
-#endif
-                blink::mojom::ShareService,
-#if defined(ENABLE_SPATIAL_NAVIGATION_HOST)
-                blink::mojom::SpatialNavigationHost,
-#endif
                 blink::mojom::TextSuggestionHost,
                 chrome::mojom::OfflinePageAutoFetcher,
                 chrome::mojom::PrerenderCanceler,
 #if defined(OS_CHROMEOS)
+                chromeos_camera::mojom::CameraAppHelper,
+                chromeos::crostini_installer::mojom::PageHandlerFactory,
                 chromeos::ime::mojom::InputEngineManager,
                 chromeos::machine_learning::mojom::PageHandler,
                 chromeos::media_perception::mojom::MediaPerception,
                 cros::mojom::CameraAppDeviceProvider,
-                cros::mojom::CameraAppHelper,
 #endif
                 contextual_search::mojom::ContextualSearchJsApiService,
                 dom_distiller::mojom::DistillabilityService,
@@ -207,8 +191,7 @@ const service_manager::Manifest& GetChromeContentBrowserOverlayManifest() {
 #endif
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS)
-                mojom::DiscardsDetailsProvider,
-                performance_manager::mojom::WebUIGraphDump,
+                discards::mojom::DetailsProvider, discards::mojom::GraphDump,
 #endif
 #if defined(OS_CHROMEOS)
                 add_supervision::mojom::AddSupervisionHandler,
@@ -225,9 +208,6 @@ const service_manager::Manifest& GetChromeContentBrowserOverlayManifest() {
 #if defined(OS_CHROMEOS)
         .PackageService(chromeos::multidevice_setup::GetManifest())
 #endif  // defined(OS_CHROMEOS)
-#if !defined(OS_ANDROID)
-        .PackageService(apps::GetManifest())
-#endif
         .Build()
   };
   return *manifest;

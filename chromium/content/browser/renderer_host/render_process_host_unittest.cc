@@ -18,6 +18,7 @@
 #include "content/common/frame_owner_properties.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -404,18 +405,6 @@ TEST_F(RenderProcessHostUnitTest, DoNotReuseError) {
   NavigationSimulator::GoBackAndFail(contents(), net::ERR_TIMED_OUT);
   site_instance = SiteInstanceImpl::CreateReusableInstanceForTesting(
       browser_context(), kUrl1);
-  EXPECT_NE(main_test_rfh()->GetProcess(), site_instance->GetProcess());
-}
-
-// Tests that RenderProcessHost will not consider reusing a process that is
-// marked as never suitable for reuse, according to MayReuseHost().
-TEST_F(RenderProcessHostUnitTest, DoNotReuseHostThatIsNeverSuitableForReuse) {
-  const GURL kUrl("http://foo.com");
-  NavigateAndCommit(kUrl);
-  main_test_rfh()->GetProcess()->SetIsNeverSuitableForReuse();
-  scoped_refptr<SiteInstanceImpl> site_instance =
-      SiteInstanceImpl::CreateReusableInstanceForTesting(browser_context(),
-                                                         kUrl);
   EXPECT_NE(main_test_rfh()->GetProcess(), site_instance->GetProcess());
 }
 

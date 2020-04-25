@@ -25,9 +25,9 @@
 #include "base/trace_event/trace_event.h"
 #include "gpu/ipc/service/gpu_channel.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/format_utils.h"
 #include "media/base/unaligned_shared_memory.h"
 #include "media/gpu/accelerated_video_decoder.h"
-#include "media/gpu/format_utils.h"
 #include "media/gpu/h264_decoder.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/vaapi/vaapi_common.h"
@@ -579,11 +579,13 @@ void VaapiVideoDecodeAccelerator::TryFinishSurfaceSetChange() {
   VLOGF(2) << "Requesting " << requested_num_pics_
            << " pictures of size: " << requested_pic_size_.ToString();
 
-  const VideoPixelFormat format = GfxBufferFormatToVideoPixelFormat(
-      vaapi_picture_factory_->GetBufferFormat());
+  const base::Optional<VideoPixelFormat> format =
+      GfxBufferFormatToVideoPixelFormat(
+          vaapi_picture_factory_->GetBufferFormat());
+  CHECK(format);
   task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&Client::ProvidePictureBuffersWithVisibleRect,
-                                client_, requested_num_pics_, format, 1,
+                                client_, requested_num_pics_, *format, 1,
                                 requested_pic_size_, requested_visible_rect_,
                                 vaapi_picture_factory_->GetGLTextureTarget()));
   // |client_| may respond via AssignPictureBuffers().
@@ -643,10 +645,14 @@ void VaapiVideoDecodeAccelerator::AssignPictureBuffers(
     vpp_vaapi_wrapper_ = VaapiWrapper::Create(
         VaapiWrapper::kVideoProcess, VAProfileNone,
         base::BindRepeating(&ReportToUMA, VAAPI_VPP_ERROR));
-    if (!vpp_vaapi_wrapper_) {
-      VLOGF(1) << "Failed initializing VppVaapiWrapper";
-      NotifyError(PLATFORM_FAILURE);
-    }
+    RETURN_AND_NOTIFY_ON_FAILURE(vpp_vaapi_wrapper_,
+                                 "Failed to initialize VppVaapiWrapper",
+                                 PLATFORM_FAILURE, );
+
+    // Size is irrelevant for a VPP context.
+    RETURN_AND_NOTIFY_ON_FAILURE(vpp_vaapi_wrapper_->CreateContext(gfx::Size()),
+                                 "Failed to create Context",
+                                 PLATFORM_FAILURE, );
   }
 
   for (size_t i = 0; i < buffers.size(); ++i) {
@@ -698,11 +704,12 @@ void VaapiVideoDecodeAccelerator::AssignPictureBuffers(
             : pictures_.size();
     CHECK_NE(requested_num_surfaces, 0u);
     va_surface_ids.clear();
-    RETURN_AND_NOTIFY_ON_FAILURE(vaapi_wrapper_->CreateContextAndSurfaces(
-                                     va_surface_format_, requested_pic_size_,
-                                     requested_num_surfaces, &va_surface_ids),
-                                 "Failed creating VA Surfaces",
-                                 PLATFORM_FAILURE, );
+    RETURN_AND_NOTIFY_ON_FAILURE(
+        vaapi_wrapper_->CreateContextAndSurfaces(
+            va_surface_format_, requested_pic_size_,
+            VaapiWrapper::SurfaceUsageHint::kVideoDecoder,
+            requested_num_surfaces, &va_surface_ids),
+        "Failed creating VA Surfaces", PLATFORM_FAILURE, );
   }
 
   available_va_surfaces_.assign(va_surface_ids.begin(), va_surface_ids.end());

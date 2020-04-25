@@ -99,6 +99,14 @@
       status: "stable",
     },
     {
+      name: "AccessibilityExposeARIAAnnotations",
+      status: "experimental",
+    },
+    {
+      name: "AccessibilityExposeDisplayNone",
+      status: "test",
+    },
+    {
       name: "AccessibilityObjectModel",
       status: "experimental",
     },
@@ -134,6 +142,13 @@
       status: "experimental",
     },
     {
+      // Use an aspect ratio from the HTML attributes even when we use sizing
+      // from CSS.
+      // https://github.com/WICG/intrinsicsize-attribute/issues/16
+      name: "AspectRatioFromWidthAndHeight",
+      status: "stable",
+    },
+    {
       name: "AsyncClipboard",
       status: "stable",
     },
@@ -157,12 +172,12 @@
     {
       name: "AutomaticLazyFrameLoading",
       depends_on: ["LazyFrameLoading"],
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "AutomaticLazyImageLoading",
       depends_on: ["LazyImageLoading"],
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "AutomationControlled",
@@ -192,7 +207,7 @@
     },
     {
       name: "Badging",
-      origin_trial_feature_name: "Badging",
+      origin_trial_feature_name: "BadgingV2",
       status: "experimental",
     },
     {
@@ -262,9 +277,6 @@
       status: "experimental",
     },
     {
-      name: "Canvas2dSwapChain",
-    },
-    {
       name: "CanvasColorManagement",
       status: "experimental",
     },
@@ -277,15 +289,12 @@
       status: "experimental",
     },
     {
+      name: "ClickPointerEvent",
+      status: "experimental",
+    },
+    {
       name: "ClickRetargetting",
       status: "experimental",
-    },
-    {
-      name: "ClientHintsFeaturePolicy",
-      status: "experimental",
-    },
-    {
-      name: "ClientPlaceholdersForServerLoFi",
     },
     {
       name: "CompositeAfterPaint",
@@ -299,6 +308,10 @@
       status: "test",
     },
     {
+      name: "CompressionStreams",
+      status: "experimental",
+    },
+    {
       name: "ComputedAccessibilityInfo",
       status: "experimental",
     },
@@ -309,6 +322,10 @@
       name: "ContactsManager",
       origin_trial_feature_name: "ContactsManager",
       origin_trial_os: ["android"],
+      status: {"Android": "experimental", "default": "test"},
+    },
+    {
+      name: "ContactsManagerAddresses",
       status: {"Android": "experimental", "default": "test"},
     },
     {
@@ -353,10 +370,6 @@
       status: "experimental",
     },
     {
-      name: "CSSAltText",
-      status: "stable",
-    },
-    {
       name: "CSSBackdropFilter",
       status: "stable",
     },
@@ -376,20 +389,18 @@
       // CSS min(), max() and clamp()
       // https://drafts.csswg.org/css-values-4/#comp-func
       name: "CSSComparisonFunctions",
-      status: "test",
+      status: "stable",
     },
     {
       // Support for CSS content-size property.
       // http://tabatkins.github.io/specs/css-content-size/
       name: "CSSContentSize",
+      implied_by: ["DisplayLocking"],
       status: "experimental",
     },
     {
       name: "CSSFocusVisible",
       status: "experimental",
-    },
-    {
-      name: "CSSFontFeatureValues"
     },
     {
       name: "CSSFontSizeAdjust",
@@ -433,6 +444,10 @@
     },
     {
       name: "CSSOffsetPositionAnchor",
+      status: "experimental",
+    },
+    {
+      name: "CSSOMViewScrollCoordinates",
       status: "experimental",
     },
     {
@@ -495,8 +510,8 @@
       status: "stable",
     },
     {
-      name: "CustomUserTiming",
-      status: "stable",
+      name: "CustomStatePseudoClass",
+      status: "experimental",
     },
     {
       name: "Database",
@@ -529,6 +544,7 @@
     },
     {
       name: "DisplayLocking",
+      origin_trial_feature_name: "DisplayLocking",
       status: "experimental",
     },
     {
@@ -554,10 +570,8 @@
       implied_by: ["FormAssociatedCustomElements"],
     },
     {
-      // https://crbug.com/879270
-      name: "ElementTiming",
-      origin_trial_feature_name: "ElementTimingImages",
-      status: "stable",
+      name: "EmbeddedVTTStylesheets",
+      status: "experimental",
     },
     {
       name: "EncryptedMediaEncryptionSchemeQuery",
@@ -598,8 +612,10 @@
       name: "ExperimentalContentSecurityPolicyFeatures",
       status: "experimental",
     },
-    // Enables navigator.scheduling.isInputPending, allowing long-running JS to
-    // be able to yield itself when user input is queued (crbug.com/910421).
+    // Enables navigator.scheduling.isInputPending and
+    // navigator.scheduling.isFramePending, allowing long-running JS to
+    // be able to yield itself when user input is queued (crbug.com/910421) or a
+    // display update is scheduled.
     {
       name: "ExperimentalIsInputPending",
       origin_trial_feature_name: "ExperimentalIsInputPending",
@@ -677,13 +693,6 @@
       name: "FileSystem",
       status: "stable",
     },
-    // FirstContentfulPaintPlusPlus enables the Largest Text Paint metric, Last
-    // Text Paint metric, Largest Image Paint metric and Last Image Paint
-    // metric. See also: http://bit.ly/fcp_plus_plus
-    {
-      name: "FirstContentfulPaintPlusPlus",
-      status: "stable",
-    },
     // Perform style recalc traversal in the flat tree order, including marking
     // flat-tree instead of shadow-including ancestors for child dirtiness.
     {
@@ -701,6 +710,7 @@
     // For simulating Android's overlay fullscreen video in web tests on Linux.
     {
       name: "ForcedColors",
+      status: "experimental",
     },
     {
       name: "ForceDeferScriptIntervention",
@@ -781,10 +791,6 @@
       status: "experimental",
     },
     {
-      name: "IDBTransactionCommit",
-      status: "stable",
-    },
-    {
       name: "IdleDetection",
       status: "experimental",
     },
@@ -802,6 +808,10 @@
       settable_from_internals: true,
     },
     {
+      name: "ImportMaps",
+      implied_by: ["ExperimentalProductivityFeatures", "BuiltInModuleInfra"],
+    },
+    {
       name: "InertAttribute",
       status: "experimental",
     },
@@ -813,6 +823,10 @@
     {
       name: "InstalledApp",
       origin_trial_feature_name: "InstalledApp",
+      status: "experimental",
+    },
+    {
+      name: "IntersectionObserverDocumentScrollingElementRoot",
       status: "experimental",
     },
     {
@@ -835,12 +849,6 @@
       name: "IsolatedWorldCSP"
     },
     {
-      // Modifies LayoutShiftTracker to use O(n log n) sweep line algorithm for
-      // computing the area of the layout shift region.
-      name: "JankTrackingSweepLine",
-      status: "stable",
-    },
-    {
       name: "JSONModules",
     },
     {
@@ -855,19 +863,8 @@
       status: "experimental",
     },
     {
-      name: "LargestContentfulPaint",
-      status: "stable",
-    },
-    {
-      // Exposes layout shift scores to Javascript. See explainer:
-      // http://bit.ly/lsm-explainer.
-      name: "LayoutInstabilityAPI",
-      origin_trial_feature_name: "LayoutJankAPI",
-      status: "stable",
-    },
-    {
       name: "LayoutNG",
-      implied_by: ["LayoutNGBlockFragmentation", "LayoutNGFieldset", "LayoutNGFlexBox", "LayoutNGFragmentItem", "LayoutNGLineCache", "EditingNG", "BidiCaretAffinity", "LayoutNGTable"],
+      implied_by: ["LayoutNGBlockFragmentation", "LayoutNGFieldset", "LayoutNGFlexBox", "LayoutNGFragmentItem", "LayoutNGFragmentPaint", "LayoutNGLineCache", "EditingNG", "BidiCaretAffinity", "LayoutNGTable"],
       status: "stable",
     },
     {
@@ -885,6 +882,9 @@
     },
     {
       name: "LayoutNGFragmentItem",
+    },
+    {
+      name: "LayoutNGFragmentPaint",
     },
     {
       name: "LayoutNGLineCache",
@@ -919,13 +919,15 @@
       // Enabled by features::kLegacyWindowsDWriteFontFallback;
     },
     {
-      name: "LinkSystemColors"
-    },
-    {
-      name: "LongTaskV2",
+      name: "LinkSystemColors",
+      status: "stable",
     },
     {
       name:"ManualSlotting",
+      status:"experimental",
+    },
+    {
+      name:"MeasureMemory",
       status:"experimental",
     },
     {
@@ -970,6 +972,9 @@
     // Set to reflect the kMediaEngagementBypassAutoplayPolicies feature.
     {
       name: "MediaEngagementBypassAutoplayPolicies",
+    },
+    {
+      name: "MediaQueryNavigationControls",
     },
     {
       name: "MediaQueryPrefersColorScheme",
@@ -1174,28 +1179,23 @@
       settable_from_internals: true,
       status: "experimental",
     },
-    // The following are developer opt-outs and opt-ins for PageLifecycle state
-    // transitions. If neither is specified then heuristics will be applied to
-    // determine whether the page is eligible.
+    // The following are developer opt-outs and opt-ins for page freezing. If
+    // neither is specified then heuristics will be applied to determine whether
+    // the page is eligible.
     {
-      name: "PageLifecycleTransitionsOptIn",
-      origin_trial_feature_name: "PageLifecycleTransitionsOptIn",
+      name: "PageFreezeOptIn",
+      origin_trial_feature_name: "PageFreezeOptIn",
       status: "experimental",
     },
     {
-      name: "PageLifecycleTransitionsOptOut",
-      origin_trial_feature_name: "PageLifecycleTransitionsOptOut",
+      name: "PageFreezeOptOut",
+      origin_trial_feature_name: "PageFreezeOptOut",
       status: "experimental",
     },
     {
       name: "PagePopup",
       // Android does not have support for PagePopup
       status: {"Android": "", "default": "stable"},
-    },
-    // See: https://docs.google.com/document/d/1IyYJ6bVF7KZq96b_s5NrAzGtVoBXn_LQnya9y4yT3iw/view
-    {
-      name: "PaintNonFastScrollableRegions",
-      status: "stable",
     },
     {
       name: "PaintUnderInvalidationChecking",
@@ -1213,16 +1213,16 @@
       name: "PassPaintVisualRectToCompositor",
     },
     {
-      name: "PauseExecutionContextOnBackgroundFreeze",
-      status: "stable",
-    },
-    {
       name: "PaymentApp",
       status: "experimental",
     },
     {
       name: "PaymentHandlerChangePaymentMethod",
       status: "stable",
+    },
+    {
+      name: "PaymentHandlerHandlesShippingAndContact",
+      status: "experimental",
     },
     {
       name: "PaymentMethodChangeEvent",
@@ -1344,10 +1344,6 @@
       status: "experimental",
     },
     {
-      name: "RasterInducingScroll",
-      status: "experimental",
-    },
-    {
       name: "ReducedReferrerGranularity",
     },
     {
@@ -1361,26 +1357,22 @@
       status: {"Android": "stable", "default": ""},
     },
     {
-      name: "ResourceLoadScheduler",
-      status: "experimental",
-    },
-    {
       name: "RestrictAppCacheToSecureContexts",
       status: "stable",
     },
     {
       name: "RestrictAutomaticLazyFrameLoadingToDataSaver",
       depends_on: ["AutomaticLazyFrameLoading"],
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "RestrictAutomaticLazyImageLoadingToDataSaver",
       depends_on: ["AutomaticLazyImageLoading"],
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "RestrictedWebkitAppearance",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "RtcAudioJitterBufferMaxPackets",
@@ -1401,11 +1393,6 @@
     {
       name: "RTCIceTransportExtension",
       origin_trial_feature_name: "RTCQuicTransport",
-      status: "experimental",
-    },
-    {
-      name: "RtcJitterBufferDelayHint",
-      origin_trial_feature_name: "RtcJitterBufferDelayHint",
       status: "experimental",
     },
     // Enables the use of the RTCQuicTransport object.
@@ -1463,11 +1450,6 @@
     {
       name: "ScriptStreamingOnPreload",
     },
-    // Serialize and restore scroll anchors.
-    {
-      name: "ScrollAnchorSerialization",
-      status: "test",
-    },
     {
       name: "ScrollCustomization",
     },
@@ -1500,7 +1482,7 @@
       status: {"Android": "", "default": "experimental"},
     },
     {
-      name: "ServiceWorkerFilterFrozen",
+      name: "ServiceWorkerClientLifecycleState",
       status: "experimental",
     },
     {
@@ -1572,11 +1554,6 @@
       status: "experimental",
     },
     {
-      name: "StaleWhileRevalidate",
-      origin_trial_feature_name: "StaleWhileRevalidate",
-      status: "stable",
-    },
-    {
       // Enabled when blink::features::kStorageAccessAPI is enabled.
       name: "StorageAccessAPI",
       status: "test",
@@ -1584,10 +1561,6 @@
     {
       name: "StorageQuotaDetails",
       status: "stable"
-    },
-    {
-      name: "StreamsNative",
-      status: "stable",
     },
     {
       name: "SurfaceEmbeddingFeatures",
@@ -1631,7 +1604,6 @@
     },
     {
       name: "TrustedDOMTypes",
-      origin_trial_feature_name: "TrustedDOMTypes",
       status: "experimental",
     },
     {
@@ -1682,6 +1654,7 @@
     },
     {
       name: "UseWindowsSystemColors",
+      status: "stable",
     },
     {
       name: "V8IdleTasks",
@@ -1744,7 +1717,7 @@
     },
     {
       name: "WebBluetoothScanning",
-      status: "test",
+      status: "experimental",
     },
     {
       name: "WebGL2ComputeContext",
@@ -1756,9 +1729,6 @@
     },
     {
       name: "WebGLImageChromium",
-    },
-    {
-      name: "WebGLSwapChain",
     },
     // WebGPU adds a large attack surface area to the GPU process and allows
     // running arbitrary programs on the GPU (compute shaders), which may
@@ -1774,6 +1744,7 @@
     },
     {
       name: "WebkitBoxLayoutUsesFlexLayout",
+      status: "stable",
     },
     {
       name: "WebNFC",
@@ -1818,17 +1789,26 @@
     },
     {
       name: "WebXR",
-      origin_trial_feature_name: "WebXRDeviceM76",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "WebXRAnchors",
       // depends_on: ["WebXRARModule"],  // TODO(https://crbug.com/954679): uncomment once bug is fixed
     },
     {
-      name: "WebXRARModule",
-      // depends_on: ["WebXR"],  // TODO(https://crbug.com/954679): uncomment once bug is fixed
+      name: "WebXRARDOMOverlay",
+      // depends_on: ["WebXRARModule"],  // TODO(https://crbug.com/954679): uncomment once bug is fixed
       status: "experimental",
+    },
+    {
+      name: "WebXRARModule",
+      depends_on: ["WebXR"],
+      status: "experimental",
+    },
+    {
+      name: "WebXrGamepadModule",
+      // depends_on: ["WebXR"],  // TODO(https://crbug.com/954679): uncomment once bug is fixed
+      status: "stable",
     },
     {
       name: "WebXRHitTest",

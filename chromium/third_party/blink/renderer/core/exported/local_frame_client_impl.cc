@@ -101,6 +101,9 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "v8/include/v8.h"
 
+#include "app/vivaldi_apptools.h"
+#include "base/vivaldi_user_agent.h"
+
 namespace blink {
 
 namespace {
@@ -469,12 +472,6 @@ void LocalFrameClientImpl::DispatchDidCommitLoad(
   CoreInitializer::GetInstance().DidCommitLoad(*web_frame_->GetFrame());
 }
 
-void LocalFrameClientImpl::DispatchDidFailProvisionalLoad(
-    const ResourceError& error,
-    const AtomicString& http_method) {
-  web_frame_->DidFailProvisionalLoad(error, http_method);
-}
-
 void LocalFrameClientImpl::DispatchDidFailLoad(
     const ResourceError& error,
     WebHistoryCommitType commit_type) {
@@ -500,7 +497,7 @@ void LocalFrameClientImpl::BeginNavigation(
     bool has_transient_activation,
     WebFrameLoadType frame_load_type,
     bool is_client_redirect,
-    WebTriggeringEventInfo triggering_event_info,
+    TriggeringEventInfo triggering_event_info,
     HTMLFormElement* form,
     ContentSecurityPolicyDisposition
         should_check_main_world_content_security_policy,
@@ -647,7 +644,7 @@ void LocalFrameClientImpl::ForwardResourceTimingToParent(
 
 void LocalFrameClientImpl::DownloadURL(
     const ResourceRequest& request,
-    DownloadCrossOriginRedirects cross_origin_redirect_behavior) {
+    network::mojom::RedirectMode cross_origin_redirect_behavior) {
   if (!web_frame_->Client())
     return;
   DCHECK(web_frame_->GetFrame()->GetDocument());
@@ -656,20 +653,12 @@ void LocalFrameClientImpl::DownloadURL(
     web_frame_->GetFrame()->GetDocument()->GetPublicURLManager().Resolve(
         request.Url(), blob_url_token.InitWithNewPipeAndPassReceiver());
   }
-  web_frame_->Client()->DownloadURL(
-      WrappedResourceRequest(request),
-      static_cast<WebLocalFrameClient::CrossOriginRedirects>(
-          cross_origin_redirect_behavior),
-      blob_url_token.PassPipe());
+  web_frame_->Client()->DownloadURL(WrappedResourceRequest(request),
+                                    cross_origin_redirect_behavior,
+                                    blob_url_token.PassPipe());
 }
 
-void LocalFrameClientImpl::LoadErrorPage(int reason) {
-  if (web_frame_->Client())
-    web_frame_->Client()->LoadErrorPage(reason);
-}
-
-bool LocalFrameClientImpl::NavigateBackForward(int offset,
-                                               bool from_script) const {
+bool LocalFrameClientImpl::NavigateBackForward(int offset) const {
   WebViewImpl* webview = web_frame_->ViewImpl();
   DCHECK(webview->Client());
   DCHECK(web_frame_->Client());
@@ -682,8 +671,7 @@ bool LocalFrameClientImpl::NavigateBackForward(int offset,
 
   bool has_user_gesture =
       LocalFrame::HasTransientUserActivation(web_frame_->GetFrame());
-  web_frame_->Client()->NavigateBackForwardSoon(offset, has_user_gesture,
-                                                from_script);
+  web_frame_->Client()->NavigateBackForwardSoon(offset, has_user_gesture);
   return true;
 }
 
@@ -725,11 +713,6 @@ void LocalFrameClientImpl::DidRunContentWithCertificateErrors() {
     web_frame_->Client()->DidRunContentWithCertificateErrors();
 }
 
-void LocalFrameClientImpl::ReportLegacyTLSVersion(const KURL& url) {
-  if (web_frame_->Client())
-    web_frame_->Client()->ReportLegacyTLSVersion(url);
-}
-
 void LocalFrameClientImpl::DidChangePerformanceTiming() {
   if (web_frame_->Client())
     web_frame_->Client()->DidChangePerformanceTiming();
@@ -749,7 +732,7 @@ void LocalFrameClientImpl::DidChangeActiveSchedulerTrackedFeatures(
 }
 
 void LocalFrameClientImpl::DidObserveLoadingBehavior(
-    WebLoadingBehaviorFlag behavior) {
+    LoadingBehaviorFlag behavior) {
   if (web_frame_->Client())
     web_frame_->Client()->DidObserveLoadingBehavior(behavior);
 }
@@ -832,6 +815,43 @@ String LocalFrameClientImpl::UserAgent() {
 
   if (user_agent_.IsEmpty())
     user_agent_ = Platform::Current()->UserAgent();
+
+  // NOTE(igor@vivaldi.com): This is called to get the HTTP UserAgent header for
+  // various resources like scripts, images, web sockets the page loads and for
+  // navigator.userAgent in JavaScript. Assume that all these should use the
+  // same user agent as the agent for the page document. If we want to customize
+  // the user agent for resources independently from the page, we need to patch
+  // FrameFetchContext::PrepareRequest to pass the request URL to this method
+  // perhaps via a global similar to vivaldi_user_agent::g_ui_thread_gurl.
+  do {
+    if(!vivaldi::IsVivaldiRunning())
+      break;
+
+    Document* document = web_frame_->GetFrame()->GetDocument();
+    if (!document)
+      break;
+
+    const KURL& url = document->Url();
+    const String& url_str = url.GetString();
+    if (url_str.IsEmpty())
+      break;
+
+    base::StringPiece host;
+    std::string host_buffer;
+    if (url_str.Is8Bit()) {
+      host.set(reinterpret_cast<const char*>(url_str.Characters8()) +
+                   url.HostStart(),
+               url.HostEnd() - url.HostStart());
+    } else {
+      // This is presumably rare as an URL is supposed to be ASCII-only.
+      // Allocate strings for code simplicity.
+      host_buffer = url.Host().Utf8();
+      host = host_buffer;
+    }
+    if (vivaldi_user_agent::IsWhiteListedHost(host))
+      return user_agent_ + vivaldi_user_agent::kVivaldiSuffix;
+  } while (false);
+
   return user_agent_;
 }
 
@@ -1027,7 +1047,7 @@ unsigned LocalFrameClientImpl::BackForwardLength() {
 
 void LocalFrameClientImpl::SuddenTerminationDisablerChanged(
     bool present,
-    WebSuddenTerminationDisablerType type) {
+    SuddenTerminationDisablerType type) {
   if (web_frame_->Client()) {
     web_frame_->Client()->SuddenTerminationDisablerChanged(present, type);
   }
@@ -1037,25 +1057,6 @@ BlameContext* LocalFrameClientImpl::GetFrameBlameContext() {
   if (WebLocalFrameClient* client = web_frame_->Client())
     return client->GetFrameBlameContext();
   return nullptr;
-}
-
-WebEffectiveConnectionType LocalFrameClientImpl::GetEffectiveConnectionType() {
-  if (web_frame_->Client())
-    return web_frame_->Client()->GetEffectiveConnectionType();
-  return WebEffectiveConnectionType::kTypeUnknown;
-}
-
-void LocalFrameClientImpl::SetEffectiveConnectionTypeForTesting(
-    WebEffectiveConnectionType type) {
-  if (web_frame_->Client())
-    return web_frame_->Client()->SetEffectiveConnectionTypeForTesting(type);
-}
-
-WebURLRequest::PreviewsState LocalFrameClientImpl::GetPreviewsStateForFrame()
-    const {
-  if (web_frame_->Client())
-    return web_frame_->Client()->GetPreviewsStateForFrame();
-  return WebURLRequest::kPreviewsUnspecified;
 }
 
 WebDevToolsAgentImpl* LocalFrameClientImpl::DevToolsAgent() {
@@ -1282,10 +1283,5 @@ void LocalFrameClientImpl::EvictFromBackForwardCache() {
   DCHECK(web_frame_->Client());
   return web_frame_->Client()->EvictFromBackForwardCache();
 }
-
-STATIC_ASSERT_ENUM(DownloadCrossOriginRedirects::kFollow,
-                   WebLocalFrameClient::CrossOriginRedirects::kFollow);
-STATIC_ASSERT_ENUM(DownloadCrossOriginRedirects::kNavigate,
-                   WebLocalFrameClient::CrossOriginRedirects::kNavigate);
 
 }  // namespace blink

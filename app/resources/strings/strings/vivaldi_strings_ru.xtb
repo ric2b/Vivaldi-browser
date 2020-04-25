@@ -2,9 +2,12 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ru">
 <translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Все права защищены.</translation>
+<translation id="2611953850925269349">Завершить работу Vivaldi?</translation>
 <translation id="3642991949832251880">Закрыть Vivaldi?</translation>
 <translation id="3850557856045828465">Внимание! Vivaldi не может запретить расширениям запись истории просмотренных страниц. Чтобы отключить это расширение в режиме инкогнито, отмените этот параметр.</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="5288672417093782294">Открыть настройки уведомлений Vivaldi</translation>
 <translation id="5743878272102782872">Диспетчер задач - Vivaldi</translation>
 <translation id="6213772951145281007">Удалять cookie и данные сайтов при выходе</translation>
+<translation id="6569282126279967574">Произошел сбой Vivaldi. Перезапустить?</translation>
 </translationbundle>

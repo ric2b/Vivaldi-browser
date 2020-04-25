@@ -60,7 +60,7 @@ class FeaturePodsContainerViewTest : public NoSessionAshTestBase,
  protected:
   void EnablePagination() {
     scoped_feature_list_->InitAndEnableFeature(
-        features::kSystemTrayFeaturePodsPagination);
+        features::kUnifiedMessageCenterRefactor);
   }
 
   void AddButtons(int count) {
@@ -441,6 +441,20 @@ TEST_F(FeaturePodsContainerViewTest, PaginationMouseWheelHandling) {
     EXPECT_EQ(previous_page - 1, current_page);
     previous_page = current_page;
   }
+}
+
+TEST_F(FeaturePodsContainerViewTest, NonTogglableButton) {
+  // Add one togglable and one non-tobblable button.
+  buttons_.push_back(new FeaturePodButton(this, /*is_togglable=*/false));
+  AddButtons(1);
+
+  // Non-togglable buttons should be labelled as a regular button for
+  // accessibility and vice versa.
+  ui::AXNodeData ax_node_data;
+  buttons_[0]->icon_button()->GetAccessibleNodeData(&ax_node_data);
+  EXPECT_EQ(ax_node_data.role, ax::mojom::Role::kButton);
+  buttons_[1]->icon_button()->GetAccessibleNodeData(&ax_node_data);
+  EXPECT_EQ(ax_node_data.role, ax::mojom::Role::kToggleButton);
 }
 
 }  // namespace ash

@@ -11,7 +11,6 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.provider.Settings;
-import android.support.annotation.IntDef;
 import android.support.v4.view.ViewCompat;
 import android.text.Spannable;
 import android.text.SpannableString;
@@ -21,10 +20,12 @@ import android.text.style.ForegroundColorSpan;
 import android.text.style.TextAppearanceSpan;
 import android.view.Window;
 
+import androidx.annotation.IntDef;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
@@ -229,25 +230,15 @@ public class PageInfoController
 
         initPreviewUiParams(viewParams);
 
-        if (isShowingOfflinePage()) {
-            boolean isConnected = OfflinePageUtils.isConnected();
-            RecordHistogram.recordBooleanHistogram(
-                    "OfflinePages.WebsiteSettings.OpenOnlineButtonVisible", isConnected);
-            if (isConnected) {
-                viewParams.openOnlineButtonClickCallback = () -> {
-                    runAfterDismiss(() -> {
-                        // Attempt to reload to an online version of the viewed offline web page.
-                        // This attempt might fail if the user is offline, in which case an offline
-                        // copy will be reloaded.
-                        RecordHistogram.recordBooleanHistogram(
-                                "OfflinePages.WebsiteSettings.ConnectedWhenOpenOnlineButtonClicked",
-                                OfflinePageUtils.isConnected());
-                        OfflinePageUtils.reload(mTab);
-                    });
-                };
-            } else {
-                viewParams.openOnlineButtonShown = false;
-            }
+        if (isShowingOfflinePage() && OfflinePageUtils.isConnected()) {
+            viewParams.openOnlineButtonClickCallback = () -> {
+                runAfterDismiss(() -> {
+                    // Attempt to reload to an online version of the viewed offline web page.
+                    // This attempt might fail if the user is offline, in which case an offline
+                    // copy will be reloaded.
+                    OfflinePageUtils.reload(mTab);
+                });
+            };
         } else {
             viewParams.openOnlineButtonShown = false;
         }
@@ -276,7 +267,7 @@ public class PageInfoController
                 mContext, mWindowAndroid, mFullUrl, this, mView::setPermissions);
 
         // This needs to come after other member initialization.
-        mNativePageInfoController = nativeInit(this, mTab.getWebContents());
+        mNativePageInfoController = PageInfoControllerJni.get().init(this, mTab.getWebContents());
         mWebContentsObserver = new WebContentsObserver(mTab.getWebContents()) {
             @Override
             public void navigationEntryCommitted() {
@@ -473,13 +464,14 @@ public class PageInfoController
             mPendingRunAfterDismissTask = null;
         }
         mWebContentsObserver.destroy();
-        nativeDestroy(mNativePageInfoController);
+        PageInfoControllerJni.get().destroy(mNativePageInfoController, PageInfoController.this);
         mNativePageInfoController = 0;
     }
 
     private void recordAction(int action) {
         if (mNativePageInfoController != 0) {
-            nativeRecordPageInfoAction(mNativePageInfoController, action);
+            PageInfoControllerJni.get().recordPageInfoAction(
+                    mNativePageInfoController, PageInfoController.this, action);
         }
     }
 
@@ -579,10 +571,11 @@ public class PageInfoController
                 offlinePageCreationDate, offlinePageState, previewPageState, contentPublisher);
     }
 
-    private static native long nativeInit(PageInfoController controller, WebContents webContents);
-
-    private native void nativeDestroy(long nativePageInfoControllerAndroid);
-
-    private native void nativeRecordPageInfoAction(
-            long nativePageInfoControllerAndroid, int action);
+    @NativeMethods
+    interface Natives {
+        long init(PageInfoController controller, WebContents webContents);
+        void destroy(long nativePageInfoControllerAndroid, PageInfoController caller);
+        void recordPageInfoAction(
+                long nativePageInfoControllerAndroid, PageInfoController caller, int action);
+    }
 }

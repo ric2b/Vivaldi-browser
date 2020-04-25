@@ -10,6 +10,11 @@
     "args": ["--enable-accelerated-2d-canvas"]
   },
   {
+    "prefix": "disable-deferred-rendering",
+    "base": "fast/canvas",
+    "args": ["--disable-features=CanvasAlwaysDeferral"]
+  },
+  {
     "prefix": "isolated_world_csp",
     "base": "http/tests/security/isolatedWorld",
     "args": ["--enable-blink-features=IsolatedWorldCSP"]
@@ -306,11 +311,6 @@
     "args": ["--enable-blink-features=CompositeAfterPaint"]
   },
   {
-    "prefix": "paint-non-fast-scrollable-regions",
-    "base": "scrollingcoordinator",
-    "args": ["--enable-blink-features=PaintNonFastScrollableRegions"]
-  },
-  {
     "prefix": "highdpi-threaded",
     "base": "external/wpt/css/css-paint-api/hidpi",
     "args": ["--force-device-scale-factor=2","--enable-use-zoom-for-dsf=false",
@@ -439,57 +439,52 @@
   {
     "prefix": "dark-mode",
     "base": "paint/dark-mode/grayscale-images",
-    "args": ["--blink-settings=darkMode=3,darkModeImagePolicy=0,darkModeImageStyle=1,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
+    "args": ["--blink-settings=darkModeEnabled=true,darkModeInversionAlgorithm=3,darkModeImagePolicy=0,darkModeImageStyle=1,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
   },
   {
     "prefix": "dark-mode",
     "base": "paint/dark-mode/image-filter-all",
-    "args": ["--blink-settings=darkMode=3,darkModeImagePolicy=0,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
+    "args": ["--blink-settings=darkModeEnabled=true,darkModeInversionAlgorithm=3,darkModeImagePolicy=0,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
   },
   {
     "prefix": "dark-mode",
     "base": "paint/dark-mode/image-filter-none",
-    "args": ["--blink-settings=darkMode=3,darkModeImagePolicy=1,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
+    "args": ["--blink-settings=darkModeEnabled=true,darkModeInversionAlgorithm=3,darkModeImagePolicy=1,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
   },
   {
     "prefix": "dark-mode",
     "base": "paint/dark-mode/image-filter-smart",
-    "args": ["--blink-settings=darkMode=3,darkModeImagePolicy=2,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
+    "args": ["--blink-settings=darkModeEnabled=true,darkModeInversionAlgorithm=3,darkModeImagePolicy=2,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
   },
   {
     "prefix": "dark-mode",
     "base": "paint/dark-mode/native-theme-off",
-    "args": ["--blink-settings=darkMode=3,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
+    "args": ["--blink-settings=darkModeEnabled=true,darkModeInversionAlgorithm=3,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
   },
   {
     "prefix": "dark-mode",
     "base": "paint/dark-mode/native-theme-on",
-    "args": ["--blink-settings=darkMode=3,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
+    "args": ["--blink-settings=darkModeEnabled=true,darkModeInversionAlgorithm=3,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
   },
   {
     "prefix": "dark-mode",
     "base": "paint/dark-mode/page-policy-all",
-    "args": ["--blink-settings=darkMode=3,darkModePagePolicy=0,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
+    "args": ["--blink-settings=darkModeEnabled=true,darkModeInversionAlgorithm=3,darkModePagePolicy=0,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
   },
   {
     "prefix": "dark-mode",
     "base": "paint/dark-mode/page-policy-background",
-    "args": ["--blink-settings=darkMode=3,darkModePagePolicy=1,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
+    "args": ["--blink-settings=darkModeEnabled=true,darkModeInversionAlgorithm=3,darkModePagePolicy=1,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
   },
   {
     "prefix": "dark-mode",
     "base": "paint/dark-mode/svg-invert-all",
-    "args": ["--blink-settings=darkMode=3,darkModeImagePolicy=0,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
+    "args": ["--blink-settings=darkModeEnabled=true,darkModeInversionAlgorithm=3,darkModeImagePolicy=0,darkModeTextBrightnessThreshold=256,darkModeBackgroundBrightnessThreshold=0"]
   },
   {
     "prefix": "presentation",
     "base": "receiver",
     "args": ["--force-presentation-receiver-for-testing"]
-  },
-  {
-    "prefix": "longtask-v2",
-    "base": "http/tests/performance-timing/longtask-v2",
-    "args": ["--enable-blink-features=LongTaskV2"]
   },
   {
     "prefix": "paint-timing",
@@ -530,15 +525,20 @@
              "--disable-smooth-scrolling"]
   },
   {
+    "prefix": "compositor_threaded_scrollbar_scrolling_hidpi_nozoomfordsf",
+    "base": "fast/scrolling/scrollbars",
+    "args": ["--enable-features=CompositorThreadedScrollbarScrolling",
+             "--enable-threaded-compositing",
+             "--enable-prefer-compositing-to-lcd-text",
+             "--disable-smooth-scrolling",
+             "--force-device-scale-factor=2",
+             "--enable-use-zoom-for-dsf=false"]
+  },
+  {
     "prefix": "compositor_threaded_scrollbar_scrolling",
     "base": "paint/invalidation/scroll/sticky",
     "args": ["--enable-threaded-compositing",
              "--enable-prefer-compositing-to-lcd-text"]
-  },
-  {
-    "prefix": "main_thread_scrollbar_gestures",
-    "base": "fast/scrolling/scrollbars",
-    "args": ["--enable-features=ScrollbarInjectScrollGestures"]
   },
   {
     "prefix": "speech-with-unified-autoplay",
@@ -578,12 +578,17 @@
   {
     "prefix": "omt-service-worker-startup",
     "base": "external/wpt/service-workers",
-    "args": ["--enable-features=OffMainThreadServiceWorkerStartup"]
+    "args": ["--disable-features=OffMainThreadServiceWorkerStartup"]
   },
   {
     "prefix": "omt-service-worker-startup",
     "base": "external/wpt/shape-detection",
-    "args": ["--enable-features=OffMainThreadServiceWorkerStartup"]
+    "args": ["--disable-features=OffMainThreadServiceWorkerStartup"]
+  },
+  {
+    "prefix": "omt-service-worker-startup",
+    "base": "http/tests/serviceworker",
+    "args": ["--disable-features=OffMainThreadServiceWorkerStartup"]
   },
   {
     "prefix": "omt-worker-fetch",
@@ -818,11 +823,6 @@
   },
   {
     "prefix": "not-site-per-process",
-    "base": "external/wpt/html/syntax/parsing/html5lib_tests19.html",
-    "args": ["--disable-site-isolation-trials"]
-  },
-  {
-    "prefix": "not-site-per-process",
     "base": "external/wpt/html/user-activation/message-event-activation-api-iframe-cross-origin.sub.tentative.html",
     "args": ["--disable-site-isolation-trials"]
   },
@@ -973,11 +973,6 @@
     "args": ["--enable-features=FreezeUserAgent"]
   },
   {
-    "prefix": "native-file-system",
-    "base": "external/wpt/native-file-system",
-    "args": ["--enable-features=NativeFileSystemAPI"]
-  },
-  {
     "prefix": "file-handling",
     "base": "file-handling",
     "args": ["--enable-features=NativeFileSystemAPI,FileHandlingAPI"]
@@ -995,11 +990,6 @@
              "--enable-blink-features=ForcedColors"]
   },
   {
-    "prefix": "user-timing-l2",
-    "base": "external/wpt/user-timing",
-    "args": ["--disable-blink-features=CustomUserTiming"]
-  },
-  {
     "prefix": "legacy-samesite",
     "base": "external/wpt/cookies/samesite",
     "args": ["--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure"]
@@ -1008,6 +998,11 @@
     "prefix": "forced-colors",
     "base": "external/wpt/css/css-forced-color-adjust",
     "args": ["--enable-blink-features=ForcedColors"]
+  },
+  {
+    "prefix": "forced-colors",
+    "base": "external/wpt/forced-colors-mode",
+    "args": ["--force-high-contrast", "--enable-blink-features=ForcedColors"]
   },
   {
     "prefix": "forced-colors",
@@ -1080,14 +1075,19 @@
     "args": ["--enable-blink-features=CSSVariables2AtProperty"]
   },
   {
-    "prefix": "cache-storage-parallel",
-    "base": "external/wpt/service-workers",
-    "args": ["--disable-features=CacheStorageParallelOps"]
-  },
-  {
     "prefix": "cache-storage-sequence",
     "base": "external/wpt/service-workers",
     "args": ["--disable-features=CacheStorageSequence"]
+  },
+  {
+    "prefix": "cache-storage-eager-reading",
+    "base": "external/wpt/service-workers",
+    "args": ["--enable-features=CacheStorageEagerReading"]
+  },
+  {
+    "prefix": "cache-storage-high-priority-match",
+    "bases": ["external/wpt/service-workers"],
+    "args": ["--enable-features=CacheStorageHighPriorityMatch"]
   },
   {
     "prefix": "conditional-appcache-delay",
@@ -1097,17 +1097,17 @@
   {
     "prefix": "audio-service",
     "base": "http/tests/media",
-    "args": ["--enable-features=AudioServiceOutOfProcess,AudioServiceSandbox"]
+    "args": ["--enable-features=AudioServiceOutOfProcess,AudioServiceSandbox,WebRtcApmInAudioService"]
   },
   {
     "prefix": "audio-service",
     "base": "media",
-    "args": ["--enable-features=AudioServiceOutOfProcess,AudioServiceSandbox"]
+    "args": ["--enable-features=AudioServiceOutOfProcess,AudioServiceSandbox,WebRtcApmInAudioService"]
   },
   {
     "prefix": "audio-service",
     "base": "external/wpt/mediacapture-streams",
-    "args": ["--enable-features=AudioServiceOutOfProcess,AudioServiceSandbox"]
+    "args": ["--enable-features=AudioServiceOutOfProcess,AudioServiceSandbox,WebRtcApmInAudioService"]
   },
   {
     "prefix": "scheduler",
@@ -1123,5 +1123,15 @@
     "prefix": "json-modules",
     "base": "external/wpt/html/semantics/scripting-1/the-script-element/json-module",
     "args": ["--enable-blink-features=JSONModules"]
+  },
+  {
+    "prefix": "out-of-blink-frame-ancestors",
+    "base": "external/wpt/content-security-policy/frame-ancestors",
+    "args": ["--enable-features=OutOfBlinkFrameAncestors"]
+  },
+  {
+    "prefix": "import-maps-without-builtin-modules",
+    "base": "external/wpt/import-maps",
+    "args": ["--enable-blink-features=ImportMaps", "--disable-blink-features=ExperimentalProductivityFeatures"]
   }
 ]

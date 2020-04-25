@@ -24,6 +24,7 @@
 #include "content/public/browser/render_process_host_factory.h"
 #include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/web_ui_controller_factory.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
@@ -986,7 +987,7 @@ void SiteInstanceImpl::RenderProcessExited(
     RenderProcessHost* host,
     const ChildProcessTerminationInfo& info) {
   for (auto& observer : observers_)
-    observer.RenderProcessGone(this);
+    observer.RenderProcessGone(this, info);
 }
 
 void SiteInstanceImpl::LockToOriginIfNeeded() {
@@ -1046,6 +1047,12 @@ void SiteInstanceImpl::LockToOriginIfNeeded() {
                    << " in process locked to " << process_lock;
     }
   }
+
+  // Track which isolation contexts use the given process.  This lets
+  // ChildProcessSecurityPolicyImpl (e.g. CanAccessDataForOrigin) determine
+  // whether a given URL should require a lock or not (a dynamically isolated
+  // origin may require a lock in some isolation contexts but not in others).
+  policy->IncludeIsolationContext(process_->GetID(), GetIsolationContext());
 }
 
 // static

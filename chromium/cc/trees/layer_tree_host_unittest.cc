@@ -51,9 +51,9 @@
 #include "cc/trees/clip_node.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/frame_rate_counter.h"
-#include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "cc/trees/scroll_and_scale_set.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "cc/trees/swap_promise.h"
@@ -254,6 +254,32 @@ class LayerTreeHostTestRequestedMainFrame : public LayerTreeHostTest {
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestRequestedMainFrame);
+
+class LayerTreeHostTestSchedulingClient : public LayerTreeHostTest {
+ public:
+  void BeginTest() override {
+    PostSetNeedsCommitToMainThread();
+    EXPECT_EQ(0, main_frame_scheduled_count_);
+    EXPECT_EQ(0, main_frame_run_count_);
+  }
+
+  void DidScheduleBeginMainFrame() override { main_frame_scheduled_count_++; }
+  void DidRunBeginMainFrame() override { main_frame_run_count_++; }
+
+  void DidBeginMainFrame() override {
+    EXPECT_EQ(1, main_frame_scheduled_count_);
+    EXPECT_EQ(1, main_frame_run_count_);
+    EndTest();
+  }
+
+  void AfterTest() override {}
+
+ private:
+  int main_frame_scheduled_count_ = 0;
+  int main_frame_run_count_ = 0;
+};
+
+MULTI_THREAD_TEST_F(LayerTreeHostTestSchedulingClient);
 
 class LayerTreeHostTestSetNeedsUpdateInsideLayout : public LayerTreeHostTest {
  protected:
@@ -615,13 +641,13 @@ MULTI_THREAD_TEST_F(
 class LayerTreeHostFreeContextResourcesOnDestroy
     : public LayerTreeHostContextCacheTest {
  public:
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    // TODO(crbug.com/985009): Fix test with surface sync enabled.
-    settings->enable_surface_synchronization = false;
-  }
-
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
                                   const viz::BeginFrameArgs& args) override {
+    if (!first_will_begin_impl_frame_)
+      return;
+
+    first_will_begin_impl_frame_ = false;
+
     // Ensure that our initialization expectations have completed.
     Mock::VerifyAndClearExpectations(mock_main_context_support_);
     Mock::VerifyAndClearExpectations(mock_worker_context_support_);
@@ -633,6 +659,9 @@ class LayerTreeHostFreeContextResourcesOnDestroy
                 SetAggressivelyFreeResources(true));
     EndTest();
   }
+
+ private:
+  bool first_will_begin_impl_frame_ = true;
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostFreeContextResourcesOnDestroy);
@@ -779,7 +808,7 @@ class LayerTreeHostTestPushPropertiesTo : public LayerTreeHostTest {
   }
 
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
-    VerifyAfterValues(impl->active_tree()->root_layer_for_testing());
+    VerifyAfterValues(impl->active_tree()->root_layer());
   }
 
   void DidCommitAndDrawFrame() override {
@@ -966,13 +995,13 @@ class LayerTreeHostTestPushElementIdToNodeIdMap : public LayerTreeHostTest {
     switch (layer_tree_host()->SourceFrameNumber()) {
       case 1:
         child_->SetForceRenderSurfaceForTesting(true);
-        child_->AddMainThreadScrollingReasons(
-            MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects);
+        // Add a non-fast region to ensure a scroll node is created.
+        child_->SetNonFastScrollableRegion(Region(gfx::Rect(50, 50, 50, 50)));
         break;
       case 2:
         child_->SetForceRenderSurfaceForTesting(false);
-        child_->ClearMainThreadScrollingReasons(
-            MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects);
+        // Remove the non-fast region to ensure a scroll node is removed.
+        child_->SetNonFastScrollableRegion(Region());
         break;
     }
   }
@@ -1129,7 +1158,8 @@ class LayerTreeHostTestSurfaceDamage : public LayerTreeHostTest {
   scoped_refptr<Layer> grand_child_;
 };
 
-SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestSurfaceDamage);
+// TODO(crbug.com/1014263): Disable because this test is flaky.
+// SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestSurfaceDamage);
 
 class LayerTreeHostTestLayerListSurfaceDamage : public LayerTreeHostTest {
  protected:
@@ -1644,7 +1674,7 @@ class LayerTreeHostTestPropertyTreesChangedSync : public LayerTreeHostTest {
   void CommitCompleteOnThread(LayerTreeHostImpl* impl) override {
     gfx::Transform transform;
     FilterOperations filters;
-    LayerImpl* root = impl->active_tree()->root_layer_for_testing();
+    LayerImpl* root = impl->active_tree()->root_layer();
     switch (static_cast<Animations>(index_)) {
       case OPACITY:
         index_++;
@@ -1750,22 +1780,28 @@ SINGLE_THREAD_TEST_F(LayerTreeHostTestAnimationOpacityMutatedUsingLayerLists);
 class LayerTreeHostTestAnimationTransformMutatedNotUsingLayerLists
     : public LayerTreeHostTest {
  protected:
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    // TODO(crbug.com/985009): Fix test with surface sync enabled.
-    settings->enable_surface_synchronization = false;
+  void SetupTree() override {
+    root_ = Layer::Create();
+    child_ = Layer::Create();
+    root_->AddChild(child_);
+    layer_tree_host()->SetRootLayer(root_);
+    LayerTreeHostTest::SetupTree();
   }
 
   void BeginTest() override {
-    Layer* root = layer_tree_host()->root_layer();
-    EXPECT_EQ(gfx::Transform(), root->transform());
+    EXPECT_EQ(gfx::Transform(), child_->transform());
     gfx::Transform expected_transform;
     expected_transform.Translate(42, 42);
     layer_tree_host()->SetElementTransformMutated(
-        root->element_id(), ElementListType::ACTIVE, expected_transform);
+        child_->element_id(), ElementListType::ACTIVE, expected_transform);
     // When not using layer lists, transform is stored on the layer.
-    EXPECT_EQ(expected_transform, root->transform());
+    EXPECT_EQ(expected_transform, child_->transform());
     EndTest();
   }
+
+ private:
+  scoped_refptr<Layer> root_;
+  scoped_refptr<Layer> child_;
 };
 
 SINGLE_THREAD_TEST_F(
@@ -1914,7 +1950,7 @@ class LayerTreeHostTestEffectTreeSync : public LayerTreeHostTest {
 
   void CommitCompleteOnThread(LayerTreeHostImpl* impl) override {
     EffectTree& effect_tree = impl->sync_tree()->property_trees()->effect_tree;
-    LayerImpl* root = impl->sync_tree()->root_layer_for_testing();
+    LayerImpl* root = impl->sync_tree()->root_layer();
     EffectNode* node = effect_tree.Node(root->effect_tree_index());
     switch (impl->sync_tree()->source_frame_number()) {
       case 0:
@@ -2151,10 +2187,12 @@ class LayerTreeHostTestSwitchMaskLayer : public LayerTreeHostTest {
   void SetupTree() override {
     scoped_refptr<Layer> root = Layer::Create();
     root->SetBounds(gfx::Size(10, 10));
+    // child_layer_ is not drawable.
     child_layer_ = base::MakeRefCounted<UpdateCountingLayer>(&client_);
     child_layer_->SetBounds(gfx::Size(10, 10));
     mask_layer_ = base::MakeRefCounted<UpdateCountingLayer>(&client_);
     mask_layer_->SetBounds(gfx::Size(10, 10));
+    mask_layer_->SetIsDrawable(true);
     child_layer_->SetMaskLayer(mask_layer_);
     root->AddChild(child_layer_);
     layer_tree_host()->SetRootLayer(root);
@@ -2170,8 +2208,8 @@ class LayerTreeHostTestSwitchMaskLayer : public LayerTreeHostTest {
     switch (layer_tree_host()->SourceFrameNumber()) {
       case 1:
         // Root and mask layer should have the same source frame number as they
-        // will be in the layer update list but the child is not as it has empty
-        // bounds.
+        // will be in the layer update list but the child is not as it doesn't
+        // draw content.
         EXPECT_EQ(mask_layer_->update_count(), 1);
         EXPECT_EQ(child_layer_->update_count(), 0);
 
@@ -2182,17 +2220,21 @@ class LayerTreeHostTestSwitchMaskLayer : public LayerTreeHostTest {
   }
 
   void CommitCompleteOnThread(LayerTreeHostImpl* impl) override {
+    auto* mask_surface =
+        GetRenderSurface(impl->sync_tree()->LayerById(mask_layer_->id()));
+    auto* root_surface = GetRenderSurface(impl->sync_tree()->root_layer());
+    ASSERT_TRUE(mask_surface);
     switch (index_) {
-      case 0:
+      case 0: {
         index_++;
-        EXPECT_FALSE(
-            GetRenderSurface(impl->sync_tree()->root_layer_for_testing())
-                ->MaskLayer());
+        auto* child_surface =
+            GetRenderSurface(impl->sync_tree()->LayerById(child_layer_->id()));
+        EXPECT_EQ(child_surface, mask_surface->render_target());
+        EXPECT_NE(child_surface, root_surface);
         break;
+      }
       case 1:
-        EXPECT_TRUE(
-            GetRenderSurface(impl->sync_tree()->root_layer_for_testing())
-                ->MaskLayer());
+        EXPECT_EQ(mask_surface->render_target(), root_surface);
         EndTest();
         break;
     }
@@ -2527,10 +2569,8 @@ class LayerTreeHostTestDeviceScaleFactorChange : public LayerTreeHostTest {
     } else {
       gfx::Rect root_damage_rect =
           frame_data->render_passes.back()->damage_rect;
-      EXPECT_EQ(
-          gfx::Rect(
-              host_impl->active_tree()->root_layer_for_testing()->bounds()),
-          root_damage_rect);
+      EXPECT_EQ(gfx::Rect(host_impl->active_tree()->root_layer()->bounds()),
+                root_damage_rect);
       EXPECT_EQ(4.f, host_impl->active_tree()->device_scale_factor());
       EndTest();
     }
@@ -2614,10 +2654,8 @@ class LayerTreeHostTestRasterColorSpaceChange : public LayerTreeHostTest {
     if (!frame_data->has_no_damage) {
       gfx::Rect root_damage_rect =
           frame_data->render_passes.back()->damage_rect;
-      EXPECT_EQ(
-          gfx::Rect(
-              host_impl->active_tree()->root_layer_for_testing()->bounds()),
-          root_damage_rect);
+      EXPECT_EQ(gfx::Rect(host_impl->active_tree()->root_layer()->bounds()),
+                root_damage_rect);
     }
 
     return draw_result;
@@ -3106,16 +3144,15 @@ SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestFrameTimeUpdatesAfterDraw);
 // from LayerTreeHost to LayerTreeHostImpl in the MT compositor.
 class LayerTreeHostTestStartPageScaleAnimation : public LayerTreeHostTest {
  public:
-  LayerTreeHostTestStartPageScaleAnimation() = default;
+  LayerTreeHostTestStartPageScaleAnimation() { SetUseLayerLists(); }
 
   void SetupTree() override {
     LayerTreeHostTest::SetupTree();
 
     Layer* root_layer = layer_tree_host()->root_layer();
 
-    scoped_refptr<FakePictureLayer> layer = FakePictureLayer::Create(&client_);
-    layer->set_always_update_resources(true);
-    scroll_layer_ = layer;
+    scroll_layer_ = FakePictureLayer::Create(&client_);
+    scroll_layer_->set_always_update_resources(true);
 
     scroll_layer_->SetBounds(gfx::Size(2 * root_layer->bounds().width(),
                                        2 * root_layer->bounds().height()));
@@ -3169,7 +3206,7 @@ class LayerTreeHostTestStartPageScaleAnimation : public LayerTreeHostTest {
   }
 
   FakeContentLayerClient client_;
-  scoped_refptr<Layer> scroll_layer_;
+  scoped_refptr<FakePictureLayer> scroll_layer_;
 };
 
 // Single thread proxy does not support impl-side page scale changes.
@@ -3177,28 +3214,16 @@ MULTI_THREAD_TEST_F(LayerTreeHostTestStartPageScaleAnimation);
 
 class ViewportDeltasAppliedDuringPinch : public LayerTreeHostTest {
  protected:
-  ViewportDeltasAppliedDuringPinch() : sent_gesture_(false) {}
+  ViewportDeltasAppliedDuringPinch() : sent_gesture_(false) {
+    SetUseLayerLists();
+  }
 
   void SetupTree() override {
-    scoped_refptr<Layer> root_clip = Layer::Create();
-    root_clip->SetBounds(gfx::Size(500, 500));
-    scoped_refptr<Layer> page_scale_layer = Layer::Create();
-    page_scale_layer->SetBounds(gfx::Size(500, 500));
-
-    scoped_refptr<Layer> pinch = Layer::Create();
-    pinch->SetBounds(gfx::Size(500, 500));
-    pinch->SetScrollable(gfx::Size(200, 200));
-    page_scale_layer->AddChild(pinch);
-    root_clip->AddChild(page_scale_layer);
-
-    ViewportLayers viewport_layers;
-    viewport_layers.page_scale = page_scale_layer;
-    viewport_layers.inner_viewport_container = root_clip;
-    viewport_layers.inner_viewport_scroll = pinch;
-    layer_tree_host()->RegisterViewportLayers(viewport_layers);
-    layer_tree_host()->SetPageScaleFactorAndLimits(1.f, 1.f, 4.f);
-    layer_tree_host()->SetRootLayer(root_clip);
+    SetInitialRootBounds(gfx::Size(200, 200));
     LayerTreeHostTest::SetupTree();
+    Layer* root = layer_tree_host()->root_layer();
+    SetupViewport(root, gfx::Size(500, 500), gfx::Size(500, 500));
+    layer_tree_host()->SetPageScaleFactorAndLimits(1.f, 1.f, 4.f);
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -3217,7 +3242,8 @@ class ViewportDeltasAppliedDuringPinch : public LayerTreeHostTest {
     EXPECT_EQ(gfx::ScrollOffset(50, 50), args.inner_delta);
     EXPECT_EQ(2, args.page_scale_delta);
 
-    auto* scroll_layer = layer_tree_host()->inner_viewport_scroll_layer();
+    auto* scroll_layer =
+        layer_tree_host()->InnerViewportScrollLayerForTesting();
     EXPECT_EQ(gfx::ScrollOffset(50, 50), scroll_layer->CurrentScrollOffset());
     EndTest();
   }
@@ -3299,8 +3325,8 @@ class LayerTreeHostTestDeviceScaleFactorScalesViewportAndLayers
     // Device viewport is scaled.
     EXPECT_EQ(gfx::Rect(60, 60), impl->active_tree()->GetDeviceViewport());
 
-    FakePictureLayerImpl* root = static_cast<FakePictureLayerImpl*>(
-        impl->active_tree()->root_layer_for_testing());
+    FakePictureLayerImpl* root =
+        static_cast<FakePictureLayerImpl*>(impl->active_tree()->root_layer());
     FakePictureLayerImpl* child = static_cast<FakePictureLayerImpl*>(
         impl->active_tree()->LayerById(child_layer_->id()));
 
@@ -3864,10 +3890,10 @@ class LayerTreeHostTestLCDChange : public LayerTreeHostTest {
   }
 
   void DrawLayersOnThread(LayerTreeHostImpl* host_impl) override {
-    PictureLayerImpl* root_layer = static_cast<PictureLayerImpl*>(
-        host_impl->active_tree()->root_layer_for_testing());
+    PictureLayerImpl* root_layer =
+        static_cast<PictureLayerImpl*>(host_impl->active_tree()->root_layer());
     bool can_use_lcd_text =
-        host_impl->active_tree()->root_layer_for_testing()->CanUseLCDText();
+        host_impl->active_tree()->root_layer()->CanUseLCDText();
     switch (host_impl->active_tree()->source_frame_number()) {
       case 0:
         // The first draw.
@@ -4456,7 +4482,7 @@ class LayerTreeHostTestImplLayersPushProperties
 
         // Make sure the new root is pushed.
         EXPECT_EQ(1u, static_cast<PushPropertiesCountingLayerImpl*>(
-                          host_impl->active_tree()->root_layer_for_testing())
+                          host_impl->active_tree()->root_layer())
                           ->push_properties_count());
         return;
       case 4:
@@ -4562,7 +4588,7 @@ class LayerTreeHostTestImplLayersPushProperties
     // Pull the layers that we need from the tree assuming the same structure
     // as LayerTreeHostTestLayersPushProperties
     root_impl_ = static_cast<PushPropertiesCountingLayerImpl*>(
-        host_impl->active_tree()->root_layer_for_testing());
+        host_impl->active_tree()->root_layer());
 
     LayerTreeImpl* impl = root_impl_->layer_tree_impl();
     if (impl->LayerById(child_->id())) {
@@ -4639,8 +4665,7 @@ class LayerTreeHostTestPropertyChangesDuringUpdateArePushed
         // avoid causing a second commit to be scheduled. If a property change
         // is made during this, however, it needs to be pushed in the upcoming
         // commit.
-        std::unique_ptr<base::AutoReset<bool>> ignore =
-            scrollbar_layer_->IgnoreSetNeedsCommit();
+        auto ignore = scrollbar_layer_->IgnoreSetNeedsCommit();
 
         scrollbar_layer_->SetBounds(gfx::Size(30, 30));
 
@@ -5381,45 +5406,26 @@ MULTI_THREAD_TEST_F(LayerTreeHostTestUpdateLayerInEmptyViewport);
 class LayerTreeHostTestElasticOverscroll : public LayerTreeHostTest {
  public:
   LayerTreeHostTestElasticOverscroll()
-      : scroll_elasticity_helper_(nullptr), num_draws_(0) {}
+      : scroll_elasticity_helper_(nullptr), num_draws_(0) {
+    SetUseLayerLists();
+  }
 
   void InitializeSettings(LayerTreeSettings* settings) override {
     settings->enable_elastic_overscroll = true;
   }
 
   void SetupTree() override {
-    root_layer_ = Layer::Create();
-    root_layer_->SetBounds(gfx::Size(10, 10));
-
-    scoped_refptr<Layer> inner_viewport_container_layer = Layer::Create();
-    inner_viewport_container_layer->SetBounds(gfx::Size(10, 10));
-    scoped_refptr<Layer> overscroll_elasticity_layer = Layer::Create();
-    overscroll_elasticity_layer->SetElementId(
-        LayerIdToElementIdForTesting(overscroll_elasticity_layer->id()));
-    scoped_refptr<Layer> page_scale_layer = Layer::Create();
-    scoped_refptr<Layer> inner_viewport_scroll_layer = Layer::Create();
-    inner_viewport_scroll_layer->SetScrollable(
-        inner_viewport_container_layer->bounds());
-
-    root_layer_->AddChild(inner_viewport_container_layer);
-    inner_viewport_container_layer->AddChild(overscroll_elasticity_layer);
-    overscroll_elasticity_layer->AddChild(page_scale_layer);
-    page_scale_layer->AddChild(inner_viewport_scroll_layer);
+    LayerTreeHostTest::SetupTree();
+    root_layer_ = layer_tree_host()->root_layer();
+    SetupViewport(root_layer_, root_layer_->bounds(), root_layer_->bounds());
 
     scoped_refptr<Layer> content_layer = FakePictureLayer::Create(&client_);
     content_layer_id_ = content_layer->id();
     content_layer->SetBounds(gfx::Size(10, 10));
-    inner_viewport_scroll_layer->AddChild(content_layer);
+    CopyProperties(layer_tree_host()->OuterViewportScrollLayerForTesting(),
+                   content_layer.get());
+    root_layer_->AddChild(content_layer);
 
-    layer_tree_host()->SetRootLayer(root_layer_);
-    ViewportLayers viewport_layers;
-    viewport_layers.overscroll_elasticity_element_id =
-        overscroll_elasticity_layer->element_id();
-    viewport_layers.page_scale = page_scale_layer;
-    viewport_layers.inner_viewport_container = inner_viewport_container_layer;
-    viewport_layers.inner_viewport_scroll = inner_viewport_scroll_layer;
-    layer_tree_host()->RegisterViewportLayers(viewport_layers);
-    LayerTreeHostTest::SetupTree();
     client_.set_bounds(content_layer->bounds());
   }
 
@@ -5468,7 +5474,7 @@ class LayerTreeHostTestElasticOverscroll : public LayerTreeHostTest {
 
  private:
   FakeContentLayerClient client_;
-  scoped_refptr<Layer> root_layer_;
+  Layer* root_layer_;
   ScrollElasticityHelper* scroll_elasticity_helper_;
   int content_layer_id_;
   int num_draws_;
@@ -5972,10 +5978,6 @@ class SimpleSwapPromiseMonitor : public SwapPromiseMonitor {
     ADD_FAILURE() << "Should not get called on main thread.";
   }
 
-  void OnForwardScrollUpdateToMainThreadOnImpl() override {
-    ADD_FAILURE() << "Should not get called on main thread.";
-  }
-
  private:
   int* set_needs_commit_count_;
 };
@@ -6155,13 +6157,6 @@ class LayerTreeHostTestGpuRasterizationDefault : public LayerTreeHostTest {
   }
 
   void BeginTest() override {
-    // Verify default value.
-    EXPECT_FALSE(layer_tree_host()->has_gpu_rasterization_trigger());
-
-    // Setting gpu rasterization trigger does not enable gpu rasterization.
-    layer_tree_host()->SetHasGpuRasterizationTrigger(true);
-    EXPECT_TRUE(layer_tree_host()->has_gpu_rasterization_trigger());
-
     PostSetNeedsCommitToMainThread();
   }
 
@@ -6170,6 +6165,7 @@ class LayerTreeHostTestGpuRasterizationDefault : public LayerTreeHostTest {
 
     EXPECT_FALSE(host_impl->pending_tree()->use_gpu_rasterization());
     EXPECT_FALSE(host_impl->use_gpu_rasterization());
+    EXPECT_FALSE(host_impl->use_msaa());
   }
 
   void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
@@ -6177,6 +6173,7 @@ class LayerTreeHostTestGpuRasterizationDefault : public LayerTreeHostTest {
 
     EXPECT_FALSE(host_impl->active_tree()->use_gpu_rasterization());
     EXPECT_FALSE(host_impl->use_gpu_rasterization());
+    EXPECT_FALSE(host_impl->use_msaa());
     EndTest();
   }
 
@@ -6187,57 +6184,12 @@ class LayerTreeHostTestGpuRasterizationDefault : public LayerTreeHostTest {
 
 MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationDefault);
 
-class LayerTreeHostTestEmptyLayerGpuRasterization : public LayerTreeHostTest {
+class LayerTreeHostWithGpuRasterizationSupportedTest
+    : public LayerTreeHostTest {
  protected:
-  void SetupTree() override {
-    LayerTreeHostTest::SetupTree();
-
-    std::unique_ptr<FakeRecordingSource> recording_source(
-        new FakeRecordingSource);
-    recording_source_ = recording_source.get();
-
-    scoped_refptr<FakePictureLayer> layer =
-        FakePictureLayer::CreateWithRecordingSource(
-            &layer_client_, std::move(recording_source));
-    layer_ = layer.get();
-    layer->SetBounds(gfx::Size());
-    layer->SetIsDrawable(true);
-    layer_tree_host()->root_layer()->AddChild(layer);
-    layer_client_.set_bounds(layer->bounds());
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    settings->gpu_rasterization_msaa_sample_count = 4;
   }
-
-  void BeginTest() override {
-    // Setting gpu rasterization trigger does not enable gpu rasterization.
-    layer_tree_host()->SetHasGpuRasterizationTrigger(true);
-    EXPECT_TRUE(layer_tree_host()->has_gpu_rasterization_trigger());
-
-    PostSetNeedsCommitToMainThread();
-  }
-
-  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
-    EXPECT_FALSE(layer_->HasSlowPaths());
-
-    EXPECT_FALSE(host_impl->pending_tree()->use_gpu_rasterization());
-    EXPECT_FALSE(host_impl->use_gpu_rasterization());
-  }
-
-  void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
-    EXPECT_FALSE(layer_->HasSlowPaths());
-
-    EXPECT_FALSE(host_impl->active_tree()->use_gpu_rasterization());
-    EXPECT_FALSE(host_impl->use_gpu_rasterization());
-    EndTest();
-  }
-
-  FakeContentLayerClient layer_client_;
-  FakePictureLayer* layer_;
-  FakeRecordingSource* recording_source_;
-};
-
-MULTI_THREAD_TEST_F(LayerTreeHostTestEmptyLayerGpuRasterization);
-
-class LayerTreeHostWithGpuRasterizationTest : public LayerTreeHostTest {
- protected:
   std::unique_ptr<TestLayerTreeFrameSink> CreateLayerTreeFrameSink(
       const viz::RendererSettings& renderer_settings,
       double refresh_rate,
@@ -6282,20 +6234,36 @@ class LayerTreeHostWithGpuRasterizationTest : public LayerTreeHostTest {
 };
 
 class LayerTreeHostTestGpuRasterizationEnabled
-    : public LayerTreeHostWithGpuRasterizationTest {
+    : public LayerTreeHostWithGpuRasterizationSupportedTest {
+ protected:
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
+    EXPECT_FALSE(layer_->HasSlowPaths());
+    EXPECT_TRUE(host_impl->pending_tree()->use_gpu_rasterization());
+    EXPECT_TRUE(host_impl->use_gpu_rasterization());
+    EXPECT_FALSE(host_impl->use_msaa());
+  }
+
+  void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
+    EXPECT_FALSE(layer_->HasSlowPaths());
+    EXPECT_TRUE(host_impl->active_tree()->use_gpu_rasterization());
+    EXPECT_TRUE(host_impl->use_gpu_rasterization());
+    EXPECT_FALSE(host_impl->use_msaa());
+    EndTest();
+  }
+};
+
+MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationEnabled);
+
+class LayerTreeHostTestGpuRasterizationEnabledWithMSAA
+    : public LayerTreeHostWithGpuRasterizationSupportedTest {
  protected:
   void BeginTest() override {
-    // Verify default value.
-    EXPECT_FALSE(layer_tree_host()->has_gpu_rasterization_trigger());
-
-    // Gpu rasterization trigger is relevant.
-    layer_tree_host()->SetHasGpuRasterizationTrigger(true);
-    EXPECT_TRUE(layer_tree_host()->has_gpu_rasterization_trigger());
-
-    // Content-based veto is relevant as well.
+    // Content-based MSAA trigger.
     layer_->set_force_content_has_slow_paths(true);
 
-    // Veto will take effect when layers are updated.
+    // MSAA trigger will take effect when layers are updated.
     // The results will be verified after commit is completed below.
     // Since we are manually marking the source as containing slow paths,
     // make sure that the layer gets a chance to update.
@@ -6309,6 +6277,7 @@ class LayerTreeHostTestGpuRasterizationEnabled
 
     EXPECT_TRUE(host_impl->pending_tree()->use_gpu_rasterization());
     EXPECT_TRUE(host_impl->use_gpu_rasterization());
+    EXPECT_TRUE(host_impl->use_msaa());
   }
 
   void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
@@ -6316,31 +6285,25 @@ class LayerTreeHostTestGpuRasterizationEnabled
 
     EXPECT_TRUE(host_impl->active_tree()->use_gpu_rasterization());
     EXPECT_TRUE(host_impl->use_gpu_rasterization());
+    EXPECT_TRUE(host_impl->use_msaa());
     EndTest();
   }
 };
 
-MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationEnabled);
+MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationEnabledWithMSAA);
 
-class LayerTreeHostTestGpuRasterizationReenabled
-    : public LayerTreeHostWithGpuRasterizationTest {
+class LayerTreeHostTestGpuRasterizationMSAAReenabled
+    : public LayerTreeHostWithGpuRasterizationSupportedTest {
  protected:
   void InitializeSettings(LayerTreeSettings* settings) override {
     settings->gpu_rasterization_msaa_sample_count = 4;
   }
 
   void BeginTest() override {
-    // Verify default value.
-    EXPECT_FALSE(layer_tree_host()->has_gpu_rasterization_trigger());
-
-    // Gpu rasterization trigger is relevant.
-    layer_tree_host()->SetHasGpuRasterizationTrigger(true);
-    EXPECT_TRUE(layer_tree_host()->has_gpu_rasterization_trigger());
-
-    // Content-based veto is relevant as well.
+    // Content-based MSAA trigger is relevant.
     layer_->set_force_content_has_slow_paths(true);
 
-    // Veto will take effect when layers are updated.
+    // MSAA trigger will take effect when layers are updated.
     // The results will be verified after commit is completed below.
     // Since we are manually marking the source as containing slow paths,
     // make sure that the layer gets a chance to update.
@@ -6380,23 +6343,16 @@ class LayerTreeHostTestGpuRasterizationReenabled
   bool expected_use_msaa_ = true;
 };
 
-MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationReenabled);
+MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationMSAAReenabled);
 
 class LayerTreeHostTestGpuRasterizationNonAASticky
-    : public LayerTreeHostWithGpuRasterizationTest {
+    : public LayerTreeHostWithGpuRasterizationSupportedTest {
  protected:
   void InitializeSettings(LayerTreeSettings* settings) override {
     settings->gpu_rasterization_msaa_sample_count = 4;
   }
 
   void BeginTest() override {
-    // Verify default value.
-    EXPECT_FALSE(layer_tree_host()->has_gpu_rasterization_trigger());
-
-    // Gpu rasterization trigger is relevant.
-    layer_tree_host()->SetHasGpuRasterizationTrigger(true);
-    EXPECT_TRUE(layer_tree_host()->has_gpu_rasterization_trigger());
-
     // Start without slow paths, but no non-aa paint.
     layer_->set_force_content_has_slow_paths(true);
     layer_->set_force_content_has_non_aa_paint(false);
@@ -6461,14 +6417,7 @@ class LayerTreeHostTestGpuRasterizationForced : public LayerTreeHostTest {
   }
 
   void BeginTest() override {
-    // Verify default value.
-    EXPECT_FALSE(layer_tree_host()->has_gpu_rasterization_trigger());
-
-    // With gpu rasterization forced, gpu rasterization trigger is irrelevant.
-    layer_tree_host()->SetHasGpuRasterizationTrigger(true);
-    EXPECT_TRUE(layer_tree_host()->has_gpu_rasterization_trigger());
-
-    // Content-based veto is irrelevant as well.
+    // Content-based MSAA trigger is irrelevant as well.
     layer_->set_force_content_has_slow_paths(true);
 
     // Veto will take effect when layers are updated.
@@ -6501,6 +6450,29 @@ class LayerTreeHostTestGpuRasterizationForced : public LayerTreeHostTest {
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationForced);
+
+class LayerTreeHostTestGpuRasterizationSupportedButDisabled
+    : public LayerTreeHostWithGpuRasterizationSupportedTest {
+ protected:
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    settings->gpu_rasterization_disabled = true;
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
+    EXPECT_FALSE(host_impl->sync_tree()->use_gpu_rasterization());
+    EXPECT_FALSE(host_impl->use_gpu_rasterization());
+  }
+
+  void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
+    EXPECT_FALSE(host_impl->active_tree()->use_gpu_rasterization());
+    EXPECT_FALSE(host_impl->use_gpu_rasterization());
+    EndTest();
+  }
+};
+
+MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationSupportedButDisabled);
 
 class LayerTreeHostTestWillBeginImplFrameHasDidFinishImplFrame
     : public LayerTreeHostTest {
@@ -6890,23 +6862,19 @@ class LayerTreeHostTestCrispUpAfterPinchEnds : public LayerTreeHostTest {
  protected:
   LayerTreeHostTestCrispUpAfterPinchEnds()
       : playback_allowed_event_(base::WaitableEvent::ResetPolicy::MANUAL,
-                                base::WaitableEvent::InitialState::SIGNALED) {}
+                                base::WaitableEvent::InitialState::SIGNALED) {
+    SetUseLayerLists();
+  }
 
   void SetupTree() override {
     frame_ = 1;
     posted_ = false;
     client_.set_fill_with_nonsolid_color(true);
 
-    scoped_refptr<Layer> root_clip = Layer::Create();
-    root_clip->SetBounds(gfx::Size(500, 500));
-    scoped_refptr<Layer> page_scale_layer = Layer::Create();
-    page_scale_layer->SetBounds(gfx::Size(500, 500));
-
-    scoped_refptr<Layer> pinch = Layer::Create();
-    pinch->SetBounds(gfx::Size(500, 500));
-    pinch->SetScrollable(gfx::Size(500, 500));
-    page_scale_layer->AddChild(pinch);
-    root_clip->AddChild(page_scale_layer);
+    SetInitialRootBounds(gfx::Size(500, 500));
+    LayerTreeHostTest::SetupTree();
+    Layer* root = layer_tree_host()->root_layer();
+    SetupViewport(root, root->bounds(), root->bounds());
 
     std::unique_ptr<FakeRecordingSource> recording(new FakeRecordingSource);
     recording->SetPlaybackAllowedEvent(&playback_allowed_event_);
@@ -6917,17 +6885,12 @@ class LayerTreeHostTestCrispUpAfterPinchEnds : public LayerTreeHostTest {
     layer->SetContentsOpaque(true);
     // Avoid LCD text on the layer so we don't cause extra commits when we
     // pinch.
-    pinch->AddChild(layer);
+    CopyProperties(layer_tree_host()->InnerViewportScrollLayerForTesting(),
+                   layer.get());
+    root->AddChild(layer);
 
-    ViewportLayers viewport_layers;
-    viewport_layers.page_scale = page_scale_layer;
-    viewport_layers.inner_viewport_container = root_clip;
-    viewport_layers.inner_viewport_scroll = pinch;
-    layer_tree_host()->RegisterViewportLayers(viewport_layers);
     layer_tree_host()->SetPageScaleFactorAndLimits(1.f, 1.f, 4.f);
-    layer_tree_host()->SetRootLayer(root_clip);
-    LayerTreeHostTest::SetupTree();
-    client_.set_bounds(root_clip->bounds());
+    client_.set_bounds(root->bounds());
   }
 
   // Returns the delta scale of all quads in the frame's root pass from their
@@ -7194,23 +7157,20 @@ class LayerTreeHostTestContinuousDrawWhenCreatingVisibleTiles
  protected:
   LayerTreeHostTestContinuousDrawWhenCreatingVisibleTiles()
       : playback_allowed_event_(base::WaitableEvent::ResetPolicy::MANUAL,
-                                base::WaitableEvent::InitialState::SIGNALED) {}
+                                base::WaitableEvent::InitialState::SIGNALED) {
+    SetUseLayerLists();
+  }
 
   void SetupTree() override {
     step_ = 1;
     continuous_draws_ = 0;
     client_.set_fill_with_nonsolid_color(true);
 
-    scoped_refptr<Layer> root_clip = Layer::Create();
-    root_clip->SetBounds(gfx::Size(500, 500));
-    scoped_refptr<Layer> page_scale_layer = Layer::Create();
-    page_scale_layer->SetBounds(gfx::Size(500, 500));
+    SetInitialRootBounds(gfx::Size(500, 500));
+    LayerTreeHostTest::SetupTree();
 
-    scoped_refptr<Layer> pinch = Layer::Create();
-    pinch->SetBounds(gfx::Size(500, 500));
-    pinch->SetScrollable(gfx::Size(500, 500));
-    page_scale_layer->AddChild(pinch);
-    root_clip->AddChild(page_scale_layer);
+    Layer* root = layer_tree_host()->root_layer();
+    SetupViewport(root, root->bounds(), root->bounds());
 
     std::unique_ptr<FakeRecordingSource> recording(new FakeRecordingSource);
     recording->SetPlaybackAllowedEvent(&playback_allowed_event_);
@@ -7219,19 +7179,12 @@ class LayerTreeHostTestContinuousDrawWhenCreatingVisibleTiles
                                                     std::move(recording));
     layer->SetBounds(gfx::Size(500, 500));
     layer->SetContentsOpaque(true);
-    // Avoid LCD text on the layer so we don't cause extra commits when we
-    // pinch.
-    pinch->AddChild(layer);
+    CopyProperties(layer_tree_host()->InnerViewportScrollLayerForTesting(),
+                   layer.get());
+    root->AddChild(layer);
 
-    ViewportLayers viewport_layers;
-    viewport_layers.page_scale = page_scale_layer;
-    viewport_layers.inner_viewport_container = root_clip;
-    viewport_layers.inner_viewport_scroll = pinch;
-    layer_tree_host()->RegisterViewportLayers(viewport_layers);
     layer_tree_host()->SetPageScaleFactorAndLimits(1.f, 1.f, 4.f);
-    layer_tree_host()->SetRootLayer(root_clip);
-    LayerTreeHostTest::SetupTree();
-    client_.set_bounds(root_clip->bounds());
+    client_.set_bounds(root->bounds());
   }
 
   // Returns the delta scale of all quads in the frame's root pass from their
@@ -7564,41 +7517,33 @@ class LayerTreeHostTestUpdateCopyRequests : public LayerTreeHostTest {
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestUpdateCopyRequests);
 
 class LayerTreeTestPageScaleFlags : public LayerTreeTest {
+ public:
+  LayerTreeTestPageScaleFlags() { SetUseLayerLists(); }
+
  protected:
   void SetupTree() override {
     // -root
     //   -pre page scale
-    //   -page scale
-    //     -inner viewport scroll
-    //       -page scale grandchild
+    //   -viewport layers
     //   -post page scale
 
-    scoped_refptr<Layer> root = Layer::Create();
-    scoped_refptr<Layer> pre_page_scale = Layer::Create();
-    scoped_refptr<Layer> page_scale = Layer::Create();
-    scoped_refptr<Layer> inner_viewport_scroll = Layer::Create();
-    scoped_refptr<Layer> page_scale_grandchild = Layer::Create();
-    scoped_refptr<Layer> post_page_scale = Layer::Create();
+    LayerTreeTest::SetupTree();
+    Layer* root = layer_tree_host()->root_layer();
 
+    scoped_refptr<Layer> pre_page_scale = Layer::Create();
+    CopyProperties(root, pre_page_scale.get());
     root->AddChild(pre_page_scale);
-    root->AddChild(page_scale);
+
+    SetupViewport(root, root->bounds(), root->bounds());
+
+    scoped_refptr<Layer> post_page_scale = Layer::Create();
+    CopyProperties(root, post_page_scale.get());
     root->AddChild(post_page_scale);
 
-    page_scale->AddChild(inner_viewport_scroll);
-    inner_viewport_scroll->AddChild(page_scale_grandchild);
-
-    layer_tree_host()->SetRootLayer(root);
-    LayerTreeTest::SetupTree();
-
-    ViewportLayers viewport_layers;
-    viewport_layers.inner_viewport_container = root;
-    viewport_layers.page_scale = page_scale;
-    viewport_layers.inner_viewport_scroll = inner_viewport_scroll;
-    layer_tree_host()->RegisterViewportLayers(viewport_layers);
-
-    affected_by_page_scale_.push_back(page_scale->id());
-    affected_by_page_scale_.push_back(inner_viewport_scroll->id());
-    affected_by_page_scale_.push_back(page_scale_grandchild->id());
+    affected_by_page_scale_.push_back(
+        layer_tree_host()->InnerViewportScrollLayerForTesting()->id());
+    affected_by_page_scale_.push_back(
+        layer_tree_host()->OuterViewportScrollLayerForTesting()->id());
 
     not_affected_by_page_scale_.push_back(root->id());
     not_affected_by_page_scale_.push_back(pre_page_scale->id());
@@ -7608,14 +7553,12 @@ class LayerTreeTestPageScaleFlags : public LayerTreeTest {
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
   void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
-    LayerTreeHostCommon::CallFunctionForEveryLayer(
-        host_impl->sync_tree(), [this](LayerImpl* layer) {
-          const std::vector<int>& list =
-              layer->IsAffectedByPageScale()
-                  ? this->affected_by_page_scale_
-                  : this->not_affected_by_page_scale_;
-          EXPECT_TRUE(base::Contains(list, layer->id()));
-        });
+    for (auto* layer : *host_impl->sync_tree()) {
+      const std::vector<int>& list = layer->IsAffectedByPageScale()
+                                         ? this->affected_by_page_scale_
+                                         : this->not_affected_by_page_scale_;
+      EXPECT_TRUE(base::Contains(list, layer->id()));
+    }
 
     EndTest();
   }
@@ -8278,8 +8221,8 @@ class LayerTreeHostTestImageAnimation : public LayerTreeHostTest {
 
   void WillPrepareToDrawOnThread(LayerTreeHostImpl* host_impl) override {
     gfx::Rect image_rect(-1, -1, 502, 502);
-    auto* layer = static_cast<PictureLayerImpl*>(
-        host_impl->active_tree()->root_layer_for_testing());
+    auto* layer =
+        static_cast<PictureLayerImpl*>(host_impl->active_tree()->root_layer());
     switch (++draw_count_) {
       case 1:
         // First draw, everything is invalid.
@@ -8816,6 +8759,8 @@ MULTI_THREAD_TEST_F(LayerTreeHostTestPartialTileDamage);
 class LayerTreeHostTopControlsDeltaTriggersViewportUpdate
     : public LayerTreeHostTest {
  public:
+  LayerTreeHostTopControlsDeltaTriggersViewportUpdate() { SetUseLayerLists(); }
+
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
   void SetupTree() override {
@@ -8824,6 +8769,7 @@ class LayerTreeHostTopControlsDeltaTriggersViewportUpdate
     // Set up scrollable root.
     root_layer->SetBounds(gfx::Size(100, 100));
     SetupViewport(root_layer, gfx::Size(50, 50), root_layer->bounds());
+    layer_tree_host()->SetPageScaleFactorAndLimits(1.f, 1.f, 1.f);
     // Set browser controls to be partially shown.
     layer_tree_host()->SetBrowserControlsHeight(kTopControlsHeight, 0.0f,
                                                 true /* shrink */);

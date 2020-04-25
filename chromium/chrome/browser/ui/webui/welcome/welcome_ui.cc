@@ -25,6 +25,7 @@
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/strings/grit/components_strings.h"
 #include "net/base/url_util.h"
+#include "ui/resources/grit/webui_resources.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -127,15 +128,26 @@ WelcomeUI::WelcomeUI(content::WebUI* web_ui, const GURL& url)
 
   content::WebUIDataSource* html_source =
       content::WebUIDataSource::Create(url.host());
+  html_source->OverrideContentSecurityPolicyScriptSrc(
+      "script-src chrome://resources chrome://test 'self';");
 
   // Add welcome strings.
   AddStrings(html_source);
 
   // Add all welcome resources.
+  std::string generated_path =
+      "@out_folder@/gen/chrome/browser/resources/welcome/";
+
   for (size_t i = 0; i < kWelcomeResourcesSize; ++i) {
-    html_source->AddResourcePath(kWelcomeResources[i].name,
-                                 kWelcomeResources[i].value);
+    std::string path = kWelcomeResources[i].name;
+    if (path.rfind(generated_path, 0) == 0) {
+      path = path.substr(generated_path.length());
+    }
+
+    html_source->AddResourcePath(path, kWelcomeResources[i].value);
   }
+  html_source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER);
+  html_source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER);
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   // Load unscaled images.
@@ -202,6 +214,7 @@ WelcomeUI::WelcomeUI(content::WebUI* web_ui, const GURL& url)
       base::BindRepeating(&HandleRequestCallback,
                           weak_ptr_factory_.GetWeakPtr()));
   html_source->UseStringsJs();
+  html_source->EnableReplaceI18nInJS();
 
   content::WebUIDataSource::Add(profile, html_source);
 }

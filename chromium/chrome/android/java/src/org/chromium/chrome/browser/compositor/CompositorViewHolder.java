@@ -14,7 +14,6 @@ import android.graphics.RectF;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.support.annotation.Nullable;
 import android.support.v4.view.ViewCompat;
 import android.support.v4.view.accessibility.AccessibilityEventCompat;
 import android.support.v4.view.accessibility.AccessibilityNodeInfoCompat;
@@ -29,8 +28,11 @@ import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityEvent;
 import android.widget.FrameLayout;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.compat.ApiHelperForN;
 import org.chromium.base.compat.ApiHelperForO;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.InsetObserverView;
@@ -52,13 +54,14 @@ import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.widget.ControlContainer;
 import org.chromium.components.content_capture.ContentCaptureConsumer;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.EventForwarder;
+import org.chromium.ui.base.EventOffsetHandler;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
@@ -202,7 +205,7 @@ public class CompositorViewHolder extends FrameLayout
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return null;
         View activeView = getContentView();
         if (activeView == null || !ViewCompat.isAttachedToWindow(activeView)) return null;
-        return activeView.onResolvePointerIcon(event, pointerIndex);
+        return ApiHelperForN.onResolvePointerIcon(activeView, event, pointerIndex);
     }
 
     /**
@@ -223,18 +226,18 @@ public class CompositorViewHolder extends FrameLayout
                     private final RectF mCacheViewport = new RectF();
 
                     @Override
-                    public RectF getViewport() {
+                    public float getTop() {
                         if (mLayoutManager != null) mLayoutManager.getViewportPixel(mCacheViewport);
-                        return mCacheViewport;
+                        return mCacheViewport.top;
                     }
 
                     @Override
-                    public void setCurrentTouchEventOffsets(float x, float y) {
+                    public void setCurrentTouchEventOffsets(float top) {
                         if (mTabVisible == null) return;
                         WebContents webContents = mTabVisible.getWebContents();
                         if (webContents == null) return;
                         EventForwarder forwarder = webContents.getEventForwarder();
-                        forwarder.setCurrentTouchEventOffsets(x, y);
+                        forwarder.setCurrentTouchEventOffsets(0, top);
                     }
                 });
 

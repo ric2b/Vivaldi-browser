@@ -4,7 +4,7 @@
 
 package org.chromium.content_public.browser;
 
-import android.support.annotation.IntDef;
+import androidx.annotation.IntDef;
 
 import org.chromium.blink.mojom.ViewportFit;
 
@@ -175,11 +175,6 @@ public abstract class WebContentsObserver {
      * @param value the new viewport fit value.
      */
     public void viewportFitChanged(@ViewportFitType int value) {}
-
-    /**
-     * This method is invoked when the WebContents reloads the LoFi images on the page.
-     */
-    public void didReloadLoFiImages() {}
 
     /**
      * This method is invoked when a RenderWidgetHost for a WebContents gains focus.

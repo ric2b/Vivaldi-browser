@@ -12,10 +12,10 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
-#include "chrome/browser/chromeos/arc/arc_service_launcher.h"
+#include "chrome/browser/chromeos/app_mode/kiosk_cryptohome_remover.h"
+#include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/child_accounts/consumer_status_reporting_service_factory.h"
 #include "chrome/browser/chromeos/child_accounts/screen_time_controller_factory.h"
@@ -36,12 +36,14 @@
 #include "chrome/browser/chromeos/tether/tether_service.h"
 #include "chrome/browser/chromeos/tpm_firmware_update_notification.h"
 #include "chrome/browser/chromeos/u2f_notification.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/webui/chromeos/login/app_launch_splash_screen_handler.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
@@ -204,7 +206,10 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
     AppListClientImpl::GetInstance()->UpdateProfile();
   }
 
-  UserSessionManager::GetInstance()->CheckEolStatus(user_profile);
+  if (base::FeatureList::IsEnabled(features::kEolWarningNotifications) &&
+      !user_profile->GetProfilePolicyConnector()->IsManaged())
+    UserSessionManager::GetInstance()->CheckEolInfo(user_profile);
+
   tpm_firmware_update::ShowNotificationIfNeeded(user_profile);
   UserSessionManager::GetInstance()->MaybeShowU2FNotification();
   UserSessionManager::GetInstance()->MaybeShowReleaseNotesNotification(
@@ -240,8 +245,7 @@ void ChromeSessionManager::Initialize(
   const AccountId login_account_id(
       cryptohome::Identification::FromString(cryptohome_id).GetAccountId());
 
-  KioskAppManager::RemoveObsoleteCryptohomes();
-  ArcKioskAppManager::RemoveObsoleteCryptohomes();
+  KioskCryptohomeRemover::RemoveObsoleteCryptohomes();
 
   if (ShouldAutoLaunchKioskApp(parsed_command_line)) {
     VLOG(1) << "Starting Chrome with kiosk auto launch.";

@@ -61,7 +61,6 @@
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_script_url.h"
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
-#include "third_party/blink/renderer/core/workers/installed_scripts_manager.h"
 #include "third_party/blink/renderer/core/workers/worker_classic_script_loader.h"
 #include "third_party/blink/renderer/core/workers/worker_clients.h"
 #include "third_party/blink/renderer/core/workers/worker_reporting_proxy.h"
@@ -181,16 +180,18 @@ static std::string MojoEnumToString(T mojo_enum) {
 ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::Create(
     ServiceWorkerThread* thread,
     std::unique_ptr<GlobalScopeCreationParams> creation_params,
+    std::unique_ptr<ServiceWorkerInstalledScriptsManager>
+        installed_scripts_manager,
     mojo::PendingRemote<mojom::blink::CacheStorage> cache_storage_remote,
     base::TimeTicks time_origin) {
   DCHECK_EQ(creation_params->off_main_thread_fetch_option,
             OffMainThreadWorkerScriptFetchOption::kEnabled);
 
+#if DCHECK_IS_ON()
   // If the script is being loaded via script streaming, the script is not yet
   // loaded.
-  if (thread->GetInstalledScriptsManager() &&
-      thread->GetInstalledScriptsManager()->IsScriptInstalled(
-          creation_params->script_url)) {
+  if (installed_scripts_manager && installed_scripts_manager->IsScriptInstalled(
+                                       creation_params->script_url)) {
     // CSP headers, referrer policy, and origin trial tokens will be provided by
     // the InstalledScriptsManager in EvaluateClassicScript().
     DCHECK(creation_params->outside_content_security_policy_headers.IsEmpty());
@@ -198,18 +199,22 @@ ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::Create(
               creation_params->referrer_policy);
     DCHECK(creation_params->origin_trial_tokens->IsEmpty());
   }
+#endif  // DCHECK_IS_ON()
 
   return MakeGarbageCollected<ServiceWorkerGlobalScope>(
-      std::move(creation_params), thread, std::move(cache_storage_remote),
-      time_origin);
+      std::move(creation_params), thread, std::move(installed_scripts_manager),
+      std::move(cache_storage_remote), time_origin);
 }
 
 ServiceWorkerGlobalScope::ServiceWorkerGlobalScope(
     std::unique_ptr<GlobalScopeCreationParams> creation_params,
     ServiceWorkerThread* thread,
+    std::unique_ptr<ServiceWorkerInstalledScriptsManager>
+        installed_scripts_manager,
     mojo::PendingRemote<mojom::blink::CacheStorage> cache_storage_remote,
     base::TimeTicks time_origin)
     : WorkerGlobalScope(std::move(creation_params), thread, time_origin),
+      installed_scripts_manager_(std::move(installed_scripts_manager)),
       cache_storage_remote_(std::move(cache_storage_remote)) {
   // Create the idle timer. At this point the timer is not started. It will be
   // started by DidEvaluateScript().
@@ -232,6 +237,12 @@ void ServiceWorkerGlobalScope::FetchAndRunClassicScript(
     WorkerResourceTimingNotifier& outside_resource_timing_notifier,
     const v8_inspector::V8StackTraceId& stack_id) {
   DCHECK(!IsContextPaused());
+
+  if (installed_scripts_manager_) {
+    // This service worker is installed. Load and run the installed script.
+    LoadAndRunInstalledClassicScript(script_url, stack_id);
+    return;
+  }
 
   // Step 9. "Switching on job's worker type, run these substeps with the
   // following options:"
@@ -279,75 +290,17 @@ void ServiceWorkerGlobalScope::FetchAndRunModuleScript(
     WorkerResourceTimingNotifier& outside_resource_timing_notifier,
     network::mojom::CredentialsMode credentials_mode) {
   DCHECK(IsContextThread());
+
+  // Start fetching scripts regardless of whether this service worker is
+  // installed. For the installed case, the scripts will be read from the
+  // service worker script storage during module script fetch (see
+  // InstalledServiceWorkerModuleScriptFetcher).
   FetchModuleScript(module_url_record, outside_settings_object,
                     outside_resource_timing_notifier,
                     mojom::RequestContextType::SERVICE_WORKER, credentials_mode,
                     ModuleScriptCustomFetchType::kWorkerConstructor,
                     MakeGarbageCollected<ServiceWorkerModuleTreeClient>(
-                        Modulator::From(ScriptController()->GetScriptState())));
-}
-
-void ServiceWorkerGlobalScope::RunInstalledClassicScript(
-    const KURL& script_url,
-    const v8_inspector::V8StackTraceId& stack_id) {
-  DCHECK(IsContextThread());
-
-  InstalledScriptsManager* installed_scripts_manager =
-      GetThread()->GetInstalledScriptsManager();
-  DCHECK(installed_scripts_manager);
-  DCHECK(installed_scripts_manager->IsScriptInstalled(script_url));
-
-  // GetScriptData blocks until the script is received from the browser.
-  std::unique_ptr<InstalledScriptsManager::ScriptData> script_data =
-      installed_scripts_manager->GetScriptData(script_url);
-  if (!script_data) {
-    ReportingProxy().DidFailToLoadClassicScript();
-    // This will eventually initiate worker thread termination. See
-    // ServiceWorkerGlobalScopeProxy::DidCloseWorkerGlobalScope() for details.
-    close();
-    return;
-  }
-  ReportingProxy().DidLoadClassicScript();
-
-  auto referrer_policy = network::mojom::ReferrerPolicy::kDefault;
-  if (!script_data->GetReferrerPolicy().IsNull()) {
-    SecurityPolicy::ReferrerPolicyFromHeaderValue(
-        script_data->GetReferrerPolicy(),
-        kDoNotSupportReferrerPolicyLegacyKeywords, &referrer_policy);
-  }
-
-  // Construct a ContentSecurityPolicy object to convert
-  // ContentSecurityPolicyResponseHeaders to CSPHeaderAndType.
-  // TODO(nhiroki): Find an efficient way to do this.
-  auto* content_security_policy = MakeGarbageCollected<ContentSecurityPolicy>();
-  content_security_policy->DidReceiveHeaders(
-      script_data->GetContentSecurityPolicyResponseHeaders());
-
-  RunClassicScript(
-      script_url, referrer_policy, script_data->GetResponseAddressSpace(),
-      content_security_policy->Headers(),
-      script_data->CreateOriginTrialTokens().get(),
-      script_data->TakeSourceText(), script_data->TakeMetaData(), stack_id);
-}
-
-void ServiceWorkerGlobalScope::RunInstalledModuleScript(
-    const KURL& module_url_record,
-    const FetchClientSettingsObjectSnapshot& outside_settings_object,
-    network::mojom::CredentialsMode credentials_mode) {
-  DCHECK(IsContextThread());
-  // Currently we don't plumb performance timing for toplevel service worker
-  // script fetch. https://crbug.com/954005
-  auto* outside_resource_timing_notifier =
-      MakeGarbageCollected<NullWorkerResourceTimingNotifier>();
-
-  // The installed scripts will be read from the service worker script storage
-  // during module script fetch.
-  FetchModuleScript(module_url_record, outside_settings_object,
-                    *outside_resource_timing_notifier,
-                    mojom::RequestContextType::SERVICE_WORKER, credentials_mode,
-                    ModuleScriptCustomFetchType::kInstalledServiceWorker,
-                    MakeGarbageCollected<ServiceWorkerModuleTreeClient>(
-                        Modulator::From(ScriptController()->GetScriptState())));
+                        ScriptController()->GetScriptState()));
 }
 
 void ServiceWorkerGlobalScope::Dispose() {
@@ -357,6 +310,11 @@ void ServiceWorkerGlobalScope::Dispose() {
   service_worker_host_.reset();
   receiver_.reset();
   WorkerGlobalScope::Dispose();
+}
+
+InstalledScriptsManager*
+ServiceWorkerGlobalScope::GetInstalledScriptsManager() {
+  return installed_scripts_manager_.get();
 }
 
 void ServiceWorkerGlobalScope::CountWorkerScript(size_t script_size,
@@ -536,6 +494,47 @@ void ServiceWorkerGlobalScope::Initialize(
   DCHECK_EQ(appcache_id, mojom::blink::kAppCacheNoCacheId);
 }
 
+void ServiceWorkerGlobalScope::LoadAndRunInstalledClassicScript(
+    const KURL& script_url,
+    const v8_inspector::V8StackTraceId& stack_id) {
+  DCHECK(IsContextThread());
+
+  DCHECK(installed_scripts_manager_);
+  DCHECK(installed_scripts_manager_->IsScriptInstalled(script_url));
+
+  // GetScriptData blocks until the script is received from the browser.
+  std::unique_ptr<InstalledScriptsManager::ScriptData> script_data =
+      installed_scripts_manager_->GetScriptData(script_url);
+  if (!script_data) {
+    ReportingProxy().DidFailToFetchClassicScript();
+    // This will eventually initiate worker thread termination. See
+    // ServiceWorkerGlobalScopeProxy::DidCloseWorkerGlobalScope() for details.
+    close();
+    return;
+  }
+  ReportingProxy().DidLoadClassicScript();
+
+  auto referrer_policy = network::mojom::ReferrerPolicy::kDefault;
+  if (!script_data->GetReferrerPolicy().IsNull()) {
+    SecurityPolicy::ReferrerPolicyFromHeaderValue(
+        script_data->GetReferrerPolicy(),
+        kDoNotSupportReferrerPolicyLegacyKeywords, &referrer_policy);
+  }
+
+  // Construct a ContentSecurityPolicy object to convert
+  // ContentSecurityPolicyResponseHeaders to CSPHeaderAndType.
+  // TODO(nhiroki): Find an efficient way to do this.
+  auto* content_security_policy = MakeGarbageCollected<ContentSecurityPolicy>();
+  content_security_policy->DidReceiveHeaders(
+      script_data->GetContentSecurityPolicyResponseHeaders());
+
+  RunClassicScript(
+      script_url, referrer_policy, script_data->GetResponseAddressSpace(),
+      content_security_policy->Headers(),
+      script_data->CreateOriginTrialTokens().get(),
+      script_data->TakeSourceText(), script_data->TakeMetaData(), stack_id);
+}
+
 // https://w3c.github.io/ServiceWorker/#run-service-worker-algorithm
 void ServiceWorkerGlobalScope::RunClassicScript(
     const KURL& response_url,
@@ -574,6 +573,10 @@ ServiceWorkerClients* ServiceWorkerGlobalScope::clients() {
 
 ServiceWorkerRegistration* ServiceWorkerGlobalScope::registration() {
   return registration_;
+}
+
+::blink::ServiceWorker* ServiceWorkerGlobalScope::serviceWorker() {
+  return service_worker_;
 }
 
 ScriptPromise ServiceWorkerGlobalScope::skipWaiting(ScriptState* script_state) {
@@ -695,6 +698,33 @@ bool ServiceWorkerGlobalScope::AddEventListenerInternal(
                                                      options);
 }
 
+bool ServiceWorkerGlobalScope::FetchClassicImportedScript(
+    const KURL& script_url,
+    KURL* out_response_url,
+    String* out_source_code,
+    std::unique_ptr<Vector<uint8_t>>* out_cached_meta_data) {
+  // InstalledScriptsManager is used only for starting installed service
+  // workers.
+  if (installed_scripts_manager_) {
+    // All imported scripts must be installed. This is already checked in
+    // ServiceWorkerGlobalScope::importScripts().
+    DCHECK(installed_scripts_manager_->IsScriptInstalled(script_url));
+    std::unique_ptr<InstalledScriptsManager::ScriptData> script_data =
+        installed_scripts_manager_->GetScriptData(script_url);
+    if (!script_data)
+      return false;
+    *out_response_url = script_url;
+    *out_source_code = script_data->TakeSourceText();
+    *out_cached_meta_data = script_data->TakeMetaData();
+    // TODO(shimazu): Add appropriate probes for inspector.
+    return true;
+  }
+  // This is a new service worker. Proceed with importing scripts and installing
+  // them.
+  return WorkerGlobalScope::FetchClassicImportedScript(
+      script_url, out_response_url, out_source_code, out_cached_meta_data);
+}
+
 const AtomicString& ServiceWorkerGlobalScope::InterfaceName() const {
   return event_target_names::kServiceWorkerGlobalScope;
 }
@@ -726,25 +756,30 @@ void ServiceWorkerGlobalScope::DispatchExtendableEventWithRespondWith(
 void ServiceWorkerGlobalScope::Trace(blink::Visitor* visitor) {
   visitor->Trace(clients_);
   visitor->Trace(registration_);
+  visitor->Trace(service_worker_);
   visitor->Trace(service_worker_objects_);
   visitor->Trace(pending_preload_fetch_events_);
   WorkerGlobalScope::Trace(visitor);
 }
 
+bool ServiceWorkerGlobalScope::HasRelatedFetchEvent(
+    const KURL& request_url) const {
+  auto it = unresponded_fetch_event_counts_.find(request_url);
+  return it != unresponded_fetch_event_counts_.end();
+}
+
 void ServiceWorkerGlobalScope::importScripts(
     const HeapVector<StringOrTrustedScriptURL>& urls,
     ExceptionState& exception_state) {
-  InstalledScriptsManager* installed_scripts_manager =
-      GetThread()->GetInstalledScriptsManager();
   for (const StringOrTrustedScriptURL& stringOrUrl : urls) {
     String string_url = stringOrUrl.IsString()
                             ? stringOrUrl.GetAsString()
                             : stringOrUrl.GetAsTrustedScriptURL()->toString();
 
     KURL completed_url = CompleteURL(string_url);
-    if (installed_scripts_manager &&
-        !installed_scripts_manager->IsScriptInstalled(completed_url)) {
-      DCHECK(installed_scripts_manager->IsScriptInstalled(Url()));
+    if (installed_scripts_manager_ &&
+        !installed_scripts_manager_->IsScriptInstalled(completed_url)) {
+      DCHECK(installed_scripts_manager_->IsScriptInstalled(Url()));
       exception_state.ThrowDOMException(
           DOMExceptionCode::kNetworkError,
           "Failed to import '" + completed_url.ElidedString() +
@@ -903,6 +938,7 @@ void ServiceWorkerGlobalScope::DidHandleExtendableMessageEvent(
 
 void ServiceWorkerGlobalScope::RespondToFetchEventWithNoResponse(
     int fetch_event_id,
+    const KURL& request_url,
     base::TimeTicks event_dispatch_time,
     base::TimeTicks respond_with_settled_time) {
   DCHECK(IsContextThread());
@@ -920,11 +956,14 @@ void ServiceWorkerGlobalScope::RespondToFetchEventWithNoResponse(
   timing->dispatch_event_time = event_dispatch_time;
   timing->respond_with_settled_time = respond_with_settled_time;
 
+  NoteRespondedToFetchEvent(request_url);
+
   response_callback->OnFallback(std::move(timing));
 }
 
 void ServiceWorkerGlobalScope::RespondToFetchEvent(
     int fetch_event_id,
+    const KURL& request_url,
     mojom::blink::FetchAPIResponsePtr response,
     base::TimeTicks event_dispatch_time,
     base::TimeTicks respond_with_settled_time) {
@@ -943,11 +982,14 @@ void ServiceWorkerGlobalScope::RespondToFetchEvent(
   timing->dispatch_event_time = event_dispatch_time;
   timing->respond_with_settled_time = respond_with_settled_time;
 
+  NoteRespondedToFetchEvent(request_url);
+
   response_callback->OnResponse(std::move(response), std::move(timing));
 }
 
 void ServiceWorkerGlobalScope::RespondToFetchEventWithResponseStream(
     int fetch_event_id,
+    const KURL& request_url,
     mojom::blink::FetchAPIResponsePtr response,
     mojom::blink::ServiceWorkerStreamHandlePtr body_as_stream,
     base::TimeTicks event_dispatch_time,
@@ -966,6 +1008,8 @@ void ServiceWorkerGlobalScope::RespondToFetchEventWithResponseStream(
   auto timing = mojom::blink::ServiceWorkerFetchEventTiming::New();
   timing->dispatch_event_time = event_dispatch_time;
   timing->respond_with_settled_time = respond_with_settled_time;
+
+  NoteRespondedToFetchEvent(request_url);
 
   response_callback->OnResponseStream(
       std::move(response), std::move(body_as_stream), std::move(timing));
@@ -1235,23 +1279,6 @@ ServiceWorkerGlobalScope::GetServiceWorkerHost() {
   return service_worker_host_.get();
 }
 
-int ServiceWorkerGlobalScope::WillStartTask() {
-  DCHECK(IsContextThread());
-  DCHECK(timeout_timer_);
-  return timeout_timer_->StartEvent(base::DoNothing());
-}
-
-void ServiceWorkerGlobalScope::DidEndTask(int task_id) {
-  DCHECK(IsContextThread());
-  DCHECK(timeout_timer_);
-  // Check if the task is still alive, since the timeout timer might have
-  // already timed it out (which calls the abort callback passed to StartEvent()
-  // but that does nothing, since we just check HasEvent() here instead of
-  // maintaining our own set of started events).
-  if (timeout_timer_->HasEvent(task_id))
-    timeout_timer_->EndEvent(task_id);
-}
-
 void ServiceWorkerGlobalScope::OnIdleTimeout() {
   DCHECK(IsContextThread());
   // RequestedTermination() returns true if ServiceWorkerTimeoutTimer agrees
@@ -1379,6 +1406,8 @@ void ServiceWorkerGlobalScope::DispatchFetchEventInternal(
     pending_preload_fetch_events_.insert(event_id, fetch_event);
   }
 
+  NoteNewFetchEvent(request->url());
+
   DispatchExtendableEventWithRespondWith(fetch_event, wait_until_observer,
                                          respond_with_observer);
 }
@@ -1386,11 +1415,8 @@ void ServiceWorkerGlobalScope::DispatchFetchEventInternal(
 void ServiceWorkerGlobalScope::SetFetchHandlerExistence(
     FetchHandlerExistence fetch_handler_existence) {
   DCHECK(IsContextThread());
-  if (fetch_handler_existence == FetchHandlerExistence::EXISTS &&
-      base::FeatureList::IsEnabled(
-          features::kServiceWorkerIsolateInForeground)) {
+  if (fetch_handler_existence == FetchHandlerExistence::EXISTS)
     GetThread()->GetIsolate()->IsolateInForegroundNotification();
-  }
 }
 
 void ServiceWorkerGlobalScope::DispatchFetchEventForSubresource(
@@ -1426,8 +1452,10 @@ void ServiceWorkerGlobalScope::InitializeGlobalScope(
     mojo::PendingAssociatedRemote<mojom::blink::ServiceWorkerHost>
         service_worker_host,
     mojom::blink::ServiceWorkerRegistrationObjectInfoPtr registration_info,
+    mojom::blink::ServiceWorkerObjectInfoPtr service_worker_info,
     mojom::blink::FetchHandlerExistence fetch_hander_existence) {
   DCHECK(IsContextThread());
+  DCHECK(!global_scope_initialized_);
 
   DCHECK(service_worker_host.is_valid());
   DCHECK(!service_worker_host_);
@@ -1442,9 +1470,34 @@ void ServiceWorkerGlobalScope::InitializeGlobalScope(
   registration_ = MakeGarbageCollected<ServiceWorkerRegistration>(
       GetExecutionContext(), std::move(registration_info));
 
+  // Set ServiceWorkerGlobalScope#serviceWorker.
+  DCHECK_NE(service_worker_info->version_id,
+            mojom::blink::kInvalidServiceWorkerVersionId);
+  DCHECK(service_worker_info->host_remote.is_valid());
+  DCHECK(service_worker_info->receiver.is_valid());
+  service_worker_ = ::blink::ServiceWorker::From(
+      GetExecutionContext(), std::move(service_worker_info));
+
   SetFetchHandlerExistence(fetch_hander_existence);
 
-  ReadyToRunWorkerScript();
+  global_scope_initialized_ = true;
+  if (!pause_evaluation_)
+    ReadyToRunWorkerScript();
+}
+
+void ServiceWorkerGlobalScope::PauseEvaluation() {
+  DCHECK(IsContextThread());
+  DCHECK(!global_scope_initialized_);
+  DCHECK(!pause_evaluation_);
+  pause_evaluation_ = true;
+}
+
+void ServiceWorkerGlobalScope::ResumeEvaluation() {
+  DCHECK(IsContextThread());
+  DCHECK(pause_evaluation_);
+  pause_evaluation_ = false;
+  if (global_scope_initialized_)
+    ReadyToRunWorkerScript();
 }
 
 void ServiceWorkerGlobalScope::DispatchInstallEvent(
@@ -1622,24 +1675,6 @@ void ServiceWorkerGlobalScope::DispatchExtendableMessageEvent(
   TRACE_EVENT_WITH_FLOW0(
       "ServiceWorker",
       "ServiceWorkerGlobalScope::DispatchExtendableMessageEvent",
-      TRACE_ID_WITH_SCOPE(kServiceWorkerGlobalScopeTraceScope,
-                          TRACE_ID_LOCAL(event_id)),
-      TRACE_EVENT_FLAG_FLOW_OUT);
-  DispatchExtendableMessageEventInternal(event_id, std::move(event));
-}
-
-void ServiceWorkerGlobalScope::DispatchExtendableMessageEventWithCustomTimeout(
-    mojom::blink::ExtendableMessageEventPtr event,
-    base::TimeDelta timeout,
-    DispatchExtendableMessageEventCallback callback) {
-  DCHECK(IsContextThread());
-  int event_id = timeout_timer_->StartEventWithCustomTimeout(
-      CreateAbortCallback(&message_event_callbacks_), timeout);
-  message_event_callbacks_.Set(event_id, std::move(callback));
-  TRACE_EVENT_WITH_FLOW0(
-      "ServiceWorker",
-      "ServiceWorkerGlobalScope::"
-      "DispatchExtendableMessageEventWithCustomTimeout",
       TRACE_ID_WITH_SCOPE(kServiceWorkerGlobalScopeTraceScope,
                           TRACE_ID_LOCAL(event_id)),
       TRACE_EVENT_FLAG_FLOW_OUT);
@@ -1893,6 +1928,20 @@ void ServiceWorkerGlobalScope::DispatchPaymentRequestEvent(
   PaymentRequestRespondWithObserver* respond_with_observer =
       PaymentRequestRespondWithObserver::Create(this, event_id,
                                                 wait_until_observer);
+
+  // Update respond_with_observer to check for required information specified in
+  // the event_data during response validation.
+  if (event_data->payment_options) {
+    respond_with_observer->set_should_have_payer_name(
+        event_data->payment_options->request_payer_name);
+    respond_with_observer->set_should_have_payer_email(
+        event_data->payment_options->request_payer_email);
+    respond_with_observer->set_should_have_payer_phone(
+        event_data->payment_options->request_payer_phone);
+    respond_with_observer->set_should_have_shipping_info(
+        event_data->payment_options->request_shipping);
+  }
+
   mojo::PendingRemote<payments::mojom::blink::PaymentHandlerHost>
       payment_handler_host = std::move(event_data->payment_handler_host);
   Event* event = PaymentRequestEvent::Create(
@@ -1907,8 +1956,7 @@ void ServiceWorkerGlobalScope::DispatchPaymentRequestEvent(
 }
 
 void ServiceWorkerGlobalScope::DispatchCookieChangeEvent(
-    const WebCanonicalCookie& cookie,
-    ::network::mojom::CookieChangeCause change_cause,
+    network::mojom::blink::CookieChangeInfoPtr change,
     DispatchCookieChangeEventCallback callback) {
   DCHECK(IsContextThread());
   int event_id = timeout_timer_->StartEvent(
@@ -1925,7 +1973,8 @@ void ServiceWorkerGlobalScope::DispatchCookieChangeEvent(
 
   HeapVector<Member<CookieListItem>> changed;
   HeapVector<Member<CookieListItem>> deleted;
-  CookieChangeEvent::ToEventInfo(cookie, change_cause, changed, deleted);
+  CookieChangeEvent::ToEventInfo(change->cookie, change->cause, changed,
+                                 deleted);
   Event* event = ExtendableCookieChangeEvent::Create(
       event_type_names::kCookiechange, std::move(changed), std::move(deleted),
       observer);
@@ -1980,6 +2029,24 @@ void ServiceWorkerGlobalScope::AddMessageToConsole(
       mojom::ConsoleMessageSource::kOther, level, message,
       SourceLocation::Capture(/* url= */ "", /* line_number= */ 0,
                               /* column_number= */ 0)));
+}
+
+void ServiceWorkerGlobalScope::NoteNewFetchEvent(const KURL& request_url) {
+  auto it = unresponded_fetch_event_counts_.find(request_url);
+  if (it == unresponded_fetch_event_counts_.end()) {
+    unresponded_fetch_event_counts_.insert(request_url, 1);
+  } else {
+    it->value += 1;
+  }
+}
+
+void ServiceWorkerGlobalScope::NoteRespondedToFetchEvent(
+    const KURL& request_url) {
+  auto it = unresponded_fetch_event_counts_.find(request_url);
+  DCHECK_GE(it->value, 1);
+  it->value -= 1;
+  if (it->value == 0)
+    unresponded_fetch_event_counts_.erase(it);
 }
 
 }  // namespace blink

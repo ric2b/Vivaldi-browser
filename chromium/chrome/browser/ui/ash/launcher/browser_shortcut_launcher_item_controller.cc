@@ -129,9 +129,8 @@ bool ShouldRecordLaunchTime(Browser* browser) {
 BrowserShortcutLauncherItemController::BrowserShortcutLauncherItemController(
     ash::ShelfModel* shelf_model)
     : ash::ShelfItemDelegate(ash::ShelfID(extension_misc::kChromeAppId)),
-      shelf_model_(shelf_model),
-      browser_list_observer_(this) {
-  browser_list_observer_.Add(BrowserList::GetInstance());
+      shelf_model_(shelf_model) {
+  BrowserList::AddObserver(this);
   // Tag all open browser windows with the appropriate shelf id property. This
   // associates each window with the shelf item for the active web contents.
   for (auto* browser : *BrowserList::GetInstance()) {
@@ -144,7 +143,9 @@ BrowserShortcutLauncherItemController::BrowserShortcutLauncherItemController(
 }
 
 BrowserShortcutLauncherItemController::
-    ~BrowserShortcutLauncherItemController() {}
+    ~BrowserShortcutLauncherItemController() {
+  BrowserList::RemoveObserver(this);
+}
 
 void BrowserShortcutLauncherItemController::UpdateBrowserItemState() {
   // Determine the new browser's active state and change if necessary.
@@ -216,13 +217,20 @@ void BrowserShortcutLauncherItemController::ItemSelected(
 
   ash::ShelfAction action;
   if (items.size() == 1) {
+    // Single browser, activate or minimize if active.
     action =
         ChromeLauncherController::instance()->ActivateWindowOrMinimizeIfActive(
-            last_browser->window(), true);
-  } else {
-    // Multiple targets, a menu will be shown. No need to activate or minimize
-    // the recently active browser.
+            last_browser->window(), true /* minimize allowed */);
+  } else if (source == ash::LAUNCH_FROM_SHELF) {
+    // Multiple targets, activating from shelf, a menu will be shown.
+    // No need to activate or minimize the recently active browser.
     action = ash::SHELF_ACTION_NONE;
+  } else {
+    // Multiple targets, not activating from shelf, no menu will be shown.
+    // Activate the recently active browser, never minimize.
+    action =
+        ChromeLauncherController::instance()->ActivateWindowOrMinimizeIfActive(
+            last_browser->window(), false /* minimize not allowed */);
   }
   std::move(callback).Run(action, std::move(items));
 }

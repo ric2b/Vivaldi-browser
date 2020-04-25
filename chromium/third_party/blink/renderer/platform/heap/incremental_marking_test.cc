@@ -171,7 +171,7 @@ class ExpectWriteBarrierFires : public IncrementalMarkingScope {
     EXPECT_FALSE(marking_worklist_->IsGlobalEmpty());
     MarkingItem item;
     // All objects watched should be on the marking stack.
-    while (marking_worklist_->Pop(WorklistTaskId::MainThread, &item)) {
+    while (marking_worklist_->Pop(WorklistTaskId::MutatorThread, &item)) {
       // Inspect backing stores to allow specifying objects that are only
       // reachable through a backing store.
       if (!ThreadHeap::IsNormalArenaIndex(
@@ -1444,7 +1444,7 @@ TEST_F(IncrementalMarkingTest, WriteBarrierDuringMixinConstruction) {
   // the process of calling the constructor.
   EXPECT_FALSE(scope.marking_worklist()->IsGlobalEmpty());
   MarkingItem marking_item;
-  while (scope.marking_worklist()->Pop(WorklistTaskId::MainThread,
+  while (scope.marking_worklist()->Pop(WorklistTaskId::MutatorThread,
                                        &marking_item)) {
     HeapObjectHeader* header =
         HeapObjectHeader::FromPayload(marking_item.object);
@@ -1458,8 +1458,8 @@ TEST_F(IncrementalMarkingTest, WriteBarrierDuringMixinConstruction) {
   bool found_mixin_object = false;
   // The same object may be on the marking work list because of expanding
   // and rehashing of the backing store in the registry.
-  while (scope.not_fully_constructed_worklist()->Pop(WorklistTaskId::MainThread,
-                                                     &partial_item)) {
+  while (scope.not_fully_constructed_worklist()->Pop(
+      WorklistTaskId::MutatorThread, &partial_item)) {
     if (object == partial_item)
       found_mixin_object = true;
     HeapObjectHeader* header = HeapObjectHeader::FromPayload(partial_item);
@@ -1481,60 +1481,6 @@ TEST_F(IncrementalMarkingTest, OverrideAfterMixinConstruction) {
 // =============================================================================
 // Tests that execute complete incremental garbage collections. ================
 // =============================================================================
-
-// Test driver for incremental marking. Assumes that no stack handling is
-// required.
-class IncrementalMarkingTestDriver {
- public:
-  explicit IncrementalMarkingTestDriver(ThreadState* thread_state)
-      : thread_state_(thread_state) {}
-  ~IncrementalMarkingTestDriver() {
-    if (thread_state_->IsIncrementalMarking())
-      FinishGC();
-  }
-
-  void Start() {
-    thread_state_->IncrementalMarkingStart(
-        BlinkGC::GCReason::kForcedGCForTesting);
-  }
-
-  bool SingleStep(BlinkGC::StackState stack_state =
-                      BlinkGC::StackState::kNoHeapPointersOnStack) {
-    CHECK(thread_state_->IsIncrementalMarking());
-    if (thread_state_->GetGCState() ==
-        ThreadState::kIncrementalMarkingStepScheduled) {
-      thread_state_->IncrementalMarkingStep(stack_state);
-      return true;
-    }
-    return false;
-  }
-
-  void FinishSteps(BlinkGC::StackState stack_state =
-                       BlinkGC::StackState::kNoHeapPointersOnStack) {
-    CHECK(thread_state_->IsIncrementalMarking());
-    while (SingleStep(stack_state)) {
-    }
-  }
-
-  void FinishGC(bool complete_sweep = true) {
-    CHECK(thread_state_->IsIncrementalMarking());
-    FinishSteps(BlinkGC::StackState::kNoHeapPointersOnStack);
-    CHECK_EQ(ThreadState::kIncrementalMarkingFinalizeScheduled,
-             thread_state_->GetGCState());
-    thread_state_->RunScheduledGC(BlinkGC::StackState::kNoHeapPointersOnStack);
-    CHECK(!thread_state_->IsIncrementalMarking());
-    if (complete_sweep)
-      thread_state_->CompleteSweep();
-  }
-
-  size_t GetHeapCompactLastFixupCount() {
-    HeapCompact* compaction = ThreadState::Current()->Heap().Compaction();
-    return compaction->LastFixupCountForTesting();
-  }
-
- private:
-  ThreadState* const thread_state_;
-};
 
 TEST_F(IncrementalMarkingTest, TestDriver) {
   IncrementalMarkingTestDriver driver(ThreadState::Current());
@@ -1860,7 +1806,8 @@ TEST_F(IncrementalMarkingTest,
   driver.FinishSteps();
   // GCs here are without stack. This is just to show that we don't want this
   // object marked.
-  CHECK(!HeapObjectHeader::FromPayload(nested)->IsMarked());
+  CHECK(!HeapObjectHeader::FromPayload(nested)
+             ->IsMarked<HeapObjectHeader::AccessMode::kAtomic>());
   nested = nullptr;
   driver.FinishGC();
 }
@@ -1892,7 +1839,8 @@ TEST_F(IncrementalMarkingTest, AdjustMarkedBytesOnMarkedBackingStore) {
   driver.Start();
   driver.FinishSteps();
   // The object is marked at this point.
-  CHECK(HeapObjectHeader::FromPayload(holder.Get())->IsMarked());
+  CHECK(HeapObjectHeader::FromPayload(holder.Get())
+            ->IsMarked<HeapObjectHeader::AccessMode::kAtomic>());
   driver.FinishGC(false);
   // The object is still marked as sweeping did not make any progress.
   CHECK(HeapObjectHeader::FromPayload(holder.Get())->IsMarked());
@@ -1930,7 +1878,7 @@ TEST_F(IncrementalMarkingTest, HeapCompactWithStaleSlotInNestedContainer) {
   driver.FinishGC();
 }
 
-class Destructed : public GarbageCollectedFinalized<Destructed> {
+class Destructed final : public GarbageCollected<Destructed> {
  public:
   ~Destructed() { n_destructed++; }
 
@@ -1941,7 +1889,7 @@ class Destructed : public GarbageCollectedFinalized<Destructed> {
 
 size_t Destructed::n_destructed = 0;
 
-class Wrapper : public GarbageCollectedFinalized<Wrapper> {
+class Wrapper final : public GarbageCollected<Wrapper> {
  public:
   using HashType = HeapLinkedHashSet<Member<Destructed>>;
 

@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.tab;
 
 import org.chromium.base.UserData;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
@@ -115,7 +116,7 @@ public class InterceptNavigationDelegateImpl implements InterceptNavigationDeleg
             setExternalNavigationHandler(
                     mTab.getDelegateFactory().createExternalNavigationHandler(mTab));
         }
-        nativeAssociateWithWebContents(this, mWebContents);
+        InterceptNavigationDelegateImplJni.get().associateWithWebContents(this, mWebContents);
     }
 
     public boolean shouldIgnoreNewTab(String url, boolean incognito) {
@@ -162,7 +163,7 @@ public class InterceptNavigationDelegateImpl implements InterceptNavigationDeleg
             // not covering the case where a gesture is carried over via a redirect.  This is
             // currently not feasible because we do not see all navigations for iframes and it is
             // better to error on the side of caution and require direct user gestures for iframes.
-            tabRedirectHandler = TabRedirectHandler.create(associatedActivity);
+            tabRedirectHandler = TabRedirectHandler.create();
         } else {
             assert false;
             return false;
@@ -238,14 +239,7 @@ public class InterceptNavigationDelegateImpl implements InterceptNavigationDeleg
     public void maybeUpdateNavigationHistory() {
         WebContents webContents = mTab.getWebContents();
         if (mClearAllForwardHistoryRequired && webContents != null) {
-            NavigationController navigationController =
-                    webContents.getNavigationController();
-            int lastCommittedEntryIndex = getLastCommittedEntryIndex();
-            while (navigationController.canGoForward()) {
-                boolean ret = navigationController.removeEntryAtIndex(
-                        lastCommittedEntryIndex + 1);
-                assert ret;
-            }
+            webContents.getNavigationController().pruneForwardEntries();
         } else if (mShouldClearRedirectHistoryForTabClobbering
                 && webContents != null) {
             // http://crbug/479056: Even if we clobber the current tab, we want to remove
@@ -346,7 +340,10 @@ public class InterceptNavigationDelegateImpl implements InterceptNavigationDeleg
         tab.getUserDataHost().setUserData(USER_DATA_KEY, delegate);
     }
 
-    private static native void nativeAssociateWithWebContents(
-            InterceptNavigationDelegateImpl nativeInterceptNavigationDelegateImpl,
-            WebContents webContents);
+    @NativeMethods
+    interface Natives {
+        void associateWithWebContents(
+                InterceptNavigationDelegateImpl nativeInterceptNavigationDelegateImpl,
+                WebContents webContents);
+    }
 }

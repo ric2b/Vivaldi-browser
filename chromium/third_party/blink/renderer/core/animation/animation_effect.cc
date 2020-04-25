@@ -76,8 +76,11 @@ void AnimationEffect::updateTiming(OptionalEffectTiming* optional_timing,
 
 void AnimationEffect::UpdateInheritedTime(double inherited_time,
                                           TimingUpdateReason reason) const {
+  base::Optional<double> playback_rate = base::nullopt;
+  if (GetAnimation())
+    playback_rate = GetAnimation()->playbackRate();
   const Timing::AnimationDirection direction =
-      (GetAnimation() && GetAnimation()->playbackRate() < 0)
+      (playback_rate && playback_rate.value() < 0)
           ? Timing::AnimationDirection::kBackwards
           : Timing::AnimationDirection::kForwards;
   bool needs_update =
@@ -91,22 +94,16 @@ void AnimationEffect::UpdateInheritedTime(double inherited_time,
   const double local_time = inherited_time;
   if (needs_update) {
     Timing::CalculatedTiming calculated = SpecifiedTiming().CalculateTimings(
-        local_time, direction, IsKeyframeEffect());
+        local_time, direction, IsKeyframeEffect(), playback_rate);
 
     const bool was_canceled = calculated.phase != calculated_.phase &&
                               calculated.phase == Timing::kPhaseNone;
 
     // If the animation was canceled, we need to fire the event condition before
-    // updating the timing so that the cancelation time can be determined.
+    // updating the calculated timing so that the cancellation time can be
+    // determined.
     if (was_canceled && event_delegate_) {
-      // TODO(jortaylo): OnEventCondition uses the new phase but the old current
-      // iterations. That is why we partially update *calculated_* here with the
-      // new phase. This pseudo state can be very confusing. It may be either a
-      // bug or required but at the very least instead of partially updating
-      // *calculated_* we should pass in current phase and the old "current
-      // iterations" more explicitly. https://crbug.com/994850
-      calculated_.phase = calculated.phase;
-      event_delegate_->OnEventCondition(*this);
+      event_delegate_->OnEventCondition(*this, calculated.phase);
     }
 
     calculated_ = calculated;
@@ -119,7 +116,7 @@ void AnimationEffect::UpdateInheritedTime(double inherited_time,
   if (reason == kTimingUpdateForAnimationFrame &&
       (!owner_ || owner_->IsEventDispatchAllowed())) {
     if (event_delegate_)
-      event_delegate_->OnEventCondition(*this);
+      event_delegate_->OnEventCondition(*this, calculated_.phase);
   }
 
   if (needs_update) {

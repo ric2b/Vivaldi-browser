@@ -8,20 +8,28 @@
 		body {
 			font-family: Arial;
 			font-size: 13px;
+			color: #333;
+			background: white;
+			margin-left: 24px;
+			margin-right: 24px;
+			max-width: 840px;
 		}
-
 		pre {
 			margin-top: 2em;
 			margin-bottom: 2em;
-			width: 90%;
 		}
-
-
 		ol {
 			margin-top: 2em;
 			margin-bottom: 2em;
-			width: 90%;
 		}
+		@media (prefers-color-scheme: dark) {
+		  html, body {
+		  	background: #232323;
+		  	color: #ccc;
+		}
+		  a:-webkit-any-link {
+    	color: white;
+  	}
 	</style>
 </head>
 

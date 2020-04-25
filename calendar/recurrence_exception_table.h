@@ -34,7 +34,7 @@ class RecurrrenceExceptionTable {
 
   bool CreateRecurringExceptionTable();
 
-  RecurrenceID CreateRecurrenceException(RecurrenceExceptionRow ev);
+  RecurrenceExceptionID CreateRecurrenceException(RecurrenceExceptionRow ev);
   bool GetAllRecurrenceExceptions(RecurrenceExceptionRows* recurrences);
 
   bool UpdateRecurrenceExceptionRow(const RecurrenceExceptionRow& exception_id);

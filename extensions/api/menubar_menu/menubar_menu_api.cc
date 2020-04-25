@@ -3,6 +3,7 @@
 //
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
 
+#include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/web_contents.h"

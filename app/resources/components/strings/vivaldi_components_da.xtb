@@ -1,4 +1,36 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="da">
+<translation id="3830627370375585318">Tillad, at Vivaldi får adgang til netværket i dine indstillinger for firewall eller
+       antivirus.</translation>
+<translation id="4200102020577305737">Gå til
+          Vivaldi-menuen &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          LAN-indstillinger,
+          og fjern markeringen af "Brug en proxyserver til LAN".</translation>
+<translation id="4932161901409251843">Gå til
+          Vivaldi-menuen &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />,
+          og kontrollér, at din konfiguration er indstillet til "ingen proxy" eller "direkte".</translation>
+<translation id="5248344925342018662">Du ser en sikker Vivaldi-side</translation>
+<translation id="7023871570427738255">Gå til
+        Vivaldi-menuen &gt;
+        <ph name="SETTINGS_TITLE" />
+        &gt;
+        <ph name="ADVANCED_TITLE" />,
+        og fjern markeringen af "<ph name="NO_PREFETCH_DESCRIPTION" />".
+        Hvis dette ikke løser problemet, bør du markere dette afkrydsningsfelt
+        igen for at forbedre effektiviteten.</translation>
+<translation id="8187289872471304532">Gå til
+          Applikationer &gt; Systemindstillinger &gt; Netværk &gt; Avanceret &gt; Proxyer,
+          og fjern markeringen af alle valgte proxyer.</translation>
 </translationbundle>

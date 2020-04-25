@@ -34,10 +34,16 @@ namespace content {
 // the bug is understood and fixed.
 #define MAYBE_ManipulatePan DISABLED_ManipulatePan
 #define MAYBE_ManipulateZoom DISABLED_ManipulateZoom
-#define MAYBE_ManipulateExposureTime DISABLED_ManipulateExposureTime
 #else
 #define MAYBE_ManipulatePan ManipulatePan
 #define MAYBE_ManipulateZoom ManipulateZoom
+#endif
+
+// TODO(crbug.com/793859, crbug.com/986602): This test is broken on Android
+// (see above) and flaky on Linux.
+#if defined(OS_ANDROID) || defined(OS_LINUX)
+#define MAYBE_ManipulateExposureTime DISABLED_ManipulateExposureTime
+#else
 #define MAYBE_ManipulateExposureTime ManipulateExposureTime
 #endif
 
@@ -213,8 +219,14 @@ IN_PROC_BROWSER_TEST_P(WebRtcImageCaptureSucceedsBrowserTest, GrabFrame) {
   ASSERT_TRUE(RunImageCaptureTestCase("testCreateAndGrabFrameSucceeds()"));
 }
 
+// Flaky. crbug.com/998116
+#if defined(OS_LINUX)
+#define MAYBE_GetTrackCapabilities DISABLED_GetTrackCapabilities
+#else
+#define MAYBE_GetTrackCapabilities GetTrackCapabilities
+#endif
 IN_PROC_BROWSER_TEST_P(WebRtcImageCaptureSucceedsBrowserTest,
-                       GetTrackCapabilities) {
+                       MAYBE_GetTrackCapabilities) {
   embedded_test_server()->StartAcceptingConnections();
   ASSERT_TRUE(RunImageCaptureTestCase("testCreateAndGetTrackCapabilities()"));
 }

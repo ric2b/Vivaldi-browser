@@ -191,6 +191,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   void DidHandleInputEventOnMainThread(const WebInputEvent& web_input_event,
                                        WebInputEventResult result) override;
   void DidAnimateForInputOnCompositorThread() override;
+  void DidScheduleBeginMainFrame() override;
+  void DidRunBeginMainFrame() override;
   void SetRendererHidden(bool hidden) override;
   void SetRendererBackgrounded(bool backgrounded) override;
   void SetSchedulerKeepActive(bool keep_active) override;
@@ -217,6 +219,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       const char* name,
       WebScopedVirtualTimePauser::VirtualTaskDuration duration) override;
   PendingUserInputInfo GetPendingUserInputInfo() const override;
+  bool IsBeginMainFrameScheduled() const override;
 
   // ThreadScheduler implementation:
   void PostIdleTask(const base::Location&, Thread::IdleTask) override;
@@ -422,6 +425,10 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   bool should_prioritize_loading_with_compositing() const {
     return main_thread_only()
         .current_policy.should_prioritize_loading_with_compositing();
+  }
+
+  bool main_thread_compositing_is_fast() const {
+    return main_thread_only().main_thread_compositing_is_fast;
   }
 
  protected:
@@ -739,6 +746,11 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   // trigger a priority update.
   bool ShouldUpdateTaskQueuePriorities(Policy new_policy) const;
 
+  // Computes the priority for compositing based on the current use case.
+  // Returns nullopt if the use case does not need to set the priority.
+  base::Optional<TaskQueue::QueuePriority>
+  ComputeCompositorPriorityFromUseCase() const;
+
   static void RunIdleTask(Thread::IdleTask, base::TimeTicks deadline);
 
   // Probabilistically record all task metadata for the current task.
@@ -932,6 +944,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
     // Compositing priority experiments (crbug.com/966177).
     CompositorPriorityExperiments compositor_priority_experiments;
+
+    bool main_thread_compositing_is_fast;
   };
 
   struct AnyThread {
@@ -958,6 +972,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
         waiting_for_meaningful_paint;
     TraceableState<bool, TracingCategoryName::kInfo>
         have_seen_input_since_navigation;
+    TraceableCounter<uint32_t, TracingCategoryName::kInfo>
+        begin_main_frame_scheduled_count;
   };
 
   struct CompositorThreadOnly {

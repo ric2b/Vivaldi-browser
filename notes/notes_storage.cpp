@@ -66,7 +66,7 @@ void LoadCallback(const base::FilePath& path,
     }
   }
 
-  base::PostTaskWithTraits(FROM_HERE, { BrowserThread::UI },
+  base::PostTask(FROM_HERE, {BrowserThread::UI},
                           base::Bind(&NotesStorage::OnLoadFinished, storage,
                                      base::Passed(&details)));
 }

@@ -16,6 +16,7 @@
 #include "chrome/browser/web_applications/components/install_manager.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_url_loader.h"
+#include "chrome/browser/web_applications/web_app_sync_install_delegate.h"
 
 class Profile;
 
@@ -29,7 +30,8 @@ enum class InstallResultCode;
 class WebAppDataRetriever;
 class WebAppInstallTask;
 
-class WebAppInstallManager final : public InstallManager {
+class WebAppInstallManager final : public InstallManager,
+                                   public SyncInstallDelegate {
  public:
   explicit WebAppInstallManager(Profile* profile);
   ~WebAppInstallManager() override;
@@ -55,14 +57,20 @@ class WebAppInstallManager final : public InstallManager {
                                const InstallParams& install_params,
                                WebappInstallSource install_source,
                                OnceInstallCallback callback) override;
-  void InstallOrUpdateWebAppFromSync(
+  void InstallWebAppFromSync(
       const AppId& app_id,
       std::unique_ptr<WebApplicationInfo> web_application_info,
       OnceInstallCallback callback) override;
-  void UpdateWebAppFromManifest(const AppId& app_id,
-                                blink::Manifest manifest,
-                                OnceInstallCallback callback) override;
+  void UpdateWebAppFromInfo(
+      const AppId& app_id,
+      std::unique_ptr<WebApplicationInfo> web_application_info,
+      OnceInstallCallback callback) override;
   void Shutdown() override;
+
+  // For the new USS-based system only. SyncInstallDelegate:
+  void InstallWebAppsAfterSync(std::vector<WebApp*> web_apps) override;
+  void UninstallWebAppsAfterSync(
+      std::vector<std::unique_ptr<WebApp>> web_apps) override;
 
   using DataRetrieverFactory =
       base::RepeatingCallback<std::unique_ptr<WebAppDataRetriever>()>;
@@ -73,6 +81,8 @@ class WebAppInstallManager final : public InstallManager {
   bool has_web_contents_for_testing() const { return web_contents_ != nullptr; }
 
  private:
+  void EnqueueTask(std::unique_ptr<WebAppInstallTask> task,
+                   base::OnceClosure start_task);
   void MaybeStartQueuedTask();
   void OnTaskCompleted(WebAppInstallTask* task,
                        OnceInstallCallback callback,
@@ -83,7 +93,7 @@ class WebAppInstallManager final : public InstallManager {
                              const AppId& app_id,
                              InstallResultCode code);
 
-  void CreateWebContentsIfNecessary();
+  content::WebContents* EnsureWebContentsCreated();
   void OnWebContentsReady(WebAppUrlLoader::Result result);
 
   DataRetrieverFactory data_retriever_factory_;

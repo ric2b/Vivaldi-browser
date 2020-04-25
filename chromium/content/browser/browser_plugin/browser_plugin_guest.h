@@ -76,7 +76,6 @@ class RenderWidgetHostImpl;
 class RenderWidgetHostView;
 class RenderWidgetHostViewBase;
 class SiteInstance;
-class WebContentsView;
 struct DropData;
 struct FrameVisualProperties;
 struct ScreenInfo;
@@ -165,9 +164,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // Returns the current rect used by the guest to render.
   const gfx::Rect& frame_rect() const { return frame_rect_; }
 
-  // Set the instance id.
-  void SetInstanceId(int instance_id);
-
   bool OnMessageReceivedFromEmbedder(const IPC::Message& message);
 
   WebContentsImpl* embedder_web_contents() const {
@@ -210,8 +206,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   void DidFinishNavigation(NavigationHandle* navigation_handle) override;
 
   void RenderViewReady() override;
-  void RenderViewDeleted(RenderViewHost* render_view_host) override;
-
   void RenderProcessGone(base::TerminationStatus status) override;
   bool OnMessageReceived(const IPC::Message& message) override;
   bool OnMessageReceived(const IPC::Message& message,
@@ -273,17 +267,14 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   gfx::Point GetCoordinatesInEmbedderWebContents(
       const gfx::Point& relative_point);
 
-  // Vivaldi: We need to change the delegate when we use the content from the
+  // Vivaldi
+  void RenderViewDeleted(RenderViewHost* render_view_host) override;
+
+  // We need to change the delegate when we use the content from the
   // tab-strip.
   void set_delegate(BrowserPluginGuestDelegate* delegate) {
     delegate_ = delegate;
   }
-
-  bool HasDelegate() {
-    return delegate_ != NULL;
-  }
-
-  gfx::Rect frame_rect(){return frame_rect_;}
 
  protected:
 

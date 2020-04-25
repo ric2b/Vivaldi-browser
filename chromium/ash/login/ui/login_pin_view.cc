@@ -9,14 +9,15 @@
 #include "ash/login/ui/login_button.h"
 #include "ash/public/cpp/ash_constants.h"
 #include "ash/public/cpp/login_constants.h"
+#include "ash/public/cpp/shelf_config.h"
 #include "ash/resources/vector_icons/vector_icons.h"
-#include "ash/shelf/shelf_constants.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -60,13 +61,11 @@ constexpr int kInitialBackspaceDelayMs = 500;
 constexpr int kRepeatingBackspaceDelayMs = 150;
 
 // Size of the md-ripple when a PIN button is tapped.
-constexpr int kRippleSizeDp = 54;
+constexpr int kRippleSizeDp = 48;
 
-// Button sizes. Button height varies per keyboard style, while button width is
-// the same for both styles.
-constexpr int kAlphanumericButtonHeightDp = 78;
-constexpr int kNumericButtonHeightDp = 70;
-constexpr int kButtonWidthDp = 78;
+// Button sizes.
+constexpr int kButtonHeightDp = 56;
+constexpr int kButtonWidthDp = 72;
 
 base::string16 GetButtonLabelForNumber(int value) {
   DCHECK(value >= 0 && value < int{base::size(kPinLabels)});
@@ -108,7 +107,7 @@ class BasePinButton : public views::InkDropHostView {
     SetInkDropMode(InkDropMode::ON_NO_GESTURE_HANDLER);
 
     focus_ring_ = views::FocusRing::Install(this);
-    focus_ring_->SetColor(kShelfFocusBorderColor);
+    focus_ring_->SetColor(ShelfConfig::Get()->shelf_focus_border_color());
   }
 
   ~BasePinButton() override = default;
@@ -398,9 +397,7 @@ class LoginPinView::BackButton : public BasePinButton {
 
 // static
 gfx::Size LoginPinView::TestApi::GetButtonSize(Style style) {
-  return gfx::Size(kButtonWidthDp, style == Style::kNumeric
-                                       ? kNumericButtonHeightDp
-                                       : kAlphanumericButtonHeightDp);
+  return gfx::Size(kButtonWidthDp, kButtonHeightDp);
 }
 
 LoginPinView::TestApi::TestApi(LoginPinView* view) : view_(view) {}
@@ -453,9 +450,7 @@ LoginPinView::LoginPinView(Style keyboard_style,
       views::BoxLayout::Orientation::kVertical));
 
   bool show_letters = keyboard_style == Style::kAlphanumeric;
-  const gfx::Size button_size =
-      gfx::Size(kButtonWidthDp, show_letters ? kAlphanumericButtonHeightDp
-                                             : kNumericButtonHeightDp);
+  const gfx::Size button_size = gfx::Size(kButtonWidthDp, kButtonHeightDp);
 
   auto add_digit_button = [&](View* row, int value) {
     row->AddChildView(

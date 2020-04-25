@@ -81,8 +81,7 @@ class PerfettoTracingSession
 #if !defined(OS_ANDROID)
     // TODO(crbug.com/941318): Re-enable startup tracing for Android once all
     // Perfetto-related deadlocks are resolved.
-    if (!TracingControllerImpl::GetInstance()->IsTracing() &&
-        tracing::TracingUsesPerfettoBackend()) {
+    if (!TracingControllerImpl::GetInstance()->IsTracing()) {
       tracing::TraceEventDataSource::GetInstance()->SetupStartupTracing(
           /*privacy_filtering_enabled=*/true);
     }
@@ -96,8 +95,9 @@ class PerfettoTracingSession
     perfetto_config.mutable_incremental_state_config()->set_clear_period_ms(
         interning_reset_interval_ms);
 
-    tracing::mojom::TracingSessionClientPtr tracing_session_client;
-    binding_.Bind(mojo::MakeRequest(&tracing_session_client));
+    mojo::PendingRemote<tracing::mojom::TracingSessionClient>
+        tracing_session_client;
+    binding_.Bind(tracing_session_client.InitWithNewPipeAndPassReceiver());
     binding_.set_connection_error_handler(
         base::BindOnce(&PerfettoTracingSession::OnTracingSessionEnded,
                        base::Unretained(this)));
@@ -196,8 +196,7 @@ class LegacyTracingSession
 #if !defined(OS_ANDROID)
     // TODO(crbug.com/941318): Re-enable startup tracing for Android once all
     // Perfetto-related deadlocks are resolved.
-    if (!TracingControllerImpl::GetInstance()->IsTracing() &&
-        tracing::TracingUsesPerfettoBackend()) {
+    if (!TracingControllerImpl::GetInstance()->IsTracing()) {
       tracing::TraceEventDataSource::GetInstance()->SetupStartupTracing(
           /*privacy_filtering_enabled=*/false);
     }
@@ -226,8 +225,7 @@ class LegacyTracingSession
       TracingControllerImpl::GetInstance()->StopTracing(
           TracingControllerImpl::CreateCallbackEndpoint(base::BindRepeating(
               [](const base::RepeatingClosure& on_failure,
-                 std::unique_ptr<const base::DictionaryValue>,
-                 base::RefCountedString*) { on_failure.Run(); },
+                 std::unique_ptr<std::string>) { on_failure.Run(); },
               std::move(on_failure))));
       return;
     }
@@ -237,18 +235,18 @@ class LegacyTracingSession
             TracingControllerImpl::CreateCallbackEndpoint(base::BindRepeating(
                 [](base::WeakPtr<BackgroundTracingActiveScenario> weak_this,
                    const base::RepeatingClosure& on_success,
-                   std::unique_ptr<const base::DictionaryValue> metadata,
-                   base::RefCountedString* file_contents) {
+                   std::unique_ptr<std::string> file_contents) {
                   on_success.Run();
                   if (weak_this) {
-                    weak_this->OnJSONDataComplete(std::move(metadata),
-                                                  file_contents);
+                    weak_this->OnJSONDataComplete(std::move(file_contents));
                   }
                 },
                 parent_scenario_->GetWeakPtr(), std::move(on_success))),
             true /* compress_with_background_priority */);
 
-    TracingControllerImpl::GetInstance()->StopTracing(trace_data_endpoint);
+    TracingControllerImpl::GetInstance()->StopTracing(
+        trace_data_endpoint, "",
+        parent_scenario_->GetConfig()->requires_anonymized_data());
   }
 
   void AbortScenario(const base::RepeatingClosure& on_abort_callback) override {
@@ -256,8 +254,7 @@ class LegacyTracingSession
       TracingControllerImpl::GetInstance()->StopTracing(
           TracingControllerImpl::CreateCallbackEndpoint(base::BindRepeating(
               [](const base::RepeatingClosure& on_abort_callback,
-                 std::unique_ptr<const base::DictionaryValue>,
-                 base::RefCountedString*) { on_abort_callback.Run(); },
+                 std::unique_ptr<std::string>) { on_abort_callback.Run(); },
               std::move(on_abort_callback))));
     } else {
       on_abort_callback.Run();
@@ -356,7 +353,20 @@ bool BackgroundTracingActiveScenario::StartTracing() {
   uint8_t modes = base::trace_event::TraceLog::RECORDING_MODE;
   if (!chrome_config.event_filters().empty())
     modes |= base::trace_event::TraceLog::FILTERING_MODE;
-  base::trace_event::TraceLog::GetInstance()->SetEnabled(chrome_config, modes);
+
+// TODO(crbug.com/941318): Re-enable startup tracing for Perfetto backend on
+// Android once all Perfetto-related deadlocks are resolved.
+#if !defined(OS_ANDROID)
+  TraceConfig chrome_config_for_trace_log(chrome_config);
+  // Perfetto backend configures buffer sizes when tracing is started in the
+  // service (see perfetto_config.cc). Zero them out here for TraceLog to avoid
+  // DCHECKs in TraceConfig::Merge.
+  chrome_config_for_trace_log.SetTraceBufferSizeInKb(0);
+  chrome_config_for_trace_log.SetTraceBufferSizeInEvents(0);
+
+  base::trace_event::TraceLog::GetInstance()->SetEnabled(
+      chrome_config_for_trace_log, modes);
+#endif  // !defined(OS_ANDROID)
 
   DCHECK(!tracing_session_);
   if (base::FeatureList::IsEnabled(features::kBackgroundTracingProtoOutput)) {
@@ -418,8 +428,7 @@ void BackgroundTracingActiveScenario::BeginFinalizing(
 }
 
 void BackgroundTracingActiveScenario::OnJSONDataComplete(
-    std::unique_ptr<const base::DictionaryValue> metadata,
-    base::RefCountedString* file_contents) {
+    std::unique_ptr<std::string> file_contents) {
   BackgroundTracingManagerImpl::RecordMetric(Metrics::FINALIZATION_STARTED);
   UMA_HISTOGRAM_MEMORY_KB("Tracing.Background.FinalizingTraceSizeInKB",
                           file_contents->size() / 1024);
@@ -428,7 +437,7 @@ void BackgroundTracingActiveScenario::OnJSONDataComplete(
   // callback.
   if (!receive_callback_.is_null()) {
     receive_callback_.Run(
-        file_contents, std::move(metadata),
+        std::move(file_contents),
         base::BindOnce(&BackgroundTracingActiveScenario::OnFinalizeComplete,
                        weak_ptr_factory_.GetWeakPtr()));
   }

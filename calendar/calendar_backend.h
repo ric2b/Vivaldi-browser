@@ -59,9 +59,9 @@ class CalendarBackend
    public:
     virtual ~CalendarDelegate() {}
 
-    virtual void NotifyEventCreated(const EventRow& row) = 0;
-    virtual void NotifyEventModified(const EventRow& row) = 0;
-    virtual void NotifyEventDeleted(const EventRow& row) = 0;
+    virtual void NotifyEventCreated(const EventResult& event) = 0;
+    virtual void NotifyEventModified(const EventResult& event) = 0;
+    virtual void NotifyEventDeleted(const EventResult& event) = 0;
 
     virtual void NotifyCalendarCreated(const CalendarRow& row) = 0;
     virtual void NotifyCalendarModified(const CalendarRow& row) = 0;
@@ -136,10 +136,11 @@ class CalendarBackend
   void CreateRecurrenceException(
       RecurrenceExceptionRow row,
       std::shared_ptr<CreateRecurrenceExceptionResult> result);
+  EventResult FillEvent(EventID id);
 
-  void NotifyEventCreated(const EventRow& row) override;
-  void NotifyEventModified(const EventRow& row) override;
-  void NotifyEventDeleted(const EventRow& row) override;
+  void NotifyEventCreated(const EventResult& event) override;
+  void NotifyEventModified(const EventResult& event) override;
+  void NotifyEventDeleted(const EventResult& event) override;
 
   void NotifyCalendarCreated(const CalendarRow& row) override;
   void NotifyCalendarModified(const CalendarRow& row) override;

@@ -20,12 +20,14 @@
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
 #include "chrome/browser/safe_browsing/download_protection/binary_upload_service.h"
+#include "chrome/browser/safe_browsing/download_protection/check_client_download_request_base.h"
 #include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_item_request.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/common/safe_browsing/download_type_util.h"
 #include "chrome/common/safe_browsing/file_type_policies.h"
+#include "components/policy/core/browser/url_util.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
@@ -33,6 +35,7 @@
 #include "components/safe_browsing/features.h"
 #include "components/safe_browsing/proto/csd.pb.h"
 #include "components/safe_browsing/proto/webprotect.pb.h"
+#include "components/url_matcher/url_matcher.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/download_item_utils.h"
 
@@ -59,16 +62,47 @@ std::string MalwareVerdictToThreatType(
   }
 }
 
-void MaybeReportDownloadDeepScanningVerdict(
-    Profile* profile,
-    const GURL& url,
-    const std::string& file_name,
-    const std::string& download_digest_sha256,
-    BinaryUploadService::Result result,
-    DeepScanningClientResponse response) {
+void DeepScanningClientResponseToDownloadCheckResult(
+    const DeepScanningClientResponse& response,
+    DownloadCheckResult* download_result,
+    DownloadCheckResultReason* download_reason) {
+  if (response.has_malware_scan_verdict() &&
+      response.malware_scan_verdict().verdict() ==
+          MalwareDeepScanningVerdict::MALWARE) {
+    *download_result = DownloadCheckResult::DANGEROUS;
+    *download_reason = DownloadCheckResultReason::REASON_DOWNLOAD_DANGEROUS;
+    return;
+  }
+
+  if (response.has_malware_scan_verdict() &&
+      response.malware_scan_verdict().verdict() ==
+          MalwareDeepScanningVerdict::UWS) {
+    *download_result = DownloadCheckResult::POTENTIALLY_UNWANTED;
+    *download_reason =
+        DownloadCheckResultReason::REASON_DOWNLOAD_POTENTIALLY_UNWANTED;
+    return;
+  }
+
+  // TODO(drubery): Handle DLP violations here as well.
+  *download_result = DownloadCheckResult::SAFE;
+  *download_reason = DownloadCheckResultReason::REASON_DOWNLOAD_SAFE;
+}
+
+}  // namespace
+
+void MaybeReportDeepScanningVerdict(Profile* profile,
+                                    const GURL& url,
+                                    const std::string& file_name,
+                                    const std::string& download_digest_sha256,
+                                    const std::string& mime_type,
+                                    const std::string& trigger,
+                                    const int64_t content_size,
+                                    BinaryUploadService::Result result,
+                                    DeepScanningClientResponse response) {
   if (result == BinaryUploadService::Result::FILE_TOO_LARGE) {
     extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
-        ->OnLargeUnscannedFileEvent(url, file_name, download_digest_sha256);
+        ->OnLargeUnscannedFileEvent(url, file_name, download_digest_sha256,
+                                    mime_type, trigger, content_size);
   }
 
   if (result != BinaryUploadService::Result::SUCCESS)
@@ -82,23 +116,23 @@ void MaybeReportDownloadDeepScanningVerdict(
         ->OnDangerousDeepScanningResult(
             url, file_name, download_digest_sha256,
             MalwareVerdictToThreatType(
-                response.malware_scan_verdict().verdict()));
+                response.malware_scan_verdict().verdict()),
+            mime_type, trigger, content_size);
   }
 
   if (response.dlp_scan_verdict().status() == DlpDeepScanningVerdict::SUCCESS) {
     if (!response.dlp_scan_verdict().triggered_rules().empty()) {
       extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
           ->OnSensitiveDataEvent(response.dlp_scan_verdict(), url, file_name,
-                                 download_digest_sha256);
+                                 download_digest_sha256, mime_type, trigger,
+                                 content_size);
     }
   }
 }
 
-}  // namespace
-
 CheckClientDownloadRequest::CheckClientDownloadRequest(
     download::DownloadItem* item,
-    CheckDownloadCallback callback,
+    CheckDownloadRepeatingCallback callback,
     DownloadProtectionService* service,
     scoped_refptr<SafeBrowsingDatabaseManager> database_manager,
     scoped_refptr<BinaryFeatureExtractor> binary_feature_extractor)
@@ -107,12 +141,14 @@ CheckClientDownloadRequest::CheckClientDownloadRequest(
           item->GetTargetFilePath(),
           item->GetFullPath(),
           {item->GetTabUrl(), item->GetTabReferrerUrl()},
+          item->GetReceivedBytes(),
           content::DownloadItemUtils::GetBrowserContext(item),
-          std::move(callback),
+          callback,
           service,
           std::move(database_manager),
           std::move(binary_feature_extractor)),
-      item_(item) {
+      item_(item),
+      callback_(callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   item_->AddObserver(this);
   DVLOG(2) << "Starting SafeBrowsing download check for: "
@@ -245,43 +281,58 @@ void CheckClientDownloadRequest::MaybeStorePingsForDownload(
       result, upload_requested, item_, request_data, response_body);
 }
 
-void CheckClientDownloadRequest::MaybeUploadBinary(
+bool CheckClientDownloadRequest::ShouldReturnAsynchronousVerdict(
+    DownloadCheckResultReason reason) {
+  return ShouldUploadBinary(reason) && ShouldDelayVerdicts();
+}
+
+bool CheckClientDownloadRequest::ShouldDelayVerdicts() {
+  int delay_delivery = g_browser_process->local_state()->GetInteger(
+      prefs::kDelayDeliveryUntilVerdict);
+  return (delay_delivery == DELAY_DOWNLOADS ||
+          delay_delivery == DELAY_UPLOADS_AND_DOWNLOADS);
+}
+
+bool CheckClientDownloadRequest::ShouldUploadBinary(
     DownloadCheckResultReason reason) {
   bool upload_for_dlp = ShouldUploadForDlpScan();
   bool upload_for_malware = ShouldUploadForMalwareScan(reason);
-  if (upload_for_dlp || upload_for_malware) {
-    Profile* profile = Profile::FromBrowserContext(GetBrowserContext());
-    if (!profile)
-      return;
+  if (!upload_for_dlp && !upload_for_malware)
+    return false;
 
-    auto request = std::make_unique<DownloadItemRequest>(
-        item_,
-        base::BindOnce(
-            &MaybeReportDownloadDeepScanningVerdict, profile, item_->GetURL(),
-            item_->GetTargetFilePath().AsUTF8Unsafe(),
-            base::HexEncode(item_->GetHash().data(), item_->GetHash().size())));
+  return !!Profile::FromBrowserContext(GetBrowserContext());
+}
 
-    if (upload_for_dlp) {
-      DlpDeepScanningClientRequest dlp_request;
-      dlp_request.set_content_source(
-          DlpDeepScanningClientRequest::FILE_DOWNLOAD);
-      request->set_request_dlp_scan(std::move(dlp_request));
-    }
+void CheckClientDownloadRequest::UploadBinary(
+    DownloadCheckResultReason reason) {
+  bool upload_for_dlp = ShouldUploadForDlpScan();
+  bool upload_for_malware = ShouldUploadForMalwareScan(reason);
+  auto request = std::make_unique<DownloadItemRequest>(
+      item_, /*read_immediately=*/true,
+      base::BindOnce(&CheckClientDownloadRequest::OnDeepScanningComplete,
+                     weakptr_factory_.GetWeakPtr()));
 
-    if (upload_for_malware) {
-      MalwareDeepScanningClientRequest malware_request;
-      malware_request.set_population(
-          MalwareDeepScanningClientRequest::POPULATION_ENTERPRISE);
-      malware_request.set_download_token(
-          DownloadProtectionService::GetDownloadPingToken(item_));
-      request->set_request_malware_scan(std::move(malware_request));
-    }
+  Profile* profile = Profile::FromBrowserContext(GetBrowserContext());
 
-    request->set_dm_token(
-        policy::BrowserDMTokenStorage::Get()->RetrieveDMToken());
-
-    service()->UploadForDeepScanning(profile, std::move(request));
+  if (upload_for_dlp) {
+    DlpDeepScanningClientRequest dlp_request;
+    dlp_request.set_content_source(DlpDeepScanningClientRequest::FILE_DOWNLOAD);
+    request->set_request_dlp_scan(std::move(dlp_request));
   }
+
+  if (upload_for_malware) {
+    MalwareDeepScanningClientRequest malware_request;
+    malware_request.set_population(
+        MalwareDeepScanningClientRequest::POPULATION_ENTERPRISE);
+    malware_request.set_download_token(
+        DownloadProtectionService::GetDownloadPingToken(item_));
+    request->set_request_malware_scan(std::move(malware_request));
+  }
+
+  request->set_dm_token(
+      policy::BrowserDMTokenStorage::Get()->RetrieveDMToken());
+
+  service()->UploadForDeepScanning(profile, std::move(request));
 }
 
 void CheckClientDownloadRequest::NotifyRequestFinished(
@@ -314,14 +365,9 @@ bool CheckClientDownloadRequest::ShouldUploadForDlpScan() {
 
   const base::ListValue* domains = g_browser_process->local_state()->GetList(
       prefs::kDomainsToCheckComplianceOfDownloadedContent);
-  bool host_in_list =
-      std::any_of(domains->GetList().begin(), domains->GetList().end(),
-                  [this](const base::Value& domain) {
-                    return domain.is_string() &&
-                           domain.GetString() == item_->GetURL().host();
-                  });
-
-  return host_in_list;
+  url_matcher::URLMatcher matcher;
+  policy::url_util::AddAllowFilters(&matcher, domains);
+  return !matcher.MatchURL(item_->GetURL()).empty();
 }
 
 bool CheckClientDownloadRequest::ShouldUploadForMalwareScan(
@@ -351,14 +397,44 @@ bool CheckClientDownloadRequest::ShouldUploadForMalwareScan(
   int send_files_for_malware_check = profile->GetPrefs()->GetInteger(
       prefs::kSafeBrowsingSendFilesForMalwareCheck);
   if (send_files_for_malware_check !=
-      SendFilesForMalwareCheckValues::SEND_DOWNLOADS)
+          SendFilesForMalwareCheckValues::SEND_DOWNLOADS &&
+      send_files_for_malware_check !=
+          SendFilesForMalwareCheckValues::SEND_UPLOADS_AND_DOWNLOADS)
     return false;
 
   // If there's no DM token, the upload will fail, so we can skip uploading now.
-  if (policy::BrowserDMTokenStorage::Get()->RetrieveDMToken().empty())
-    return false;
+  return !policy::BrowserDMTokenStorage::Get()->RetrieveDMToken().empty();
+}
 
-  return true;
+void CheckClientDownloadRequest::OnDeepScanningComplete(
+    BinaryUploadService::Result result,
+    DeepScanningClientResponse response) {
+  Profile* profile = Profile::FromBrowserContext(GetBrowserContext());
+  if (profile) {
+    std::string raw_digest_sha256 = item_->GetHash();
+    MaybeReportDeepScanningVerdict(
+        profile, item_->GetURL(), item_->GetTargetFilePath().AsUTF8Unsafe(),
+        base::HexEncode(raw_digest_sha256.data(), raw_digest_sha256.size()),
+        item_->GetMimeType(),
+        extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
+        item_->GetTotalBytes(), result, response);
+  }
+
+  DownloadCheckResult download_result = DownloadCheckResult::SAFE;
+  DownloadCheckResultReason download_reason =
+      DownloadCheckResultReason::REASON_DOWNLOAD_SAFE;
+
+  // Fails open in case of error.
+  if (result == BinaryUploadService::Result::SUCCESS) {
+    DeepScanningClientResponseToDownloadCheckResult(response, &download_result,
+                                                    &download_reason);
+  }
+
+  // If we're not delaying verdicts, we already ran |callback_| with the final
+  // result in FinishRequest.
+  callback_.Run(download_result);
+  NotifyRequestFinished(download_result, download_reason);
+  service()->RequestFinished(this);
 }
 
 }  // namespace safe_browsing

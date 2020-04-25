@@ -38,7 +38,7 @@ let ShowAtPositionConfig;
  * @enum {number}
  * @const
  */
-const AnchorAlignment = {
+/* #export */ const AnchorAlignment = {
   BEFORE_START: -2,
   AFTER_START: -1,
   CENTER: 0,
@@ -183,7 +183,7 @@ Polymer({
    * @return {!HTMLDialogElement}
    */
   getDialog: function() {
-    return this.$.dialog;
+    return /** @type {!HTMLDialogElement} */ (this.$.dialog);
   },
 
   /** @private */

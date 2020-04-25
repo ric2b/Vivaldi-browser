@@ -10,6 +10,7 @@
 
 <dom-module id="encryption-migration">
   <template>
+    <link rel="stylesheet" href="oobe_dialog_host.css">
     <link rel="stylesheet" href="encryption_migration.css">
     <link rel="stylesheet" href="oobe_flex_layout.css">
     <template is="dom-if" if="[[isInitial_(uiState)]]">
@@ -30,7 +31,8 @@
         <template is="dom-if" if="[[isEnoughBattery]]">
           <div slot="footer" class="layout vertical center">
             <img srcset="images/security_update_1x.png 1x,
-                         images/security_update_2x.png 2x">
+                         images/security_update_2x.png 2x"
+                 class="oobe-illustration">
           </div>
         </template>
         <template is="dom-if" if="[[!isEnoughBattery]]">

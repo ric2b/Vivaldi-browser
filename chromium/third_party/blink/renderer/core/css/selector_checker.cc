@@ -46,6 +46,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/picture_in_picture_controller.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
+#include "third_party/blink/renderer/core/html/custom/element_internals.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_option_element.h"
@@ -77,14 +78,14 @@ static bool IsFrameFocused(const Element& element) {
 }
 
 static bool MatchesSpatialNavigationFocusPseudoClass(const Element& element) {
-  return IsHTMLOptionElement(element) &&
-         ToHTMLOptionElement(element).SpatialNavigationFocused() &&
+  auto* option_element = DynamicTo<HTMLOptionElement>(element);
+  return option_element && option_element->SpatialNavigationFocused() &&
          IsFrameFocused(element);
 }
 
 static bool MatchesListBoxPseudoClass(const Element& element) {
-  return IsHTMLSelectElement(element) &&
-         !ToHTMLSelectElement(element).UsesMenuList();
+  auto* html_select_element = DynamicTo<HTMLSelectElement>(element);
+  return html_select_element && !html_select_element->UsesMenuList();
 }
 
 static bool MatchesTagName(const Element& element,
@@ -1007,9 +1008,10 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
         if (input_element->ShouldAppearChecked() &&
             !input_element->ShouldAppearIndeterminate())
           return true;
-      } else if (IsHTMLOptionElement(element) &&
-                 ToHTMLOptionElement(element).Selected()) {
-        return true;
+      } else if (auto* option_element = DynamicTo<HTMLOptionElement>(element)) {
+        if (option_element->Selected()) {
+          return true;
+        }
       }
       break;
     }
@@ -1045,6 +1047,11 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoVideoPersistentAncestor:
       DCHECK(is_ua_rule_);
       return element.ContainsPersistentVideo();
+    case CSSSelector::kPseudoXrImmersiveDomOverlay:
+      DCHECK(is_ua_rule_);
+      // In immersive AR overlay mode, apply a pseudostyle to the root element.
+      return element.GetDocument().IsImmersiveArOverlay() &&
+             element == element.GetDocument().documentElement();
     case CSSSelector::kPseudoInRange:
       return element.IsInRange();
     case CSSSelector::kPseudoOutOfRange:
@@ -1103,6 +1110,10 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       if (!context.has_selection_pseudo)
         return false;
       return !element.GetDocument().GetPage()->GetFocusController().IsActive();
+    case CSSSelector::kPseudoState: {
+      return element.DidAttachInternals() &&
+             element.EnsureElementInternals().HasState(selector.Argument());
+    }
     case CSSSelector::kPseudoHorizontal:
     case CSSSelector::kPseudoVertical:
     case CSSSelector::kPseudoDecrement:

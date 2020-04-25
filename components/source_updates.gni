@@ -1,14 +1,16 @@
 
 update_target("//components/bookmarks/browser:browser") {
   sources += [
-    "//vivaldi/components/bookmarks/titled_url_node.cc",
     "//vivaldi/components/bookmarks/vivaldi_bookmark_node.cc",
+    "//vivaldi/components/bookmarks/vivaldi_bookmark_kit.cc",
+    "//vivaldi/components/bookmarks/vivaldi_bookmark_kit.h",
   ]
 }
 
 update_target("//components/history/core/browser:browser") {
   sources += [
     "//vivaldi/components/history/vivaldi_history_backend.cc",
+    "//vivaldi/components/history/vivaldi_history_service.cc",
     "//vivaldi/components/history/vivaldi_top_sites.cc",
     "//vivaldi/components/history/vivaldi_url_database.cc",
     "//vivaldi/components/history/vivaldi_visit_database.cc",
@@ -72,6 +74,10 @@ update_target("//components:components_unittests") {
   deps += [ "//vivaldi/components:adverse_adblocking" ]
 }
 
+update_target("//content/browser:browser") {
+  sources += [ "//vivaldi/components/content/vivaldi_browser_plugin_guest.cc" ]
+}
+
 update_target("//chrome/test:unit_tests") {
   sources += [ "//vivaldi/components/adverse_adblocking/adverse_ad_filter_list_unittests.cc" ]
   deps += [ "//vivaldi/components:adverse_adblocking" ]
@@ -87,6 +93,13 @@ if (!is_android) {
     sources += [
       "//vivaldi/components/browser/vivaldi_component_loader.cc",
       "//vivaldi/components/bookmarks/vivaldi_bookmark_api_helpers.cc",
+      "//vivaldi/components/bookmarks/vivaldi_bookmark_api_helpers.h",
+    ]
+  }
+
+  update_target("//components/guest_view/browser:browser") {
+    sources += [
+      "//vivaldi/components/guest_view/vivaldi_guest_view_base.cc",
     ]
   }
 
@@ -107,6 +120,7 @@ if (!is_android) {
     sources += [
       "//vivaldi/components/menu/vivaldi_toolkit_delegate_views.cc",
     ]
+    deps += ["//vivaldi/extensions/schema"]
   }
 
   update_target("//extensions/browser/api:api") {
@@ -131,6 +145,14 @@ if (!is_android) {
   update_template_instance("//extensions/renderer:renderer") {
     sources += [
       "//vivaldi/components/extensions/vivaldi_mime_handler_view_container_manager.cc",
+    ]
+  }
+}
+
+if (is_mac) {
+  update_target("//components/os_crypt:os_crypt") {
+    sources += [
+      "//vivaldi/components/os_crypt/viv_keychain_password_mac.mm",
     ]
   }
 }

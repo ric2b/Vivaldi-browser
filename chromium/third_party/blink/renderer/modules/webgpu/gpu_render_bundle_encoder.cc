@@ -7,7 +7,6 @@
 #include "third_party/blink/renderer/modules/webgpu/dawn_conversions.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_bind_group.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_buffer.h"
-#include "third_party/blink/renderer/modules/webgpu/gpu_color.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_device.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_bundle.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_bundle_descriptor.h"
@@ -38,6 +37,9 @@ GPURenderBundleEncoder* GPURenderBundleEncoder::Create(
   dawn_desc.colorFormats = color_formats.get();
   dawn_desc.depthStencilFormat = depth_stencil_format;
   dawn_desc.sampleCount = webgpu_desc->sampleCount();
+  if (webgpu_desc->hasLabel()) {
+    dawn_desc.label = webgpu_desc->label().Utf8().data();
+  }
 
   return MakeGarbageCollected<GPURenderBundleEncoder>(
       device, device->GetProcs().deviceCreateRenderBundleEncoder(
@@ -89,22 +91,11 @@ void GPURenderBundleEncoder::setIndexBuffer(GPUBuffer* buffer,
                                                offset);
 }
 
-void GPURenderBundleEncoder::setVertexBuffers(
-    uint32_t startSlot,
-    const HeapVector<Member<GPUBuffer>>& buffers,
-    const Vector<uint64_t>& offsets,
-    ExceptionState& exception_state) {
-  if (buffers.size() != offsets.size()) {
-    exception_state.ThrowRangeError(
-        "buffers array and offsets array must be the same length");
-    return;
-  }
-
-  std::unique_ptr<DawnBuffer[]> dawn_buffers = AsDawnType(buffers);
-
-  GetProcs().renderBundleEncoderSetVertexBuffers(
-      GetHandle(), startSlot, buffers.size(), dawn_buffers.get(),
-      offsets.data());
+void GPURenderBundleEncoder::setVertexBuffer(uint32_t slot,
+                                             const GPUBuffer* buffer,
+                                             uint64_t offset) {
+  GetProcs().renderBundleEncoderSetVertexBuffer(GetHandle(), slot,
+                                                buffer->GetHandle(), offset);
 }
 
 void GPURenderBundleEncoder::draw(uint32_t vertexCount,
@@ -141,6 +132,9 @@ GPURenderBundle* GPURenderBundleEncoder::finish(
     const GPURenderBundleDescriptor* webgpu_desc) {
   DawnRenderBundleDescriptor dawn_desc = {};
   dawn_desc.nextInChain = nullptr;
+  if (webgpu_desc->hasLabel()) {
+    dawn_desc.label = webgpu_desc->label().Utf8().data();
+  }
 
   DawnRenderBundle render_bundle =
       GetProcs().renderBundleEncoderFinish(GetHandle(), &dawn_desc);

@@ -40,12 +40,6 @@ class ChromeWebViewPermissionHelperDelegate
       bool user_gesture,
       base::OnceCallback<void(bool)> callback) override;
   void CancelGeolocationPermissionRequest(int bridge_id) override;
-  void RequestNotificationPermission(
-      int bridge_id,
-      const GURL& requesting_frame,
-      bool user_gesture,
-      const base::Callback<void(bool)>& callback) override;
-  void CancelNotificationPermissionRequest(int bridge_id) override;
   void RequestFileSystemPermission(
       const GURL& url,
       bool allowed_by_default,

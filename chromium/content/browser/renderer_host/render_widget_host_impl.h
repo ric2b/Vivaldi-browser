@@ -58,10 +58,13 @@
 #include "ipc/ipc_listener.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 #include "services/viz/public/mojom/hit_test/input_target_client.mojom.h"
-#include "third_party/blink/public/common/manifest/web_display_mode.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/ui_base_types.h"
@@ -166,7 +169,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
                        RenderProcessHost* process,
                        int32_t routing_id,
-                       mojom::WidgetPtr widget_interface,
+                       mojo::PendingRemote<mojom::Widget> widget_interface,
                        bool hidden);
 
   ~RenderWidgetHostImpl() override;
@@ -289,8 +292,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Returns a gfx::Image that is backed by an NSImage on MacOS or by an
   // SkBitmap otherwise. The gfx::Image may be empty if the snapshot failed.
   using GetSnapshotFromBrowserCallback =
-      base::Callback<void(const gfx::Image&)>;
-  void GetSnapshotFromBrowser(const GetSnapshotFromBrowserCallback& callback,
+      base::OnceCallback<void(const gfx::Image&)>;
+  void GetSnapshotFromBrowser(GetSnapshotFromBrowserCallback callback,
                               bool from_surface);
 
   // Sets the View of this RenderWidgetHost.
@@ -345,6 +348,12 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // RenderProcessHost which aggregates importance of all of its widgets.
   void SetImportance(ChildProcessImportance importance);
   ChildProcessImportance importance() const { return importance_; }
+
+  void OnImeTextCommittedEvent(const base::string16& text_str);
+  void AddImeTextCommittedEventObserver(
+      RenderWidgetHost::InputEventObserver* observer) override;
+  void RemoveImeTextCommittedEventObserver(
+      RenderWidgetHost::InputEventObserver* observer) override;
 #endif
 
   // Returns true if the RenderWidget is hidden.
@@ -475,6 +484,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // gesture is sent while the main thread is blocked) so this allows the
   // caller to do so manually.
   void EnsureReadyForSyntheticGestures(base::OnceClosure on_ready);
+
+  void TakeSyntheticGestureController(RenderWidgetHostImpl* host);
 
   // Update the composition node of the renderer (or WebKit).
   // WebKit has a special node (a composition node) for input method to change
@@ -646,13 +657,16 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void RequestCompositionUpdates(bool immediate_request, bool monitor_updates);
 
   void RequestCompositorFrameSink(
-      viz::mojom::CompositorFrameSinkRequest compositor_frame_sink_request,
-      viz::mojom::CompositorFrameSinkClientPtr compositor_frame_sink_client);
+      mojo::PendingReceiver<viz::mojom::CompositorFrameSink>
+          compositor_frame_sink_receiver,
+      mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient>
+          compositor_frame_sink_client);
 
   void RegisterRenderFrameMetadataObserver(
-      mojom::RenderFrameMetadataObserverClientRequest
-          render_frame_metadata_observer_client_request,
-      mojom::RenderFrameMetadataObserverPtr render_frame_metadata_observer);
+      mojo::PendingReceiver<mojom::RenderFrameMetadataObserverClient>
+          render_frame_metadata_observer_client_receiver,
+      mojo::PendingRemote<mojom::RenderFrameMetadataObserver>
+          render_frame_metadata_observer);
 
   RenderFrameMetadataProviderImpl* render_frame_metadata_provider() {
     return &render_frame_metadata_provider_;
@@ -685,7 +699,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   // Indicate the frame input handler is now available.
   void SetFrameInputHandler(mojom::FrameInputHandler*);
-  void SetWidget(mojom::WidgetPtr widget);
+  void SetWidget(mojo::PendingRemote<mojom::Widget> widget_remote);
 
   viz::mojom::InputTargetClient* input_target_client() {
     return input_target_client_.get();
@@ -1108,6 +1122,14 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   base::ObserverList<RenderWidgetHost::InputEventObserver>::Unchecked
       input_event_observers_;
 
+#if defined(OS_ANDROID)
+  // Ime Text Committed callbacks. This is separated from
+  // input_event_observers_, because text events are not triggered by input
+  // events on Android.
+  base::ObserverList<RenderWidgetHost::InputEventObserver>::Unchecked
+      ime_text_committed_observers_;
+#endif
+
   // The observers watching us.
   base::ObserverList<RenderWidgetHostObserver> observers_;
 
@@ -1223,8 +1245,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   mojo::Remote<device::mojom::WakeLock> wake_lock_;
 #endif
 
-  mojo::Binding<viz::mojom::CompositorFrameSink> compositor_frame_sink_binding_;
-  viz::mojom::CompositorFrameSinkClientPtr renderer_compositor_frame_sink_;
+  mojo::Receiver<viz::mojom::CompositorFrameSink>
+      compositor_frame_sink_receiver_;
+  mojo::Remote<viz::mojom::CompositorFrameSinkClient>
+      renderer_compositor_frame_sink_;
 
   // Stash a request to create a CompositorFrameSink if it arrives before
   // we have a view. This is only used if |enable_viz_| is true.

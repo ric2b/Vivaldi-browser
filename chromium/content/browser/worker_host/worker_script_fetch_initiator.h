@@ -77,15 +77,19 @@ class WorkerScriptFetchInitiator {
       const std::string& storage_domain,
       CompletionCallback callback);
 
- private:
+  // Used for specifying how URLLoaderFactoryBundle is used.
+  enum class LoaderType { kMainResource, kSubResource };
+
   // Creates a loader factory bundle. Must be called on the UI thread.
   static std::unique_ptr<blink::URLLoaderFactoryBundleInfo> CreateFactoryBundle(
+      LoaderType loader_type,
       int worker_process_id,
       StoragePartitionImpl* storage_partition,
       const std::string& storage_domain,
       bool file_support,
       bool filesystem_url_support);
 
+ private:
   // Adds additional request headers to |resource_request|. Must be called on
   // the UI thread.
   static void AddAdditionalRequestHeaders(

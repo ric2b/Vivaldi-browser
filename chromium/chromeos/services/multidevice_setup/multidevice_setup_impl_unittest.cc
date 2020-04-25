@@ -615,7 +615,7 @@ class MultiDeviceSetupImplTest : public testing::Test {
 
     EXPECT_FALSE(fake_account_status_change_delegate_notifier()->delegate());
     multidevice_setup_->SetAccountStatusChangeDelegate(
-        fake_account_status_change_delegate_->GenerateInterfacePtr());
+        fake_account_status_change_delegate_->GenerateRemote());
     EXPECT_TRUE(fake_account_status_change_delegate_notifier()->delegate());
   }
 
@@ -947,8 +947,7 @@ TEST_F(MultiDeviceSetupImplTest, AccountStatusChangeDelegate) {
 // because it never requires authentication for either enabling or disabling.
 TEST_F(MultiDeviceSetupImplTest, FeatureStateChanges_NoAuthTokenRequired) {
   auto observer = std::make_unique<FakeFeatureStateObserver>();
-  multidevice_setup()->AddFeatureStateObserver(
-      observer->GenerateInterfacePtr());
+  multidevice_setup()->AddFeatureStateObserver(observer->GenerateRemote());
 
   EXPECT_EQ(mojom::FeatureState::kUnavailableNoVerifiedHost,
             CallGetFeatureStates()[mojom::Feature::kInstantTethering]);
@@ -981,8 +980,7 @@ TEST_F(MultiDeviceSetupImplTest, FeatureStateChanges_NoAuthTokenRequired) {
 TEST_F(MultiDeviceSetupImplTest,
        FeatureStateChanges_AuthTokenRequired_SmartLock) {
   auto observer = std::make_unique<FakeFeatureStateObserver>();
-  multidevice_setup()->AddFeatureStateObserver(
-      observer->GenerateInterfacePtr());
+  multidevice_setup()->AddFeatureStateObserver(observer->GenerateRemote());
 
   EXPECT_EQ(mojom::FeatureState::kUnavailableNoVerifiedHost,
             CallGetFeatureStates()[mojom::Feature::kSmartLock]);
@@ -1025,8 +1023,7 @@ TEST_F(MultiDeviceSetupImplTest,
 TEST_F(MultiDeviceSetupImplTest,
        FeatureStateChanges_AuthTokenRequired_BetterTogetherSuite) {
   auto observer = std::make_unique<FakeFeatureStateObserver>();
-  multidevice_setup()->AddFeatureStateObserver(
-      observer->GenerateInterfacePtr());
+  multidevice_setup()->AddFeatureStateObserver(observer->GenerateRemote());
 
   EXPECT_EQ(mojom::FeatureState::kUnavailableNoVerifiedHost,
             CallGetFeatureStates()[mojom::Feature::kBetterTogetherSuite]);
@@ -1111,7 +1108,7 @@ TEST_F(MultiDeviceSetupImplTest, ComprehensiveHostTest) {
 
   // Add a status observer.
   auto observer = std::make_unique<FakeHostStatusObserver>();
-  multidevice_setup()->AddHostStatusObserver(observer->GenerateInterfacePtr());
+  multidevice_setup()->AddHostStatusObserver(observer->GenerateRemote());
 
   // Simulate a sync occurring; now, all of the test devices are eligible hosts.
   fake_eligible_host_devices_provider()->set_eligible_host_devices(
@@ -1202,7 +1199,7 @@ TEST_F(MultiDeviceSetupImplTest, TestSetHostDevice_InvalidAuthToken) {
 TEST_F(MultiDeviceSetupImplTest, TestSetHostDeviceWithoutAuthToken) {
   // Add a status observer.
   auto observer = std::make_unique<FakeHostStatusObserver>();
-  multidevice_setup()->AddHostStatusObserver(observer->GenerateInterfacePtr());
+  multidevice_setup()->AddHostStatusObserver(observer->GenerateRemote());
 
   // Start valid eligible host devices.
   fake_eligible_host_devices_provider()->set_eligible_host_devices(

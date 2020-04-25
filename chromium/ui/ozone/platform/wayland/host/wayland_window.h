@@ -17,11 +17,11 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
-#include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_delegate.h"
 #include "ui/platform_window/platform_window_handler/wm_drag_handler.h"
 #include "ui/platform_window/platform_window_handler/wm_move_resize_handler.h"
 #include "ui/platform_window/platform_window_init_properties.h"
+#include "ui/platform_window/platform_window_linux.h"
 
 namespace gfx {
 class PointF;
@@ -39,7 +39,7 @@ namespace {
 class XDGShellObjectFactory;
 }  // namespace
 
-class WaylandWindow : public PlatformWindow,
+class WaylandWindow : public PlatformWindowLinux,
                       public PlatformEventDispatcher,
                       public WmMoveResizeHandler,
                       public WmDragHandler {
@@ -72,7 +72,7 @@ class WaylandWindow : public PlatformWindow,
   void ApplyPendingBounds();
 
   // Set whether this window has pointer focus and should dispatch mouse events.
-  void set_pointer_focus(bool focus) { has_pointer_focus_ = focus; }
+  void SetPointerFocus(bool focus);
   bool has_pointer_focus() const { return has_pointer_focus_; }
 
   // Set whether this window has keyboard focus and should dispatch key events.
@@ -113,9 +113,10 @@ class WaylandWindow : public PlatformWindow,
                  base::OnceCallback<void(int)> callback) override;
 
   // PlatformWindow
-  void Show() override;
+  void Show(bool inactive) override;
   void Hide() override;
   void Close() override;
+  bool IsVisible() const override;
   void PrepareForShutdown() override;
   void SetBounds(const gfx::Rect& bounds) override;
   gfx::Rect GetBounds() override;
@@ -131,11 +132,17 @@ class WaylandWindow : public PlatformWindow,
   void Activate() override;
   void Deactivate() override;
   void SetUseNativeFrame(bool use_native_frame) override;
+  bool ShouldUseNativeFrame() const override;
   void SetCursor(PlatformCursor cursor) override;
   void MoveCursorTo(const gfx::Point& location) override;
   void ConfineCursorToBounds(const gfx::Rect& bounds) override;
   void SetRestoredBoundsInPixels(const gfx::Rect& bounds) override;
   gfx::Rect GetRestoredBoundsInPixels() const override;
+  bool ShouldWindowContentsBeTransparent() const override;
+  void SetAspectRatio(const gfx::SizeF& aspect_ratio) override;
+  void SetWindowIcons(const gfx::ImageSkia& window_icon,
+                      const gfx::ImageSkia& app_icon) override;
+  void SizeConstraintsChanged() override;
 
   // PlatformEventDispatcher
   bool CanDispatchEvent(const PlatformEvent& event) override;

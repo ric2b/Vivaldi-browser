@@ -42,6 +42,7 @@
 #include "net/base/url_util.h"
 #include "net/cert/x509_certificate.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 #include "url/gurl.h"
 
 namespace {
@@ -122,7 +123,7 @@ void UpdateRecurrentInterstitialPref(Profile* profile,
     // (i.e. out of order). Save a new list composed of just this one error
     // instance.
     base::ListValue error_list;
-    error_list.GetList().push_back(base::Value(now));
+    error_list.Append(base::Value(now));
     pref_update->SetKey(net::ErrorToShortString(error), std::move(error_list));
   } else {
     // Only up to |threshold| values need to be stored. If the list already
@@ -155,7 +156,7 @@ bool DoesRecurrentInterstitialPrefMeetThreshold(Profile* profile,
   // Assume that the values in the list are in increasing order;
   // UpdateRecurrentInterstitialPref() maintains this ordering. Check if there
   // are more than |threshold| values after the cutoff time.
-  const base::ListValue::ListStorage& error_list = list_value->GetList();
+  base::span<const base::Value> error_list = list_value->GetList();
   for (size_t i = 0; i < error_list.size(); i++) {
     if (base::Time::FromJsTime(error_list[i].GetDouble()) >= cutoff_time)
       return base::MakeStrictNum(error_list.size() - i) >= threshold;

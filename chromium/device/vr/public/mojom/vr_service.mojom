@@ -52,6 +52,9 @@ enum XRSessionFeature {
   REF_SPACE_LOCAL_FLOOR = 3,
   REF_SPACE_BOUNDED_FLOOR = 4,
   REF_SPACE_UNBOUNDED = 5,
+
+  // Experimental or not-yet-standardized feature names.
+  DOM_OVERLAY_FOR_HANDHELD_AR = 6,
 };
 
 struct XRSessionOptions {
@@ -80,15 +83,15 @@ struct XRSessionOptions {
 // apropriate based on the session creation options. (for example, an immersive
 // session ought to have a XRPresentationConnection to submit the frames to the
 // immersive environment).
-// The XRSessionClient request must be fulfilled for the session to get
+// The XRSessionClient receiver must be fulfilled for the session to get
 // information about the device it is connected to, such as focus and blur
 // events, changes to view or stage parameters, or exit present calls initiated
 // by the device.
 struct XRSession {
-  XRFrameDataProvider data_provider;
-  // TODO(http://crbug.com/842025) Move where the client_request gets set to the
+  pending_remote<XRFrameDataProvider> data_provider;
+  // TODO(http://crbug.com/842025) Move where the client_receiver gets set to the
   // device process then mark this as non-optional.
-  XRSessionClient&? client_request;
+  pending_receiver<XRSessionClient>? client_receiver;
   // TODO(http://crbug.com/842025) Move the information that is sent in display
   // info to more sensible places so that this doesn't need to be sent here.
   VRDisplayInfo display_info;
@@ -107,15 +110,14 @@ struct XRSession {
 // way connection between the renderer and a device to synchronize and submit
 // frames to a sink outside of Chrome.
 struct XRPresentationConnection {
-  XRPresentationProvider provider;
-  XRPresentationClient& client_request;
+  pending_remote<XRPresentationProvider> provider;
+  pending_receiver<XRPresentationClient> client_receiver;
   XRPresentationTransportOptions transport_options;
 };
 
 struct XRInputSourceDescription {
   XRTargetRayMode target_ray_mode;
   XRHandedness handedness;
-  bool emulated_position;
 
   // Transform from the grip matrix to the pointer's origin and orientation.
   gfx.mojom.Transform? pointer_offset;
@@ -136,6 +138,10 @@ struct XRInputSourceState {
 
   // Transform to the controllers grip (users palm) from start space origin.
   gfx.mojom.Transform? grip;
+
+  // True when position is estimated by something like a neck or arm model.
+  // False when position is based on sensors tracking a 6DoF pose.
+  bool emulated_position;
 
   // Describes the current state of the primary input.
   bool primary_input_pressed;
@@ -173,6 +179,10 @@ struct VRFieldOfView {
 struct VRPose {
   gfx.mojom.Quaternion? orientation;
   gfx.mojom.Point3F? position;
+
+  // True when position is estimated by something like a neck or arm model.
+  // False when position is based on sensors tracking a 6DoF pose.
+  bool emulated_position;
 
   // Velocity/Acceleration is in global coordinates, as rad/s.
   gfx.mojom.Vector3dF? angular_velocity;
@@ -279,6 +289,31 @@ struct XRPresentationTransportOptions {
   bool wait_for_gpu_fence;
 };
 
+// Native origins that are reference spaces are identified by their category.
+// Currently, the device needs to know about 3 reference space categories.
+enum XRReferenceSpaceCategory {
+  LOCAL,
+  LOCAL_FLOOR,
+  VIEWER,
+  BOUNDED_FLOOR,
+  UNBOUNDED
+};
+
+// Native origin represents a reference space that is known to the device and
+// whose position can be tracked over time. There are multiple different types
+// of native origins (planes, anchors, reference spaces, input sources), each of
+// them roughly corresponds to something that either is an XRSpace (for example
+// XRReferenceSpaceType, XRBoundedReferenceSpace) or returns an XRSpace (for
+// example XRAnchor, XRPlane, XRInputSource). Native origin can be identified,
+// depending on its type, by the id of the entity (this is the case for planes,
+// anchors and input sources), or by reference space category.
+union XRNativeOriginInformation {
+  uint32 input_source_id;
+  uint32 plane_id;
+  uint32 anchor_id;
+  XRReferenceSpaceCategory reference_space_category;
+};
+
 enum XRPlaneOrientation {
   UNKNOWN = 0,
   HORIZONTAL = 1,
@@ -294,7 +329,7 @@ struct XRPlanePointData {
 // detected in the real world by the underlying system.
 struct XRPlaneData {
   // Unique (per session) identifier of the plane.
-  int32 id;
+  uint32 id;
 
   // Plane orientation relative to gravity.
   XRPlaneOrientation orientation;
@@ -314,7 +349,7 @@ struct XRPlaneData {
 // present in updated_planes_data.
 struct XRPlaneDetectionData {
   // Array with ids of all tracked planes.
-  array<int32> all_planes_ids;
+  array<uint32> all_planes_ids;
 
   // Array with plane data for all updated planes. Plane is considered updated
   // if its position or polygon has changed. Updated planes are always a subset
@@ -329,7 +364,7 @@ struct XRPlaneDetectionData {
 // evolves.
 struct XRAnchorData {
   // Unique (per session) identifier of the anchor.
-  int32 id;
+  uint32 id;
 
   // Pose of the anchor.
   VRPose pose;
@@ -341,12 +376,24 @@ struct XRAnchorData {
 // will not be present in updated_anchors_data.
 struct XRAnchorsData {
   // Array with ids of all tracked anchors.
-  array<int32> all_anchors_ids;
+  array<uint32> all_anchors_ids;
 
   // Array with anchor data for all updated anchors. Updated anchors are always
   // a subset of all anchors (i.e. for each anchor found in
   // updated_anchors_data, its ID will be present in all_anchors_ids).
   array<XRAnchorData> updated_anchors_data;
+};
+
+// Information about results for a single subscription for the current frame.
+struct XRHitTestSubscriptionResultData {
+  uint32 subscription_id;
+  array<XRHitResult> hit_test_results;
+};
+
+// Struct containing data about results of all hit test subscriptions for the
+// current frame.
+struct XRHitTestSubscriptionResultsData {
+  array<XRHitTestSubscriptionResultData> results;
 };
 
 // The data needed for each animation frame of an XRSession.
@@ -398,6 +445,10 @@ struct XRFrameData {
 
   // Tracked anchors information.
   XRAnchorsData? anchors_data;
+
+  // Hit test subscription results. Only present if the session supports
+  // environment integration.
+  XRHitTestSubscriptionResultsData? hit_test_subscription_results;
 };
 
 enum VRDisplayEventReason {
@@ -445,6 +496,15 @@ interface VRService {
   GetImmersiveVRDisplayInfo() => (VRDisplayInfo? info);
 
   ExitPresent();
+
+  // Used for the renderer process to indicate that it is throttling frame
+  // requests from the page, and thus it (not the page) is responsible for any
+  // drop in frame rate or delay in posting frames. This is mainly meant to be
+  // informational for the browser process, so that it can decide if or what UI
+  // to show if it seems like the frame rate is too low or has stalled. The
+  // renderer can (and may) still decide to submit frames and that should not be
+  // treated as illegal or clear the throttled state.
+  SetFramesThrottled(bool throttled);
 };
 
 // The interface for the renderer to listen to top level XR events, events that
@@ -454,9 +514,22 @@ interface VRServiceClient {
   OnDeviceChanged();
 };
 
+enum CreateAnchorResult {
+  SUCCESS = 0,
+  FAILURE = 1,
+};
+
+enum SubscribeToHitTestResult {
+  SUCCESS = 0,
+  FAILURE_GENERIC = 1,
+};
+
 // Provides functionality for integrating environment information into an
 // XRSession. For example, some AR sessions would implement hit test to allow
 // developers to get the information about the world that its sensors supply.
+// On XRSession end, the message pipe will be destroyed - we need to clean up
+// all outstanding JavaScript promises at that time. The XRsession might end for
+// example due to a call to XRSession::end() method (exposed to JavaScript).
 interface XREnvironmentIntegrationProvider {
   // Performs a raycast into the scene and returns a list of XRHitResults sorted
   // from closest to furthest hit from the ray. Each hit result contains a
@@ -465,6 +538,45 @@ interface XREnvironmentIntegrationProvider {
   // An empty result list means there were no hits. If a nullopt is returned,
   // there was an error.
   RequestHitTest(XRRay ray) => (array<XRHitResult>? results);
+
+  // Establishes a hit test subscription on the device. The subscription results
+  // will be computed taking into account latest state of the native origin
+  // identified by passed in |native_origin_information|. I.e., in each frame,
+  // the ray used to subscribe to hit test will be transformed to device
+  // coordinate system using the device's current knowledge of the state of the
+  // native origin. The returned |subscription_id| uniquely identifies the
+  // subscription within an immersive session. Lifetime of the subscription is
+  // tied to the lifetime of the immersive session.
+  SubscribeToHitTest(
+    XRNativeOriginInformation native_origin_information, XRRay ray) =>
+    (SubscribeToHitTestResult result, uint32 subscription_id);
+
+  // Notifies the device that subscription with the passed in |subscription_id|
+  // is no longer needed and should be removed. The |subscription_id| must be a
+  // valid id of a subscription returned by one of the SubscribeToHitTest calls,
+  // otherwise the call will be ignored.
+  UnsubscribeFromHitTest(uint32 subscription_id);
+
+  // Issues a request to create an anchor attached to a session.
+  // |result| will contain status code of the request. |anchor_id| will be valid
+  // only if the |result| is SUCCESS.
+  CreateAnchor(VRPose anchor_pose) => (CreateAnchorResult result,
+                                       uint32 anchor_id);
+  // TODO(https://crbug.com/657632): Switch anchor_id to nullable integer once
+  // that's available. This will allow us to remove CreateAnchorResult if we're
+  // not interested in obtaining detailed error information from the device.
+
+  // Issues a request to create an anchor attached to a plane.
+  // |result| will contain status code of the request. |anchor_id| will be valid
+  // only if the |result| is SUCCESS.
+  CreatePlaneAnchor(VRPose anchor_pose, uint32 plane_id) =>
+    (CreateAnchorResult result, uint32 anchor_id);
+  // TODO(https://crbug.com/657632): Ditto - make anchor_id a nullable integer..
+
+  // Detaches an existing anchor. The |anchor_id| must be a valid id of an
+  // anchor created by one of the CreateAnchor calls, otherwise the call will be
+  // ignored.
+  DetachAnchor(uint32 anchor_id);
 };
 
 // Provides a mechanism for a channel to plumb up any button click events
@@ -490,9 +602,10 @@ interface XRFrameDataProvider {
   // for some reason, such as device disconnection.
   GetFrameData(XRFrameDataRequestOptions? options) => (XRFrameData? frame_data);
   GetEnvironmentIntegrationProvider(
-      associated XREnvironmentIntegrationProvider& environment_provider);
+      pending_associated_receiver<XREnvironmentIntegrationProvider>
+          environment_provider);
   SetInputSourceButtonListener(
-      associated XRInputSourceButtonListener? event_listener);
+      pending_associated_remote<XRInputSourceButtonListener>? event_listener);
 };
 
 // Provides the necessary functionality for sending frames to a headset.
@@ -561,12 +674,21 @@ interface XRPresentationClient {
   OnSubmitFrameGpuFence(gfx.mojom.GpuFenceHandle gpu_fence_handle);
 };
 
+enum XRVisibilityState {
+  // Indicates the WebXR content is visible to the user and receiving input.
+  VISIBLE = 1,
+  // Indicates the WebXR content is visible but not receiving input.
+  VISIBLE_BLURRED = 2,
+  // Indicates the WebXR content is not visible.
+  HIDDEN = 3
+};
+
 // Functions for pushing device information to the sessions.
 interface XRSessionClient {
   OnChanged(VRDisplayInfo display);
   OnExitPresent();
-  OnBlur();
-  OnFocus();
+  // Indicates a change in the visibility of the WebXR content.
+  OnVisibilityStateChanged(XRVisibilityState visibility_state);
 };
 
 // Backwards compatibility events for WebVR 1.1. These are expected to not be

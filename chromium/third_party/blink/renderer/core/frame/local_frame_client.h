@@ -38,25 +38,24 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/public/mojom/ip_address_space.mojom-blink-forward.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/loader/loading_behavior_flag.h"
+#include "third_party/blink/public/common/navigation/triggering_event_info.h"
+#include "third_party/blink/public/common/sudden_termination_disabler_type.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
-#include "third_party/blink/public/mojom/frame/navigation_initiator.mojom-blink.h"
-#include "third_party/blink/public/mojom/portal/portal.mojom-blink.h"
-#include "third_party/blink/public/mojom/use_counter/css_property_id.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/navigation_initiator.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/portal/portal.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/use_counter/css_property_id.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
 #include "third_party/blink/public/platform/web_content_security_policy_struct.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/platform/web_effective_connection_type.h"
 #include "third_party/blink/public/platform/web_insecure_request_policy.h"
-#include "third_party/blink/public/platform/web_loading_behavior_flag.h"
-#include "third_party/blink/public/platform/web_sudden_termination_disabler_type.h"
-#include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/platform/web_worker_fetch_context.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_history_commit_type.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_manifest_manager.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
-#include "third_party/blink/public/web/web_triggering_event_info.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/icon_url.h"
@@ -120,10 +119,6 @@ class WebSpellCheckPanelHostClient;
 struct WebScrollIntoViewParams;
 class WebTextCheckClient;
 
-// Whether to follow cross origin redirects when downloading, or treating
-// the download as a navigation instead.
-enum class DownloadCrossOriginRedirects { kFollow, kNavigate };
-
 class CORE_EXPORT LocalFrameClient : public FrameClient {
  public:
   ~LocalFrameClient() override = default;
@@ -152,9 +147,6 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual void DispatchDidCommitLoad(HistoryItem*,
                                      WebHistoryCommitType,
                                      GlobalObjectReusePolicy) = 0;
-  virtual void DispatchDidFailProvisionalLoad(
-      const ResourceError&,
-      const AtomicString& http_method) = 0;
   virtual void DispatchDidFailLoad(const ResourceError&,
                                    WebHistoryCommitType) = 0;
   virtual void DispatchDidFinishDocumentLoad() = 0;
@@ -171,7 +163,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
       bool has_transient_activation,
       WebFrameLoadType,
       bool is_client_redirect,
-      WebTriggeringEventInfo,
+      TriggeringEventInfo,
       HTMLFormElement*,
       ContentSecurityPolicyDisposition
           should_check_main_world_content_security_policy,
@@ -191,10 +183,9 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual void ForwardResourceTimingToParent(const WebResourceTimingInfo&) = 0;
 
   virtual void DownloadURL(const ResourceRequest&,
-                           DownloadCrossOriginRedirects) = 0;
-  virtual void LoadErrorPage(int reason) = 0;
+                           network::mojom::RedirectMode) = 0;
 
-  virtual bool NavigateBackForward(int offset, bool from_script) const = 0;
+  virtual bool NavigateBackForward(int offset) const = 0;
 
   // Another page has accessed the initial empty document of this frame. It is
   // no longer safe to display a provisional URL, since a URL spoof is now
@@ -219,10 +210,6 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   // The frame ran content with certificate errors with the given URL.
   virtual void DidRunContentWithCertificateErrors() = 0;
 
-  // The frame loaded a resource with a legacy TLS version that will be removed
-  // in the future. Prints a console message to warn about this.
-  virtual void ReportLegacyTLSVersion(const KURL&) {}
-
   // Will be called when |PerformanceTiming| events are updated
   virtual void DidChangePerformanceTiming() {}
 
@@ -236,7 +223,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   // Will be called when a particular loading code path has been used. This
   // propogates renderer loading behavior to the browser process for histograms.
-  virtual void DidObserveLoadingBehavior(WebLoadingBehaviorFlag) {}
+  virtual void DidObserveLoadingBehavior(LoadingBehaviorFlag) {}
 
   // Will be called when a new UseCounter feature has been observed in a frame.
   // This propogates feature usage to the browser process for histograms.
@@ -382,21 +369,8 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual bool IsLocalFrameClientImpl() const { return false; }
 
-  virtual void SuddenTerminationDisablerChanged(
-      bool present,
-      WebSuddenTerminationDisablerType) {}
-
-  // Effective connection type when this frame was loaded.
-  virtual WebEffectiveConnectionType GetEffectiveConnectionType() {
-    return WebEffectiveConnectionType::kTypeUnknown;
-  }
-  // Overrides the effective connection type for testing.
-  virtual void SetEffectiveConnectionTypeForTesting(
-      WebEffectiveConnectionType) {}
-
-  // Returns the PreviewsState active for the frame.
-  virtual WebURLRequest::PreviewsState GetPreviewsStateForFrame() const {
-    return WebURLRequest::kPreviewsUnspecified;
+  virtual void SuddenTerminationDisablerChanged(bool present,
+                                                SuddenTerminationDisablerType) {
   }
 
   // Overwrites the given URL to use an HTML5 embed if possible. An empty URL is
@@ -432,9 +406,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   }
 
   virtual AssociatedInterfaceProvider*
-  GetRemoteNavigationAssociatedInterfaces() {
-    return nullptr;
-  }
+  GetRemoteNavigationAssociatedInterfaces() = 0;
 
   // Notify the embedder that the associated frame has user activation so that
   // the replicated states in the browser and other renderers can be updated.

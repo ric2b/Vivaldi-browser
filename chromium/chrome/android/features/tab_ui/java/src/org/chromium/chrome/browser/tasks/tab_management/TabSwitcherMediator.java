@@ -11,13 +11,13 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerP
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.IS_VISIBLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.SHADOW_TOP_MARGIN;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.TOP_CONTROLS_HEIGHT;
-import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.TOP_PADDING;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.VISIBILITY_LISTENER;
 
 import android.graphics.Bitmap;
 import android.os.Handler;
-import android.support.annotation.Nullable;
 import android.view.ViewGroup;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -41,7 +41,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.TabSelectionType;
-import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.UrlConstants;
@@ -50,6 +49,9 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.List;
+
+import org.chromium.chrome.browser.ChromeApplication;
+import android.view.View;
 
 /**
  * The Mediator that is responsible for resetting the tab grid or carousel based on visibility and
@@ -185,11 +187,18 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
 
                 TabList currentTabModelFilter =
                         mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter();
-                mResetHandler.resetWithTabList(currentTabModelFilter, false, mShowTabsInMruOrder);
+
+                // NOTE(david@vivaldi.com) Only ignore next selection when |currentTabModelFilter|
+                // has items, otherwise this could lead into the tab switcher not closing correctly.
+                if (ChromeApplication.isVivaldi())
+                    mShouldIgnoreNextSelect = currentTabModelFilter.getCount() > 0;
+
                 mContainerViewModel.set(IS_INCOGNITO, currentTabModelFilter.isIncognito());
                 if (mTabGridDialogController != null) {
                     mTabGridDialogController.hideDialog(false);
                 }
+                if (!mContainerViewModel.get(IS_VISIBLE)) return;
+                mResetHandler.resetWithTabList(currentTabModelFilter, false, mShowTabsInMruOrder);
                 if (mIphProvider != null) {
                     mIphProvider.maybeShowIPH(mTabModelSelector.isIncognitoSelected());
                 }
@@ -246,23 +255,22 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
                         .isIncognito());
         mContainerViewModel.set(ANIMATE_VISIBILITY_CHANGES, true);
 
-        // Container view takes care of padding and margin in carousel mode.
+        // Container view takes care of padding and margin in start surface.
         if (mode != TabListCoordinator.TabListMode.CAROUSEL) {
-            mContainerViewModel.set(TOP_CONTROLS_HEIGHT, fullscreenManager.getTopControlsHeight());
+            // The start surface checks in this block are for top controls height and shadow margin
+            //  to be set correctly for displaying the omnibox above the tab switcher.
+            int topControlsHeight = FeatureUtilities.isStartSurfaceEnabled()
+                    ? 0
+                    : fullscreenManager.getTopControlsHeight();
+            mContainerViewModel.set(TOP_CONTROLS_HEIGHT, topControlsHeight);
             mContainerViewModel.set(
                     BOTTOM_CONTROLS_HEIGHT, fullscreenManager.getBottomControlsHeight());
 
             int toolbarHeight =
                     ContextUtils.getApplicationContext().getResources().getDimensionPixelSize(
                             R.dimen.toolbar_height_no_shadow);
-            int topPadding = ReturnToChromeExperimentsUtil.shouldShowOmniboxOnTabSwitcher()
-                    ? toolbarHeight
-                    : DEFAULT_TOP_PADDING;
-            mContainerViewModel.set(TOP_PADDING, topPadding);
-            int shadowTopMargin = ReturnToChromeExperimentsUtil.shouldShowOmniboxOnTabSwitcher()
-                    ? toolbarHeight * 2
-                    : toolbarHeight;
-            mContainerViewModel.set(SHADOW_TOP_MARGIN, shadowTopMargin);
+            mContainerViewModel.set(SHADOW_TOP_MARGIN,
+                    FeatureUtilities.isStartSurfaceEnabled() ? 0 : toolbarHeight);
         }
 
         mContainerView = containerView;
@@ -275,9 +283,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
 
         // TODO(crbug.com/982018): Let the start surface pass in the parameter and add unit test for
         // it. This is a temporary solution to keep this change minimum.
-        String feature = ChromeFeatureList.getFieldTrialParamByFeature(
-                ChromeFeatureList.START_SURFACE_ANDROID, "start_surface_variation");
-        mShowTabsInMruOrder = feature.equals("twopanes") || feature.equals("single");
+        mShowTabsInMruOrder = isShowingTabsInMRUOrder();
     }
 
     /**
@@ -506,11 +512,6 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         return true;
     }
 
-    @Override
-    public void setBottomControlsHeight(int bottomControlsHeight) {
-        mContainerViewModel.set(BOTTOM_CONTROLS_HEIGHT, bottomControlsHeight);
-    }
-
     /**
      * Do clean-up work after the overview hiding animation is finished.
      * @see TabSwitcher#postHiding
@@ -541,6 +542,16 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
      */
     void setIphProvider(IphProvider iphProvider) {
         mIphProvider = iphProvider;
+    }
+
+    /**
+     * Check if tabs should show in MRU order in current start surface tab switcher.
+     *  @return whether tabs should show in MRU order
+     */
+    static boolean isShowingTabsInMRUOrder() {
+        String feature = ChromeFeatureList.getFieldTrialParamByFeature(
+                ChromeFeatureList.START_SURFACE_ANDROID, "start_surface_variation");
+        return feature.equals("twopanes") || feature.equals("single");
     }
 
     /**

@@ -119,10 +119,11 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   ~PaintArtifactCompositor();
 
   struct ViewportProperties {
+    const TransformPaintPropertyNode* overscroll_elasticity_transform = nullptr;
     const TransformPaintPropertyNode* page_scale = nullptr;
     const TransformPaintPropertyNode* inner_scroll_translation = nullptr;
-    // TODO(crbug.com/909750): Add other viewport properties, e.g.
-    // outer_scroll_translation.
+    const ClipPaintPropertyNode* outer_clip = nullptr;
+    const TransformPaintPropertyNode* outer_scroll_translation = nullptr;
   };
 
   struct Settings {
@@ -213,7 +214,10 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
     // applied. The merged layer must have a property tree state that's deeper
     // than this layer, i.e. can "upcast" to this layer's state.
     void Merge(const PendingLayer& guest);
-    bool CanMerge(const PendingLayer& guest) const;
+    // |guest_state| is for cases that we want to check if we can merge |guest|
+    // if it has |guest_state| (which may be different from its current state).
+    bool CanMerge(const PendingLayer& guest,
+                  const PropertyTreeState& guest_state) const;
     // Mutate this layer's property tree state to a more general (shallower)
     // state, thus the name "upcast". The concrete effect of this is to
     // "decomposite" some of the properties, so that fewer properties will be
@@ -260,8 +264,10 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
                      const EffectPaintPropertyNode&,
                      Vector<PaintChunk>::const_iterator& chunk_cursor);
   static bool MightOverlap(const PendingLayer&, const PendingLayer&);
-  static bool CanDecompositeEffect(const EffectPaintPropertyNode&,
-                                   const PendingLayer&);
+  bool DecompositeEffect(const EffectPaintPropertyNode& unaliased_parent_effect,
+                         size_t first_layer_in_parent_group_index,
+                         const EffectPaintPropertyNode& unaliased_effect,
+                         size_t layer_index);
 
   // Builds a leaf layer that represents a single paint chunk.
   scoped_refptr<cc::Layer> CompositedLayerForPendingLayer(

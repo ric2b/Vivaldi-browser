@@ -34,6 +34,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "sql/database.h"
+#include "storage/browser/quota/special_storage_policy.h"
 #include "third_party/blink/public/common/features.h"
 #include "url/origin.h"
 
@@ -102,7 +103,6 @@ void GotMojoSessionStorageUsage(
 }  // namespace
 
 scoped_refptr<DOMStorageContextWrapper> DOMStorageContextWrapper::Create(
-    service_manager::Connector* connector,
     const base::FilePath& profile_path,
     const base::FilePath& local_partition_path,
     storage::SpecialStoragePolicy* special_storage_policy) {
@@ -129,15 +129,19 @@ scoped_refptr<DOMStorageContextWrapper> DOMStorageContextWrapper::Create(
   base::FilePath new_localstorage_path =
       profile_path.empty()
           ? base::FilePath()
-          : local_partition_path.AppendASCII(kLocalStorageDirectory);
+          : base::FilePath().AppendASCII(kLocalStorageDirectory);
   LocalStorageContextMojo* mojo_local_state = new LocalStorageContextMojo(
-      mojo_task_runner, connector,
+      data_path, mojo_task_runner,
       new DOMStorageWorkerPoolTaskRunner(std::move(primary_sequence),
                                          std::move(commit_sequence)),
       legacy_localstorage_path, new_localstorage_path, special_storage_policy);
   SessionStorageContextMojo* mojo_session_state = nullptr;
   mojo_session_state = new SessionStorageContextMojo(
-      mojo_task_runner, connector,
+      data_path,
+      base::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::ThreadPool(),
+           base::TaskShutdownBehavior::BLOCK_SHUTDOWN}),
+      mojo_task_runner,
 #if defined(OS_ANDROID)
       // On Android there is no support for session storage restoring, and
       // since the restoring code is responsible for database cleanup, we must
@@ -148,7 +152,7 @@ scoped_refptr<DOMStorageContextWrapper> DOMStorageContextWrapper::Create(
           ? SessionStorageContextMojo::BackingMode::kNoDisk
           : SessionStorageContextMojo::BackingMode::kRestoreDiskState,
 #endif
-      local_partition_path, std::string(kSessionStorageDirectory));
+      std::string(kSessionStorageDirectory));
 
   return base::WrapRefCounted(new DOMStorageContextWrapper(
       std::move(legacy_localstorage_path), mojo_task_runner, mojo_local_state,
@@ -432,16 +436,14 @@ void DOMStorageContextWrapper::OpenSessionStorage(
                      std::move(receiver)));
 }
 
-void DOMStorageContextWrapper::SetLocalStorageDatabaseForTesting(
-    mojo::PendingAssociatedRemote<leveldb::mojom::LevelDBDatabase> database) {
-  // base::Unretained is safe here, because the mojo_state_ won't be deleted
-  // until a ShutdownAndDelete task has been ran on the mojo_task_runner_, and
-  // as soon as that task is posted, mojo_state_ is set to null, preventing
-  // further tasks from being queued.
+void DOMStorageContextWrapper::SetLocalStorageDatabaseOpenCallbackForTesting(
+    LocalStorageDatabaseOpenCallback callback) {
   mojo_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&LocalStorageContextMojo::SetDatabaseForTesting,
-                     base::Unretained(mojo_state_), std::move(database)));
+      base::BindOnce(
+          &LocalStorageContextMojo::SetDatabaseOpenCallbackForTesting,
+          base::Unretained(mojo_state_),
+          base::BindOnce(std::move(callback), mojo_state_)));
 }
 
 scoped_refptr<SessionStorageNamespaceImpl>

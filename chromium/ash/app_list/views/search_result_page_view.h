@@ -16,13 +16,10 @@
 #include "base/memory/weak_ptr.h"
 
 namespace ash {
-class ViewShadow;
-}
-
-namespace app_list {
 
 class AppListViewDelegate;
 class SearchResultBaseView;
+class ViewShadow;
 
 // The search results page for the app list.
 class APP_LIST_EXPORT SearchResultPageView
@@ -47,18 +44,24 @@ class APP_LIST_EXPORT SearchResultPageView
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   const char* GetClassName() const override;
   gfx::Size CalculatePreferredSize() const override;
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
   // AppListPage overrides:
   void OnHidden() override;
   void OnShown() override;
 
-  gfx::Rect GetPageBoundsForState(ash::AppListState state) const override;
   void OnAnimationStarted(ash::AppListState from_state,
                           ash::AppListState to_state) override;
   void OnAnimationUpdated(double progress,
                           ash::AppListState from_state,
                           ash::AppListState to_state) override;
-  gfx::Rect GetSearchBoxBounds() const override;
+  gfx::Size GetPreferredSearchBoxSize() const override;
+  base::Optional<int> GetSearchBoxTop(
+      ash::AppListViewState view_state) const override;
+  gfx::Rect GetPageBoundsForState(
+      ash::AppListState state,
+      const gfx::Rect& contents_bounds,
+      const gfx::Rect& search_box_bounds) const override;
   views::View* GetFirstFocusableView() override;
   views::View* GetLastFocusableView() override;
 
@@ -83,6 +86,11 @@ class APP_LIST_EXPORT SearchResultPageView
 
   // Sort the result container views.
   void ReorderSearchResultContainers();
+
+  // Passed to |result_selection_controller_| as a callback that gets called
+  // when the currently selected result changes.
+  // Ensures that |scroller_| visible rect contains the newly selected result.
+  void SelectedResultChanged();
 
   AppListViewDelegate* view_delegate_;
 
@@ -109,6 +117,6 @@ class APP_LIST_EXPORT SearchResultPageView
   DISALLOW_COPY_AND_ASSIGN(SearchResultPageView);
 };
 
-}  // namespace app_list
+}  // namespace ash
 
 #endif  // ASH_APP_LIST_VIEWS_SEARCH_RESULT_PAGE_VIEW_H_

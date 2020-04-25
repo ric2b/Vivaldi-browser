@@ -391,6 +391,12 @@ const IDNTestCase kIdnCases[] = {
     // ѕсоԗе.com is Cyrillic with Latin lookalikes.
     {"xn--e1ari3f61c.com", L"\x0455\x0441\x043e\x0517\x0435.com", false},
 
+    // ыоԍ.com is Cyrillic with Latin lookalikes.
+    {"xn--n1az74c.com", L"\x044b\x043e\x050d.com", false},
+
+    // сю.com is Cyrillic with Latin lookalikes.
+    {"xn--q1a0a.com", L"\x0441\x044e.com", false},
+
     // Combining Diacritic marks after a script other than Latin-Greek-Cyrillic
     {"xn--rsa2568fvxya.com", L"\xd55c\x0301\xae00.com", false},  // 한́글.com
     {"xn--rsa0336bjom.com", L"\x6f22\x0307\x5b57.com", false},   // 漢̇字.com
@@ -1077,6 +1083,7 @@ const IDNTestCase kIdnCases[] = {
     {"xn--est-118d.net", L"七est.net", false},
     {"xn--est-918d.net", L"丅est.net", false},
     {"xn--est-e28d.net", L"丆est.net", false},
+    {"xn--est-t18d.net", L"丁est.net", false},
     {"xn--3-cq6a.com", L"丩3.com", false},
     {"xn--cxe-n68d.com", L"c丫xe.com", false},
     {"xn--cye-b98d.com", L"cy乂e.com", false},

@@ -61,17 +61,6 @@ First, create the file
 </manifest>
 ```
 
-Then, add a package ID for Foo so that Foo's resources have unique identifiers.
-For this, add a new ID to
-`//chrome/android/modules/chrome_feature_modules.gni`:
-
-```gn
-resource_packages_id_mapping = [
-  ...,
-  "foo=0x{XX}", # Set {XX} to next lower hex number.
-]
-```
-
 Next, create a descriptor configuring the Foo module. To do this, create
 `//chrome/android/features/foo/foo_module.gni` and add the following:
 
@@ -189,7 +178,7 @@ access the module. To do this, add the following in the new file
 ```java
 package org.chromium.chrome.features.foo;
 
-import org.chromium.components.module_installer.ModuleInterface;
+import org.chromium.components.module_installer.builder.ModuleInterface;
 
 /** Interface to call into Foo feature. */
 @ModuleInterface(module = "foo", impl = "org.chromium.chrome.features.FooImpl")

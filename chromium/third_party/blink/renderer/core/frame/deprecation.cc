@@ -56,6 +56,8 @@ enum Milestone {
   kM78,
   kM79,
   kM80,
+  kM81,
+  kM82,
 };
 
 // Returns estimated milestone dates as human-readable strings.
@@ -92,6 +94,10 @@ const char* MilestoneString(Milestone milestone) {
       return "M79, around December 2019";
     case kM80:
       return "M80, around February 2020";
+    case kM81:
+      return "M81, around March 2020";
+    case kM82:
+      return "M82, around April 2020";
   }
 
   NOTREACHED();
@@ -132,7 +138,11 @@ double MilestoneDate(Milestone milestone) {
     case kM79:
       return 1575950400000;  // December 10, 2019.
     case kM80:
-      return 1580529600000;  // February 1, 2020. (This is a guess!)
+      return 1580788800000;  // February 4, 2020.
+    case kM81:
+      return 1584417600000;  // March 17, 2020.
+    case kM82:
+      return 1588046400000;  // April 28, 2020.
   }
 
   NOTREACHED();
@@ -304,13 +314,23 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
           "https://www.chromestatus.com/features/6107495151960064 for more "
           "details."};
 
-    case WebFeature::kApplicationCacheManifestSelectInsecureOrigin:
     case WebFeature::kApplicationCacheAPIInsecureOrigin:
+    case WebFeature::kApplicationCacheManifestSelectInsecureOrigin:
       return {"ApplicationCacheAPIInsecureOrigin", kM70,
-              "Application Cache is restricted to secure contexts. Please "
-              "consider migrating your application to HTTPS, and eventually "
-              "shifting over to Service Workers. See https://goo.gl/rStTGz for "
-              "more details."};
+              "Application Cache was previously restricted to secure origins "
+              "only from M70 on but now secure origin use is deprecated and "
+              "will be removed in M82.  Please shift your use case over to "
+              "Service Workers."};
+
+    case WebFeature::kApplicationCacheAPISecureOrigin:
+      return {
+          "ApplicationCacheAPISecureOrigin", kM82,
+          WillBeRemoved("Application Cache API use", kM82, "6192449487634432")};
+
+    case WebFeature::kApplicationCacheManifestSelectSecureOrigin:
+      return {"ApplicationCacheAPISecureOrigin", kM82,
+              WillBeRemoved("Application Cache API manifest selection", kM82,
+                            "6192449487634432")};
 
     case WebFeature::kNotificationInsecureOrigin:
     case WebFeature::kNotificationAPIInsecureOriginIframe:
@@ -338,7 +358,8 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
 
     case WebFeature::kCSSDeepCombinator:
       return {"CSSDeepCombinator", kM65,
-              "/deep/ combinator is no longer supported in CSS dynamic profile."
+              "/deep/ combinator is no longer supported in CSS dynamic "
+              "profile. "
               "It is now effectively no-op, acting as if it were a descendant "
               "combinator. /deep/ combinator will be removed, and will be "
               "invalid at M65. You should remove it. See "
@@ -472,16 +493,6 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
               "Creating a MediaStreamAudioSourceNode on an OfflineAudioContext",
               kM71, "5258622686724096")};
 
-    case WebFeature::kGridRowTrackPercentIndefiniteHeight:
-      return {"GridRowTrackPercentIndefiniteHeight", kM70,
-              String::Format("Percentages row tracks and gutters for "
-                             "indefinite height grid containers will be "
-                             "resolved against the intrinsic height instead of "
-                             "being treated as auto and zero respectively. "
-                             "This change will happen in %s. See "
-                             "https://www.chromestatus.com/feature/"
-                             "6708326821789696 for more details.",
-                             MilestoneString(kM70))};
     case WebFeature::kTextToSpeech_SpeakDisallowedByAutoplay:
       return {
           "TextToSpeech_DisallowedByAutoplay", kM71,
@@ -674,6 +685,25 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
               WillBeRemoved("'-webkit-appearance: textarea' for "
                             "elements other than textarea",
                             kM79, "5070237827334144")};
+    case WebFeature::kARIAHelpAttribute:
+      return {"ARIAHelpAttribute", kM80,
+              WillBeRemoved("'aria-help'", kM80, "5645050857914368")};
+
+    case WebFeature::kXRSupportsSession:
+      return {"XRSupportsSession", kM80,
+              ReplacedBy(
+                  "supportsSession()",
+                  "isSessionSupported() and check the resolved boolean value")};
+
+    case WebFeature::kCSSValueAppearanceButtonForBootstrapLooseSelectorRendered:
+    case WebFeature::kCSSValueAppearanceButtonForOthers2Rendered:
+      // The below DeprecationInfo::id doesn't match to WebFeature enums
+      // intentionally.
+      return {"CSSValueAppearanceButtonForOthersRendered", kM80,
+              WillBeRemoved("'-webkit-appearance: button' for "
+                            "elements other than <button> and <input "
+                            "type=button/color/reset/submit>",
+                            kM80, "4867142128238592")};
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

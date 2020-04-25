@@ -45,7 +45,7 @@ AdverseAdFilterListService::AdverseAdFilterListService(Profile* profile)
   if (!vivaldi::IsVivaldiRunning())
     return;
   if (profile_) {  // Profile will be null in components.
-    task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
+    task_runner_ = base::CreateSequencedTaskRunner(
         {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT,
          base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 
@@ -271,7 +271,7 @@ void AdverseAdFilterListService::LoadList(ListFailedCallback callback) {
 
 void AdverseAdFilterListService::LoadList(const base::FilePath& json_filename,
                                           ListFailedCallback callback) {
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE, {content::BrowserThread::IO},
       base::BindOnce(&AdverseAdFilterListService::LoadListOnIO,
                      base::Unretained(this), json_filename,
@@ -390,7 +390,7 @@ void AdverseAdFilterListService::ClearSiteList() {
 void AdverseAdFilterListService::PostCallback(ListFailedCallback callback) {
   if (callback.is_null())
     return;
-  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
                            std::move(callback));
 }
 

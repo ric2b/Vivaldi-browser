@@ -47,9 +47,6 @@
 #include "net/base/filename_util.h"
 #include "url/gurl.h"
 
-#include "app/vivaldi_apptools.h"
-#include "components/url_formatter/url_fixer.h"
-
 #if defined(OS_CHROMEOS)
 #include "components/user_manager/user_manager.h"
 #endif
@@ -396,27 +393,6 @@ void LaunchPlatformAppWithCommandLineAndLaunchId(
       LOG(ERROR) << "App with 'kiosk_only' attribute must be run in "
                  << " ChromeOS kiosk mode.";
       NOTREACHED();
-      return;
-    }
-  }
-
-  if (vivaldi::IsVivaldiRunning()) {
-    if (command_line.GetArgs().size() > 0) {
-      // To simplistic fixing of the supplied URL.  For more complete
-      // fixing see: StartupBrowserCreator::GetURLsFromCommandLine()
-      GURL url;
-      {
-        base::ThreadRestrictions::ScopedAllowIO allow_io;
-        url = url_formatter::FixupRelativeFile(
-            current_directory, base::FilePath(command_line.GetArgs()[0]));
-      }
-      //GURL url = GURL(command_line.GetArgs()[0]);
-      AppRuntimeEventRouter::DispatchOnLaunchedEventWithUrl(
-        context, app,
-        "None", //const std::string& handler_id,
-        url, //const GURL& url,
-        GURL() //const GURL& referrer_url);
-        );
       return;
     }
   }

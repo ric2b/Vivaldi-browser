@@ -203,11 +203,51 @@ LayoutUnit CalculateAvailableBlockSizeForLegacy(
   return space.PercentageResolutionBlockSize();
 }
 
+void SetupBoxLayoutExtraInput(const NGConstraintSpace& space,
+                              const LayoutBox& box,
+                              BoxLayoutExtraInput* input) {
+  input->containing_block_content_inline_size =
+      CalculateAvailableInlineSizeForLegacy(box, space);
+  input->containing_block_content_block_size =
+      CalculateAvailableBlockSizeForLegacy(box, space);
+
+  WritingMode writing_mode = box.StyleRef().GetWritingMode();
+  if (LayoutObject* containing_block = box.ContainingBlock()) {
+    if (!IsParallelWritingMode(containing_block->StyleRef().GetWritingMode(),
+                               writing_mode)) {
+      // The sizes should be in the containing block writing mode.
+      std::swap(input->containing_block_content_block_size,
+                input->containing_block_content_inline_size);
+
+      // We cannot lay out without a definite containing block inline-size. We
+      // end up here if we're performing a measure pass (as part of resolving
+      // the intrinsic min/max inline-size of some ancestor, for instance).
+      // Legacy layout has a tendency of clamping negative sizes to 0 anyway,
+      // but this is missing when it comes to resolving percentage-based
+      // padding, for instance.
+      if (input->containing_block_content_inline_size == kIndefiniteSize)
+        input->containing_block_content_inline_size = LayoutUnit();
+    }
+  }
+
+  // We need a definite containing block inline-size, or we'd be unable to
+  // resolve percentages.
+  DCHECK_GE(input->containing_block_content_inline_size, LayoutUnit());
+
+  input->available_inline_size = space.AvailableSize().inline_size;
+
+  if (space.IsFixedInlineSize())
+    input->override_inline_size = space.AvailableSize().inline_size;
+  if (space.IsFixedBlockSize())
+    input->override_block_size = space.AvailableSize().block_size;
+}
+
 }  // namespace
 
 scoped_refptr<const NGLayoutResult> NGBlockNode::Layout(
     const NGConstraintSpace& constraint_space,
-    const NGBreakToken* break_token) {
+    const NGBreakToken* break_token,
+    const NGEarlyBreak* early_break) {
   // Use the old layout code and synthesize a fragment.
   if (!CanUseNewLayout())
     return RunLegacyLayout(constraint_space);
@@ -228,8 +268,9 @@ scoped_refptr<const NGLayoutResult> NGBlockNode::Layout(
 
   NGLayoutCacheStatus cache_status;
   base::Optional<NGFragmentGeometry> fragment_geometry;
-  scoped_refptr<const NGLayoutResult> layout_result = box_->CachedLayoutResult(
-      constraint_space, break_token, &fragment_geometry, &cache_status);
+  scoped_refptr<const NGLayoutResult> layout_result =
+      box_->CachedLayoutResult(constraint_space, break_token, early_break,
+                               &fragment_geometry, &cache_status);
   if (layout_result) {
     DCHECK_EQ(cache_status, NGLayoutCacheStatus::kHit);
 
@@ -264,7 +305,8 @@ scoped_refptr<const NGLayoutResult> NGBlockNode::Layout(
   PrepareForLayout();
 
   NGLayoutAlgorithmParams params(*this, *fragment_geometry, constraint_space,
-                                 To<NGBlockBreakToken>(break_token));
+                                 To<NGBlockBreakToken>(break_token),
+                                 early_break);
 
   // Try to perform "simplified" layout.
   // TODO(crbug.com/992953): Add a simplified layout pass for custom layout.
@@ -438,11 +480,20 @@ void NGBlockNode::FinishLayout(
     const NGConstraintSpace& constraint_space,
     const NGBreakToken* break_token,
     scoped_refptr<const NGLayoutResult> layout_result) {
-  if (!IsBlockLayoutComplete(constraint_space, *layout_result))
+  if (constraint_space.IsIntermediateLayout())
     return;
+
+  // If we abort layout and don't clear the cached layout-result, we can end
+  // up in a state where the layout-object tree doesn't match fragment tree
+  // referenced by this layout-result.
+  if (layout_result->Status() != NGLayoutResult::kSuccess) {
+    box_->ClearCachedLayoutResult();
+    return;
+  }
 
   if (!constraint_space.HasBlockFragmentation())
     box_->SetCachedLayoutResult(*layout_result, break_token);
+
   if (block_flow) {
     auto* child = GetLayoutObjectForFirstChildNode(block_flow);
     bool has_inline_children =
@@ -763,27 +814,33 @@ void NGBlockNode::CopyFragmentDataToLayoutBox(
 
   auto* block_flow = DynamicTo<LayoutBlockFlow>(box_);
   LayoutMultiColumnFlowThread* flow_thread = GetFlowThread(block_flow);
-  if (UNLIKELY(flow_thread)) {
-    PlaceChildrenInFlowThread(physical_fragment);
-  } else {
-    PhysicalOffset offset_from_start;
-    if (UNLIKELY(constraint_space.HasBlockFragmentation())) {
-      // Need to include any block space that this container has used in
-      // previous fragmentainers. The offset of children will be relative to
-      // the container, in flow thread coordinates, i.e. the model where
-      // everything is represented as one single strip, rather than being
-      // sliced and translated into columns.
 
-      // TODO(mstensho): writing modes
-      if (previous_break_token)
-        offset_from_start.top = previous_break_token->ConsumedBlockSize();
+  // Position the children inside the box. We skip this if display-lock prevents
+  // child layout.
+  if (!LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren)) {
+    if (UNLIKELY(flow_thread)) {
+      PlaceChildrenInFlowThread(physical_fragment);
+    } else {
+      PhysicalOffset offset_from_start;
+      if (UNLIKELY(constraint_space.HasBlockFragmentation())) {
+        // Need to include any block space that this container has used in
+        // previous fragmentainers. The offset of children will be relative to
+        // the container, in flow thread coordinates, i.e. the model where
+        // everything is represented as one single strip, rather than being
+        // sliced and translated into columns.
+
+        // TODO(mstensho): writing modes
+        if (previous_break_token)
+          offset_from_start.top = previous_break_token->ConsumedBlockSize();
+      }
+      PlaceChildrenInLayoutBox(physical_fragment, offset_from_start);
     }
-    PlaceChildrenInLayoutBox(physical_fragment, offset_from_start);
   }
 
   LayoutBlock* block = DynamicTo<LayoutBlock>(box_);
   if (LIKELY(block && is_last_fragment)) {
-    LayoutUnit intrinsic_block_size = layout_result.IntrinsicBlockSize();
+    LayoutUnit intrinsic_block_size =
+        layout_result.UnconstrainedIntrinsicBlockSize();
     if (UNLIKELY(previous_break_token))
       intrinsic_block_size += previous_break_token->ConsumedBlockSize();
 
@@ -796,9 +853,12 @@ void NGBlockNode::CopyFragmentDataToLayoutBox(
                                         physical_fragment);
     }
 
+    BoxLayoutExtraInput input(*block);
+    SetupBoxLayoutExtraInput(constraint_space, *block, &input);
+
     // |ComputeOverflow()| below calls |AddVisualOverflowFromChildren()|, which
     // computes visual overflow from |RootInlineBox| if |ChildrenInline()|
-    block->SetNeedsOverflowRecalc();
+    block->SetNeedsVisualOverflowAndPaintInvalidation();
     block->ComputeLayoutOverflow(intrinsic_block_size - borders.block_end -
                                  scrollbars.block_end);
   }
@@ -861,8 +921,7 @@ void NGBlockNode::PlaceChildrenInFlowThread(
   for (const auto& child : physical_fragment.Children()) {
     if (child->GetLayoutObject() != box_) {
       DCHECK(child->GetLayoutObject()->IsColumnSpanAll());
-      // TODO(mstensho): Write back the spanner offset to the associated
-      // LayoutMultiColumnSpannerPlaceholder (if we bother)
+      CopyChildFragmentPosition(*child, child.offset);
       continue;
     }
     // Each anonymous child of a multicol container constitutes one column.
@@ -1089,42 +1148,9 @@ scoped_refptr<const NGLayoutResult> NGBlockNode::RunLegacyLayout(
 
   if (box_->NeedsLayout() || !layout_result || needs_force_relayout) {
     BoxLayoutExtraInput input(*box_);
-    input.containing_block_content_inline_size =
-        CalculateAvailableInlineSizeForLegacy(*box_, constraint_space);
-    input.containing_block_content_block_size =
-        CalculateAvailableBlockSizeForLegacy(*box_, constraint_space);
-
     WritingMode writing_mode = Style().GetWritingMode();
-    if (LayoutObject* containing_block = box_->ContainingBlock()) {
-      if (!IsParallelWritingMode(containing_block->StyleRef().GetWritingMode(),
-                                 writing_mode)) {
-        // The sizes should be in the containing block writing mode.
-        std::swap(input.containing_block_content_block_size,
-                  input.containing_block_content_inline_size);
 
-        // We cannot lay out without a definite containing block inline-size. We
-        // end up here if we're performing a measure pass (as part of resolving
-        // the intrinsic min/max inline-size of some ancestor, for instance).
-        // Legacy layout has a tendency of clamping negative sizes to 0 anyway,
-        // but this is missing when it comes to resolving percentage-based
-        // padding, for instance.
-        if (input.containing_block_content_inline_size == kIndefiniteSize) {
-          DCHECK(constraint_space.IsIntermediateLayout());
-          input.containing_block_content_inline_size = LayoutUnit();
-        }
-      }
-    }
-
-    // We need a definite containing block inline-size, or we'd be unable to
-    // resolve percentages.
-    DCHECK_GE(input.containing_block_content_inline_size, LayoutUnit());
-
-    input.available_inline_size = constraint_space.AvailableSize().inline_size;
-
-    if (constraint_space.IsFixedInlineSize())
-      input.override_inline_size = constraint_space.AvailableSize().inline_size;
-    if (constraint_space.IsFixedBlockSize())
-      input.override_block_size = constraint_space.AvailableSize().block_size;
+    SetupBoxLayoutExtraInput(constraint_space, *box_, &input);
     box_->ComputeAndSetBlockDirectionMargins(box_->ContainingBlock());
 
     // Using |LayoutObject::LayoutIfNeeded| save us a little bit of overhead,
@@ -1154,10 +1180,25 @@ scoped_refptr<const NGLayoutResult> NGBlockNode::RunLegacyLayout(
     builder.SetInitialFragmentGeometry(fragment_geometry);
     builder.SetIsLegacyLayoutRoot();
 
+    // If we're block-fragmented, we can only handle monolithic content, since
+    // the two block fragmentation machineries (NG and legacy) cannot cooperate.
+    DCHECK(!constraint_space.HasBlockFragmentation() || IsMonolithic());
+
+    if (constraint_space.IsInitialColumnBalancingPass()) {
+      // In the initial column balancing pass we need to provide the tallest
+      // unbreakable block-size. However, since the content is monolithic,
+      // that's already handled by the parent algorithm (so we don't need to
+      // propagate anything here). We still have to tell the builder that we're
+      // in this layout pass, though, so that the layout result is set up
+      // correctly.
+      builder.SetIsInitialColumnBalancingPass();
+    }
+
     CopyBaselinesFromLegacyLayout(constraint_space, &builder);
     layout_result = builder.ToBoxFragment();
 
-    box_->SetCachedLayoutResult(*layout_result, /* break_token */ nullptr);
+    if (!constraint_space.IsIntermediateLayout())
+      box_->SetCachedLayoutResult(*layout_result, /* break_token */ nullptr);
 
     // If |SetCachedLayoutResult| did not update cached |LayoutResult|,
     // |NeedsLayout()| flag should not be cleared.

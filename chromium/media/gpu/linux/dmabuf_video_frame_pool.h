@@ -23,6 +23,12 @@ namespace media {
 // implementation must be thread-safe.
 class MEDIA_GPU_EXPORT DmabufVideoFramePool {
  public:
+  using DmabufId = const std::vector<base::ScopedFD>*;
+
+  // Get the identifier of Dmabuf-backed |frame|. Calling this method with the
+  // frames backed by the same Dmabuf should return the same result.
+  static DmabufId GetDmabufId(const VideoFrame& frame);
+
   DmabufVideoFramePool();
   virtual ~DmabufVideoFramePool();
 
@@ -45,7 +51,8 @@ class MEDIA_GPU_EXPORT DmabufVideoFramePool {
       const gfx::Size& natural_size) = 0;
 
   // Returns a frame from the pool with the parameters assigned by
-  // SetFrameFormat(). Returns nullptr if the pool is exhausted.
+  // SetFrameFormat() and zero timestamp. Returns nullptr if the pool is
+  // exhausted.
   virtual scoped_refptr<VideoFrame> GetFrame() = 0;
 
   // Checks whether the pool is exhausted. This happens when the pool reached
@@ -58,12 +65,6 @@ class MEDIA_GPU_EXPORT DmabufVideoFramePool {
   // pending callback when calling NotifyWhenFrameAvailable(), the old callback
   // would be dropped immediately.
   virtual void NotifyWhenFrameAvailable(base::OnceClosure cb) = 0;
-
-  // Returns the original frame of a wrapped frame. We need this method to
-  // determine whether the frame returned by GetFrame() is the same one after
-  // recycling, and bind destruction callback at original frames.
-  // TODO(akahuang): Find a way to avoid this method.
-  virtual VideoFrame* UnwrapFrame(const VideoFrame& wrapped_frame) = 0;
 
  protected:
   scoped_refptr<base::SequencedTaskRunner> parent_task_runner_;

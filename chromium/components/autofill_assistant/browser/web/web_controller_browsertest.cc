@@ -24,6 +24,8 @@ namespace autofill_assistant {
 using ::testing::AnyOf;
 using ::testing::IsEmpty;
 
+// Flag to enable site per process to enforce OOPIFs.
+const char* kSitePerProcess = "site-per-process";
 const char* kTargetWebsitePath = "/autofill_assistant_target_website.html";
 
 class WebControllerBrowserTest : public content::ContentBrowserTest,
@@ -32,13 +34,26 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
   WebControllerBrowserTest() {}
   ~WebControllerBrowserTest() override {}
 
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(kSitePerProcess);
+  }
+
   void SetUpOnMainThread() override {
     ContentBrowserTest::SetUpOnMainThread();
+
+    // Start a mock server for hosting an OOPIF.
+    http_server_iframe_ = std::make_unique<net::EmbeddedTestServer>(
+        net::EmbeddedTestServer::TYPE_HTTP);
+    http_server_iframe_->ServeFilesFromSourceDirectory(
+        "components/test/data/autofill_assistant/html_iframe");
+    ASSERT_TRUE(http_server_iframe_->Start(8081));
+
+    // Start the main server hosting the test page.
     http_server_ = std::make_unique<net::EmbeddedTestServer>(
         net::EmbeddedTestServer::TYPE_HTTP);
     http_server_->ServeFilesFromSourceDirectory(
-        "components/test/data/autofill_assistant");
-    ASSERT_TRUE(http_server_->Start());
+        "components/test/data/autofill_assistant/html");
+    ASSERT_TRUE(http_server_->Start(8080));
     ASSERT_TRUE(
         NavigateToURL(shell(), http_server_->GetURL(kTargetWebsitePath)));
     web_controller_ = WebController::CreateForWebContents(
@@ -46,25 +61,20 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
     Observe(shell()->web_contents());
   }
 
-  void DidCommitAndDrawCompositorFrame() override {
-    paint_occurred_during_last_loop_ = true;
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ContentBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch("allow-pre-commit-input");
-  }
-
   void WaitTillPageIsIdle(base::TimeDelta continuous_paint_timeout) {
     base::TimeTicks finished_load_time = base::TimeTicks::Now();
-    bool page_is_loading = false;
-    do {
-      paint_occurred_during_last_loop_ = false;
-      base::RunLoop heart_beat;
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, heart_beat.QuitClosure(), base::TimeDelta::FromSeconds(3));
-      heart_beat.Run();
-      page_is_loading =
+    while (true) {
+      content::RenderFrameSubmissionObserver frame_submission_observer(
+          web_contents());
+      // Runs a loop for 3 seconds to see if the renderer is idle.
+      {
+        base::RunLoop heart_beat;
+        base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+            FROM_HERE, heart_beat.QuitClosure(),
+            base::TimeDelta::FromSeconds(3));
+        heart_beat.Run();
+      }
+      bool page_is_loading =
           web_contents()->IsWaitingForResponse() || web_contents()->IsLoading();
       if (page_is_loading) {
         finished_load_time = base::TimeTicks::Now();
@@ -76,8 +86,12 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
         // blinking caret or a persistent animation is making Chrome paint at
         // regular intervals. Exit.
         break;
+      } else if (frame_submission_observer.render_frame_count() == 0) {
+        // If the renderer has stopped submitting frames for 3 seconds then
+        // we're done.
+        break;
       }
-    } while (page_is_loading || paint_occurred_during_last_loop_);
+    }
   }
 
   void RunStrictElementCheck(const Selector& selector, bool result) {
@@ -114,8 +128,8 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
                                    const Selector& selector,
                                    size_t* pending_number_of_checks_output,
                                    bool expected_result,
-                                   bool result) {
-    EXPECT_EQ(expected_result, result) << "selector: " << selector;
+                                   const ClientStatus& result) {
+    EXPECT_EQ(expected_result, result.ok()) << "selector: " << selector;
     *pending_number_of_checks_output -= 1;
     if (*pending_number_of_checks_output == 0) {
       done_callback.Run();
@@ -150,9 +164,9 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
 
   void OnWaitForElementRemove(const base::Closure& done_callback,
                               const Selector& selector,
-                              bool result) {
+                              const ClientStatus& result) {
     done_callback.Run();
-    if (result) {
+    if (result.ok()) {
       WaitForElementRemove(selector);
     }
   }
@@ -315,7 +329,7 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
   void OnGetFieldValue(const base::Closure& done_callback,
                        size_t* pending_number_of_checks_output,
                        const std::string& expected_value,
-                       bool exists,
+                       const ClientStatus& status,
                        const std::string& value) {
     // Don't use ASSERT_EQ here: if the check fails, this would result in
     // an endless loop without meaningful test results.
@@ -461,7 +475,7 @@ class WebControllerBrowserTest : public content::ContentBrowserTest,
 
  private:
   std::unique_ptr<net::EmbeddedTestServer> http_server_;
-  bool paint_occurred_during_last_loop_ = false;
+  std::unique_ptr<net::EmbeddedTestServer> http_server_iframe_;
   ClientSettings settings_;
 
   DISALLOW_COPY_AND_ASSIGN(WebControllerBrowserTest);
@@ -487,6 +501,18 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, ElementExistenceCheck) {
 
   // A non-existent pseudo-element
   RunLaxElementCheck(Selector({"#button"}, AFTER), false);
+
+  // An iFrame.
+  RunLaxElementCheck(Selector({"#iframe"}), true);
+
+  // An element in a same-origin iFrame.
+  RunLaxElementCheck(Selector({"#iframe", "#button"}), true);
+
+  // An OOPIF.
+  RunLaxElementCheck(Selector({"#iframeExternal"}), true);
+
+  // An element in an OOPIF.
+  RunLaxElementCheck(Selector({"#iframeExternal", "#button"}), true);
 }
 
 IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, VisibilityRequirementCheck) {
@@ -508,6 +534,19 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, VisibilityRequirementCheck) {
 
   // A non-existent pseudo-element
   RunLaxElementCheck(Selector({"#button"}, AFTER).MustBeVisible(), false);
+
+  // An iFrame.
+  RunLaxElementCheck(Selector({"#iframe"}).MustBeVisible(), true);
+
+  // An element in a same-origin iFrame.
+  RunLaxElementCheck(Selector({"#iframe", "#button"}).MustBeVisible(), true);
+
+  // An OOPIF.
+  RunLaxElementCheck(Selector({"#iframeExternal"}).MustBeVisible(), true);
+
+  // An element in an OOPIF.
+  RunLaxElementCheck(Selector({"#iframeExternal", "#button"}).MustBeVisible(),
+                     true);
 }
 
 IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, MultipleVisibleElementCheck) {
@@ -636,6 +675,13 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest,
   selectors.emplace_back(a_selector);
   results.emplace_back(true);
 
+  // OOPIF.
+  a_selector.selectors.clear();
+  a_selector.selectors.emplace_back("#iframeExternal");
+  a_selector.selectors.emplace_back("#button");
+  selectors.emplace_back(a_selector);
+  results.emplace_back(true);
+
   // Shadow DOM.
   a_selector.selectors.clear();
   a_selector.selectors.emplace_back("#iframe");
@@ -687,6 +733,18 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, ClickElementInIFrame) {
   selector.selectors.clear();
   selector.selectors.emplace_back("#iframe");
   selector.selectors.emplace_back("#button");
+  WaitForElementRemove(selector);
+}
+
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, ClickElementInOOPIF) {
+  Selector selector;
+  selector.selectors.emplace_back("#iframeExternal");
+  selector.selectors.emplace_back("#button");
+  ClickOrTapElement(selector, ClickAction::CLICK);
+
+  selector.selectors.clear();
+  selector.selectors.emplace_back("#iframeExternal");
+  selector.selectors.emplace_back("#div");
   WaitForElementRemove(selector);
 }
 
@@ -1057,6 +1115,28 @@ IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, GetAndSetFieldValue) {
       ELEMENT_RESOLUTION_FAILED,
       SetFieldValue(a_selector, "foobar", /* simulate_key_presses= */ false)
           .proto_status());
+}
+
+IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, GetAndSetFieldValueInIFrame) {
+  Selector a_selector;
+
+  // IFrame.
+  a_selector.selectors.clear();
+  a_selector.selectors.emplace_back("#iframe");
+  a_selector.selectors.emplace_back("#input");
+  EXPECT_EQ(ACTION_APPLIED, SetFieldValue(a_selector, "text",
+                                          /* simulate_key_presses= */ false)
+                                .proto_status());
+  GetFieldsValue({a_selector}, {"text"});
+
+  // OOPIF.
+  a_selector.selectors.clear();
+  a_selector.selectors.emplace_back("#iframeExternal");
+  a_selector.selectors.emplace_back("#input");
+  EXPECT_EQ(ACTION_APPLIED, SetFieldValue(a_selector, "text",
+                                          /* simulate_key_presses= */ false)
+                                .proto_status());
+  GetFieldsValue({a_selector}, {"text"});
 }
 
 IN_PROC_BROWSER_TEST_F(WebControllerBrowserTest, SendKeyboardInput) {

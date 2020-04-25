@@ -20,11 +20,15 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.SynchronousInitializationActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
-import org.chromium.chrome.browser.widget.TintedDrawable;
+import org.chromium.chrome.browser.ui.widget.TintedDrawable;
 import org.chromium.components.bookmarks.BookmarkId;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import org.vivaldi.browser.bookmarks.VivaldiBookmarkAddEditFolderActivity;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Activity that allows a user to add or edit a bookmark folder. This activity has two modes: adding
@@ -90,6 +94,10 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
      * Starts an edit folder activity. Require the context to fire an intent.
      */
     public static void startEditFolderActivity(Context context, BookmarkId idToEdit) {
+        if (ChromeApplication.isVivaldi()) {
+            VivaldiBookmarkAddEditFolderActivity.startEditFolderActivity(context, idToEdit);
+            return;
+        }
         RecordUserAction.record("MobileBookmarkManagerEditFolder");
         Intent intent = new Intent(context, BookmarkAddEditFolderActivity.class);
         intent.putExtra(INTENT_IS_ADD_MODE, false);
@@ -103,6 +111,10 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
      */
     public static void startAddFolderActivity(BookmarkFolderSelectActivity activity,
             List<BookmarkId> bookmarksToMove) {
+        if (ChromeApplication.isVivaldi()) {
+            VivaldiBookmarkAddEditFolderActivity.startAddFolderActivity(activity, bookmarksToMove);
+            return;
+        }
         assert bookmarksToMove.size() > 0;
         Intent intent = new Intent(activity, BookmarkAddEditFolderActivity.class);
         intent.putExtra(INTENT_IS_ADD_MODE, true);
@@ -146,6 +158,7 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
 
         if (mIsAddMode) {
             getSupportActionBar().setTitle(R.string.add_folder);
+            if (!ChromeApplication.isVivaldi())
             updateParent(mModel.getDefaultFolder());
         } else {
             // Edit mode
@@ -157,7 +170,7 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
             editText.setSelection(editText.getText().length());
             mParentTextView.setEnabled(bookmarkItem.isMovable());
         }
-
+        if (!ChromeApplication.isVivaldi())
         mParentTextView.setText(mModel.getBookmarkTitle(mParentId));
 
         View shadow = findViewById(R.id.shadow);
@@ -188,6 +201,7 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
                                     R.drawable.bookmark_check_gray, R.color.default_icon_color))
                             .setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_IF_ROOM);
         } else {
+            if (!ChromeApplication.isVivaldi())
             mDeleteButton = menu.add(R.string.bookmark_action_bar_delete)
                                     .setIcon(TintedDrawable.constructTintedDrawable(
                                             this, R.drawable.ic_delete_white_24dp))
@@ -212,6 +226,7 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
             }
 
             BookmarkId newFolder = mModel.addFolder(mParentId, 0, mFolderTitle.getTrimmedText());
+            if (ChromeApplication.isVivaldi()) updateIsSpeedDial(newFolder);
             Intent intent = new Intent();
             intent.putExtra(INTENT_CREATED_BOOKMARK, newFolder.toString());
             setResult(RESULT_OK, intent);
@@ -223,6 +238,7 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
             // When deleting, wait till the model has done its job and notified us via model
             // observer, and then we finish this activity.
             mModel.deleteBookmarks(mFolderId);
+            if (ChromeApplication.isVivaldi()) finish();
             return true;
         }
 
@@ -232,6 +248,7 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
     @Override
     protected void onStop() {
         if (!mIsAddMode && mModel.doesBookmarkExist(mFolderId) && !mFolderTitle.isEmpty()) {
+            if (!ChromeApplication.isVivaldi() || !mModel.isInsideTrashFolder(mFolderId))
             mModel.setBookmarkTitle(mFolderId, mFolderTitle.getTrimmedText());
         }
 
@@ -260,5 +277,28 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
     private void updateParent(BookmarkId newParent) {
         mParentId = newParent;
         mParentTextView.setText(mModel.getBookmarkTitle(mParentId));
+    }
+
+    // Vivaldi
+    public static String getIntentIsAddMode() { return INTENT_IS_ADD_MODE; }
+    public static String getIntentBookmarkId() { return INTENT_BOOKMARK_ID; }
+    public BookmarkModel getModel() { return mModel; }
+    public BookmarkId getFolderId() { return mFolderId; }
+    public void updateParentVivaldi(BookmarkId newParent) {
+        if (newParent.getId() >= 0)
+            updateParent(newParent);
+        else
+            updateParent(mModel.getDefaultFolder());
+    }
+    public BookmarkId getParentId() { return mParentId; }
+    public boolean getIsAddMode() {
+        return mIsAddMode;
+    }
+    public void setDeleteButton(MenuItem deleteButton) { mDeleteButton = deleteButton; }
+    public void updateIsSpeedDial(BookmarkId newFolder) {
+
+    }
+    public void enableParentTextView(boolean enable) {
+        mParentTextView.setEnabled(enable);
     }
 }

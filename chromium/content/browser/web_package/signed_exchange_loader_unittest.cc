@@ -12,12 +12,14 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
+#include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/web_package/mock_signed_exchange_handler.h"
 #include "content/browser/web_package/signed_exchange_devtools_proxy.h"
 #include "content/browser/web_package/signed_exchange_prefetch_metric_recorder.h"
 #include "content/browser/web_package/signed_exchange_reporter.h"
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/system/data_pipe_producer.h"
 #include "mojo/public/cpp/system/string_data_source.h"
 #include "net/http/http_status_code.h"
@@ -117,7 +119,8 @@ class SignedExchangeLoaderTest : public testing::TestWithParam<bool> {
       ping_loader_ = std::make_unique<MockURLLoader>(std::move(request));
       ping_loader_client_ = std::move(client);
     }
-    void Clone(network::mojom::URLLoaderFactoryRequest request) override {}
+    void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
+        override {}
 
     std::unique_ptr<MockURLLoader> ping_loader_;
     network::mojom::URLLoaderClientPtr ping_loader_client_;
@@ -179,7 +182,7 @@ TEST_P(SignedExchangeLoaderTest, Simple) {
           false /* should_redirect_to_fallback */, nullptr /* devtools_proxy */,
           nullptr /* reporter */, CreateMockPingLoaderFactory(),
           base::BindRepeating(&SignedExchangeLoaderTest::ThrottlesGetter),
-          base::RepeatingCallback<int(void)>(), nullptr /* metric_recorder */,
+          FrameTreeNode::kFrameTreeNodeInvalidId, nullptr /* metric_recorder */,
           std::string() /* accept_langs */);
 
   EXPECT_CALL(mock_loader, PauseReadingBodyFromNet());

@@ -13,6 +13,7 @@
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/button_controller.h"
 
 ExtensionsToolbarButton::ExtensionsToolbarButton(
@@ -23,7 +24,8 @@ ExtensionsToolbarButton::ExtensionsToolbarButton(
       extensions_container_(extensions_container) {
   SetTooltipText(l10n_util::GetStringUTF16(IDS_TOOLTIP_EXTENSIONS_BUTTON));
   button_controller()->set_notify_action(
-      views::ButtonController::NotifyAction::NOTIFY_ON_PRESS);
+      views::ButtonController::NotifyAction::kOnPress);
+  GetViewAccessibility().OverrideHasPopup(ax::mojom::HasPopup::kMenu);
 }
 
 void ExtensionsToolbarButton::UpdateIcon() {

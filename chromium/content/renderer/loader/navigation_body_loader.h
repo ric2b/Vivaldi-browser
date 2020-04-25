@@ -22,6 +22,7 @@
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "third_party/blink/public/platform/web_navigation_body_loader.h"
 
 namespace blink {
@@ -50,10 +51,10 @@ class CONTENT_EXPORT NavigationBodyLoader
   // This method fills navigation params related to the navigation request,
   // redirects and response, and also creates a body loader if needed.
   static void FillNavigationParamsResponseAndBodyLoader(
-      const mojom::CommonNavigationParams& common_params,
-      const mojom::CommitNavigationParams& commit_params,
+      mojom::CommonNavigationParamsPtr common_params,
+      mojom::CommitNavigationParamsPtr commit_params,
       int request_id,
-      const network::ResourceResponseHead& response_head,
+      network::mojom::URLResponseHeadPtr response_head,
       mojo::ScopedDataPipeConsumerHandle response_body,
       network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
@@ -93,7 +94,7 @@ class CONTENT_EXPORT NavigationBodyLoader
   static constexpr uint32_t kMaxNumConsumedBytesInTask = 64 * 1024;
 
   NavigationBodyLoader(
-      const network::ResourceResponseHead& response_head,
+      network::mojom::URLResponseHeadPtr response_head,
       mojo::ScopedDataPipeConsumerHandle response_body,
       network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
@@ -120,7 +121,9 @@ class CONTENT_EXPORT NavigationBodyLoader
       mojo::ScopedDataPipeConsumerHandle handle) override;
   void OnComplete(const network::URLLoaderCompletionStatus& status) override;
 
-  void CodeCacheReceived(base::Time response_time, mojo_base::BigBuffer data);
+  void CodeCacheReceived(base::Time response_head_response_time,
+                         base::Time response_time,
+                         mojo_base::BigBuffer data);
   void BindURLLoaderAndContinue();
   void OnConnectionClosed();
   void OnReadable(MojoResult unused);
@@ -132,7 +135,7 @@ class CONTENT_EXPORT NavigationBodyLoader
 
   // Navigation parameters.
   const int render_frame_id_;
-  const network::ResourceResponseHead response_head_;
+  network::mojom::URLResponseHeadPtr response_head_;
   mojo::ScopedDataPipeConsumerHandle response_body_;
   network::mojom::URLLoaderClientEndpointsPtr endpoints_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;

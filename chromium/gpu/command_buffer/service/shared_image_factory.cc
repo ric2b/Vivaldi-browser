@@ -105,7 +105,10 @@ SharedImageFactory::SharedImageFactory(
           workarounds, gpu_feature_info, use_gl);
 #else
   // Others
-  DCHECK(!using_vulkan_);
+  if (using_vulkan_)
+    LOG(ERROR) << "ERROR: using_vulkan_ = true and interop_backing_factory_ is "
+                  "not set";
+
 #endif
   if (enable_wrapped_sk_image && context_state) {
     wrapped_sk_image_factory_ =
@@ -114,12 +117,10 @@ SharedImageFactory::SharedImageFactory(
 
 #if defined(OS_WIN)
   // For Windows
-  if (SharedImageBackingFactoryD3D::IsSwapChainSupported()) {
-    bool use_passthrough = gpu_preferences.use_passthrough_cmd_decoder &&
-                           gles2::PassthroughCommandDecoderSupported();
-    d3d_backing_factory_ =
-        std::make_unique<SharedImageBackingFactoryD3D>(use_passthrough);
-  }
+  bool use_passthrough = gpu_preferences.use_passthrough_cmd_decoder &&
+                         gles2::PassthroughCommandDecoderSupported();
+  interop_backing_factory_ =
+      std::make_unique<SharedImageBackingFactoryD3D>(use_passthrough);
 #endif  // OS_WIN
 
 #if defined(OS_FUCHSIA)
@@ -243,10 +244,14 @@ bool SharedImageFactory::CreateSwapChain(const Mailbox& front_buffer_mailbox,
                                          const gfx::Size& size,
                                          const gfx::ColorSpace& color_space,
                                          uint32_t usage) {
-  if (!d3d_backing_factory_)
+  if (!SharedImageBackingFactoryD3D::IsSwapChainSupported())
     return false;
+
+  SharedImageBackingFactoryD3D* d3d_backing_factory =
+      static_cast<SharedImageBackingFactoryD3D*>(
+          interop_backing_factory_.get());
   bool allow_legacy_mailbox = true;
-  auto backings = d3d_backing_factory_->CreateSwapChain(
+  auto backings = d3d_backing_factory->CreateSwapChain(
       front_buffer_mailbox, back_buffer_mailbox, format, size, color_space,
       usage);
   return RegisterBacking(std::move(backings.front_buffer),
@@ -255,7 +260,7 @@ bool SharedImageFactory::CreateSwapChain(const Mailbox& front_buffer_mailbox,
 }
 
 bool SharedImageFactory::PresentSwapChain(const Mailbox& mailbox) {
-  if (!d3d_backing_factory_)
+  if (!SharedImageBackingFactoryD3D::IsSwapChainSupported())
     return false;
   auto it = shared_images_.find(mailbox);
   if (it == shared_images_.end()) {

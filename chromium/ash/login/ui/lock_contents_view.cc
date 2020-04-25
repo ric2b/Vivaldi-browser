@@ -80,13 +80,13 @@ namespace {
 // should not affect visual appearance.
 constexpr int kNonEmptyHeightDp = 30;
 
-// Horizontal distance between the auth user and the media controls.
-constexpr int kDistanceBetweenAuthUserAndMediaControlsLandscapeDp = 100;
-constexpr int kDistanceBetweenAuthUserAndMediaControlsPortraitDp = 50;
-
 // Horizontal distance between two users in the low density layout.
 constexpr int kLowDensityDistanceBetweenUsersInLandscapeDp = 118;
 constexpr int kLowDensityDistanceBetweenUsersInPortraitDp = 32;
+
+constexpr int kMediaControlsSpacingThreshold = 1280;
+constexpr int kMediaControlsSmallSpaceFactor = 3;
+constexpr int kMediaControlsLargeSpaceFactor = 5;
 
 // Margin left of the auth user in the medium density layout.
 constexpr int kMediumDensityMarginLeftOfAuthUserLandscapeDp = 98;
@@ -557,6 +557,15 @@ void LockContentsView::FocusPreviousUser() {
   }
 }
 
+void LockContentsView::ShowSystemInfo() {
+  enable_system_info_if_possible_ = true;
+  bool system_info_visible = GetSystemInfoVisibility();
+  if (system_info_visible && !system_info_->GetVisible()) {
+    system_info_->SetVisible(true);
+    LayoutTopHeader();
+  }
+}
+
 void LockContentsView::ShowParentAccessDialog() {
   // ParentAccessDialog should only be shown on lock screen from here.
   DCHECK(primary_big_view_);
@@ -640,9 +649,12 @@ void LockContentsView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   Shelf* shelf = Shelf::ForWindow(GetWidget()->GetNativeWindow());
   ShelfWidget* shelf_widget = shelf->shelf_widget();
   GetViewAccessibility().OverrideNextFocus(shelf_widget);
-
   GetViewAccessibility().OverridePreviousFocus(shelf->GetStatusAreaWidget());
-  node_data->SetNameExplicitlyEmpty();
+  node_data->SetName(
+      l10n_util::GetStringUTF16(screen_type_ == LockScreen::ScreenType::kLogin
+                                    ? IDS_ASH_LOGIN_SCREEN_ACCESSIBLE_NAME
+                                    : IDS_ASH_LOCK_SCREEN_ACCESSIBLE_NAME));
+  node_data->role = ax::mojom::Role::kWindow;
 }
 
 bool LockContentsView::AcceleratorPressed(const ui::Accelerator& accelerator) {
@@ -885,6 +897,11 @@ void LockContentsView::OnAuthDisabledForUser(
   disable_lock_screen_note_ = state->disable_auth;
   OnLockScreenNoteStateChanged(mojom::TrayActionState::kNotAvailable);
 
+  if (auth_disabled_data.disable_lock_screen_media) {
+    Shell::Get()->media_controller()->SuspendMediaSessions();
+    HideMediaControlsLayout();
+  }
+
   LoginBigUserView* big_user =
       TryToFindBigUser(user, true /*require_auth_active*/);
   if (big_user && big_user->auth_user()) {
@@ -998,6 +1015,7 @@ void LockContentsView::OnLockScreenNoteStateChanged(
 
 void LockContentsView::OnSystemInfoChanged(
     bool show,
+    bool enforced,
     const std::string& os_version_label_text,
     const std::string& enterprise_info_text,
     const std::string& bluetooth_name) {
@@ -1021,8 +1039,15 @@ void LockContentsView::OnSystemInfoChanged(
       system_info_->AddChildView(create_info_label());
   }
 
-  if (show)
-    system_info_->SetVisible(true);
+  if (enforced) {
+    enable_system_info_enforced_ = show;
+  } else {
+    enable_system_info_enforced_ = base::nullopt;
+    enable_system_info_if_possible_ |= show;
+  }
+
+  bool system_info_visible = GetSystemInfoVisibility();
+  system_info_->SetVisible(system_info_visible);
 
   auto update_label = [&](size_t index, const std::string& text) {
     views::Label* label =
@@ -1261,6 +1286,27 @@ void LockContentsView::SetLowDensitySpacing(views::View* spacing_middle,
                            std::min(available_width, desired_width));
 }
 
+void LockContentsView::SetMediaControlsSpacing(bool landscape) {
+  views::View* spacing_middle = media_controls_view_->GetMiddleSpacingView();
+
+  int total_width = GetPreferredSize().width();
+  int available_width =
+      total_width - (primary_big_view_->GetPreferredSize().width() +
+                     media_controls_view_->GetPreferredSize().width());
+  if (available_width <= 0) {
+    SetPreferredWidthForView(spacing_middle, 0);
+    return;
+  }
+
+  int desired_width;
+  if (!landscape || total_width <= kMediaControlsSpacingThreshold)
+    desired_width = available_width / kMediaControlsSmallSpaceFactor;
+  else
+    desired_width = available_width / kMediaControlsLargeSpaceFactor;
+
+  SetPreferredWidthForView(spacing_middle, desired_width);
+}
+
 bool LockContentsView::AreMediaControlsEnabled() const {
   return screen_type_ == LockScreen::ScreenType::kLock &&
          !expanded_view_->GetVisible() &&
@@ -1289,10 +1335,7 @@ void LockContentsView::CreateMediaControlsLayout() {
 
   // Set |spacing_middle|.
   AddDisplayLayoutAction(base::BindRepeating(
-      &LockContentsView::SetLowDensitySpacing, base::Unretained(this),
-      media_controls_view_->GetMiddleSpacingView(), media_controls_view_.get(),
-      kDistanceBetweenAuthUserAndMediaControlsLandscapeDp,
-      kDistanceBetweenAuthUserAndMediaControlsPortraitDp));
+      &LockContentsView::SetMediaControlsSpacing, base::Unretained(this)));
 
   Layout();
 }
@@ -2021,10 +2064,7 @@ void LockContentsView::PerformAction(AcceleratorAction action) {
       FocusPreviousUser();
       break;
     case AcceleratorAction::kShowSystemInfo:
-      if (!system_info_->GetVisible()) {
-        system_info_->SetVisible(true);
-        LayoutTopHeader();
-      }
+      ShowSystemInfo();
       break;
     case AcceleratorAction::kShowFeedback:
       Shell::Get()->login_screen_controller()->ShowFeedback();
@@ -2034,6 +2074,14 @@ void LockContentsView::PerformAction(AcceleratorAction action) {
       break;
     default:
       NOTREACHED();
+  }
+}
+
+bool LockContentsView::GetSystemInfoVisibility() const {
+  if (enable_system_info_enforced_.has_value()) {
+    return enable_system_info_enforced_.value();
+  } else {
+    return enable_system_info_if_possible_;
   }
 }
 

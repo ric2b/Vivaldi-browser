@@ -35,12 +35,6 @@ using base::android::ScopedJavaLocalRef;
 
 namespace {
 
-bool DoesAndroidSupportMaskableIconsForWebApk() {
-  // TODO(crbug.com/977173): re-enable maskable icon support once server support
-  // is ready.
-  return false;
-}
-
 // Returns whether the given |url| is within the scope of the |scope| url.
 bool IsInScope(const GURL& url, const GURL& scope) {
   return base::StartsWith(url.spec(), scope.spec(),
@@ -118,7 +112,8 @@ void WebApkUpdateDataFetcher::FetchInstallableData() {
 
   InstallableParams params;
   params.valid_manifest = true;
-  params.prefer_maskable_icon = DoesAndroidSupportMaskableIconsForWebApk();
+  params.prefer_maskable_icon =
+      ShortcutHelper::DoesAndroidSupportMaskableIcons();
   params.has_worker = true;
   params.valid_primary_icon = true;
   params.valid_badge_icon = true;
@@ -276,7 +271,7 @@ void WebApkUpdateDataFetcher::OnDataAvailable(
       java_primary_icon_url, java_primary_icon_murmur2_hash, java_primary_icon,
       java_is_primary_icon_maskable, java_badge_icon_url,
       java_badge_icon_murmur2_hash, java_badge_icon, java_icon_urls,
-      info_.display, info_.orientation,
+      static_cast<int>(info_.display), info_.orientation,
       OptionalSkColorToJavaColor(info_.theme_color),
       OptionalSkColorToJavaColor(info_.background_color), java_share_action,
       java_share_params_title, java_share_params_text, java_share_params_url,

@@ -15,7 +15,16 @@
 class Browser;
 class Profile;
 
+namespace content {
+class WebUIDataSource;
+}
+
 namespace web_app {
+
+// Returns the system app type for the given App ID.
+base::Optional<SystemAppType> GetSystemWebAppTypeForAppId(
+    Profile* profile,
+    web_app::AppId app_id);
 
 // Returns the PWA system App ID for the given system app type.
 base::Optional<web_app::AppId> GetAppIdForSystemWebApp(Profile* profile,
@@ -32,6 +41,20 @@ Browser* LaunchSystemWebApp(Profile* profile,
 // Returns a browser that is hosting the given system app type, or nullptr if
 // not found.
 Browser* FindSystemWebAppBrowser(Profile* profile, SystemAppType app_type);
+
+// Returns true if the |browser| is a system web app.
+bool IsSystemWebApp(Browser* browser);
+
+// Returns the minimum window size for a system web app, or an empty size if
+// the app does not specify a minimum size.
+gfx::Size GetSystemWebAppMinimumWindowSize(Browser* browser);
+
+// Calls |source->SetRequestFilter()| to set up respones to requests for
+// "manifest.json" while replacing $i18nRaw{name} in the contents indiciated by
+// |manifest_idr| with the name from |name_ids|.
+void SetManifestRequestFilter(content::WebUIDataSource* source,
+                              int manifest_idr,
+                              int name_ids);
 
 }  // namespace web_app
 

@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "android_webview/browser/aw_content_browser_client.h"
-#include "android_webview/browser/aw_feature_list.h"
 #include "android_webview/browser/aw_media_url_interceptor.h"
 #include "android_webview/browser/gfx/browser_view_renderer.h"
 #include "android_webview/browser/gfx/gpu_service_web_view.h"
@@ -15,6 +14,7 @@
 #include "android_webview/browser/scoped_add_feature_flags.h"
 #include "android_webview/browser/tracing/aw_trace_event_args_whitelist.h"
 #include "android_webview/common/aw_descriptors.h"
+#include "android_webview/common/aw_features.h"
 #include "android_webview/common/aw_paths.h"
 #include "android_webview/common/aw_resource_bundle.h"
 #include "android_webview/common/aw_switches.h"
@@ -95,9 +95,6 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   // Web Notification API and the Push API are not supported (crbug.com/434712)
   cl->AppendSwitch(switches::kDisableNotifications);
 
-  // WebRTC hardware decoding is not supported, internal bug 15075307
-  cl->AppendSwitch(switches::kDisableWebRtcHWDecoding);
-
   // Check damage in OnBeginFrame to prevent unnecessary draws.
   cl->AppendSwitch(cc::switches::kCheckDamageEarly);
 
@@ -130,12 +127,6 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   // WebView does not support MediaSession API since there's no UI for media
   // metadata and controls.
   cl->AppendSwitch(switches::kDisableMediaSessionAPI);
-
-  // WebView CTS fails in numerous ways if we drop pre-commit input.
-  // We would like to remove this flag, but it requires a cross team effort to
-  // figure out how to address the failures.
-  // crbug.com/987626 is the tracking bug for removing this flag from tests.
-  cl->AppendSwitch(switches::kAllowPreCommitInput);
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
   if (cl->GetSwitchValueASCII(switches::kProcessType).empty()) {
@@ -207,6 +198,9 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     // clear on how user can remove persistent media licenses from UI.
     features.DisableIfNotSet(media::kMediaDrmPersistentLicense);
 
+    // WebView does not support Picture-in-Picture yet.
+    features.DisableIfNotSet(media::kPictureInPictureAPI);
+
     features.DisableIfNotSet(
         autofill::features::kAutofillRestrictUnownedFieldsToFormlessCheckout);
 
@@ -217,6 +211,8 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     // TODO(https://crbug.com/963653): SmsReceiver is not yet supported on
     // WebView.
     features.DisableIfNotSet(::features::kSmsReceiver);
+
+    features.DisableIfNotSet(::features::kWebXr);
 
     // De-jelly is never supported on WebView.
     features.EnableIfNotSet(::features::kDisableDeJelly);

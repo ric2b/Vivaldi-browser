@@ -25,17 +25,18 @@
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
+#include "third_party/blink/renderer/core/css/media_feature_overrides.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/visited_link_state.h"
 #include "third_party/blink/renderer/core/editing/drag_caret.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker_controller.h"
+#include "third_party/blink/renderer/core/execution_context/agent_metrics_collector.h"
 #include "third_party/blink/renderer/core/frame/browser_controls.h"
 #include "third_party/blink/renderer/core/frame/dom_timer.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
-#include "third_party/blink/renderer/core/frame/link_highlights.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
@@ -58,6 +59,7 @@
 #include "third_party/blink/renderer/core/page/context_menu_controller.h"
 #include "third_party/blink/renderer/core/page/drag_controller.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
+#include "third_party/blink/renderer/core/page/link_highlight.h"
 #include "third_party/blink/renderer/core/page/page_hidden_state.h"
 #include "third_party/blink/renderer/core/page/plugin_data.h"
 #include "third_party/blink/renderer/core/page/plugins_changed_observer.h"
@@ -104,6 +106,12 @@ Page::PageSet& Page::OrdinaryPages() {
   return *pages;
 }
 
+static AgentMetricsCollector& GlobalAgentMetricsCollector() {
+  DEFINE_STATIC_LOCAL(Persistent<AgentMetricsCollector>, metrics_collector,
+                      (MakeGarbageCollected<AgentMetricsCollector>()));
+  return *metrics_collector;
+}
+
 void Page::InsertOrdinaryPageForTesting(Page* page) {
   OrdinaryPages().insert(page);
 }
@@ -136,6 +144,7 @@ Page* Page::CreateNonOrdinary(PageClients& page_clients) {
 Page* Page::CreateOrdinary(PageClients& page_clients, Page* opener) {
   Page* page = MakeGarbageCollected<Page>(page_clients);
   page->is_ordinary_ = true;
+  page->agent_metrics_collector_ = &GlobalAgentMetricsCollector();
   page->SetPageScheduler(ThreadScheduler::Current()->CreatePageScheduler(page));
 
   if (opener) {
@@ -182,7 +191,7 @@ Page::Page(PageClients& page_clients)
       overscroll_controller_(
           MakeGarbageCollected<OverscrollController>(GetVisualViewport(),
                                                      GetChromeClient())),
-      link_highlights_(MakeGarbageCollected<LinkHighlights>(*this)),
+      link_highlight_(MakeGarbageCollected<LinkHighlight>(*this)),
       plugin_data_(nullptr),
       // TODO(pdr): Initialize |validation_message_client_| lazily.
       validation_message_client_(
@@ -205,7 +214,7 @@ Page::Page(PageClients& page_clients)
 }
 
 Page::~Page() {
-  // willBeDestroyed() must be called before Page destruction.
+  // WillBeDestroyed() must be called before Page destruction.
   DCHECK(!main_frame_);
 }
 
@@ -281,8 +290,8 @@ const OverscrollController& Page::GetOverscrollController() const {
   return *overscroll_controller_;
 }
 
-LinkHighlights& Page::GetLinkHighlights() {
-  return *link_highlights_;
+LinkHighlight& Page::GetLinkHighlight() {
+  return *link_highlight_;
 }
 
 void Page::SetMainFrame(Frame* main_frame) {
@@ -306,6 +315,9 @@ void Page::DocumentDetached(Document* document) {
   if (validation_message_client_)
     validation_message_client_->DocumentDetached(*document);
   hosts_using_features_.DocumentDetached(*document);
+
+  if (agent_metrics_collector_)
+    agent_metrics_collector_->DidDetachDocument(*document);
 }
 
 bool Page::OpenedByDOM() const {
@@ -500,50 +512,27 @@ void Page::SetLifecycleState(PageLifecycleState state) {
     return;
   DCHECK_NE(state, PageLifecycleState::kUnknown);
 
-  // When background tab freezing was first shipped it didn't pause
-  // the execution context but froze the frame scheduler. This feature
-  // flag attempts to bring the two mechanisms to use the same path for
-  // all pausing and freezing.
-  // This allows for mojo channels, workers to also be frozen because
-  // they listen for the page execution context being paused/frozen.
-  if (RuntimeEnabledFeatures::
-          PauseExecutionContextOnBackgroundFreezeEnabled()) {
-    base::Optional<mojom::FrameLifecycleState> next_state;
-    if (state == PageLifecycleState::kFrozen) {
-      next_state = mojom::FrameLifecycleState::kFrozen;
-    } else if (page_lifecycle_state_ == PageLifecycleState::kFrozen) {
-      // TODO(fmeawad): Only resume the page that just became visible, blocked
-      // on task queues per frame.
-      DCHECK(state == PageLifecycleState::kActive ||
-             state == PageLifecycleState::kHiddenBackgrounded ||
-             state == PageLifecycleState::kHiddenForegrounded);
-      next_state = mojom::FrameLifecycleState::kRunning;
-    }
+  base::Optional<mojom::FrameLifecycleState> next_state;
+  if (state == PageLifecycleState::kFrozen) {
+    next_state = mojom::FrameLifecycleState::kFrozen;
+  } else if (page_lifecycle_state_ == PageLifecycleState::kFrozen) {
+    // TODO(fmeawad): Only resume the page that just became visible, blocked
+    // on task queues per frame.
+    DCHECK(state == PageLifecycleState::kActive ||
+           state == PageLifecycleState::kHiddenBackgrounded ||
+           state == PageLifecycleState::kHiddenForegrounded);
+    next_state = mojom::FrameLifecycleState::kRunning;
+  }
 
-    if (next_state) {
-      for (Frame* frame = main_frame_.Get(); frame;
-           frame = frame->Tree().TraverseNext()) {
-        if (auto* local_frame = DynamicTo<LocalFrame>(frame))
-          local_frame->SetLifecycleState(next_state.value());
-      }
-    }
-  } else {
-    // The following code will dispatch the freeze/resume events,
-    // freeze the frame scheduler but but not pause the execution context.
-    if (state == PageLifecycleState::kFrozen) {
-      for (Frame* frame = main_frame_.Get(); frame;
-           frame = frame->Tree().TraverseNext()) {
-        frame->DidFreeze();
-      }
-    } else if (page_lifecycle_state_ == PageLifecycleState::kFrozen) {
-      // TODO(fmeawad): Only resume the page that just became visible, blocked
-      // on task queues per frame.
-      DCHECK(state == PageLifecycleState::kActive ||
-             state == PageLifecycleState::kHiddenBackgrounded ||
-             state == PageLifecycleState::kHiddenForegrounded);
-      for (Frame* frame = main_frame_.Get(); frame;
-           frame = frame->Tree().TraverseNext()) {
-        frame->DidResume();
+  if (next_state) {
+    for (Frame* frame = main_frame_.Get(); frame;
+         frame = frame->Tree().TraverseNext()) {
+      if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
+        // TODO(chrisha): Determine if dispatching the before unload
+        // makes sense and if so put it into a specification.
+        if (next_state == mojom::FrameLifecycleState::kFrozen)
+          local_frame->DispatchBeforeUnloadEventForFreeze();
+        local_frame->SetLifecycleState(next_state.value());
       }
     }
   }
@@ -789,8 +778,8 @@ void Page::UpdateAcceleratedCompositingSettings() {
     auto* local_frame = DynamicTo<LocalFrame>(frame);
     if (!local_frame)
       continue;
-    if (LocalFrameView* view = local_frame->View())
-      view->UpdateAcceleratedCompositingSettings();
+    LayoutView* layout_view = local_frame->ContentLayoutObject();
+    layout_view->Compositor()->UpdateAcceleratedCompositingSettings();
   }
 }
 
@@ -812,7 +801,7 @@ void Page::DidCommitLoad(LocalFrame* frame) {
     // Update |has_related_pages_| as features are reset after navigation.
     UpdateHasRelatedPages();
   }
-  GetLinkHighlights().ResetForPageNavigation();
+  GetLinkHighlight().ResetForPageNavigation();
 }
 
 void Page::AcceptLanguagesChanged() {
@@ -846,11 +835,12 @@ void Page::Trace(blink::Visitor* visitor) {
   visitor->Trace(global_root_scroller_controller_);
   visitor->Trace(visual_viewport_);
   visitor->Trace(overscroll_controller_);
-  visitor->Trace(link_highlights_);
+  visitor->Trace(link_highlight_);
   visitor->Trace(spatial_navigation_controller_);
   visitor->Trace(main_frame_);
   visitor->Trace(plugin_data_);
   visitor->Trace(validation_message_client_);
+  visitor->Trace(agent_metrics_collector_);
   visitor->Trace(plugins_changed_observers_);
   visitor->Trace(next_related_page_);
   visitor->Trace(prev_related_page_);
@@ -863,13 +853,13 @@ void Page::AnimationHostInitialized(cc::AnimationHost& animation_host,
   if (GetScrollingCoordinator()) {
     GetScrollingCoordinator()->AnimationHostInitialized(animation_host, view);
   }
-  GetLinkHighlights().AnimationHostInitialized(animation_host);
+  GetLinkHighlight().AnimationHostInitialized(animation_host);
 }
 
 void Page::WillCloseAnimationHost(LocalFrameView* view) {
   if (scrolling_coordinator_)
     scrolling_coordinator_->WillCloseAnimationHost(view);
-  GetLinkHighlights().WillCloseAnimationHost();
+  GetLinkHighlight().WillCloseAnimationHost();
 }
 
 void Page::WillBeDestroyed() {
@@ -904,6 +894,9 @@ void Page::WillBeDestroyed() {
   if (validation_message_client_)
     validation_message_client_->WillBeDestroyed();
   main_frame_ = nullptr;
+
+  if (agent_metrics_collector_)
+    agent_metrics_collector_->ReportMetrics();
 
   PageVisibilityNotifier::NotifyContextDestroyed();
 
@@ -988,12 +981,32 @@ void Page::UpdateHasRelatedPages() {
     LocalFrame* local_main_frame = DynamicTo<LocalFrame>(main_frame_.Get());
     // We want to record this only for the pages which have local main frame,
     // which is fine as we are aggregating results across all processes.
-    if (!local_main_frame)
+    if (!local_main_frame || !local_main_frame->IsAttached())
       return;
     has_related_pages_ = local_main_frame->GetFrameScheduler()->RegisterFeature(
         SchedulingPolicy::Feature::kHasScriptableFramesInMultipleTabs,
         {SchedulingPolicy::RecordMetricsForBackForwardCache()});
   }
+}
+
+void Page::SetMediaFeatureOverride(const AtomicString& media_feature,
+                                   const String& value) {
+  if (!media_feature_overrides_) {
+    if (value.IsEmpty())
+      return;
+    media_feature_overrides_ = std::make_unique<MediaFeatureOverrides>();
+  }
+  media_feature_overrides_->SetOverride(media_feature, value);
+  if (media_feature == "prefers-color-scheme")
+    SettingsChanged(SettingsDelegate::kColorSchemeChange);
+  else
+    SettingsChanged(SettingsDelegate::kMediaQueryChange);
+}
+
+void Page::ClearMediaFeatureOverrides() {
+  media_feature_overrides_.reset();
+  SettingsChanged(SettingsDelegate::kMediaQueryChange);
+  SettingsChanged(SettingsDelegate::kColorSchemeChange);
 }
 
 Page::PageClients::PageClients() : chrome_client(nullptr) {}

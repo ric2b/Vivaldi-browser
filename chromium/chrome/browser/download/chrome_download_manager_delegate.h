@@ -19,6 +19,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "build/build_config.h"
+#include "chrome/browser/download/download_completion_blocker.h"
 #include "chrome/browser/download/download_target_determiner_delegate.h"
 #include "chrome/browser/download/download_target_info.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
@@ -33,7 +34,7 @@
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_ANDROID)
-#include "chrome/browser/android/download/download_location_dialog_bridge.h"
+#include "chrome/browser/download/android/download_location_dialog_bridge.h"
 #endif
 
 class DownloadPrefs;
@@ -86,7 +87,7 @@ class ChromeDownloadManagerDelegate
       const content::DownloadTargetCallback& callback) override;
   bool ShouldOpenFileBasedOnExtension(const base::FilePath& path) override;
   bool ShouldCompleteDownload(download::DownloadItem* item,
-                              const base::Closure& complete_callback) override;
+                              base::OnceClosure complete_callback) override;
   bool ShouldOpenDownload(
       download::DownloadItem* item,
       const content::DownloadOpenDelayedCallback& callback) override;
@@ -101,8 +102,7 @@ class ChromeDownloadManagerDelegate
       content::WebContents* web_contents) override;
   void GetSaveDir(content::BrowserContext* browser_context,
                   base::FilePath* website_save_dir,
-                  base::FilePath* download_save_dir,
-                  bool* skip_dir_check) override;
+                  base::FilePath* download_save_dir) override;
   void ChooseSavePath(
       content::WebContents* web_contents,
       const base::FilePath& suggested_path,
@@ -133,6 +133,22 @@ class ChromeDownloadManagerDelegate
   void OpenDownloadUsingPlatformHandler(download::DownloadItem* download);
 
   DownloadPrefs* download_prefs() { return download_prefs_.get(); }
+
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+  // The state of a safebrowsing check.
+  class SafeBrowsingState : public DownloadCompletionBlocker {
+   public:
+    SafeBrowsingState() = default;
+    ~SafeBrowsingState() override;
+
+    // String pointer used for identifying safebrowing data associated with
+    // a download item.
+    static const char kSafeBrowsingUserDataKey[];
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(SafeBrowsingState);
+  };
+#endif  // FULL_SAFE_BROWSING
 
  protected:
   virtual safe_browsing::DownloadProtectionService*
@@ -212,10 +228,9 @@ class ChromeDownloadManagerDelegate
   // Internal gateways for ShouldCompleteDownload().
   bool IsDownloadReadyForCompletion(
       download::DownloadItem* item,
-      const base::Closure& internal_complete_callback);
-  void ShouldCompleteDownloadInternal(
-      uint32_t download_id,
-      const base::Closure& user_complete_callback);
+      base::OnceClosure internal_complete_callback);
+  void ShouldCompleteDownloadInternal(uint32_t download_id,
+                                      base::OnceClosure user_complete_callback);
 
   // Sets the next download id based on download database records, and runs all
   // cached id callbacks.

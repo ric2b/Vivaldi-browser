@@ -43,6 +43,7 @@ class CC_EXPORT LayerTreeSettings {
   bool enable_latency_recovery = true;
   bool can_use_lcd_text = true;
   bool gpu_rasterization_forced = false;
+  bool gpu_rasterization_disabled = false;
   int gpu_rasterization_msaa_sample_count = 0;
   float gpu_rasterization_skewport_target_time_in_seconds = 0.2f;
   bool create_low_res_tiling = false;
@@ -109,10 +110,6 @@ class CC_EXPORT LayerTreeSettings {
 
   LayerTreeDebugState initial_debug_state;
 
-  // Indicates that the LayerTreeHost should defer commits unless it has a valid
-  // viz::LocalSurfaceId set.
-  bool enable_surface_synchronization = true;
-
   // Indicates the case when a sub-frame gets its own LayerTree because it's
   // rendered in a different process from its ancestor frames.
   bool is_layer_tree_for_subframe = false;
@@ -127,6 +124,9 @@ class CC_EXPORT LayerTreeSettings {
   // completed the current BeginFrame before triggering their own BeginFrame
   // deadlines.
   bool wait_for_all_pipeline_stages_before_draw = false;
+
+  // Determines whether the zoom needs to be applied to the device scale factor.
+  bool use_zoom_for_dsf = false;
 
   // Determines whether mouse interactions on composited scrollbars are handled
   // on the compositor thread.
@@ -175,6 +175,11 @@ class CC_EXPORT LayerTreeSettings {
 
   // Whether experimental de-jelly effect is allowed.
   bool allow_de_jelly_effect = false;
+};
+
+class CC_EXPORT LayerListSettings : public LayerTreeSettings {
+ public:
+  LayerListSettings() { use_layer_lists = true; }
 };
 
 }  // namespace cc

@@ -95,7 +95,7 @@ constexpr const char* const kCopiedOnSigninAccessibilityPrefs[]{
     prefs::kScreenMagnifierAcceleratorDialogHasBeenAccepted,
     prefs::kDockedMagnifierAcceleratorDialogHasBeenAccepted,
     prefs::kDictationAcceleratorDialogHasBeenAccepted,
-    prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted,
+    prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted2,
 };
 
 // Returns true if |pref_service| is the one used for the signin screen.
@@ -262,11 +262,7 @@ AccessibilityControllerImpl::AccessibilityControllerImpl()
   Shell::Get()->tablet_mode_controller()->AddObserver(this);
 }
 
-AccessibilityControllerImpl::~AccessibilityControllerImpl() {
-  if (Shell::Get()->tablet_mode_controller())
-    Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
-  Shell::Get()->session_controller()->RemoveObserver(this);
-}
+AccessibilityControllerImpl::~AccessibilityControllerImpl() = default;
 
 // static
 void AccessibilityControllerImpl::RegisterProfilePrefs(
@@ -351,12 +347,20 @@ void AccessibilityControllerImpl::RegisterProfilePrefs(
     registry->RegisterBooleanPref(
         prefs::kDictationAcceleratorDialogHasBeenAccepted, false);
     registry->RegisterBooleanPref(
-        prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted, false);
+        prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted2, false);
     return;
   }
 
   // In production the prefs are owned by chrome.
   // TODO(jamescook): Move ownership to ash.
+}
+
+void AccessibilityControllerImpl::Shutdown() {
+  Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
+  Shell::Get()->session_controller()->RemoveObserver(this);
+
+  for (auto& observer : observers_)
+    observer.OnAccessibilityControllerShutdown();
 }
 
 void AccessibilityControllerImpl::SetHighContrastAcceleratorDialogAccepted() {
@@ -403,7 +407,7 @@ bool AccessibilityControllerImpl::
     HasDisplayRotationAcceleratorDialogBeenAccepted() const {
   return active_user_prefs_ &&
          active_user_prefs_->GetBoolean(
-             prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted);
+             prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted2);
 }
 
 void AccessibilityControllerImpl::
@@ -411,7 +415,7 @@ void AccessibilityControllerImpl::
   if (!active_user_prefs_)
     return;
   active_user_prefs_->SetBoolean(
-      prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted, true);
+      prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted2, true);
   active_user_prefs_->CommitPendingWrite();
 }
 
@@ -545,7 +549,8 @@ void AccessibilityControllerImpl::SetDictationEnabled(bool enabled) {
           controller->SetDictationAcceleratorDialogAccepted();
           // If they accept, try again to set dictation_enabled to true
           controller->SetDictationEnabled(true);
-        }));
+        }),
+        base::DoNothing());
     return;
   }
   active_user_prefs_->SetBoolean(prefs::kAccessibilityDictationEnabled,
@@ -878,6 +883,7 @@ void AccessibilityControllerImpl::ToggleDictationFromSource(
   base::RecordAction(base::UserMetricsAction("Accel_Toggle_Dictation"));
   UserMetricsRecorder::RecordUserToggleDictation(source);
 
+  SetDictationEnabled(true);
   ToggleDictation();
 }
 

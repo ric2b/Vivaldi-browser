@@ -26,7 +26,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
@@ -58,7 +58,6 @@
 #include "chrome/browser/component_updater/crl_set_component_installer.h"
 #include "chrome/browser/component_updater/file_type_policies_component_installer.h"
 #include "chrome/browser/component_updater/mei_preload_component_installer.h"
-#include "chrome/browser/component_updater/on_device_head_suggest_component_installer.h"
 #include "chrome/browser/component_updater/optimization_hints_component_installer.h"
 #include "chrome/browser/component_updater/origin_trials_component_installer.h"
 #include "chrome/browser/component_updater/pepper_flash_component_installer.h"
@@ -117,7 +116,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/env_vars.h"
-#include "chrome/common/heap_profiler_controller.h"
 #include "chrome/common/logging_chrome.h"
 #include "chrome/common/media/media_resource_provider.h"
 #include "chrome/common/net/net_resource_provider.h"
@@ -128,6 +126,7 @@
 #include "chrome/installer/util/google_update_settings.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/crl_set_remover.h"
+#include "components/component_updater/installer_policies/on_device_head_suggest_component_installer.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/google/core/common/google_util.h"
@@ -200,7 +199,6 @@
 #include "chrome/browser/metrics/thread_watcher_android.h"
 #include "ui/base/resource/resource_bundle_android.h"
 #else
-#include "chrome/browser/feedback/feedback_profile_observer.h"
 #include "chrome/browser/resource_coordinator/tab_activity_watcher.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -228,6 +226,7 @@
 
 #if defined(OS_LINUX)
 #include "components/crash/content/app/breakpad_linux.h"
+#include "components/crash/content/app/crashpad.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -329,7 +328,7 @@
 #endif
 
 #if !defined(OS_ANDROID)
-#include "chrome/browser/component_updater/intervention_policy_database_component_installer.h"
+#include "chrome/browser/component_updater/tls_deprecation_config_component_installer.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 #endif
 
@@ -338,7 +337,6 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
-#include "extraparts/vivaldi_browser_main_extra_parts.h"
 
 using content::BrowserThread;
 
@@ -491,7 +489,8 @@ void RegisterComponentsForUpdate(PrefService* profile_prefs) {
 #endif
 
   RegisterSubresourceFilterComponent(cus);
-  RegisterOnDeviceHeadSuggestComponent(cus);
+  RegisterOnDeviceHeadSuggestComponent(
+      cus, g_browser_process->GetApplicationLocale());
   RegisterOptimizationHintsComponent(cus, profile_prefs);
 
   base::FilePath path;
@@ -537,8 +536,7 @@ void RegisterComponentsForUpdate(PrefService* profile_prefs) {
 #endif  // defined(OS_WIN)
 
 #if !defined(OS_ANDROID)
-  RegisterInterventionPolicyDatabaseComponent(
-      cus, g_browser_process->GetTabManager()->intervention_policy_database());
+  RegisterTLSDeprecationConfigComponent(cus, path);
 #endif
 
 #if BUILDFLAG(ENABLE_VR)
@@ -648,7 +646,6 @@ ChromeBrowserMainParts::ChromeBrowserMainParts(
     : parameters_(parameters),
       parsed_command_line_(parameters.command_line),
       result_code_(service_manager::RESULT_CODE_NORMAL_EXIT),
-      heap_profiler_controller_(std::make_unique<HeapProfilerController>()),
       should_call_pre_main_loop_start_startup_on_variations_service_(
           !parameters.ui_task),
       profile_(NULL),
@@ -737,7 +734,7 @@ void ChromeBrowserMainParts::RecordBrowserStartupTime() {
 
   // Record collected startup metrics.
   startup_metric_utils::RecordBrowserMainMessageLoopStart(
-      base::TimeTicks::Now(), is_first_run, g_browser_process->local_state());
+      base::TimeTicks::Now(), is_first_run);
 }
 
 void ChromeBrowserMainParts::SetupOriginTrialsCommandLine(
@@ -872,8 +869,6 @@ void ChromeBrowserMainParts::PostMainMessageLoopStart() {
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PostMainMessageLoopStart");
 
   ThreadProfiler::SetMainThreadTaskRunner(base::ThreadTaskRunnerHandle::Get());
-
-  heap_profiler_controller_->Start();
 
   system_monitor_ = performance_monitor::SystemMonitor::Create();
 
@@ -1093,7 +1088,9 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
 
 #if defined(OS_LINUX) || defined(OS_OPENBSD)
   // Set the product channel for crash reports.
-  breakpad::SetChannelCrashKey(chrome::GetChannelName());
+  if (!crash_reporter::IsCrashpadEnabled()) {
+    breakpad::SetChannelCrashKey(chrome::GetChannelName());
+  }
 #endif  // defined(OS_LINUX) || defined(OS_OPENBSD)
 
 #if defined(OS_MACOSX)
@@ -1221,10 +1218,6 @@ void ChromeBrowserMainParts::PreProfileInit() {
     chrome_extra_parts_[i]->PreProfileInit();
 
 #if !defined(OS_ANDROID)
-  // Initialize the feedback uploader so it can setup notifications for profile
-  // creation.
-  feedback::FeedbackProfileObserver::Initialize();
-
   // Ephemeral profiles may have been left behind if the browser crashed.
   g_browser_process->profile_manager()->CleanUpEphemeralProfiles();
   // Files of deleted profiles can also be left behind after a crash.
@@ -1572,10 +1565,6 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // (requires supporting early exit).
   PostProfileInit();
 
-  // NOTE(igor@viavaldi.com) See comments in VivaldiBrowserMainExtraParts.
-  // The check for vivaldi::IsVivaldiRunning() is done inside the function.
-  VivaldiBrowserMainExtraParts::PostProfileInit(profile_);
-
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   // Execute first run specific code after the PrefService has been initialized
   // and preferences have been registered since some of the import code depends
@@ -1640,9 +1629,8 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 #endif  // BUILDFLAG(ENABLE_RLZ) && !defined(OS_CHROMEOS)
 
   // Configure modules that need access to resources.
-  net::NetModule::SetResourceProvider(chrome_common_net::NetResourceProvider);
-  media::SetLocalizedStringProvider(
-      chrome_common_media::LocalizedStringProvider);
+  net::NetModule::SetResourceProvider(ChromeNetResourceProvider);
+  media::SetLocalizedStringProvider(ChromeMediaLocalizedStringProvider);
 
   // In unittest mode, this will do nothing.  In normal mode, this will create
   // the global IntranetRedirectDetector instance, which will promptly go to

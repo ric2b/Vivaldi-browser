@@ -27,10 +27,13 @@ class ASH_EXPORT ShelfContainerView : public views::View {
   // views::View:
   gfx::Size CalculatePreferredSize() const override;
   void ChildPreferredSizeChanged(views::View* child) override;
-  void Layout() override;
   const char* GetClassName() const override;
 
  protected:
+  // Calculates the ideal size of |shelf_view_| to accommodate all of app icons
+  // without scrolling.
+  gfx::Size CalculateIdealSize() const;
+
   // Owned by views hierarchy.
   ShelfView* shelf_view_ = nullptr;
 

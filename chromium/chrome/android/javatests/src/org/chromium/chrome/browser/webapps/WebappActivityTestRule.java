@@ -120,8 +120,9 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
                 // runnable.
                 callback.waitForCallback(0);
 
-                TestThreadUtils.runOnUiThreadBlocking(
-                        () -> { callback.getStorage().updateFromShortcutIntent(createIntent()); });
+                TestThreadUtils.runOnUiThreadBlocking(() -> {
+                    callback.getStorage().updateFromWebappInfo(WebappInfo.create(createIntent()));
+                });
 
                 base.evaluate();
 
@@ -136,14 +137,14 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
     /**
      * Starts up the WebappActivity and sets up the test observer.
      */
-    public final void startWebappActivity() throws Exception {
+    public final void startWebappActivity() {
         startWebappActivity(createIntent());
     }
 
     /**
      * Starts up the WebappActivity with a specific Intent and sets up the test observer.
      */
-    public final void startWebappActivity(Intent intent) throws Exception {
+    public final void startWebappActivity(Intent intent) {
         launchActivity(intent);
         waitUntilIdle();
     }
@@ -158,7 +159,7 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
      * Executing window.open() through a click on a link, as it needs user gesture to avoid Chrome
      * blocking it as a popup.
      */
-    static public void jsWindowOpen(ChromeActivity activity, String url) throws Exception {
+    public static void jsWindowOpen(ChromeActivity activity, String url) throws Exception {
         String injectedHtml = String.format("var aTag = document.createElement('testId');"
                         + "aTag.id = 'testId';"
                         + "aTag.innerHTML = 'Click Me!';"
@@ -199,7 +200,7 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
      * Starts up the WebappActivity and sets up the test observer.
      * Wait till Splashscreen full loaded.
      */
-    public final ViewGroup startWebappActivityAndWaitForSplashScreen() throws Exception {
+    public final ViewGroup startWebappActivityAndWaitForSplashScreen() {
         return startWebappActivityAndWaitForSplashScreen(createIntent());
     }
 
@@ -208,8 +209,7 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
      * Wait till Splashscreen full loaded.
      * Intent url is modified to one that takes more time to load.
      */
-    public final ViewGroup startWebappActivityAndWaitForSplashScreen(Intent intent)
-            throws Exception {
+    public final ViewGroup startWebappActivityAndWaitForSplashScreen(Intent intent) {
         // Reset the url to one that takes more time to load.
         // This is to make sure splash screen won't disappear during test.
         intent.putExtra(ShortcutHelper.EXTRA_URL, getTestServer().getURL("/slow?2"));

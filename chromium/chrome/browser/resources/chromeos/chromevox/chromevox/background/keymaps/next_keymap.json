@@ -924,6 +924,25 @@
       }
     },
     {
+      "command": "previousSimilarItem",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [73],
+          "shiftKey": [true]
+        }
+      }
+    },
+    {
+      "command": "nextSimilarItem",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [73]
+        }
+      }
+    },
+    {
       "command": "jumpToDetails",
       "sequence": {
         "cvoxModifier": true,
@@ -998,7 +1017,7 @@
       }
     },
     {
-      "command": "getBatteryDescription",
+      "command": "announceBatteryDescription",
       "sequence": {
         "cvoxModifier": true,
         "keys": {
@@ -1007,11 +1026,20 @@
       }
     },
     {
-      "command": "getRichTextDescription",
+      "command": "announceRichTextDescription",
       "sequence": {
         "cvoxModifier": true,
         "keys": {
           "keyCode": [65, 70]
+        }
+      }
+    },
+    {
+      "command": "readPhoneticPronunciation",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [65, 67]
         }
       }
     }

@@ -88,6 +88,8 @@ jumbo_component("views") {
     "animation/installable_ink_drop_config.h",
     "animation/installable_ink_drop_painter.h",
     "animation/scroll_animator.h",
+    "animation/slide_out_controller.h",
+    "animation/slide_out_controller_delegate.h",
     "animation/square_ink_drop_ripple.h",
     "background.h",
     "border.h",
@@ -101,7 +103,6 @@ jumbo_component("views") {
     "color_chooser/color_chooser_listener.h",
     "color_chooser/color_chooser_view.h",
     "context_menu_controller.h",
-    "controls/animated_image_view.h",
     "controls/button/button.h",
     "controls/button/button_controller.h",
     "controls/button/button_controller_delegate.h",
@@ -124,8 +125,8 @@ jumbo_component("views") {
     "controls/editable_combobox/editable_combobox_listener.h",
     "controls/focus_ring.h",
     "controls/focusable_border.h",
+    "controls/highlight_path_generator.h",
     "controls/image_view.h",
-    "controls/image_view_base.h",
     "controls/label.h",
     "controls/link.h",
     "controls/link_listener.h",
@@ -199,6 +200,7 @@ jumbo_component("views") {
     "focus/focus_search.h",
     "focus/widget_focus_manager.h",
     "input_event_activation_protector.h",
+    "layout/animating_layout_manager.h",
     "layout/box_layout.h",
     "layout/fill_layout.h",
     "layout/flex_layout.h",
@@ -208,6 +210,8 @@ jumbo_component("views") {
     "layout/layout_manager_base.h",
     "layout/layout_provider.h",
     "layout/layout_types.h",
+    "layout/normalized_geometry.h",
+    "layout/proposed_layout.h",
     "masked_targeter_delegate.h",
     "metadata/metadata_cache.h",
     "metadata/metadata_header_macros.h",
@@ -309,6 +313,7 @@ jumbo_component("views") {
     "animation/installable_ink_drop_animator.cc",
     "animation/installable_ink_drop_painter.cc",
     "animation/scroll_animator.cc",
+    "animation/slide_out_controller.cc",
     "animation/square_ink_drop_ripple.cc",
     "background.cc",
     "border.cc",
@@ -321,7 +326,6 @@ jumbo_component("views") {
     "button_drag_utils.cc",
     "color_chooser/color_chooser_view.cc",
     "context_menu_controller.cc",
-    "controls/animated_image_view.cc",
     "controls/button/button.cc",
     "controls/button/button_controller.cc",
     "controls/button/checkbox.cc",
@@ -339,8 +343,8 @@ jumbo_component("views") {
     "controls/editable_combobox/editable_combobox.cc",
     "controls/focus_ring.cc",
     "controls/focusable_border.cc",
+    "controls/highlight_path_generator.cc",
     "controls/image_view.cc",
-    "controls/image_view_base.cc",
     "controls/label.cc",
     "controls/link.cc",
     "controls/menu/menu_closure_animation_mac.mm",
@@ -406,16 +410,18 @@ jumbo_component("views") {
     "focus/focus_search.cc",
     "focus/widget_focus_manager.cc",
     "input_event_activation_protector.cc",
+    "layout/animating_layout_manager.cc",
     "layout/box_layout.cc",
     "layout/fill_layout.cc",
     "layout/flex_layout.cc",
     "layout/flex_layout_types.cc",
-    "layout/flex_layout_types_internal.cc",
     "layout/grid_layout.cc",
     "layout/layout_manager.cc",
     "layout/layout_manager_base.cc",
     "layout/layout_provider.cc",
     "layout/layout_types.cc",
+    "layout/normalized_geometry.cc",
+    "layout/proposed_layout.cc",
     "masked_targeter_delegate.cc",
     "metadata/metadata_cache.cc",
     "metadata/metadata_types.cc",
@@ -493,7 +499,10 @@ jumbo_component("views") {
   ]
 
   sources += get_target_outputs(":views_vector_icons")
-  configs += [ "//build/config:precompiled_headers" ]
+  configs += [
+    "//build/config:precompiled_headers",
+    "//build/config/compiler:noshadowing",
+  ]
   defines = [ "VIEWS_IMPLEMENTATION" ]
 
   deps = [
@@ -757,8 +766,8 @@ jumbo_component("views") {
         sources += [
           "style/platform_style_linux.cc",
           "widget/desktop_aura/desktop_window_tree_host_linux.cc",
-          "widget/desktop_aura/window_event_filter.cc",
-          "widget/desktop_aura/window_event_filter.h",
+          "widget/desktop_aura/window_event_filter_linux.cc",
+          "widget/desktop_aura/window_event_filter_linux.h",
         ]
         deps += [ "//ui/base:hit_test" ]
       }
@@ -988,6 +997,7 @@ test("views_unittests") {
     "animation/ink_drop_unittest.cc",
     "animation/installable_ink_drop_animator_unittest.cc",
     "animation/installable_ink_drop_unittest.cc",
+    "animation/slide_out_controller_unittest.cc",
     "animation/square_ink_drop_ripple_unittest.cc",
     "border_unittest.cc",
     "bubble/bubble_border_unittest.cc",
@@ -1042,12 +1052,13 @@ test("views_unittests") {
     "event_monitor_unittest.cc",
     "focus/focus_manager_unittest.cc",
     "focus/focus_traversal_unittest.cc",
+    "layout/animating_layout_manager_unittest.cc",
     "layout/box_layout_unittest.cc",
     "layout/fill_layout_unittest.cc",
-    "layout/flex_layout_types_internal_unittest.cc",
     "layout/flex_layout_unittest.cc",
     "layout/grid_layout_unittest.cc",
     "layout/layout_manager_base_unittest.cc",
+    "layout/normalized_geometry_unittest.cc",
     "metadata/metadata_unittest.cc",
     "metadata/type_conversion_unittest.cc",
     "paint_info_unittest.cc",
@@ -1215,17 +1226,27 @@ test("views_unittests") {
           "widget/desktop_aura/desktop_screen_x11_unittest.cc",
           "widget/desktop_aura/desktop_window_tree_host_x11_unittest.cc",
         ]
-      } else if (is_linux) {
+      }
+      if (is_linux || is_fuchsia) {
         sources += [
-          "widget/desktop_aura/desktop_drag_drop_client_ozone_unittest.cc",
           "widget/desktop_aura/desktop_window_tree_host_platform_unittest.cc",
         ]
+      }
+      if (use_ozone) {
+        sources +=
+            [ "widget/desktop_aura/desktop_drag_drop_client_ozone_unittest.cc" ]
+        deps += [ "//ui/platform_window" ]
       }
     }
   }
 
   if (!is_chromeos) {
     sources += [ "widget/desktop_widget_unittest.cc" ]
+  }
+
+  if (is_desktop_linux && use_ozone) {
+    data_deps +=
+        [ "//testing/buildbot/filters:linux_ozone_views_unittests_filters" ]
   }
 
   if (use_atk) {
@@ -1287,8 +1308,8 @@ source_set("views_interactive_ui_tests") {
       "//ui/wm/public",
     ]
 
-    if (!is_chromeos && (is_linux && !use_x11)) {
-      sources += [ "widget/desktop_aura/desktop_window_tree_host_platform_interactive_uitest.cc" ]
+    if (is_desktop_linux) {
+      sources += [ "widget/desktop_aura/desktop_window_tree_host_linux_interactive_uitest.cc" ]
     }
 
     deps += [

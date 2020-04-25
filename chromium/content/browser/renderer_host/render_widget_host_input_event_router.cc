@@ -711,8 +711,12 @@ void RenderWidgetHostInputEventRouter::DispatchMouseWheelEvent(
       wheel_target_ = target;
     } else {
       if (wheel_target_) {
-        DCHECK(!target);
-        target = wheel_target_;
+        // If middle click autoscroll is in progress, browser routes all input
+        // events to single renderer. So if autoscroll is in progress, route
+        // mouse wheel events to the |target| instead of |wheel_target_|.
+        DCHECK(!target || event_targeter_->is_auto_scroll_in_progress());
+        if (!event_targeter_->is_auto_scroll_in_progress())
+          target = wheel_target_;
       } else if ((mouse_wheel_event.phase ==
                       blink::WebMouseWheelEvent::kPhaseEnded ||
                   mouse_wheel_event.momentum_phase ==
@@ -1427,6 +1431,7 @@ RenderWidgetTargetResult
 RenderWidgetHostInputEventRouter::FindTouchscreenGestureEventTarget(
     RenderWidgetHostViewBase* root_view,
     const blink::WebGestureEvent& gesture_event) {
+#if !defined(OS_ANDROID)
   if (vivaldi::IsVivaldiRunning() &&
       blink::WebInputEvent::IsPinchGestureEventType(gesture_event.GetType())) {
     // We have to find the view under the event position as we can not use the
@@ -1435,6 +1440,7 @@ RenderWidgetHostInputEventRouter::FindTouchscreenGestureEventTarget(
     return FindViewAtLocation(root_view, gesture_event.PositionInWidget(),
                               viz::EventSource::TOUCH, &transformed_point);
   }
+#endif  // !OS_ANDROID
   // Since DispatchTouchscreenGestureEvent() doesn't pay any attention to the
   // target we could just return nullptr for pinch events, but since we know
   // where they are going we return the correct target.
@@ -1518,9 +1524,11 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
         // not already started in the root from scroll bubbling, then we need
         // to warp the diverted pinch events in a GestureScrollBegin/End.
         DCHECK(!root_rwhi->is_in_touchscreen_gesture_scroll());
+#if !defined(OS_ANDROID)
         if (vivaldi::IsVivaldiRunning() && target) // Prevent pinching UI
           SendGestureScrollBegin(target, gesture_event);
         else
+#endif  // !OS_ANDROID
         SendGestureScrollBegin(root_view, gesture_event);
       }
 
@@ -1529,9 +1537,11 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
   }
 
   if (touchscreen_pinch_state_.IsInPinch()) {
+#if !defined(OS_ANDROID)
     if (vivaldi::IsVivaldiRunning() && target) // Prevent pinching UI
       target->ProcessGestureEvent(gesture_event, latency);
     else
+#endif  // !OS_ANDROID
     root_view->ProcessGestureEvent(gesture_event, latency);
 
     if (gesture_event.GetType() == blink::WebInputEvent::kGesturePinchEnd) {
@@ -1543,9 +1553,11 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
         auto* root_rwhi = static_cast<RenderWidgetHostImpl*>(
             root_view->GetRenderWidgetHost());
         DCHECK(root_rwhi->is_in_touchscreen_gesture_scroll());
+#if !defined(OS_ANDROID)
         if (vivaldi::IsVivaldiRunning() && target) // Prevent pinching UI
           SendGestureScrollEnd(target, gesture_event);
         else
+#endif  // !OS_ANDROID
         SendGestureScrollEnd(root_view, gesture_event);
       }
     }
@@ -1681,7 +1693,7 @@ RenderWidgetTargetResult
 RenderWidgetHostInputEventRouter::FindTouchpadGestureEventTarget(
     RenderWidgetHostViewBase* root_view,
     const blink::WebGestureEvent& event) const {
-
+#if !defined(OS_ANDROID)
   if (vivaldi::IsVivaldiRunning() &&
     (event.GetType() == blink::WebInputEvent::kGestureDoubleTap)) {
     // NOTE(espen@vivaldi.com): We have to find the view under the event
@@ -1690,7 +1702,7 @@ RenderWidgetHostInputEventRouter::FindTouchpadGestureEventTarget(
     return FindViewAtLocation(root_view, event.PositionInWidget(),
                               viz::EventSource::TOUCH, &transformed_point);
   }
-
+#endif  // !OS_ANDROID
   if (event.GetType() != blink::WebInputEvent::kGesturePinchBegin &&
       event.GetType() != blink::WebInputEvent::kGestureFlingCancel &&
       event.GetType() != blink::WebInputEvent::kGestureDoubleTap) {
@@ -2031,6 +2043,11 @@ RenderWidgetHostInputEventRouter::GetMouseCaptureWidgetForTests() const {
   if (mouse_capture_target_)
     return mouse_capture_target_->host();
   return nullptr;
+}
+
+void RenderWidgetHostInputEventRouter::SetAutoScrollInProgress(
+    bool is_autoscroll_in_progress) {
+  event_targeter_->SetIsAutoScrollInProgress(is_autoscroll_in_progress);
 }
 
 }  // namespace content

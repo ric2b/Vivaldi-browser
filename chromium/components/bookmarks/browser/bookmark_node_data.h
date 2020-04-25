@@ -78,27 +78,6 @@ struct BookmarkNodeData {
     // Date of the last modification. Only used for folders.
     base::Time date_folder_modified;
 
-    // A nickname for the Bookmark
-    base::string16 nickname;
-
-    // A description of the Bookmark
-    base::string16 description;
-
-    // A thumbnail of the Bookmarked page
-    base::string16 thumbnail;
-
-    // A partner of the bookmark
-    base::string16 partner;
-
-    // Is this a speeddial element
-    bool speeddial;
-
-    // Is this a bookmark bar element
-    bool bookmarkbar;
-
-    // Date of when this node was visited.
-    base::Time date_visited;
-
     // Children, only used for non-URL nodes.
     std::vector<Element> children;
 

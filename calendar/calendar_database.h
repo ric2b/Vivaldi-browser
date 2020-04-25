@@ -19,7 +19,6 @@
 #include "calendar/event_database.h"
 #include "calendar/event_type_database.h"
 #include "calendar/recurrence_exception_table.h"
-#include "calendar/recurrence_table.h"
 #include "sql/database.h"
 #include "sql/init_status.h"
 #include "sql/meta_table.h"
@@ -40,8 +39,7 @@ namespace calendar {
 class CalendarDatabase : public EventDatabase,
                          public EventTypeDatabase,
                          public CalendarTable,
-                         public RecurrrenceExceptionTable,
-                         public RecurrrenceTable {
+                         public RecurrrenceExceptionTable {
  public:
   CalendarDatabase() {}
 

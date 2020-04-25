@@ -28,7 +28,7 @@ struct WebScrollIntoViewParams;
 class WindowAgentFactory;
 
 class CORE_EXPORT WebRemoteFrameImpl final
-    : public GarbageCollectedFinalized<WebRemoteFrameImpl>,
+    : public GarbageCollected<WebRemoteFrameImpl>,
       public WebRemoteFrame {
  public:
   static WebRemoteFrameImpl* Create(WebTreeScopeType, WebRemoteFrameClient*);
@@ -44,7 +44,6 @@ class CORE_EXPORT WebRemoteFrameImpl final
 
   // WebFrame methods:
   void Close() override;
-  WebRect VisibleContentRect() const override;
   WebView* View() const override;
   void StopLoading() override;
 

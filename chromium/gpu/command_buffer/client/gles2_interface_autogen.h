@@ -657,6 +657,10 @@ virtual void DispatchCompute(GLuint num_groups_x,
                              GLuint num_groups_y,
                              GLuint num_groups_z) = 0;
 virtual void DispatchComputeIndirect(GLintptr offset) = 0;
+virtual void DrawArraysIndirect(GLenum mode, const void* offset) = 0;
+virtual void DrawElementsIndirect(GLenum mode,
+                                  GLenum type,
+                                  const void* offset) = 0;
 virtual void GetProgramInterfaceiv(GLuint program,
                                    GLenum program_interface,
                                    GLenum pname,
@@ -961,6 +965,7 @@ virtual void ProgramPathFragmentInputGenCHROMIUM(GLuint program,
                                                  GLenum genMode,
                                                  GLint components,
                                                  const GLfloat* coeffs) = 0;
+virtual void ContextVisibilityHintCHROMIUM(GLboolean visibility) = 0;
 virtual void CoverageModulationCHROMIUM(GLenum components) = 0;
 virtual GLenum GetGraphicsResetStatusKHR() = 0;
 virtual void BlendBarrierKHR() = 0;

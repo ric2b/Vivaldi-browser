@@ -113,6 +113,10 @@ class ContactBackend
   void UpdateEmailAddress(EmailAddressRow row,
                           std::shared_ptr<ContactResults> result);
 
+  void RemoveEmailAddress(ContactID contact_id,
+                          EmailAddressID email_id,
+                          std::shared_ptr<ContactResults> result);
+
   void AddProperty(AddPropertyObject row,
                    std::shared_ptr<ContactResults> result);
   void UpdateProperty(UpdatePropertyObject row,

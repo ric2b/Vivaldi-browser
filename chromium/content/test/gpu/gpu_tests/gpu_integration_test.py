@@ -5,11 +5,11 @@
 import logging
 import re
 
+from telemetry.core import android_platform
 from telemetry.testing import serially_executed_browser_test_case
 from telemetry.util import screenshot
 from typ import json_results
 
-from gpu_tests import exception_formatter
 from gpu_tests import gpu_helper
 
 _START_BROWSER_RETRIES = 3
@@ -79,12 +79,6 @@ class GpuIntegrationTest(
     # If requested, disable uploading of failure logs to cloud storage.
     if cls._disable_log_uploads:
       browser_options.logs_cloud_bucket = None
-
-    # A non-sandboxed, 120-seconds-delayed gpu process is currently running in
-    # the browser to collect gpu info. A command line switch is added here so
-    # the dx12/vulkan info can be collected immediately for the tests.
-    browser_args.append(
-      '--no-delay-for-dx12-vulkan-info-collection')
 
     # Append the new arguments.
     browser_options.AppendExtraBrowserArgs(browser_args)
@@ -182,22 +176,20 @@ class GpuIntegrationTest(
     except Exception:
       if ResultType.Failure in expected_results or should_retry_on_failure:
         if should_retry_on_failure:
+          logging.exception('Exception while running flaky test %s', test_name)
           # For robustness, shut down the browser and restart it
           # between flaky test failures, to make sure any state
           # doesn't propagate to the next iteration.
           self._RestartBrowser('flaky test failure')
         else:
-          msg = 'Expected exception while running %s' % test_name
-          exception_formatter.PrintFormattedException(msg=msg)
+          logging.exception('Expected exception while running %s', test_name)
           # Even though this is a known failure, the browser might still
           # be in a bad state; for example, certain kinds of timeouts
           # will affect the next test. Restart the browser to prevent
           # these kinds of failures propagating to the next test.
           self._RestartBrowser('expected test failure')
       else:
-        # This is not an expected exception or test failure, so print
-        # the detail to the console.
-        exception_formatter.PrintFormattedException()
+        logging.exception('Unexpected exception while running %s', test_name)
         # Symbolize any crash dump (like from the GPU process) that
         # might have happened but wasn't detected above. Note we don't
         # do this for either 'fail' or 'flaky' expectations because
@@ -207,7 +199,14 @@ class GpuIntegrationTest(
         # stacks could slow down the tests' running time unacceptably.
         # We also don't do this if the browser failed to startup.
         if self.browser is not None:
-          self.browser.LogSymbolizedUnsymbolizedMinidumps(logging.ERROR)
+          # TODO(https://crbug.com/1008075): Remove this split once stack
+          # symbolization is standardized across all platforms.
+          if isinstance(self.browser.platform,
+              android_platform.AndroidPlatform):
+            _, output = self.browser.GetStackTrace()
+            logging.error(output)
+          else:
+            self.browser.LogSymbolizedUnsymbolizedMinidumps(logging.ERROR)
         # This failure might have been caused by a browser or renderer
         # crash, so restart the browser to make sure any state doesn't
         # propagate to the next test iteration.
@@ -275,6 +274,47 @@ class GpuIntegrationTest(
           config['nv12_overlay_support'] = 'SCALING'
     return config
 
+  def GetDx12VulkanBotConfig(self):
+    """Returns expected bot config for DX12 and Vulkan support.
+
+    This configuration is collected on Windows platform only.
+    The rules to determine bot config are:
+      1) DX12: Win7 doesn't support DX12. Only Win10 supports DX12
+      2) Vulkan: All bots support Vulkan except for Win FYI AMD bots
+    """
+    if self.browser is None:
+      raise Exception("Browser doesn't exist")
+    system_info = self.browser.GetSystemInfo()
+    if system_info is None:
+      raise Exception("Browser doesn't support GetSystemInfo")
+    gpu = system_info.gpu.devices[0]
+    if gpu is None:
+      raise Exception("System Info doesn't have a gpu")
+    gpu_vendor_id = gpu.vendor_id
+    gpu_device_id = gpu.device_id
+    assert gpu_vendor_id in _SUPPORTED_WIN_GPU_VENDORS
+
+    os_version = self.browser.platform.GetOSVersionName()
+    if os_version is None:
+      raise Exception("browser.platform.GetOSVersionName() returns None")
+    os_version = os_version.lower()
+    assert os_version in _SUPPORTED_WIN_VERSIONS
+
+    config = {
+      'supports_dx12': True,
+      'supports_vulkan': True,
+    }
+
+    if os_version == 'win7':
+      config['supports_dx12'] = False
+
+    # "Win7 FYI Release (AMD)" and "Win7 FYI Debug (AMD)" bots
+    if (os_version == 'win7' and gpu_vendor_id == 0x1002
+        and gpu_device_id == 0x6613):
+      config['supports_vulkan'] = False
+
+    return config
+
   @classmethod
   def GenerateTags(cls, finder_options, possible_browser):
     # If no expectations file paths are returned from cls.ExpectationsFiles()
@@ -324,6 +364,9 @@ class GpuIntegrationTest(
       skia_renderer = gpu_helper.GetSkiaRenderer(\
           browser._browser_backend.browser_options.extra_browser_args)
       tags.extend([skia_renderer])
+      use_gl = gpu_helper.GetGL(\
+          browser._browser_backend.browser_options.extra_browser_args)
+      tags.extend([use_gl])
       use_vulkan = gpu_helper.GetVulkan(\
           browser._browser_backend.browser_options.extra_browser_args)
       tags.extend([use_vulkan])

@@ -18,8 +18,8 @@
 #include "chrome/common/extensions/manifest_handlers/app_theme_color_info.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
-#include "extensions/browser/extension_system.h"
 #include "extensions/common/extension.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "url/gurl.h"
 
 namespace extensions {
@@ -30,14 +30,6 @@ BookmarkAppRegistrar::BookmarkAppRegistrar(Profile* profile)
 }
 
 BookmarkAppRegistrar::~BookmarkAppRegistrar() = default;
-
-void BookmarkAppRegistrar::Init(base::OnceClosure callback) {
-  ExtensionSystem::Get(profile())->ready().Post(FROM_HERE, std::move(callback));
-}
-
-BookmarkAppRegistrar* BookmarkAppRegistrar::AsBookmarkAppRegistrar() {
-  return this;
-}
 
 bool BookmarkAppRegistrar::IsInstalled(const web_app::AppId& app_id) const {
   return GetExtension(app_id) != nullptr;
@@ -79,11 +71,24 @@ int BookmarkAppRegistrar::CountUserInstalledApps() const {
 
 void BookmarkAppRegistrar::OnExtensionUninstalled(
     content::BrowserContext* browser_context,
-    const extensions::Extension* extension,
-    extensions::UninstallReason reason) {
+    const Extension* extension,
+    UninstallReason reason) {
   DCHECK_EQ(browser_context, profile());
   if (extension->from_bookmark())
     NotifyWebAppUninstalled(extension->id());
+}
+
+void BookmarkAppRegistrar::OnExtensionUnloaded(
+    content::BrowserContext* browser_context,
+    const Extension* extension,
+    UnloadedExtensionReason reason) {
+  DCHECK_EQ(browser_context, profile());
+  if (!extension->from_bookmark())
+    return;
+  // If a profile is removed, notify the web app that it is uninstalled, so it
+  // can cleanup any state outside the profile dir (e.g., registry settings).
+  if (reason == UnloadedExtensionReason::PROFILE_SHUTDOWN)
+    NotifyWebAppProfileWillBeDeleted(extension->id());
 }
 
 void BookmarkAppRegistrar::OnShutdown(ExtensionRegistry* registry) {
@@ -145,45 +150,22 @@ base::Optional<GURL> BookmarkAppRegistrar::GetAppScope(
   return base::nullopt;
 }
 
-web_app::LaunchContainer BookmarkAppRegistrar::GetAppLaunchContainer(
+blink::mojom::DisplayMode BookmarkAppRegistrar::GetAppDisplayMode(
     const web_app::AppId& app_id) const {
   const Extension* extension = GetExtension(app_id);
   if (!extension)
-    return web_app::LaunchContainer::kWindow;
+    return blink::mojom::DisplayMode::kStandalone;
 
   switch (extensions::GetLaunchContainer(
       extensions::ExtensionPrefs::Get(profile()), extension)) {
     case LaunchContainer::kLaunchContainerWindow:
     case LaunchContainer::kLaunchContainerPanelDeprecated:
-      return web_app::LaunchContainer::kWindow;
+      return blink::mojom::DisplayMode::kStandalone;
     case LaunchContainer::kLaunchContainerTab:
-      return web_app::LaunchContainer::kTab;
+      return blink::mojom::DisplayMode::kBrowser;
     case LaunchContainer::kLaunchContainerNone:
       NOTREACHED();
-      return web_app::LaunchContainer::kDefault;
-  }
-}
-
-void BookmarkAppRegistrar::SetAppLaunchContainer(
-    const web_app::AppId& app_id,
-    web_app::LaunchContainer launch_container) {
-  const Extension* extension = GetExtension(app_id);
-  DCHECK(extension);
-  if (!extension)
-    return;
-
-  switch (launch_container) {
-    case web_app::LaunchContainer::kWindow:
-      extensions::SetLaunchType(profile(), extension->id(),
-                                extensions::LAUNCH_TYPE_WINDOW);
-      return;
-    case web_app::LaunchContainer::kTab:
-      extensions::SetLaunchType(profile(), extension->id(),
-                                extensions::LAUNCH_TYPE_REGULAR);
-      return;
-    case web_app::LaunchContainer::kDefault:
-      NOTREACHED();
-      return;
+      return blink::mojom::DisplayMode::kUndefined;
   }
 }
 

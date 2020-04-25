@@ -49,7 +49,7 @@ class VivaldiNativeAppWindowViewsWin : public VivaldiNativeAppWindowViewsAura {
   HWND GetNativeAppWindowHWND() const;
   void EnsureCaptionStyleSet();
 
-  // Overridden from ChromeNativeAppWindowViews:
+  // Overridden from VivaldiNativeAppWindowViews:
   void OnBeforeWidgetInit(
       const extensions::AppWindow::CreateParams& create_params,
       views::Widget::InitParams* init_params,
@@ -57,6 +57,7 @@ class VivaldiNativeAppWindowViewsWin : public VivaldiNativeAppWindowViewsAura {
   void InitializeDefaultWindow(
       const extensions::AppWindow::CreateParams& create_params) override;
   views::NonClientFrameView* CreateStandardDesktopAppFrame() override;
+  bool IsOnCurrentWorkspace() const override;
 
   // Overridden from views::WidgetDelegate:
   bool CanMinimize() const override;

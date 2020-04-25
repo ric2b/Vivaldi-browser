@@ -25,7 +25,7 @@
 #include "chrome/browser/ui/webui/print_preview/print_preview_utils.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/debug_daemon_client.h"
+#include "chromeos/dbus/debug_daemon/debug_daemon_client.h"
 #include "chromeos/printing/printer_configuration.h"
 #include "components/prefs/pref_service.h"
 #include "components/printing/browser/printer_capabilities.h"
@@ -303,6 +303,9 @@ base::Value LocalPrinterHandlerChromeos::GetNativePrinterPolicies() const {
   policies.SetKey(
       kAllowedPinModes,
       base::Value(prefs->GetInteger(prefs::kPrintingAllowedPinModes)));
+  policies.SetKey(kAllowedBackgroundGraphicsModes,
+                  base::Value(prefs->GetInteger(
+                      prefs::kPrintingAllowedBackgroundGraphicsModes)));
   policies.SetKey(kDefaultColorMode,
                   base::Value(prefs->GetInteger(prefs::kPrintingColorDefault)));
   policies.SetKey(
@@ -310,6 +313,9 @@ base::Value LocalPrinterHandlerChromeos::GetNativePrinterPolicies() const {
       base::Value(prefs->GetInteger(prefs::kPrintingDuplexDefault)));
   policies.SetKey(kDefaultPinMode,
                   base::Value(prefs->GetInteger(prefs::kPrintingPinDefault)));
+  policies.SetKey(kDefaultBackgroundGraphicsMode,
+                  base::Value(prefs->GetInteger(
+                      prefs::kPrintingBackgroundGraphicsDefault)));
   return policies;
 }
 

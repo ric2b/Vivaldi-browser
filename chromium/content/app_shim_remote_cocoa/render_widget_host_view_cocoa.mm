@@ -10,6 +10,7 @@
 #include "base/debug/crash_logging.h"
 #import "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
+#include "base/numerics/ranges.h"
 #include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "content/browser/accessibility/browser_accessibility_cocoa.h"
@@ -114,13 +115,13 @@ SkColor SkColorFromNSColor(NSColor* color) {
   CGFloat r, g, b, a;
   [color getRed:&r green:&g blue:&b alpha:&a];
 
-  return std::max(0, std::min(static_cast<int>(lroundf(255.0f * a)), 255))
+  return base::ClampToRange(static_cast<int>(lroundf(255.0f * a)), 0, 255)
              << 24 |
-         std::max(0, std::min(static_cast<int>(lroundf(255.0f * r)), 255))
+         base::ClampToRange(static_cast<int>(lroundf(255.0f * r)), 0, 255)
              << 16 |
-         std::max(0, std::min(static_cast<int>(lroundf(255.0f * g)), 255))
+         base::ClampToRange(static_cast<int>(lroundf(255.0f * g)), 0, 255)
              << 8 |
-         std::max(0, std::min(static_cast<int>(lroundf(255.0f * b)), 255));
+         base::ClampToRange(static_cast<int>(lroundf(255.0f * b)), 0, 255);
 }
 
 // Extract underline information from an attributed string. Mostly copied from
@@ -585,8 +586,7 @@ void ExtractUnderlines(NSAttributedString* string,
 - (void)setHostDisconnected {
   // Set the host to be an abandoned message pipe, and set the hostHelper
   // to forward messages to that host.
-  remote_cocoa::mojom::RenderWidgetHostNSViewHostRequest dummyHostRequest =
-      mojo::MakeRequest(&dummyHost_);
+  ignore_result(dummyHost_.BindNewPipeAndPassReceiver());
   dummyHostHelper_ = std::make_unique<DummyHostHelper>();
   host_ = dummyHost_.get();
   hostHelper_ = dummyHostHelper_.get();
@@ -602,7 +602,7 @@ void ExtractUnderlines(NSAttributedString* string,
 }
 
 - (bool)hostIsDisconnected {
-  return host_ == dummyHost_.get();
+  return host_ == (dummyHost_.is_bound() ? dummyHost_.get() : nullptr);
 }
 
 - (void)setShowingContextMenu:(BOOL)showing {

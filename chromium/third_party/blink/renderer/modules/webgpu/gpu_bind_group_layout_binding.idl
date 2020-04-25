@@ -8,9 +8,10 @@ dictionary GPUBindGroupLayoutBinding {
     required unsigned long binding;
     required GPUShaderStageFlags visibility;
     required GPUBindingType type;
+    GPUTextureViewDimension textureDimension = "2d";
     GPUTextureComponentType textureComponentType = "float";
     boolean multisampled = false;
-    boolean dynamic = false;
+    boolean hasDynamicOffset = false;
 };
 
 enum GPUBindingType {
@@ -19,6 +20,7 @@ enum GPUBindingType {
     "readonly-storage-buffer",
     "sampler",
     "sampled-texture",
+    "storage-texture",
 };
 
 enum GPUTextureComponentType {

@@ -21,6 +21,7 @@
 #include "components/password_manager/core/browser/android_affiliation/affiliated_match_helper.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_service.h"
 #include "components/password_manager/core/browser/android_affiliation/mock_affiliated_match_helper.h"
+#include "components/password_manager/core/browser/password_leak_history_consumer.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
@@ -37,6 +38,7 @@ using autofill::PasswordForm;
 using base::WaitableEvent;
 using testing::_;
 using testing::DoAll;
+using testing::UnorderedElementsAre;
 using testing::WithArg;
 
 namespace password_manager {
@@ -56,6 +58,9 @@ constexpr const char kTestPSLMatchingWebOrigin[] =
     "https://psl.example.com/origin";
 constexpr const char kTestUnrelatedWebRealm[] = "https://notexample.com/";
 constexpr const char kTestUnrelatedWebOrigin[] = "https:/notexample.com/origin";
+constexpr const char kTestUnrelatedWebRealm2[] = "https://notexample2.com/";
+constexpr const char kTestUnrelatedWebOrigin2[] =
+    "https:/notexample2.com/origin";
 constexpr const char kTestInsecureWebRealm[] = "http://one.example.com/";
 constexpr const char kTestInsecureWebOrigin[] = "http://one.example.com/origin";
 constexpr const char kTestAndroidRealm1[] =
@@ -70,6 +75,16 @@ constexpr const char kTestAndroidName1[] = "Example Android App 1";
 constexpr const char kTestAndroidIconURL1[] = "https://example.com/icon_1.png";
 constexpr const char kTestAndroidName2[] = "Example Android App 2";
 constexpr const char kTestAndroidIconURL2[] = "https://example.com/icon_2.png";
+
+class MockPasswordLeakHistoryConsumer : public PasswordLeakHistoryConsumer {
+ public:
+  MockPasswordLeakHistoryConsumer() = default;
+
+  MOCK_METHOD1(OnGetLeakedCredentials, void(std::vector<LeakedCredentials>));
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockPasswordLeakHistoryConsumer);
+};
 
 class MockPasswordStoreConsumer : public PasswordStoreConsumer {
  public:
@@ -108,8 +123,7 @@ class StartSyncFlareMock {
 
 class PasswordStoreTest : public testing::Test {
  protected:
-  PasswordStoreTest()
-      : task_environment_(base::test::TaskEnvironment::MainThreadType::UI) {}
+  PasswordStoreTest() = default;
 
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
@@ -135,7 +149,7 @@ class PasswordStoreTest : public testing::Test {
 
  private:
   base::ScopedTempDir temp_dir_;
-  base::test::TaskEnvironment task_environment_;
+  base::test::TaskEnvironment task_environment_{base::test::TaskEnvironment::MainThreadType::UI};
 
   DISALLOW_COPY_AND_ASSIGN(PasswordStoreTest);
 };
@@ -898,6 +912,70 @@ TEST_F(PasswordStoreTest, GetAllLoginsWithAffiliationAndBrandingInformation) {
   store->ShutdownOnUIThread();
 }
 
+TEST_F(PasswordStoreTest, Unblacklisting) {
+  static const PasswordFormData kTestCredentials[] = {
+      // A PasswordFormData with nullptr as the username_value will be converted
+      // in a blacklisted PasswordForm in FillPasswordFormWithData().
+
+      // Blacklisted entry for the observed domain.
+      {PasswordForm::Scheme::kHtml, kTestWebRealm1, kTestWebOrigin1, "", L"",
+       L"", L"", nullptr, L"", true, 1},
+      // Blacklisted entry for a PSL match of the observed form.
+      {PasswordForm::Scheme::kHtml, kTestPSLMatchingWebRealm,
+       kTestPSLMatchingWebOrigin, "", L"", L"", L"", nullptr, L"", true, 1},
+      // Blacklisted entry for another domain
+      {PasswordForm::Scheme::kHtml, kTestUnrelatedWebRealm,
+       kTestUnrelatedWebOrigin, "", L"", L"", L"", nullptr, L"", true, 1},
+      // Non-blacklisted for the observed domain with a username.
+      {PasswordForm::Scheme::kHtml, kTestWebRealm1, kTestWebOrigin1, "", L"",
+       L"", L"", L"username", L"", true, 1},
+      // Non-blacklisted for the observed domain without a username.
+      {PasswordForm::Scheme::kHtml, kTestWebRealm1, kTestWebOrigin1, "", L"",
+       L"", L"username_element", L"", L"", true, 1},
+      // Non-blacklisted entry for a PSL match of the observed form.
+      {PasswordForm::Scheme::kHtml, kTestPSLMatchingWebRealm,
+       kTestPSLMatchingWebOrigin, "", L"", L"", L"", L"username", L"", true, 1},
+      // Non-blacklisted entry for another domain
+      {PasswordForm::Scheme::kHtml, kTestUnrelatedWebRealm2,
+       kTestUnrelatedWebOrigin2, "", L"", L"", L"", L"username", L"", true, 1}};
+
+  scoped_refptr<PasswordStoreDefault> store = CreatePasswordStore();
+  store->Init(syncer::SyncableService::StartSyncFlare(), nullptr);
+
+  std::vector<std::unique_ptr<PasswordForm>> all_credentials;
+  for (const auto& test_credential : kTestCredentials) {
+    all_credentials.push_back(FillPasswordFormWithData(test_credential));
+    store->AddLogin(*all_credentials.back());
+  }
+  WaitForPasswordStore();
+
+  MockPasswordStoreObserver mock_observer;
+  store->AddObserver(&mock_observer);
+
+  // Only the related non-PSL match should be deleted.
+  EXPECT_CALL(mock_observer, OnLoginsChanged(testing::SizeIs(1u)));
+  base::RunLoop run_loop;
+  PasswordStore::FormDigest observed_form_digest = {
+      PasswordForm::Scheme::kHtml, kTestWebRealm1, GURL(kTestWebOrigin1)};
+
+  store->Unblacklist(observed_form_digest, run_loop.QuitClosure());
+  run_loop.Run();
+  testing::Mock::VerifyAndClearExpectations(&mock_observer);
+
+  // Unblacklisting will delete only the first credential. It should leave the
+  // PSL match as well as the unrelated blacklisting entry and all
+  // non-blacklisting entries.
+  all_credentials.erase(all_credentials.begin());
+
+  MockPasswordStoreConsumer mock_consumer;
+  EXPECT_CALL(mock_consumer,
+              OnGetPasswordStoreResultsConstRef(
+                  UnorderedPasswordFormElementsAre(&all_credentials)));
+  store->GetAllLogins(&mock_consumer);
+  WaitForPasswordStore();
+  store->ShutdownOnUIThread();
+}
+
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
 TEST_F(PasswordStoreTest, CheckPasswordReuse) {
   static constexpr PasswordFormData kTestCredentials[] = {
@@ -1166,6 +1244,74 @@ TEST_F(PasswordStoreTest, ReportMetricsForNonSyncPassword) {
   histogram_tester.ExpectBucketCount(
       "PasswordManager.NonSyncPasswordHashChange",
       GaiaPasswordHashChange::NOT_SYNC_PASSWORD_CHANGE, 1);
+  store->ShutdownOnUIThread();
+}
+
+TEST_F(PasswordStoreTest, GetAllLeakedCredentials) {
+  LeakedCredentials leaked_credentials(GURL("https://example.com"),
+                                       base::ASCIIToUTF16("username"),
+                                       base::Time::FromTimeT(1));
+  LeakedCredentials leaked_credentials2(GURL("https://example2.com"),
+                                        base::ASCIIToUTF16("username2"),
+                                        base::Time::FromTimeT(2));
+
+  scoped_refptr<PasswordStoreDefault> store = CreatePasswordStore();
+  store->Init(syncer::SyncableService::StartSyncFlare(), nullptr);
+
+  store->AddLeakedCredentials(leaked_credentials);
+  store->AddLeakedCredentials(leaked_credentials2);
+  MockPasswordLeakHistoryConsumer consumer;
+  EXPECT_CALL(consumer, OnGetLeakedCredentials(UnorderedElementsAre(
+                            leaked_credentials, leaked_credentials2)));
+  store->GetAllLeakedCredentials(&consumer);
+  WaitForPasswordStore();
+  testing::Mock::VerifyAndClearExpectations(&consumer);
+
+  store->RemoveLeakedCredentials(leaked_credentials.url,
+                                 leaked_credentials.username);
+  EXPECT_CALL(consumer, OnGetLeakedCredentials(
+                            UnorderedElementsAre(leaked_credentials2)));
+  store->GetAllLeakedCredentials(&consumer);
+  WaitForPasswordStore();
+
+  store->ShutdownOnUIThread();
+}
+
+TEST_F(PasswordStoreTest, RemoveLeakedCredentialsCreatedBetween) {
+  LeakedCredentials leaked_credentials1(GURL("https://example1.com"),
+                                        base::ASCIIToUTF16("username1"),
+                                        base::Time::FromTimeT(100));
+  LeakedCredentials leaked_credentials2(GURL("https://example2.com"),
+                                        base::ASCIIToUTF16("username2"),
+                                        base::Time::FromTimeT(200));
+  LeakedCredentials leaked_credentials3(GURL("https://example3.com"),
+                                        base::ASCIIToUTF16("username3"),
+                                        base::Time::FromTimeT(300));
+
+  scoped_refptr<PasswordStoreDefault> store = CreatePasswordStore();
+  store->Init(syncer::SyncableService::StartSyncFlare(), nullptr);
+
+  store->AddLeakedCredentials(leaked_credentials1);
+  store->AddLeakedCredentials(leaked_credentials2);
+  store->AddLeakedCredentials(leaked_credentials3);
+
+  MockPasswordLeakHistoryConsumer consumer;
+  EXPECT_CALL(consumer, OnGetLeakedCredentials(UnorderedElementsAre(
+                            leaked_credentials1, leaked_credentials2,
+                            leaked_credentials3)));
+  store->GetAllLeakedCredentials(&consumer);
+  WaitForPasswordStore();
+  testing::Mock::VerifyAndClearExpectations(&consumer);
+
+  store->RemoveLeakedCredentialsByUrlAndTime(
+      base::BindRepeating(std::not_equal_to<GURL>(), leaked_credentials3.url),
+      base::Time::FromTimeT(150), base::Time::FromTimeT(350), base::Closure());
+
+  EXPECT_CALL(consumer, OnGetLeakedCredentials(UnorderedElementsAre(
+                            leaked_credentials1, leaked_credentials3)));
+  store->GetAllLeakedCredentials(&consumer);
+  WaitForPasswordStore();
+
   store->ShutdownOnUIThread();
 }
 

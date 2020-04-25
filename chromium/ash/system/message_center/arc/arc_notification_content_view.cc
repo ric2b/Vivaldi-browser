@@ -13,6 +13,7 @@
 #include "components/arc/metrics/arc_metrics_constants.h"
 #include "components/exo/notification_surface.h"
 #include "components/exo/surface.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer_animation_observer.h"
@@ -794,6 +795,13 @@ void ArcNotificationContentView::OnWidgetClosing(views::Widget* widget) {
     attached_widget_->RemoveObserver(this);
     attached_widget_ = nullptr;
   }
+}
+
+void ArcNotificationContentView::OnWidgetActivationChanged(
+    views::Widget* widget,
+    bool active) {
+  if (item_)
+    item_->OnWindowActivated(active);
 }
 
 void ArcNotificationContentView::OnItemDestroying() {

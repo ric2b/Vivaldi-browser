@@ -1,13 +1,13 @@
 /**
  * @unrestricted
  */
-SDK.HeapProfilerModel = class extends SDK.SDKModel {
+export default class HeapProfilerModel extends SDK.SDKModel {
   /**
    * @param {!SDK.Target} target
    */
   constructor(target) {
     super(target);
-    target.registerHeapProfilerDispatcher(new SDK.HeapProfilerDispatcher(this));
+    target.registerHeapProfilerDispatcher(new HeapProfilerDispatcher(this));
     this._enabled = false;
     this._heapProfilerAgent = target.heapProfilerAgent();
     this._memoryAgent = target.memoryAgent();
@@ -30,8 +30,9 @@ SDK.HeapProfilerModel = class extends SDK.SDKModel {
   }
 
   enable() {
-    if (this._enabled)
+    if (this._enabled) {
       return;
+    }
 
     this._enabled = true;
     this._heapProfilerAgent.enable();
@@ -41,8 +42,9 @@ SDK.HeapProfilerModel = class extends SDK.SDKModel {
    * @param {number=} samplingRateInBytes
    */
   startSampling(samplingRateInBytes) {
-    if (this._samplingProfilerDepth++)
+    if (this._samplingProfilerDepth++) {
       return;
+    }
     const defaultSamplingIntervalInBytes = 16384;
     this._heapProfilerAgent.startSampling(samplingRateInBytes || defaultSamplingIntervalInBytes);
   }
@@ -51,10 +53,12 @@ SDK.HeapProfilerModel = class extends SDK.SDKModel {
    * @return {!Promise<?Protocol.HeapProfiler.SamplingHeapProfile>}
    */
   stopSampling() {
-    if (!this._samplingProfilerDepth)
+    if (!this._samplingProfilerDepth) {
       throw new Error('Sampling profiler is not running.');
-    if (--this._samplingProfilerDepth)
+    }
+    if (--this._samplingProfilerDepth) {
       return this.getSamplingProfile();
+    }
     return this._heapProfilerAgent.stopSampling();
   }
 
@@ -71,33 +75,35 @@ SDK.HeapProfilerModel = class extends SDK.SDKModel {
   }
 
   /**
-   * @return {!Promise<!SDK.HeapProfilerModel.NativeHeapProfile>}
+   * @return {!Promise<!NativeHeapProfile>}
    */
   async stopNativeSampling() {
-    const rawProfile = await this._memoryAgent.getSamplingProfile();
+    const rawProfile = /** @type {!Protocol.Memory.SamplingProfile} */ (await this._memoryAgent.getSamplingProfile());
     this._memoryAgent.stopSampling();
     return this._convertNativeProfile(rawProfile);
   }
 
   /**
-   * @return {!Promise<!SDK.HeapProfilerModel.NativeHeapProfile>}
+   * @return {!Promise<!NativeHeapProfile>}
    */
   async takeNativeSnapshot() {
-    const rawProfile = await this._memoryAgent.getAllTimeSamplingProfile();
+    const rawProfile =
+        /** @type {!Protocol.Memory.SamplingProfile} */ (await this._memoryAgent.getAllTimeSamplingProfile());
     return this._convertNativeProfile(rawProfile);
   }
 
   /**
-   * @return {!Promise<!SDK.HeapProfilerModel.NativeHeapProfile>}
+   * @return {!Promise<!NativeHeapProfile>}
    */
   async takeNativeBrowserSnapshot() {
-    const rawProfile = await this._memoryAgent.getBrowserSamplingProfile();
+    const rawProfile =
+        /** @type {!Protocol.Memory.SamplingProfile} */ (await this._memoryAgent.getBrowserSamplingProfile());
     return this._convertNativeProfile(rawProfile);
   }
 
   /**
    * @param {!Protocol.Memory.SamplingProfile} rawProfile
-   * @return {!SDK.HeapProfilerModel.NativeHeapProfile}
+   * @return {!NativeHeapProfile}
    */
   _convertNativeProfile(rawProfile) {
     const head = /** @type {!Protocol.HeapProfiler.SamplingHeapProfileNode} */
@@ -105,8 +111,9 @@ SDK.HeapProfilerModel = class extends SDK.SDKModel {
     for (const sample of rawProfile.samples) {
       const node = sample.stack.reverse().reduce((node, name) => {
         let child = node.children.get(name);
-        if (child)
+        if (child) {
           return child;
+        }
         const namespace = /^([^:]*)::/.exec(name);
         child = {
           children: new Map(),
@@ -125,7 +132,7 @@ SDK.HeapProfilerModel = class extends SDK.SDKModel {
     }
     convertChildren(head);
 
-    return new SDK.HeapProfilerModel.NativeHeapProfile(head, rawProfile.modules);
+    return new NativeHeapProfile(head, rawProfile.modules);
   }
 
   /**
@@ -189,7 +196,7 @@ SDK.HeapProfilerModel = class extends SDK.SDKModel {
    * @param {!Array<number>} samples
    */
   heapStatsUpdate(samples) {
-    this.dispatchEventToListeners(SDK.HeapProfilerModel.Events.HeapStatsUpdate, samples);
+    this.dispatchEventToListeners(Events.HeapStatsUpdate, samples);
   }
 
   /**
@@ -197,15 +204,14 @@ SDK.HeapProfilerModel = class extends SDK.SDKModel {
    * @param {number} timestamp
    */
   lastSeenObjectId(lastSeenObjectId, timestamp) {
-    this.dispatchEventToListeners(
-        SDK.HeapProfilerModel.Events.LastSeenObjectId, {lastSeenObjectId: lastSeenObjectId, timestamp: timestamp});
+    this.dispatchEventToListeners(Events.LastSeenObjectId, {lastSeenObjectId: lastSeenObjectId, timestamp: timestamp});
   }
 
   /**
    * @param {string} chunk
    */
   addHeapSnapshotChunk(chunk) {
-    this.dispatchEventToListeners(SDK.HeapProfilerModel.Events.AddHeapSnapshotChunk, chunk);
+    this.dispatchEventToListeners(Events.AddHeapSnapshotChunk, chunk);
   }
 
   /**
@@ -214,19 +220,16 @@ SDK.HeapProfilerModel = class extends SDK.SDKModel {
    * @param {boolean=} finished
    */
   reportHeapSnapshotProgress(done, total, finished) {
-    this.dispatchEventToListeners(
-        SDK.HeapProfilerModel.Events.ReportHeapSnapshotProgress, {done: done, total: total, finished: finished});
+    this.dispatchEventToListeners(Events.ReportHeapSnapshotProgress, {done: done, total: total, finished: finished});
   }
 
   resetProfiles() {
-    this.dispatchEventToListeners(SDK.HeapProfilerModel.Events.ResetProfiles, this);
+    this.dispatchEventToListeners(Events.ResetProfiles, this);
   }
-};
-
-SDK.SDKModel.register(SDK.HeapProfilerModel, SDK.Target.Capability.JS, false);
+}
 
 /** @enum {symbol} */
-SDK.HeapProfilerModel.Events = {
+export const Events = {
   HeapStatsUpdate: Symbol('HeapStatsUpdate'),
   LastSeenObjectId: Symbol('LastSeenObjectId'),
   AddHeapSnapshotChunk: Symbol('AddHeapSnapshotChunk'),
@@ -235,9 +238,10 @@ SDK.HeapProfilerModel.Events = {
 };
 
 /**
+ * @implements {Protocol.Profiler.Profile}
  * @extends {Protocol.HeapProfiler.SamplingHeapProfile}
  */
-SDK.HeapProfilerModel.NativeHeapProfile = class {
+export class NativeHeapProfile {
   /**
    * @param {!Protocol.HeapProfiler.SamplingHeapProfileNode} head
    * @param {!Array<!Protocol.Memory.Module>} modules
@@ -246,13 +250,13 @@ SDK.HeapProfilerModel.NativeHeapProfile = class {
     this.head = head;
     this.modules = modules;
   }
-};
+}
 
 /**
  * @extends {Protocol.HeapProfilerDispatcher}
  * @unrestricted
  */
-SDK.HeapProfilerDispatcher = class {
+export class HeapProfilerDispatcher {
   constructor(model) {
     this._heapProfilerModel = model;
   }
@@ -298,4 +302,27 @@ SDK.HeapProfilerDispatcher = class {
   resetProfiles() {
     this._heapProfilerModel.resetProfiles();
   }
-};
+}
+
+/* Legacy exported object */
+self.SDK = self.SDK || {};
+
+/* Legacy exported object */
+SDK = SDK || {};
+
+/** @constructor */
+SDK.HeapProfilerModel = HeapProfilerModel;
+
+/** @enum {symbol} */
+SDK.HeapProfilerModel.Events = Events;
+
+/**
+ * @implements {Protocol.Profiler.Profile}
+ * @extends {Protocol.HeapProfiler.SamplingHeapProfile}
+ */
+SDK.HeapProfilerModel.NativeHeapProfile = NativeHeapProfile;
+
+/** @constructor */
+SDK.HeapProfilerDispatcher = HeapProfilerDispatcher;
+
+SDK.SDKModel.register(SDK.HeapProfilerModel, SDK.Target.Capability.JS, false);

@@ -619,7 +619,6 @@ TEST_P(PaintArtifactCompositorTest, SortingContextID) {
       Pointee(DrawsRectangle(FloatRect(0, 0, 300, 200), Color::kWhite)));
   int white_sorting_context_id =
       GetTransformNode(white_layer).sorting_context_id;
-  EXPECT_EQ(white_layer->sorting_context_id(), white_sorting_context_id);
   EXPECT_EQ(0, white_sorting_context_id);
 
   // The light gray layer is 3D sorted.
@@ -977,7 +976,7 @@ TEST_P(PaintArtifactCompositorTest, EffectTreeConversionWithAlias) {
   const cc::EffectNode& converted_effect1 = *effect_tree.Node(2);
   EXPECT_EQ(converted_root_effect.id, converted_effect1.parent_id);
   EXPECT_FLOAT_EQ(0.5, converted_effect1.opacity);
-  EXPECT_EQ(real_effect1->GetCompositorElementId().GetInternalValue(),
+  EXPECT_EQ(real_effect1->GetCompositorElementId().GetStableId(),
             converted_effect1.stable_id);
 
   const cc::EffectNode& converted_effect2 = *effect_tree.Node(3);
@@ -2008,7 +2007,7 @@ TEST_P(PaintArtifactCompositorTest, EffectWithElementIdWithAlias) {
             ElementIdToEffectNodeIndex(real_effect->GetCompositorElementId()));
 }
 
-TEST_P(PaintArtifactCompositorTest, CompositedLuminanceMask) {
+TEST_P(PaintArtifactCompositorTest, NonCompositedSimpleLuminanceMask) {
   auto masked = CreateOpacityEffect(
       e0(), 1.0, CompositingReason::kIsolateCompositedDescendants);
   EffectPaintPropertyNode::State masking_state;
@@ -2016,8 +2015,6 @@ TEST_P(PaintArtifactCompositorTest, CompositedLuminanceMask) {
   masking_state.output_clip = &c0();
   masking_state.color_filter = kColorFilterLuminanceToAlpha;
   masking_state.blend_mode = SkBlendMode::kDstIn;
-  masking_state.direct_compositing_reasons =
-      CompositingReason::kSquashingDisallowed;
   auto masking =
       EffectPaintPropertyNode::Create(*masked, std::move(masking_state));
 
@@ -2027,30 +2024,18 @@ TEST_P(PaintArtifactCompositorTest, CompositedLuminanceMask) {
   artifact.Chunk(t0(), c0(), *masking)
       .RectDrawing(FloatRect(150, 150, 100, 100), Color::kWhite);
   Update(artifact.Build());
-  ASSERT_EQ(2u, ContentLayerCount());
+  ASSERT_EQ(1u, ContentLayerCount());
 
-  const cc::Layer* masked_layer = ContentLayerAt(0);
-  EXPECT_THAT(masked_layer->GetPicture(),
-              Pointee(DrawsRectangle(FloatRect(0, 0, 200, 200), Color::kGray)));
-  EXPECT_EQ(Translation(100, 100), masked_layer->ScreenSpaceTransform());
-  EXPECT_EQ(gfx::Size(200, 200), masked_layer->bounds());
+  const cc::Layer* layer = ContentLayerAt(0);
+  EXPECT_THAT(*layer->GetPicture(),
+              DrawsRectangles(Vector<RectWithColor>{
+                  RectWithColor(FloatRect(0, 0, 200, 200), Color::kGray),
+                  RectWithColor(FloatRect(50, 50, 100, 100), Color::kWhite)}));
+  EXPECT_EQ(Translation(100, 100), layer->ScreenSpaceTransform());
+  EXPECT_EQ(gfx::Size(200, 200), layer->bounds());
   const cc::EffectNode* masked_group =
-      GetPropertyTrees().effect_tree.Node(masked_layer->effect_tree_index());
-  EXPECT_TRUE(masked_group->HasRenderSurface());
-
-  const cc::Layer* masking_layer = ContentLayerAt(1);
-  EXPECT_THAT(
-      masking_layer->GetPicture(),
-      Pointee(DrawsRectangle(FloatRect(0, 0, 100, 100), Color::kWhite)));
-  EXPECT_EQ(Translation(150, 150), masking_layer->ScreenSpaceTransform());
-  EXPECT_EQ(gfx::Size(100, 100), masking_layer->bounds());
-  const cc::EffectNode* masking_group =
-      GetPropertyTrees().effect_tree.Node(masking_layer->effect_tree_index());
-  EXPECT_FALSE(masking_group->HasRenderSurface());
-  EXPECT_EQ(masked_group->id, masking_group->parent_id);
-  ASSERT_EQ(1u, masking_group->filters.size());
-  EXPECT_EQ(cc::FilterOperation::REFERENCE,
-            masking_group->filters.at(0).type());
+      GetPropertyTrees().effect_tree.Node(layer->effect_tree_index());
+  EXPECT_FALSE(masked_group->HasRenderSurface());
 }
 
 TEST_P(PaintArtifactCompositorTest, CompositedLuminanceMaskTwoChildren) {
@@ -2061,8 +2046,6 @@ TEST_P(PaintArtifactCompositorTest, CompositedLuminanceMaskTwoChildren) {
   masking_state.output_clip = &c0();
   masking_state.color_filter = kColorFilterLuminanceToAlpha;
   masking_state.blend_mode = SkBlendMode::kDstIn;
-  masking_state.direct_compositing_reasons =
-      CompositingReason::kSquashingDisallowed;
   auto masking =
       EffectPaintPropertyNode::Create(*masked, std::move(masking_state));
 
@@ -2090,7 +2073,31 @@ TEST_P(PaintArtifactCompositorTest, CompositedLuminanceMaskTwoChildren) {
             masking_group->filters.at(0).type());
 }
 
-TEST_P(PaintArtifactCompositorTest, CompositedExoticBlendMode) {
+TEST_P(PaintArtifactCompositorTest, NonCompositedSimpleExoticBlendMode) {
+  auto masked = CreateOpacityEffect(
+      e0(), 1.0, CompositingReason::kIsolateCompositedDescendants);
+  EffectPaintPropertyNode::State masking_state;
+  masking_state.local_transform_space = &t0();
+  masking_state.output_clip = &c0();
+  masking_state.blend_mode = SkBlendMode::kXor;
+  auto masking =
+      EffectPaintPropertyNode::Create(*masked, std::move(masking_state));
+
+  TestPaintArtifact artifact;
+  artifact.Chunk(t0(), c0(), *masked)
+      .RectDrawing(FloatRect(100, 100, 200, 200), Color::kGray);
+  artifact.Chunk(t0(), c0(), *masking)
+      .RectDrawing(FloatRect(150, 150, 100, 100), Color::kWhite);
+  Update(artifact.Build());
+  ASSERT_EQ(1u, ContentLayerCount());
+
+  const cc::Layer* layer = ContentLayerAt(0);
+  const cc::EffectNode* group =
+      GetPropertyTrees().effect_tree.Node(layer->effect_tree_index());
+  EXPECT_FALSE(group->HasRenderSurface());
+}
+
+TEST_P(PaintArtifactCompositorTest, ForcedCompositedExoticBlendMode) {
   auto masked = CreateOpacityEffect(
       e0(), 1.0, CompositingReason::kIsolateCompositedDescendants);
   EffectPaintPropertyNode::State masking_state;
@@ -2113,6 +2120,77 @@ TEST_P(PaintArtifactCompositorTest, CompositedExoticBlendMode) {
   const cc::Layer* masking_layer = ContentLayerAt(1);
   const cc::EffectNode* masking_group =
       GetPropertyTrees().effect_tree.Node(masking_layer->effect_tree_index());
+  EXPECT_EQ(SkBlendMode::kXor, masking_group->blend_mode);
+
+  /// This requires a render surface.
+  EXPECT_TRUE(masking_group->HasRenderSurface());
+}
+
+TEST_P(PaintArtifactCompositorTest,
+       CompositedExoticBlendModeOnTwoOpacityAnimationLayers) {
+  auto masked = CreateOpacityEffect(
+      e0(), 1.0, CompositingReason::kIsolateCompositedDescendants);
+  auto masked_child1 = CreateOpacityEffect(
+      *masked, 1.0, CompositingReason::kActiveOpacityAnimation);
+  auto masked_child2 = CreateOpacityEffect(
+      *masked, 1.0, CompositingReason::kActiveOpacityAnimation);
+  EffectPaintPropertyNode::State masking_state;
+  masking_state.local_transform_space = &t0();
+  masking_state.output_clip = &c0();
+  masking_state.blend_mode = SkBlendMode::kXor;
+  auto masking =
+      EffectPaintPropertyNode::Create(*masked, std::move(masking_state));
+
+  TestPaintArtifact artifact;
+  artifact.Chunk(t0(), c0(), *masked_child1)
+      .RectDrawing(FloatRect(100, 100, 200, 200), Color::kGray);
+  artifact.Chunk(t0(), c0(), *masked_child2)
+      .RectDrawing(FloatRect(100, 100, 200, 200), Color::kBlack);
+  artifact.Chunk(t0(), c0(), *masking)
+      .RectDrawing(FloatRect(150, 150, 100, 100), Color::kWhite);
+  Update(artifact.Build());
+  ASSERT_EQ(3u, ContentLayerCount());
+
+  const cc::Layer* masking_layer = ContentLayerAt(2);
+  const cc::EffectNode* masking_group =
+      GetPropertyTrees().effect_tree.Node(masking_layer->effect_tree_index());
+  EXPECT_EQ(SkBlendMode::kXor, masking_group->blend_mode);
+
+  /// This requires a render surface.
+  EXPECT_TRUE(masking_group->HasRenderSurface());
+}
+
+TEST_P(PaintArtifactCompositorTest,
+       CompositedExoticBlendModeOnTwo3DTransformLayers) {
+  auto masked = CreateOpacityEffect(
+      e0(), 1.0, CompositingReason::kIsolateCompositedDescendants);
+  auto transform1 =
+      CreateTransform(t0(), TransformationMatrix(), FloatPoint3D(),
+                      CompositingReason::k3DTransform);
+  auto transform2 =
+      CreateTransform(t0(), TransformationMatrix(), FloatPoint3D(),
+                      CompositingReason::k3DTransform);
+  EffectPaintPropertyNode::State masking_state;
+  masking_state.local_transform_space = &t0();
+  masking_state.output_clip = &c0();
+  masking_state.blend_mode = SkBlendMode::kXor;
+  auto masking =
+      EffectPaintPropertyNode::Create(*masked, std::move(masking_state));
+
+  TestPaintArtifact artifact;
+  artifact.Chunk(*transform1, c0(), *masked)
+      .RectDrawing(FloatRect(100, 100, 200, 200), Color::kGray);
+  artifact.Chunk(*transform2, c0(), *masked)
+      .RectDrawing(FloatRect(100, 100, 200, 200), Color::kBlack);
+  artifact.Chunk(t0(), c0(), *masking)
+      .RectDrawing(FloatRect(150, 150, 100, 100), Color::kWhite);
+  Update(artifact.Build());
+  ASSERT_EQ(3u, ContentLayerCount());
+
+  const cc::Layer* masking_layer = ContentLayerAt(2);
+  const cc::EffectNode* masking_group =
+      GetPropertyTrees().effect_tree.Node(masking_layer->effect_tree_index());
+  EXPECT_EQ(SkBlendMode::kXor, masking_group->blend_mode);
 
   /// This requires a render surface.
   EXPECT_TRUE(masking_group->HasRenderSurface());

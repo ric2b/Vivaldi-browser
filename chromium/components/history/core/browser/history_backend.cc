@@ -39,6 +39,7 @@
 #include "components/history/core/browser/in_memory_history_backend.h"
 #include "components/history/core/browser/keyword_search_term.h"
 #include "components/history/core/browser/page_usage_data.h"
+#include "components/history/core/browser/sync/typed_url_sync_bridge.h"
 #include "components/history/core/browser/url_utils.h"
 #include "components/sync/model_impl/client_tag_based_model_type_processor.h"
 #include "components/url_formatter/url_formatter.h"
@@ -927,6 +928,11 @@ void HistoryBackend::AddPagesWithDetails(const URLRows& urls,
   ScheduleCommit();
 }
 
+void HistoryBackend::SetTypedURLSyncBridgeForTest(
+    std::unique_ptr<TypedURLSyncBridge> bridge) {
+  typed_url_sync_bridge_ = std::move(bridge);
+}
+
 bool HistoryBackend::IsExpiredVisitTime(const base::Time& time) {
   return time < expirer_.GetCurrentExpirationTime();
 }
@@ -1424,11 +1430,8 @@ MostVisitedURLList HistoryBackend::QueryMostVisitedURLs(int result_count,
       url_filter);
 
   MostVisitedURLList result;
-  for (const std::unique_ptr<PageUsageData>& current_data : data) {
-    RedirectList redirects = QueryRedirectsFrom(current_data->GetURL());
-    result.emplace_back(current_data->GetURL(), current_data->GetTitle(),
-                        redirects);
-  }
+  for (const std::unique_ptr<PageUsageData>& current_data : data)
+    result.emplace_back(current_data->GetURL(), current_data->GetTitle());
 
   UMA_HISTOGRAM_TIMES("History.QueryMostVisitedURLsTime",
                       base::TimeTicks::Now() - begin_time);

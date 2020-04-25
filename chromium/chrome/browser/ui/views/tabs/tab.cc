@@ -52,6 +52,7 @@
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/material_design/material_design_controller.h"
@@ -71,6 +72,7 @@
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/rect_based_targeting_utils.h"
 #include "ui/views/view.h"
@@ -112,6 +114,22 @@ int Center(int size, int item_size) {
     ++extra_space;
   return extra_space / 2;
 }
+
+class TabStyleHighlightPathGenerator : public views::HighlightPathGenerator {
+ public:
+  explicit TabStyleHighlightPathGenerator(TabStyle* tab_style)
+      : tab_style_(tab_style) {}
+
+  // views::HighlightPathGenerator:
+  SkPath GetHighlightPath(const views::View* view) override {
+    return tab_style_->GetPath(TabStyle::PathType::kHighlight, 1.0);
+  }
+
+ private:
+  TabStyle* const tab_style_;
+
+  DISALLOW_COPY_AND_ASSIGN(TabStyleHighlightPathGenerator);
+};
 
 }  // namespace
 
@@ -179,6 +197,7 @@ Tab::Tab(TabController* controller)
   title_->SetHandlesTooltips(false);
   title_->SetAutoColorReadabilityEnabled(false);
   title_->SetText(CoreTabHelper::GetDefaultTitle());
+  title_->SetFontList(tab_style_->GetFontList());
   AddChildView(title_);
 
   SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
@@ -204,6 +223,8 @@ Tab::Tab(TabController* controller)
   // Enable keyboard focus.
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   focus_ring_ = views::FocusRing::Install(this);
+  views::HighlightPathGenerator::Install(
+      this, std::make_unique<TabStyleHighlightPathGenerator>(tab_style_.get()));
 }
 
 Tab::~Tab() {
@@ -398,16 +419,33 @@ const char* Tab::GetClassName() const {
   return kViewClassName;
 }
 
-void Tab::OnBoundsChanged(const gfx::Rect& previous_bounds) {
-  // Update focus ring path.
-  const SkPath path = tab_style_->GetPath(TabStyle::PathType::kHighlight, 1.0);
-  SetProperty(views::kHighlightPathKey, path);
-}
-
 bool Tab::OnKeyPressed(const ui::KeyEvent& event) {
   if (event.key_code() == ui::VKEY_SPACE && !IsSelected()) {
     controller_->SelectTab(this, event);
     return true;
+  }
+
+  if (event.type() == ui::ET_KEY_PRESSED &&
+      (event.flags() & ui::EF_CONTROL_DOWN)) {
+    if (event.flags() & ui::EF_SHIFT_DOWN) {
+      if (event.key_code() == ui::VKEY_RIGHT) {
+        controller()->MoveTabLast(this);
+        return true;
+      }
+      if (event.key_code() == ui::VKEY_LEFT) {
+        controller()->MoveTabFirst(this);
+        return true;
+      }
+    } else {
+      if (event.key_code() == ui::VKEY_RIGHT) {
+        controller()->MoveTabRight(this);
+        return true;
+      }
+      if (event.key_code() == ui::VKEY_LEFT) {
+        controller()->MoveTabLeft(this);
+        return true;
+      }
+    }
   }
 
   return false;
@@ -674,7 +712,6 @@ void Tab::SetGroup(base::Optional<TabGroupId> group) {
   if (group_ == group)
     return;
   group_ = group;
-  GroupColorChanged();
 }
 
 base::Optional<SkColor> Tab::GetGroupColor() const {
@@ -682,11 +719,6 @@ base::Optional<SkColor> Tab::GetGroupColor() const {
              ? base::make_optional(
                    controller_->GetVisualDataForGroup(group_.value())->color())
              : base::nullopt;
-}
-
-void Tab::GroupColorChanged() {
-  UpdateForegroundColors();
-  SchedulePaint();
 }
 
 SkColor Tab::GetAlertIndicatorColor(TabAlertState state) const {
@@ -712,7 +744,6 @@ SkColor Tab::GetAlertIndicatorColor(TabAlertState state) const {
     case TabAlertState::BLUETOOTH_CONNECTED:
     case TabAlertState::USB_CONNECTED:
     case TabAlertState::SERIAL_CONNECTED:
-    case TabAlertState::NONE:
     case TabAlertState::VR_PRESENTING_IN_HEADSET:
       return foreground_color_;
     default:
@@ -728,10 +759,13 @@ bool Tab::IsActive() const {
 void Tab::ActiveStateChanged() {
   UpdateTabIconNeedsAttentionBlocked();
   UpdateForegroundColors();
+  title_->SetFontList(tab_style_->GetFontList());
   Layout();
 }
 
 void Tab::AlertStateChanged() {
+  if (controller_->HoverCardIsShowingForTab(this))
+    controller_->UpdateHoverCard(this);
   Layout();
 }
 
@@ -804,58 +838,14 @@ void Tab::SetTabNeedsAttention(bool attention) {
 
 // static
 base::string16 Tab::GetTooltipText(const base::string16& title,
-                                   TabAlertState alert_state) {
-  if (alert_state == TabAlertState::NONE)
+                                   base::Optional<TabAlertState> alert_state) {
+  if (!alert_state)
     return title;
 
   base::string16 result = title;
   if (!result.empty())
     result.append(1, '\n');
-  switch (alert_state) {
-    case TabAlertState::AUDIO_PLAYING:
-      result.append(
-          l10n_util::GetStringUTF16(IDS_TOOLTIP_TAB_ALERT_STATE_AUDIO_PLAYING));
-      break;
-    case TabAlertState::AUDIO_MUTING:
-      result.append(
-          l10n_util::GetStringUTF16(IDS_TOOLTIP_TAB_ALERT_STATE_AUDIO_MUTING));
-      break;
-    case TabAlertState::MEDIA_RECORDING:
-      result.append(l10n_util::GetStringUTF16(
-          IDS_TOOLTIP_TAB_ALERT_STATE_MEDIA_RECORDING));
-      break;
-    case TabAlertState::TAB_CAPTURING:
-      result.append(
-          l10n_util::GetStringUTF16(IDS_TOOLTIP_TAB_ALERT_STATE_TAB_CAPTURING));
-      break;
-    case TabAlertState::BLUETOOTH_CONNECTED:
-      result.append(l10n_util::GetStringUTF16(
-          IDS_TOOLTIP_TAB_ALERT_STATE_BLUETOOTH_CONNECTED));
-      break;
-    case TabAlertState::USB_CONNECTED:
-      result.append(
-          l10n_util::GetStringUTF16(IDS_TOOLTIP_TAB_ALERT_STATE_USB_CONNECTED));
-      break;
-    case TabAlertState::SERIAL_CONNECTED:
-      result.append(l10n_util::GetStringUTF16(
-          IDS_TOOLTIP_TAB_ALERT_STATE_SERIAL_CONNECTED));
-      break;
-    case TabAlertState::PIP_PLAYING:
-      result.append(
-          l10n_util::GetStringUTF16(IDS_TOOLTIP_TAB_ALERT_STATE_PIP_PLAYING));
-      break;
-    case TabAlertState::DESKTOP_CAPTURING:
-      result.append(l10n_util::GetStringUTF16(
-          IDS_TOOLTIP_TAB_ALERT_STATE_DESKTOP_CAPTURING));
-      break;
-    case TabAlertState::VR_PRESENTING_IN_HEADSET:
-      result.append(
-          l10n_util::GetStringUTF16(IDS_TOOLTIP_TAB_ALERT_STATE_VR_PRESENTING));
-      break;
-    case TabAlertState::NONE:
-      NOTREACHED();
-      break;
-  }
+  result.append(chrome::GetTabAlertStateText(alert_state.value()));
   return result;
 }
 
@@ -898,7 +888,8 @@ void Tab::UpdateIconVisibility() {
   const bool has_favicon = data().show_icon;
   const bool has_alert_icon =
       (alert_indicator_ ? alert_indicator_->showing_alert_state()
-                        : data().alert_state) != TabAlertState::NONE;
+                        : data().alert_state)
+          .has_value();
 
   if (data().pinned) {
     // When the tab is pinned, we can show one of the two icons; the alert icon

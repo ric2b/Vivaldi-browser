@@ -13,17 +13,22 @@
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_group_visual_data.h"
 #include "chrome/browser/ui/tabs/tab_types.h"
+#include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/tabs/glow_hover_controller.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_close_button.h"
 #include "chrome/browser/ui/views/tabs/tab_controller.h"
+#include "chrome/browser/ui/views/tabs/tab_group_underline.h"
 #include "chrome/grit/theme_resources.h"
 #include "third_party/skia/include/core/SkScalar.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/font_list.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/views/style/platform_style.h"
+#include "ui/views/style/typography.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -55,6 +60,7 @@ class GM2TabStyle : public TabStyleViews {
   gfx::Insets GetContentsInsets() const override;
   float GetZValue() const override;
   TabStyle::TabColors CalculateColors() const override;
+  const gfx::FontList& GetFontList() const override;
   void PaintTab(gfx::Canvas* canvas) const override;
   void SetHoverLocation(const gfx::Point& location) override;
   void ShowHover(ShowHoverStyle style) override;
@@ -130,6 +136,8 @@ class GM2TabStyle : public TabStyleViews {
   const Tab* const tab_;
 
   std::unique_ptr<GlowHoverController> hover_controller_;
+  gfx::FontList normal_font_;
+  gfx::FontList heavy_font_;
 
   DISALLOW_COPY_AND_ASSIGN(GM2TabStyle);
 };
@@ -163,7 +171,14 @@ GM2TabStyle::GM2TabStyle(Tab* tab)
     : tab_(tab),
       hover_controller_(gfx::Animation::ShouldRenderRichAnimation()
                             ? new GlowHoverController(tab)
-                            : nullptr) {}
+                            : nullptr),
+      normal_font_(views::style::GetFont(views::style::CONTEXT_LABEL,
+                                         views::style::STYLE_PRIMARY)),
+      heavy_font_(views::style::GetFont(views::style::CONTEXT_BUTTON_MD,
+                                        views::style::STYLE_PRIMARY)) {
+  // TODO(dfried): create a new STYLE_PROMINENT or similar to use instead of
+  // repurposing CONTEXT_BUTTON_MD.
+}
 
 SkPath GM2TabStyle::GetPath(PathType path_type,
                             float scale,
@@ -235,7 +250,17 @@ SkPath GM2TabStyle::GetPath(PathType path_type,
     // of the bottom of the tab bar (when strokes are enabled).
     tab_bottom -= stroke_adjustment;
     bottom_radius -= stroke_adjustment;
-    extend_to_top = ShouldExtendHitTest();
+    if (ShouldExtendHitTest()) {
+      extend_to_top = true;
+      if (tab_->controller()->IsFirstVisibleTab(tab_)) {
+        // The path is not mirrored in RTL and thus we must manually choose the
+        // correct "leading" edge.
+        if (base::i18n::IsRTL())
+          tab_right = right;
+        else
+          tab_left = left;
+      }
+    }
   }
   const ShapeModifier shape_modifier = GetShapeModifier(path_type);
   const bool extend_left_to_bottom = shape_modifier & kNoLowerLeftArc;
@@ -267,23 +292,26 @@ SkPath GM2TabStyle::GetPath(PathType path_type,
     // Start with the left side of the shape.
     path.moveTo(left, extended_bottom);
 
-    // Draw the left edge of the extension.
-    //   ╭─────────╮
-    //   │ Content │
-    // ┏─╯         ╰─┐
-    if (tab_bottom != extended_bottom)
-      path.lineTo(left, tab_bottom);
+    if (tab_left != left) {
+      // Draw the left edge of the extension.
+      //   ╭─────────╮
+      //   │ Content │
+      // ┏─╯         ╰─┐
+      if (tab_bottom != extended_bottom)
+        path.lineTo(left, tab_bottom);
 
-    // Draw the bottom-left corner.
-    //   ╭─────────╮
-    //   │ Content │
-    // ┌━╝         ╰─┐
-    if (extend_left_to_bottom) {
-      path.lineTo(tab_left, tab_bottom);
-    } else {
-      path.lineTo(tab_left - bottom_radius, tab_bottom);
-      path.arcTo(bottom_radius, bottom_radius, 0, SkPath::kSmall_ArcSize,
-                 SkPath::kCCW_Direction, tab_left, tab_bottom - bottom_radius);
+      // Draw the bottom-left corner.
+      //   ╭─────────╮
+      //   │ Content │
+      // ┌━╝         ╰─┐
+      if (extend_left_to_bottom) {
+        path.lineTo(tab_left, tab_bottom);
+      } else {
+        path.lineTo(tab_left - bottom_radius, tab_bottom);
+        path.arcTo(bottom_radius, bottom_radius, 0, SkPath::kSmall_ArcSize,
+                   SkPath::kCCW_Direction, tab_left,
+                   tab_bottom - bottom_radius);
+      }
     }
 
     // Draw the ascender and top-left curve, if present.
@@ -316,22 +344,26 @@ SkPath GM2TabStyle::GetPath(PathType path_type,
                  SkPath::kCW_Direction, tab_right, tab_top + top_radius);
     }
 
-    // Draw the descender and bottom-right corner.
-    //   ╭─────────╮
-    //   │ Content ┃
-    // ┌─╯         ╚━┐
-    if (extend_right_to_bottom) {
-      path.lineTo(tab_right, tab_bottom);
-    } else {
-      path.lineTo(tab_right, tab_bottom - bottom_radius);
-      path.arcTo(bottom_radius, bottom_radius, 0, SkPath::kSmall_ArcSize,
-                 SkPath::kCCW_Direction, tab_right + bottom_radius, tab_bottom);
+    if (tab_right != right) {
+      // Draw the descender and bottom-right corner.
+      //   ╭─────────╮
+      //   │ Content ┃
+      // ┌─╯         ╚━┐
+      if (extend_right_to_bottom) {
+        path.lineTo(tab_right, tab_bottom);
+      } else {
+        path.lineTo(tab_right, tab_bottom - bottom_radius);
+        path.arcTo(bottom_radius, bottom_radius, 0, SkPath::kSmall_ArcSize,
+                   SkPath::kCCW_Direction, tab_right + bottom_radius,
+                   tab_bottom);
+      }
+      if (tab_bottom != extended_bottom)
+        path.lineTo(right, tab_bottom);
     }
-    if (tab_bottom != extended_bottom)
-      path.lineTo(right, tab_bottom);
 
-    // Draw anything remaining: the bottom right horizontal stroke, or the right
-    // edge of the extension, depending on which condition fired above.
+    // Draw anything remaining: the descender, the bottom right horizontal
+    // stroke, or the right edge of the extension, depending on which
+    // conditions fired above.
     //   ╭─────────╮
     //   │ Content │
     // ┌─╯         ╰─┓
@@ -414,6 +446,19 @@ TabStyle::TabColors GM2TabStyle::CalculateColors() const {
       background_color);
 
   return {foreground_color, background_color};
+}
+
+const gfx::FontList& GM2TabStyle::GetFontList() const {
+  // Don't want to have to keep re-computing this value.
+  static const bool prominent_dark_mode_title =
+      base::FeatureList::IsEnabled(features::kProminentDarkModeActiveTabTitle);
+
+  if (prominent_dark_mode_title && tab_->IsActive() &&
+      color_utils::IsDark(GetTabBackgroundColor(TabActive::kActive))) {
+    return heavy_font_;
+  }
+
+  return normal_font_;
 }
 
 void GM2TabStyle::PaintTab(gfx::Canvas* canvas) const {
@@ -610,9 +655,14 @@ float GM2TabStyle::GetThrobValue() const {
 }
 
 int GM2TabStyle::GetStrokeThickness(bool should_paint_as_active) const {
-  return (tab_->IsActive() || should_paint_as_active)
-             ? tab_->controller()->GetStrokeThickness()
-             : 0;
+  base::Optional<SkColor> group_color = tab_->GetGroupColor();
+  if (group_color.has_value() && tab_->IsActive())
+    return TabGroupUnderline::kStrokeThickness;
+
+  if (tab_->IsActive() || should_paint_as_active)
+    return tab_->controller()->GetStrokeThickness();
+
+  return 0;
 }
 
 bool GM2TabStyle::ShouldPaintTabBackgroundColor(
@@ -634,21 +684,7 @@ bool GM2TabStyle::ShouldPaintTabBackgroundColor(
 
 SkColor GM2TabStyle::GetTabBackgroundColor(TabActive active) const {
   SkColor color = tab_->controller()->GetTabBackgroundColor(
-      active, BrowserNonClientFrameView::kUseCurrent);
-
-  base::Optional<SkColor> group_color = tab_->GetGroupColor();
-  if (group_color.has_value()) {
-    if (tab_->IsActive()) {
-      color = group_color.value();
-    } else {
-      // Tint with group color. With a dark scheme, the tint needs a higher
-      // contrast to stand out effectively.
-      const float target_contrast = color_utils::IsDark(color) ? 1.8f : 1.2f;
-      color = color_utils::BlendForMinContrast(
-                  color, color, group_color.value(), target_contrast)
-                  .color;
-    }
-  }
+      active, BrowserFrameActiveState::kUseCurrent);
 
   return color;
 }
@@ -674,7 +710,7 @@ ShapeModifier GM2TabStyle::GetShapeModifier(PathType path_type) const {
 void GM2TabStyle::PaintInactiveTabBackground(gfx::Canvas* canvas) const {
   PaintTabBackground(canvas, TabActive::kInactive,
                      tab_->controller()->GetCustomBackgroundId(
-                         BrowserNonClientFrameView::kUseCurrent),
+                         BrowserFrameActiveState::kUseCurrent),
                      0);
 }
 
@@ -685,11 +721,14 @@ void GM2TabStyle::PaintTabBackground(gfx::Canvas* canvas,
   // |y_inset| is only set when |fill_id| is being used.
   DCHECK(!y_inset || fill_id.has_value());
 
+  base::Optional<SkColor> group_color = tab_->GetGroupColor();
+
   PaintTabBackgroundFill(canvas, active,
                          active == TabActive::kInactive && IsHoverActive(),
                          fill_id, y_inset);
-  PaintBackgroundStroke(canvas, active,
-                        tab_->controller()->GetToolbarTopSeparatorColor());
+  PaintBackgroundStroke(
+      canvas, active,
+      group_color.value_or(tab_->controller()->GetToolbarTopSeparatorColor()));
   PaintSeparators(canvas);
 }
 

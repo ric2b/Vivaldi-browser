@@ -14,10 +14,11 @@
 #include "components/viz/host/host_display_client.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/host/renderer_settings_creation.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom.h"
 #include "services/viz/privileged/mojom/compositing/vsync_parameter_observer.mojom.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
-#include "ui/compositor/host/external_begin_frame_controller_client_impl.h"
 #include "ui/compositor/reflector.h"
 
 #if defined(OS_WIN)
@@ -30,7 +31,7 @@ namespace {
 
 static const char* kBrowser = "Browser";
 
-#if defined(USE_X11)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 class HostDisplayClient : public viz::HostDisplayClient {
  public:
   explicit HostDisplayClient(ui::Compositor* compositor)
@@ -60,6 +61,18 @@ class HostDisplayClient : public viz::HostDisplayClient {
 #endif
 
 }  // namespace
+
+struct PendingBeginFrameArgs {
+  PendingBeginFrameArgs(
+      const viz::BeginFrameArgs& args,
+      bool force,
+      base::OnceCallback<void(const viz::BeginFrameAck&)> callback)
+      : args(args), force(force), callback(std::move(callback)) {}
+
+  viz::BeginFrameArgs args;
+  bool force;
+  base::OnceCallback<void(const viz::BeginFrameAck&)> callback;
+};
 
 HostContextFactoryPrivate::HostContextFactoryPrivate(
     uint32_t client_id,
@@ -92,10 +105,12 @@ void HostContextFactoryPrivate::ConfigureCompositor(
 
   auto root_params = viz::mojom::RootCompositorFrameSinkParams::New();
   // Create interfaces for a root CompositorFrameSink.
-  viz::mojom::CompositorFrameSinkAssociatedPtrInfo sink_info;
-  root_params->compositor_frame_sink = mojo::MakeRequest(&sink_info);
-  viz::mojom::CompositorFrameSinkClientRequest client_request =
-      mojo::MakeRequest(&root_params->compositor_frame_sink_client);
+  mojo::PendingAssociatedRemote<viz::mojom::CompositorFrameSink> sink_remote;
+  root_params->compositor_frame_sink =
+      sink_remote.InitWithNewEndpointAndPassReceiver();
+  mojo::PendingReceiver<viz::mojom::CompositorFrameSinkClient> client_receiver =
+      root_params->compositor_frame_sink_client
+          .InitWithNewPipeAndPassReceiver();
   root_params->display_private =
       mojo::MakeRequest(&compositor_data.display_private);
   compositor_data.display_client =
@@ -104,18 +119,9 @@ void HostContextFactoryPrivate::ConfigureCompositor(
       compositor_data.display_client->GetBoundPtr(resize_task_runner_)
           .PassInterface();
 
-  // Initialize ExternalBeginFrameController client if enabled.
-  compositor_data.external_begin_frame_controller_client.reset();
-  if (compositor->external_begin_frame_client()) {
-    compositor_data.external_begin_frame_controller_client =
-        std::make_unique<ExternalBeginFrameControllerClientImpl>(
-            compositor->external_begin_frame_client());
+  if (compositor->use_external_begin_frame_control()) {
     root_params->external_begin_frame_controller =
-        compositor_data.external_begin_frame_controller_client
-            ->GetControllerRequest();
-    root_params->external_begin_frame_controller_client =
-        compositor_data.external_begin_frame_controller_client->GetBoundPtr()
-            .PassInterface();
+        mojo::MakeRequest(&compositor_data.external_begin_frame_controller);
   }
 
   root_params->frame_sink_id = compositor->frame_sink_id();
@@ -143,8 +149,8 @@ void HostContextFactoryPrivate::ConfigureCompositor(
   params.compositor_task_runner = compositor->task_runner();
   params.gpu_memory_buffer_manager =
       compositor->context_factory()->GetGpuMemoryBufferManager();
-  params.pipes.compositor_frame_sink_associated_info = std::move(sink_info);
-  params.pipes.client_request = std::move(client_request);
+  params.pipes.compositor_frame_sink_associated_remote = std::move(sink_remote);
+  params.pipes.client_receiver = std::move(client_receiver);
   if (!features::IsVizHitTestingSurfaceLayerEnabled()) {
     params.hit_test_data_provider =
         std::make_unique<viz::HitTestDataProviderDrawQuad>(
@@ -156,6 +162,12 @@ void HostContextFactoryPrivate::ConfigureCompositor(
       std::make_unique<cc::mojo_embedder::AsyncLayerTreeFrameSink>(
           std::move(context_provider), std::move(worker_context_provider),
           &params));
+  auto* args = compositor_data.pending_begin_frame_args.get();
+  if (args && compositor->use_external_begin_frame_control()) {
+    compositor_data.external_begin_frame_controller->IssueExternalBeginFrame(
+        args->args, args->force, std::move(args->callback));
+    compositor_data.pending_begin_frame_args.reset();
+  }
 }
 
 void HostContextFactoryPrivate::UnconfigureCompositor(Compositor* compositor) {
@@ -261,14 +273,20 @@ void HostContextFactoryPrivate::SetDisplayVSyncParameters(
 
 void HostContextFactoryPrivate::IssueExternalBeginFrame(
     Compositor* compositor,
-    const viz::BeginFrameArgs& args) {
+    const viz::BeginFrameArgs& args,
+    bool force,
+    base::OnceCallback<void(const viz::BeginFrameAck&)> callback) {
   auto iter = compositor_data_map_.find(compositor);
-  if (iter == compositor_data_map_.end() || !iter->second.display_private)
+  DCHECK(iter != compositor_data_map_.end() && iter->second.display_private);
+  if (!iter->second.external_begin_frame_controller.is_bound()) {
+    DCHECK(!iter->second.pending_begin_frame_args);
+    iter->second.pending_begin_frame_args =
+        std::make_unique<PendingBeginFrameArgs>(args, force,
+                                                std::move(callback));
     return;
-
-  DCHECK(iter->second.external_begin_frame_controller_client);
-  iter->second.external_begin_frame_controller_client->GetController()
-      ->IssueExternalBeginFrame(args);
+  }
+  iter->second.external_begin_frame_controller->IssueExternalBeginFrame(
+      args, force, std::move(callback));
 }
 
 void HostContextFactoryPrivate::SetOutputIsSecure(Compositor* compositor,

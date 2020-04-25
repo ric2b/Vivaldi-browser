@@ -180,31 +180,11 @@ TEST_F(ExternalFileURLLoaderFactoryTest, RegularFile) {
   client.RunUntilComplete();
 
   ASSERT_EQ(net::OK, client.completion_status().error_code);
-  EXPECT_EQ("text/plain", client.response_head().mime_type);
+  EXPECT_EQ("text/plain", client.response_head()->mime_type);
   std::string response_body;
   ASSERT_TRUE(mojo::BlockingCopyToString(client.response_body_release(),
                                          &response_body));
   EXPECT_EQ(kExpectedFileContents, response_body);
-}
-
-TEST_F(ExternalFileURLLoaderFactoryTest, HostedDocument) {
-  // Hosted documents are never opened via externalfile: URLs with DriveFS.
-  if (base::FeatureList::IsEnabled(chromeos::features::kDriveFs)) {
-    return;
-  }
-  // Open a gdoc file.
-  network::TestURLLoaderClient client;
-  network::mojom::URLLoaderPtr loader = CreateURLLoaderAndStart(
-      &client,
-      CreateRequest("externalfile:drive-test-user-hash/root/Document 1 "
-                    "excludeDir-test.gdoc"));
-
-  client.RunUntilRedirectReceived();
-
-  // Make sure that a hosted document triggers redirection.
-  EXPECT_TRUE(client.has_received_redirect());
-  EXPECT_TRUE(client.redirect_info().new_url.is_valid());
-  EXPECT_TRUE(client.redirect_info().new_url.SchemeIs("https"));
 }
 
 TEST_F(ExternalFileURLLoaderFactoryTest, RootDirectory) {

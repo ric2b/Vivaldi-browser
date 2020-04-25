@@ -38,6 +38,9 @@ import org.chromium.components.search_engines.TemplateUrlService;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.preferences.VivaldiSyncPreference;
+
 /**
  * The main settings screen, shown when the user first opens Settings.
  */
@@ -58,14 +61,18 @@ public class MainPreferences extends PreferenceFragmentCompat
     public static final String PREF_DEVELOPER = "developer";
     public static final String PREF_AUTOFILL_ASSISTANT = "autofill_assistant";
 
+    public static final String PREF_VIVALDI_SYNC = "vivaldi_sync";
+
     public static final String AUTOFILL_GUID = "guid";
     // Needs to be in sync with kSettingsOrigin[] in
     // chrome/browser/ui/webui/options/autofill_options_handler.cc
     public static final String SETTINGS_ORIGIN = "Chrome settings";
 
     private final ManagedPreferenceDelegate mManagedPreferenceDelegate;
-    private final Map<String, Preference> mAllPreferences = new HashMap<>();
+    protected final Map<String, Preference> mAllPreferences = new HashMap<>();
     private SignInPreference mSignInPreference;
+
+    private VivaldiSyncPreference mVivaldiSyncPreference;
 
     public MainPreferences() {
         setHasOptionsMenu(true);
@@ -103,6 +110,7 @@ public class MainPreferences extends PreferenceFragmentCompat
         if (syncService != null) {
             syncService.addSyncStateChangedListener(this);
         }
+        mVivaldiSyncPreference.registerForUpdates();
     }
 
     @Override
@@ -117,6 +125,7 @@ public class MainPreferences extends PreferenceFragmentCompat
         if (syncService != null) {
             syncService.removeSyncStateChangedListener(this);
         }
+        mVivaldiSyncPreference.unregisterForUpdates();
     }
 
     @Override
@@ -126,10 +135,18 @@ public class MainPreferences extends PreferenceFragmentCompat
     }
 
     private void createPreferences() {
+        if(ChromeApplication.isVivaldi())
+            PreferenceUtils.addPreferencesFromResource(this, R.layout.vivaldi_main_preferences);
+        else
         PreferenceUtils.addPreferencesFromResource(this, R.xml.main_preferences);
         cachePreferences();
 
         mSignInPreference.setOnStateChangedCallback(this::onSignInPreferenceStateChanged);
+
+        if (ChromeApplication.isVivaldi()) {
+            removePreferenceIfPresent(PREF_ACCOUNT_SECTION);
+            removePreferenceIfPresent(PREF_SYNC_AND_SERVICES);
+        }
 
         updatePasswordsPreference();
 
@@ -165,9 +182,8 @@ public class MainPreferences extends PreferenceFragmentCompat
         }
 
         // This checks whether the flag for Downloads Preferences is enabled.
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOADS_LOCATION_CHANGE)) {
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOADS_LOCATION_CHANGE))
             getPreferenceScreen().removePreference(findPreference(PREF_DOWNLOADS));
-        }
 
         // This checks whether Autofill Assistant is enabled and was shown at least once (only then
         // will the AA switch be assigned a value).
@@ -189,10 +205,12 @@ public class MainPreferences extends PreferenceFragmentCompat
             mAllPreferences.put(preference.getKey(), preference);
         }
         mSignInPreference = (SignInPreference) mAllPreferences.get(PREF_SIGN_IN);
+        mVivaldiSyncPreference = (VivaldiSyncPreference) mAllPreferences.get(PREF_VIVALDI_SYNC);
     }
 
     private void setManagedPreferenceDelegateForPreference(String key) {
         ChromeBasePreference chromeBasePreference = (ChromeBasePreference) mAllPreferences.get(key);
+        if (chromeBasePreference != null)
         chromeBasePreference.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
     }
 
@@ -206,15 +224,8 @@ public class MainPreferences extends PreferenceFragmentCompat
         updateSyncAndServicesPreference();
         updateSearchEnginePreference();
 
-        if (HomepageManager.shouldShowHomepageSetting()) {
-            Preference homepagePref = addPreferenceIfAbsent(PREF_HOMEPAGE);
-            if (FeatureUtilities.isNewTabPageButtonEnabled()) {
-                homepagePref.setTitle(R.string.options_startup_page_title);
-            }
-            setOnOffSummary(homepagePref, HomepageManager.getInstance().getPrefHomepageEnabled());
-        } else {
-            removePreferenceIfPresent(PREF_HOMEPAGE);
-        }
+        Preference homepagePref = addPreferenceIfAbsent(PREF_HOMEPAGE);
+        setOnOffSummary(homepagePref, HomepageManager.getInstance().getPrefHomepageEnabled());
 
         if (NightModeUtils.isNightModeSupported() && FeatureUtilities.isNightModeAvailable()) {
             addPreferenceIfAbsent(PREF_UI_THEME);
@@ -222,7 +233,8 @@ public class MainPreferences extends PreferenceFragmentCompat
             removePreferenceIfPresent(PREF_UI_THEME);
         }
 
-        if (DeveloperPreferences.shouldShowDeveloperPreferences()) {
+        if (!ChromeApplication.isVivaldi() &&
+                DeveloperPreferences.shouldShowDeveloperPreferences()) {
             addPreferenceIfAbsent(PREF_DEVELOPER);
         } else {
             removePreferenceIfPresent(PREF_DEVELOPER);
@@ -230,6 +242,7 @@ public class MainPreferences extends PreferenceFragmentCompat
 
         ChromeBasePreference dataReduction =
                 (ChromeBasePreference) findPreference(PREF_DATA_REDUCTION);
+        if (dataReduction != null)
         dataReduction.setSummary(DataReductionPreferenceFragment.generateSummary(getResources()));
     }
 
@@ -245,6 +258,7 @@ public class MainPreferences extends PreferenceFragmentCompat
     }
 
     private void updateSyncAndServicesPreference() {
+        if (ChromeApplication.isVivaldi()) return;
         ChromeBasePreference syncAndServices =
                 (ChromeBasePreference) findPreference(PREF_SYNC_AND_SERVICES);
         syncAndServices.setIcon(SyncPreferenceUtils.getSyncStatusIcon(getActivity()));
@@ -279,7 +293,7 @@ public class MainPreferences extends PreferenceFragmentCompat
     }
 
     private void setOnOffSummary(Preference pref, boolean isOn) {
-        pref.setSummary(getResources().getString(isOn ? R.string.text_on : R.string.text_off));
+        pref.setSummary(isOn ? R.string.text_on : R.string.text_off);
     }
 
     // SigninManager.SignInStateObserver implementation.

@@ -6,6 +6,7 @@
 #define COMPONENTS_SYNC_DRIVER_SYNC_USER_SETTINGS_MOCK_H_
 
 #include <string>
+#include <vector>
 
 #include "components/sync/driver/sync_user_settings.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -24,7 +25,7 @@ class SyncUserSettingsMock : public SyncUserSettings {
   MOCK_METHOD1(SetSyncAllowedByPlatform, void(bool));
 
   MOCK_CONST_METHOD0(IsFirstSetupComplete, bool());
-  MOCK_METHOD0(SetFirstSetupComplete, void());
+  MOCK_METHOD1(SetFirstSetupComplete, void(SyncFirstSetupCompleteSource));
 
   MOCK_CONST_METHOD0(IsSyncEverythingEnabled, bool());
   MOCK_CONST_METHOD0(GetSelectedTypes, UserSelectableTypeSet());
@@ -38,13 +39,16 @@ class SyncUserSettingsMock : public SyncUserSettings {
 
   MOCK_CONST_METHOD0(GetEncryptedDataTypes, ModelTypeSet());
   MOCK_CONST_METHOD0(IsPassphraseRequired, bool());
-  MOCK_CONST_METHOD0(IsPassphraseRequiredForDecryption, bool());
+  MOCK_CONST_METHOD0(IsPassphraseRequiredForPreferredDataTypes, bool());
+  MOCK_CONST_METHOD0(IsTrustedVaultKeyRequiredForPreferredDataTypes, bool());
   MOCK_CONST_METHOD0(IsUsingSecondaryPassphrase, bool());
   MOCK_CONST_METHOD0(GetExplicitPassphraseTime, base::Time());
   MOCK_CONST_METHOD0(GetPassphraseType, PassphraseType());
 
   MOCK_METHOD1(SetEncryptionPassphrase, void(const std::string&));
   MOCK_METHOD1(SetDecryptionPassphrase, bool(const std::string&));
+  MOCK_METHOD2(AddTrustedVaultDecryptionKeys,
+               void(const std::string&, const std::vector<std::string>&));
 };
 
 }  // namespace syncer

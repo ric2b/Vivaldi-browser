@@ -27,16 +27,16 @@ MediaInterfaceFactory::~MediaInterfaceFactory() {
 }
 
 void MediaInterfaceFactory::CreateAudioDecoder(
-    media::mojom::AudioDecoderRequest request) {
+    mojo::PendingReceiver<media::mojom::AudioDecoder> receiver) {
   if (!task_runner_->BelongsToCurrentThread()) {
     task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&MediaInterfaceFactory::CreateAudioDecoder,
-                                  weak_this_, std::move(request)));
+                                  weak_this_, std::move(receiver)));
     return;
   }
 
   DVLOG(1) << __func__;
-  GetMediaInterfaceFactory()->CreateAudioDecoder(std::move(request));
+  GetMediaInterfaceFactory()->CreateAudioDecoder(std::move(receiver));
 }
 
 void MediaInterfaceFactory::CreateVideoDecoder(
@@ -143,21 +143,21 @@ void MediaInterfaceFactory::CreateCdm(
 
 void MediaInterfaceFactory::CreateDecryptor(
     int cdm_id,
-    media::mojom::DecryptorRequest request) {
+    mojo::PendingReceiver<media::mojom::Decryptor> receiver) {
   if (!task_runner_->BelongsToCurrentThread()) {
     task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&MediaInterfaceFactory::CreateDecryptor,
-                                  weak_this_, cdm_id, std::move(request)));
+                                  weak_this_, cdm_id, std::move(receiver)));
     return;
   }
 
   DVLOG(1) << __func__;
-  GetMediaInterfaceFactory()->CreateDecryptor(cdm_id, std::move(request));
+  GetMediaInterfaceFactory()->CreateDecryptor(cdm_id, std::move(receiver));
 }
 
 void MediaInterfaceFactory::CreateCdmProxy(
     const base::Token& cdm_guid,
-    media::mojom::CdmProxyRequest request) {
+    mojo::PendingReceiver<media::mojom::CdmProxy> receiver) {
   NOTREACHED() << "CdmProxy should only be connected from a library CDM";
 }
 

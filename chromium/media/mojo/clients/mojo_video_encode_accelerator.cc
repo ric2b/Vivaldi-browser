@@ -125,19 +125,31 @@ void MojoVideoEncodeAccelerator::Encode(scoped_refptr<VideoFrame> frame,
   DCHECK(vea_.is_bound());
 
 #if defined(OS_LINUX)
+  // TODO(crbug.com/1003197): Remove this once we stop supporting STORAGE_DMABUF
+  // in VideoEncodeAccelerator.
   if (frame->storage_type() == VideoFrame::STORAGE_DMABUFS) {
     DCHECK(frame->HasDmaBufs());
     vea_->Encode(
-        std::move(frame), force_keyframe,
+        frame, force_keyframe,
         base::BindOnce(base::DoNothing::Once<scoped_refptr<VideoFrame>>(),
                        frame));
     return;
   }
 #endif
+  if (frame->storage_type() == VideoFrame::STORAGE_GPU_MEMORY_BUFFER) {
+    vea_->Encode(
+        frame, force_keyframe,
+        base::BindOnce(base::DoNothing::Once<scoped_refptr<VideoFrame>>(),
+                       frame));
+    return;
+  }
 
-  DCHECK_EQ(PIXEL_FORMAT_I420, frame->format());
-  DCHECK_EQ(VideoFrame::STORAGE_SHMEM, frame->storage_type());
-  DCHECK(frame->shm_region()->IsValid());
+  if (frame->format() != PIXEL_FORMAT_I420 ||
+      VideoFrame::STORAGE_SHMEM != frame->storage_type() ||
+      !frame->shm_region()->IsValid()) {
+    DLOG(ERROR) << "Unexpected video frame buffer";
+    return;
+  }
 
   // Oftentimes |frame|'s underlying planes will be aligned and not tightly
   // packed, so don't use VideoFrame::AllocationSize().

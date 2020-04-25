@@ -99,6 +99,10 @@ class MetricsServiceClient {
       metrics::MetricsLogUploader::MetricServiceType service_type,
       const MetricsLogUploader::UploadCallback& on_upload_complete) = 0;
 
+  // Returns the interval between upload attempts. Checks if debugging flags
+  // have been set, otherwise defaults to GetStandardUploadInterval().
+  base::TimeDelta GetUploadInterval();
+
   // Returns the standard interval between upload attempts.
   virtual base::TimeDelta GetStandardUploadInterval() = 0;
 
@@ -146,7 +150,7 @@ class MetricsServiceClient {
   void UpdateRunningServices();
 
   // Checks if the user has forced metrics collection on via the override flag.
-  bool IsMetricsReportingForceEnabled();
+  bool IsMetricsReportingForceEnabled() const;
 
  private:
   base::Closure update_running_services_;

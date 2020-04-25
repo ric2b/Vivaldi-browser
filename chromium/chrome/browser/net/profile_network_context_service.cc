@@ -31,7 +31,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/certificate_transparency/pref_names.h"
-#include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/language/core/browser/pref_names.h"
@@ -47,6 +46,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/features.h"
 #include "net/http/http_auth_preferences.h"
 #include "net/http/http_util.h"
@@ -94,17 +94,6 @@ std::string ComputeAcceptLanguageFromPref(const std::string& language_pref) {
 }
 
 #if defined(OS_CHROMEOS)
-Profile* GetPrimaryProfile() {
-  // Obtains the primary profile.
-  if (!user_manager::UserManager::IsInitialized())
-    return nullptr;
-  const user_manager::User* primary_user =
-      user_manager::UserManager::Get()->GetPrimaryUser();
-  if (!primary_user)
-    return nullptr;
-  return chromeos::ProfileHelper::Get()->GetProfileByUser(primary_user);
-}
-
 bool ShouldUseBuiltinCertVerifier(Profile* profile) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(chromeos::switches::kForceCertVerifierBuiltin))
@@ -115,41 +104,12 @@ bool ShouldUseBuiltinCertVerifier(Profile* profile) {
     return true;
   }
 
-  // TODO(https://crbug.com/982936): Instead of evaluating the primary profile
-  // prefs explicitly, register the pref with LocalState and evaluate the pref
-  // there. Note that currently that is not possible because the LocalState
-  // prefs may not reflect the primary profile policy state at the time this
-  // function is executed.
-
-  // Explicitly check if |profile| is the primary profile. GetPrimaryProfile
-  // only returns non-null pretty late in the primary profile initialization
-  // stage, and the NetworkContext is created before that.
-  Profile* primary_profile = nullptr;
-  if (chromeos::ProfileHelper::Get()->IsPrimaryProfile(profile))
-    primary_profile = profile;
-
-  if (!primary_profile)
-    primary_profile = GetPrimaryProfile();
-  if (!primary_profile) {
-    NOTREACHED();
-    return base::FeatureList::IsEnabled(
-        net::features::kCertVerifierBuiltinFeature);
-  }
-
-  // The policy evaluated through the pref is not updatable dynamically, so
-  // assert that the pref system is already initialized at the time this is
-  // called.
-  DCHECK_NE(PrefService::INITIALIZATION_STATUS_WAITING,
-            primary_profile->GetPrefs()->GetInitializationStatus());
   const PrefService::Preference* builtin_cert_verifier_enabled_pref =
-      primary_profile->GetPrefs()->FindPreference(
+      g_browser_process->local_state()->FindPreference(
           prefs::kBuiltinCertificateVerifierEnabled);
   if (builtin_cert_verifier_enabled_pref->IsManaged())
     return builtin_cert_verifier_enabled_pref->GetValue()->GetBool();
 
-  // TODO(https://crbug.com/939344): Also evaluate whether there are
-  // extension-specific certificates to be used, and if yes, enable the built-in
-  // cert verifier.
   return base::FeatureList::IsEnabled(
       net::features::kCertVerifierBuiltinFeature);
 }
@@ -166,12 +126,40 @@ network::mojom::AdditionalCertificatesPtr GetAdditionalCertificates(
 
 #endif  // defined (OS_CHROMEOS)
 
+void InitializeCorsExtraSafelistedRequestHeaderNamesForProfile(
+    Profile* profile,
+    std::vector<std::string>* extra_safelisted_request_header_names) {
+  PrefService* pref = profile->GetPrefs();
+  bool has_managed_mitigation_list =
+      pref->IsManagedPreference(prefs::kCorsMitigationList);
+
+  // Set default mitigation parameters managed by the server for normal users
+  // and enterprise users separately.
+  const char* const feature_param_name =
+      has_managed_mitigation_list
+          ? "extra-safelisted-request-headers-for-enterprise"
+          : "extra-safelisted-request-headers";
+  *extra_safelisted_request_header_names =
+      SplitString(base::GetFieldTrialParamValueByFeature(
+                      features::kExtraSafelistedRequestHeadersForOutOfBlinkCors,
+                      feature_param_name),
+                  ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+
+  // We trust and append |pref|'s values only when they are set by the managed
+  // policy. Chrome does not have any interface to set this preference manually.
+  if (has_managed_mitigation_list) {
+    for (const auto& header_name_value :
+         *pref->GetList(prefs::kCorsMitigationList)) {
+      extra_safelisted_request_header_names->push_back(
+          header_name_value.GetString());
+    }
+  }
+}
+
 }  // namespace
 
 ProfileNetworkContextService::ProfileNetworkContextService(Profile* profile)
-    : profile_(profile),
-      proxy_config_monitor_(profile),
-      cookie_settings_observer_(this) {
+    : profile_(profile), proxy_config_monitor_(profile) {
   PrefService* profile_prefs = profile->GetPrefs();
   quic_allowed_.Init(
       prefs::kQuicAllowed, profile_prefs,
@@ -218,18 +206,25 @@ ProfileNetworkContextService::ProfileNetworkContextService(Profile* profile)
       certificate_transparency::prefs::kCTExcludedLegacySPKIs,
       base::BindRepeating(&ProfileNetworkContextService::ScheduleUpdateCTPolicy,
                           base::Unretained(this)));
+
+  // Reflects CORS mitigation list policy updates dynamically.
+  pref_change_registrar_.Add(
+      prefs::kCorsMitigationList,
+      base::BindRepeating(
+          &ProfileNetworkContextService::UpdateCorsMitigationList,
+          base::Unretained(this)));
 }
 
 ProfileNetworkContextService::~ProfileNetworkContextService() {}
 
-network::mojom::NetworkContextPtr
+mojo::Remote<network::mojom::NetworkContext>
 ProfileNetworkContextService::CreateNetworkContext(
     bool in_memory,
     const base::FilePath& relative_partition_path) {
-  network::mojom::NetworkContextPtr network_context;
+  mojo::Remote<network::mojom::NetworkContext> network_context;
 
   content::GetNetworkService()->CreateNetworkContext(
-      MakeRequest(&network_context),
+      network_context.BindNewPipeAndPassReceiver(),
       CreateNetworkContextParams(in_memory, relative_partition_path));
 
   if ((!in_memory && !profile_->IsOffTheRecord())) {
@@ -274,12 +269,6 @@ void ProfileNetworkContextService::UpdateAdditionalCertificates() {
 void ProfileNetworkContextService::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(prefs::kQuicAllowed, true);
-#if defined(OS_CHROMEOS)
-  // Note that the default value is not relevant because the pref is only
-  // evaluated when it is managed.
-  registry->RegisterBooleanPref(prefs::kBuiltinCertificateVerifierEnabled,
-                                false);
-#endif
 }
 
 // static
@@ -383,6 +372,23 @@ void ProfileNetworkContextService::ScheduleUpdateCTPolicy() {
                                 &ProfileNetworkContextService::UpdateCTPolicy);
 }
 
+void ProfileNetworkContextService::UpdateCorsMitigationList() {
+  std::vector<std::string> cors_extra_safelisted_request_header_names;
+  InitializeCorsExtraSafelistedRequestHeaderNamesForProfile(
+      profile_, &cors_extra_safelisted_request_header_names);
+
+  content::BrowserContext::ForEachStoragePartition(
+      profile_, base::BindRepeating(
+                    [](std::vector<std::string>*
+                           cors_extra_safelisted_request_header_names,
+                       content::StoragePartition* storage_partition) {
+                      storage_partition->GetNetworkContext()
+                          ->SetCorsExtraSafelistedRequestHeaderNames(
+                              *cors_extra_safelisted_request_header_names);
+                    },
+                    &cors_extra_safelisted_request_header_names));
+}
+
 // static
 network::mojom::CookieManagerParamsPtr
 ProfileNetworkContextService::CreateCookieManagerParams(
@@ -446,11 +452,13 @@ ProfileNetworkContextService::CreateNetworkContextParams(
         base::TimeDelta::FromMilliseconds(100);
   }
 
-  network_context_params->cors_extra_safelisted_request_header_names =
-      SplitString(base::GetFieldTrialParamValueByFeature(
-                      features::kExtraSafelistedRequestHeadersForOutOfBlinkCors,
-                      "extra-safelisted-request-headers"),
-                  ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  InitializeCorsExtraSafelistedRequestHeaderNamesForProfile(
+      profile_,
+      &network_context_params->cors_extra_safelisted_request_header_names);
+  network_context_params->cors_mode =
+      profile_->ShouldEnableOutOfBlinkCors()
+          ? network::mojom::NetworkContextParams::CorsMode::kEnable
+          : network::mojom::NetworkContextParams::CorsMode::kDisable;
 
   // Always enable the HTTP cache.
   network_context_params->http_cache_enabled = true;
@@ -504,6 +512,14 @@ ProfileNetworkContextService::CreateNetworkContextParams(
     cookie_path = cookie_path.Append(chrome::kCookieFilename);
     network_context_params->cookie_path = cookie_path;
 
+#if BUILDFLAG(ENABLE_REPORTING)
+    base::FilePath reporting_and_nel_store_path = path;
+    reporting_and_nel_store_path = reporting_and_nel_store_path.Append(
+        chrome::kReportingAndNelStoreFilename);
+    network_context_params->reporting_and_nel_store_path =
+        reporting_and_nel_store_path;
+#endif  // BUILDFLAG(ENABLE_REPORTING)
+
     if (relative_partition_path.empty()) {  // This is the main partition.
       network_context_params->restore_old_session_cookies =
           profile_->ShouldRestoreOldSessionCookies();
@@ -532,7 +548,8 @@ ProfileNetworkContextService::CreateNetworkContextParams(
   // ProfileIOData::IsHandledProtocol().
   // TODO(mmenke): Find a better way of handling tracking supported schemes.
 #if !BUILDFLAG(DISABLE_FTP_SUPPORT)
-  network_context_params->enable_ftp_url_support = true;
+  network_context_params->enable_ftp_url_support =
+      base::FeatureList::IsEnabled(features::kEnableFtp);
 #endif  // !BUILDFLAG(DISABLE_FTP_SUPPORT)
 
   proxy_config_monitor_.AddToNetworkContextParams(network_context_params.get());
@@ -541,10 +558,12 @@ ProfileNetworkContextService::CreateNetworkContextParams(
   network_context_params->enable_expect_ct_reporting = true;
 
 #if BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
-  if (!in_memory &&
+  if (!in_memory && !network_context_params->use_builtin_cert_verifier &&
       TrialComparisonCertVerifierController::MaybeAllowedForProfile(profile_)) {
-    network::mojom::TrialComparisonCertVerifierConfigClientPtr config_client;
-    auto config_client_request = mojo::MakeRequest(&config_client);
+    mojo::PendingRemote<network::mojom::TrialComparisonCertVerifierConfigClient>
+        config_client;
+    auto config_client_receiver =
+        config_client.InitWithNewPipeAndPassReceiver();
 
     network_context_params->trial_comparison_cert_verifier_params =
         network::mojom::TrialComparisonCertVerifierParams::New();
@@ -555,14 +574,13 @@ ProfileNetworkContextService::CreateNetworkContextParams(
     }
     trial_comparison_cert_verifier_controller_->AddClient(
         std::move(config_client),
-        mojo::MakeRequest(
-            &network_context_params->trial_comparison_cert_verifier_params
-                 ->report_client));
+        network_context_params->trial_comparison_cert_verifier_params
+            ->report_client.InitWithNewPipeAndPassReceiver());
     network_context_params->trial_comparison_cert_verifier_params
         ->initial_allowed =
         trial_comparison_cert_verifier_controller_->IsAllowed();
     network_context_params->trial_comparison_cert_verifier_params
-        ->config_client_request = std::move(config_client_request);
+        ->config_client_receiver = std::move(config_client_receiver);
   }
 #endif
 
@@ -591,6 +609,8 @@ ProfileNetworkContextService::CreateNetworkContextParams(
   }
 
 #if defined(OS_CHROMEOS)
+  // Note: On non-ChromeOS platforms, the |use_builtin_cert_verifier| param
+  // value is inherited from CreateDefaultNetworkContextParams.
   network_context_params->use_builtin_cert_verifier =
       using_builtin_cert_verifier_;
 

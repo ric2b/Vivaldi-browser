@@ -90,6 +90,7 @@ struct PrintHostMsg_RequestPrintPreview_Params {
   PrintHostMsg_RequestPrintPreview_Params();
   ~PrintHostMsg_RequestPrintPreview_Params();
   bool is_modifiable;
+  bool is_pdf;
   bool webnode_only;
   bool has_selection;
   bool selection_only;
@@ -214,6 +215,7 @@ IPC_STRUCT_TRAITS_END()
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 IPC_STRUCT_TRAITS_BEGIN(PrintHostMsg_RequestPrintPreview_Params)
   IPC_STRUCT_TRAITS_MEMBER(is_modifiable)
+  IPC_STRUCT_TRAITS_MEMBER(is_pdf)
   IPC_STRUCT_TRAITS_MEMBER(webnode_only)
   IPC_STRUCT_TRAITS_MEMBER(has_selection)
   IPC_STRUCT_TRAITS_MEMBER(selection_only)
@@ -356,11 +358,6 @@ IPC_STRUCT_END()
 
 // Messages sent from the browser to the renderer.
 
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-// Tells the RenderFrame to initiate print preview for the entire document.
-IPC_MESSAGE_ROUTED1(PrintMsg_InitiatePrintPreview, bool /* has_selection */)
-#endif
-
 // Tells the RenderFrame to initiate printing or print preview for a particular
 // node, depending on which mode the RenderFrame is in.
 IPC_MESSAGE_ROUTED0(PrintMsg_PrintNodeUnderContextMenu)
@@ -369,9 +366,6 @@ IPC_MESSAGE_ROUTED0(PrintMsg_PrintNodeUnderContextMenu)
 // Tells the RenderFrame to switch the CSS to print media type, renders every
 // requested pages and switch back the CSS to display media type.
 IPC_MESSAGE_ROUTED0(PrintMsg_PrintPages)
-
-// Like PrintMsg_PrintPages, but using the print preview document's frame/node.
-IPC_MESSAGE_ROUTED0(PrintMsg_PrintForSystemDialog)
 #endif
 
 // Print content of an out-of-process subframe.
@@ -390,9 +384,6 @@ IPC_MESSAGE_ROUTED1(PrintMsg_SetPrintingEnabled, bool /* enabled */)
 // called multiple times as the user updates settings.
 IPC_MESSAGE_ROUTED1(PrintMsg_PrintPreview,
                     base::DictionaryValue /* settings */)
-
-// Tells the RenderFrame that print preview dialog was closed.
-IPC_MESSAGE_ROUTED0(PrintMsg_ClosePrintPreviewDialog)
 #endif
 
 // Messages sent from the renderer to the browser.

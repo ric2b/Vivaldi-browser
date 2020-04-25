@@ -449,7 +449,7 @@ bool LoopbackServer::HandleGetUpdatesRequest(
       break;
     }
   }
-  
+
   if (is_initial_notes_sync) {
     if (!CreatePermanentNotesFolder("main_notes", "Notes"))
       return false;

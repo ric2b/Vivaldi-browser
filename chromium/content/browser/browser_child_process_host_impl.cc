@@ -19,6 +19,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/persistent_histogram_allocator.h"
 #include "base/metrics/persistent_memory_allocator.h"
+#include "base/no_destructor.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -43,7 +44,10 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/resource_coordinator_service.h"
+#include "content/public/browser/system_connector.h"
 #include "content/public/common/connection_filter.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
@@ -55,9 +59,18 @@
 #include "net/websockets/websocket_channel.h"
 #include "services/service_manager/embedder/switches.h"
 #include "services/service_manager/public/cpp/constants.h"
+#include "services/tracing/public/cpp/trace_startup.h"
 
 #if defined(OS_MACOSX)
 #include "content/browser/child_process_task_port_provider_mac.h"
+#include "content/browser/sandbox_support_mac_impl.h"
+#include "content/common/sandbox_support_mac.mojom.h"
+#endif
+
+#if defined(OS_WIN)
+#include "content/browser/renderer_host/dwrite_font_proxy_impl_win.h"
+#include "content/public/common/font_cache_dispatcher_win.h"
+#include "content/public/common/font_cache_win.mojom.h"
 #endif
 
 namespace content {
@@ -98,6 +111,24 @@ void NotifyProcessKilled(const ChildProcessData& data,
                          const ChildProcessTerminationInfo& info) {
   for (auto& observer : g_browser_child_process_observers.Get())
     observer.BrowserChildProcessKilled(data, info);
+}
+
+memory_instrumentation::mojom::ProcessType GetCoordinatorClientProcessType(
+    ProcessType process_type) {
+  switch (process_type) {
+    case PROCESS_TYPE_RENDERER:
+      return memory_instrumentation::mojom::ProcessType::RENDERER;
+    case PROCESS_TYPE_UTILITY:
+      return memory_instrumentation::mojom::ProcessType::UTILITY;
+    case PROCESS_TYPE_GPU:
+      return memory_instrumentation::mojom::ProcessType::GPU;
+    case PROCESS_TYPE_PPAPI_PLUGIN:
+    case PROCESS_TYPE_PPAPI_BROKER:
+      return memory_instrumentation::mojom::ProcessType::PLUGIN;
+    default:
+      NOTREACHED();
+      return memory_instrumentation::mojom::ProcessType::OTHER;
+  }
 }
 
 }  // namespace
@@ -217,24 +248,7 @@ void BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(
 // static
 void BrowserChildProcessHostImpl::CopyTraceStartupFlags(
     base::CommandLine* cmd_line) {
-  if (tracing::TraceStartupConfig::GetInstance()->IsEnabled()) {
-    const auto trace_config =
-        tracing::TraceStartupConfig::GetInstance()->GetTraceConfig();
-    if (!trace_config.IsArgumentFilterEnabled()) {
-      // The only trace option that we can pass through switches is the record
-      // mode. Other trace options should have the default value.
-      //
-      // TODO(chiniforooshan): Add other trace options to switches if, for
-      // example, they are used in a telemetry test that needs startup trace
-      // events from renderer processes.
-      cmd_line->AppendSwitchASCII(switches::kTraceStartup,
-                                  trace_config.ToCategoryFilterString());
-      cmd_line->AppendSwitchASCII(
-          switches::kTraceStartupRecordMode,
-          base::trace_event::TraceConfig::TraceRecordModeToStr(
-              trace_config.GetTraceRecordMode()));
-    }
-  }
+  tracing::PropagateTracingFlagsToChildProcessCmdLine(cmd_line);
 }
 
 void BrowserChildProcessHostImpl::Launch(
@@ -317,7 +331,6 @@ void BrowserChildProcessHostImpl::LaunchWithoutExtraCommandLineSwitches(
       service_manager::switches::kDisableInProcessStackTraces,
       switches::kDisableBestEffortTasks,
       switches::kDisableLogging,
-      switches::kDisablePerfetto,
       switches::kEnableLogging,
       switches::kIPCConnectionTimeout,
       switches::kLogBestEffortTasks,
@@ -367,11 +380,6 @@ void BrowserChildProcessHostImpl::BindInterface(
     return;
 
   child_connection_->BindInterface(interface_name, std::move(interface_pipe));
-}
-
-void BrowserChildProcessHostImpl::BindHostReceiver(
-    mojo::GenericPendingReceiver receiver) {
-  delegate_->BindHostReceiver(std::move(receiver));
 }
 
 void BrowserChildProcessHostImpl::HistogramBadMessageTerminated(
@@ -650,6 +658,31 @@ void BrowserChildProcessHostImpl::OnProcessLaunched() {
         FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&NotifyProcessLaunchedAndConnected, data_.Duplicate()));
   }
+}
+
+void BrowserChildProcessHostImpl::RegisterCoordinatorClient(
+    mojo::PendingReceiver<memory_instrumentation::mojom::Coordinator> receiver,
+    mojo::PendingRemote<memory_instrumentation::mojom::ClientProcess>
+        client_process) {
+  base::PostTask(
+      FROM_HERE, BrowserThread::UI,
+      base::BindOnce(
+          [](mojo::PendingReceiver<memory_instrumentation::mojom::Coordinator>
+                 receiver,
+             mojo::PendingRemote<memory_instrumentation::mojom::ClientProcess>
+                 client_process,
+             memory_instrumentation::mojom::ProcessType process_type,
+             base::ProcessId process_id,
+             base::Optional<std::string> service_name) {
+            GetMemoryInstrumentationCoordinatorController()
+                ->RegisterClientProcess(std::move(receiver),
+                                        std::move(client_process), process_type,
+                                        process_id, std::move(service_name));
+          },
+          std::move(receiver), std::move(client_process),
+          GetCoordinatorClientProcessType(
+              static_cast<ProcessType>(data_.process_type)),
+          child_process_->GetProcess().Pid(), delegate_->GetServiceName()));
 }
 
 bool BrowserChildProcessHostImpl::IsProcessLaunched() const {

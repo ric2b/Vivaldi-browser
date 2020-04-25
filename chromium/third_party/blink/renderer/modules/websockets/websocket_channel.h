@@ -47,7 +47,7 @@ class DOMArrayBuffer;
 class KURL;
 
 class MODULES_EXPORT WebSocketChannel
-    : public GarbageCollectedFinalized<WebSocketChannel> {
+    : public GarbageCollected<WebSocketChannel> {
  public:
   enum class SendResult { SENT_SYNCHRONOUSLY, CALLBACK_WILL_BE_CALLED };
 
@@ -101,6 +101,10 @@ class MODULES_EXPORT WebSocketChannel
 
   // Do not call any methods after calling this method.
   virtual void Disconnect() = 0;  // Will suppress didClose().
+
+  // Cancel the WebSocket handshake. Does nothing if the connection is already
+  // established. Do not call any other methods after this one.
+  virtual void CancelHandshake() = 0;
 
   // Clients can call ApplyBackpressure() to indicate that they want to stop
   // receiving new messages. WebSocketChannelClient::DidReceive*Message() may

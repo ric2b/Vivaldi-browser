@@ -14,8 +14,8 @@
 #include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "components/session_manager/core/session_manager_observer.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
 class AssistantImageDownloader;
@@ -40,7 +40,7 @@ class AssistantClient : chromeos::assistant::mojom::Client,
       mojo::PendingReceiver<chromeos::assistant::mojom::Assistant> receiver);
 
   // assistant::mojom::Client overrides:
-  void OnAssistantStatusChanged(bool running) override;
+  void OnAssistantStatusChanged(ash::mojom::AssistantState new_state) override;
   void RequestAssistantStructure(
       RequestAssistantStructureCallback callback) override;
   void RequestAssistantController(
@@ -100,7 +100,7 @@ class AssistantClient : chromeos::assistant::mojom::Client,
   void OnUserProfileLoaded(const AccountId& account_id) override;
   void OnUserSessionStarted(bool is_primary_user) override;
 
-  mojo::Binding<chromeos::assistant::mojom::Client> client_binding_{this};
+  mojo::Receiver<chromeos::assistant::mojom::Client> client_receiver_{this};
 
   DeviceActions device_actions_;
 

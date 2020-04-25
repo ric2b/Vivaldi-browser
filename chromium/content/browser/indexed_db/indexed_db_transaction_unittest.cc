@@ -18,6 +18,7 @@
 #include "content/browser/indexed_db/indexed_db_class_factory.h"
 #include "content/browser/indexed_db/indexed_db_connection.h"
 #include "content/browser/indexed_db/indexed_db_database_error.h"
+#include "content/browser/indexed_db/indexed_db_execution_context_connection_tracker.h"
 #include "content/browser/indexed_db/indexed_db_factory_impl.h"
 #include "content/browser/indexed_db/indexed_db_fake_backing_store.h"
 #include "content/browser/indexed_db/indexed_db_leveldb_coding.h"
@@ -39,8 +40,6 @@ void SetToTrue(bool* value) {
 }
 
 }  // namespace
-
-const int kFakeProcessId = 10;
 
 class AbortObserver {
  public:
@@ -120,11 +119,12 @@ class IndexedDBTransactionTest : public testing::Test {
   }
 
   std::unique_ptr<IndexedDBConnection> CreateConnection() {
-    auto connection = std::unique_ptr<IndexedDBConnection>(
-        std::make_unique<IndexedDBConnection>(
-            kFakeProcessId, IndexedDBOriginStateHandle(),
-            IndexedDBClassFactory::Get(), db_->AsWeakPtr(), base::DoNothing(),
-            base::DoNothing(), new MockIndexedDBDatabaseCallbacks()));
+    auto connection = std::unique_ptr<
+        IndexedDBConnection>(std::make_unique<IndexedDBConnection>(
+        IndexedDBExecutionContextConnectionTracker::Handle::CreateForTesting(),
+        IndexedDBOriginStateHandle(), IndexedDBClassFactory::Get(),
+        db_->AsWeakPtr(), base::DoNothing(), base::DoNothing(),
+        new MockIndexedDBDatabaseCallbacks()));
     db_->AddConnectionForTesting(connection.get());
     return connection;
   }

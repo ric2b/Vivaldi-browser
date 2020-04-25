@@ -9,6 +9,7 @@
 <translation id="10614374240317010">Ei tallenneta</translation>
 <translation id="1067922213147265141">Muut Google-palvelut</translation>
 <translation id="1068672505746868501">Älä koskaan käännä kielellä <ph name="SOURCE_LANGUAGE" /> kirjoitettuja sivuja.</translation>
+<translation id="107147699690128016">Jos vaihdat tiedostotunnisteen, tiedosto voi avautua eri sovelluksessa ja mahdollisesti vahingoittaa laitetta.</translation>
 <translation id="1100066534610197918">Avaa uusi välilehti ja ryhmä</translation>
 <translation id="1105960400813249514">Kuvakaappaus</translation>
 <translation id="1111673857033749125">Muilla laitteilla tallentamasi kirjanmerkit näytetään täällä.</translation>
@@ -21,9 +22,7 @@
 <translation id="1146678959555564648">Siirry VR-tilaan</translation>
 <translation id="116280672541001035">Käytetty</translation>
 <translation id="1171770572613082465">Katso suositut sivustot napauttamalla Suosituimmat sivustot ‑painiketta</translation>
-<translation id="1172593791219290334">Aloitussivu</translation>
 <translation id="1173894706177603556">Muuta nimeä</translation>
-<translation id="1175310183703641346">Kirjanmerkkejäsi, historiaasi, salasanojasi tai muita ei enää synkronoida Google-tilillesi</translation>
 <translation id="1178581264944972037">Tauko</translation>
 <translation id="1181037720776840403">Poista</translation>
 <translation id="1188239144602654184">Lisää AR</translation>
@@ -67,16 +66,13 @@
 <translation id="1407135791313364759">Avaa kaikki</translation>
 <translation id="1409426117486808224">Yksinkertaisempi avoimien välilehtien näkymä</translation>
 <translation id="1409879593029778104">Tiedoston <ph name="FILE_NAME" /> lataus estettiin, koska tiedosto on jo olemassa.</translation>
-<translation id="1413136574162415971">Google voi tarkistaa, olivatko salasanasi osallisina tietosuojaloukkauksessa. Tämä otetaan käyttöön, kun kirjaudut sisään Google-tililläsi ja otat synkronoinnin käyttöön.</translation>
 <translation id="1414981605391750300">Otetaan yhteyttä Googleen. Tämä voi kestää hetken…</translation>
 <translation id="1416550906796893042">Sovellusversio</translation>
 <translation id="1430915738399379752">Tulosta</translation>
-<translation id="1445680696957526815">Chromen osat eivät ole yhteensopivia toistensa kanssa. Chromen päivitys voi olla kesken; yritä uudelleen muutaman minuutin kuluttua. Jos ongelma ei ratkea, poista Chrome ja asenna se uudelleen.</translation>
 <translation id="1446450296470737166">Salli MIDI-laitteiden täysi käyttöoik.</translation>
 <translation id="1450753235335490080">Jakaminen ei onnistu: <ph name="CONTENT_TYPE" /></translation>
 <translation id="145097072038377568">Poistettu käytöstä Android-asetuksissa</translation>
 <translation id="1477626028522505441">Tiedoston <ph name="FILE_NAME" /> lataus epäonnistui palvelinongelman vuoksi.</translation>
-<translation id="1501480321619201731">Poista ryhmä</translation>
 <translation id="1506061864768559482">Hakukone</translation>
 <translation id="1513352483775369820">Kirjanmerkit ja verkkohistoria</translation>
 <translation id="1513858653616922153">Poista salasana</translation>
@@ -102,7 +98,6 @@
 <translation id="169515064810179024">Estä sivustoja käyttämästä liiketunnistimien lukemia</translation>
 <translation id="1717218214683051432">Liiketunnistimet</translation>
 <translation id="1718835860248848330">Viimeinen tunti</translation>
-<translation id="1733116627827457509"><ph name="FILE_SIZE" /> – päivitettiin <ph name="TIME_SINCE_UPDATE" /></translation>
 <translation id="1736419249208073774">Tutustu</translation>
 <translation id="1743802530341753419">Pyydä lupaa, kun sivustot yrittävät yhdistää laitteeseen (suositus)</translation>
 <translation id="1749561566933687563">Synkronoi kirjanmerkit</translation>
@@ -118,7 +113,6 @@
 <translation id="1853692000353488670">Uusi incognito-välilehti</translation>
 <translation id="1856325424225101786">Palautetaanko yksinkertaistettu tila?</translation>
 <translation id="1868024384445905608">Chrome lataa tiedostot nyt nopeammin</translation>
-<translation id="1880072593381090678">Suosittuja Chromen sivuja</translation>
 <translation id="1883903952484604915">Omat tiedostot</translation>
 <translation id="1887786770086287077">Sijainti on poissa käytöstä tällä laitteella. Voit ottaa sen käyttöön <ph name="BEGIN_LINK" />Android-asetuksista<ph name="END_LINK" />.</translation>
 <translation id="1891331835972267886"><ph name="APP_NAME" /> avautuu Chromessa. Jatkamalla hyväksyt Chromen <ph name="BEGIN_LINK1" />käyttöehdot<ph name="END_LINK1" /> ja <ph name="BEGIN_LINK2" />tietosuojailmoituksen<ph name="END_LINK2" />.</translation>
@@ -144,16 +138,13 @@
 <translation id="1994173015038366702">Sivuston URL-osoite</translation>
 <translation id="2000419248597011803">Lähettää joitakin osoitekentän ja hakukentän kautta tehtyjä hakuja sekä joitakin evästeitä oletushakukoneellesi</translation>
 <translation id="2002537628803770967">Luottokortit ja osoitteet Google Paysta</translation>
-<translation id="200815880754187296"><ph name="KILOBYTES" /> kt muita sovelluksia</translation>
 <translation id="2013642289801508067">{FILE_COUNT,plural, =1{# tiedosto}other{# tiedostoa}}</translation>
 <translation id="2017836877785168846">Tyhjentää historian ja osoitepalkin automaattiset täydennykset.</translation>
 <translation id="2021896219286479412">Ohjaimet koko näytön tilassa</translation>
 <translation id="2038563949887743358">Ota käyttöön Käytä tietokoneversiota</translation>
 <translation id="2041019821020695769">Ota ilmoitukset käyttöön myös <ph name="BEGIN_LINK" />Android-asetuksissa<ph name="END_LINK" />, niin Chrome voi lähettää sinulle ilmoituksia.</translation>
 <translation id="204321170514947529"><ph name="APP_NAME" /> sisältää dataa myös Chromessa</translation>
-<translation id="2045104531052923016"><ph name="GIGABYTES" /> Gt muita sovelluksia</translation>
 <translation id="2049574241039454490"><ph name="FILE_SIZE_OF_TOTAL" /> <ph name="SEPARATOR" /> <ph name="DESCRIPTION" /></translation>
-<translation id="2049961518639794558">Tiedostotunnisteen muuttaminen voi aiheuttaa odottamatonta toimintaa ja vahingoittaa laitetta.</translation>
 <translation id="2056878612599315956">Sivusto keskeytetty</translation>
 <translation id="2063713494490388661">Hae napauttamalla</translation>
 <translation id="2067805253194386918">tekstiviesti</translation>
@@ -170,7 +161,6 @@
 <translation id="2131665479022868825"><ph name="DATA" /> tallennettu</translation>
 <translation id="213279576345780926"><ph name="TAB_TITLE" /> suljettiin</translation>
 <translation id="2139186145475833000">Lisää aloitusnäyttöön</translation>
-<translation id="2142289305367051020">Suosikkisivusi löytyvät täältä</translation>
 <translation id="2146738493024040262">Avaa Instant-sovellus</translation>
 <translation id="2148716181193084225">Tänään</translation>
 <translation id="2154484045852737596">Muokkaa korttia</translation>
@@ -199,6 +189,7 @@
 <translation id="2387895666653383613">Tekstin skaalaus</translation>
 <translation id="2394602618534698961">Lataamasi tiedostot näkyvät tässä</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> Mt</translation>
+<translation id="2407481962792080328">Tämä ominaisuus otetaan käyttöön, kun kirjaudut Google-tilillesi</translation>
 <translation id="2410754283952462441">Valitse tili</translation>
 <translation id="2414886740292270097">Tumma</translation>
 <translation id="2416359993254398973">Chrome tarvitsee oikeuden käyttää kameraasi tällä sivustolla.</translation>
@@ -215,6 +206,7 @@
 <translation id="2498359688066513246">Ohjeet ja palaute</translation>
 <translation id="2501278716633472235">Takaisin</translation>
 <translation id="2513403576141822879">Näet lisää yksityisyyteen, tietoturvaan ja datankeruuseen liittyviä asetuksia <ph name="BEGIN_LINK" />Synkronointi ja Google-palvelut<ph name="END_LINK" /> ‑kohdassa.</translation>
+<translation id="2518590038762162553">Yksinkertaistetussa tilassa Chrome lataa sivuja nopeammin ja käyttää jopa 60 % vähemmän dataa. Chrome lähettää verkkoliikenteesi tietoja Googlelle avaamiesi sivujen optimoimiseksi. <ph name="BEGIN_LINK" />Lue lisää<ph name="END_LINK" /></translation>
 <translation id="2523184218357549926">Lähettää avaamiesi sivujen URL-osoitteet Googlelle</translation>
 <translation id="2532336938189706096">Verkkonäkymä</translation>
 <translation id="2534155362429831547"><ph name="NUMBER_OF_ITEMS" /> kohdetta poistettu</translation>
@@ -236,12 +228,10 @@
 <translation id="2650751991977523696">Ladataanko tiedosto uudelleen?</translation>
 <translation id="2651091186440431324">{FILE_COUNT,plural, =1{# äänitiedosto}other{# äänitiedostoa}}</translation>
 <translation id="2653659639078652383">Lähetä</translation>
-<translation id="2671423594960767771">Jaa ryhmä</translation>
 <translation id="2677748264148917807">Poistu</translation>
 <translation id="2704606927547763573">Kopioitu</translation>
 <translation id="2707726405694321444">Päivitä sivu</translation>
 <translation id="2709516037105925701">Automaattinen täyttö</translation>
-<translation id="271033894570825754">Uusi</translation>
 <translation id="2717722538473713889">Sähköpostiosoitteet</translation>
 <translation id="2728754400939377704">Lajittele sivuston mukaan</translation>
 <translation id="2744248271121720757">Napauta sanaa etsiäksesi välittömästi tai nähdäksesi asiaan liittyviä toimia.</translation>
@@ -267,13 +257,13 @@
 <translation id="2893180576842394309">Google voi muokata Hakua ja muita Googlen palveluita historiasi perusteella</translation>
 <translation id="2898264748040935573">Muokkaa tallennettua salasanaa</translation>
 <translation id="2900528713135656174">Luo tapahtuma</translation>
-<translation id="2902702728133930130">Chromen käynnistys epäonnistui odottamattoman virheen takia.</translation>
 <translation id="290376772003165898">Eikö sivu ole kirjoitettu kielellä <ph name="LANGUAGE" />?</translation>
 <translation id="2904414404539560095">Välilehden jakamisen laiteluettelo avataan koko näytön korkeudella.</translation>
 <translation id="2910701580606108292">Kysy, saavatko sivustot toistaa suojattua sisältöä</translation>
 <translation id="2913331724188855103">Salli sivustojen tallentaa ja lukea evästetietoja (suositus).</translation>
 <translation id="2923908459366352541">Nimi on virheellinen</translation>
 <translation id="2932150158123903946">Tallennustila: Google <ph name="APP_NAME" /></translation>
+<translation id="2942036813789421260">Esikatseluvälilehti on suljettu</translation>
 <translation id="2956410042958133412">Tätä tiliä hallinnoivat <ph name="PARENT_NAME_1" /> ja <ph name="PARENT_NAME_2" />.</translation>
 <translation id="2962095958535813455">Vaihdettiin näkyviin incognito-välilehdet.</translation>
 <translation id="2968755619301702150">Varmennetiedot</translation>
@@ -324,6 +314,7 @@
 <translation id="3315103659806849044">Yksilöit parhaillaan synkronoinnin ja Google-palvelujen asetuksia. Viimeistele synkronoinnin käyttöönotto napauttamalla näytön alaosasta Vahvista-painiketta. Siirry ylös</translation>
 <translation id="3328801116991980348">Tietoja sivustosta</translation>
 <translation id="3333961966071413176">Kaikki yhteystiedot</translation>
+<translation id="3334729583274622784">Vaihdetaanko tiedostotunniste?</translation>
 <translation id="3341058695485821946">Katso paljonko dataa olet säästänyt</translation>
 <translation id="3350687908700087792">Sulje kaikki incognito-välilehdet.</translation>
 <translation id="3353615205017136254">Googlen tarjoama yksinkertaistettu sivu. Valitse Lataa alkuperäinen, jos haluat ladata alkuperäisen sivun.</translation>
@@ -366,10 +357,9 @@
 <translation id="3716182511346448902">Tämä sivu käyttää liikaa muistia, joten Chrome keskeytti sen.</translation>
 <translation id="3730075448226062617">Ota mikrofoni käyttöön myös <ph name="BEGIN_LINK" />Android-asetuksissa<ph name="END_LINK" />, niin Chrome voi käyttää mikrofoniasi.</translation>
 <translation id="3739899004075612870">Lisätty kirjanmerkkeihin: <ph name="PRODUCT_NAME" /></translation>
-<translation id="3744111309925758534"><ph name="MEGABYTES" /> Mt muita sovelluksia</translation>
 <translation id="3744111561329211289">Taustasynkronointi</translation>
-<translation id="3745176700485982507">Tältä sivulta löydät linkit suosikkisivuillesi</translation>
 <translation id="3771001275138982843">Päivityksen lataaminen epäonnistui</translation>
+<translation id="3771033907050503522">Incognito</translation>
 <translation id="3773755127849930740"><ph name="BEGIN_LINK" />Ota Bluetooth käyttöön<ph name="END_LINK" />, jotta laiteparin muodostus onnistuu.</translation>
 <translation id="3775705724665058594">Lähetä laitteillesi</translation>
 <translation id="3778956594442850293">Lisätty aloitusnäytölle</translation>
@@ -400,6 +390,7 @@
 <translation id="3988466920954086464">Näytä Instant-hakutulokset tässä paneelissa</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="3997476611815694295">Vähemmän tärkeät tiedot</translation>
+<translation id="4000212216660919741">Offline-etusivu</translation>
 <translation id="4002066346123236978">Nimi</translation>
 <translation id="4008040567710660924">Salli evästeet tietyllä sivustolla.</translation>
 <translation id="4034817413553209278">{HOURS,plural, =1{# h}other{# h}}</translation>
@@ -412,7 +403,6 @@ Muokkaa hakutermiä valitsemalla se pitkällä painalluksella. Tarkenna hakua li
 <translation id="4062305924942672200">Oikeudelliset tiedot</translation>
 <translation id="4084682180776658562">Kirjanmerkki</translation>
 <translation id="4084712963632273211">Lähde: <ph name="PUBLISHER_ORIGIN" /> – <ph name="BEGIN_DEEMPHASIZED" />Googlen toimittama<ph name="END_DEEMPHASIZED" /></translation>
-<translation id="4084836577264234537"><ph name="MEGABYTES" /> Mt ladattu</translation>
 <translation id="4095146165863963773">Poistetaanko sovellustiedot?</translation>
 <translation id="4099578267706723511">Auta parantamaan Chromea lähettämällä käyttötilastoja ja virheraportteja Googlelle.</translation>
 <translation id="410351446219883937">Automaattinen toisto</translation>
@@ -453,7 +443,6 @@ Muokkaa hakutermiä valitsemalla se pitkällä painalluksella. Tarkenna hakua li
 <translation id="4440958355523780886">Googlen tarjoama yksinkertaistettu sivu. Lataa alkuperäinen napauttamalla.</translation>
 <translation id="4452411734226507615">Sulje välilehti <ph name="TAB_TITLE" /></translation>
 <translation id="4452548195519783679">Lisätty kirjanmerkiksi kansioon <ph name="FOLDER_NAME" /></translation>
-<translation id="4453340223357552416"><ph name="FILE_NAME" /> on ladattu kohteeseen <ph name="PRODUCT_NAME" /></translation>
 <translation id="445467742685312942">Salli sivustojen toistaa suojattua sisältöä</translation>
 <translation id="4468959413250150279">Mykistä tietyn sivuston äänet.</translation>
 <translation id="4472118726404937099">Kirjaudu sisään ja ota synkronointi käyttöön, niin sisältö synkronoidaan ja yksilöidään eri laitteilla</translation>
@@ -489,13 +478,11 @@ Google-tililläsi voi olla muita selaushistoriatietoja, kuten hakuja ja toiminta
 <translation id="4695891336199304370">{SHIPPING_OPTIONS,plural, =1{<ph name="SHIPPING_OPTION_PREVIEW" />\u2026 ja <ph name="NUMBER_OF_ADDITIONAL_SHIPPING_OPTIONS" /> muu}other{<ph name="SHIPPING_OPTION_PREVIEW" />\u2026 ja <ph name="NUMBER_OF_ADDITIONAL_SHIPPING_OPTIONS" /> muuta}}</translation>
 <translation id="4696983787092045100">Lähetä teksti laitteillesi</translation>
 <translation id="4698034686595694889"><ph name="APP_NAME" /> voi näyttää sisältöä offline-tilassa</translation>
-<translation id="4698413471314543145">Chromen suorittamiseen tarvittava kriittinen toiminto puuttuu. Joko Chromea ei ole asennettu loppuun tai selain ei sovi yhteen tämän Android-version kanssa.</translation>
 <translation id="4699172675775169585">Välimuistissa olevat kuvat ja tiedostot</translation>
 <translation id="4714588616299687897">Käytä jopa 60 % vähemmän dataa</translation>
 <translation id="4719927025381752090">Tarjoudu kääntämään</translation>
 <translation id="4720023427747327413">Avaa kohteessa <ph name="PRODUCT_NAME" /></translation>
 <translation id="4720982865791209136">Auta parantamaan Chromea. <ph name="BEGIN_LINK" />Vastaa kyselyyn.<ph name="END_LINK" /></translation>
-<translation id="4730876730346568982">Muutoksen jälkeen synkronointi käyttää tilin <ph name="ACCOUNT_EMAIL_OLD" /> sijaan tiliä <ph name="ACCOUNT_EMAIL_NEW" />. <ph name="MANAGED_DOMAIN" /> hallinnoi tämänhetkisiä Chrome-tietojasi. Jatkaminen poistaa tietosi tältä laitteella, mutta tiedot säilyvät tilillä <ph name="ACCOUNT_EMAIL_OLD" />.</translation>
 <translation id="473775607612524610">Päivitä</translation>
 <translation id="4738836084190194332">Viimeisin synkronointi: <ph name="WHEN" /></translation>
 <translation id="4749960740855309258">Uuden välilehden avaaminen</translation>
@@ -530,7 +517,6 @@ Jos haluat muokata asetusta, <ph name="BEGIN_LINK" />nollaa synkronointi<ph name
 <translation id="4943872375798546930">Ei tuloksia</translation>
 <translation id="4958708863221495346"><ph name="URL_OF_THE_CURRENT_TAB" /> jakaa näyttösi.</translation>
 <translation id="4961107849584082341">Käännä sivu mille tahansa kielelle</translation>
-<translation id="4961700429721424617">Olet kirjautumassa ulos verkkotunnuksen <ph name="MANAGED_DOMAIN" /> hallinnoimalta tililtä. Chrome-tietosi poistetaan tältä laitteelta, mutta tietosi säilyvät Google-tililläsi.</translation>
 <translation id="4962975101802056554">Peru kaikki laitteen käyttöoikeudet</translation>
 <translation id="4970824347203572753">Ei käytettävissä sijainnissasi</translation>
 <translation id="497421865427891073">Siirry eteenpäin</translation>
@@ -573,7 +559,6 @@ Varmista, että sivusto on luotettava, ennen kuin siirryt VR-tilaan.</translatio
 <translation id="5224771365102442243">Video sivulla</translation>
 <translation id="5230560987958996918"><ph name="SITE" /> haluaa etsiä lähellä olevia Bluetooth-laitteita. Seuraavat laitteet löydettiin:</translation>
 <translation id="5233638681132016545">Uusi välilehti</translation>
-<translation id="5234764350956374838">Piilota</translation>
 <translation id="526421993248218238">Sivun lataaminen epäonnistui</translation>
 <translation id="5271967389191913893">Laite ei voi avata ladattavaa sisältöä.</translation>
 <translation id="528192093759286357">Poistu koko näytön tilasta vetämällä näytön yläreunasta ja koskettamalla Takaisin-painiketta.</translation>
@@ -590,7 +575,6 @@ Varmista, että sivusto on luotettava, ennen kuin siirryt VR-tilaan.</translatio
 <translation id="5335288049665977812">Anna kaikkien sivustojen käyttää JavaScriptiä (suositus).</translation>
 <translation id="5342314432463739672">Käyttöoikeuspyynnöt</translation>
 <translation id="5357811892247919462">Välilehti vastaanotettu</translation>
-<translation id="5363230136052241468">Napauta aloitusnäyttöpainiketta ladataksesi uusi välilehti ‑sivun.</translation>
 <translation id="5368958499335451666">{OPEN_TABS,plural, =1{<ph name="OPEN_TABS_ONE" /> avoin välilehti, vaihda välilehteä napauttamalla}other{<ph name="OPEN_TABS_MANY" /> avointa välilehteä, vaihda välilehteä napauttamalla}}</translation>
 <translation id="5391532827096253100">Sivustolle muodostamasi yhteys ei ole turvallinen. Sivuston tiedot</translation>
 <translation id="5394307150471348411">{DETAIL_COUNT,plural, =1{(+ 1 muu)}other{(+ # muuta)}}</translation>
@@ -609,7 +593,6 @@ Varmista, että sivusto on luotettava, ennen kuin siirryt VR-tilaan.</translatio
 <translation id="545042621069398927">Lataustasi nopeutetaan</translation>
 <translation id="5456381639095306749">Lataa sivu</translation>
 <translation id="5475862044948910901">Aloitetaanko lisätyn todellisuuden käyttökerta?</translation>
-<translation id="5481942164684849270"><ph name="APP_NAME" /> lisätty omiin sovelluksiin</translation>
 <translation id="548278423535722844">Avaa karttasovelluksessa</translation>
 <translation id="5487521232677179737">Poista tiedot</translation>
 <translation id="5494752089476963479">Estä häiritseviä tai harhaanjohtavia mainoksia näyttävien sivustojen mainokset</translation>
@@ -683,13 +666,13 @@ Varmista, että sivusto on luotettava, ennen kuin siirryt VR-tilaan.</translatio
 <translation id="5937580074298050696"><ph name="AMOUNT" /> säästetty</translation>
 <translation id="5939518447894949180">Tyhjennä</translation>
 <translation id="5942872142862698679">Hakukoneena käytetään Googlea.</translation>
-<translation id="5944669582486359588">Yksinkertaistetussa tilassa Chrome lataa sivuja nopeammin ja käyttää jopa 60 % vähemmän dataa. Googlen pilviteknologia optimoi sivut, joilla käyt.</translation>
 <translation id="5952764234151283551">Lähettää Googlelle etsimäsi sivun URL-osoitteen</translation>
 <translation id="5956665950594638604">Avaa Chromen ohjekeskus uudella välilehdellä</translation>
 <translation id="5958275228015807058">Löydät tiedostosi ja sivusi Latauksista</translation>
 <translation id="5962718611393537961">Tiivistä napauttamalla.</translation>
 <translation id="6000066717592683814">Käytä Googlea</translation>
 <translation id="6005538289190791541">Salasanaehdotus</translation>
+<translation id="6036057147555329831">Ylimääräinen ICU</translation>
 <translation id="6039379616847168523">Siirry seuraavalle välilehdelle</translation>
 <translation id="6040143037577758943">Sulje</translation>
 <translation id="6042308850641462728">Lisää</translation>
@@ -731,11 +714,11 @@ Jotkin verkkosivustot voivat vastata tähän pyyntöön esimerkiksi näyttämäl
 <translation id="6333140779060797560">Jaa sovelluksella <ph name="APPLICATION" /></translation>
 <translation id="6337234675334993532">Salaus</translation>
 <translation id="6341580099087024258">Kysy tiedostojen tallennussijaintia</translation>
-<translation id="6343192674172527289">Latauksia ei löytynyt.</translation>
 <translation id="6343495912647200061">{SHIPPING_ADDRESS,plural, =1{<ph name="SHIPPING_ADDRESS_PREVIEW" />\u2026 ja <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES" /> muu}other{<ph name="SHIPPING_ADDRESS_PREVIEW" />\u2026 ja <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES" /> muuta}}</translation>
 <translation id="6364438453358674297">Poistetaanko ehdotus historiasta?</translation>
 <translation id="6369229450655021117">Tässä voit tehdä verkkohakuja, jakaa sisältöä kavereiden kanssa ja nähdä avoimet sivut</translation>
 <translation id="6378173571450987352">Lisätiedot: Lajiteltu käytetyn datan mukaan</translation>
+<translation id="6381421346744604172">Tummenna sivustot</translation>
 <translation id="6388207532828177975">Tyhjennä ja nollaa</translation>
 <translation id="6393863479814692971">Chrome tarvitsee oikeuden käyttää kameraasi ja mikrofoniasi tällä sivustolla.</translation>
 <translation id="6395288395575013217">LINKITÄ</translation>
@@ -787,6 +770,7 @@ Jotkin verkkosivustot voivat vastata tähän pyyntöön esimerkiksi näyttämäl
 <translation id="6697947395630195233">Chrome tarvitsee oikeuden käyttää sijaintiasi, jotta se voidaan jakaa tämän sivuston kanssa.</translation>
 <translation id="6698801883190606802">Hallinnoi synkronoituja tietoja</translation>
 <translation id="6699370405921460408">Googlen palvelimet optimoivat sivut, joilla käyt.</translation>
+<translation id="6706288973712894588">Olet offline-tilassa.\n<ph name="BEGIN_LINK" />Tutustu offline-fiidiin.<ph name="END_LINK" /></translation>
 <translation id="6709133671862442373">Uutiset</translation>
 <translation id="6710213216561001401">Edellinen</translation>
 <translation id="671481426037969117">Ajastimesta (<ph name="FQDN" />) loppui aika. Se alkaa alusta huomenna.</translation>
@@ -814,7 +798,6 @@ Jotkin verkkosivustot voivat vastata tähän pyyntöön esimerkiksi näyttämäl
 <translation id="6912998170423641340">Estä sivustoja lukemasta tekstiä ja kuvia leikepöydältä</translation>
 <translation id="6914783257214138813">Salasanasi näkyvät kaikille, jotka näkevät viedyn tiedoston.</translation>
 <translation id="6942665639005891494">Muuta oletuslataussijaintia milloin tahansa Asetukset-valikon kautta</translation>
-<translation id="6944102653068653326">Lataa uusi välilehti-sivu napauttamalla.</translation>
 <translation id="6945221475159498467">Valitse</translation>
 <translation id="6963642900430330478">Tämä sivu on vaarallinen. Sivuston tiedot</translation>
 <translation id="6963766334940102469">Poista kirjanmerkkejä</translation>
@@ -824,15 +807,14 @@ Jotkin verkkosivustot voivat vastata tähän pyyntöön esimerkiksi näyttämäl
 <translation id="6989267951144302301">Lataus epäonnistui</translation>
 <translation id="6990079615885386641">Hanki sovellus Google Play Kaupasta: <ph name="APP_ACTION" /></translation>
 <translation id="6992289844737586249">Pyydä lupaa, kun sivustot yrittävät käyttää mikrofonia (suositus).</translation>
+<translation id="6995899638241819463">Varoita, jos salasanoja vaarantuu tietosuojaloukkauksessa</translation>
 <translation id="7015203776128479407">Synkronoinnin ensimääritystä ei tehty loppuun. Synkronointi ei ole käytössä.</translation>
 <translation id="7016516562562142042">Sallittu nykyisellä hakukoneella</translation>
-<translation id="7021515813996758557"><ph name="FILE_NAME" /> ladattiin.</translation>
 <translation id="7022756207310403729">Avaa selaimessa</translation>
 <translation id="702463548815491781">Suositellaan käytettäväksi, kun TalkBack tai Kytkimen käyttö on päällä</translation>
 <translation id="7029809446516969842">Salasanat</translation>
 <translation id="7053983685419859001">Estä</translation>
 <translation id="7055152154916055070">Uudelleenohjaus estetty:</translation>
-<translation id="7062545763355031412">Hyväksy ja vaihda tiliä</translation>
 <translation id="7063006564040364415">Synkronointipalvelimeen ei saada yhteyttä.</translation>
 <translation id="7066151586745993502">{NUM_SELECTED,plural, =1{1 valittu}other{# valittu}}</translation>
 <translation id="7071521146534760487">Hallinnoi tiliä</translation>
@@ -889,10 +871,10 @@ Sivusto EI saa kameran käyttöoikeutta. Kamerakuvat näkyvät vain sinulle.</tr
 <translation id="7475688122056506577">SD-korttia ei löydy. Osa tiedostoista voi puuttua.</translation>
 <translation id="7479104141328977413">Välilehtien ylläpito</translation>
 <translation id="7481312909269577407">Seuraava</translation>
+<translation id="7482656565088326534">Esikatseluvälilehti</translation>
 <translation id="7493994139787901920"><ph name="VERSION" /> (päivitettiin <ph name="TIME_SINCE_UPDATE" />)</translation>
 <translation id="7494974237137038751">dataa säästetty</translation>
 <translation id="7498271377022651285">Odota…</translation>
-<translation id="7510943789645525906">Varoittaa sinua, jos käyttämäsi salasana oli osallisena tietosuojaloukkauksessa</translation>
 <translation id="7514365320538308">Lataa</translation>
 <translation id="751961395872307827">Yhteyden muodostaminen sivustoon epäonnistui</translation>
 <translation id="7521387064766892559">JavaScript</translation>
@@ -925,12 +907,10 @@ Sivusto EI saa kameran käyttöoikeutta. Kamerakuvat näkyvät vain sinulle.</tr
 <translation id="7704317875155739195">Täydennä automaattisesti hakuja ja URL-osoitteita</translation>
 <translation id="7725024127233776428">Kirjanmerkeiksi lisätyt sivut näkyvät tässä</translation>
 <translation id="773466115871691567">Käännä aina kielellä <ph name="SOURCE_LANGUAGE" /> kirjoitut sivut</translation>
-<translation id="7735672056998735387"><ph name="SPACE_FREE" /> (<ph name="SPACE_OTHER" />)</translation>
 <translation id="7746457520633464754">Vaarallisia sovelluksia ja sivustoja löytääkseen Chrome lähettää joidenkin avattujen sivujen URL-osoitteita, rajallisia järjestelmätietoja ja osia sivujen sisällöstä Googlelle</translation>
 <translation id="7757787379047923882"><ph name="DEVICE_NAME" /> jakoi tekstin</translation>
 <translation id="7762668264895820836">SD-kortti <ph name="SD_CARD_NUMBER" /></translation>
 <translation id="7764225426217299476">Lisää osoite</translation>
-<translation id="7769602470925380267">Hyväksy ja kirjaudu ulos</translation>
 <translation id="7772032839648071052">Vahvista tunnuslause</translation>
 <translation id="7772375229873196092">Sulje <ph name="APP_NAME" /></translation>
 <translation id="7774809984919390718">{PAYMENT_METHOD,plural, =1{<ph name="PAYMENT_METHOD_PREVIEW" />\u2026 ja <ph name="NUMBER_OF_ADDITIONAL_PAYMENT_METHODS" /> muu}other{<ph name="PAYMENT_METHOD_PREVIEW" />\u2026 ja <ph name="NUMBER_OF_ADDITIONAL_PAYMENT_METHODS" /> muuta}}</translation>
@@ -940,7 +920,6 @@ Sivusto EI saa kameran käyttöoikeutta. Kamerakuvat näkyvät vain sinulle.</tr
 <translation id="7810647596859435254">Avaa sovelluksessa…</translation>
 <translation id="7821588508402923572">Datasäästösi näkyvät täällä</translation>
 <translation id="7837721118676387834">Sallii tietylle sivustolle mykistettyjen videoiden automaattisen toiston.</translation>
-<translation id="7838340937077326045">Haluatko varmasti vaihtaa tiedostotunnisteen?</translation>
 <translation id="7846076177841592234">Peruuta valinta</translation>
 <translation id="784934925303690534">Aikaväli</translation>
 <translation id="7851858861565204677">Muut laitteet</translation>
@@ -951,7 +930,6 @@ Sivusto EI saa kameran käyttöoikeutta. Kamerakuvat näkyvät vain sinulle.</tr
 <translation id="7886917304091689118">Käynnissä Chromessa</translation>
 <translation id="7925590027513907933">{FILE_COUNT,plural, =1{Ladataan tiedostoa}other{Ladataan # tiedostoa}}</translation>
 <translation id="7929962904089429003">Avaa valikko</translation>
-<translation id="7930681627240672853">Salasanojen turvallisuuden tarkistaminen</translation>
 <translation id="7942131818088350342"><ph name="PRODUCT_NAME" /> on vanhentunut.</translation>
 <translation id="7947953824732555851">Hyväksy ja kirjaudu sisään</translation>
 <translation id="7963646190083259054">Toimittaja:</translation>
@@ -967,7 +945,6 @@ Sivusto EI saa kameran käyttöoikeutta. Kamerakuvat näkyvät vain sinulle.</tr
 <translation id="8007176423574883786">Ei käytössä tällä laitteella</translation>
 <translation id="8013372441983637696">Poistetaanko Chrome-data tältä laitteelta?</translation>
 <translation id="8015452622527143194">Palauta sivun kaiken sisällön oletuskoko</translation>
-<translation id="8015780634880457457">Google voi tarkistaa, olivatko salasanasi osallisina tietosuojaloukkauksessa</translation>
 <translation id="802154636333426148">Lataus epäonnistui.</translation>
 <translation id="8026334261755873520">Poista selaustiedot</translation>
 <translation id="8035133914807600019">Uusi kansio…</translation>
@@ -998,7 +975,6 @@ Sivusto EI saa kameran käyttöoikeutta. Kamerakuvat näkyvät vain sinulle.</tr
 <translation id="8200772114523450471">Jatka</translation>
 <translation id="8209050860603202033">Avaa kuva</translation>
 <translation id="8218622182176210845">Ylläpidä tiliäsi</translation>
-<translation id="8220488350232498290"><ph name="GIGABYTES" /> Gt ladattu</translation>
 <translation id="8224471946457685718">Lataa sinulle valittuja artikkeleita Wi-Fin kautta</translation>
 <translation id="8232956427053453090">Säilytä data</translation>
 <translation id="8249310407154411074">Siirrä ylimmäksi</translation>
@@ -1011,7 +987,6 @@ Sivusto EI saa kameran käyttöoikeutta. Kamerakuvat näkyvät vain sinulle.</tr
 <translation id="8284326494547611709">Tekstitykset</translation>
 <translation id="8300705686683892304">Sovelluksen ylläpitämät</translation>
 <translation id="8310344678080805313">Tavalliset välilehdet</translation>
-<translation id="8313455859591948645">Muokkaa aloitussivua</translation>
 <translation id="8316092324682955408"><ph name="DOMAIN_NAME" /> ja muita sivustoja</translation>
 <translation id="8327155640814342956">Jotta saat parhaan mahdollisen selauskokemuksen, avaa ja päivitä Chrome nyt</translation>
 <translation id="8339163506404995330">Kielellä <ph name="LANGUAGE" /> kirjoitettuja sivuja ei käännetä.</translation>
@@ -1019,11 +994,11 @@ Sivusto EI saa kameran käyttöoikeutta. Kamerakuvat näkyvät vain sinulle.</tr
 <translation id="8364299278605033898">Katso suositut sivustot</translation>
 <translation id="8368027906805972958">Tuntematon tai ei-tuettu laite (<ph name="DEVICE_ID" />)</translation>
 <translation id="8372893542064058268">Salli taustasynkronointi tietyllä sivustolla.</translation>
-<translation id="8374821112118309944">TalkBack täytyy päivittää uudempaan versioon.</translation>
 <translation id="8378714024927312812">Organisaatiosi ylläpitämä</translation>
 <translation id="8380167699614421159">Tällä sivustolla on häiritseviä tai harhaanjohtavia mainoksia</translation>
 <translation id="8393700583063109961">Lähetä viesti</translation>
 <translation id="8413126021676339697">Näytä koko selaushistoria</translation>
+<translation id="8427875596167638501">Esikatseluvälilehti on puoliksi auki</translation>
 <translation id="8428213095426709021">Asetukset</translation>
 <translation id="8438566539970814960">Paranna hakuja ja selausta</translation>
 <translation id="8441146129660941386">Kelaa taaksepäin</translation>
@@ -1112,17 +1087,17 @@ Sivusto EI saa kameran käyttöoikeutta. Kamerakuvat näkyvät vain sinulle.</tr
 <translation id="9070377983101773829">Aloita puhehaku</translation>
 <translation id="9074336505530349563">Kirjaudu sisään ja ota synkronointi käyttöön, niin näet Googlen suosittelemaa yksilöllistä sisältöä</translation>
 <translation id="9086455579313502267">Ei yhteyttä verkkoon.</translation>
-<translation id="9099018167121903954"><ph name="KILOBYTES" /> Kt ladattu</translation>
 <translation id="9100505651305367705">Tarjoa yksinkertaistettua näkymää, jos artikkeli tukee sitä</translation>
 <translation id="9100610230175265781">Tunnuslause tarvitaan</translation>
+<translation id="9102803872260866941">Esikatseluvälilehti on avattu</translation>
 <translation id="9104217018994036254">Välilehden jakamisen laiteluettelo.</translation>
+<translation id="9133397713400217035">Tutki offline-tilassa</translation>
 <translation id="9133703968756164531"><ph name="ITEM_NAME" /> (<ph name="ITEM_ID" />)</translation>
 <translation id="9137013805542155359">Näytä alkuperäinen</translation>
 <translation id="9139068048179869749">Pyydä lupaa, kun sivustot yrittävät lähettää ilmoituksia (suositus).</translation>
 <translation id="9139318394846604261">Ostokset</translation>
 <translation id="9155898266292537608">Voit hakea myös napauttamalla sanaa nopeasti.</translation>
 <translation id="9169507124922466868">Navigointihistoria on puoliksi auki</translation>
-<translation id="9188680907066685419">Kirjaudu ulos hallinnoidulta tililtä</translation>
 <translation id="9204836675896933765">1 tiedosto jäljellä</translation>
 <translation id="9206873250291191720">A</translation>
 <translation id="9209888181064652401">Puheluiden soittaminen ei onnistu</translation>
@@ -1131,7 +1106,6 @@ Sivusto EI saa kameran käyttöoikeutta. Kamerakuvat näkyvät vain sinulle.</tr
 <translation id="932327136139879170">Etusivu</translation>
 <translation id="938850635132480979">(Virhe: <ph name="ERROR_CODE" />)</translation>
 <translation id="945632385593298557">Mikrofonin käyttöoikeus</translation>
-<translation id="951339005376969845">Poistaa olemassa olevat tiedot. Voit palauttaa nykyiset tiedot kirjautumalla takaisin tilille <ph name="FROM_ACCOUNT" />.</translation>
 <translation id="95817756606698420">Chrome voi käyttää <ph name="BEGIN_BOLD" />Sogouta<ph name="END_BOLD" /> hakujen tekemiseen Kiinassa. Voit muokata tätä <ph name="BEGIN_LINK" />Asetuksissa<ph name="END_LINK" />.</translation>
 <translation id="965817943346481315">Estä, jos sivusto näyttää häiritseviä tai harhaanjohtavia mainoksia (suositus)</translation>
 <translation id="968900484120156207">Avaamasi sivut näkyvät tässä</translation>

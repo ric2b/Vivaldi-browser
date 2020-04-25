@@ -56,6 +56,7 @@
 ../../third_party/catapult/devil/devil/android/sdk/aapt.py
 ../../third_party/catapult/devil/devil/android/sdk/adb_wrapper.py
 ../../third_party/catapult/devil/devil/android/sdk/build_tools.py
+../../third_party/catapult/devil/devil/android/sdk/bundletool.py
 ../../third_party/catapult/devil/devil/android/sdk/intent.py
 ../../third_party/catapult/devil/devil/android/sdk/keyevent.py
 ../../third_party/catapult/devil/devil/android/sdk/shared_prefs.py
@@ -168,7 +169,10 @@ pylib/local/device/local_device_linker_test_run.py
 pylib/local/device/local_device_monkey_test_run.py
 pylib/local/device/local_device_test_run.py
 pylib/local/emulator/__init__.py
+pylib/local/emulator/avd.py
 pylib/local/emulator/local_emulator_environment.py
+pylib/local/emulator/proto/__init__.py
+pylib/local/emulator/proto/avd_pb2.py
 pylib/local/local_test_server_spawner.py
 pylib/local/machine/__init__.py
 pylib/local/machine/local_machine_environment.py

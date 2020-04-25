@@ -40,6 +40,7 @@
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/passwords/password_bubble_view_base.h"
 #include "chrome/browser/ui/webui/settings_utils.h"
 #include "chrome/browser/ui/webui/site_settings_helper.h"
 #include "chrome/common/chrome_switches.h"
@@ -72,15 +73,6 @@
 #elif defined(OS_MACOSX)
 #include "chrome/browser/password_manager/password_manager_util_mac.h"
 #endif
-
-namespace {
-bool IsValidUserId(const std::string& user_id) {
-  uint64_t value;
-  return !user_id.empty() && base::HexStringToUInt64(user_id, &value) &&
-         value > 0;
-}
-
-}  // anonymous namespace
 
 namespace extensions {
 
@@ -377,65 +369,6 @@ UtilitiesClearAllRecentlyClosedSessionsFunction::Run() {
     tab_restore_service->ClearEntries();
   }
   return RespondNow(ArgumentList(Results::Create(result)));
-}
-
-ExtensionFunction::ResponseAction UtilitiesGetUniqueUserIdFunction::Run() {
-  using vivaldi::utilities::GetUniqueUserId::Params;
-
-  std::unique_ptr<Params> params = Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  std::string user_id = g_browser_process->local_state()->GetString(
-      vivaldiprefs::kVivaldiUniqueUserId);
-
-  if (!IsValidUserId(user_id)) {
-    // Run this as task as this may do blocking IO like reading a file or a
-    // platform registry.
-    base::PostTaskWithTraits(
-        FROM_HERE, {base::ThreadPool(), base::MayBlock()},
-        base::BindOnce(&UtilitiesGetUniqueUserIdFunction::GetUniqueUserIdTask,
-                       this, params->legacy_user_id));
-    return RespondLater();
-  } else {
-    RespondOnUIThread(user_id, false);
-    return AlreadyResponded();
-  }
-}
-
-void UtilitiesGetUniqueUserIdFunction::GetUniqueUserIdTask(
-    const std::string& legacy_user_id) {
-  // Note: We do not refresh the copy of the user id stored in the OS profile
-  // if it is missing because we do not want standalone copies of vivaldi on USB
-  // to spread their user id to all the computers they are run on.
-
-  std::string user_id;
-  bool is_new_user = false;
-  if (!ReadUserIdFromOSProfile(&user_id) || !IsValidUserId(user_id)) {
-    if (IsValidUserId(legacy_user_id)) {
-      user_id = legacy_user_id;
-    } else {
-      uint64_t random = base::RandUint64();
-      user_id = base::StringPrintf("%016" PRIX64, random);
-      is_new_user = true;
-    }
-    WriteUserIdToOSProfile(user_id);
-  }
-
-  base::PostTaskWithTraits(
-      FROM_HERE, {content::BrowserThread::UI},
-      base::BindOnce(&UtilitiesGetUniqueUserIdFunction::RespondOnUIThread, this,
-                     user_id, is_new_user));
-}
-
-void UtilitiesGetUniqueUserIdFunction::RespondOnUIThread(
-    const std::string& user_id,
-    bool is_new_user) {
-  namespace Results = vivaldi::utilities::GetUniqueUserId::Results;
-
-  g_browser_process->local_state()->SetString(
-      vivaldiprefs::kVivaldiUniqueUserId, user_id);
-
-  Respond(ArgumentList(Results::Create(user_id, is_new_user)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesIsTabInLastSessionFunction::Run() {
@@ -835,6 +768,17 @@ ExtensionFunction::ResponseAction UtilitiesGetSystemDateFormatFunction::Run() {
   }
 }
 
+ExtensionFunction::ResponseAction UtilitiesGetSystemCountryFunction::Run() {
+  namespace Results = vivaldi::utilities::GetSystemCountry::Results;
+
+  std::string value;
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+  if (!env->GetVar("VIVALDI_COUNTRY", &value) || value.empty()) {
+    value = ReadCountry();
+  }
+  return RespondNow(ArgumentList(Results::Create(value)));
+}
+
 ExtensionFunction::ResponseAction UtilitiesSetLanguageFunction::Run() {
   using vivaldi::utilities::SetLanguage::Params;
   namespace Results = vivaldi::utilities::SetLanguage::Results;
@@ -1142,19 +1086,6 @@ ExtensionFunction::ResponseAction UtilitiesSetStartupActionFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(content_settings)));
 }
 
-ExtensionFunction::ResponseAction UtilitiesCanShowWelcomePageFunction::Run() {
-  namespace Results = vivaldi::utilities::CanShowWelcomePage::Results;
-
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
-
-  bool force_first_run = command_line->HasSwitch(switches::kForceFirstRun);
-  bool no_first_run = command_line->HasSwitch(switches::kNoFirstRun);
-  bool can_show_welcome = (force_first_run || !no_first_run);
-
-  return RespondNow(ArgumentList(Results::Create(can_show_welcome)));
-}
-
 ExtensionFunction::ResponseAction UtilitiesCanShowWhatsNewPageFunction::Run() {
   namespace Results = vivaldi::utilities::CanShowWhatsNewPage::Results;
 
@@ -1272,6 +1203,7 @@ ExtensionFunction::ResponseAction UtilitiesSetContentSettingsFunction::Run() {
   using vivaldi::utilities::SetContentSettings::Params;
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
+
   std::string primary_pattern_string = params->details.primary_pattern;
   std::string secondary_pattern_string;
   if (params->details.secondary_pattern) {
@@ -1311,6 +1243,54 @@ ExtensionFunction::ResponseAction UtilitiesSetContentSettingsFunction::Run() {
                                     content_type, "", setting);
 
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction UtilitiesIsDialogOpenFunction::Run() {
+  using vivaldi::utilities::IsDialogOpen::Params;
+  namespace Results = vivaldi::utilities::IsDialogOpen::Results;
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  bool visible = false;
+
+  switch (params->dialog_name) {
+    case vivaldi::utilities::DialogName::DIALOG_NAME_PASSWORD :
+      if (PasswordBubbleViewBase::manage_password_bubble()) {
+        visible =
+            PasswordBubbleViewBase::manage_password_bubble()->GetVisible();
+      }
+      break;
+
+    default:
+    case vivaldi::utilities::DialogName::DIALOG_NAME_CHROMECAST:
+      break;
+  }
+  return RespondNow(ArgumentList(Results::Create(visible)));
+}
+
+ExtensionFunction::ResponseAction UtilitiesFocusDialogFunction::Run() {
+  using vivaldi::utilities::FocusDialog::Params;
+  namespace Results = vivaldi::utilities::FocusDialog::Results;
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  bool focused = false;
+
+  switch (params->dialog_name) {
+    case vivaldi::utilities::DialogName::DIALOG_NAME_PASSWORD:
+      if (PasswordBubbleViewBase::manage_password_bubble()) {
+        if (PasswordBubbleViewBase::manage_password_bubble()->CanActivate()) {
+          PasswordBubbleViewBase::manage_password_bubble()->ActivateBubble();
+          focused = true;
+        }
+      }
+      break;
+
+    default:
+    case vivaldi::utilities::DialogName::DIALOG_NAME_CHROMECAST:
+      break;
+  }
+  return RespondNow(ArgumentList(Results::Create(focused)));
 }
 
 }  // namespace extensions

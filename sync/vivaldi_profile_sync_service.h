@@ -50,13 +50,15 @@ class VivaldiProfileSyncService : public syncer::ProfileSyncService {
   void ShutdownImpl(syncer::ShutdownReason reason) override;
   void StartSyncingWithServer() override;
   void OnEngineInitialized(
-    syncer::ModelTypeSet initial_types,
-    const syncer::WeakHandle<syncer::JsBackend>& js_backend,
-    const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>& debug_info_listener,
-    const std::string& cache_guid,
-    const std::string& birthday,
-    const std::string& bag_of_chips,
-    bool success) override;
+      syncer::ModelTypeSet initial_types,
+      const syncer::WeakHandle<syncer::JsBackend>& js_backend,
+      const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
+          debug_info_listener,
+      const std::string& cache_guid,
+      const std::string& birthday,
+      const std::string& bag_of_chips,
+      const std::string& last_keystore_key,
+      bool success) override;
 
   void OnClearDataComplete(scoped_refptr<net::HttpResponseHeaders> headers);
 

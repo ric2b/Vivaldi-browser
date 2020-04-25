@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="pt-BR">
+<translation id="1029351048239796117">O Vivaldi precisa de sua permissão para acessar a microfone para este site.</translation>
+<translation id="1063227610401477317">Aplicar Mudanças</translation>
+<translation id="1067048845568873861">Criada</translation>
+<translation id="1151669774236491028">Vivaldi.net está experimentando problemas: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="1193152013480891461">Criar uma Conta Vivaldi</translation>
+<translation id="119944043368869598">Limpar tudo</translation>
+<translation id="1228311134236651326">Nenhuma nota encontrada</translation>
+<translation id="1243314992276662751">Upload</translation>
+<translation id="1249276067323441352">Dados em Sincronização</translation>
+<translation id="1302932907222175914">Pesquisar notas</translation>
+<translation id="1644574205037202324">Histórico</translation>
+<translation id="1689333818294560261">Apelido</translation>
+<translation id="1799160781006135561">Senha Criptografada Não Especificada</translation>
+<translation id="1887193815546011584">Nova Pasta de Speed Dual</translation>
+<translation id="1984391066297619717">Sincronização Automática</translation>
+<translation id="2071726368047511075">Captura de Página</translation>
+<translation id="2199644148227291099">Você está certo de que quer usar sua senha de login para criptografar? Isso reduz enormemente sua segurança de seus dados sincronizados online.</translation>
+<translation id="2243210264130642074">Nota salva</translation>
+<translation id="2359808026110333948">Continuar</translation>
+<translation id="2526968784648867272">Captura de Página em andamento...</translation>
+<translation id="2709516037105925701">Autocompletar</translation>
+<translation id="271033894570825754">Novo</translation>
+<translation id="2745324713975967671">Senha criptografada</translation>
+<translation id="2818042133587341562">O Vivaldi precisa de sua permissão para acessar a câmera para este site.</translation>
+<translation id="2842985007712546952">Pasta pai</translation>
+<translation id="2850144663494818309">Iniciando sincronização...</translation>
+<translation id="2873951654529031587">Lixeira</translation>
+<translation id="2915527103487649658">Sincronizar Tudo</translation>
+<translation id="2953995378235516294">Os dados de sua conta Sync são criptografados. Por favor, providencie sua senha criptografada para descriptografá-los.</translation>
+<translation id="2996809686854298943">A URL é necessária</translation>
+<translation id="3177673846235066154">Servidor recusou suas credenciais.</translation>
+<translation id="3183006304368105350">Clonar guia</translation>
+<translation id="3271422135763022755">Comece a digitar...</translation>
+<translation id="3335772982573114336">Nova nota</translation>
+<translation id="33451081266695216">Conexão limitada pelo servidor.</translation>
+<translation id="3377025655491224618">Guia Privada</translation>
+<translation id="3513566764071045027">Deslogar</translation>
+<translation id="3723593528923555236">Continuar sem definir uma Senha Independente</translation>
+<translation id="3838463869765243557">Nome do dispositivo (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">Descrição</translation>
+<translation id="3897711243931585177">Geral</translation>
+<translation id="4014682279600355881">Recomendamos criar uma senha criptografada forte. Entretanto, você pode deixá-la em branco - neste caso iremos reusar a sua senha salva de sua conta.</translation>
+<translation id="4073968054795398875">O servidor da sincronização está experimentando problemas. Tentando sincronizar novamente...</translation>
+<translation id="4082980568238151037">Configurar senha criptografada.</translation>
+<translation id="4145489350420416595">Erro inesperado.</translation>
+<translation id="4268574628540273656">URL:</translation>
+<translation id="4304224509867189079">Log In</translation>
+<translation id="4435780204941264251">Limpar Dados do Sync</translation>
+<translation id="4532845899244822526">Escolher pasta</translation>
+<translation id="4579489600439872414">Sync está desabilitado na configuração do Android.</translation>
+<translation id="4589558845651536280">Em andamento...</translation>
+<translation id="4752136117982598343">Nota salva em <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">Downloads</translation>
+<translation id="4833044618885331665">Você deve atualizar o Vivaldi para usar a sincronização.</translation>
+<translation id="4847896847259487518">Marcadores</translation>
+<translation id="4890701585167892790">Nenhuma nota aqui</translation>
+<translation id="4936710149174207991">Não Sincronizado</translation>
+<translation id="4954427294703861104">Novo no Vivaldi? Cria uma conta.</translation>
+<translation id="504986598654589766">Navegar em Guia Privada significa que pesquisas, sites visitados, cookies e arquivos temporários não serão armazenados no Vivaldi. Isso não modificará ou encriptará sua conexão.</translation>
+<translation id="5161254044473106830">Um nome é necessário</translation>
+<translation id="5186185447130319458">Privado</translation>
+<translation id="5271549068863921519">Salvar Senha</translation>
+<translation id="5286002386457946212">Erro de cliente.</translation>
+<translation id="5290452628447338707">Nenhuma Nota criada</translation>
+<translation id="5351912500249789547">Vivaldi.net rejeitou suas credenciais: Error code <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">Abrir Imagem</translation>
+<translation id="5421638721143596928">Falha ao decodificar suas credencial. Por favor, identifique-se novamente.</translation>
+<translation id="5443210757369395869">Capturar Área Visível</translation>
+<translation id="5448025735280530073">Vivaldi precisa acessar sua localização para compartilhá-la com este site.</translation>
+<translation id="5510723066938954312">Marcadores e Discagem Rápida</translation>
+<translation id="5525981542754785361">Nota salva em <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">Copiar para Notas</translation>
+<translation id="5765833063161370062">Mover notas</translation>
+<translation id="5790085346892983794">Sucesso</translation>
+<translation id="5803562371819294631">Isso removerá toda os dados sincronizados armazenados no servidor do Sync, reiniciará sua senha criptografada e te deslogará. Você tem certeza?</translation>
+<translation id="5823830882692559950">Vivaldi.net rejeitou suas credenciais: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5841317974325635710">Nova Nota Criada</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> nota}
+          other {<ph name="NOTES_COUNT_MANY" /> notas}}</translation>
+<translation id="6012194412768958291">Impossível se conectar ao vivaldi.net.</translation>
+<translation id="6027204815015935175">Senha requisitada para descriptografar.</translation>
+<translation id="6059232451013891645">Pasta:</translation>
+<translation id="6077943432358741146">Discagem Rápida</translation>
+<translation id="6091125352818749975">Limpar Dados Sincronizados Remotamente.</translation>
+<translation id="6179463181009746489">Excluir notas</translation>
+<translation id="6231148928368101651">Painel</translation>
+<translation id="6406506848690869874">Sync</translation>
+<translation id="6657585470893396449">Senha</translation>
+<translation id="6682232524697939870">O Vivaldi precisa de sua permissão para acessar a câmera e o microfone para este site.</translation>
+<translation id="6698381487523150993">Criado:</translation>
+<translation id="6786747875388722282">Extensões</translation>
+<translation id="6887143077297974801">Sync falhou em iniciar.</translation>
+<translation id="6945221475159498467">Selecionar</translation>
+<translation id="6960734555676205519">Último Sync</translation>
+<translation id="7029809446516969842">Senhas</translation>
+<translation id="7075547914712055886">Reiniciar Sync</translation>
+<translation id="7222342267839079597">Por favor, escolha uma senha criptografada forte para proteger seus dados.</translation>
+<translation id="7492794630657957996">Confirmar a Sincronização dos Dados para completar o setup</translation>
+<translation id="7514365320538308">Download</translation>
+<translation id="7547490097772831952">Captura de toda página</translation>
+<translation id="7725641807765767506">Nenhum speed dial encontrado</translation>
+<translation id="7765158879357617694">Mover</translation>
+<translation id="7822864833609233785">AVANÇADO</translation>
+<translation id="798930073512159071">
+
+Digite sua Primeira Nota
+
+Para começar, pressione o ícone de Nova Nota ou selecione o texto em qualquer site e crie uma nota do menu de contexto..</translation>
+<translation id="8028021641083150097">Em ordem de ganhar acesso novamente à sua conta, todos os dados remotos do Sync devem ser reiniciados. Você pode então começar uma nova sincronização usando seus dados do atual navegador.</translation>
+<translation id="8035133914807600019">Nova pasta…</translation>
+<translation id="8066170816074394954">Erro do servidor.</translation>
+<translation id="8123787473700925741">Vivaldi.net está experimentando problemas: Código de erro <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">Iniciar Sync</translation>
+<translation id="8206267832882844324">Editar nota</translation>
+<translation id="8225478925744929238">Excluir marcador</translation>
+<translation id="8233521945095997439">Nenhum Speed Dial aqui</translation>
+<translation id="8257908958623224237">Conflito com dados de outro cliente.</translation>
+<translation id="8261506727792406068">Excluir</translation>
+<translation id="8305137170060620165">Histórico Digitado e Sessões Remotas</translation>
+<translation id="8414685983518053656">Notas</translation>
+<translation id="8422778094137438683">Você deve usar uma conta de usuário do vivaldi.net para logar.</translation>
+<translation id="8428213095426709021">Configurações</translation>
+<translation id="8462396943848220200">Tentando novamente em <ph name="TIME" /></translation>
+<translation id="8480556999740355963">Logado como<ph name="USERNAME" /> no <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">Logando no Vivaldi.net como <ph name="USERNAME" />. Please wait.</translation>
+<translation id="8503813439785031346">Usuário</translation>
+<translation id="8661216209723599816">Reiniciar Dados Remotos</translation>
+<translation id="8721244337025311110">Novo Marcador</translation>
+<translation id="8724114686743788114">Imagem não pode ser exibida</translation>
+<translation id="8730621377337864115">Feito</translation>
+<translation id="8738958257180686306">Criado: <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Vivaldi requer acesso de armazenamento para gravar o arquivos baixados.</translation>
+<translation id="8808060551076378370">Erro ao adicionar nota.</translation>
+<translation id="8817201557520703060">Captura de página finalizada</translation>
+<translation id="8820817407110198400">Marcadores</translation>
+<translation id="895749247724466293">Pesquisar seus speed dials</translation>
+<translation id="8959245489304000426">Eu Esqueci Minha Senha</translation>
+<translation id="8979401359137062629">Nota:</translation>
+<translation id="9028089729841356743">Erro de rede.</translation>
+<translation id="9065203028668620118">Editar</translation>
+<translation id="9148058034647219655">Sair</translation>
+<translation id="9173575361559252669">Erro na Captura da Página</translation>
+</translationbundle>

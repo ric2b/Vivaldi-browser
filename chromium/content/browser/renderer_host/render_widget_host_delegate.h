@@ -17,8 +17,8 @@
 #include "content/common/drag_event_source_info.h"
 #include "content/public/common/drop_data.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
-#include "third_party/blink/public/common/manifest/web_display_mode.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/gfx/native_widget_types.h"
@@ -48,7 +48,6 @@ class RenderViewHostDelegateView;
 class TextInputManager;
 class WebContents;
 enum class KeyboardEventProcessingResult;
-struct ScreenInfo;
 struct NativeWebKeyboardEvent;
 
 //
@@ -86,7 +85,6 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   // The RenderWidget was resized.
   virtual void RenderWidgetWasResized(RenderWidgetHostImpl* render_widget_host,
-                                      const ScreenInfo& screen_info,
                                       bool width_changed) {}
 
   // The contents auto-resized and the container should match it.
@@ -105,6 +103,11 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // TODO(carlosil, nasko): remove once committed interstitial pages are
   // fully implemented.
   virtual bool PreHandleMouseEvent(const blink::WebMouseEvent& event);
+
+  // Callback to inform the browser that the renderer did not process the
+  // specified events. This gives an opportunity to the browser to process the
+  // back/forward mouse buttons.
+  virtual bool HandleMouseEvent(const blink::WebMouseEvent& event);
 
   // Callback to inform the browser that the renderer did not process the
   // specified events. This gives an opportunity to the browser to process the
@@ -218,7 +221,7 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   virtual bool ShouldShowStaleContentOnEviction();
 
   // Returns the display mode for the view.
-  virtual blink::WebDisplayMode GetDisplayMode(
+  virtual blink::mojom::DisplayMode GetDisplayMode(
       RenderWidgetHostImpl* render_widget_host) const;
 
   // Notification that the widget has lost capture.

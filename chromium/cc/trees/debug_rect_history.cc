@@ -14,8 +14,8 @@
 #include "cc/layers/render_surface_impl.h"
 #include "cc/trees/damage_tracker.h"
 #include "cc/trees/layer_tree_host.h"
-#include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "cc/trees/scroll_node.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
 namespace cc {
@@ -137,9 +137,8 @@ void DebugRectHistory::SaveScreenSpaceRects(
 }
 
 void DebugRectHistory::SaveTouchEventHandlerRects(LayerTreeImpl* tree_impl) {
-  LayerTreeHostCommon::CallFunctionForEveryLayer(
-      tree_impl,
-      [this](LayerImpl* layer) { SaveTouchEventHandlerRectsCallback(layer); });
+  for (auto* layer : *tree_impl)
+    SaveTouchEventHandlerRectsCallback(layer);
 }
 
 void DebugRectHistory::SaveTouchEventHandlerRectsCallback(LayerImpl* layer) {
@@ -167,19 +166,20 @@ void DebugRectHistory::SaveWheelEventHandlerRects(LayerTreeImpl* tree_impl) {
 
   // Since the wheel event handlers property is on the entire layer tree just
   // mark inner viewport if have listeners.
-  LayerImpl* inner_viewport = tree_impl->InnerViewportScrollLayer();
-  if (!inner_viewport)
+  ScrollNode* inner_scroll = tree_impl->InnerViewportScrollNode();
+  if (!inner_scroll)
     return;
-  debug_rects_.push_back(DebugRect(
-      WHEEL_EVENT_HANDLER_RECT_TYPE,
-      MathUtil::MapEnclosingClippedRect(inner_viewport->ScreenSpaceTransform(),
-                                        gfx::Rect(inner_viewport->bounds()))));
+  debug_rects_.push_back(
+      DebugRect(WHEEL_EVENT_HANDLER_RECT_TYPE,
+                MathUtil::MapEnclosingClippedRect(
+                    tree_impl->property_trees()->transform_tree.ToScreen(
+                        inner_scroll->transform_id),
+                    gfx::Rect(inner_scroll->bounds))));
 }
 
 void DebugRectHistory::SaveScrollEventHandlerRects(LayerTreeImpl* tree_impl) {
-  LayerTreeHostCommon::CallFunctionForEveryLayer(
-      tree_impl,
-      [this](LayerImpl* layer) { SaveScrollEventHandlerRectsCallback(layer); });
+  for (auto* layer : *tree_impl)
+    SaveScrollEventHandlerRectsCallback(layer);
 }
 
 void DebugRectHistory::SaveScrollEventHandlerRectsCallback(LayerImpl* layer) {
@@ -193,9 +193,8 @@ void DebugRectHistory::SaveScrollEventHandlerRectsCallback(LayerImpl* layer) {
 }
 
 void DebugRectHistory::SaveNonFastScrollableRects(LayerTreeImpl* tree_impl) {
-  LayerTreeHostCommon::CallFunctionForEveryLayer(
-      tree_impl,
-      [this](LayerImpl* layer) { SaveNonFastScrollableRectsCallback(layer); });
+  for (auto* layer : *tree_impl)
+    SaveNonFastScrollableRectsCallback(layer);
 }
 
 void DebugRectHistory::SaveNonFastScrollableRectsCallback(LayerImpl* layer) {

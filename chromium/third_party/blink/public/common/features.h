@@ -17,18 +17,16 @@ namespace features {
 
 BLINK_COMMON_EXPORT extern const base::Feature
     kBlockingDownloadsInAdFrameWithoutUserActivation;
-BLINK_COMMON_EXPORT extern const base::Feature kAvoidFlashBetweenNavigation;
+BLINK_COMMON_EXPORT extern const base::Feature kPaintHolding;
 BLINK_COMMON_EXPORT extern const base::Feature
     kEagerCacheStorageSetupForServiceWorkers;
-BLINK_COMMON_EXPORT extern const base::Feature
-    kEnableGpuRasterizationViewportRestriction;
 BLINK_COMMON_EXPORT extern const base::Feature kScriptStreaming;
 BLINK_COMMON_EXPORT extern const base::Feature kSmallScriptStreaming;
 BLINK_COMMON_EXPORT extern const base::Feature kUserLevelMemoryPressureSignal;
-BLINK_COMMON_EXPORT extern const base::Feature kFirstContentfulPaintPlusPlus;
 BLINK_COMMON_EXPORT extern const base::Feature kFreezePurgeMemoryAllPagesFrozen;
 BLINK_COMMON_EXPORT extern const base::Feature kFreezeUserAgent;
 BLINK_COMMON_EXPORT extern const base::Feature kImplicitRootScroller;
+BLINK_COMMON_EXPORT extern const base::Feature kCSSOMViewScrollCoordinates;
 BLINK_COMMON_EXPORT extern const base::Feature kCSSBackdropFilter;
 BLINK_COMMON_EXPORT extern const base::Feature kDisplayLocking;
 BLINK_COMMON_EXPORT extern const base::Feature kFastBorderRadius;
@@ -49,6 +47,8 @@ BLINK_COMMON_EXPORT extern const base::Feature kRTCOfferExtmapAllowMixed;
 BLINK_COMMON_EXPORT extern const base::Feature kWebRtcHWH264Encoding;
 BLINK_COMMON_EXPORT extern const base::Feature kWebRtcHWVP8Encoding;
 BLINK_COMMON_EXPORT extern const base::Feature kWebRtcHWVP9Encoding;
+BLINK_COMMON_EXPORT extern const base::Feature kWebRtcMultiplexCodec;
+BLINK_COMMON_EXPORT extern const base::Feature kWebRtcHideLocalIpsWithMdns;
 
 #if BUILDFLAG(RTC_USE_H264) && BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
 BLINK_COMMON_EXPORT extern const base::Feature kWebRtcH264WithOpenH264FFmpeg;
@@ -56,11 +56,7 @@ BLINK_COMMON_EXPORT extern const base::Feature kWebRtcH264WithOpenH264FFmpeg;
 
 BLINK_COMMON_EXPORT extern const base::Feature kResourceLoadViaDataPipe;
 BLINK_COMMON_EXPORT extern const base::Feature
-    kServiceWorkerIsolateInForeground;
-BLINK_COMMON_EXPORT extern const base::Feature
     kServiceWorkerImportedScriptUpdateCheck;
-BLINK_COMMON_EXPORT extern const base::Feature
-    kServiceWorkerAggressiveCodeCache;
 BLINK_COMMON_EXPORT extern const base::Feature kServiceWorkerUpdateDelay;
 BLINK_COMMON_EXPORT extern const base::Feature kStopInBackground;
 BLINK_COMMON_EXPORT extern const base::Feature
@@ -83,13 +79,9 @@ BLINK_COMMON_EXPORT extern const base::Feature kDecodeJpeg420ImagesToYUV;
 BLINK_COMMON_EXPORT extern const base::Feature kDecodeLossyWebPImagesToYUV;
 
 BLINK_COMMON_EXPORT extern const base::Feature
-    kSendPreviewsLoadingHintsBeforeCommit;
-
-BLINK_COMMON_EXPORT extern const base::Feature
     kWebFontsCacheAwareTimeoutAdaption;
 BLINK_COMMON_EXPORT extern const base::Feature
     kBlockingFocusWithoutUserActivation;
-BLINK_COMMON_EXPORT extern const base::Feature kScrollbarInjectScrollGestures;
 
 BLINK_COMMON_EXPORT extern const base::Feature kAudioWorkletRealtimeThread;
 
@@ -110,8 +102,6 @@ BLINK_COMMON_EXPORT bool IsPlzDedicatedWorkerEnabled();
 
 BLINK_COMMON_EXPORT extern const base::Feature kCanvasAlwaysDeferral;
 
-BLINK_COMMON_EXPORT extern const base::Feature kStreamsNative;
-
 // Blink garbage collection.
 BLINK_COMMON_EXPORT extern const base::Feature kBlinkHeapCompaction;
 BLINK_COMMON_EXPORT extern const base::Feature kBlinkHeapConcurrentMarking;
@@ -119,7 +109,6 @@ BLINK_COMMON_EXPORT extern const base::Feature kBlinkHeapConcurrentSweeping;
 BLINK_COMMON_EXPORT extern const base::Feature kBlinkHeapIncrementalMarking;
 BLINK_COMMON_EXPORT extern const base::Feature
     kBlinkHeapIncrementalMarkingStress;
-BLINK_COMMON_EXPORT extern const base::Feature kBlinkHeapUnifiedGCScheduling;
 
 BLINK_COMMON_EXPORT extern const base::Feature kBufferingBytesConsumerDelay;
 BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
@@ -136,6 +125,12 @@ BLINK_COMMON_EXPORT extern const base::Feature
 
 BLINK_COMMON_EXPORT extern const base::Feature
     kLowerJavaScriptPriorityWhenForceDeferred;
+
+BLINK_COMMON_EXPORT extern const base::Feature kARIAAnnotationRoles;
+
+BLINK_COMMON_EXPORT extern const base::Feature kDisableDirectlyCompositedImages;
+
+BLINK_COMMON_EXPORT extern const base::Feature kSetLowPriorityForBeacon;
 
 }  // namespace features
 }  // namespace blink

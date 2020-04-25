@@ -26,6 +26,7 @@
     "extension_types": ["platform_app"],
     "min_manifest_version": 2,
     "whitelist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C",   // Vivaldi
       // Keep this list in sync with extensions_misc::kHangoutsExtensionIds but
       // omit the Packaged App ids.
       "53041A2FA309EECED01FFC751E7399186E860B2C",  // Hangouts Production.
@@ -33,8 +34,7 @@
       "E7E2461CE072DF036CF9592740196159E2D7C089",  // Hangouts Alpha.
       "A74A4D44C7CFCD8844830E6140C8D763E12DD8F3",  // Hangouts Beta.
 
-      "5107DE9024C329EEA9C9A72D94C16723790C6422", // Apps Debugger
-      "A414F2F4543AC9C68DDF663D0A459E6053E3373C"   // Vivaldi
+      "5107DE9024C329EEA9C9A72D94C16723790C6422" // Apps Debugger
     ]
   },
   "app.background": {
@@ -333,8 +333,8 @@
     {
       "channel": "stable",
       "extension_types": [
-        "extension", "legacy_packaged_app", "hosted_app",
-        "platform_app"
+        "platform_app",
+        "extension", "legacy_packaged_app", "hosted_app"
       ]
     },
     {

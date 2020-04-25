@@ -7,6 +7,7 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/profiles/profile.h"
@@ -141,7 +142,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientSecondaryAccountSyncTest,
   // set first-time setup to complete.
   secondary_account_helper::MakeAccountPrimary(profile(), "user@email.com");
   GetSyncService(0)->GetUserSettings()->SetSyncRequested(true);
-  GetSyncService(0)->GetUserSettings()->SetFirstSetupComplete();
+  GetSyncService(0)->GetUserSettings()->SetFirstSetupComplete(
+      syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
 
   EXPECT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());
   EXPECT_EQ(syncer::SyncService::TransportState::ACTIVE,
@@ -207,6 +209,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSecondaryAccountSyncTest,
   ASSERT_FALSE(prefs.GetCacheGuid().empty());
 
   std::string old_cache_guid;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   ASSERT_TRUE(
       base::ReadFileToString(GetTestFilePathForCacheGuid(), &old_cache_guid));
   ASSERT_FALSE(old_cache_guid.empty());

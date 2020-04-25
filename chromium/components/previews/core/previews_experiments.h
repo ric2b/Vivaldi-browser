@@ -126,10 +126,6 @@ bool LitePagePreviewsTriggerOnLocalhost();
 // page hints for the host.
 bool LitePagePreviewsOverridePageHints();
 
-// The maximum number of times that a Lite Page Redirect preview should restart
-// a navigation.
-size_t LitePageRedirectPreviewMaxNavigationRestarts();
-
 // Whether we should preconnect to the lite page redirect server or the origin.
 bool LitePageRedirectPreviewShouldPreconnect();
 
@@ -145,6 +141,12 @@ bool LitePageRedirectPreviewIgnoresOptimizationGuideFilter();
 // only been attempted when a probe to the previews server has completed
 // successfully.
 bool LitePageRedirectOnlyTriggerOnSuccessfulProbe();
+
+// Whether the preview should trigger on API page transitions.
+bool LitePageRedirectTriggerOnAPITransition();
+
+// Whether the preview should trigger on forward/back page transitions.
+bool LitePageRedirectValidateForwardBackTransition();
 
 // The URL to probe on the lite pages server.
 GURL LitePageRedirectProbeURL();

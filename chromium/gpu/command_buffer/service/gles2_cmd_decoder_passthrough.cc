@@ -699,6 +699,15 @@ GLES2Decoder::Error GLES2DecoderPassthroughImpl::DoCommandsImpl(
   if (entries_processed)
     *entries_processed = process_pos;
 
+#if defined(OS_MACOSX)
+  // Aggressively call glFlush on macOS. This is the only fix that has been
+  // found so far to avoid crashes on Intel drivers. The workaround
+  // isn't needed for WebGL contexts, though.
+  // https://crbug.com/863817
+  if (!feature_info_->IsWebGLContext())
+    context_->FlushForDriverCrashWorkaround();
+#endif
+
   return result;
 }
 
@@ -1747,6 +1756,11 @@ void GLES2DecoderPassthroughImpl::BindOnePendingImage(
   if (!image)
     return;
 
+  // Because the binding is deferred, this texture may not be currently bound
+  // any more. Bind it again.
+  GLenum texture_type = TextureTargetToTextureType(target);
+  api()->glBindTextureFn(texture_type, texture->service_id());
+
   // TODO: internalformat?
   if (image->ShouldBindOrCopy() == gl::GLImage::BIND)
     image->BindTexImage(target);
@@ -1756,6 +1770,14 @@ void GLES2DecoderPassthroughImpl::BindOnePendingImage(
   // If copy / bind fail, then we could keep the bind state the same.
   // However, for now, we only try once.
   texture->set_is_bind_pending(false);
+
+  // Re-bind the previous texture
+  const BoundTexture& bound_texture =
+      bound_textures_[static_cast<size_t>(GLenumToTextureTarget(texture_type))]
+                     [active_texture_unit_];
+  GLuint prev_texture =
+      bound_texture.texture ? bound_texture.texture->service_id() : 0;
+  api()->glBindTextureFn(texture_type, prev_texture);
 
   // Update any binding points that are currently bound for this texture.
   RebindTexture(texture);

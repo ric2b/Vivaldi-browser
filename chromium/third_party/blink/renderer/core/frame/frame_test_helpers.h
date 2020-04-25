@@ -39,11 +39,12 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "cc/test/test_task_graph_runner.h"
+#include "cc/trees/layer_tree_host.h"
 #include "content/renderer/compositor/layer_tree_view.h"
 #include "content/test/stub_layer_tree_view_delegate.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
-#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/test/web_fake_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_mouse_event.h"
@@ -213,10 +214,8 @@ class TestWebWidgetClient : public WebWidgetClient {
   // WebWidgetClient implementation.
   void ScheduleAnimation() override { animation_scheduled_ = true; }
   void SetRootLayer(scoped_refptr<cc::Layer> layer) override;
-  void RegisterViewportLayers(const cc::ViewportLayers& layOAers) override;
   void RegisterSelection(const cc::LayerSelection& selection) override;
   void SetBackgroundColor(SkColor color) override;
-  void SetAllowGpuRasterization(bool allow) override;
   void SetPageScaleStateAndLimits(float page_scale_factor,
                                   bool is_pinch_gesture_active,
                                   float minimum,
@@ -243,7 +242,6 @@ class TestWebWidgetClient : public WebWidgetClient {
                                 bool shrink_viewport) override;
   viz::FrameSinkId GetFrameSinkId() override;
 
-  content::LayerTreeView* layer_tree_view() { return layer_tree_view_; }
   cc::LayerTreeHost* layer_tree_host() {
     return layer_tree_view_->layer_tree_host();
   }
@@ -294,7 +292,6 @@ class TestWebViewClient : public WebViewClient {
   // WebViewClient overrides.
   bool CanHandleGestureEvent() override { return true; }
   bool CanUpdateLayout() override { return true; }
-  blink::WebScreenInfo GetScreenInfo() override { return {}; }
   WebView* CreateView(WebLocalFrame* opener,
                       const WebURLRequest&,
                       const WebWindowFeatures&,
@@ -371,8 +368,8 @@ class WebViewHelper {
   void Reset();
 
   WebViewImpl* GetWebView() const { return web_view_; }
-  content::LayerTreeView* GetLayerTreeView() const {
-    return test_web_widget_client_->layer_tree_view();
+  cc::LayerTreeHost* GetLayerTreeHost() const {
+    return test_web_widget_client_->layer_tree_host();
   }
   TestWebWidgetClient* GetWebWidgetClient() const {
     return test_web_widget_client_;

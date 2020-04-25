@@ -44,7 +44,6 @@
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
 #include "third_party/blink/public/platform/web_prerendering_support.h"
-#include "third_party/blink/public/platform/web_rtc_certificate_generator.h"
 #include "third_party/blink/public/platform/web_rtc_peer_connection_handler.h"
 #include "third_party/blink/public/platform/websocket_handshake_throttle.h"
 #include "third_party/blink/renderer/platform/bindings/parkable_string_manager.h"
@@ -223,11 +222,11 @@ void Platform::InitializeCommon(Platform* platform,
   Thread::SetMainThread(std::move(main_thread));
 
   ProcessHeap::Init();
-  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
-      BlinkGCMemoryDumpProvider::Instance(), "BlinkGC",
-      base::ThreadTaskRunnerHandle::Get());
 
-  ThreadState::AttachMainThread();
+  ThreadState* thread_state = ThreadState::AttachMainThread();
+  new BlinkGCMemoryDumpProvider(
+      thread_state, base::ThreadTaskRunnerHandle::Get(),
+      BlinkGCMemoryDumpProvider::HeapType::kBlinkMainThread);
 
   MemoryPressureListenerRegistry::Initialize();
 
@@ -350,21 +349,6 @@ std::unique_ptr<cricket::PortAllocator> Platform::CreateWebRtcPortAllocator(
 
 std::unique_ptr<webrtc::AsyncResolverFactory>
 Platform::CreateWebRtcAsyncResolverFactory() {
-  return nullptr;
-}
-
-std::unique_ptr<WebRTCCertificateGenerator>
-Platform::CreateRTCCertificateGenerator() {
-  return nullptr;
-}
-
-std::unique_ptr<webrtc::RtpCapabilities> Platform::GetRtpSenderCapabilities(
-    const WebString& kind) {
-  return nullptr;
-}
-
-std::unique_ptr<webrtc::RtpCapabilities> Platform::GetRtpReceiverCapabilities(
-    const WebString& kind) {
   return nullptr;
 }
 

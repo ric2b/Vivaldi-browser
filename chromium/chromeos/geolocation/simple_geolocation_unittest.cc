@@ -115,12 +115,12 @@ class TestGeolocationAPILoaderFactory : public network::TestURLLoaderFactory {
 
  private:
   void AddResponseWithCode(int error_code) {
-    network::ResourceResponseHead response_head;
-    response_head.headers = base::MakeRefCounted<net::HttpResponseHeaders>("");
-    response_head.headers->AddHeader("Content-Type: application/json");
+    auto response_head = network::mojom::URLResponseHead::New();
+    response_head->headers = base::MakeRefCounted<net::HttpResponseHeaders>("");
+    response_head->headers->AddHeader("Content-Type: application/json");
     // If AddResponse() is called multiple times for the same URL, the last
     // one is the one used so there is no need for ClearResponses().
-    AddResponse(url_, response_head, response_,
+    AddResponse(url_, std::move(response_head), response_,
                 network::URLLoaderCompletionStatus(error_code));
   }
 
@@ -182,7 +182,7 @@ class WirelessTestMonitor : public SimpleGeolocationRequestTestMonitor {
 
 class SimpleGeolocationTest : public testing::Test {
  private:
-  base::test::TaskEnvironment task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
 };
 
 TEST_F(SimpleGeolocationTest, ResponseOK) {
@@ -368,8 +368,8 @@ class SimpleGeolocationWirelessTest : public ::testing::TestWithParam<bool> {
   }
 
  protected:
-  base::test::TaskEnvironment task_environment_{
-      base::test::TaskEnvironment::MainThreadType::UI};
+  base::test::SingleThreadTaskEnvironment task_environment_{
+      base::test::SingleThreadTaskEnvironment::MainThreadType::UI};
   std::unique_ptr<GeolocationHandler> geolocation_handler_;
   ShillManagerClient::TestInterface* manager_test_;
   WifiAccessPointVector wifi_access_points_;

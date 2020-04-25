@@ -53,8 +53,7 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
  public:
   explicit TestNavigationLoaderInterceptor(
       base::Optional<network::ResourceRequest>* most_recent_resource_request)
-      : most_recent_resource_request_(most_recent_resource_request),
-        resource_scheduler_(false) {
+      : most_recent_resource_request_(most_recent_resource_request) {
     net::URLRequestContextBuilder context_builder;
     context_builder.set_proxy_resolution_service(
         net::ProxyResolutionService::CreateDirect());
@@ -95,7 +94,8 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
         std::move(request), 0 /* options */, resource_request,
         std::move(client), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
         0, /* request_id */
-        resource_scheduler_client_, nullptr /* keepalive_statistics_recorder */,
+        0 /* keepalive_request_size */, resource_scheduler_client_,
+        nullptr /* keepalive_statistics_recorder */,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */);
   }
@@ -107,7 +107,8 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
       network::mojom::URLLoaderPtr* loader,
       network::mojom::URLLoaderClientRequest* client_request,
       ThrottlingURLLoader* url_loader,
-      bool* skip_other_interceptors) override {
+      bool* skip_other_interceptors,
+      bool* will_return_unsafe_redirect) override {
     return false;
   }
 

@@ -13,6 +13,7 @@
 #include "content/browser/web_package/signed_exchange_prefetch_metric_recorder.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
@@ -81,7 +82,8 @@ class CONTENT_EXPORT PrefetchURLLoaderService final
                             network::mojom::URLLoaderClientPtr client,
                             const net::MutableNetworkTrafficAnnotationTag&
                                 traffic_annotation) override;
-  void Clone(network::mojom::URLLoaderFactoryRequest request) override;
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
+      override;
 
   // This ensures that the BindContext's |cross_origin_factory| member exists
   // by setting it to a special URLLoaderFactory created by the current
@@ -90,14 +92,17 @@ class CONTENT_EXPORT PrefetchURLLoaderService final
   bool IsValidCrossOriginPrefetch(
       const network::ResourceRequest& resource_request);
 
+  base::UnguessableToken GenerateRecursivePrefetchToken(
+      base::WeakPtr<BindContext> bind_context,
+      const network::ResourceRequest& request);
+
   // blink::mojom::RendererPreferenceWatcher.
   void NotifyUpdate(blink::mojom::RendererPreferencesPtr new_prefs) override;
 
   // For URLLoaderThrottlesGetter.
   std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
-  CreateURLLoaderThrottles(
-      const network::ResourceRequest& request,
-      base::RepeatingCallback<int(void)> frame_tree_node_id_getter);
+  CreateURLLoaderThrottles(const network::ResourceRequest& request,
+                           int frame_tree_node_id);
 
   scoped_refptr<URLLoaderFactoryGetter> loader_factory_getter_;
   BrowserContext* browser_context_ = nullptr;

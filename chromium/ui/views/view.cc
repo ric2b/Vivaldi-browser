@@ -143,6 +143,12 @@ View::~View() {
 
   for (ui::Layer* layer_beneath : layers_beneath_)
     layer_beneath->RemoveObserver(this);
+
+  // Clearing properties explicitly here lets us guarantee that properties
+  // outlive |this| (at least the View part of |this|). This is intentionally
+  // called at the end so observers can examine properties inside
+  // OnViewIsDeleting(), for instance.
+  ClearProperties();
 }
 
 // Tree operations -------------------------------------------------------------
@@ -482,6 +488,11 @@ PropertyChangedSubscription View::AddEnabledChangedCallback(
 }
 
 View::Views View::GetChildrenInZOrder() {
+  if (layout_manager_) {
+    const auto result = layout_manager_->GetChildViewsInPaintOrder(this);
+    DCHECK_EQ(children_.size(), result.size());
+    return result;
+  }
   return children_;
 }
 
@@ -1042,7 +1053,7 @@ const ui::NativeTheme* View::GetNativeTheme() const {
   return ui::NativeTheme::GetInstanceForNativeUi();
 }
 
-void View::SetNativeTheme(ui::NativeTheme* theme) {
+void View::SetNativeThemeForTesting(ui::NativeTheme* theme) {
   ui::NativeTheme* original_native_theme = GetNativeTheme();
   native_theme_ = theme;
   if (native_theme_ != original_native_theme)

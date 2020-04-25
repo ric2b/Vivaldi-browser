@@ -92,13 +92,13 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {CONTENT_SETTINGS_TYPE_HID_CHOOSER_DATA, kHidChooserDataGroupType},
     {CONTENT_SETTINGS_TYPE_NATIVE_FILE_SYSTEM_WRITE_GUARD,
      "native-file-system-write"},
+    {CONTENT_SETTINGS_TYPE_MIXEDSCRIPT, "mixed-script"},
 
     // Add new content settings here if a corresponding Javascript string
     // representation for it is not required. Note some exceptions do have UI in
     // Content Settings but do not require a separate string.
     {CONTENT_SETTINGS_TYPE_DEFAULT, nullptr},
     {CONTENT_SETTINGS_TYPE_AUTO_SELECT_CERTIFICATE, nullptr},
-    {CONTENT_SETTINGS_TYPE_MIXEDSCRIPT, nullptr},
     {CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS, nullptr},
     {CONTENT_SETTINGS_TYPE_APP_BANNER, nullptr},
     {CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, nullptr},
@@ -658,7 +658,7 @@ base::Value CreateChooserExceptionObject(
   base::Value sites(base::Value::Type::LIST);
   for (auto& one_provider_sites : all_provider_sites) {
     for (auto& site : one_provider_sites) {
-      sites.GetList().push_back(std::move(site));
+      sites.Append(std::move(site));
     }
   }
 
@@ -712,7 +712,7 @@ base::Value GetChooserExceptionListFromProfile(
     const base::Value& object = all_chooser_objects_entry.first.second;
     const ChooserExceptionDetails& chooser_exception_details =
         all_chooser_objects_entry.second;
-    exceptions.GetList().push_back(CreateChooserExceptionObject(
+    exceptions.Append(CreateChooserExceptionObject(
         name, object, chooser_type.name, chooser_exception_details));
   }
 

@@ -27,6 +27,10 @@ class ConvertableToTraceFormat;
 class SingleThreadTaskRunner;
 }
 
+namespace viz {
+struct FrameTimingDetails;
+}
+
 namespace cc {
 
 class CompositorTimingHistory;
@@ -63,6 +67,7 @@ class SchedulerClient {
   // Functions used for reporting animation targeting UMA, crbug.com/758439.
   virtual size_t CompositedAnimationsCount() const = 0;
   virtual size_t MainThreadAnimationsCount() const = 0;
+  virtual bool HasCustomPropertyAnimations() const = 0;
   virtual bool CurrentFrameHadRAF() const = 0;
   virtual bool NextFrameHasPendingRAF() const = 0;
 
@@ -182,7 +187,7 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
   // |DidPresentCompositorFrame| is called when the renderer receives
   // presentation feedback.
   void DidPresentCompositorFrame(uint32_t frame_token,
-                                 base::TimeTicks presentation_time);
+                                 const viz::FrameTimingDetails& details);
 
   void DidLoseLayerTreeFrameSink();
   void DidCreateAndInitializeLayerTreeFrameSink();

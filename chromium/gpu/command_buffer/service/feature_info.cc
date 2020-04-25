@@ -388,6 +388,17 @@ void FeatureInfo::EnableEXTColorBufferHalfFloat() {
   feature_flags_.enable_color_buffer_half_float = true;
 }
 
+void FeatureInfo::EnableEXTTextureFilterAnisotropic() {
+  if (!ext_texture_filter_anisotropic_available_)
+    return;
+  AddExtensionString("GL_EXT_texture_filter_anisotropic");
+  validators_.texture_parameter.AddValue(GL_TEXTURE_MAX_ANISOTROPY_EXT);
+  validators_.g_l_state.AddValue(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+  if (IsWebGL2OrES3OrHigherContext()) {
+    validators_.sampler_parameter.AddValue(GL_TEXTURE_MAX_ANISOTROPY_EXT);
+  }
+}
+
 void FeatureInfo::EnableCHROMIUMColorBufferFloatRGBA() {
   if (!feature_flags_.chromium_color_buffer_float_rgba)
     return;
@@ -426,6 +437,11 @@ void FeatureInfo::EnableOESTextureHalfFloatLinear() {
     return;
   AddExtensionString("GL_OES_texture_half_float_linear");
   feature_flags_.enable_texture_half_float_linear = true;
+
+  // TODO(capn) : Re-enable this once we have ANGLE+SwiftShader supporting
+  // IOSurfaces.
+  if (workarounds_.disable_half_float_for_gmb)
+    return;
   feature_flags_.gpu_memory_buffer_formats.Add(gfx::BufferFormat::RGBA_F16);
 }
 
@@ -597,9 +613,9 @@ void FeatureInfo::InitializeFeatures() {
 
   // Check if we should enable GL_EXT_texture_filter_anisotropic.
   if (gfx::HasExtension(extensions, "GL_EXT_texture_filter_anisotropic")) {
-    AddExtensionString("GL_EXT_texture_filter_anisotropic");
-    validators_.texture_parameter.AddValue(GL_TEXTURE_MAX_ANISOTROPY_EXT);
-    validators_.g_l_state.AddValue(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+    ext_texture_filter_anisotropic_available_ = true;
+    if (!disallowed_features_.ext_texture_filter_anisotropic)
+      EnableEXTTextureFilterAnisotropic();
   }
 
   // Check if we should support GL_OES_packed_depth_stencil and/or
@@ -1044,12 +1060,12 @@ void FeatureInfo::InitializeFeatures() {
     validators_.texture_internal_format_storage.AddValue(GL_ETC1_RGB8_OES);
   }
 
-  // Expose GL_CHROMIUM_compressed_texture_etc when ANGLE exposes it directly or
+  // Expose GL_ANGLE_compressed_texture_etc when ANGLE exposes it directly or
   // running on top of a non-ANGLE ES driver. We assume that this implies native
   // support of these formats.
-  if (gfx::HasExtension(extensions, "GL_CHROMIUM_compressed_texture_etc") ||
+  if (gfx::HasExtension(extensions, "GL_ANGLE_compressed_texture_etc") ||
       (gl_version_info_->is_es3 && !gl_version_info_->is_angle)) {
-    AddExtensionString("GL_CHROMIUM_compressed_texture_etc");
+    AddExtensionString("GL_ANGLE_compressed_texture_etc");
     validators_.UpdateETCCompressedTextureFormats();
   }
 

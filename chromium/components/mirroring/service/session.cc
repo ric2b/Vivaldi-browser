@@ -41,7 +41,7 @@
 #include "media/mojo/clients/mojo_video_encode_accelerator.h"
 #include "media/video/video_encode_accelerator.h"
 #include "mojo/public/cpp/base/shared_memory_utils.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "net/base/ip_endpoint.h"
 #include "services/viz/public/cpp/gpu/gpu.h"
@@ -373,13 +373,14 @@ class Session::AudioCapturingCallback final
   DISALLOW_COPY_AND_ASSIGN(AudioCapturingCallback);
 };
 
-Session::Session(mojom::SessionParametersPtr session_params,
-                 const gfx::Size& max_resolution,
-                 mojom::SessionObserverPtr observer,
-                 mojom::ResourceProviderPtr resource_provider,
-                 mojom::CastMessageChannelPtr outbound_channel,
-                 mojom::CastMessageChannelRequest inbound_channel,
-                 scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
+Session::Session(
+    mojom::SessionParametersPtr session_params,
+    const gfx::Size& max_resolution,
+    mojo::PendingRemote<mojom::SessionObserver> observer,
+    mojo::PendingRemote<mojom::ResourceProvider> resource_provider,
+    mojo::PendingRemote<mojom::CastMessageChannel> outbound_channel,
+    mojo::PendingReceiver<mojom::CastMessageChannel> inbound_channel,
+    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
     : session_params_(*session_params),
       state_(MIRRORING),
       observer_(std::move(observer)),
@@ -392,7 +393,8 @@ Session::Session(mojom::SessionParametersPtr session_params,
   DCHECK(resource_provider_);
   mirror_settings_.SetResolutionContraints(max_resolution.width(),
                                            max_resolution.height());
-  resource_provider_->GetNetworkContext(mojo::MakeRequest(&network_context_));
+  resource_provider_->GetNetworkContext(
+      network_context_.BindNewPipeAndPassReceiver());
 
   if (session_params->type != mojom::SessionType::AUDIO_ONLY &&
       io_task_runner) {
@@ -737,8 +739,9 @@ void Session::OnAnswer(const std::vector<FrameSenderConfig>& audio_configs,
       video_stream_ = std::make_unique<VideoRtpStream>(
           std::move(video_sender), weak_factory_.GetWeakPtr());
       if (!video_capture_client_) {
-        media::mojom::VideoCaptureHostPtr video_host;
-        resource_provider_->GetVideoCaptureHost(mojo::MakeRequest(&video_host));
+        mojo::PendingRemote<media::mojom::VideoCaptureHost> video_host;
+        resource_provider_->GetVideoCaptureHost(
+            video_host.InitWithNewPipeAndPassReceiver());
         video_capture_client_ = std::make_unique<VideoCaptureClient>(
             mirror_settings_.GetVideoCaptureParams(), std::move(video_host));
         video_capture_client_->Start(
@@ -787,9 +790,10 @@ void Session::OnResponseParsingError(const std::string& error_message) {
   // TODO(xjz): Log the |error_message| in the mirroring logs.
 }
 
-void Session::CreateAudioStream(mojom::AudioStreamCreatorClientPtr client,
-                                const media::AudioParameters& params,
-                                uint32_t shared_memory_count) {
+void Session::CreateAudioStream(
+    mojo::PendingRemote<mojom::AudioStreamCreatorClient> client,
+    const media::AudioParameters& params,
+    uint32_t shared_memory_count) {
   resource_provider_->CreateAudioStream(std::move(client), params,
                                         shared_memory_count);
 }
@@ -893,10 +897,10 @@ void Session::CreateAndSendOffer() {
 }
 
 void Session::ConnectToRemotingSource(
-    media::mojom::RemoterPtr remoter,
-    media::mojom::RemotingSourceRequest request) {
+    mojo::PendingRemote<media::mojom::Remoter> remoter,
+    mojo::PendingReceiver<media::mojom::RemotingSource> receiver) {
   resource_provider_->ConnectToRemotingSource(std::move(remoter),
-                                              std::move(request));
+                                              std::move(receiver));
 }
 
 void Session::RequestRemotingStreaming() {

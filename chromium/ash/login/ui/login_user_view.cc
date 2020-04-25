@@ -41,7 +41,7 @@ namespace ash {
 namespace {
 
 // Vertical spacing between icon, label, and authentication UI.
-constexpr int kVerticalSpacingBetweenEntriesDp = 32;
+constexpr int kVerticalSpacingBetweenEntriesDp = 24;
 // Horizontal spacing between username label and the dropdown icon.
 constexpr int kDistanceBetweenUsernameAndDropdownDp = 8;
 // Distance between user icon and the user label in small/extra-small layouts.
@@ -549,7 +549,7 @@ void LoginUserView::ButtonPressed(views::Button* sender,
         menu_->GetBubbleOpener() && menu_->GetBubbleOpener()->HasFocus();
 
     if (!menu_->parent())
-      login_views_utils::GetTopLevelParentView(this)->AddChildView(menu_);
+      login_views_utils::GetBubbleContainer(this)->AddChildView(menu_);
 
     // Reset state in case the remove-user button was clicked once previously.
     menu_->ResetState();

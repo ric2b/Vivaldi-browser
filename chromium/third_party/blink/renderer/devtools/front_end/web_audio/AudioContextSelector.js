@@ -6,19 +6,22 @@
  * @implements {UI.SoftDropDown.Delegate<!Protocol.WebAudio.BaseAudioContext>}
  */
 WebAudio.AudioContextSelector = class extends Common.Object {
-  constructor(title) {
+  constructor() {
     super();
+
+    /** @type {string} */
+    this._placeholderText = ls`(no recordings)`;
 
     /** @type {!UI.ListModel<!Protocol.WebAudio.BaseAudioContext>} */
     this._items = new UI.ListModel();
 
     /** @type {!UI.SoftDropDown<!Protocol.WebAudio.BaseAudioContext>} */
     this._dropDown = new UI.SoftDropDown(this._items, this);
-    this._dropDown.setPlaceholderText(ls`(no recordings)`);
+    this._dropDown.setPlaceholderText(this._placeholderText);
 
     this._toolbarItem = new UI.ToolbarItem(this._dropDown.element);
     this._toolbarItem.setEnabled(false);
-    this._toolbarItem.setTitle(title);
+    this._toolbarItem.setTitle(ls`Audio context: ${this._placeholderText}`);
     this._items.addEventListener(UI.ListModel.Events.ItemsReplaced, this._onListItemReplaced, this);
     this._toolbarItem.element.classList.add('toolbar-has-dropdown');
 
@@ -27,7 +30,11 @@ WebAudio.AudioContextSelector = class extends Common.Object {
   }
 
   _onListItemReplaced() {
-    this._toolbarItem.setEnabled(!!this._items.length);
+    const hasItems = !!this._items.length;
+    this._toolbarItem.setEnabled(hasItems);
+    if (!hasItems) {
+      this._toolbarItem.setTitle(ls`Audio context: ${this._placeholderText}`);
+    }
   }
 
   /**
@@ -38,8 +45,9 @@ WebAudio.AudioContextSelector = class extends Common.Object {
     this._items.insert(this._items.length, context);
 
     // Select if this is the first item.
-    if (this._items.length === 1)
+    if (this._items.length === 1) {
       this._dropDown.selectItem(context);
+    }
   }
 
   /**
@@ -48,8 +56,9 @@ WebAudio.AudioContextSelector = class extends Common.Object {
   contextDestroyed(event) {
     const contextId = /** @type {!Protocol.WebAudio.GraphObjectId} */ (event.data);
     const contextIndex = this._items.findIndex(context => context.contextId === contextId);
-    if (contextIndex > -1)
+    if (contextIndex > -1) {
       this._items.remove(contextIndex);
+    }
   }
 
   /**
@@ -59,13 +68,13 @@ WebAudio.AudioContextSelector = class extends Common.Object {
     const changedContext = /** @type {!Protocol.WebAudio.BaseAudioContext} */ (event.data);
     const contextIndex = this._items.findIndex(context => context.contextId === changedContext.contextId);
     if (contextIndex > -1) {
-      this._items.remove(contextIndex);
-      this._items.insert(contextIndex, changedContext);
+      this._items.replace(contextIndex, changedContext);
 
       // If the changed context is currently selected by user. Re-select it
       // because the actual element is replaced with a new one.
-      if (this._selectedContext && this._selectedContext.contextId === changedContext.contextId)
+      if (this._selectedContext && this._selectedContext.contextId === changedContext.contextId) {
         this._dropDown.selectItem(changedContext);
+      }
     }
   }
 
@@ -78,7 +87,7 @@ WebAudio.AudioContextSelector = class extends Common.Object {
     const element = createElementWithClass('div');
     const shadowRoot = UI.createShadowRootWithCoreStyles(element, 'web_audio/audioContextSelector.css');
     const title = shadowRoot.createChild('div', 'title');
-    title.createTextChild(this.titleFor(item).trimEnd(100));
+    title.createTextChild(this.titleFor(item).trimEndWithMaxLength(100));
     return element;
   }
 
@@ -86,8 +95,9 @@ WebAudio.AudioContextSelector = class extends Common.Object {
    * @return {?Protocol.WebAudio.BaseAudioContext}
    */
   selectedContext() {
-    if (!this._selectedContext)
+    if (!this._selectedContext) {
       return null;
+    }
 
     return this._selectedContext;
   }
@@ -100,10 +110,12 @@ WebAudio.AudioContextSelector = class extends Common.Object {
    * @param {?Element} toElement
    */
   highlightedItemChanged(from, to, fromElement, toElement) {
-    if (fromElement)
+    if (fromElement) {
       fromElement.classList.remove('highlighted');
-    if (toElement)
+    }
+    if (toElement) {
       toElement.classList.add('highlighted');
+    }
   }
 
   /**
@@ -120,12 +132,15 @@ WebAudio.AudioContextSelector = class extends Common.Object {
    * @param {?Protocol.WebAudio.BaseAudioContext} item
    */
   itemSelected(item) {
-    if (!item)
+    if (!item) {
       return;
+    }
 
     // It's possible that no context is selected yet.
-    if (!this._selectedContext || this._selectedContext.contextId !== item.contextId)
+    if (!this._selectedContext || this._selectedContext.contextId !== item.contextId) {
       this._selectedContext = item;
+      this._toolbarItem.setTitle(ls`Audio context: ${this.titleFor(item)}`);
+    }
 
     this.dispatchEventToListeners(WebAudio.AudioContextSelector.Events.ContextSelected, item);
   }

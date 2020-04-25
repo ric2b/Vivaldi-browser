@@ -7,6 +7,7 @@
 #import <UIKit/UIKit.h>
 
 #include "base/ios/ios_util.h"
+#include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
@@ -43,8 +44,7 @@
 #error "This file requires ARC support."
 #endif
 
-using namespace chrome_test_util;
-using namespace scanner;
+using scanner::CameraState;
 
 namespace {
 
@@ -74,7 +74,7 @@ id<GREYMatcher> VisibleInteractableEnabled() {
 
 // Returns the GREYMatcher for the button that closes the QR Scanner.
 id<GREYMatcher> QrScannerCloseButton() {
-  return ButtonWithAccessibilityLabel(
+  return chrome_test_util::ButtonWithAccessibilityLabel(
       [[ChromeIcon closeIcon] accessibilityLabel]);
 }
 
@@ -100,7 +100,7 @@ id<GREYMatcher> QrScannerTorchOnButton() {
 
 // Returns the GREYMatcher for the QR Scanner viewport caption.
 id<GREYMatcher> QrScannerViewportCaption() {
-  return StaticTextWithAccessibilityLabelId(
+  return chrome_test_util::StaticTextWithAccessibilityLabelId(
       IDS_IOS_QR_SCANNER_VIEWPORT_CAPTION);
 }
 
@@ -134,17 +134,43 @@ void TapButton(id<GREYMatcher> button) {
 // Appends the given |editText| to the |text| already in the omnibox and presses
 // the keyboard return key.
 void EditOmniboxTextAndTapKeyboardReturn(std::string text, NSString* editText) {
-  [[EarlGrey selectElementWithMatcher:OmniboxText(text)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(text)]
       performAction:grey_typeText([editText stringByAppendingString:@"\n"])];
 }
 
 // Presses the keyboard return key.
 void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
-  [[EarlGrey selectElementWithMatcher:OmniboxText(text)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(text)]
       performAction:grey_typeText(@"\n")];
 }
 
 }  // namespace
+
+// Override a QRScannerViewController voice search check, simulating voice
+// search being enabled. This doesn't reset the previous value, don't use
+// nested.
+@interface ScopedQRScannerVoiceSearchOverride : NSObject
+@property(nonatomic, weak) QRScannerViewController* scanner;
+@end
+
+@implementation ScopedQRScannerVoiceSearchOverride
+
+- (instancetype)initWithQRScanner:(QRScannerViewController*)QRScanner {
+  self = [super init];
+  if (self) {
+    _scanner = QRScanner;
+    [_scanner overrideVoiceOverCheck:YES];
+  }
+  return self;
+}
+
+- (void)dealloc {
+  [_scanner overrideVoiceOverCheck:NO];
+}
+
+@end
+
+#pragma mark - Test Case
 
 @interface QRScannerViewControllerTestCase : ChromeTestCase {
   GURL _testURL;
@@ -284,7 +310,7 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
 
 // Checks that the omnibox is visible and contains |text|.
 - (void)assertOmniboxIsVisibleWithText:(std::string)text {
-  [[EarlGrey selectElementWithMatcher:OmniboxText(text)]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(text)]
       assertWithMatcher:grey_notNil()];
 }
 
@@ -374,20 +400,20 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
 - (NSString*)dialogTitleForState:(CameraState)state {
   base::string16 appName = base::UTF8ToUTF16(version_info::GetProductName());
   switch (state) {
-    case CAMERA_AVAILABLE:
-    case CAMERA_NOT_LOADED:
+    case scanner::CAMERA_AVAILABLE:
+    case scanner::CAMERA_NOT_LOADED:
       return nil;
-    case CAMERA_IN_USE_BY_ANOTHER_APPLICATION:
+    case scanner::CAMERA_IN_USE_BY_ANOTHER_APPLICATION:
       return l10n_util::GetNSString(
           IDS_IOS_QR_SCANNER_CAMERA_IN_USE_ALERT_TITLE);
-    case CAMERA_PERMISSION_DENIED:
+    case scanner::CAMERA_PERMISSION_DENIED:
       return l10n_util::GetNSString(
           IDS_IOS_SCANNER_CAMERA_PERMISSIONS_HELP_TITLE_GO_TO_SETTINGS);
-    case CAMERA_UNAVAILABLE_DUE_TO_SYSTEM_PRESSURE:
-    case CAMERA_UNAVAILABLE:
+    case scanner::CAMERA_UNAVAILABLE_DUE_TO_SYSTEM_PRESSURE:
+    case scanner::CAMERA_UNAVAILABLE:
       return l10n_util::GetNSString(
           IDS_IOS_QR_SCANNER_CAMERA_UNAVAILABLE_ALERT_TITLE);
-    case MULTIPLE_FOREGROUND_APPS:
+    case scanner::MULTIPLE_FOREGROUND_APPS:
       return l10n_util::GetNSString(
           IDS_IOS_QR_SCANNER_MULTIPLE_FOREGROUND_APPS_ALERT_TITLE);
   }
@@ -660,9 +686,10 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
                 AVAuthorizationStatusAuthorized];
   [self swizzleCameraController:cameraControllerMock];
 
-  std::vector<CameraState> tests{MULTIPLE_FOREGROUND_APPS, CAMERA_UNAVAILABLE,
-                                 CAMERA_PERMISSION_DENIED,
-                                 CAMERA_IN_USE_BY_ANOTHER_APPLICATION};
+  std::vector<CameraState> tests{scanner::MULTIPLE_FOREGROUND_APPS,
+                                 scanner::CAMERA_UNAVAILABLE,
+                                 scanner::CAMERA_PERMISSION_DENIED,
+                                 scanner::CAMERA_IN_USE_BY_ANOTHER_APPLICATION};
 
   for (const CameraState& state : tests) {
     [self showQRScannerAndCheckLayoutWithCameraMock:cameraControllerMock];
@@ -689,14 +716,15 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
   [self swizzleCameraController:cameraControllerMock];
 
   // Change state to CAMERA_UNAVAILABLE.
-  CameraState currentState = CAMERA_UNAVAILABLE;
+  CameraState currentState = scanner::CAMERA_UNAVAILABLE;
   [self showQRScannerAndCheckLayoutWithCameraMock:cameraControllerMock];
   [self callCameraStateChanged:currentState];
   [self assertQRScannerIsPresentingADialogForState:currentState];
 
-  std::vector<CameraState> tests{
-      CAMERA_PERMISSION_DENIED, MULTIPLE_FOREGROUND_APPS,
-      CAMERA_IN_USE_BY_ANOTHER_APPLICATION, CAMERA_UNAVAILABLE};
+  std::vector<CameraState> tests{scanner::CAMERA_PERMISSION_DENIED,
+                                 scanner::MULTIPLE_FOREGROUND_APPS,
+                                 scanner::CAMERA_IN_USE_BY_ANOTHER_APPLICATION,
+                                 scanner::CAMERA_UNAVAILABLE};
 
   for (const CameraState& state : tests) {
     [self callCameraStateChanged:state];
@@ -723,9 +751,10 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
                 AVAuthorizationStatusAuthorized];
   [self swizzleCameraController:cameraControllerMock];
 
-  std::vector<CameraState> tests{CAMERA_IN_USE_BY_ANOTHER_APPLICATION,
-                                 CAMERA_UNAVAILABLE, MULTIPLE_FOREGROUND_APPS,
-                                 CAMERA_PERMISSION_DENIED};
+  std::vector<CameraState> tests{scanner::CAMERA_IN_USE_BY_ANOTHER_APPLICATION,
+                                 scanner::CAMERA_UNAVAILABLE,
+                                 scanner::MULTIPLE_FOREGROUND_APPS,
+                                 scanner::CAMERA_PERMISSION_DENIED};
 
   for (const CameraState& state : tests) {
     [self showQRScannerAndCheckLayoutWithCameraMock:cameraControllerMock];
@@ -733,7 +762,7 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
     [self assertQRScannerIsPresentingADialogForState:state];
 
     // Change state to CAMERA_AVAILABLE.
-    [self callCameraStateChanged:CAMERA_AVAILABLE];
+    [self callCameraStateChanged:scanner::CAMERA_AVAILABLE];
     [self assertQRScannerIsNotPresentingADialogForState:state];
     [self closeQRScannerWithCameraMock:cameraControllerMock];
   }
@@ -784,6 +813,56 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
       performAction:grey_tap()];
   [self assertModalOfClass:[QRScannerViewController class]
           isNotPresentedBy:[self currentViewController]];
+}
+
+// Test that the correct page is loaded if the scanner result is a URL which is
+// then manually edited when VoiceOver is enabled.
+- (void)testReceivingQRScannerURLResultWithVoiceOver {
+  id cameraControllerMock =
+      [self getCameraControllerMockWithAuthorizationStatus:
+                AVAuthorizationStatusAuthorized];
+  [self swizzleCameraController:cameraControllerMock];
+
+  // Open the QR scanner.
+  [self showQRScannerAndCheckLayoutWithCameraMock:cameraControllerMock];
+  [self callTorchAvailabilityChanged:YES];
+  [self assertQRScannerUIIsVisibleWithTorch:YES];
+
+  // Add override for the VoiceOver check.
+  QRScannerViewController* viewController =
+      base::mac::ObjCCast<QRScannerViewController>(
+          [[self currentViewController] presentedViewController]);
+  GREYAssertTrue(viewController, @"The QRScanner isn't presented.");
+  ScopedQRScannerVoiceSearchOverride* scopedOverride =
+      [[ScopedQRScannerVoiceSearchOverride alloc]
+          initWithQRScanner:viewController];
+
+  // Receive a scanned result from the camera.
+  [self addCameraControllerDismissalExpectations:cameraControllerMock];
+  [self callReceiveQRScannerResult:base::SysUTF8ToNSString(
+                                       _testURL.GetContent())];
+
+  // Fake the end of the VoiceOver announcement.
+  NSString* scannedAnnouncement = l10n_util::GetNSString(
+      IDS_IOS_SCANNER_SCANNED_ACCESSIBILITY_ANNOUNCEMENT);
+  [[NSNotificationCenter defaultCenter]
+      postNotificationName:UIAccessibilityAnnouncementDidFinishNotification
+                    object:nil
+                  userInfo:@{
+                    UIAccessibilityAnnouncementKeyStringValue :
+                        scannedAnnouncement
+                  }];
+
+  [self waitForModalOfClass:[QRScannerViewController class]
+       toDisappearFromAbove:[self currentViewController]];
+  [cameraControllerMock verify];
+
+  // Optionally edit the text in the omnibox before pressing return.
+  [self assertOmniboxIsVisibleWithText:_testURL.GetContent()];
+  TapKeyboardReturnKeyInOmniboxWithText(_testURL.GetContent());
+  [ChromeEarlGrey waitForWebStateContainingText:kTestURLResponse];
+
+  scopedOverride = nil;
 }
 
 // Test that the correct page is loaded if the scanner result is a URL.

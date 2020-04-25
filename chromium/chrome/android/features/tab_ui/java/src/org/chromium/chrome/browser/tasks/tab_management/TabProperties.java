@@ -6,7 +6,8 @@ package org.chromium.chrome.browser.tasks.tab_management;
 
 import android.content.res.ColorStateList;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.IntDef;
+
+import androidx.annotation.IntDef;
 
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
 import org.chromium.ui.modelutil.PropertyKey;
@@ -22,12 +23,13 @@ import java.lang.annotation.RetentionPolicy;
  */
 public class TabProperties {
     /** IDs for possible types of UI in the tab list. */
-    @IntDef({UiType.SELECTABLE, UiType.CLOSABLE, UiType.STRIP})
+    @IntDef({UiType.SELECTABLE, UiType.CLOSABLE, UiType.STRIP, UiType.SUGGESTION})
     @Retention(RetentionPolicy.SOURCE)
     public @interface UiType {
         int SELECTABLE = 0;
         int CLOSABLE = 1;
         int STRIP = 2;
+        int SUGGESTION = 3;
     }
 
     public static final PropertyModel.WritableIntPropertyKey TAB_ID =

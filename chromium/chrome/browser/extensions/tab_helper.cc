@@ -45,7 +45,6 @@
 #include "extensions/browser/api/declarative/rules_registry_service.h"
 #include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_prefs.h"
-#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/image_loader.h"
@@ -73,8 +72,7 @@ TabHelper::TabHelper(content::WebContents* web_contents)
       profile_(Profile::FromBrowserContext(web_contents->GetBrowserContext())),
       extension_app_(NULL),
       script_executor_(new ScriptExecutor(web_contents)),
-      extension_action_runner_(new ExtensionActionRunner(web_contents)),
-      registry_observer_(this) {
+      extension_action_runner_(new ExtensionActionRunner(web_contents)) {
   // The ActiveTabPermissionManager requires a session ID; ensure this
   // WebContents has one.
   SessionTabHelper::CreateForWebContents(web_contents);
@@ -100,9 +98,7 @@ TabHelper::TabHelper(content::WebContents* web_contents)
 }
 
 void TabHelper::SetExtensionApp(const Extension* extension) {
-  // Vivaldi is bundled and does not have a valid url.
-  if (!extension || extension->name() != "Vivaldi")
-    DCHECK(!extension || AppLaunchInfo::GetFullLaunchURL(extension).is_valid());
+  DCHECK(!extension || AppLaunchInfo::GetFullLaunchURL(extension).is_valid());
   if (extension_app_ == extension)
     return;
 
@@ -216,10 +212,7 @@ void TabHelper::DidCloneToNewWebContents(WebContents* old_web_contents,
   CreateForWebContents(new_web_contents);
   TabHelper* new_helper = FromWebContents(new_web_contents);
 
-  // This is not set for Vivaldi.
-  if (extension_app_) {
   new_helper->SetExtensionApp(extension_app_);
-  }
   new_helper->extension_app_icon_ = extension_app_icon_;
 }
 

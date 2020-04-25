@@ -159,7 +159,7 @@ ExtensionFunction::ResponseAction WebViewPrivateGetThumbnailFunction::RunImpl(
 
 void WebViewPrivateGetThumbnailFunction::CopyFromBackingStoreComplete(
     const SkBitmap& bitmap) {
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE,
       {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
@@ -208,7 +208,7 @@ void WebViewPrivateGetThumbnailFunction::ScaleAndEncodeOnWorkerThread(
     success = true;
   } while (false);
 
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(
           &WebViewPrivateGetThumbnailFunction::SendResult,

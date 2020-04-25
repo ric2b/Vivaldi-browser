@@ -4,12 +4,13 @@
 
 package org.chromium.chrome.test.pagecontroller.utils;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.uiautomator.StaleObjectException;
 import android.support.test.uiautomator.UiDevice;
 import android.support.test.uiautomator.UiObject2;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -324,7 +325,7 @@ public class UiLocatorHelper {
      * Delegate to be used with getCustomElements.
      * @param <T> The type of the element.
      */
-    static public interface CustomElementMaker<T> {
+    public static interface CustomElementMaker<T> {
         /**
          * Should construct an element given a node.
          * @param root          The input node.
@@ -402,10 +403,11 @@ public class UiLocatorHelper {
 
     private <T> T getOneElement(IUi2Locator locator, ElementConverter<T> converter) {
         List<T> all = getAllElements(locator, converter);
-        if (all.size() > 0)
+        if (all.size() > 0) {
             return all.get(0);
-        else
+        } else {
             return null;
+        }
     }
 
     private <T> T getOneElementImmediate(

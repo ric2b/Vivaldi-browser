@@ -59,7 +59,7 @@
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
 #endif
 
-#if defined(USE_X11)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #include "ui/views/linux_ui/linux_ui.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_x11.h"
 #endif
@@ -536,7 +536,6 @@ void NativeWidgetAura::Close() {
   DCHECK(window_ ||
          ownership_ == Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
   if (window_) {
-    window_->SuppressPaint();
     Hide();
     window_->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_NONE);
   }
@@ -1066,7 +1065,7 @@ void NativeWidgetAura::SetInitialFocus(ui::WindowShowState show_state) {
 // Widget, public:
 
 namespace {
-#if defined(OS_WIN) || defined(USE_X11)
+#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
 void CloseWindow(aura::Window* window) {
   if (window) {
     Widget* widget = Widget::GetWidgetForNativeView(window);
@@ -1096,13 +1095,13 @@ void Widget::CloseAllSecondaryWidgets() {
   EnumThreadWindows(GetCurrentThreadId(), WindowCallbackProc, 0);
 #endif
 
-#if defined(USE_X11)
-  DesktopWindowTreeHostX11::CleanUpWindowList(CloseWindow);
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  DesktopWindowTreeHostLinux::CleanUpWindowList(CloseWindow);
 #endif
 }
 
 const ui::NativeTheme* Widget::GetNativeTheme() const {
-#if defined(USE_X11)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   const LinuxUI* linux_ui = LinuxUI::instance();
   if (linux_ui) {
     ui::NativeTheme* native_theme =

@@ -92,7 +92,11 @@ chrome.automation.RoleType = {
   ALERT: 'alert',
   ALERT_DIALOG: 'alertDialog',
   ANCHOR: 'anchor',
-  ANNOTATION: 'annotation',
+  ANNOTATION_ATTRIBUTION: 'annotationAttribution',
+  ANNOTATION_COMMENTARY: 'annotationCommentary',
+  ANNOTATION_PRESENCE: 'annotationPresence',
+  ANNOTATION_REVISION: 'annotationRevision',
+  ANNOTATION_SUGGESTION: 'annotationSuggestion',
   APPLICATION: 'application',
   ARTICLE: 'article',
   AUDIO: 'audio',
@@ -170,6 +174,7 @@ chrome.automation.RoleType = {
   FIGCAPTION: 'figcaption',
   FIGURE: 'figure',
   FOOTER: 'footer',
+  FOOTER_AS_NON_LANDMARK: 'footerAsNonLandmark',
   FORM: 'form',
   GENERIC_CONTAINER: 'genericContainer',
   GRAPHICS_DOCUMENT: 'graphicsDocument',
@@ -177,6 +182,8 @@ chrome.automation.RoleType = {
   GRAPHICS_SYMBOL: 'graphicsSymbol',
   GRID: 'grid',
   GROUP: 'group',
+  HEADER: 'header',
+  HEADER_AS_NON_LANDMARK: 'headerAsNonLandmark',
   HEADING: 'heading',
   IFRAME: 'iframe',
   IFRAME_PRESENTATIONAL: 'iframePresentational',
@@ -229,10 +236,12 @@ chrome.automation.RoleType = {
   ROW: 'row',
   ROW_HEADER: 'rowHeader',
   RUBY: 'ruby',
+  RUBY_ANNOTATION: 'rubyAnnotation',
   SCROLL_BAR: 'scrollBar',
   SCROLL_VIEW: 'scrollView',
   SEARCH: 'search',
   SEARCH_BOX: 'searchBox',
+  SECTION: 'section',
   SLIDER: 'slider',
   SLIDER_THUMB: 'sliderThumb',
   SPIN_BUTTON: 'spinButton',
@@ -584,6 +593,13 @@ chrome.automation.AutomationNode.prototype.unclippedLocation;
  * @see https://developer.chrome.com/extensions/automation#type-description
  */
 chrome.automation.AutomationNode.prototype.description;
+
+/**
+ * The tooltip of the node, if any.
+ * @type {(string|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-tooltip
+ */
+chrome.automation.AutomationNode.prototype.tooltip;
 
 /**
  * The placeholder for this text field, if any.
@@ -1093,9 +1109,9 @@ chrome.automation.AutomationNode.prototype.tableCellColumnIndex;
 /**
  * The ARIA column index as specified by the page author.
  * @type {(number|undefined)}
- * @see https://developer.chrome.com/extensions/automation#type-ariaCellColumnIndex
+ * @see https://developer.chrome.com/extensions/automation#type-tableCellAriaColumnIndex
  */
-chrome.automation.AutomationNode.prototype.ariaCellColumnIndex;
+chrome.automation.AutomationNode.prototype.tableCellAriaColumnIndex;
 
 /**
  * The number of columns that this cell spans (default is 1).
@@ -1114,9 +1130,9 @@ chrome.automation.AutomationNode.prototype.tableCellRowIndex;
 /**
  * The ARIA row index as specified by the page author.
  * @type {(number|undefined)}
- * @see https://developer.chrome.com/extensions/automation#type-ariaCellRowIndex
+ * @see https://developer.chrome.com/extensions/automation#type-tableCellAriaRowIndex
  */
-chrome.automation.AutomationNode.prototype.ariaCellRowIndex;
+chrome.automation.AutomationNode.prototype.tableCellAriaRowIndex;
 
 /**
  * The number of rows that this cell spans (default is 1).
@@ -1710,6 +1726,19 @@ chrome.automation.AutomationNode.prototype.matches = function(params) {};
  */
 chrome.automation.AutomationNode.prototype.getNextTextMatch = function(searchStr, backward) {};
 
+/**
+ * Returns the detected languages for the provided string attribute as an array
+ * of LanguageSpan objects. There are several guarantees about the format of the
+ * LanguageSpan array: 1. Is either empty or contains LanguageSpans that cover
+ * all indices in the associated string attribute value. 2. Is sorted by
+ * increasing startIndex (those with smaller startIndex appear first). 3.
+ * LanguageSpans are non-overlapping and contain exactly one language.
+ * @param {string} attribute
+ * @return {!Array<!chrome.automation.LanguageSpan>}
+ * @see https://developer.chrome.com/extensions/automation#method-languageAnnotationForStringAttribute
+ */
+chrome.automation.AutomationNode.prototype.languageAnnotationForStringAttribute = function(attribute) {};
+
 
 /**
  * Get the automation tree for the tab with the given tabId, or the current tab
@@ -1775,16 +1804,3 @@ chrome.automation.removeTreeChangeObserver = function(observer) {};
  * @see https://developer.chrome.com/extensions/automation#method-setDocumentSelection
  */
 chrome.automation.setDocumentSelection = function(params) {};
-
-/**
- * Returns the detected languages for the provided string attribute as an array
- * of LanguageSpan objects. There are several guarantees about the format of the
- * LanguageSpan array: 1. Is either empty or contains LanguageSpans that cover
- * all indices in the associated string attribute value. 2. Is sorted by
- * increasing startIndex (those with smaller startIndex appear first). 3.
- * LanguageSpans are non-overlapping and contain exactly one language.
- * @param {string} attribute
- * @return {!Array<!chrome.automation.LanguageSpan>}
- * @see https://developer.chrome.com/extensions/automation#method-languageAnnotationForStringAttribute
- */
-chrome.automation.languageAnnotationForStringAttribute = function(attribute) {};

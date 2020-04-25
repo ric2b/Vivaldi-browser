@@ -394,23 +394,11 @@ var CrExtensionsItemListTest = class extends CrExtensionsBrowserTest {
   }
 };
 
-// This test is flaky on Mac10.9 Tests (dbg). See https://crbug.com/771099.
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_Filtering DISABLED_Filtering');
-GEN('#else');
-GEN('#define MAYBE_Filtering Filtering');
-GEN('#endif');
-TEST_F('CrExtensionsItemListTest', 'MAYBE_Filtering', function() {
+TEST_F('CrExtensionsItemListTest', 'Filtering', function() {
   this.runMochaTest(extension_item_list_tests.TestNames.Filtering);
 });
 
-// This test is flaky on Mac10.9 Tests (dbg). See https://crbug.com/771099.
-GEN('#if defined(OS_MACOSX)');
-GEN('#define MAYBE_NoItems DISABLED_NoItems');
-GEN('#else');
-GEN('#define MAYBE_NoItems NoItems');
-GEN('#endif');
-TEST_F('CrExtensionsItemListTest', 'MAYBE_NoItems', function() {
+TEST_F('CrExtensionsItemListTest', 'NoItems', function() {
   this.runMochaTest(extension_item_list_tests.TestNames.NoItemsMsg);
 });
 

@@ -33,22 +33,12 @@ class SyncPointManager;
 class SharedImageManager;
 }  // namespace gpu
 
-namespace service_manager {
-class Connector;
-}
-
 namespace ukm {
 class MojoUkmRecorder;
 }
 
 namespace viz {
 class GpuServiceImpl;
-
-#if defined(OS_ANDROID)
-using CompositorThreadType = base::android::JavaHandlerThread;
-#else
-using CompositorThreadType = base::Thread;
-#endif
 
 class VizMainImpl : public mojom::VizMain {
  public:
@@ -83,7 +73,7 @@ class VizMainImpl : public mojom::VizMain {
     gpu::SharedImageManager* shared_image_manager = nullptr;
     base::WaitableEvent* shutdown_event = nullptr;
     scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner;
-    service_manager::Connector* connector = nullptr;
+    std::unique_ptr<ukm::MojoUkmRecorder> ukm_recorder;
     VizCompositorThreadRunner* viz_compositor_thread_runner = nullptr;
 
    private:
@@ -111,7 +101,8 @@ class VizMainImpl : public mojom::VizMain {
   void CreateGpuService(
       mojo::PendingReceiver<mojom::GpuService> pending_receiver,
       mojo::PendingRemote<mojom::GpuHost> pending_gpu_host,
-      discardable_memory::mojom::DiscardableSharedMemoryManagerPtr
+      mojo::PendingRemote<
+          discardable_memory::mojom::DiscardableSharedMemoryManager>
           discardable_memory_manager,
       mojo::ScopedSharedBufferHandle activity_flags,
       gfx::FontRenderParams::SubpixelRendering subpixel_rendering) override;
@@ -132,9 +123,6 @@ class VizMainImpl : public mojom::VizMain {
   void ExitProcess();
 
  private:
-  // Initializes GPU's UkmRecorder if GPU is running in it's own process.
-  void CreateUkmRecorderIfNeeded(service_manager::Connector* connector);
-
   void CreateFrameSinkManagerInternal(mojom::FrameSinkManagerParamsPtr params);
 
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner() const {

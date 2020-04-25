@@ -14,10 +14,15 @@
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
+#include "chrome/browser/safe_browsing/download_protection/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/download_protection/check_client_download_request_base.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "components/download/public/common/download_item.h"
+#include "components/safe_browsing/proto/webprotect.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "url/gurl.h"
+
+class Profile;
 
 namespace safe_browsing {
 
@@ -26,7 +31,7 @@ class CheckClientDownloadRequest : public CheckClientDownloadRequestBase,
  public:
   CheckClientDownloadRequest(
       download::DownloadItem* item,
-      CheckDownloadCallback callback,
+      CheckDownloadRepeatingCallback callback,
       DownloadProtectionService* service,
       scoped_refptr<SafeBrowsingDatabaseManager> database_manager,
       scoped_refptr<BinaryFeatureExtractor> binary_feature_extractor);
@@ -53,21 +58,60 @@ class CheckClientDownloadRequest : public CheckClientDownloadRequestBase,
                                   bool upload_requested,
                                   const std::string& request_data,
                                   const std::string& response_body) override;
-  void MaybeUploadBinary(DownloadCheckResultReason reason) override;
+
+  // Returns true if the CheckClientDownloadRequest should return the
+  // ASYNC_SCANNING result while it does deep scanning.
+  bool ShouldReturnAsynchronousVerdict(
+      DownloadCheckResultReason reason) override;
+
+  // Uploads the binary for deep scanning if the reason and policies indicate
+  // it should be.
+  bool ShouldUploadBinary(DownloadCheckResultReason reason) override;
+  void UploadBinary(DownloadCheckResultReason reason) override;
+
+  // Called when this request is completed.
   void NotifyRequestFinished(DownloadCheckResult result,
                              DownloadCheckResultReason reason) override;
 
+  // Returns true when the file should be uploaded for a DLP compliance scan.
+  // This consults the CheckContentCompliance enterprise policy.
   bool ShouldUploadForDlpScan();
+
+  // Returns true when the file should be uploaded for a malware scan. This
+  // consults the SendFilesForMalwareCheck enterprise policy.
   bool ShouldUploadForMalwareScan(DownloadCheckResultReason reason);
+
+  // Returns true when the downloads UX should prevent access to the file until
+  // the deep scanning verdict has been received. This consults the
+  // DelayDeliveryUntilVerdict enterprise policy.
+  bool ShouldDelayVerdicts();
+
+  // Called when deep scanning is complete. Where appropriate, it updates the
+  // download UX, and sends a real time report about the download.
+  void OnDeepScanningComplete(BinaryUploadService::Result result,
+                              DeepScanningClientResponse response);
 
   // The DownloadItem we are checking. Will be NULL if the request has been
   // canceled. Must be accessed only on UI thread.
   download::DownloadItem* item_;
+  CheckDownloadRepeatingCallback callback_;
 
   base::WeakPtrFactory<CheckClientDownloadRequest> weakptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(CheckClientDownloadRequest);
 };
+
+// Helper function to examine a DeepScanningClientResponse and report the
+// appropriate events to the enterprise admin.
+void MaybeReportDeepScanningVerdict(Profile* profile,
+                                    const GURL& url,
+                                    const std::string& file_name,
+                                    const std::string& download_digest_sha256,
+                                    const std::string& mime_type,
+                                    const std::string& trigger,
+                                    const int64_t content_size,
+                                    BinaryUploadService::Result result,
+                                    DeepScanningClientResponse response);
 
 }  // namespace safe_browsing
 

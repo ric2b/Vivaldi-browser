@@ -41,27 +41,10 @@ scoped_refptr<StaticBitmapImage> StaticBitmapImage::Create(PaintImage image) {
 }
 
 scoped_refptr<StaticBitmapImage> StaticBitmapImage::Create(
-    scoped_refptr<Uint8Array>&& image_pixels,
+    sk_sp<SkData> data,
     const SkImageInfo& info) {
-  SkPixmap pixmap(info, image_pixels->Data(), info.minRowBytes());
-
-  Uint8Array* pixels = image_pixels.get();
-  if (pixels) {
-    pixels->AddRef();
-    image_pixels = nullptr;
-  }
-
-  return Create(SkImage::MakeFromRaster(
-      pixmap,
-      [](const void*, void* p) { static_cast<Uint8Array*>(p)->Release(); },
-      pixels));
-}
-
-scoped_refptr<StaticBitmapImage> StaticBitmapImage::Create(
-    WTF::ArrayBufferContents& contents,
-    const SkImageInfo& info) {
-  SkPixmap pixmap(info, contents.Data(), info.minRowBytes());
-  return Create(SkImage::MakeFromRaster(pixmap, nullptr, nullptr));
+  return Create(
+      SkImage::MakeRasterData(info, std::move(data), info.minRowBytes()));
 }
 
 void StaticBitmapImage::DrawHelper(cc::PaintCanvas* canvas,
@@ -114,12 +97,14 @@ bool StaticBitmapImage::ConvertToArrayBufferContents(
 
   int alloc_size_in_bytes = data_size.ValueOrDie();
   if (!src_image) {
-    auto data = WTF::ArrayBufferContents::CreateDataHandle(
-        alloc_size_in_bytes, WTF::ArrayBufferContents::kZeroInitialize);
-    if (!data)
+    WTF::ArrayBufferContents result(alloc_size_in_bytes, 1,
+                                    WTF::ArrayBufferContents::kNotShared,
+                                    WTF::ArrayBufferContents::kZeroInitialize);
+
+    // Check if the ArrayBuffer backing store was allocated correctly.
+    if (result.DataLength() != static_cast<size_t>(alloc_size_in_bytes)) {
       return false;
-    WTF::ArrayBufferContents result(std::move(data),
-                                    WTF::ArrayBufferContents::kNotShared);
+    }
     result.Transfer(dest_contents);
     return true;
   }
@@ -132,12 +117,14 @@ bool StaticBitmapImage::ConvertToArrayBufferContents(
   WTF::ArrayBufferContents::InitializationPolicy initialization_policy =
       may_have_stray_area ? WTF::ArrayBufferContents::kZeroInitialize
                           : WTF::ArrayBufferContents::kDontInitialize;
-  auto data = WTF::ArrayBufferContents::CreateDataHandle(alloc_size_in_bytes,
-                                                         initialization_policy);
-  if (!data)
+
+  WTF::ArrayBufferContents result(alloc_size_in_bytes, 1,
+                                  WTF::ArrayBufferContents::kNotShared,
+                                  initialization_policy);
+  // Check if the ArrayBuffer backing store was allocated correctly.
+  if (result.DataLength() != static_cast<size_t>(alloc_size_in_bytes)) {
     return false;
-  WTF::ArrayBufferContents result(std::move(data),
-                                  WTF::ArrayBufferContents::kNotShared);
+  }
 
   SkColorType color_type =
       (color_params.GetSkColorType() == kRGBA_F16_SkColorType)

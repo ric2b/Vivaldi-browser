@@ -231,7 +231,8 @@ void InternalPopupMenu::WriteDocument(SharedBuffer* data) {
       owner_element.VisibleBoundsInVisualViewport(),
       owner_element.GetDocument().View());
 
-  float scale_factor = chrome_client_->WindowToViewportScalar(1.f);
+  float scale_factor = chrome_client_->WindowToViewportScalar(
+      owner_element.GetDocument().GetFrame(), 1.f);
   PagePopupClient::AddString(
       "<!DOCTYPE html><head><meta charset='UTF-8'><style>\n", data);
   data->Append(ChooserResourceLoader::GetPickerCommonStyleSheet());
@@ -268,11 +269,11 @@ void InternalPopupMenu::WriteDocument(SharedBuffer* data) {
   const HeapVector<Member<HTMLElement>>& items = owner_element.GetListItems();
   for (; context.list_index_ < items.size(); ++context.list_index_) {
     Element& child = *items[context.list_index_];
-    if (!IsHTMLOptGroupElement(child.parentNode()))
+    if (!IsA<HTMLOptGroupElement>(child.parentNode()))
       context.FinishGroupIfNecessary();
-    if (auto* option = ToHTMLOptionElementOrNull(child))
+    if (auto* option = DynamicTo<HTMLOptionElement>(child))
       AddOption(context, *option);
-    else if (auto* optgroup = ToHTMLOptGroupElementOrNull(child))
+    else if (auto* optgroup = DynamicTo<HTMLOptGroupElement>(child))
       AddOptGroup(context, *optgroup);
     else if (auto* hr = ToHTMLHRElementOrNull(child))
       AddSeparator(context, *hr);
@@ -534,11 +535,11 @@ void InternalPopupMenu::Update() {
   const HeapVector<Member<HTMLElement>>& items = owner_element_->GetListItems();
   for (; context.list_index_ < items.size(); ++context.list_index_) {
     Element& child = *items[context.list_index_];
-    if (!IsHTMLOptGroupElement(child.parentNode()))
+    if (!IsA<HTMLOptGroupElement>(child.parentNode()))
       context.FinishGroupIfNecessary();
-    if (auto* option = ToHTMLOptionElementOrNull(child))
+    if (auto* option = DynamicTo<HTMLOptionElement>(child))
       AddOption(context, *option);
-    else if (auto* optgroup = ToHTMLOptGroupElementOrNull(child))
+    else if (auto* optgroup = DynamicTo<HTMLOptGroupElement>(child))
       AddOptGroup(context, *optgroup);
     else if (auto* hr = ToHTMLHRElementOrNull(child))
       AddSeparator(context, *hr);

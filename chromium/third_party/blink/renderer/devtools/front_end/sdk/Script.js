@@ -27,7 +27,7 @@
  * @implements {Common.ContentProvider}
  * @unrestricted
  */
-SDK.Script = class {
+export default class Script {
   /**
    * @param {!SDK.DebuggerModel} debuggerModel
    * @param {string} scriptId
@@ -76,16 +76,19 @@ SDK.Script = class {
     let sourceURLIndex = source.lastIndexOf('//# sourceURL=');
     if (sourceURLIndex === -1) {
       sourceURLIndex = source.lastIndexOf('//@ sourceURL=');
-      if (sourceURLIndex === -1)
+      if (sourceURLIndex === -1) {
         return source;
+      }
     }
     const sourceURLLineIndex = source.lastIndexOf('\n', sourceURLIndex);
-    if (sourceURLLineIndex === -1)
+    if (sourceURLLineIndex === -1) {
       return source;
-    const sourceURLLine = source.substr(sourceURLLineIndex + 1).split('\n', 1)[0];
-    if (sourceURLLine.search(SDK.Script.sourceURLRegex) === -1)
+    }
+    const sourceURLLine = source.substr(sourceURLLineIndex + 1);
+    if (!sourceURLLine.match(sourceURLRegex)) {
       return source;
-    return source.substr(0, sourceURLLineIndex) + source.substr(sourceURLLineIndex + sourceURLLine.length + 1);
+    }
+    return source.substr(0, sourceURLLineIndex);
   }
 
   /**
@@ -135,21 +138,31 @@ SDK.Script = class {
 
   /**
    * @override
-   * @return {!Promise<?string>}
+   * @return {!Promise<!Common.DeferredContent>}
    */
   async requestContent() {
-    if (this._source)
-      return this._source;
-    if (!this.scriptId)
-      return '';
-    const source = await this.debuggerModel.target().debuggerAgent().getScriptSource(this.scriptId);
-    if (source && this.hasSourceURL)
-      this._source = SDK.Script._trimSourceURLComment(source);
-    else
-      this._source = source || '';
-    if (this._originalSource === null)
-      this._originalSource = this._source;
-    return this._source;
+    if (this._source) {
+      return {content: this._source, isEncoded: false};
+    }
+    if (!this.scriptId) {
+      return {error: ls`Script removed or deleted.`, isEncoded: false};
+    }
+
+    try {
+      const source = await this.debuggerModel.target().debuggerAgent().getScriptSource(this.scriptId);
+      if (source && this.hasSourceURL) {
+        this._source = SDK.Script._trimSourceURLComment(source);
+      } else {
+        this._source = source || '';
+      }
+
+      if (this._originalSource === null) {
+        this._originalSource = this._source;
+      }
+      return {content: this._source, isEncoded: false};
+    } catch (err) {
+      return {error: ls`Unable to fetch script source.`, isEncoded: false};
+    }
   }
 
   /**
@@ -157,7 +170,12 @@ SDK.Script = class {
    */
   originalContentProvider() {
     if (!this._originalContentProvider) {
-      const lazyContent = () => this.requestContent().then(() => this._originalSource);
+      const lazyContent = () => this.requestContent().then(() => {
+        return {
+          content: this._originalSource,
+          isEncoded: false,
+        };
+      });
       this._originalContentProvider =
           new Common.StaticContentProvider(this.contentURL(), this.contentType(), lazyContent);
     }
@@ -172,8 +190,9 @@ SDK.Script = class {
    * @return {!Promise<!Array<!Common.ContentProvider.SearchMatch>>}
    */
   async searchInContent(query, caseSensitive, isRegex) {
-    if (!this.scriptId)
+    if (!this.scriptId) {
       return [];
+    }
 
     const matches =
         await this.debuggerModel.target().debuggerAgent().searchInContent(this.scriptId, query, caseSensitive, isRegex);
@@ -185,8 +204,9 @@ SDK.Script = class {
    * @return {string}
    */
   _appendSourceURLCommentIfNeeded(source) {
-    if (!this.hasSourceURL)
+    if (!this.hasSourceURL) {
       return source;
+    }
     return source + '\n //# sourceURL=' + this.sourceURL;
   }
 
@@ -195,7 +215,7 @@ SDK.Script = class {
    * @param {function(?Protocol.Error, !Protocol.Runtime.ExceptionDetails=, !Array.<!Protocol.Debugger.CallFrame>=, !Protocol.Runtime.StackTrace=, !Protocol.Runtime.StackTraceId=, boolean=)} callback
    */
   async editSource(newSource, callback) {
-    newSource = SDK.Script._trimSourceURLComment(newSource);
+    newSource = Script._trimSourceURLComment(newSource);
     // We append correct sourceURL to script for consistency only. It's not actually needed for things to work correctly.
     newSource = this._appendSourceURLCommentIfNeeded(newSource);
 
@@ -212,8 +232,9 @@ SDK.Script = class {
     const response = await this.debuggerModel.target().debuggerAgent().invoke_setScriptSource(
         {scriptId: this.scriptId, scriptSource: newSource});
 
-    if (!response[Protocol.Error] && !response.exceptionDetails)
+    if (!response[Protocol.Error] && !response.exceptionDetails) {
       this._source = newSource;
+    }
 
     const needsStepIn = !!response.stackChanged;
     callback(
@@ -261,6 +282,24 @@ SDK.Script = class {
         {scriptId: this.scriptId, positions});
     return !response[Protocol.Error];
   }
-};
 
-SDK.Script.sourceURLRegex = /^[\040\t]*\/\/[@#] sourceURL=\s*(\S*?)\s*$/m;
+  containsLocation(lineNumber, columnNumber) {
+    const afterStart =
+        (lineNumber === this.lineOffset && columnNumber >= this.columnOffset) || lineNumber > this.lineOffset;
+    const beforeEnd = lineNumber < this.endLine || (lineNumber === this.endLine && columnNumber <= this.endColumn);
+    return afterStart && beforeEnd;
+  }
+}
+
+export const sourceURLRegex = /^[\040\t]*\/\/[@#] sourceURL=\s*(\S*?)\s*$/;
+
+/* Legacy exported object */
+self.SDK = self.SDK || {};
+
+/* Legacy exported object */
+SDK = SDK || {};
+
+/** @constructor */
+SDK.Script = Script;
+
+SDK.Script.sourceURLRegex = sourceURLRegex;

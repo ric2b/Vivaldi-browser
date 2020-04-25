@@ -16,6 +16,7 @@
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_service_manager_context.h"
 #include "content/test/test_render_frame_host.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/device/public/cpp/test/scoped_geolocation_overrider.h"
 #include "services/device/public/mojom/constants.mojom.h"
 #include "services/device/public/mojom/geolocation.mojom.h"
@@ -26,11 +27,11 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
 
-using blink::mojom::PermissionStatus;
-using device::mojom::GeolocationPtr;
-using device::mojom::GeopositionPtr;
 using blink::mojom::GeolocationService;
 using blink::mojom::GeolocationServicePtr;
+using blink::mojom::PermissionStatus;
+using device::mojom::Geolocation;
+using device::mojom::GeopositionPtr;
 
 namespace content {
 namespace {
@@ -91,12 +92,12 @@ class GeolocationServiceTest : public RenderViewHostImplTestHarness {
     geolocation_overrider_ =
         std::make_unique<device::ScopedGeolocationOverrider>(kMockLatitude,
                                                              kMockLongitude);
-    GetSystemConnector()->BindInterface(device::mojom::kServiceName,
-                                        mojo::MakeRequest(&context_ptr_));
+    GetSystemConnector()->Connect(device::mojom::kServiceName,
+                                  context_.BindNewPipeAndPassReceiver());
   }
 
   void TearDown() override {
-    context_ptr_.reset();
+    context_.reset();
     geolocation_overrider_.reset();
     service_manager_context_.reset();
     browser_context_.reset();
@@ -119,7 +120,7 @@ class GeolocationServiceTest : public RenderViewHostImplTestHarness {
     embedded_rfh = navigation_simulator->GetFinalRenderFrameHost();
 
     service_.reset(new GeolocationServiceImpl(
-        context_ptr_.get(), permission_controller_.get(), embedded_rfh));
+        context_.get(), permission_controller_.get(), embedded_rfh));
     service_->Bind(mojo::MakeRequest(&service_ptr_));
   }
 
@@ -142,7 +143,7 @@ class GeolocationServiceTest : public RenderViewHostImplTestHarness {
   std::unique_ptr<PermissionControllerImpl> permission_controller_;
   std::unique_ptr<GeolocationServiceImpl> service_;
   GeolocationServicePtr service_ptr_;
-  device::mojom::GeolocationContextPtr context_ptr_;
+  mojo::Remote<device::mojom::GeolocationContext> context_;
 
   DISALLOW_COPY_AND_ASSIGN(GeolocationServiceTest);
 };
@@ -150,22 +151,22 @@ class GeolocationServiceTest : public RenderViewHostImplTestHarness {
 }  // namespace
 
 TEST_F(GeolocationServiceTest, PermissionGrantedPolicyViolation) {
-  // The embedded frame is not whitelisted.
+  // The embedded frame is not allowed.
   CreateEmbeddedFrameAndGeolocationService(/*allow_via_feature_policy=*/false);
 
   permission_manager()->SetRequestCallback(
       base::BindRepeating([](PermissionCallback callback) {
         ADD_FAILURE() << "Permissions checked unexpectedly.";
       }));
-  GeolocationPtr geolocation;
+  mojo::Remote<Geolocation> geolocation;
   service()->CreateGeolocation(
-      mojo::MakeRequest(&geolocation), true,
+      geolocation.BindNewPipeAndPassReceiver(), true,
       base::BindRepeating([](blink::mojom::PermissionStatus status) {
         EXPECT_EQ(blink::mojom::PermissionStatus::DENIED, status);
       }));
 
   base::RunLoop loop;
-  geolocation.set_connection_error_handler(loop.QuitClosure());
+  geolocation.set_disconnect_handler(loop.QuitClosure());
 
   geolocation->QueryNextPosition(base::BindOnce([](GeopositionPtr geoposition) {
     ADD_FAILURE() << "Position updated unexpectedly";
@@ -174,22 +175,22 @@ TEST_F(GeolocationServiceTest, PermissionGrantedPolicyViolation) {
 }
 
 TEST_F(GeolocationServiceTest, PermissionGrantedNoPolicyViolation) {
-  // Whitelist the embedded frame.
+  // Allow the embedded frame.
   CreateEmbeddedFrameAndGeolocationService(/*allow_via_feature_policy=*/true);
 
   permission_manager()->SetRequestCallback(
       base::BindRepeating([](PermissionCallback callback) {
         std::move(callback).Run(PermissionStatus::GRANTED);
       }));
-  GeolocationPtr geolocation;
+  mojo::Remote<Geolocation> geolocation;
   service()->CreateGeolocation(
-      mojo::MakeRequest(&geolocation), true,
+      geolocation.BindNewPipeAndPassReceiver(), true,
       base::BindRepeating([](blink::mojom::PermissionStatus status) {
         EXPECT_EQ(blink::mojom::PermissionStatus::GRANTED, status);
       }));
 
   base::RunLoop loop;
-  geolocation.set_connection_error_handler(base::BindOnce(
+  geolocation.set_disconnect_handler(base::BindOnce(
       [] { ADD_FAILURE() << "Connection error handler called unexpectedly"; }));
 
   geolocation->QueryNextPosition(base::BindOnce(
@@ -208,15 +209,15 @@ TEST_F(GeolocationServiceTest, PermissionGrantedSync) {
       base::BindRepeating([](PermissionCallback callback) {
         std::move(callback).Run(PermissionStatus::GRANTED);
       }));
-  GeolocationPtr geolocation;
+  mojo::Remote<Geolocation> geolocation;
   service()->CreateGeolocation(
-      mojo::MakeRequest(&geolocation), true,
+      geolocation.BindNewPipeAndPassReceiver(), true,
       base::BindRepeating([](blink::mojom::PermissionStatus status) {
         EXPECT_EQ(blink::mojom::PermissionStatus::GRANTED, status);
       }));
 
   base::RunLoop loop;
-  geolocation.set_connection_error_handler(base::BindOnce(
+  geolocation.set_disconnect_handler(base::BindOnce(
       [] { ADD_FAILURE() << "Connection error handler called unexpectedly"; }));
 
   geolocation->QueryNextPosition(base::BindOnce(
@@ -235,15 +236,15 @@ TEST_F(GeolocationServiceTest, PermissionDeniedSync) {
       base::BindRepeating([](PermissionCallback callback) {
         std::move(callback).Run(PermissionStatus::DENIED);
       }));
-  GeolocationPtr geolocation;
+  mojo::Remote<Geolocation> geolocation;
   service()->CreateGeolocation(
-      mojo::MakeRequest(&geolocation), true,
+      geolocation.BindNewPipeAndPassReceiver(), true,
       base::BindRepeating([](blink::mojom::PermissionStatus status) {
         EXPECT_EQ(blink::mojom::PermissionStatus::DENIED, status);
       }));
 
   base::RunLoop loop;
-  geolocation.set_connection_error_handler(loop.QuitClosure());
+  geolocation.set_disconnect_handler(loop.QuitClosure());
 
   geolocation->QueryNextPosition(base::BindOnce([](GeopositionPtr geoposition) {
     ADD_FAILURE() << "Position updated unexpectedly";
@@ -260,15 +261,15 @@ TEST_F(GeolocationServiceTest, PermissionGrantedAsync) {
             FROM_HERE, base::BindOnce(std::move(permission_callback),
                                       PermissionStatus::GRANTED));
       }));
-  GeolocationPtr geolocation;
+  mojo::Remote<Geolocation> geolocation;
   service()->CreateGeolocation(
-      mojo::MakeRequest(&geolocation), true,
+      geolocation.BindNewPipeAndPassReceiver(), true,
       base::BindRepeating([](blink::mojom::PermissionStatus status) {
         EXPECT_EQ(blink::mojom::PermissionStatus::GRANTED, status);
       }));
 
   base::RunLoop loop;
-  geolocation.set_connection_error_handler(base::BindOnce(
+  geolocation.set_disconnect_handler(base::BindOnce(
       [] { ADD_FAILURE() << "Connection error handler called unexpectedly"; }));
 
   geolocation->QueryNextPosition(base::BindOnce(
@@ -290,15 +291,15 @@ TEST_F(GeolocationServiceTest, PermissionDeniedAsync) {
             FROM_HERE, base::BindOnce(std::move(permission_callback),
                                       PermissionStatus::DENIED));
       }));
-  GeolocationPtr geolocation;
+  mojo::Remote<Geolocation> geolocation;
   service()->CreateGeolocation(
-      mojo::MakeRequest(&geolocation), true,
+      geolocation.BindNewPipeAndPassReceiver(), true,
       base::BindRepeating([](blink::mojom::PermissionStatus status) {
         EXPECT_EQ(blink::mojom::PermissionStatus::DENIED, status);
       }));
 
   base::RunLoop loop;
-  geolocation.set_connection_error_handler(loop.QuitClosure());
+  geolocation.set_disconnect_handler(loop.QuitClosure());
 
   geolocation->QueryNextPosition(base::BindOnce([](GeopositionPtr geoposition) {
     ADD_FAILURE() << "Position updated unexpectedly";
@@ -309,9 +310,9 @@ TEST_F(GeolocationServiceTest, PermissionDeniedAsync) {
 TEST_F(GeolocationServiceTest, ServiceClosedBeforePermissionResponse) {
   CreateEmbeddedFrameAndGeolocationService(/*allow_via_feature_policy=*/true);
   permission_manager()->SetRequestId(42);
-  GeolocationPtr geolocation;
+  mojo::Remote<Geolocation> geolocation;
   service()->CreateGeolocation(
-      mojo::MakeRequest(&geolocation), true,
+      geolocation.BindNewPipeAndPassReceiver(), true,
       base::BindRepeating([](blink::mojom::PermissionStatus) {
         ADD_FAILURE() << "PositionStatus received unexpectedly.";
       }));

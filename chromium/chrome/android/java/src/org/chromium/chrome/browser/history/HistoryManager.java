@@ -11,7 +11,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.provider.Browser;
-import android.support.annotation.VisibleForTesting;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.OnScrollListener;
@@ -20,6 +19,8 @@ import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.ViewGroup;
 import android.widget.TextView;
+
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
@@ -56,6 +57,9 @@ import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 
 import java.util.List;
+
+import org.chromium.chrome.browser.ChromeApplication;
+import android.view.View;
 
 /**
  * Displays and manages the UI for browsing history.
@@ -189,6 +193,9 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
         mPrefChangeRegistrar = new PrefChangeRegistrar();
         mPrefChangeRegistrar.addObserver(Pref.ALLOW_DELETING_BROWSER_HISTORY, this);
         mPrefChangeRegistrar.addObserver(Pref.INCOGNITO_MODE_AVAILABILITY, this);
+
+        if (ChromeApplication.isVivaldi())
+            mSelectableListLayout.getToolbarShadow().setVisibility(View.GONE);
 
         recordUserAction("Show");
     }
@@ -364,7 +371,8 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
 
         // Determine component or class name.
         ComponentName component;
-        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity)) {
+        if (!ChromeApplication.isVivaldi() &&
+                DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity)) {
             component = mActivity.getComponentName();
         } else {
             component = IntentUtils.safeGetParcelableExtra(
@@ -551,5 +559,14 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
     @VisibleForTesting
     public RecyclerView getRecyclerViewForTests() {
         return mRecyclerView;
+    }
+
+    // Vivaldi
+    public void openSearchUI() {
+        mHistoryAdapter.removeHeader();
+        mToolbar.showSearchView();
+        mSelectableListLayout.onStartSearch();
+        recordUserAction("Search");
+        mIsSearching = true;
     }
 }

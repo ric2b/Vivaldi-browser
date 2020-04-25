@@ -160,7 +160,9 @@
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
 #include "content/browser/web_contents/web_contents_view_android.h"
 #include "content/public/browser/android/child_process_importance.h"
+#include "content/public/common/content_client.h"
 #include "content/test/mock_overscroll_refresh_handler_android.h"
+#include "content/test/test_content_browser_client.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 #include "ui/events/android/event_handler_android.h"
@@ -482,60 +484,52 @@ void OpenURLBlockUntilNavigationComplete(Shell* shell, const GURL& url) {
 }
 
 // Helper function to generate a feature policy for a single feature and a list
-// of origins. (Equivalent to the declared policy "feature origin1 origin2...".)
-void SetParsedFeaturePolicyDeclaration(
-    blink::ParsedFeaturePolicyDeclaration* declaration,
+// of origins.
+// (Equivalent to the declared policy "feature origin1 origin2 ...".)
+// If the origins list is empty, it's treated as matches all origins
+// (Equivalent to the declared policy "feature *")
+blink::ParsedFeaturePolicyDeclaration CreateParsedFeaturePolicyDeclaration(
     blink::mojom::FeaturePolicyFeature feature,
     const std::vector<GURL>& origins) {
-  declaration->feature = feature;
+  blink::ParsedFeaturePolicyDeclaration declaration;
+
+  const bool matches_all = origins.empty();
+
+  declaration.feature = feature;
   blink::mojom::PolicyValueType feature_type =
       blink::FeaturePolicy::GetDefaultFeatureList().at(feature).second;
-  declaration->fallback_value =
-      blink::PolicyValue::CreateMinPolicyValue(feature_type);
-  declaration->opaque_value = declaration->fallback_value;
-  if (feature == blink::mojom::FeaturePolicyFeature::kOversizedImages) {
-    declaration->fallback_value.SetDoubleValue(2.0);
-    declaration->opaque_value.SetDoubleValue(2.0);
+  declaration.fallback_value =
+      matches_all ? blink::PolicyValue::CreateMaxPolicyValue(feature_type)
+                  : blink::PolicyValue::CreateMinPolicyValue(feature_type);
+  declaration.opaque_value = declaration.fallback_value;
+
+  if (feature == blink::mojom::FeaturePolicyFeature::kOversizedImages &&
+      !matches_all) {
+    declaration.fallback_value.SetDoubleValue(2.0);
+    declaration.opaque_value.SetDoubleValue(2.0);
   }
-  DCHECK(!origins.empty());
+
   for (const auto origin : origins)
-    declaration->values.insert(std::pair<url::Origin, blink::PolicyValue>(
+    declaration.values.insert(std::pair<url::Origin, blink::PolicyValue>(
         url::Origin::Create(origin),
         blink::PolicyValue::CreateMaxPolicyValue(feature_type)));
+
+  return declaration;
 }
 
-blink::ParsedFeaturePolicy CreateFPHeader(
-    blink::mojom::FeaturePolicyFeature feature1,
-    blink::mojom::FeaturePolicyFeature feature2,
+blink::ParsedFeaturePolicy CreateParsedFeaturePolicy(
+    const std::vector<blink::mojom::FeaturePolicyFeature>& features,
     const std::vector<GURL>& origins) {
-  blink::ParsedFeaturePolicy result(2);
-  SetParsedFeaturePolicyDeclaration(&(result[0]), feature1, origins);
-  SetParsedFeaturePolicyDeclaration(&(result[1]), feature2, origins);
+  blink::ParsedFeaturePolicy result;
+  result.reserve(features.size());
+  for (const auto& feature : features)
+    result.push_back(CreateParsedFeaturePolicyDeclaration(feature, origins));
   return result;
 }
 
-// Helper function to generate a feature policy for a single feature which
-// matches every origin. (Equivalent to the declared policy "feature1 *;
-// feature2 *".)
-blink::ParsedFeaturePolicy CreateFPHeaderMatchesAll(
-    blink::mojom::FeaturePolicyFeature feature1,
-    blink::mojom::FeaturePolicyFeature feature2) {
-  blink::ParsedFeaturePolicy result(2);
-  blink::mojom::PolicyValueType feature_type1 =
-      blink::FeaturePolicy::GetDefaultFeatureList().at(feature1).second;
-  blink::mojom::PolicyValueType feature_type2 =
-      blink::FeaturePolicy::GetDefaultFeatureList().at(feature2).second;
-  blink::PolicyValue max_value1 =
-      blink::PolicyValue::CreateMaxPolicyValue(feature_type1);
-  blink::PolicyValue max_value2 =
-      blink::PolicyValue::CreateMaxPolicyValue(feature_type2);
-  result[0].feature = feature1;
-  result[0].fallback_value = max_value1;
-  result[0].opaque_value = max_value1;
-  result[1].feature = feature2;
-  result[1].fallback_value = max_value2;
-  result[1].opaque_value = max_value2;
-  return result;
+blink::ParsedFeaturePolicy CreateParsedFeaturePolicyMatchesAll(
+    const std::vector<blink::mojom::FeaturePolicyFeature>& features) {
+  return CreateParsedFeaturePolicy(features, {});
 }
 
 // Check frame depth on node, widget, and process all match expected depth.
@@ -677,7 +671,13 @@ class UpdateViewportIntersectionMessageFilter
 // SitePerProcessBrowserTest
 //
 
-SitePerProcessBrowserTest::SitePerProcessBrowserTest() {}
+SitePerProcessBrowserTest::SitePerProcessBrowserTest() {
+#if !defined(OS_ANDROID)
+  // TODO(bokan): Needed for scrollability check in
+  // FrameOwnerPropertiesPropagationScrolling. crbug.com/662196.
+  feature_list_.InitAndDisableFeature(features::kOverlayScrollbar);
+#endif
+}
 
 std::string SitePerProcessBrowserTest::DepictFrameTree(FrameTreeNode* node) {
   return visualizer_.DepictFrameTree(node);
@@ -689,13 +689,6 @@ void SitePerProcessBrowserTest::SetUpCommandLine(
   IsolateAllSitesForTesting(command_line);
 
   command_line->AppendSwitch(switches::kValidateInputEventStream);
-  command_line->AppendSwitch(switches::kAllowPreCommitInput);
-
-#if !defined(OS_ANDROID)
-  // TODO(bokan): Needed for scrollability check in
-  // FrameOwnerPropertiesPropagationScrolling. crbug.com/662196.
-  feature_list_.InitAndDisableFeature(features::kOverlayScrollbar);
-#endif
 }
 
 void SitePerProcessBrowserTest::SetUpOnMainThread() {
@@ -954,6 +947,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHighDPIBrowserTest,
   EXPECT_EQ(expected_dip_scale, GetFrameDeviceScaleFactor(web_contents()));
 
   FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  EXPECT_EQ(expected_dip_scale, GetFrameDeviceScaleFactor(root));
   ASSERT_EQ(1U, root->child_count());
 
   FrameTreeNode* child = root->child_at(0);
@@ -1677,13 +1671,14 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ScrollBubblingFromOOPIFTest) {
       blink::WebInputEvent::kMouseWheel, blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   scroll_event.SetPositionInWidget(1, 1);
+  // Use precise pixels to keep these events off the animated scroll pathways,
+  // which currently break this test.
+  // https://bugs.chromium.org/p/chromium/issues/detail?id=710513
+  scroll_event.delta_units =
+      ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
   scroll_event.delta_x = 0.0f;
   scroll_event.delta_y = -5.0f;
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
-  // Set has_precise_scroll_deltas to keep these events off the animated scroll
-  // pathways, which currently break this test.
-  // https://bugs.chromium.org/p/chromium/issues/detail?id=710513
-  scroll_event.has_precise_scrolling_deltas = true;
   rwhv_parent->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
 
   // The event router sends wheel events of a single scroll sequence to the
@@ -1856,6 +1851,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   RenderWidgetHostViewBase* rwhv_child = static_cast<RenderWidgetHostViewBase*>(
       iframe_node->current_frame_host()->GetRenderWidgetHost()->GetView());
 
+  // This test does not involve hit testing, but input events could be dropped
+  // by the renderer before the first compositor commit, so we wait here anyway
+  // to avoid that.
+  WaitForHitTestData(iframe_node->current_frame_host());
+
   double initial_y = 0.0;
   ASSERT_TRUE(content::ExecuteScriptAndExtractDouble(
       root,
@@ -1964,10 +1964,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, TouchpadGestureFlingStart) {
   blink::WebMouseWheelEvent scroll_event(
       blink::WebInputEvent::kMouseWheel, blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
+  scroll_event.delta_units =
+      ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
   scroll_event.delta_x = 0.0f;
   scroll_event.delta_y = 5.0f;
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
-  scroll_event.has_precise_scrolling_deltas = true;
   child_rwh->ForwardWheelEvent(scroll_event);
   gesture_scroll_begin_ack_observer.Wait();
 
@@ -2091,10 +2092,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
                        scale_factor),
       gfx::ToCeiledInt((bounds.y() - root_view->GetViewBounds().y() + 10) *
                        scale_factor));
+  scroll_event.delta_units =
+      ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
   scroll_event.delta_x = 0.0f;
   scroll_event.delta_y = 5.0f;
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
-  scroll_event.has_precise_scrolling_deltas = true;
   rwhv_nested->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
   ack_observer.Wait();
 
@@ -2150,10 +2152,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
                        scale_factor),
       gfx::ToCeiledInt((bounds.y() - root_view->GetViewBounds().y() + 10) *
                        scale_factor));
+  scroll_event.delta_units =
+      ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
   scroll_event.delta_x = 0.0f;
   scroll_event.delta_y = -5.0f;
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
-  scroll_event.has_precise_scrolling_deltas = true;
   child_view->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
 
   // Send a wheel end event to complete the scrolling sequence.
@@ -2227,10 +2230,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, ScrollLocalSubframeInOOPIF) {
       blink::WebInputEvent::kMouseWheel, blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   scroll_event.SetPositionInWidget(90, 110);
+  scroll_event.delta_units =
+      ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
   scroll_event.delta_x = 0.0f;
   scroll_event.delta_y = -50.0f;
   scroll_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
-  scroll_event.has_precise_scrolling_deltas = true;
   rwhv_child->ProcessMouseWheelEvent(scroll_event, ui::LatencyInfo());
   ack_observer.Wait();
 }
@@ -2919,7 +2923,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
 IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, RemoveFocusFromKilledFrame) {
   GURL main_url(embedded_test_server()->GetURL(
       "foo.com", "/cross_site_iframe_factory.html?foo.com(bar.com)"));
-  NavigateToURL(shell(), main_url);
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
 
   // It is safe to obtain the root frame tree node here, as it doesn't change.
   FrameTreeNode* root = web_contents()->GetFrameTree()->root();
@@ -4097,6 +4101,14 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessEmbedderCSPEnforcementBrowserTest,
     NavigateFrameToURL(child, urls[i]);
     EXPECT_EQ(csp_values[i], child->frame_owner_properties().required_csp);
     // TODO(amalika): add checks that the CSP replication takes effect
+
+    const url::Origin child_origin =
+        child->current_frame_host()->GetLastCommittedOrigin();
+    // TODO(https://crbug.com/1000804): Enable check once bug is fixed.
+    // EXPECT_TRUE(child_origin.opaque());
+    EXPECT_EQ(url::Origin::Create(urls[i].GetOrigin())
+                  .GetTupleOrPrecursorTupleIfOpaque(),
+              child_origin.GetTupleOrPrecursorTupleIfOpaque());
   }
 }
 
@@ -4155,8 +4167,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, OriginReplication) {
 
 // Test that HasReceivedUserGesture and HasReceivedUserGestureBeforeNavigation
 // are propagated correctly across origins.
+// Flaky. https://crbug.com/1014175
 IN_PROC_BROWSER_TEST_F(SitePerProcessAutoplayBrowserTest,
-                       PropagateUserGestureFlag) {
+                       DISABLED_PropagateUserGestureFlag) {
   GURL main_url(embedded_test_server()->GetURL(
       "example.com", "/media/autoplay/autoplay-enabled.html"));
   GURL foo_url(embedded_test_server()->GetURL(
@@ -6213,8 +6226,6 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
     params->parent_routing_id =
         shell()->web_contents()->GetMainFrame()->GetRoutingID();
     params->previous_sibling_routing_id = IPC::mojom::kRoutingIdNone;
-    params->widget_params = mojom::CreateFrameWidgetParams::New();
-    params->widget_params->routing_id = IPC::mojom::kRoutingIdNone;
     params->replication_state.name = "name";
     params->replication_state.unique_name = "name";
     params->devtools_frame_token = base::UnguessableToken::Create();
@@ -7136,7 +7147,12 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
     load_observer.Wait();
 
     // The blocked frame's origin should become unique.
-    EXPECT_EQ("null", root->child_at(0)->current_origin().Serialize());
+    const url::Origin child_origin =
+        root->child_at(0)->current_frame_host()->GetLastCommittedOrigin();
+    EXPECT_TRUE(child_origin.opaque());
+    EXPECT_EQ(url::Origin::Create(blocked_url.GetOrigin())
+                  .GetTupleOrPrecursorTupleIfOpaque(),
+              child_origin.GetTupleOrPrecursorTupleIfOpaque());
 
     // X-Frame-Options and CSP frame-ancestors behave differently. XFO commits
     // an error page, while CSP commits a "data:," URL.
@@ -7968,7 +7984,7 @@ class ShowCreatedWindowInterceptor
           test_callback)
       : render_frame_host_(render_frame_host),
         test_callback_(std::move(test_callback)) {
-    render_frame_host_->frame_host_binding_for_testing().SwapImplForTesting(
+    render_frame_host_->frame_host_receiver_for_testing().SwapImplForTesting(
         this);
   }
 
@@ -8737,17 +8753,18 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessFeaturePolicyBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), start_url));
 
   FrameTreeNode* root = web_contents()->GetFrameTree()->root();
-  EXPECT_EQ(CreateFPHeader(blink::mojom::FeaturePolicyFeature::kGeolocation,
-                           blink::mojom::FeaturePolicyFeature::kOversizedImages,
-                           {start_url.GetOrigin()}),
+  EXPECT_EQ(CreateParsedFeaturePolicy(
+                {blink::mojom::FeaturePolicyFeature::kGeolocation,
+                 blink::mojom::FeaturePolicyFeature::kOversizedImages},
+                {start_url.GetOrigin()}),
             root->current_replication_state().feature_policy_header);
 
   // When the main frame navigates to a page with a new policy, it should
   // overwrite the old one.
   EXPECT_TRUE(NavigateToURL(shell(), first_nav_url));
-  EXPECT_EQ(CreateFPHeaderMatchesAll(
-                blink::mojom::FeaturePolicyFeature::kGeolocation,
-                blink::mojom::FeaturePolicyFeature::kOversizedImages),
+  EXPECT_EQ(CreateParsedFeaturePolicyMatchesAll(
+                {blink::mojom::FeaturePolicyFeature::kGeolocation,
+                 blink::mojom::FeaturePolicyFeature::kOversizedImages}),
             root->current_replication_state().feature_policy_header);
 
   // When the main frame navigates to a page without a policy, the replicated
@@ -8767,17 +8784,18 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessFeaturePolicyBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), start_url));
 
   FrameTreeNode* root = web_contents()->GetFrameTree()->root();
-  EXPECT_EQ(CreateFPHeader(blink::mojom::FeaturePolicyFeature::kGeolocation,
-                           blink::mojom::FeaturePolicyFeature::kOversizedImages,
-                           {start_url.GetOrigin()}),
+  EXPECT_EQ(CreateParsedFeaturePolicy(
+                {blink::mojom::FeaturePolicyFeature::kGeolocation,
+                 blink::mojom::FeaturePolicyFeature::kOversizedImages},
+                {start_url.GetOrigin()}),
             root->current_replication_state().feature_policy_header);
 
   // When the main frame navigates to a page with a new policy, it should
   // overwrite the old one.
   EXPECT_TRUE(NavigateToURL(shell(), first_nav_url));
-  EXPECT_EQ(CreateFPHeaderMatchesAll(
-                blink::mojom::FeaturePolicyFeature::kGeolocation,
-                blink::mojom::FeaturePolicyFeature::kOversizedImages),
+  EXPECT_EQ(CreateParsedFeaturePolicyMatchesAll(
+                {blink::mojom::FeaturePolicyFeature::kGeolocation,
+                 blink::mojom::FeaturePolicyFeature::kOversizedImages}),
             root->current_replication_state().feature_policy_header);
 
   // When the main frame navigates to a page without a policy, the replicated
@@ -8799,23 +8817,25 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessFeaturePolicyBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
 
   FrameTreeNode* root = web_contents()->GetFrameTree()->root();
-  EXPECT_EQ(CreateFPHeader(blink::mojom::FeaturePolicyFeature::kGeolocation,
-                           blink::mojom::FeaturePolicyFeature::kOversizedImages,
-                           {main_url.GetOrigin(), GURL("http://example.com/")}),
+  EXPECT_EQ(CreateParsedFeaturePolicy(
+                {blink::mojom::FeaturePolicyFeature::kGeolocation,
+                 blink::mojom::FeaturePolicyFeature::kOversizedImages},
+                {main_url.GetOrigin(), GURL("http://example.com/")}),
             root->current_replication_state().feature_policy_header);
   EXPECT_EQ(1UL, root->child_count());
   EXPECT_EQ(
-      CreateFPHeader(blink::mojom::FeaturePolicyFeature::kGeolocation,
-                     blink::mojom::FeaturePolicyFeature::kOversizedImages,
-                     {main_url.GetOrigin()}),
+      CreateParsedFeaturePolicy(
+          {blink::mojom::FeaturePolicyFeature::kGeolocation,
+           blink::mojom::FeaturePolicyFeature::kOversizedImages},
+          {main_url.GetOrigin()}),
       root->child_at(0)->current_replication_state().feature_policy_header);
 
   // Navigate the iframe cross-site.
   NavigateFrameToURL(root->child_at(0), first_nav_url);
   EXPECT_EQ(
-      CreateFPHeaderMatchesAll(
-          blink::mojom::FeaturePolicyFeature::kGeolocation,
-          blink::mojom::FeaturePolicyFeature::kOversizedImages),
+      CreateParsedFeaturePolicyMatchesAll(
+          {blink::mojom::FeaturePolicyFeature::kGeolocation,
+           blink::mojom::FeaturePolicyFeature::kOversizedImages}),
       root->child_at(0)->current_replication_state().feature_policy_header);
 
   // Navigate the iframe to another location, this one with no policy header
@@ -8827,9 +8847,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessFeaturePolicyBrowserTest,
   // Navigate the iframe back to a page with a policy
   NavigateFrameToURL(root->child_at(0), first_nav_url);
   EXPECT_EQ(
-      CreateFPHeaderMatchesAll(
-          blink::mojom::FeaturePolicyFeature::kGeolocation,
-          blink::mojom::FeaturePolicyFeature::kOversizedImages),
+      CreateParsedFeaturePolicyMatchesAll(
+          {blink::mojom::FeaturePolicyFeature::kGeolocation,
+           blink::mojom::FeaturePolicyFeature::kOversizedImages}),
       root->child_at(0)->current_replication_state().feature_policy_header);
 }
 
@@ -8858,9 +8878,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessFeaturePolicyJavaScriptBrowserTest,
   // exists.)
   NavigateFrameToURL(root->child_at(1), first_nav_url);
   EXPECT_EQ(
-      CreateFPHeaderMatchesAll(
-          blink::mojom::FeaturePolicyFeature::kGeolocation,
-          blink::mojom::FeaturePolicyFeature::kOversizedImages),
+      CreateParsedFeaturePolicyMatchesAll(
+          {blink::mojom::FeaturePolicyFeature::kGeolocation,
+           blink::mojom::FeaturePolicyFeature::kOversizedImages}),
       root->child_at(1)->current_replication_state().feature_policy_header);
 
   EXPECT_EQ(1UL, root->child_at(1)->child_count());
@@ -11929,7 +11949,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
 // Create an out-of-process iframe that causes itself to be detached during
 // its layout/animate phase. See https://crbug.com/802932.
 // Disabled on Android due to flakiness, https://crbug.com/809580.
-#if defined(OS_ANDROID)
+// Disabled on Mac due to flakiness, https://crbug.com/1006122.
+#if defined(OS_ANDROID) || defined(OS_MACOSX)
 #define MAYBE_OOPIFDetachDuringAnimation DISABLED_OOPIFDetachDuringAnimation
 #else
 #define MAYBE_OOPIFDetachDuringAnimation OOPIFDetachDuringAnimation
@@ -12761,6 +12782,12 @@ class SitePerProcessBrowserTouchActionTest : public SitePerProcessBrowserTest {
       : compositor_touch_action_enabled_(
             base::FeatureList::IsEnabled(features::kCompositorTouchAction)) {}
 
+  bool GetTouchActionForceEnableZoom(RenderWidgetHost* rwh) {
+    InputRouterImpl* input_router = static_cast<InputRouterImpl*>(
+        static_cast<RenderWidgetHostImpl*>(rwh)->input_router());
+    return input_router->touch_action_filter_.force_enable_zoom_;
+  }
+
   // Computes the effective and white-listed touch action for |rwhv_child| by
   // dispatching a touch to it through |rwhv_root|. |rwhv_root| is the root
   // frame containing |rwhv_child|. |rwhv_child| is the child (or indirect
@@ -12861,6 +12888,76 @@ class SitePerProcessBrowserTouchActionTest : public SitePerProcessBrowserTest {
  protected:
   const bool compositor_touch_action_enabled_;
 };
+
+#if defined(OS_ANDROID)
+// Class to set |force_enable_zoom| to true in WebkitPrefs.
+class EnableForceZoomContentClient : public TestContentBrowserClient {
+ public:
+  EnableForceZoomContentClient() = default;
+
+  void OverrideWebkitPrefs(RenderViewHost* render_view_host,
+                           WebPreferences* prefs) override {
+    DCHECK(old_client_);
+    old_client_->OverrideWebkitPrefs(render_view_host, prefs);
+    prefs->force_enable_zoom = true;
+  }
+
+  void set_old_client(ContentBrowserClient* old_client) {
+    old_client_ = old_client;
+  }
+
+ private:
+  ContentBrowserClient* old_client_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(EnableForceZoomContentClient);
+};
+
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTouchActionTest,
+                       ForceEnableZoomPropagatesToChild) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  ASSERT_EQ(1U, root->child_count());
+  GURL b_url(embedded_test_server()->GetURL("b.com", "/title1.html"));
+  FrameTreeNode* child = root->child_at(0);
+  NavigateFrameToURL(child, b_url);
+  WaitForHitTestData(child->current_frame_host());
+
+  // Get access to child's TouchActionFilter.
+  RenderWidgetHost* child_rwh =
+      child->current_frame_host()->GetRenderWidgetHost();
+  EXPECT_FALSE(GetTouchActionForceEnableZoom(child_rwh));
+
+  EnableForceZoomContentClient new_client;
+  ContentBrowserClient* old_client = SetBrowserClientForTesting(&new_client);
+  new_client.set_old_client(old_client);
+
+  web_contents()->GetRenderViewHost()->OnWebkitPreferencesChanged();
+
+  EXPECT_TRUE(GetTouchActionForceEnableZoom(child_rwh));
+
+  // Add a new oopif child frame, and make sure it initializes with the correct
+  // value of ForceEnableZoom.
+  GURL c_url = embedded_test_server()->GetURL("c.com", "/title1.html");
+  std::string create_frame_script = base::StringPrintf(
+      "var new_iframe = document.createElement('iframe');"
+      "new_iframe.src = '%s';"
+      "document.body.appendChild(new_iframe);",
+      c_url.spec().c_str());
+  EXPECT_TRUE(ExecuteScript(root, create_frame_script));
+  EXPECT_TRUE(WaitForLoadStop(web_contents()));
+  ASSERT_EQ(2U, root->child_count());
+
+  FrameTreeNode* new_child = root->child_at(1);
+  EXPECT_NE(root->current_frame_host()->GetRenderWidgetHost(),
+            new_child->current_frame_host()->GetRenderWidgetHost());
+  EXPECT_TRUE(GetTouchActionForceEnableZoom(
+      new_child->current_frame_host()->GetRenderWidgetHost()));
+
+  SetBrowserClientForTesting(old_client);
+}
+#endif  // defined(OS_ANDROID)
 
 // Flaky on every platform, failing most of the time on Android.
 // See https://crbug.com/945734
@@ -13347,14 +13444,22 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
       1);
 }
 
-IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
-                       ChildFrameCrashMetrics_ScrolledIntoViewAfterTabIsShown) {
-  // Disable the feature to mark hidden tabs with sad frames for reload, since
-  // it makes the scenario for which this test collects metrics impossible.
-  base::test::ScopedFeatureList feature_list_;
-  feature_list_.InitAndDisableFeature(
-      features::kReloadHiddenTabsWithCrashedSubframes);
+class SitePerProcessBrowserTestWithoutSadFrameTabReload
+    : public SitePerProcessBrowserTest {
+ public:
+  SitePerProcessBrowserTestWithoutSadFrameTabReload() {
+    // Disable the feature to mark hidden tabs with sad frames for reload, since
+    // it makes the scenario for which this test collects metrics impossible.
+    feature_list_.InitAndDisableFeature(
+        features::kReloadHiddenTabsWithCrashedSubframes);
+  }
 
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTestWithoutSadFrameTabReload,
+                       ChildFrameCrashMetrics_ScrolledIntoViewAfterTabIsShown) {
   // Start on a page that has a single iframe, which is positioned out of
   // view, and navigate that iframe cross-site.
   GURL main_url(
@@ -13425,15 +13530,33 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
       1);
 }
 
+class SitePerProcessBrowserTestWithSadFrameTabReload
+    : public SitePerProcessBrowserTest {
+ public:
+  SitePerProcessBrowserTestWithSadFrameTabReload() {
+    // Disable the feature to mark hidden tabs with sad frames for reload, since
+    // it makes the scenario for which this test collects metrics impossible.
+    feature_list_.InitAndEnableFeature(
+        features::kReloadHiddenTabsWithCrashedSubframes);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
 // Verify the feature where hidden tabs with crashed subframes are marked for
 // reload.  This avoids showing crashed subframes if a hidden tab is eventually
 // shown.  See https://crbug.com/841572.
-IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
-                       ReloadHiddenTabWithCrashedSubframe) {
-  base::test::ScopedFeatureList feature_list_;
-  feature_list_.InitAndEnableFeature(
-      features::kReloadHiddenTabsWithCrashedSubframes);
-
+// crbug.com/1010119, fails on win.
+#if defined(OS_WIN)
+#define MAYBE_ReloadHiddenTabWithCrashedSubframe \
+  DISABLED_ReloadHiddenTabWithCrashedSubframe
+#else
+#define MAYBE_ReloadHiddenTabWithCrashedSubframe \
+  ReloadHiddenTabWithCrashedSubframe
+#endif
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTestWithSadFrameTabReload,
+                       MAYBE_ReloadHiddenTabWithCrashedSubframe) {
   auto crash_process = [](FrameTreeNode* ftn) {
     RenderProcessHost* process = ftn->current_frame_host()->GetProcess();
     RenderProcessHostWatcher crash_observer(
@@ -13457,6 +13580,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   // Kill the b.com subframe's process.  This should mark the hidden
   // WebContents for reload.
   {
+    SCOPED_TRACE("In-viewport sad frame on a hidden tab");
     base::HistogramTester histograms;
     crash_process(root->child_at(0));
     histograms.ExpectUniqueSample(
@@ -13482,10 +13606,12 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   GURL out_of_view_url(
       embedded_test_server()->GetURL("a.com", "/iframe_out_of_view.html"));
   EXPECT_TRUE(NavigateToURL(shell(), out_of_view_url));
+  EXPECT_EQ("LOADED", EvalJsWithManualReply(shell(), "notifyWhenLoaded();"));
   NavigateIframeToURL(web_contents(), "test_iframe",
                       embedded_test_server()->GetURL("b.com", "/title1.html"));
   web_contents()->UpdateWebContentsVisibility(Visibility::HIDDEN);
   {
+    SCOPED_TRACE("Out-of-viewport sad frame on a hidden tab");
     base::HistogramTester histograms;
     crash_process(root->child_at(0));
     histograms.ExpectUniqueSample(
@@ -13516,6 +13642,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
 
   web_contents()->UpdateWebContentsVisibility(Visibility::HIDDEN);
   {
+    SCOPED_TRACE("display:none sad frame on a hidden tab");
     base::HistogramTester histograms;
     crash_process(root->child_at(0));
     histograms.ExpectUniqueSample(
@@ -13531,6 +13658,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   EXPECT_EQ(Visibility::VISIBLE, web_contents()->GetVisibility());
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
   {
+    SCOPED_TRACE("Visible sad frame on a visible tab");
     base::HistogramTester histograms;
     crash_process(root->child_at(0));
     histograms.ExpectUniqueSample(
@@ -14235,7 +14363,8 @@ class ScrollingIntegrationTest : public SitePerProcessBrowserTest {
     params.gesture_source_type = source;
     params.anchor = gfx::PointF(point);
     params.distances.push_back(-distance);
-    params.precise_scrolling_deltas = true;
+    params.granularity =
+        ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
 
     auto gesture = std::make_unique<SyntheticSmoothScrollGesture>(params);
 

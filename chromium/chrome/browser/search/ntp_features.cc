@@ -6,6 +6,7 @@
 
 #include "base/feature_list.h"
 #include "build/build_config.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "ui/base/ui_base_features.h"
 
@@ -19,23 +20,9 @@ const base::Feature kChromeColors{"ChromeColors",
 const base::Feature kChromeColorsCustomColorPicker{
     "ChromeColorsCustomColorPicker", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// If enabled, does not fade in most visited tiles on initial page load.
-const base::Feature kDisableInitialMostVisitedFadeIn{
-    "DisableInitialMostVisitedFadeIn", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// If enabled, the NTP shortcut layout will be replaced with a grid layout that
-// enables better animations.
-const base::Feature kGridLayoutForNtpShortcuts{
-    "GridLayoutForNtpShortcuts", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // If enabled, the user will see the second version of the customization picker.
 const base::Feature kNtpCustomizationMenuV2{"NtpCustomizationMenuV2",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
-
-// If enabled, include a pre-populated Google search shortcut on the NTP during
-// first run.
-const base::Feature kFirstRunDefaultSearchShortcut{
-    "FirstRunDefaultSearchShortcut", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If enabled, the search box in the middle of the NTP will accept input
 // directly (i.e. not be a "fake" box) and search results will show directly
@@ -45,7 +32,16 @@ const base::Feature kNtpRealbox{"NtpRealbox",
 
 bool IsNtpRealboxEnabled() {
   return base::FeatureList::IsEnabled(kNtpRealbox) ||
-         base::FeatureList::IsEnabled(omnibox::kZeroSuggestionsOnNTP);
+         base::FeatureList::IsEnabled(omnibox::kZeroSuggestionsOnNTPRealbox) ||
+         (base::FeatureList::IsEnabled(omnibox::kOnFocusSuggestions) &&
+          !OmniboxFieldTrial::GetZeroSuggestVariants(
+               metrics::OmniboxEventProto::NTP_REALBOX)
+               .empty());
 }
+
+// If enabled, "middle slot" promos on the bottom of the NTP will show a dismiss
+// UI that allows users to close them and not see them again.
+const base::Feature kDismissNtpPromos{"DismissNtpPromos",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features

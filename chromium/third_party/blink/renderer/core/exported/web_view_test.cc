@@ -47,8 +47,9 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
-#include "third_party/blink/public/common/manifest/web_display_mode.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/mojom/frame/document_interface_broker.mojom-blink.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_cursor_info.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
@@ -107,6 +108,7 @@
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/interactive_detector.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
+#include "third_party/blink/renderer/core/page/context_menu_controller.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/page_hidden_state.h"
@@ -251,12 +253,10 @@ class WebViewTest : public testing::Test {
 
  protected:
   void SetViewportSize(const WebSize& size) {
-    content::LayerTreeView* layer_tree_view =
-        web_view_helper_.GetLayerTreeView();
-    layer_tree_view->SetViewportRectAndScale(
+    cc::LayerTreeHost* layer_tree_host = web_view_helper_.GetLayerTreeHost();
+    layer_tree_host->SetViewportRectAndScale(
         gfx::Rect(static_cast<gfx::Size>(size)), /*device_scale_factor=*/1.f,
-        layer_tree_view->layer_tree_host()
-            ->local_surface_id_allocation_from_parent());
+        layer_tree_host->local_surface_id_allocation_from_parent());
   }
 
   std::string RegisterMockedHttpURLLoad(const std::string& file_name) {
@@ -2776,6 +2776,10 @@ TEST_F(WebViewTest, LongPressImage) {
   EXPECT_EQ(WebInputEventResult::kHandledSystem,
             web_view->MainFrameWidget()->HandleInputEvent(
                 WebCoalescedInputEvent(event)));
+  EXPECT_TRUE(
+      web_view->AsView()
+          .page->GetContextMenuController()
+          .ContextMenuNodeForFrame(web_view->MainFrameImpl()->GetFrame()));
 }
 
 TEST_F(WebViewTest, LongPressVideo) {
@@ -3841,7 +3845,7 @@ TEST_F(WebViewTest, ChangeDisplayMode) {
       WebFrameContentDumper::DumpWebViewAsText(web_view, 21).Utf8();
   EXPECT_EQ("regular-ui", content);
 
-  web_view->SetDisplayMode(kWebDisplayModeMinimalUi);
+  web_view->SetDisplayMode(blink::mojom::DisplayMode::kMinimalUi);
   content = WebFrameContentDumper::DumpWebViewAsText(web_view, 21).Utf8();
   EXPECT_EQ("minimal-ui", content);
   web_view_helper_.Reset();
@@ -4252,19 +4256,19 @@ TEST_F(WebViewTest, PreferredSize) {
   EXPECT_EQ(100, size.width);
   EXPECT_EQ(100, size.height);
 
-  web_view->SetZoomLevel(WebView::ZoomFactorToZoomLevel(2.0));
+  web_view->SetZoomLevel(PageZoomFactorToZoomLevel(2.0));
   size = web_view->ContentsPreferredMinimumSize();
   EXPECT_EQ(200, size.width);
   EXPECT_EQ(200, size.height);
 
   // Verify that both width and height are rounded (in this case up)
-  web_view->SetZoomLevel(WebView::ZoomFactorToZoomLevel(0.9995));
+  web_view->SetZoomLevel(PageZoomFactorToZoomLevel(0.9995));
   size = web_view->ContentsPreferredMinimumSize();
   EXPECT_EQ(100, size.width);
   EXPECT_EQ(100, size.height);
 
   // Verify that both width and height are rounded (in this case down)
-  web_view->SetZoomLevel(WebView::ZoomFactorToZoomLevel(1.0005));
+  web_view->SetZoomLevel(PageZoomFactorToZoomLevel(1.0005));
   size = web_view->ContentsPreferredMinimumSize();
   EXPECT_EQ(100, size.width);
   EXPECT_EQ(100, size.height);
@@ -4274,7 +4278,7 @@ TEST_F(WebViewTest, PreferredSize) {
       ToKURL(url), test::CoreTestDataPath("specify_size.html"));
   web_view = web_view_helper_.InitializeAndLoad(url);
 
-  web_view->SetZoomLevel(WebView::ZoomFactorToZoomLevel(1));
+  web_view->SetZoomLevel(PageZoomFactorToZoomLevel(1));
   size = web_view->ContentsPreferredMinimumSize();
   EXPECT_EQ(2, size.width);
   EXPECT_EQ(2, size.height);
@@ -4840,8 +4844,6 @@ TEST_F(WebViewTest, ForceAndResetViewport) {
       web_view_helper_.InitializeAndLoad(base_url_ + "200-by-300.html");
   web_view_impl->MainFrameWidget()->Resize(WebSize(100, 150));
   SetViewportSize(WebSize(100, 150));
-  VisualViewport* visual_viewport =
-      &web_view_impl->GetPage()->GetVisualViewport();
   DevToolsEmulator* dev_tools_emulator = web_view_impl->GetDevToolsEmulator();
 
   TransformationMatrix expected_matrix;
@@ -4852,7 +4854,6 @@ TEST_F(WebViewTest, ForceAndResetViewport) {
     dev_tools_emulator->OverrideVisibleRect(IntSize(), &visible_rect);
     EXPECT_EQ(IntRect(1, 2, 3, 4), visible_rect);  // Was modified.
   }
-  EXPECT_TRUE(visual_viewport->ContainerLayer()->MasksToBounds());
 
   // Override applies transform, sets visible rect, and disables
   // visual viewport clipping.
@@ -4865,7 +4866,6 @@ TEST_F(WebViewTest, ForceAndResetViewport) {
     dev_tools_emulator->OverrideVisibleRect(IntSize(100, 150), &visible_rect);
     EXPECT_EQ(IntRect(50, 55, 50, 75), visible_rect);
   }
-  EXPECT_FALSE(visual_viewport->ContainerLayer()->MasksToBounds());
 
   // Setting new override discards previous one.
   matrix = dev_tools_emulator->ForceViewportForTesting(
@@ -4877,7 +4877,6 @@ TEST_F(WebViewTest, ForceAndResetViewport) {
     dev_tools_emulator->OverrideVisibleRect(IntSize(100, 150), &visible_rect);
     EXPECT_EQ(IntRect(5, 10, 68, 101), visible_rect);  // Was modified.
   }
-  EXPECT_FALSE(visual_viewport->ContainerLayer()->MasksToBounds());
 
   // Clearing override restores original transform, visible rect and
   // visual viewport clipping.
@@ -4889,7 +4888,6 @@ TEST_F(WebViewTest, ForceAndResetViewport) {
     dev_tools_emulator->OverrideVisibleRect(IntSize(), &visible_rect);
     EXPECT_EQ(IntRect(1, 2, 3, 4), visible_rect);  // Not modified.
   }
-  EXPECT_TRUE(visual_viewport->ContainerLayer()->MasksToBounds());
 }
 
 TEST_F(WebViewTest, ViewportOverrideIntegratesDeviceMetricsOffsetAndScale) {
@@ -5034,7 +5032,7 @@ TEST_F(WebViewTest, ResizeForPrintingViewportUnits) {
 TEST_F(WebViewTest, WidthMediaQueryWithPageZoomAfterPrinting) {
   WebViewImpl* web_view = web_view_helper_.Initialize();
   web_view->MainFrameWidget()->Resize(WebSize(800, 600));
-  web_view->SetZoomLevel(WebView::ZoomFactorToZoomLevel(2.0));
+  web_view->SetZoomLevel(PageZoomFactorToZoomLevel(2.0));
 
   WebURL base_url = url_test_helpers::ToKURL("http://example.com/");
   frame_test_helpers::LoadHTMLString(web_view->MainFrameImpl(),
@@ -5069,7 +5067,7 @@ TEST_F(WebViewTest, WidthMediaQueryWithPageZoomAfterPrinting) {
 TEST_F(WebViewTest, ViewportUnitsPrintingWithPageZoom) {
   WebViewImpl* web_view = web_view_helper_.Initialize();
   web_view->MainFrameWidget()->Resize(WebSize(800, 600));
-  web_view->SetZoomLevel(WebView::ZoomFactorToZoomLevel(2.0));
+  web_view->SetZoomLevel(PageZoomFactorToZoomLevel(2.0));
 
   WebURL base_url = url_test_helpers::ToKURL("http://example.com/");
   frame_test_helpers::LoadHTMLString(web_view->MainFrameImpl(),
@@ -5729,14 +5727,14 @@ TEST_F(WebViewTest, RootLayerAttachment) {
 
   // Layers (including the root layer) should not be attached until the paint
   // lifecycle phase.
-  auto* layer_tree_view = web_view_helper_.GetLayerTreeView();
-  EXPECT_FALSE(layer_tree_view->GetRootLayer());
+  cc::LayerTreeHost* layer_tree_host = web_view_helper_.GetLayerTreeHost();
+  EXPECT_FALSE(layer_tree_host->root_layer());
 
   // Do a full lifecycle update and ensure that the root layer has been added.
   web_view->MainFrameWidget()->UpdateLifecycle(
       WebFrameWidget::LifecycleUpdate::kAll,
       WebWidget::LifecycleUpdateReason::kTest);
-  EXPECT_TRUE(layer_tree_view->GetRootLayer());
+  EXPECT_TRUE(layer_tree_host->root_layer());
 }
 
 // Verifies that we emit Blink.UseCounter.FeaturePolicy.PotentialAnimation for
@@ -5786,6 +5784,46 @@ TEST_F(WebViewTest, ForceDarkModeInvalidatesPaint) {
   ASSERT_TRUE(document);
   web_view->GetSettings()->SetForceDarkModeEnabled(true);
   EXPECT_TRUE(document->GetLayoutView()->ShouldDoFullPaintInvalidation());
+}
+
+// Regression test for https://crbug.com/1012068
+TEST_F(WebViewTest, LongPressImageAndThenLongTapImage) {
+  RegisterMockedHttpURLLoad("long_press_image.html");
+
+  WebViewImpl* web_view =
+      web_view_helper_.InitializeAndLoad(base_url_ + "long_press_image.html");
+  web_view->SettingsImpl()->SetAlwaysShowContextMenuOnTouch(false);
+  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  UpdateAllLifecyclePhases();
+  RunPendingTasks();
+
+  WebGestureEvent event(WebInputEvent::kGestureLongPress,
+                        WebInputEvent::kNoModifiers,
+                        WebInputEvent::GetStaticTimeStampForTests(),
+                        WebGestureDevice::kTouchscreen);
+  event.SetPositionInWidget(WebFloatPoint(10, 10));
+
+  EXPECT_EQ(WebInputEventResult::kHandledSystem,
+            web_view->MainFrameWidget()->HandleInputEvent(
+                WebCoalescedInputEvent(event)));
+  EXPECT_TRUE(
+      web_view->AsView()
+          .page->GetContextMenuController()
+          .ContextMenuNodeForFrame(web_view->MainFrameImpl()->GetFrame()));
+
+  WebGestureEvent tap_event(WebInputEvent::kGestureLongTap,
+                            WebInputEvent::kNoModifiers,
+                            WebInputEvent::GetStaticTimeStampForTests(),
+                            WebGestureDevice::kTouchscreen);
+  tap_event.SetPositionInWidget(WebFloatPoint(10, 10));
+
+  EXPECT_EQ(WebInputEventResult::kNotHandled,
+            web_view->MainFrameWidget()->HandleInputEvent(
+                WebCoalescedInputEvent(tap_event)));
+  EXPECT_TRUE(
+      web_view->AsView()
+          .page->GetContextMenuController()
+          .ContextMenuNodeForFrame(web_view->MainFrameImpl()->GetFrame()));
 }
 
 }  // namespace blink

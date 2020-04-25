@@ -35,6 +35,7 @@
 #include "media/base/simple_watch_timer.h"
 #include "media/base/text_track.h"
 #include "media/blink/buffered_data_source_host_impl.h"
+#include "media/blink/learning_experiment_helper.h"
 #include "media/blink/media_blink_export.h"
 #include "media/blink/multibuffer_data_source.h"
 #include "media/blink/video_frame_compositor.h"
@@ -82,14 +83,15 @@ class CdmContextRef;
 class ChunkDemuxer;
 class EncryptionScheme;
 class VideoDecodeStatsReporter;
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-class IPCDemuxer;
-class CoreAudioDemuxer;
-#endif
 class MediaLog;
 class UrlIndex;
 class VideoFrameCompositor;
 class WatchTimeReporter;
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+class IPCDemuxer;
+class CoreAudioDemuxer;
+#endif
 
 // The canonical implementation of blink::WebMediaPlayer that's backed by
 // Pipeline. Handles normal resource loading, Media Source, and
@@ -292,6 +294,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   bool IsOpaque() const override;
   int GetDelegateId() override;
   base::Optional<viz::SurfaceId> GetSurfaceId() override;
+  GURL GetSrcAfterRedirects() override;
 
   base::WeakPtr<blink::WebMediaPlayer> AsWeakPtr() override;
 
@@ -402,11 +405,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // they've changed.
   void SetNetworkState(blink::WebMediaPlayer::NetworkState state);
   void SetReadyState(blink::WebMediaPlayer::ReadyState state);
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  void SniffProtocol();
-  void ProtocolSniffed(const std::string& mime_type);
-#endif
 
   // Returns the current video frame from |compositor_|, and asks the compositor
   // to update its frame if it is stale.
@@ -629,6 +627,11 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // the amount of data the DataSource buffers. Does nothing prior to reaching
   // kReadyStateHaveEnoughData for the first time.
   void MaybeUpdateBufferSizesForPlayback();
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  void SniffProtocol();
+  void ProtocolSniffed(const std::string& mime_type);
+#endif
 
   blink::WebLocalFrame* const frame_;
 
@@ -1042,6 +1045,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // State for simplified watch time reporting.
   RendererFactorySelector::FactoryType reported_renderer_type_;
   SimpleWatchTimer simple_watch_timer_;
+
+  LearningExperimentHelper will_play_helper_;
 
   base::WeakPtr<WebMediaPlayerImpl> weak_this_;
   base::WeakPtrFactory<WebMediaPlayerImpl> weak_factory_{this};

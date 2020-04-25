@@ -117,7 +117,7 @@ void SyncConfirmationHandler::HandleAccountImageRequest(
 
 void SyncConfirmationHandler::RecordConsent(const base::ListValue* args) {
   CHECK_EQ(2U, args->GetSize());
-  const std::vector<base::Value>& consent_description =
+  base::span<const base::Value> consent_description =
       args->GetList()[0].GetList();
   const std::string& consent_confirmation = args->GetList()[1].GetString();
 
@@ -211,6 +211,8 @@ void SyncConfirmationHandler::CloseModalSigninWindow(
 
 void SyncConfirmationHandler::HandleInitializedWithSize(
     const base::ListValue* args) {
+  AllowJavascript();
+
   if (!browser_)
     return;
 
@@ -237,5 +239,5 @@ void SyncConfirmationHandler::HandleInitializedWithSize(
   // TODO(anthonyvd): Figure out why this is needed on Mac and not other
   // platforms and if there's a way to start unfocused while avoiding this
   // workaround.
-  web_ui()->CallJavascriptFunctionUnsafe("sync.confirmation.clearFocus");
+  FireWebUIListener("clear-focus");
 }

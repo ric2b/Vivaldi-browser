@@ -34,10 +34,6 @@ class CompositedLayerMappingTest : public RenderingTest {
         .ComputeInterestRect(graphics_layer, previous_interest_rect);
   }
 
-  bool ShouldFlattenTransform(const GraphicsLayer& layer) const {
-    return layer.ShouldFlattenTransform();
-  }
-
   bool InterestRectChangedEnoughToRepaint(const IntRect& previous_interest_rect,
                                           const IntRect& new_interest_rect,
                                           const IntSize& layer_size) {
@@ -518,31 +514,6 @@ TEST_F(CompositedLayerMappingTest, ClippedBigLayer) {
   // Offscreen layers are painted as usual.
   EXPECT_EQ(IntRect(0, 0, 4001, 4001),
             RecomputeInterestRect(paint_layer->GraphicsLayerBacking()));
-}
-
-TEST_F(CompositedLayerMappingTest, ScrollContentsFlattenForScroller) {
-  SetBodyInnerHTML(R"HTML(
-    <style>div::-webkit-scrollbar{ width: 5px; }</style>
-    <div id='scroller' style='width: 100px; height: 100px; overflow:
-    scroll; will-change: transform'>
-    <div style='width: 1000px; height: 1000px;'>Foo</div>Foo</div>
-  )HTML");
-
-  UpdateAllLifecyclePhasesForTest();
-  Element* element = GetDocument().getElementById("scroller");
-  PaintLayer* paint_layer =
-      ToLayoutBoxModelObject(element->GetLayoutObject())->Layer();
-  CompositedLayerMapping* composited_layer_mapping =
-      paint_layer->GetCompositedLayerMapping();
-
-  ASSERT_TRUE(composited_layer_mapping);
-
-  EXPECT_FALSE(
-      ShouldFlattenTransform(*composited_layer_mapping->MainGraphicsLayer()));
-  EXPECT_FALSE(
-      ShouldFlattenTransform(*composited_layer_mapping->ScrollingLayer()));
-  EXPECT_TRUE(ShouldFlattenTransform(
-      *composited_layer_mapping->ScrollingContentsLayer()));
 }
 
 TEST_F(CompositedLayerMappingTest, InterestRectChangedEnoughToRepaintEmpty) {
@@ -1178,89 +1149,6 @@ TEST_F(CompositedLayerMappingTest,
   EXPECT_FALSE(mapping->BackgroundPaintsOntoScrollingContentsLayer());
 }
 
-TEST_F(CompositedLayerMappingTest,
-       ScrollingLayerWithPerspectivePositionedCorrectly) {
-  // Test positioning of a scrolling layer within an offset parent, both with
-  // and without perspective.
-  //
-  // When a box shadow is used, the main graphics layer position is offset by
-  // the shadow. The scrolling contents then need to be offset in the other
-  // direction to compensate.  To make this a little clearer, for the first
-  // example here the layer positions are calculated as:
-  //
-  //   graphics_layer_ x = left_pos - shadow_spread + shadow_x_offset
-  //                     = 50 - 10 - 10
-  //                     = 30
-  //
-  //   graphics_layer_ y = top_pos - shadow_spread + shadow_y_offset
-  //                     = 50 - 10 + 0
-  //                     = 40
-  //
-  //   contents x = 50 - graphics_layer_ x = 50 - 30 = 20
-  //   contents y = 50 - graphics_layer_ y = 50 - 40 = 10
-  //
-  // The reason that perspective matters is that it affects which 'contents'
-  // layer is offset; child_transform_layer_ when using perspective, or
-  // scrolling_layer_ when there is no perspective.
-
-  SetBodyInnerHTML(R"HTML(
-    <div id='scroller' style='position: absolute; top: 50px; left: 50px;
-        width: 400px; height: 245px; overflow: auto; will-change: transform;
-        box-shadow: -10px 0 0 10px; perspective: 1px;'>
-      <div style='position: absolute; top: 50px; bottom: 0; width: 200px;
-          height: 200px;'></div>
-      </div>
-    <div id='scroller2' style='position: absolute; top: 400px; left: 50px;
-        width: 400px; height: 245px; overflow: auto; will-change: transform;
-        box-shadow: -10px 0 0 10px;'>
-      <div style='position: absolute; top: 50px; bottom: 0; width: 200px;
-          height: 200px;'></div>
-    </div>
-  )HTML");
-
-  auto* mapping = To<LayoutBlock>(GetLayoutObjectByElementId("scroller"))
-                      ->Layer()
-                      ->GetCompositedLayerMapping();
-
-  auto* mapping2 = To<LayoutBlock>(GetLayoutObjectByElementId("scroller2"))
-                       ->Layer()
-                       ->GetCompositedLayerMapping();
-
-  ASSERT_TRUE(mapping);
-  ASSERT_TRUE(mapping2);
-
-  // The perspective scroller should have a child transform containing the
-  // positional offset, and a scrolling layer that has no offset.
-
-  GraphicsLayer* scrolling_layer = mapping->ScrollingLayer();
-  GraphicsLayer* child_transform_layer = mapping->ChildTransformLayer();
-  GraphicsLayer* main_graphics_layer = mapping->MainGraphicsLayer();
-
-  ASSERT_TRUE(scrolling_layer);
-  ASSERT_TRUE(child_transform_layer);
-
-  EXPECT_FLOAT_EQ(30, main_graphics_layer->GetPosition().x());
-  EXPECT_FLOAT_EQ(40, main_graphics_layer->GetPosition().y());
-  EXPECT_FLOAT_EQ(0, scrolling_layer->GetPosition().x());
-  EXPECT_FLOAT_EQ(0, scrolling_layer->GetPosition().y());
-  EXPECT_FLOAT_EQ(20, child_transform_layer->GetPosition().x());
-  EXPECT_FLOAT_EQ(10, child_transform_layer->GetPosition().y());
-
-  // The non-perspective scroller should have no child transform and the
-  // offset on the scroller layer directly.
-
-  GraphicsLayer* scrolling_layer2 = mapping2->ScrollingLayer();
-  GraphicsLayer* main_graphics_layer2 = mapping2->MainGraphicsLayer();
-
-  ASSERT_TRUE(scrolling_layer2);
-  ASSERT_FALSE(mapping2->ChildTransformLayer());
-
-  EXPECT_FLOAT_EQ(30, main_graphics_layer2->GetPosition().x());
-  EXPECT_FLOAT_EQ(390, main_graphics_layer2->GetPosition().y());
-  EXPECT_FLOAT_EQ(20, scrolling_layer2->GetPosition().x());
-  EXPECT_FLOAT_EQ(10, scrolling_layer2->GetPosition().y());
-}
-
 TEST_F(CompositedLayerMappingTest, StickyPositionMainThreadOffset) {
   SetBodyInnerHTML(R"HTML(
     <style>.composited { backface-visibility: hidden; }
@@ -1349,10 +1237,8 @@ TEST_F(CompositedLayerMappingTest,
       sticky->Layer()->GetCompositedLayerMapping();
   ASSERT_TRUE(mapping);
   GraphicsLayer* main_graphics_layer = mapping->MainGraphicsLayer();
-  GraphicsLayer* child_transform_layer = mapping->ChildTransformLayer();
 
   ASSERT_TRUE(main_graphics_layer);
-  ASSERT_TRUE(child_transform_layer);
 
   auto* scroller =
       To<LayoutBlock>(GetLayoutObjectByElementId("scroller"))->Layer();
@@ -1369,11 +1255,6 @@ TEST_F(CompositedLayerMappingTest,
   // removed so that the compositor can take care of it.
   EXPECT_FLOAT_EQ(0, main_graphics_layer->GetPosition().x());
   EXPECT_FLOAT_EQ(0, main_graphics_layer->GetPosition().y());
-
-  // The child transform layer for the perspective shifting should also not be
-  // moved by the sticky offset.
-  EXPECT_FLOAT_EQ(0, child_transform_layer->GetPosition().x());
-  EXPECT_FLOAT_EQ(0, child_transform_layer->GetPosition().y());
 }
 
 TEST_F(CompositedLayerMappingTest,
@@ -1415,9 +1296,9 @@ TEST_F(CompositedLayerMappingTest,
   // This test verifies layers with direct compositing reasons won't have
   // transformed rasterization, i.e. should raster in local space.
   SetBodyInnerHTML(R"HTML(
-    <div id='target1' style='transform:translateZ(0);'>foo</div>
-    <div id='target2' style='will-change:opacity;'>bar</div>
-    <div id='target3' style='backface-visibility:hidden;'>ham</div>
+    <div id='target1' style='will-change: transform;'>foo</div>
+    <div id='target2' style='will-change: opacity;'>bar</div>
+    <div id='target3' style='backface-visibility: hidden;'>ham</div>
   )HTML");
 
   {
@@ -1658,11 +1539,10 @@ TEST_F(CompositedLayerMappingTest,
     return;
 
   SetHtmlInnerHTML(R"HTML(
-    <div id=scroller style="transform: translateZ(0); overflow: scroll;
-    width: 200px; height: 400px;">
-      <div id=squashing
-          style='width: 200px; height: 200px; position: relative; will-change:
-transform'></div>
+    <div id=scroller style="will-change: transform; overflow: scroll;
+        width: 200px; height: 400px;">
+      <div id=squashing style='width: 200px; height: 200px; position: relative;
+          will-change: transform'></div>
       <div id=squashed style="width: 200px; height: 6000px; top: -100px;
           position: relative;">
       </div>

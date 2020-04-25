@@ -22,6 +22,8 @@
  */
 
 #include "third_party/blink/renderer/core/html/html_image_element.h"
+
+#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/media_query_matcher.h"
@@ -326,7 +328,7 @@ ImageCandidate HTMLImageElement::FindBestFitImageFromPictureParent() {
   DCHECK(IsMainThread());
   Node* parent = parentNode();
   source_ = nullptr;
-  if (!parent || !IsHTMLPictureElement(*parent))
+  if (!parent || !IsA<HTMLPictureElement>(*parent))
     return ImageCandidate();
   for (Node* child = parent->firstChild(); child;
        child = child->nextSibling()) {
@@ -416,7 +418,7 @@ Node::InsertionNotificationRequest HTMLImageElement::InsertedInto(
   if (listener_)
     GetDocument().GetMediaQueryMatcher().AddViewportListener(listener_);
   bool was_added_to_picture_parent = false;
-  if (auto* picture_parent = ToHTMLPictureElementOrNull(parentNode())) {
+  if (auto* picture_parent = DynamicTo<HTMLPictureElement>(parentNode())) {
     picture_parent->AddListenerToSourceChildren();
     was_added_to_picture_parent = picture_parent == insertion_point;
   }
@@ -444,7 +446,7 @@ void HTMLImageElement::RemovedFrom(ContainerNode& insertion_point) {
     ResetFormOwner();
   if (listener_) {
     GetDocument().GetMediaQueryMatcher().RemoveViewportListener(listener_);
-    if (auto* picture_parent = ToHTMLPictureElementOrNull(parentNode()))
+    if (auto* picture_parent = DynamicTo<HTMLPictureElement>(parentNode()))
       picture_parent->RemoveListenerFromSourceChildren();
   }
   HTMLElement::RemovedFrom(insertion_point);
@@ -456,6 +458,7 @@ unsigned HTMLImageElement::width() {
 
   if (!GetLayoutObject()) {
     // check the attribute first for an explicit pixel value
+    // TODO(cbiesinger): The attribute could be a float or percentage value...
     unsigned width = 0;
     if (ParseHTMLNonNegativeInteger(getAttribute(kWidthAttr), width))
       return width;
@@ -477,6 +480,7 @@ unsigned HTMLImageElement::height() {
 
   if (!GetLayoutObject()) {
     // check the attribute first for an explicit pixel value
+    // TODO(cbiesinger): The attribute could be a float or percentage value...
     unsigned height = 0;
     if (ParseHTMLNonNegativeInteger(getAttribute(kHeightAttr), height))
       return height;
@@ -622,9 +626,9 @@ bool HTMLImageElement::complete() const {
 }
 
 void HTMLImageElement::DidMoveToNewDocument(Document& old_document) {
-  SelectSourceURL(ImageLoader::kUpdateIgnorePreviousError);
   GetImageLoader().ElementDidMoveToNewDocument();
   HTMLElement::DidMoveToNewDocument(old_document);
+  SelectSourceURL(ImageLoader::kUpdateIgnorePreviousError);
 }
 
 bool HTMLImageElement::IsServerMap() const {

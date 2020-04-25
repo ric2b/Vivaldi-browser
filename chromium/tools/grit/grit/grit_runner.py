@@ -111,7 +111,8 @@ def PrintUsage():
   tool_list = ''
   for (tool, info) in _TOOLS:
     if not _HIDDEN in info:
-      tool_list += '    %-12s %s\n' % (tool, info[_FACTORY]().ShortDescription())
+      tool_list += '    %-12s %s\n' % (
+          tool, info[_FACTORY]().ShortDescription())
 
   print("""GRIT - the Google Resource and Internationalization Tool
 
@@ -154,11 +155,10 @@ class Options(object):
     self.extra_verbose = False
     self.output_stream = sys.stdout
     self.profile_dest = None
-    self.search_paths = []
 
   def ReadOptions(self, args):
     """Reads options from the start of args and returns the remainder."""
-    (opts, args) = getopt.getopt(args, 'vxi:p:h:I:', ('help',))
+    (opts, args) = getopt.getopt(args, 'vxi:p:h:', ('help',))
     for (key, val) in opts:
       if key == '-h': self.hash = val
       elif key == '-i': self.input = val
@@ -174,16 +174,12 @@ class Options(object):
       elif key == '--help':
         PrintUsage()
         sys.exit(0)
-      elif key == '-I': self.search_paths.append(val)
 
     if not self.input:
       if 'GRIT_INPUT' in os.environ:
         self.input = os.environ['GRIT_INPUT']
       else:
         self.input = 'resource.grd'
-
-    if self.search_paths:
-      util.PathSearcher.Configure(self.search_paths)
 
     return args
 
@@ -268,4 +264,9 @@ def Main(args):
 
 
 if __name__ == '__main__':
-  sys.exit(Main(sys.argv[1:]))
+  sys.path.append(os.path.abspath(
+      os.path.join(os.path.dirname(__file__), '..', '..', 'diagnosis')))
+  import crbug_1001171
+
+  with crbug_1001171.DumpStateOnLookupError():
+    sys.exit(Main(sys.argv[1:]))

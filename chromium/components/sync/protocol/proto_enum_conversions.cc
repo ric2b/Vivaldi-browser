@@ -255,7 +255,7 @@ const char* ProtoEnumToString(
 const char* ProtoEnumToString(
     sync_pb::SyncEnums::SingletonDebugEventType type) {
   ASSERT_ENUM_BOUNDS(sync_pb::SyncEnums, SingletonDebugEventType,
-                     CONNECTION_STATUS_CHANGE, BOOTSTRAP_TOKEN_UPDATED);
+                     CONNECTION_STATUS_CHANGE, TRUSTED_VAULT_KEY_ACCEPTED);
   switch (type) {
     ENUM_CASE(sync_pb::SyncEnums, CONNECTION_STATUS_CHANGE);
     ENUM_CASE(sync_pb::SyncEnums, UPDATED_TOKEN);
@@ -270,6 +270,8 @@ const char* ProtoEnumToString(
     ENUM_CASE(sync_pb::SyncEnums, KEYSTORE_TOKEN_UPDATED);
     ENUM_CASE(sync_pb::SyncEnums, CONFIGURE_COMPLETE);
     ENUM_CASE(sync_pb::SyncEnums, BOOTSTRAP_TOKEN_UPDATED);
+    ENUM_CASE(sync_pb::SyncEnums, TRUSTED_VAULT_KEY_REQUIRED);
+    ENUM_CASE(sync_pb::SyncEnums, TRUSTED_VAULT_KEY_ACCEPTED);
   }
   NOTREACHED();
   return "";
@@ -538,6 +540,19 @@ const char* ProtoEnumToString(
 }
 
 const char* ProtoEnumToString(
+    sync_pb::WebAppSpecifics::DisplayMode display_mode) {
+  ASSERT_ENUM_BOUNDS(sync_pb::WebAppSpecifics, DisplayMode, kBrowser,
+                     kStandalone);
+  switch (display_mode) {
+    ENUM_CASE(sync_pb::WebAppSpecifics, kBrowser);
+    ENUM_CASE(sync_pb::WebAppSpecifics, kMinimalUi);
+    ENUM_CASE(sync_pb::WebAppSpecifics, kStandalone);
+  }
+  NOTREACHED();
+  return "";
+}
+
+const char* ProtoEnumToString(
     sync_pb::WifiConfigurationSpecificsData::SecurityType security_type) {
   ASSERT_ENUM_BOUNDS(sync_pb::WifiConfigurationSpecificsData, SecurityType,
                      SECURITY_TYPE_UNSPECIFIED, SECURITY_TYPE_PSK);
@@ -617,20 +632,6 @@ const char* ProtoEnumToString(
               PROXY_OPTION_AUTODISCOVERY);
     ENUM_CASE(sync_pb::WifiConfigurationSpecificsData::ProxyConfiguration,
               PROXY_OPTION_MANUAL);
-  }
-  NOTREACHED();
-  return "";
-}
-
-const char* ProtoEnumToString(
-    sync_pb::WifiCredentialSpecifics::SecurityClass security_class) {
-  ASSERT_ENUM_BOUNDS(sync_pb::WifiCredentialSpecifics, SecurityClass,
-                     SECURITY_CLASS_INVALID, SECURITY_CLASS_PSK);
-  switch (security_class) {
-    ENUM_CASE(sync_pb::WifiCredentialSpecifics, SECURITY_CLASS_INVALID);
-    ENUM_CASE(sync_pb::WifiCredentialSpecifics, SECURITY_CLASS_NONE);
-    ENUM_CASE(sync_pb::WifiCredentialSpecifics, SECURITY_CLASS_WEP);
-    ENUM_CASE(sync_pb::WifiCredentialSpecifics, SECURITY_CLASS_PSK);
   }
   NOTREACHED();
   return "";

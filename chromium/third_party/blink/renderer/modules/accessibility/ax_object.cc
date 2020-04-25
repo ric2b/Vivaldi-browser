@@ -28,6 +28,7 @@
 
 #include "third_party/blink/renderer/modules/accessibility/ax_object.h"
 
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/web_scroll_into_view_params.h"
 #include "third_party/blink/renderer/core/aom/accessible_node.h"
 #include "third_party/blink/renderer/core/aom/accessible_node_list.h"
@@ -55,7 +56,9 @@
 #include "third_party/blink/renderer/modules/accessibility/ax_object_cache_impl.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_range.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_sparse_attribute_setter.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/language.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
@@ -63,11 +66,7 @@
 #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 #include "third_party/skia/include/core/SkMatrix44.h"
 
-using blink::WebLocalizedString;
-
 namespace blink {
-
-using namespace html_names;
 
 namespace {
 
@@ -91,6 +90,11 @@ struct RoleEntry {
 const RoleEntry kRoles[] = {
     {"alert", ax::mojom::Role::kAlert},
     {"alertdialog", ax::mojom::Role::kAlertDialog},
+    {"annotation-attribution", ax::mojom::Role::kAnnotationAttribution},
+    {"annotation-commentary", ax::mojom::Role::kAnnotationCommentary},
+    {"annotation-presence", ax::mojom::Role::kAnnotationPresence},
+    {"annotation-revision", ax::mojom::Role::kAnnotationRevision},
+    {"annotation-suggestion", ax::mojom::Role::kAnnotationSuggestion},
     {"application", ax::mojom::Role::kApplication},
     {"article", ax::mojom::Role::kArticle},
     {"banner", ax::mojom::Role::kBanner},
@@ -230,7 +234,11 @@ const InternalRoleEntry kInternalRoles[] = {
     {ax::mojom::Role::kAlertDialog, "AlertDialog"},
     {ax::mojom::Role::kAlert, "Alert"},
     {ax::mojom::Role::kAnchor, "Anchor"},
-    {ax::mojom::Role::kAnnotation, "Annotation"},
+    {ax::mojom::Role::kAnnotationAttribution, "kAnnotationAttribution"},
+    {ax::mojom::Role::kAnnotationCommentary, "AnnotationCommentary"},
+    {ax::mojom::Role::kAnnotationPresence, "AnnotationPresence"},
+    {ax::mojom::Role::kAnnotationRevision, "AnnotationRevision"},
+    {ax::mojom::Role::kAnnotationSuggestion, "AnnotationSuggestion"},
     {ax::mojom::Role::kApplication, "Application"},
     {ax::mojom::Role::kArticle, "Article"},
     {ax::mojom::Role::kAudio, "Audio"},
@@ -313,6 +321,7 @@ const InternalRoleEntry kInternalRoles[] = {
     {ax::mojom::Role::kFigcaption, "Figcaption"},
     {ax::mojom::Role::kFigure, "Figure"},
     {ax::mojom::Role::kFooter, "Footer"},
+    {ax::mojom::Role::kFooterAsNonLandmark, "FooterAsNonLandmark"},
     {ax::mojom::Role::kForm, "Form"},
     {ax::mojom::Role::kGenericContainer, "GenericContainer"},
     // --------------------------------------------------------------
@@ -325,6 +334,8 @@ const InternalRoleEntry kInternalRoles[] = {
     // --------------------------------------------------------------
     {ax::mojom::Role::kGrid, "Grid"},
     {ax::mojom::Role::kGroup, "Group"},
+    {ax::mojom::Role::kHeader, "Header"},
+    {ax::mojom::Role::kHeaderAsNonLandmark, "HeaderAsNonLandmark"},
     {ax::mojom::Role::kHeading, "Heading"},
     {ax::mojom::Role::kIframePresentational, "IframePresentational"},
     {ax::mojom::Role::kIframe, "Iframe"},
@@ -377,6 +388,8 @@ const InternalRoleEntry kInternalRoles[] = {
     {ax::mojom::Role::kRowHeader, "RowHeader"},
     {ax::mojom::Role::kRow, "Row"},
     {ax::mojom::Role::kRuby, "Ruby"},
+    {ax::mojom::Role::kRubyAnnotation, "RubyAnnotation"},
+    {ax::mojom::Role::kSection, "Section"},
     {ax::mojom::Role::kSvgRoot, "SVGRoot"},
     {ax::mojom::Role::kScrollBar, "ScrollBar"},
     {ax::mojom::Role::kScrollView, "ScrollView"},
@@ -418,12 +431,14 @@ static_assert(base::size(kInternalRoles) ==
 
 // Roles which we need to map in the other direction
 const RoleEntry kReverseRoles[] = {
+    {"banner", ax::mojom::Role::kHeader},
     {"button", ax::mojom::Role::kToggleButton},
     {"combobox", ax::mojom::Role::kPopUpButton},
     {"contentinfo", ax::mojom::Role::kFooter},
     {"menuitem", ax::mojom::Role::kMenuButton},
     {"menuitem", ax::mojom::Role::kMenuListOption},
     {"progressbar", ax::mojom::Role::kMeter},
+    {"region", ax::mojom::Role::kSection},
     {"textbox", ax::mojom::Role::kTextField},
     {"combobox", ax::mojom::Role::kComboBoxMenuButton},
     {"combobox", ax::mojom::Role::kTextFieldWithComboBox}};
@@ -808,10 +823,12 @@ bool AXObject::IsLandmarkRelated() const {
     case ax::mojom::Role::kDocToc:
     case ax::mojom::Role::kFooter:
     case ax::mojom::Role::kForm:
+    case ax::mojom::Role::kHeader:
     case ax::mojom::Role::kMain:
     case ax::mojom::Role::kNavigation:
     case ax::mojom::Role::kRegion:
     case ax::mojom::Role::kSearch:
+    case ax::mojom::Role::kSection:
       return true;
     default:
       return false;
@@ -1081,7 +1098,7 @@ const AXObject* AXObject::InertRoot() const {
     element = FlatTreeTraversal::ParentElement(*node);
 
   while (element) {
-    if (element->hasAttribute(kInertAttr))
+    if (element->hasAttribute(html_names::kInertAttr))
       return AXObjectCache().GetOrCreate(element);
     element = FlatTreeTraversal::ParentElement(*element);
   }
@@ -1195,11 +1212,6 @@ bool AXObject::ComputeAccessibilityIsIgnoredButIncludedInTree() const {
   if (!GetNode())
     return false;
 
-  // Disallow inert nodes from the tree to ensure the dialog is always the
-  // first child of the root.
-  if (GetNode()->IsInert())
-    return false;
-
   // If the node is part of the user agent shadow dom, or has the explicit
   // internal Role::kIgnored, they aren't interesting for paragraph navigation
   // or LabelledBy/DescribedBy relationships.
@@ -1213,15 +1225,28 @@ bool AXObject::ComputeAccessibilityIsIgnoredButIncludedInTree() const {
   if (IsLineBreakingObject())
     return true;
 
-  // Allow the browser side ax tree to access aria-hidden="true", "visibility:
-  // hidden", and "visibility: collapse" nodes. This is useful for APIs that
-  // return the node referenced by aria-labeledby and aria-describedby
-  if (GetLayoutObject()) {
+  // Allow the browser side ax tree to access "visibility: [hidden|collapse]"
+  // and "display: none" nodes. This is useful for APIs that return the node
+  // referenced by aria-labeledby and aria-describedby.
+  // An element must have an id attribute or it cannot be referenced by
+  // aria-labelledby or aria-describedby.
+  if (RuntimeEnabledFeatures::AccessibilityExposeDisplayNoneEnabled()) {
+    if (Element* element = GetElement()) {
+      if (element->FastHasAttribute(html_names::kIdAttr) &&
+          IsHiddenForTextAlternativeCalculation()) {
+        return true;
+      }
+    }
+  } else if (GetLayoutObject()) {
     if (GetLayoutObject()->Style()->Visibility() != EVisibility::kVisible)
       return true;
-    if (AriaHiddenRoot())
-      return true;
   }
+
+  // Allow the browser side ax tree to access "aria-hidden" nodes.
+  // This is useful for APIs that return the node referenced by
+  // aria-labeledby and aria-describedby.
+  if (GetLayoutObject() && AriaHiddenRoot())
+    return true;
 
   return false;
 }
@@ -1291,7 +1316,7 @@ bool AXObject::CanReceiveAccessibilityFocus() const {
     return true;
 
   // aria-activedescendant focus
-  return elem->FastHasAttribute(kIdAttr) && CanBeActiveDescendant();
+  return elem->FastHasAttribute(html_names::kIdAttr) && CanBeActiveDescendant();
 }
 
 bool AXObject::CanSetValueAttribute() const {
@@ -1536,6 +1561,9 @@ String AXObject::GetName(ax::mojom::NameFrom& name_from,
   bool hidden_and_ignored_but_included_in_tree =
       IsHiddenForTextAlternativeCalculation() &&
       AccessibilityIsIgnoredButIncludedInTree();
+  // Initialize |name_from|, as TextAlternative() might never set it in some
+  // cases.
+  name_from = ax::mojom::NameFrom::kNone;
   String text = TextAlternative(false, hidden_and_ignored_but_included_in_tree,
                                 visited, name_from, &related_objects, nullptr);
 
@@ -1610,8 +1638,7 @@ bool AXObject::IsHiddenForTextAlternativeCalculation() const {
   if (Node* node = GetNode()) {
     auto* element = DynamicTo<Element>(node);
     if (element && node->isConnected()) {
-      scoped_refptr<ComputedStyle> style =
-          document->EnsureStyleResolver().StyleForElement(element);
+      const ComputedStyle* style = element->EnsureComputedStyle();
       return style->Display() == EDisplay::kNone ||
              style->Visibility() != EVisibility::kVisible;
     }
@@ -1645,9 +1672,10 @@ String AXObject::AriaTextAlternative(bool recursive,
 
     // Check ARIA attributes.
     const QualifiedName& attr =
-        HasAttribute(kAriaLabeledbyAttr) && !HasAttribute(kAriaLabelledbyAttr)
-            ? kAriaLabeledbyAttr
-            : kAriaLabelledbyAttr;
+        HasAttribute(html_names::kAriaLabeledbyAttr) &&
+                !HasAttribute(html_names::kAriaLabelledbyAttr)
+            ? html_names::kAriaLabeledbyAttr
+            : html_names::kAriaLabelledbyAttr;
 
     if (name_sources) {
       name_sources->push_back(NameSource(*found_text_alternative, attr));
@@ -1690,7 +1718,7 @@ String AXObject::AriaTextAlternative(bool recursive,
   name_from = ax::mojom::NameFrom::kAttribute;
   if (name_sources) {
     name_sources->push_back(
-        NameSource(*found_text_alternative, kAriaLabelAttr));
+        NameSource(*found_text_alternative, html_names::kAriaLabelAttr));
     name_sources->back().type = name_from;
   }
   const AtomicString& aria_label =
@@ -1777,9 +1805,9 @@ void AXObject::AriaLabelledbyElementVector(
     HeapVector<Member<Element>>& elements,
     Vector<String>& ids) const {
   // Try both spellings, but prefer aria-labelledby, which is the official spec.
-  ElementsFromAttribute(elements, kAriaLabelledbyAttr, ids);
+  ElementsFromAttribute(elements, html_names::kAriaLabelledbyAttr, ids);
   if (!ids.size())
-    ElementsFromAttribute(elements, kAriaLabeledbyAttr, ids);
+    ElementsFromAttribute(elements, html_names::kAriaLabeledbyAttr, ids);
 }
 
 String AXObject::TextFromAriaLabelledby(AXObjectSet& visited,
@@ -1794,7 +1822,7 @@ String AXObject::TextFromAriaDescribedby(AXRelatedObjectVector* related_objects,
                                          Vector<String>& ids) const {
   AXObjectSet visited;
   HeapVector<Member<Element>> elements;
-  ElementsFromAttribute(elements, kAriaDescribedbyAttr, ids);
+  ElementsFromAttribute(elements, html_names::kAriaDescribedbyAttr, ids);
   return TextFromElements(true, visited, elements, related_objects);
 }
 
@@ -2042,6 +2070,22 @@ ax::mojom::Role AXObject::DetermineAriaRoleAttribute() const {
     return ax::mojom::Role::kUnknown;
 
   ax::mojom::Role role = AriaRoleToWebCoreRole(aria_role);
+
+  switch (role) {
+    case ax::mojom::Role::kAnnotationAttribution:
+    case ax::mojom::Role::kAnnotationCommentary:
+    case ax::mojom::Role::kAnnotationPresence:
+    case ax::mojom::Role::kAnnotationRevision:
+    case ax::mojom::Role::kAnnotationSuggestion:
+      UseCounter::Count(GetDocument(), WebFeature::kARIAAnnotationRoles);
+      if (!RuntimeEnabledFeatures::
+              AccessibilityExposeARIAAnnotationsEnabled()) {
+        role = ax::mojom::Role::kGenericContainer;
+      }
+      break;
+    default:
+      break;
+  }
 
   // ARIA states if an item can get focus, it should not be presentational.
   // It also states user agents should ignore the presentational role if
@@ -2516,8 +2560,10 @@ void AXObject::UpdateChildrenIfNecessary() {
 
 void AXObject::ClearChildren() {
   // Detach all weak pointers from objects to their parents.
-  for (const auto& child : children_)
-    child->DetachFromParent();
+  for (const auto& child : children_) {
+    if (child->parent_ == this)
+      child->DetachFromParent();
+  }
 
   children_.clear();
   have_children_ = false;
@@ -2568,7 +2614,7 @@ AtomicString AXObject::Language() const {
   // 2. The list of languages the browser sends in the [Accept-Language] header.
   // 3. The browser's default language.
 
-  const AtomicString& lang = GetAttribute(kLangAttr);
+  const AtomicString& lang = GetAttribute(html_names::kLangAttr);
   if (!lang.IsEmpty())
     return lang;
 
@@ -3161,8 +3207,10 @@ bool AXObject::OnNativeScrollToMakeVisibleAction() const {
   if (!node)
     return false;
   if (Element* locked_ancestor =
-          DisplayLockUtilities::NearestLockedInclusiveAncestor(*node))
-    locked_ancestor->ActivateDisplayLockIfNeeded();
+          DisplayLockUtilities::NearestLockedInclusiveAncestor(*node)) {
+    locked_ancestor->ActivateDisplayLockIfNeeded(
+        DisplayLockActivationReason::kUser);
+  }
   LayoutObject* layout_object = node->GetLayoutObject();
   if (!layout_object || !node->isConnected())
     return false;
@@ -3314,7 +3362,7 @@ bool AXObject::NameFromSelectedOption(bool recursive) const {
     // This can be either a button widget with a non-false value of
     // aria-haspopup or a select element with size of 1.
     case ax::mojom::Role::kPopUpButton:
-      return ToHTMLSelectElementOrNull(*GetNode()) ? recursive : false;
+      return DynamicTo<HTMLSelectElement>(*GetNode()) ? recursive : false;
     default:
       return false;
   }
@@ -3365,6 +3413,11 @@ bool AXObject::NameFromContents(bool recursive) const {
     // containers for many subobjects. Superset of nameFrom:author ARIA roles.
     case ax::mojom::Role::kAlert:
     case ax::mojom::Role::kAlertDialog:
+    case ax::mojom::Role::kAnnotationAttribution:
+    case ax::mojom::Role::kAnnotationCommentary:
+    case ax::mojom::Role::kAnnotationPresence:
+    case ax::mojom::Role::kAnnotationRevision:
+    case ax::mojom::Role::kAnnotationSuggestion:
     case ax::mojom::Role::kApplication:
     case ax::mojom::Role::kAudio:
     case ax::mojom::Role::kArticle:
@@ -3428,6 +3481,7 @@ bool AXObject::NameFromContents(bool recursive) const {
     case ax::mojom::Role::kGraphicsSymbol:
     case ax::mojom::Role::kGrid:
     case ax::mojom::Role::kGroup:
+    case ax::mojom::Role::kHeader:
     case ax::mojom::Role::kIframePresentational:
     case ax::mojom::Role::kIframe:
     case ax::mojom::Role::kImage:
@@ -3482,7 +3536,6 @@ bool AXObject::NameFromContents(bool recursive) const {
     // Some objects can contribute their contents to ancestor names, but
     // only have their own name if they are focusable
     case ax::mojom::Role::kAbbr:
-    case ax::mojom::Role::kAnnotation:
     case ax::mojom::Role::kCanvas:
     case ax::mojom::Role::kCaption:
     case ax::mojom::Role::kContentDeletion:
@@ -3493,7 +3546,9 @@ bool AXObject::NameFromContents(bool recursive) const {
     case ax::mojom::Role::kDetails:
     case ax::mojom::Role::kFigcaption:
     case ax::mojom::Role::kFooter:
+    case ax::mojom::Role::kFooterAsNonLandmark:
     case ax::mojom::Role::kGenericContainer:
+    case ax::mojom::Role::kHeaderAsNonLandmark:
     case ax::mojom::Role::kIgnored:
     case ax::mojom::Role::kImageMap:
     case ax::mojom::Role::kInlineTextBox:
@@ -3516,6 +3571,8 @@ bool AXObject::NameFromContents(bool recursive) const {
     // if the row might receive focus
     case ax::mojom::Role::kRow:
     case ax::mojom::Role::kRuby:
+    case ax::mojom::Role::kRubyAnnotation:
+    case ax::mojom::Role::kSection:
       result = recursive || (CanReceiveAccessibilityFocus() && !IsEditable());
       break;
 

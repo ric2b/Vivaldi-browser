@@ -36,6 +36,7 @@
 
 #include "services/network/public/cpp/features.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/frame/blocked_navigation_types.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
@@ -95,7 +96,6 @@
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/idleness_detector.h"
-#include "third_party/blink/renderer/core/loader/previews_resource_loading_hints_receiver_impl.h"
 #include "third_party/blink/renderer/core/page/drag_controller.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/plugin_data.h"
@@ -141,24 +141,15 @@ inline float ParentTextZoomFactor(LocalFrame* frame) {
   return parent_local_frame ? parent_local_frame->TextZoomFactor() : 1;
 }
 
-bool ShouldUseClientLoFiForRequest(
-    const ResourceRequest& request,
-    WebURLRequest::PreviewsState frame_previews_state) {
-  if (request.GetPreviewsState() != WebURLRequest::kPreviewsUnspecified)
-    return request.GetPreviewsState() & WebURLRequest::kClientLoFiOn;
-
-  if (!(frame_previews_state & WebURLRequest::kClientLoFiOn))
-    return false;
-
-  return true;
-}
-
 }  // namespace
 
 template class CORE_TEMPLATE_EXPORT Supplement<LocalFrame>;
 
 void LocalFrame::Init() {
   CoreInitializer::GetInstance().InitLocalFrame(*this);
+
+  GetRemoteNavigationAssociatedInterfaces()->GetInterface(
+      local_frame_host_remote_.BindNewEndpointAndPassReceiver());
 
   loader_.Init();
 }
@@ -308,7 +299,7 @@ void LocalFrame::DetachImpl(FrameDetachType type) {
   // both when unloading itself and when unloading its descendants.
   IgnoreOpensDuringUnloadCountIncrementer ignore_opens_during_unload(
       GetDocument());
-  loader_.DispatchUnloadEvent();
+  loader_.DispatchUnloadEvent(nullptr, nullptr);
   DetachChildren();
 
   // All done if detaching the subframes brought about a detach of this frame
@@ -376,7 +367,7 @@ void LocalFrame::DetachImpl(FrameDetachType type) {
 }
 
 bool LocalFrame::DetachDocument() {
-  return Loader().DetachDocument();
+  return Loader().DetachDocument(nullptr, nullptr);
 }
 
 void LocalFrame::CheckCompleted() {
@@ -442,7 +433,6 @@ void LocalFrame::DidAttachDocument() {
   GetInputMethodController().DidAttachDocument(document);
   GetSpellChecker().DidAttachDocument(document);
   GetTextSuggestionController().DidAttachDocument(document);
-  previews_resource_loading_hints_receiver_.reset();
 }
 
 void LocalFrame::Reload(WebFrameLoadType load_type) {
@@ -494,59 +484,6 @@ void LocalFrame::DidChangeVisibilityState() {
     GetDocument()->DidChangeVisibilityState();
 
   Frame::DidChangeVisibilityState();
-}
-
-void LocalFrame::DidFreeze() {
-  if (GetDocument()) {
-    if (GetDocument()->GetResourceCoordinator() &&
-        !RuntimeEnabledFeatures::BackForwardCacheEnabled()) {
-      // TODO(yuzus): Skip this block if DidFreeze is triggered by bfcache.
-
-      // Determine if there is a beforeunload handler by dispatching a
-      // beforeunload that will *not* launch a user dialog. If
-      // |proceed| is false then there is a non-empty beforeunload
-      // handler indicating potentially unsaved user state.
-      bool unused_did_allow_navigation = false;
-      bool proceed = GetDocument()->DispatchBeforeUnloadEvent(
-          nullptr, false /* is_reload */, unused_did_allow_navigation);
-      // Running the beforeunload event may invalidate the
-      // DocumentResourceCoordinator. Because of that, it can't be stored in a
-      // local variable that is reused throughout the method.
-      // https://crbug.com/991380.
-      auto* document_resource_coordinator =
-          GetDocument()->GetResourceCoordinator();
-      if (document_resource_coordinator)
-        document_resource_coordinator->SetHasNonEmptyBeforeUnload(!proceed);
-    }
-
-    GetDocument()->DispatchFreezeEvent();
-    // TODO(fmeawad): Move the following logic to the page once we have a
-    // PageResourceCoordinator in Blink. http://crbug.com/838415
-    if (auto* document_resource_coordinator =
-            GetDocument()->GetResourceCoordinator()) {
-      document_resource_coordinator->SetLifecycleState(
-          resource_coordinator::mojom::LifecycleState::kFrozen);
-    }
-  }
-}
-
-void LocalFrame::DidResume() {
-  if (GetDocument()) {
-    const base::TimeTicks resume_event_start = base::TimeTicks::Now();
-    GetDocument()->DispatchEvent(*Event::Create(event_type_names::kResume));
-    const base::TimeTicks resume_event_end = base::TimeTicks::Now();
-    DEFINE_STATIC_LOCAL(
-        CustomCountHistogram, resume_histogram,
-        ("DocumentEventTiming.ResumeDuration", 0, 10000000, 50));
-    resume_histogram.CountMicroseconds(resume_event_end - resume_event_start);
-    // TODO(fmeawad): Move the following logic to the page once we have a
-    // PageResourceCoordinator in Blink
-    if (auto* document_resource_coordinator =
-            GetDocument()->GetResourceCoordinator()) {
-      document_resource_coordinator->SetLifecycleState(
-          resource_coordinator::mojom::LifecycleState::kRunning);
-    }
-  }
 }
 
 void LocalFrame::HookBackForwardCacheEviction() {
@@ -915,9 +852,7 @@ LocalFrame::LocalFrame(LocalFrameClient* client,
       interface_registry_(interface_registry
                               ? interface_registry
                               : InterfaceRegistry::GetEmptyInterfaceRegistry()),
-      is_save_data_enabled_(
-          !(GetSettings() && GetSettings()->GetDataSaverHoldbackWebApi()) &&
-          GetNetworkStateNotifier().SaveDataEnabled()),
+      is_save_data_enabled_(GetNetworkStateNotifier().SaveDataEnabled()),
       lifecycle_state_(mojom::FrameLifecycleState::kRunning) {
   if (IsLocalRoot()) {
     probe_sink_ = MakeGarbageCollected<CoreProbeSink>();
@@ -1287,11 +1222,6 @@ void ScopedFrameBlamer::LeaveContext() {
     context->Leave();
 }
 
-bool LocalFrame::IsClientLoFiAllowed(const ResourceRequest& request) const {
-  return Client() && ShouldUseClientLoFiForRequest(
-                         request, Client()->GetPreviewsStateForFrame());
-}
-
 LocalFrame::LazyLoadImageSetting LocalFrame::GetLazyLoadImageSetting() const {
   DCHECK(GetSettings());
   if (!RuntimeEnabledFeatures::LazyImageLoadingEnabled() ||
@@ -1328,8 +1258,9 @@ bool LocalFrame::ShouldForceDeferScript() const {
   // Check if enabled by runtime feature (for testing/evaluation) or if enabled
   // by PreviewsState (for live intervention).
   return RuntimeEnabledFeatures::ForceDeferScriptInterventionEnabled() ||
-         (Client() && Client()->GetPreviewsStateForFrame() ==
-                          WebURLRequest::kDeferAllScriptOn);
+         (Loader().GetDocumentLoader() &&
+          Loader().GetDocumentLoader()->GetPreviewsState() ==
+              WebURLRequest::kDeferAllScriptOn);
 }
 
 WebURLLoaderFactory* LocalFrame::GetURLLoaderFactory() {
@@ -1447,17 +1378,6 @@ bool LocalFrame::IsProvisional() const {
   return Owner()->ContentFrame() != this;
 }
 
-bool LocalFrame::IsUsingDataSavingPreview() const {
-  if (!Client())
-    return false;
-
-  WebURLRequest::PreviewsState previews_state =
-      Client()->GetPreviewsStateForFrame();
-  // Check for any data saving type of preview.
-  return previews_state &
-         (WebURLRequest::kClientLoFiOn | WebURLRequest::kNoScriptOn);
-}
-
 bool LocalFrame::IsAdSubframe() const {
   return ad_frame_type_ != blink::mojom::AdFrameType::kNonAd;
 }
@@ -1516,15 +1436,6 @@ void LocalFrame::ResumeSubresourceLoading() {
 
 void LocalFrame::AnimateSnapFling(base::TimeTicks monotonic_time) {
   GetEventHandler().AnimateSnapFling(monotonic_time);
-}
-
-void LocalFrame::BindPreviewsResourceLoadingHintsReceiver(
-    mojo::PendingReceiver<
-        blink::mojom::blink::PreviewsResourceLoadingHintsReceiver> receiver) {
-  DCHECK(!previews_resource_loading_hints_receiver_);
-  previews_resource_loading_hints_receiver_ =
-      std::make_unique<PreviewsResourceLoadingHintsReceiverImpl>(
-          std::move(receiver), GetDocument());
 }
 
 SmoothScrollSequencer& LocalFrame::GetSmoothScrollSequencer() {
@@ -1699,20 +1610,70 @@ void LocalFrame::ForciblyPurgeV8Memory() {
   Loader().StopAllLoaders();
 }
 
-void LocalFrame::PauseContext() {
-  if (Document* document = GetDocument()) {
-    document->Fetcher()->SetDefersLoading(true);
-    document->SetLifecycleState(lifecycle_state_);
+void LocalFrame::DispatchBeforeUnloadEventForFreeze() {
+  auto* document_resource_coordinator = GetDocument()->GetResourceCoordinator();
+  if (document_resource_coordinator &&
+      lifecycle_state_ == mojom::FrameLifecycleState::kRunning &&
+      !RuntimeEnabledFeatures::BackForwardCacheEnabled()) {
+    // TODO(yuzus): Skip this block if DidFreeze is triggered by bfcache.
+
+    // Determine if there is a beforeunload handler by dispatching a
+    // beforeunload that will *not* launch a user dialog. If
+    // |proceed| is false then there is a non-empty beforeunload
+    // handler indicating potentially unsaved user state.
+    bool unused_did_allow_navigation = false;
+    bool proceed = GetDocument()->DispatchBeforeUnloadEvent(
+        nullptr, false /* is_reload */, unused_did_allow_navigation);
+
+    // DispatchBeforeUnloadEvent dispatches JS events, which may detach |this|.
+    if (!IsAttached())
+      return;
+    document_resource_coordinator->SetHasNonEmptyBeforeUnload(!proceed);
   }
+}
+
+void LocalFrame::DidFreeze() {
+  DCHECK(IsAttached());
+  GetDocument()->DispatchFreezeEvent();
+  // DispatchFreezeEvent dispatches JS events, which may detach |this|.
+  if (!IsAttached())
+    return;
+  // TODO(fmeawad): Move the following logic to the page once we have a
+  // PageResourceCoordinator in Blink. http://crbug.com/838415
+  if (auto* document_resource_coordinator =
+          GetDocument()->GetResourceCoordinator()) {
+    document_resource_coordinator->SetLifecycleState(
+        performance_manager::mojom::LifecycleState::kFrozen);
+  }
+}
+
+void LocalFrame::DidResume() {
+  DCHECK(IsAttached());
+  const base::TimeTicks resume_event_start = base::TimeTicks::Now();
+  GetDocument()->DispatchEvent(*Event::Create(event_type_names::kResume));
+  const base::TimeTicks resume_event_end = base::TimeTicks::Now();
+  DEFINE_STATIC_LOCAL(CustomCountHistogram, resume_histogram,
+                      ("DocumentEventTiming.ResumeDuration", 0, 10000000, 50));
+  resume_histogram.CountMicroseconds(resume_event_end - resume_event_start);
+  // TODO(fmeawad): Move the following logic to the page once we have a
+  // PageResourceCoordinator in Blink
+  if (auto* document_resource_coordinator =
+          GetDocument()->GetResourceCoordinator()) {
+    document_resource_coordinator->SetLifecycleState(
+        performance_manager::mojom::LifecycleState::kRunning);
+  }
+}
+
+void LocalFrame::PauseContext() {
+  GetDocument()->Fetcher()->SetDefersLoading(true);
+  GetDocument()->SetLifecycleState(lifecycle_state_);
   Loader().SetDefersLoading(true);
   GetFrameScheduler()->SetPaused(true);
 }
 
 void LocalFrame::UnpauseContext() {
-  if (Document* document = GetDocument()) {
-    document->Fetcher()->SetDefersLoading(false);
-    document->SetLifecycleState(mojom::FrameLifecycleState::kRunning);
-  }
+  GetDocument()->Fetcher()->SetDefersLoading(false);
+  GetDocument()->SetLifecycleState(mojom::FrameLifecycleState::kRunning);
   Loader().SetDefersLoading(false);
   GetFrameScheduler()->SetPaused(false);
 }
@@ -1725,7 +1686,12 @@ void LocalFrame::SetLifecycleState(mojom::FrameLifecycleState state) {
   // load event has fired.
   if ((state == mojom::FrameLifecycleState::kFrozen ||
        state == mojom::FrameLifecycleState::kFrozenAutoResumeMedia) &&
-      IsLoading()) {
+      IsLoading() && !RuntimeEnabledFeatures::BackForwardCacheEnabled()) {
+    // TODO(yuzus): We violate the spec and when bfcache is enabled,
+    // |pending_lifecycle_state_| is not set.
+    // With bfcache, the decision as to whether the frame gets frozen or not is
+    // already made on the browser side and should not be overridden here.
+    // https://wicg.github.io/page-lifecycle/#update-document-frozenness-steps
     pending_lifecycle_state_ = state;
     return;
   }
@@ -1750,7 +1716,7 @@ void LocalFrame::SetLifecycleState(mojom::FrameLifecycleState state) {
   if (freeze) {
     if (lifecycle_state_ != mojom::FrameLifecycleState::kPaused) {
       DidFreeze();
-      // DidFreeze can dispatch JS events, causing |this| to be detached.
+      // DidFreeze can dispatch JS events, which may detach |this|.
       if (!IsAttached())
         return;
     }
@@ -1759,13 +1725,12 @@ void LocalFrame::SetLifecycleState(mojom::FrameLifecycleState state) {
     UnpauseContext();
     if (old_state != mojom::FrameLifecycleState::kPaused) {
       DidResume();
-      // DidResume can dispatch JS events, causing |this| to be detached.
+      // DidResume can dispatch JS events, which may detach |this|.
       if (!IsAttached())
         return;
     }
   }
-  if (Client())
-    Client()->LifecycleStateChanged(state);
+  Client()->LifecycleStateChanged(state);
 }
 
 void LocalFrame::MaybeLogAdClickNavigation() {
@@ -1822,6 +1787,19 @@ bool LocalFrame::IsCapturingMedia() const {
 
 void LocalFrame::EvictFromBackForwardCache() {
   Client()->EvictFromBackForwardCache();
+}
+
+void LocalFrame::DidChangeVisibleToHitTesting() {
+  // LayoutEmbeddedContent does not propagate style updates to descendants.
+  // Need to update the field manually.
+  for (Frame* child = Tree().FirstChild(); child;
+       child = child->Tree().NextSibling()) {
+    child->UpdateVisibleToHitTesting();
+  }
+}
+
+mojom::blink::LocalFrameHost& LocalFrame::GetLocalFrameHostRemote() {
+  return *local_frame_host_remote_.get();
 }
 
 }  // namespace blink

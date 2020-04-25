@@ -42,7 +42,6 @@
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_external_delegate.h"
 #include "components/autofill/core/browser/autofill_field.h"
-#include "components/autofill/core/browser/autofill_internals_service.h"
 #include "components/autofill/core/browser/autofill_manager_test_delegate.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_type.h"
@@ -68,9 +67,12 @@
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_data_validation.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_internals/log_message.h"
+#include "components/autofill/core/common/autofill_internals/logging_scope.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_switches.h"
+#include "components/autofill/core/common/autofill_tick_clock.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_data_predictions.h"
@@ -345,6 +347,17 @@ AutofillField* GetBestPossibleCVCField(
   return HeuristicallyFindCVCField(form_structure);
 }
 
+// Some autofill types are detected based on values and not based on form
+// features. We may decide that it's an autofill form after submission.
+bool ContainsAutofillableValue(const autofill::FormStructure& form) {
+  return std::any_of(form.begin(), form.end(),
+                     [](const std::unique_ptr<autofill::AutofillField>& field) {
+                       return base::Contains(field->possible_types(),
+                                             UPI_VPA) ||
+                              IsUPIVirtualPaymentAddress(field->value);
+                     });
+}
+
 }  // namespace
 
 AutofillManager::FillingContext::FillingContext() = default;
@@ -587,8 +600,10 @@ void AutofillManager::OnFormSubmittedImpl(const FormData& form,
         enable_ablation_logging_, sync_state_, *submitted_form);
   }
 
-  if (!submitted_form->IsAutofillable())
+  if (!submitted_form->IsAutofillable() &&
+      !ContainsAutofillableValue(*submitted_form)) {
     return;
+  }
 
   // Update Personal Data with the form's submitted data.
   // Also triggers offering local/upload credit card save, if applicable.
@@ -660,8 +675,8 @@ bool AutofillManager::MaybeStartVoteUploadProcess(
       base::BindOnce(&AutofillManager::UploadFormDataAsyncCallback,
                      weak_ptr_factory_.GetWeakPtr(),
                      base::Owned(form_structure.release()),
-                     initial_interaction_timestamp_, base::TimeTicks::Now(),
-                     observed_submission));
+                     initial_interaction_timestamp_,
+                     AutofillTickClock::NowTicks(), observed_submission));
   return true;
 }
 
@@ -927,7 +942,7 @@ void AutofillManager::FillOrPreviewProfileForm(
       auto filling_context = std::make_unique<FillingContext>();
       filling_context->temp_data_model = profile;
       filling_context->filled_field_name = autofill_field->unique_name();
-      filling_context->original_fill_time = base::TimeTicks::Now();
+      filling_context->original_fill_time = AutofillTickClock::NowTicks();
       entry = std::move(filling_context);
     }
   }
@@ -993,10 +1008,13 @@ void AutofillManager::OnFocusNoLongerOnForm() {
 #if defined(OS_CHROMEOS)
   // There is no way of determining whether ChromeVox is in use, so assume it's
   // being used.
-  external_delegate_->OnAutofillAvailabilityEvent(false);
+  external_delegate_->OnAutofillAvailabilityEvent(
+      mojom::AutofillState::kNoSuggestions);
 #else
-  if (external_delegate_->HasActiveScreenReader())
-    external_delegate_->OnAutofillAvailabilityEvent(false);
+  if (external_delegate_->HasActiveScreenReader()) {
+    external_delegate_->OnAutofillAvailabilityEvent(
+        mojom::AutofillState::kNoSuggestions);
+  }
 #endif
 }
 
@@ -1018,8 +1036,10 @@ void AutofillManager::OnFocusOnFormFieldImpl(const FormData& form,
   GetAvailableSuggestions(form, field, &suggestions, &context);
 
   external_delegate_->OnAutofillAvailabilityEvent(
-      context.suppress_reason == SuppressReason::kNotSuppressed &&
-      !suggestions.empty());
+      (context.suppress_reason == SuppressReason::kNotSuppressed &&
+       !suggestions.empty())
+          ? mojom::AutofillState::kAutofillAvailable
+          : mojom::AutofillState::kNoSuggestions);
 }
 
 void AutofillManager::OnSelectControlDidChangeImpl(
@@ -1355,6 +1375,9 @@ void AutofillManager::OnSuggestionsReturned(
     int query_id,
     bool autoselect_first_suggestion,
     const std::vector<Suggestion>& suggestions) {
+  external_delegate_->OnAutofillAvailabilityEvent(
+      !suggestions.empty() ? mojom::AutofillState::kAutocompleteAvailable
+                           : mojom::AutofillState::kNoSuggestions);
   external_delegate_->OnSuggestionsReturned(query_id, suggestions,
                                             autoselect_first_suggestion);
 }
@@ -2199,7 +2222,7 @@ bool AutofillManager::ShouldTriggerRefill(const FormStructure& form_structure) {
                                                           form_structure);
 
   FillingContext* filling_context = itr->second.get();
-  base::TimeTicks now = base::TimeTicks::Now();
+  base::TimeTicks now = AutofillTickClock::NowTicks();
   base::TimeDelta delta = now - filling_context->original_fill_time;
 
   if (filling_context->attempted_refill &&

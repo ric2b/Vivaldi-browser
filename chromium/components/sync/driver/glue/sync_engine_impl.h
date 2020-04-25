@@ -64,6 +64,8 @@ class SyncEngineImpl : public SyncEngine, public InvalidationHandler {
   void StartSyncingWithServer() override;
   void SetEncryptionPassphrase(const std::string& passphrase) override;
   void SetDecryptionPassphrase(const std::string& passphrase) override;
+  void AddTrustedVaultDecryptionKeys(const std::vector<std::string>& keys,
+                                     base::OnceClosure done_cb) override;
   void StopSyncingForShutdown() override;
   void Shutdown(ShutdownReason reason) override;
   void ConfigureDataTypes(ConfigureParams params) override;
@@ -92,6 +94,7 @@ class SyncEngineImpl : public SyncEngine, public InvalidationHandler {
                           bool empty_jar,
                           const base::Closure& callback) override;
   void SetInvalidationsForSessionsEnabled(bool enabled) override;
+  void GetNigoriNodeForDebugging(AllNodesCallback callback) override;
 
   // InvalidationHandler implementation.
   void OnInvalidatorStateChange(InvalidatorState state) override;
@@ -123,7 +126,8 @@ class SyncEngineImpl : public SyncEngine, public InvalidationHandler {
       std::unique_ptr<ModelTypeConnector> model_type_connector,
       const std::string& cache_guid,
       const std::string& birthday,
-      const std::string& bag_of_chips);
+      const std::string& bag_of_chips,
+      const std::string& last_keystore_key);
 
   // Forwards a ProtocolEvent to the host. Will not be called unless a call to
   // SetForwardProtocolEvents() explicitly requested that we start forwarding
@@ -167,7 +171,8 @@ class SyncEngineImpl : public SyncEngine, public InvalidationHandler {
   // Called from SyncEngineBackend::OnSyncCycleCompleted to handle updating
   // frontend thread components.
   void HandleSyncCycleCompletedOnFrontendLoop(
-      const SyncCycleSnapshot& snapshot);
+      const SyncCycleSnapshot& snapshot,
+      const std::string& last_keystore_key);
 
   // Let the front end handle the actionable error event.
   void HandleActionableErrorEventOnFrontendLoop(

@@ -13,19 +13,20 @@
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/frame/hosted_app_button_container.h"
 #include "chrome/browser/ui/views/frame/opaque_browser_frame_view_layout.h"
 #include "chrome/browser/ui/views/frame/opaque_browser_frame_view_platform_specific.h"
 #include "chrome/browser/ui/views/tab_icon_view.h"
 #include "chrome/browser/ui/views/tabs/new_tab_button.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/browser/ui/views/web_apps/web_app_frame_toolbar_view.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/skia/include/core/SkPath.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -183,10 +184,11 @@ void OpaqueBrowserFrameView::InitViews() {
   web_app::AppBrowserController* controller =
       browser_view()->browser()->app_controller();
   if (controller && controller->HasTitlebarToolbar()) {
-    set_hosted_app_button_container(new HostedAppButtonContainer(
-        frame(), browser_view(), GetCaptionColor(kActive),
-        GetCaptionColor(kInactive)));
-    AddChildView(hosted_app_button_container());
+    set_web_app_frame_toolbar(
+        AddChildView(std::make_unique<WebAppFrameToolbarView>(
+            frame(), browser_view(),
+            GetCaptionColor(BrowserFrameActiveState::kActive),
+            GetCaptionColor(BrowserFrameActiveState::kInactive))));
   }
 }
 
@@ -496,7 +498,8 @@ void OpaqueBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
 
   const bool active = ShouldPaintAsActive();
   SkColor frame_color = GetFrameColor();
-  window_title_->SetEnabledColor(GetCaptionColor(kUseCurrent));
+  window_title_->SetEnabledColor(
+      GetCaptionColor(BrowserFrameActiveState::kUseCurrent));
   window_title_->SetBackgroundColor(frame_color);
   frame_background_->set_frame_color(frame_color);
   frame_background_->set_use_custom_frame(frame()->UseCustomFrame());
@@ -708,15 +711,14 @@ void OpaqueBrowserFrameView::PaintMaximizedFrameBorder(
 
 void OpaqueBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) const {
   const bool tabstrip_visible = browser_view()->IsTabStripVisible();
-  gfx::Rect client_bounds =
+  const gfx::Rect client_bounds =
       layout_->CalculateClientAreaBounds(width(), height());
   int y = client_bounds.y();
   // If the toolbar isn't going to draw a top edge for us, draw one ourselves.
   if (!tabstrip_visible) {
-    const gfx::Rect line_bounds(client_bounds.x(), client_bounds.y() - 1,
-                                client_bounds.width(), 1);
-    BrowserView::Paint1pxHorizontalLine(canvas, GetToolbarTopSeparatorColor(),
-                                        line_bounds, true);
+    canvas->DrawLine(gfx::Point(client_bounds.x(), client_bounds.y() - 1),
+                     gfx::Point(client_bounds.right(), client_bounds.y() - 1),
+                     GetToolbarTopSeparatorColor());
   }
 
   // In maximized mode, the only edge to draw is the top one, so we're done.
@@ -730,7 +732,7 @@ void OpaqueBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) const {
   }
 
   // For popup windows, draw location bar sides.
-  SkColor location_bar_border_color =
+  const SkColor location_bar_border_color =
       browser_view()->toolbar()->location_bar()->GetOpaqueBorderColor(
           browser_view()->IsIncognito());
   if (!tabstrip_visible && IsToolbarVisible()) {

@@ -12,34 +12,6 @@
 
 namespace views {
 
-bool LayoutManagerBase::ChildLayout::operator==(
-    const ChildLayout& other) const {
-  // Note: if the view is not visible, the bounds do not matter as they will not
-  // be set.
-  return child_view == other.child_view && visible == other.visible &&
-         (!visible || bounds == other.bounds);
-}
-
-LayoutManagerBase::ProposedLayout::ProposedLayout() = default;
-LayoutManagerBase::ProposedLayout::ProposedLayout(const ProposedLayout& other) =
-    default;
-LayoutManagerBase::ProposedLayout::ProposedLayout(ProposedLayout&& other) =
-    default;
-LayoutManagerBase::ProposedLayout::ProposedLayout(
-    const gfx::Size& size,
-    const std::initializer_list<ChildLayout>& children)
-    : host_size(size), child_layouts(children) {}
-LayoutManagerBase::ProposedLayout::~ProposedLayout() = default;
-LayoutManagerBase::ProposedLayout& LayoutManagerBase::ProposedLayout::operator=(
-    const ProposedLayout& other) = default;
-LayoutManagerBase::ProposedLayout& LayoutManagerBase::ProposedLayout::operator=(
-    ProposedLayout&& other) = default;
-
-bool LayoutManagerBase::ProposedLayout::operator==(
-    const ProposedLayout& other) const {
-  return host_size == other.host_size && child_layouts == other.child_layouts;
-}
-
 LayoutManagerBase::~LayoutManagerBase() = default;
 
 gfx::Size LayoutManagerBase::GetPreferredSize(const View* host) const {
@@ -73,7 +45,13 @@ void LayoutManagerBase::Layout(View* host) {
   ApplyLayout(GetProposedLayout(size));
 }
 
-LayoutManagerBase::ProposedLayout LayoutManagerBase::GetProposedLayout(
+std::vector<View*> LayoutManagerBase::GetChildViewsInPaintOrder(
+    const View* host) const {
+  DCHECK_EQ(host_view_, host);
+  return LayoutManager::GetChildViewsInPaintOrder(host);
+}
+
+ProposedLayout LayoutManagerBase::GetProposedLayout(
     const gfx::Size& host_size) const {
   if (cached_layout_size_ != host_size) {
     cached_layout_size_ = host_size;

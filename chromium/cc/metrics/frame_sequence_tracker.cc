@@ -23,6 +23,7 @@ constexpr const char* FrameSequenceTracker::kFrameSequenceTrackerTypeNames[] = {
     [FrameSequenceTrackerType::kPinchZoom] = "PinchZoom",
     [FrameSequenceTrackerType::kRAF] = "RAF",
     [FrameSequenceTrackerType::kTouchScroll] = "TouchScroll",
+    [FrameSequenceTrackerType::kUniversal] = "Universal",
     [FrameSequenceTrackerType::kVideo] = "Video",
     [FrameSequenceTrackerType::kWheelScroll] = "WheelScroll",
     [FrameSequenceTrackerType::kMaxType] = "",
@@ -37,16 +38,38 @@ constexpr int kMinFramesForThroughputMetric = 4;
 enum class ThreadType {
   kMain,
   kCompositor,
+  kSlower,
 };
 
 constexpr int kBuiltinSequenceNum =
     base::size(FrameSequenceTracker::kFrameSequenceTrackerTypeNames);
-constexpr int kMaximumHistogramIndex = 2 * kBuiltinSequenceNum;
+constexpr int kMaximumHistogramIndex = 3 * kBuiltinSequenceNum;
 
 int GetIndexForMetric(ThreadType thread_type, FrameSequenceTrackerType type) {
-  return thread_type == ThreadType::kMain
-             ? static_cast<int>(type)
-             : static_cast<int>(type + kBuiltinSequenceNum);
+  if (thread_type == ThreadType::kMain)
+    return static_cast<int>(type);
+  if (thread_type == ThreadType::kCompositor)
+    return static_cast<int>(type + kBuiltinSequenceNum);
+  return static_cast<int>(type + 2 * kBuiltinSequenceNum);
+}
+
+std::string GetCheckerboardingHistogramName(FrameSequenceTrackerType type) {
+  return base::StrCat(
+      {"Graphics.Smoothness.Checkerboarding.",
+       FrameSequenceTracker::kFrameSequenceTrackerTypeNames[type]});
+}
+
+std::string GetThroughputHistogramName(FrameSequenceTrackerType type,
+                                       const char* thread_name) {
+  return base::StrCat(
+      {"Graphics.Smoothness.Throughput.", thread_name, ".",
+       FrameSequenceTracker::kFrameSequenceTrackerTypeNames[type]});
+}
+
+std::string GetFrameSequenceLengthHistogramName(FrameSequenceTrackerType type) {
+  return base::StrCat(
+      {"Graphics.Smoothness.FrameSequenceLength.",
+       FrameSequenceTracker::kFrameSequenceTrackerTypeNames[type]});
 }
 
 }  // namespace
@@ -55,8 +78,10 @@ int GetIndexForMetric(ThreadType thread_type, FrameSequenceTrackerType type) {
 // FrameSequenceTrackerCollection
 
 FrameSequenceTrackerCollection::FrameSequenceTrackerCollection(
+    bool is_single_threaded,
     CompositorFrameReportingController* compositor_frame_reporting_controller)
-    : compositor_frame_reporting_controller_(
+    : is_single_threaded_(is_single_threaded),
+      compositor_frame_reporting_controller_(
           compositor_frame_reporting_controller) {}
 
 FrameSequenceTrackerCollection::~FrameSequenceTrackerCollection() {
@@ -66,6 +91,8 @@ FrameSequenceTrackerCollection::~FrameSequenceTrackerCollection() {
 
 void FrameSequenceTrackerCollection::StartSequence(
     FrameSequenceTrackerType type) {
+  if (is_single_threaded_)
+    return;
   if (frame_trackers_.contains(type))
     return;
   auto tracker = base::WrapUnique(new FrameSequenceTracker(type));
@@ -98,16 +125,15 @@ void FrameSequenceTrackerCollection::ClearAll() {
 
 void FrameSequenceTrackerCollection::NotifyBeginImplFrame(
     const viz::BeginFrameArgs& args) {
-  for (auto& tracker : frame_trackers_) {
+  RecreateTrackers(args);
+  for (auto& tracker : frame_trackers_)
     tracker.second->ReportBeginImplFrame(args);
-  }
 }
 
 void FrameSequenceTrackerCollection::NotifyBeginMainFrame(
     const viz::BeginFrameArgs& args) {
-  for (auto& tracker : frame_trackers_) {
+  for (auto& tracker : frame_trackers_)
     tracker.second->ReportBeginMainFrame(args);
-  }
 }
 
 void FrameSequenceTrackerCollection::NotifyImplFrameCausedNoDamage(
@@ -158,6 +184,24 @@ void FrameSequenceTrackerCollection::NotifyFramePresented(
       });
 }
 
+void FrameSequenceTrackerCollection::RecreateTrackers(
+    const viz::BeginFrameArgs& args) {
+  std::vector<FrameSequenceTrackerType> recreate_trackers;
+  for (const auto& tracker : frame_trackers_) {
+    if (tracker.second->ShouldReportMetricsNow(args))
+      recreate_trackers.push_back(tracker.first);
+  }
+
+  for (const auto& tracker_type : recreate_trackers) {
+    // StopSequence put the tracker in the |removal_trackers_|, which will
+    // report its throughput data when its frame is presented.
+    StopSequence(tracker_type);
+    // The frame sequence is still active, so create a new tracker to keep
+    // tracking this sequence.
+    StartSequence(tracker_type);
+  }
+}
+
 FrameSequenceTracker* FrameSequenceTrackerCollection::GetTrackerForTesting(
     FrameSequenceTrackerType type) {
   if (!frame_trackers_.contains(type))
@@ -185,28 +229,45 @@ FrameSequenceTracker::~FrameSequenceTracker() {
       "cc,benchmark", "FrameSequenceTracker", this, "args",
       ThroughputData::ToTracedValue(impl_throughput_, main_throughput_),
       "checkerboard", checkerboarding_.frames_checkerboarded);
+  ReportMetrics();
+}
 
+void FrameSequenceTracker::ReportMetrics() {
   // Report the throughput metrics.
-  ThroughputData::ReportHistogram(
+  base::Optional<int> impl_throughput_percent = ThroughputData::ReportHistogram(
       type_, "CompositorThread",
       GetIndexForMetric(ThreadType::kCompositor, type_), impl_throughput_);
-  ThroughputData::ReportHistogram(type_, "MainThread",
-                                  GetIndexForMetric(ThreadType::kMain, type_),
-                                  main_throughput_);
+  base::Optional<int> main_throughput_percent = ThroughputData::ReportHistogram(
+      type_, "MainThread", GetIndexForMetric(ThreadType::kMain, type_),
+      main_throughput_);
+
+  base::Optional<ThroughputData> slower_throughput;
+  if (impl_throughput_percent &&
+      (!main_throughput_percent ||
+       impl_throughput_percent.value() <= main_throughput_percent.value())) {
+    slower_throughput = impl_throughput_;
+  }
+  if (main_throughput_percent &&
+      (!impl_throughput_percent ||
+       main_throughput_percent.value() < impl_throughput_percent.value())) {
+    slower_throughput = main_throughput_;
+  }
+  if (slower_throughput.has_value()) {
+    ThroughputData::ReportHistogram(
+        type_, "SlowerThread", GetIndexForMetric(ThreadType::kSlower, type_),
+        slower_throughput.value());
+  }
 
   // Report the checkerboarding metrics.
   if (impl_throughput_.frames_expected >= kMinFramesForThroughputMetric) {
-    const std::string checkerboarding_name =
-        base::StrCat({"Graphics.Smoothness.Checkerboarding.",
-                      kFrameSequenceTrackerTypeNames[type_]});
     const int checkerboarding_percent =
         static_cast<int>(100 * checkerboarding_.frames_checkerboarded /
                          impl_throughput_.frames_expected);
     STATIC_HISTOGRAM_POINTER_GROUP(
-        checkerboarding_name, type_, FrameSequenceTrackerType::kMaxType,
-        Add(checkerboarding_percent),
+        GetCheckerboardingHistogramName(type_), type_,
+        FrameSequenceTrackerType::kMaxType, Add(checkerboarding_percent),
         base::LinearHistogram::FactoryGet(
-            checkerboarding_name, 1, 100, 101,
+            GetCheckerboardingHistogramName(type_), 1, 100, 101,
             base::HistogramBase::kUmaTargetedHistogramFlag));
   }
 }
@@ -223,6 +284,9 @@ void FrameSequenceTracker::ReportBeginImplFrame(
                          args.sequence_number);
   impl_throughput_.frames_expected +=
       begin_impl_frame_data_.previous_sequence_delta;
+
+  if (first_frame_timestamp_.is_null())
+    first_frame_timestamp_ = args.frame_time;
 }
 
 void FrameSequenceTracker::ReportBeginMainFrame(
@@ -442,35 +506,40 @@ FrameSequenceTracker::ThroughputData::ToTracedValue(
   return dict;
 }
 
-void FrameSequenceTracker::ThroughputData::ReportHistogram(
+bool FrameSequenceTracker::ShouldReportMetricsNow(
+    const viz::BeginFrameArgs& args) const {
+  if (!first_frame_timestamp_.is_null() &&
+      args.frame_time - first_frame_timestamp_ >= time_delta_to_report_)
+    return true;
+  return false;
+}
+
+base::Optional<int> FrameSequenceTracker::ThroughputData::ReportHistogram(
     FrameSequenceTrackerType sequence_type,
     const char* thread_name,
     int metric_index,
     const ThroughputData& data) {
   DCHECK_LT(sequence_type, FrameSequenceTrackerType::kMaxType);
 
-  const std::string sequence_length_name = base::StrCat(
-      {"Graphics.Smoothness.FrameSequenceLength.",
-       FrameSequenceTracker::kFrameSequenceTrackerTypeNames[sequence_type]});
   STATIC_HISTOGRAM_POINTER_GROUP(
-      sequence_length_name, sequence_type, FrameSequenceTrackerType::kMaxType,
-      Add(data.frames_expected),
+      GetFrameSequenceLengthHistogramName(sequence_type), sequence_type,
+      FrameSequenceTrackerType::kMaxType, Add(data.frames_expected),
       base::Histogram::FactoryGet(
-          sequence_length_name, 1, 1000, 50,
+          GetFrameSequenceLengthHistogramName(sequence_type), 1, 1000, 50,
           base::HistogramBase::kUmaTargetedHistogramFlag));
 
   if (data.frames_expected < kMinFramesForThroughputMetric)
-    return;
+    return base::nullopt;
 
-  const std::string name = base::StrCat(
-      {"Graphics.Smoothness.Throughput.", thread_name, ".",
-       FrameSequenceTracker::kFrameSequenceTrackerTypeNames[sequence_type]});
   const int percent =
       static_cast<int>(100 * data.frames_produced / data.frames_expected);
   STATIC_HISTOGRAM_POINTER_GROUP(
-      name, metric_index, kMaximumHistogramIndex, Add(percent),
+      GetThroughputHistogramName(sequence_type, thread_name), metric_index,
+      kMaximumHistogramIndex, Add(percent),
       base::LinearHistogram::FactoryGet(
-          name, 1, 100, 101, base::HistogramBase::kUmaTargetedHistogramFlag));
+          GetThroughputHistogramName(sequence_type, thread_name), 1, 100, 101,
+          base::HistogramBase::kUmaTargetedHistogramFlag));
+  return percent;
 }
 
 FrameSequenceTracker::CheckerboardingData::CheckerboardingData() = default;

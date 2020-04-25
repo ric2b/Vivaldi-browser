@@ -44,6 +44,7 @@ class TestPlatformDelegate : public ui::PlatformWindowDelegate {
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) override {}
   void OnAcceleratedWidgetDestroyed() override {}
   void OnActivationChanged(bool active) override {}
+  void OnMouseEnter() override {}
 };
 
 void RunPendingTasks(scoped_refptr<base::TaskRunner> task_runner) {
@@ -588,7 +589,7 @@ class DirectCompositionPixelTest : public DirectCompositionSurfaceTest {
 
  protected:
   void SetUp() override {
-    static_cast<ui::PlatformWindow*>(&window_)->Show();
+    static_cast<ui::PlatformWindowBase*>(&window_)->Show();
     DirectCompositionSurfaceTest::SetUp();
   }
 
@@ -1133,7 +1134,7 @@ TEST_F(DirectCompositionPixelTest, SwapChainImage) {
   ASSERT_TRUE(front_buffer_texture);
 
   auto front_buffer_image = base::MakeRefCounted<GLImageD3D>(
-      swap_chain_size, gfx::BufferFormat::BGRA_8888, front_buffer_texture,
+      swap_chain_size, GL_BGRA_EXT, GL_UNSIGNED_BYTE, front_buffer_texture,
       swap_chain);
   ASSERT_TRUE(front_buffer_image->Initialize());
 

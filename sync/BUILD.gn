@@ -60,6 +60,18 @@ jumbo_source_set("browser") {
     "//components/sync/protocol",
     "//vivaldi/notes:browser",
   ]
+
+  if (is_android) {
+    deps += [
+      "//chrome/android:jni_headers",
+    ]
+
+    sources += [
+      "//vivaldi/sync/vivaldi_profile_sync_service_android.cc",
+      "//vivaldi/sync/vivaldi_profile_sync_service_android.h",
+    ]
+  }
+
   if (!is_android) {
     public_deps += [
       "//vivaldi/extensions",

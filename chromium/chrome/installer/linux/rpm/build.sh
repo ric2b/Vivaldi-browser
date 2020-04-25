@@ -107,7 +107,6 @@ do_package() {
   PKGNAME="${PACKAGE}-${CHANNEL}-${VERSION}-${PACKAGE_RELEASE}"
   mv "$RPMBUILD_DIR/RPMS/$ARCHITECTURE/${PKGNAME}.${ARCHITECTURE}.rpm" \
      "${OUTPUTDIR}"
-
   # Make sure the package is world-readable, otherwise it causes problems when
   # copied to share drive.
   chmod a+r "${OUTPUTDIR}/${PKGNAME}.${ARCHITECTURE}.rpm"
@@ -246,7 +245,6 @@ eval $(sed -e "s/^\([^=]\+\)=\(.*\)$/export \1='\2'/" \
   "${BUILDDIR}/installer/theme/BRANDING")
 
 REPOCONFIG="http://repo.vivaldi.com/archive/rpm"
-SSLREPOCONFIG="https://repo.vivaldi.com/archive/rpm"
 verify_channel
 export USR_BIN_SYMLINK_NAME="${PACKAGE}-${CHANNEL}"
 

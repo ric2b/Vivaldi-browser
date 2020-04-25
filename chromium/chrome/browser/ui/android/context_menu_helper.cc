@@ -15,7 +15,7 @@
 #include "base/callback.h"
 #include "chrome/android/chrome_jni_headers/ContextMenuHelper_jni.h"
 #include "chrome/android/chrome_jni_headers/ContextMenuParams_jni.h"
-#include "chrome/browser/android/download/download_controller_base.h"
+#include "chrome/browser/download/android/download_controller_base.h"
 #include "chrome/browser/image_decoder.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
@@ -72,7 +72,8 @@ class ContextMenuHelperImageRequest : public ImageDecoder::ImageRequest {
 };
 
 void OnRetrieveImageForShare(
-    chrome::mojom::ChromeRenderFrameAssociatedPtr chrome_render_frame,
+    mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame>
+        chrome_render_frame,
     const base::android::JavaRef<jobject>& jcallback,
     const std::vector<uint8_t>& thumbnail_data,
     const gfx::Size& original_size) {
@@ -80,7 +81,8 @@ void OnRetrieveImageForShare(
 }
 
 void OnRetrieveImageForContextMenu(
-    chrome::mojom::ChromeRenderFrameAssociatedPtr chrome_render_frame,
+    mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame>
+        chrome_render_frame,
     const base::android::JavaRef<jobject>& jcallback,
     const std::vector<uint8_t>& thumbnail_data,
     const gfx::Size& original_size) {
@@ -225,7 +227,7 @@ void ContextMenuHelper::RetrieveImageInternal(
   if (!render_frame_host)
     return;
 
-  chrome::mojom::ChromeRenderFrameAssociatedPtr chrome_render_frame;
+  mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame> chrome_render_frame;
   render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
       &chrome_render_frame);
   // Bind the InterfacePtr into the callback so that it's kept alive

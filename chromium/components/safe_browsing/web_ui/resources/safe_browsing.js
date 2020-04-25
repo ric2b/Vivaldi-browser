@@ -89,6 +89,24 @@ cr.define('safe_browsing', function() {
       addPGResponse(result);
     });
 
+    cr.sendWithPromise('getRTLookupPings', [])
+        .then((rtLookupPings) => { rtLookupPings
+            .forEach(function (rtLookupPing) {
+          addRTLookupPing(rtLookupPing);
+        })});
+    cr.addWebUIListener('rt-lookup-pings-update', function(result) {
+      addRTLookupPing(result);
+    });
+
+    cr.sendWithPromise('getRTLookupResponses', [])
+        .then((rtLookupResponses) => { rtLookupResponses
+            .forEach(function (rtLookupResponse) {
+          addRTLookupResponse(rtLookupResponse);
+        })});
+    cr.addWebUIListener('rt-lookup-responses-update', function(result) {
+      addRTLookupResponse(result);
+    });
+
     cr.sendWithPromise('getLogMessages', [])
         .then((logMessages) => { logMessages.forEach(function (message) {
           addLogMessage(message);
@@ -99,10 +117,11 @@ cr.define('safe_browsing', function() {
 
     $('get-referrer-chain-form').addEventListener('submit', addReferrerChain);
 
-    // Allow tabs to be navigated to by anchor.
-    showTab(window.location.hash.substr(1));
+    // Allow tabs to be navigated to by fragment. The fragment with be of the
+    // format "#tab-<tab id>"
+    showTab(window.location.hash.substr(5));
     window.onhashchange = function () {
-      showTab(window.location.hash.substr(1));
+      showTab(window.location.hash.substr(5));
     };
 
     // When the tab updates, update the anchor
@@ -110,7 +129,7 @@ cr.define('safe_browsing', function() {
       var tabbox = $('tabbox');
       var tabs = tabbox.querySelector('tabs').children;
       var selectedTab = tabs[tabbox.selectedIndex];
-      window.location.hash = selectedTab.id;
+      window.location.hash = 'tab-' + selectedTab.id;
     }, true);
   }
 
@@ -203,36 +222,40 @@ cr.define('safe_browsing', function() {
     appendChildWithInnerText(logDiv, eventFormatted);
   }
 
-  function addPGPingRow(token) {
-    var row = $('pg-ping-list').insertRow();
+  function insertTokenToTable(tableId, token) {
+    var row = $(tableId).insertRow();
     row.className = 'content';
-    row.id = 'pg-ping-list-' + token;
-    row.insertCell();
-    row.insertCell();
+    row.id = tableId + '-' + token;
+    row.insertCell().className = 'content';
+    row.insertCell().className = 'content';
   }
 
-  function addPGPing(result) {
+  function addResultToTable(tableId, result, position) {
     var token = result[0];
     var request = result[1];
 
-    if ($('pg-ping-list-'+token) == undefined) {
-      addPGPingRow(token);
+    if ($(tableId + '-' + token) == undefined) {
+      insertTokenToTable(tableId, token);
     }
 
-    var cell = $('pg-ping-list-'+token).cells[0];
+    var cell = $(tableId + '-' + token).cells[position];
     appendChildWithInnerText(cell, request);
   }
 
+  function addPGPing(result) {
+    addResultToTable('pg-ping-list', result, 0);
+  }
+
   function addPGResponse(result) {
-    var token = result[0];
-    var response = result[1];
+    addResultToTable('pg-ping-list', result, 1);
+  }
 
-    if ($('pg-ping-list-'+token) == undefined) {
-      addPGPingRow(token);
-    }
+  function addRTLookupPing(result) {
+    addResultToTable('rt-lookup-ping-list', result, 0);
+  }
 
-    var cell = $('pg-ping-list-'+token).cells[1];
-    appendChildWithInnerText(cell, response);
+  function addRTLookupResponse(result) {
+    addResultToTable('rt-lookup-ping-list', result, 1);
   }
 
   function addLogMessage(result) {

@@ -21,11 +21,6 @@ extern const char kAutofillCacheQueryResponsesDescription[];
 extern const char kAutofillCreditCardUploadName[];
 extern const char kAutofillCreditCardUploadDescription[];
 
-// Title and description for the flag to control GPay branding in credit card
-// downstream keyboard accessory.
-extern const char kAutofillDownstreamUseGooglePayBrandingOniOSName[];
-extern const char kAutofillDownstreamUseGooglePayBrandingOniOSDescription[];
-
 // Title and description for the flag to control deprecating company name.
 extern const char kAutofillEnableCompanyNameName[];
 extern const char kAutofillEnableCompanyNameDescription[];
@@ -57,6 +52,11 @@ extern const char kAutofillNoLocalSaveOnUploadSuccessDescription[];
 extern const char kAutofillPruneSuggestionsName[];
 extern const char kAutofillPruneSuggestionsDescription[];
 
+// Title and description for the flag to control dismissing the Save Card
+// Infobar on Navigation.
+extern const char kAutofillSaveCardDismissOnNavigationName[];
+extern const char kAutofillSaveCardDismissOnNavigationDescription[];
+
 // Title and description for the flag to control if prefilled value filter
 // profiles.
 extern const char kAutofillShowAllSuggestionsOnPrefilledFormsName[];
@@ -77,6 +77,11 @@ extern const char kAutofillRichMetadataQueriesDescription[];
 extern const char kAutofillUseMobileLabelDisambiguationName[];
 extern const char kAutofillUseMobileLabelDisambiguationDescription[];
 
+// Title and description for the flag that controls whether event breadcrumbs
+// are captured.
+extern const char kLogBreadcrumbsName[];
+extern const char kLogBreadcrumbsDescription[];
+
 // Title and description for the flag to control if initial uploading of crash
 // reports is delayed.
 extern const char kBreakpadNoDelayInitialUploadName[];
@@ -87,20 +92,20 @@ extern const char kBreakpadNoDelayInitialUploadDescription[];
 extern const char kBrowserContainerKeepsContentViewName[];
 extern const char kBrowserContainerKeepsContentViewDescription[];
 
-// Title and description for the flag to enable automatically switching to the
-// regular tabs after closing the last incognito tab.
-extern const char kClosingLastIncognitoTabName[];
-extern const char kClosingLastIncognitoTabDescription[];
-
 // Title and description for the flag that controls whether Collections are
 // presented using the new iOS13 Card style or the custom legacy one.
 extern const char kCollectionsCardPresentationStyleName[];
 extern const char kCollectionsCardPresentationStyleDescription[];
 
-// Title and description for the flag to diffentiate between copied
-// urls, strings, and images.
-extern const char kCopiedContentBehaviorName[];
-extern const char kCopiedContentBehaviorDescription[];
+// Title and description for the flag that enables Messages UI on
+// ConfirmInfobars.
+extern const char kConfirmInfobarMessagesUIName[];
+extern const char kConfirmInfobarMessagesUIDescription[];
+
+// Title and description for the flag that enables Messages UI on
+// Crash Restore Infobars.
+extern const char kCrashRestoreInfobarMessagesUIName[];
+extern const char kCrashRestoreInfobarMessagesUIDescription[];
 
 // Title and description for the flag to scan a new credit card using the
 // camera.
@@ -118,9 +123,18 @@ extern const char kDcheckIsFatalDescription[];
 extern const char kDetectMainThreadFreezeName[];
 extern const char kDetectMainThreadFreezeDescription[];
 
+// Title and description for the flag to disable animations when battery
+// level is below a certain level.
+extern const char kDisableAnimationOnLowBatteryName[];
+extern const char kDisableAnimationOnLowBatteryDescription[];
+
 // Title and description for the flag to enable drag and drop.
 extern const char kDragAndDropName[];
 extern const char kDragAndDropDescription[];
+
+// Title and description for the flag to block restore urls.
+extern const char kEmbedderBlockRestoreUrlName[];
+extern const char kEmbedderBlockRestoreUrlDescription[];
 
 // Title and description for the flag to control if credit card upload can
 // display a cardholder name fix flow.
@@ -138,11 +152,6 @@ extern const char
 // shown when saving a card.
 extern const char kEnableAutofillSaveCardShowNoThanksName[];
 extern const char kEnableAutofillSaveCardShowNoThanksDescription[];
-
-// Title and description for the flag to control the credit card import from
-// dynamic forms.
-extern const char kEnableAutofillImportDynamicFormsName[];
-extern const char kEnableAutofillImportDynamicFormsDescription[];
 
 // Title and description for the flag to enable the clipboard provider to
 // suggest searchihng for copied imagse
@@ -174,13 +183,8 @@ extern const char kFindInPageiFrameDescription[];
 
 // Title and description for the command line switch used to determine the
 // active fullscreen viewport adjustment mode.
-extern const char kFullscreenViewportAdjustmentExperimentName[];
-extern const char kFullscreenViewportAdjustmentExperimentDescription[];
-
-// Title and description for the flag to display current user identity on
-// New Tab Page.
-extern const char kIdentityDiscName[];
-extern const char kIdentityDiscDescription[];
+extern const char kFullscreenSmoothScrollingName[];
+extern const char kFullscreenSmoothScrollingDescription[];
 
 // Title and description for the flag to ignore viewport scale limits.
 extern const char kIgnoresViewportScaleLimitsName[];
@@ -250,6 +254,11 @@ extern const char kOmniboxOnDeviceHeadSuggestionsDescription[];
 extern const char kOptionalArticleThumbnailName[];
 extern const char kOptionalArticleThumbnailDescription[];
 
+// Title and description for the flag to enable leak detection for entered
+// credentials.
+extern const char kPasswordLeakDetectionName[];
+extern const char kPasswordLeakDetectionDescription[];
+
 // Title and description for the flag to toggle the flag of the search button.
 extern const char kSearchIconToggleName[];
 extern const char kSearchIconToggleDescription[];
@@ -263,10 +272,6 @@ extern const char kSendTabToSelfDescription[];
 // of the users devices.
 extern const char kSendTabToSelfBroadcastName[];
 extern const char kSendTabToSelfBroadcastDescription[];
-
-// Title and description for the flag to enable the send tab to self sending UI.
-extern const char kSendTabToSelfShowSendingUIName[];
-extern const char kSendTabToSelfShowSendingUIDescription[];
 
 // Title and description for the flag to send UMA data over any network.
 extern const char kSendUmaOverAnyNetwork[];
@@ -296,6 +301,15 @@ extern const char kSlimNavigationManagerDescription[];
 extern const char kSnapshotDrawViewName[];
 extern const char kSnapshotDrawViewDescription[];
 
+// Title and description for the flag to trigger the startup sign-in promo.
+extern const char kForceStartupSigninPromoName[];
+extern const char kForceStartupSigninPromoDescription[];
+
+// Title and description for the flag to allow syncing DeviceInfo in
+// transport-only mode.
+extern const char kSyncDeviceInfoInTransportModeName[];
+extern const char kSyncDeviceInfoInTransportModeDescription[];
+
 // Title and description for the flag to control if Chrome Sync should use the
 // sandbox servers.
 extern const char kSyncSandboxName[];
@@ -310,10 +324,6 @@ extern const char kToolbarContainerDescription[];
 // toolbar.
 extern const char kToolbarNewTabButtonName[];
 extern const char kToolbarNewTabButtonDescription[];
-
-// Title and description for the flag to enable the unified consent.
-extern const char kUnifiedConsentName[];
-extern const char kUnifiedConsentDescription[];
 
 // Title and description for the flag to enable the ddljson Doodle API.
 extern const char kUseDdljsonApiName[];
@@ -337,11 +347,6 @@ extern const char kWebClearBrowsingDataDescription[];
 // Title and description for the flag to enable text accessibility in webpages.
 extern const char kWebPageTextAccessibilityName[];
 extern const char kWebPageTextAccessibilityDescription[];
-
-// Title and description for the flag to enable WKHTTPSystemCookieStore usage
-// for main context URL requests.
-extern const char kWKHTTPSystemCookieStoreName[];
-extern const char kWKHTTPSystemCookieStoreDescription[];
 
 // Please add names and descriptions above in alphabetical order.
 

@@ -18,6 +18,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/optional.h"
+#include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
@@ -68,8 +69,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
-#include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_util.h"
@@ -172,7 +172,17 @@ void ClearShaderCacheOnIOThread(const base::FilePath& path,
                                 const base::Time end,
                                 base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  GetShaderCacheFactorySingleton()->ClearByPath(
+  gpu::ShaderCacheFactory* shader_cache_factory =
+      GetShaderCacheFactorySingleton();
+
+  // May be null in tests where it is difficult to plumb through a test storage
+  // partition.
+  if (!shader_cache_factory) {
+    std::move(callback).Run();
+    return;
+  }
+
+  shader_cache_factory->ClearByPath(
       path, begin, end,
       base::BindOnce(&ClearedShaderCache, std::move(callback)));
 }
@@ -374,7 +384,10 @@ void DeprecateSameSiteCookies(int process_id,
     }
 
     if (emit_messages) {
-      root_frame_host->AddSameSiteCookieDeprecationMessage(cookie_url, warning);
+      root_frame_host->AddSameSiteCookieDeprecationMessage(
+          cookie_url, warning,
+          net::cookie_util::IsSameSiteByDefaultCookiesEnabled(),
+          net::cookie_util::IsCookiesWithoutSameSiteMustBeSecureEnabled());
     }
   }
 
@@ -544,15 +557,10 @@ class LoginHandlerDelegate {
     auth_challenge_responder_.set_disconnect_handler(base::BindOnce(
         &LoginHandlerDelegate::OnRequestCancelled, base::Unretained(this)));
 
-    auto continue_after_inteceptor_io =
-        base::BindOnce(&LoginHandlerDelegate::ContinueAfterInterceptorIO,
-                       weak_factory_.GetWeakPtr());
-    base::PostTask(
-        FROM_HERE, {BrowserThread::IO},
-        base::BindOnce(&DevToolsURLLoaderInterceptor::HandleAuthRequest,
-                       request_id_.child_id, routing_id_,
-                       request_id_.request_id, auth_info_,
-                       std::move(continue_after_inteceptor_io)));
+    DevToolsURLLoaderInterceptor::HandleAuthRequest(
+        request_id_.child_id, routing_id_, request_id_.request_id, auth_info_,
+        base::BindOnce(&LoginHandlerDelegate::ContinueAfterInterceptor,
+                       weak_factory_.GetWeakPtr()));
   }
 
  private:
@@ -563,18 +571,7 @@ class LoginHandlerDelegate {
     delete this;
   }
 
-  static void ContinueAfterInterceptorIO(
-      base::WeakPtr<LoginHandlerDelegate> self_weak,
-      bool use_fallback,
-      const base::Optional<net::AuthCredentials>& auth_credentials) {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
-        base::BindOnce(&LoginHandlerDelegate::ContinueAfterInterceptorUI,
-                       std::move(self_weak), use_fallback, auth_credentials));
-  }
-
-  void ContinueAfterInterceptorUI(
+  void ContinueAfterInterceptor(
       bool use_fallback,
       const base::Optional<net::AuthCredentials>& auth_credentials) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -768,10 +765,11 @@ class SSLClientAuthDelegate : public SSLClientAuthHandler::Delegate {
     DCHECK((cert && private_key) || (!cert && !private_key));
 
     if (cert && private_key) {
-      network::mojom::SSLPrivateKeyPtr ssl_private_key;
+      mojo::PendingRemote<network::mojom::SSLPrivateKey> ssl_private_key;
 
-      mojo::MakeStrongBinding(std::make_unique<SSLPrivateKeyImpl>(private_key),
-                              mojo::MakeRequest(&ssl_private_key));
+      mojo::MakeSelfOwnedReceiver(
+          std::make_unique<SSLPrivateKeyImpl>(private_key),
+          ssl_private_key.InitWithNewPipeAndPassReceiver());
 
       client_cert_responder_->ContinueWithCertificate(
           cert, private_key->GetProviderName(),
@@ -896,12 +894,13 @@ class StoragePartitionImpl::URLLoaderFactoryForBrowserProcess
                                traffic_annotation);
   }
 
-  void Clone(network::mojom::URLLoaderFactoryRequest request) override {
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
+      override {
     if (!storage_partition_)
       return;
     storage_partition_
         ->GetURLLoaderFactoryForBrowserProcessInternal(corb_enabled_)
-        ->Clone(std::move(request));
+        ->Clone(std::move(receiver));
   }
 
   // SharedURLLoaderFactory implementation:
@@ -1223,7 +1222,6 @@ void StoragePartitionImpl::Initialize() {
       browser_context_->GetSpecialStoragePolicy(), quota_manager_proxy.get());
 
   dom_storage_context_ = DOMStorageContextWrapper::Create(
-      BrowserContext::GetConnectorFor(browser_context_),
       is_in_memory_ ? base::FilePath() : browser_context_->GetPath(),
       relative_partition_path_, browser_context_->GetSpecialStoragePolicy());
 
@@ -1410,17 +1408,19 @@ StoragePartitionImpl::GetCookieManagerForBrowserProcess() {
 void StoragePartitionImpl::CreateRestrictedCookieManager(
     network::mojom::RestrictedCookieManagerRole role,
     const url::Origin& origin,
+    const GURL& site_for_cookies,
+    const url::Origin& top_frame_origin,
     bool is_service_worker,
     int process_id,
     int routing_id,
     mojo::PendingReceiver<network::mojom::RestrictedCookieManager> receiver) {
   DCHECK(initialized_);
   if (!GetContentClient()->browser()->WillCreateRestrictedCookieManager(
-          role, browser_context_, origin, is_service_worker, process_id,
-          routing_id, &receiver)) {
-    GetNetworkContext()->GetRestrictedCookieManager(std::move(receiver), role,
-                                                    origin, is_service_worker,
-                                                    process_id, routing_id);
+          role, browser_context_, origin, site_for_cookies, top_frame_origin,
+          is_service_worker, process_id, routing_id, &receiver)) {
+    GetNetworkContext()->GetRestrictedCookieManager(
+        std::move(receiver), role, origin, site_for_cookies, top_frame_origin,
+        is_service_worker, process_id, routing_id);
   }
 }
 
@@ -2086,7 +2086,8 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
         base::WrapRefCounted(dom_storage_context),
         base::WrapRefCounted(special_storage_policy), origin_matcher,
         storage_origin, perform_storage_cleanup, begin, end,
-        CreateTaskCompletionClosure(TracingDataType::kLocalStorage));
+        mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+            CreateTaskCompletionClosure(TracingDataType::kLocalStorage)));
 
     // ClearDataImpl cannot clear session storage data when a particular origin
     // is specified. Therefore we ignore clearing session storage in this case.
@@ -2304,7 +2305,7 @@ void StoragePartitionImpl::InitNetworkContext() {
   network_context_client_receiver_.reset();
   network_context_->SetClient(
       network_context_client_receiver_.BindNewPipeAndPassRemote());
-  network_context_.set_connection_error_handler(base::BindOnce(
+  network_context_.set_disconnect_handler(base::BindOnce(
       &StoragePartitionImpl::InitNetworkContext, weak_factory_.GetWeakPtr()));
 }
 
@@ -2357,24 +2358,26 @@ network::mojom::OriginPolicyManager*
 StoragePartitionImpl::GetOriginPolicyManagerForBrowserProcess() {
   DCHECK(initialized_);
   if (!origin_policy_manager_for_browser_process_ ||
-      origin_policy_manager_for_browser_process_.encountered_error()) {
+      !origin_policy_manager_for_browser_process_.is_connected()) {
     GetNetworkContext()->GetOriginPolicyManager(
-        mojo::MakeRequest(&origin_policy_manager_for_browser_process_));
+        origin_policy_manager_for_browser_process_
+            .BindNewPipeAndPassReceiver());
   }
   return origin_policy_manager_for_browser_process_.get();
 }
 
 void StoragePartitionImpl::SetOriginPolicyManagerForBrowserProcessForTesting(
-    network::mojom::OriginPolicyManagerPtr test_origin_policy_manager) {
+    mojo::PendingRemote<network::mojom::OriginPolicyManager>
+        test_origin_policy_manager) {
   DCHECK(initialized_);
-  origin_policy_manager_for_browser_process_ =
-      std::move(test_origin_policy_manager);
+  origin_policy_manager_for_browser_process_.Bind(
+      std::move(test_origin_policy_manager));
 }
 
 void StoragePartitionImpl::
     ResetOriginPolicyManagerForBrowserProcessForTesting() {
   DCHECK(initialized_);
-  origin_policy_manager_for_browser_process_ = nullptr;
+  origin_policy_manager_for_browser_process_.reset();
 }
 
 }  // namespace content

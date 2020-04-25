@@ -16,8 +16,7 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/ios/browser/autofill_switches.h"
 #include "ios/chrome/browser/application_context.h"
-#import "ios/chrome/browser/autofill/form_suggestion_label.h"
-#import "ios/chrome/browser/autofill/form_suggestion_view.h"
+#import "ios/chrome/browser/autofill/form_suggestion_constants.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/address_view_controller.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_accessory_view_controller.h"
@@ -36,6 +35,8 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+using manual_fill::AccessoryKeyboardAccessibilityIdentifier;
 
 namespace {
 
@@ -82,6 +83,11 @@ id<GREYMatcher> ProfilesTableViewWindowMatcher() {
 id<GREYMatcher> ProfileTableViewButtonMatcher() {
   // The company name for autofill::test::GetFullProfile() is "Underworld".
   return grey_buttonTitle(@"Underworld");
+}
+
+// Matcher for the Keyboard icon in the accessory bar.
+id<GREYMatcher> KeyboardIconMatcher() {
+  return grey_accessibilityID(AccessoryKeyboardAccessibilityIdentifier);
 }
 
 // Saves an example profile in the store.
@@ -155,40 +161,41 @@ UIAccessibilityElement* KeyboardDismissKeyInLayout(UIView* layout) {
   return key;
 }
 
-// Finds the first view containing the keyboard which origin is not zero.
-UIView* KeyboardContainerForLayout(UIView* layout) {
-  CGRect frame = CGRectZero;
-  UIView* keyboardContainer = layout;
-  while (CGPointEqualToPoint(frame.origin, CGPointZero) && keyboardContainer) {
-    keyboardContainer = [keyboardContainer superview];
-    if (keyboardContainer) {
-      frame = keyboardContainer.frame;
-    }
-  }
-  return keyboardContainer;
+// Matcher for the Keyboard Window.
+id<GREYMatcher> KeyboardWindow(UIView* layout) {
+  id<GREYMatcher> classMatcher = grey_kindOfClass([UIWindow class]);
+  UIAccessibilityElement* key = KeyboardDismissKeyInLayout(layout);
+  id<GREYMatcher> parentMatcher =
+      grey_descendant(grey_accessibilityLabel(key.accessibilityLabel));
+  return grey_allOf(classMatcher, parentMatcher, nil);
 }
 
 // Returns YES if the keyboard is docked at the bottom. NO otherwise.
 BOOL IsKeyboardDockedForLayout(UIView* layout) {
-  UIView* keyboardContainer = KeyboardContainerForLayout(layout);
-  CGRect screenBounds = [[UIScreen mainScreen] bounds];
-  CGFloat maxY = CGRectGetMaxY(keyboardContainer.frame);
-  return [@(maxY) isEqualToNumber:@(screenBounds.size.height)];
+  CGRect windowBounds = layout.window.bounds;
+  UIView* viewToCompare = layout;
+  while (viewToCompare &&
+         viewToCompare.bounds.size.height < windowBounds.size.height) {
+    CGRect keyboardFrameInWindow =
+        [viewToCompare.window convertRect:viewToCompare.bounds
+                                 fromView:viewToCompare];
+
+    CGFloat maxY = CGRectGetMaxY(keyboardFrameInWindow);
+    if ([@(maxY) isEqualToNumber:@(windowBounds.size.height)]) {
+      return YES;
+    }
+    viewToCompare = viewToCompare.superview;
+  }
+  return NO;
 }
 
 // Undocks and split the keyboard by swiping it up. Does nothing if already
-// undocked.  Only works on iOS 12; it is an error to call this method on
-// iOS 13.  Some devices, like iPhone or iPad Pro, do not allow undocking or
+// undocked. Some devices, like iPhone or iPad Pro, do not allow undocking or
 // splitting, this returns NO if it is the case.
 BOOL UndockAndSplitKeyboard() {
   if (![ChromeEarlGrey isIPadIdiom]) {
     return NO;
   }
-
-  // TODO(crbug.com/985977): Remove this DCHECK once this method is updated to
-  // support iOS 13.
-  DCHECK(!base::ios::IsRunningOnIOS13OrLater())
-      << "Undocking the keyboard via this method does not work on iOS 13";
 
   UITextField* textField = ShowKeyboard();
 
@@ -209,37 +216,33 @@ BOOL UndockAndSplitKeyboard() {
     layout.accessibilityIdentifier = @"CRKBLayout";
   }
 
-  id<GREYMatcher> matcher =
-      grey_accessibilityID(layout.accessibilityIdentifier);
-
   UIAccessibilityElement* key = KeyboardDismissKeyInLayout(layout);
-  CGRect keyFrame = [key accessibilityFrame];
-  CGRect keyboardContainerFrame = KeyboardContainerForLayout(layout).frame;
-  CGPoint pointToKey = {keyFrame.origin.x - keyboardContainerFrame.origin.x,
-                        keyFrame.origin.y - keyboardContainerFrame.origin.y};
-  CGPoint startPoint = CGPointMake((pointToKey.x + keyFrame.size.width / 2.0) /
-                                       keyboardContainerFrame.size.width,
-                                   (pointToKey.y + keyFrame.size.height / 2.0) /
-                                       keyboardContainerFrame.size.height);
+  CGRect keyFrameInScreen = [key accessibilityFrame];
+  CGRect keyFrameInWindow = [UIScreen.mainScreen.coordinateSpace
+            convertRect:keyFrameInScreen
+      toCoordinateSpace:layout.window.coordinateSpace];
+  CGRect windowBounds = layout.window.bounds;
+
+  CGPoint startPoint = CGPointMake(
+      (keyFrameInWindow.origin.x + keyFrameInWindow.size.width / 2.0) /
+          windowBounds.size.width,
+      (keyFrameInWindow.origin.y + keyFrameInWindow.size.height / 2.0) /
+          windowBounds.size.height);
 
   id action = grey_swipeFastInDirectionWithStartPoint(
       kGREYDirectionUp, startPoint.x, startPoint.y);
-  [[EarlGrey selectElementWithMatcher:matcher] performAction:action];
+
+  [[EarlGrey selectElementWithMatcher:KeyboardWindow(layout)]
+      performAction:action];
 
   return !IsKeyboardDockedForLayout(layout);
 }
 
-// Docks the keyboard by swiping it down. Does nothing if already docked.  Only
-// works on iOS 12; it is an error to call this method on iOS 13.
+// Docks the keyboard by swiping it down. Does nothing if already docked.
 void DockKeyboard() {
   if (![ChromeEarlGrey isIPadIdiom]) {
     return;
   }
-
-  // TODO(crbug.com/985977): Remove this DCHECK once this method is updated to
-  // support iOS 13.
-  DCHECK(!base::ios::IsRunningOnIOS13OrLater())
-      << "Docking the keyboard via this method does not work on iOS 13";
 
   UITextField* textField = ShowKeyboard();
 
@@ -256,30 +259,39 @@ void DockKeyboard() {
   }
 
   // Swipe it down.
-  id<GREYMatcher> classMatcher = grey_kindOfClass([UIWindow class]);
   UIAccessibilityElement* key = KeyboardDismissKeyInLayout(layout);
-  id<GREYMatcher> parentMatcher =
-      grey_descendant(grey_accessibilityLabel(key.accessibilityLabel));
-  id matcher = grey_allOf(classMatcher, parentMatcher, nil);
 
-  CGRect keyFrame = [key accessibilityFrame];
-  GREYAssertFalse(CGRectEqualToRect(keyFrame, CGRectZero),
+  CGRect keyFrameInScreen = [key accessibilityFrame];
+  CGRect keyFrameInWindow = [UIScreen.mainScreen.coordinateSpace
+            convertRect:keyFrameInScreen
+      toCoordinateSpace:layout.window.coordinateSpace];
+  CGRect windowBounds = layout.window.bounds;
+
+  GREYAssertFalse(CGRectEqualToRect(keyFrameInWindow, CGRectZero),
                   @"The dismiss key accessibility frame musn't be zero");
-  CGPoint startPoint =
-      CGPointMake((keyFrame.origin.x + keyFrame.size.width / 2.0) /
-                      [UIScreen mainScreen].bounds.size.width,
-                  (keyFrame.origin.y + keyFrame.size.height / 2.0) /
-                      [UIScreen mainScreen].bounds.size.height);
+  CGPoint startPoint = CGPointMake(
+      (keyFrameInWindow.origin.x + keyFrameInWindow.size.width / 2.0) /
+          windowBounds.size.width,
+      (keyFrameInWindow.origin.y + keyFrameInWindow.size.height / 2.0) /
+          windowBounds.size.height);
   id<GREYAction> action = grey_swipeFastInDirectionWithStartPoint(
       kGREYDirectionDown, startPoint.x, startPoint.y);
 
-  [[EarlGrey selectElementWithMatcher:matcher] performAction:action];
+  [[EarlGrey selectElementWithMatcher:KeyboardWindow(layout)]
+      performAction:action];
 
   // If we created a dummy textfield for this, remove it.
   [textField removeFromSuperview];
 
-  GREYAssertTrue(IsKeyboardDockedForLayout(layout),
-                 @"Keyboard should be docked");
+  GREYCondition* waitForDockedKeyboard =
+      [GREYCondition conditionWithName:@"Wait For Docked Keyboard Animations"
+                                 block:^BOOL {
+                                   return IsKeyboardDockedForLayout(layout);
+                                 }];
+
+  GREYAssertTrue([waitForDockedKeyboard
+                     waitWithTimeout:base::test::ios::kWaitForActionTimeout],
+                 @"Keyboard animations still present.");
 }
 
 }  // namespace
@@ -376,11 +388,6 @@ void DockKeyboard() {
     [[EarlGrey selectElementWithMatcher:grey_kindOfClass([UITableView class])]
         assertWithMatcher:grey_notVisible()];
   }
-  if (!base::ios::IsRunningOnIOS13OrLater()) {
-    // TODO(crbug.com/985977): Remove this conditional once DockKeyboard() is
-    // updated to support iOS 13.
-    DockKeyboard();
-  }
   [super tearDown];
 }
 
@@ -400,7 +407,7 @@ void DockKeyboard() {
 
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementName)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementName)];
 
   // Tap on the profiles icon.
   [[EarlGrey selectElementWithMatcher:ProfilesIconMatcher()]
@@ -444,7 +451,7 @@ void DockKeyboard() {
 
   // Bring up the keyboard.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   // Tap on the profiles icon.
   [[EarlGrey selectElementWithMatcher:ProfilesIconMatcher()]
@@ -461,6 +468,22 @@ void DockKeyboard() {
   // Verify the profiles controller table view is not visible.
   [[EarlGrey selectElementWithMatcher:ProfilesTableViewMatcher()]
       assertWithMatcher:grey_notVisible()];
+
+  // Verify the status of the icons.
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    // Hidden on iPad.
+    [[EarlGrey selectElementWithMatcher:ProfilesIconMatcher()]
+        assertWithMatcher:grey_notVisible()];
+    [[EarlGrey selectElementWithMatcher:KeyboardIconMatcher()]
+        assertWithMatcher:grey_not(grey_sufficientlyVisible())];
+  } else {
+    [[EarlGrey selectElementWithMatcher:ProfilesIconMatcher()]
+        assertWithMatcher:grey_sufficientlyVisible()];
+    [[EarlGrey selectElementWithMatcher:ProfilesIconMatcher()]
+        assertWithMatcher:grey_userInteractionEnabled()];
+    [[EarlGrey selectElementWithMatcher:KeyboardIconMatcher()]
+        assertWithMatcher:grey_not(grey_sufficientlyVisible())];
+  }
 }
 
 // Tests that the input accessory view continues working after a picker is
@@ -472,7 +495,7 @@ void DockKeyboard() {
   // Bring up the keyboard by tapping the city, which is the element before the
   // picker.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   // Tap on the profiles icon.
   [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]
@@ -506,7 +529,7 @@ void DockKeyboard() {
 
   // Bring up the regular keyboard again.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   // Wait for the accessory icon to appear.
   [GREYKeyboard waitForKeyboardToAppear];
@@ -515,8 +538,13 @@ void DockKeyboard() {
   // bar.
   [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]
       performAction:grey_scrollToContentEdge(kGREYContentEdgeRight)];
+  // Verify the status of the icons.
   [[EarlGrey selectElementWithMatcher:ProfilesIconMatcher()]
       assertWithMatcher:grey_sufficientlyVisible()];
+  [[EarlGrey selectElementWithMatcher:ProfilesIconMatcher()]
+      assertWithMatcher:grey_userInteractionEnabled()];
+  [[EarlGrey selectElementWithMatcher:KeyboardIconMatcher()]
+      assertWithMatcher:grey_not(grey_sufficientlyVisible())];
 }
 
 // Same as before but with the keyboard undocked the re-docked.
@@ -526,18 +554,13 @@ void DockKeyboard() {
     EARL_GREY_TEST_SKIPPED(@"Test not applicable for iPhone.");
   }
 
-  // TODO(crbug.com/985977): Reenable once undocking is supported on iOS 13.
-  if (base::ios::IsRunningOnIOS13OrLater()) {
-    EARL_GREY_TEST_DISABLED(@"Undocking the keyboard does not work on iOS 13");
-  }
-
   // Add the profile to be used.
   AddAutofillProfile(_personalDataManager);
 
   // Bring up the keyboard by tapping the city, which is the element before the
   // picker.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   if (!UndockAndSplitKeyboard()) {
     EARL_GREY_TEST_DISABLED(
@@ -579,15 +602,22 @@ void DockKeyboard() {
 
   // Bring up the regular keyboard again.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementName)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementName)];
 
   // Wait for the accessory icon to appear.
   [GREYKeyboard waitForKeyboardToAppear];
 
   // Verify the profiles icon is visible, and therefore also the input accessory
   // bar.
+  [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]
+      performAction:grey_scrollToContentEdge(kGREYContentEdgeRight)];
+  // Verify the status of the icons.
   [[EarlGrey selectElementWithMatcher:ProfilesIconMatcher()]
       assertWithMatcher:grey_sufficientlyVisible()];
+  [[EarlGrey selectElementWithMatcher:ProfilesIconMatcher()]
+      assertWithMatcher:grey_userInteractionEnabled()];
+  [[EarlGrey selectElementWithMatcher:KeyboardIconMatcher()]
+      assertWithMatcher:grey_not(grey_sufficientlyVisible())];
 }
 
 // Test the input accessory bar is present when undocking then docking the
@@ -597,18 +627,13 @@ void DockKeyboard() {
     EARL_GREY_TEST_SKIPPED(@"Test not applicable for iPhone.");
   }
 
-  // TODO(crbug.com/985977): Reenable once undocking is supported on iOS 13.
-  if (base::ios::IsRunningOnIOS13OrLater()) {
-    EARL_GREY_TEST_DISABLED(@"Undocking the keyboard does not work on iOS 13");
-  }
-
   // Add the profile to use for verification.
   AddAutofillProfile(_personalDataManager);
 
   // Bring up the keyboard by tapping the city, which is the element before the
   // picker.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   if (!UndockAndSplitKeyboard()) {
     EARL_GREY_TEST_DISABLED(
@@ -625,8 +650,15 @@ void DockKeyboard() {
 
   // Verify the profiles icon is visible, and therefore also the input accessory
   // bar.
+  [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]
+      performAction:grey_scrollToContentEdge(kGREYContentEdgeRight)];
+  // Verify the status of the icons.
   [[EarlGrey selectElementWithMatcher:ProfilesIconMatcher()]
       assertWithMatcher:grey_sufficientlyVisible()];
+  [[EarlGrey selectElementWithMatcher:ProfilesIconMatcher()]
+      assertWithMatcher:grey_userInteractionEnabled()];
+  [[EarlGrey selectElementWithMatcher:KeyboardIconMatcher()]
+      assertWithMatcher:grey_not(grey_sufficientlyVisible())];
 }
 
 // Tests that the manual fallback view is present in incognito.
@@ -637,7 +669,7 @@ void DockKeyboard() {
   // Bring up the keyboard by tapping the city, which is the element before the
   // picker.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   // Verify the profiles icon is visible.
   [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]
@@ -654,7 +686,7 @@ void DockKeyboard() {
   // Bring up the keyboard by tapping the city, which is the element before the
   // picker.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   // Verify the profiles icon is visible.
   [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]
@@ -672,7 +704,7 @@ void DockKeyboard() {
   AddAutofillProfile(_personalDataManager);
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   // Verify the profiles icon is visible.
   [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]
@@ -686,7 +718,7 @@ void DockKeyboard() {
   [ChromeEarlGrey waitForWebStateContainingText:webViewText];
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   // Verify the profiles icon is visible.
   [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]
@@ -702,7 +734,7 @@ void DockKeyboard() {
   // Bring up the keyboard by tapping the city, which is the element before the
   // picker.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   // Verify the profiles icon is visible.
   [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]
@@ -718,7 +750,7 @@ void DockKeyboard() {
   // Bring up the keyboard by tapping the city, which is the element before the
   // picker.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   // Open a  regular tab.
   [ChromeEarlGrey openNewTab];
@@ -728,7 +760,7 @@ void DockKeyboard() {
   // Bring up the keyboard by tapping the city, which is the element before the
   // picker.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   // This will fail if there is more than one profiles icon in the hierarchy.
   [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]
@@ -745,7 +777,7 @@ void DockKeyboard() {
   // Bring up the keyboard by tapping the city, which is the element before the
   // picker.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   // Verify the profiles icon is visible.
   [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]
@@ -762,7 +794,7 @@ void DockKeyboard() {
   // Bring up the keyboard by tapping the city, which is the element before the
   // picker.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   // Open a  regular tab.
   [ChromeEarlGrey openNewTab];
@@ -772,7 +804,7 @@ void DockKeyboard() {
   // Bring up the keyboard by tapping the city, which is the element before the
   // picker.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-      performAction:chrome_test_util::TapWebElement(kFormElementCity)];
+      performAction:chrome_test_util::TapWebElementWithId(kFormElementCity)];
 
   // This will fail if there is more than one profiles icon in the hierarchy.
   [[EarlGrey selectElementWithMatcher:FormSuggestionViewMatcher()]

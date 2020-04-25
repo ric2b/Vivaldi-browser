@@ -8,9 +8,10 @@
 
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/modules/nfc/nfc_proxy.h"
@@ -62,7 +63,8 @@ class FakeNfcService : public device::mojom::blink::NFC {
 
   void BindRequest(mojo::ScopedMessagePipeHandle handle) {
     DCHECK(!receiver_.is_bound());
-    receiver_.Bind(device::mojom::blink::NFCRequest(std::move(handle)));
+    receiver_.Bind(
+        mojo::PendingReceiver<device::mojom::blink::NFC>(std::move(handle)));
     receiver_.set_disconnect_handler(
         WTF::Bind(&FakeNfcService::OnConnectionError, WTF::Unretained(this)));
   }
@@ -152,13 +154,15 @@ class NFCProxyTest : public PageTestBase {
 
   void SetUp() override {
     PageTestBase::SetUp(IntSize());
-
-    service_manager::InterfaceProvider::TestApi test_api(
-        GetDocument().GetInterfaceProvider());
-    test_api.SetBinderForName(
+    GetDocument().GetBrowserInterfaceBroker().SetBinderForTesting(
         device::mojom::blink::NFC::Name_,
         WTF::BindRepeating(&FakeNfcService::BindRequest,
                            WTF::Unretained(nfc_service())));
+  }
+
+  void TearDown() override {
+    GetDocument().GetBrowserInterfaceBroker().SetBinderForTesting(
+        device::mojom::blink::NFC::Name_, {});
   }
 
   FakeNfcService* nfc_service() { return nfc_service_.get(); }
@@ -187,7 +191,7 @@ TEST_F(NFCProxyTest, SuccessfulPath) {
   auto record = device::mojom::blink::NDEFRecord::New();
   WTF::Vector<uint8_t> record_data(
       {0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10});
-  record->record_type = device::mojom::blink::NDEFRecordType::OPAQUE_RECORD;
+  record->record_type = "opaque";
   record->data = WTF::Vector<uint8_t>(record_data);
   message->data.push_back(std::move(record));
 

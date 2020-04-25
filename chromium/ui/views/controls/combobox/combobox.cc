@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/models/combobox_model.h"
@@ -61,7 +62,7 @@ class TransparentButton : public Button {
   explicit TransparentButton(ButtonListener* listener) : Button(listener) {
     SetFocusBehavior(FocusBehavior::NEVER);
     button_controller()->set_notify_action(
-        ButtonController::NotifyAction::NOTIFY_ON_PRESS);
+        ButtonController::NotifyAction::kOnPress);
 
     SetInkDropMode(InkDropMode::ON);
     set_has_ink_drop_action_on_click(true);
@@ -505,7 +506,7 @@ void Combobox::ButtonPressed(Button* sender, const ui::Event& event) {
   // TODO(hajimehoshi): Fix the problem that the arrow button blinks when
   // cliking this while the dropdown menu is opened.
   const base::TimeDelta delta = base::TimeTicks::Now() - closed_time_;
-  if (delta.InMilliseconds() <= kMinimumMsBetweenButtonClicks)
+  if (delta <= kMinimumTimeBetweenButtonClicks)
     return;
 
   ui::MenuSourceType source_type = ui::MENU_SOURCE_MOUSE;

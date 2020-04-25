@@ -31,7 +31,7 @@
  * @implements {Bindings.DebuggerSourceMapping}
  * @unrestricted
  */
-Bindings.DefaultScriptMapping = class {
+export default class DefaultScriptMapping {
   /**
    * @param {!SDK.DebuggerModel} debuggerModel
    * @param {!Workspace.Workspace} workspace
@@ -57,7 +57,7 @@ Bindings.DefaultScriptMapping = class {
    * @return {?SDK.Script}
    */
   static scriptForUISourceCode(uiSourceCode) {
-    const scripts = uiSourceCode[Bindings.DefaultScriptMapping._scriptsSymbol];
+    const scripts = uiSourceCode[_scriptsSymbol];
     return scripts ? scripts.values().next().value : null;
   }
 
@@ -68,13 +68,15 @@ Bindings.DefaultScriptMapping = class {
    */
   rawLocationToUILocation(rawLocation) {
     const script = rawLocation.script();
-    if (!script)
+    if (!script) {
       return null;
-    const uiSourceCode = script[Bindings.DefaultScriptMapping._uiSourceCodeSymbol];
+    }
+    const uiSourceCode = script[_uiSourceCodeSymbol];
     const lineNumber = rawLocation.lineNumber - (script.isInlineScriptWithSourceURL() ? script.lineOffset : 0);
     let columnNumber = rawLocation.columnNumber || 0;
-    if (script.isInlineScriptWithSourceURL() && !lineNumber && columnNumber)
+    if (script.isInlineScriptWithSourceURL() && !lineNumber && columnNumber) {
       columnNumber -= script.columnOffset;
+    }
     return uiSourceCode.uiLocation(lineNumber, columnNumber);
   }
 
@@ -87,8 +89,9 @@ Bindings.DefaultScriptMapping = class {
    */
   uiLocationToRawLocations(uiSourceCode, lineNumber, columnNumber) {
     const script = uiSourceCode[this._scriptSymbol];
-    if (!script)
+    if (!script) {
       return [];
+    }
     if (script.isInlineScriptWithSourceURL()) {
       return [this._debuggerModel.createRawLocation(
           script, lineNumber + script.lineOffset, lineNumber ? columnNumber : columnNumber + script.columnOffset)];
@@ -106,11 +109,12 @@ Bindings.DefaultScriptMapping = class {
 
     const uiSourceCode = this._project.createUISourceCode(url, Common.resourceTypes.Script);
     uiSourceCode[this._scriptSymbol] = script;
-    if (!uiSourceCode[Bindings.DefaultScriptMapping._scriptsSymbol])
-      uiSourceCode[Bindings.DefaultScriptMapping._scriptsSymbol] = new Set([script]);
-    else
-      uiSourceCode[Bindings.DefaultScriptMapping._scriptsSymbol].add(script);
-    script[Bindings.DefaultScriptMapping._uiSourceCodeSymbol] = uiSourceCode;
+    if (!uiSourceCode[_scriptsSymbol]) {
+      uiSourceCode[_scriptsSymbol] = new Set([script]);
+    } else {
+      uiSourceCode[_scriptsSymbol].add(script);
+    }
+    script[_uiSourceCodeSymbol] = uiSourceCode;
     this._project.addUISourceCodeWithProvider(uiSourceCode, script, null, 'text/javascript');
     this._debuggerWorkspaceBinding.updateLocations(script);
   }
@@ -120,14 +124,16 @@ Bindings.DefaultScriptMapping = class {
    */
   _discardedScriptSource(event) {
     const script = /** @type {!SDK.Script} */ (event.data);
-    const uiSourceCode = script[Bindings.DefaultScriptMapping._uiSourceCodeSymbol];
-    if (!uiSourceCode)
+    const uiSourceCode = script[_uiSourceCodeSymbol];
+    if (!uiSourceCode) {
       return;
-    delete script[Bindings.DefaultScriptMapping._uiSourceCodeSymbol];
+    }
+    delete script[_uiSourceCodeSymbol];
     delete uiSourceCode[this._scriptSymbol];
-    uiSourceCode[Bindings.DefaultScriptMapping._scriptsSymbol].delete(script);
-    if (!uiSourceCode[Bindings.DefaultScriptMapping._scriptsSymbol].size)
-      delete uiSourceCode[Bindings.DefaultScriptMapping._scriptsSymbol];
+    uiSourceCode[_scriptsSymbol].delete(script);
+    if (!uiSourceCode[_scriptsSymbol].size) {
+      delete uiSourceCode[_scriptsSymbol];
+    }
     this._project.removeUISourceCode(uiSourceCode.url());
   }
 
@@ -140,7 +146,19 @@ Bindings.DefaultScriptMapping = class {
     this._debuggerReset();
     this._project.dispose();
   }
-};
+}
 
-Bindings.DefaultScriptMapping._scriptsSymbol = Symbol('symbol');
-Bindings.DefaultScriptMapping._uiSourceCodeSymbol = Symbol('uiSourceCodeSymbol');
+export const _scriptsSymbol = Symbol('symbol');
+export const _uiSourceCodeSymbol = Symbol('uiSourceCodeSymbol');
+
+/* Legacy exported object */
+self.Bindings = self.Bindings || {};
+
+/* Legacy exported object */
+Bindings = Bindings || {};
+
+/** @constructor */
+Bindings.DefaultScriptMapping = DefaultScriptMapping;
+
+Bindings.DefaultScriptMapping._scriptsSymbol = _scriptsSymbol;
+Bindings.DefaultScriptMapping._uiSourceCodeSymbol = _uiSourceCodeSymbol;

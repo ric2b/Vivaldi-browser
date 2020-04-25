@@ -112,25 +112,6 @@ struct URLRequest {
   // done if there really is no way to determine the correct value.
   url.mojom.Url site_for_cookies;
 
-  // A non-null |top_frame_origin| contains the origin of the top frame of the
-  // page making the request. |top_frame_origin| depends on the context making
-  // the request.
-  // - If a page is making the request, it is the origin of the top-level
-  //   frame of the page. This is set for the navigation and subresource
-  //   requests.
-  // - If a dedicated worker is making the request, it is the top-frame
-  //   origin of its creator (which may be a page or a dedicated worker).
-  // - If a shared worker or a service worker is making the request, it is null,
-  //   including for both the main script request and subresource requests.
-  //
-  // In some other cases(?) |top_frame_origin| may be null.
-  //
-  // Note that this is experimental.
-  //
-  // TODO(crbug.com/911299, crbug.com/978968): This field will most likely be
-  // removed at some point.
-  url.mojom.Origin? top_frame_origin;
-
   // Boolean indicating whether SameSite cookies are allowed to be attached
   // to the request. It should be used as additional input to network side
   // checks.
@@ -144,6 +125,10 @@ struct URLRequest {
   // The origin of the context which initiated the request, which will be used
   // for cookie checks like 'First-Party-Only'.
   url.mojom.Origin? request_initiator;
+
+  // The origin of the isolated world - set if this is a fetch/XHR initiated by
+  // an isolated world.
+  url.mojom.Origin? isolated_world_origin;
 
   // The referrer to use (may be empty).
   url.mojom.Url referrer;
@@ -268,11 +253,10 @@ struct URLRequest {
   //   created by a frame.
   // - MSG_ROUTING_NONE for nested dedicated workers.
   // - MSG_ROUTING_NONE for subresource requests from a dedicated/shared worker.
+  // - service_worker_route_id from EmbeddedWorkerStartParams for service worker
+  //   main script requests and subresource requests.
   // - The frame tree node ID for navigation requests only. Please do not use
   //   frame tree node ID for other requests.
-  // TODO(nhiroki): Clarify which frame id should be used for service workers.
-  // Probably the render frame id of the frame calling register() or update(),
-  // and MSG_ROUTING_NONE for the soft update.
   int32 render_frame_id;
 
   // True if |frame_id| is the main frame of a RenderView.
@@ -304,10 +288,6 @@ struct URLRequest {
   // Some users, notably blink, has its own cache. This flag is set to exempt
   // some CORS logic for a revalidating request.
   bool is_revalidating;
-
-  // True when the CORS module should *also* use the origin set to the
-  // associated URLLoaderFactory.
-  bool should_also_use_factory_bound_origin_for_cors;
 
   // The profile ID of network conditions to throttle the network request.
   mojo_base.mojom.UnguessableToken? throttling_profile_id;
@@ -356,6 +336,12 @@ struct URLRequest {
 
   // Setting these from an untrusted URLLoader will cause the request to fail.
   TrustedUrlRequestParams? trusted_params;
+
+  // Set for recursive prefetch requests originating from cross-origin
+  // prefetches. These requests take the form of `Link: rel=preload` HTTP
+  // response headers. For more information on these requests see
+  // https://github.com/w3c/resource-hints/issues/77.
+  mojo_base.mojom.UnguessableToken? recursive_prefetch_token;
 };
 
 // URLRequestBody represents body (i.e. upload data) of a HTTP request.

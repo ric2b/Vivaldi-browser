@@ -30,6 +30,7 @@ blink_platform_sources("heap") {
     "blink_gc_memory_dump_provider.h",
     "cancelable_task_scheduler.cc",
     "cancelable_task_scheduler.h",
+    "disallow_new_wrapper.h",
     "finalizer_traits.h",
     "garbage_collected.h",
     "gc_info.cc",
@@ -67,6 +68,8 @@ blink_platform_sources("heap") {
     "thread_state.cc",
     "thread_state.h",
     "thread_state_scopes.h",
+    "thread_state_statistics.cc",
+    "thread_state_statistics.h",
     "threading_traits.h",
     "trace_traits.h",
     "unified_heap_controller.cc",
@@ -84,6 +87,21 @@ blink_platform_sources("heap") {
     "//third_party/blink/renderer/platform/heap/asm",
     "//third_party/icu",
     "//v8",
+  ]
+}
+
+jumbo_source_set("test_support") {
+  testonly = true
+
+  sources = [
+    "heap_test_utilities.cc",
+    "heap_test_utilities.h",
+  ]
+
+  deps = [
+    "//testing/gtest",
+    "//third_party/blink/public/mojom:mojom_platform_blink_headers",
+    "//third_party/blink/renderer/platform:bindings_buildflags",
   ]
 }
 
@@ -112,8 +130,6 @@ jumbo_source_set("blink_heap_unittests_sources") {
     "heap_compact_test.cc",
     "heap_stats_collector_test.cc",
     "heap_test.cc",
-    "heap_test_utilities.cc",
-    "heap_test_utilities.h",
     "heap_thread_test.cc",
     "heap_traits_test.cc",
     "incremental_marking_test.cc",
@@ -123,6 +139,7 @@ jumbo_source_set("blink_heap_unittests_sources") {
     "persistent_test.cc",
     "thread_state_scheduling_test.cc",
     "worklist_test.cc",
+    "write_barrier_perftest.cc",
   ]
 
   configs += [

@@ -17,6 +17,7 @@
 #include "ash/shelf/shelf_focus_cycler.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_observer.h"
+#include "ash/shelf/shelf_tooltip_manager.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
@@ -82,7 +83,8 @@ class Shelf::AutoHideEventHandler : public ui::EventHandler {
 
 Shelf::Shelf()
     : shelf_locking_manager_(this),
-      shelf_focus_cycler_(std::make_unique<ShelfFocusCycler>(this)) {}
+      shelf_focus_cycler_(std::make_unique<ShelfFocusCycler>(this)),
+      tooltip_(std::make_unique<ShelfTooltipManager>(this)) {}
 
 Shelf::~Shelf() = default;
 
@@ -148,6 +150,9 @@ void Shelf::CreateShelfWidget(aura::Window* root) {
       root->GetChildById(kShellWindowId_StatusContainer);
   shelf_widget_->CreateStatusAreaWidget(status_container);
   shelf_widget_->Initialize(shelf_container);
+
+  // The Hotseat should be above everything in the shelf.
+  shelf_widget_->hotseat_widget()->StackAtTop();
 }
 
 void Shelf::ShutdownShelfWidget() {
@@ -187,6 +192,7 @@ void Shelf::SetAlignment(ShelfAlignment alignment) {
   alignment_ = alignment;
   // The ShelfWidget notifies the ShelfView of the alignment change.
   shelf_widget_->OnShelfAlignmentChanged();
+  tooltip_->Close();
   shelf_layout_manager_->LayoutShelf();
   Shell::Get()->NotifyShelfAlignmentChanged(GetWindow()->GetRootWindow());
 }
@@ -251,11 +257,6 @@ void Shelf::UpdateVisibilityState() {
     shelf_layout_manager_->UpdateVisibilityState();
 }
 
-void Shelf::SetSuspendVisibilityUpdate(bool value) {
-  if (shelf_layout_manager_)
-    shelf_layout_manager_->set_suspend_visibility_update(value);
-}
-
 void Shelf::MaybeUpdateShelfBackground() {
   if (!shelf_layout_manager_)
     return;
@@ -291,8 +292,9 @@ void Shelf::ProcessMouseEvent(const ui::MouseEvent& event) {
     shelf_layout_manager_->ProcessMouseEventFromShelf(event);
 }
 
-void Shelf::ProcessMouseWheelEvent(const ui::MouseWheelEvent& event) {
-  Shell::Get()->app_list_controller()->ProcessMouseWheelEvent(event);
+void Shelf::ProcessMouseWheelEvent(ui::MouseWheelEvent* event) {
+  event->SetHandled();
+  Shell::Get()->app_list_controller()->ProcessMouseWheelEvent(*event);
 }
 
 void Shelf::AddObserver(ShelfObserver* observer) {

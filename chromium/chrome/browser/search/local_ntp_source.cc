@@ -27,20 +27,17 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/background/ntp_background_data.h"
-#include "chrome/browser/search/background/ntp_background_service.h"
 #include "chrome/browser/search/background/ntp_background_service_factory.h"
 #include "chrome/browser/search/instant_io_context.h"
 #include "chrome/browser/search/local_ntp_js_integrity.h"
 #include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_data.h"
-#include "chrome/browser/search/one_google_bar/one_google_bar_service.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_service_factory.h"
 #include "chrome/browser/search/promos/promo_data.h"
 #include "chrome/browser/search/promos/promo_service.h"
 #include "chrome/browser/search/promos/promo_service_factory.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search/search_suggest/search_suggest_data.h"
-#include "chrome/browser/search/search_suggest/search_suggest_service.h"
 #include "chrome/browser/search/search_suggest/search_suggest_service_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/search_provider_logos/logo_service_factory.h"
@@ -120,7 +117,6 @@ const struct Resource{
     {"customize.js", IDR_LOCAL_NTP_CUSTOMIZE_JS, "application/javascript"},
     {"doodles.css", IDR_LOCAL_NTP_DOODLES_CSS, "text/css"},
     {"doodles.js", IDR_LOCAL_NTP_DOODLES_JS, "application/javascript"},
-    {"images/close_3_mask.png", IDR_CLOSE_3_MASK, "image/png"},
     {"images/ntp_default_favicon.png", IDR_NTP_DEFAULT_FAVICON, "image/png"},
     {"local-ntp.css", IDR_LOCAL_NTP_CSS, "text/css"},
     {"local-ntp.js", IDR_LOCAL_NTP_JS, "application/javascript"},
@@ -297,6 +293,15 @@ std::unique_ptr<base::DictionaryValue> GetTranslatedStrings(bool is_google) {
               IDS_NEW_TAB_VOICE_OTHER_ERROR);
     AddString(translated_strings.get(), "voiceCloseTooltip",
               IDS_NEW_TAB_VOICE_CLOSE_TOOLTIP);
+
+    // Realbox
+    AddString(translated_strings.get(), "realboxSeparator",
+              IDS_AUTOCOMPLETE_MATCH_DESCRIPTION_SEPARATOR);
+    AddString(translated_strings.get(), "removeSuggestion",
+              IDS_OMNIBOX_REMOVE_SUGGESTION);
+
+    // Promos
+    AddString(translated_strings.get(), "dismissPromo", IDS_NTP_DISMISS_PROMO);
   }
 
   return translated_strings;
@@ -345,7 +350,7 @@ base::Value ConvertCollectionInfoToDict(
     dict.SetKey("collectionName", base::Value(collection.collection_name));
     dict.SetKey("previewImageUrl",
                 base::Value(collection.preview_image_url.spec()));
-    collections.GetList().push_back(std::move(dict));
+    collections.Append(std::move(dict));
   }
   return collections;
 }
@@ -362,12 +367,12 @@ base::Value ConvertCollectionImageToDict(
     dict.SetKey("collectionId", base::Value(image.collection_id));
     base::Value attributions(base::Value::Type::LIST);
     for (const auto& attribution : image.attribution) {
-      attributions.GetList().push_back(base::Value(attribution));
+      attributions.Append(base::Value(attribution));
     }
     dict.SetKey("attributions", std::move(attributions));
     dict.SetKey("attributionActionUrl",
                 base::Value(image.attribution_action_url.spec()));
-    images.GetList().push_back(std::move(dict));
+    images.Append(std::move(dict));
   }
   return images;
 }
@@ -399,8 +404,7 @@ scoped_refptr<base::RefCountedString> GetPromoString(
   if (promo.has_value()) {
     dict.SetString("promoHtml", promo->promo_html);
     dict.SetString("promoLogUrl", promo->promo_log_url.spec());
-  } else {
-    dict.SetString("promoHtml", std::string());
+    dict.SetString("promoId", promo->promo_id);
   }
 
   std::string js;
@@ -607,13 +611,6 @@ class LocalNtpSource::SearchConfigurationProvider
 
     if (is_google) {
       config_data.SetBoolean(
-          "enableShortcutsGrid",
-          base::FeatureList::IsEnabled(features::kGridLayoutForNtpShortcuts));
-      config_data.SetBoolean(
-          "showFakeboxPlaceholderOnFocus",
-          base::FeatureList::IsEnabled(
-              omnibox::kUIExperimentShowPlaceholderWhenCaretShowing));
-      config_data.SetBoolean(
           "richerPicker",
           base::FeatureList::IsEnabled(features::kNtpCustomizationMenuV2));
       config_data.SetBoolean("chromeColors", base::FeatureList::IsEnabled(
@@ -621,6 +618,11 @@ class LocalNtpSource::SearchConfigurationProvider
       config_data.SetBoolean("chromeColorsCustomColorPicker",
                              base::FeatureList::IsEnabled(
                                  features::kChromeColorsCustomColorPicker));
+      config_data.SetBoolean("realboxEnabled", features::IsNtpRealboxEnabled());
+      config_data.SetBoolean(
+          "suggestionTransparencyEnabled",
+          base::FeatureList::IsEnabled(
+              omnibox::kOmniboxSuggestionTransparencyOptions));
     }
 
     // Serialize the dictionary.
@@ -771,15 +773,11 @@ LocalNtpSource::LocalNtpSource(Profile* profile)
     : profile_(profile),
       ntp_background_service_(
           NtpBackgroundServiceFactory::GetForProfile(profile_)),
-      ntp_background_service_observer_(this),
       one_google_bar_service_(
           OneGoogleBarServiceFactory::GetForProfile(profile_)),
-      one_google_bar_service_observer_(this),
       promo_service_(PromoServiceFactory::GetForProfile(profile_)),
-      promo_service_observer_(this),
       search_suggest_service_(
           SearchSuggestServiceFactory::GetForProfile(profile_)),
-      search_suggest_service_observer_(this),
       logo_service_(nullptr) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -1031,6 +1029,10 @@ void LocalNtpSource::StartDataRequest(
                                     custom_background_url.spec() +
                                     "\" as=\"image\">";
     }
+
+    bool realbox_enabled = features::IsNtpRealboxEnabled();
+    replacements["hiddenIfRealboxEnabled"] = realbox_enabled ? "hidden" : "";
+    replacements["hiddenIfRealboxDisabled"] = realbox_enabled ? "" : "hidden";
 
     ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
     base::StringPiece html = bundle.GetRawDataResource(IDR_LOCAL_NTP_HTML);
@@ -1350,6 +1352,10 @@ void LocalNtpSource::ServePromo(const base::Optional<PromoData>& data) {
   if (promo_service_->promo_status() == PromoService::Status::OK_WITH_PROMO) {
     UMA_HISTOGRAM_MEDIUM_TIMES(
         "NewTabPage.Promos.RequestLatency2.SuccessWithPromo", delta);
+  } else if (promo_service_->promo_status() ==
+             PromoService::Status::OK_BUT_BLOCKED) {
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "NewTabPage.Promos.RequestLatency2.SuccessButBlocked", delta);
   } else if (promo_service_->promo_status() ==
              PromoService::Status::OK_WITHOUT_PROMO) {
     UMA_HISTOGRAM_MEDIUM_TIMES(

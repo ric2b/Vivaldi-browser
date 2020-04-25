@@ -2,6 +2,7 @@
 
 #include "sync/test/integration/notes_sync_test.h"
 
+#include "base/message_loop/message_loop_current.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/test/fake_server/fake_server_verifier.h"
 #include "notes/notes_factory.h"

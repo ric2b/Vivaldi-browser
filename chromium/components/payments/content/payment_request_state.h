@@ -264,7 +264,19 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate,
   // Selects the default shipping address.
   void SelectDefaultShippingAddressAndNotifyObservers();
 
+  // Returns true when shipping address is required and the selected instrument
+  // (if any) does not support shipping address delegation.
+  bool ShouldShowShippingSection() const;
+
+  // Returns true when payer name/phone/email is required and the selected
+  // instrument (if any) does not support required contact info delegation.
+  bool ShouldShowContactSection() const;
+
   base::WeakPtr<PaymentRequestState> AsWeakPtr();
+
+  void set_is_show_user_gesture(bool is_show_user_gesture) {
+    is_show_user_gesture_ = is_show_user_gesture;
+  }
 
  private:
   // Fetches the Autofill Profiles for this user from the PersonalDataManager,
@@ -310,15 +322,6 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate,
       bool result);
   void FinishedGetAllSWPaymentInstruments();
 
-  // Checks whether support for the specified payment methods exists and call
-  // the |callback| to return the result.
-  void CheckCanMakePayment(StatusCallback callback);
-
-  // Checks whether the user has at least one instrument that satisfies the
-  // specified supported payment methods and call the |callback| to return the
-  // result.
-  void CheckHasEnrolledInstrument(StatusCallback callback);
-
   // Checks if the payment methods that the merchant website have
   // requested are supported and call the |callback| to return the result.
   void CheckRequestedMethodsSupported(MethodsSupportedCallback callback);
@@ -339,7 +342,16 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate,
   // not affected by payment instruments.
   bool is_requested_autofill_data_available_ = true;
 
-  bool get_all_instruments_finished_;
+  // Whether getting all available instruments is finished.
+  bool get_all_instruments_finished_ = false;
+
+  // The value returned by hasEnrolledInstrument(). Can be used only after
+  // |get_all_instruments_finished_| is true.
+  bool has_enrolled_instrument_ = false;
+
+  // Whether there's at least one instrument that is not autofill. Can be used
+  // only after |get_all_instruments_finished_| is true.
+  bool has_non_autofill_instrument_ = false;
 
   // Whether the data is currently being validated by the merchant.
   bool is_waiting_for_merchant_validation_;
@@ -388,6 +400,9 @@ class PaymentRequestState : public PaymentResponseHelper::Delegate,
   PaymentsProfileComparator profile_comparator_;
 
   base::ObserverList<Observer>::Unchecked observers_;
+
+  // Whether PaymentRequest.show() was invoked with a user gesture.
+  bool is_show_user_gesture_ = false;
 
   base::WeakPtrFactory<PaymentRequestState> weak_ptr_factory_{this};
 

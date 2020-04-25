@@ -140,10 +140,14 @@ String KeyframeEffect::composite() const {
 void KeyframeEffect::setComposite(String composite_string) {
   Model()->SetComposite(
       EffectModel::StringToCompositeOperation(composite_string).value());
+
+  ClearEffects();
+  InvalidateAndNotifyOwner();
 }
 
-Vector<ScriptValue> KeyframeEffect::getKeyframes(ScriptState* script_state) {
-  Vector<ScriptValue> computed_keyframes;
+HeapVector<ScriptValue> KeyframeEffect::getKeyframes(
+    ScriptState* script_state) {
+  HeapVector<ScriptValue> computed_keyframes;
   if (!model_->HasFrames())
     return computed_keyframes;
 
@@ -384,16 +388,18 @@ void KeyframeEffect::ApplyEffects() {
     GetAnimation()->CancelAnimationOnCompositor();
   }
 
-  double iteration = CurrentIteration();
-  DCHECK_GE(iteration, 0);
+  base::Optional<double> iteration = CurrentIteration();
+  DCHECK(iteration);
+  DCHECK_GE(iteration.value(), 0);
   bool changed = false;
   if (sampled_effect_) {
-    changed = model_->Sample(clampTo<int>(iteration, 0), Progress().value(),
-                             SpecifiedTiming().IterationDuration(),
-                             sampled_effect_->MutableInterpolations());
+    changed =
+        model_->Sample(clampTo<int>(iteration.value(), 0), Progress().value(),
+                       SpecifiedTiming().IterationDuration(),
+                       sampled_effect_->MutableInterpolations());
   } else {
     HeapVector<Member<Interpolation>> interpolations;
-    model_->Sample(clampTo<int>(iteration, 0), Progress().value(),
+    model_->Sample(clampTo<int>(iteration.value(), 0), Progress().value(),
                    SpecifiedTiming().IterationDuration(), interpolations);
     if (!interpolations.IsEmpty()) {
       auto* sampled_effect =
@@ -469,7 +475,7 @@ void KeyframeEffect::DetachTarget(Animation* animation) {
   ClearEffects();
 }
 
-double KeyframeEffect::CalculateTimeToEffectChange(
+AnimationTimeDelta KeyframeEffect::CalculateTimeToEffectChange(
     bool forwards,
     double local_time,
     double time_to_next_iteration) const {
@@ -482,34 +488,37 @@ double KeyframeEffect::CalculateTimeToEffectChange(
 
   switch (GetPhase()) {
     case Timing::kPhaseNone:
-      return std::numeric_limits<double>::infinity();
+      return AnimationTimeDelta::Max();
     case Timing::kPhaseBefore:
       DCHECK_GE(start_time, local_time);
-      return forwards ? start_time - local_time
-                      : std::numeric_limits<double>::infinity();
+      return forwards
+                 ? AnimationTimeDelta::FromSecondsD(start_time - local_time)
+                 : AnimationTimeDelta::Max();
     case Timing::kPhaseActive:
       if (forwards) {
         // Need service to apply fill / fire events.
         const double time_to_end = after_time - local_time;
         if (RequiresIterationEvents()) {
-          return std::min(time_to_end, time_to_next_iteration);
+          return AnimationTimeDelta::FromSecondsD(
+              std::min(time_to_end, time_to_next_iteration));
         }
-        return time_to_end;
+        return AnimationTimeDelta::FromSecondsD(time_to_end);
       }
-      return 0;
+      return {};
     case Timing::kPhaseAfter:
       DCHECK_GE(local_time, after_time);
       if (forwards) {
         // If an animation has a positive-valued end delay, we need an
         // additional tick at the end time to ensure that the finished event is
         // delivered.
-        return end_time > local_time ? end_time - local_time
-                                     : std::numeric_limits<double>::infinity();
+        return end_time > local_time
+                   ? AnimationTimeDelta::FromSecondsD(end_time - local_time)
+                   : AnimationTimeDelta::Max();
       }
-      return local_time - after_time;
+      return AnimationTimeDelta::FromSecondsD(local_time - after_time);
     default:
       NOTREACHED();
-      return std::numeric_limits<double>::infinity();
+      return AnimationTimeDelta::Max();
   }
 }
 

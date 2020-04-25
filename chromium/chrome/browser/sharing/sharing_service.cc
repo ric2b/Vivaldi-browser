@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/guid.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/time/time.h"
@@ -27,12 +28,119 @@
 #include "chrome/browser/sharing/sharing_metrics.h"
 #include "chrome/browser/sharing/sharing_sync_preference.h"
 #include "chrome/browser/sharing/vapid_key_manager.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/gcm_driver/crypto/gcm_encryption_provider.h"
 #include "components/gcm_driver/gcm_driver.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync_device_info/device_info.h"
 #include "components/sync_device_info/local_device_info_provider.h"
+#include "components/sync_device_info/local_device_info_util.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "ui/base/l10n/l10n_util.h"
+
+namespace {
+// Util function to return a string denoting the type of device.
+std::string GetDeviceType(sync_pb::SyncEnums::DeviceType type) {
+  int device_type_message_id = -1;
+
+  switch (type) {
+    case sync_pb::SyncEnums::TYPE_LINUX:
+    case sync_pb::SyncEnums::TYPE_WIN:
+    case sync_pb::SyncEnums::TYPE_CROS:
+    case sync_pb::SyncEnums::TYPE_MAC:
+      device_type_message_id = IDS_BROWSER_SHARING_DEVICE_TYPE_COMPUTER;
+      break;
+
+    case sync_pb::SyncEnums::TYPE_UNSET:
+    case sync_pb::SyncEnums::TYPE_OTHER:
+      device_type_message_id = IDS_BROWSER_SHARING_DEVICE_TYPE_DEVICE;
+      break;
+
+    case sync_pb::SyncEnums::TYPE_PHONE:
+      device_type_message_id = IDS_BROWSER_SHARING_DEVICE_TYPE_PHONE;
+      break;
+
+    case sync_pb::SyncEnums::TYPE_TABLET:
+      device_type_message_id = IDS_BROWSER_SHARING_DEVICE_TYPE_TABLET;
+      break;
+  }
+
+  return l10n_util::GetStringUTF8(device_type_message_id);
+}
+
+std::string CapitalizeWords(const std::string& sentence) {
+  std::string capitalized_sentence;
+  bool use_upper_case = true;
+  for (char ch : sentence) {
+    capitalized_sentence += (use_upper_case ? toupper(ch) : ch);
+    use_upper_case = !isalpha(ch);
+  }
+  return capitalized_sentence;
+}
+
+struct DeviceNames {
+  std::string full_name;
+  std::string short_name;
+};
+
+// Returns full and short names for |device|.
+DeviceNames GetDeviceNames(const syncer::DeviceInfo* device) {
+  DCHECK(device);
+  DeviceNames device_names;
+
+  base::SysInfo::HardwareInfo hardware_info = device->hardware_info();
+  sync_pb::SyncEnums::DeviceType type = device->device_type();
+  // We only want to apply renaming for sign-in only devices. sign-in only
+  // devices has client_name == model. Additionally, Android and Chrome OS also
+  // uses model as client_name, so we should avoid renaming them as well.
+  // Lastly, avoid renaming if HardwareInfo is not available for M78- devices,
+  if (hardware_info.model.empty() ||
+      hardware_info.model != device->client_name() ||
+      type == sync_pb::SyncEnums::TYPE_CROS ||
+      type == sync_pb::SyncEnums::TYPE_PHONE ||
+      type == sync_pb::SyncEnums::TYPE_TABLET) {
+    device_names.full_name = device_names.short_name = device->client_name();
+    return device_names;
+  }
+
+  hardware_info.manufacturer = CapitalizeWords(hardware_info.manufacturer);
+
+  // For chromeOS, return manufacturer + model.
+  if (type == sync_pb::SyncEnums::TYPE_CROS) {
+    device_names.short_name = device_names.full_name =
+        base::StrCat({hardware_info.manufacturer, " ", hardware_info.model});
+    return device_names;
+  }
+
+  if (hardware_info.manufacturer == "Apple Inc.") {
+    // Internal names of Apple devices are formatted as MacbookPro2,3 or
+    // iPhone2,1 or Ipad4,1.
+    device_names.short_name = hardware_info.model.substr(
+        0, hardware_info.model.find_first_of("0123456789,"));
+    device_names.full_name = hardware_info.model;
+    return device_names;
+  }
+
+  device_names.short_name =
+      base::StrCat({hardware_info.manufacturer, " ", GetDeviceType(type)});
+  device_names.full_name =
+      base::StrCat({device_names.short_name, " ", hardware_info.model});
+  return device_names;
+}
+
+// Clones device with new device name.
+std::unique_ptr<syncer::DeviceInfo> CloneDevice(
+    const syncer::DeviceInfo* device,
+    const std::string& device_name) {
+  return std::make_unique<syncer::DeviceInfo>(
+      device->guid(), device_name, device->chrome_version(),
+      device->sync_user_agent(), device->device_type(),
+      device->signin_scoped_device_id(), device->hardware_info(),
+      device->last_updated_timestamp(),
+      device->send_tab_to_self_receiving_enabled(), device->sharing_info());
+}
+
+}  // namespace
 
 SharingService::SharingService(
     std::unique_ptr<SharingSyncPreference> sync_prefs,
@@ -56,7 +164,7 @@ SharingService::SharingService(
       backoff_entry_(&kRetryBackoffPolicy),
       state_(State::DISABLED),
       is_observing_device_info_tracker_(false) {
-  // Remove old encryption info with empty authrozed_entity to avoid DCHECK.
+  // Remove old encryption info with empty authorized_entity to avoid DCHECK.
   // See http://crbug/987591
   if (gcm_driver) {
     gcm::GCMEncryptionProvider* encryption_provider =
@@ -91,7 +199,7 @@ SharingService::SharingService(
           this, notification_display_service);
 #endif  // defined(OS_ANDROID)
 
-  if (base::FeatureList::IsEnabled(kSharedClipboardReceiver)) {
+  if (sharing_device_registration_->IsSharedClipboardSupported()) {
     fcm_handler_->AddSharingHandler(
         chrome_browser_sharing::SharingMessage::kSharedClipboardMessage,
         shared_clipboard_message_handler_.get());
@@ -111,6 +219,14 @@ SharingService::SharingService(
     // and only doing clean up via UnregisterDevice().
     UnregisterDevice();
   }
+
+  base::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(),
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(syncer::GetPersonalizableDeviceNameBlocking),
+      base::BindOnce(&SharingService::InitPersonalizableLocalDeviceName,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 SharingService::~SharingService() {
@@ -125,61 +241,23 @@ std::unique_ptr<syncer::DeviceInfo> SharingService::GetDeviceByGuid(
   if (!IsSyncEnabled())
     return nullptr;
 
-  return device_info_tracker_->GetDeviceInfo(guid);
+  std::unique_ptr<syncer::DeviceInfo> device_info =
+      device_info_tracker_->GetDeviceInfo(guid);
+  return CloneDevice(device_info.get(),
+                     GetDeviceNames(device_info.get()).full_name);
 }
 
-std::vector<std::unique_ptr<syncer::DeviceInfo>>
-SharingService::GetDeviceCandidates(int required_capabilities) const {
-  std::vector<std::unique_ptr<syncer::DeviceInfo>> device_candidates;
-  std::vector<std::unique_ptr<syncer::DeviceInfo>> all_devices =
+SharingService::SharingDeviceList SharingService::GetDeviceCandidates(
+    sync_pb::SharingSpecificFields::EnabledFeatures required_feature) const {
+  if (IsSyncDisabled() || !local_device_info_provider_->GetLocalDeviceInfo() ||
+      !personalizable_local_device_name_)
+    return {};
+
+  SharingDeviceList device_candidates =
       device_info_tracker_->GetAllDeviceInfo();
-  const syncer::DeviceInfo* local_device_info =
-      local_device_info_provider_->GetLocalDeviceInfo();
-
-  if (IsSyncDisabled() || all_devices.empty() || !local_device_info)
-    return device_candidates;
-
-  std::map<std::string, SharingSyncPreference::Device> synced_devices =
-      sync_prefs_->GetSyncedDevices();
-
-  const base::Time min_updated_time = base::Time::Now() - kDeviceExpiration;
-
-  // Sort the DeviceInfo vector so the most recently modified devices are first.
-  std::sort(all_devices.begin(), all_devices.end(),
-            [](const auto& device1, const auto& device2) {
-              return device1->last_updated_timestamp() >
-                     device2->last_updated_timestamp();
-            });
-
-  std::unordered_set<std::string> device_names;
-  for (auto& device : all_devices) {
-    // If the current device is considered expired for our purposes, stop here
-    // since the next devices in the vector are at least as expired than this
-    // one.
-    if (device->last_updated_timestamp() < min_updated_time)
-      break;
-
-    if (local_device_info->client_name() == device->client_name())
-      continue;
-
-    auto synced_device = synced_devices.find(device->guid());
-    if (synced_device == synced_devices.end())
-      continue;
-
-    int device_capabilities = synced_device->second.capabilities;
-    if ((device_capabilities & required_capabilities) != required_capabilities)
-      continue;
-
-    // Only insert the first occurrence of each device name.
-    auto inserted = device_names.insert(device->client_name());
-    if (inserted.second)
-      device_candidates.push_back(std::move(device));
-  }
-
-  // TODO(knollr): Remove devices from |sync_prefs_| that are in
-  // |synced_devices| but not in |all_devices|?
-
-  return device_candidates;
+  device_candidates =
+      FilterDeviceCandidates(std::move(device_candidates), required_feature);
+  return RenameAndDeduplicateDevices(std::move(device_candidates));
 }
 
 void SharingService::AddDeviceCandidatesInitializedObserver(
@@ -219,27 +297,53 @@ void SharingService::SendMessageToDevice(
     SendMessageCallback callback) {
   std::string message_guid = base::GenerateGUID();
   send_message_callbacks_.emplace(message_guid, std::move(callback));
+  chrome_browser_sharing::MessageType message_type =
+      SharingPayloadCaseToMessageType(message.payload_case());
 
   base::PostDelayedTask(
       FROM_HERE, {base::TaskPriority::USER_VISIBLE, content::BrowserThread::UI},
       base::BindOnce(&SharingService::InvokeSendMessageCallback,
-                     weak_ptr_factory_.GetWeakPtr(), message_guid,
+                     weak_ptr_factory_.GetWeakPtr(), message_guid, message_type,
                      SharingSendMessageResult::kAckTimeout),
       kSendMessageTimeout);
 
-  base::Optional<SharingSyncPreference::Device> target =
-      sync_prefs_->GetSyncedDevice(device_guid);
-  if (!target) {
-    InvokeSendMessageCallback(message_guid,
+  // TODO(crbug/1015411): Here we assume caller gets |device_guid| from
+  // GetDeviceCandidates, so both DeviceInfoTracker and LocalDeviceInfoProvider
+  // are already ready. It's better to queue up the message and wait until
+  // DeviceInfoTracker and LocalDeviceInfoProvider are ready.
+  base::Optional<syncer::DeviceInfo::SharingInfo> target_sharing_info =
+      sync_prefs_->GetSharingInfo(device_guid);
+  if (!target_sharing_info) {
+    InvokeSendMessageCallback(message_guid, message_type,
                               SharingSendMessageResult::kDeviceNotFound);
     return;
   }
 
+  const syncer::DeviceInfo* local_device_info =
+      local_device_info_provider_->GetLocalDeviceInfo();
+  if (!local_device_info) {
+    InvokeSendMessageCallback(message_guid, message_type,
+                              SharingSendMessageResult::kInternalError);
+    return;
+  }
+
+  std::unique_ptr<syncer::DeviceInfo> sender_device_info = CloneDevice(
+      local_device_info, GetDeviceNames(local_device_info).full_name);
+  sender_device_info->set_sharing_info(
+      sync_prefs_->GetLocalSharingInfo(local_device_info));
+
+  if (!sender_device_info->sharing_info()) {
+    InvokeSendMessageCallback(message_guid, message_type,
+                              SharingSendMessageResult::kInternalError);
+    return;
+  }
+
   fcm_sender_->SendMessageToDevice(
-      std::move(*target), time_to_live, std::move(message),
+      std::move(*target_sharing_info), time_to_live, std::move(message),
+      std::move(sender_device_info),
       base::BindOnce(&SharingService::OnMessageSent,
                      weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now(),
-                     message_guid));
+                     message_guid, message_type));
 }
 
 void SharingService::SetDeviceInfoTrackerForTesting(
@@ -247,12 +351,14 @@ void SharingService::SetDeviceInfoTrackerForTesting(
   device_info_tracker_ = tracker;
 }
 
-void SharingService::OnMessageSent(base::TimeTicks start_time,
-                                   const std::string& message_guid,
-                                   SharingSendMessageResult result,
-                                   base::Optional<std::string> message_id) {
+void SharingService::OnMessageSent(
+    base::TimeTicks start_time,
+    const std::string& message_guid,
+    chrome_browser_sharing::MessageType message_type,
+    SharingSendMessageResult result,
+    base::Optional<std::string> message_id) {
   if (result != SharingSendMessageResult::kSuccessful) {
-    InvokeSendMessageCallback(message_guid, result);
+    InvokeSendMessageCallback(message_guid, message_type, result);
     return;
   }
 
@@ -260,10 +366,13 @@ void SharingService::OnMessageSent(base::TimeTicks start_time,
   message_guids_.emplace(*message_id, message_guid);
 }
 
-void SharingService::OnAckReceived(const std::string& message_id) {
+void SharingService::OnAckReceived(
+    chrome_browser_sharing::MessageType message_type,
+    const std::string& message_id) {
   auto times_iter = send_message_times_.find(message_id);
   if (times_iter != send_message_times_.end()) {
-    LogSharingMessageAckTime(base::TimeTicks::Now() - times_iter->second);
+    LogSharingMessageAckTime(message_type,
+                             base::TimeTicks::Now() - times_iter->second);
     send_message_times_.erase(times_iter);
   }
 
@@ -273,12 +382,13 @@ void SharingService::OnAckReceived(const std::string& message_id) {
 
   std::string message_guid = std::move(iter->second);
   message_guids_.erase(iter);
-  InvokeSendMessageCallback(message_guid,
+  InvokeSendMessageCallback(message_guid, message_type,
                             SharingSendMessageResult::kSuccessful);
 }
 
 void SharingService::InvokeSendMessageCallback(
     const std::string& message_guid,
+    chrome_browser_sharing::MessageType message_type,
     SharingSendMessageResult result) {
   auto iter = send_message_callbacks_.find(message_guid);
   if (iter == send_message_callbacks_.end())
@@ -287,7 +397,7 @@ void SharingService::InvokeSendMessageCallback(
   SendMessageCallback callback = std::move(iter->second);
   send_message_callbacks_.erase(iter);
   std::move(callback).Run(result);
-  LogSendSharingMessageResult(result);
+  LogSendSharingMessageResult(message_type, result);
 }
 
 void SharingService::OnDeviceInfoChange() {
@@ -342,15 +452,30 @@ void SharingService::OnStateChanged(syncer::SyncService* sync) {
   }
 }
 
+void SharingService::OnSyncCycleCompleted(syncer::SyncService* sync) {
+  if (!base::FeatureList::IsEnabled(kSharingDeriveVapidKey) ||
+      state_ != State::ACTIVE) {
+    return;
+  }
+
+  RefreshVapidKey();
+}
+
+void SharingService::RefreshVapidKey() {
+  if (vapid_key_manager_->RefreshCachedKey())
+    RegisterDevice();
+}
+
 void SharingService::RegisterDevice() {
   sharing_device_registration_->RegisterDevice(base::BindOnce(
       &SharingService::OnDeviceRegistered, weak_ptr_factory_.GetWeakPtr()));
 }
 
 void SharingService::RegisterDeviceInTesting(
-    int capabilities,
+    std::set<sync_pb::SharingSpecificFields_EnabledFeatures> enabled_feautres,
     SharingDeviceRegistration::RegistrationCallback callback) {
-  sharing_device_registration_->SetDeviceCapabilityForTesting(capabilities);
+  sharing_device_registration_->SetEnabledFeaturesForTesting(
+      std::move(enabled_feautres));
   sharing_device_registration_->RegisterDevice(std::move(callback));
 }
 
@@ -370,10 +495,16 @@ void SharingService::OnDeviceRegistered(
           state_ = State::ACTIVE;
           fcm_handler_->StartListening();
 
-          // Listen for further VAPID key changes for re-registration.
-          // state_ is kept as State::ACTIVE during re-registration.
-          sync_prefs_->SetVapidKeyChangeObserver(base::BindRepeating(
-              &SharingService::RegisterDevice, weak_ptr_factory_.GetWeakPtr()));
+          if (base::FeatureList::IsEnabled(kSharingDeriveVapidKey)) {
+            // Refresh VAPID key in case it's changed during registration.
+            RefreshVapidKey();
+          } else {
+            // Listen for further VAPID key changes for re-registration.
+            // state_ is kept as State::ACTIVE during re-registration.
+            sync_prefs_->SetVapidKeyChangeObserver(
+                base::BindRepeating(&SharingService::RefreshVapidKey,
+                                    weak_ptr_factory_.GetWeakPtr()));
+          }
         } else if (IsSyncDisabled()) {
           // In case sync is disabled during registration, unregister it.
           state_ = State::UNREGISTERING;
@@ -441,7 +572,7 @@ bool SharingService::IsSyncEnabled() const {
   return sync_service_ &&
          sync_service_->GetTransportState() ==
              syncer::SyncService::TransportState::ACTIVE &&
-         sync_service_->GetActiveDataTypes().Has(syncer::PREFERENCES);
+         sync_service_->GetActiveDataTypes().HasAll(GetRequiredSyncDataTypes());
 }
 
 SharingSyncPreference* SharingService::GetSyncPreferences() const {
@@ -449,14 +580,104 @@ SharingSyncPreference* SharingService::GetSyncPreferences() const {
 }
 
 bool SharingService::IsSyncDisabled() const {
-  // TODO(alexchau): Better way to make
-  // ClickToCallBrowserTest.ContextMenu_DevicesAvailable_SyncTurnedOff pass
-  // without unnecessarily checking SyncService::GetDisableReasons.
-  return sync_service_ &&
-         (sync_service_->GetTransportState() ==
-              syncer::SyncService::TransportState::DISABLED ||
-          (sync_service_->GetTransportState() ==
-               syncer::SyncService::TransportState::ACTIVE &&
-           !sync_service_->GetActiveDataTypes().Has(syncer::PREFERENCES)) ||
-          sync_service_->GetDisableReasons());
+  return sync_service_ && (sync_service_->GetTransportState() ==
+                               syncer::SyncService::TransportState::DISABLED ||
+                           (sync_service_->GetTransportState() ==
+                                syncer::SyncService::TransportState::ACTIVE &&
+                            !sync_service_->GetActiveDataTypes().HasAll(
+                                GetRequiredSyncDataTypes())));
+}
+
+syncer::ModelTypeSet SharingService::GetRequiredSyncDataTypes() const {
+  // DeviceInfo is always required to list devices.
+  syncer::ModelTypeSet required_data_types(syncer::DEVICE_INFO);
+
+  // Legacy implementation of device list and VAPID key uses sync preferences.
+  if (!base::FeatureList::IsEnabled(kSharingUseDeviceInfo) ||
+      !base::FeatureList::IsEnabled(kSharingDeriveVapidKey)) {
+    required_data_types.Put(syncer::PREFERENCES);
+  }
+
+  return required_data_types;
+}
+
+SharingService::SharingDeviceList SharingService::FilterDeviceCandidates(
+    SharingDeviceList devices,
+    sync_pb::SharingSpecificFields::EnabledFeatures required_feature) const {
+  const base::Time min_updated_time = base::Time::Now() - kDeviceExpiration;
+  SharingDeviceList filtered_devices;
+
+  for (auto& device : devices) {
+    // Checks if |last_updated_timestamp| is not too old.
+    if (device->last_updated_timestamp() < min_updated_time)
+      continue;
+
+    // Checks whether |device| supports |required_feature|.
+    base::Optional<syncer::DeviceInfo::SharingInfo> sharing_info =
+        sync_prefs_->GetSharingInfo(device.get());
+    if (!sharing_info ||
+        !sharing_info->enabled_features.count(required_feature)) {
+      continue;
+    }
+
+    filtered_devices.push_back(std::move(device));
+  }
+
+  return filtered_devices;
+}
+
+SharingService::SharingDeviceList SharingService::RenameAndDeduplicateDevices(
+    SharingDeviceList devices) const {
+  // Sort the devices so the most recently modified devices are first.
+  std::sort(devices.begin(), devices.end(),
+            [](const auto& device1, const auto& device2) {
+              return device1->last_updated_timestamp() >
+                     device2->last_updated_timestamp();
+            });
+
+  std::unordered_map<std::string, DeviceNames> device_candidate_names;
+  std::unordered_set<std::string> full_device_names;
+  std::unordered_map<std::string, int> short_device_name_counter;
+
+  // To prevent adding candidates with same full name as local device.
+  full_device_names.insert(
+      GetDeviceNames(local_device_info_provider_->GetLocalDeviceInfo())
+          .full_name);
+  // To prevent M78- instances of Chrome with same device model from showing up.
+  full_device_names.insert(*personalizable_local_device_name_);
+
+  for (const auto& device : devices) {
+    DeviceNames device_names = GetDeviceNames(device.get());
+
+    // Only insert the first occurrence of each device name.
+    auto inserted = full_device_names.insert(device_names.full_name);
+    if (!inserted.second)
+      continue;
+
+    short_device_name_counter[device_names.short_name]++;
+    device_candidate_names.insert({device->guid(), std::move(device_names)});
+  }
+
+  // Rename filtered devices.
+  SharingDeviceList device_candidates;
+  for (const auto& device : devices) {
+    auto it = device_candidate_names.find(device->guid());
+    if (it == device_candidate_names.end())
+      continue;
+
+    const DeviceNames& device_names = it->second;
+    bool is_short_name_unique =
+        short_device_name_counter[device_names.short_name] == 1;
+    device_candidates.push_back(CloneDevice(
+        device.get(), is_short_name_unique ? device_names.short_name
+                                           : device_names.full_name));
+  }
+
+  return device_candidates;
+}
+
+void SharingService::InitPersonalizableLocalDeviceName(
+    std::string personalizable_local_device_name) {
+  personalizable_local_device_name_ =
+      std::move(personalizable_local_device_name);
 }

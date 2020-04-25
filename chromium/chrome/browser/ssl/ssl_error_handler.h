@@ -15,10 +15,11 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/common_name_mismatch_handler.h"
-#include "chrome/browser/ssl/ssl_cert_reporter.h"
 #include "chrome/browser/ssl/ssl_error_assistant.pb.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
+#include "components/security_interstitials/content/ssl_cert_reporter.h"
 #include "components/ssl_errors/error_classification.h"
+#include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/restore_type.h"
@@ -221,11 +222,6 @@ class SSLErrorHandler : public content::WebContentsUserData<SSLErrorHandler>,
   void HandleCertDateInvalidErrorImpl(base::TimeTicks started_handling_error);
 
   bool IsOnlyCertError(net::CertStatus only_cert_error_expected) const;
-
-  // Calculates a mask encoded using flags in SSLErrorUI::SSLErrorOptionsMask.
-  static int CalculateOptionsMask(int cert_error,
-                                  bool hard_override_disabled,
-                                  bool should_ssl_errors_be_fatal);
 
   std::unique_ptr<Delegate> delegate_;
   content::WebContents* const web_contents_;

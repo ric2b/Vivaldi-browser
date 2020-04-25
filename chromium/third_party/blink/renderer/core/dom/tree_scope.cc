@@ -279,7 +279,7 @@ static bool ShouldAcceptNonElementNode(const Node& node) {
     return false;
   // In some cases the hit test doesn't return slot elements, so we can only
   // get it through its child and can't skip it.
-  if (IsHTMLSlotElement(*parent))
+  if (IsA<HTMLSlotElement>(*parent))
     return true;
   // SVG text content elements has no background, and are thus not
   // hit during the background phase of hit-testing. Because of that
@@ -289,7 +289,6 @@ static bool ShouldAcceptNonElementNode(const Node& node) {
 
 HeapVector<Member<Element>> TreeScope::ElementsFromHitTestResult(
     HitTestResult& result) const {
-  DCHECK(RootNode().isConnected());
   HeapVector<Member<Element>> elements;
   Node* last_node = nullptr;
   for (const auto rect_based_node : result.ListBasedTestResult()) {

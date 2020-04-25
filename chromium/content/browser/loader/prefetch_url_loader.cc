@@ -13,6 +13,7 @@
 #include "content/browser/web_package/signed_exchange_prefetch_metric_recorder.h"
 #include "content/browser/web_package/signed_exchange_utils.h"
 #include "content/public/common/content_features.h"
+#include "net/base/load_flags.h"
 #include "services/network/loader_util.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -31,7 +32,7 @@ PrefetchURLLoader::PrefetchURLLoader(
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
-    base::RepeatingCallback<int(void)> frame_tree_node_id_getter,
+    int frame_tree_node_id,
     const network::ResourceRequest& resource_request,
     network::mojom::URLLoaderClientPtr client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
@@ -43,21 +44,26 @@ PrefetchURLLoader::PrefetchURLLoader(
     scoped_refptr<PrefetchedSignedExchangeCache>
         prefetched_signed_exchange_cache,
     base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
-    const std::string& accept_langs)
-    : frame_tree_node_id_getter_(frame_tree_node_id_getter),
+    const std::string& accept_langs,
+    RecursivePrefetchTokenGenerator recursive_prefetch_token_generator)
+    : frame_tree_node_id_(frame_tree_node_id),
       resource_request_(resource_request),
       network_loader_factory_(std::move(network_loader_factory)),
       client_binding_(this),
       forwarding_client_(std::move(client)),
       url_loader_throttles_getter_(url_loader_throttles_getter),
-      browser_context_(browser_context),
       signed_exchange_prefetch_metric_recorder_(
           std::move(signed_exchange_prefetch_metric_recorder)),
-      accept_langs_(accept_langs) {
+      accept_langs_(accept_langs),
+      recursive_prefetch_token_generator_(
+          std::move(recursive_prefetch_token_generator)),
+      is_signed_exchange_handling_enabled_(
+          signed_exchange_utils::IsSignedExchangeHandlingEnabled(
+              browser_context)) {
   DCHECK(network_loader_factory_);
   RecordPrefetchRedirectHistogram(PrefetchRedirect::kPrefetchMade);
 
-  if (IsSignedExchangeHandlingEnabled()) {
+  if (is_signed_exchange_handling_enabled_) {
     // Set the SignedExchange accept header.
     // (https://wicg.github.io/webpackage/draft-yasskin-http-origin-signed-responses.html#internet-media-type-applicationsigned-exchange).
     resource_request_.headers.SetHeader(
@@ -67,7 +73,7 @@ PrefetchURLLoader::PrefetchURLLoader(
       prefetched_signed_exchange_cache_adapter_ =
           std::make_unique<PrefetchedSignedExchangeCacheAdapter>(
               std::move(prefetched_signed_exchange_cache),
-              BrowserContext::GetBlobStorageContext(browser_context_),
+              BrowserContext::GetBlobStorageContext(browser_context),
               resource_request.url, this);
     }
   }
@@ -142,7 +148,7 @@ void PrefetchURLLoader::ResumeReadingBodyFromNet() {
 
 void PrefetchURLLoader::OnReceiveResponse(
     network::mojom::URLResponseHeadPtr response) {
-  if (IsSignedExchangeHandlingEnabled() &&
+  if (is_signed_exchange_handling_enabled_ &&
       signed_exchange_utils::ShouldHandleAsSignedHTTPExchange(
           resource_request_.url, response)) {
     DCHECK(!signed_exchange_prefetch_handler_);
@@ -154,13 +160,29 @@ void PrefetchURLLoader::OnReceiveResponse(
     // network. (Until |this| calls the handler's FollowRedirect.)
     signed_exchange_prefetch_handler_ =
         std::make_unique<SignedExchangePrefetchHandler>(
-            frame_tree_node_id_getter_, resource_request_, response,
+            frame_tree_node_id_, resource_request_, response,
             mojo::ScopedDataPipeConsumerHandle(), std::move(loader_),
             client_binding_.Unbind(), network_loader_factory_,
             url_loader_throttles_getter_, this,
             signed_exchange_prefetch_metric_recorder_, accept_langs_);
     return;
   }
+
+  // If the response is marked as a restricted cross-origin prefetch, we
+  // populate the response's |recursive_prefetch_token| member with a unique
+  // token. The renderer will propagate this token to recursive prefetches
+  // coming from this response, in the form of preload headers. This token is
+  // later used by the PrefetchURLLoaderService to recover the correct
+  // NetworkIsolationKey to use when fetching the request. In the Signed
+  // Exchange case, we do this after redirects from the outer response, because
+  // we redirect back here for the inner response.
+  if (resource_request_.load_flags & net::LOAD_RESTRICTED_PREFETCH) {
+    DCHECK(!recursive_prefetch_token_generator_.is_null());
+    base::UnguessableToken recursive_prefetch_token =
+        std::move(recursive_prefetch_token_generator_).Run(resource_request_);
+    response->recursive_prefetch_token = recursive_prefetch_token;
+  }
+
   if (prefetched_signed_exchange_cache_adapter_ &&
       signed_exchange_prefetch_handler_) {
     prefetched_signed_exchange_cache_adapter_->OnReceiveInnerResponse(response);
@@ -182,7 +204,6 @@ void PrefetchURLLoader::OnReceiveRedirect(
 
   resource_request_.url = redirect_info.new_url;
   resource_request_.site_for_cookies = redirect_info.new_site_for_cookies;
-  resource_request_.top_frame_origin = redirect_info.new_top_frame_origin;
   resource_request_.referrer = GURL(redirect_info.new_referrer);
   resource_request_.referrer_policy = redirect_info.new_referrer_policy;
   forwarding_client_->OnReceiveRedirect(redirect_info, std::move(head));
@@ -258,11 +279,6 @@ void PrefetchURLLoader::OnNetworkConnectionError() {
   // The network loader has an error; we should let the client know it's closed
   // by dropping this, which will in turn make this loader destroyed.
   forwarding_client_.reset();
-}
-
-bool PrefetchURLLoader::IsSignedExchangeHandlingEnabled() {
-  return signed_exchange_utils::IsSignedExchangeHandlingEnabled(
-      browser_context_);
 }
 
 }  // namespace content

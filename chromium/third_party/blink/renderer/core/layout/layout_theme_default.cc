@@ -28,8 +28,10 @@
 #include "third_party/blink/public/platform/web_theme_engine.h"
 #include "third_party/blink/public/resources/grit/blink_resources.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/layout/layout_theme_font_provider.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
+#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/data_resource_helper.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
@@ -70,7 +72,9 @@ bool LayoutThemeDefault::ThemeDrawsFocusRing(const ComputedStyle& style) const {
 Color LayoutThemeDefault::SystemColor(CSSValueID css_value_id,
                                       WebColorScheme color_scheme) const {
   constexpr Color kDefaultButtonGrayColor(0xffdddddd);
+  constexpr Color kDefaultButtonGrayColorDark(0xff444444);
   constexpr Color kDefaultMenuColor(0xfff7f7f7);
+  constexpr Color kDefaultMenuColorDark(0xff404040);
 
   if (css_value_id == CSSValueID::kButtonface) {
     if (UseMockTheme()) {
@@ -79,10 +83,21 @@ Color LayoutThemeDefault::SystemColor(CSSValueID css_value_id,
       else
         return Color(0x80, 0x80, 0x80);
     }
-    return kDefaultButtonGrayColor;
+    switch (color_scheme) {
+      case WebColorScheme::kLight:
+        return kDefaultButtonGrayColor;
+      case WebColorScheme::kDark:
+        return kDefaultButtonGrayColorDark;
+    }
   }
-  if (css_value_id == CSSValueID::kMenu)
-    return kDefaultMenuColor;
+  if (css_value_id == CSSValueID::kMenu) {
+    switch (color_scheme) {
+      case WebColorScheme::kLight:
+        return kDefaultMenuColor;
+      case WebColorScheme::kDark:
+        return kDefaultMenuColorDark;
+    }
+  }
   return LayoutTheme::SystemColor(css_value_id, color_scheme);
 }
 
@@ -116,41 +131,49 @@ String LayoutThemeDefault::ExtraQuirksStyleSheet() {
   return UncompressResourceAsASCIIString(IDR_UASTYLE_THEME_WIN_QUIRKS_CSS);
 }
 
-Color LayoutThemeDefault::ActiveListBoxSelectionBackgroundColor() const {
+Color LayoutThemeDefault::ActiveListBoxSelectionBackgroundColor(
+    WebColorScheme color_scheme) const {
   return Color(0x28, 0x28, 0x28);
 }
 
-Color LayoutThemeDefault::ActiveListBoxSelectionForegroundColor() const {
-  return Color::kBlack;
+Color LayoutThemeDefault::ActiveListBoxSelectionForegroundColor(
+    WebColorScheme color_scheme) const {
+  return color_scheme == WebColorScheme::kDark ? Color::kWhite : Color::kBlack;
 }
 
-Color LayoutThemeDefault::InactiveListBoxSelectionBackgroundColor() const {
+Color LayoutThemeDefault::InactiveListBoxSelectionBackgroundColor(
+    WebColorScheme color_scheme) const {
   return Color(0xc8, 0xc8, 0xc8);
 }
 
-Color LayoutThemeDefault::InactiveListBoxSelectionForegroundColor() const {
+Color LayoutThemeDefault::InactiveListBoxSelectionForegroundColor(
+    WebColorScheme color_scheme) const {
   return Color(0x32, 0x32, 0x32);
 }
 
-Color LayoutThemeDefault::PlatformActiveSelectionBackgroundColor() const {
+Color LayoutThemeDefault::PlatformActiveSelectionBackgroundColor(
+    WebColorScheme color_scheme) const {
   if (UseMockTheme())
     return Color(0x00, 0x00, 0xff);  // Royal blue.
   return active_selection_background_color_;
 }
 
-Color LayoutThemeDefault::PlatformInactiveSelectionBackgroundColor() const {
+Color LayoutThemeDefault::PlatformInactiveSelectionBackgroundColor(
+    WebColorScheme color_scheme) const {
   if (UseMockTheme())
     return Color(0x99, 0x99, 0x99);  // Medium gray.
   return inactive_selection_background_color_;
 }
 
-Color LayoutThemeDefault::PlatformActiveSelectionForegroundColor() const {
+Color LayoutThemeDefault::PlatformActiveSelectionForegroundColor(
+    WebColorScheme color_scheme) const {
   if (UseMockTheme())
     return Color(0xff, 0xff, 0xcc);  // Pale yellow.
   return active_selection_foreground_color_;
 }
 
-Color LayoutThemeDefault::PlatformInactiveSelectionForegroundColor() const {
+Color LayoutThemeDefault::PlatformInactiveSelectionForegroundColor(
+    WebColorScheme color_scheme) const {
   if (UseMockTheme())
     return Color::kWhite;
   return inactive_selection_foreground_color_;
@@ -159,13 +182,19 @@ Color LayoutThemeDefault::PlatformInactiveSelectionForegroundColor() const {
 IntSize LayoutThemeDefault::SliderTickSize() const {
   if (UseMockTheme())
     return IntSize(1, 3);
-  return IntSize(1, 6);
+  if (RuntimeEnabledFeatures::FormControlsRefreshEnabled())
+    return IntSize(1, 4);
+  else
+    return IntSize(1, 6);
 }
 
 int LayoutThemeDefault::SliderTickOffsetFromTrackCenter() const {
   if (UseMockTheme())
     return 11;
-  return -16;
+  if (RuntimeEnabledFeatures::FormControlsRefreshEnabled())
+    return 7;
+  else
+    return -16;
 }
 
 void LayoutThemeDefault::AdjustSliderThumbSize(ComputedStyle& style) const {
@@ -327,12 +356,12 @@ int LayoutThemeDefault::PopupInternalPaddingStart(
 }
 
 int LayoutThemeDefault::PopupInternalPaddingEnd(
-    const ChromeClient* client,
+    LocalFrame* frame,
     const ComputedStyle& style) const {
   if (!style.HasEffectiveAppearance())
     return 0;
   return 1 * style.EffectiveZoom() +
-         ClampedMenuListArrowPaddingSize(client, style);
+         ClampedMenuListArrowPaddingSize(frame, style);
 }
 
 int LayoutThemeDefault::PopupInternalPaddingTop(
@@ -354,15 +383,15 @@ int LayoutThemeDefault::MenuListArrowWidthInDIP() const {
 }
 
 float LayoutThemeDefault::ClampedMenuListArrowPaddingSize(
-    const ChromeClient* client,
+    LocalFrame* frame,
     const ComputedStyle& style) const {
   if (cached_menu_list_arrow_padding_size_ > 0 &&
       style.EffectiveZoom() == cached_menu_list_arrow_zoom_level_)
     return cached_menu_list_arrow_padding_size_;
   cached_menu_list_arrow_zoom_level_ = style.EffectiveZoom();
   int original_size = MenuListArrowWidthInDIP();
-  int scaled_size =
-      client ? client->WindowToViewportScalar(original_size) : original_size;
+  int scaled_size = frame->GetPage()->GetChromeClient().WindowToViewportScalar(
+      frame, original_size);
   // The result should not be samller than the scrollbar thickness in order to
   // secure space for scrollbar in popup.
   float device_scale = 1.0f * scaled_size / original_size;

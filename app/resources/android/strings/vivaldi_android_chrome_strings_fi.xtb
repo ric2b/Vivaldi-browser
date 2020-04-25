@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="fi">
+<translation id="1829244130665387512">Etsi sivulta</translation>
+<translation id="3076631378407175873">Tekijänoikeudet <ph name="YEAR" /> Vivaldi Technologies AS. Kaikki oikeudet pidätetään.</translation>
+<translation id="3700829948786686853">Tervetuloa Vivaldiin</translation>
+<translation id="4121750346708795461">Käyttämällä sovellusta hyväksyt Vivaldin <ph name="BEGIN_LINK1" />käyttöehdot<ph name="END_LINK1" /> ja <ph name="BEGIN_LINK2" />tietosuojailmoituksen<ph name="END_LINK2" />.</translation>
+<translation id="4943872375798546930">Ei tuloksia</translation>
+<translation id="5118676864324397542"><ph name="APP_NAME" /> – tallennustila</translation>
+<translation id="5840488417521835756">Lue lisää sivustojen aiheista sivulta poistumatta. Napautushaku on käytettävissä vain, kun Google on Vivaldin oletushakukoneena. Se lähettää sanan konteksteineen Googleen ja palauttaa määritelmiä, kuvia, hakutuloksia ja muita tietoja.
+
+Muokataksesi hakusanaa valitse se ensin painamalla pitkään. Tarkenna hakua liu'uttamalla paneelissa ylös asti ja napauttamalla hakukenttää.</translation>
+<translation id="706339621163631076">Selaimen tietosuojailmoitus</translation>
+<translation id="7427132068601343474">Tietoja Vivaldista</translation>
+<translation id="7519434535192513364">Napautushaku on käytettävissä vain, jos Google on asetettu Vivaldin oletushakukoneeksi. Se lähettää valitun sanan ja nykyisen sivun sen kontekstina Googleen. Ominaisuuden voi poistaa käytöstä <ph name="BEGIN_LINK" />asetuksissa<ph name="END_LINK" />.</translation>
+<translation id="7649070708921625228">Ohje</translation>
+<translation id="804786196054284061">Vivaldin käyttöehdot</translation>
+</translationbundle>

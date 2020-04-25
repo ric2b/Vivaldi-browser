@@ -128,6 +128,7 @@ template("partitioned_shared_library") {
   # can name the libraries foo1.so and foo2.so, allowing them to reside in the
   # same directory.
   _partition_dir = "$root_out_dir/${invoker.target_name}_partitions"
+  not_needed(["_partition_dir"])
   foreach(_partition, invoker.partitions) {
     partition_action("${target_name}_${_partition}") {
       partition = _partition

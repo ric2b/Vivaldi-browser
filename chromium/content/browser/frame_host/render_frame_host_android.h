@@ -39,10 +39,18 @@ class RenderFrameHostAndroid : public base::SupportsUserData::Data {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>&) const;
 
+  base::android::ScopedJavaLocalRef<jobject> GetLastCommittedOrigin(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>&);
+
   void GetCanonicalUrlForSharing(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>&,
       const base::android::JavaParamRef<jobject>& jcallback) const;
+
+  bool IsPaymentFeaturePolicyEnabled(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>&) const;
 
   // Returns UnguessableToken.
   base::android::ScopedJavaLocalRef<jobject> GetAndroidOverlayRoutingToken(
@@ -55,6 +63,9 @@ class RenderFrameHostAndroid : public base::SupportsUserData::Data {
   jboolean IsRenderFrameCreated(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>&) const;
+
+  jboolean IsProcessBlocked(JNIEnv* env,
+                            const base::android::JavaParamRef<jobject>&) const;
 
   RenderFrameHostImpl* render_frame_host() const { return render_frame_host_; }
 

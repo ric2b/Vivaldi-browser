@@ -41,7 +41,6 @@ hooks = [
         'chromium/third_party/blink/renderer/build/scripts',
         'chromium/third_party/blink/tools',  # See http://crbug.com/625877.
         'chromium/third_party/catapult',
-        'chromium/third_party/closure_compiler/build',
         'chromium/tools',
     ],
   },
@@ -135,6 +134,13 @@ hooks = [
       "--source-dir", ".",
       "--revision-id-only",
       '-o', 'chromium/build/util/LASTCHANGE'],
+  },
+  {
+    # Update LASTCHANGE.chromium
+    'name': 'lastchange_chromium',
+    'pattern': '.',
+    'action': ['python', "-u", 'chromium/build/util/lastchange.py',
+      '-o', 'chromium/build/util/LASTCHANGE.chromium'],
   },
   {
     # Update GPU lists version string (for gpu/config).
@@ -286,6 +292,28 @@ hooks = [
     'action': [ 'python', "-u",
                 'chromium/tools/perf/fetch_benchmark_deps.py',
                 '-f',
+    ],
+  },
+  # Pull down Android RenderTest goldens
+  {
+    'name': 'Fetch Android RenderTest goldens',
+    'pattern': '.',
+    'condition': 'checkout_android',
+    'action': [ 'python', "-u",
+                'chromium/chrome/test/data/android/manage_render_test_goldens.py',
+                'download',
+    ],
+  },
+  {
+    'name': 'Fetch Android AFDO profile',
+    'pattern': '.',
+    'condition': 'checkout_android or checkout_linux',
+    'action': [ 'vpython',
+                'chromium/tools/download_cros_provided_profile.py',
+                '--newest_state=chromium/chrome/android/profiles/newest.txt',
+                '--local_state=chromium/chrome/android/profiles/local.txt',
+                '--output_name=chromium/chrome/android/profiles/afdo.prof',
+                '--gs_url_base=chromeos-prebuilt/afdo-job/llvm',
     ],
   },
   {

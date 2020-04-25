@@ -10,14 +10,13 @@
 
 #include "ash/public/cpp/assistant/assistant_state_base.h"
 #include "ash/public/mojom/assistant_state_controller.mojom.h"
-#include "ash/public/mojom/voice_interaction_controller.mojom.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "chromeos/services/assistant/pref_connection_delegate.h"
 #include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 
 namespace chromeos {
 namespace assistant {
@@ -41,8 +40,7 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) AssistantStateProxy
 
  private:
   // AssistantStateObserver:
-  void OnAssistantStatusChanged(
-      ash::mojom::VoiceInteractionState state) override;
+  void OnAssistantStatusChanged(ash::mojom::AssistantState state) override;
   void OnAssistantFeatureAllowedChanged(
       ash::mojom::AssistantAllowedState state) override;
   void OnLocaleChanged(const std::string& locale) override;
@@ -51,9 +49,10 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) AssistantStateProxy
 
   void OnPrefServiceConnected(std::unique_ptr<::PrefService> pref_service);
 
-  ash::mojom::AssistantStateControllerPtr assistant_state_controller_;
-  mojo::Binding<ash::mojom::AssistantStateObserver>
-      assistant_state_observer_binding_;
+  mojo::Remote<ash::mojom::AssistantStateController>
+      assistant_state_controller_;
+  mojo::Receiver<ash::mojom::AssistantStateObserver>
+      assistant_state_observer_receiver_{this};
 
   std::unique_ptr<PrefService> pref_service_;
 

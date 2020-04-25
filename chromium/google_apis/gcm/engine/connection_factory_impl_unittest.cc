@@ -308,7 +308,7 @@ class ConnectionFactoryImplTest
   GURL connected_server_;
   std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier_;
   std::unique_ptr<network::NetworkService> network_service_;
-  network::mojom::NetworkContextPtr network_context_ptr_;
+  mojo::Remote<network::mojom::NetworkContext> network_context_remote_;
   std::unique_ptr<network::NetworkContext> network_context_;
 };
 
@@ -322,7 +322,8 @@ ConnectionFactoryImplTest::ConnectionFactoryImplTest()
                base::Bind(&ConnectionFactoryImplTest::ConnectionsComplete,
                           base::Unretained(this))),
       run_loop_(new base::RunLoop()),
-      network_change_notifier_(net::NetworkChangeNotifier::CreateMock()),
+      network_change_notifier_(
+          net::NetworkChangeNotifier::CreateMockIfNeeded()),
       network_service_(network::NetworkService::CreateForTesting()) {
   network::mojom::NetworkContextParamsPtr params =
       network::mojom::NetworkContextParams::New();
@@ -330,8 +331,8 @@ ConnectionFactoryImplTest::ConnectionFactoryImplTest()
   // configuration.
   params->initial_proxy_config = net::ProxyConfigWithAnnotation::CreateDirect();
   network_context_ = std::make_unique<network::NetworkContext>(
-      network_service_.get(), mojo::MakeRequest(&network_context_ptr_),
-      std::move(params));
+      network_service_.get(),
+      network_context_remote_.BindNewPipeAndPassReceiver(), std::move(params));
   factory()->SetConnectionListener(this);
   factory()->Initialize(ConnectionFactory::BuildLoginRequestCallback(),
                         ConnectionHandler::ProtoReceivedCallback(),

@@ -67,11 +67,11 @@ class CORE_EXPORT AnimationEffect : public ScriptWrappable {
   friend class EffectStack;
 
  public:
-  class EventDelegate : public GarbageCollectedFinalized<EventDelegate> {
+  class EventDelegate : public GarbageCollected<EventDelegate> {
    public:
     virtual ~EventDelegate() = default;
     virtual bool RequiresIterationEvents(const AnimationEffect&) = 0;
-    virtual void OnEventCondition(const AnimationEffect&) = 0;
+    virtual void OnEventCondition(const AnimationEffect&, Timing::Phase) = 0;
     virtual void Trace(blink::Visitor* visitor) {}
   };
 
@@ -84,16 +84,16 @@ class CORE_EXPORT AnimationEffect : public ScriptWrappable {
   bool IsCurrent() const { return EnsureCalculated().is_current; }
   bool IsInEffect() const { return EnsureCalculated().is_in_effect; }
   bool IsInPlay() const { return EnsureCalculated().is_in_play; }
-  double CurrentIteration() const {
+  base::Optional<double> CurrentIteration() const {
     return EnsureCalculated().current_iteration;
   }
   base::Optional<double> Progress() const {
     return EnsureCalculated().progress;
   }
-  double TimeToForwardsEffectChange() const {
+  AnimationTimeDelta TimeToForwardsEffectChange() const {
     return EnsureCalculated().time_to_forwards_effect_change;
   }
-  double TimeToReverseEffectChange() const {
+  AnimationTimeDelta TimeToReverseEffectChange() const {
     return EnsureCalculated().time_to_reverse_effect_change;
   }
   double LocalTime() const { return EnsureCalculated().local_time; }
@@ -142,7 +142,7 @@ class CORE_EXPORT AnimationEffect : public ScriptWrappable {
     return AnimationTimeDelta();
   }
 
-  virtual double CalculateTimeToEffectChange(
+  virtual AnimationTimeDelta CalculateTimeToEffectChange(
       bool forwards,
       double local_time,
       double time_to_next_iteration) const = 0;

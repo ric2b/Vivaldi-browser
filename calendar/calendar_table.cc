@@ -51,6 +51,9 @@ bool CalendarTable::CreateCalendarTable() {
       "active INTEGER DEFAULT 0,"
       "iconindex INTEGER DEFAULT 0,"
       "username LONGVARCHAR,"
+      "type INTEGER DEFAULT 0,"
+      "interval INTEGER DEFAULT 0,"
+      "last_checked INTEGER NOT NULL,"
       "created INTEGER,"
       "last_modified INTEGER"
       ")");
@@ -89,8 +92,9 @@ CalendarID CalendarTable::CreateCalendar(CalendarRow row) {
       "INSERT INTO calendar "
       "(name, description, url, ctag, "
       "orderindex, color, hidden, active, iconindex, "
-      "username, created, last_modified) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+      "username, type, interval, last_checked,  "
+      "created, last_modified) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
 
   statement.BindString16(0, row.name());
   statement.BindString16(1, row.description());
@@ -102,9 +106,12 @@ CalendarID CalendarTable::CreateCalendar(CalendarRow row) {
   statement.BindInt(7, row.active() ? 1 : 0);
   statement.BindInt(8, row.iconindex());
   statement.BindString16(9, row.username());
+  statement.BindInt(10, row.type());
+  statement.BindInt(11, row.interval());
+  statement.BindInt64(12, row.last_checked().ToInternalValue());
 
-  statement.BindInt64(10, base::Time().Now().ToInternalValue());
-  statement.BindInt64(11, base::Time().Now().ToInternalValue());
+  statement.BindInt64(13, base::Time().Now().ToInternalValue());
+  statement.BindInt64(14, base::Time().Now().ToInternalValue());
 
   if (!statement.Run()) {
     return 0;
@@ -118,7 +125,8 @@ bool CalendarTable::GetAllCalendars(CalendarRows* calendars) {
       SQL_FROM_HERE,
       "SELECT id, name, description, "
       "url, ctag, orderindex, color, hidden, active, iconindex, "
-      "username, created, last_modified FROM calendar"));
+      "username, type, interval, last_checked, "
+      "created, last_modified FROM calendar"));
   while (s.Step()) {
     CalendarRow calendar;
     FillCalendarRow(s, &calendar);
@@ -132,7 +140,8 @@ bool CalendarTable::UpdateCalendarRow(const CalendarRow& calendar) {
   sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
                                                       "UPDATE calendar SET \
         name=?, description=?, url=?, ctag=?, orderindex=?, color=?, hidden=?, \
-        active=?, iconindex=?, username=? WHERE id=?"));
+        active=?, iconindex=?, username=?, type=?, interval=?, last_checked=? \
+        WHERE id=?"));
   statement.BindString16(0, calendar.name());
   statement.BindString16(1, calendar.description());
   statement.BindString(2, GURLToDatabaseURL(calendar.url()));
@@ -143,8 +152,11 @@ bool CalendarTable::UpdateCalendarRow(const CalendarRow& calendar) {
   statement.BindInt(7, calendar.active() ? 1 : 0);
   statement.BindInt(8, calendar.iconindex());
   statement.BindString16(9, calendar.username());
+  statement.BindInt(10, calendar.type());
+  statement.BindInt(11, calendar.interval());
+  statement.BindInt64(12, calendar.last_checked().ToInternalValue());
 
-  statement.BindInt64(10, calendar.id());
+  statement.BindInt64(13, calendar.id());
 
   return statement.Run();
 }
@@ -184,6 +196,10 @@ void CalendarTable::FillCalendarRow(sql::Statement& statement,
   bool active = statement.ColumnInt(8) != 0;
   int iconindex = statement.ColumnInt(9);
   base::string16 username = statement.ColumnString16(10);
+  int type = statement.ColumnInt(11);
+  int interval = statement.ColumnInt(12);
+  base::Time last_checked =
+      base::Time::FromInternalValue(statement.ColumnInt64(13));
 
   calendar->set_id(id);
   calendar->set_name(name);
@@ -196,6 +212,9 @@ void CalendarTable::FillCalendarRow(sql::Statement& statement,
   calendar->set_active(active);
   calendar->set_iconindex(iconindex);
   calendar->set_username(username);
+  calendar->set_type(type);
+  calendar->set_interval(interval);
+  calendar->set_last_checked(last_checked);
 }
 
 bool CalendarTable::DoesCalendarIdExist(CalendarID calendar_id) {
@@ -218,6 +237,33 @@ bool CalendarTable::DoesAnyCalendarExist() {
     return false;
 
   return statement.ColumnInt(0) > 0;
+}
+
+// Updates to version 3. Adds columns type, interval, last_checked
+bool CalendarTable::MigrateCalendarToVersion3() {
+  if (!GetDB().DoesTableExist("calendar")) {
+    NOTREACHED() << "Calendar table should exist before migration";
+    return false;
+  }
+
+  if (!GetDB().DoesColumnExist("calendar", "type") &&
+      !GetDB().DoesColumnExist("calendar", "interval") &&
+      !GetDB().DoesColumnExist("calendar", "last_checked")) {
+    // Old versions don't have the type, interval and last_checked column, we
+    // modify the table to add that field.
+    if (!GetDB().Execute("ALTER TABLE calendar "
+                         "ADD COLUMN type INTEGER DEFAULT 0 NOT NULL"))
+      return false;
+
+    if (!GetDB().Execute("ALTER TABLE calendar "
+                         "ADD COLUMN interval INTEGER DEFAULT 0 not NULL"))
+      return false;
+
+    if (!GetDB().Execute("ALTER TABLE calendar "
+                         "ADD COLUMN last_checked INTEGER DEFAULT 0 not NULL"))
+      return false;
+  }
+  return true;
 }
 
 }  // namespace calendar

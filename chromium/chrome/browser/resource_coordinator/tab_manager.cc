@@ -32,7 +32,6 @@
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/memory/oom_memory_details.h"
-#include "chrome/browser/performance_manager/performance_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/background_tab_navigation_throttle.h"
 #include "chrome/browser/resource_coordinator/resource_coordinator_parts.h"
@@ -54,6 +53,7 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
+#include "components/performance_manager/performance_manager_impl.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -67,7 +67,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/page_importance_signals.h"
 #include "net/base/network_change_notifier.h"
-#include "third_party/blink/public/platform/web_sudden_termination_disabler_type.h"
+#include "third_party/blink/public/common/sudden_termination_disabler_type.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/resource_coordinator/tab_manager_delegate_chromeos.h"
@@ -169,7 +169,6 @@ TabManager::TabManager(TabLoadTracker* tab_load_tracker)
   proactive_freeze_discard_params_ =
       GetStaticProactiveTabFreezeAndDiscardParams();
   tab_load_tracker_->AddObserver(this);
-  intervention_policy_database_.reset(new InterventionPolicyDatabase());
 
   // TabManager works in the absence of DesktopSessionDurationTracker for tests.
   if (metrics::DesktopSessionDurationTracker::IsInitialized())
@@ -211,8 +210,8 @@ void TabManager::Start() {
   // EQT measurements.
   // TODO(sebmarchand): Remove the "IsAvailable" check, or merge the TM into the
   // PM. The TM and PM must always exist together.
-  if (performance_manager::PerformanceManager::IsAvailable()) {
-    performance_manager::PerformanceManager::CallOnGraph(
+  if (performance_manager::PerformanceManagerImpl::IsAvailable()) {
+    performance_manager::PerformanceManagerImpl::CallOnGraphImpl(
         FROM_HERE, base::BindOnce(
                        [](std::unique_ptr<ResourceCoordinatorSignalObserver>
                               rc_signal_observer,

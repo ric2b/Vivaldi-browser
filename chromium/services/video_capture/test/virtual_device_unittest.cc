@@ -71,15 +71,17 @@ class VirtualDeviceTest : public ::testing::Test {
          i++) {
       device_adapter_->RequestFrameBuffer(
           kTestFrameSize, kTestPixelFormat, nullptr,
-          base::Bind(&VirtualDeviceTest::OnFrameBufferReceived,
-                     base::Unretained(this), true /* valid_buffer_expected */));
+          base::BindOnce(&VirtualDeviceTest::OnFrameBufferReceived,
+                         base::Unretained(this),
+                         true /* valid_buffer_expected */));
     }
 
     // No more buffer available. Invalid buffer id should be returned.
     device_adapter_->RequestFrameBuffer(
         kTestFrameSize, kTestPixelFormat, nullptr,
-        base::Bind(&VirtualDeviceTest::OnFrameBufferReceived,
-                   base::Unretained(this), false /* valid_buffer_expected */));
+        base::BindOnce(&VirtualDeviceTest::OnFrameBufferReceived,
+                       base::Unretained(this),
+                       false /* valid_buffer_expected */));
 
     wait_loop.RunUntilIdle();
     Mock::VerifyAndClearExpectations(producer_.get());
@@ -95,7 +97,7 @@ class VirtualDeviceTest : public ::testing::Test {
   std::unique_ptr<MockProducer> producer_;
 
  private:
-  base::test::TaskEnvironment task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
   media::VideoCaptureDeviceInfo device_info_;
 };
 
@@ -115,8 +117,8 @@ TEST_F(VirtualDeviceTest, OnFrameReadyInBufferWithoutReceiver) {
   EXPECT_CALL(*producer_, DoOnNewBuffer(_, _, _)).Times(0);
   device_adapter_->RequestFrameBuffer(
       kTestFrameSize, kTestPixelFormat, nullptr,
-      base::Bind(&VirtualDeviceTest::OnFrameBufferReceived,
-                 base::Unretained(this), true /* valid_buffer_expected */));
+      base::BindOnce(&VirtualDeviceTest::OnFrameBufferReceived,
+                     base::Unretained(this), true /* valid_buffer_expected */));
 
   wait_loop.RunUntilIdle();
 }
@@ -128,8 +130,8 @@ TEST_F(VirtualDeviceTest, OnFrameReadyInBufferWithReceiver) {
   // Release all buffers back to consumer, then back to the pool
   // after |Receiver::OnFrameReadyInBuffer| is invoked.
   base::RunLoop wait_loop;
-  mojom::ReceiverPtr receiver_proxy;
-  MockReceiver receiver(mojo::MakeRequest(&receiver_proxy));
+  mojo::PendingRemote<mojom::Receiver> receiver_proxy;
+  MockReceiver receiver(receiver_proxy.InitWithNewPipeAndPassReceiver());
   EXPECT_CALL(receiver, OnStarted());
   EXPECT_CALL(receiver, DoOnNewBuffer(_, _))
       .Times(

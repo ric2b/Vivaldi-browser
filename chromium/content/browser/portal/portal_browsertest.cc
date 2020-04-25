@@ -12,11 +12,13 @@
 #include "content/browser/frame_host/render_frame_host_manager.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/portal/portal.h"
+#include "content/browser/portal/portal_created_observer.h"
+#include "content/browser/portal/portal_interceptor_for_testing.h"
+#include "content/browser/renderer_host/input/synthetic_smooth_scroll_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_tap_gesture.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/frame.mojom-test-utils.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
@@ -32,207 +34,12 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/mojom/portal/portal.mojom-test-utils.h"
 #include "third_party/blink/public/mojom/portal/portal.mojom.h"
 #include "url/url_constants.h"
 
 using testing::_;
 
 namespace content {
-
-// The PortalInterceptorForTesting can be used in tests to inspect Portal IPCs.
-class PortalInterceptorForTesting final
-    : public blink::mojom::PortalInterceptorForTesting {
- public:
-  static PortalInterceptorForTesting* Create(
-      RenderFrameHostImpl* render_frame_host_impl,
-      mojo::PendingAssociatedReceiver<blink::mojom::Portal> receiver,
-      mojo::AssociatedRemote<blink::mojom::PortalClient> client);
-  static PortalInterceptorForTesting* Create(
-      RenderFrameHostImpl* render_frame_host_impl,
-      content::Portal* portal);
-  static PortalInterceptorForTesting* From(content::Portal* portal);
-
-  void Activate(blink::TransferableMessage data,
-                ActivateCallback callback) override {
-    portal_activated_ = true;
-
-    if (run_loop_) {
-      run_loop_->Quit();
-      run_loop_ = nullptr;
-    }
-
-    // |this| can be destroyed after Activate() is called.
-    portal_->Activate(std::move(data), std::move(callback));
-  }
-
-  void Navigate(const GURL& url, blink::mojom::ReferrerPtr referrer) override {
-    if (navigate_callback_) {
-      navigate_callback_.Run(url, std::move(referrer));
-      return;
-    }
-
-    portal_->Navigate(url, std::move(referrer));
-  }
-
-  void WaitForActivate() {
-    if (portal_activated_)
-      return;
-
-    base::RunLoop run_loop;
-    run_loop_ = &run_loop;
-    run_loop.Run();
-  }
-
-  // Test getters.
-  content::Portal* GetPortal() { return portal_.get(); }
-  WebContents* GetPortalContents() { return portal_->GetPortalContents(); }
-
-  // IPC callbacks
-  base::RepeatingCallback<void(const GURL&, blink::mojom::ReferrerPtr)>
-      navigate_callback_;
-
- private:
-  explicit PortalInterceptorForTesting(
-      RenderFrameHostImpl* render_frame_host_impl)
-      : portal_(content::Portal::CreateForTesting(render_frame_host_impl)) {}
-  PortalInterceptorForTesting(RenderFrameHostImpl* render_frame_host_impl,
-                              std::unique_ptr<content::Portal> portal)
-      : portal_(std::move(portal)) {}
-
-  blink::mojom::Portal* GetForwardingInterface() override {
-    return portal_.get();
-  }
-
-  std::unique_ptr<content::Portal> portal_;
-  bool portal_activated_ = false;
-  base::RunLoop* run_loop_ = nullptr;
-};
-
-// static
-PortalInterceptorForTesting* PortalInterceptorForTesting::Create(
-    RenderFrameHostImpl* render_frame_host_impl,
-    mojo::PendingAssociatedReceiver<blink::mojom::Portal> receiver,
-    mojo::AssociatedRemote<blink::mojom::PortalClient> client) {
-  auto test_portal_ptr =
-      base::WrapUnique(new PortalInterceptorForTesting(render_frame_host_impl));
-  PortalInterceptorForTesting* test_portal = test_portal_ptr.get();
-  test_portal->GetPortal()->SetBindingForTesting(
-      mojo::MakeStrongAssociatedBinding<blink::mojom::Portal>(
-          std::move(test_portal_ptr), std::move(receiver)));
-  test_portal->GetPortal()->SetClientForTesting(std::move(client));
-  return test_portal;
-}
-
-PortalInterceptorForTesting* PortalInterceptorForTesting::Create(
-    RenderFrameHostImpl* render_frame_host_impl,
-    content::Portal* portal) {
-  // Take ownership of the portal.
-  std::unique_ptr<blink::mojom::Portal> mojom_portal_ptr =
-      portal->GetBindingForTesting()->SwapImplForTesting(nullptr);
-  std::unique_ptr<content::Portal> portal_ptr = base::WrapUnique(
-      static_cast<content::Portal*>(mojom_portal_ptr.release()));
-
-  // Create PortalInterceptorForTesting.
-  auto test_portal_ptr = base::WrapUnique(new PortalInterceptorForTesting(
-      render_frame_host_impl, std::move(portal_ptr)));
-  PortalInterceptorForTesting* test_portal = test_portal_ptr.get();
-
-  // Set the binding for the PortalInterceptorForTesting.
-  portal->GetBindingForTesting()->SwapImplForTesting(
-      std::move(test_portal_ptr));
-
-  return test_portal;
-}
-
-// static
-PortalInterceptorForTesting* PortalInterceptorForTesting::From(
-    content::Portal* portal) {
-  blink::mojom::Portal* impl = portal->GetBindingForTesting()->impl();
-  auto* interceptor = static_cast<PortalInterceptorForTesting*>(impl);
-  CHECK_NE(static_cast<blink::mojom::Portal*>(portal), impl);
-  CHECK_EQ(interceptor->GetPortal(), portal);
-  return interceptor;
-}
-
-// The PortalCreatedObserver observes portal creations on
-// |render_frame_host_impl|. This observer can be used to monitor for multiple
-// Portal creations on the same RenderFrameHost, by repeatedly calling
-// WaitUntilPortalCreated().
-class PortalCreatedObserver : public mojom::FrameHostInterceptorForTesting {
- public:
-  explicit PortalCreatedObserver(RenderFrameHostImpl* render_frame_host_impl)
-      : render_frame_host_impl_(render_frame_host_impl) {
-    old_impl_ = render_frame_host_impl_->frame_host_binding_for_testing()
-                    .SwapImplForTesting(this);
-  }
-
-  ~PortalCreatedObserver() override {
-    render_frame_host_impl_->frame_host_binding_for_testing()
-        .SwapImplForTesting(old_impl_);
-  }
-
-  FrameHost* GetForwardingInterface() override {
-    return render_frame_host_impl_;
-  }
-
-  void CreatePortal(
-      mojo::PendingAssociatedReceiver<blink::mojom::Portal> portal,
-      mojo::PendingAssociatedRemote<blink::mojom::PortalClient> client,
-      CreatePortalCallback callback) override {
-    PortalInterceptorForTesting* portal_interceptor =
-        PortalInterceptorForTesting::Create(
-            render_frame_host_impl_, std::move(portal),
-            mojo::AssociatedRemote<blink::mojom::PortalClient>(
-                std::move(client)));
-    portal_ = portal_interceptor->GetPortal();
-    RenderFrameProxyHost* proxy_host = portal_->CreateProxyAndAttachPortal();
-    std::move(callback).Run(proxy_host->GetRoutingID(), portal_->portal_token(),
-                            portal_->GetDevToolsFrameToken());
-
-    if (run_loop_)
-      run_loop_->Quit();
-  }
-
-  void AdoptPortal(const base::UnguessableToken& portal_token,
-                   AdoptPortalCallback callback) override {
-    Portal* portal = Portal::FromToken(portal_token);
-    PortalInterceptorForTesting* portal_interceptor =
-        PortalInterceptorForTesting::Create(render_frame_host_impl_, portal);
-    portal_ = portal_interceptor->GetPortal();
-    RenderFrameProxyHost* proxy_host = portal_->CreateProxyAndAttachPortal();
-    std::move(callback).Run(
-        proxy_host->GetRoutingID(),
-        proxy_host->frame_tree_node()->current_replication_state(),
-        portal->GetDevToolsFrameToken());
-
-    if (run_loop_)
-      run_loop_->Quit();
-  }
-
-  Portal* WaitUntilPortalCreated() {
-    Portal* portal = portal_;
-    if (portal) {
-      portal_ = nullptr;
-      return portal;
-    }
-
-    base::RunLoop run_loop;
-    run_loop_ = &run_loop;
-    run_loop.Run();
-    run_loop_ = nullptr;
-
-    portal = portal_;
-    portal_ = nullptr;
-    return portal;
-  }
-
- private:
-  RenderFrameHostImpl* render_frame_host_impl_;
-  mojom::FrameHost* old_impl_;
-  base::RunLoop* run_loop_ = nullptr;
-  Portal* portal_ = nullptr;
-};
 
 class PortalBrowserTest : public ContentBrowserTest {
  protected:
@@ -245,6 +52,8 @@ class PortalBrowserTest : public ContentBrowserTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kValidateInputEventStream);
+    command_line->AppendSwitchASCII("--enable-blink-features",
+                                    "OverscrollCustomization");
   }
 
   void SetUpOnMainThread() override {
@@ -505,6 +314,7 @@ class PortalHitTestBrowserTest : public PortalBrowserTest,
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     PortalBrowserTest::SetUpCommandLine(command_line);
+    IsolateAllSitesForTesting(command_line);
     const bool use_viz_hit_test_surface_layer = GetParam();
     if (use_viz_hit_test_surface_layer) {
       feature_list_.InitAndEnableFeature(
@@ -602,6 +412,84 @@ IN_PROC_BROWSER_TEST_P(PortalHitTestBrowserTest, DispatchInputEvent) {
   EXPECT_EQ(false, EvalJs(portal_frame, "clicked"));
 }
 
+// Tests that input events performed over on OOPIF inside a portal are targeted
+// to the portal's parent.
+IN_PROC_BROWSER_TEST_P(PortalHitTestBrowserTest, NoInputToOOPIFInPortal) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("portal.test", "/title1.html")));
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  RenderFrameHostImpl* main_frame = web_contents_impl->GetMainFrame();
+
+  // Create portal and wait for navigation.
+  // In the case of crbug.com/1002228 , this does not appear to reproduce if the
+  // portal element is too small, so we give it an explicit size.
+  Portal* portal = nullptr;
+  PortalCreatedObserver portal_created_observer(main_frame);
+  GURL a_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  EXPECT_TRUE(ExecJs(main_frame,
+                     JsReplace("var portal = document.createElement('portal');"
+                               "portal.src = $1;"
+                               "portal.style.width = '500px';"
+                               "portal.style.height = '500px';"
+                               "portal.style.border = 'solid';"
+                               "document.body.appendChild(portal);",
+                               a_url)));
+  portal = portal_created_observer.WaitUntilPortalCreated();
+  WebContentsImpl* portal_contents = portal->GetPortalContents();
+  RenderFrameHostImpl* portal_frame = portal_contents->GetMainFrame();
+  TestNavigationObserver navigation_observer(portal_contents);
+  navigation_observer.Wait();
+  WaitForHitTestData(portal_frame);
+
+  // Add an out-of-process iframe to the portal.
+  GURL b_url(embedded_test_server()->GetURL("b.com", "/title1.html"));
+  TestNavigationObserver iframe_navigation_observer(portal_contents);
+  EXPECT_TRUE(ExecJs(portal_frame,
+                     JsReplace("var iframe = document.createElement('iframe');"
+                               "iframe.src = $1;"
+                               "document.body.appendChild(iframe);",
+                               b_url)));
+  iframe_navigation_observer.Wait();
+  EXPECT_EQ(b_url, iframe_navigation_observer.last_navigation_url());
+  RenderFrameHostImpl* portal_iframe =
+      portal_frame->child_at(0)->current_frame_host();
+  EXPECT_TRUE(static_cast<RenderWidgetHostViewBase*>(portal_iframe->GetView())
+                  ->IsRenderWidgetHostViewChildFrame());
+  RenderWidgetHostViewChildFrame* oopif_view =
+      static_cast<RenderWidgetHostViewChildFrame*>(portal_iframe->GetView());
+  EXPECT_NE(portal_frame->GetSiteInstance(), portal_iframe->GetSiteInstance());
+  WaitForHitTestData(portal_iframe);
+
+  FailOnInputEvent no_input_to_portal_frame(
+      portal_frame->GetRenderWidgetHost());
+  FailOnInputEvent no_input_to_oopif(portal_iframe->GetRenderWidgetHost());
+  EXPECT_TRUE(ExecJs(main_frame,
+                     "var clicked = false;"
+                     "portal.onmousedown = _ => clicked = true;"));
+  EXPECT_TRUE(ExecJs(portal_frame,
+                     "var clicked = false;"
+                     "document.body.onmousedown = _ => clicked = true;"));
+  EXPECT_TRUE(ExecJs(portal_iframe,
+                     "var clicked = false;"
+                     "document.body.onmousedown = _ => clicked = true;"));
+
+  // Route the mouse event.
+  gfx::Point root_location =
+      oopif_view->TransformPointToRootCoordSpace(gfx::Point(5, 5));
+  InputEventAckWaiter waiter(main_frame->GetRenderWidgetHost(),
+                             blink::WebInputEvent::kMouseDown);
+  SimulateRoutedMouseEvent(web_contents_impl, blink::WebInputEvent::kMouseDown,
+                           blink::WebPointerProperties::Button::kLeft,
+                           root_location);
+  waiter.Wait();
+
+  // Check that the click event was only received by the main frame.
+  EXPECT_EQ(true, EvalJs(main_frame, "clicked"));
+  EXPECT_EQ(false, EvalJs(portal_frame, "clicked"));
+  EXPECT_EQ(false, EvalJs(portal_iframe, "clicked"));
+}
+
 // Tests that async hit testing does not target portals.
 IN_PROC_BROWSER_TEST_F(PortalBrowserTest, AsyncEventTargetingIgnoresPortals) {
   EXPECT_TRUE(NavigateToURL(
@@ -675,12 +563,13 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, NavigateToChrome) {
       PortalInterceptorForTesting::From(portal);
 
   // Try to navigate to chrome://settings and wait for the process to die.
-  portal_interceptor->navigate_callback_ = base::BindRepeating(
-      [](Portal* portal, const GURL& url, blink::mojom::ReferrerPtr referrer) {
+  portal_interceptor->SetNavigateCallback(base::BindRepeating(
+      [](Portal* portal, const GURL& url, blink::mojom::ReferrerPtr referrer,
+         blink::mojom::Portal::NavigateCallback callback) {
         GURL chrome_url("chrome://settings");
-        portal->Navigate(chrome_url, std::move(referrer));
+        portal->Navigate(chrome_url, std::move(referrer), std::move(callback));
       },
-      portal);
+      portal));
   RenderProcessHostKillWaiter kill_waiter(main_frame->GetProcess());
   GURL a_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
   ignore_result(ExecJs(main_frame, JsReplace("portal.src = $1;", a_url)));
@@ -743,16 +632,9 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, TouchAckAfterActivate) {
   input_event_ack_waiter.Wait();
 }
 
-#if defined(OS_MACOSX)
-//  TODO(crbug.com/941824): Test flaky on MAC
-#define MAYBE_TouchAckAfterActivateAndAdopt \
-  DISABLED_TouchAckAfterActivateAndAdopt
-#else
-#define MAYBE_TouchAckAfterActivateAndAdopt TouchAckAfterActivateAndAdopt
-#endif
 // Regression test for crbug.com/973647. Tests that receiving a touch ack
 // after activation and predecessor adoption doesn't cause a crash.
-IN_PROC_BROWSER_TEST_F(PortalBrowserTest, MAYBE_TouchAckAfterActivateAndAdopt) {
+IN_PROC_BROWSER_TEST_F(PortalBrowserTest, TouchAckAfterActivateAndAdopt) {
   EXPECT_TRUE(NavigateToURL(
       shell(), embedded_test_server()->GetURL("portal.test", "/title1.html")));
   WebContentsImpl* web_contents_impl =
@@ -807,10 +689,15 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, MAYBE_TouchAckAfterActivateAndAdopt) {
 
   std::unique_ptr<SyntheticTapGesture> gesture =
       std::make_unique<SyntheticTapGesture>(params);
-  render_widget_host->QueueSyntheticGesture(
-      std::move(gesture), base::Bind([](SyntheticGesture::Result) {}));
-  portal_interceptor->WaitForActivate();
-  EXPECT_EQ(portal_contents, shell()->web_contents());
+  {
+    PortalCreatedObserver adoption_observer(portal_frame);
+    render_widget_host->QueueSyntheticGesture(
+        std::move(gesture), base::Bind([](SyntheticGesture::Result) {}));
+    portal_interceptor->WaitForActivate();
+    EXPECT_EQ(portal_contents, shell()->web_contents());
+    // Wait for predecessor to be adopted.
+    adoption_observer.WaitUntilPortalCreated();
+  }
 
   // Wait for a touch ack to be sent from the predecessor.
   input_event_ack_waiter.Wait();
@@ -947,8 +834,8 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, TouchStateClearedBeforeActivation) {
         std::make_unique<SyntheticTapGesture>(params);
     InputEventAckWaiter input_event_ack_waiter(
         render_widget_host, blink::WebInputEvent::Type::kTouchCancel);
-    render_widget_host->QueueSyntheticGesture(
-        std::move(gesture), base::Bind([](SyntheticGesture::Result) {}));
+    render_widget_host->QueueSyntheticGestureCompleteImmediately(
+        std::move(gesture));
     // Wait for synthetic cancel event to be sent.
     input_event_ack_waiter.Wait();
     portal_interceptor->WaitForActivate();
@@ -1028,8 +915,8 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, GestureCleanedUpBeforeActivation) {
     PortalCreatedObserver adoption_observer(portal_frame);
     std::unique_ptr<SyntheticTapGesture> gesture =
         std::make_unique<SyntheticTapGesture>(params);
-    render_widget_host->QueueSyntheticGesture(
-        std::move(gesture), base::Bind([](SyntheticGesture::Result) {}));
+    render_widget_host->QueueSyntheticGestureCompleteImmediately(
+        std::move(gesture));
     portal_interceptor->WaitForActivate();
     EXPECT_EQ(portal_contents, shell()->web_contents());
     adopted_portal = adoption_observer.WaitUntilPortalCreated();
@@ -1050,6 +937,123 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, GestureCleanedUpBeforeActivation) {
   // Wait for the tap gesture ack. If the initial gesture wasn't cleaned up, the
   // new gesture created will cause an error in the gesture validator.
   input_event_ack_waiter.Wait();
+}
+#endif
+
+// Touch input transfer is only implemented in the content layer for Aura.
+#if defined(USE_AURA)
+IN_PROC_BROWSER_TEST_F(PortalBrowserTest, TouchInputTransferAcrossActivation) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(),
+      embedded_test_server()->GetURL("portal.test", "/portals/scroll.html")));
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  RenderFrameHostImpl* main_frame = web_contents_impl->GetMainFrame();
+  RenderWidgetHostImpl* render_widget_host = main_frame->GetRenderWidgetHost();
+
+  // Create portal and wait for navigation.
+  Portal* portal = nullptr;
+  {
+    PortalCreatedObserver portal_created_observer(main_frame);
+    GURL portal_url(embedded_test_server()->GetURL(
+        "portal.test", "/portals/scroll-portal.html"));
+    EXPECT_TRUE(ExecJs(
+        main_frame, JsReplace("var portal = document.createElement('portal');"
+                              "portal.src = $1;"
+                              "document.body.appendChild(portal);",
+                              portal_url)));
+    portal = portal_created_observer.WaitUntilPortalCreated();
+  }
+  WebContentsImpl* portal_contents = portal->GetPortalContents();
+  RenderFrameHostImpl* portal_frame = portal_contents->GetMainFrame();
+  // The portal should not have navigated yet, wait for the first navigation.
+  TestNavigationObserver navigation_observer(portal_contents);
+  navigation_observer.Wait();
+  WaitForHitTestData(portal_frame);
+
+  // Create and dispatch a synthetic scroll to trigger activation.
+  SyntheticSmoothScrollGestureParams params;
+  params.gesture_source_type = SyntheticGestureParams::TOUCH_INPUT;
+  params.anchor = gfx::PointF(50, 150);
+  params.distances.push_back(-gfx::Vector2d(0, 100));
+
+  std::unique_ptr<SyntheticSmoothScrollGesture> gesture =
+      std::make_unique<SyntheticSmoothScrollGesture>(params);
+  base::RunLoop run_loop;
+  render_widget_host->QueueSyntheticGesture(
+      std::move(gesture),
+      base::BindLambdaForTesting([&](SyntheticGesture::Result result) {
+        EXPECT_EQ(SyntheticGesture::Result::GESTURE_FINISHED, result);
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+
+  // Check if the activated page scrolled.
+  EXPECT_NE(0, EvalJs(portal_frame, "window.scrollY"));
+}
+#endif
+
+// TODO(crbug.com/1010675): Test fails flakily.
+// Touch input transfer is only implemented in the content layer for Aura.
+#if defined(USE_AURA)
+IN_PROC_BROWSER_TEST_F(PortalBrowserTest,
+                       DISABLED_TouchInputTransferAcrossReactivation) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL(
+                   "portal.test",
+                   "/portals/touch-input-transfer-across-reactivation.html")));
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  RenderFrameHostImpl* main_frame = web_contents_impl->GetMainFrame();
+  RenderWidgetHostImpl* render_widget_host = main_frame->GetRenderWidgetHost();
+
+  // Create portal and wait for navigation.
+  Portal* portal = nullptr;
+  {
+    PortalCreatedObserver portal_created_observer(main_frame);
+    GURL portal_url(embedded_test_server()->GetURL(
+        "portal.test", "/portals/reactivate-predecessor.html"));
+    EXPECT_TRUE(ExecJs(
+        main_frame, JsReplace("var portal = document.createElement('portal');"
+                              "portal.src = $1;"
+                              "document.body.appendChild(portal);",
+                              portal_url)));
+    portal = portal_created_observer.WaitUntilPortalCreated();
+  }
+  WebContentsImpl* portal_contents = portal->GetPortalContents();
+  // The portal should not have navigated yet, wait for the first navigation.
+  TestNavigationObserver navigation_observer(portal_contents);
+  navigation_observer.Wait();
+
+  PortalInterceptorForTesting* portal_interceptor =
+      PortalInterceptorForTesting::From(portal);
+
+  // Create and dispatch a synthetic scroll to trigger activation.
+  SyntheticSmoothScrollGestureParams params;
+  params.gesture_source_type = SyntheticGestureParams::TOUCH_INPUT;
+  params.anchor = gfx::PointF(50, 150);
+  params.distances.push_back(-gfx::Vector2d(0, 1000));
+
+  std::unique_ptr<SyntheticSmoothScrollGesture> gesture =
+      std::make_unique<SyntheticSmoothScrollGesture>(params);
+  base::RunLoop run_loop;
+  render_widget_host->QueueSyntheticGesture(
+      std::move(gesture),
+      base::BindLambdaForTesting([&](SyntheticGesture::Result result) {
+        EXPECT_EQ(SyntheticGesture::Result::GESTURE_FINISHED, result);
+        run_loop.Quit();
+      }));
+  // Portal should activate when the gesture begins.
+  portal_interceptor->WaitForActivate();
+  // Wait till the scroll gesture finishes.
+  run_loop.Run();
+  // The predecessor should have been reactivated (we should be back to the
+  // starting page).
+  EXPECT_EQ(web_contents_impl, shell()->web_contents());
+  // The starting page should have scrolled.
+  // NOTE: This assumes that the scroll gesture is long enough that touch events
+  // are still sent after the predecessor is reactivated.
+  EXPECT_NE(0, EvalJs(main_frame, "window.scrollY"));
 }
 #endif
 
@@ -1178,6 +1182,45 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, OrphanedNavigation) {
                      "window.location.reload()");
   portal_interceptor->WaitForActivate();
   main_frame_navigation_observer.Wait();
+}
+
+// Tests that the browser doesn't crash if the renderer tries to create the
+// PortalHost after the parent renderer dropped the portal.
+IN_PROC_BROWSER_TEST_F(PortalBrowserTest,
+                       AccessPortalHostAfterPortalDestruction) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("portal.test", "/title1.html")));
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  RenderFrameHostImpl* main_frame = web_contents_impl->GetMainFrame();
+
+  Portal* portal = nullptr;
+  {
+    PortalCreatedObserver portal_created_observer(main_frame);
+    GURL a_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
+    EXPECT_TRUE(ExecJs(
+        main_frame, JsReplace("var portal = document.createElement('portal');"
+                              "portal.src = $1;"
+                              "document.body.appendChild(portal);",
+                              a_url)));
+    portal = portal_created_observer.WaitUntilPortalCreated();
+  }
+  WebContentsImpl* portal_contents = portal->GetPortalContents();
+  RenderFrameHostImpl* portal_frame = portal_contents->GetMainFrame();
+
+  // The portal should not have navigated yet; wait for the first navigation.
+  TestNavigationObserver navigation_observer(portal_contents);
+  navigation_observer.Wait();
+
+  // Simulate the portal being dropped, but not the destruction of the
+  // WebContents.
+  portal->GetBindingForTesting()->SwapImplForTesting(nullptr);
+
+  // Get the portal renderer to access the WebContents.
+  RenderProcessHostKillWaiter kill_waiter(portal_frame->GetProcess());
+  ExecuteScriptAsync(portal_frame,
+                     "window.portalHost.postMessage('message', '*');");
+  EXPECT_EQ(bad_message::RPH_MOJO_PROCESS_ERROR, kill_waiter.Wait());
 }
 
 class PortalOOPIFBrowserTest : public PortalBrowserTest {

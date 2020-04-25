@@ -10,8 +10,8 @@
 # https://chromium.googlesource.com/chromium/src/+/master/docs/testing/web_test_expectations.md
 
 external/wpt/.codecov.yml [ Skip ]
+external/wpt/.github [ Skip ]
 external/wpt/.gitmodules [ Skip ]
-external/wpt/.travis.yml [ Skip ]
 external/wpt/CODEOWNERS [ Skip ]
 external/wpt/WebIDL/invalid [ Skip ]
 external/wpt/WebIDL/readme.txt [ Skip ]
@@ -100,7 +100,6 @@ external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/css21 [ Skip ]
 external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/filters [ Skip ]
 external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/fonts3 [ Skip ]
 external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/images3 [ Skip ]
-external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/lists-3 [ Skip ]
 external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/masking [ Skip ]
 external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/multicol3 [ Skip ]
 external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/ruby [ Skip ]

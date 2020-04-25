@@ -12,9 +12,11 @@ update_target("//components/resources:about_credits") {
   if (!defined(deps)) {
     deps = []
   }
-  deps += [ "//vivaldi/vivapp:vivaldi_app" ]
+  if (!is_android) {
+    deps += [ "//vivaldi/vivapp:vivaldi_app" ]
+    inputs += ["$root_gen_dir/vivaldi/vivapp/module_list"]
+  }
   inputs += [
     "//vivaldi/scripts/licenses/licenses_vivaldi.py",
-    "$root_gen_dir/vivaldi/vivapp/module_list",
   ]
 }

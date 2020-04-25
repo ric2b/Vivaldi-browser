@@ -120,12 +120,7 @@ Polymer({
   /** @private  {settings.InternetPageBrowserProxy} */
   browserProxy_: null,
 
-  /**
-   * This UI will use both the networkingPrivate extension API and the
-   * networkConfig mojo API until we provide all of the required functionality
-   * in networkConfig. TODO(stevenjb): Remove use of networkingPrivate api.
-   * @private {?chromeos.networkConfig.mojom.CrosNetworkConfigRemote}
-   */
+  /** @private {?chromeos.networkConfig.mojom.CrosNetworkConfigRemote} */
   networkConfig_: null,
 
   /** @override */
@@ -275,7 +270,7 @@ Polymer({
     }
     const filter = {
       filter: chromeos.networkConfig.mojom.FilterType.kVisible,
-      limit: chromeos.networkConfig.mojom.kNoLimit,
+      limit: chromeos.networkConfig.mojom.NO_LIMIT,
       networkType: this.deviceState.type,
     };
     this.networkConfig_.getNetworkStateList(filter).then(response => {
@@ -298,7 +293,7 @@ Polymer({
         this.tetherDeviceState) {
       const filter = {
         filter: chromeos.networkConfig.mojom.FilterType.kVisible,
-        limit: chromeos.networkConfig.mojom.kNoLimit,
+        limit: chromeos.networkConfig.mojom.NO_LIMIT,
         networkType: mojom.NetworkType.kTether,
       };
       this.networkConfig_.getNetworkStateList(filter).then(response => {
@@ -314,7 +309,7 @@ Polymer({
       const thirdPartyVpns = {};
       networkStates.forEach(state => {
         assert(state.type == mojom.NetworkType.kVPN);
-        switch (state.vpn.type) {
+        switch (state.typeState.vpn.type) {
           case mojom.VpnType.kL2TPIPsec:
           case mojom.VpnType.kOpenVPN:
             builtinNetworkStates.push(state);
@@ -326,7 +321,7 @@ Polymer({
             }
             // Otherwise Arc VPNs are treated the same as Extension VPNs.
           case mojom.VpnType.kExtension:
-            const providerId = state.vpn.providerId;
+            const providerId = state.typeState.vpn.providerId;
             thirdPartyVpns[providerId] = thirdPartyVpns[providerId] || [];
             thirdPartyVpns[providerId].push(state);
             break;
@@ -354,7 +349,7 @@ Polymer({
     for (const vpnList of Object.values(thirdPartyVpns)) {
       assert(vpnList.length > 0);
       // All vpns in the list will have the same type and provider id.
-      const vpn = vpnList[0].vpn;
+      const vpn = vpnList[0].typeState.vpn;
       const provider = {
         type: vpn.type,
         providerId: vpn.providerId,
@@ -584,7 +579,8 @@ Polymer({
         (!!this.globalPolicy.allowOnlyPolicyNetworksToConnectIfAvailable &&
          !!this.deviceState && !!this.deviceState.managedNetworkAvailable) ||
         (!!this.globalPolicy.blockedHexSsids &&
-         this.globalPolicy.blockedHexSsids.includes(state.wifi.hexSsid));
+         this.globalPolicy.blockedHexSsids.includes(
+             state.typeState.wifi.hexSsid));
   },
 
   /**

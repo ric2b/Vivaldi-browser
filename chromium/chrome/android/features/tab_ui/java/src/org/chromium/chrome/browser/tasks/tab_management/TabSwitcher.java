@@ -6,7 +6,9 @@ package org.chromium.chrome.browser.tasks.tab_management;
 
 import android.graphics.Bitmap;
 import android.graphics.Rect;
-import android.support.annotation.NonNull;
+import android.graphics.RectF;
+
+import androidx.annotation.NonNull;
 
 import org.chromium.base.Callback;
 import org.chromium.base.VisibleForTesting;
@@ -99,12 +101,6 @@ public interface TabSwitcher {
          * @return Whether or not the TabSwitcher consumed the event.
          */
         boolean onBackPressed();
-
-        /**
-         * Set the bottom control height to margin the bottom of the TabListRecyclerView.
-         * @param bottomControlsHeight The bottom control height in pixel.
-         */
-        void setBottomControlsHeight(int bottomControlsHeight);
     }
 
     /**
@@ -177,10 +173,34 @@ public interface TabSwitcher {
          */
         @VisibleForTesting
         int getCleanupDelayForTesting();
+
+        /**
+         * @return The top offset from top toolbar to tab list. Used to adjust the animations for
+         *         tab switcher.
+         */
+        int getTabListTopOffset();
+    }
+
+    /**
+     * Interface to access the Tab Dialog.
+     */
+    interface TabDialogDelegation {
+        /**
+         * Set a hook to receive {@link RectF} with position information about source tab card used
+         * to setup Tab Dialog animation.
+         * @param callback The callback to send rect through.
+         */
+        @VisibleForTesting
+        void setSourceRectCallbackForTesting(Callback<RectF> callback);
     }
 
     /**
      * @return The {@link TabListDelegate}.
      */
     TabListDelegate getTabListDelegate();
+
+    /**
+     * @return The {@link TabDialogDelegation}.
+     */
+    TabDialogDelegation getTabGridDialogDelegation();
 }

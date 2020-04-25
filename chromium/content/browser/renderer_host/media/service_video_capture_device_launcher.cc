@@ -8,13 +8,16 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/command_line.h"
 #include "base/task/post_task.h"
 #include "content/browser/renderer_host/media/service_launched_video_capture_device.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "media/base/media_switches.h"
 #include "media/capture/video/video_capture_device.h"
 #include "media/capture/video/video_frame_receiver_on_task_runner.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/video_capture/public/cpp/receiver_media_to_mojo_adapter.h"
 
 namespace content {
@@ -114,9 +117,10 @@ void ServiceVideoCaptureDeviceLauncher::LaunchDeviceAsync(
           std::make_unique<media::VideoFrameReceiverOnTaskRunner>(
               std::move(receiver),
               base::CreateSingleThreadTaskRunner({BrowserThread::IO})));
-  video_capture::mojom::ReceiverPtr receiver_proxy;
-  mojo::MakeStrongBinding<video_capture::mojom::Receiver>(
-      std::move(receiver_adapter), mojo::MakeRequest(&receiver_proxy));
+  mojo::PendingRemote<video_capture::mojom::Receiver> pending_remote_proxy;
+  mojo::MakeSelfOwnedReceiver(
+      std::move(receiver_adapter),
+      pending_remote_proxy.InitWithNewPipeAndPassReceiver());
 
   video_capture::mojom::PushVideoStreamSubscriptionPtr subscription;
   // Create message pipe so that we can subsequently call
@@ -134,6 +138,14 @@ void ServiceVideoCaptureDeviceLauncher::LaunchDeviceAsync(
   new_params.power_line_frequency =
       media::VideoCaptureDevice::GetPowerLineFrequency(params);
 
+  // GpuMemoryBuffer-based VideoCapture buffer works only on the Chrome OS
+  // VideoCaptureDevice implementation. It's not supported by
+  // FakeVideoCaptureDevice.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kVideoCaptureUseGpuMemoryBuffer)) {
+    new_params.buffer_type = media::VideoCaptureBufferType::kGpuMemoryBuffer;
+  }
+
   // Note that we set |force_reopen_with_new_settings| to true in order
   // to avoid the situation that a requests to open (or reopen) a device
   // that has just been closed with different settings ends up getting the old
@@ -142,7 +154,7 @@ void ServiceVideoCaptureDeviceLauncher::LaunchDeviceAsync(
   // have to refactor code here and upstream to wait for a callback from the
   // service indicating that the device closing is complete.
   source->CreatePushSubscription(
-      std::move(receiver_proxy), new_params,
+      std::move(pending_remote_proxy), new_params,
       true /*force_reopen_with_new_settings*/, std::move(subscription_request),
       base::BindOnce(
           // Use of Unretained |this| is safe, because |done_cb_| guarantees

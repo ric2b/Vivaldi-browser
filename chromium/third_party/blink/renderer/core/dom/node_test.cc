@@ -12,11 +12,13 @@
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/dom/layout_tree_builder.h"
 #include "third_party/blink/renderer/core/dom/processing_instruction.h"
+#include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/shadow_root_init.h"
 #include "third_party/blink/renderer/core/editing/testing/editing_test_base.h"
 #include "third_party/blink/renderer/core/html/html_div_element.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 namespace blink {
 
@@ -326,6 +328,61 @@ TEST_F(NodeTest, appendChildCommentNoStyleRecalc) {
   Comment* comment = Comment::Create(GetDocument(), "comment");
   GetDocument().body()->appendChild(comment, ASSERT_NO_EXCEPTION);
   EXPECT_FALSE(GetDocument().ChildNeedsStyleRecalc());
+}
+
+TEST_F(NodeTest, MutationOutsideFlatTreeStyleDirty) {
+  SetBodyContent("<div id=host><span id=nonslotted></span></div>");
+  GetDocument().getElementById("host")->AttachShadowRootInternal(
+      ShadowRootType::kOpen);
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_FALSE(GetDocument().NeedsLayoutTreeUpdate());
+  GetDocument()
+      .getElementById("nonslotted")
+      ->setAttribute("style", "color:green");
+  EXPECT_TRUE(GetDocument().NeedsLayoutTreeUpdate());
+}
+
+TEST_F(NodeTest, SkipStyleDirtyHostChild) {
+  ScopedFlatTreeStyleRecalcForTest scope(true);
+
+  SetBodyContent("<div id=host><span></span></div>");
+  Element* host = GetDocument().getElementById("host");
+  ShadowRoot& shadow_root =
+      host->AttachShadowRootInternal(ShadowRootType::kOpen);
+  shadow_root.SetInnerHTMLFromString(
+      "<div style='display:none'><slot></slot></div>");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(GetDocument().NeedsLayoutTreeUpdate());
+
+  // Check that we do not mark an element for style recalc when the element and
+  // its flat tree parent are display:none.
+  To<Element>(host->firstChild())->setAttribute("style", "color:green");
+  EXPECT_FALSE(GetDocument().NeedsLayoutTreeUpdate());
+}
+
+TEST_F(NodeTest, ContainsChild) {
+  SetBodyContent("<div id=a><div id=b></div></div>");
+  Element* a = GetDocument().getElementById("a");
+  Element* b = GetDocument().getElementById("b");
+  EXPECT_TRUE(a->contains(b));
+}
+
+TEST_F(NodeTest, ContainsNoSibling) {
+  SetBodyContent("<div id=a></div><div id=b></div>");
+  Element* a = GetDocument().getElementById("a");
+  Element* b = GetDocument().getElementById("b");
+  EXPECT_FALSE(a->contains(b));
+}
+
+TEST_F(NodeTest, ContainsPseudo) {
+  SetBodyContent(
+      "<style>#a::before{content:'aaa';}</style>"
+      "<div id=a></div>");
+  Element* a = GetDocument().getElementById("a");
+  PseudoElement* pseudo = a->GetPseudoElement(kPseudoIdBefore);
+  ASSERT_TRUE(pseudo);
+  EXPECT_TRUE(a->contains(pseudo));
 }
 
 }  // namespace blink

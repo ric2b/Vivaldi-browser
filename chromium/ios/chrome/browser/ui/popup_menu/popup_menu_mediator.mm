@@ -29,6 +29,7 @@
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/reading_list_add_command.h"
 #import "ios/chrome/browser/ui/list_model/list_model.h"
+#import "ios/chrome/browser/ui/ntp_tile_views/ntp_tile_constants.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_navigation_item.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_tools_item.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
@@ -51,7 +52,7 @@
 #include "ios/web/public/navigation/navigation_manager.h"
 #include "ios/web/public/web_client.h"
 #import "ios/web/public/web_state.h"
-#import "ios/web/public/web_state/web_state_observer_bridge.h"
+#import "ios/web/public/web_state_observer_bridge.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
 
@@ -704,32 +705,23 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   // represent a section in the popup menu. Having one sub array means having
   // all the items in the same section.
   PopupMenuToolsItem* copiedContentItem = nil;
-  if (base::FeatureList::IsEnabled(kCopiedContentBehavior)) {
-    ClipboardRecentContent* clipboardRecentContent =
-        ClipboardRecentContent::GetInstance();
+  ClipboardRecentContent* clipboardRecentContent =
+      ClipboardRecentContent::GetInstance();
 
-    if (search_engines::SupportsSearchByImage(self.templateURLService) &&
-        clipboardRecentContent->GetRecentImageFromClipboard()) {
-      copiedContentItem = CreateTableViewItem(
-          IDS_IOS_TOOLS_MENU_SEARCH_COPIED_IMAGE,
-          PopupMenuActionSearchCopiedImage, @"popup_menu_paste_and_go",
-          kToolsMenuCopiedImageSearch);
-    } else if (clipboardRecentContent->GetRecentURLFromClipboard()) {
-      copiedContentItem = CreateTableViewItem(
-          IDS_IOS_TOOLS_MENU_VISIT_COPIED_LINK, PopupMenuActionPasteAndGo,
-          @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
-    } else if (clipboardRecentContent->GetRecentTextFromClipboard()) {
-      copiedContentItem = CreateTableViewItem(
-          IDS_IOS_TOOLS_MENU_SEARCH_COPIED_TEXT, PopupMenuActionPasteAndGo,
-          @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
-    }
-  } else {
-    NSString* pasteboardString = [UIPasteboard generalPasteboard].string;
-    if (pasteboardString) {
-      copiedContentItem = CreateTableViewItem(
-          IDS_IOS_TOOLS_MENU_PASTE_AND_GO, PopupMenuActionPasteAndGo,
-          @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
-    }
+  if (search_engines::SupportsSearchByImage(self.templateURLService) &&
+      clipboardRecentContent->GetRecentImageFromClipboard()) {
+    copiedContentItem = CreateTableViewItem(
+        IDS_IOS_TOOLS_MENU_SEARCH_COPIED_IMAGE,
+        PopupMenuActionSearchCopiedImage, @"popup_menu_paste_and_go",
+        kToolsMenuCopiedImageSearch);
+  } else if (clipboardRecentContent->GetRecentURLFromClipboard()) {
+    copiedContentItem = CreateTableViewItem(
+        IDS_IOS_TOOLS_MENU_VISIT_COPIED_LINK, PopupMenuActionPasteAndGo,
+        @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
+  } else if (clipboardRecentContent->GetRecentTextFromClipboard()) {
+    copiedContentItem = CreateTableViewItem(
+        IDS_IOS_TOOLS_MENU_SEARCH_COPIED_TEXT, PopupMenuActionPasteAndGo,
+        @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
   }
   if (copiedContentItem) {
     if (base::FeatureList::IsEnabled(kToolbarNewTabButton)) {
@@ -899,8 +891,13 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   self.readingListItem = CreateTableViewItem(
       IDS_IOS_TOOLS_MENU_READING_LIST, PopupMenuActionReadingList,
       @"popup_menu_reading_list", kToolsMenuReadingListId);
-  self.readingListItem.badgeNumber =
+  NSInteger numberOfUnreadArticles =
       [self.readingListMenuNotifier readingListUnreadCount];
+  self.readingListItem.badgeNumber = numberOfUnreadArticles;
+  if (numberOfUnreadArticles) {
+    self.readingListItem.additionalAccessibilityLabel =
+        AccessibilityLabelForReadingListCellWithCount(numberOfUnreadArticles);
+  }
   if (self.engagementTracker &&
       self.engagementTracker->ShouldTriggerHelpUI(
           feature_engagement::kIPHBadgedReadingListFeature)) {

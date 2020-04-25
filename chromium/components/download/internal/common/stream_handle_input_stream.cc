@@ -27,9 +27,9 @@ StreamHandleInputStream::~StreamHandleInputStream() = default;
 
 void StreamHandleInputStream::Initialize() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  binding_ = std::make_unique<mojo::Binding<mojom::DownloadStreamClient>>(
-      this, std::move(stream_handle_->client_request));
-  binding_->set_connection_error_handler(base::BindOnce(
+  receiver_ = std::make_unique<mojo::Receiver<mojom::DownloadStreamClient>>(
+      this, std::move(stream_handle_->client_receiver));
+  receiver_->set_disconnect_handler(base::BindOnce(
       &StreamHandleInputStream::OnStreamCompleted, base::Unretained(this),
       mojom::NetworkRequestStatus::USER_CANCELED));
   handle_watcher_ = std::make_unique<mojo::SimpleWatcher>(
@@ -45,6 +45,8 @@ void StreamHandleInputStream::RegisterDataReadyCallback(
     const mojo::SimpleWatcher::ReadyCallback& callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (handle_watcher_) {
+    if (handle_watcher_->IsWatching())
+      ClearDataReadyCallback();
     handle_watcher_->Watch(stream_handle_->stream.get(),
                            MOJO_HANDLE_SIGNAL_READABLE, callback);
   }

@@ -25,7 +25,7 @@ blink::ScrollbarThemeMock scrollbar_theme_;
 
 namespace blink {
 
-class ScrollableAreaStub : public GarbageCollectedFinalized<ScrollableAreaStub>,
+class ScrollableAreaStub : public GarbageCollected<ScrollableAreaStub>,
                            public ScrollableArea {
   USING_GARBAGE_COLLECTED_MIXIN(ScrollableAreaStub);
 
@@ -103,10 +103,8 @@ class ScrollableAreaStub : public GarbageCollectedFinalized<ScrollableAreaStub>,
   bool IsScrollCornerVisible() const override { return true; }
   IntRect ScrollCornerRect() const override { return IntRect(); }
   bool ScrollbarsCanBeActive() const override { return true; }
-  IntRect ScrollableAreaBoundingBox() const override { return IntRect(); }
   bool ShouldPlaceVerticalScrollbarOnLeft() const override { return true; }
   void ScrollControlWasSetNeedsPaintInvalidation() override {}
-  GraphicsLayer* LayerForContainer() const override { return nullptr; }
   GraphicsLayer* LayerForScrolling() const override { return nullptr; }
   GraphicsLayer* LayerForHorizontalScrollbar() const override {
     return nullptr;

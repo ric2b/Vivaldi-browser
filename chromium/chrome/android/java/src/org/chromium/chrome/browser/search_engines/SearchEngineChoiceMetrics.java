@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.search_engines;
 
-import android.support.annotation.IntDef;
+import androidx.annotation.IntDef;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;

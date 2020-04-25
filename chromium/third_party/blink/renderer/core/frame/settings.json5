@@ -489,9 +489,9 @@
     },
     {
       name: "displayModeOverride",
-      initial: "kWebDisplayModeUndefined",
+      initial: "blink::mojom::DisplayMode::kUndefined",
       invalidate: "MediaQuery",
-      type: "WebDisplayMode",
+      type: "blink::mojom::DisplayMode",
     },
 
     // loadsImagesAutomatically only suppresses the network load of
@@ -510,15 +510,6 @@
       name: "imageAnimationPolicy",
       initial: "kImageAnimationPolicyAllowed",
       type: "ImageAnimationPolicy",
-    },
-
-    // Added because the setting above does not what it say. Will only
-    // serve a resource that is in cache, see ResourceFetcher::requestResource
-    // only used for images now.
-    {
-      name: "serveResourceFromCacheOnly",
-      initial: false,
-      invalidate: "ImageLoading",
     },
 
     // Html preload scanning is a fast, early scan of HTML documents to find loadable
@@ -893,9 +884,14 @@
     // Dark mode
     //
     {
-      name: "darkMode",
-      initial: "DarkMode::kOff",
-      type: "DarkMode",
+      name: "darkModeEnabled",
+      initial: false,
+      invalidate: "Paint",
+    },
+    {
+      name: "darkModeInversionAlgorithm",
+      initial: "DarkModeInversionAlgorithm::kInvertLightnessLAB",
+      type: "DarkModeInversionAlgorithm",
       invalidate: "Paint",
     },
     {
@@ -1030,6 +1026,34 @@
       initial: 3000,
       type: "int",
     },
+    //
+    // Count of the images to fully load for different effective connection types.
+    //
+    {
+      name: "lazyImageFirstKFullyLoadUnknown",
+      initial: 0,
+      type: "int",
+    },
+    {
+      name: "lazyImageFirstKFullyLoadSlow2G",
+      initial: 12,
+      type: "int",
+    },
+    {
+      name: "lazyImageFirstKFullyLoad2G",
+      initial: 10,
+      type: "int",
+    },
+    {
+      name: "lazyImageFirstKFullyLoad3G",
+      initial: 8,
+      type: "int",
+    },
+    {
+      name: "lazyImageFirstKFullyLoad4G",
+      initial: 6,
+      type: "int",
+    },
 
     // Preferred color scheme from the OS/application passed to the renderer for
     // evaluating the prefers-color-scheme media query.
@@ -1051,15 +1075,23 @@
       name: "DontSendKeyEventsToJavascript",
       initial: false,
     },
-    // Forced colors from the OS/application passed to the renderer for
-    // evaluating the forced-colors media query.
+    // Navigation controls from the application passed to the renderer for
+    // evaluating the navigation-controls media query.
     {
-      name: "forcedColors",
-      initial: "ForcedColors::kNone",
-      invalidate: "ColorScheme",
-      type: "ForcedColors",
+      name: "navigationControls",
+      initial: "NavigationControls::kNone",
+      invalidate: "MediaQuery",
+      type: "NavigationControls",
     },
     // Vivaldi:
+    // Will only serve a resource that is in cache,
+    // see ResourceFetcher::requestResource
+    // only used for images now.
+    {
+      name: "serveResourceFromCacheOnly",
+      initial: false,
+      invalidate: "ImageLoading",
+    },
     {
       name: "allowTabCycleIntoUI",
       initial: false,

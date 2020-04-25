@@ -180,8 +180,10 @@ bool ValidatePartialKeyframes(const StringKeyframeVector& keyframes) {
 EffectModel::CompositeOperation ResolveCompositeOperationForKeyframe(
     EffectModel::CompositeOperation composite,
     StringKeyframe* keyframe) {
+  bool additive_composite = composite == EffectModel::kCompositeAdd ||
+                            composite == EffectModel::kCompositeAccumulate;
   if (!RuntimeEnabledFeatures::CSSAdditiveAnimationsEnabled() &&
-      keyframe->HasCssProperty() && composite == EffectModel::kCompositeAdd) {
+      keyframe->HasCssProperty() && additive_composite) {
     return EffectModel::kCompositeReplace;
   }
   return composite;
@@ -226,8 +228,8 @@ void AddPropertyValuePairsForKeyframe(
 
   v8::TryCatch try_catch(isolate);
   for (const auto& property : keyframe_properties) {
-    if (property == "offset" || property == "composite" ||
-        property == "easing") {
+    if (property == "offset" || property == "float" ||
+        property == "composite" || property == "easing") {
       continue;
     }
 
@@ -488,8 +490,8 @@ StringKeyframeVector ConvertObjectForm(Element* element,
             WTF::CodeUnitCompareLessThan);
 
   for (const auto& property : keyframe_properties) {
-    if (property == "offset" || property == "composite" ||
-        property == "easing") {
+    if (property == "offset" || property == "float" ||
+        property == "composite" || property == "easing") {
       continue;
     }
 
@@ -642,8 +644,10 @@ bool HasAdditiveCompositeCSSKeyframe(
     if (!property.IsCSSProperty())
       continue;
     for (const auto& keyframe : keyframe_group.value->Keyframes()) {
-      if (keyframe->Composite() == EffectModel::kCompositeAdd)
+      if (keyframe->Composite() == EffectModel::kCompositeAdd ||
+          keyframe->Composite() == EffectModel::kCompositeAccumulate) {
         return true;
+      }
     }
   }
   return false;

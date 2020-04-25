@@ -502,9 +502,6 @@ TEST_F(RenderViewContextMenuPrefsTest, DataSaverDisabledSaveImageAs) {
 
 // Check that if image is broken "Load image" menu item is present.
 TEST_F(RenderViewContextMenuPrefsTest, LoadBrokenImage) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kLoadBrokenImagesFromContextMenu);
   content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
   params.unfiltered_link_url = params.link_url;
   params.has_image_contents = false;
@@ -547,9 +544,6 @@ TEST_F(RenderViewContextMenuPrefsTest, ShowAllPasswords) {
   // Set up password manager stuff.
   ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
       web_contents(), nullptr);
-  password_manager::ContentPasswordManagerDriverFactory::FromWebContents(
-      web_contents())
-      ->RenderFrameCreated(web_contents()->GetMainFrame());
 
   NavigateAndCommit(GURL("http://www.foo.com/"));
   content::ContextMenuParams params = CreateParams(MenuItem::EDITABLE);
@@ -571,9 +565,6 @@ TEST_F(RenderViewContextMenuPrefsTest, ShowAllPasswordsIncognito) {
   // Set up password manager stuff.
   ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
       incognito_web_contents.get(), nullptr);
-  password_manager::ContentPasswordManagerDriverFactory::FromWebContents(
-      incognito_web_contents.get())
-      ->RenderFrameCreated(incognito_web_contents->GetMainFrame());
 
   content::WebContentsTester::For(incognito_web_contents.get())
       ->NavigateAndCommit(GURL("http://www.foo.com/"));

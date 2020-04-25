@@ -4,6 +4,8 @@
 
 """An interactive console for looking analyzing .size files."""
 
+from __future__ import print_function
+
 import argparse
 import atexit
 import code
@@ -21,6 +23,7 @@ import canned_queries
 import describe
 import diff
 import file_format
+import html_report
 import match_util
 import models
 import path_util
@@ -73,6 +76,7 @@ class _Session(object):
         'Print': self._PrintFunc,
         'Csv': self._CsvFunc,
         'Diff': self._DiffFunc,
+        'SaveNdjson': self._SaveNdjsonFunc,
         'ReadStringLiterals': self._ReadStringLiterals,
         'Disassemble': self._DisassembleFunc,
         'ExpandRegex': match_util.ExpandRegexIdentifierPlaceholder,
@@ -122,26 +126,8 @@ class _Session(object):
     elf_path = self._ElfPathForSymbol(
         size_info, tool_prefix, elf_path)
 
-    address, offset, _ = string_extract.LookupElfRodataInfo(
-        elf_path, tool_prefix)
-    adjust = offset - address
-    ret = []
-    with open(elf_path, 'rb') as f:
-      for symbol in thing:
-        if symbol.section != 'r' or (
-            not all_rodata and not symbol.IsStringLiteral()):
-          continue
-        f.seek(symbol.address + adjust)
-        data = f.read(symbol.size_without_padding)
-        # As of Oct 2017, there are ~90 symbols name .L.str(.##). These appear
-        # in the linker map file explicitly, and there doesn't seem to be a
-        # pattern as to which variables lose their kConstant name (the more
-        # common case), or which string literals don't get moved to
-        # ** merge strings (less common).
-        if symbol.IsStringLiteral() or (
-            all_rodata and data and data[-1] == '\0'):
-          ret.append((symbol, data))
-    return ret
+    return string_extract.ReadStringLiterals(
+        thing, elf_path, tool_prefix, all_rodata=all_rodata)
 
   def _DiffFunc(self, before=None, after=None, sort=True):
     """Diffs two SizeInfo objects. Returns a DeltaSizeInfo.
@@ -154,6 +140,31 @@ class _Session(object):
     before = before if before is not None else self._size_infos[0]
     after = after if after is not None else self._size_infos[1]
     return diff.Diff(before, after, sort=sort)
+
+  def _SaveNdjsonFunc(self, filtered_symbols, size_info=None, to_file=None):
+    """Saves a .ndjson file containing only filtered_symbols into to_file.
+
+    Args:
+      filtered_symbols: Which symbols to include
+      size_info: The size_info to filter. Defaults to size_infos[0].
+      to_file: Defaults to default.ndjson
+    """
+    size_info = size_info or self._size_infos[0]
+    to_file = to_file or 'default.ndjson'
+
+    old_raw_symbols = size_info.raw_symbols
+    size_info.raw_symbols = filtered_symbols
+    html_report.BuildReportFromSizeInfo(to_file, size_info)
+    size_info.raw_symbols = old_raw_symbols
+
+    shortname = os.path.basename(os.path.normpath(to_file))
+    msg = (
+        'Saved locally to {local}. To share, run:\n'
+        '> gsutil.py cp {local} gs://chrome-supersize/oneoffs && gsutil.py -m '
+        'acl ch -u AllUsers:R gs://chrome-supersize/oneoffs/{shortname}\n'
+        '  Then view it at https://storage.googleapis.com/chrome-supersize'
+        '/viewer.html?load_url=oneoffs%2F{shortname}')
+    print(msg.format(local=to_file, shortname=shortname))
 
   def _SizeStats(self, size_info=None):
     """Prints some statistics for the given size info.
@@ -311,8 +322,8 @@ class _Session(object):
     proc.kill()
 
   def _ShowExamplesFunc(self):
-    print self._CreateBanner()
-    print '\n'.join([
+    print(self._CreateBanner())
+    print('\n'.join([
         '# Show pydoc for main types:',
         'import models',
         'help(models)',
@@ -345,6 +356,10 @@ class _Session(object):
         '# Diff two .size files and save result to a file:',
         'Print(Diff(size_info1, size_info2), to_file="output.txt")',
         '',
+        '# Save a .ndjson containing only the filtered symbols',
+        'filtered_symbols = size_info.raw_symbols.Filter(lambda l: l.IsPak())',
+        'SaveNdjson(filtered_symbols, size_info, to_file="oneoff_paks.ndjson")',
+        '',
         '# View per-component breakdowns, then drill into the last entry.',
         'c = canned_queries.CategorizeByChromeComponent()',
         'Print(c)',
@@ -352,7 +367,7 @@ class _Session(object):
         '',
         '# For even more inspiration, look at canned_queries.py',
         '# (and feel free to add your own!).',
-    ])
+    ]))
 
   def _CreateBanner(self):
     def keys(cls, super_keys=None):

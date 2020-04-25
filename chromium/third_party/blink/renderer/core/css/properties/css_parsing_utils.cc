@@ -849,6 +849,7 @@ bool ParseBackgroundOrMask(bool important,
     CSSValue* origin_value = nullptr;
     do {
       bool found_property = false;
+      bool bg_position_parsed_in_current_layer = false;
       for (unsigned i = 0; i < longhand_count; ++i) {
         if (parsed_longhand[i])
           continue;
@@ -866,6 +867,8 @@ bool ParseBackgroundOrMask(bool important,
                   css_property_parser_helpers::UnitlessQuirk::kForbid,
                   WebFeature::kThreeValuedPositionBackground, value, value_y))
             continue;
+          if (value)
+            bg_position_parsed_in_current_layer = true;
         } else if (property.IDEquals(CSSPropertyID::kBackgroundSize) ||
                    property.IDEquals(CSSPropertyID::kWebkitMaskSize)) {
           if (!css_property_parser_helpers::ConsumeSlashIncludingWhitespace(
@@ -877,12 +880,8 @@ bool ParseBackgroundOrMask(bool important,
                   ? WebFeature::kNegativeBackgroundSize
                   : WebFeature::kNegativeMaskSize,
               ParsingStyle::kNotLegacy);
-          if (!value ||
-              !parsed_longhand[i - 1])  // Position must have been
-                                        // parsed in the current layer.
-          {
+          if (!value || !bg_position_parsed_in_current_layer)
             return false;
-          }
         } else if (property.IDEquals(CSSPropertyID::kBackgroundPositionY) ||
                    property.IDEquals(CSSPropertyID::kBackgroundRepeatY) ||
                    property.IDEquals(CSSPropertyID::kWebkitMaskPositionY) ||
@@ -1723,7 +1722,7 @@ CSSCustomIdentValue* ConsumeCustomIdentForGridLine(
 }
 
 // Appends to the passed in CSSGridLineNamesValue if any, otherwise creates a
-// new one.
+// new one. Returns nullptr if an empty list is consumed.
 CSSGridLineNamesValue* ConsumeGridLineNames(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
@@ -1739,6 +1738,8 @@ CSSGridLineNamesValue* ConsumeGridLineNames(
   if (range_copy.ConsumeIncludingWhitespace().GetType() != kRightBracketToken)
     return nullptr;
   range = range_copy;
+  if (line_names->length() == 0U)
+    return nullptr;
   return line_names;
 }
 
@@ -1939,12 +1940,11 @@ CSSValue* ConsumeGridTrackList(CSSParserTokenRange& range,
                                TrackListType track_list_type) {
   bool allow_grid_line_names = track_list_type != TrackListType::kGridAuto;
   CSSValueList* values = CSSValueList::CreateSpaceSeparated();
+  if (!allow_grid_line_names && range.Peek().GetType() == kLeftBracketToken)
+    return nullptr;
   CSSGridLineNamesValue* line_names = ConsumeGridLineNames(range, context);
-  if (line_names) {
-    if (!allow_grid_line_names)
-      return nullptr;
+  if (line_names)
     values->Append(*line_names);
-  }
 
   bool allow_repeat = track_list_type == TrackListType::kGridTemplate;
   bool seen_auto_repeat = false;
@@ -1970,12 +1970,11 @@ CSSValue* ConsumeGridTrackList(CSSParserTokenRange& range,
     }
     if (seen_auto_repeat && !all_tracks_are_fixed_sized)
       return nullptr;
+    if (!allow_grid_line_names && range.Peek().GetType() == kLeftBracketToken)
+      return nullptr;
     line_names = ConsumeGridLineNames(range, context);
-    if (line_names) {
-      if (!allow_grid_line_names)
-        return nullptr;
+    if (line_names)
       values->Append(*line_names);
-    }
   } while (!range.AtEnd() && range.Peek().GetType() != kDelimiterToken);
   return values;
 }

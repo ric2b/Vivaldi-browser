@@ -8,7 +8,8 @@ import android.accounts.Account;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.Nullable;
 
 import com.google.android.gms.auth.AccountChangeEvent;
 import com.google.android.gms.auth.GoogleAuthException;
@@ -19,15 +20,13 @@ import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.invalidation.InvalidationServiceFactory;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.SigninManager.SignInCallback;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountTrackerService;
 import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.signin.OAuth2TokenService;
-import org.chromium.components.sync.AndroidSyncSettings;
+import org.chromium.components.signin.metrics.SignoutReason;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -188,20 +187,6 @@ public class SigninHelper {
             // should now be available.
             mOAuth2TokenService.updateAccountList();
         }
-
-        if (mProfileSyncService != null && AndroidSyncSettings.get().isSyncEnabled()) {
-            if (mProfileSyncService.isFirstSetupComplete()) {
-                if (accountsChanged) {
-                    // Nudge the syncer to ensure it does a full sync.
-                    InvalidationServiceFactory.getForProfile(Profile.getLastUsedProfile())
-                                        .requestSyncFromNativeChromeForAllTypes();
-                }
-            } else {
-                // We should have set up sync but for some reason it's not enabled. Tell the sync
-                // engine to start.
-                mProfileSyncService.requestStart();
-            }
-        }
     }
 
     /**
@@ -224,14 +209,14 @@ public class SigninHelper {
             // signed-out.
             clearNewSignedInAccountName();
             performResignin(newName);
-        });
+        }, false);
     }
 
     private void performResignin(String newName) {
         // This is the correct account now.
         final Account account = AccountManagerFacade.createAccountFromName(newName);
 
-        mSigninManager.signIn(account, null, new SignInCallback() {
+        mSigninManager.signIn(account, new SignInCallback() {
             @Override
             public void onSignInComplete() {
                 validateAccountsInternal(true);

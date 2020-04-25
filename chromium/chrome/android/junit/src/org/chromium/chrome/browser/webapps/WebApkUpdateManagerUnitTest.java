@@ -38,7 +38,6 @@ import org.chromium.base.PathUtils;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.blink_public.platform.WebDisplayMode;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.background_task_scheduler.ChromeBackgroundTaskFactory;
 import org.chromium.chrome.browser.tab.Tab;
@@ -380,9 +379,8 @@ public class WebApkUpdateManagerUnitTest {
                                 && manifestData.shareTargetEncType.equals(
                                         SHARE_TARGET_ENC_TYPE_MULTIPART),
                         manifestData.shareTargetFileNames, manifestData.shareTargetFileAccepts),
-                null /* shareTargetActivityName */, false /* forceNavigation */,
-                false /* isSplashProvidedByWebApk */, null /* shareData */,
-                1 /* webApkVersionCode */);
+                false /* forceNavigation */, false /* isSplashProvidedByWebApk */,
+                null /* shareData */, 1 /* webApkVersionCode */);
     }
 
     /**
@@ -434,7 +432,7 @@ public class WebApkUpdateManagerUnitTest {
      *               succeeding.
      */
     private static void tryCompletingUpdate(TestWebApkUpdateManager updateManager,
-            WebappDataStorage storage, @WebApkInstallResult int result) throws Exception {
+            WebappDataStorage storage, @WebApkInstallResult int result) {
         // Emulate proto creation as always succeeding.
         Callback<Boolean> storeUpdateRequestCallback =
                 updateManager.getStoreUpdateRequestCallback();
@@ -486,7 +484,7 @@ public class WebApkUpdateManagerUnitTest {
     }
 
     @Before
-    public void setUp() throws Exception {
+    public void setUp() {
         PathUtils.setPrivateDataDirectorySuffix("chrome");
         PostTask.setPrenativeThreadPoolExecutorForTesting(new RoboExecutorService());
 
@@ -619,7 +617,7 @@ public class WebApkUpdateManagerUnitTest {
      * update succeeded.
      */
     @Test
-    public void testPendingUpdateFileDeletedAfterUpdateCompletion() throws Exception {
+    public void testPendingUpdateFileDeletedAfterUpdateCompletion() {
         mClockRule.advance(WebappDataStorage.UPDATE_INTERVAL);
 
         WebappDataStorage storage = getStorage(WEBAPK_PACKAGE_NAME);
@@ -644,7 +642,7 @@ public class WebApkUpdateManagerUnitTest {
      * file but fails.
      */
     @Test
-    public void testFileDeletedIfStoreWebApkUpdateRequestToFileFails() throws Exception {
+    public void testFileDeletedIfStoreWebApkUpdateRequestToFileFails() {
         mClockRule.advance(WebappDataStorage.UPDATE_INTERVAL);
 
         WebappDataStorage storage = getStorage(WEBAPK_PACKAGE_NAME);
@@ -1148,7 +1146,7 @@ public class WebApkUpdateManagerUnitTest {
      * there wasn't a previous request for this ShellAPK version.
      */
     @Test
-    public void testShellApkOutOfDate() throws Exception {
+    public void testShellApkOutOfDate() {
         registerWebApk(WEBAPK_PACKAGE_NAME, defaultManifestData(),
                 REQUEST_UPDATE_FOR_SHELL_APK_VERSION - 1);
         WebappDataStorage storage = getStorage(WEBAPK_PACKAGE_NAME);
@@ -1180,7 +1178,7 @@ public class WebApkUpdateManagerUnitTest {
      * change to the manifest.
      */
     @Test
-    public void testForcedUpdateSuccess() throws Exception {
+    public void testForcedUpdateSuccess() {
         WebappDataStorage storage = getStorage(WEBAPK_PACKAGE_NAME);
         storage.setShouldForceUpdate(true);
         TestWebApkUpdateManager updateManager = new TestWebApkUpdateManager(storage);
@@ -1197,7 +1195,7 @@ public class WebApkUpdateManagerUnitTest {
      * the manifest.
      */
     @Test
-    public void testForcedUpdateNotNeeded() throws Exception {
+    public void testForcedUpdateNotNeeded() {
         WebappDataStorage storage = getStorage(WEBAPK_PACKAGE_NAME);
         storage.setShouldForceUpdate(true);
         TestWebApkUpdateManager updateManager = new TestWebApkUpdateManager(storage);
@@ -1212,7 +1210,7 @@ public class WebApkUpdateManagerUnitTest {
      * Tests that a forced update handles failure gracefully.
      */
     @Test
-    public void testForcedUpdateFailure() throws Exception {
+    public void testForcedUpdateFailure() {
         WebappDataStorage storage = getStorage(WEBAPK_PACKAGE_NAME);
         storage.setShouldForceUpdate(true);
         TestWebApkUpdateManager updateManager = new TestWebApkUpdateManager(storage);
@@ -1228,7 +1226,7 @@ public class WebApkUpdateManagerUnitTest {
      * Tests that a forced update handles failing to retrieve the manifest.
      */
     @Test
-    public void testForcedUpdateManifestNotRetrieved() throws Exception {
+    public void testForcedUpdateManifestNotRetrieved() {
         WebappDataStorage storage = getStorage(WEBAPK_PACKAGE_NAME);
         storage.setShouldForceUpdate(true);
         TestWebApkUpdateManager updateManager = new TestWebApkUpdateManager(storage);
@@ -1243,7 +1241,7 @@ public class WebApkUpdateManagerUnitTest {
      * Test that WebappDataStorage#setShouldForceUpdate() is a no-op for unbound WebAPKs.
      */
     @Test
-    public void testForceUpdateUnboundWebApk() throws Exception {
+    public void testForceUpdateUnboundWebApk() {
         registerWebApk(UNBOUND_WEBAPK_PACKAGE_NAME, defaultManifestData(),
                 REQUEST_UPDATE_FOR_SHELL_APK_VERSION);
         registerStorageForWebApkPackage(UNBOUND_WEBAPK_PACKAGE_NAME);

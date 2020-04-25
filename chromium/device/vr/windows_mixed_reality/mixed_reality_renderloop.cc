@@ -14,7 +14,8 @@
 
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/trace_event/common/trace_event_common.h"
+#include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "base/win/com_init_util.h"
 #include "base/win/core_winrt_util.h"
 #include "base/win/scoped_co_mem.h"
@@ -44,6 +45,8 @@ using SpatialMovementRange =
 using ABI::Windows::Foundation::DateTime;
 using ABI::Windows::Foundation::TimeSpan;
 using ABI::Windows::Foundation::Numerics::Matrix4x4;
+using HolographicSpaceUserPresence =
+    ABI::Windows::Graphics::Holographic::HolographicSpaceUserPresence;
 using ABI::Windows::Graphics::Holographic::HolographicStereoTransform;
 using Microsoft::WRL::ComPtr;
 
@@ -221,6 +224,15 @@ bool MixedRealityRenderLoop::StartRuntime() {
   if (!holographic_space_)
     return false;
 
+  // Since we explicitly null out both the holographic_space and the
+  // subscription during StopRuntime (which happens before destruction),
+  // base::Unretained is safe.
+  user_presence_changed_subscription_ =
+      holographic_space_->AddUserPresenceChangedCallback(
+          base::BindRepeating(&MixedRealityRenderLoop::OnUserPresenceChanged,
+                              base::Unretained(this)));
+  UpdateVisibilityState();
+
   input_helper_ = std::make_unique<MixedRealityInputHelper>(
       window_->hwnd(), weak_ptr_factory_.GetWeakPtr());
 
@@ -252,7 +264,19 @@ bool MixedRealityRenderLoop::StartRuntime() {
   if (FAILED(hr))
     return false;
 
-  return holographic_space_->TrySetDirect3D11Device(device);
+  if (!holographic_space_->TrySetDirect3D11Device(device))
+    return false;
+
+  // Go through one initial dummy frame to update the display info and notify
+  // the device of the correct values before it sends the initial info to the
+  // renderer. The frame must be submitted because WMR requires frames to be
+  // submitted in the order they're created.
+  UpdateWMRDataForNextFrame();
+  UpdateDisplayInfo();
+  main_thread_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(on_display_info_changed_, current_display_info_.Clone()));
+  return SubmitCompositedFrame();
 }
 
 void MixedRealityRenderLoop::StopRuntime() {
@@ -271,6 +295,8 @@ void MixedRealityRenderLoop::StopRuntime() {
   pose_ = nullptr;
   rendering_params_ = nullptr;
   camera_ = nullptr;
+
+  user_presence_changed_subscription_ = nullptr;
 
   if (input_helper_)
     input_helper_->Dispose();
@@ -376,6 +402,51 @@ void MixedRealityRenderLoop::OnCurrentStageChanged() {
                                 render_loop->InitializeStageOrigin();
                               },
                               base::Unretained(this)));
+}
+
+void MixedRealityRenderLoop::OnUserPresenceChanged() {
+  // Unretained is safe here because the task_runner() gets invalidated
+  // during Stop() which happens before our destruction
+  task_runner()->PostTask(FROM_HERE,
+                          base::BindOnce(
+                              [](MixedRealityRenderLoop* render_loop) {
+                                render_loop->UpdateVisibilityState();
+                              },
+                              base::Unretained(this)));
+}
+
+void MixedRealityRenderLoop::UpdateVisibilityState() {
+  // We could've had a task get queued up during or before a StopRuntime call.
+  // Which would lead to the holographic space being null. In that case, don't
+  // update the visibility state. We'll get the fresh state  when and if the
+  // runtime starts back up again.
+  if (!holographic_space_) {
+    return;
+  }
+
+  switch (holographic_space_->UserPresence()) {
+    // Indicates that the browsers immersive content is visible in the headset
+    // receiving input, and the headset is being worn.
+    case HolographicSpaceUserPresence::
+        HolographicSpaceUserPresence_PresentActive:
+      SetVisibilityState(device::mojom::XRVisibilityState::VISIBLE);
+      return;
+    // Indicates that the browsers immersive content is visible in the headset
+    // and the headset is being worn, but a modal dialog is capturing input.
+    case HolographicSpaceUserPresence::
+        HolographicSpaceUserPresence_PresentPassive:
+      // TODO(1016907): Should report VISIBLE_BLURRED, but changed to VISIBLE to
+      // work around an issue in some versions of Windows Mixed Reality which
+      // only report PresentPassive and never PresentActive. Should be reverted
+      // after the Windows fix has been widely released.
+      SetVisibilityState(device::mojom::XRVisibilityState::VISIBLE);
+      return;
+    // Indicates that the browsers immersive content is not visible in the
+    // headset or the user is not wearing the headset.
+    case HolographicSpaceUserPresence::HolographicSpaceUserPresence_Absent:
+      SetVisibilityState(device::mojom::XRVisibilityState::HIDDEN);
+      return;
+  }
 }
 
 void MixedRealityRenderLoop::EnsureStageBounds() {
@@ -759,8 +830,6 @@ mojom::XRFrameDataPtr MixedRealityRenderLoop::GetNextFrameData() {
   if (anchor_origin_ &&
       pose_->TryGetViewTransform(anchor_origin_.get(), &view)) {
     got_view = true;
-    // TODO(http://crbug.com/931393): Send down emulated_position_, and report
-    // reset events when this changes.
     emulated_position_ = false;
     ABI::Windows::Foundation::Numerics::Matrix4x4 origin_from_attached;
     if (attached_coordinates->TryGetTransformTo(anchor_origin_.get(),
@@ -835,6 +904,8 @@ mojom::XRFrameDataPtr MixedRealityRenderLoop::GetNextFrameData() {
 
   ret->pose->input_state =
       input_helper_->GetInputState(anchor_origin_.get(), timestamp_.get());
+
+  ret->pose->emulated_position = emulated_position_;
 
   if (emulated_position_ && last_origin_from_attached_) {
     gfx::DecomposedTransform attached_from_view_decomp;

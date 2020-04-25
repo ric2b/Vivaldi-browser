@@ -36,6 +36,8 @@ public class RecordUserAction {
     }
 
     public static void record(final String action) {
+        // Vivaldi - Disable recording user actions
+        if (true) return;
         if (sDisabledBy != null) return;
 
         if (ThreadUtils.runningOnUiThread()) {

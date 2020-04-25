@@ -19,15 +19,15 @@ WebAudio.GraphVisualizer.GraphView = class extends Common.Object {
 
     /**
      * For each node ID, keep a set of all out-bound edge IDs.
-     * @type {!Multimap<!Protocol.WebAudio.GraphObjectId, string>}
+     * @type {!Platform.Multimap<!Protocol.WebAudio.GraphObjectId, string>}
      */
-    this._outboundEdgeMap = new Multimap();
+    this._outboundEdgeMap = new Platform.Multimap();
 
     /**
      * For each node ID, keep a set of all in-bound edge IDs.
-     * @type {!Multimap<!Protocol.WebAudio.GraphObjectId, string>}
+     * @type {!Platform.Multimap<!Protocol.WebAudio.GraphObjectId, string>}
      */
-    this._inboundEdgeMap = new Multimap();
+    this._inboundEdgeMap = new Platform.Multimap();
 
     // Use concise node label to replace the long UUID.
     // Each graph has its own label generator so that the label starts from 0.
@@ -166,8 +166,9 @@ WebAudio.GraphVisualizer.GraphView = class extends Common.Object {
   _addEdge(edge) {
     const sourceId = edge.sourceId;
     // Do nothing if the edge already exists.
-    if (this._outboundEdgeMap.hasValue(sourceId, edge.id))
+    if (this._outboundEdgeMap.hasValue(sourceId, edge.id)) {
       return;
+    }
 
     this._edges.set(edge.id, edge);
     this._outboundEdgeMap.set(sourceId, edge.id);
@@ -183,8 +184,9 @@ WebAudio.GraphVisualizer.GraphView = class extends Common.Object {
    */
   _removeEdge(edgeId) {
     const edge = this._edges.get(edgeId);
-    if (!edge)
+    if (!edge) {
       return;
+    }
 
     this._outboundEdgeMap.delete(edge.sourceId, edgeId);
     this._inboundEdgeMap.delete(edge.destinationId, edgeId);

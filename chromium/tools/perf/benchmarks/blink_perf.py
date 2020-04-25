@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+from __future__ import print_function
+
 import os
 import collections
 
@@ -18,8 +20,6 @@ from telemetry import story
 from telemetry.timeline import bounds
 from telemetry.timeline import model as model_module
 from telemetry.timeline import tracing_config
-
-from telemetry.value import list_of_scalar_values
 
 
 BLINK_PERF_BASE_DIR = os.path.join(path_util.GetChromiumSrcDir(),
@@ -300,20 +300,18 @@ class _BlinkPerfMeasurement(legacy_page_test.LegacyPageTest):
 
   def PrintAndCollectTraceEventMetrics(self, trace_cpu_time_metrics, results):
     unit = 'ms'
-    print
+    print()
     for trace_event_name, cpu_times in trace_cpu_time_metrics.iteritems():
-      print 'CPU times of trace event "%s":' % trace_event_name
+      print('CPU times of trace event "%s":' % trace_event_name)
       cpu_times_string = ', '.join(['{0:.10f}'.format(t) for t in cpu_times])
-      print 'values %s %s' % (cpu_times_string, unit)
+      print('values %s %s' % (cpu_times_string, unit))
       avg = 0.0
       if cpu_times:
         avg = sum(cpu_times)/len(cpu_times)
-      print 'avg', '{0:.10f}'.format(avg), unit
-      results.AddValue(list_of_scalar_values.ListOfScalarValues(
-          results.current_page, name=trace_event_name, units=unit,
-          values=cpu_times))
-      print
-    print '\n'
+      print('avg', '{0:.10f}'.format(avg), unit)
+      results.AddMeasurement(trace_event_name, unit, cpu_times)
+      print()
+    print('\n')
 
   def ValidateAndMeasurePage(self, page, tab, results):
     trace_cpu_time_metrics = {}
@@ -333,7 +331,7 @@ class _BlinkPerfMeasurement(legacy_page_test.LegacyPageTest):
 
     for line in log.splitlines():
       if line.startswith("FATAL: "):
-        print line
+        print(line)
         continue
       if not line.startswith('values '):
         continue
@@ -342,14 +340,13 @@ class _BlinkPerfMeasurement(legacy_page_test.LegacyPageTest):
       units = parts[-1]
       metric = page.name.split('.')[0].replace('/', '_')
       if values:
-        results.AddValue(list_of_scalar_values.ListOfScalarValues(
-            results.current_page, metric, units, values))
+        results.AddMeasurement(metric, units, values)
       else:
         raise legacy_page_test.MeasurementFailure('Empty test results')
 
       break
 
-    print log
+    print(log)
 
     self.PrintAndCollectTraceEventMetrics(trace_cpu_time_metrics, results)
 
@@ -566,4 +563,5 @@ class BlinkPerfDisplayLocking(_BlinkPerfBenchmark):
     return 'blink_perf.display_locking'
 
   def SetExtraBrowserOptions(self, options):
-    options.AppendExtraBrowserArgs(['--enable-blink-features=DisplayLocking'])
+    options.AppendExtraBrowserArgs(
+      ['--enable-blink-features=DisplayLocking,CSSContentSize'])

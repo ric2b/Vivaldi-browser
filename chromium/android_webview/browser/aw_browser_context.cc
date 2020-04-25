@@ -11,20 +11,21 @@
 #include "android_webview/browser/aw_browser_process.h"
 #include "android_webview/browser/aw_content_browser_client.h"
 #include "android_webview/browser/aw_download_manager_delegate.h"
-#include "android_webview/browser/aw_feature_list.h"
 #include "android_webview/browser/aw_form_database_service.h"
-#include "android_webview/browser/aw_metrics_service_client.h"
 #include "android_webview/browser/aw_permission_manager.h"
 #include "android_webview/browser/aw_quota_manager_bridge.h"
 #include "android_webview/browser/aw_resource_context.h"
 #include "android_webview/browser/aw_web_ui_controller_factory.h"
 #include "android_webview/browser/cookie_manager.h"
+#include "android_webview/browser/metrics/aw_metrics_service_client.h"
 #include "android_webview/browser/network_service/net_helpers.h"
 #include "android_webview/browser/safe_browsing/aw_safe_browsing_whitelist_manager.h"
-#include "android_webview/native_jni/AwBrowserContext_jni.h"
+#include "android_webview/browser_jni_headers/AwBrowserContext_jni.h"
+#include "android_webview/common/aw_features.h"
 #include "base/base_paths_posix.h"
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task/post_task.h"
@@ -76,12 +77,75 @@ bool IgnoreOriginSecurityCheck(const GURL& url) {
   return true;
 }
 
+void MigrateProfileData(base::FilePath cache_path,
+                        base::FilePath context_storage_path) {
+  FilePath old_cache_path;
+  base::PathService::Get(base::DIR_CACHE, &old_cache_path);
+  old_cache_path = old_cache_path.DirName().Append(
+      FILE_PATH_LITERAL("org.chromium.android_webview"));
+
+  if (base::PathExists(old_cache_path)) {
+    bool success = base::CreateDirectory(cache_path);
+    if (success)
+      success &= base::Move(old_cache_path, cache_path);
+    DCHECK(success);
+  }
+
+  base::FilePath old_context_storage_path;
+  base::PathService::Get(base::DIR_ANDROID_APP_DATA, &old_context_storage_path);
+
+  if (!base::PathExists(context_storage_path)) {
+    base::CreateDirectory(context_storage_path);
+  }
+
+  auto migrate_context_storage_data = [&old_context_storage_path,
+                                       &context_storage_path](auto& suffix) {
+    FilePath old_file = old_context_storage_path.Append(suffix);
+    if (base::PathExists(old_file)) {
+      FilePath new_file = context_storage_path.Append(suffix);
+
+      if (base::PathExists(new_file)) {
+        bool success =
+            base::Move(new_file, new_file.AddExtension(".partial-migration"));
+        DCHECK(success);
+      }
+      bool success = base::Move(old_file, new_file);
+      DCHECK(success);
+    }
+  };
+
+  // These were handled in the initial migration
+  migrate_context_storage_data("Web Data");
+  migrate_context_storage_data("Web Data-journal");
+  migrate_context_storage_data("GPUCache");
+  migrate_context_storage_data("blob_storage");
+  migrate_context_storage_data("Session Storage");
+
+  // These were missed in the initial migration
+  migrate_context_storage_data("Application Cache");
+  migrate_context_storage_data("File System");
+  migrate_context_storage_data("IndexedDB");
+  migrate_context_storage_data("Local Storage");
+  migrate_context_storage_data("QuotaManager");
+  migrate_context_storage_data("QuotaManager-journal");
+  migrate_context_storage_data("Service Worker");
+  migrate_context_storage_data("VideoDecodeStats");
+  migrate_context_storage_data("databases");
+  migrate_context_storage_data("shared_proto_db");
+  migrate_context_storage_data("webrtc_event_logs");
+}
+
 }  // namespace
 
 AwBrowserContext::AwBrowserContext()
     : context_storage_path_(GetContextStoragePath()),
       simple_factory_key_(GetPath(), IsOffTheRecord()) {
   DCHECK(!g_browser_context);
+
+  if (IsDefaultBrowserContext()) {
+    MigrateProfileData(GetCacheDir(), GetContextStoragePath());
+  }
+
   g_browser_context = this;
   SimpleKeyMap::GetInstance()->Associate(this, &simple_factory_key_);
 
@@ -131,8 +195,8 @@ base::FilePath AwBrowserContext::GetCacheDir() {
   if (!base::PathService::Get(base::DIR_CACHE, &cache_path)) {
     NOTREACHED() << "Failed to get app cache directory for Android WebView";
   }
-  cache_path =
-      cache_path.Append(FILE_PATH_LITERAL("org.chromium.android_webview"));
+  cache_path = cache_path.Append(FILE_PATH_LITERAL("Default"))
+                   .Append(FILE_PATH_LITERAL("HTTP Cache"));
   return cache_path;
 }
 
@@ -158,6 +222,7 @@ base::FilePath AwBrowserContext::GetContextStoragePath() {
     NOTREACHED() << "Failed to get app data directory for Android WebView";
   }
 
+  user_data_dir = user_data_dir.Append(FILE_PATH_LITERAL("Default"));
   return user_data_dir;
 }
 
@@ -202,7 +267,7 @@ void AwBrowserContext::CreateUserPrefService() {
   pref_service_factory.set_user_prefs(base::MakeRefCounted<SegregatedPrefStore>(
       base::MakeRefCounted<InMemoryPrefStore>(),
       base::MakeRefCounted<JsonPrefStore>(GetPrefStorePath()), persistent_prefs,
-      /*validation_delegate=*/nullptr));
+      mojo::Remote<::prefs::mojom::TrackedPreferenceValidationDelegate>()));
 
   policy::URLBlacklistManager::RegisterProfilePrefs(pref_registry.get());
   AwBrowserPolicyConnector* browser_policy_connector =
@@ -315,6 +380,11 @@ storage::SpecialStoragePolicy* AwBrowserContext::GetSpecialStoragePolicy() {
 content::PushMessagingService* AwBrowserContext::GetPushMessagingService() {
   // TODO(johnme): Support push messaging in WebView.
   return NULL;
+}
+
+content::StorageNotificationService*
+AwBrowserContext::GetStorageNotificationService() {
+  return nullptr;
 }
 
 content::SSLHostStateDelegate* AwBrowserContext::GetSSLHostStateDelegate() {

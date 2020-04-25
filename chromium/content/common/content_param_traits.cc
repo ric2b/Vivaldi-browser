@@ -17,10 +17,12 @@
 #include "content/common/tab_switch_time_recorder.h"
 #include "ipc/ipc_mojo_message_helper.h"
 #include "ipc/ipc_mojo_param_traits.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/ip_endpoint.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/public/common/messaging/transferable_message.h"
+#include "third_party/blink/public/mojom/feature_policy/policy_value.mojom.h"
 #include "third_party/blink/public/mojom/messaging/transferable_message.mojom.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/events/blink/web_input_event_traits.h"
@@ -223,7 +225,7 @@ struct ParamTraits<blink::mojom::SerializedBlobPtr> {
     WriteParam(m, p->uuid);
     WriteParam(m, p->content_type);
     WriteParam(m, p->size);
-    WriteParam(m, p->blob.PassHandle().release());
+    WriteParam(m, p->blob.PassPipe().release());
   }
 
   static bool Read(const base::Pickle* m,
@@ -236,7 +238,7 @@ struct ParamTraits<blink::mojom::SerializedBlobPtr> {
         !ReadParam(m, iter, &(*r)->size) || !ReadParam(m, iter, &handle)) {
       return false;
     }
-    (*r)->blob = blink::mojom::BlobPtrInfo(
+    (*r)->blob = mojo::PendingRemote<blink::mojom::Blob>(
         mojo::ScopedMessagePipeHandle(handle), blink::mojom::Blob::Version_);
     return true;
   }
@@ -250,6 +252,7 @@ void ParamTraits<scoped_refptr<base::RefCountedData<
   WriteParam(m, p->data.stack_trace_id);
   WriteParam(m, p->data.stack_trace_debugger_id_first);
   WriteParam(m, p->data.stack_trace_debugger_id_second);
+  WriteParam(m, p->data.stack_trace_should_pause);
   WriteParam(m, p->data.ports);
   WriteParam(m, p->data.stream_channels);
   WriteParam(m, !!p->data.user_activation);
@@ -282,6 +285,7 @@ bool ParamTraits<
       !ReadParam(m, iter, &(*r)->data.stack_trace_id) ||
       !ReadParam(m, iter, &(*r)->data.stack_trace_debugger_id_first) ||
       !ReadParam(m, iter, &(*r)->data.stack_trace_debugger_id_second) ||
+      !ReadParam(m, iter, &(*r)->data.stack_trace_should_pause) ||
       !ReadParam(m, iter, &(*r)->data.ports) ||
       !ReadParam(m, iter, &(*r)->data.stream_channels) ||
       !ReadParam(m, iter, &has_activation) ||

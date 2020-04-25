@@ -80,10 +80,6 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
 
   void SetUnhandledMessageListener(IPC::Listener* listener);
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  void SetProprietaryMediaMessageListener(IPC::Listener* listener);
-#endif
-
   // Get the GpuChannelManager that owns this channel.
   GpuChannelManager* gpu_channel_manager() const {
     return gpu_channel_manager_;
@@ -173,6 +169,10 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
     return shared_image_stub_.get();
   }
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  void SetProprietaryMediaMessageListener(IPC::Listener* listener);
+#endif
+
  private:
   // Takes ownership of the renderer process handle.
   GpuChannel(GpuChannelManager* gpu_channel_manager,
@@ -227,10 +227,6 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
 
   IPC::Listener* unhandled_message_listener_ = nullptr;
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  IPC::Listener* proprietary_media_message_listener_ = nullptr;
-#endif
-
   // Used to implement message routing functionality to CommandBuffer objects
   IPC::MessageRouter router_;
 
@@ -256,6 +252,10 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
 #if defined(OS_ANDROID)
   // Set of active StreamTextures.
   base::flat_map<int32_t, scoped_refptr<StreamTexture>> stream_textures_;
+#endif
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  IPC::Listener* proprietary_media_message_listener_ = nullptr;
 #endif
 
   // Member variables should appear before the WeakPtrFactory, to ensure that

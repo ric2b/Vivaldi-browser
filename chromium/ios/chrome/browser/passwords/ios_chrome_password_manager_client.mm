@@ -59,6 +59,7 @@ const syncer::SyncService* GetSyncService(
 IOSChromePasswordManagerClient::IOSChromePasswordManagerClient(
     id<PasswordManagerClientDelegate> delegate)
     : delegate_(delegate),
+      password_feature_manager_(GetSyncService(delegate_.browserState)),
       credentials_filter_(
           this,
           base::BindRepeating(&GetSyncService, delegate_.browserState)),
@@ -141,6 +142,11 @@ IOSChromePasswordManagerClient::GetPasswordManager() const {
   return delegate_.passwordManager;
 }
 
+const password_manager::PasswordFeatureManager*
+IOSChromePasswordManagerClient::GetPasswordFeatureManager() const {
+  return &password_feature_manager_;
+}
+
 bool IOSChromePasswordManagerClient::IsMainFrameSecure() const {
   return WebStateContentIsSecureHtml(delegate_.webState);
 }
@@ -149,10 +155,15 @@ PrefService* IOSChromePasswordManagerClient::GetPrefs() const {
   return (delegate_.browserState)->GetPrefs();
 }
 
-PasswordStore* IOSChromePasswordManagerClient::GetPasswordStore() const {
+PasswordStore* IOSChromePasswordManagerClient::GetProfilePasswordStore() const {
   return IOSChromePasswordStoreFactory::GetForBrowserState(
              delegate_.browserState, ServiceAccessType::EXPLICIT_ACCESS)
       .get();
+}
+
+PasswordStore* IOSChromePasswordManagerClient::GetAccountPasswordStore() const {
+  // AccountPasswordStore is currenly not supported on iOS.
+  return nullptr;
 }
 
 void IOSChromePasswordManagerClient::NotifyUserAutoSignin(
@@ -175,6 +186,12 @@ void IOSChromePasswordManagerClient::NotifySuccessfulLoginWithExistingPassword(
 
 void IOSChromePasswordManagerClient::NotifyStorePasswordCalled() {
   helper_.NotifyStorePasswordCalled();
+}
+
+void IOSChromePasswordManagerClient::NotifyUserCredentialsWereLeaked(
+    password_manager::CredentialLeakType leak_type,
+    const GURL& origin) {
+  [delegate_ showPasswordBreachForLeakType:leak_type URL:origin];
 }
 
 bool IOSChromePasswordManagerClient::IsSavingAndFillingEnabled(

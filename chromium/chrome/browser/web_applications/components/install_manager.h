@@ -12,7 +12,7 @@
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_url_loader.h"
-#include "third_party/blink/public/common/manifest/manifest.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 
 enum class WebappInstallSource;
 struct WebApplicationInfo;
@@ -88,7 +88,8 @@ class InstallManager {
 
   // These params are a subset of ExternalInstallOptions.
   struct InstallParams {
-    LaunchContainer launch_container = LaunchContainer::kDefault;
+    blink::mojom::DisplayMode display_mode =
+        blink::mojom::DisplayMode::kUndefined;
 
     bool add_to_applications_menu = true;
     bool add_to_desktop = true;
@@ -107,15 +108,17 @@ class InstallManager {
   // Starts background installation or an update of a web app from the sync
   // system. |web_application_info| contains received sync data. Icons will be
   // downloaded from the icon URLs provided in |web_application_info|.
-  virtual void InstallOrUpdateWebAppFromSync(
+  virtual void InstallWebAppFromSync(
       const AppId& app_id,
       std::unique_ptr<WebApplicationInfo> web_application_info,
       OnceInstallCallback callback) = 0;
 
-  // Reinstall an existing web app with an updated manifest.
-  virtual void UpdateWebAppFromManifest(const AppId& app_id,
-                                        blink::Manifest manifest,
-                                        OnceInstallCallback callback) = 0;
+  // Reinstall an existing web app, will redownload icons and update them on
+  // disk.
+  virtual void UpdateWebAppFromInfo(
+      const AppId& app_id,
+      std::unique_ptr<WebApplicationInfo> web_application_info,
+      OnceInstallCallback callback) = 0;
 
   virtual void Shutdown() = 0;
 
@@ -136,7 +139,7 @@ class InstallManager {
   InstallFinalizer* finalizer() { return finalizer_; }
 
  private:
-  Profile* profile_;
+  Profile* const profile_;
   WebAppUrlLoader url_loader_;
 
   AppRegistrar* registrar_ = nullptr;

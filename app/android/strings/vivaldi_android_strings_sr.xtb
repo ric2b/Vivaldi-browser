@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="sr">
+<translation id="1029351048239796117">Vivaldi прегледачу је потребна дозвола за приступ вашем микрофону за овај сајт.</translation>
+<translation id="1063227610401477317">Примени промене</translation>
+<translation id="1067048845568873861">Креирано</translation>
+<translation id="1151669774236491028">Vivaldi.net је наишао на проблем: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="1193152013480891461">Креирај Vivaldi налог</translation>
+<translation id="119944043368869598">Обриши све</translation>
+<translation id="1228311134236651326">Нема пронађених бележака</translation>
+<translation id="1243314992276662751">Отпремање</translation>
+<translation id="1249276067323441352">Подаци за синхронизовање</translation>
+<translation id="1302932907222175914">Претражи белешке</translation>
+<translation id="1644574205037202324">Историја</translation>
+<translation id="1689333818294560261">Надимак</translation>
+<translation id="1721552494230946796">Нова фасцикла брзог бирања</translation>
+<translation id="1799160781006135561">Лозинка за шифровање није наведена</translation>
+<translation id="1887193815546011584">Ново брзо бирање</translation>
+<translation id="1984391066297619717">Аутоматска синхронизација</translation>
+<translation id="2030706494969937066">Није успело преузимање ваших података за пријављивање. Пријавите се поново.</translation>
+<translation id="2034405583989639424">Уреди брзо бирање</translation>
+<translation id="2071726368047511075">Сними страницу</translation>
+<translation id="2199644148227291099">Да ли сте сигурни да желите да лозинку за пријављивање користите за шифровање? То знатно смањује безбедност ваших синхронизованих података на мрежи.</translation>
+<translation id="2243210264130642074">Белешка је сачувана</translation>
+<translation id="2336309953058658733">Испразни отпад</translation>
+<translation id="2359808026110333948">Настави</translation>
+<translation id="2526968784648867272">Снимање странице...</translation>
+<translation id="2709516037105925701">Аутоматско попуњавање</translation>
+<translation id="271033894570825754">Ново</translation>
+<translation id="2745324713975967671">Лозинка за шифровање</translation>
+<translation id="2818042133587341562">Vivaldi прегледачу је потребна дозвола за приступ вашој камери за овај сајт.</translation>
+<translation id="2842985007712546952">Надређена фасцикла</translation>
+<translation id="2850144663494818309">Покретање синхронизације...</translation>
+<translation id="2873951654529031587">Отпад</translation>
+<translation id="2915527103487649658">Синхронизуј све податке</translation>
+<translation id="2953995378235516294">Подаци на вашем налогу за синхронизацију су шифровани. Унесите лозинку за шифровање да бисте их дешифровали.</translation>
+<translation id="2996809686854298943">Неопходан је URL</translation>
+<translation id="3177673846235066154">Сервер је одбио ваше податке за пријављивање.</translation>
+<translation id="3183006304368105350">Клонирај картицу</translation>
+<translation id="3271422135763022755">Започните куцање...</translation>
+<translation id="3335772982573114336">Нова белешка</translation>
+<translation id="33451081266695216">Сервер је ограничио везу.</translation>
+<translation id="3377025655491224618">Приватна картица</translation>
+<translation id="3513566764071045027">Одјави се</translation>
+<translation id="3596285013654573099">Пријавите се да бисте синхронизовали</translation>
+<translation id="3611176835527015865">Утиче само на интерне странице Vivaldi прегледача, не и на веб странице</translation>
+<translation id="3723593528923555236">Настави без посебне лозинке</translation>
+<translation id="3838463869765243557">Име уређаја (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">Опис</translation>
+<translation id="3897711243931585177">ОПШТЕ</translation>
+<translation id="4014682279600355881">Препоручујемо да креирате посебну, снажну лозинку за шифровање. Међутим, можете да оставите празно - у том случају ћемо употребити вашу сачувану лозинку налога.</translation>
+<translation id="4073968054795398875">Синхронизациони сервер је наишао на проблем. Покретање синхронизације ће ускоро бити поновљено...</translation>
+<translation id="4082980568238151037">Постави лозинку за шифровање.</translation>
+<translation id="4145489350420416595">Неочекивана грешка.</translation>
+<translation id="4268574628540273656">URL:</translation>
+<translation id="4304224509867189079">Пријави се</translation>
+<translation id="4435780204941264251">Обриши синхронизоване податке</translation>
+<translation id="4532845899244822526">Изаберите фасциклу</translation>
+<translation id="4579489600439872414">Синхронизација је онемогућена у android подешавањима.</translation>
+<translation id="4589558845651536280">У току...</translation>
+<translation id="4752136117982598343">Белешка је сачувана у <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">Преузимања</translation>
+<translation id="4833044618885331665">Морате надоградити Vivaldi да бисте користили синхронизацију.</translation>
+<translation id="4847896847259487518">Додај у обележиваче</translation>
+<translation id="4890701585167892790">Нема бележака</translation>
+<translation id="4892521078757281695">Брзо превуци за затварање картице</translation>
+<translation id="4936710149174207991">Није синхронизовано</translation>
+<translation id="4954427294703861104">Нови сте корисник? Креирајте Vivaldi налог.</translation>
+<translation id="504986598654589766">Прегледање у приватној картици значи да претраге, посећени сајтови, колачићи и привремене датотеке неће бити сачувани у Vivaldi прегледачу. Овај режим не шифрује нити на неки други начин мења вашу везу.</translation>
+<translation id="5161254044473106830">Неопходан је наслов</translation>
+<translation id="5186185447130319458">Приватно</translation>
+<translation id="5271549068863921519">Сачувај лозинку</translation>
+<translation id="5286002386457946212">Грешка клијента.</translation>
+<translation id="5290452628447338707">Нема бележака</translation>
+<translation id="5351912500249789547">Vivaldi.net је одбио ваше акредитиве: Код грешке <ph name="ERROR_CODE" /></translation>
+<translation id="5388358297987318779">Отвори слику</translation>
+<translation id="5421638721143596928">Није успело дешифровање ваших акредитива. Пријавите се поново.</translation>
+<translation id="5443210757369395869">Сними видљиву област</translation>
+<translation id="5448025735280530073">Vivaldi прегледачу је потребан приступ вашој локацији за дељење ваше локације са овим сајтом.</translation>
+<translation id="5510723066938954312">Обележивачи и брзо бирање</translation>
+<translation id="5525981542754785361">Белешка је сачувана у <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">Копирај у белешку</translation>
+<translation id="5754087700864822036">ВЕБ СТРАНИЦЕ</translation>
+<translation id="5765833063161370062">Премести белешке</translation>
+<translation id="5790085346892983794">Успешно</translation>
+<translation id="5803562371819294631">Ово ће уклонити све синхронизоване податке ускладиштене на синхронизационом серверу, поништити вашу лозинку за шифровање и одјавити вас. Да ли сте сигурни?</translation>
+<translation id="5823830882692559950">Vivaldi.net је одбио ваше акредитиве: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5841317974325635710">Нова белешка је креирана</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> белешка}
+          few {<ph name="NOTES_COUNT_MANY" /> белешке}
+          other {<ph name="NOTES_COUNT_MANY" /> бележака}}</translation>
+<translation id="6012194412768958291">Није могуће повезати се на vivaldi.net.</translation>
+<translation id="6027204815015935175">Неопходна је лозинка за дешифровање.</translation>
+<translation id="6059232451013891645">Фасцикла:</translation>
+<translation id="6077943432358741146">Брзо бирање</translation>
+<translation id="6091125352818749975">Брисање удаљених синхронизованих података.</translation>
+<translation id="6135798666968342262">Прикажи траку за померање</translation>
+<translation id="6179463181009746489">Избриши белешке</translation>
+<translation id="6231148928368101651">Панели</translation>
+<translation id="6406506848690869874">Синхронизација</translation>
+<translation id="6657585470893396449">Лозинка</translation>
+<translation id="6682232524697939870">Vivaldi прегледачу је потребна дозвола за приступ вашој камери и микрофону за овај сајт.</translation>
+<translation id="6698381487523150993">Креирано:</translation>
+<translation id="6786747875388722282">Проширења</translation>
+<translation id="6887143077297974801">Није успело покретање синхронизације.</translation>
+<translation id="6945221475159498467">Изабери</translation>
+<translation id="6960734555676205519">Последња синхронизација</translation>
+<translation id="7029809446516969842">Лозинке</translation>
+<translation id="7075547914712055886">Поново покрени синхронизацију</translation>
+<translation id="7222342267839079597">Изаберите снажну лозинку за шифровање да бисте заштитили своје податке.</translation>
+<translation id="7228660378238874411">Увек прикажи верзију сајта за рачунаре</translation>
+<translation id="7390295729483215958">Синхронизација је у току...</translation>
+<translation id="7492794630657957996">Изаберите податке за синхронизацију да бисте довршили подешавање</translation>
+<translation id="7514365320538308">Преузимање</translation>
+<translation id="7547490097772831952">Сними целу страницу</translation>
+<translation id="7725641807765767506">Нема пронађених брзих бирања</translation>
+<translation id="7765158879357617694">Премести</translation>
+<translation id="7822864833609233785">НАПРЕДНО</translation>
+<translation id="798930073512159071">
+
+Напишите своју прву белешку
+
+За почетак, тапните на икону Нова белешка или изаберите текст на било којој веб страници и преко контекстног менија креирајте белешку.</translation>
+<translation id="8004991133350335392">Неопходна је минимална дужина лозинке од 12 знакова.</translation>
+<translation id="8028021641083150097">Да бисте поново добили приступ вашем налогу, сви удаљени синхронизовани подаци се морају поништити. Након тога можете започети нову синхронизацију користећи тренутне податке у прегледачу.</translation>
+<translation id="8035133914807600019">Нова фасцикла…</translation>
+<translation id="8066170816074394954">Грешка на серверу.</translation>
+<translation id="8123787473700925741">Vivaldi.net је наишао на проблем: Код грешке <ph name="ERROR_CODE" /></translation>
+<translation id="817228583984462779">Покрени синхронизацију</translation>
+<translation id="8206267832882844324">Уреди белешку</translation>
+<translation id="8225478925744929238">Уклони из обележивача</translation>
+<translation id="8233521945095997439">Нема брзих бирања овде</translation>
+<translation id="8257908958623224237">Конфликт са подацима другог клијента.</translation>
+<translation id="8261506727792406068">Избриши</translation>
+<translation id="8305137170060620165">Историја и удаљене сесије</translation>
+<translation id="8414685983518053656">Белешке</translation>
+<translation id="8422778094137438683">Морате користити vivaldi.net кориснички налог за пријављивање.</translation>
+<translation id="8428213095426709021">Подешавања</translation>
+<translation id="8462396943848220200">Поновни покушај за <ph name="TIME" /></translation>
+<translation id="8480556999740355963">Пријављени сте као <ph name="USERNAME" /> на <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">Пријављивање на Vivaldi.net као <ph name="USERNAME" />. Сачекајте.</translation>
+<translation id="8503813439785031346">Корисничко име</translation>
+<translation id="8661216209723599816">Обриши удаљене податке</translation>
+<translation id="8721244337025311110">Нови обележивач</translation>
+<translation id="8724114686743788114">Није могуће приказати слику</translation>
+<translation id="8730621377337864115">Готово</translation>
+<translation id="8738958257180686306">Креирано: <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Vivaldi прегледачу је потребан приступ складишту за преузимање датотека.</translation>
+<translation id="8808060551076378370">Није успело додавање белешке.</translation>
+<translation id="8817201557520703060">Страница је снимљена</translation>
+<translation id="8820817407110198400">Обележивачи</translation>
+<translation id="8884751487662988673">Да бисте видели синхронизоване картице, пријавите се за синхронизацију у подешавањима.</translation>
+<translation id="895749247724466293">Претражи брза бирања</translation>
+<translation id="8959245489304000426">Заборавили сте лозинку?</translation>
+<translation id="8979401359137062629">Белешка:</translation>
+<translation id="9028089729841356743">Грешка на мрежи.</translation>
+<translation id="9065203028668620118">Уреди</translation>
+<translation id="9148058034647219655">Изађи</translation>
+<translation id="9173575361559252669">Није успело снимање странице</translation>
+</translationbundle>

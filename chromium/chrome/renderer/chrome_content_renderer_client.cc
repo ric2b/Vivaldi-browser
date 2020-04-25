@@ -61,6 +61,7 @@
 #include "chrome/renderer/prerender/prerender_helper.h"
 #include "chrome/renderer/prerender/prerenderer_client.h"
 #include "chrome/renderer/previews/resource_loading_hints_agent.h"
+#include "chrome/renderer/sync_encryption_keys_extension.h"
 #include "chrome/renderer/url_loader_throttle_provider_impl.h"
 #include "chrome/renderer/v8_unwinder.h"
 #include "chrome/renderer/websocket_handshake_throttle_provider_impl.h"
@@ -154,21 +155,6 @@
 #include "chrome/renderer/searchbox/searchbox_extension.h"
 #endif
 
-#if defined(OS_LINUX)
-#include "base/allocator/buildflags.h"
-#if BUILDFLAG(USE_TCMALLOC)
-#include "chrome/common/performance_manager/mojom/tcmalloc.mojom.h"
-#include "chrome/renderer/performance_manager/mechanisms/tcmalloc_tunables_impl.h"
-#endif  // BUILDFLAG(USE_TCMALLOC)
-#endif  // defined(OS_LINUX)
-
-#if defined(OS_WIN)
-#endif
-
-#if BUILDFLAG(FULL_SAFE_BROWSING)
-#include "chrome/renderer/safe_browsing/phishing_classifier_delegate.h"
-#endif
-
 #if BUILDFLAG(ENABLE_NACL)
 #include "components/nacl/common/nacl_constants.h"
 #include "components/nacl/renderer/nacl_helper.h"
@@ -215,6 +201,10 @@
 #include "components/spellcheck/renderer/spellcheck_panel.h"
 #endif  // BUILDFLAG(HAS_SPELLCHECK_PANEL)
 #endif  // BUILDFLAG(ENABLE_SPELLCHECK)
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+#include "chrome/renderer/supervised_user/supervised_user_error_page_controller_delegate_impl.h"
+#endif
 
 #include "renderer/vivaldi_render_frame_observer.h"
 #include "renderer/vivaldi_render_view_observer.h"
@@ -503,7 +493,17 @@ void ChromeContentRendererClient::RenderFrameCreated(
   SandboxStatusExtension::Create(render_frame);
 #endif
 
+#if !defined(OS_ANDROID)
+  if (base::FeatureList::IsEnabled(features::kSyncEncryptionKeysWebApi)) {
+    SyncEncryptionKeysExtension::Create(render_frame);
+  }
+#endif
+
   new NetErrorHelper(render_frame);
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  new SupervisedUserErrorPageControllerDelegateImpl(render_frame);
+#endif
 
   if (!render_frame->IsMainFrame()) {
     auto* prerender_helper = prerender::PrerenderHelper::Get(
@@ -548,7 +548,7 @@ void ChromeContentRendererClient::RenderFrameCreated(
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (content::MimeHandlerViewMode::UsesCrossProcessFrame()) {
     associated_interfaces->AddInterface(base::BindRepeating(
-        &extensions::MimeHandlerViewContainerManager::BindRequest,
+        &extensions::MimeHandlerViewContainerManager::BindReceiver,
         render_frame->GetRoutingID()));
   }
 #endif
@@ -569,9 +569,7 @@ void ChromeContentRendererClient::RenderFrameCreated(
         render_frame, subresource_filter_ruleset_dealer_.get(),
         std::move(ad_resource_tracker));
   }
-  if (base::FeatureList::IsEnabled(
-          blink::features::kSendPreviewsLoadingHintsBeforeCommit) &&
-      render_frame->IsMainFrame()) {
+  if (render_frame->IsMainFrame()) {
     new previews::ResourceLoadingHintsAgent(
         render_frame_observer->associated_interfaces(), render_frame);
   }
@@ -739,7 +737,7 @@ bool ChromeContentRendererClient::DeferMediaLoad(
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 
-chrome::mojom::PluginInfoHostAssociatedPtr&
+mojo::AssociatedRemote<chrome::mojom::PluginInfoHost>&
 ChromeContentRendererClient::GetPluginInfoHost() {
   struct PluginInfoHostHolder {
     PluginInfoHostHolder() {
@@ -747,7 +745,7 @@ ChromeContentRendererClient::GetPluginInfoHost() {
           &plugin_info_host);
     }
     ~PluginInfoHostHolder() {}
-    chrome::mojom::PluginInfoHostAssociatedPtr plugin_info_host;
+    mojo::AssociatedRemote<chrome::mojom::PluginInfoHost> plugin_info_host;
   };
   static base::NoDestructor<PluginInfoHostHolder> holder;
   return holder->plugin_info_host;
@@ -981,9 +979,9 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
             IDR_BLOCKED_PLUGIN_HTML,
             l10n_util::GetStringFUTF16(IDS_PLUGIN_OUTDATED, group_name));
         placeholder->AllowLoading();
-        chrome::mojom::PluginHostAssociatedPtr plugin_host;
+        mojo::AssociatedRemote<chrome::mojom::PluginHost> plugin_host;
         render_frame->GetRemoteAssociatedInterfaces()->GetInterface(
-            &plugin_host);
+            plugin_host.BindNewEndpointAndPassReceiver());
         plugin_host->BlockedOutdatedPlugin(placeholder->BindPluginRenderer(),
                                            identifier);
         break;
@@ -999,9 +997,9 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
             IDR_BLOCKED_PLUGIN_HTML,
             l10n_util::GetStringFUTF16(IDS_PLUGIN_NOT_AUTHORIZED, group_name));
         placeholder->AllowLoading();
-        chrome::mojom::PluginAuthHostAssociatedPtr plugin_auth_host;
+        mojo::AssociatedRemote<chrome::mojom::PluginAuthHost> plugin_auth_host;
         render_frame->GetRemoteAssociatedInterfaces()->GetInterface(
-            &plugin_auth_host);
+            plugin_auth_host.BindNewEndpointAndPassReceiver());
         plugin_auth_host->BlockedUnauthorizedPlugin(group_name, identifier);
         observer->DidBlockContentType(content_type, group_name);
         break;
@@ -1038,9 +1036,9 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
             IDR_BLOCKED_PLUGIN_HTML,
             l10n_util::GetStringFUTF16(IDS_PLUGIN_OUTDATED, group_name));
         placeholder->AllowLoading();
-        chrome::mojom::PluginHostAssociatedPtr plugin_host;
+        mojo::AssociatedRemote<chrome::mojom::PluginHost> plugin_host;
         render_frame->GetRemoteAssociatedInterfaces()->GetInterface(
-            &plugin_host);
+            plugin_host.BindNewEndpointAndPassReceiver());
         plugin_host->BlockedComponentUpdatedPlugin(
             placeholder->BindPluginRenderer(), identifier);
         break;
@@ -1177,26 +1175,29 @@ void ChromeContentRendererClient::PrepareErrorPage(
     content::RenderFrame* render_frame,
     const blink::WebURLError& web_error,
     const std::string& http_method,
-    bool ignoring_cache,
     std::string* error_html) {
   NetErrorHelper::Get(render_frame)
       ->PrepareErrorPage(
           error_page::Error::NetError(web_error.url(), web_error.reason(),
                                       web_error.has_copy_in_cache()),
-          http_method == "POST", ignoring_cache, error_html);
+          http_method == "POST", error_html);
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  SupervisedUserErrorPageControllerDelegateImpl::Get(render_frame)
+      ->PrepareForErrorPage();
+#endif
 }
 
 void ChromeContentRendererClient::PrepareErrorPageForHttpStatusError(
     content::RenderFrame* render_frame,
     const GURL& unreachable_url,
     const std::string& http_method,
-    bool ignoring_cache,
     int http_status,
     std::string* error_html) {
   NetErrorHelper::Get(render_frame)
       ->PrepareErrorPage(
           error_page::Error::HttpError(unreachable_url, http_status),
-          http_method == "POST", ignoring_cache, error_html);
+          http_method == "POST", error_html);
 }
 
 void ChromeContentRendererClient::GetErrorDescription(
@@ -1243,21 +1244,6 @@ bool ChromeContentRendererClient::ShouldFork(WebLocalFrame* frame,
                                              const std::string& http_method,
                                              bool is_initial_navigation,
                                              bool is_server_redirect) {
-  DCHECK(!frame->Parent());
-
-#if !defined(OS_ANDROID)
-  // If this is the Instant process, fork all navigations originating from the
-  // renderer.  The destination page will then be bucketed back to this Instant
-  // process if it is an Instant url, or to another process if not.  Conversely,
-  // fork if this is a non-Instant process navigating to an Instant url, so that
-  // such navigations can also be bucketed into an Instant renderer.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kInstantProcess) ||
-      SearchBouncer::GetInstance()->ShouldFork(url)) {
-    return true;
-  }
-#endif
-
   // TODO(lukasza): https://crbug.com/650694: For now, we skip the rest for POST
   // submissions.  This is because 1) in M54 there are some remaining issues
   // with POST in OpenURL path (e.g. https://crbug.com/648648) and 2) OpenURL
@@ -1267,15 +1253,6 @@ bool ChromeContentRendererClient::ShouldFork(WebLocalFrame* frame,
   // instead.
   if (http_method != "GET")
     return false;
-
-  // If |url| matches one of the prerendered URLs, stop this navigation and try
-  // to swap in the prerendered page on the browser process. If the prerendered
-  // page no longer exists by the time the OpenURL IPC is handled, a normal
-  // navigation is attempted.
-  if (prerender_dispatcher_.get() &&
-      prerender_dispatcher_->IsPrerenderURL(url)) {
-    return true;
-  }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   bool should_fork = ChromeExtensionsRendererClient::ShouldFork(
@@ -1454,14 +1431,16 @@ ChromeContentRendererClient::CreateBrowserPluginDelegate(
 void ChromeContentRendererClient::RecordRappor(const std::string& metric,
                                                const std::string& sample) {
   if (!rappor_recorder_)
-    RenderThread::Get()->BindHostReceiver(mojo::MakeRequest(&rappor_recorder_));
+    RenderThread::Get()->BindHostReceiver(
+        rappor_recorder_.BindNewPipeAndPassReceiver());
   rappor_recorder_->RecordRappor(metric, sample);
 }
 
 void ChromeContentRendererClient::RecordRapporURL(const std::string& metric,
                                                   const GURL& url) {
   if (!rappor_recorder_)
-    RenderThread::Get()->BindHostReceiver(mojo::MakeRequest(&rappor_recorder_));
+    RenderThread::Get()->BindHostReceiver(
+        rappor_recorder_.BindNewPipeAndPassReceiver());
   rappor_recorder_->RecordRapporURL(metric, url);
 }
 
@@ -1517,6 +1496,19 @@ void ChromeContentRendererClient::
       metrics::CallStackProfileParams::SERVICE_WORKER_THREAD);
 }
 
+void ChromeContentRendererClient::
+    DidInitializeServiceWorkerContextOnWorkerThread(
+        blink::WebServiceWorkerContextProxy* context_proxy,
+        const GURL& service_worker_scope,
+        const GURL& script_url) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  ChromeExtensionsRendererClient::GetInstance()
+      ->extension_dispatcher()
+      ->DidInitializeServiceWorkerContextOnWorkerThread(
+          context_proxy, service_worker_scope, script_url);
+#endif
+}
+
 void ChromeContentRendererClient::WillEvaluateServiceWorkerOnWorkerThread(
     blink::WebServiceWorkerContextProxy* context_proxy,
     v8::Local<v8::Context> v8_context,
@@ -1537,8 +1529,10 @@ void ChromeContentRendererClient::DidStartServiceWorkerContextOnWorkerThread(
     const GURL& service_worker_scope,
     const GURL& script_url) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::Dispatcher::DidStartServiceWorkerContextOnWorkerThread(
-      service_worker_version_id, service_worker_scope, script_url);
+  ChromeExtensionsRendererClient::GetInstance()
+      ->extension_dispatcher()
+      ->DidStartServiceWorkerContextOnWorkerThread(
+          service_worker_version_id, service_worker_scope, script_url);
 #endif
 }
 
@@ -1548,8 +1542,10 @@ void ChromeContentRendererClient::WillDestroyServiceWorkerContextOnWorkerThread(
     const GURL& service_worker_scope,
     const GURL& script_url) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::Dispatcher::WillDestroyServiceWorkerContextOnWorkerThread(
-      context, service_worker_version_id, service_worker_scope, script_url);
+  ChromeExtensionsRendererClient::GetInstance()
+      ->extension_dispatcher()
+      ->WillDestroyServiceWorkerContextOnWorkerThread(
+          context, service_worker_version_id, service_worker_scope, script_url);
 #endif
 }
 
@@ -1622,42 +1618,4 @@ bool ChromeContentRendererClient::RequiresHtmlImports(const GURL& url) {
   can_use_polyfill |= url.host() == chrome::kChromeUIPrintHost;
 #endif
   return url.SchemeIs(content::kChromeUIScheme) && !can_use_polyfill;
-}
-
-void ChromeContentRendererClient::BindReceiverOnMainThread(
-    mojo::GenericPendingReceiver receiver) {
-  if (auto agent_receiver = receiver.As<chrome::mojom::WebRtcLoggingAgent>()) {
-    if (!webrtc_logging_agent_impl_) {
-      webrtc_logging_agent_impl_ =
-          std::make_unique<chrome::WebRtcLoggingAgentImpl>();
-    }
-    webrtc_logging_agent_impl_->AddReceiver(std::move(agent_receiver));
-    return;
-  }
-
-#if BUILDFLAG(FULL_SAFE_BROWSING)
-  if (auto setter_receiver =
-          receiver.As<safe_browsing::mojom::PhishingModelSetter>()) {
-    safe_browsing::PhishingClassifierFilter::Create(std::move(setter_receiver));
-    return;
-  }
-#endif
-
-#if defined(OS_LINUX)
-#if BUILDFLAG(USE_TCMALLOC)
-  if (auto setter_receiver = receiver.As<tcmalloc::mojom::TcmallocTunables>()) {
-    performance_manager::mechanism::TcmallocTunablesImpl::Create(
-        std::move(setter_receiver));
-    return;
-  }
-#endif  // BUILDFLAG(USE_TCMALLOC)
-#endif  // defined(OS_LINUX)
-
-  // TODO(crbug.com/977637): Get rid of the use of BinderRegistry here. This was
-  // done only to avoid churning spellcheck code while eliminting the "chrome"
-  // and "chrome_renderer" services. Spellcheck is (and should remain) the only
-  // user of |registry_|.
-  std::string interface_name = *receiver.interface_name();
-  auto pipe = receiver.PassPipe();
-  registry_.TryBindInterface(interface_name, &pipe);
 }

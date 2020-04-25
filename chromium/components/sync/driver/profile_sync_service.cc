@@ -14,6 +14,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/strcat.h"
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -41,6 +42,7 @@
 #include "components/sync/model/sync_error.h"
 #include "components/sync/syncable/user_share.h"
 #include "components/version_info/version_info_values.h"
+#include "crypto/ec_private_key.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace syncer {
@@ -149,7 +151,8 @@ ProfileSyncService::ProfileSyncService(InitParams init_params)
                               base::Unretained(this)),
           base::BindRepeating(&ProfileSyncService::ReconfigureDueToPassphrase,
                               base::Unretained(this)),
-          &sync_prefs_),
+          &sync_prefs_,
+          sync_client_->GetTrustedVaultClient()),
       network_time_update_callback_(
           std::move(init_params.network_time_update_callback)),
       url_loader_factory_(std::move(init_params.url_loader_factory)),
@@ -592,6 +595,8 @@ void ProfileSyncService::ShutdownImpl(ShutdownReason reason) {
   crypto_.Reset();
   expect_sync_configuration_aborted_ = false;
   last_snapshot_ = SyncCycleSnapshot();
+  last_keystore_key_.clear();
+
   if (!IsLocalSyncEnabled()) {
     auth_manager_->ConnectionClosed();
   }
@@ -810,6 +815,7 @@ void ProfileSyncService::OnEngineInitialized(
     const std::string& cache_guid,
     const std::string& birthday,
     const std::string& bag_of_chips,
+    const std::string& last_keystore_key,
     bool success) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -842,6 +848,8 @@ void ProfileSyncService::OnEngineInitialized(
   sync_prefs_.SetBirthday(birthday);
   sync_prefs_.SetBagOfChips(bag_of_chips);
 
+  last_keystore_key_ = last_keystore_key;
+
   if (protocol_event_observers_.might_have_observers()) {
     engine_->RequestBufferedProtocolEventsAndEnableForwarding();
   }
@@ -859,13 +867,14 @@ void ProfileSyncService::OnEngineInitialized(
           initial_types, debug_info_listener, &data_type_controllers_,
           user_settings_.get(), engine_.get(), this);
 
-  crypto_.SetSyncEngine(engine_.get());
+  crypto_.SetSyncEngine(GetAuthenticatedAccountInfo(), engine_.get());
 
   // Auto-start means IsFirstSetupComplete gets set automatically.
   if (start_behavior_ == AUTO_START &&
       !user_settings_->IsFirstSetupComplete()) {
     // This will trigger a configure if it completes setup.
-    user_settings_->SetFirstSetupComplete();
+    user_settings_->SetFirstSetupComplete(
+        SyncFirstSetupCompleteSource::ENGINE_INITIALIZED_WITH_AUTO_START);
   } else if (CanConfigureDataTypes(/*bypass_setup_in_progress_check=*/false)) {
     // Datatype downloads on restart are generally due to newly supported
     // datatypes (although it's also possible we're picking up where a failed
@@ -889,10 +898,12 @@ void ProfileSyncService::OnEngineInitialized(
 }
 
 void ProfileSyncService::OnSyncCycleCompleted(
-    const SyncCycleSnapshot& snapshot) {
+    const SyncCycleSnapshot& snapshot,
+    const std::string& last_keystore_key) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   last_snapshot_ = snapshot;
+  last_keystore_key_ = last_keystore_key;
 
   UpdateLastSyncedTime();
   if (!snapshot.poll_finish_time().is_null())
@@ -1044,7 +1055,7 @@ void ProfileSyncService::OnConfigureDone(
 
   // We should never get in a state where we have no encrypted datatypes
   // enabled, and yet we still think we require a passphrase for decryption.
-  DCHECK(!user_settings_->IsPassphraseRequiredForDecryption() ||
+  DCHECK(!user_settings_->IsPassphraseRequiredForPreferredDataTypes() ||
          user_settings_->IsEncryptedDatatypeEnabled());
 
   // Notify listeners that configuration is done.
@@ -1106,6 +1117,17 @@ base::Time ProfileSyncService::GetAuthErrorTime() const {
 
 bool ProfileSyncService::RequiresClientUpgrade() const {
   return last_actionable_error_.action == UPGRADE_CLIENT;
+}
+
+std::unique_ptr<crypto::ECPrivateKey>
+ProfileSyncService::GetExperimentalAuthenticationKey() const {
+  std::string secret = GetExperimentalAuthenticationSecret();
+  if (secret.empty()) {
+    return nullptr;
+  }
+
+  return crypto::ECPrivateKey::DeriveFromSecret(
+      base::as_bytes(base::make_span(secret)));
 }
 
 bool ProfileSyncService::CanConfigureDataTypes(
@@ -1229,7 +1251,7 @@ void ProfileSyncService::ConfigureDataTypeManager(ConfigureReason reason) {
   configure_context.authenticated_account_id =
       GetAuthenticatedAccountInfo().account_id;
   configure_context.cache_guid = sync_prefs_.GetCacheGuid();
-  configure_context.storage_option = STORAGE_ON_DISK;
+  configure_context.sync_mode = SyncMode::kFull;
   configure_context.reason = reason;
   configure_context.configuration_start_time = base::Time::Now();
 
@@ -1281,8 +1303,13 @@ void ProfileSyncService::ConfigureDataTypeManager(ConfigureReason reason) {
       }
     }
 
+    if (base::FeatureList::IsEnabled(
+            switches::kSyncDeviceInfoInTransportMode)) {
+      allowed_types.Put(DEVICE_INFO);
+    }
+
     types = Intersection(types, allowed_types);
-    configure_context.storage_option = STORAGE_IN_MEMORY;
+    configure_context.sync_mode = SyncMode::kTransportOnly;
   }
   data_type_manager_->Configure(types, configure_context);
 
@@ -1326,11 +1353,6 @@ UserShare* ProfileSyncService::GetUserShare() const {
 SyncCycleSnapshot ProfileSyncService::GetLastCycleSnapshotForDebugging() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return last_snapshot_;
-}
-
-PassphraseRequiredReason
-ProfileSyncService::GetPassphraseRequiredReasonForTest() const {
-  return crypto_.passphrase_required_reason();
 }
 
 void ProfileSyncService::HasUnsyncedItemsForTest(
@@ -1603,7 +1625,7 @@ void GetAllNodesRequestHelper::OnReceivedNodesForType(
   type_dict.SetKey("type", base::Value(ModelTypeToString(type)));
   type_dict.SetKey("nodes",
                    base::Value::FromUniquePtrValue(std::move(node_list)));
-  result_accumulator_->GetList().push_back(std::move(type_dict));
+  result_accumulator_->Append(std::move(type_dict));
 
   // Remember that this part of the request is satisfied.
   awaiting_types_.Remove(type);
@@ -1646,10 +1668,10 @@ void ProfileSyncService::GetAllNodesForDebugging(
             &GetAllNodesRequestHelper::OnReceivedNodesForType, helper));
       }
     } else {
-      // Control Types.
-      helper->OnReceivedNodesForType(
-          type, DirectoryDataTypeController::GetAllNodesForTypeFromDirectory(
-                    type, GetUserShare()->directory.get()));
+      // We should have no data type controller only for Nigori.
+      DCHECK_EQ(type, NIGORI);
+      engine_->GetNigoriNodeForDebugging(base::BindOnce(
+          &GetAllNodesRequestHelper::OnReceivedNodesForType, helper));
     }
   }
 }
@@ -1896,6 +1918,31 @@ void ProfileSyncService::ReconfigureDueToPassphrase(ConfigureReason reason) {
   // IsSetupInProgress() case where the UI needs to be updated to reflect that
   // the passphrase was accepted (https://crbug.com/870256).
   NotifyObservers();
+}
+
+std::string ProfileSyncService::GetExperimentalAuthenticationSecretForTest()
+    const {
+  return GetExperimentalAuthenticationSecret();
+}
+
+std::string ProfileSyncService::GetExperimentalAuthenticationSecret() const {
+  // Dependent fields are first populated when the sync engine is initialized,
+  // when usually all except keystore keys are guaranteed to be available.
+  // Keystore keys are usually available initially too, but in rare cases they
+  // should arrive in later sync cycles.
+  if (last_keystore_key_.empty()) {
+    return std::string();
+  }
+
+  // A separator is not strictly needed but it's adopted here as good practice.
+  const std::string kSeparator("|");
+  const std::string gaia_id = GetAuthenticatedAccountInfo().gaia;
+  const std::string birthday = sync_prefs_.GetBirthday();
+  DCHECK(!gaia_id.empty());
+  DCHECK(!birthday.empty());
+
+  return base::StrCat(
+      {gaia_id, kSeparator, birthday, kSeparator, last_keystore_key_});
 }
 
 }  // namespace syncer

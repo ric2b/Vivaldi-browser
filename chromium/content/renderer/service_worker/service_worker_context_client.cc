@@ -107,10 +107,11 @@ ServiceWorkerContextClient::ServiceWorkerContextClient(
     mojo::PendingReceiver<blink::mojom::RendererPreferenceWatcher>
         preference_watcher_receiver,
     std::unique_ptr<blink::URLLoaderFactoryBundleInfo> subresource_loaders,
-    mojo::PendingReceiver<blink::mojom::ServiceWorkerSubresourceLoaderUpdater>
+    mojo::PendingReceiver<blink::mojom::SubresourceLoaderUpdater>
         subresource_loader_updater,
     const GURL& script_url_to_skip_throttling,
-    scoped_refptr<base::SingleThreadTaskRunner> initiator_thread_task_runner)
+    scoped_refptr<base::SingleThreadTaskRunner> initiator_thread_task_runner,
+    int32_t service_worker_route_id)
     : service_worker_version_id_(service_worker_version_id),
       service_worker_scope_(service_worker_scope),
       script_url_(script_url),
@@ -125,7 +126,8 @@ ServiceWorkerContextClient::ServiceWorkerContextClient(
       pending_subresource_loader_updater_(
           std::move(subresource_loader_updater)),
       owner_(owner),
-      start_timing_(std::move(start_timing)) {
+      start_timing_(std::move(start_timing)),
+      service_worker_route_id_(service_worker_route_id) {
   DCHECK(initiator_thread_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(owner_);
   DCHECK(subresource_loaders);
@@ -171,10 +173,20 @@ ServiceWorkerContextClient::~ServiceWorkerContextClient() {
 
 void ServiceWorkerContextClient::StartWorkerContextOnInitiatorThread(
     std::unique_ptr<blink::WebEmbeddedWorker> worker,
-    const blink::WebEmbeddedWorkerStartData& start_data) {
+    std::unique_ptr<blink::WebEmbeddedWorkerStartData> start_data,
+    std::unique_ptr<blink::WebServiceWorkerInstalledScriptsManagerParams>
+        installed_scripts_manager_params,
+    mojo::ScopedMessagePipeHandle content_settings_handle,
+    mojo::ScopedMessagePipeHandle cache_storage,
+    mojo::ScopedMessagePipeHandle interface_provider,
+    mojo::ScopedMessagePipeHandle browser_interface_broker) {
   DCHECK(initiator_thread_task_runner_->RunsTasksInCurrentSequence());
   worker_ = std::move(worker);
-  worker_->StartWorkerContext(start_data, initiator_thread_task_runner_);
+  worker_->StartWorkerContext(
+      std::move(start_data), std::move(installed_scripts_manager_params),
+      std::move(content_settings_handle), std::move(cache_storage),
+      std::move(interface_provider), std::move(browser_interface_broker),
+      initiator_thread_task_runner_);
 }
 
 blink::WebEmbeddedWorker& ServiceWorkerContextClient::worker() {
@@ -194,28 +206,10 @@ void ServiceWorkerContextClient::WorkerReadyForInspectionOnInitiatorThread(
                                        std::move(receiver));
 }
 
-void ServiceWorkerContextClient::WorkerContextFailedToStartOnInitiatorThread() {
-  DCHECK(initiator_thread_task_runner_->RunsTasksInCurrentSequence());
-  DCHECK(!proxy_);
-
-  instance_host_->OnStopped();
-
-  TRACE_EVENT_NESTABLE_ASYNC_END1(
-      "ServiceWorker", "ServiceWorkerContextClient", this, "Status",
-      "WorkerContextFailedToStartOnInitiatorThread");
-
-  owner_->WorkerContextDestroyed();
-}
-
-void ServiceWorkerContextClient::FailedToLoadClassicScript() {
+void ServiceWorkerContextClient::FailedToFetchClassicScript() {
   DCHECK(worker_task_runner_->RunsTasksInCurrentSequence());
   TRACE_EVENT_NESTABLE_ASYNC_END1("ServiceWorker", "LOAD_SCRIPT", this,
-                                  "Status", "FailedToLoadClassicScript");
-  // Cleanly send an OnStopped() message instead of just breaking the
-  // Mojo connection on termination, for consistency with the other
-  // startup failure paths.
-  instance_host_->OnStopped();
-
+                                  "Status", "FailedToFetchClassicScript");
   // The caller is responsible for terminating the thread which
   // eventually destroys |this|.
 }
@@ -224,11 +218,6 @@ void ServiceWorkerContextClient::FailedToFetchModuleScript() {
   DCHECK(worker_task_runner_->RunsTasksInCurrentSequence());
   TRACE_EVENT_NESTABLE_ASYNC_END1("ServiceWorker", "LOAD_SCRIPT", this,
                                   "Status", "FailedToFetchModuleScript");
-  // Cleanly send an OnStopped() message instead of just breaking the
-  // Mojo connection on termination, for consistency with the other
-  // startup failure paths.
-  instance_host_->OnStopped();
-
   // The caller is responsible for terminating the thread which
   // eventually destroys |this|.
 }
@@ -258,6 +247,11 @@ void ServiceWorkerContextClient::WorkerContextStarted(
 
   DCHECK(controller_receiver_.is_valid());
   proxy_->BindControllerServiceWorker(controller_receiver_.PassPipe());
+
+  GetContentClient()
+      ->renderer()
+      ->DidInitializeServiceWorkerContextOnWorkerThread(
+          proxy_, service_worker_scope_, script_url_);
 }
 
 void ServiceWorkerContextClient::WillEvaluateScript(
@@ -394,7 +388,7 @@ ServiceWorkerContextClient::CreateWorkerFetchContextOnInitiatorThread() {
           ->renderer()
           ->CreateWebSocketHandshakeThrottleProvider(),
       std::move(preference_watcher_receiver_),
-      std::move(pending_subresource_loader_updater_));
+      std::move(pending_subresource_loader_updater_), service_worker_route_id_);
 }
 
 void ServiceWorkerContextClient::OnNavigationPreloadResponse(

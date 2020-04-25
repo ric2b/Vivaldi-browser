@@ -29,7 +29,7 @@
 #include "ui/views/view_model.h"
 #include "ui/views/widget/widget.h"
 
-namespace app_list {
+namespace ash {
 namespace test {
 
 namespace {
@@ -131,7 +131,7 @@ class AppListMainViewTest : public views::ViewsTestBase {
       }
     }
 
-    return NULL;
+    return nullptr;
   }
 
   void SimulateClick(views::View* view) {
@@ -303,7 +303,7 @@ TEST_F(AppListMainViewTest, DISABLED_DragLastItemFromFolderAndDropAtLastSlot) {
   EXPECT_EQ(first_slot_tile, RootViewModel()->view_at(0)->bounds());
 
   // Single item folder should be auto removed.
-  EXPECT_EQ(NULL,
+  EXPECT_EQ(nullptr,
             delegate_->GetTestModel()->FindFolderItem("single_item_folder"));
 
   // Ensure keyboard selection works on the root grid view after a reparent.
@@ -325,7 +325,7 @@ TEST_F(AppListMainViewTest, DISABLED_DragReparentItemOntoPageSwitcher) {
   const int kNumApps = 30;
 
   // Ensure we are on the apps grid view page.
-  app_list::ContentsView* contents_view = GetContentsView();
+  ContentsView* contents_view = GetContentsView();
   contents_view->SetActiveState(ash::AppListState::kStateApps);
   contents_view->Layout();
 
@@ -351,7 +351,7 @@ TEST_F(AppListMainViewTest, DISABLED_DragReparentItemOntoPageSwitcher) {
 
   // The folder should be destroyed.
   EXPECT_EQ(kNumApps + 1, RootViewModel()->view_size());
-  EXPECT_EQ(NULL,
+  EXPECT_EQ(nullptr,
             delegate_->GetTestModel()->FindFolderItem("single_item_folder"));
 }
 
@@ -413,4 +413,4 @@ TEST_F(AppListMainViewTest, DISABLED_ReparentSingleItemOntoSelf) {
 }
 
 }  // namespace test
-}  // namespace app_list
+}  // namespace ash

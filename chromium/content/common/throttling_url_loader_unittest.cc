@@ -10,6 +10,7 @@
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/task_environment.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
@@ -66,13 +67,14 @@ class TestURLLoaderFactory : public network::mojom::URLLoaderFactory,
   }
 
   void NotifyClientOnReceiveResponse() {
-    client_ptr_->OnReceiveResponse(network::ResourceResponseHead());
+    client_ptr_->OnReceiveResponse(network::mojom::URLResponseHead::New());
   }
 
   void NotifyClientOnReceiveRedirect() {
     net::RedirectInfo info;
     info.new_url = redirect_url;
-    client_ptr_->OnReceiveRedirect(info, network::ResourceResponseHead());
+    client_ptr_->OnReceiveRedirect(info,
+                                   network::mojom::URLResponseHead::New());
   }
 
   void NotifyClientOnComplete(int error_code) {
@@ -112,7 +114,8 @@ class TestURLLoaderFactory : public network::mojom::URLLoaderFactory,
       on_create_loader_and_start_callback_.Run(url_request);
   }
 
-  void Clone(network::mojom::URLLoaderFactoryRequest request) override {
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
+      override {
     NOTREACHED();
   }
 

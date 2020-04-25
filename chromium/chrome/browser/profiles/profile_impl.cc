@@ -42,6 +42,7 @@
 #include "chrome/browser/background_sync/background_sync_controller_impl.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -98,6 +99,7 @@
 #include "chrome/browser/ssl/chrome_ssl_host_state_delegate.h"
 #include "chrome/browser/ssl/chrome_ssl_host_state_delegate_factory.h"
 #include "chrome/browser/startup_data.h"
+#include "chrome/browser/storage/storage_notification_service_factory.h"
 #include "chrome/browser/transition_manager/full_browser_transition_manager.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/webui/prefs_internals_source.h"
@@ -152,12 +154,14 @@
 #include "content/public/common/content_constants.h"
 #include "extensions/buildflags/buildflags.h"
 #include "google_apis/google_api_keys.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "services/identity/identity_service.h"
 #include "services/image_annotation/image_annotation_service.h"
 #include "services/image_annotation/public/mojom/constants.mojom.h"
+#include "services/network/public/cpp/features.h"
 #include "services/preferences/public/cpp/in_process_service_factory.h"
 #include "services/preferences/public/mojom/preferences.mojom.h"
 #include "services/preferences/public/mojom/tracked_preference_validation_delegate.mojom.h"
@@ -168,8 +172,7 @@
 #include "chrome/browser/chromeos/android_sms/android_sms_app_manager.h"
 #include "chrome/browser/chromeos/android_sms/android_sms_pairing_state_tracker_impl.h"
 #include "chrome/browser/chromeos/android_sms/android_sms_service_factory.h"
-#include "chrome/browser/chromeos/arc/accessibility/arc_accessibility_helper_bridge.h"
-#include "chrome/browser/chromeos/arc/arc_service_launcher.h"
+#include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/authpolicy/auth_policy_credentials_manager.h"
 #include "chrome/browser/chromeos/cryptauth/gcm_device_info_provider_impl.h"
 #include "chrome/browser/chromeos/device_sync/device_sync_client_factory.h"
@@ -200,8 +203,6 @@
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/profile_key_startup_accessor.h"
 #else
-#include "chrome/services/app_service/app_service.h"
-#include "chrome/services/app_service/public/mojom/constants.mojom.h"
 #include "components/zoom/zoom_event_manager.h"
 #include "content/public/common/page_zoom.h"
 #endif
@@ -236,6 +237,8 @@
 #include "chrome/browser/supervised_user/supervised_user_settings_service.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
 #endif
+
+#include "browser/vivaldi_profile_impl.h"
 
 using base::TimeDelta;
 using bookmarks::BookmarkModel;
@@ -395,10 +398,6 @@ void ProfileImpl::RegisterProfilePrefs(
                                 safe_search_util::YOUTUBE_RESTRICT_OFF);
   registry->RegisterStringPref(prefs::kAllowedDomainsForApps, std::string());
 
-#if defined(OS_ANDROID)
-  // The following prefs don't need to be sync'd to mobile. This file isn't
-  // compiled on iOS so we only need to exclude them syncing from the Android
-  // build.
   registry->RegisterIntegerPref(prefs::kProfileAvatarIndex, -1);
   // Whether a profile is using an avatar without having explicitely chosen it
   // (i.e. was assigned by default by legacy profile creation).
@@ -407,25 +406,6 @@ void ProfileImpl::RegisterProfilePrefs(
   // Whether a profile is using a default avatar name (eg. Pickles or Person 1).
   registry->RegisterBooleanPref(prefs::kProfileUsingDefaultName, true);
   registry->RegisterStringPref(prefs::kProfileName, std::string());
-#else
-  registry->RegisterIntegerPref(
-      prefs::kProfileAvatarIndex, -1,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  // Whether a profile is using an avatar without having explicitely chosen it
-  // (i.e. was assigned by default by legacy profile creation).
-  registry->RegisterBooleanPref(
-      prefs::kProfileUsingDefaultAvatar, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterBooleanPref(
-      prefs::kProfileUsingGAIAAvatar, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  // Whether a profile is using a default avatar name (eg. Pickles or Person 1).
-  registry->RegisterBooleanPref(
-      prefs::kProfileUsingDefaultName, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterStringPref(prefs::kProfileName, std::string(),
-                               user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-#endif
 
   registry->RegisterStringPref(prefs::kSupervisedUserId, std::string());
 #if defined(OS_ANDROID)
@@ -622,15 +602,17 @@ void ProfileImpl::LoadPrefsForNormalStartup(bool async_prefs) {
                          g_browser_process->GetApplicationLocale(),
                          pref_registry_.get());
 
-  prefs::mojom::TrackedPreferenceValidationDelegatePtr pref_validation_delegate;
+  mojo::PendingRemote<prefs::mojom::TrackedPreferenceValidationDelegate>
+      pref_validation_delegate;
   scoped_refptr<safe_browsing::SafeBrowsingService> safe_browsing_service(
       g_browser_process->safe_browsing_service());
   if (safe_browsing_service.get()) {
     auto pref_validation_delegate_impl =
         safe_browsing_service->CreatePreferenceValidationDelegate(this);
     if (pref_validation_delegate_impl) {
-      mojo::MakeStrongBinding(std::move(pref_validation_delegate_impl),
-                              mojo::MakeRequest(&pref_validation_delegate));
+      mojo::MakeSelfOwnedReceiver(
+          std::move(pref_validation_delegate_impl),
+          pref_validation_delegate.InitWithNewPipeAndPassReceiver());
     }
   }
 
@@ -745,16 +727,6 @@ void ProfileImpl::DoFinalInit() {
 
   HeavyAdServiceFactory::GetForBrowserContext(this)->Initialize(GetPath());
 
-  // Page Load Capping was remove in M74, so the database file should be removed
-  // when users upgrade Chrome.
-  // TODO(ryansturm): Remove this after M-79. https://crbug.com/937489
-  base::PostTask(
-      FROM_HERE,
-      {base::ThreadPool(), base::TaskPriority::LOWEST, base::MayBlock()},
-      base::BindOnce(base::IgnoreResult(&base::DeleteFile),
-                     GetPath().Append(chrome::kPageLoadCappingOptOutDBFilename),
-                     false));
-
   PushMessagingServiceImpl::InitializeForProfile(this);
 
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
@@ -768,13 +740,15 @@ void ProfileImpl::DoFinalInit() {
   content::URLDataSource::Add(this,
                               std::make_unique<PrefsInternalsSource>(this));
 
+  vivaldi::VivaldiInitProfile(this);
+
   if (delegate_) {
     TRACE_EVENT0("browser", "ProfileImpl::DoFileInit:DelegateOnProfileCreated")
     delegate_->OnProfileCreated(this, true, IsNewProfile());
   }
 
   // Ensure that the SharingService is initialized now that io_data_ is
-  // initialized.
+  // initialized. https://crbug.com/171406
   SharingServiceFactory::GetForBrowserContext(this);
 
   content::NotificationService::current()->Notify(
@@ -1005,7 +979,6 @@ void ProfileImpl::OnLocaleReady() {
 
 #if defined(OS_CHROMEOS)
   arc::ArcServiceLauncher::Get()->MaybeSetProfile(this);
-  arc::ArcAccessibilityHelperBridge::GetForBrowserContext(this);
 #endif
 
   FullBrowserTransitionManager::Get()->OnProfileCreated(this);
@@ -1223,6 +1196,11 @@ content::PushMessagingService* ProfileImpl::GetPushMessagingService() {
   return PushMessagingServiceFactory::GetForProfile(this);
 }
 
+content::StorageNotificationService*
+ProfileImpl::GetStorageNotificationService() {
+  return StorageNotificationServiceFactory::GetForBrowserContext(this);
+}
+
 content::SSLHostStateDelegate* ProfileImpl::GetSSLHostStateDelegate() {
   return ChromeSSLHostStateDelegateFactory::GetForProfile(this);
 }
@@ -1299,6 +1277,20 @@ ProfileImpl::GetSharedCorsOriginAccessList() {
   return shared_cors_origin_access_list_.get();
 }
 
+bool ProfileImpl::ShouldEnableOutOfBlinkCors() {
+  // Obtains the applied policy at most one time per profile, and reuse the
+  // same value for the whole session so that CORS implementations distributed
+  // in multi-processes work consistently. Profile-bound renderers and
+  // NetworkContexts will be initialized based on this returned mode.
+  if (!cors_legacy_mode_enabled_.has_value()) {
+    cors_legacy_mode_enabled_ =
+        GetPrefs()->GetBoolean(prefs::kCorsLegacyModeEnabled);
+  }
+  if (cors_legacy_mode_enabled_.value())
+    return false;
+  return base::FeatureList::IsEnabled(network::features::kOutOfBlinkCors);
+}
+
 std::unique_ptr<service_manager::Service> ProfileImpl::HandleServiceRequest(
     const std::string& service_name,
     service_manager::mojom::ServiceRequest request) {
@@ -1311,14 +1303,6 @@ std::unique_ptr<service_manager::Service> ProfileImpl::HandleServiceRequest(
     return std::make_unique<image_annotation::ImageAnnotationService>(
         std::move(request), APIKeyForChannel(), GetURLLoaderFactory());
   }
-
-#if !defined(OS_ANDROID)
-  if (service_name == apps::mojom::kServiceName) {
-    // TODO(crbug.com/826982): Use the current profile to fetch existing
-    // registries.
-    return std::make_unique<apps::AppService>(std::move(request));
-  }
-#endif  // !defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
   if (service_name == chromeos::multidevice_setup::mojom::kServiceName) {
@@ -1356,7 +1340,7 @@ ProfileImpl::RetriveInProgressDownloadManager() {
 
 content::NativeFileSystemPermissionContext*
 ProfileImpl::GetNativeFileSystemPermissionContext() {
-  return NativeFileSystemPermissionContextFactory::GetForProfile(this).get();
+  return NativeFileSystemPermissionContextFactory::GetForProfile(this);
 }
 
 bool ProfileImpl::IsSameProfile(Profile* profile) {
@@ -1537,7 +1521,7 @@ void ProfileImpl::UpdateNameInStorage() {
                        ->GetProfileAttributesStorage()
                        .GetProfileAttributesWithPath(GetPath(), &entry);
   if (has_entry) {
-    entry->SetName(
+    entry->SetLocalProfileName(
         base::UTF8ToUTF16(GetPrefs()->GetString(prefs::kProfileName)));
     entry->SetIsUsingDefaultName(
         GetPrefs()->GetBoolean(prefs::kProfileUsingDefaultName));

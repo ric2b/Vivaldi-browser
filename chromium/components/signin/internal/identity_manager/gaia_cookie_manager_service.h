@@ -26,6 +26,7 @@
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "net/base/backoff_entry.h"
+#include "net/cookies/cookie_change_dispatcher.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 
 class GaiaAuthFetcher;
@@ -240,7 +241,7 @@ class GaiaCookieManagerService : public GaiaAuthConsumer,
   void TriggerListAccounts();
 
   // Forces the processing of OnCookieChange. This is public so that callers
-  // that know the GAIA APISID cookie might have changed can inform the
+  // that know the GAIA SAPISID cookie might have changed can inform the
   // service. Virtual for testing.
   virtual void ForceOnCookieChangeProcessing();
 
@@ -267,10 +268,10 @@ class GaiaCookieManagerService : public GaiaAuthConsumer,
 
   // If set, this callback will be invoked whenever the
   // GaiaCookieManagerService's list of GAIA accounts is updated. The GCMS
-  // monitors the APISID cookie and triggers a /ListAccounts call on change.
+  // monitors the SAPISID cookie and triggers a /ListAccounts call on change.
   // The GCMS will also call ListAccounts upon the first call to
   // ListAccounts(). The GCMS will delay calling ListAccounts if other
-  // requests are in queue that would modify the APISID cookie.
+  // requests are in queue that would modify the SAPISID cookie.
   // If the ListAccounts call fails and the GCMS cannot recover, the reason
   // is passed in |error|.
   // This method can only be called once.
@@ -312,8 +313,7 @@ class GaiaCookieManagerService : public GaiaAuthConsumer,
   // Overridden from network::mojom::CookieChangeListner. If the cookie relates
   // to a GAIA APISID cookie, then we call ListAccounts and fire
   // OnGaiaAccountsInCookieUpdated.
-  void OnCookieChange(const net::CanonicalCookie& cookie,
-                      network::mojom::CookieChangeCause cause) override;
+  void OnCookieChange(const net::CookieChangeInfo& change) override;
   void OnCookieListenerConnectionError();
 
   // Overridden from GaiaAuthConsumer.

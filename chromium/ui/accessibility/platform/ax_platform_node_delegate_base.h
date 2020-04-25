@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -43,6 +44,10 @@ class AX_EXPORT AXPlatformNodeDelegateBase : public AXPlatformNodeDelegate {
 
   // See comments in AXPlatformNodeDelegate.
   gfx::NativeViewAccessible GetNSWindow() override;
+
+  // Get the node for this delegate, which may be an AXPlatformNode or it may
+  // be a native accessible object implemented by another class.
+  gfx::NativeViewAccessible GetNativeViewAccessible() override;
 
   // Get the parent of the node, which may be an AXPlatformNode or it may
   // be a native accessible object implemented by another class.
@@ -88,6 +93,9 @@ class AX_EXPORT AXPlatformNodeDelegateBase : public AXPlatformNodeDelegate {
 
   base::string16 GetHypertext() const override;
   bool SetHypertextSelection(int start_offset, int end_offset) override;
+  TextAttributeMap ComputeTextAttributeMap(
+      const TextAttributeList& default_attributes) const override;
+  std::string GetInheritedFontFamilyName() const override;
 
   base::string16 GetInnerText() const override;
 
@@ -141,7 +149,14 @@ class AX_EXPORT AXPlatformNodeDelegateBase : public AXPlatformNodeDelegate {
   // Get whether this node is in web content.
   bool IsWebContent() const override;
 
+  // Get another node from this same tree.
   AXPlatformNode* GetFromNodeID(int32_t id) override;
+
+  // Get a node from a different tree using a tree ID and node ID.
+  // Note that this is only guaranteed to work if the other tree is of the
+  // same type, i.e. it won't work between web and views or vice-versa.
+  AXPlatformNode* GetFromTreeIDAndNodeID(const ui::AXTreeID& ax_tree_id,
+                                         int32_t id) override;
 
   // Given a node ID attribute (one where IsNodeIdIntAttribute is true), return
   // a target nodes for which this delegate's node has that relationship

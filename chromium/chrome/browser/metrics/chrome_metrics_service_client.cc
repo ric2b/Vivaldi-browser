@@ -27,7 +27,6 @@
 #include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
@@ -46,7 +45,6 @@
 #include "chrome/browser/metrics/https_engagement_metrics_provider.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/metrics/network_quality_estimator_provider_impl.h"
-#include "chrome/browser/metrics/process_memory_metrics_emitter.h"
 #include "chrome/browser/metrics/sampling_metrics_provider.h"
 #include "chrome/browser/metrics/subprocess_metrics_provider.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -135,15 +133,10 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/printing/printer_metrics_provider.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/metrics/assistant_service_metrics_provider.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
 #include "chrome/browser/signin/signin_status_metrics_provider_chromeos.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/app_list_launch_metrics_provider.h"
-#include "chromeos/assistant/buildflags.h"
-
-#if BUILDFLAG(ENABLE_CROS_ASSISTANT)
-#include "chrome/browser/metrics/assistant_service_metrics_provider.h"
-#endif
-
 #endif
 
 #if defined(OS_WIN)
@@ -186,9 +179,6 @@ const int kMaxHistogramStorageKiB = 500 << 10;  // 500 MiB
 // This specifies the amount of time to wait for all renderers to send their
 // data.
 const int kMaxHistogramGatheringWaitDuration = 60000;  // 60 seconds.
-
-// The minimum time in seconds between consecutive metrics report uploads.
-const int kMetricsUploadIntervalSecMinimum = 20;
 
 // Needs to be kept in sync with the writer in
 // third_party/crashpad/crashpad/handler/handler_main.cc.
@@ -434,6 +424,13 @@ class ProfileClientImpl
   DISALLOW_COPY_AND_ASSIGN(ProfileClientImpl);
 };
 
+std::unique_ptr<metrics::DemographicMetricsProvider>
+MakeDemographicMetricsProvider(
+    metrics::MetricsLogUploader::MetricServiceType metrics_service_type) {
+  return std::make_unique<metrics::DemographicMetricsProvider>(
+      std::make_unique<ProfileClientImpl>(), metrics_service_type);
+}
+
 }  // namespace
 
 // UKM suffix for field trial recording.
@@ -567,22 +564,7 @@ ChromeMetricsServiceClient::CreateUploader(
 }
 
 base::TimeDelta ChromeMetricsServiceClient::GetStandardUploadInterval() {
-  const base::CommandLine* command_line(base::CommandLine::ForCurrentProcess());
-  // If an upload interval is set from the command line, use that value but
-  // subject it to a minimum threshold to mitigate the risk of DDoS attack.
-  if (command_line->HasSwitch(metrics::switches::kMetricsUploadIntervalSec)) {
-    const std::string switchValue = command_line->GetSwitchValueASCII(
-        metrics::switches::kMetricsUploadIntervalSec);
-    int custom_upload_interval;
-    if (base::StringToInt(switchValue, &custom_upload_interval)) {
-      return base::TimeDelta::FromSeconds(
-          std::max(custom_upload_interval, kMetricsUploadIntervalSecMinimum));
-    } else {
-      LOG(DFATAL) << "Malformed value for --metrics-upload-interval. "
-                  << "Expected int, got: " << switchValue;
-    }
-  }
-  return metrics::GetUploadInterval();
+  return metrics::GetUploadInterval(metrics::ShouldUseCellularUploadInterval());
 }
 
 void ChromeMetricsServiceClient::OnPluginLoadingError(
@@ -625,8 +607,10 @@ void ChromeMetricsServiceClient::Initialize() {
     // We only need to restrict to whitelisted Entries if metrics reporting
     // is not forced.
     bool restrict_to_whitelist_entries = !IsMetricsReportingForceEnabled();
-    ukm_service_.reset(
-        new ukm::UkmService(local_state, this, restrict_to_whitelist_entries));
+    ukm_service_.reset(new ukm::UkmService(
+        local_state, this, restrict_to_whitelist_entries,
+        MakeDemographicMetricsProvider(
+            metrics::MetricsLogUploader::MetricServiceType::UKM)));
     ukm_service_->SetIsWebstoreExtensionCallback(
         base::BindRepeating(&IsWebstoreExtension));
     RegisterUKMProviders();
@@ -688,9 +672,8 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<tracing::BackgroundTracingMetricsProvider>());
 
-  metrics_service_->RegisterMetricsProvider(
-      std::make_unique<metrics::DemographicMetricsProvider>(
-          std::make_unique<ProfileClientImpl>()));
+  metrics_service_->RegisterMetricsProvider(MakeDemographicMetricsProvider(
+      metrics::MetricsLogUploader::MetricServiceType::UMA));
 
 #if defined(OS_ANDROID)
   metrics_service_->RegisterMetricsProvider(
@@ -755,6 +738,9 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
   // Using WrapUnique to access a private constructor.
   metrics_service_->RegisterMetricsProvider(
       base::WrapUnique(new app_list::AppListLaunchMetricsProvider()));
+
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<AssistantServiceMetricsProvider>());
 #endif  // defined(OS_CHROMEOS)
 
 #if !defined(OS_CHROMEOS)
@@ -785,13 +771,6 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<PowerMetricsProvider>());
 #endif
-
-#if defined(OS_CHROMEOS)
-#if BUILDFLAG(ENABLE_CROS_ASSISTANT)
-  metrics_service_->RegisterMetricsProvider(
-      std::make_unique<AssistantServiceMetricsProvider>());
-#endif  // BUILDFLAG(ENABLE_CROS_ASSISTANT)
-#endif  // defined(OS_CHROMEOS)
 }
 
 void ChromeMetricsServiceClient::RegisterUKMProviders() {
@@ -839,12 +818,6 @@ void ChromeMetricsServiceClient::CollectFinalHistograms() {
   scoped_refptr<MetricsMemoryDetails> details(
       new MetricsMemoryDetails(callback));
   details->StartFetch();
-
-  if (base::FeatureList::IsEnabled(kMemoryMetricsOldTiming)) {
-    scoped_refptr<ProcessMemoryMetricsEmitter> emitter(
-        new ProcessMemoryMetricsEmitter);
-    emitter->FetchAndEmitProcessMemoryMetrics();
-  }
 }
 
 void ChromeMetricsServiceClient::OnMemoryDetailCollectionDone() {
@@ -1034,7 +1007,7 @@ void ChromeMetricsServiceClient::OnURLOpenedFromOmnibox(OmniboxLog* log) {
 }
 
 bool ChromeMetricsServiceClient::IsUMACellularUploadLogicEnabled() {
-  return metrics::IsCellularLogicEnabled();
+  return metrics::ShouldUseCellularUploadInterval();
 }
 
 void ChromeMetricsServiceClient::OnHistoryDeleted() {

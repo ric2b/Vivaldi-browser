@@ -66,42 +66,6 @@ public class ConfirmManagedSyncDataDialog extends DialogFragment
         String desc = resources.getString(R.string.sign_in_managed_account_description, domain);
         showNewInstance(title, desc, positive, negative, fragmentManager, callback);
     }
-    /**
-     * Create the dialog to show when signing out of a managed account (but not switching from a
-     * managed account).
-     * @param callback Callback for result.
-     * @param fragmentManager FragmentManaged to display the dialog.
-     * @param resources Resources to load the strings.
-     * @param domain The domain of the managed account.
-     */
-    public static void showSignOutFromManagedAccountDialog(Listener callback,
-            FragmentManager fragmentManager, Resources resources, String domain) {
-        String title = resources.getString(R.string.sign_out_managed_account);
-        String positive = resources.getString(R.string.accept_and_sign_out);
-        String negative = resources.getString(R.string.cancel);
-        String desc = resources.getString(R.string.sign_out_managed_account_description, domain);
-        showNewInstance(title, desc, positive, negative, fragmentManager, callback);
-    }
-
-    /**
-     * Create the dialog to show when switching from a managed account.
-     * @param callback Callback for result.
-     * @param fragmentManager FragmentManaged to display the dialog.
-     * @param resources Resources to load the strings.
-     * @param domain The domain of the managed account.
-     * @param oldAccount The old account email address.
-     * @param newAccount The new account email address.
-     */
-    public static void showSwitchFromManagedAccountDialog(Listener callback,
-            FragmentManager fragmentManager, Resources resources, String domain, String oldAccount,
-            String newAccount) {
-        String title = resources.getString(R.string.sign_out_managed_account);
-        String positive = resources.getString(R.string.accept_and_switch_accounts);
-        String negative = resources.getString(R.string.cancel);
-        String desc = resources.getString(R.string.switch_from_managed_account_description,
-                oldAccount, newAccount, domain);
-        showNewInstance(title, desc, positive, negative, fragmentManager, callback);
-    }
 
     private static void showNewInstance(String title, String description, String positiveButton,
             String negativeButton, FragmentManager fragmentManager, Listener callback) {

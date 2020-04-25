@@ -43,6 +43,16 @@ Elements.PropertiesWidget = class extends UI.ThrottledWidget {
         SDK.DOMModel, SDK.DOMModel.Events.ChildNodeCountUpdated, this._onNodeChange, this);
     UI.context.addFlavorChangeListener(SDK.DOMNode, this._setNode, this);
     this._node = UI.context.flavor(SDK.DOMNode);
+
+    this._treeOutline = new ObjectUI.ObjectPropertiesSectionsTreeOutline({readOnly: true});
+    this._treeOutline.setShowSelectionOnKeyboardFocus(/* show */ true, /* preventTabOrder */ false);
+    this._expandController = new ObjectUI.ObjectPropertiesSectionsTreeExpandController(this._treeOutline);
+    this.contentElement.appendChild(this._treeOutline.element);
+
+    this._treeOutline.addEventListener(UI.TreeOutline.Events.ElementExpanded, () => {
+      Host.userMetrics.actionTaken(Host.UserMetrics.Action.DOMPropertiesExpanded);
+    });
+
     this.update();
   }
 
@@ -67,50 +77,48 @@ Elements.PropertiesWidget = class extends UI.ThrottledWidget {
 
     if (!this._node) {
       this.contentElement.removeChildren();
-      this.sections = [];
       return;
     }
 
     this._lastRequestedNode = this._node;
     const object = await this._node.resolveToObject(Elements.PropertiesWidget._objectGroupName);
-    if (!object)
+    if (!object) {
       return;
+    }
 
     const result = await object.callFunction(protoList);
     object.release();
 
-    if (!result.object || result.wasThrown)
+    if (!result.object || result.wasThrown) {
       return;
+    }
 
     const propertiesResult = await result.object.getOwnProperties(false /* generatePreview */);
     result.object.release();
 
-    if (!propertiesResult || !propertiesResult.properties)
+    if (!propertiesResult || !propertiesResult.properties) {
       return;
+    }
 
     const properties = propertiesResult.properties;
-    const expanded = [];
-    const sections = this.sections || [];
-    for (let i = 0; i < sections.length; ++i)
-      expanded.push(sections[i].expanded);
+    this._treeOutline.removeChildren();
 
-    this.contentElement.removeChildren();
-    this.sections = [];
-
+    let selected = false;
     // Get array of property user-friendly names.
     for (let i = 0; i < properties.length; ++i) {
-      if (!parseInt(properties[i].name, 10))
+      if (!parseInt(properties[i].name, 10)) {
         continue;
+      }
       const property = properties[i].value;
       let title = property.description;
       title = title.replace(/Prototype$/, '');
-      const section = new ObjectUI.ObjectPropertiesSection(property, title);
-      section.element.classList.add('properties-widget-section');
-      this.sections.push(section);
-      this.contentElement.appendChild(section.element);
-      if (expanded[this.sections.length - 1])
-        section.expand();
-      section.addEventListener(UI.TreeOutline.Events.ElementExpanded, this._propertyExpanded, this);
+
+      const section = this._createSectionTreeElement(property, title);
+      this._treeOutline.appendChild(section);
+      if (!selected) {
+        section.select(/* omitFocus= */ true, /* selectedByUser= */ false);
+        selected = true;
+      }
     }
 
     /**
@@ -130,24 +138,33 @@ Elements.PropertiesWidget = class extends UI.ThrottledWidget {
   }
 
   /**
-   * @param {!Common.Event} event
+   * @param {!SDK.RemoteObject} property
+   * @param {string} title
+   * @returns {!ObjectUI.ObjectPropertiesSection.RootElement}
    */
-  _propertyExpanded(event) {
-    Host.userMetrics.actionTaken(Host.UserMetrics.Action.DOMPropertiesExpanded);
-    for (const section of this.sections)
-      section.removeEventListener(UI.TreeOutline.Events.ElementExpanded, this._propertyExpanded, this);
+  _createSectionTreeElement(property, title) {
+    const titleElement = createElementWithClass('span', 'tree-element-title');
+    titleElement.textContent = title;
+
+    const section = new ObjectUI.ObjectPropertiesSection.RootElement(property);
+    section.title = titleElement;
+    this._expandController.watchSection(title, section);
+
+    return section;
   }
 
   /**
    * @param {!Common.Event} event
    */
   _onNodeChange(event) {
-    if (!this._node)
+    if (!this._node) {
       return;
+    }
     const data = event.data;
     const node = /** @type {!SDK.DOMNode} */ (data instanceof SDK.DOMNode ? data : data.node);
-    if (this._node !== node)
+    if (this._node !== node) {
       return;
+    }
     this.update();
   }
 };

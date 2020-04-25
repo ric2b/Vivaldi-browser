@@ -152,7 +152,7 @@ interface TrustedHeaderClient {
 
   // Allows modifying response headers, including sensitive headers such as
   // set-cookie. This should only be used from a trusted process.
-  OnHeadersReceived(string headers) =>
+  OnHeadersReceived(string headers, IPEndPoint remote_endpoint) =>
       (int32 result,
        string? headers,
        url.mojom.Url allowed_unsafe_redirect_url);
@@ -166,6 +166,12 @@ interface TrustedURLLoaderHeaderClient {
   // corresponding |header_client|.
   OnLoaderCreated(int32 request_id,
                   pending_receiver<TrustedHeaderClient> header_client);
+
+  // When a new URLLoader is created for a CORS preflight request, this will
+  // be called to pass a corresponding |header_client|.
+  OnLoaderForCorsPreflightCreated(
+      URLRequest request,
+      pending_receiver<TrustedHeaderClient> header_client);
 };
 
 // Parameters for constructing a network context.
@@ -252,9 +258,6 @@ struct NetworkContextParams {
   [EnableIf=is_android]
   bool check_clear_text_permitted = false;
 
-  // Enables HTTP/0.9 on ports other than 80 for HTTP and 443 for HTTPS.
-  bool http_09_on_non_default_ports_enabled = false;
-
   // If true, idle sockets won't be closed when memory pressure happens.
   bool disable_idle_sockets_close_on_memory_pressure = false;
 
@@ -265,9 +268,9 @@ struct NetworkContextParams {
 
   // SSL configuration. |initial_proxy_config| is the initial SSL configuration
   // to use. If nullptr, uses the default configuration. Updated SSL
-  // configurations can be passed in via |ssl_config_client_request|.
+  // configurations can be passed in via |ssl_config_client_receiver|.
   SSLConfig? initial_ssl_config;
-  SSLConfigClient&? ssl_config_client_request;
+  pending_receiver<SSLConfigClient>? ssl_config_client_receiver;
 
   // Proxy configuration. If |initial_proxy_config| is set, it's the initial
   // proxy configuration. Updated proxy configuration can be passed in via
@@ -277,7 +280,7 @@ struct NetworkContextParams {
   //
   // If both are null, the NetworkContext will not use a proxy.
   ProxyConfigWithAnnotation? initial_proxy_config;
-  ProxyConfigClient&? proxy_config_client_request;
+  pending_receiver<ProxyConfigClient>? proxy_config_client_receiver;
 
   // If |custom_proxy_config_client_receiver| is set, this context will listen
   // for updates to the custom proxy config, and use it if applicable for
@@ -294,11 +297,11 @@ struct NetworkContextParams {
   // TODO(mmenke): Can the consumer piggy back on other network events through
   // other channels (navigation, issuing requests, etc)? Or can
   // ProxyConfigServices be modified not to need this notification?
-  ProxyConfigPollerClient? proxy_config_poller_client;
+  pending_remote<ProxyConfigPollerClient>? proxy_config_poller_client;
 
   // Optional client that will be notified of errors related to the proxy
   // settings.
-  ProxyErrorClient? proxy_error_client;
+  pending_remote<ProxyErrorClient>? proxy_error_client;
 
   // When PAC quick checking is enabled, DNS lookups for PAC script's host are
   // timed out aggressively. This prevents hanging all network request on DNS
@@ -353,7 +356,7 @@ struct NetworkContextParams {
 
   // If true, the built-in cert verifier will be used. If false, the platform
   // cert verifier will be used.
-  [EnableIf=is_chromeos]
+  [EnableIf=is_builtin_cert_verifier_feature_supported]
   bool use_builtin_cert_verifier = false;
 
   // Parameters for the cert verifier comparison trial. This is a temporary
@@ -415,6 +418,20 @@ struct NetworkContextParams {
 
   // Extra CORS safelisted request headers names.
   array<string> cors_extra_safelisted_request_header_names;
+
+  // Specifies the CORS mode.
+  //   kDefault - Decided by base::Feature
+  //   kEnable  - Enable CORS in Network Service (aka OOR-CORS)
+  //   kDisable - Don't enable CORS (Blink will take care of it)
+  enum CorsMode {kDefault, kDisable, kEnable};
+  CorsMode cors_mode = kDefault;
+
+  // Points to a sqlite database containing persisted Reporting clients and NEL
+  // policies. If Reporting and NEL persistence is disabled, then we'll ignore
+  // this field. If this field is null then persistence will be disabled
+  // regardless. This field should not be used if the ENABLE_REPORTING build
+  // flag is false.
+  mojo_base.mojom.FilePath? reporting_and_nel_store_path;
 };
 
 struct NetworkConditions {
@@ -564,7 +581,7 @@ interface ClientCertificateResponder {
   ContinueWithCertificate(network.mojom.X509Certificate x509_certificate,
                           string provider_name,
                           array<uint16> algorithm_preferences,
-                          SSLPrivateKey ssl_private_key);
+                          pending_remote<SSLPrivateKey> ssl_private_key);
 
   // Affirmatively select no certificate (this is cached and can affect future
   // URLRequests). Does not cancel the URLRequest.
@@ -737,7 +754,7 @@ interface NetworkContext {
   SetClient(pending_remote<NetworkContextClient> client);
 
   // Creates a new URLLoaderFactory with the given |params|.
-  CreateURLLoaderFactory(URLLoaderFactory& url_loader_factory,
+  CreateURLLoaderFactory(pending_receiver<URLLoaderFactory> url_loader_factory,
                          URLLoaderFactoryParams params);
 
   // Destroys all URLLoaderFactory bindings, which should then be regenerated.
@@ -754,7 +771,15 @@ interface NetworkContext {
   // Gets a RestrictedCookieManager scoped to a given origin, and applying
   // settings configured on the CookieManager associated with this domain.
   //
-  // If role == SCRIPT, this interface can be safely handed out to a process
+  // |site_for_cookies| represents which domains the cookie manager should
+  // consider to be first-party, for purposes of SameSite cookies and any
+  // third-party cookie blocking the embedder may implement. Empty
+  // |site_for_cookies| denotes that no domains are first-party.
+  //
+  // |top_frame_origin| represents the domain for top-level frame, and can be
+  // used to look up preferences that are dependent on that.
+  //
+  // If |role| == SCRIPT, this interface can be safely handed out to a process
   // that is known to represent the given origin, such as a renderer process.
   //
   // |is_service_worker|, |process_id| and |routing_id| will be passed to
@@ -763,6 +788,8 @@ interface NetworkContext {
       pending_receiver<RestrictedCookieManager> restricted_cookie_manager,
       RestrictedCookieManagerRole role,
       url.mojom.Origin origin,
+      url.mojom.Url site_for_cookies,
+      url.mojom.Origin top_frame_origin,
       bool is_service_worker,
       int32 process_id, int32 routing_id);
 
@@ -924,7 +951,8 @@ interface NetworkContext {
   // is not interested in incoming data.
   // Any sockets that are created but are yet to be destroyed will be destroyed
   // when NetworkContext goes away.
-  CreateUDPSocket(UDPSocket& request, UDPSocketListener? listener);
+  CreateUDPSocket(pending_receiver<UDPSocket> receiver,
+                  pending_remote<UDPSocketListener>? listener);
 
   // Creates a TCP server socket that listens on |local_addr|. The socket
   // created can only be used for the purpose specified in |traffic_annotation|,
@@ -941,7 +969,7 @@ interface NetworkContext {
   CreateTCPServerSocket(IPEndPoint local_addr,
                         uint32 backlog,
                         MutableNetworkTrafficAnnotationTag traffic_annotation,
-                        TCPServerSocket& socket)
+                        pending_receiver<TCPServerSocket> socket)
       => (int32 result, IPEndPoint? local_addr_out);
 
   // Creates a TCP socket connected to |remote_addr|. |observer| if non-null
@@ -964,8 +992,8 @@ interface NetworkContext {
       AddressList remote_addr_list,
       TCPConnectedSocketOptions? tcp_connected_socket_options,
       MutableNetworkTrafficAnnotationTag traffic_annotation,
-      TCPConnectedSocket& socket,
-      SocketObserver? observer)
+      pending_receiver<TCPConnectedSocket> socket,
+      pending_remote<SocketObserver>? observer)
       => (int32 result,
           IPEndPoint? local_addr,
           IPEndPoint? peer_addr,
@@ -985,7 +1013,7 @@ interface NetworkContext {
   // consumers can mimic Berkeley sockets semantics.
   CreateTCPBoundSocket(IPEndPoint local_addr,
                        MutableNetworkTrafficAnnotationTag traffic_annotation,
-                       TCPBoundSocket& socket)
+                       pending_receiver<TCPBoundSocket> socket)
       => (int32 result, IPEndPoint? local_addr);
 
   // Creates a ProxyResolvingSocketFactory that shares some configuration params
@@ -997,7 +1025,7 @@ interface NetworkContext {
 
   // Looks up what proxy to use for a particular URL.
   LookUpProxyForURL(url.mojom.Url url,
-                    ProxyLookupClient proxy_lookup_client);
+                    pending_remote<ProxyLookupClient> proxy_lookup_client);
 
   // Forces refetching the proxy configuration, and applying it.
   ForceReloadProxyConfig() => ();
@@ -1045,7 +1073,7 @@ interface NetworkContext {
   // managed by the same NetworkService. The particular NetworkContext this is
   // called on will determine which NetworkContext gets its information and
   // configuration summary written out at the end of the log.
-  CreateNetLogExporter(NetLogExporter& exporter);
+  CreateNetLogExporter(pending_receiver<NetLogExporter> receiver);
 
   // Tries to preconnect to |url|. |num_streams| may be used to request more
   // than one connection be established in parallel.
@@ -1065,7 +1093,7 @@ interface NetworkContext {
                          P2PSocketManager& socket_manager);
 
   // Creates an MdnsResponder instance.
-  CreateMdnsResponder(MdnsResponder& responder_request);
+  CreateMdnsResponder(pending_receiver<MdnsResponder> responder_receiver);
 
   // Resolves the given hostname (or IP address literal). See documentation at
   // HostResolver::ResolveHost.
@@ -1074,7 +1102,7 @@ interface NetworkContext {
   // Such requests will receive ERR_FAILED via |response_client|.
   ResolveHost(HostPortPair host,
               ResolveHostParameters? optional_parameters,
-              ResolveHostClient response_client);
+              pending_remote<ResolveHostClient> response_client);
 
   // Creates a HostResolver interface that can be passed to code/processes
   // without direct access to NetworkContext to make ResolveHost requests.
@@ -1091,7 +1119,7 @@ interface NetworkContext {
   // the contained ResolveHost method, consider adding the ability for this to
   // be a restricted resolver with some functionality disabled (eg maybe MDNS).
   CreateHostResolver(DnsConfigOverrides? config_overrides,
-                     HostResolver& host_resolver);
+                     pending_receiver<HostResolver> host_resolver);
 
   // Checks the given certificate against the CertVerifier and CTVerifier. This
   // implementation is currently specific for use by Signed Exchange.
@@ -1127,6 +1155,10 @@ interface NetworkContext {
   SetCorsOriginAccessListsForOrigin(
       url.mojom.Origin source_origin, array<CorsOriginPattern> allow_patterns,
       array<CorsOriginPattern> block_patterns) => ();
+
+  // Sets extra CORS safelisted request headers names dynamically.
+  SetCorsExtraSafelistedRequestHeaderNames(
+      array<string> cors_extra_safelisted_request_header_names);
 
   // Deletes any dynamic data stored for |host| from the transport
   // security state. Returns true iff an entry was deleted.
@@ -1186,5 +1218,6 @@ interface NetworkContext {
   ForceDomainReliabilityUploadsForTesting() => ();
 
   // Gets the OriginPolicyManager associated with this network context.
-  GetOriginPolicyManager(OriginPolicyManager& origin_policy_manager);
+  GetOriginPolicyManager(
+      pending_receiver<OriginPolicyManager> origin_policy_manager);
 };

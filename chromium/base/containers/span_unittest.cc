@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "base/containers/checked_iterators.h"
@@ -21,6 +22,24 @@ using ::testing::Eq;
 using ::testing::Pointwise;
 
 namespace base {
+
+namespace {
+
+// constexpr implementation of std::equal's 4 argument overload.
+template <class InputIterator1, class InputIterator2>
+constexpr bool constexpr_equal(InputIterator1 first1,
+                               InputIterator1 last1,
+                               InputIterator2 first2,
+                               InputIterator2 last2) {
+  for (; first1 != last1 && first2 != last2; ++first1, ++first2) {
+    if (*first1 != *first2)
+      return false;
+  }
+
+  return first1 == last1 && first2 == last2;
+}
+
+}  // namespace
 
 TEST(SpanTest, DefaultConstructor) {
   span<int> dynamic_span;
@@ -472,6 +491,17 @@ TEST(SpanTest, TemplatedSubspan) {
     static_assert(2 == subspan[1], "");
     static_assert(3 == subspan[2], "");
   }
+}
+
+TEST(SpanTest, SubscriptedBeginIterator) {
+  int array[] = {1, 2, 3};
+  span<const int> const_span(array);
+  for (size_t i = 0; i < const_span.size(); ++i)
+    EXPECT_EQ(array[i], const_span.begin()[i]);
+
+  span<int> mutable_span(array);
+  for (size_t i = 0; i < mutable_span.size(); ++i)
+    EXPECT_EQ(array[i], mutable_span.begin()[i]);
 }
 
 TEST(SpanTest, TemplatedFirstOnDynamicSpan) {
@@ -950,6 +980,21 @@ TEST(SpanTest, Iterator) {
   EXPECT_THAT(results, ElementsAre(1, 6, 1, 8, 0));
 }
 
+TEST(SpanTest, ConstexprIterator) {
+  static constexpr int kArray[] = {1, 6, 1, 8, 0};
+  constexpr span<const int> span(kArray);
+
+  static_assert(constexpr_equal(std::begin(kArray), std::end(kArray),
+                                span.begin(), span.end()),
+                "");
+  static_assert(1 == span.begin()[0], "");
+  static_assert(1 == *(span.begin() += 0), "");
+  static_assert(6 == *(span.begin() += 1), "");
+
+  static_assert(1 == *((span.begin() + 1) -= 1), "");
+  static_assert(6 == *((span.begin() + 1) -= 0), "");
+}
+
 TEST(SpanTest, ReverseIterator) {
   static constexpr int kArray[] = {1, 6, 1, 8, 0};
   constexpr span<const int> span(kArray);
@@ -1212,12 +1257,16 @@ TEST(SpanTest, EnsureConstexprGoodness) {
 TEST(SpanTest, OutOfBoundsDeath) {
   constexpr span<int, 0> kEmptySpan;
   ASSERT_DEATH_IF_SUPPORTED(kEmptySpan[0], "");
+  ASSERT_DEATH_IF_SUPPORTED(kEmptySpan.begin()[0], "");
+  ASSERT_DEATH_IF_SUPPORTED(kEmptySpan.end()[0], "");
   ASSERT_DEATH_IF_SUPPORTED(kEmptySpan.first(1), "");
   ASSERT_DEATH_IF_SUPPORTED(kEmptySpan.last(1), "");
   ASSERT_DEATH_IF_SUPPORTED(kEmptySpan.subspan(1), "");
 
   constexpr span<int> kEmptyDynamicSpan;
   ASSERT_DEATH_IF_SUPPORTED(kEmptyDynamicSpan[0], "");
+  ASSERT_DEATH_IF_SUPPORTED(kEmptyDynamicSpan.begin()[0], "");
+  ASSERT_DEATH_IF_SUPPORTED(kEmptyDynamicSpan.end()[0], "");
   ASSERT_DEATH_IF_SUPPORTED(kEmptyDynamicSpan.front(), "");
   ASSERT_DEATH_IF_SUPPORTED(kEmptyDynamicSpan.first(1), "");
   ASSERT_DEATH_IF_SUPPORTED(kEmptyDynamicSpan.last(1), "");
@@ -1228,6 +1277,8 @@ TEST(SpanTest, OutOfBoundsDeath) {
   constexpr span<const int> kNonEmptyDynamicSpan(kArray);
   EXPECT_EQ(3U, kNonEmptyDynamicSpan.size());
   ASSERT_DEATH_IF_SUPPORTED(kNonEmptyDynamicSpan[4], "");
+  ASSERT_DEATH_IF_SUPPORTED(kNonEmptyDynamicSpan.begin()[-1], "");
+  ASSERT_DEATH_IF_SUPPORTED(kNonEmptyDynamicSpan.begin()[3], "");
   ASSERT_DEATH_IF_SUPPORTED(kEmptyDynamicSpan.subspan(10), "");
   ASSERT_DEATH_IF_SUPPORTED(kEmptyDynamicSpan.subspan(1, 7), "");
 }
@@ -1242,47 +1293,73 @@ TEST(SpanTest, IteratorIsRangeMoveSafe) {
 
   // Overlapping ranges.
   for (const int dest_start_index : kOverlappingStartIndexes) {
-    EXPECT_FALSE(CheckedRandomAccessIterator<const int>::IsRangeMoveSafe(
+    EXPECT_FALSE(CheckedContiguousIterator<const int>::IsRangeMoveSafe(
         span.begin(), span.end(),
-        CheckedRandomAccessIterator<const int>(
+        CheckedContiguousIterator<const int>(
             span.data() + dest_start_index,
             span.data() + dest_start_index + kNumElements)));
-    EXPECT_FALSE(CheckedRandomAccessConstIterator<const int>::IsRangeMoveSafe(
+    EXPECT_FALSE(CheckedContiguousConstIterator<const int>::IsRangeMoveSafe(
         span.cbegin(), span.cend(),
-        CheckedRandomAccessConstIterator<const int>(
+        CheckedContiguousConstIterator<const int>(
             span.data() + dest_start_index,
             span.data() + dest_start_index + kNumElements)));
   }
 
   // Non-overlapping ranges.
   for (const int dest_start_index : kNonOverlappingStartIndexes) {
-    EXPECT_TRUE(CheckedRandomAccessIterator<const int>::IsRangeMoveSafe(
+    EXPECT_TRUE(CheckedContiguousIterator<const int>::IsRangeMoveSafe(
         span.begin(), span.end(),
-        CheckedRandomAccessIterator<const int>(
+        CheckedContiguousIterator<const int>(
             span.data() + dest_start_index,
             span.data() + dest_start_index + kNumElements)));
-    EXPECT_TRUE(CheckedRandomAccessConstIterator<const int>::IsRangeMoveSafe(
+    EXPECT_TRUE(CheckedContiguousConstIterator<const int>::IsRangeMoveSafe(
         span.cbegin(), span.cend(),
-        CheckedRandomAccessConstIterator<const int>(
+        CheckedContiguousConstIterator<const int>(
             span.data() + dest_start_index,
             span.data() + dest_start_index + kNumElements)));
   }
 
   // IsRangeMoveSafe is true if the length to be moved is 0.
-  EXPECT_TRUE(CheckedRandomAccessIterator<const int>::IsRangeMoveSafe(
+  EXPECT_TRUE(CheckedContiguousIterator<const int>::IsRangeMoveSafe(
       span.begin(), span.begin(),
-      CheckedRandomAccessIterator<const int>(span.data(), span.data())));
-  EXPECT_TRUE(CheckedRandomAccessConstIterator<const int>::IsRangeMoveSafe(
+      CheckedContiguousIterator<const int>(span.data(), span.data())));
+  EXPECT_TRUE(CheckedContiguousConstIterator<const int>::IsRangeMoveSafe(
       span.cbegin(), span.cbegin(),
-      CheckedRandomAccessConstIterator<const int>(span.data(), span.data())));
+      CheckedContiguousConstIterator<const int>(span.data(), span.data())));
 
   // IsRangeMoveSafe is false if end < begin.
-  EXPECT_FALSE(CheckedRandomAccessIterator<const int>::IsRangeMoveSafe(
+  EXPECT_FALSE(CheckedContiguousIterator<const int>::IsRangeMoveSafe(
       span.end(), span.begin(),
-      CheckedRandomAccessIterator<const int>(span.data(), span.data())));
-  EXPECT_FALSE(CheckedRandomAccessConstIterator<const int>::IsRangeMoveSafe(
+      CheckedContiguousIterator<const int>(span.data(), span.data())));
+  EXPECT_FALSE(CheckedContiguousConstIterator<const int>::IsRangeMoveSafe(
       span.cend(), span.cbegin(),
-      CheckedRandomAccessConstIterator<const int>(span.data(), span.data())));
+      CheckedContiguousConstIterator<const int>(span.data(), span.data())));
+}
+
+TEST(SpanTest, Sort) {
+  int array[] = {5, 4, 3, 2, 1};
+
+  span<int> dynamic_span = array;
+  std::sort(dynamic_span.begin(), dynamic_span.end());
+  EXPECT_THAT(array, ElementsAre(1, 2, 3, 4, 5));
+  std::sort(dynamic_span.rbegin(), dynamic_span.rend());
+  EXPECT_THAT(array, ElementsAre(5, 4, 3, 2, 1));
+
+  span<int, 5> static_span = array;
+  std::sort(static_span.rbegin(), static_span.rend(), std::greater<>());
+  EXPECT_THAT(array, ElementsAre(1, 2, 3, 4, 5));
+  std::sort(static_span.begin(), static_span.end(), std::greater<>());
+  EXPECT_THAT(array, ElementsAre(5, 4, 3, 2, 1));
+}
+
+TEST(SpanTest, IteratorConversions) {
+  static_assert(std::is_convertible<span<int>::iterator,
+                                    span<int>::const_iterator>::value,
+                "Error: iterator should be convertible to const_iterator");
+
+  static_assert(!std::is_convertible<span<int>::const_iterator,
+                                     span<int>::iterator>::value,
+                "Error: const_iterator should not be convertible to iterator");
 }
 
 }  // namespace base

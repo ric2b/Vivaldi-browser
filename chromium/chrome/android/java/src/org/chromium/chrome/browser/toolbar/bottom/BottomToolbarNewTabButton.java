@@ -9,12 +9,13 @@ import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.StringRes;
 import android.support.graphics.drawable.VectorDrawableCompat;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+
+import androidx.annotation.StringRes;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
@@ -26,6 +27,8 @@ import org.chromium.chrome.browser.toolbar.IncognitoStateProvider.IncognitoState
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.ui.widget.ChromeImageButton;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * The tab switcher new tab button.
@@ -59,8 +62,10 @@ class BottomToolbarNewTabButton extends ChromeImageButton
                 getContext().getResources(), R.drawable.new_tab_icon, getContext().getTheme()));
 
         mBackground = ApiCompatibilityUtils.getDrawable(mResources, R.drawable.ntp_search_box);
+        if (!ChromeApplication.isVivaldi()) {
         mBackground.mutate();
         setBackground(mBackground);
+        }
     }
 
     /**
@@ -69,7 +74,11 @@ class BottomToolbarNewTabButton extends ChromeImageButton
     public void setWrapperView(ViewGroup wrapper) {
         mWrapper = wrapper;
         mLabel = mWrapper.findViewById(R.id.new_tab_button_label);
-        if (FeatureUtilities.isLabeledBottomToolbarEnabled()) mLabel.setVisibility(View.VISIBLE);
+        if (FeatureUtilities.isLabeledBottomToolbarEnabled()) {
+            mLabel.setVisibility(View.VISIBLE);
+        } else {
+            mWrapper.setBackground(null);
+        }
     }
 
     @Override
@@ -123,6 +132,9 @@ class BottomToolbarNewTabButton extends ChromeImageButton
 
     @Override
     public void onTintChanged(ColorStateList tint, boolean useLight) {
+        if (ChromeApplication.isVivaldi())
+            this.setColorFilter(tint.getDefaultColor());
+        else
         ApiCompatibilityUtils.setImageTintList(this, tint);
         if (mLabel != null) mLabel.setTextColor(tint);
         updateBackground();

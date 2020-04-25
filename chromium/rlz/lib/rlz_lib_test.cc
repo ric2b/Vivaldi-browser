@@ -24,7 +24,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
-#include "net/url_request/test_url_fetcher_factory.h"
 #include "rlz/lib/financial_ping.h"
 #include "rlz/lib/lib_values.h"
 #include "rlz/lib/net_response_check.h"
@@ -53,7 +52,7 @@
 #include "base/files/important_file_writer.h"
 #include "base/stl_util.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/fake_debug_daemon_client.h"
+#include "chromeos/dbus/debug_daemon/fake_debug_daemon_client.h"
 #include "rlz/chromeos/lib/rlz_value_store_chromeos.h"
 #endif
 

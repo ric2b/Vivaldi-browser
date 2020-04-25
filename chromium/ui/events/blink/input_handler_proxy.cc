@@ -398,7 +398,7 @@ void InputHandlerProxy::InjectScrollbarGestureScroll(
   // provided element_id.
   if (type == WebInputEvent::Type::kGestureScrollBegin)
     synthetic_gesture_event->data.scroll_begin.scrollable_area_element_id =
-        pointer_result.target_scroller.GetInternalValue();
+        pointer_result.target_scroller.GetStableId();
 
   WebScopedInputEvent web_scoped_gesture_event(
       synthetic_gesture_event.release());
@@ -523,7 +523,8 @@ InputHandlerProxy::RouteToTypeSpecificHandler(
         CHECK(input_handler_);
         cc::InputHandlerPointerResult pointer_result =
             input_handler_->MouseDown(
-                gfx::PointF(mouse_event.PositionInWidget()));
+                gfx::PointF(mouse_event.PositionInWidget()),
+                event.GetModifiers() & WebInputEvent::kShiftKey);
         if (pointer_result.type == cc::PointerResultType::kScrollbarScroll) {
           // Generate GSB and GSU events and add them to the
           // CompositorThreadEventQueue.

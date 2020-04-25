@@ -207,17 +207,26 @@ struct Cookie {
          const std::string& value,
          const std::string& domain,
          const std::string& path,
+         const std::string& samesite,
          double expiry,
          bool http_only,
          bool secure,
          bool session)
-      : name(name), value(value), domain(domain), path(path), expiry(expiry),
-        http_only(http_only), secure(secure), session(session) {}
+      : name(name),
+        value(value),
+        domain(domain),
+        path(path),
+        samesite(samesite),
+        expiry(expiry),
+        http_only(http_only),
+        secure(secure),
+        session(session) {}
 
   std::string name;
   std::string value;
   std::string domain;
   std::string path;
+  std::string samesite;
   double expiry;
   bool http_only;
   bool secure;
@@ -237,6 +246,8 @@ std::unique_ptr<base::DictionaryValue> CreateDictionaryFrom(
     dict->SetDouble("expiry", cookie.expiry);
   dict->SetBoolean("httpOnly", cookie.http_only);
   dict->SetBoolean("secure", cookie.secure);
+  if (!cookie.samesite.empty())
+    dict->SetString("sameSite", cookie.samesite);
   return dict;
 }
 
@@ -264,6 +275,8 @@ Status GetVisibleCookies(WebView* web_view,
     cookie_dict->GetString("domain", &domain);
     std::string path;
     cookie_dict->GetString("path", &path);
+    std::string samesite = "";
+    GetOptionalString(cookie_dict, "sameSite", &samesite);
     double expiry = 0;
     cookie_dict->GetDouble("expires", &expiry);
     if (expiry > 1e12)
@@ -275,8 +288,8 @@ Status GetVisibleCookies(WebView* web_view,
     bool secure = false;
     cookie_dict->GetBoolean("secure", &secure);
 
-    cookies_tmp.push_back(
-        Cookie(name, value, domain, path, expiry, http_only, secure, session));
+    cookies_tmp.push_back(Cookie(name, value, domain, path, samesite, expiry,
+                                 http_only, secure, session));
   }
   cookies->swap(cookies_tmp);
   return Status(kOk);
@@ -512,6 +525,8 @@ Status ExecuteWindowCommand(const WindowCommand& command,
     return nav_status;
   if (status.code() == kUnexpectedAlertOpen)
     return Status(kOk);
+  if (status.code() == kUnexpectedAlertOpen_Keep)
+    return Status(kUnexpectedAlertOpen);
   return status;
 }
 
@@ -1286,10 +1301,34 @@ Status ExecutePerformActions(Session* session,
   }
 
   for (size_t i = 0; i < longest_action_list_size; i++) {
+    // Find the last pointer action, and it has to be sent synchronously by
+    // default.
+    size_t last_action_index = 0;
+    size_t last_touch_index = 0;
+    for (size_t j = 0; j < actions_list.size(); j++) {
+      if (actions_list[j].size() > i) {
+        const base::DictionaryValue* action = actions_list[j][i].get();
+        std::string type;
+        std::string action_type;
+        action->GetString("type", &type);
+        action->GetString("subtype", &action_type);
+        if (type != "none" && action_type != "pause")
+          last_action_index = j;
+
+        if (type == "pointer") {
+          std::string pointer_type;
+          action->GetString("pointerType", &pointer_type);
+          if (pointer_type == "touch")
+            last_touch_index = j;
+        }
+      }
+    }
+
     // Implements "compute the tick duration" algorithm from W3C spec
     // (https://w3c.github.io/webdriver/#dfn-computing-the-tick-duration).
     // This is the duration for actions in one tick.
     int tick_duration = 0;
+    std::list<TouchEvent> dispatch_touch_events;
     for (size_t j = 0; j < actions_list.size(); j++) {
       if (actions_list[j].size() > i) {
         const base::DictionaryValue* action = actions_list[j][i].get();
@@ -1334,8 +1373,11 @@ Status ExecutePerformActions(Session* session,
           GetOptionalInt(action, "duration", &duration);
           tick_duration = std::max(tick_duration, duration);
         } else {
-          bool async_dispatch_event = false;
-          GetOptionalBool(action, "asyncDispatch", &async_dispatch_event);
+          bool async_dispatch_event = true;
+          if (j == last_action_index) {
+            async_dispatch_event = false;
+            GetOptionalBool(action, "asyncDispatch", &async_dispatch_event);
+          }
 
           if (type == "key") {
             std::list<KeyEvent> dispatch_key_events;
@@ -1467,10 +1509,14 @@ Status ExecutePerformActions(Session* session,
                 action_input_states[j]->SetInteger("pressed", 0);
               }
               if (has_touch_start[id]) {
-                Status status =
-                    web_view->DispatchTouchEvent(event, async_dispatch_event);
-                if (status.IsError())
-                  return status;
+                event.id = dispatch_touch_events.size();
+                dispatch_touch_events.push_back(event);
+                if (j == last_touch_index) {
+                  Status status = web_view->DispatchTouchEventWithMultiPoints(
+                      dispatch_touch_events, async_dispatch_event);
+                  if (status.IsError())
+                    return status;
+                }
               }
               if (action_type == "pointerUp")
                 has_touch_start[id] = false;
@@ -1742,7 +1788,14 @@ Status ExecuteScreenshot(Session* session,
   std::string screenshot;
   status = web_view->CaptureScreenshot(&screenshot, base::DictionaryValue());
   if (status.IsError()) {
-    LOG(WARNING) << "screenshot failed, retrying";
+    if (status.code() == kUnexpectedAlertOpen) {
+      LOG(WARNING) << status.message() << ", cancelling screenshot";
+      // we can't take screenshot in this state
+      // but we must return kUnexpectedAlertOpen_Keep instead
+      // see https://crbug.com/chromedriver/2117
+      return Status(kUnexpectedAlertOpen_Keep);
+    }
+    LOG(WARNING) << "screenshot failed, retrying " << status.message();
     status = web_view->CaptureScreenshot(&screenshot, base::DictionaryValue());
   }
   if (status.IsError())
@@ -1826,6 +1879,12 @@ Status ExecuteAddCookie(Session* session,
   std::string path("/");
   if (!GetOptionalString(cookie, "path", &path))
     return Status(kInvalidArgument, "invalid 'path'");
+  std::string samesite("");
+  if (!GetOptionalString(cookie, "sameSite", &samesite))
+    return Status(kInvalidArgument, "invalid 'sameSite'");
+  if (!samesite.empty() && samesite != "Strict" && samesite != "Lax" &&
+      samesite != "None")
+    return Status(kInvalidArgument, "invalid 'sameSite'");
   bool secure = false;
   if (!GetOptionalBool(cookie, "secure", &secure))
     return Status(kInvalidArgument, "invalid 'secure'");
@@ -1852,8 +1911,8 @@ Status ExecuteAddCookie(Session* session,
       expiry = (base::Time::Now() - base::Time::UnixEpoch()).InSeconds() +
                kDefaultCookieExpiryTime;
   }
-  return web_view->AddCookie(name, url, cookie_value, domain, path,
-      secure, httpOnly, expiry);
+  return web_view->AddCookie(name, url, cookie_value, domain, path, samesite,
+                             secure, httpOnly, expiry);
 }
 
 Status ExecuteDeleteCookie(Session* session,

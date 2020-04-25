@@ -72,6 +72,9 @@ enum ChromeDistanceMetric {
   // Width of a bubble unless the content is too wide to make that
   // feasible.
   DISTANCE_BUBBLE_PREFERRED_WIDTH,
+  // Width of a bubble that appears mid-screen (like a standalone dialog)
+  // instead of being anchored.
+  DISTANCE_STANDALONE_BUBBLE_PREFERRED_WIDTH,
   // Horizontal spacing between value and description in the row.
   DISTANCE_BETWEEN_PRIMARY_AND_SECONDARY_LABELS_HORIZONTAL
 };
@@ -89,10 +92,6 @@ class ChromeLayoutProvider : public views::LayoutProvider {
   int GetDistanceMetric(int metric) const override;
   int GetSnappedDialogWidth(int min_width) const override;
   const views::TypographyProvider& GetTypographyProvider() const override;
-  int GetCornerRadiusMetric(views::EmphasisMetric emphasis_metric,
-                            const gfx::Size& size = gfx::Size()) const override;
-  int GetShadowElevationMetric(
-      views::EmphasisMetric emphasis_metric) const override;
   gfx::ShadowValues MakeShadowValues(int elevation,
                                      SkColor color) const override;
 

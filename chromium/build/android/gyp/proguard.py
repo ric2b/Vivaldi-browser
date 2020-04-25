@@ -14,6 +14,18 @@ import zipfile
 from util import build_utils
 from util import diff_utils
 
+_API_LEVEL_VERSION_CODE = [
+    (21, 'L'),
+    (22, 'LolliopoMR1'),
+    (23, 'M'),
+    (24, 'N'),
+    (25, 'NMR1'),
+    (26, 'O'),
+    (27, 'OMR1'),
+    (28, 'P'),
+    (29, 'Q'),
+]
+
 
 class _ProguardOutputFilter(object):
   """ProGuard outputs boring stuff to stdout (ProGuard version, jar path, etc)
@@ -99,8 +111,7 @@ def _ParseOptions():
   parser.add_argument(
       '--verbose', '-v', action='store_true', help='Print all ProGuard output')
   parser.add_argument(
-      '--repackage-classes',
-      help='Unique package name given to an asynchronously proguarded module')
+      '--repackage-classes', help='Package all optimized classes are put in.')
   parser.add_argument(
       '--disable-outlining',
       action='store_true',
@@ -122,9 +133,6 @@ def _ParseOptions():
   options.input_paths = build_utils.ParseGnList(options.input_paths)
   options.extra_mapping_output_paths = build_utils.ParseGnList(
       options.extra_mapping_output_paths)
-
-  if options.apply_mapping:
-    options.apply_mapping = os.path.abspath(options.apply_mapping)
 
   return options
 
@@ -168,7 +176,7 @@ def _OptimizeWithR8(options,
       os.mkdir(tmp_output)
 
     cmd = [
-        'java',
+        build_utils.JAVA_PATH,
         '-jar',
         options.r8_path,
         '--no-desugaring',
@@ -238,7 +246,7 @@ def _OptimizeWithProguard(options,
 
     if options.proguard_path.endswith('.jar'):
       cmd = [
-          'java', '-jar', options.proguard_path, '-include',
+          build_utils.JAVA_PATH, '-jar', options.proguard_path, '-include',
           combined_proguard_configs_path
       ]
     else:
@@ -319,9 +327,23 @@ def _CreateDynamicConfig(options):
 }""" % options.min_api)
 
   if options.apply_mapping:
-    ret.append("-applymapping '%s'" % options.apply_mapping)
+    ret.append("-applymapping '%s'" % os.path.abspath(options.apply_mapping))
   if options.repackage_classes:
     ret.append("-repackageclasses '%s'" % options.repackage_classes)
+
+  _min_api = int(options.min_api) if options.min_api else 0
+  for api_level, version_code in _API_LEVEL_VERSION_CODE:
+    annotation_name = 'org.chromium.base.annotations.VerifiesOn' + version_code
+    if api_level > _min_api:
+      ret.append('-keep @interface %s' % annotation_name)
+      ret.append("""\
+-keep,allowobfuscation,allowoptimization @%s class ** {
+  <methods>;
+}""" % annotation_name)
+      ret.append("""\
+-keepclassmembers,allowobfuscation,allowoptimization class ** {
+  @%s <methods>;
+}""" % annotation_name)
   return '\n'.join(ret)
 
 
@@ -387,7 +409,7 @@ def main():
 
   inputs = options.proguard_configs + options.input_paths + libraries
   if options.apply_mapping:
-    inputs += options.apply_mapping
+    inputs.append(options.apply_mapping)
 
   build_utils.WriteDepfile(
       options.depfile, options.output_path, inputs=inputs, add_pydeps=False)

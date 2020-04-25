@@ -229,9 +229,9 @@ class ConversionContext {
   const TransformPaintPropertyNode* previous_transform_ = nullptr;
 
   // This structure accumulates bounds of all chunks under an effect. When an
-  // effect starts, we emit a SaveLayer[Alpha]Op with null bounds starts, and
-  // push a new |EffectBoundsInfo| onto |effect_bounds_stack_|. When the effect
-  // ends, we update the bounds of the op.
+  // effect starts, we emit a SaveLayer[Alpha]Op with null bounds, and push a
+  // new |EffectBoundsInfo| onto |effect_bounds_stack_|. When the effect ends,
+  // we update the bounds of the op.
   struct EffectBoundsInfo {
     // The id of the SaveLayer[Alpha]Op for this effect. It's recorded when we
     // push the op for this effect, and used when this effect ends in
@@ -388,6 +388,15 @@ void ConversionContext::SwitchToClip(
     pending_combined_clip_rect =
       FloatRoundedRect(LayoutRect::InfiniteIntRect());
   }
+
+// NOTE(david@vivaldi.com): When capturing the whole page in Android, we need
+// to apply the correct clipping rect without taking the top frame into account.
+#if defined(OS_ANDROID)
+  if (PaintChunksToCcLayer::TopClipToIgnore() != nullptr) {
+    pending_combined_clip_rect =
+        FloatRoundedRect(LayoutRect::InfiniteIntRect());
+  }
+#endif  // OS_ANDROID
 
   const auto* lowest_combined_clip_node = pending_clips.back();
   for (size_t i = pending_clips.size() - 1; i--;) {
@@ -808,6 +817,12 @@ scoped_refptr<cc::DisplayItemList> PaintChunksToCcLayer::Convert(
 
   cc_list->Finalize();
   return cc_list;
+}
+
+const ClipPaintPropertyNode*& PaintChunksToCcLayer::TopClipToIgnore() {
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(const ClipPaintPropertyNode*, clip_to_ignore,
+                                  (nullptr));
+  return clip_to_ignore;
 }
 
 }  // namespace blink

@@ -71,6 +71,7 @@
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/bindings_policy.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -109,10 +110,11 @@
 #endif
 
 using base::TimeDelta;
+
+using blink::PluginAction;
 using blink::WebConsoleMessage;
 using blink::WebInputEvent;
 using blink::WebMediaPlayerAction;
-using blink::WebPluginAction;
 
 namespace content {
 namespace {
@@ -136,36 +138,6 @@ void GetFontInfo(gfx::win::SystemFont system_font,
   *size = font.GetFontSize();
 }
 #endif  // OS_WIN
-
-void GetPlatformSpecificPrefs(blink::mojom::RendererPreferences* prefs) {
-#if defined(OS_WIN)
-  // Note that what is called "height" in this struct is actually the font size;
-  // font "height" typically includes ascender, descender, and padding and is
-  // often a third or so larger than the given font size.
-  GetFontInfo(gfx::win::SystemFont::kCaption, &prefs->caption_font_family_name,
-              &prefs->caption_font_height);
-  GetFontInfo(gfx::win::SystemFont::kSmallCaption,
-              &prefs->small_caption_font_family_name,
-              &prefs->small_caption_font_height);
-  GetFontInfo(gfx::win::SystemFont::kMenu, &prefs->menu_font_family_name,
-              &prefs->menu_font_height);
-  GetFontInfo(gfx::win::SystemFont::kMessage, &prefs->message_font_family_name,
-              &prefs->message_font_height);
-  GetFontInfo(gfx::win::SystemFont::kStatus, &prefs->status_font_family_name,
-              &prefs->status_font_height);
-
-  prefs->vertical_scroll_bar_width_in_dips =
-      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CXVSCROLL);
-  prefs->horizontal_scroll_bar_height_in_dips =
-      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYHSCROLL);
-  prefs->arrow_bitmap_height_vertical_scroll_bar_in_dips =
-      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYVSCROLL);
-  prefs->arrow_bitmap_width_horizontal_scroll_bar_in_dips =
-      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CXHSCROLL);
-#elif defined(OS_LINUX)
-  prefs->system_font_family_name = gfx::Font().GetFontName();
-#endif
-}
 
 }  // namespace
 
@@ -209,6 +181,38 @@ RenderViewHostImpl* RenderViewHostImpl::From(RenderWidgetHost* rwh) {
   return rvh;
 }
 
+// static
+void RenderViewHostImpl::GetPlatformSpecificPrefs(
+    blink::mojom::RendererPreferences* prefs) {
+#if defined(OS_WIN)
+  // Note that what is called "height" in this struct is actually the font size;
+  // font "height" typically includes ascender, descender, and padding and is
+  // often a third or so larger than the given font size.
+  GetFontInfo(gfx::win::SystemFont::kCaption, &prefs->caption_font_family_name,
+              &prefs->caption_font_height);
+  GetFontInfo(gfx::win::SystemFont::kSmallCaption,
+              &prefs->small_caption_font_family_name,
+              &prefs->small_caption_font_height);
+  GetFontInfo(gfx::win::SystemFont::kMenu, &prefs->menu_font_family_name,
+              &prefs->menu_font_height);
+  GetFontInfo(gfx::win::SystemFont::kMessage, &prefs->message_font_family_name,
+              &prefs->message_font_height);
+  GetFontInfo(gfx::win::SystemFont::kStatus, &prefs->status_font_family_name,
+              &prefs->status_font_height);
+
+  prefs->vertical_scroll_bar_width_in_dips =
+      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CXVSCROLL);
+  prefs->horizontal_scroll_bar_height_in_dips =
+      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYHSCROLL);
+  prefs->arrow_bitmap_height_vertical_scroll_bar_in_dips =
+      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYVSCROLL);
+  prefs->arrow_bitmap_width_horizontal_scroll_bar_in_dips =
+      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CXHSCROLL);
+#elif defined(OS_LINUX)
+  prefs->system_font_family_name = gfx::Font().GetFontName();
+#endif
+}
+
 RenderViewHostImpl::RenderViewHostImpl(
     SiteInstance* instance,
     std::unique_ptr<RenderWidgetHostImpl> widget,
@@ -222,11 +226,7 @@ RenderViewHostImpl::RenderViewHostImpl(
       instance_(static_cast<SiteInstanceImpl*>(instance)),
       is_swapped_out_(swapped_out),
       routing_id_(routing_id),
-      main_frame_routing_id_(main_frame_routing_id),
-      is_waiting_for_close_ack_(false),
-      sudden_termination_allowed_(false),
-      updating_web_preferences_(false),
-      has_notified_about_creation_(false) {
+      main_frame_routing_id_(main_frame_routing_id) {
   DCHECK(instance_.get());
   CHECK(delegate_);  // http://crbug.com/82827
   DCHECK_NE(GetRoutingID(), render_widget_host_->GetRoutingID());
@@ -236,8 +236,6 @@ RenderViewHostImpl::RenderViewHostImpl(
           RenderViewHostID(GetProcess()->GetID(), routing_id_), this);
   CHECK(result.second) << "Inserting a duplicate item!";
   GetProcess()->AddRoute(routing_id_, this);
-
-  GetWidget()->set_owner_delegate(this);
 
   GetProcess()->AddObserver(this);
   ui::GpuSwitchingManager::GetInstance()->AddObserver(this);
@@ -255,6 +253,8 @@ RenderViewHostImpl::RenderViewHostImpl(
       &RenderViewHostImpl::ClosePageTimeout, weak_factory_.GetWeakPtr())));
 
   input_device_change_observer_.reset(new InputDeviceChangeObserver(this));
+
+  GetWidget()->set_owner_delegate(this);
 }
 
 RenderViewHostImpl::~RenderViewHostImpl() {
@@ -285,8 +285,12 @@ RenderViewHostImpl::~RenderViewHostImpl() {
 
   // This can be called inside the FrameTree destructor. When the delegate is
   // the InterstialPageImpl, the |frame_tree| is set to null before deleting it.
-  if (FrameTree* frame_tree = GetDelegate()->GetFrameTree())
-    frame_tree->RenderViewHostDeleted(this);
+  if (FrameTree* frame_tree = GetDelegate()->GetFrameTree()) {
+    // If |this| is in the BackForwardCache, then it was already removed from
+    // the FrameTree at the time it entered the BackForwardCache.
+    if (!is_in_back_forward_cache_)
+      frame_tree->UnregisterRenderViewHost(this);
+  }
 }
 
 RenderViewHostDelegate* RenderViewHostImpl::GetDelegate() {
@@ -334,7 +338,8 @@ bool RenderViewHostImpl::CreateRenderView(
   mojom::CreateViewParamsPtr params = mojom::CreateViewParams::New();
   params->renderer_preferences =
       delegate_->GetRendererPrefs(GetProcess()->GetBrowserContext()).Clone();
-  GetPlatformSpecificPrefs(params->renderer_preferences.get());
+  RenderViewHostImpl::GetPlatformSpecificPrefs(
+      params->renderer_preferences.get());
   params->web_preferences = GetWebkitPreferences();
   params->view_id = GetRoutingID();
   params->main_frame_routing_id = main_frame_routing_id_;
@@ -374,8 +379,11 @@ bool RenderViewHostImpl::CreateRenderView(
       GetSiteInstance()->GetSiteURL().SchemeIs(kGuestScheme);
   params->inside_portal = delegate_->IsPortal();
 
-  params->visual_properties = GetWidget()->GetVisualProperties();
-  GetWidget()->SetInitialVisualProperties(params->visual_properties);
+  // TODO(danakj): Make the visual_properties optional in the message.
+  if (proxy_route_id == MSG_ROUTING_NONE) {
+    params->visual_properties = GetWidget()->GetVisualProperties();
+    GetWidget()->SetInitialVisualProperties(params->visual_properties);
+  }
 
   // The RenderView is owned by this process. This call must be accompanied by a
   // DestroyView [see destructor] or else there will be a leak in the renderer
@@ -400,16 +408,23 @@ void RenderViewHostImpl::SetMainFrameRoutingId(int routing_id) {
   GetWidget()->UpdatePriority();
 }
 
+void RenderViewHostImpl::EnterBackForwardCache() {
+  FrameTree* frame_tree = GetDelegate()->GetFrameTree();
+  frame_tree->UnregisterRenderViewHost(this);
+  is_in_back_forward_cache_ = true;
+}
+
+void RenderViewHostImpl::LeaveBackForwardCache() {
+  FrameTree* frame_tree = GetDelegate()->GetFrameTree();
+  // At this point, the frames |this| RenderViewHostImpl belongs to are
+  // guaranteed to be committed, so it should be reused going forward.
+  frame_tree->RegisterRenderViewHost(this);
+  is_in_back_forward_cache_ = false;
+}
+
 bool RenderViewHostImpl::IsRenderViewLive() {
   return GetProcess()->IsInitializedAndNotDead() &&
          GetWidget()->renderer_initialized();
-}
-
-void RenderViewHostImpl::SyncRendererPrefs() {
-  blink::mojom::RendererPreferences renderer_preferences =
-      delegate_->GetRendererPrefs(GetProcess()->GetBrowserContext());
-  GetPlatformSpecificPrefs(&renderer_preferences);
-  Send(new ViewMsg_SetRendererPrefs(GetRoutingID(), renderer_preferences));
 }
 
 void RenderViewHostImpl::SetBackgroundOpaque(bool opaque) {
@@ -749,8 +764,8 @@ RenderFrameHost* RenderViewHostImpl::GetMainFrame() {
   // TODO(alexmos, creis): Migrate these code paths to use RenderFrameHost APIs
   // and remove this fallback.  See https://crbug.com/763548.
   if (is_active()) {
-    return RenderFrameHost::FromID(GetProcess()->GetID(),
-                                   main_frame_routing_id_);
+    return RenderFrameHostImpl::FromID(GetProcess()->GetID(),
+                                       main_frame_routing_id_);
   }
   return delegate_->GetPendingMainFrame();
 }
@@ -785,10 +800,6 @@ void RenderViewHostImpl::SetInitialFocus(bool reverse) {
 
 void RenderViewHostImpl::RenderWidgetDidFirstVisuallyNonEmptyPaint() {
   delegate_->DidFirstVisuallyNonEmptyPaint(this);
-}
-
-void RenderViewHostImpl::RenderWidgetDidCommitAndDrawCompositorFrame() {
-  delegate_->DidCommitAndDrawCompositorFrame(this);
 }
 
 bool RenderViewHostImpl::SuddenTerminationAllowed() const {
@@ -853,16 +864,18 @@ void RenderViewHostImpl::RenderWidgetDidClose() {
   ClosePageIgnoringUnloadEvents();
 }
 
-void RenderViewHostImpl::CreateNewWidget(int32_t widget_route_id,
-                                         mojom::WidgetPtr widget) {
+void RenderViewHostImpl::CreateNewWidget(
+    int32_t widget_route_id,
+    mojo::PendingRemote<mojom::Widget> widget) {
   delegate_->CreateNewWidget(GetProcess()->GetID(), widget_route_id,
-                             std::move(widget));
+                             std::move(widget), this);
 }
 
-void RenderViewHostImpl::CreateNewFullscreenWidget(int32_t widget_route_id,
-                                                   mojom::WidgetPtr widget) {
+void RenderViewHostImpl::CreateNewFullscreenWidget(
+    int32_t widget_route_id,
+    mojo::PendingRemote<mojom::Widget> widget) {
   delegate_->CreateNewFullscreenWidget(GetProcess()->GetID(), widget_route_id,
-                                       std::move(widget));
+                                       std::move(widget), this);
 }
 
 void RenderViewHostImpl::OnShowWidget(int widget_route_id,
@@ -982,7 +995,13 @@ void RenderViewHostImpl::OnWebkitPreferencesChanged() {
   updating_web_preferences_ = true;
   UpdateWebkitPreferences(ComputeWebPreferences());
 #if defined(OS_ANDROID)
-  GetWidget()->SetForceEnableZoom(web_preferences_->force_enable_zoom);
+  for (FrameTreeNode* node : GetDelegate()->GetFrameTree()->Nodes()) {
+    RenderFrameHostImpl* rfh = node->current_frame_host();
+    if (rfh->is_local_root()) {
+      if (auto* rwh = rfh->GetRenderWidgetHost())
+        rwh->SetForceEnableZoom(web_preferences_->force_enable_zoom);
+    }
+  }
 #endif
   updating_web_preferences_ = false;
 }
@@ -1000,7 +1019,8 @@ void RenderViewHostImpl::EnablePreferredSizeMode() {
 }
 
 void RenderViewHostImpl::ExecutePluginActionAtLocation(
-  const gfx::Point& location, const blink::WebPluginAction& action) {
+    const gfx::Point& location,
+    const blink::PluginAction& action) {
   // TODO(wjmaclean): See if this needs to be done for OOPIFs as well.
   // https://crbug.com/776807
   gfx::PointF local_location_f =

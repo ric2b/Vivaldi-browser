@@ -807,7 +807,7 @@ VisiblePosition ReplaceSelectionCommand::PositionAtEndOfInsertedContent()
   // TODO(yosin): We should set |end_of_inserted_content_| not in SELECT
   // element, since contents of SELECT elements, e.g. OPTION, OPTGROUP, are
   // not editable, or SELECT element is an atomic on editing.
-  HTMLSelectElement* enclosing_select = ToHTMLSelectElement(
+  auto* enclosing_select = To<HTMLSelectElement>(
       EnclosingElementWithTag(end_of_inserted_content_, kSelectTag));
   if (enclosing_select) {
     return CreateVisiblePosition(LastPositionInOrAfterNode(*enclosing_select));
@@ -830,7 +830,7 @@ static void RemoveHeadContents(ReplacementFragment& fragment) {
   Node* next = nullptr;
   for (Node* node = fragment.FirstChild(); node; node = next) {
     if (IsA<HTMLBaseElement>(*node) || IsHTMLLinkElement(*node) ||
-        IsHTMLMetaElement(*node) || IsHTMLTitleElement(*node)) {
+        IsA<HTMLMetaElement>(*node) || IsHTMLTitleElement(*node)) {
       next = NodeTraversal::NextSkippingChildren(*node);
       fragment.RemoveNode(node);
     } else {

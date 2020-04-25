@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import android.content.Context;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
@@ -28,7 +29,7 @@ public class TabGridSheetCoordinator {
     private final TabListCoordinator mTabGridCoordinator;
     private final TabGridSheetMediator mMediator;
     private TabGridSheetContent mBottomSheetContent;
-    private TabGridSheetToolbarCoordinator mToolbarCoordinator;
+    private TabGridPanelToolbarCoordinator mToolbarCoordinator;
     private final PropertyModel mToolbarPropertyModel;
 
     TabGridSheetCoordinator(Context context, BottomSheetController bottomSheetController,
@@ -36,7 +37,7 @@ public class TabGridSheetCoordinator {
             TabCreatorManager tabCreatorManager, ThemeColorProvider themeColorProvider) {
         mContext = context;
 
-        mToolbarPropertyModel = new PropertyModel(TabGridSheetProperties.ALL_KEYS);
+        mToolbarPropertyModel = new PropertyModel(TabGridPanelProperties.ALL_KEYS);
 
         mTabGridCoordinator = new TabListCoordinator(TabListCoordinator.TabListMode.GRID, context,
                 tabModelSelector, tabContentManager::getTabThumbnailWithCallback, null, false, null,
@@ -77,7 +78,7 @@ public class TabGridSheetCoordinator {
     private void updateBottomSheetContent(@Nullable List<Tab> tabs) {
         if (tabs != null) {
             // create bottom sheet content
-            mToolbarCoordinator = new TabGridSheetToolbarCoordinator(
+            mToolbarCoordinator = new TabGridPanelToolbarCoordinator(
                     mContext, mTabGridCoordinator.getContainerView(), mToolbarPropertyModel);
             mBottomSheetContent = new TabGridSheetContent(
                     mTabGridCoordinator.getContainerView(), mToolbarCoordinator.getView());

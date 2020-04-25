@@ -30,7 +30,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
-#include "chrome/grit/locale_settings.h"
+#include "app/vivaldi_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -62,26 +62,18 @@ StartupTabs StartupTabProviderImpl::GetOnboardingTabs(Profile* profile) const {
   PrefService* prefs = profile->GetPrefs();
   standard_params.has_seen_welcome_page =
       prefs && prefs->GetBoolean(prefs::kHasSeenWelcomePage);
+
+  if (vivaldi::IsVivaldiRunning()) {
+    // This is set in web_ui in Chromium. We set this here for maintainability.
+    prefs->SetBoolean(prefs::kHasSeenWelcomePage, true);
+  }
+
   standard_params.is_signin_allowed = profile->IsSyncAllowed();
   if (auto* identity_manager = IdentityManagerFactory::GetForProfile(profile)) {
     standard_params.is_signed_in = identity_manager->HasPrimaryAccount();
   }
   standard_params.is_supervised_user = profile->IsSupervised();
   standard_params.is_force_signin_enabled = signin_util::IsForceSigninEnabled();
-
-  if (vivaldi::IsVivaldiRunning() && !standard_params.has_seen_welcome_page) {
-    // Chromium sets the flag in webui code only when generating the actual
-    // page. We have to do it a bit earlier.
-    // NOTE(jarle@vivaldi.com): This flag is not set to true on older builds,
-    // which causes VB-26089 when updating.
-    prefs->SetBoolean(prefs::kHasSeenWelcomePage, true);
-    // Add the welcome page here as the tabs are used in the browser creation
-    // and if not set NTP is added.
-    StartupTabs tabs;
-    tabs.emplace_back(GetWelcomePageUrl(false), false);
-    return tabs;
-
-  }
 
   return GetStandardOnboardingTabsForState(standard_params);
 #endif  // defined(OS_CHROMEOS)
@@ -183,8 +175,16 @@ StartupTabs StartupTabProviderImpl::GetStandardOnboardingTabsForState(
   StartupTabs tabs;
   // NOTE(jarle@vivaldi.com): We only want to see the welcome page on first run.
   // Ref. VB-26089.
-  if (vivaldi::IsVivaldiRunning() && !params.is_first_run)
-    return tabs;
+  if (vivaldi::IsVivaldiRunning()) {
+    StartupTabs vivaldi_start_tabs;
+    if (!tabs.empty()) {
+      vivaldi_start_tabs = tabs;
+    } else if (!params.has_seen_welcome_page) {
+      vivaldi_start_tabs = StartupTabs({StartupTab(
+          GURL(l10n_util::GetStringUTF8(IDS_WELCOME_PAGE_URL)), false)});
+    }
+    return vivaldi_start_tabs;
+  }
   if (CanShowWelcome(params.is_signin_allowed, params.is_supervised_user,
                      params.is_force_signin_enabled) &&
       ShouldShowWelcomeForOnboarding(params.has_seen_welcome_page,
@@ -279,13 +279,6 @@ StartupTabs StartupTabProviderImpl::GetPostCrashTabsForState(
 // static
 GURL StartupTabProviderImpl::GetWelcomePageUrl(bool use_later_run_variant) {
   GURL url(chrome::kChromeUIWelcomeURL);
-  if (vivaldi::IsVivaldiRunning()) {
-    // 'use_later_run_variant' is true with '--no-first-run' cmd line option
-    if (use_later_run_variant)
-      url = GURL(vivaldi::kVivaldiNewTabURL);
-    else
-      url = GURL(l10n_util::GetStringUTF8(IDS_WELCOME_PAGE_URL));
-  }
   return use_later_run_variant
              ? net::AppendQueryParameter(url, "variant", "everywhere")
              : url;

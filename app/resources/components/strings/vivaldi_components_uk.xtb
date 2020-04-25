@@ -1,4 +1,33 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="uk">
+<translation id="3830627370375585318">Надайте Vivaldi доступ до мережі в налаштуваннях брандмауера чи антивіруса.</translation>
+<translation id="4200102020577305737">Перейдіть до
+          меню Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Налаштування LAN
+          і зніміть прапорець "Використовувати проксі-сервер для вашої локальної мережі".</translation>
+<translation id="4932161901409251843">Перейдіть у
+          меню Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          і переконайтеся, що встановлено значення конфігурації "без проксі" чи "безпосередньо."</translation>
+<translation id="5248344925342018662">Ви переглядаєте безпечну сторінку Vivaldi</translation>
+<translation id="7023871570427738255">Перейдіть у
+          меню Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          і зніміть прапорець біля опції "<ph name="NO_PREFETCH_DESCRIPTION" />".
+          Якщо проблема не зникне, радимо знову вибрати цю опцію,
+          щоб покращити стабільність.</translation>
+<translation id="8187289872471304532">Перейдіть до Програми &gt; Системні налаштування &gt; Мережа &gt; Розширені &gt; Проксі-сервери і зніміть прапорці біля всіх вибраних проксі-серверів.</translation>
 </translationbundle>

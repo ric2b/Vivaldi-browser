@@ -13,10 +13,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/common/api/extension_types.h"
 #include "renderer/vivaldi_render_messages.h"
 #include "ui/gfx/codec/png_codec.h"
-#include "ui/vivaldi_ui_utils.h"
 
 using content::BrowserThread;
 using content::RenderWidgetHost;
@@ -79,7 +77,7 @@ void CapturePage::CaptureImpl(content::WebContents* contents,
       FROM_HERE,
       base::BindRepeating(&CapturePage::OnCaptureTimeout,
                           weak_ptr_factory_.GetWeakPtr()),
-      kMaxWaitForPageLoad);
+      kMaxWaitForCapture);
 }
 
 void CapturePage::RespondAndDelete(Result captured) {

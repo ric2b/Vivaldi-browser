@@ -6,7 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_FRAME_CLIENT_H_
 
 #include "base/unguessable_token.h"
-#include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/blame_context.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -17,7 +17,7 @@ namespace blink {
 class Frame;
 enum class FrameDetachType;
 
-class CORE_EXPORT FrameClient : public GarbageCollectedFinalized<FrameClient> {
+class CORE_EXPORT FrameClient : public GarbageCollected<FrameClient> {
  public:
   virtual bool InShadowTree() const = 0;
 

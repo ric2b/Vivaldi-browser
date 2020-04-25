@@ -74,9 +74,10 @@ class NamedNodeMap;
 class PaintLayerScrollableArea;
 class PointerLockOptions;
 class PseudoElement;
-class PseudoStyleRequest;
+class PseudoElementStyleRequest;
 class ResizeObservation;
 class ResizeObserver;
+class ScriptPromise;
 class ScrollIntoViewOptions;
 class ScrollIntoViewOptionsOrBoolean;
 class ScrollToOptions;
@@ -94,6 +95,7 @@ class V0CustomElementDefinition;
 
 enum class CSSPropertyID;
 enum class CSSValueID;
+enum class DisplayLockActivationReason;
 enum class DisplayLockLifecycleTarget;
 
 using ScrollOffset = FloatSize;
@@ -203,6 +205,12 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   Element* GetElementAttribute(const QualifiedName& name);
   void SetElementAttribute(const QualifiedName&, Element*);
+  HeapVector<Member<Element>> GetElementArrayAttribute(
+      const QualifiedName& name,
+      bool& is_null);
+  void SetElementArrayAttribute(const QualifiedName&,
+                                HeapVector<Member<Element>>,
+                                bool is_null);
 
   // Call this to get the value of an attribute that is known not to be the
   // style attribute or one of the SVG animatable attributes.
@@ -547,7 +555,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void RebuildLayoutTree(WhitespaceAttacher&);
   void PseudoStateChanged(CSSSelector::PseudoType);
   void SetAnimationStyleChange(bool);
-  void ClearAnimationStyleChange();
   void SetNeedsAnimationStyleRecalc();
 
   void SetNeedsCompositingUpdate();
@@ -667,6 +674,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   virtual bool IsMouseFocusable() const;
   bool IsFocusedElementInDocument() const;
   Element* AdjustedFocusedElementInTreeScope() const;
+  bool IsAutofocusable() const;
 
   virtual void DispatchFocusEvent(
       Element* old_focused_element,
@@ -749,9 +757,10 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   PseudoElement* GetPseudoElement(PseudoId) const;
   LayoutObject* PseudoElementLayoutObject(PseudoId) const;
 
-  const ComputedStyle* CachedStyleForPseudoElement(const PseudoStyleRequest&);
+  const ComputedStyle* CachedStyleForPseudoElement(
+      const PseudoElementStyleRequest&);
   scoped_refptr<ComputedStyle> StyleForPseudoElement(
-      const PseudoStyleRequest&,
+      const PseudoElementStyleRequest&,
       const ComputedStyle* parent_style = nullptr);
   bool CanGeneratePseudoElement(PseudoId) const;
 
@@ -793,6 +802,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   virtual bool IsOutOfRange() const { return false; }
   virtual bool IsClearButtonElement() const { return false; }
   virtual bool IsScriptElement() const { return false; }
+  virtual bool IsVTTCueBackgroundBox() const { return false; }
 
   // Elements that may have an insertion mode other than "in body" should
   // override this and return true.
@@ -920,15 +930,17 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   EnsureResizeObserverData();
   void SetNeedsResizeObserverUpdate();
 
-  DisplayLockContext* getDisplayLockForBindings();
   DisplayLockContext* GetDisplayLockContext() const;
   DisplayLockContext& EnsureDisplayLockContext();
 
+  ScriptPromise updateRendering(ScriptState*);
+
   bool StyleRecalcBlockedByDisplayLock(DisplayLockLifecycleTarget) const;
 
-  // Activates all activatable locked ancestors for this element. Return true if
-  // we activated at least one previously locked element.
-  bool ActivateDisplayLockIfNeeded();
+  // Activates all activatable (for a given reason) locked ancestors for this
+  // element. Return true if we activated at least one previously locked
+  // element.
+  bool ActivateDisplayLockIfNeeded(DisplayLockActivationReason reason);
 
   virtual void SetActive(bool active);
   virtual void SetHovered(bool hovered);
@@ -984,6 +996,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   scoped_refptr<ComputedStyle> OriginalStyleForLayoutObject();
 
+  // Step 4 of http://domparsing.spec.whatwg.org/#insertadjacenthtml()
   Node* InsertAdjacent(const String& where, Node* new_child, ExceptionState&);
 
   virtual void ParserDidSetAttributes() {}
@@ -1139,7 +1152,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void DetachAttrNodeFromElementWithValue(Attr*, const AtomicString& value);
   void DetachAttrNodeAtIndex(Attr*, wtf_size_t index);
 
-  bool DisplayLockPreventsActivation() const;
+  bool DisplayLockPreventsActivation(DisplayLockActivationReason reason) const;
   FRIEND_TEST_ALL_PREFIXES(DisplayLockContextTest,
                            DisplayLockPreventsActivation);
 

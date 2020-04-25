@@ -30,6 +30,10 @@ import org.chromium.chrome.browser.util.UrlConstants;
 import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 
+import org.vivaldi.browser.preferences.VivaldiSyncActivity;
+import org.vivaldi.browser.sync.VivaldiProfileSyncService;
+import org.vivaldi.browser.vivaldi_account_manager.VivaldiAccountManager;
+
 /**
  * The native recent tabs page. Lists recently closed tabs, open windows and tabs from the user's
  * synced devices, and snapshot documents sent from Chrome to Mobile in an expandable list view.
@@ -74,6 +78,9 @@ public class RecentTabsPage
      */
     private long mForegroundTimeMs;
 
+    //** Vivaldi */
+    private VivaldiAccountManager.AccountStateObserver mAccountObserver;
+
     /**
      * Constructor returns an instance of RecentTabsPage.
      *
@@ -113,8 +120,12 @@ public class RecentTabsPage
             mFullscreenManager = null;
         }
 
+        if (mPageHost != null)  // Vivaldi
         mView.setNavigationDelegate(mPageHost.createHistoryNavigationDelegate());
         onUpdated();
+
+        //** Vivaldi */
+        mAccountObserver = () -> onUpdated();
     }
 
     /**
@@ -210,6 +221,9 @@ public class RecentTabsPage
         // toggling the Sync quick setting.  For some reason, the layout is being dropped on the
         // flow and we need to force a root level layout to get the UI to appear.
         view.getRootView().requestLayout();
+
+        //** Vivaldi */
+        VivaldiAccountManager.get().addAccountStateObserver(mAccountObserver);
     }
 
     @Override
@@ -217,6 +231,9 @@ public class RecentTabsPage
         // Called when the user navigates from the RecentTabsPage or switches to another tab.
         mIsAttachedToWindow = false;
         updateForegroundState();
+
+        //** Vivaldi */
+        VivaldiAccountManager.get().removeAccountStateObserver(mAccountObserver);
     }
 
     // ExpandableListView.OnChildClickedListener
@@ -243,6 +260,33 @@ public class RecentTabsPage
     // RecentTabsManager.UpdatedCallback
     @Override
     public void onUpdated() {
+        // NOTE (david@vivaldi.com): This only affects the sync tab page in the tab switcher which
+        // will show a login button when we're not logged into sync.
+        if (mRecentTabsManager.getVivaldiRecentTabsManager() != null) {
+            if (mRecentTabsManager.getVivaldiRecentTabsManager().onlyShowForeignSessions()) {
+                View view = mActivity.findViewById(R.id.sign_in_for_tabs);
+                if (view == null) {
+                    view = LayoutInflater.from(mActivity).inflate(
+                            R.layout.sign_in_for_sync_tabs, null);
+                    view.findViewById(R.id.no_sync_sign_in_button)
+                            .setOnClickListener(v -> VivaldiSyncActivity.start(mView.getContext()));
+                    mView.addView(view);
+                }
+                if (VivaldiAccountManager.get().getSimplifiedState()
+                        == VivaldiAccountManager.SimplifiedState.LOGGED_IN) {
+                    mView.findViewById(R.id.no_sync_sign_in_button).setVisibility(View.GONE);
+                    if (VivaldiProfileSyncService.get().getCommitStatus()
+                            != VivaldiProfileSyncService.CycleStatus.SUCCESS) {
+                        ((android.widget.TextView) mView.findViewById(R.id.no_sync_text))
+                                .setText(R.string.vivaldi_sync_in_progress_text);
+                        return;
+                    } else if (view != null)
+                        mView.removeView(view);
+                } else
+                    return;
+            }
+        }
+
         mAdapter.notifyDataSetChanged();
         for (int i = 0; i < mAdapter.getGroupCount(); i++) {
             if (mAdapter.getGroup(i).isCollapsed()) {

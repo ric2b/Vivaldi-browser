@@ -6,12 +6,13 @@
 
 #include <utility>
 
+#include "base/bind_helpers.h"
 #include "base/task/post_task.h"
-#include "chrome/browser/performance_manager/performance_manager.h"
 #include "chrome/browser/resource_coordinator/local_site_characteristics_data_store_factory.h"
 #include "chrome/browser/resource_coordinator/local_site_characteristics_webcontents_observer.h"
 #include "chrome/browser/resource_coordinator/tab_helper.h"
 #include "chrome/browser/resource_coordinator/tab_manager_features.h"
+#include "components/performance_manager/performance_manager_impl.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/system_connector.h"
@@ -104,7 +105,8 @@ void ChromeTestHarnessWithLocalDB::SetUp() {
   // ChromeRenderViewHostTestHarness::SetUp(), this will prevent the creation
   // of a non-mock version of a data store when browser_context() gets
   // initialized.
-  performance_manager_ = performance_manager::PerformanceManager::Create();
+  performance_manager_ =
+      performance_manager::PerformanceManagerImpl::Create(base::DoNothing());
 
   LocalSiteCharacteristicsDataStoreFactory::EnableForTesting();
 
@@ -116,7 +118,7 @@ void ChromeTestHarnessWithLocalDB::SetUp() {
 }
 
 void ChromeTestHarnessWithLocalDB::TearDown() {
-  performance_manager::PerformanceManager::Destroy(
+  performance_manager::PerformanceManagerImpl::Destroy(
       std::move(performance_manager_));
   content::SetSystemConnectorForTesting(nullptr);
   ChromeRenderViewHostTestHarness::TearDown();

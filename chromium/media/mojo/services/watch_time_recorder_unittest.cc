@@ -162,7 +162,7 @@ class WatchTimeRecorderTest : public testing::Test {
   MOCK_METHOD0(GetCurrentMediaTime, base::TimeDelta());
 
  protected:
-  base::test::TaskEnvironment task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
   mojom::MediaMetricsProviderPtr provider_;
   std::unique_ptr<base::HistogramTester> histogram_tester_;
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> test_recorder_;
@@ -1247,7 +1247,7 @@ TEST_F(WatchTimeRecorderTest, DISABLED_PrintExpectedDecoderNameHashes) {
       "FFmpegAudioDecoder", "FFmpegVideoDecoder",     "GpuVideoDecoder",
       "MojoVideoDecoder",   "MojoAudioDecoder",       "VpxVideoDecoder",
       "AomVideoDecoder",    "DecryptingAudioDecoder", "DecryptingVideoDecoder",
-      "Dav1dVideoDecoder",  "FuchsiaVideoDecoder"};
+      "Dav1dVideoDecoder",  "FuchsiaVideoDecoder",    "MediaPlayer"};
   printf("%18s = 0\n", "None");
   for (const auto& name : kDecoderNames)
     printf("%18s = 0x%x\n", name.c_str(), base::PersistentHash(name));

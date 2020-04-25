@@ -4,38 +4,21 @@
 
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 
+#include <winnls.h>
+
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/registry.h"
 
+namespace extensions {
+
 namespace {
+
 const wchar_t kVivaldiKey[] = L"Software\\Vivaldi";
 const wchar_t kUniqueUserValue[] = L"unique_user_id";
 
 }  // anonymous namespace
-
-namespace extensions {
-bool UtilitiesGetUniqueUserIdFunction::ReadUserIdFromOSProfile(
-    std::string* user_id) {
-  base::win::RegKey key(HKEY_CURRENT_USER, kVivaldiKey, KEY_READ);
-
-  base::string16 reg_user_id;
-  if (!key.Valid() ||
-      key.ReadValue(kUniqueUserValue, &reg_user_id) != ERROR_SUCCESS)
-    return false;
-  user_id->assign(base::UTF16ToUTF8(reg_user_id));
-  return true;
-}
-
-void UtilitiesGetUniqueUserIdFunction::WriteUserIdToOSProfile(
-    const std::string& user_id) {
-  base::win::RegKey key(HKEY_CURRENT_USER, kVivaldiKey, KEY_WRITE);
-
-  if (!key.Valid())
-    return;
-  key.WriteValue(kUniqueUserValue, base::UTF8ToUTF16(user_id).c_str());
-}
 
 bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
     vivaldi::utilities::DateFormats* date_formats) {
@@ -85,6 +68,22 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
   date_formats->long_date_format = longdateformat;
   date_formats->time_format = timeformat;
   return true;
+}
+
+std::string UtilitiesGetSystemCountryFunction::ReadCountry() {
+  // TODO(igor@vivaldi.com): Consider calling GetUserDefaultGeoName() instead.
+  // It is only available in Windows 10 so calling it require looking up the
+  // function at runtime.
+  GEOID geo_id = GetUserGeoID(GEOCLASS_NATION);
+  if (geo_id == GEOID_NOT_AVAILABLE)
+    return std::string();
+  char buffer[3];
+  if (0 == GetGeoInfoA(geo_id, GEO_ISO2, buffer,
+                       sizeof buffer / sizeof buffer[0], 0)) {
+    LOG(ERROR) << "Windows API error " << GetLastError();
+    return std::string();
+  }
+  return std::string(buffer);
 }
 
 }  // namespace extensions

@@ -35,6 +35,7 @@
 #include "content/browser/webauth/authenticator_environment_impl.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_service_manager_context.h"
@@ -58,6 +59,7 @@
 #include "services/service_manager/public/cpp/connector.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/url_util.h"
 
 #if defined(OS_MACOSX)
 #include "device/fido/mac/authenticator_config.h"
@@ -327,10 +329,11 @@ GetTestPublicKeyCredentialRequestOptions() {
 
 std::vector<device::CableDiscoveryData> GetTestCableExtension() {
   device::CableDiscoveryData cable;
-  cable.version = 1;
-  cable.client_eid.fill(0x01);
-  cable.authenticator_eid.fill(0x02);
-  cable.session_pre_key.fill(0x03);
+  cable.version = device::CableDiscoveryData::Version::V1;
+  cable.v1.emplace();
+  cable.v1->client_eid.fill(0x01);
+  cable.v1->authenticator_eid.fill(0x02);
+  cable.v1->session_pre_key.fill(0x03);
 
   std::vector<device::CableDiscoveryData> ret;
   ret.emplace_back(std::move(cable));
@@ -341,8 +344,13 @@ std::vector<device::CableDiscoveryData> GetTestCableExtension() {
 
 class AuthenticatorTestBase : public content::RenderViewHostTestHarness {
  protected:
-  AuthenticatorTestBase() { ResetVirtualDevice(); }
+  AuthenticatorTestBase() = default;
   ~AuthenticatorTestBase() override {}
+
+  void SetUp() override {
+    content::RenderViewHostTestHarness::SetUp();
+    ResetVirtualDevice();
+  }
 
   void ResetVirtualDevice() {
     auto virtual_device_factory =
@@ -354,11 +362,6 @@ class AuthenticatorTestBase : public content::RenderViewHostTestHarness {
   }
 
   device::test::VirtualFidoDeviceFactory* virtual_device_factory_;
-
-#if defined(OS_WIN)
-  device::ScopedFakeWinWebAuthnApi win_webauthn_api_ =
-      device::ScopedFakeWinWebAuthnApi::MakeUnavailable();
-#endif  // defined(OS_WIN)
 };
 
 class AuthenticatorImplTest : public AuthenticatorTestBase {
@@ -409,7 +412,7 @@ class AuthenticatorImplTest : public AuthenticatorTestBase {
     connector_->OverrideBinderForTesting(
         service_manager::ServiceFilter::ByName(device::mojom::kServiceName),
         device::mojom::HidManager::Name_,
-        base::Bind(&device::FakeFidoHidManager::AddBinding,
+        base::Bind(&device::FakeFidoHidManager::AddReceiver,
                    base::Unretained(fake_hid_manager_.get())));
 
     // Set up a timer for testing.
@@ -2571,7 +2574,7 @@ class AuthenticatorImplRequestDelegateTest : public AuthenticatorImplTest {
     connector_->OverrideBinderForTesting(
         service_manager::ServiceFilter::ByName(device::mojom::kServiceName),
         device::mojom::HidManager::Name_,
-        base::Bind(&device::FakeFidoHidManager::AddBinding,
+        base::Bind(&device::FakeFidoHidManager::AddReceiver,
                    base::Unretained(fake_hid_manager_.get())));
 
     // Set up a timer for testing.
@@ -2898,6 +2901,40 @@ TEST_F(AuthenticatorImplTest, GetAssertionWithLargeAllowList) {
               has_allowed_credential ? AuthenticatorStatus::SUCCESS
                                      : AuthenticatorStatus::NOT_ALLOWED_ERROR);
   }
+}
+
+TEST_F(AuthenticatorImplTest, NoUnexpectedAuthenticatorExtensions) {
+  TestServiceManagerContext smc;
+  NavigateAndCommit(GURL(kTestOrigin1));
+
+  device::VirtualCtap2Device::Config config;
+  config.add_extra_extension = true;
+  virtual_device_factory_->SetCtap2Config(config);
+
+  mojo::Remote<blink::mojom::Authenticator> authenticator =
+      ConnectToAuthenticator();
+
+  // Check that extra authenticator extensions are rejected when creating a
+  // credential.
+  TestMakeCredentialCallback create_callback;
+  authenticator->MakeCredential(GetTestPublicKeyCredentialCreationOptions(),
+                                create_callback.callback());
+  base::RunLoop().RunUntilIdle();
+  create_callback.WaitForCallback();
+  EXPECT_EQ(create_callback.status(), AuthenticatorStatus::NOT_ALLOWED_ERROR);
+
+  // Extensions should also be rejected when getting an assertion.
+  PublicKeyCredentialRequestOptionsPtr assertion_options =
+      GetTestPublicKeyCredentialRequestOptions();
+  ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectRegistration(
+      assertion_options->allow_credentials.back().id(), kTestRelyingPartyId));
+  TestGetAssertionCallback assertion_callback;
+  authenticator->GetAssertion(std::move(assertion_options),
+                              assertion_callback.callback());
+  base::RunLoop().RunUntilIdle();
+  assertion_callback.WaitForCallback();
+  EXPECT_EQ(assertion_callback.status(),
+            AuthenticatorStatus::NOT_ALLOWED_ERROR);
 }
 
 class UVAuthenticatorImplTest : public AuthenticatorImplTest {
@@ -3651,8 +3688,6 @@ class ResidentKeyAuthenticatorImplTest : public UVAuthenticatorImplTest {
   ResidentKeyAuthenticatorImplTest() = default;
 
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures({device::kWebAuthResidentKeys}, {});
-
     UVAuthenticatorImplTest::SetUp();
     old_client_ = SetBrowserClientForTesting(&test_client_);
     device::VirtualCtap2Device::Config config;
@@ -3689,7 +3724,6 @@ class ResidentKeyAuthenticatorImplTest : public UVAuthenticatorImplTest {
 
  private:
   ContentBrowserClient* old_client_ = nullptr;
-  base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(ResidentKeyAuthenticatorImplTest);
 };
@@ -4077,15 +4111,14 @@ TEST_F(ResidentKeyAuthenticatorImplTest, WinCredProtectApiVersion) {
   // The canned response returned by the Windows API fake is for acme.com.
   NavigateAndCommit(GURL("https://acme.com"));
   TestServiceManagerContext smc;
-  // AuthenticatorTestBase default-disables |win_webauthn_api_|.
-  win_webauthn_api_.set_available(true);
   for (const bool supports_cred_protect : {false, true}) {
     SCOPED_TRACE(testing::Message()
                  << "supports_cred_protect: " << supports_cred_protect);
 
-    win_webauthn_api_.set_version(supports_cred_protect
-                                      ? WEBAUTHN_API_VERSION_2
-                                      : WEBAUTHN_API_VERSION_1);
+    ::device::FakeWinWebAuthnApi api;
+    virtual_device_factory_->set_win_webauthn_api(&api);
+    api.set_version(supports_cred_protect ? WEBAUTHN_API_VERSION_2
+                                          : WEBAUTHN_API_VERSION_1);
 
     PublicKeyCredentialCreationOptionsPtr options = make_credential_options();
     options->relying_party = device::PublicKeyCredentialRpEntity();
@@ -4161,7 +4194,7 @@ class InternalAuthenticatorImplTest : public AuthenticatorTestBase {
     connector_->OverrideBinderForTesting(
         service_manager::ServiceFilter::ByName(device::mojom::kServiceName),
         device::mojom::HidManager::Name_,
-        base::BindRepeating(&device::FakeFidoHidManager::AddBinding,
+        base::BindRepeating(&device::FakeFidoHidManager::AddReceiver,
                             base::Unretained(fake_hid_manager_.get())));
 
     // Set up a timer for testing.

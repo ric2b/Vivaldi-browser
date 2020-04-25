@@ -197,6 +197,11 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   // fullscreen or transitioning between fullscreen states.
   gfx::Rect GetRestoredBounds() const;
 
+  // An opaque blob of AppKit data which includes, among other things, a
+  // window's workspace and fullscreen state, and can be retrieved from or
+  // applied to a window.
+  const std::vector<uint8_t>& GetWindowStateRestorationData() const;
+
   // Set |parent_| and update the old and new parents' |children_|. It is valid
   // to set |new_parent| to nullptr. Propagate this to the BridgedNativeWidget.
   void SetParent(NativeWidgetMacNSWindowHost* new_parent);
@@ -284,6 +289,8 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   void OnWindowKeyStatusChanged(bool is_key,
                                 bool is_content_first_responder,
                                 bool full_keyboard_access_enabled) override;
+  void OnWindowStateRestorationDataChanged(
+      const std::vector<uint8_t>& data) override;
   void DoDialogButtonAction(ui::DialogButton button) override;
   bool GetDialogButtonInfo(ui::DialogButton type,
                            bool* button_exists,
@@ -446,15 +453,10 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   // Display link for getting vsync info for |display_|.
   scoped_refptr<ui::DisplayLinkMac> display_link_;
 
-  // Structure to avoid sending IOSurface mach ports over mojo.
-  // https://crbug.com/942213
-  class IOSurfaceToRemoteLayerInterceptor;
-  std::unique_ptr<IOSurfaceToRemoteLayerInterceptor>
-      io_surface_to_remote_layer_interceptor_;
-
   // The geometry of the window and its contents view, in screen coordinates.
   gfx::Rect window_bounds_in_screen_;
   gfx::Rect content_bounds_in_screen_;
+  std::vector<uint8_t> state_restoration_data_;
   bool is_visible_ = false;
   bool target_fullscreen_state_ = false;
   bool in_fullscreen_transition_ = false;

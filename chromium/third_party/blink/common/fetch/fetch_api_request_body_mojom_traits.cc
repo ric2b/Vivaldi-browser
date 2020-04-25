@@ -5,6 +5,7 @@
 #include "third_party/blink/public/common/fetch/fetch_api_request_body_mojom_traits.h"
 
 #include "services/network/public/cpp/url_request_mojom_traits.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 
 namespace mojo {
 
@@ -38,7 +39,7 @@ bool StructTraits<
   out->data_pipe_getter_ =
       data.TakeDataPipeGetter<network::mojom::DataPipeGetterPtrInfo>();
   out->chunked_data_pipe_getter_ = data.TakeChunkedDataPipeGetter<
-      network::mojom::ChunkedDataPipeGetterPtrInfo>();
+      mojo::PendingRemote<network::mojom::ChunkedDataPipeGetter>>();
   out->offset_ = data.offset();
   out->length_ = data.length();
   return true;

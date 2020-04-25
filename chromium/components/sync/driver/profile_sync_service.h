@@ -130,6 +130,8 @@ class ProfileSyncService : public SyncService,
   bool RequiresClientUpgrade() const override;
   std::unique_ptr<SyncSetupInProgressHandle> GetSetupInProgressHandle()
       override;
+  std::unique_ptr<crypto::ECPrivateKey> GetExperimentalAuthenticationKey()
+      const override;
   bool IsSetupInProgress() const override;
   ModelTypeSet GetRegisteredDataTypes() const override;
   ModelTypeSet GetPreferredDataTypes() const override;
@@ -170,8 +172,10 @@ class ProfileSyncService : public SyncService,
       const std::string& cache_guid,
       const std::string& birthday,
       const std::string& bag_of_chips,
+      const std::string& last_keystore_key,
       bool success) override;
-  void OnSyncCycleCompleted(const SyncCycleSnapshot& snapshot) override;
+  void OnSyncCycleCompleted(const SyncCycleSnapshot& snapshot,
+                            const std::string& last_keystore_key) override;
   void OnProtocolEvent(const ProtocolEvent& event) override;
   void OnDirectoryTypeCommitCounterUpdated(
       ModelType type,
@@ -226,8 +230,6 @@ class ProfileSyncService : public SyncService,
   bool IsPassphrasePrompted() const;
   void SetPassphrasePrompted(bool prompted);
 
-  PassphraseRequiredReason GetPassphraseRequiredReasonForTest() const;
-
   // Returns whether or not the underlying sync engine has made any
   // local changes to items that have not yet been synced with the
   // server.
@@ -262,6 +264,10 @@ class ProfileSyncService : public SyncService,
   SyncEncryptionHandler::Observer* GetEncryptionObserverForTest();
 
   SyncClient* GetSyncClientForTest();
+
+  // Combines GAIA ID, sync birthday and keystore key with '|' sepearator to
+  // generate a secret. Returns empty string if keystore key is not available.
+  std::string GetExperimentalAuthenticationSecretForTest() const;
 
  private:
   friend class vivaldi::VivaldiProfileSyncService;
@@ -356,9 +362,6 @@ class ProfileSyncService : public SyncService,
   // Tell the sync server that this client has disabled sync.
   void RemoveClientFromServer() const;
 
-  // Check if previous shutdown is shutdown cleanly.
-  void ReportPreviousSessionMemoryWarningCount();
-
   // Estimates and records memory usage histograms per type.
   void RecordMemoryUsageHistograms();
 
@@ -370,6 +373,8 @@ class ProfileSyncService : public SyncService,
 
   // Called by SyncServiceCrypto when a passphrase is required or accepted.
   void ReconfigureDueToPassphrase(ConfigureReason reason);
+
+  std::string GetExperimentalAuthenticationSecret() const;
 
   // This profile's SyncClient, which abstracts away non-Sync dependencies and
   // the Sync API component factory.
@@ -435,6 +440,11 @@ class ProfileSyncService : public SyncService,
   // This is set to true if last synced time is not set at the time of
   // OnEngineInitialized().
   bool is_first_time_sync_configure_;
+
+  // Last known keystore key, populated after engine initialization.
+  // TODO(crbug.com/1012226): Remove |last_keystore_key_| when VAPID migration
+  // is over.
+  std::string last_keystore_key_;
 
   // Number of UIs currently configuring the Sync service. When this number
   // is decremented back to zero, Sync setup is marked no longer in progress.

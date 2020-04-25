@@ -10,7 +10,6 @@ import android.os.Build;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.device.mojom.NdefMessage;
 import org.chromium.device.mojom.NdefRecord;
-import org.chromium.device.mojom.NdefRecordType;
 
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
@@ -18,8 +17,8 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Utility class that provides convesion between Android NdefMessage
- * and mojo NdefMessage data structures.
+ * Utility class that provides conversion between Android NdefMessage and Mojo NdefMessage data
+ * structures.
  */
 public final class NdefMessageUtils {
     private static final String TAG = "NdefMessageUtils";
@@ -28,6 +27,23 @@ public final class NdefMessageUtils {
     private static final String TEXT_MIME = "text/plain";
     private static final String JSON_MIME = "application/json";
     private static final String OCTET_STREAM_MIME = "application/octet-stream";
+
+    public static final String RECORD_TYPE_EMPTY = "empty";
+    public static final String RECORD_TYPE_TEXT = "text";
+    public static final String RECORD_TYPE_URL = "url";
+    public static final String RECORD_TYPE_JSON = "json";
+    public static final String RECORD_TYPE_OPAQUE = "opaque";
+    public static final String RECORD_TYPE_SMART_POSTER = "smart-poster";
+
+    private static class PairOfDomainAndType {
+        private String mDomain;
+        private String mType;
+
+        private PairOfDomainAndType(String domain, String type) {
+            mDomain = domain;
+            mType = type;
+        }
+    }
 
     /**
      * Converts mojo NdefMessage to android.nfc.NdefMessage
@@ -91,24 +107,31 @@ public final class NdefMessageUtils {
             throws InvalidNdefMessageException, IllegalArgumentException,
                    UnsupportedEncodingException {
         switch (record.recordType) {
-            case NdefRecordType.URL:
+            case RECORD_TYPE_URL:
                 return android.nfc.NdefRecord.createUri(new String(record.data, "UTF-8"));
-            case NdefRecordType.TEXT:
+            case RECORD_TYPE_TEXT:
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     return android.nfc.NdefRecord.createTextRecord(
                             "en-US", new String(record.data, "UTF-8"));
                 } else {
                     return android.nfc.NdefRecord.createMime(TEXT_MIME, record.data);
                 }
-            case NdefRecordType.JSON:
-            case NdefRecordType.OPAQUE_RECORD:
+            case RECORD_TYPE_JSON:
+            case RECORD_TYPE_OPAQUE:
                 return android.nfc.NdefRecord.createMime(record.mediaType, record.data);
-            case NdefRecordType.EMPTY:
+            case RECORD_TYPE_EMPTY:
                 return new android.nfc.NdefRecord(
                         android.nfc.NdefRecord.TNF_EMPTY, null, null, null);
-            default:
+            case RECORD_TYPE_SMART_POSTER:
+                // TODO(https://crbug.com/520391): Support 'smart-poster' type records.
                 throw new InvalidNdefMessageException();
         }
+        PairOfDomainAndType pair = parseDomainAndType(record.recordType);
+        if (pair != null) {
+            return android.nfc.NdefRecord.createExternal(pair.mDomain, pair.mType, record.data);
+        }
+
+        throw new InvalidNdefMessageException();
     }
 
     /**
@@ -128,6 +151,9 @@ public final class NdefMessageUtils {
                 return createWellKnownRecord(ndefRecord);
             case android.nfc.NdefRecord.TNF_UNKNOWN:
                 return createUnKnownRecord(ndefRecord.getPayload());
+            case android.nfc.NdefRecord.TNF_EXTERNAL_TYPE:
+                return createExternalTypeRecord(
+                        new String(ndefRecord.getType(), "UTF-8"), ndefRecord.getPayload());
         }
         return null;
     }
@@ -145,7 +171,7 @@ public final class NdefMessageUtils {
      */
     private static NdefRecord createEmptyRecord() {
         NdefRecord nfcRecord = new NdefRecord();
-        nfcRecord.recordType = NdefRecordType.EMPTY;
+        nfcRecord.recordType = RECORD_TYPE_EMPTY;
         nfcRecord.mediaType = "";
         nfcRecord.data = new byte[0];
         return nfcRecord;
@@ -157,7 +183,7 @@ public final class NdefMessageUtils {
     private static NdefRecord createURLRecord(Uri uri) {
         if (uri == null) return null;
         NdefRecord nfcRecord = new NdefRecord();
-        nfcRecord.recordType = NdefRecordType.URL;
+        nfcRecord.recordType = RECORD_TYPE_URL;
         nfcRecord.mediaType = TEXT_MIME;
         nfcRecord.data = ApiCompatibilityUtils.getBytesUtf8(uri.toString());
         return nfcRecord;
@@ -169,9 +195,9 @@ public final class NdefMessageUtils {
     private static NdefRecord createMIMERecord(String mediaType, byte[] payload) {
         NdefRecord nfcRecord = new NdefRecord();
         if (mediaType.equals(JSON_MIME)) {
-            nfcRecord.recordType = NdefRecordType.JSON;
+            nfcRecord.recordType = RECORD_TYPE_JSON;
         } else {
-            nfcRecord.recordType = NdefRecordType.OPAQUE_RECORD;
+            nfcRecord.recordType = RECORD_TYPE_OPAQUE;
         }
         nfcRecord.mediaType = mediaType;
         nfcRecord.data = payload;
@@ -188,7 +214,7 @@ public final class NdefMessageUtils {
         }
 
         NdefRecord nfcRecord = new NdefRecord();
-        nfcRecord.recordType = NdefRecordType.TEXT;
+        nfcRecord.recordType = RECORD_TYPE_TEXT;
         nfcRecord.mediaType = TEXT_MIME;
         // According to NFCForum-TS-RTD_Text_1.0 specification, section 3.2.1 Syntax.
         // First byte of the payload is status byte, defined in Table 3: Status Byte Encodings.
@@ -216,6 +242,8 @@ public final class NdefMessageUtils {
             return createTextRecord(record.getPayload());
         }
 
+        // TODO(https://crbug.com/520391): Support RTD_SMART_POSTER type records.
+
         return null;
     }
 
@@ -224,9 +252,45 @@ public final class NdefMessageUtils {
      */
     private static NdefRecord createUnKnownRecord(byte[] payload) {
         NdefRecord nfcRecord = new NdefRecord();
-        nfcRecord.recordType = NdefRecordType.OPAQUE_RECORD;
+        nfcRecord.recordType = RECORD_TYPE_OPAQUE;
         nfcRecord.mediaType = OCTET_STREAM_MIME;
         nfcRecord.data = payload;
         return nfcRecord;
+    }
+
+    /**
+     * Constructs External type NdefRecord
+     */
+    private static NdefRecord createExternalTypeRecord(String customType, byte[] payload) {
+        NdefRecord nfcRecord = new NdefRecord();
+        nfcRecord.recordType = customType;
+        nfcRecord.mediaType = OCTET_STREAM_MIME;
+        nfcRecord.data = payload;
+        return nfcRecord;
+    }
+
+    /**
+     * Parses the input custom type to get its domain and type.
+     * e.g. returns a pair ('w3.org', 'xyz') for the input 'w3.org:xyz'.
+     * Returns null for invalid input.
+     * https://w3c.github.io/web-nfc/#the-ndefrecordtype-string
+     *
+     * TODO(https://crbug.com/520391): Refine the validation algorithm here accordingly once there
+     * is a conclusion on some case-sensitive things at https://github.com/w3c/web-nfc/issues/331.
+     */
+    private static PairOfDomainAndType parseDomainAndType(String customType) {
+        int colonIndex = customType.indexOf(':');
+        if (colonIndex == -1) return null;
+
+        // TODO(ThisCL): verify |domain| is a valid FQDN, asking help at
+        // https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/QN2mHt_WgHo.
+        String domain = customType.substring(0, colonIndex);
+        if (domain.isEmpty()) return null;
+
+        String type = customType.substring(colonIndex + 1);
+        if (type.isEmpty()) return null;
+        if (!type.matches("[a-zA-Z0-9()+,\\-:=@;$_!*'.]+")) return null;
+
+        return new PairOfDomainAndType(domain, type);
     }
 }

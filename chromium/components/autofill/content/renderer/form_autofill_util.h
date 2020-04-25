@@ -10,10 +10,13 @@
 #include <set>
 #include <vector>
 
+#include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "components/autofill/core/common/autofill_constants.h"
-#include "components/autofill/core/common/password_form_field_prediction_map.h"
+#include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/form_field_data.h"
+#include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_element_collection.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -71,15 +74,14 @@ GURL StripAuthAndParams(const GURL& gurl);
 // successful.
 bool ExtractFormData(const blink::WebFormElement& form_element, FormData* data);
 
-// Helper function to check if there exist any visible form on |frame| which
-// equals |form_element|. If |form_element| is null, checks if forms action
-// equals |action|. Returns true if so. For forms with empty or unspecified
-// actions, all form data are used for comparison.
-bool IsFormVisible(blink::WebLocalFrame* frame,
-                   const blink::WebFormElement& form_element,
-                   const GURL& action,
-                   const GURL& origin,
-                   const FormData& form_data);
+// Helper function to check if a form with renderer id |form_renderer_id| exists
+// in |frame| and is visible.
+bool IsFormVisible(blink::WebLocalFrame* frame, uint32_t form_renderer_id);
+
+// Helper function to check if a field with renderer id |field_renderer_id|
+// exists in |frame| and is visible.
+bool IsFormControlVisible(blink::WebLocalFrame* frame,
+                          uint32_t field_renderer_id);
 
 // Returns true if at least one element from |control_elements| is visible.
 bool IsSomeControlElementVisible(
@@ -219,12 +221,6 @@ bool FindFormAndFieldForFormControlElement(
 // initiated the auto-fill process.
 void FillForm(const FormData& form,
               const blink::WebFormControlElement& element);
-
-// Fills focusable and non-focusable form control elements within |form_element|
-// with field data from |form_data|.
-void FillFormIncludingNonFocusableElements(
-    const FormData& form_data,
-    const blink::WebFormElement& form_element);
 
 // Previews the form represented by |form|.  |element| is the input element that
 // initiated the preview process.

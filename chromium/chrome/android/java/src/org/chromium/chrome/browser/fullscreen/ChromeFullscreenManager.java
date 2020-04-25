@@ -8,14 +8,15 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.app.Activity;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
 import android.widget.FrameLayout;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
@@ -38,16 +39,16 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tabmodel.TabSelectionType;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.vr.VrModeObserver;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
-import org.chromium.chrome.browser.widget.ControlContainer;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.BrowserControlsState;
+import org.chromium.ui.util.TokenHolder;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -471,8 +472,7 @@ public class ChromeFullscreenManager extends FullscreenManager
                 // The toast tells user how to leave fullscreen by touching the screen. Since,
                 // there is no touchscreen when browsing in VR, the toast doesn't have any useful
                 // information.
-                return !isOverlayVideoMode() && !isInVr() && !bootsToVr()
-                        && !FeatureUtilities.isNoTouchModeEnabled();
+                return !isOverlayVideoMode() && !isInVr() && !bootsToVr();
             }
         };
     }

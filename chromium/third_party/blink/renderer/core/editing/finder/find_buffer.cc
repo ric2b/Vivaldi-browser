@@ -103,14 +103,15 @@ bool ShouldIgnoreContents(const Node& node) {
     return false;
   return (!element->ShouldSerializeEndTag() && !IsHTMLInputElement(*element)) ||
          IsA<HTMLIFrameElement>(*element) || IsHTMLImageElement(*element) ||
-         IsA<HTMLLegendElement>(*element) || IsHTMLMeterElement(*element) ||
-         IsHTMLObjectElement(*element) || IsHTMLProgressElement(*element) ||
-         (IsHTMLSelectElement(*element) &&
-          ToHTMLSelectElement(*element).UsesMenuList()) ||
+         IsA<HTMLLegendElement>(*element) || IsA<HTMLMeterElement>(*element) ||
+         IsHTMLObjectElement(*element) || IsA<HTMLProgressElement>(*element) ||
+         (IsA<HTMLSelectElement>(*element) &&
+          To<HTMLSelectElement>(*element).UsesMenuList()) ||
          IsHTMLStyleElement(*element) || IsHTMLScriptElement(*element) ||
          IsHTMLVideoElement(*element) || IsA<HTMLAudioElement>(*element) ||
          (element->GetDisplayLockContext() &&
-          !element->GetDisplayLockContext()->IsActivatable());
+          !element->GetDisplayLockContext()->IsActivatable(
+              DisplayLockActivationReason::kUser));
 }
 
 Node* GetNonSearchableAncestor(const Node& node) {
@@ -234,7 +235,7 @@ std::unique_ptr<FindBuffer::Results> FindBuffer::FindMatches(
 
 bool FindBuffer::PushScopedForcedUpdateIfNeeded(const Element& element) {
   if (auto* context = element.GetDisplayLockContext()) {
-    DCHECK(context->IsActivatable());
+    DCHECK(context->IsActivatable(DisplayLockActivationReason::kUser));
     scoped_forced_update_list_.push_back(context->GetScopedForcedUpdate());
     return true;
   }
@@ -244,7 +245,8 @@ bool FindBuffer::PushScopedForcedUpdateIfNeeded(const Element& element) {
 void FindBuffer::CollectScopedForcedUpdates(Node& start_node,
                                             const Node* search_range_end_node,
                                             const Node* node_after_block) {
-  if (!RuntimeEnabledFeatures::DisplayLockingEnabled())
+  if (!RuntimeEnabledFeatures::DisplayLockingEnabled(
+          start_node.GetExecutionContext()))
     return;
   if (start_node.GetDocument().LockedDisplayLockCount() ==
       start_node.GetDocument().ActivationBlockingDisplayLockCount())

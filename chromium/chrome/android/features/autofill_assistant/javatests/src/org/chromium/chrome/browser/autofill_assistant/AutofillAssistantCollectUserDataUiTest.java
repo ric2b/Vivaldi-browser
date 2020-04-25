@@ -6,15 +6,23 @@ package org.chromium.chrome.browser.autofill_assistant;
 
 import static android.support.test.espresso.Espresso.onView;
 import static android.support.test.espresso.action.ViewActions.click;
+import static android.support.test.espresso.action.ViewActions.replaceText;
+import static android.support.test.espresso.assertion.PositionAssertions.isAbove;
+import static android.support.test.espresso.assertion.PositionAssertions.isBelow;
 import static android.support.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static android.support.test.espresso.assertion.ViewAssertions.matches;
+import static android.support.test.espresso.contrib.PickerActions.setDate;
+import static android.support.test.espresso.contrib.PickerActions.setTime;
+import static android.support.test.espresso.matcher.RootMatchers.isDialog;
 import static android.support.test.espresso.matcher.ViewMatchers.isDescendantOfA;
 import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static android.support.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static android.support.test.espresso.matcher.ViewMatchers.withId;
 import static android.support.test.espresso.matcher.ViewMatchers.withTagValue;
 import static android.support.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
@@ -27,6 +35,7 @@ import static org.chromium.chrome.browser.autofill_assistant.AssistantTagsForTes
 
 import android.support.test.filters.MediumTest;
 import android.view.View;
+import android.widget.TextView;
 
 import org.hamcrest.Matcher;
 import org.junit.Before;
@@ -34,6 +43,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.LocaleUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.autofill_assistant.R;
 import org.chromium.chrome.browser.ChromeSwitches;
@@ -42,13 +52,26 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill_assistant.AutofillAssistantCollectUserDataTestHelper.ViewHolder;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantCollectUserDataCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantCollectUserDataModel;
+import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantDateChoiceOptions;
+import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantDateTime;
+import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantInfoPopup;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantLoginChoice;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantTermsAndConditionsState;
+import org.chromium.chrome.browser.autofill_assistant.user_data.additional_sections.AssistantAdditionalSectionFactory;
+import org.chromium.chrome.browser.autofill_assistant.user_data.additional_sections.AssistantStaticTextSection;
+import org.chromium.chrome.browser.autofill_assistant.user_data.additional_sections.AssistantTextInputSection;
+import org.chromium.chrome.browser.autofill_assistant.user_data.additional_sections.AssistantTextInputSection.TextInputFactory;
+import org.chromium.chrome.browser.autofill_assistant.user_data.additional_sections.AssistantTextInputType;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * Tests for the Autofill Assistant collect user data UI.
@@ -72,6 +95,22 @@ public class AutofillAssistantCollectUserDataUiTest {
             AssistantCollectUserDataModel model) throws Exception {
         AssistantCollectUserDataCoordinator coordinator = TestThreadUtils.runOnUiThreadBlocking(
                 () -> new AssistantCollectUserDataCoordinator(mTestRule.getActivity(), model));
+
+        TestThreadUtils.runOnUiThreadBlocking(
+                ()
+                        -> AutofillAssistantUiTestUtil.attachToCoordinator(
+                                mTestRule.getActivity(), coordinator.getView()));
+        return coordinator;
+    }
+
+    /** Creates a coordinator for use in UI tests, and adds it to the global view hierarchy. */
+    private AssistantCollectUserDataCoordinator createCollectUserDataCoordinator(
+            AssistantCollectUserDataModel model, Locale locale, DateFormat dateFormat)
+            throws Exception {
+        AssistantCollectUserDataCoordinator coordinator = TestThreadUtils.runOnUiThreadBlocking(
+                ()
+                        -> new AssistantCollectUserDataCoordinator(
+                                mTestRule.getActivity(), model, locale, dateFormat));
 
         TestThreadUtils.runOnUiThreadBlocking(
                 ()
@@ -106,6 +145,8 @@ public class AutofillAssistantCollectUserDataUiTest {
         assertThat(model.get(AssistantCollectUserDataModel.TERMS_STATUS),
                 is(AssistantTermsAndConditionsState.NOT_SELECTED));
         assertThat(model.get(AssistantCollectUserDataModel.SELECTED_LOGIN), nullValue());
+        assertThat(model.get(AssistantCollectUserDataModel.APPENDED_SECTIONS), empty());
+        assertThat(model.get(AssistantCollectUserDataModel.PREPENDED_SECTIONS), empty());
 
         /* Test initial UI state. */
         AutofillAssistantCollectUserDataTestHelper
@@ -201,6 +242,26 @@ public class AutofillAssistantCollectUserDataUiTest {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> model.set(AssistantCollectUserDataModel.REQUEST_LOGIN_CHOICE, true));
         onView(is(viewHolder.mLoginsSection)).check(matches(isDisplayed()));
+
+        /* Prepended section visibility test. */
+        List<AssistantAdditionalSectionFactory> prependedSections = new ArrayList<>();
+        prependedSections.add(
+                new AssistantStaticTextSection.Factory("Prepended section", "Lorem ipsum."));
+        TestThreadUtils.runOnUiThreadBlocking(
+                ()
+                        -> model.set(AssistantCollectUserDataModel.PREPENDED_SECTIONS,
+                                prependedSections));
+        /* Login section is top-most regular section. */
+        onView(withText("Prepended section")).check(isAbove(is(viewHolder.mLoginsSection)));
+
+        /* Appended section visibility test. */
+        List<AssistantAdditionalSectionFactory> appendedSections = new ArrayList<>();
+        appendedSections.add(
+                new AssistantStaticTextSection.Factory("Appended section", "Lorem ipsum."));
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> model.set(AssistantCollectUserDataModel.APPENDED_SECTIONS, appendedSections));
+        /* Shipping address is bottom-most regular section. */
+        onView(withText("Appended section")).check(isBelow(is(viewHolder.mShippingSection)));
     }
 
     /**
@@ -226,6 +287,7 @@ public class AutofillAssistantCollectUserDataUiTest {
             model.set(AssistantCollectUserDataModel.REQUEST_PAYMENT, true);
             model.set(AssistantCollectUserDataModel.REQUEST_SHIPPING_ADDRESS, true);
             model.set(AssistantCollectUserDataModel.REQUEST_LOGIN_CHOICE, true);
+            model.set(AssistantCollectUserDataModel.REQUEST_DATE_RANGE, true);
             model.set(AssistantCollectUserDataModel.DELEGATE, delegate);
             model.set(AssistantCollectUserDataModel.VISIBLE, true);
         });
@@ -240,9 +302,16 @@ public class AutofillAssistantCollectUserDataUiTest {
         onView(allOf(withId(R.id.section_title_add_button),
                        isDescendantOfA(is(viewHolder.mShippingSection))))
                 .check(matches(isDisplayed()));
-        /* ... Except for the logins section, which currently does not support adding items.*/
+        /* ... Except for logins, date/time and additional sections, which currently do not support
+         * adding items.*/
         onView(allOf(withId(R.id.section_title_add_button),
                        isDescendantOfA(is(viewHolder.mLoginsSection))))
+                .check(matches(not(isDisplayed())));
+        onView(allOf(withId(R.id.section_title_add_button),
+                       isDescendantOfA(is(viewHolder.mDateRangeStartSection))))
+                .check(matches(not(isDisplayed())));
+        onView(allOf(withId(R.id.section_title_add_button),
+                       isDescendantOfA(is(viewHolder.mDateRangeEndSection))))
                 .check(matches(not(isDisplayed())));
 
         /* Empty sections should be 'fixed', i.e., they can not be expanded. */
@@ -255,6 +324,14 @@ public class AutofillAssistantCollectUserDataUiTest {
         onView(allOf(withTagValue(is(VERTICAL_EXPANDER_CHEVRON)),
                        isDescendantOfA(is(viewHolder.mShippingSection))))
                 .check(matches(not(isDisplayed())));
+
+        /* Date/time range sections should always display the chevron. */
+        onView(allOf(withTagValue(is(VERTICAL_EXPANDER_CHEVRON)),
+                       isDescendantOfA(is(viewHolder.mDateRangeStartSection))))
+                .check(matches(isDisplayed()));
+        onView(allOf(withTagValue(is(VERTICAL_EXPANDER_CHEVRON)),
+                       isDescendantOfA(is(viewHolder.mDateRangeEndSection))))
+                .check(matches(isDisplayed()));
 
         /* Empty sections are collapsed. */
         onView(allOf(withTagValue(is(COLLECT_USER_DATA_CHOICE_LIST)),
@@ -427,7 +504,8 @@ public class AutofillAssistantCollectUserDataUiTest {
             model.set(AssistantCollectUserDataModel.VISIBLE, true);
             model.set(AssistantCollectUserDataModel.REQUEST_LOGIN_CHOICE, true);
             model.set(AssistantCollectUserDataModel.AVAILABLE_LOGINS,
-                    Collections.singletonList(new AssistantLoginChoice("id", "Guest", 0)));
+                    Collections.singletonList(new AssistantLoginChoice(
+                            "id", "Guest", "Description of guest checkout", "", 0, null)));
         });
 
         /* Non-empty sections should not display the 'add' button in their title. */
@@ -478,8 +556,8 @@ public class AutofillAssistantCollectUserDataUiTest {
                 "Acme Inc., 123 Main, 90210 Los Angeles, California, Uzbekistan",
                 viewHolder.mShippingSection.getCollapsedView(),
                 viewHolder.mShippingAddressList.getItem(0));
-        testLoginDetails("Guest", viewHolder.mLoginsSection.getCollapsedView(),
-                viewHolder.mLoginList.getItem(0));
+        testLoginDetails("Guest", "Description of guest checkout",
+                viewHolder.mLoginsSection.getCollapsedView(), viewHolder.mLoginList.getItem(0));
 
         /* Check delegate status. */
         assertThat(delegate.mPaymentMethod.getCard().getNumber(), is("4111111111111111"));
@@ -561,9 +639,6 @@ public class AutofillAssistantCollectUserDataUiTest {
                     acceptTermsText);
             model.set(AssistantCollectUserDataModel.SHOW_TERMS_AS_CHECKBOX, false);
             model.set(AssistantCollectUserDataModel.DELEGATE, delegate);
-
-            // Setting web contents will set the origin and the decline terms text.
-            model.set(AssistantCollectUserDataModel.WEB_CONTENTS, mTestRule.getWebContents());
             model.set(AssistantCollectUserDataModel.VISIBLE, true);
         });
 
@@ -611,6 +686,46 @@ public class AutofillAssistantCollectUserDataUiTest {
         // Clicking the text will trigger the link.
         onView(acceptMatcher).perform(click());
         assertThat(delegate.mLastLinkClicked, is(42));
+    }
+
+    @Test
+    @MediumTest
+    public void testTermsRequireReview() throws Exception {
+        AssistantCollectUserDataModel model = new AssistantCollectUserDataModel();
+        createCollectUserDataCoordinator(model);
+
+        // Setting a text from "backend".
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            model.set(AssistantCollectUserDataModel.TERMS_REQUIRE_REVIEW_TEXT, "Check terms");
+            model.set(AssistantCollectUserDataModel.SHOW_TERMS_AS_CHECKBOX, false);
+            model.set(AssistantCollectUserDataModel.VISIBLE, true);
+        });
+
+        onView(withTagValue(is(COLLECT_USER_DATA_TERMS_REQUIRE_REVIEW)))
+                .check(matches(allOf(withText("Check terms"), isDisplayed())));
+    }
+
+    @Test
+    @MediumTest
+    public void testThirdpartyPrivacyNotice() throws Exception {
+        AssistantCollectUserDataModel model = new AssistantCollectUserDataModel();
+        AssistantCollectUserDataCoordinator coordinator = createCollectUserDataCoordinator(model);
+        AutofillAssistantCollectUserDataTestHelper
+                .ViewHolder viewHolder = TestThreadUtils.runOnUiThreadBlocking(
+                () -> new AutofillAssistantCollectUserDataTestHelper.ViewHolder(coordinator));
+
+        TextView privacyNotice = viewHolder.mTermsSection.findViewById(
+                R.id.payment_request_3rd_party_privacy_notice);
+
+        // Setting a text from "backend".
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            model.set(AssistantCollectUserDataModel.THIRDPARTY_PRIVACY_NOTICE_TEXT,
+                    "Thirdparty privacy notice");
+            model.set(AssistantCollectUserDataModel.VISIBLE, true);
+        });
+
+        onView(is(privacyNotice))
+                .check(matches(allOf(withText("Thirdparty privacy notice"), isDisplayed())));
     }
 
     /**
@@ -725,6 +840,297 @@ public class AutofillAssistantCollectUserDataUiTest {
         assertThat(delegate.mContact.getPayerName(), is("Joe Doe"));
     }
 
+    @Test
+    @MediumTest
+    public void testDateRangeLocaleUS() throws Exception {
+        AssistantCollectUserDataModel model = new AssistantCollectUserDataModel();
+        Locale locale = LocaleUtils.forLanguageTag("en-US");
+        AssistantCollectUserDataCoordinator coordinator = createCollectUserDataCoordinator(
+                model, locale, new SimpleDateFormat("MMM d, yyyy h:mm a", locale));
+        AutofillAssistantCollectUserDataTestHelper.MockDelegate delegate =
+                new AutofillAssistantCollectUserDataTestHelper.MockDelegate();
+        AutofillAssistantCollectUserDataTestHelper
+                .ViewHolder viewHolder = TestThreadUtils.runOnUiThreadBlocking(
+                () -> new AutofillAssistantCollectUserDataTestHelper.ViewHolder(coordinator));
+
+        AssistantDateTime startTime = new AssistantDateTime(2019, 10, 21, 8, 0, 0);
+        AssistantDateTime endTime = new AssistantDateTime(2019, 11, 7, 18, 30, 0);
+        AssistantDateTime minTime = new AssistantDateTime(2019, 10, 21, 8, 0, 0);
+        AssistantDateTime maxTime = new AssistantDateTime(2020, 10, 21, 8, 0, 0);
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            model.set(AssistantCollectUserDataModel.DELEGATE, delegate);
+            model.set(AssistantCollectUserDataModel.REQUEST_DATE_RANGE, true);
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_START,
+                    new AssistantDateChoiceOptions(startTime, minTime, maxTime));
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_END,
+                    new AssistantDateChoiceOptions(endTime, minTime, maxTime));
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_START_LABEL, "Pick up");
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_END_LABEL, "Return");
+            model.set(AssistantCollectUserDataModel.VISIBLE, true);
+        });
+
+        onView(allOf(withId(R.id.datetime), isDescendantOfA(is(viewHolder.mDateRangeStartSection)),
+                       withText("Oct 21, 2019 8:00 AM")))
+                .check(matches(isDisplayed()));
+
+        onView(allOf(withId(R.id.datetime), isDescendantOfA(is(viewHolder.mDateRangeEndSection)),
+                       withText("Nov 7, 2019 6:30 PM")))
+                .check(matches(isDisplayed()));
+
+        assertThat(
+                delegate.mDateRangeStart.getTimeInUtcMillis(), is(startTime.getTimeInUtcMillis()));
+        assertThat(delegate.mDateRangeEnd.getTimeInUtcMillis(), is(endTime.getTimeInUtcMillis()));
+    }
+
+    @Test
+    @MediumTest
+    public void testDateRangeLocaleDE() throws Exception {
+        AssistantCollectUserDataModel model = new AssistantCollectUserDataModel();
+        Locale locale = LocaleUtils.forLanguageTag("de-DE");
+        AssistantCollectUserDataCoordinator coordinator = createCollectUserDataCoordinator(
+                model, locale, new SimpleDateFormat("dd.MM.yyyy HH:mm", locale));
+        AutofillAssistantCollectUserDataTestHelper.MockDelegate delegate =
+                new AutofillAssistantCollectUserDataTestHelper.MockDelegate();
+        AutofillAssistantCollectUserDataTestHelper
+                .ViewHolder viewHolder = TestThreadUtils.runOnUiThreadBlocking(
+                () -> new AutofillAssistantCollectUserDataTestHelper.ViewHolder(coordinator));
+
+        AssistantDateTime startTime = new AssistantDateTime(2019, 10, 21, 8, 0, 0);
+        AssistantDateTime endTime = new AssistantDateTime(2019, 11, 7, 18, 30, 0);
+        AssistantDateTime minTime = new AssistantDateTime(2019, 10, 21, 8, 0, 0);
+        AssistantDateTime maxTime = new AssistantDateTime(2020, 10, 21, 8, 0, 0);
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            model.set(AssistantCollectUserDataModel.DELEGATE, delegate);
+            model.set(AssistantCollectUserDataModel.REQUEST_DATE_RANGE, true);
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_START,
+                    new AssistantDateChoiceOptions(startTime, minTime, maxTime));
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_END,
+                    new AssistantDateChoiceOptions(endTime, minTime, maxTime));
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_START_LABEL, "Pick up");
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_END_LABEL, "Return");
+            model.set(AssistantCollectUserDataModel.VISIBLE, true);
+        });
+
+        onView(allOf(withId(R.id.datetime), isDescendantOfA(is(viewHolder.mDateRangeStartSection)),
+                       withText("21.10.2019 08:00")))
+                .check(matches(isDisplayed()));
+
+        onView(allOf(withId(R.id.datetime), isDescendantOfA(is(viewHolder.mDateRangeEndSection)),
+                       withText("07.11.2019 18:30")))
+                .check(matches(isDisplayed()));
+
+        assertThat(
+                delegate.mDateRangeStart.getTimeInUtcMillis(), is(startTime.getTimeInUtcMillis()));
+        assertThat(delegate.mDateRangeEnd.getTimeInUtcMillis(), is(endTime.getTimeInUtcMillis()));
+    }
+
+    @Test
+    @MediumTest
+    public void testDateRangeClamp() throws Exception {
+        AssistantCollectUserDataModel model = new AssistantCollectUserDataModel();
+        Locale locale = LocaleUtils.forLanguageTag("en-US");
+        AssistantCollectUserDataCoordinator coordinator = createCollectUserDataCoordinator(
+                model, locale, new SimpleDateFormat("MMM d, yyyy h:mm a", locale));
+        AutofillAssistantCollectUserDataTestHelper.MockDelegate delegate =
+                new AutofillAssistantCollectUserDataTestHelper.MockDelegate();
+        AutofillAssistantCollectUserDataTestHelper
+                .ViewHolder viewHolder = TestThreadUtils.runOnUiThreadBlocking(
+                () -> new AutofillAssistantCollectUserDataTestHelper.ViewHolder(coordinator));
+
+        AssistantDateTime startTime = new AssistantDateTime(2019, 11, 7, 18, 30, 0);
+        AssistantDateTime endTime = new AssistantDateTime(2019, 10, 21, 8, 0, 0);
+        AssistantDateTime minTime = new AssistantDateTime(2019, 10, 21, 8, 0, 0);
+        AssistantDateTime maxTime = new AssistantDateTime(2020, 10, 21, 8, 0, 0);
+
+        // Note the sequence: after the start time is set, the end time is modified to be *before*
+        // the start time. This should automatically clamp the start time to the end time.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            model.set(AssistantCollectUserDataModel.DELEGATE, delegate);
+            model.set(AssistantCollectUserDataModel.REQUEST_DATE_RANGE, true);
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_START,
+                    new AssistantDateChoiceOptions(startTime, minTime, maxTime));
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_END,
+                    new AssistantDateChoiceOptions(endTime, minTime, maxTime));
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_START_LABEL, "Pick up");
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_END_LABEL, "Return");
+            model.set(AssistantCollectUserDataModel.VISIBLE, true);
+        });
+
+        onView(allOf(withId(R.id.datetime), isDescendantOfA(is(viewHolder.mDateRangeStartSection)),
+                       withText("Oct 21, 2019 8:00 AM")))
+                .check(matches(isDisplayed()));
+
+        onView(allOf(withId(R.id.datetime), isDescendantOfA(is(viewHolder.mDateRangeEndSection)),
+                       withText("Oct 21, 2019 8:00 AM")))
+                .check(matches(isDisplayed()));
+
+        assertThat(delegate.mDateRangeStart.getTimeInUtcMillis(), is(endTime.getTimeInUtcMillis()));
+        assertThat(delegate.mDateRangeEnd.getTimeInUtcMillis(), is(endTime.getTimeInUtcMillis()));
+    }
+
+    @Test
+    @MediumTest
+    public void testDateRangePopup() throws Exception {
+        AssistantCollectUserDataModel model = new AssistantCollectUserDataModel();
+        Locale locale = LocaleUtils.forLanguageTag("en-US");
+        AssistantCollectUserDataCoordinator coordinator = createCollectUserDataCoordinator(
+                model, locale, new SimpleDateFormat("MMM d, yyyy h:mm a", locale));
+        AutofillAssistantCollectUserDataTestHelper.MockDelegate delegate =
+                new AutofillAssistantCollectUserDataTestHelper.MockDelegate();
+        AutofillAssistantCollectUserDataTestHelper
+                .ViewHolder viewHolder = TestThreadUtils.runOnUiThreadBlocking(
+                () -> new AutofillAssistantCollectUserDataTestHelper.ViewHolder(coordinator));
+
+        AssistantDateTime startTime = new AssistantDateTime(2019, 10, 21, 8, 0, 0);
+        AssistantDateTime endTime = new AssistantDateTime(2019, 11, 7, 18, 30, 0);
+        AssistantDateTime minTime = new AssistantDateTime(2019, 10, 21, 8, 0, 0);
+        AssistantDateTime maxTime = new AssistantDateTime(2020, 10, 21, 8, 0, 0);
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            model.set(AssistantCollectUserDataModel.DELEGATE, delegate);
+            model.set(AssistantCollectUserDataModel.REQUEST_DATE_RANGE, true);
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_START,
+                    new AssistantDateChoiceOptions(startTime, minTime, maxTime));
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_END,
+                    new AssistantDateChoiceOptions(endTime, minTime, maxTime));
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_START_LABEL, "Pick up");
+            model.set(AssistantCollectUserDataModel.DATE_RANGE_END_LABEL, "Return");
+            model.set(AssistantCollectUserDataModel.VISIBLE, true);
+        });
+
+        AssistantDateTime newStartTime = new AssistantDateTime(2019, 11, 3, 12, 0, 0);
+        AssistantDateTime newEndTime = new AssistantDateTime(2019, 11, 12, 20, 30, 0);
+
+        onView(allOf(withId(R.id.datetime), isDescendantOfA(is(viewHolder.mDateRangeStartSection))))
+                .perform(click());
+        onView(withId(R.id.date_picker))
+                .inRoot(isDialog())
+                .perform(setDate(
+                        newStartTime.getYear(), newStartTime.getMonth(), newStartTime.getDay()));
+        onView(withId(R.id.time_picker))
+                .inRoot(isDialog())
+                .perform(setTime(newStartTime.getHour(), newStartTime.getMinute()));
+        onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click());
+
+        onView(allOf(withId(R.id.datetime), isDescendantOfA(is(viewHolder.mDateRangeEndSection))))
+                .perform(click());
+        onView(withId(R.id.date_picker))
+                .inRoot(isDialog())
+                .perform(setDate(newEndTime.getYear(), newEndTime.getMonth(), newEndTime.getDay()));
+        onView(withId(R.id.time_picker))
+                .inRoot(isDialog())
+                .perform(setTime(newEndTime.getHour(), newEndTime.getMinute()));
+        onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click());
+
+        assertThat(delegate.mDateRangeStart.getTimeInUtcMillis(),
+                is(newStartTime.getTimeInUtcMillis()));
+        assertThat(
+                delegate.mDateRangeEnd.getTimeInUtcMillis(), is(newEndTime.getTimeInUtcMillis()));
+    }
+
+    @Test
+    @MediumTest
+    public void testAdditionalStaticSections() throws Exception {
+        AssistantCollectUserDataModel model = new AssistantCollectUserDataModel();
+        AssistantCollectUserDataCoordinator coordinator = createCollectUserDataCoordinator(model);
+
+        List<AssistantAdditionalSectionFactory> prependedSections = new ArrayList<>();
+        prependedSections.add(
+                new AssistantStaticTextSection.Factory("Prepended section 1", "Lorem ipsum."));
+        prependedSections.add(
+                new AssistantStaticTextSection.Factory("Prepended section 2", "Lorem ipsum."));
+
+        List<AssistantAdditionalSectionFactory> appendedSections = new ArrayList<>();
+        appendedSections.add(
+                new AssistantStaticTextSection.Factory("Appended section 1", "Lorem ipsum."));
+        appendedSections.add(
+                new AssistantStaticTextSection.Factory("Appended section 2", "Lorem ipsum."));
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            model.set(AssistantCollectUserDataModel.PREPENDED_SECTIONS, prependedSections);
+            model.set(AssistantCollectUserDataModel.APPENDED_SECTIONS, appendedSections);
+            model.set(AssistantCollectUserDataModel.VISIBLE, true);
+        });
+
+        onView(withText("Prepended section 1")).check(matches(isDisplayed()));
+        onView(withText("Prepended section 2")).check(matches(isDisplayed()));
+        onView(withText("Appended section 1")).check(matches(isDisplayed()));
+        onView(withText("Appended section 2")).check(matches(isDisplayed()));
+
+        onView(withText("Prepended section 1")).check(isAbove(withText("Prepended section 2")));
+        onView(withText("Prepended section 2")).check(isAbove(withText("Appended section 1")));
+        onView(withText("Appended section 1")).check(isAbove(withText("Appended section 2")));
+    }
+
+    @Test
+    @MediumTest
+    public void testAdditionalTextInputSections() throws Exception {
+        AssistantCollectUserDataModel model = new AssistantCollectUserDataModel();
+        AssistantCollectUserDataCoordinator coordinator = createCollectUserDataCoordinator(model);
+        AutofillAssistantCollectUserDataTestHelper.MockDelegate delegate =
+                new AutofillAssistantCollectUserDataTestHelper.MockDelegate();
+
+        List<AssistantAdditionalSectionFactory> prependedSections = new ArrayList<>();
+        List<AssistantTextInputSection.TextInputFactory> textInputs = new ArrayList<>();
+        textInputs.add(new TextInputFactory(AssistantTextInputType.INPUT_ALPHANUMERIC,
+                "Discount code", "123456789", "discount"));
+        textInputs.add(new TextInputFactory(
+                AssistantTextInputType.INPUT_ALPHANUMERIC, "Loyalty code", "", "loyalty"));
+        textInputs.add(
+                new TextInputFactory(AssistantTextInputType.INPUT_TEXT, "Comment", "", "comment"));
+        prependedSections.add(
+                new AssistantTextInputSection.Factory("Discount codes title", textInputs));
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            model.set(AssistantCollectUserDataModel.DELEGATE, delegate);
+            model.set(AssistantCollectUserDataModel.PREPENDED_SECTIONS, prependedSections);
+            model.set(AssistantCollectUserDataModel.VISIBLE, true);
+        });
+
+        // Expand section
+        onView(withText("Discount codes title")).perform(click());
+
+        onView(withContentDescription("Discount code")).check(matches(isDisplayed()));
+        onView(withContentDescription("Loyalty code")).check(matches(isDisplayed()));
+        assertThat(delegate.mAdditionalValues.get("discount"), is("123456789"));
+        assertThat(delegate.mAdditionalValues.get("loyalty"), is(""));
+
+        onView(withContentDescription("Discount code")).perform(replaceText("D-742394"));
+        onView(withContentDescription("Loyalty code")).perform(replaceText("L-394834"));
+        assertThat(delegate.mAdditionalValues.get("discount"), is("D-742394"));
+        assertThat(delegate.mAdditionalValues.get("loyalty"), is("L-394834"));
+    }
+
+    @Test
+    @MediumTest
+    public void testLoginSectionInfoPopup() throws Exception {
+        AssistantCollectUserDataModel model = new AssistantCollectUserDataModel();
+        createCollectUserDataCoordinator(model);
+        AutofillAssistantCollectUserDataTestHelper.MockDelegate delegate =
+                new AutofillAssistantCollectUserDataTestHelper.MockDelegate();
+
+        AssistantInfoPopup infoPopup =
+                new AssistantInfoPopup("Guest checkout", "Text explanation.");
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            model.set(AssistantCollectUserDataModel.DELEGATE, delegate);
+            model.set(AssistantCollectUserDataModel.VISIBLE, true);
+            model.set(AssistantCollectUserDataModel.LOGIN_SECTION_TITLE, "Login options");
+            model.set(AssistantCollectUserDataModel.REQUEST_LOGIN_CHOICE, true);
+            model.set(AssistantCollectUserDataModel.AVAILABLE_LOGINS,
+                    Collections.singletonList(new AssistantLoginChoice(
+                            "id", "Guest checkout", "", "", 0, infoPopup)));
+        });
+
+        onView(withText("Login options")).perform(click());
+        onView(withContentDescription(mTestRule.getActivity().getString(R.string.learn_more)))
+                .perform(click());
+        onView(withText("Guest checkout")).check(matches(isDisplayed()));
+        onView(withText("Text explanation.")).check(matches(isDisplayed()));
+        onView(withText(mTestRule.getActivity().getString(R.string.close))).perform(click());
+    }
+
     private View getPaymentSummaryErrorView(ViewHolder viewHolder) {
         return viewHolder.mPaymentSection.findViewById(R.id.payment_method_summary)
                 .findViewById(R.id.incomplete_error);
@@ -781,10 +1187,13 @@ public class AutofillAssistantCollectUserDataUiTest {
                 .check(matches(not(isDisplayed())));
     }
 
-    private void testLoginDetails(String expectedLabel, View summaryView, View fullView) {
-        onView(allOf(withId(R.id.username), isDescendantOfA(is(summaryView))))
+    private void testLoginDetails(
+            String expectedLabel, String expectedSublabel, View summaryView, View fullView) {
+        onView(allOf(withId(R.id.label), isDescendantOfA(is(summaryView))))
                 .check(matches(withText(expectedLabel)));
-        onView(allOf(withId(R.id.username), isDescendantOfA(is(fullView))))
+        onView(allOf(withId(R.id.label), isDescendantOfA(is(fullView))))
                 .check(matches(withText(expectedLabel)));
+        onView(allOf(withId(R.id.sublabel), isDescendantOfA(is(fullView))))
+                .check(matches(withText(expectedSublabel)));
     }
 }

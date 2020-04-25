@@ -24,6 +24,13 @@ class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationContainer {
   // Called when MediaNotificationView's expanded state changes.
   virtual void OnExpanded(bool expanded) = 0;
 
+  // Called when the MediaSessionInfo changes.
+  virtual void OnMediaSessionInfoChanged(
+      const media_session::mojom::MediaSessionInfoPtr& session_info) = 0;
+
+  // Called when the metadata changes.
+  virtual void OnMediaSessionMetadataChanged() = 0;
+
   // TODO(https://crbug.com/1003847): Use base::flat_set isntead.
   // Called when the set of visible MediaSessionActions changes.
   virtual void OnVisibleActionsChanged(
@@ -31,6 +38,15 @@ class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationContainer {
 
   // Called when the media artwork changes.
   virtual void OnMediaArtworkChanged(const gfx::ImageSkia& image) = 0;
+
+  // Called when MediaNotificationView's colors change.
+  virtual void OnColorsChanged(SkColor foreground, SkColor background) = 0;
+
+  // Called when the header row is clicked.
+  virtual void OnHeaderClicked() = 0;
+
+ protected:
+  virtual ~MediaNotificationContainer() = default;
 };
 
 }  // namespace media_message_center

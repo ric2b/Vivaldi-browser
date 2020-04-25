@@ -65,6 +65,7 @@ class DisplayPanel extends HTMLElement {
     return `<style>
               :host {
                 max-width: 400px;
+                outline: none;
               }
               #container {
                   align-items: stretch;
@@ -257,6 +258,11 @@ class DisplayPanel extends HTMLElement {
     let summaryHost = this.shadowRoot.querySelector('#summary');
     let summaryPanel = summaryHost.querySelector('#summary-panel');
 
+    // Make the display panel available by tab if there are panels to
+    // show and there's an aria-label for use by a screen reader.
+    if (this.hasAttribute('aria-label')) {
+      this.tabIndex = this.items_.length ? 0 : -1;
+    }
     // Work out how many progress panels are being shown.
     let count = 0;
     for (let i = 0; i < this.items_.length; ++i) {
@@ -327,11 +333,18 @@ class DisplayPanel extends HTMLElement {
    */
   attachPanelItem(panel) {
     const displayPanel = panel.parent;
+
     // Only attach the panel if it hasn't been removed.
     const index = displayPanel.items_.indexOf(panel);
     if (index === -1) {
       return;
     }
+
+    // If it's already attached, nothing to do here.
+    if (panel.isConnected) {
+      return;
+    }
+
     displayPanel.panels_.appendChild(panel);
     displayPanel.updateSummaryPanel();
   }

@@ -60,10 +60,10 @@ Polymer({
     },
 
     /** @private */
-    enableBluetoothScanningContentSetting_: {
+    enableInsecureContentContentSetting_: {
       type: Boolean,
       value: function() {
-        return loadTimeData.getBoolean('enableBluetoothScanningContentSetting');
+        return loadTimeData.getBoolean('enableInsecureContentContentSetting');
       }
     },
 
@@ -130,7 +130,7 @@ Polymer({
       pairs.push([R.SITE_SETTINGS_SERIAL_PORTS, 'serial-ports']);
     }
 
-    if (this.enableBluetoothScanningContentSetting_) {
+    if (this.enableExperimentalWebPlatformFeatures_) {
       pairs.push([R.SITE_SETTINGS_BLUETOOTH_SCANNING, 'bluetooth-scanning']);
     }
 
@@ -138,6 +138,10 @@ Polymer({
       pairs.push([
         R.SITE_SETTINGS_NATIVE_FILE_SYSTEM_WRITE, 'native-file-system-write'
       ]);
+    }
+
+    if (this.enableInsecureContentContentSetting_) {
+      pairs.push([R.SITE_SETTINGS_MIXEDSCRIPT, 'mixed-script']);
     }
 
     pairs.forEach(([route, id]) => {

@@ -10,12 +10,12 @@
 #include "base/memory/weak_ptr.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/platform_window/platform_window_base.h"
 #include "ui/platform_window/platform_window_delegate.h"
 
 namespace ui {
 
 class Event;
-class PlatformWindow;
 class Renderer;
 class RendererFactory;
 class WindowManager;
@@ -45,6 +45,7 @@ class DemoWindow : public PlatformWindowDelegate {
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) override;
   void OnAcceleratedWidgetDestroyed() override;
   void OnActivationChanged(bool active) override;
+  void OnMouseEnter() override;
 
  private:
   // Since we pretend to have a GPU process, we should also pretend to
@@ -57,7 +58,7 @@ class DemoWindow : public PlatformWindowDelegate {
   std::unique_ptr<Renderer> renderer_;
 
   // Window-related state.
-  std::unique_ptr<PlatformWindow> platform_window_;
+  std::unique_ptr<PlatformWindowBase> platform_window_;
   gfx::AcceleratedWidget widget_ = gfx::kNullAcceleratedWidget;
 
   base::WeakPtrFactory<DemoWindow> weak_ptr_factory_{this};

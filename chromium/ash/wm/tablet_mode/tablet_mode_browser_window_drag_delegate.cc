@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "ash/display/screen_orientation_controller.h"
 #include "ash/home_screen/home_screen_controller.h"
 #include "ash/public/cpp/wallpaper_types.h"
 #include "ash/root_window_controller.h"
@@ -310,9 +311,9 @@ void TabletModeBrowserWindowDragDelegate::UpdateSourceWindow(
     } else {
       // Put the source window on the other side of the split screen.
       expected_bounds = split_view_controller_->GetSnappedWindowBoundsInScreen(
-          source_window, snap_position == SplitViewController::LEFT
-                             ? SplitViewController::RIGHT
-                             : SplitViewController::LEFT);
+          snap_position == SplitViewController::LEFT
+              ? SplitViewController::RIGHT
+              : SplitViewController::LEFT);
     }
   }
   ::wm::ConvertRectFromScreen(source_window->parent(), &expected_bounds);

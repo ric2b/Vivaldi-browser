@@ -147,7 +147,7 @@ BaseFetchContext::CanRequestInternal(
   if (!url.GetString().StartsWith("blob:chrome-extension://" VIVALDI_APP_ID "/"))
 #endif
   if (!network::IsNavigationRequestMode(request_mode) &&
-      !origin->CanDisplay(url)) {
+      !resource_request.CanDisplay(url)) {
     if (reporting_policy == SecurityViolationReportingPolicy::kReport) {
       AddConsoleMessage(ConsoleMessage::Create(
           mojom::ConsoleMessageSource::kJavaScript,
@@ -160,7 +160,9 @@ BaseFetchContext::CanRequestInternal(
   }
 
   if (request_mode == network::mojom::RequestMode::kSameOrigin &&
-      cors::CalculateCorsFlag(url, origin.get(), request_mode)) {
+      cors::CalculateCorsFlag(url, origin.get(),
+                              resource_request.IsolatedWorldOrigin().get(),
+                              request_mode)) {
     PrintAccessDeniedMessage(url);
     return ResourceRequestBlockedReason::kOrigin;
   }

@@ -10,6 +10,8 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/web_contents.h"
+#include "storage/browser/quota/quota_settings.h"
 
 class GURL;
 
@@ -69,6 +71,9 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
   void RegisterNonNetworkNavigationURLLoaderFactories(
       int frame_tree_node_id,
       NonNetworkURLLoaderFactoryMap* factories) override;
+  void RegisterNonNetworkWorkerMainResourceURLLoaderFactories(
+      content::BrowserContext* browser_context,
+      NonNetworkURLLoaderFactoryMap* factories) override;
   void RegisterNonNetworkServiceWorkerUpdateURLLoaderFactories(
       content::BrowserContext* browser_context,
       NonNetworkURLLoaderFactoryMap* factories) override;
@@ -94,6 +99,7 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
       bool is_main_frame,
       ui::PageTransition page_transition,
       bool has_user_gesture,
+      const base::Optional<url::Origin>& initiating_origin,
       network::mojom::URLLoaderFactoryPtr* out_factory) override;
   network::mojom::URLLoaderFactoryPtrInfo
   CreateURLLoaderFactoryForNetworkRequests(
@@ -101,7 +107,9 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
       network::mojom::NetworkContext* network_context,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
-      const url::Origin& request_initiator) override;
+      const url::Origin& request_initiator,
+      const base::Optional<net::NetworkIsolationKey>& network_isolation_key)
+      override;
   std::string GetUserAgent() override;
 
  protected:

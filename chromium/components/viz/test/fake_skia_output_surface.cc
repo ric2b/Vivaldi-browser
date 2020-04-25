@@ -177,19 +177,23 @@ void FakeSkiaOutputSurface::ReleaseImageContexts(
     std::vector<std::unique_ptr<ImageContext>> image_contexts) {}
 
 std::unique_ptr<ExternalUseClient::ImageContext>
-FakeSkiaOutputSurface::CreateImageContext(const gpu::MailboxHolder& holder,
-                                          const gfx::Size& size,
-                                          ResourceFormat format,
-                                          sk_sp<SkColorSpace> color_space) {
+FakeSkiaOutputSurface::CreateImageContext(
+    const gpu::MailboxHolder& holder,
+    const gfx::Size& size,
+    ResourceFormat format,
+    const base::Optional<gpu::VulkanYCbCrInfo>& ycbcr_info,
+    sk_sp<SkColorSpace> color_space) {
   return std::make_unique<ExternalUseClient::ImageContext>(
-      holder, size, format, std::move(color_space));
+      holder, size, format, ycbcr_info, std::move(color_space));
 }
 
-void FakeSkiaOutputSurface::SkiaSwapBuffers(OutputSurfaceFrame frame) {
+gpu::SyncToken FakeSkiaOutputSurface::SkiaSwapBuffers(OutputSurfaceFrame frame,
+                                                      bool wants_sync_token) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&FakeSkiaOutputSurface::SwapBuffersAck,
                                 weak_ptr_factory_.GetWeakPtr()));
+  return gpu::SyncToken();
 }
 
 SkCanvas* FakeSkiaOutputSurface::BeginPaintRenderPass(
@@ -356,7 +360,21 @@ void FakeSkiaOutputSurface::SwapBuffersAck() {
 
 void FakeSkiaOutputSurface::ScheduleGpuTaskForTesting(
     base::OnceClosure callback,
-    std::vector<gpu::SyncToken> sync_tokesn) {
+    std::vector<gpu::SyncToken> sync_tokens) {
+  NOTIMPLEMENTED();
+}
+
+void FakeSkiaOutputSurface::SendOverlayPromotionNotification(
+    std::vector<gpu::SyncToken> sync_tokens,
+    base::flat_set<gpu::Mailbox> promotion_denied,
+    base::flat_map<gpu::Mailbox, gfx::Rect> possible_promotions) {
+  NOTIMPLEMENTED();
+}
+
+void FakeSkiaOutputSurface::RenderToOverlay(
+    gpu::SyncToken sync_token,
+    gpu::Mailbox overlay_candidate_mailbox,
+    const gfx::Rect& bounds) {
   NOTIMPLEMENTED();
 }
 

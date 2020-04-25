@@ -30,27 +30,6 @@ class Browser;
 // It displays a list of profiles and allows users to switch between profiles.
 class ProfileMenuView : public ProfileMenuViewBase, public AvatarMenuObserver {
  public:
-  // These values are persisted to logs. Entries should not be renumbered and
-  // numeric values should never be reused.
-  enum class ActionableItem {
-    kManageGoogleAccountButton = 0,
-    kPasswordsButton = 1,
-    kCreditCardsButton = 2,
-    kAddressesButton = 3,
-    kGuestProfileButton = 4,
-    kManageProfilesButton = 5,
-    kLockButton = 6,
-    kExitProfileButton = 7,
-    kSyncErrorButton = 8,
-    kCurrentProfileCard = 9,
-    kSigninButton = 10,
-    kSigninAccountButton = 11,
-    kSignoutButton = 12,
-    kOtherProfileButton = 13,
-    kCookiesClearedOnExitLink = 14,
-    kMaxValue = kCookiesClearedOnExitLink,
-  };
-
   ProfileMenuView(views::Button* anchor_button,
                      Browser* browser,
                      signin_metrics::AccessPoint access_point);
@@ -78,16 +57,16 @@ class ProfileMenuView : public ProfileMenuViewBase, public AvatarMenuObserver {
   void OnManageProfilesButtonClicked();
   void OnLockButtonClicked();
   void OnExitProfileButtonClicked();
+  void OnSyncSettingsButtonClicked();
   void OnSyncErrorButtonClicked(sync_ui_util::AvatarSyncErrorType error);
   void OnCurrentProfileCardClicked();
   void OnSigninButtonClicked();
   void OnSigninAccountButtonClicked(AccountInfo account);
   void OnSignoutButtonClicked();
-  void OnOtherProfileButtonClicked(int profile_index);
+  void OnOtherProfileSelected(const base::FilePath& profile_path);
   void OnCookiesClearedOnExitLinkClicked();
-
-  // Should be called inside each button/link action.
-  void RecordClick(ActionableItem item);
+  void OnAddNewProfileButtonClicked();
+  void OnEditProfileButtonClicked();
 
   // AvatarMenuObserver:
   void OnAvatarMenuChanged(AvatarMenu* avatar_menu) override;
@@ -99,6 +78,14 @@ class ProfileMenuView : public ProfileMenuViewBase, public AvatarMenuObserver {
 
   // Helper methods for building the menu.
   void BuildIdentity();
+  void BuildGuestIdentity();
+  gfx::ImageSkia GetSyncIcon();
+  void BuildAutofillButtons();
+  void BuildSyncInfo();
+  void BuildFeatureButtons();
+  void BuildProfileManagementHeading();
+  void BuildSelectableProfiles();
+  void BuildProfileManagementFeatureButtons();
 
   // Adds the profile chooser view.
   void AddProfileMenuView(AvatarMenu* avatar_menu);

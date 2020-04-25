@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="bg">
+<translation id="1029351048239796117">Vivaldi изисква разрешение за достъп до микрофона за сайта.</translation>
+<translation id="1063227610401477317">Приложи промените</translation>
+<translation id="1067048845568873861">Дата на създаване</translation>
+<translation id="1151669774236491028">Vivaldi.net се натъква на конфликти: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />).</translation>
+<translation id="1193152013480891461">Създай профил във Vivaldi</translation>
+<translation id="119944043368869598">Изчисти всичко</translation>
+<translation id="1228311134236651326">Няма намерени записки</translation>
+<translation id="1243314992276662751">Качване</translation>
+<translation id="1249276067323441352">Сверявай избраните</translation>
+<translation id="1302932907222175914">Търси в записките</translation>
+<translation id="1644574205037202324">История</translation>
+<translation id="1689333818294560261">Псевдоним</translation>
+<translation id="1721552494230946796">Добави папка към номератора</translation>
+<translation id="1799160781006135561">Непосочена шифроваща парола</translation>
+<translation id="1887193815546011584">Нов номератор</translation>
+<translation id="1984391066297619717">Автосверяване</translation>
+<translation id="2030706494969937066">Извличането на данните за вписване се провали. Моля, впишете се отново.</translation>
+<translation id="2034405583989639424">Редактирай номератора</translation>
+<translation id="2071726368047511075">Прихвани страницата</translation>
+<translation id="2199644148227291099">Сигурен ли сте, че ще ползвате паролата за вписване като шифроваща? Това съществено снижава сигурността на сверените данни в мрежата.</translation>
+<translation id="2243210264130642074">Записана записка</translation>
+<translation id="2336309953058658733">Изпразни кошчето</translation>
+<translation id="2359808026110333948">Напред</translation>
+<translation id="2526968784648867272">Прихващане на страницата…</translation>
+<translation id="2709516037105925701">Запълващи данни</translation>
+<translation id="271033894570825754">Създай отметка</translation>
+<translation id="2745324713975967671">Шифроваща парола</translation>
+<translation id="2818042133587341562">Vivaldi изисква разрешение за достъп до камерата за сайта.</translation>
+<translation id="2842985007712546952">Покажи папката</translation>
+<translation id="2850144663494818309">Иницииране на Свер…</translation>
+<translation id="2873951654529031587">Кошче</translation>
+<translation id="2915527103487649658">Сверявай всички</translation>
+<translation id="2953995378235516294">Данните в профила на Свер са шифровани. Моля, въведете вашата шифроващата парола.</translation>
+<translation id="2996809686854298943">Задължително въведете адрес</translation>
+<translation id="3177673846235066154">Сървърът отказа данните за вписване.</translation>
+<translation id="3183006304368105350">Клонирай раздела</translation>
+<translation id="3271422135763022755">Напишете нещо…</translation>
+<translation id="3335772982573114336">Нова записка</translation>
+<translation id="33451081266695216">Свързването се забавя от сървъра.</translation>
+<translation id="3377025655491224618">Частен раздел</translation>
+<translation id="3513566764071045027">Отпиши ме</translation>
+<translation id="3596285013654573099">Впиши ме в Свер</translation>
+<translation id="3611176835527015865">Засяга вътрешните страници на Vivaldi, но не и сайтовете.</translation>
+<translation id="3723593528923555236">Продължи без отделна парола</translation>
+<translation id="3838463869765243557">Име на устройството (<ph name="DEVICE_NAME" />)</translation>
+<translation id="3866249974567520381">Описание</translation>
+<translation id="3897711243931585177">ОБЩИ</translation>
+<translation id="4014682279600355881">Препоръчваме ви да създадете отделна и надеждна шифроваща парола. В случай че оставите полето празно ще се ползва паролата за вписване в профила.</translation>
+<translation id="4073968054795398875">Сървърът на Свер се натъква на конфликти. Скоро ще последва повторен опит за иницииране на Свер…</translation>
+<translation id="4082980568238151037">Настройване на шифроваща парола.</translation>
+<translation id="4145489350420416595">Неочаквана грешка.</translation>
+<translation id="4268574628540273656">Адрес:</translation>
+<translation id="4304224509867189079">Впиши ме</translation>
+<translation id="4435780204941264251">Изчисти сверените данни</translation>
+<translation id="4532845899244822526">Посочване на папка</translation>
+<translation id="4579489600439872414">Свер е забранен в настройките на Android.</translation>
+<translation id="4589558845651536280">в ход…</translation>
+<translation id="4752136117982598343">Записана записка в <ph name="FOLDER_NAME" /></translation>
+<translation id="4759238208242260848">Изтегляния</translation>
+<translation id="4833044618885331665">Ползването на Свер изисква да обновите Vivaldi.</translation>
+<translation id="4847896847259487518">Отметни страницата</translation>
+<translation id="4890701585167892790">Тук няма записки.</translation>
+<translation id="4892521078757281695">Затваряй раздела с плъзгане</translation>
+<translation id="4936710149174207991">несверено</translation>
+<translation id="4954427294703861104">Не познавате Vivaldi? Създайте профил.</translation>
+<translation id="504986598654589766">Сърфирането в частни раздели означава, че Vivaldi не пази търсения, посетени сайтове, бисквитки или временни файлове. Той не шифрова, нито променя по какъвто и да е начин вашето свързване.</translation>
+<translation id="5161254044473106830">Задължително въведете заглавие</translation>
+<translation id="5186185447130319458">Частен режим</translation>
+<translation id="5271549068863921519">Запиши паролата</translation>
+<translation id="5286002386457946212">Грешка в клиента.</translation>
+<translation id="5290452628447338707">Няма записки</translation>
+<translation id="5351912500249789547">Vivaldi.net отхвърля данните за вписване: код на грешката <ph name="ERROR_CODE" />.</translation>
+<translation id="5388358297987318779">Отвори картината</translation>
+<translation id="5421638721143596928">Разшифроването на данните за вписване се провали. Моля, впишете се отново.</translation>
+<translation id="5443210757369395869">Прихвани видимата област</translation>
+<translation id="5448025735280530073">Vivaldi изисква достъп до местоположението и позволение да го сподели със сайта.</translation>
+<translation id="5510723066938954312">Отметки и номератори</translation>
+<translation id="5525981542754785361">Записана записка във <ph name="PRODUCT_NAME" /></translation>
+<translation id="5626560911099156926">Копирай в записка</translation>
+<translation id="5754087700864822036">СТРАНИЦИ</translation>
+<translation id="5765833063161370062">Премести записките</translation>
+<translation id="5790085346892983794">уеспешно</translation>
+<translation id="5803562371819294631">С ТОВА премахвате съхраняваните в сървъра на Свер сверени данни, нулирате шифроващата парола и се отписвате! Сигурен ли сте?</translation>
+<translation id="5823830882692559950">Vivaldi.net отхвърля данните за вписване: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />).</translation>
+<translation id="5841317974325635710">Създадена е нова записка</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> записка}
+          other {<ph name="NOTES_COUNT_MANY" /> записки}}</translation>
+<translation id="6012194412768958291">Невъзможно свързване с Vivaldi.net.</translation>
+<translation id="6027204815015935175">Задължително въведете парола за разшифроване.</translation>
+<translation id="6059232451013891645">Папка:</translation>
+<translation id="6077943432358741146">Номератор</translation>
+<translation id="6091125352818749975">Изчистване на отдалечено сверените данни</translation>
+<translation id="6135798666968342262">Показвай плъзгачите</translation>
+<translation id="6179463181009746489">Изтрий записките</translation>
+<translation id="6231148928368101651">Чекмедже</translation>
+<translation id="6406506848690869874">Свер</translation>
+<translation id="6657585470893396449">Парола</translation>
+<translation id="6682232524697939870">Vivaldi изисква разрешение за достъп до камерата и микрофона за сайта.</translation>
+<translation id="6698381487523150993">Дата на създаване:</translation>
+<translation id="6786747875388722282">Разширения</translation>
+<translation id="6887143077297974801">Пускът на Cвер се провали.</translation>
+<translation id="6945221475159498467">Избери</translation>
+<translation id="6960734555676205519">Последно сверяване</translation>
+<translation id="7029809446516969842">Пароли</translation>
+<translation id="7075547914712055886">Пусни Свер пак</translation>
+<translation id="7222342267839079597">Моля, посочете надеждна шифроваща парола за защита на вашите данни.</translation>
+<translation id="7228660378238874411">Показвай настолната версия</translation>
+<translation id="7390295729483215958">Сверяване в ход…</translation>
+<translation id="7492794630657957996">Потвърдете сверяването на данни за завършване на настройването.</translation>
+<translation id="7514365320538308">Изтегляне</translation>
+<translation id="7547490097772831952">Прихвани цялата страница</translation>
+<translation id="7725641807765767506">Няма намерени номератори</translation>
+<translation id="7765158879357617694">Премести</translation>
+<translation id="7822864833609233785">РАЗШИРЕНИ</translation>
+<translation id="798930073512159071">
+
+Създайте своя записка!
+
+Добавете първата тук с докосване на иконата или изберете текст в страница и я създайте от контекстното меню.</translation>
+<translation id="8004991133350335392">Минималната дължина на паролата е 12 знака.</translation>
+<translation id="8028021641083150097">За връщане на достъпа до вашия профил отдалечено сверените данни трябва да бъдат нулирани. Едва след това ще можете да сверите текущите данни на сърфиране.</translation>
+<translation id="8035133914807600019">Създай папка…</translation>
+<translation id="8066170816074394954">Грешка в сървъра.</translation>
+<translation id="8123787473700925741">Vivaldi.net се натъква на конфликти: код на грешката <ph name="ERROR_CODE" />.</translation>
+<translation id="817228583984462779">Пусни Свер</translation>
+<translation id="8206267832882844324">Редактирай записката</translation>
+<translation id="8225478925744929238">Премахни от отметките</translation>
+<translation id="8233521945095997439">Тук няма номератори.</translation>
+<translation id="8257908958623224237">Конфликт с данните на друг клиент.</translation>
+<translation id="8261506727792406068">Изтрий</translation>
+<translation id="8305137170060620165">История и отдалечени сесии</translation>
+<translation id="8414685983518053656">Записки</translation>
+<translation id="8422778094137438683">Впишете се с вашия профил във vivaldi.net</translation>
+<translation id="8428213095426709021">Настройки</translation>
+<translation id="8462396943848220200">Повторно вписване след <ph name="TIME" /></translation>
+<translation id="8480556999740355963">Вписан като <ph name="USERNAME" /> чрез <ph name="DEVICE_NAME" /></translation>
+<translation id="8489813444100643867">Моля, изчакайте — вписване във Vivaldi.net като <ph name="USERNAME" />.</translation>
+<translation id="8503813439785031346">Потребител</translation>
+<translation id="8661216209723599816">Занули отдалечените данни</translation>
+<translation id="8721244337025311110">Добави отметка</translation>
+<translation id="8724114686743788114">Невъзможно показване на картината</translation>
+<translation id="8730621377337864115">Готово</translation>
+<translation id="8738958257180686306">Дата на създаване: <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Vivaldi изисква достъп до хранилището за изтегляне на файлове.</translation>
+<translation id="8808060551076378370">Добавянето на записката се провали.</translation>
+<translation id="8817201557520703060">Прихваната страница</translation>
+<translation id="8820817407110198400">Отметки</translation>
+<translation id="8884751487662988673">За да видите Сверени раздели, моля впишете се в Свер от Настройки.</translation>
+<translation id="895749247724466293">Търси в номераторите</translation>
+<translation id="8959245489304000426">Не си знам паролата</translation>
+<translation id="8979401359137062629">Записка:</translation>
+<translation id="9028089729841356743">Грешка в мрежата.</translation>
+<translation id="9065203028668620118">Редактирай</translation>
+<translation id="9148058034647219655">Изход</translation>
+<translation id="9173575361559252669">Провалено прихващане на страницата</translation>
+</translationbundle>

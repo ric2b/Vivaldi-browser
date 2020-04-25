@@ -42,8 +42,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #endif
 
-#include "app/vivaldi_apptools.h"
-
 using content::BrowserThread;
 
 namespace shell_integration {

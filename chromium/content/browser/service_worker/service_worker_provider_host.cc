@@ -31,6 +31,7 @@
 #include "content/browser/web_contents/frame_tree_node_id_registry.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/service_worker/service_worker_utils.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -41,6 +42,8 @@
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/origin_util.h"
+#include "media/mojo/services/video_decode_perf_history.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "net/base/url_util.h"
 #include "services/network/public/cpp/resource_request_body.h"
@@ -77,13 +80,73 @@ void GetInterfaceImpl(const std::string& interface_name,
         std::move(interface_pipe));
     process->GetStoragePartition()->CreateRestrictedCookieManager(
         network::mojom::RestrictedCookieManagerRole::SCRIPT, origin,
-        true /* is_service_worker */, process_id, MSG_ROUTING_NONE,
-        std::move(receiver));
+        origin.GetURL(), origin, true /* is_service_worker */, process_id,
+        MSG_ROUTING_NONE, std::move(receiver));
     return;
   }
 
   BindWorkerInterface(interface_name, std::move(interface_pipe), process,
                       origin);
+}
+
+void BindVideoDecodePerfHistoryImpl(
+    int process_id,
+    mojo::PendingReceiver<media::mojom::VideoDecodePerfHistory> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  auto* process = RenderProcessHost::FromID(process_id);
+  if (!process)
+    return;
+
+  process->GetBrowserContext()->GetVideoDecodePerfHistory()->BindReceiver(
+      std::move(receiver));
+}
+
+void CreateLockManagerImpl(
+    const url::Origin& origin,
+    int process_id,
+    mojo::PendingReceiver<blink::mojom::LockManager> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  auto* process = RenderProcessHost::FromID(process_id);
+  if (!process)
+    return;
+
+  process->CreateLockManager(MSG_ROUTING_NONE, origin, std::move(receiver));
+}
+
+void CreateIDBFactoryImpl(
+    const url::Origin& origin,
+    int process_id,
+    mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  auto* process = RenderProcessHost::FromID(process_id);
+  if (!process)
+    return;
+
+  process->BindIndexedDB(MSG_ROUTING_NONE, origin, std::move(receiver));
+}
+
+void CreatePermissionServiceImpl(
+    const url::Origin& origin,
+    int process_id,
+    mojo::PendingReceiver<blink::mojom::PermissionService> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  auto* process = RenderProcessHost::FromID(process_id);
+  if (!process)
+    return;
+
+  process->CreatePermissionService(origin, std::move(receiver));
+}
+
+void CreatePaymentManagerImpl(
+    const url::Origin& origin,
+    int process_id,
+    mojo::PendingReceiver<payments::mojom::PaymentManager> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  auto* process = RenderProcessHost::FromID(process_id);
+  if (!process)
+    return;
+
+  process->CreatePaymentManagerForOrigin(origin, std::move(receiver));
 }
 
 ServiceWorkerMetrics::EventType PurposeToEventType(
@@ -162,7 +225,7 @@ ServiceWorkerProviderHost::PreCreateNavigationHost(
 
 // static
 base::WeakPtr<ServiceWorkerProviderHost>
-ServiceWorkerProviderHost::PreCreateForController(
+ServiceWorkerProviderHost::CreateForServiceWorker(
     base::WeakPtr<ServiceWorkerContextCore> context,
     scoped_refptr<ServiceWorkerVersion> version,
     blink::mojom::ServiceWorkerProviderInfoForStartWorkerPtr*
@@ -181,7 +244,7 @@ ServiceWorkerProviderHost::PreCreateForController(
 
 // static
 base::WeakPtr<ServiceWorkerProviderHost>
-ServiceWorkerProviderHost::PreCreateForWebWorker(
+ServiceWorkerProviderHost::CreateForWebWorker(
     base::WeakPtr<ServiceWorkerContextCore> context,
     int process_id,
     blink::mojom::ServiceWorkerProviderType provider_type,
@@ -378,8 +441,10 @@ ServiceWorkerProviderHost::GetRemoteControllerServiceWorker() {
   return remote_controller;
 }
 
-void ServiceWorkerProviderHost::UpdateUrls(const GURL& url,
-                                           const GURL& site_for_cookies) {
+void ServiceWorkerProviderHost::UpdateUrls(
+    const GURL& url,
+    const GURL& site_for_cookies,
+    const base::Optional<url::Origin>& top_frame_origin) {
   DCHECK(IsProviderForClient());
   DCHECK(!url.has_ref());
   DCHECK(!controller());
@@ -387,6 +452,8 @@ void ServiceWorkerProviderHost::UpdateUrls(const GURL& url,
   GURL previous_url = url_;
   url_ = url;
   site_for_cookies_ = site_for_cookies;
+  top_frame_origin_ = top_frame_origin;
+
   if (previous_url != url) {
     // Revoke the token on URL change since any service worker holding the token
     // may no longer be the potential controller of this frame and shouldn't
@@ -438,6 +505,13 @@ const GURL& ServiceWorkerProviderHost::site_for_cookies() const {
   if (IsProviderForClient())
     return site_for_cookies_;
   return running_hosted_version_->script_url();
+}
+
+base::Optional<url::Origin> ServiceWorkerProviderHost::top_frame_origin()
+    const {
+  if (IsProviderForClient())
+    return top_frame_origin_;
+  return url::Origin::Create(running_hosted_version_->script_url());
 }
 
 void ServiceWorkerProviderHost::UpdateController(bool notify_controllerchange) {
@@ -543,8 +617,8 @@ void ServiceWorkerProviderHost::RemoveMatchingRegistration(
   matching_registrations_.erase(key);
 }
 
-ServiceWorkerRegistration*
-ServiceWorkerProviderHost::MatchRegistration() const {
+ServiceWorkerRegistration* ServiceWorkerProviderHost::MatchRegistration()
+    const {
   auto it = matching_registrations_.rbegin();
   for (; it != matching_registrations_.rend(); ++it) {
     if (it->second->is_uninstalled())
@@ -574,13 +648,13 @@ bool ServiceWorkerProviderHost::AllowServiceWorker(const GURL& scope,
   DCHECK(IsContextAlive());
   if (ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
     return GetContentClient()->browser()->AllowServiceWorkerOnUI(
-        scope, site_for_cookies(), script_url,
+        scope, site_for_cookies(), top_frame_origin(), script_url,
         context_->wrapper()->browser_context(),
         base::BindRepeating(&WebContentsImpl::FromRenderFrameHostID,
                             render_process_id_, frame_id()));
   } else {
     return GetContentClient()->browser()->AllowServiceWorkerOnIO(
-        scope, site_for_cookies(), script_url,
+        scope, site_for_cookies(), top_frame_origin(), script_url,
         context_->wrapper()->resource_context(),
         base::BindRepeating(&WebContentsImpl::FromRenderFrameHostID,
                             render_process_id_, frame_id()));
@@ -916,11 +990,25 @@ void ServiceWorkerProviderHost::Register(
   TRACE_EVENT_ASYNC_BEGIN2(
       "ServiceWorker", "ServiceWorkerProviderHost::Register", trace_id, "Scope",
       options->scope.spec(), "Script URL", script_url.spec());
+
+  // Wrap the callback with default invoke before passing it, since
+  // RegisterServiceWorker() can drop the callback on service worker
+  // context core shutdown (i.e., browser session shutdown or
+  // DeleteAndStartOver()) and a DCHECK would happen.
+  // TODO(crbug.com/1002776): Remove this wrapper and have the Mojo connections
+  // drop during shutdown, so the callback can be dropped without crash. Note
+  // that we currently would need to add this WrapCallback to *ALL* Mojo
+  // callbacks that go through ServiceWorkerContextCore or its members like
+  // ServiceWorkerStorage. We're only adding it to Register() now because a
+  // browser test fails without it.
+  auto wrapped_callback = mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+      std::move(callback), blink::mojom::ServiceWorkerErrorType::kUnknown,
+      std::string(), nullptr);
   context_->RegisterServiceWorker(
       script_url, *options,
       base::BindOnce(&ServiceWorkerProviderHost::RegistrationComplete,
                      AsWeakPtr(), GURL(script_url), GURL(options->scope),
-                     std::move(callback), trace_id,
+                     std::move(wrapped_callback), trace_id,
                      mojo::GetBadMessageCallback()));
 }
 
@@ -1289,6 +1377,21 @@ ServiceWorkerProviderHost::CreateServiceWorkerRegistrationObjectInfo(
   return registration_object_hosts_[registration_id]->CreateObjectInfo();
 }
 
+blink::mojom::ServiceWorkerObjectInfoPtr
+ServiceWorkerProviderHost::CreateServiceWorkerObjectInfoToSend(
+    scoped_refptr<ServiceWorkerVersion> version) {
+  int64_t version_id = version->version_id();
+  auto existing_object_host = service_worker_object_hosts_.find(version_id);
+  if (existing_object_host != service_worker_object_hosts_.end()) {
+    return existing_object_host->second->CreateCompleteObjectInfoToSend();
+  }
+  service_worker_object_hosts_[version_id] =
+      std::make_unique<ServiceWorkerObjectHost>(context_, this,
+                                                std::move(version));
+  return service_worker_object_hosts_[version_id]
+      ->CreateCompleteObjectInfoToSend();
+}
+
 template <typename CallbackType, typename... Args>
 bool ServiceWorkerProviderHost::CanServeContainerHostMethods(
     CallbackType* callback,
@@ -1350,6 +1453,60 @@ bool ServiceWorkerProviderHost::is_response_committed() const {
 bool ServiceWorkerProviderHost::is_execution_ready() const {
   DCHECK(IsProviderForClient());
   return client_phase_ == ClientPhase::kExecutionReady;
+}
+
+void ServiceWorkerProviderHost::CreateLockManager(
+    mojo::PendingReceiver<blink::mojom::LockManager> receiver) {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+  DCHECK(IsProviderForServiceWorker());
+  RunOrPostTaskOnThread(
+      FROM_HERE, BrowserThread::UI,
+      base::BindOnce(&CreateLockManagerImpl,
+                     running_hosted_version_->script_origin(),
+                     render_process_id_, std::move(receiver)));
+}
+
+void ServiceWorkerProviderHost::CreateIDBFactory(
+    mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+  DCHECK(IsProviderForServiceWorker());
+  RunOrPostTaskOnThread(
+      FROM_HERE, BrowserThread::UI,
+      base::BindOnce(&CreateIDBFactoryImpl,
+                     running_hosted_version_->script_origin(),
+                     render_process_id_, std::move(receiver)));
+}
+
+void ServiceWorkerProviderHost::BindVideoDecodePerfHistory(
+    mojo::PendingReceiver<media::mojom::VideoDecodePerfHistory> receiver) {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+  DCHECK(IsProviderForServiceWorker());
+  RunOrPostTaskOnThread(
+      FROM_HERE, BrowserThread::UI,
+      base::BindOnce(&BindVideoDecodePerfHistoryImpl, render_process_id_,
+                     std::move(receiver)));
+}
+
+void ServiceWorkerProviderHost::CreatePermissionService(
+    mojo::PendingReceiver<blink::mojom::PermissionService> receiver) {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+  DCHECK(IsProviderForServiceWorker());
+  RunOrPostTaskOnThread(
+      FROM_HERE, BrowserThread::UI,
+      base::BindOnce(&CreatePermissionServiceImpl,
+                     running_hosted_version_->script_origin(),
+                     render_process_id_, std::move(receiver)));
+}
+
+void ServiceWorkerProviderHost::CreatePaymentManager(
+    mojo::PendingReceiver<payments::mojom::PaymentManager> receiver) {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+  DCHECK(IsProviderForServiceWorker());
+  RunOrPostTaskOnThread(
+      FROM_HERE, BrowserThread::UI,
+      base::BindOnce(&CreatePaymentManagerImpl,
+                     running_hosted_version_->script_origin(),
+                     render_process_id_, std::move(receiver)));
 }
 
 void ServiceWorkerProviderHost::SetExecutionReady() {

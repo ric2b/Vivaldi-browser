@@ -32,7 +32,6 @@
 #include "content/public/common/context_menu_params.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_api_frame_id_map.h"
-#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/state_store.h"
 #include "extensions/common/extension.h"
@@ -318,9 +317,7 @@ const char MenuManager::kOnWebviewContextMenus[] =
     "webViewInternal.contextMenus";
 
 MenuManager::MenuManager(content::BrowserContext* context, StateStore* store)
-    : extension_registry_observer_(this),
-      browser_context_(context),
-      store_(store) {
+    : browser_context_(context), store_(store) {
   extension_registry_observer_.Add(ExtensionRegistry::Get(browser_context_));
   registrar_.Add(this, chrome::NOTIFICATION_PROFILE_DESTROYED,
                  content::NotificationService::AllSources());
@@ -700,10 +697,12 @@ void MenuManager::ExecuteCommand(content::BrowserContext* context,
 
       // We intentionally don't scrub the tab data here, since the user chose to
       // invoke the extension on the page.
-      // NOTE(devlin): We could potentially gate this on whether the extension
-      // has activeTab.
+      // TODO(tjudkins) Potentially use GetScrubTabBehavior here to gate based
+      // on permissions.
+      ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior = {
+          ExtensionTabUtil::kDontScrubTab, ExtensionTabUtil::kDontScrubTab};
       args->Append(ExtensionTabUtil::CreateTabObject(
-                       web_contents, ExtensionTabUtil::kDontScrubTab, extension)
+                       web_contents, scrub_tab_behavior, extension)
                        ->ToValue());
     } else {
       args->Append(std::make_unique<base::DictionaryValue>());

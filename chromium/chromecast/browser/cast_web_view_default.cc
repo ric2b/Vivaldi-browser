@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -41,13 +42,8 @@ namespace {
 std::unique_ptr<content::WebContents> CreateWebContents(
     content::BrowserContext* browser_context,
     scoped_refptr<content::SiteInstance> site_instance) {
-  CHECK(display::Screen::GetScreen());
-  gfx::Size display_size =
-      display::Screen::GetScreen()->GetPrimaryDisplay().size();
-
   content::WebContents::CreateParams create_params(browser_context, NULL);
   create_params.routing_id = MSG_ROUTING_NONE;
-  create_params.initial_size = display_size;
   create_params.site_instance = site_instance;
   return content::WebContents::Create(create_params);
 }
@@ -58,7 +54,8 @@ CastWebViewDefault::CastWebViewDefault(
     const CreateParams& params,
     CastWebContentsManager* web_contents_manager,
     content::BrowserContext* browser_context,
-    scoped_refptr<content::SiteInstance> site_instance)
+    scoped_refptr<content::SiteInstance> site_instance,
+    std::unique_ptr<shell::CastContentWindow> cast_content_window)
     : web_contents_manager_(web_contents_manager),
       browser_context_(browser_context),
       site_instance_(std::move(site_instance)),
@@ -67,7 +64,9 @@ CastWebViewDefault::CastWebViewDefault(
       log_prefix_(params.log_prefix),
       web_contents_(CreateWebContents(browser_context_, site_instance_)),
       cast_web_contents_(web_contents_.get(), params.web_contents_params),
-      window_(shell::CastContentWindow::Create(params.window_params)),
+      window_(cast_content_window
+                  ? std::move(cast_content_window)
+                  : shell::CastContentWindow::Create(params.window_params)),
       resize_window_when_navigation_starts_(true) {
   DCHECK(delegate_);
   DCHECK(web_contents_manager_);

@@ -28,12 +28,6 @@ const base::Feature kProactiveTabFreezeAndDiscard{
     resource_coordinator::kProactiveTabFreezeAndDiscardFeatureName,
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables prioritization of sites that communicate with the user while in the
-// background (email, chat, calendar, etc) during session restore.
-const base::Feature kSessionRestorePrioritizesBackgroundUseCases{
-    "SessionRestorePrioritizesBackgroundUseCases",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Enables the site characteristics database.
 const base::Feature kSiteCharacteristicsDatabase{
     "SiteCharacteristicsDatabase", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -84,6 +78,8 @@ const char kProactiveTabFreezeAndDiscardFeatureName[] =
     "ProactiveTabFreezeAndDiscard";
 const char kProactiveTabFreezeAndDiscard_ShouldProactivelyDiscardParam[] =
     "ShouldProactivelyDiscard";
+const char kProactiveTabFreezeAndDiscard_ShouldPeriodicallyUnfreezeParam[] =
+    "ShouldPeriodicallyUnfreeze";
 const char kProactiveTabFreezeAndDiscard_DisableHeuristicsParam[] =
     "DisableHeuristicsProtections";
 
@@ -125,9 +121,9 @@ constexpr base::FeatureParam<int>
 constexpr base::FeatureParam<int>
     SiteCharacteristicsDatabaseParams::kNotificationsUsageObservationWindow;
 constexpr base::FeatureParam<int>
-    SiteCharacteristicsDatabaseParams::kTitleOrFaviconChangeGracePeriod;
+    SiteCharacteristicsDatabaseParams::kTitleOrFaviconChangePostLoadGracePeriod;
 constexpr base::FeatureParam<int>
-    SiteCharacteristicsDatabaseParams::kAudioUsageGracePeriod;
+    SiteCharacteristicsDatabaseParams::kFeatureUsagePostBackgroundGracePeriod;
 
 ProactiveTabFreezeAndDiscardParams::ProactiveTabFreezeAndDiscardParams() =
     default;
@@ -239,12 +235,15 @@ SiteCharacteristicsDatabaseParams GetSiteCharacteristicsDatabaseParams() {
       SiteCharacteristicsDatabaseParams::kNotificationsUsageObservationWindow
           .Get());
 
-  params.title_or_favicon_change_grace_period = base::TimeDelta::FromSeconds(
-      SiteCharacteristicsDatabaseParams::kTitleOrFaviconChangeGracePeriod
-          .Get());
+  params.title_or_favicon_change_post_load_grace_period =
+      base::TimeDelta::FromSeconds(
+          SiteCharacteristicsDatabaseParams::
+              kTitleOrFaviconChangePostLoadGracePeriod.Get());
 
-  params.audio_usage_grace_period = base::TimeDelta::FromSeconds(
-      SiteCharacteristicsDatabaseParams::kAudioUsageGracePeriod.Get());
+  params.feature_usage_post_background_grace_period =
+      base::TimeDelta::FromSeconds(
+          SiteCharacteristicsDatabaseParams::
+              kFeatureUsagePostBackgroundGracePeriod.Get());
 
   return params;
 }
@@ -258,8 +257,7 @@ GetStaticSiteCharacteristicsDatabaseParams() {
 
 int GetNumOldestTabsToScoreWithTabRanker() {
   return base::GetFieldTrialParamByFeatureAsInt(
-      features::kTabRanker, "number_of_oldest_tabs_to_score_with_TabRanker",
-      std::numeric_limits<int>::max());
+      features::kTabRanker, "number_of_oldest_tabs_to_score_with_TabRanker", 0);
 }
 
 int GetProcessTypeToScoreWithTabRanker() {

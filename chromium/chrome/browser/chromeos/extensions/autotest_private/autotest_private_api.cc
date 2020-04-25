@@ -15,11 +15,11 @@
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_prefs.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/public/cpp/split_view.h"
 #include "ash/public/cpp/split_view_test_api.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/mojom/constants.mojom.h"
+#include "ash/rotator/screen_rotation_animator.h"
 #include "ash/shell.h"
 #include "ash/wm/wm_event.h"
 #include "base/base64.h"
@@ -41,8 +41,11 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/tracing/arc_app_performance_tracing.h"
+#include "chrome/browser/chromeos/arc/tracing/arc_app_performance_tracing_session.h"
 #include "chrome/browser/chromeos/assistant/assistant_util.h"
 #include "chrome/browser/chromeos/crostini/crostini_export_import.h"
 #include "chrome/browser/chromeos/crostini/crostini_installer.h"
@@ -78,11 +81,13 @@
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "chromeos/printing/printer_configuration.h"
 #include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
+#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "chromeos/services/machine_learning/public/cpp/service_connection.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/metrics/arc_metrics_constants.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/histogram_fetcher.h"
+#include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function_registry.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -93,9 +98,12 @@
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "net/base/filename_util.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
+#include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/display/display.h"
@@ -337,7 +345,7 @@ ash::WindowStateType GetExpectedWindowState(
   switch (event_type) {
     case api::autotest_private::WMEventType::WM_EVENT_TYPE_WMEVENTNORMAL:
       return ash::WindowStateType::kNormal;
-    case api::autotest_private::WMEventType::WM_EVENT_TYPE_WMEVENTMAXMIZE:
+    case api::autotest_private::WMEventType::WM_EVENT_TYPE_WMEVENTMAXIMIZE:
       return ash::WindowStateType::kMaximized;
     case api::autotest_private::WMEventType::WM_EVENT_TYPE_WMEVENTMINIMIZE:
       return ash::WindowStateType::kMinimized;
@@ -357,7 +365,7 @@ ash::WMEventType ToWMEventType(api::autotest_private::WMEventType event_type) {
   switch (event_type) {
     case api::autotest_private::WMEventType::WM_EVENT_TYPE_WMEVENTNORMAL:
       return ash::WMEventType::WM_EVENT_NORMAL;
-    case api::autotest_private::WMEventType::WM_EVENT_TYPE_WMEVENTMAXMIZE:
+    case api::autotest_private::WMEventType::WM_EVENT_TYPE_WMEVENTMAXIMIZE:
       return ash::WMEventType::WM_EVENT_MAXIMIZE;
     case api::autotest_private::WMEventType::WM_EVENT_TYPE_WMEVENTMINIMIZE:
       return ash::WMEventType::WM_EVENT_MINIMIZE;
@@ -401,7 +409,48 @@ api::autotest_private::WindowStateType ToWindowStateType(
   }
 }
 
+std::string GetPngDataAsString(scoped_refptr<base::RefCountedMemory> png_data) {
+  // Base64 encode the result so we can return it as a string.
+  std::string base64Png(png_data->front(),
+                        png_data->front() + png_data->size());
+  base::Base64Encode(base64Png, &base64Png);
+  return base64Png;
+}
+
+display::Display::Rotation ToRotation(
+    api::autotest_private::RotationType rotation) {
+  switch (rotation) {
+    case api::autotest_private::RotationType::ROTATION_TYPE_ROTATE0:
+      return display::Display::ROTATE_0;
+    case api::autotest_private::RotationType::ROTATION_TYPE_ROTATE90:
+      return display::Display::ROTATE_90;
+    case api::autotest_private::RotationType::ROTATION_TYPE_ROTATE180:
+      return display::Display::ROTATE_180;
+    case api::autotest_private::RotationType::ROTATION_TYPE_ROTATE270:
+      return display::Display::ROTATE_270;
+    case api::autotest_private::RotationType::ROTATION_TYPE_NONE:
+      break;
+  }
+  NOTREACHED();
+  return display::Display::ROTATE_0;
+}
+
 }  // namespace
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateInitializeEventsFunction
+///////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateInitializeEventsFunction::
+    ~AutotestPrivateInitializeEventsFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateInitializeEventsFunction::Run() {
+  // AutotestPrivateAPI is lazily initialized, but needs to be created before
+  // any of its events can be fired, so we get the instance here and return.
+  AutotestPrivateAPI::GetFactoryInstance()->Get(browser_context());
+  return RespondNow(NoArguments());
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // AutotestPrivateLogoutFunction
@@ -1164,6 +1213,42 @@ ExtensionFunction::ResponseAction AutotestPrivateCloseAppFunction::Run() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateGetClipboardTextDataFunction
+///////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateGetClipboardTextDataFunction::
+    ~AutotestPrivateGetClipboardTextDataFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateGetClipboardTextDataFunction::Run() {
+  base::string16 data;
+  ui::Clipboard::GetForCurrentThread()->ReadText(
+      ui::ClipboardBuffer::kCopyPaste, &data);
+  return RespondNow(
+      OneArgument(base::Value::ToUniquePtrValue(base::Value(data))));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateSetClipboardTextDataFunction
+///////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateSetClipboardTextDataFunction::
+    ~AutotestPrivateSetClipboardTextDataFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateSetClipboardTextDataFunction::Run() {
+  std::unique_ptr<api::autotest_private::SetClipboardTextData::Params> params(
+      api::autotest_private::SetClipboardTextData::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  const base::string16 data = base::UTF8ToUTF16(params->data);
+  ui::ScopedClipboardWriter clipboard_writer(ui::ClipboardBuffer::kCopyPaste);
+  clipboard_writer.WriteText(data);
+
+  return RespondNow(NoArguments());
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // AutotestPrivateSetCrostiniEnabledFunction
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1396,17 +1481,60 @@ void AutotestPrivateTakeScreenshotFunction::ScreenshotTaken(
     std::unique_ptr<ui::ScreenshotGrabber> grabber,
     ui::ScreenshotResult screenshot_result,
     scoped_refptr<base::RefCountedMemory> png_data) {
-  if (screenshot_result == ui::ScreenshotResult::SUCCESS) {
-    // Base64 encode the result so we can return it as a string.
-    std::string base64Png(png_data->front(),
-                          png_data->front() + png_data->size());
-    base::Base64Encode(base64Png, &base64Png);
-    Respond(OneArgument(std::make_unique<base::Value>(std::move(base64Png))));
-  } else {
-    Respond(Error(base::StrCat(
+  if (screenshot_result != ui::ScreenshotResult::SUCCESS) {
+    return Respond(Error(base::StrCat(
         {"Error taking screenshot ",
          base::NumberToString(static_cast<int>(screenshot_result))})));
   }
+  Respond(
+      OneArgument(std::make_unique<base::Value>(GetPngDataAsString(png_data))));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateTakeScreenshotForDisplayFunction
+///////////////////////////////////////////////////////////////////////////////
+AutotestPrivateTakeScreenshotForDisplayFunction::
+    ~AutotestPrivateTakeScreenshotForDisplayFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateTakeScreenshotForDisplayFunction::Run() {
+  std::unique_ptr<api::autotest_private::TakeScreenshotForDisplay::Params>
+      params(api::autotest_private::TakeScreenshotForDisplay::Params::Create(
+          *args_));
+  EXTENSION_FUNCTION_VALIDATE(params);
+  DVLOG(1) << "AutotestPrivateTakeScreenshotForDisplayFunction "
+           << params->display_id;
+  int64_t target_display_id;
+  base::StringToInt64(params->display_id, &target_display_id);
+  auto grabber = std::make_unique<ui::ScreenshotGrabber>();
+
+  for (auto* const window : ash::Shell::GetAllRootWindows()) {
+    const int64_t display_id =
+        display::Screen::GetScreen()->GetDisplayNearestWindow(window).id();
+    if (display_id == target_display_id) {
+      grabber->TakeScreenshot(
+          window, window->bounds(),
+          base::BindOnce(
+              &AutotestPrivateTakeScreenshotForDisplayFunction::ScreenshotTaken,
+              this, base::Passed(&grabber)));
+      return RespondLater();
+    }
+  }
+  return RespondNow(Error(base::StrCat(
+      {"Error taking screenshot for display ", params->display_id})));
+}
+
+void AutotestPrivateTakeScreenshotForDisplayFunction::ScreenshotTaken(
+    std::unique_ptr<ui::ScreenshotGrabber> grabber,
+    ui::ScreenshotResult screenshot_result,
+    scoped_refptr<base::RefCountedMemory> png_data) {
+  if (screenshot_result != ui::ScreenshotResult::SUCCESS) {
+    return Respond(Error(base::StrCat(
+        {"Error taking screenshot ",
+         base::NumberToString(static_cast<int>(screenshot_result))})));
+  }
+  Respond(
+      OneArgument(std::make_unique<base::Value>(GetPngDataAsString(png_data))));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1553,13 +1681,15 @@ AutotestPrivateBootstrapMachineLearningServiceFunction::Run() {
   DVLOG(1) << "AutotestPrivateBootstrapMachineLearningServiceFunction";
 
   // Load a model. This will first bootstrap the Mojo connection to ML Service.
-  chromeos::machine_learning::ServiceConnection::GetInstance()->LoadModel(
-      chromeos::machine_learning::mojom::ModelSpec::New(
-          chromeos::machine_learning::mojom::ModelId::TEST_MODEL),
-      mojo::MakeRequest(&model_),
-      base::BindOnce(
-          &AutotestPrivateBootstrapMachineLearningServiceFunction::ModelLoaded,
-          this));
+  chromeos::machine_learning::ServiceConnection::GetInstance()
+      ->LoadBuiltinModel(
+          chromeos::machine_learning::mojom::BuiltinModelSpec::New(
+              chromeos::machine_learning::mojom::BuiltinModelId::TEST_MODEL),
+          mojo::MakeRequest(&model_),
+          base::BindOnce(
+              &AutotestPrivateBootstrapMachineLearningServiceFunction::
+                  ModelLoaded,
+              this));
   model_.set_connection_error_handler(base::BindOnce(
       &AutotestPrivateBootstrapMachineLearningServiceFunction::ConnectionError,
       this));
@@ -1586,6 +1716,7 @@ void AutotestPrivateBootstrapMachineLearningServiceFunction::ConnectionError() {
 
 AutotestPrivateSetAssistantEnabledFunction::
     AutotestPrivateSetAssistantEnabledFunction() {
+  // |AddObserver| will immediately trigger |OnAssistantStatusChanged|.
   ash::AssistantState::Get()->AddObserver(this);
 }
 
@@ -1609,19 +1740,17 @@ AutotestPrivateSetAssistantEnabledFunction::Run() {
   if (!err_msg.empty())
     return RespondNow(Error(err_msg));
 
-  // |NOT_READY| means service not running
-  // |STOPPED| means service running but UI not shown
-  auto new_state = params->enabled
-                       ? ash::mojom::VoiceInteractionState::STOPPED
-                       : ash::mojom::VoiceInteractionState::NOT_READY;
-
-  if (ash::AssistantState::Get()->voice_interaction_state() == new_state)
+  // Any state that's not |NOT_READY| would be considered a ready state.
+  const bool not_ready = (ash::AssistantState::Get()->assistant_state() ==
+                          ash::mojom::AssistantState::NOT_READY);
+  const bool success = (params->enabled != not_ready);
+  if (success)
     return RespondNow(NoArguments());
 
   // Assistant service has not responded yet, set up a delayed timer to wait for
   // it and holder a reference to |this|. Also make sure we stop and respond
   // when timeout.
-  expected_state_ = new_state;
+  enabled_ = params->enabled;
   timeout_timer_.Start(
       FROM_HERE, base::TimeDelta::FromMilliseconds(params->timeout_ms),
       base::BindOnce(&AutotestPrivateSetAssistantEnabledFunction::Timeout,
@@ -1630,17 +1759,21 @@ AutotestPrivateSetAssistantEnabledFunction::Run() {
 }
 
 void AutotestPrivateSetAssistantEnabledFunction::OnAssistantStatusChanged(
-    ash::mojom::VoiceInteractionState state) {
-  if (!expected_state_)
+    ash::mojom::AssistantState state) {
+  // Must check if the Optional contains value first to avoid possible
+  // segmentation fault caused by Respond() below being called before
+  // RespondLater() in Run(). This will happen due to AddObserver() call
+  // in the constructor will trigger this function immediately.
+  if (!enabled_.has_value())
     return;
 
-  // The service could go through |NOT_READY| then to |STOPPED| during enable
-  // flow if this API is called before the initial state is reported.
-  if (expected_state_ != state)
+  const bool not_ready = (state == ash::mojom::AssistantState::NOT_READY);
+  const bool success = (enabled_.value() != not_ready);
+  if (!success)
     return;
 
   Respond(NoArguments());
-  expected_state_.reset();
+  enabled_.reset();
   timeout_timer_.AbandonAndStop();
 }
 
@@ -1648,14 +1781,128 @@ void AutotestPrivateSetAssistantEnabledFunction::Timeout() {
   Respond(Error("Assistant service timed out"));
 }
 
+// AssistantInteractionHelper is a helper class used to interact with Assistant
+// server and store interaction states for tests. It is shared by
+// |AutotestPrivateSendAssistantTextQueryFunction| and
+// |AutotestPrivateWaitForAssistantQueryStatusFunction|.
+class AssistantInteractionHelper
+    : public chromeos::assistant::mojom::AssistantInteractionSubscriber {
+ public:
+  using OnInteractionFinishedCallback = base::OnceCallback<void(bool)>;
+
+  AssistantInteractionHelper()
+      : query_status_(std::make_unique<base::DictionaryValue>()) {}
+
+  ~AssistantInteractionHelper() override = default;
+
+  void Init(OnInteractionFinishedCallback on_interaction_finished_callback) {
+    // Bind to Assistant service interface.
+    AssistantClient::Get()->BindAssistant(mojo::MakeRequest(&assistant_));
+
+    // Subscribe to Assistant interaction events.
+    assistant_->AddAssistantInteractionSubscriber(
+        assistant_interaction_subscriber_receiver_.BindNewPipeAndPassRemote());
+
+    on_interaction_finished_callback_ =
+        std::move(on_interaction_finished_callback);
+  }
+
+  void SendTextQuery(const std::string& query, bool allow_tts) {
+    // Start text interaction with Assistant server.
+    assistant_->StartTextInteraction(query, allow_tts);
+
+    query_status_->SetKey("queryText", base::Value(query));
+  }
+
+  std::unique_ptr<base::DictionaryValue> GetQueryStatus() {
+    return std::move(query_status_);
+  }
+
+ private:
+  // chromeos::assistant::mojom::AssistantInteractionSubscriber:
+  using AssistantSuggestionPtr =
+      chromeos::assistant::mojom::AssistantSuggestionPtr;
+  using AssistantInteractionMetadataPtr =
+      chromeos::assistant::mojom::AssistantInteractionMetadataPtr;
+  using AssistantInteractionResolution =
+      chromeos::assistant::mojom::AssistantInteractionResolution;
+
+  void OnInteractionStarted(AssistantInteractionMetadataPtr metadata) override {
+    const bool is_voice_interaction =
+        chromeos::assistant::mojom::AssistantInteractionType::kVoice ==
+        metadata->type;
+    query_status_->SetKey("isMicOpen", base::Value(is_voice_interaction));
+  }
+
+  void OnInteractionFinished(
+      AssistantInteractionResolution resolution) override {
+    // Only invoke the callback when |result_| is not empty to avoid an early
+    // return before the entire session is completed. This happens when
+    // sending queries to modify device settings, e.g. "turn on bluetooth",
+    // which results in a round trip due to the need to fetch device state
+    // on the client and return that to the server as part of a follow-up
+    // interaction.
+    if (result_.empty())
+      return;
+
+    query_status_->SetKey("queryResponse", std::move(result_));
+
+    if (on_interaction_finished_callback_) {
+      const bool success =
+          (resolution == AssistantInteractionResolution::kNormal) ? true
+                                                                  : false;
+      std::move(on_interaction_finished_callback_).Run(success);
+    }
+  }
+
+  void OnHtmlResponse(const std::string& response,
+                      const std::string& fallback) override {
+    result_.SetKey("htmlResponse", base::Value(response));
+    result_.SetKey("htmlFallback", base::Value(fallback));
+  }
+
+  void OnTextResponse(const std::string& response) override {
+    result_.SetKey("text", base::Value(response));
+  }
+
+  void OnSpeechRecognitionFinalResult(
+      const std::string& final_result) override {
+    query_status_->SetKey("queryText", base::Value(final_result));
+  }
+
+  void OnSuggestionsResponse(
+      std::vector<AssistantSuggestionPtr> response) override {}
+  void OnOpenUrlResponse(const GURL& url, bool in_background) override {}
+  void OnOpenAppResponse(chromeos::assistant::mojom::AndroidAppInfoPtr app_info,
+                         OnOpenAppResponseCallback callback) override {}
+  void OnSpeechRecognitionStarted() override {}
+  void OnSpeechRecognitionIntermediateResult(
+      const std::string& high_confidence_text,
+      const std::string& low_confidence_text) override {}
+  void OnSpeechRecognitionEndOfUtterance() override {}
+  void OnSpeechLevelUpdated(float speech_level) override {}
+  void OnTtsStarted(bool due_to_error) override {}
+  void OnWaitStarted() override {}
+
+  chromeos::assistant::mojom::AssistantPtr assistant_;
+  mojo::Receiver<chromeos::assistant::mojom::AssistantInteractionSubscriber>
+      assistant_interaction_subscriber_receiver_{this};
+  std::unique_ptr<base::DictionaryValue> query_status_;
+  base::DictionaryValue result_;
+
+  // Callback triggered when interaction finished with non-empty response.
+  OnInteractionFinishedCallback on_interaction_finished_callback_;
+
+  DISALLOW_COPY_AND_ASSIGN(AssistantInteractionHelper);
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 // AutotestPrivateSendAssistantTextQueryFunction
 ///////////////////////////////////////////////////////////////////////////////
 
 AutotestPrivateSendAssistantTextQueryFunction::
     AutotestPrivateSendAssistantTextQueryFunction()
-    : assistant_interaction_subscriber_binding_(this),
-      result_(std::make_unique<base::DictionaryValue>()) {}
+    : interaction_helper_(std::make_unique<AssistantInteractionHelper>()) {}
 
 AutotestPrivateSendAssistantTextQueryFunction::
     ~AutotestPrivateSendAssistantTextQueryFunction() = default;
@@ -1676,16 +1923,13 @@ AutotestPrivateSendAssistantTextQueryFunction::Run() {
         "Assistant not allowed - state: %d", allowed_state)));
   }
 
-  // Bind to Assistant service interface.
-  AssistantClient::Get()->BindAssistant(mojo::MakeRequest(&assistant_));
-
-  // Subscribe to Assistant interaction events.
-  chromeos::assistant::mojom::AssistantInteractionSubscriberPtr ptr;
-  assistant_interaction_subscriber_binding_.Bind(mojo::MakeRequest(&ptr));
-  assistant_->AddAssistantInteractionSubscriber(std::move(ptr));
+  interaction_helper_->Init(
+      base::BindOnce(&AutotestPrivateSendAssistantTextQueryFunction::
+                         OnInteractionFinishedCallback,
+                     this));
 
   // Start text interaction with Assistant server.
-  assistant_->StartTextInteraction(params->query, /*allow_tts*/ false);
+  interaction_helper_->SendTextQuery(params->query, /*allow_tts=*/false);
 
   // Set up a delayed timer to wait for the query response and hold a reference
   // to |this| to avoid being destructed. Also make sure we stop and respond
@@ -1698,39 +1942,76 @@ AutotestPrivateSendAssistantTextQueryFunction::Run() {
   return RespondLater();
 }
 
-void AutotestPrivateSendAssistantTextQueryFunction::OnTextResponse(
-    const std::string& response) {
-  result_->SetKey("text", base::Value(response));
-}
-
-void AutotestPrivateSendAssistantTextQueryFunction::OnHtmlResponse(
-    const std::string& response,
-    const std::string& fallback) {
-  result_->SetKey("htmlResponse", base::Value(response));
-  result_->SetKey("htmlFallback", base::Value(fallback));
-}
-
-void AutotestPrivateSendAssistantTextQueryFunction::OnInteractionFinished(
-    AssistantInteractionResolution resolution) {
-  // Only return a result to the caller and stop the timer when |result_|
-  // is not empty to avoid an early return before the entire interaction is
-  // completed. This happens when sending queries to modify device settings,
-  // e.g. "turn on bluetooth", which results in two rounds of interaction.
-  if (result_->empty())
-    return;
-
-  if (resolution != AssistantInteractionResolution::kNormal) {
+void AutotestPrivateSendAssistantTextQueryFunction::
+    OnInteractionFinishedCallback(bool success) {
+  if (!success) {
     Respond(Error("Interaction ends abnormally."));
     timeout_timer_.AbandonAndStop();
     return;
   }
 
-  Respond(OneArgument(std::move(result_)));
+  Respond(OneArgument(interaction_helper_->GetQueryStatus()));
   timeout_timer_.AbandonAndStop();
 }
 
 void AutotestPrivateSendAssistantTextQueryFunction::Timeout() {
   Respond(Error("Assistant response timeout."));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateWaitForAssistantQueryStatusFunction
+///////////////////////////////////////////////////////////////////////////////
+AutotestPrivateWaitForAssistantQueryStatusFunction::
+    AutotestPrivateWaitForAssistantQueryStatusFunction()
+    : interaction_helper_(std::make_unique<AssistantInteractionHelper>()) {}
+
+AutotestPrivateWaitForAssistantQueryStatusFunction::
+    ~AutotestPrivateWaitForAssistantQueryStatusFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateWaitForAssistantQueryStatusFunction::Run() {
+  DVLOG(1) << "AutotestPrivateWaitForAssistantQueryStatusFunction";
+
+  std::unique_ptr<api::autotest_private::WaitForAssistantQueryStatus::Params>
+      params(api::autotest_private::WaitForAssistantQueryStatus::Params::Create(
+          *args_));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  ash::mojom::AssistantAllowedState allowed_state =
+      assistant::IsAssistantAllowedForProfile(profile);
+  if (allowed_state != ash::mojom::AssistantAllowedState::ALLOWED) {
+    return RespondNow(Error(base::StringPrintf(
+        "Assistant not allowed - state: %d", allowed_state)));
+  }
+
+  interaction_helper_->Init(
+      base::BindOnce(&AutotestPrivateWaitForAssistantQueryStatusFunction::
+                         OnInteractionFinishedCallback,
+                     this));
+
+  // Start waiting for the response before time out.
+  timeout_timer_.Start(
+      FROM_HERE, base::TimeDelta::FromSeconds(params->timeout_s),
+      base::BindOnce(
+          &AutotestPrivateWaitForAssistantQueryStatusFunction::Timeout, this));
+  return RespondLater();
+}
+
+void AutotestPrivateWaitForAssistantQueryStatusFunction::
+    OnInteractionFinishedCallback(bool success) {
+  if (!success) {
+    Respond(Error("Interaction ends abnormally."));
+    timeout_timer_.AbandonAndStop();
+    return;
+  }
+
+  Respond(OneArgument(interaction_helper_->GetQueryStatus()));
+  timeout_timer_.AbandonAndStop();
+}
+
+void AutotestPrivateWaitForAssistantQueryStatusFunction::Timeout() {
+  Respond(Error("No query response received before time out."));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2202,10 +2483,72 @@ AutotestPrivateGetArcAppWindowInfoFunction::Run() {
 
   auto result = std::make_unique<base::DictionaryValue>();
   result->SetDictionary("bounds", std::move(bounds_dict));
-  result->SetBoolean("is_animating", is_animating);
   result->SetString("display_id", base::NumberToString(display_id));
+  result->SetBoolean("is_animating", is_animating);
+  result->SetBoolean("is_visible", arc_window->IsVisible());
 
   return RespondNow(OneArgument(std::move(result)));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateArcAppTracingStartFunction
+///////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateArcAppTracingStartFunction::
+    AutotestPrivateArcAppTracingStartFunction() = default;
+AutotestPrivateArcAppTracingStartFunction::
+    ~AutotestPrivateArcAppTracingStartFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateArcAppTracingStartFunction::Run() {
+  DVLOG(1) << "AutotestPrivateArcAppTracingStartFunction";
+
+  arc::ArcAppPerformanceTracing* const tracing =
+      arc::ArcAppPerformanceTracing::GetForBrowserContext(browser_context());
+  if (!tracing)
+    return RespondNow(Error("No ARC performance tracing is available."));
+
+  if (!tracing->StartCustomTracing())
+    return RespondNow(Error("Failed to start custom tracing."));
+
+  return RespondNow(NoArguments());
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateArcAppTracingStopAndAnalyzeFunction
+///////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateArcAppTracingStopAndAnalyzeFunction::
+    AutotestPrivateArcAppTracingStopAndAnalyzeFunction() = default;
+AutotestPrivateArcAppTracingStopAndAnalyzeFunction::
+    ~AutotestPrivateArcAppTracingStopAndAnalyzeFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateArcAppTracingStopAndAnalyzeFunction::Run() {
+  DVLOG(1) << "AutotestPrivateArcAppTracingStopAndAnalyzeFunction";
+
+  arc::ArcAppPerformanceTracing* const tracing =
+      arc::ArcAppPerformanceTracing::GetForBrowserContext(browser_context());
+  if (!tracing)
+    return RespondNow(Error("No ARC performance tracing is available."));
+
+  tracing->StopCustomTracing(base::BindOnce(
+      &AutotestPrivateArcAppTracingStopAndAnalyzeFunction::OnTracingResult,
+      this));
+  return did_respond() ? AlreadyResponded() : RespondLater();
+}
+
+void AutotestPrivateArcAppTracingStopAndAnalyzeFunction::OnTracingResult(
+    bool success,
+    double fps,
+    double commit_deviation,
+    double render_quality) {
+  auto result = std::make_unique<base::Value>(base::Value::Type::DICTIONARY);
+  result->SetBoolKey("success", success);
+  result->SetDoubleKey("fps", fps);
+  result->SetDoubleKey("commitDeviation", commit_deviation);
+  result->SetDoubleKey("renderQuality", render_quality);
+  Respond(OneArgument(std::move(result)));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2396,6 +2739,66 @@ AutotestPrivateSwapWindowsInSplitViewFunction::Run() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateWaitForDisplayRotationFunction
+///////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateWaitForDisplayRotationFunction::
+    AutotestPrivateWaitForDisplayRotationFunction() = default;
+AutotestPrivateWaitForDisplayRotationFunction::
+    ~AutotestPrivateWaitForDisplayRotationFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateWaitForDisplayRotationFunction::Run() {
+  DVLOG(1) << "AutotestPrivateWaitForDisplayRotationFunction";
+
+  std::unique_ptr<api::autotest_private::WaitForDisplayRotation::Params> params(
+      api::autotest_private::WaitForDisplayRotation::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params);
+  target_rotation_ = ToRotation(params->rotation);
+
+  if (!base::StringToInt64(params->display_id, &display_id_)) {
+    return RespondNow(Error(base::StrCat(
+        {"Invalid display_id; expected string with numbers only, got ",
+         params->display_id})));
+  }
+  auto* root_window = ash::Shell::GetRootWindowForDisplayId(display_id_);
+  if (!root_window) {
+    return RespondNow(Error(base::StrCat(
+        {"Invalid display_id; no root window found for the display id ",
+         params->display_id})));
+  }
+  auto* animator = ash::ScreenRotationAnimator::GetForRootWindow(root_window);
+  if (!animator->IsRotating()) {
+    display::Display display;
+    display::Screen::GetScreen()->GetDisplayWithDisplayId(display_id_,
+                                                          &display);
+    // This should never fail.
+    DCHECK(display.is_valid());
+    return RespondNow(OneArgument(
+        std::make_unique<base::Value>(display.rotation() == target_rotation_)));
+  }
+  self_ = this;
+
+  animator->AddObserver(this);
+  return RespondLater();
+}
+
+void AutotestPrivateWaitForDisplayRotationFunction::
+    OnScreenCopiedBeforeRotation() {}
+
+void AutotestPrivateWaitForDisplayRotationFunction::
+    OnScreenRotationAnimationFinished(ash::ScreenRotationAnimator* animator,
+                                      bool canceled) {
+  animator->RemoveObserver(this);
+
+  display::Display display;
+  display::Screen::GetScreen()->GetDisplayWithDisplayId(display_id_, &display);
+  Respond(OneArgument(std::make_unique<base::Value>(
+      display.is_valid() && display.rotation() == target_rotation_)));
+  self_.reset();
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // AutotestPrivateAPI
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -2412,11 +2815,28 @@ template <>
 KeyedService*
 BrowserContextKeyedAPIFactory<AutotestPrivateAPI>::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  return new AutotestPrivateAPI();
+  return new AutotestPrivateAPI(context);
 }
 
-AutotestPrivateAPI::AutotestPrivateAPI() : test_mode_(false) {}
+AutotestPrivateAPI::AutotestPrivateAPI(content::BrowserContext* context)
+    : clipboard_observer_(this), browser_context_(context), test_mode_(false) {
+  clipboard_observer_.Add(ui::ClipboardMonitor::GetInstance());
+}
 
 AutotestPrivateAPI::~AutotestPrivateAPI() = default;
+
+void AutotestPrivateAPI::OnClipboardDataChanged() {
+  EventRouter* event_router = EventRouter::Get(browser_context_);
+  if (!event_router)
+    return;
+
+  std::unique_ptr<base::ListValue> event_args =
+      std::make_unique<base::ListValue>();
+  std::unique_ptr<Event> event(
+      new Event(events::AUTOTESTPRIVATE_ON_CLIPBOARD_DATA_CHANGED,
+                api::autotest_private::OnClipboardDataChanged::kEventName,
+                std::move(event_args)));
+  event_router->BroadcastEvent(std::move(event));
+}
 
 }  // namespace extensions

@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/html/forms/file_input_type.h"
 
+#include "base/run_loop.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -140,7 +141,7 @@ TEST(FileInputTypeTest, DropTouchesNoPopupOpeningObserver) {
   auto& input = *ToHTMLInputElement(doc.body()->firstChild());
 
   base::RunLoop run_loop;
-  MockFileChooser chooser(&doc.GetFrame()->GetInterfaceProvider(),
+  MockFileChooser chooser(doc.GetFrame()->GetBrowserInterfaceBroker(),
                           run_loop.QuitClosure());
   DragData drag_data(DataObject::Create(), FloatPoint(), FloatPoint(),
                      kDragOperationCopy);

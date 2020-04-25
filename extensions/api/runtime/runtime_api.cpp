@@ -106,11 +106,10 @@ void VivaldiRuntimeFeatures::LoadRuntimeFeatures() {
 #endif  // defined(OS_MACOSX)
     path = path.AppendASCII(kRuntimeFeaturesFilename);
 
-    store_ = new JsonPrefStore(path,
-                               std::unique_ptr<PrefFilter>(),
-                               base::CreateSequencedTaskRunnerWithTraits(
-                                   {base::ThreadPool(), base::MayBlock()})
-                                   .get());
+    store_ = new JsonPrefStore(
+        path, std::unique_ptr<PrefFilter>(),
+        base::CreateSequencedTaskRunner({base::ThreadPool(), base::MayBlock()})
+            .get());
     store_->ReadPrefs();
 
     if (!GetFlags(&flags_)) {

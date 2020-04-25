@@ -14,12 +14,14 @@ import org.chromium.chrome.browser.appmenu.AppMenuDelegate;
 import org.chromium.chrome.browser.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.appmenu.AppMenuIconRowFooter;
 import org.chromium.chrome.browser.appmenu.AppMenuPropertiesDelegateImpl;
+import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.datareduction.DataReductionMainMenuItem;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * An {@link AppMenuPropertiesDelegateImpl} for ChromeTabbedActivity.
@@ -31,9 +33,10 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
             MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
             TabModelSelector tabModelSelector, ToolbarManager toolbarManager, View decorView,
             AppMenuDelegate appMenuDelegate,
-            ObservableSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier) {
+            ObservableSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
+            ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier) {
         super(context, activityTabProvider, multiWindowModeStateDispatcher, tabModelSelector,
-                toolbarManager, decorView, overviewModeBehaviorSupplier);
+                toolbarManager, decorView, overviewModeBehaviorSupplier, bookmarkBridgeSupplier);
         mAppMenuDelegate = appMenuDelegate;
     }
 
@@ -48,7 +51,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     @Override
     public int getFooterResourceId() {
-        if (isMenuButtonInBottomToolbar()) {
+        if (isMenuButtonInBottomToolbar() && !ChromeApplication.isVivaldi()) {
             return this.shouldShowPageMenu() ? R.layout.icon_row_menu_footer : 0;
         }
         return shouldShowDataSaverMenuItem() ? R.layout.data_reduction_main_menu_item : 0;

@@ -12,6 +12,8 @@
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "content/browser/web_package/bundled_exchanges_reader.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -58,6 +60,19 @@ network::ResourceResponseHead CreateResourceResponse(
   return response_head;
 }
 
+void AddResponseParseErrorMessageToConsole(
+    int frame_tree_node_id,
+    const data_decoder::mojom::BundleResponseParseErrorPtr& error) {
+  WebContents* web_contents =
+      WebContents::FromFrameTreeNodeId(frame_tree_node_id);
+  if (!web_contents)
+    return;
+  web_contents->GetMainFrame()->AddMessageToConsole(
+      blink::mojom::ConsoleMessageLevel::kError,
+      std::string("Failed to read response header of Web Bundle file: ") +
+          error->message);
+}
+
 }  // namespace
 
 // TODO(crbug.com/966753): Consider security models, i.e. plausible CORS
@@ -67,12 +82,29 @@ class BundledExchangesURLLoaderFactory::EntryLoader final
  public:
   EntryLoader(base::WeakPtr<BundledExchangesURLLoaderFactory> factory,
               mojo::PendingRemote<network::mojom::URLLoaderClient> client,
-              const GURL& url)
-      : factory_(std::move(factory)), loader_client_(std::move(client)) {
+              const network::ResourceRequest& resource_request,
+              int frame_tree_node_id)
+      : factory_(std::move(factory)),
+        loader_client_(std::move(client)),
+        frame_tree_node_id_(frame_tree_node_id) {
     DCHECK(factory_);
-    factory_->GetReader()->ReadResponse(
-        url, base::BindOnce(&EntryLoader::OnResponseReady,
-                            weak_factory_.GetWeakPtr()));
+
+    // Parse the Range header if any.
+    // Whether range request should be supported or not is discussed here:
+    // https://github.com/WICG/webpackage/issues/478
+    std::string range_header;
+    if (resource_request.headers.GetHeader(net::HttpRequestHeaders::kRange,
+                                           &range_header)) {
+      std::vector<net::HttpByteRange> ranges;
+      if (net::HttpUtil::ParseRangeHeader(range_header, &ranges) &&
+          ranges.size() == 1) {  // We don't support multi-range requests.
+        byte_range_ = ranges[0];
+      }
+    }
+
+    factory_->reader()->ReadResponse(
+        resource_request.url, base::BindOnce(&EntryLoader::OnResponseReady,
+                                             weak_factory_.GetWeakPtr()));
   }
   ~EntryLoader() override = default;
 
@@ -86,19 +118,41 @@ class BundledExchangesURLLoaderFactory::EntryLoader final
   void PauseReadingBodyFromNet() override {}
   void ResumeReadingBodyFromNet() override {}
 
-  void OnResponseReady(data_decoder::mojom::BundleResponsePtr response) {
+  void OnResponseReady(data_decoder::mojom::BundleResponsePtr response,
+                       data_decoder::mojom::BundleResponseParseErrorPtr error) {
     if (!factory_ || !loader_client_.is_connected())
       return;
 
     // TODO(crbug.com/990733): For the initial implementation, we allow only
     // net::HTTP_OK, but we should clarify acceptable status code in the spec.
     if (!response || response->response_code != net::HTTP_OK) {
+      if (error)
+        AddResponseParseErrorMessageToConsole(frame_tree_node_id_, error);
       loader_client_->OnComplete(network::URLLoaderCompletionStatus(
           net::ERR_INVALID_BUNDLED_EXCHANGES));
       return;
     }
 
-    loader_client_->OnReceiveResponse(CreateResourceResponse(response));
+    network::ResourceResponseHead response_head =
+        CreateResourceResponse(response);
+    if (byte_range_) {
+      if (byte_range_->ComputeBounds(response->payload_length)) {
+        response_head.headers->UpdateWithNewRange(*byte_range_,
+                                                  response->payload_length,
+                                                  true /*replace_status_line*/);
+        // Adjust the offset and length to read.
+        // Note: This wouldn't work when the exchange is signed and its payload
+        // is mi-sha256 encoded. see crbug.com/1001366
+        response->payload_offset += byte_range_->first_byte_position();
+        response->payload_length = byte_range_->last_byte_position() -
+                                   byte_range_->first_byte_position() + 1;
+      } else {
+        loader_client_->OnComplete(network::URLLoaderCompletionStatus(
+            net::ERR_REQUEST_RANGE_NOT_SATISFIABLE));
+        return;
+      }
+    }
+    loader_client_->OnReceiveResponse(std::move(response_head));
 
     mojo::ScopedDataPipeProducerHandle producer_handle;
     mojo::ScopedDataPipeConsumerHandle consumer_handle;
@@ -119,7 +173,7 @@ class BundledExchangesURLLoaderFactory::EntryLoader final
       return;
     }
 
-    factory_->GetReader()->ReadResponseBody(
+    factory_->reader()->ReadResponseBody(
         std::move(response), std::move(producer_handle),
         base::BindOnce(&EntryLoader::FinishReadingBody,
                        weak_factory_.GetWeakPtr()));
@@ -137,6 +191,8 @@ class BundledExchangesURLLoaderFactory::EntryLoader final
 
   base::WeakPtr<BundledExchangesURLLoaderFactory> factory_;
   mojo::Remote<network::mojom::URLLoaderClient> loader_client_;
+  const int frame_tree_node_id_;
+  base::Optional<net::HttpByteRange> byte_range_;
 
   base::WeakPtrFactory<EntryLoader> weak_factory_{this};
 
@@ -144,8 +200,9 @@ class BundledExchangesURLLoaderFactory::EntryLoader final
 };
 
 BundledExchangesURLLoaderFactory::BundledExchangesURLLoaderFactory(
-    std::unique_ptr<BundledExchangesReader> reader)
-    : reader_(std::move(reader)) {}
+    scoped_refptr<BundledExchangesReader> reader,
+    int frame_tree_node_id)
+    : reader_(std::move(reader)), frame_tree_node_id_(frame_tree_node_id) {}
 
 BundledExchangesURLLoaderFactory::~BundledExchangesURLLoaderFactory() = default;
 
@@ -165,9 +222,9 @@ void BundledExchangesURLLoaderFactory::CreateLoaderAndStart(
   if (base::EqualsCaseInsensitiveASCII(resource_request.method,
                                        net::HttpRequestHeaders::kGetMethod) &&
       reader_->HasEntry(resource_request.url)) {
-    auto loader = std::make_unique<EntryLoader>(weak_factory_.GetWeakPtr(),
-                                                loader_client.PassInterface(),
-                                                resource_request.url);
+    auto loader = std::make_unique<EntryLoader>(
+        weak_factory_.GetWeakPtr(), loader_client.PassInterface(),
+        resource_request, frame_tree_node_id_);
     std::unique_ptr<network::mojom::URLLoader> url_loader = std::move(loader);
     mojo::MakeSelfOwnedReceiver(
         std::move(url_loader), mojo::PendingReceiver<network::mojom::URLLoader>(
@@ -183,8 +240,8 @@ void BundledExchangesURLLoaderFactory::CreateLoaderAndStart(
 }
 
 void BundledExchangesURLLoaderFactory::Clone(
-    network::mojom::URLLoaderFactoryRequest request) {
-  bindings_.AddBinding(this, std::move(request));
+    mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver) {
+  receivers_.Add(this, std::move(receiver));
 }
 
 }  // namespace content

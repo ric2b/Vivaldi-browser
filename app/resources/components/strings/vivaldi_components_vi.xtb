@@ -1,4 +1,33 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="vi">
+<translation id="4200102020577305737">Chuyển đến
+          trình đơn Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Cài đặt mạng LAN
+          và bỏ chọn "Sử dụng máy chủ proxy cho mạng LAN của bạn".</translation>
+<translation id="4932161901409251843">Chuyển đến
+          trình đơn Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          và đảm bảo cấu hình của bạn được đặt thành "không có proxy" hoặc "trực tiếp"</translation>
+<translation id="7023871570427738255">Chuyển đến
+          trình đơn Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          và bỏ chọn "<ph name="NO_PREFETCH_DESCRIPTION" />."
+          Nếu cách này không giải quyết được sự cố thì chúng tôi khuyên bạn nên chọn lại tùy chọn này
+          để cải thiện hiệu suất.</translation>
+<translation id="8187289872471304532">Chuyển đến
+          Ứng dụng &gt; Tùy chọn hệ thống &gt; Mạng &gt; Nâng cao &gt; Proxy
+          và bỏ chọn bất kỳ proxy nào đã được chọn.</translation>
 </translationbundle>

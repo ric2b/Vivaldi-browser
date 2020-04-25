@@ -9,6 +9,11 @@
 namespace network {
 namespace features {
 
+// When kCapReferrerToOriginOnCrossOrigin is enabled, HTTP referrers on cross-
+// origin requests are restricted to contain at most the source origin.
+const base::Feature kCapReferrerToOriginOnCrossOrigin{
+    "CapReferrerToOriginOnCrossOrigin", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables Expect CT reporting, which sends reports for opted-in sites
 // that don't serve sufficient Certificate Transparency information.
 const base::Feature kExpectCTReporting{"ExpectCTReporting",
@@ -143,7 +148,13 @@ const base::FeatureParam<std::string>
 const base::Feature kDisableKeepaliveFetch{"DisableKeepaliveFetch",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
-bool ShouldEnableOutOfBlinkCors() {
+// When kOutOfBlinkFrameAncestors is enabled, the frame-ancestors
+// directive is parsed from the Content-Security-Policy header in the network
+// service and enforced in the browser.
+const base::Feature kOutOfBlinkFrameAncestors{
+    "OutOfBlinkFrameAncestors", base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool ShouldEnableOutOfBlinkCorsForTesting() {
   return base::FeatureList::IsEnabled(features::kOutOfBlinkCors);
 }
 

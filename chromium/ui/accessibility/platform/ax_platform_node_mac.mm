@@ -43,7 +43,11 @@ RoleMap BuildRoleMap() {
       {ax::mojom::Role::kAlert, NSAccessibilityGroupRole},
       {ax::mojom::Role::kAlertDialog, NSAccessibilityGroupRole},
       {ax::mojom::Role::kAnchor, NSAccessibilityGroupRole},
-      {ax::mojom::Role::kAnnotation, NSAccessibilityUnknownRole},
+      {ax::mojom::Role::kAnnotationAttribution, NSAccessibilityGroupRole},
+      {ax::mojom::Role::kAnnotationCommentary, NSAccessibilityGroupRole},
+      {ax::mojom::Role::kAnnotationPresence, NSAccessibilityGroupRole},
+      {ax::mojom::Role::kAnnotationRevision, NSAccessibilityGroupRole},
+      {ax::mojom::Role::kAnnotationSuggestion, NSAccessibilityGroupRole},
       {ax::mojom::Role::kApplication, NSAccessibilityGroupRole},
       {ax::mojom::Role::kArticle, NSAccessibilityGroupRole},
       {ax::mojom::Role::kAudio, NSAccessibilityGroupRole},
@@ -121,6 +125,7 @@ RoleMap BuildRoleMap() {
       {ax::mojom::Role::kFigcaption, NSAccessibilityGroupRole},
       {ax::mojom::Role::kFigure, NSAccessibilityGroupRole},
       {ax::mojom::Role::kFooter, NSAccessibilityGroupRole},
+      {ax::mojom::Role::kFooterAsNonLandmark, NSAccessibilityGroupRole},
       {ax::mojom::Role::kForm, NSAccessibilityGroupRole},
       {ax::mojom::Role::kGenericContainer, NSAccessibilityGroupRole},
       {ax::mojom::Role::kGraphicsDocument, NSAccessibilityGroupRole},
@@ -130,6 +135,8 @@ RoleMap BuildRoleMap() {
       // a list as of 10.12.6, so following WebKit and using table role:
       {ax::mojom::Role::kGrid, NSAccessibilityTableRole},  // crbug.com/753925
       {ax::mojom::Role::kGroup, NSAccessibilityGroupRole},
+      {ax::mojom::Role::kHeader, NSAccessibilityGroupRole},
+      {ax::mojom::Role::kHeaderAsNonLandmark, NSAccessibilityGroupRole},
       {ax::mojom::Role::kHeading, @"AXHeading"},
       {ax::mojom::Role::kIframe, NSAccessibilityGroupRole},
       {ax::mojom::Role::kIframePresentational, NSAccessibilityGroupRole},
@@ -179,9 +186,14 @@ RoleMap BuildRoleMap() {
       {ax::mojom::Role::kRootWebArea, @"AXWebArea"},
       {ax::mojom::Role::kRow, NSAccessibilityRowRole},
       {ax::mojom::Role::kRowHeader, @"AXCell"},
+      // TODO(accessibility) What should kRuby be? It's not listed? Any others
+      // missing? Maybe use switch statement so that compiler doesn't allow us
+      // to miss any.
+      {ax::mojom::Role::kRubyAnnotation, NSAccessibilityUnknownRole},
       {ax::mojom::Role::kScrollBar, NSAccessibilityScrollBarRole},
       {ax::mojom::Role::kSearch, NSAccessibilityGroupRole},
       {ax::mojom::Role::kSearchBox, NSAccessibilityTextFieldRole},
+      {ax::mojom::Role::kSection, NSAccessibilityGroupRole},
       {ax::mojom::Role::kSlider, NSAccessibilitySliderRole},
       {ax::mojom::Role::kSliderThumb, NSAccessibilityValueIndicatorRole},
       {ax::mojom::Role::kSpinButton, NSAccessibilityIncrementorRole},
@@ -238,15 +250,17 @@ RoleMap BuildSubroleMap() {
       {ax::mojom::Role::kFooter, @"AXLandmarkContentInfo"},
       {ax::mojom::Role::kForm, @"AXLandmarkForm"},
       {ax::mojom::Role::kGraphicsDocument, @"AXDocument"},
+      {ax::mojom::Role::kHeader, @"AXLandmarkBanner"},
       {ax::mojom::Role::kLog, @"AXApplicationLog"},
       {ax::mojom::Role::kMain, @"AXLandmarkMain"},
       {ax::mojom::Role::kMarquee, @"AXApplicationMarquee"},
       {ax::mojom::Role::kMath, @"AXDocumentMath"},
       {ax::mojom::Role::kNavigation, @"AXLandmarkNavigation"},
       {ax::mojom::Role::kNote, @"AXDocumentNote"},
-      {ax::mojom::Role::kRegion, @"AXDocumentRegion"},
+      {ax::mojom::Role::kRegion, @"AXLandmarkRegion"},
       {ax::mojom::Role::kSearch, @"AXLandmarkSearch"},
       {ax::mojom::Role::kSearchBox, @"AXSearchField"},
+      {ax::mojom::Role::kSection, @"AXLandmarkRegion"},
       {ax::mojom::Role::kStatus, @"AXApplicationStatus"},
       {ax::mojom::Role::kSwitch, @"AXSwitch"},
       {ax::mojom::Role::kTabPanel, @"AXTabPanel"},
@@ -307,11 +321,6 @@ void PostAnnouncementNotification(NSString* announcement) {
 }
 
 void NotifyMacEvent(AXPlatformNodeCocoa* target, ax::mojom::Event event_type) {
-  NSString* announcement_text = [target announcementTextForEvent:event_type];
-  if (announcement_text) {
-    PostAnnouncementNotification(announcement_text);
-    return;
-  }
   NSString* notification =
       [AXPlatformNodeCocoa nativeNotificationFromAXEvent:event_type];
   if (notification)
@@ -1146,27 +1155,33 @@ gfx::NativeViewAccessible AXPlatformNodeMac::GetNativeViewAccessible() {
 
 void AXPlatformNodeMac::NotifyAccessibilityEvent(ax::mojom::Event event_type) {
   GetNativeViewAccessible();
-  // Add mappings between ax::mojom::Event and NSAccessibility notifications
-  // using the EventMap above. This switch contains exceptions to those
-  // mappings.
-  switch (event_type) {
-    case ax::mojom::Event::kTextChanged:
-      // If the view is a user-editable textfield, this should change the value.
-      if (GetData().role == ax::mojom::Role::kTextField) {
-        NotifyMacEvent(native_node_, ax::mojom::Event::kValueChanged);
-        return;
-      }
-      break;
-    case ax::mojom::Event::kSelection:
-      // On Mac, map menu item selection to a focus event.
-      if (ui::IsMenuItem(GetData().role)) {
-        NotifyMacEvent(native_node_, ax::mojom::Event::kFocus);
-        return;
-      }
-      break;
-    default:
-      break;
+  // Handle special cases.
+  NSString* announcement_text =
+      [native_node_ announcementTextForEvent:event_type];
+  if (announcement_text) {
+    PostAnnouncementNotification(announcement_text);
+    return;
   }
+  if (event_type == ax::mojom::Event::kSelection) {
+    ax::mojom::Role role = GetData().role;
+    if (ui::IsMenuItem(role)) {
+      // On Mac, map menu item selection to a focus event.
+      NotifyMacEvent(native_node_, ax::mojom::Event::kFocus);
+      return;
+    } else if (ui::IsListItem(role)) {
+      if (AXPlatformNodeBase* container = GetSelectionContainer()) {
+        const ui::AXNodeData& data = container->GetData();
+        if (data.role == ax::mojom::Role::kListBox &&
+            !data.HasState(ax::mojom::State::kMultiselectable) &&
+            GetDelegate()->GetFocus() == GetNativeViewAccessible()) {
+          NotifyMacEvent(native_node_, ax::mojom::Event::kFocus);
+          return;
+        }
+      }
+    }
+  }
+  // Otherwise, use mappings between ax::mojom::Event and NSAccessibility
+  // notifications from the EventMap above.
   NotifyMacEvent(native_node_, event_type);
 }
 

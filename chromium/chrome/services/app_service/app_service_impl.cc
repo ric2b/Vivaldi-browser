@@ -8,14 +8,13 @@
 
 #include "base/bind.h"
 #include "chrome/services/app_service/public/mojom/types.mojom.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
 
 namespace {
 
 void Connect(apps::mojom::Publisher* publisher,
              apps::mojom::Subscriber* subscriber) {
-  apps::mojom::SubscriberPtr clone;
-  subscriber->Clone(mojo::MakeRequest(&clone));
+  mojo::PendingRemote<apps::mojom::Subscriber> clone;
+  subscriber->Clone(clone.InitWithNewPipeAndPassReceiver());
   // TODO: replace nullptr with a ConnectOptions.
   publisher->Connect(std::move(clone), nullptr);
 }
@@ -28,31 +27,42 @@ AppServiceImpl::AppServiceImpl() = default;
 
 AppServiceImpl::~AppServiceImpl() = default;
 
-void AppServiceImpl::BindRequest(apps::mojom::AppServiceRequest request) {
-  bindings_.AddBinding(this, std::move(request));
+void AppServiceImpl::BindReceiver(
+    mojo::PendingReceiver<apps::mojom::AppService> receiver) {
+  receivers_.Add(this, std::move(receiver));
 }
 
-void AppServiceImpl::RegisterPublisher(apps::mojom::PublisherPtr publisher,
-                                       apps::mojom::AppType app_type) {
+void AppServiceImpl::FlushMojoCallsForTesting() {
+  subscribers_.FlushForTesting();
+  receivers_.FlushForTesting();
+}
+
+void AppServiceImpl::RegisterPublisher(
+    mojo::PendingRemote<apps::mojom::Publisher> publisher_remote,
+    apps::mojom::AppType app_type) {
+  mojo::Remote<apps::mojom::Publisher> publisher(std::move(publisher_remote));
   // Connect the new publisher with every registered subscriber.
-  subscribers_.ForAllPtrs([&publisher](auto* subscriber) {
-    ::Connect(publisher.get(), subscriber);
-  });
+  for (auto& subscriber : subscribers_) {
+    ::Connect(publisher.get(), subscriber.get());
+  }
 
   // Check that no previous publisher has registered for the same app_type.
   CHECK(publishers_.find(app_type) == publishers_.end());
 
   // Add the new publisher to the set.
-  publisher.set_connection_error_handler(
+  publisher.set_disconnect_handler(
       base::BindOnce(&AppServiceImpl::OnPublisherDisconnected,
                      base::Unretained(this), app_type));
   auto result = publishers_.emplace(app_type, std::move(publisher));
   CHECK(result.second);
 }
 
-void AppServiceImpl::RegisterSubscriber(apps::mojom::SubscriberPtr subscriber,
-                                        apps::mojom::ConnectOptionsPtr opts) {
+void AppServiceImpl::RegisterSubscriber(
+    mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote,
+    apps::mojom::ConnectOptionsPtr opts) {
   // Connect the new subscriber with every registered publisher.
+  mojo::Remote<apps::mojom::Subscriber> subscriber(
+      std::move(subscriber_remote));
   for (const auto& iter : publishers_) {
     ::Connect(iter.second.get(), subscriber.get());
   }
@@ -60,7 +70,7 @@ void AppServiceImpl::RegisterSubscriber(apps::mojom::SubscriberPtr subscriber,
   // TODO: store the opts somewhere.
 
   // Add the new subscriber to the set.
-  subscribers_.AddPtr(std::move(subscriber));
+  subscribers_.Add(std::move(subscriber));
 }
 
 void AppServiceImpl::LoadIcon(apps::mojom::AppType app_type,
@@ -92,6 +102,20 @@ void AppServiceImpl::Launch(apps::mojom::AppType app_type,
   iter->second->Launch(app_id, event_flags, launch_source, display_id);
 }
 
+void AppServiceImpl::LaunchAppWithIntent(
+    apps::mojom::AppType app_type,
+    const std::string& app_id,
+    apps::mojom::IntentPtr intent,
+    apps::mojom::LaunchSource launch_source,
+    int64_t display_id) {
+  auto iter = publishers_.find(app_type);
+  if (iter == publishers_.end()) {
+    return;
+  }
+  iter->second->LaunchAppWithIntent(app_id, std::move(intent), launch_source,
+                                    display_id);
+}
+
 void AppServiceImpl::SetPermission(apps::mojom::AppType app_type,
                                    const std::string& app_id,
                                    apps::mojom::PermissionPtr permission) {
@@ -102,13 +126,24 @@ void AppServiceImpl::SetPermission(apps::mojom::AppType app_type,
   iter->second->SetPermission(app_id, std::move(permission));
 }
 
-void AppServiceImpl::Uninstall(apps::mojom::AppType app_type,
-                               const std::string& app_id) {
+void AppServiceImpl::PromptUninstall(apps::mojom::AppType app_type,
+                                     const std::string& app_id) {
   auto iter = publishers_.find(app_type);
   if (iter == publishers_.end()) {
     return;
   }
-  iter->second->Uninstall(app_id);
+  iter->second->PromptUninstall(app_id);
+}
+
+void AppServiceImpl::Uninstall(apps::mojom::AppType app_type,
+                               const std::string& app_id,
+                               bool clear_site_data,
+                               bool report_abuse) {
+  auto iter = publishers_.find(app_type);
+  if (iter == publishers_.end()) {
+    return;
+  }
+  iter->second->Uninstall(app_id, clear_site_data, report_abuse);
 }
 
 void AppServiceImpl::OpenNativeSettings(apps::mojom::AppType app_type,

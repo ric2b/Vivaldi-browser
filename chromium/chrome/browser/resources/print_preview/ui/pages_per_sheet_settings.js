@@ -19,8 +19,7 @@ Polymer({
    */
   onPagesPerSheetSettingChange_: function(newValue) {
     this.selectedValue = /** @type {number} */ (newValue).toString();
-    this.setSetting(
-        'margins', print_preview.ticket_items.MarginsTypeValue.DEFAULT);
+    this.setSetting('margins', print_preview.MarginsType.DEFAULT);
   },
 
   /** @param {string} value The new select value. */

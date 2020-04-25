@@ -16,6 +16,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "content/browser/frame_host/back_forward_cache_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/common/content_export.h"
@@ -94,6 +95,10 @@ struct FrameReplicationState;
 class CONTENT_EXPORT RenderFrameHostManager
     : public SiteInstanceImpl::Observer {
  public:
+  using RenderFrameProxyHostMap =
+      std::unordered_map<int32_t /* SiteInstance id */,
+                         std::unique_ptr<RenderFrameProxyHost>>;
+
   // Functions implemented by our owner that we need.
   //
   // TODO(brettw) Clean this up! These are all the functions in WebContentsImpl
@@ -125,7 +130,8 @@ class CONTENT_EXPORT RenderFrameHostManager
         int parent_routing_id,
         int previous_sibling_routing_id) = 0;
     virtual void BeforeUnloadFiredFromRenderManager(
-        bool proceed, const base::TimeTicks& proceed_time,
+        bool proceed,
+        const base::TimeTicks& proceed_time,
         bool* proceed_to_fire_unload) = 0;
     virtual void RenderProcessGoneFromRenderManager(
         RenderViewHost* render_view_host) = 0;
@@ -139,13 +145,12 @@ class CONTENT_EXPORT RenderFrameHostManager
     virtual void NotifyMainFrameSwappedFromRenderManager(
         RenderFrameHost* old_host,
         RenderFrameHost* new_host) = 0;
-    virtual NavigationControllerImpl&
-        GetControllerForRenderManager() = 0;
+    virtual NavigationControllerImpl& GetControllerForRenderManager() = 0;
 
     // Returns the navigation entry of the current navigation, or NULL if there
     // is none.
     virtual NavigationEntry*
-        GetLastCommittedNavigationEntryForRenderManager() = 0;
+    GetLastCommittedNavigationEntryForRenderManager() = 0;
 
     // Returns the interstitial page showing in the delegate, or null if there
     // is none.
@@ -306,8 +311,7 @@ class CONTENT_EXPORT RenderFrameHostManager
   RenderViewHostImpl* GetSwappedOutRenderViewHost(SiteInstance* instance) const;
 
   // Returns the RenderFrameProxyHost for the given SiteInstance, if any.
-  RenderFrameProxyHost* GetRenderFrameProxyHost(
-      SiteInstance* instance) const;
+  RenderFrameProxyHost* GetRenderFrameProxyHost(SiteInstance* instance) const;
 
   // If |render_frame_host| is on the pending deletion list, this deletes it.
   // Returns whether it was deleted.
@@ -316,8 +320,8 @@ class CONTENT_EXPORT RenderFrameHostManager
   // BackForwardCache:
   // During a history navigation, unfreezes and swaps in a document from the
   // BackForwardCache, making it active.
-  void RestoreFromBackForwardCache(std::unique_ptr<RenderFrameHostImpl>);
-  void EvictFromBackForwardCache(RenderFrameHostImpl*);
+  void RestoreFromBackForwardCache(
+      std::unique_ptr<BackForwardCacheImpl::Entry>);
 
   // BackForwardCache:
   // Unfreezes the current frame host. This is called after committing a
@@ -345,8 +349,7 @@ class CONTENT_EXPORT RenderFrameHostManager
   // appropriate RenderFrameHost for the provided URL. The returned pointer will
   // be for the current or the speculative RenderFrameHost and the instance is
   // owned by this manager.
-  RenderFrameHostImpl* GetFrameHostForNavigation(
-      const NavigationRequest& request);
+  RenderFrameHostImpl* GetFrameHostForNavigation(NavigationRequest* request);
 
   // Clean up any state for any ongoing navigation.
   void CleanUpNavigation();
@@ -464,14 +467,14 @@ class CONTENT_EXPORT RenderFrameHostManager
 
   // Returns a const reference to the map of proxy hosts. The keys are
   // SiteInstance IDs, the values are RenderFrameProxyHosts.
-  const std::unordered_map<int32_t, std::unique_ptr<RenderFrameProxyHost>>&
-  GetAllProxyHostsForTesting() const {
+  const RenderFrameProxyHostMap& GetAllProxyHostsForTesting() const {
     return proxy_hosts_;
   }
 
   // SiteInstanceImpl::Observer
   void ActiveFrameCountIsZero(SiteInstanceImpl* site_instance) override;
-  void RenderProcessGone(SiteInstanceImpl* site_instance) override;
+  void RenderProcessGone(SiteInstanceImpl* site_instance,
+                         const ChildProcessTerminationInfo& info) override;
 
   // Cancels and destroys the pending or speculative RenderFrameHost if they
   // match the provided |render_frame_host|.
@@ -496,7 +499,7 @@ class CONTENT_EXPORT RenderFrameHostManager
   // used to route IPC messages when in swapped out state.  Returns early if the
   // RenderViewHost has already been initialized for another RenderFrameHost.
   bool InitRenderView(RenderViewHostImpl* render_view_host,
-    RenderFrameProxyHost* proxy);
+                      RenderFrameProxyHost* proxy);
 
   // Returns the SiteInstance that should be used to host the navigation handled
   // by |navigation_request|.
@@ -505,7 +508,7 @@ class CONTENT_EXPORT RenderFrameHostManager
   // GetProcess() is called on the SiteInstance. In particular, calling this
   // function will never lead to a process being created for the navigation.
   scoped_refptr<SiteInstance> GetSiteInstanceForNavigationRequest(
-      const NavigationRequest& navigation_request);
+      NavigationRequest* navigation_request);
 
   // Helper to initialize the RenderFrame if it's not initialized.
   void InitializeRenderFrameIfNecessary(RenderFrameHostImpl* render_frame_host);
@@ -739,8 +742,14 @@ class CONTENT_EXPORT RenderFrameHostManager
 
   // Sets the |pending_rfh| to be the active one. Called when the pending
   // RenderFrameHost commits.
-  // BackForwardCache: Called to restore a RenderFrameHost.
-  void CommitPending(std::unique_ptr<RenderFrameHostImpl> pending_rfh);
+  //
+  // This function is also called when restoring an entry from BackForwardCache.
+  // In that case, |pending_rfh| is the RenderFrameHost to be restored, and
+  // |pending_bfcache_entry| provides additional state to be restored, such as
+  // proxies.
+  void CommitPending(
+      std::unique_ptr<RenderFrameHostImpl> pending_rfh,
+      std::unique_ptr<BackForwardCacheImpl::Entry> pending_bfcache_entry);
 
   // Helper to call CommitPending() in all necessary cases.
   void CommitPendingIfNecessary(RenderFrameHostImpl* render_frame_host,
@@ -811,8 +820,7 @@ class CONTENT_EXPORT RenderFrameHostManager
   std::unique_ptr<RenderFrameHostImpl> render_frame_host_;
 
   // Proxy hosts, indexed by site instance ID.
-  std::unordered_map<int32_t, std::unique_ptr<RenderFrameProxyHost>>
-      proxy_hosts_;
+  RenderFrameProxyHostMap proxy_hosts_;
 
   // A list of RenderFrameHosts waiting to shut down after swapping out.
   using RFHPendingDeleteList = std::list<std::unique_ptr<RenderFrameHostImpl>>;
@@ -824,11 +832,11 @@ class CONTENT_EXPORT RenderFrameHostManager
   // behavior. The speculative RenderFrameHost might be discarded later on if
   // the final URL's SiteInstance isn't compatible with the one used to create
   // it.
-  //
-  // This is also used by the BackForwardCache, which
-  // sets speculative_render_frame_host_ to the restored frame before
-  // committing.
   std::unique_ptr<RenderFrameHostImpl> speculative_render_frame_host_;
+
+  // After being set in RestoreFromBackForwardCache(), the bfcache entry is
+  // immediately consumed in CommitPending().
+  std::unique_ptr<BackForwardCacheImpl::Entry> bfcache_entry_to_restore_;
 
   // This callback is used when attaching an inner Delegate to |delegate_|
   // through |frame_tree_node_|.

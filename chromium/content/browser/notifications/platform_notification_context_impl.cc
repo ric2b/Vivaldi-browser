@@ -26,6 +26,7 @@
 #include "content/public/browser/permission_controller.h"
 #include "content/public/browser/permission_type.h"
 #include "content/public/browser/platform_notification_service.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "third_party/blink/public/common/notifications/notification_resources.h"
 
@@ -437,6 +438,11 @@ void PlatformNotificationContextImpl::DoTriggerNotification(
                                       write_database_data.origin);
     return;
   }
+
+  base::Time timestamp =
+      database_data.notification_data.show_trigger_timestamp.value();
+  UMA_HISTOGRAM_LONG_TIMES("Notifications.Triggers.DisplayDelay",
+                           base::Time::Now() - timestamp);
 
   // Remove resources from DB as we don't need them anymore.
   database_->DeleteNotificationResources(write_database_data.notification_id,

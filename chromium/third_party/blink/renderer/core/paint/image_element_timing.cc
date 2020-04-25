@@ -60,10 +60,7 @@ ImageElementTiming& ImageElementTiming::From(LocalDOMWindow& window) {
 }
 
 ImageElementTiming::ImageElementTiming(LocalDOMWindow& window)
-    : Supplement<LocalDOMWindow>(window) {
-  DCHECK(RuntimeEnabledFeatures::ElementTimingEnabled(
-      GetSupplementable()->document()));
-}
+    : Supplement<LocalDOMWindow>(window) {}
 
 void ImageElementTiming::NotifyImageFinished(
     const LayoutObject& layout_object,
@@ -151,11 +148,12 @@ void ImageElementTiming::NotifyImagePaintedInternal(
   DCHECK(layout_object.GetDocument().GetSecurityOrigin());
   // It's ok to expose rendering timestamp for data URIs so exclude those from
   // the Timing-Allow-Origin check.
+  bool tainted = false;
   if (!url.ProtocolIsData() &&
       !Performance::PassesTimingAllowCheck(
           cached_image.GetResponse(),
           *layout_object.GetDocument().GetSecurityOrigin(),
-          &layout_object.GetDocument())) {
+          &layout_object.GetDocument(), &tainted)) {
     WindowPerformance* performance =
         DOMWindowPerformance::performance(*GetSupplementable());
     if (performance) {

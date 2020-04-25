@@ -16,8 +16,11 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_canvas.h"
+#include "components/printing/common/print.mojom.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
+#include "mojo/public/cpp/bindings/associated_receiver_set.h"
+#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "printing/buildflags/buildflags.h"
 #include "printing/common/metafile_utils.h"
 #include "third_party/blink/public/web/web_node.h"
@@ -86,7 +89,8 @@ class FrameReference {
 // copying the DOM of the document and creating a new WebView with the contents.
 class PrintRenderFrameHelper
     : public content::RenderFrameObserver,
-      public content::RenderFrameObserverTracker<PrintRenderFrameHelper> {
+      public content::RenderFrameObserverTracker<PrintRenderFrameHelper>,
+      public mojom::PrintRenderFrame {
  public:
   class Delegate {
    public:
@@ -182,23 +186,44 @@ class PrintRenderFrameHelper
     kScripted,
   };
 
+  // Helper to make it easy to correctly call IPCReceived() and IPCProcessed().
+  class ScopedIPC {
+   public:
+    explicit ScopedIPC(base::WeakPtr<PrintRenderFrameHelper> weak_this);
+    ScopedIPC(const ScopedIPC&) = delete;
+    ScopedIPC& operator=(const ScopedIPC&) = delete;
+    ~ScopedIPC();
+
+   private:
+    const base::WeakPtr<PrintRenderFrameHelper> weak_this_;
+  };
+
   // RenderFrameObserver implementation.
   void OnDestruct() override;
   void DidStartNavigation(
       const GURL& url,
       base::Optional<blink::WebNavigationType> navigation_type) override;
-  void DidFailProvisionalLoad(const blink::WebURLError& error) override;
+  void DidFailProvisionalLoad() override;
   void DidFinishLoad() override;
   void ScriptedPrint(bool user_initiated) override;
   bool OnMessageReceived(const IPC::Message& message) override;
 
+  void BindPrintRenderFrameReceiver(
+      mojo::PendingAssociatedReceiver<mojom::PrintRenderFrame> receiver);
+
+  // printing::mojom::PrintRenderFrame:
+  void PrintForSystemDialog() override;
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+  void InitiatePrintPreview(
+      mojom::PrintRendererAssociatedPtrInfo print_renderer,
+      bool has_selection) override;
+  void OnPrintPreviewDialogClosed() override;
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
+
   // Message handlers ---------------------------------------------------------
   void OnPrintPages();
-  void OnPrintForSystemDialog();
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-  void OnInitiatePrintPreview(bool has_selection);
   void OnPrintPreview(const base::DictionaryValue& settings);
-  void OnClosePrintPreviewDialog();
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
   void OnPrintFrameContent(const PrintMsg_PrintFrame_Params& params);
   void OnPrintingDone(bool success);
@@ -319,6 +344,12 @@ class PrintRenderFrameHelper
       const MetafileSkia& metafile,
       PrintHostMsg_DidPrintContent_Params* params);
 
+  // Increments the IPC nesting level when an IPC message is received.
+  void IPCReceived();
+
+  // Decrements the IPC nesting level once an IPC message has been processed.
+  void IPCProcessed();
+
   // Helper method to get page layout in points and fit to page if needed.
   static void ComputePageLayoutInPointsForCss(
       blink::WebLocalFrame* frame,
@@ -393,6 +424,12 @@ class PrintRenderFrameHelper
   // Used to check the prerendering status.
   const std::unique_ptr<Delegate> delegate_;
 
+  // Used to render print documents from an external source (ARC, Crostini,
+  // etc.).
+  mojom::PrintRendererAssociatedPtr print_renderer_;
+
+  mojo::AssociatedReceiverSet<mojom::PrintRenderFrame> receivers_;
+
   // Keeps track of the state of print preview between messages.
   // TODO(vitalybuka): Create PrintPreviewContext when needed and delete after
   // use. Now it's interaction with various messages is confusing.
@@ -436,6 +473,7 @@ class PrintRenderFrameHelper
     int GetNextPageNumber();
     bool IsRendering() const;
     bool IsModifiable() const;
+    bool IsPdf() const;
     bool HasSelection();
     bool IsLastPageOfPrintReadyMetafile() const;
     bool IsFinalPageRendered() const;
@@ -474,6 +512,8 @@ class PrintRenderFrameHelper
 
     void CalculateIsModifiable();
 
+    void CalculateIsPdf();
+
     // Specifies what to render for print preview.
     FrameReference source_frame_;
     blink::WebNode source_node_;
@@ -492,6 +532,10 @@ class PrintRenderFrameHelper
 
     // True, if the document source is modifiable. e.g. HTML and not PDF.
     bool is_modifiable_ = true;
+
+    // True, if the document source is a PDF. Used to distinguish from
+    // other plugins such as Flash.
+    bool is_pdf_ = false;
 
     // Specifies the total number of pages in the print ready metafile.
     int print_ready_metafile_page_count_ = 0;

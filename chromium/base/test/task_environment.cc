@@ -19,6 +19,7 @@
 #include "base/task/post_task.h"
 #include "base/task/sequence_manager/sequence_manager_impl.h"
 #include "base/task/sequence_manager/time_domain.h"
+#include "base/task/simple_task_executor.h"
 #include "base/task/thread_pool/thread_pool_impl.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/bind_test_util.h"
@@ -164,6 +165,12 @@ class TaskEnvironment::MockTimeDomain : public sequence_manager::TimeDomain,
     if (!sequence_manager_->IsIdleForTesting())
       return Now();
     return TimeDomain::NextScheduledRunTime();
+  }
+
+  void AdvanceClock(TimeDelta delta) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    AutoLock lock(now_ticks_lock_);
+    now_ticks_ += delta;
   }
 
   static std::unique_ptr<TaskEnvironment::MockTimeDomain> CreateAndRegister(
@@ -363,16 +370,23 @@ TaskEnvironment::TaskEnvironment(
                                     : nullptr),
       scoped_lazy_task_runner_list_for_testing_(
           std::make_unique<internal::ScopedLazyTaskRunnerListForTesting>()),
-      // TODO(https://crbug.com/918724): Enable Run() timeouts even for
-      // instances created with *MOCK_TIME, and determine whether the timeout
-      // can be reduced from action_max_timeout() to action_timeout().
+      // TODO(https://crbug.com/922098): Enable Run() timeouts even for
+      // instances created with *MOCK_TIME.
       run_loop_timeout_(
           mock_time_domain_
               ? nullptr
               : std::make_unique<RunLoop::ScopedRunTimeoutForTest>(
-                    TestTimeouts::action_max_timeout(),
-                    MakeExpectedNotRunClosure(FROM_HERE,
-                                              "RunLoop::Run() timed out."))) {
+                    TestTimeouts::action_timeout(),
+                    BindRepeating(
+                        [](sequence_manager::SequenceManager*
+                               sequence_manager) {
+                          ADD_FAILURE()
+                              << "RunLoop::Run() timed out with the following "
+                                 "pending task(s) in its TaskEnvironment's "
+                                 "main thread queue:\n"
+                              << sequence_manager->DescribeAllPendingTasks();
+                        },
+                        Unretained(sequence_manager_.get())))) {
   CHECK(!base::ThreadTaskRunnerHandle::IsSet());
   // If |subclass_creates_default_taskrunner| is true then initialization is
   // deferred until DeferredInitFromSubclass().
@@ -382,6 +396,7 @@ TaskEnvironment::TaskEnvironment(
             .SetTimeDomain(mock_time_domain_.get()));
     task_runner_ = task_queue_->task_runner();
     sequence_manager_->SetDefaultTaskRunner(task_runner_);
+    simple_task_executor_ = std::make_unique<SimpleTaskExecutor>(task_runner_);
     CHECK(base::ThreadTaskRunnerHandle::IsSet())
         << "ThreadTaskRunnerHandle should've been set now.";
     CompleteInitialization();
@@ -429,7 +444,7 @@ void TaskEnvironment::InitializeThreadPool() {
   auto task_tracker = std::make_unique<TestTaskTracker>();
   task_tracker_ = task_tracker.get();
   auto thread_pool = std::make_unique<internal::ThreadPoolImpl>(
-      "TaskEnvironment", std::move(task_tracker));
+      std::string(), std::move(task_tracker));
   if (mock_time_domain_)
     mock_time_domain_->SetThreadPool(thread_pool.get(), task_tracker_);
   ThreadPoolInstance::Set(std::move(thread_pool));
@@ -647,6 +662,13 @@ void TaskEnvironment::FastForwardUntilNoTasksRemain() {
   FastForwardBy(TimeDelta::Max());
 }
 
+void TaskEnvironment::AdvanceClock(TimeDelta delta) {
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
+  DCHECK(mock_time_domain_);
+  DCHECK_GE(delta, TimeDelta());
+  mock_time_domain_->AdvanceClock(delta);
+}
+
 const TickClock* TaskEnvironment::GetMockTickClock() const {
   DCHECK(mock_time_domain_);
   return mock_time_domain_.get();
@@ -695,7 +717,7 @@ void TaskEnvironment::DescribePendingMainThreadTasks() const {
 }
 
 TaskEnvironment::TestTaskTracker::TestTaskTracker()
-    : internal::ThreadPoolImpl::TaskTrackerImpl("TaskEnvironment"),
+    : internal::ThreadPoolImpl::TaskTrackerImpl(std::string()),
       can_run_tasks_cv_(&lock_),
       task_completed_(&lock_) {}
 

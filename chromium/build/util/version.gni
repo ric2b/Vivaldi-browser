@@ -31,7 +31,7 @@ chrome_version_file = "//chrome/VERSION"
 
 _script_arguments = []
 
-if (target_os == "mac") {
+if (is_mac) {
   _version_dictionary_template += "patch_hi = @PATCH_HI@ patch_lo = @PATCH_LO@ "
 
   _script_arguments += [
@@ -97,7 +97,7 @@ chrome_version_minor = _result.minor
 chrome_version_build = _result.build
 chrome_version_patch = _result.patch
 
-if (target_os == "mac") {
+if (is_mac) {
   chrome_version_patch_hi = _result.patch_hi
   chrome_version_patch_lo = _result.patch_lo
 
@@ -145,5 +145,11 @@ if (is_mac && !(defined(is_vivaldi) && is_vivaldi)) {
     ]
   }
 
+  if (is_android && defined(is_vivaldi) && is_vivaldi) {
+    lines_to_write += [
+      "Vivaldi: $vivaldi_version_code",
+    ]
+    chrome_version_code = vivaldi_version_code
+  }
   write_file("$root_out_dir/android_chrome_versions.txt", lines_to_write)
 }

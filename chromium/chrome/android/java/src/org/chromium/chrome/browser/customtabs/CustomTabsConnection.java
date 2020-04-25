@@ -17,11 +17,11 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Process;
 import android.os.SystemClock;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.widget.RemoteViews;
 
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 import androidx.browser.customtabs.CustomTabsCallback;
 import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.browser.customtabs.CustomTabsService;
@@ -45,7 +45,6 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.library_loader.LibraryProcessType;
-import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.metrics.CachedMetrics.EnumeratedHistogramSample;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
@@ -373,14 +372,7 @@ public class CustomTabsConnection {
     /** Warmup activities that should only happen once. */
     private static void initializeBrowser(final Context context) {
         ThreadUtils.assertOnUiThread();
-        try {
-            ChromeBrowserInitializer.getInstance(context).handleSynchronousStartupWithGpuWarmUp();
-        } catch (ProcessInitException e) {
-            Log.e(TAG, "ProcessInitException while starting the browser process.");
-            // Cannot do anything without the native library, and cannot show a
-            // dialog to the user.
-            System.exit(-1);
-        }
+        ChromeBrowserInitializer.getInstance(context).handleSynchronousStartupWithGpuWarmUp();
         ChildProcessLauncherHelper.warmUp(context, true);
     }
 
@@ -490,8 +482,7 @@ public class CustomTabsConnection {
         String scheme = uri.normalizeScheme().getScheme();
         boolean allowedScheme = scheme == null || scheme.equals(UrlConstants.HTTP_SCHEME)
                 || scheme.equals(UrlConstants.HTTPS_SCHEME);
-        if (!allowedScheme) return false;
-        return true;
+        return allowedScheme;
     }
 
     /**
@@ -1235,6 +1226,24 @@ public class CustomTabsConnection {
     }
 
     /**
+     * Calls {@link CustomTabsCallback#extraCallbackWithResult)}.
+     * Wraps calling sendExtraCallbackWithResult in a try/catch so that exceptions thrown by the
+     * host app don't crash Chrome.
+     */
+    @Nullable
+    public Bundle sendExtraCallbackWithResult(CustomTabsSessionToken session, String callbackName,
+            @Nullable Bundle args) {
+        CustomTabsCallback callback = mClientManager.getCallbackForSession(session);
+        if (callback == null) return null;
+
+        try {
+            return callback.extraCallbackWithResult(callbackName, args);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * Keeps the application linked with a given session alive.
      *
      * The application is kept alive (that is, raised to at least the current process priority
@@ -1290,7 +1299,7 @@ public class CustomTabsConnection {
             String line = null;
             while ((line = reader.readLine()) != null) {
                 // line format: 2:cpu:/bg_non_interactive
-                String fields[] = line.trim().split(":");
+                String[] fields = line.trim().split(":");
                 if (fields.length == 3 && fields[1].equals(controllerName)) return fields[2];
             }
         } catch (IOException e) {

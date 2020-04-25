@@ -29,6 +29,7 @@
 #include "chrome/browser/bookmarks/chrome_bookmark_client.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate_factory.h"
 #include "chrome/browser/chrome_content_browser_client.h"
@@ -120,6 +121,7 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/test/test_network_connection_tracker.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -141,13 +143,8 @@
 #include "extensions/browser/extension_system.h"
 #endif
 
-#if !defined(OS_ANDROID)
-#include "chrome/services/app_service/app_service.h"
-#include "chrome/services/app_service/public/mojom/constants.mojom.h"
-#endif
-
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/arc/arc_service_launcher.h"
+#include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/net/delay_network_call.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chromeos/components/account_manager/account_manager.h"
@@ -751,6 +748,10 @@ Profile* TestingProfile::GetOffTheRecordProfile() {
   return incognito_profile_.get();
 }
 
+void TestingProfile::DestroyOffTheRecordProfile() {
+  incognito_profile_.reset();
+}
+
 bool TestingProfile::HasOffTheRecordProfile() {
   return incognito_profile_.get() != nullptr;
 }
@@ -919,6 +920,11 @@ content::PushMessagingService* TestingProfile::GetPushMessagingService() {
   return nullptr;
 }
 
+content::StorageNotificationService*
+TestingProfile::GetStorageNotificationService() {
+  return nullptr;
+}
+
 bool TestingProfile::IsSameProfile(Profile *profile) {
   if (this == profile)
     return true;
@@ -1001,6 +1007,10 @@ void TestingProfile::SetCreationTimeForTesting(base::Time creation_time) {
   start_time_ = creation_time;
 }
 
+bool TestingProfile::ShouldEnableOutOfBlinkCors() {
+  return network::features::ShouldEnableOutOfBlinkCorsForTesting();
+}
+
 PrefService* TestingProfile::GetOffTheRecordPrefs() {
   return nullptr;
 }
@@ -1059,18 +1069,6 @@ void TestingProfile::SetCorsOriginAccessListForOrigin(
   base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, std::move(closure));
 }
 
-std::unique_ptr<service_manager::Service> TestingProfile::HandleServiceRequest(
-    const std::string& service_name,
-    service_manager::mojom::ServiceRequest request) {
-#if !defined(OS_ANDROID)
-  if (service_name == apps::mojom::kServiceName) {
-    return std::make_unique<apps::AppService>(std::move(request));
-  }
-#endif  // !defined(OS_ANDROID)
-
-  return nullptr;
-}
-
 bool TestingProfile::WasCreatedByVersionOrLater(const std::string& version) {
   return true;
 }
@@ -1095,22 +1093,24 @@ void TestingProfile::SetNetworkContext(
   network_context_ = std::move(network_context);
 }
 
-network::mojom::NetworkContextPtr TestingProfile::CreateNetworkContext(
+mojo::Remote<network::mojom::NetworkContext>
+TestingProfile::CreateNetworkContext(
     bool in_memory,
     const base::FilePath& relative_partition_path) {
   if (network_context_) {
-    network::mojom::NetworkContextPtr network_context_ptr;
+    mojo::Remote<network::mojom::NetworkContext> network_context_remote;
     network_context_bindings_.AddBinding(
-        network_context_.get(), mojo::MakeRequest(&network_context_ptr));
-    return network_context_ptr;
+        network_context_.get(),
+        network_context_remote.BindNewPipeAndPassReceiver());
+    return network_context_remote;
   }
-  network::mojom::NetworkContextPtr network_context;
+  mojo::Remote<network::mojom::NetworkContext> network_context;
   network::mojom::NetworkContextParamsPtr context_params =
       network::mojom::NetworkContextParams::New();
   context_params->user_agent = GetUserAgent();
   context_params->accept_language = "en-us,en";
   content::GetNetworkService()->CreateNetworkContext(
-      MakeRequest(&network_context), std::move(context_params));
+      network_context.BindNewPipeAndPassReceiver(), std::move(context_params));
   return network_context;
 }
 
@@ -1184,6 +1184,12 @@ void TestingProfile::Builder::AddTestingFactory(
     BrowserContextKeyedServiceFactory* service_factory,
     BrowserContextKeyedServiceFactory::TestingFactory testing_factory) {
   testing_factories_.emplace_back(service_factory, std::move(testing_factory));
+}
+
+void TestingProfile::Builder::AddTestingFactories(
+    const TestingFactories& testing_factories) {
+  testing_factories_.insert(testing_factories_.end(), testing_factories.begin(),
+                            testing_factories.end());
 }
 
 std::unique_ptr<TestingProfile> TestingProfile::Builder::Build() {

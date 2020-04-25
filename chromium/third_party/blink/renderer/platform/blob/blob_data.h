@@ -55,7 +55,6 @@ namespace network {
 namespace mojom {
 namespace blink {
 class DataPipeGetter;
-using DataPipeGetterPtr = mojo::InterfacePtr<DataPipeGetter>;
 }  // namespace blink
 }  // namespace mojom
 }  // namespace network
@@ -209,7 +208,8 @@ class PLATFORM_EXPORT BlobDataHandle
   ~BlobDataHandle();
 
   mojo::PendingRemote<mojom::blink::Blob> CloneBlobRemote();
-  network::mojom::blink::DataPipeGetterPtr AsDataPipeGetter();
+  void CloneBlobRemote(mojo::PendingReceiver<mojom::blink::Blob>);
+  mojo::PendingRemote<network::mojom::blink::DataPipeGetter> AsDataPipeGetter();
 
   void ReadAll(mojo::ScopedDataPipeProducerHandle,
                mojo::PendingRemote<mojom::blink::BlobReaderClient>);

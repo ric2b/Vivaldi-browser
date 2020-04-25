@@ -31,9 +31,12 @@ class CalendarModelObserver : public base::CheckedObserver {
 
   virtual void OnCalendarServiceLoaded(CalendarService* service) {}
 
-  virtual void OnEventCreated(CalendarService* service, const EventRow& row) {}
-  virtual void OnEventDeleted(CalendarService* service, const EventRow& row) {}
-  virtual void OnEventChanged(CalendarService* service, const EventRow& row) {}
+  virtual void OnEventCreated(CalendarService* service,
+                              const EventResult& event) {}
+  virtual void OnEventDeleted(CalendarService* service,
+                              const EventResult& event) {}
+  virtual void OnEventChanged(CalendarService* service,
+                              const EventResult& event) {}
 
   virtual void OnCalendarCreated(CalendarService* service,
                                  const CalendarRow& row) {}
@@ -43,11 +46,11 @@ class CalendarModelObserver : public base::CheckedObserver {
                                  const CalendarRow& row) {}
 
   virtual void OnEventTypeCreated(CalendarService* service,
-                                 const EventTypeRow& row) {}
+                                  const EventTypeRow& row) {}
   virtual void OnEventTypeDeleted(CalendarService* service,
-                                 const EventTypeRow& row) {}
+                                  const EventTypeRow& row) {}
   virtual void OnEventTypeChanged(CalendarService* service,
-                                 const EventTypeRow& row) {}
+                                  const EventTypeRow& row) {}
 
  protected:
   ~CalendarModelObserver() override {}

@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/numerics/ranges.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_action_data.h"
@@ -24,6 +25,9 @@ std::unordered_map<AXNode*, TestAXNodeWrapper*> g_node_to_wrapper_map;
 
 // A global coordinate offset.
 gfx::Vector2d g_offset;
+
+// A global scale factor.
+float g_scale_factor = 1.0;
 
 // A global map that stores which node is focused on a determined tree.
 //   - If a tree has no node being focused, there shouldn't be any entry on the
@@ -87,6 +91,12 @@ const AXNode* TestAXNodeWrapper::GetNodeFromLastDefaultAction() {
   return g_node_from_last_default_action;
 }
 
+// static
+std::unique_ptr<base::AutoReset<float>> TestAXNodeWrapper::SetScaleFactor(
+    float value) {
+  return std::make_unique<base::AutoReset<float>>(&g_scale_factor, value);
+}
+
 TestAXNodeWrapper::~TestAXNodeWrapper() {
   platform_node_->Destroy();
 }
@@ -110,8 +120,13 @@ AXNodePosition::AXPositionInstance TestAXNodeWrapper::CreateTextPositionAt(
       ax::mojom::TextAffinity::kDownstream);
 }
 
+gfx::NativeViewAccessible TestAXNodeWrapper::GetNativeViewAccessible() {
+  return ax_platform_node()->GetNativeViewAccessible();
+}
+
 gfx::NativeViewAccessible TestAXNodeWrapper::GetParent() {
-  TestAXNodeWrapper* parent_wrapper = GetOrCreate(tree_, node_->parent());
+  TestAXNodeWrapper* parent_wrapper =
+      GetOrCreate(tree_, node_->GetUnignoredParent());
   return parent_wrapper ?
       parent_wrapper->ax_platform_node()->GetNativeViewAccessible() :
       nullptr;
@@ -137,6 +152,14 @@ gfx::Rect TestAXNodeWrapper::GetBoundsRect(
       // We could optionally add clipping here if ever needed.
       gfx::RectF bounds = GetLocation();
       bounds.Offset(g_offset);
+
+      // For test behavior only, for bounds that are offscreen we currently do
+      // not apply clipping to the bounds but we still return the offscreen
+      // status.
+      if (offscreen_result) {
+        *offscreen_result = DetermineOffscreenResult(bounds);
+      }
+
       return gfx::ToEnclosingRect(bounds);
     }
     case AXCoordinateSystem::kRootFrame:
@@ -171,6 +194,14 @@ gfx::Rect TestAXNodeWrapper::GetInnerTextRangeBoundsRect(
       }
 
       bounds.Offset(g_offset);
+
+      // For test behavior only, for bounds that are offscreen we currently do
+      // not apply clipping to the bounds but we still return the offscreen
+      // status.
+      if (offscreen_result) {
+        *offscreen_result = DetermineOffscreenResult(bounds);
+      }
+
       return gfx::ToEnclosingRect(bounds);
     }
     case AXCoordinateSystem::kRootFrame:
@@ -222,7 +253,8 @@ TestAXNodeWrapper* TestAXNodeWrapper::HitTestSyncInternal(int x, int y) {
 }
 
 gfx::NativeViewAccessible TestAXNodeWrapper::HitTestSync(int x, int y) {
-  TestAXNodeWrapper* wrapper = HitTestSyncInternal(x, y);
+  TestAXNodeWrapper* wrapper =
+      HitTestSyncInternal(x / g_scale_factor, y / g_scale_factor);
   return wrapper ? wrapper->ax_platform_node()->GetNativeViewAccessible()
                  : nullptr;
 }
@@ -267,6 +299,15 @@ AXPlatformNode* TestAXNodeWrapper::GetFromNodeID(int32_t id) {
     }
   }
   return nullptr;
+}
+
+AXPlatformNode* TestAXNodeWrapper::GetFromTreeIDAndNodeID(
+    const ui::AXTreeID& ax_tree_id,
+    int32_t id) {
+  // TestAXNodeWrapper only supports one accessibility tree.
+  // Additional work would need to be done to support multiple trees.
+  CHECK_EQ(GetTreeData().tree_id, ax_tree_id);
+  return GetFromNodeID(id);
 }
 
 int TestAXNodeWrapper::GetIndexInParent() {
@@ -486,9 +527,9 @@ bool TestAXNodeWrapper::AccessibilityPerformAction(
       int scroll_y_max =
           GetData().GetIntAttribute(ax::mojom::IntAttribute::kScrollYMax);
       int scroll_x =
-          std::max(scroll_x_min, std::min(data.target_point.x(), scroll_x_max));
+          base::ClampToRange(data.target_point.x(), scroll_x_min, scroll_x_max);
       int scroll_y =
-          std::max(scroll_y_min, std::min(data.target_point.y(), scroll_y_max));
+          base::ClampToRange(data.target_point.y(), scroll_y_min, scroll_y_max);
 
       ReplaceIntAttribute(node_->id(), ax::mojom::IntAttribute::kScrollX,
                           scroll_x);
@@ -556,6 +597,7 @@ base::string16 TestAXNodeWrapper::GetLocalizedStringForLandmarkType() const {
   const AXNodeData& data = GetData();
   switch (data.role) {
     case ax::mojom::Role::kBanner:
+    case ax::mojom::Role::kHeader:
       return base::ASCIIToUTF16("banner");
 
     case ax::mojom::Role::kComplementary:
@@ -566,6 +608,7 @@ base::string16 TestAXNodeWrapper::GetLocalizedStringForLandmarkType() const {
       return base::ASCIIToUTF16("content information");
 
     case ax::mojom::Role::kRegion:
+    case ax::mojom::Role::kSection:
       if (data.HasStringAttribute(ax::mojom::StringAttribute::kName))
         return base::ASCIIToUTF16("region");
       FALLTHROUGH;
@@ -577,6 +620,7 @@ base::string16 TestAXNodeWrapper::GetLocalizedStringForLandmarkType() const {
 
 base::string16 TestAXNodeWrapper::GetLocalizedStringForRoleDescription() const {
   const AXNodeData& data = GetData();
+
   switch (data.role) {
     case ax::mojom::Role::kArticle:
       return base::ASCIIToUTF16("article");
@@ -612,11 +656,29 @@ base::string16 TestAXNodeWrapper::GetLocalizedStringForRoleDescription() const {
     case ax::mojom::Role::kFigure:
       return base::ASCIIToUTF16("figure");
 
+    case ax::mojom::Role::kFooter:
+    case ax::mojom::Role::kFooterAsNonLandmark:
+      return base::ASCIIToUTF16("footer");
+
+    case ax::mojom::Role::kHeader:
+    case ax::mojom::Role::kHeaderAsNonLandmark:
+      return base::ASCIIToUTF16("header");
+
+    case ax::mojom::Role::kMark:
+      return base::ASCIIToUTF16("highlight");
+
     case ax::mojom::Role::kMeter:
       return base::ASCIIToUTF16("meter");
 
     case ax::mojom::Role::kSearchBox:
       return base::ASCIIToUTF16("search box");
+
+    case ax::mojom::Role::kSection: {
+      if (data.HasStringAttribute(ax::mojom::StringAttribute::kName))
+        return base::ASCIIToUTF16("section");
+
+      return {};
+    }
 
     case ax::mojom::Role::kStatus:
       return base::ASCIIToUTF16("output");
@@ -747,13 +809,13 @@ TestAXNodeWrapper* TestAXNodeWrapper::InternalGetChild(int index) const {
 void TestAXNodeWrapper::Descendants(
     const AXNode* node,
     std::vector<gfx::NativeViewAccessible>* descendants) const {
-  std::vector<AXNode*> child_nodes = node->children();
-  for (AXNode* child : child_nodes) {
+  for (auto it = node->UnignoredChildrenBegin();
+       it != node->UnignoredChildrenEnd(); ++it) {
     descendants->emplace_back(ax_platform_node()
                                   ->GetDelegate()
-                                  ->GetFromNodeID(child->id())
+                                  ->GetFromNodeID(it->id())
                                   ->GetNativeViewAccessible());
-    Descendants(child, descendants);
+    Descendants(it.get(), descendants);
   }
 }
 
@@ -790,6 +852,30 @@ gfx::RectF TestAXNodeWrapper::GetInlineTextRect(const int start_offset,
       NOTIMPLEMENTED();
   }
   return bounds;
+}
+
+AXOffscreenResult TestAXNodeWrapper::DetermineOffscreenResult(
+    gfx::RectF bounds) const {
+  if (!tree_ || !tree_->root())
+    return AXOffscreenResult::kOnscreen;
+
+  const AXNodeData& root_web_area_node_data = tree_->root()->data();
+  gfx::RectF root_web_area_bounds =
+      root_web_area_node_data.relative_bounds.bounds;
+
+  // For testing, we only look at the current node's bound relative to the root
+  // web area bounds to determine offscreen status. We currently do not look at
+  // the bounds of the immediate parent of the node for determining offscreen
+  // status.
+  // We only determine offscreen result if the root web area bounds is actually
+  // set in the test. We default the offscreen result of every other situation
+  // to AXOffscreenResult::kOnscreen.
+  if (!root_web_area_bounds.IsEmpty()) {
+    bounds.Intersect(root_web_area_bounds);
+    if (bounds.IsEmpty())
+      return AXOffscreenResult::kOffscreen;
+  }
+  return AXOffscreenResult::kOnscreen;
 }
 
 }  // namespace ui

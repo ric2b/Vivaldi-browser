@@ -124,15 +124,15 @@ class ChannelAssociatedGroupController
       : task_runner_(ipc_task_runner),
         proxy_task_runner_(proxy_task_runner),
         set_interface_id_namespace_bit_(set_interface_id_namespace_bit),
-        filters_(this),
+        dispatcher_(this),
         control_message_handler_(this),
         control_message_proxy_thunk_(this),
         control_message_proxy_(&control_message_proxy_thunk_) {
     thread_checker_.DetachFromThread();
     control_message_handler_.SetDescription(
         "IPC::mojom::Bootstrap [master] PipeControlMessageHandler");
-    filters_.Append<mojo::MessageHeaderValidator>(
-        "IPC::mojom::Bootstrap [master] MessageHeaderValidator");
+    dispatcher_.SetValidator(std::make_unique<mojo::MessageHeaderValidator>(
+        "IPC::mojom::Bootstrap [master] MessageHeaderValidator"));
 
     GetMemoryDumpProvider().AddController(this);
   }
@@ -166,7 +166,7 @@ class ChannelAssociatedGroupController
     connector_.reset(new mojo::Connector(
         std::move(handle), mojo::Connector::SINGLE_THREADED_SEND,
         task_runner_));
-    connector_->set_incoming_receiver(&filters_);
+    connector_->set_incoming_receiver(&dispatcher_);
     connector_->set_connection_error_handler(
         base::Bind(&ChannelAssociatedGroupController::OnPipeError,
                    base::Unretained(this)));
@@ -202,8 +202,9 @@ class ChannelAssociatedGroupController
       SendMessage(&message);
   }
 
-  void CreateChannelEndpoints(mojom::ChannelAssociatedPtr* sender,
-                              mojom::ChannelAssociatedRequest* receiver) {
+  void CreateChannelEndpoints(
+      mojo::AssociatedRemote<mojom::Channel>* sender,
+      mojo::PendingAssociatedReceiver<mojom::Channel>* receiver) {
     mojo::InterfaceId sender_id, receiver_id;
     if (set_interface_id_namespace_bit_) {
       sender_id = 1 | mojo::kInterfaceIdNamespaceMask;
@@ -228,8 +229,10 @@ class ChannelAssociatedGroupController
     mojo::ScopedInterfaceEndpointHandle receiver_handle =
         CreateScopedInterfaceEndpointHandle(receiver_id);
 
-    sender->Bind(mojom::ChannelAssociatedPtrInfo(std::move(sender_handle), 0));
-    *receiver = mojom::ChannelAssociatedRequest(std::move(receiver_handle));
+    sender->Bind(mojo::PendingAssociatedRemote<mojom::Channel>(
+        std::move(sender_handle), 0));
+    *receiver = mojo::PendingAssociatedReceiver<mojom::Channel>(
+        std::move(receiver_handle));
   }
 
   void ShutDown() {
@@ -983,7 +986,7 @@ class ChannelAssociatedGroupController
   const bool set_interface_id_namespace_bit_;
   bool paused_ = false;
   std::unique_ptr<mojo::Connector> connector_;
-  mojo::FilterChain filters_;
+  mojo::MessageDispatcher dispatcher_;
   mojo::PipeControlMessageHandler control_message_handler_;
   ControlMessageProxyThunk control_message_proxy_thunk_;
 
@@ -1059,8 +1062,9 @@ class MojoBootstrapImpl : public MojoBootstrap {
   }
 
  private:
-  void Connect(mojom::ChannelAssociatedPtr* sender,
-               mojom::ChannelAssociatedRequest* receiver) override {
+  void Connect(
+      mojo::AssociatedRemote<mojom::Channel>* sender,
+      mojo::PendingAssociatedReceiver<mojom::Channel>* receiver) override {
     controller_->Bind(std::move(handle_));
     controller_->CreateChannelEndpoints(sender, receiver);
   }

@@ -8,6 +8,7 @@
 #include "base/strings/string_util.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_util.h"
+#include "components/autofill/core/common/logging/log_buffer.h"
 
 // TODO(crbug/897756): Clean up the (de)serialization code.
 
@@ -143,9 +144,15 @@ bool HaveSameLabel(const FormFieldData& field1, const FormFieldData& field2) {
 
 FormFieldData::FormFieldData() = default;
 
-FormFieldData::FormFieldData(const FormFieldData& other) = default;
+FormFieldData::FormFieldData(const FormFieldData&) = default;
 
-FormFieldData::~FormFieldData() {}
+FormFieldData& FormFieldData::operator=(const FormFieldData&) = default;
+
+FormFieldData::FormFieldData(FormFieldData&&) = default;
+
+FormFieldData& FormFieldData::operator=(FormFieldData&&) = default;
+
+FormFieldData::~FormFieldData() = default;
 
 bool FormFieldData::SameFieldAs(const FormFieldData& field) const {
 // TODO(crbug.com/896689): On iOS the unique_id member uniquely addresses
@@ -203,6 +210,22 @@ bool FormFieldData::IsTextInputElement() const {
   return form_control_type == "text" || form_control_type == "password" ||
          form_control_type == "search" || form_control_type == "tel" ||
          form_control_type == "url" || form_control_type == "email";
+}
+
+bool FormFieldData::IsPasswordInputElement() const {
+  return form_control_type == "password";
+}
+
+bool FormFieldData::DidUserType() const {
+  return properties_mask & USER_TYPED;
+}
+
+bool FormFieldData::HadFocus() const {
+  return properties_mask & HAD_FOCUS;
+}
+
+bool FormFieldData::WasAutofilled() const {
+  return properties_mask & AUTOFILLED;
 }
 
 bool FormFieldData::operator==(const FormFieldData& field) const {
@@ -466,6 +489,28 @@ std::ostream& operator<<(std::ostream& os, const FormFieldData& field) {
             << "typed_value=" << field.typed_value << " "
             << "properties_mask=" << field.properties_mask << " "
             << "label_source=" << field.label_source;
+}
+
+LogBuffer& operator<<(LogBuffer& buffer, const FormFieldData& field) {
+  buffer << Tag{"table"};
+  buffer << Tr{} << "Name:" << field.name;
+  buffer << Tr{} << "Unique renderer Id:" << field.unique_renderer_id;
+  buffer << Tr{} << "Name attribute:" << field.name_attribute;
+  buffer << Tr{} << "Id attribute:" << field.id_attribute;
+  constexpr size_t kMaxLabelSize = 100;
+  const base::string16 truncated_label =
+      field.label.substr(0, std::min(field.label.length(), kMaxLabelSize));
+  buffer << Tr{} << "Label:" << truncated_label;
+  buffer << Tr{} << "Form control type:" << field.form_control_type;
+  buffer << Tr{} << "Autocomplete attribute:" << field.autocomplete_attribute;
+  buffer << Tr{} << "Aria label:" << field.aria_label;
+  buffer << Tr{} << "Aria description:" << field.aria_description;
+  buffer << Tr{} << "Section:" << field.section;
+  buffer << Tr{} << "Is focusable:" << field.is_focusable;
+  buffer << Tr{} << "Is enabled:" << field.is_enabled;
+  buffer << Tr{} << "Is readonly:" << field.is_readonly;
+  buffer << CTag{"table"};
+  return buffer;
 }
 
 }  // namespace autofill

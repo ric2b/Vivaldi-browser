@@ -22,7 +22,7 @@ class IntRect;
 class WebViewImpl;
 
 class CORE_EXPORT DevToolsEmulator final
-    : public GarbageCollectedFinalized<DevToolsEmulator> {
+    : public GarbageCollected<DevToolsEmulator> {
  public:
   explicit DevToolsEmulator(WebViewImpl*);
   ~DevToolsEmulator();
@@ -110,7 +110,6 @@ class CORE_EXPORT DevToolsEmulator final
   struct ViewportOverride {
     FloatPoint position;
     double scale;
-    bool original_visual_viewport_masking;
   };
   base::Optional<ViewportOverride> viewport_override_;
 

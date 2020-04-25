@@ -69,10 +69,8 @@ class SwitchAccess {
 
     this.commands_ = new Commands(this);
     this.autoScanManager_ = new AutoScanManager(this);
-    const onPrefsReady =
-        this.autoScanManager_.onPrefsReady.bind(this.autoScanManager_);
     this.switchAccessPreferences_ =
-        new SwitchAccessPreferences(this, onPrefsReady);
+        new SwitchAccessPreferences(this, this.onPrefsReady_.bind(this));
 
     chrome.automation.getDesktop(function(desktop) {
       this.navigationManager_ = new NavigationManager(desktop, this);
@@ -120,24 +118,10 @@ class SwitchAccess {
   }
 
   /**
-   * Check if the current node is in the virtual keyboard.
-   * @return {boolean}
-   * @override
-   * @public
-   */
-  inVirtualKeyboard() {
-    if (this.navigationManager_) {
-      return this.navigationManager_.inVirtualKeyboard();
-    }
-    return false;
-  }
-
-  /**
    * Returns whether or not the feature flag
    * for improved text input is enabled.
    * @return {boolean}
    * @override
-   * @public
    */
   improvedTextInputEnabled() {
     return this.enableImprovedTextInput_;
@@ -146,10 +130,18 @@ class SwitchAccess {
   /**
    * Restarts auto-scan if it is enabled.
    * @override
-   * @public
    */
   restartAutoScan() {
     this.autoScanManager_.restartIfRunning();
+  }
+
+  /**
+   * Sets whether the current node is in the virtual keyboard.
+   * @param {boolean} inKeyboard
+   * @override
+   */
+  setInKeyboard(inKeyboard) {
+    this.autoScanManager_.setInKeyboard(inKeyboard);
   }
 
   /**
@@ -171,6 +163,15 @@ class SwitchAccess {
           break;
       }
     }
+  }
+
+  /**
+   * Returns whether prefs have initially loaded or not.
+   * @return {boolean}
+   * @override
+   */
+  prefsAreReady() {
+    return this.switchAccessPreferences_.isReady();
   }
 
   /**
@@ -247,5 +248,15 @@ class SwitchAccess {
     // If not, set navReadyCallback_ to have the menuPanel try again.
     this.navReadyCallback_ = menuPanel.connectToBackground.bind(menuPanel);
     return null;
+  }
+
+  /**
+   * Notifies managers that the preferences have initially loaded.
+   */
+  onPrefsReady_() {
+    this.autoScanManager_.onPrefsReady();
+    if (this.navigationManager_) {
+      this.navigationManager_.focusRingManager.onPrefsReady();
+    }
   }
 }

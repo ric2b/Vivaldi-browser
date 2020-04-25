@@ -33,12 +33,12 @@ scoped_refptr<FakePaintedScrollbarLayer> FakePaintedScrollbarLayer::Create(
 
 FakePaintedScrollbarLayer::FakePaintedScrollbarLayer(
     FakeScrollbar* fake_scrollbar,
-    ElementId scrolling_element_id)
-    : PaintedScrollbarLayer(std::unique_ptr<Scrollbar>(fake_scrollbar),
-                            scrolling_element_id),
+    ElementId scroll_element_id)
+    : PaintedScrollbarLayer(std::unique_ptr<Scrollbar>(fake_scrollbar)),
       update_count_(0),
       push_properties_count_(0),
       fake_scrollbar_(fake_scrollbar) {
+  SetScrollElementId(scroll_element_id);
   SetBounds(gfx::Size(1, 1));
   SetIsDrawable(true);
 }
@@ -54,12 +54,6 @@ bool FakePaintedScrollbarLayer::Update() {
 void FakePaintedScrollbarLayer::PushPropertiesTo(LayerImpl* layer) {
   PaintedScrollbarLayer::PushPropertiesTo(layer);
   ++push_properties_count_;
-}
-
-std::unique_ptr<base::AutoReset<bool>>
-FakePaintedScrollbarLayer::IgnoreSetNeedsCommit() {
-  return std::make_unique<base::AutoReset<bool>>(&ignore_set_needs_commit_,
-                                                 true);
 }
 
 }  // namespace cc

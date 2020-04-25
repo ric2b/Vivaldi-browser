@@ -11,6 +11,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -176,6 +177,10 @@ class TestBrowserClientWithHeaderClient
       int32_t request_id,
       mojo::PendingReceiver<network::mojom::TrustedHeaderClient> receiver)
       override {}
+  void OnLoaderForCorsPreflightCreated(
+      const network::ResourceRequest& request,
+      mojo::PendingReceiver<network::mojom::TrustedHeaderClient> receiver)
+      override {}
 
   mojo::ReceiverSet<network::mojom::TrustedURLLoaderHeaderClient> receivers_;
 };
@@ -276,8 +281,8 @@ IN_PROC_BROWSER_TEST_F(URLLoaderInterceptorTest, WriteResponse) {
       "HTTP/1.1 200 OK\nContent-type: text/html\n\n", body, &client);
   client.RunUntilComplete();
 
-  EXPECT_EQ(client.response_head().headers->response_code(), 200);
-  EXPECT_EQ(client.response_head().mime_type, "text/html");
+  EXPECT_EQ(client.response_head()->headers->response_code(), 200);
+  EXPECT_EQ(client.response_head()->mime_type, "text/html");
 
   std::string response;
   EXPECT_TRUE(
@@ -295,7 +300,7 @@ IN_PROC_BROWSER_TEST_F(URLLoaderInterceptorTest, WriteResponseFromFile1) {
                                       &headers);
   client.RunUntilComplete();
 
-  EXPECT_EQ(client.response_head().headers->response_code(), 404);
+  EXPECT_EQ(client.response_head()->headers->response_code(), 404);
 
   std::string response;
   EXPECT_TRUE(
@@ -311,10 +316,10 @@ IN_PROC_BROWSER_TEST_F(URLLoaderInterceptorTest, WriteResponseFromFile2) {
   URLLoaderInterceptor::WriteResponse("content/test/data/hello.html", &client);
   client.RunUntilComplete();
 
-  EXPECT_EQ(client.response_head().headers->response_code(), 200);
+  EXPECT_EQ(client.response_head()->headers->response_code(), 200);
 
   std::string mime_type;
-  EXPECT_TRUE(client.response_head().headers->GetMimeType(&mime_type));
+  EXPECT_TRUE(client.response_head()->headers->GetMimeType(&mime_type));
   EXPECT_EQ(mime_type, "text/html");
 
   std::string response;
@@ -330,10 +335,10 @@ IN_PROC_BROWSER_TEST_F(URLLoaderInterceptorTest, WriteResponseFromFile3) {
   URLLoaderInterceptor::WriteResponse("content/test/data/empty.html", &client);
   client.RunUntilComplete();
 
-  EXPECT_EQ(client.response_head().headers->response_code(), 200);
+  EXPECT_EQ(client.response_head()->headers->response_code(), 200);
 
   std::string mime_type;
-  EXPECT_TRUE(client.response_head().headers->GetMimeType(&mime_type));
+  EXPECT_TRUE(client.response_head()->headers->GetMimeType(&mime_type));
   EXPECT_EQ(mime_type, "text/html");
 
   std::string response;

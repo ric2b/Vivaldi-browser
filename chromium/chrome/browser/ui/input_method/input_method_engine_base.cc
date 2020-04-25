@@ -126,6 +126,7 @@ void GetExtensionKeyboardEventFromKeyEvent(
   }
   ext_event->key_code = static_cast<int>(event.key_code());
   ext_event->alt_key = event.IsAltDown();
+  ext_event->altgr_key = event.IsAltGrDown();
   ext_event->ctrl_key = event.IsControlDown();
   ext_event->shift_key = event.IsShiftDown();
   ext_event->caps_lock = event.IsCapsLockOn();
@@ -138,8 +139,7 @@ void GetExtensionKeyboardEventFromKeyEvent(
 
 }  // namespace
 
-InputMethodEngineBase::KeyboardEvent::KeyboardEvent()
-    : alt_key(false), ctrl_key(false), shift_key(false), caps_lock(false) {}
+InputMethodEngineBase::KeyboardEvent::KeyboardEvent() = default;
 
 InputMethodEngineBase::KeyboardEvent::KeyboardEvent(
     const KeyboardEvent& other) = default;
@@ -151,7 +151,6 @@ InputMethodEngineBase::InputMethodEngineBase()
       context_id_(0),
       next_context_id_(1),
       profile_(nullptr),
-      next_request_id_(1),
       composition_changed_(false),
       text_(""),
       commit_text_changed_(false),
@@ -238,8 +237,19 @@ void InputMethodEngineBase::ProcessKeyEvent(const ui::KeyEvent& key_event,
     ext_event.extension_id = extension_id_;
 
   // Should not pass key event in password field.
-  if (current_input_type_ != ui::TEXT_INPUT_TYPE_PASSWORD)
-    observer_->OnKeyEvent(active_component_id_, ext_event, std::move(callback));
+  if (current_input_type_ != ui::TEXT_INPUT_TYPE_PASSWORD) {
+    // Bind the start time to the callback so that we can calculate the latency
+    // when the callback is called.
+    observer_->OnKeyEvent(
+        active_component_id_, ext_event,
+        base::BindOnce(
+            [](base::Time start, KeyEventDoneCallback callback, bool handled) {
+              std::move(callback).Run(handled);
+              UMA_HISTOGRAM_TIMES("InputMethod.KeyEventLatency",
+                                  base::Time::Now() - start);
+            },
+            base::Time::Now(), std::move(callback)));
+  }
 }
 
 void InputMethodEngineBase::SetSurroundingText(const std::string& text,
@@ -330,6 +340,7 @@ bool InputMethodEngineBase::SendKeyEvents(
 
     int flags = ui::EF_NONE;
     flags |= event.alt_key ? ui::EF_ALT_DOWN : ui::EF_NONE;
+    flags |= event.altgr_key ? ui::EF_ALTGR_DOWN : ui::EF_NONE;
     flags |= event.ctrl_key ? ui::EF_CONTROL_DOWN : ui::EF_NONE;
     flags |= event.shift_key ? ui::EF_SHIFT_DOWN : ui::EF_NONE;
     flags |= event.caps_lock ? ui::EF_CAPS_LOCK_ON : ui::EF_NONE;
@@ -457,26 +468,37 @@ void InputMethodEngineBase::KeyEventHandled(const std::string& extension_id,
     composition_changed_ = false;
   }
 
-  auto request = request_map_.find(request_id);
-  if (request == request_map_.end()) {
+  const auto it = pending_key_events_.find(request_id);
+  if (it == pending_key_events_.end()) {
     LOG(ERROR) << "Request ID not found: " << request_id;
     return;
   }
 
-  std::move(request->second.second).Run(handled);
-  request_map_.erase(request);
+  std::move(it->second.callback).Run(handled);
+  pending_key_events_.erase(it);
 }
 
-std::string InputMethodEngineBase::AddRequest(
+std::string InputMethodEngineBase::AddPendingKeyEvent(
     const std::string& component_id,
-    ui::IMEEngineHandlerInterface::KeyEventDoneCallback key_data) {
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback) {
   std::string request_id = base::NumberToString(next_request_id_);
   ++next_request_id_;
 
-  request_map_[request_id] = std::make_pair(component_id, std::move(key_data));
+  pending_key_events_.emplace(
+      request_id, PendingKeyEvent(component_id, std::move(callback)));
 
   return request_id;
 }
+
+InputMethodEngineBase::PendingKeyEvent::PendingKeyEvent(
+    const std::string& component_id,
+    ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback)
+    : component_id(component_id), callback(std::move(callback)) {}
+
+InputMethodEngineBase::PendingKeyEvent::PendingKeyEvent(
+    PendingKeyEvent&& other) = default;
+
+InputMethodEngineBase::PendingKeyEvent::~PendingKeyEvent() = default;
 
 void InputMethodEngineBase::DeleteSurroundingTextToInputContext(
     int offset,

@@ -7,6 +7,7 @@
 #include "base/task/post_task.h"
 #include "content/browser/native_file_system/native_file_system_error.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/web_contents_observer.h"
 
@@ -24,6 +25,10 @@ class NativeFileSystemHandleBase::UsageIndicatorTracker
         is_directory_(is_directory),
         directory_path_(directory_path) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    // Disable back-forward cache as native file system's usage of
+    // RenderFrameHost::IsCurrent at the moment is not compatible with bfcache.
+    BackForwardCache::DisableForRenderFrameHost(
+        GlobalFrameRoutingId(process_id, frame_id), "NativeFileSystem");
     if (web_contents()) {
       web_contents()->IncrementNativeFileSystemHandleCount();
       if (is_directory_)
@@ -132,6 +137,7 @@ NativeFileSystemHandleBase::NativeFileSystemHandleBase(
 }
 
 NativeFileSystemHandleBase::~NativeFileSystemHandleBase() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // It is fine to remove an observer that never was added, so no need to check
   // for URL type and/or the same grant being used for read and write access.
   handle_state_.read_grant->RemoveObserver(this);
@@ -140,11 +146,13 @@ NativeFileSystemHandleBase::~NativeFileSystemHandleBase() {
 
 NativeFileSystemHandleBase::PermissionStatus
 NativeFileSystemHandleBase::GetReadPermissionStatus() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return handle_state_.read_grant->GetStatus();
 }
 
 NativeFileSystemHandleBase::PermissionStatus
 NativeFileSystemHandleBase::GetWritePermissionStatus() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   UpdateUsage();
   // It is not currently possible to have write only handles, so first check the
   // read permission status. See also:
@@ -159,6 +167,7 @@ NativeFileSystemHandleBase::GetWritePermissionStatus() {
 void NativeFileSystemHandleBase::DoGetPermissionStatus(
     bool writable,
     base::OnceCallback<void(PermissionStatus)> callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   std::move(callback).Run(writable ? GetWritePermissionStatus()
                                    : GetReadPermissionStatus());
 }
@@ -167,6 +176,7 @@ void NativeFileSystemHandleBase::DoRequestPermission(
     bool writable,
     base::OnceCallback<void(blink::mojom::NativeFileSystemErrorPtr,
                             PermissionStatus)> callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   PermissionStatus current_status =
       writable ? GetWritePermissionStatus() : GetReadPermissionStatus();
   // If we already have a valid permission status, just return that. Also just
@@ -205,6 +215,7 @@ void NativeFileSystemHandleBase::DidRequestPermission(
     base::OnceCallback<void(blink::mojom::NativeFileSystemErrorPtr,
                             PermissionStatus)> callback,
     NativeFileSystemPermissionGrant::PermissionRequestOutcome outcome) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   using Outcome = NativeFileSystemPermissionGrant::PermissionRequestOutcome;
   switch (outcome) {
     case Outcome::kInvalidFrame:
@@ -236,6 +247,7 @@ void NativeFileSystemHandleBase::DidRequestPermission(
 }
 
 void NativeFileSystemHandleBase::UpdateUsage() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!usage_indicator_tracker_)
     return;
   bool is_readable =
@@ -253,6 +265,7 @@ void NativeFileSystemHandleBase::UpdateUsage() {
 }
 
 void NativeFileSystemHandleBase::OnPermissionStatusChanged() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   UpdateUsage();
 }
 

@@ -8,13 +8,14 @@ import android.content.Context;
 import android.net.Uri;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
 import android.support.v7.widget.RecyclerView;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.Base64;
 import android.view.View;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
@@ -32,9 +33,8 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.ui.widget.RoundedIconGenerator;
 import org.chromium.chrome.browser.util.UrlConstants;
-import org.chromium.chrome.browser.widget.RoundedIconGenerator;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.ui.modelutil.ListModel;
@@ -84,7 +84,8 @@ public class ExploreSitesPage extends BasicNativePage {
             new PropertyModel.ReadableIntPropertyKey();
     private static final int UNKNOWN_NAV_CATEGORY = -1;
 
-    @IntDef({CatalogLoadingState.LOADING, CatalogLoadingState.SUCCESS, CatalogLoadingState.ERROR})
+    @IntDef({CatalogLoadingState.LOADING, CatalogLoadingState.SUCCESS, CatalogLoadingState.ERROR,
+            CatalogLoadingState.LOADING_NET})
     @Retention(RetentionPolicy.SOURCE)
     public @interface CatalogLoadingState {
         int LOADING = 1; // Loading catalog info from disk.
@@ -289,11 +290,10 @@ public class ExploreSitesPage extends BasicNativePage {
         });
 
         // We don't want to scroll to the 4th category if personalized
-        // or integrated with Most Likely, or if we're on a touchless device.
+        // or integrated with Most Likely.
         int variation = ExploreSitesBridge.getVariation();
         mInitialScrollPosition = variation == ExploreSitesVariation.PERSONALIZED
                         || ExploreSitesBridge.isIntegratedWithMostLikely(variation)
-                        || FeatureUtilities.isNoTouchModeEnabled()
                 ? INITIAL_SCROLL_POSITION_PERSONALIZED
                 : INITIAL_SCROLL_POSITION;
 

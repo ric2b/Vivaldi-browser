@@ -79,11 +79,6 @@ void GetMostRecentlyAddedEntries(BookmarkModel* model,
                                  size_t count,
                                  std::vector<const BookmarkNode*>* nodes);
 
-// Returns true if the nickname exists in bookmark model, false otherwise
-// If |id| is -1 then the bookmark is being created, otherwise the nickname
-// is being updated
-bool DoesNickExists(BookmarkModel* model, base::string16 nickname, int64_t id);
-
 // Returns true if |n1| was added more recently than |n2|.
 bool MoreRecentlyAdded(const BookmarkNode* n1, const BookmarkNode* n2);
 

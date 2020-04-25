@@ -15,11 +15,12 @@ import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.StrictMode;
-import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityOptionsCompat;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.RemoteViews;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -37,6 +38,8 @@ import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.search_engines.TemplateUrlService.LoadListener;
 import org.chromium.components.search_engines.TemplateUrlService.TemplateUrlServiceObserver;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Widget that lets the user search using their default search engine.
@@ -405,8 +408,8 @@ public class SearchWidgetProvider extends AppWidgetProvider {
     }
 
     static boolean shouldShowFullString() {
-        boolean freIsNotNecessary = !FirstRunFlowSequencer.checkIfFirstRunIsNecessary(
-                getDelegate().getContext(), null, false);
+        if (ChromeApplication.isVivaldi()) return true;
+        boolean freIsNotNecessary = !FirstRunFlowSequencer.checkIfFirstRunIsNecessary(null, false);
         boolean noNeedToCheckForSearchDialog =
                 !LocaleManager.getInstance().needToCheckForSearchEnginePromo();
         return freIsNotNecessary && noNeedToCheckForSearchDialog;

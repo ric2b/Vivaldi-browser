@@ -20,8 +20,9 @@ class CC_EXPORT ScrollbarController {
   virtual ~ScrollbarController();
 
   InputHandlerPointerResult HandlePointerDown(
-      const gfx::PointF position_in_widget);
-  InputHandlerPointerResult HandleMouseMove(
+      const gfx::PointF position_in_widget,
+      const bool shift_modifier);
+  InputHandlerPointerResult HandlePointerMove(
       const gfx::PointF position_in_widget);
   InputHandlerPointerResult HandlePointerUp(
       const gfx::PointF position_in_widget);
@@ -30,7 +31,9 @@ class CC_EXPORT ScrollbarController {
   // InitialDeltaToAutoscrollVelocity). This value carries a "sign" which is
   // needed to determine whether we should set up the autoscrolling in the
   // forwards or the backwards direction.
-  void StartAutoScrollAnimation(float velocity, ElementId element_id);
+  void StartAutoScrollAnimation(float velocity,
+                                ElementId element_id,
+                                ScrollbarPart pressed_scrollbar_part);
   bool ScrollbarScrollIsActive() { return scrollbar_scroll_is_active_; }
   ScrollbarOrientation orientation() {
     return currently_captured_scrollbar_->orientation();
@@ -54,7 +57,25 @@ class CC_EXPORT ScrollbarController {
     // Used to track the scroller length while autoscrolling. Helpful for
     // setting up infinite scrolling.
     float scroll_layer_length = 0.f;
+
+    // Used to lookup the rect corresponding to the ScrollbarPart so that
+    // autoscroll animations can be played/paused depending on the current
+    // pointer location.
+    ScrollbarPart pressed_scrollbar_part;
   };
+
+  struct CC_EXPORT DragState {
+    // This is used to track the pointer location relative to the thumb origin
+    // when a drag has started.
+    gfx::Vector2dF anchor_relative_to_thumb_;
+
+    // This is needed for thumb snapping when the pointer moves too far away
+    // from the track while scrolling.
+    float scroll_position_at_start_;
+  };
+
+  // Returns the DSF based on whether use-zoom-for-dsf is enabled.
+  float ScreenSpaceScaleFactor() const;
 
   // Helper to convert scroll offset to autoscroll velocity.
   float InitialDeltaToAutoscrollVelocity(gfx::ScrollOffset scroll_offset) const;
@@ -66,17 +87,36 @@ class CC_EXPORT ScrollbarController {
   // Returns scroll offsets based on which ScrollbarPart was hit tested.
   gfx::ScrollOffset GetScrollOffsetForScrollbarPart(
       const ScrollbarPart scrollbar_part,
-      const ScrollbarOrientation orientation);
+      const ScrollbarOrientation orientation,
+      const bool shift_modifier);
+
+  // Returns the rect for the ScrollbarPart.
+  gfx::Rect GetRectForScrollbarPart(const ScrollbarPart scrollbar_part);
 
   LayerImpl* GetLayerHitByPoint(const gfx::PointF position_in_widget);
-  int GetScrollDeltaForScrollbarPart(ScrollbarPart scrollbar_part);
+  int GetScrollDeltaForScrollbarPart(const ScrollbarPart scrollbar_part,
+                                     const bool shift_modifier);
 
   // Makes position_in_widget relative to the scrollbar.
   gfx::PointF GetScrollbarRelativePosition(const gfx::PointF position_in_widget,
                                            bool* clipped);
 
-  // Decides whether a track autoscroll should be aborted.
-  bool ShouldCancelTrackAutoscroll();
+  // Decides if the scroller should snap to the offset that it was originally at
+  // (i.e the offset before the thumb drag).
+  bool SnapToDragOrigin(const gfx::PointF pointer_position_in_widget);
+
+  // Decides whether a track autoscroll should be aborted (or restarted) due to
+  // the thumb reaching the pointer or the pointer leaving (or re-entering) the
+  // bounds.
+  void RecomputeAutoscrollStateIfNeeded();
+
+  // Shift + click is expected to do a non-animated jump to a certain offset.
+  float GetScrollDeltaForShiftClick();
+
+  // Determines if the delta needs to be animated.
+  ui::input_types::ScrollGranularity Granularity(
+      const ScrollbarPart scrollbar_part,
+      bool shift_modifier);
 
   // Calculates the scroll_offset based on position_in_widget and
   // drag_anchor_relative_to_thumb_.
@@ -98,15 +138,15 @@ class CC_EXPORT ScrollbarController {
   const ScrollbarLayerImplBase* currently_captured_scrollbar_;
 
   // This is relative to the RenderWidget's origin.
-  gfx::PointF previous_pointer_position_;
+  gfx::PointF last_known_pointer_position_;
 
   // Holds information pertaining to autoscrolling. This member is empty if and
   // only if an autoscroll is *not* in progress.
   base::Optional<AutoScrollState> autoscroll_state_;
 
-  // This is used to track the pointer location relative to the thumb origin
-  // when a drag has started. It is empty if a thumb drag is *not* in progress.
-  base::Optional<gfx::Vector2dF> drag_anchor_relative_to_thumb_;
+  // Holds information pertaining to thumb drags. Useful while making decisions
+  // about thumb anchoring/snapping.
+  base::Optional<DragState> drag_state_;
 
   // Used to track if a GSU was processed for the current frame or not. Without
   // this, thumb drag will appear jittery. The reason this happens is because

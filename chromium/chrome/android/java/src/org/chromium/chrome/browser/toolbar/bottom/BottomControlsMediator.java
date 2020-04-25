@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.toolbar.bottom;
 
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
@@ -45,7 +45,7 @@ class BottomControlsMediator implements ChromeFullscreenManager.FullscreenListen
      * The base height of the bottom bar in pixels not including adjustments for immersive mode or
      * the top shadow.
      */
-    private final int mBottomControlsBaseHeight;
+    private int mBottomControlsBaseHeight;
 
     /**
      * The height of the bottom bar container (which includes the top shadow) in pixels not
@@ -250,5 +250,19 @@ class BottomControlsMediator implements ChromeFullscreenManager.FullscreenListen
                 mBottomControlsContainerBaseHeight + bottomUiInsetPx);
 
         updateCompositedViewVisibility();
+    }
+
+    /**
+     * Vivaldi. Adjust the height if there is a TabGroupUi and also setup the swipe handler.
+     * For now, when we have a TabGroupUi in the bottom toolbar the swipe navigation is off since we
+     * can scroll through the list of the TabGroupUi.
+     */
+    public void updateBottomControls(boolean visible, int height)
+    {
+        mBottomControlsBaseHeight = height;
+        mModel.set(BottomControlsProperties.TOOLBAR_SWIPE_HANDLER,
+                visible ? null
+                        : mModel.get(BottomControlsProperties.LAYOUT_MANAGER)
+                                  .getToolbarSwipeHandler());
     }
 }

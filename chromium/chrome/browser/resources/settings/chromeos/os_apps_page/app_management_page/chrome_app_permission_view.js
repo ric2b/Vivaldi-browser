@@ -36,13 +36,14 @@ Polymer({
     const {messages: messages} =
         await app_management.BrowserProxy.getInstance()
             .handler.getExtensionAppPermissionMessages(this.app_.id);
-    this.$['app-description'].hidden = this.app_.description.length === 0;
     this.messages_ = messages;
   },
 
   onClickExtensionsSettingsButton_: function() {
     app_management.BrowserProxy.getInstance().handler.openNativeSettings(
         this.app_.id);
+    app_management.util.recordAppManagementUserAction(
+        this.app_.type, AppManagementUserAction.NativeSettingsOpened);
   },
 
   /**

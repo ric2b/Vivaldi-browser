@@ -16,6 +16,7 @@ cr.define('model_settings_availability_test', function() {
         hasCssMediaStyles: false,
         hasSelection: false,
         isModifiable: true,
+        isPdf: false,
         isScalingDisabled: false,
         fitToPageScaling: 100,
         pageCount: 3,
@@ -321,31 +322,79 @@ cr.define('model_settings_availability_test', function() {
 
       // PDF -> Save as PDF
       model.set('documentSettings.isModifiable', false);
+      model.set('documentSettings.isPdf', true);
       assertFalse(model.settings.scaling.available);
 
       // PDF -> printer
       model.set('destination', defaultDestination);
       assertTrue(model.settings.scaling.available);
       assertFalse(model.settings.scaling.setFromUi);
+
+      // Non-PDF Plugin -> Save as PDF
+      setSaveAsPdfDestination();
+      model.set('documentSettings.isPdf', false);
+      assertFalse(model.settings.scaling.available);
+
+      // Non-PDF Plugin -> printer
+      model.set('destination', defaultDestination);
+      assertFalse(model.settings.scaling.available);
+
     });
 
-    test('fit to page', function() {
+    test('scalingType', function() {
       // HTML -> printer
-      assertFalse(model.settings.fitToPage.available);
+      assertTrue(model.settings.scalingType.available);
 
       // HTML -> Save as PDF
       const defaultDestination = model.destination;
       setSaveAsPdfDestination();
-      assertFalse(model.settings.fitToPage.available);
+      assertTrue(model.settings.scalingType.available);
 
       // PDF -> Save as PDF
       model.set('documentSettings.isModifiable', false);
-      assertFalse(model.settings.fitToPage.available);
+      model.set('documentSettings.isPdf', true);
+      assertFalse(model.settings.scalingType.available);
 
       // PDF -> printer
       model.set('destination', defaultDestination);
-      assertTrue(model.settings.fitToPage.available);
-      assertFalse(model.settings.fitToPage.setFromUi);
+      assertFalse(model.settings.scalingType.available);
+
+      // Non-PDF Plugin -> Save as PDF
+      setSaveAsPdfDestination();
+      model.set('documentSettings.isPdf', false);
+      assertFalse(model.settings.scalingType.available);
+
+      // Non-PDF Plugin -> printer
+      model.set('destination', defaultDestination);
+      assertFalse(model.settings.scalingType.available);
+    });
+
+    test('scalingTypePdf', function() {
+      // HTML -> printer
+      assertFalse(model.settings.scalingTypePdf.available);
+
+      // HTML -> Save as PDF
+      const defaultDestination = model.destination;
+      setSaveAsPdfDestination();
+      assertFalse(model.settings.scalingTypePdf.available);
+
+      // PDF -> Save as PDF
+      model.set('documentSettings.isModifiable', false);
+      model.set('documentSettings.isPdf', true);
+      assertFalse(model.settings.scalingTypePdf.available);
+
+      // PDF -> printer
+      model.set('destination', defaultDestination);
+      assertTrue(model.settings.scalingTypePdf.available);
+
+      // Non-PDF Plugin -> Save as PDF
+      setSaveAsPdfDestination();
+      model.set('documentSettings.isPdf', false);
+      assertFalse(model.settings.scalingTypePdf.available);
+
+      // Non-PDF Plugin -> printer
+      model.set('destination', defaultDestination);
+      assertFalse(model.settings.scalingTypePdf.available);
     });
 
     test('header footer', function() {
@@ -353,15 +402,11 @@ cr.define('model_settings_availability_test', function() {
       assertTrue(model.settings.headerFooter.available);
 
       // Set margins to NONE
-      model.set(
-          'settings.margins.value',
-          print_preview.ticket_items.MarginsTypeValue.NO_MARGINS);
+      model.set('settings.margins.value', print_preview.MarginsType.NO_MARGINS);
       assertFalse(model.settings.headerFooter.available);
 
       // Custom margins of 0.
-      model.set(
-          'settings.margins.value',
-          print_preview.ticket_items.MarginsTypeValue.CUSTOM);
+      model.set('settings.margins.value', print_preview.MarginsType.CUSTOM);
       model.set(
           'settings.customMargins.value',
           {marginTop: 0, marginLeft: 0, marginRight: 0, marginBottom: 0});
@@ -406,9 +451,7 @@ cr.define('model_settings_availability_test', function() {
         ]
       };
       model.set('destination.capabilities', capabilities);
-      model.set(
-          'settings.margins.value',
-          print_preview.ticket_items.MarginsTypeValue.DEFAULT);
+      model.set('settings.margins.value', print_preview.MarginsType.DEFAULT);
 
       // Header/footer should be available for default big label with
       // default margins.
@@ -507,6 +550,27 @@ cr.define('model_settings_availability_test', function() {
       model.set('documentSettings.isModifiable', false);
       assertFalse(model.settings.selectionOnly.available);
       assertFalse(model.settings.selectionOnly.setFromUi);
+    });
+
+    test('pages per sheet', function() {
+      // Pages per sheet is available everywhere except for Flash content.
+      // With the default settings for Blink content, it is available.
+      model.set('documentSettings.isModifiable', true);
+      model.set('documentSettings.isPdf', false);
+      assertTrue(model.settings.pagesPerSheet.available);
+
+      // This state should never occur, but if it does, |isModifiable| takes
+      // precedence and this is still interpreted as Blink content.
+      model.set('documentSettings.isPdf', true);
+      assertTrue(model.settings.pagesPerSheet.available);
+
+      // Still available for PDF content.
+      model.set('documentSettings.isModifiable', false);
+      assertTrue(model.settings.pagesPerSheet.available);
+
+      // Not available for Flash content.
+      model.set('documentSettings.isPdf', false);
+      assertFalse(model.settings.pagesPerSheet.available);
     });
 
     if (cr.isChromeOS) {

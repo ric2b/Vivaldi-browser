@@ -171,10 +171,6 @@ IPC_STRUCT_BEGIN(ExtensionMsg_ExecuteCode_Params)
   // When to inject the code.
   IPC_STRUCT_MEMBER(extensions::UserScript::RunLocation, run_at)
 
-  // Whether to execute code in the main world (as opposed to an isolated
-  // world).
-  IPC_STRUCT_MEMBER(bool, in_main_world)
-
   // Whether the request is coming from a <webview>.
   IPC_STRUCT_MEMBER(bool, is_web_view)
 
@@ -1030,8 +1026,10 @@ IPC_MESSAGE_CONTROL2(ExtensionHostMsg_DecrementServiceWorkerActivity,
 
 // Tells the browser that an event with |event_id| was successfully dispatched
 // to the worker with version |service_worker_version_id|.
-IPC_MESSAGE_CONTROL2(ExtensionHostMsg_EventAckWorker,
+IPC_MESSAGE_CONTROL4(ExtensionHostMsg_EventAckWorker,
+                     std::string /* extension_id */,
                      int64_t /* service_worker_version_id */,
+                     int /* worker_thread_id */,
                      int /* event_id */)
 
 // Tells the browser that an extension service worker context was initialized,

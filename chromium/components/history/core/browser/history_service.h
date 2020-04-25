@@ -88,7 +88,6 @@ class WebHistoryService;
 // as information about downloads.
 class HistoryService : public KeyedService {
  public:
-
   // Must call Init after construction. The empty constructor provided only for
   // unit tests. When using the full constructor, |history_client| may only be
   // null during testing, while |visit_delegate| may be null if the embedder use
@@ -240,13 +239,6 @@ class HistoryService : public KeyedService {
   // the results out of the passed in parameter and take ownership of them.
   using QueryHistoryCallback = base::OnceCallback<void(QueryResults)>;
 
-  base::CancelableTaskTracker::TaskId QueryHistoryWStatement(
-      const char* sql_statement,
-      const std::string& search_string,
-      int max_hits,
-      QueryHistoryCallback callback,
-      base::CancelableTaskTracker* tracker);
-
   // Queries all history with the given options (see QueryOptions in
   // history_types.h).  If empty, all results matching the given options
   // will be returned.
@@ -332,7 +324,7 @@ class HistoryService : public KeyedService {
 
   // Delete all the information related to a list of urls.  (Deleting
   // URLs one by one is slow as it has to flush to disk each time.)
-  void DeleteURLsForTest(const std::vector<GURL>& urls);
+  void DeleteURLs(const std::vector<GURL>& urls);
 
   // Removes all visits in the selected time range (including the
   // start time), updating the URLs accordingly. This deletes any
@@ -538,6 +530,13 @@ class HistoryService : public KeyedService {
   }
 
   // Vivaldi
+  base::CancelableTaskTracker::TaskId QueryHistoryWStatement(
+      const char* sql_statement,
+      const std::string& search_string,
+      int max_hits,
+      QueryHistoryCallback callback,
+      base::CancelableTaskTracker* tracker);
+
   // Computes the |num_hosts| most-visited hostnames. First version uses all
   // history.
   // Note: Virtual needed for mocking.

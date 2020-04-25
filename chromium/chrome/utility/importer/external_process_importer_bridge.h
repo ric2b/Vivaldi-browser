@@ -5,7 +5,6 @@
 #ifndef CHROME_UTILITY_IMPORTER_EXTERNAL_PROCESS_IMPORTER_BRIDGE_H_
 #define CHROME_UTILITY_IMPORTER_EXTERNAL_PROCESS_IMPORTER_BRIDGE_H_
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -15,6 +14,7 @@
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/profile_import.mojom.h"
 #include "components/favicon_base/favicon_usage_data.h"
+#include "mojo/public/cpp/bindings/shared_remote.h"
 
 class GURL;
 struct ImportedBookmarkEntry;
@@ -38,19 +38,11 @@ class ExternalProcessImporterBridge : public ImporterBridge {
   // |observer| must outlive this object.
   ExternalProcessImporterBridge(
       const base::flat_map<uint32_t, std::string>& localized_strings,
-      scoped_refptr<chrome::mojom::ThreadSafeProfileImportObserverPtr>
-          observer);
+      mojo::SharedRemote<chrome::mojom::ProfileImportObserver> observer);
 
   // Begin ImporterBridge implementation:
   void AddBookmarks(const std::vector<ImportedBookmarkEntry>& bookmarks,
                     const base::string16& first_folder_name) override;
-
-  void AddNotes(
-      const std::vector<ImportedNotesEntry>& notes,
-      const base::string16& first_folder_name) override;
-
-  void AddSpeedDial(
-      const std::vector<ImportedSpeedDialEntry>& speeddials) override;
 
   void AddHomePage(const GURL& home_page) override;
 
@@ -75,12 +67,20 @@ class ExternalProcessImporterBridge : public ImporterBridge {
   void NotifyItemStarted(importer::ImportItem item) override;
   void NotifyItemEnded(importer::ImportItem item) override;
   void NotifyEnded() override;
-  void NotifyItemFailed(importer::ImportItem item,
-                        const std::string& error) override;
 
   base::string16 GetLocalizedString(int message_id) override;
   // End ImporterBridge implementation.
 
+  // Vivaldi
+  void AddNotes(
+      const std::vector<ImportedNotesEntry>& notes,
+      const base::string16& first_folder_name) override;
+
+  void AddSpeedDial(
+      const std::vector<ImportedSpeedDialEntry>& speeddials) override;
+
+  void NotifyItemFailed(importer::ImportItem item,
+                        const std::string& error) override;
  private:
   ~ExternalProcessImporterBridge() override;
 
@@ -88,7 +88,7 @@ class ExternalProcessImporterBridge : public ImporterBridge {
   // bundle isn't available to the external process.
   base::flat_map<uint32_t, std::string> localized_strings_;
 
-  scoped_refptr<chrome::mojom::ThreadSafeProfileImportObserverPtr> observer_;
+  mojo::SharedRemote<chrome::mojom::ProfileImportObserver> observer_;
 
   DISALLOW_COPY_AND_ASSIGN(ExternalProcessImporterBridge);
 };

@@ -1671,10 +1671,14 @@ Status IndexedDBDatabase::OpenInternal() {
 std::unique_ptr<IndexedDBConnection> IndexedDBDatabase::CreateConnection(
     IndexedDBOriginStateHandle origin_state_handle,
     scoped_refptr<IndexedDBDatabaseCallbacks> database_callbacks,
-    int child_process_id) {
+    IndexedDBExecutionContextConnectionTracker::Handle
+        execution_context_connection_handle) {
+  const int render_process_id =
+      execution_context_connection_handle.render_process_id();
   std::unique_ptr<IndexedDBConnection> connection =
       std::make_unique<IndexedDBConnection>(
-          child_process_id, std::move(origin_state_handle), class_factory_,
+          std::move(execution_context_connection_handle),
+          std::move(origin_state_handle), class_factory_,
           weak_factory_.GetWeakPtr(),
           base::BindRepeating(&IndexedDBDatabase::VersionChangeIgnored,
                               weak_factory_.GetWeakPtr()),
@@ -1682,7 +1686,7 @@ std::unique_ptr<IndexedDBConnection> IndexedDBDatabase::CreateConnection(
                          weak_factory_.GetWeakPtr()),
           database_callbacks);
   connections_.insert(connection.get());
-  backing_store_->GrantChildProcessPermissions(child_process_id);
+  backing_store_->GrantChildProcessPermissions(render_process_id);
   return connection;
 }
 

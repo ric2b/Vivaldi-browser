@@ -7,10 +7,11 @@ package org.chromium.chrome.browser.ui.system;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.os.Build;
-import android.support.annotation.ColorInt;
-import android.support.annotation.Nullable;
 import android.view.View;
 import android.view.Window;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
@@ -34,6 +35,9 @@ import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.widget.ScrimView;
 import org.chromium.ui.UiUtils;
+
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.speeddial.SpeedDialPage;
 
 /**
  * Maintains the status bar color for a {@link ChromeActivity}.
@@ -173,6 +177,7 @@ public class StatusBarColorController
                 @Override
                 public void onOverviewModeStartedShowing(boolean showToolbar) {
                     mIsInOverviewMode = true;
+                    if (!ChromeApplication.isVivaldi())
                     updateStatusBarColor(false);
                 }
 
@@ -325,6 +330,8 @@ public class StatusBarColorController
      * @return Whether or not the current tab is a new tab page in standard mode.
      */
     private boolean isStandardNTP() {
+        if (ChromeApplication.isVivaldi())
+            return mCurrentTab != null && mCurrentTab.getNativePage() instanceof SpeedDialPage;
         return mCurrentTab != null && mCurrentTab.getNativePage() instanceof NewTabPage;
     }
 
@@ -333,6 +340,7 @@ public class StatusBarColorController
      */
     private boolean isLocationBarShownInNTP() {
         if (!isStandardNTP()) return false;
+        if (ChromeApplication.isVivaldi()) return false;
         final NewTabPage newTabPage = (NewTabPage) mCurrentTab.getNativePage();
         return newTabPage != null && newTabPage.isLocationBarShownInNTP();
     }

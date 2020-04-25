@@ -47,6 +47,12 @@ id<GREYMatcher> HeaderWithAccessibilityLabelId(int message_id);
 // accessibility trait UIAccessibilityTraitHeader.
 id<GREYMatcher> HeaderWithAccessibilityLabel(NSString* label);
 
+// Matcher for text field of a cell with |message_id|.
+id<GREYMatcher> TextFieldForCellWithLabelId(int message_id);
+
+// Matcher for icon view of a cell with |message_id|.
+id<GREYMatcher> IconViewForCellWithLabelId(int message_id, NSString* icon_type);
+
 // Returns matcher for the primary toolbar.
 id<GREYMatcher> PrimaryToolbar();
 
@@ -125,9 +131,6 @@ id<GREYMatcher> NavigationBarDoneButton();
 // Matcher for the done button on the Bookmarks navigation bar.
 id<GREYMatcher> BookmarksNavigationBarDoneButton();
 
-// Returns matcher for the account consistency setup signin button.
-id<GREYMatcher> AccountConsistencySetupSigninButton();
-
 // Returns matcher for the account consistency confirmation button.
 id<GREYMatcher> AccountConsistencyConfirmationOkButton();
 
@@ -163,6 +166,31 @@ id<GREYMatcher> SettingsDoneButton();
 // settings' navigation bar.
 id<GREYMatcher> SyncSettingsConfirmButton();
 
+// Returns matcher for the Autofill Credit Card "Payment Methods" view in the
+// settings menu.
+id<GREYMatcher> AutofillCreditCardTableView();
+
+// Returns matcher for the "Payment Methods" button in the settings menu.
+id<GREYMatcher> PaymentMethodsButton();
+
+// Returns matcher for the "Add Credit Card" view in the Settings menu.
+id<GREYMatcher> AddCreditCardView();
+
+// Returns matcher for the "Add Payment Method" button in the Settings Payment
+// Methods view.
+id<GREYMatcher> AddPaymentMethodButton();
+
+// Returns matcher for the "Add" credit card button in the Payment
+// Methods add credit card view.
+id<GREYMatcher> AddCreditCardButton();
+
+// Returns matcher for the "Cancel" button in the Payment Methods add credit
+// card view.
+id<GREYMatcher> AddCreditCardCancelButton();
+
+// Returns matcher for the "Credit Card Scanner" view.
+id<GREYMatcher> CreditCardScannerView();
+
 // Returns matcher for the tools menu table view.
 id<GREYMatcher> ToolsMenuView();
 
@@ -196,9 +224,6 @@ id<GREYMatcher> SettingsImportDataContinueButton();
 
 // Returns matcher for the privacy settings table view.
 id<GREYMatcher> SettingsPrivacyTableView();
-
-// Returns matcher for the Manage Synced Data button in sync setting view.
-id<GREYMatcher> SettingsSyncManageSyncedDataButton();
 
 // Returns matcher for the menu button to sync accounts.
 id<GREYMatcher> AccountsSyncButton();

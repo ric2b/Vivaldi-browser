@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="id">
+<translation id="1029351048239796117">Vivaldi memerlukan izin untuk mengakses mikrofon Anda untuk situs ini.</translation>
+<translation id="1067048845568873861">Dibuat</translation>
+<translation id="1228311134236651326">Tidak menemukan catatan</translation>
+<translation id="1302932907222175914">Cari catatan Anda</translation>
+<translation id="1689333818294560261">Nama Julukan</translation>
+<translation id="2071726368047511075">Tangkap halaman</translation>
+<translation id="2243210264130642074">Catatan disimpan</translation>
+<translation id="2526968784648867272">Menangkap Halaman...</translation>
+<translation id="2818042133587341562">Vivaldi memerlukan izin untuk mengakses kamera Anda untuk situs ini.</translation>
+<translation id="2842985007712546952">Folder induk</translation>
+<translation id="2873951654529031587">Keranjang Sampah</translation>
+<translation id="2996809686854298943">Belum ada URLnya</translation>
+<translation id="3183006304368105350">Gandakan tab</translation>
+<translation id="3271422135763022755">Mulai menulis...</translation>
+<translation id="3335772982573114336">Catatan baru</translation>
+<translation id="3866249974567520381">Deskripsi</translation>
+<translation id="4268574628540273656">URL:</translation>
+<translation id="4532845899244822526">Pilih folder</translation>
+<translation id="4752136117982598343">Catatan disimpan ke <ph name="FOLDER_NAME" /></translation>
+<translation id="4847896847259487518">Halaman bookmark</translation>
+<translation id="4890701585167892790">Tidak ada catatan</translation>
+<translation id="5161254044473106830">Belum ada judulnya</translation>
+<translation id="5290452628447338707">Tidak ada catatan</translation>
+<translation id="5448025735280530073">Vivaldi memerlukan akses ke lokasi Anda untuk dibagikan dengan situs ini.</translation>
+<translation id="5525981542754785361">Catatan tersimpan di <ph name="PRODUCT_NAME" /></translation>
+<translation id="5765833063161370062">Pindahkan catatan</translation>
+<translation id="5973151297483997626">{NOTES_COUNT, plural,
+          =1 {<ph name="NOTES_COUNT_ONE" /> catatan}
+          other {<ph name="NOTES_COUNT_MANY" /> catatan}}</translation>
+<translation id="6059232451013891645">Folder:</translation>
+<translation id="6179463181009746489">Hapus catatan</translation>
+<translation id="6682232524697939870">Vivaldi memerlukan izin untuk mengakses kamera dan mikrofon Anda untuk situs ini.</translation>
+<translation id="6698381487523150993">Dibuat:</translation>
+<translation id="6945221475159498467">Pilih</translation>
+<translation id="7765158879357617694">Pindah</translation>
+<translation id="8035133914807600019">Folder baru…</translation>
+<translation id="8206267832882844324">Sunting catatan</translation>
+<translation id="8225478925744929238">Hapus dari bookmark</translation>
+<translation id="8261506727792406068">Hapus</translation>
+<translation id="8414685983518053656">Catatan</translation>
+<translation id="8738958257180686306">Dibuat: <ph name="FOLDER_NAME" /></translation>
+<translation id="8792189997982531874">Vivaldi memerlukan akses penyimpanan untuk mengunduh berkas-berkas.</translation>
+<translation id="8808060551076378370">Gagal menambah catatan.</translation>
+<translation id="8817201557520703060">Halaman Tertangkap</translation>
+<translation id="8979401359137062629">Catatan:</translation>
+<translation id="9065203028668620118">Sunting</translation>
+<translation id="9148058034647219655">Keluar</translation>
+</translationbundle>

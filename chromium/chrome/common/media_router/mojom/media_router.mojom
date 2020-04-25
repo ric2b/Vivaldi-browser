@@ -483,8 +483,8 @@ interface MediaRouteProvider {
   // TODO(takumif): Consider returning an enum instead of a bool to distinguish
   // between error conditions for metrics/debugging.
   CreateMediaRouteController(string route_id,
-                             MediaController& media_controller,
-                             MediaStatusObserver observer) =>
+                             pending_receiver<MediaController> media_controller,
+                             pending_remote<MediaStatusObserver> observer) =>
                                  (bool success);
 };
 
@@ -523,8 +523,8 @@ interface MediaRouter {
   // Returns a string that uniquely identifies the Media Router browser
   // process.
   RegisterMediaRouteProvider(MediaRouteProvider.Id provider_id,
-                             MediaRouteProvider media_router_provider) =>
-      (string instance_id, MediaRouteProviderConfig config);
+      pending_remote<MediaRouteProvider> media_router_provider) =>
+          (string instance_id, MediaRouteProviderConfig config);
 
   // Called when a MediaRouteProvider receives a new list of |sinks|
   // compatible with |media_source|. The result is only valid for |origins|. If
@@ -573,8 +573,11 @@ interface MediaRouter {
   // can be used to access the MediaRemoter to control a media remoting session
   // and send RPC messages to the remote device. |remoting_source| is bound to
   // receive the updates/messages from MediaRemoter.
-  OnMediaRemoterCreated(int32 tab_id, media.mojom.MirrorServiceRemoter remoter,
-      media.mojom.MirrorServiceRemotingSource& remoting_source);
+  OnMediaRemoterCreated(
+      int32 tab_id,
+      pending_remote<media.mojom.MirrorServiceRemoter> remoter,
+      pending_receiver<media.mojom.MirrorServiceRemotingSource>
+          remoting_source);
 
   // Returns current status of media sink service in JSON format.
   GetMediaSinkServiceStatus() => (string status);
@@ -584,13 +587,13 @@ interface MediaRouter {
   // TODO(http://crbug.com/809249): Remove these APIs when native Cast MRP with
   // mirroring support is rolled out.
   GetMirroringServiceHostForTab(int32 target_tab_id,
-                                mirroring.mojom.MirroringServiceHost& request);
+      pending_receiver<mirroring.mojom.MirroringServiceHost> receiver);
   GetMirroringServiceHostForDesktop(
       int32 initiator_tab_id,  // The tab used to register the stream.
       string desktop_stream_id,
-      mirroring.mojom.MirroringServiceHost& request);
+      pending_receiver<mirroring.mojom.MirroringServiceHost> receiver);
   GetMirroringServiceHostForOffscreenTab(
       url.mojom.Url presentation_url,
       string presentation_id,
-      mirroring.mojom.MirroringServiceHost& request);
+      pending_receiver<mirroring.mojom.MirroringServiceHost> receiver);
 };

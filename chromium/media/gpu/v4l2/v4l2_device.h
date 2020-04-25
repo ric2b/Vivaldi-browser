@@ -20,10 +20,12 @@
 #include "base/files/scoped_file.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
+#include "base/sequence_checker.h"
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_frame_layout.h"
 #include "media/gpu/media_gpu_export.h"
+#include "media/gpu/v4l2/v4l2_device_poller.h"
 #include "media/video/video_decode_accelerator.h"
 #include "media/video/video_encode_accelerator.h"
 #include "ui/gfx/geometry/size.h"
@@ -46,6 +48,10 @@
 // MTK 8-bit block mode, two non-contiguous planes.
 #define V4L2_PIX_FMT_MM21 v4l2_fourcc('M', 'M', '2', '1')
 #endif
+
+namespace gfx {
+struct NativePixmapPlane;
+}  // namespace gfx
 
 namespace media {
 
@@ -95,6 +101,15 @@ class MEDIA_GPU_EXPORT V4L2WritableBufferRef {
   // In case of error, false is returned and the buffer is returned to the free
   // list.
   bool QueueDMABuf(const std::vector<base::ScopedFD>& fds) &&;
+  // Queue a DMABUF buffer, assigning file descriptors of |planes| for planes.
+  // It is allowed the number of |planes| might be greater than the number of
+  // planes of this buffer. It happens when the v4l2 pixel format is single
+  // planar. The fd of the first plane of |planes| is only used in that case.
+  // If successful, true is returned and the reference to the buffer is dropped
+  // so this reference becomes invalid.
+  // In case of error, false is returned and the buffer is returned to the free
+  // list.
+  bool QueueDMABuf(const std::vector<gfx::NativePixmapPlane>& planes) &&;
 
   // Returns the number of planes in this buffer.
   size_t PlanesCount() const;
@@ -242,6 +257,21 @@ class V4L2Buffer;
 class MEDIA_GPU_EXPORT V4L2Queue
     : public base::RefCountedThreadSafe<V4L2Queue> {
  public:
+  // Set |fourcc| as the current format on this queue. |size| corresponds to the
+  // desired buffer's dimensions (i.e. width and height members of
+  // v4l2_pix_format_mplane (if not applicable, pass gfx::Size()).
+  // |buffer_size| is the desired size in bytes of the buffer for single-planar
+  // formats (i.e. sizeimage of the first plane). It can be set to 0 if not
+  // relevant for the desired format.
+  // If the format could be set, then the |v4l2_format| reflecting the actual
+  // format is returned. It is guaranteed to feature the specified |fourcc|,
+  // but any other parameter (including |size| and |buffer_size| may have been
+  // adjusted by the driver, so the caller must check their values.
+  base::Optional<struct v4l2_format> SetFormat(uint32_t fourcc,
+                                               const gfx::Size& size,
+                                               size_t buffer_size)
+      WARN_UNUSED_RESULT;
+
   // Allocate |count| buffers for the current format of this queue, with a
   // specific |memory| allocation, and returns the number of buffers allocated
   // or zero if an error occurred, or if references to any previously allocated
@@ -318,6 +348,8 @@ class MEDIA_GPU_EXPORT V4L2Queue
   enum v4l2_memory memory_ = V4L2_MEMORY_MMAP;
   bool is_streaming_ = false;
   size_t planes_count_ = 0;
+  // Current format as set by SetFormat.
+  base::Optional<struct v4l2_format> current_format_;
 
   std::vector<std::unique_ptr<V4L2Buffer>> buffers_;
 
@@ -349,12 +381,6 @@ class MEDIA_GPU_EXPORT V4L2Device
     : public base::RefCountedThreadSafe<V4L2Device> {
  public:
   // Utility format conversion functions
-  static VideoPixelFormat V4L2PixFmtToVideoPixelFormat(uint32_t format);
-  static uint32_t VideoPixelFormatToV4L2PixFmt(VideoPixelFormat format,
-                                               bool single_planar);
-  // Returns v4l2 pixel format from |layout|. If there is no corresponding
-  // single- or multi-planar format or |layout| is invalid, returns 0.
-  static uint32_t VideoFrameLayoutToV4L2PixFmt(const VideoFrameLayout& layout);
   // If there is no corresponding single- or multi-planar format, returns 0.
   static uint32_t VideoCodecProfileToV4L2PixFmt(VideoCodecProfile profile,
                                                 bool slice_based);
@@ -383,9 +409,6 @@ class MEDIA_GPU_EXPORT V4L2Device
   // If error occurs, it returns base::nullopt.
   static base::Optional<VideoFrameLayout> V4L2FormatToVideoFrameLayout(
       const struct v4l2_format& format);
-
-  // Returns whether |pix_fmt| is multi planar.
-  static bool IsMultiPlanarV4L2PixFmt(uint32_t pix_fmt);
 
   // Returns number of planes of |pix_fmt|.
   static size_t GetNumPlanesOfV4L2PixFmt(uint32_t pix_fmt);
@@ -525,6 +548,19 @@ class MEDIA_GPU_EXPORT V4L2Device
   virtual bool IsJpegDecodingSupported() = 0;
   virtual bool IsJpegEncodingSupported() = 0;
 
+  // Start polling on this V4L2Device. |event_callback| will be posted to
+  // the caller's sequence if a buffer is ready to be dequeued and/or a V4L2
+  // event has been posted. |error_callback| will be posted to the client's
+  // sequence if a polling error has occurred.
+  bool StartPolling(V4L2DevicePoller::EventCallback event_callback,
+                    base::RepeatingClosure error_callback);
+  // Stop polling this V4L2Device if polling was active. No new events will
+  // be posted after this method has returned.
+  bool StopPolling();
+  // Schedule a polling event if polling is enabled. This method is intended
+  // to be called from V4L2Queue, clients should not need to call it directly.
+  void SchedulePoll();
+
  protected:
   friend class base::RefCountedThreadSafe<V4L2Device>;
   V4L2Device();
@@ -548,6 +584,12 @@ class MEDIA_GPU_EXPORT V4L2Device
   // Callback that is called upon a queue's destruction, to cleanup its pointer
   // in queues_.
   void OnQueueDestroyed(v4l2_buf_type buf_type);
+
+  // Used if EnablePolling() is called to signal the user that an event
+  // happened or a buffer is ready to be dequeued.
+  std::unique_ptr<V4L2DevicePoller> device_poller_;
+
+  SEQUENCE_CHECKER(client_sequence_checker_);
 };
 
 }  //  namespace media

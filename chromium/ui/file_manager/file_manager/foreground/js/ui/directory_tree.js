@@ -6,11 +6,11 @@
 const directorytree = {};
 
 ////////////////////////////////////////////////////////////////////////////////
-// DirectoryTreeBase
+// DirectoryTreeBase methods
 
 /**
  * Implementation of methods for DirectoryTree and DirectoryItem. These classes
- * inherits cr.ui.Tree/TreeItem so we can't make them inherit this class.
+ * inherits cr.ui.Tree/cr.ui.TreeItem so we can't make them inherit this class.
  * Instead, we separate their implementations to this separate object and call
  * it with setting 'this' from DirectoryTree/Item.
  */
@@ -138,6 +138,17 @@ const TREE_ITEM_INNER_HTML = '<div class="tree-row">' +
 // DirectoryItem
 
 /**
+ * An optional rowElement depth (indent) style handler where undefined uses the
+ * default cr.ui.Tree/cr.ui.TreeItem indent styling.
+ *
+ * TODO(crbug.com/992819): add an implementation for the FILES_NG_ENABLED case,
+ * where a rowElement child needs the indent, not the rowElement itself.
+ *
+ * @type {function(!cr.ui.TreeItem,number)|undefined}
+ */
+directorytree.styleRowElementDepth = undefined;
+
+/**
  * An expandable directory in the tree. Each element represents one folder (sub
  * directory) or one volume (root directory).
  */
@@ -208,68 +219,64 @@ class DirectoryItem extends cr.ui.TreeItem {
   }
 
   /**
-   * Returns true if this item is inside any part of My Drive.
+   * Returns true if this.entry is inside any part of Drive 'My Drive'.
    * @type {!boolean}
    */
   get insideMyDrive() {
-    if (!this.entry) {
-      return false;
+    let rootType;
+
+    if (this.entry) {
+      const root = this.parentTree_.volumeManager.getLocationInfo(this.entry);
+      rootType = root ? root.rootType : null;
     }
 
-    const locationInfo =
-        this.parentTree_.volumeManager.getLocationInfo(this.entry);
-    return locationInfo &&
-        locationInfo.rootType === VolumeManagerCommon.RootType.DRIVE;
+    return rootType && (rootType === VolumeManagerCommon.RootType.DRIVE);
   }
 
   /**
-   * Returns true if this item is inside any part of Computers.
+   * Returns true if this.entry is inside any part of Drive 'Computers'.
    * @type {!boolean}
    */
   get insideComputers() {
-    if (!this.entry) {
-      return false;
+    let rootType;
+
+    if (this.entry) {
+      const root = this.parentTree_.volumeManager.getLocationInfo(this.entry);
+      rootType = root ? root.rootType : null;
     }
 
-    const locationInfo =
-        this.parentTree_.volumeManager.getLocationInfo(this.entry);
-    return locationInfo &&
-        (locationInfo.rootType ===
-             VolumeManagerCommon.RootType.COMPUTERS_GRAND_ROOT ||
-         locationInfo.rootType === VolumeManagerCommon.RootType.COMPUTER);
+    return rootType &&
+        (rootType === VolumeManagerCommon.RootType.COMPUTERS_GRAND_ROOT ||
+         rootType === VolumeManagerCommon.RootType.COMPUTER);
   }
 
   /**
-   * Returns true if this item is inside any part of Drive, including Team
-   * Drive.
+   * Returns true if this.entry is inside any part of Drive.
    * @type {!boolean}
    */
   get insideDrive() {
-    if (!this.entry) {
-      return false;
+    let rootType;
+
+    if (this.entry) {
+      const root = this.parentTree_.volumeManager.getLocationInfo(this.entry);
+      rootType = root ? root.rootType : null;
     }
 
-    const locationInfo =
-        this.parentTree_.volumeManager.getLocationInfo(this.entry);
-    return locationInfo &&
-        (locationInfo.rootType === VolumeManagerCommon.RootType.DRIVE ||
-         locationInfo.rootType ===
-             VolumeManagerCommon.RootType.SHARED_DRIVES_GRAND_ROOT ||
-         locationInfo.rootType === VolumeManagerCommon.RootType.SHARED_DRIVE ||
-         locationInfo.rootType ===
-             VolumeManagerCommon.RootType.COMPUTERS_GRAND_ROOT ||
-         locationInfo.rootType === VolumeManagerCommon.RootType.COMPUTER ||
-         locationInfo.rootType === VolumeManagerCommon.RootType.DRIVE_OFFLINE ||
-         locationInfo.rootType ===
-             VolumeManagerCommon.RootType.DRIVE_SHARED_WITH_ME ||
-         locationInfo.rootType ===
-             VolumeManagerCommon.RootType.DRIVE_FAKE_ROOT);
+    return rootType &&
+        (rootType === VolumeManagerCommon.RootType.DRIVE ||
+         rootType === VolumeManagerCommon.RootType.SHARED_DRIVES_GRAND_ROOT ||
+         rootType === VolumeManagerCommon.RootType.SHARED_DRIVE ||
+         rootType === VolumeManagerCommon.RootType.COMPUTERS_GRAND_ROOT ||
+         rootType === VolumeManagerCommon.RootType.COMPUTER ||
+         rootType === VolumeManagerCommon.RootType.DRIVE_OFFLINE ||
+         rootType === VolumeManagerCommon.RootType.DRIVE_SHARED_WITH_ME ||
+         rootType === VolumeManagerCommon.RootType.DRIVE_FAKE_ROOT);
   }
 
   /**
-   * If the this directory supports 'shared' feature, as in displays shared
-   * icon. It's only supported inside 'My Drive', even Shared Drive doesn't
-   * support it.
+   * Returns true if this.entry supports the 'shared' feature, as in, displays
+   * a shared icon. It's only supported inside 'My Drive' or 'Computers', even
+   * Shared Drive does not support it.
    * @type {!boolean}
    */
   get supportDriveSpecificIcons() {
@@ -639,14 +646,14 @@ class DirectoryItem extends cr.ui.TreeItem {
    * @private
    */
   setupEjectButton_(rowElement) {
-    const ejectButton = cr.doc.createElement('button');
+    const ejectButton = document.createElement('button');
 
     ejectButton.className = 'root-eject align-right-icon';
     ejectButton.setAttribute('aria-label', str('UNMOUNT_DEVICE_BUTTON_LABEL'));
     ejectButton.setAttribute('tabindex', '0');
 
     // Add paper-ripple effect on the eject button.
-    const ripple = cr.doc.createElement('paper-ripple');
+    const ripple = document.createElement('paper-ripple');
     ripple.setAttribute('fit', '');
     ripple.className = 'circle recenteringTouch';
     ejectButton.appendChild(ripple);
@@ -666,7 +673,8 @@ class DirectoryItem extends cr.ui.TreeItem {
     });
     ejectButton.addEventListener('click', (event) => {
       event.stopPropagation();
-      const command = cr.doc.querySelector('command#unmount');
+      const command = /** @type {!cr.ui.Command} */ (
+          document.querySelector('command#unmount'));
       // Ensure 'canExecute' state of the command is properly setup for the
       // root before executing it.
       command.canExecuteChange(this);
@@ -1063,7 +1071,7 @@ class VolumeItem extends DirectoryItem {
    * @private
    */
   setupRenamePlaceholder_(rowElement) {
-    const placeholder = cr.doc.createElement('span');
+    const placeholder = document.createElement('span');
     placeholder.className = 'rename-placeholder';
     rowElement.querySelector('.label').insertAdjacentElement(
         'afterend', placeholder);
@@ -1614,7 +1622,7 @@ class AndroidAppItem extends cr.ui.TreeItem {
 
     // Create an external link icon. TODO(crbug.com/986169) does this icon
     // element need aria-label, role, tabindex, etc?
-    const externalLinkIcon = cr.doc.createElement('span');
+    const externalLinkIcon = document.createElement('span');
     externalLinkIcon.className = 'external-link-icon align-right-icon';
 
     // Add the external link as the last element of the tree row content.
@@ -1855,7 +1863,7 @@ class DirectoryTree extends cr.ui.Tree {
 
     let addAt = 0;
     while (addAt < parentItem.items.length &&
-           parentItem.items[addAt].entry.name < newDirectory.name) {
+           util.compareName(parentItem.items[addAt].entry, newDirectory) < 0) {
       addAt++;
     }
 
@@ -2244,6 +2252,10 @@ DirectoryTree.decorate =
     (el, directoryModel, volumeManager, metadataModel, fileOperationManager,
      fakeEntriesVisible) => {
       el.__proto__ = DirectoryTree.prototype;
+
+      // TODO(crbug.com/992819): add overrides for the FILES_NG_ENABLED case.
+      Object.freeze(directorytree);
+
       /** @type {DirectoryTree} */ (el).decorateDirectoryTree(
           directoryModel, volumeManager, metadataModel, fileOperationManager,
           fakeEntriesVisible);

@@ -42,8 +42,7 @@ class TextNavigationManager {
   jumpToBeginning() {
     if (this.currentlySelecting_)
       this.setupDynamicSelection_(false /* resetCursor */);
-    this.navigationManager_.simulateKeyPress(
-        SAConstants.KeyCode.HOME, {ctrl: true});
+    EventHelper.simulateKeyPress(EventHelper.KeyCode.HOME, {ctrl: true});
   }
 
   /**
@@ -54,8 +53,7 @@ class TextNavigationManager {
   jumpToEnd() {
     if (this.currentlySelecting_)
       this.setupDynamicSelection_(false /* resetCursor */);
-    this.navigationManager_.simulateKeyPress(
-        SAConstants.KeyCode.END, {ctrl: true});
+    EventHelper.simulateKeyPress(EventHelper.KeyCode.END, {ctrl: true});
   }
 
   /**
@@ -67,8 +65,7 @@ class TextNavigationManager {
   moveBackwardOneChar() {
     if (this.currentlySelecting_)
       this.setupDynamicSelection_(true /* resetCursor */);
-    this.navigationManager_.simulateKeyPress(
-        SAConstants.KeyCode.LEFT_ARROW, {});
+    EventHelper.simulateKeyPress(EventHelper.KeyCode.LEFT_ARROW);
   }
 
   /**
@@ -80,8 +77,7 @@ class TextNavigationManager {
   moveForwardOneChar() {
     if (this.currentlySelecting_)
       this.setupDynamicSelection_(true /* resetCursor */);
-    this.navigationManager_.simulateKeyPress(
-        SAConstants.KeyCode.RIGHT_ARROW, {});
+    EventHelper.simulateKeyPress(EventHelper.KeyCode.RIGHT_ARROW);
   }
 
   /**
@@ -94,8 +90,7 @@ class TextNavigationManager {
   moveBackwardOneWord() {
     if (this.currentlySelecting_)
       this.setupDynamicSelection_(false /* resetCursor */);
-    this.navigationManager_.simulateKeyPress(
-        SAConstants.KeyCode.LEFT_ARROW, {ctrl: true});
+    EventHelper.simulateKeyPress(EventHelper.KeyCode.LEFT_ARROW, {ctrl: true});
   }
 
   /**
@@ -108,8 +103,7 @@ class TextNavigationManager {
   moveForwardOneWord() {
     if (this.currentlySelecting_)
       this.setupDynamicSelection_(false /* resetCursor */);
-    this.navigationManager_.simulateKeyPress(
-        SAConstants.KeyCode.RIGHT_ARROW, {ctrl: true});
+    EventHelper.simulateKeyPress(EventHelper.KeyCode.RIGHT_ARROW, {ctrl: true});
   }
 
   /**
@@ -120,8 +114,8 @@ class TextNavigationManager {
    */
   moveUpOneLine() {
     if (this.currentlySelecting_)
-      this.setupDynamicSelection_(false /* resetCursor */);
-    this.navigationManager_.simulateKeyPress(SAConstants.KeyCode.UP_ARROW, {});
+      this.setupDynamicSelection_(true /* resetCursor */);
+    EventHelper.simulateKeyPress(EventHelper.KeyCode.UP_ARROW);
   }
 
   /**
@@ -132,9 +126,8 @@ class TextNavigationManager {
    */
   moveDownOneLine() {
     if (this.currentlySelecting_)
-      this.setupDynamicSelection_(false /* resetCursor */);
-    this.navigationManager_.simulateKeyPress(
-        SAConstants.KeyCode.DOWN_ARROW, {});
+      this.setupDynamicSelection_(true /* resetCursor */);
+    EventHelper.simulateKeyPress(EventHelper.KeyCode.DOWN_ARROW);
   }
 
   /**

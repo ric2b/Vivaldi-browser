@@ -163,7 +163,10 @@ enum class ProvisioningResult : int {
   // Account type is not supported for authorization.
   UNSUPPORTED_ACCOUNT_TYPE = 22,
 
-  kMaxValue = UNSUPPORTED_ACCOUNT_TYPE,
+  // Account is not present in Chrome OS Account Manager.
+  CHROME_ACCOUNT_NOT_FOUND = 23,
+
+  kMaxValue = CHROME_ACCOUNT_NOT_FOUND,
 };
 
 enum class OptInFlowResult : int {
@@ -245,6 +248,9 @@ void UpdateSecondaryAccountSilentAuthCodeUMA(OptInSilentAuthCode state);
 void UpdateAuthTiming(const char* histogram_name, base::TimeDelta elapsed_time);
 void UpdateAuthCheckinAttempts(int32_t num_attempts);
 void UpdateAuthAccountCheckStatus(mojom::AccountCheckStatus status);
+void UpdateMainAccountResolutionStatus(
+    const Profile* profile,
+    mojom::MainAccountResolutionStatus status);
 
 // Outputs the stringified |result| to |os|. This is only for logging purposes.
 std::ostream& operator<<(std::ostream& os, const ProvisioningResult& result);

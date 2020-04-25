@@ -15,7 +15,6 @@
 #include "base/macros.h"
 #include "components/guest_view/browser/guest_view.h"
 #include "content/public/browser/javascript_dialog_manager.h"
-#include "extensions/api/extension_action_utils/vivaldi_extension_host.h"
 #include "extensions/browser/guest_view/web_view/javascript_dialog_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_find_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest_delegate.h"
@@ -25,8 +24,9 @@
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
 
 #ifdef VIVALDI_BUILD
+#include "extensions/api/extension_action_utils/vivaldi_extension_host.h"
 #include "extensions/api/guest_view/vivaldi_web_view_guest_top.inc"
-#include "third_party/blink/public/platform/web_security_style.h"
+#include "third_party/blink/public/common/security/security_style.h"
 #endif // VIVALDI_BUILD
 
 namespace extensions {
@@ -90,11 +90,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   zoom::ZoomController::ZoomMode GetZoomMode();
 
   // Request navigating the guest to the provided |src| URL.
-  // |wasTyped| will set transition to PAGE_TRANSITION_TYPED so it is remembered
-  // in typed history.
-  void NavigateGuest(
-      const std::string& src,
-      bool force_navigation,
+  void NavigateGuest(const std::string& src, bool force_navigation,
       ui::PageTransition transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
       content::Referrer* referrer = nullptr,
       content::OpenURLParams* params = nullptr);
@@ -167,9 +163,6 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
 
   // Returns spatial navigation status.
   bool IsSpatialNavigationEnabled() const;
-
-  // Used to expose the view to extensions, only popups now.
-  std::unique_ptr<::vivaldi::VivaldiExtensionHost> extension_host_;
 
  private:
   friend class WebViewPermissionHelper;
@@ -275,17 +268,13 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   void EnterFullscreenModeForTab(
       content::WebContents* web_contents,
       const GURL& origin,
-      const blink::WebFullscreenOptions& options) final;
+      const blink::mojom::FullscreenOptions& options) final;
   void ExitFullscreenModeForTab(content::WebContents* web_contents) final;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) final;
   void RequestToLockMouse(content::WebContents* web_contents,
                           bool user_gesture,
                           bool last_unlocked_by_target) override;
-
-  blink::WebSecurityStyle GetSecurityStyle(
-      content::WebContents* web_contents,
-      content::SecurityStyleExplanations* security_style_explanations) override;
 
   // WebContentsObserver implementation.
   void DidStartNavigation(content::NavigationHandle* navigation_handle) final;
@@ -300,7 +289,6 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   void FrameNameChanged(content::RenderFrameHost* render_frame_host,
                         const std::string& name) final;
   void OnAudioStateChanged(bool audible) final;
-  void OnVisibilityChanged(content::Visibility visibility) override;
 
   // Informs the embedder of a frame name change.
   void ReportFrameNameChange(const std::string& name);

@@ -66,11 +66,10 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_response.h"
 
+#if !defined(OS_ANDROID) && defined(VIVALDI_BUILD)
 #include "app/vivaldi_apptools.h"
-
-#ifdef VIVALDI_BUILD
 #include "components/blink/vivaldi_add_search_context_menu.h"
-#endif  // VIVALDI_BUILD
+#endif  // !OS_ANDROID && VIVALDI_BUILD
 
 namespace blink {
 
@@ -434,7 +433,7 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
           data.misspelled_word, misspelled_offset, misspelled_length,
           &data.dictionary_suggestions);
     }
-
+#if !defined(OS_ANDROID) && defined(VIVALDI_BUILD)
     if (vivaldi::IsVivaldiRunning()) {
       // Collect information of input field so that we can use it to set up
       // correct menu content.
@@ -453,14 +452,15 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
         }
       }
     }
+#endif  // !OS_ANDROID && VIVALDI_BUILD
   }
 
-#ifdef VIVALDI_BUILD
+#if !defined(OS_ANDROID) && defined(VIVALDI_BUILD)
   WebURL web_url = vivaldi::GetWebSearchableUrl(
       selected_frame->Selection(), ToHTMLInputElementOrNull(result.InnerNode()));
   if (web_url.IsValid())
     data.vivaldi_keyword_url = web_url;
-#endif  // VIVALDI_BUILD
+#endif  // !OS_ANDROID && VIVALDI_BUILD
   if (EditingStyle::SelectionHasStyle(*selected_frame,
                                       CSSPropertyID::kDirection,
                                       "ltr") != EditingTriState::kFalse) {
@@ -497,7 +497,7 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
 
     data.link_text = anchor->innerText();
   }
-
+#if !defined(OS_ANDROID) && defined(VIVALDI_BUILD)
   // NOTE(david@vivaldi): We should at least display the URL as a link_text when
   // we don't get the correct link_text. This is mostly the case when we have
   // pdf's.
@@ -505,6 +505,7 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
     if (data.link_text.IsNull() && !data.link_url.IsNull())
       data.link_text = data.link_url.GetString();
   }
+#endif  // !OS_ANDROID && VIVALDI_BUILD
 
   data.input_field_type = ComputeInputFieldType(result);
   data.selection_rect = ComputeSelectionRect(selected_frame);

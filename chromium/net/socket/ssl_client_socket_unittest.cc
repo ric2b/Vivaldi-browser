@@ -87,6 +87,7 @@
 #include "third_party/boringssl/src/include/openssl/bio.h"
 #include "third_party/boringssl/src/include/openssl/evp.h"
 #include "third_party/boringssl/src/include/openssl/pem.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -1360,6 +1361,14 @@ class SSLClientSocketZeroRTTTest : public SSLClientSocketTest {
                                            server_config);
   }
 
+  // Makes a new connection to the test server and returns a
+  // FakeBlockingStreamSocket which may be used to block transport I/O.
+  //
+  // Most tests should call BlockReadResult() before calling Connect(). This
+  // avoid race conditions by controlling the order of events. 0-RTT typically
+  // races the ServerHello from the server with early data from the client. If
+  // the ServerHello arrives before client calls Write(), the data may be sent
+  // with 1-RTT keys rather than 0-RTT keys.
   FakeBlockingStreamSocket* MakeClient(bool early_data_enabled) {
     SSLConfig ssl_config;
     ssl_config.early_data_enabled = early_data_enabled;
@@ -1792,10 +1801,11 @@ TEST_P(SSLClientSocketReadTest, Read_WithSynchronousError) {
   int rv = callback.GetResult(transport->Connect(callback.callback()));
   EXPECT_THAT(rv, IsOk());
 
+  SSLConfig config;
+  config.disable_post_handshake_peek_for_testing = true;
   SynchronousErrorStreamSocket* raw_transport = transport.get();
   std::unique_ptr<SSLClientSocket> sock(CreateSSLClientSocket(
-      std::move(transport), spawned_test_server()->host_port_pair(),
-      SSLConfig()));
+      std::move(transport), spawned_test_server()->host_port_pair(), config));
 
   rv = callback.GetResult(sock->Connect(callback.callback()));
   EXPECT_THAT(rv, IsOk());
@@ -2012,9 +2022,10 @@ TEST_P(SSLClientSocketReadTest, Read_DeleteWhilePendingFullDuplex) {
   int rv = callback.GetResult(transport->Connect(callback.callback()));
   EXPECT_THAT(rv, IsOk());
 
+  SSLConfig config;
+  config.disable_post_handshake_peek_for_testing = true;
   std::unique_ptr<SSLClientSocket> sock = CreateSSLClientSocket(
-      std::move(transport), spawned_test_server()->host_port_pair(),
-      SSLConfig());
+      std::move(transport), spawned_test_server()->host_port_pair(), config);
 
   rv = callback.GetResult(sock->Connect(callback.callback()));
   EXPECT_THAT(rv, IsOk());
@@ -2174,10 +2185,11 @@ TEST_F(SSLClientSocketTest, Connect_WithZeroReturn) {
   int rv = callback.GetResult(transport->Connect(callback.callback()));
   EXPECT_THAT(rv, IsOk());
 
+  SSLConfig config;
+  config.disable_post_handshake_peek_for_testing = true;
   SynchronousErrorStreamSocket* raw_transport = transport.get();
   std::unique_ptr<SSLClientSocket> sock(CreateSSLClientSocket(
-      std::move(transport), spawned_test_server()->host_port_pair(),
-      SSLConfig()));
+      std::move(transport), spawned_test_server()->host_port_pair(), config));
 
   raw_transport->SetNextReadError(0);
 
@@ -2200,10 +2212,11 @@ TEST_P(SSLClientSocketReadTest, Read_WithZeroReturn) {
   int rv = callback.GetResult(transport->Connect(callback.callback()));
   EXPECT_THAT(rv, IsOk());
 
+  SSLConfig config;
+  config.disable_post_handshake_peek_for_testing = true;
   SynchronousErrorStreamSocket* raw_transport = transport.get();
   std::unique_ptr<SSLClientSocket> sock(CreateSSLClientSocket(
-      std::move(transport), spawned_test_server()->host_port_pair(),
-      SSLConfig()));
+      std::move(transport), spawned_test_server()->host_port_pair(), config));
 
   rv = callback.GetResult(sock->Connect(callback.callback()));
   EXPECT_THAT(rv, IsOk());
@@ -2233,9 +2246,10 @@ TEST_P(SSLClientSocketReadTest, Read_WithAsyncZeroReturn) {
   int rv = callback.GetResult(transport->Connect(callback.callback()));
   EXPECT_THAT(rv, IsOk());
 
+  SSLConfig config;
+  config.disable_post_handshake_peek_for_testing = true;
   std::unique_ptr<SSLClientSocket> sock(CreateSSLClientSocket(
-      std::move(transport), spawned_test_server()->host_port_pair(),
-      SSLConfig()));
+      std::move(transport), spawned_test_server()->host_port_pair(), config));
 
   rv = callback.GetResult(sock->Connect(callback.callback()));
   EXPECT_THAT(rv, IsOk());
@@ -2309,9 +2323,10 @@ TEST_P(SSLClientSocketReadTest, Read_ManySmallRecords) {
   int rv = callback.GetResult(transport->Connect(callback.callback()));
   ASSERT_THAT(rv, IsOk());
 
+  SSLConfig config;
+  config.disable_post_handshake_peek_for_testing = true;
   std::unique_ptr<SSLClientSocket> sock(CreateSSLClientSocket(
-      std::move(transport), spawned_test_server()->host_port_pair(),
-      SSLConfig()));
+      std::move(transport), spawned_test_server()->host_port_pair(), config));
 
   rv = callback.GetResult(sock->Connect(callback.callback()));
   ASSERT_THAT(rv, IsOk());
@@ -3203,7 +3218,13 @@ TEST_F(SSLClientSocketTest, SessionResumption_RSA) {
 }
 
 // Tests that ALPN works with session resumption.
-TEST_F(SSLClientSocketTest, SessionResumptionAlpn) {
+// Failed on Android, see https://crbug.com/1014556.
+#if defined(OS_ANDROID)
+#define MAYBE_SessionResumptionAlpn DISABLED_SessionResumptionAlpn
+#else
+#define MAYBE_SessionResumptionAlpn SessionResumptionAlpn
+#endif
+TEST_F(SSLClientSocketTest, MAYBE_SessionResumptionAlpn) {
   SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.alpn_protocols.push_back("h2");
   ssl_options.alpn_protocols.push_back("http/1.1");
@@ -3465,6 +3486,56 @@ TEST_F(SSLClientSocketFalseStartTest, SessionResumption) {
   // Let a full handshake complete with False Start.
   ASSERT_NO_FATAL_FAILURE(
       TestFalseStart(server_options, client_config, true));
+
+  // Make a second connection.
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(client_config, &rv));
+  EXPECT_THAT(rv, IsOk());
+
+  // It should resume the session.
+  SSLInfo ssl_info;
+  EXPECT_TRUE(sock_->GetSSLInfo(&ssl_info));
+  EXPECT_EQ(SSLInfo::HANDSHAKE_RESUME, ssl_info.handshake_type);
+}
+
+// Test that the client completes the handshake in the background and installs
+// new sessions, even if the socket isn't used. This also avoids a theoretical
+// deadlock if NewSessionTicket is sufficiently large that neither it nor the
+// client's HTTP/1.1 POST fit in transport windows.
+TEST_F(SSLClientSocketFalseStartTest, CompleteHandshakeWithoutRequest) {
+  // Start a server.
+  SpawnedTestServer::SSLOptions server_options;
+  server_options.key_exchanges =
+      SpawnedTestServer::SSLOptions::KEY_EXCHANGE_ECDHE_RSA;
+  server_options.bulk_ciphers =
+      SpawnedTestServer::SSLOptions::BULK_CIPHER_AES128GCM;
+  server_options.alpn_protocols.push_back("http/1.1");
+  ASSERT_TRUE(StartTestServer(server_options));
+
+  SSLConfig client_config;
+  client_config.alpn_protos.push_back(kProtoHTTP11);
+
+  // Start a handshake up to the server Finished message.
+  TestCompletionCallback callback;
+  FakeBlockingStreamSocket* raw_transport = nullptr;
+  std::unique_ptr<SSLClientSocket> sock;
+  ASSERT_NO_FATAL_FAILURE(CreateAndConnectUntilServerFinishedReceived(
+      client_config, &callback, &raw_transport, &sock));
+
+  // Wait for the server Finished to arrive, release it, and allow
+  // SSLClientSocket to process it. This should install a session.
+  // SpawnedTestServer, however, writes data in small chunks, so, even though it
+  // is only sending 51 bytes, it may take a few iterations to complete.
+  while (ssl_client_session_cache_->size() == 0) {
+    raw_transport->WaitForReadResult();
+    raw_transport->UnblockReadResult();
+    base::RunLoop().RunUntilIdle();
+    raw_transport->BlockReadResult();
+  }
+
+  // Drop the old socket. This is needed because the Python test server can't
+  // service two sockets in parallel.
+  sock.reset();
 
   // Make a second connection.
   int rv;
@@ -4738,67 +4809,16 @@ TEST_F(SSLClientSocketTest, AccessDeniedClientCerts) {
   EXPECT_THAT(rv, IsError(ERR_BAD_SSL_CLIENT_AUTH_CERT));
 }
 
-TEST_F(SSLClientSocketZeroRTTTest, ZeroRTT) {
-  ASSERT_TRUE(StartServer());
-  ASSERT_TRUE(RunInitialConnection());
-
-  // 0-RTT Connection
-  MakeClient(true);
-  ASSERT_THAT(Connect(), IsOk());
-  constexpr base::StringPiece kRequest = "GET /zerortt HTTP/1.0\r\n\r\n";
-  EXPECT_EQ(static_cast<int>(kRequest.size()), WriteAndWait(kRequest));
-
-  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(4096);
-  int size = ReadAndWait(buf.get(), 4096);
-  EXPECT_GT(size, 0);
-  EXPECT_EQ('1', buf->data()[size - 1]);
-
-  SSLInfo ssl_info;
-  ASSERT_TRUE(GetSSLInfo(&ssl_info));
-  EXPECT_EQ(SSLInfo::HANDSHAKE_RESUME, ssl_info.handshake_type);
-}
-
-// Check that 0RTT is confirmed after a Write and Read.
-TEST_F(SSLClientSocketZeroRTTTest, ZeroRTTConfirmedAfterRead) {
-  ASSERT_TRUE(StartServer());
-  ASSERT_TRUE(RunInitialConnection());
-
-  // 0-RTT Connection
-  MakeClient(true);
-  ASSERT_THAT(Connect(), IsOk());
-  constexpr base::StringPiece kRequest = "GET /zerortt HTTP/1.0\r\n\r\n";
-  EXPECT_EQ(static_cast<int>(kRequest.size()), WriteAndWait(kRequest));
-
-  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(4096);
-  int size = ReadAndWait(buf.get(), 4096);
-  EXPECT_GT(size, 0);
-  EXPECT_EQ('1', buf->data()[size - 1]);
-
-  // After the handshake is confirmed, ConfirmHandshake should return
-  // synchronously.
-  TestCompletionCallback callback;
-  ASSERT_THAT(ssl_socket()->ConfirmHandshake(callback.callback()), IsOk());
-
-  SSLInfo ssl_info;
-  ASSERT_TRUE(GetSSLInfo(&ssl_info));
-  EXPECT_EQ(SSLInfo::HANDSHAKE_RESUME, ssl_info.handshake_type);
-}
-
-// Test that the client sends application data before the ServerHello comes in.
+// Test the client can send application data before the ServerHello comes in.
 TEST_F(SSLClientSocketZeroRTTTest, ZeroRTTEarlyDataBeforeServerHello) {
   ASSERT_TRUE(StartServer());
   ASSERT_TRUE(RunInitialConnection());
 
-  // 0-RTT Connection
+  // Make a 0-RTT Connection. Connect() and Write() complete even though the
+  // ServerHello is blocked.
   FakeBlockingStreamSocket* socket = MakeClient(true);
-
-  // Block the ServerHello.
   socket->BlockReadResult();
-
-  // The handshake still completes.
   ASSERT_THAT(Connect(), IsOk());
-
-  // Writes still complete.
   constexpr base::StringPiece kRequest = "GET /zerortt HTTP/1.0\r\n\r\n";
   EXPECT_EQ(static_cast<int>(kRequest.size()), WriteAndWait(kRequest));
 
@@ -4814,19 +4834,80 @@ TEST_F(SSLClientSocketZeroRTTTest, ZeroRTTEarlyDataBeforeServerHello) {
   EXPECT_EQ(SSLInfo::HANDSHAKE_RESUME, ssl_info.handshake_type);
 }
 
+// Test that the client sends 1-RTT data if the ServerHello happens to come in
+// before Write() is called. See https://crbug.com/950706.
+TEST_F(SSLClientSocketZeroRTTTest, ZeroRTTEarlyDataAfterServerHello) {
+  ASSERT_TRUE(StartServer());
+  ASSERT_TRUE(RunInitialConnection());
+
+  // Make a 0-RTT Connection. Connect() completes even though the ServerHello is
+  // blocked.
+  FakeBlockingStreamSocket* socket = MakeClient(true);
+  socket->BlockReadResult();
+  ASSERT_THAT(Connect(), IsOk());
+
+  // Wait for the ServerHello to come in and for SSLClientSocket to process it.
+  socket->WaitForReadResult();
+  socket->UnblockReadResult();
+  base::RunLoop().RunUntilIdle();
+
+  // Now write to the socket.
+  constexpr base::StringPiece kRequest = "GET /zerortt HTTP/1.0\r\n\r\n";
+  EXPECT_EQ(static_cast<int>(kRequest.size()), WriteAndWait(kRequest));
+
+  // Although the socket was created in early data state and the client never
+  // explicitly called ReaD() or ConfirmHandshake(), SSLClientSocketImpl
+  // internally consumed the ServerHello and switch keys. The server then
+  // responds with '0'.
+  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(4096);
+  int size = ReadAndWait(buf.get(), 4096);
+  EXPECT_GT(size, 0);
+  EXPECT_EQ('0', buf->data()[size - 1]);
+
+  SSLInfo ssl_info;
+  ASSERT_TRUE(GetSSLInfo(&ssl_info));
+  EXPECT_EQ(SSLInfo::HANDSHAKE_RESUME, ssl_info.handshake_type);
+}
+
+// Check that 0RTT is confirmed after a Write and Read.
+TEST_F(SSLClientSocketZeroRTTTest, ZeroRTTConfirmedAfterRead) {
+  ASSERT_TRUE(StartServer());
+  ASSERT_TRUE(RunInitialConnection());
+
+  // Make a 0-RTT Connection. Connect() and Write() complete even though the
+  // ServerHello is blocked.
+  FakeBlockingStreamSocket* socket = MakeClient(true);
+  socket->BlockReadResult();
+  ASSERT_THAT(Connect(), IsOk());
+  constexpr base::StringPiece kRequest = "GET /zerortt HTTP/1.0\r\n\r\n";
+  EXPECT_EQ(static_cast<int>(kRequest.size()), WriteAndWait(kRequest));
+
+  socket->UnblockReadResult();
+  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(4096);
+  int size = ReadAndWait(buf.get(), 4096);
+  EXPECT_GT(size, 0);
+  EXPECT_EQ('1', buf->data()[size - 1]);
+
+  // After the handshake is confirmed, ConfirmHandshake should return
+  // synchronously.
+  TestCompletionCallback callback;
+  ASSERT_THAT(ssl_socket()->ConfirmHandshake(callback.callback()), IsOk());
+
+  SSLInfo ssl_info;
+  ASSERT_TRUE(GetSSLInfo(&ssl_info));
+  EXPECT_EQ(SSLInfo::HANDSHAKE_RESUME, ssl_info.handshake_type);
+}
+
 // Test that writes wait for the ServerHello once it has reached the early data
 // limit.
 TEST_F(SSLClientSocketZeroRTTTest, ZeroRTTEarlyDataLimit) {
   ASSERT_TRUE(StartServer());
   ASSERT_TRUE(RunInitialConnection());
 
-  // 0-RTT Connection
+  // Make a 0-RTT Connection. Connect() completes even though the ServerHello is
+  // blocked.
   FakeBlockingStreamSocket* socket = MakeClient(true);
-
-  // Block the ServerHello.
   socket->BlockReadResult();
-
-  // The handshake still completes.
   ASSERT_THAT(Connect(), IsOk());
 
   // EmbeddedTestServer uses BoringSSL's hard-coded early data limit, which is
@@ -4949,16 +5030,24 @@ TEST_F(SSLClientSocketZeroRTTTest, ZeroRTTReadBeforeWrite) {
   ASSERT_TRUE(StartServer());
   ASSERT_TRUE(RunInitialConnection());
 
-  // 0-RTT Connection
-  MakeClient(true);
+  // Make a 0-RTT Connection. Connect() completes even though the ServerHello is
+  // blocked.
+  FakeBlockingStreamSocket* socket = MakeClient(true);
+  socket->BlockReadResult();
+  ASSERT_THAT(Connect(), IsOk());
+
+  // Read() does not make progress.
   scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(4096);
   TestCompletionCallback read_callback;
-  ASSERT_THAT(Connect(), IsOk());
   ASSERT_EQ(ERR_IO_PENDING,
             ssl_socket()->Read(buf.get(), 4096, read_callback.callback()));
+
+  // Write() completes, even though reads are blocked.
   constexpr base::StringPiece kRequest = "GET /zerortt HTTP/1.0\r\n\r\n";
   EXPECT_EQ(static_cast<int>(kRequest.size()), WriteAndWait(kRequest));
 
+  // Release the ServerHello, etc. The Read() now completes.
+  socket->UnblockReadResult();
   int size = read_callback.GetResult(ERR_IO_PENDING);
   EXPECT_GT(size, 0);
   EXPECT_EQ('1', buf->data()[size - 1]);
@@ -5038,8 +5127,13 @@ TEST_F(SSLClientSocketZeroRTTTest, ZeroRTTParallelReadConfirm) {
 TEST_P(SSLClientSocketReadTest, DumpMemoryStats) {
   ASSERT_TRUE(StartTestServer(SpawnedTestServer::SSLOptions()));
 
+  // This test compares the memory usage when there is and isn't a pending read
+  // on the socket, so disable the post-handshake peek.
+  SSLConfig config;
+  config.disable_post_handshake_peek_for_testing = true;
+
   int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(config, &rv));
   EXPECT_THAT(rv, IsOk());
   StreamSocket::SocketMemoryStats stats;
   sock_->DumpMemoryStats(&stats);
@@ -5268,273 +5362,55 @@ TEST_F(SSLClientSocketTest, Tag) {
 #endif  // OS_ANDROID
 }
 
-// Test downgrade enforcement works for the 1.3 to 1.2 downgrade.
-TEST_F(SSLClientSocketTest, TLS13DowngradeEnforcedAtTLS12) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(
-      features::kEnforceTLS13Downgrade, {{"known_roots_only", "false"}});
+// Test downgrade enforcement behaves as expected.
+TEST_F(SSLClientSocketTest, TLS13DowngradeEnforced) {
+  for (auto tls_max_version :
+       {SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_0,
+        SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_1,
+        SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_2}) {
+    for (bool downgrade : {false, true}) {
+      SCOPED_TRACE(downgrade);
+      SCOPED_TRACE(tls_max_version);
+      SpawnedTestServer::SSLOptions ssl_options;
+      ssl_options.simulate_tls13_downgrade = downgrade;
+      ssl_options.tls_max_version = tls_max_version;
+      ASSERT_TRUE(StartTestServer(ssl_options));
+      scoped_refptr<X509Certificate> server_cert =
+          spawned_test_server()->GetCertificate();
 
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.simulate_tls13_downgrade = true;
-  ssl_options.tls_max_version =
-      SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_2;
-  ASSERT_TRUE(StartTestServer(ssl_options));
+      for (bool enable_for_local_anchors : {false, true}) {
+        SCOPED_TRACE(enable_for_local_anchors);
+        SSLContextConfig config;
+        config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
+        config.tls13_hardening_for_local_anchors_enabled =
+            enable_for_local_anchors;
+        ssl_config_service_->UpdateSSLConfigAndNotify(config);
 
-  SSLContextConfig config;
-  config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
-  ssl_config_service_->UpdateSSLConfigAndNotify(config);
+        for (bool known_root : {false, true}) {
+          SCOPED_TRACE(known_root);
+          CertVerifyResult verify_result;
+          verify_result.is_issued_by_known_root = known_root;
+          verify_result.verified_cert = server_cert;
+          cert_verifier_->ClearRules();
+          cert_verifier_->AddResultForCert(server_cert.get(), verify_result,
+                                           OK);
 
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  EXPECT_THAT(rv, IsError(ERR_TLS13_DOWNGRADE_DETECTED));
-  EXPECT_FALSE(sock_->IsConnected());
-}
+          bool should_enforce = known_root || enable_for_local_anchors;
 
-// Test downgrade enforcement works for the 1.3 to 1.1 downgrade.
-TEST_F(SSLClientSocketTest, TLS13DowngradeEnforcedAtTLS11) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(
-      features::kEnforceTLS13Downgrade, {{"known_roots_only", "false"}});
-
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.simulate_tls12_downgrade = true;
-  ssl_options.tls_max_version =
-      SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_1;
-  ASSERT_TRUE(StartTestServer(ssl_options));
-
-  SSLContextConfig config;
-  config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
-  ssl_config_service_->UpdateSSLConfigAndNotify(config);
-
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  EXPECT_THAT(rv, IsError(ERR_TLS13_DOWNGRADE_DETECTED));
-  EXPECT_FALSE(sock_->IsConnected());
-}
-
-// Test downgrade enforcement works for the 1.3 to 1.0 downgrade.
-TEST_F(SSLClientSocketTest, TLS13DowngradeEnforcedAtTLS10) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(
-      features::kEnforceTLS13Downgrade, {{"known_roots_only", "false"}});
-
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.simulate_tls12_downgrade = true;
-  ssl_options.tls_max_version =
-      SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_0;
-  ASSERT_TRUE(StartTestServer(ssl_options));
-
-  SSLContextConfig config;
-  config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
-  ssl_config_service_->UpdateSSLConfigAndNotify(config);
-
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  EXPECT_THAT(rv, IsError(ERR_TLS13_DOWNGRADE_DETECTED));
-  EXPECT_FALSE(sock_->IsConnected());
-}
-
-// Test downgrade enforcement lets valid connections through.
-TEST_F(SSLClientSocketTest, TLS13DowngradeValid) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(features::kEnforceTLS13Downgrade);
-
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.tls_max_version =
-      SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_2;
-  ASSERT_TRUE(StartTestServer(ssl_options));
-
-  SSLContextConfig config;
-  config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
-  ssl_config_service_->UpdateSSLConfigAndNotify(config);
-
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  EXPECT_THAT(rv, IsOk());
-  EXPECT_TRUE(sock_->IsConnected());
-
-  SSLInfo info;
-  EXPECT_TRUE(sock_->GetSSLInfo(&info));
-  EXPECT_EQ(SSL_CONNECTION_VERSION_TLS1_2,
-            SSLConnectionStatusToVersion(info.connection_status));
-}
-
-// Test the downgrade is not enforced for the TLS 1.3 to TLS 1.2 downgrade if
-// disabled.
-TEST_F(SSLClientSocketTest, TLS13DowngradeIgnoredAtTLS12) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(features::kEnforceTLS13Downgrade);
-
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.tls_max_version =
-      SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_2;
-  ssl_options.simulate_tls13_downgrade = true;
-  ASSERT_TRUE(StartTestServer(ssl_options));
-
-  SSLContextConfig config;
-  config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
-  ssl_config_service_->UpdateSSLConfigAndNotify(config);
-
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  EXPECT_THAT(rv, IsOk());
-  EXPECT_TRUE(sock_->IsConnected());
-
-  SSLInfo info;
-  EXPECT_TRUE(sock_->GetSSLInfo(&info));
-  EXPECT_EQ(SSL_CONNECTION_VERSION_TLS1_2,
-            SSLConnectionStatusToVersion(info.connection_status));
-}
-
-// Test the downgrade is not enforced for the TLS 1.3 to TLS 1.1 downgrade if
-// disabled.
-TEST_F(SSLClientSocketTest, TLS13DowngradeIgnoredAtTLS11) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(features::kEnforceTLS13Downgrade);
-
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.simulate_tls12_downgrade = true;
-  ssl_options.tls_max_version =
-      SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_1;
-  ASSERT_TRUE(StartTestServer(ssl_options));
-
-  SSLContextConfig config;
-  config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
-  ssl_config_service_->UpdateSSLConfigAndNotify(config);
-
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  EXPECT_THAT(rv, IsOk());
-  EXPECT_TRUE(sock_->IsConnected());
-
-  SSLInfo info;
-  EXPECT_TRUE(sock_->GetSSLInfo(&info));
-  EXPECT_EQ(SSL_CONNECTION_VERSION_TLS1_1,
-            SSLConnectionStatusToVersion(info.connection_status));
-}
-
-// Test the downgrade is not enforced for the TLS 1.3 to TLS 1.0 downgrade if
-// disabled.
-TEST_F(SSLClientSocketTest, TLS13DowngradeIgnoredAtTLS10) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(features::kEnforceTLS13Downgrade);
-
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.simulate_tls13_downgrade = true;
-  ssl_options.tls_max_version =
-      SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_0;
-  ASSERT_TRUE(StartTestServer(ssl_options));
-
-  SSLContextConfig config;
-  config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
-  ssl_config_service_->UpdateSSLConfigAndNotify(config);
-
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  EXPECT_THAT(rv, IsOk());
-  EXPECT_TRUE(sock_->IsConnected());
-
-  SSLInfo info;
-  EXPECT_TRUE(sock_->GetSSLInfo(&info));
-  EXPECT_EQ(SSL_CONNECTION_VERSION_TLS1,
-            SSLConnectionStatusToVersion(info.connection_status));
-}
-
-// Failed on Android builder. See https://crbug.com/999647
-#if defined(OS_ANDROID)
-#define MAYBE_TLS13DowngradeEnforcedKnownKnown \
-  DISABLED_TLS13DowngradeEnforcedKnownKnown
-#else
-#define MAYBE_TLS13DowngradeEnforcedKnownKnown TLS13DowngradeEnforcedKnownKnown
-#endif
-// Test downgrade enforcement enforces known roots when configured to.
-TEST_F(SSLClientSocketTest, MAYBE_TLS13DowngradeEnforcedKnownKnown) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(
-      features::kEnforceTLS13Downgrade, {{"known_roots_only", "true"}});
-
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.simulate_tls13_downgrade = true;
-  ssl_options.tls_max_version =
-      SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_2;
-  ASSERT_TRUE(StartTestServer(ssl_options));
-
-  scoped_refptr<X509Certificate> server_cert =
-      spawned_test_server()->GetCertificate();
-
-  // Certificate is trusted and chains to a public root.
-  CertVerifyResult verify_result;
-  verify_result.is_issued_by_known_root = true;
-  verify_result.verified_cert = server_cert;
-  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
-
-  SSLContextConfig config;
-  config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
-  ssl_config_service_->UpdateSSLConfigAndNotify(config);
-
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  EXPECT_THAT(rv, IsError(ERR_TLS13_DOWNGRADE_DETECTED));
-  EXPECT_FALSE(sock_->IsConnected());
-}
-
-// Test downgrade enforcement allows valid connections with known roots when
-// configured to.
-TEST_F(SSLClientSocketTest, TLS13DowngradeEnforcedKnownValid) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(
-      features::kEnforceTLS13Downgrade, {{"known_roots_only", "true"}});
-
-  ASSERT_TRUE(StartTestServer(SpawnedTestServer::SSLOptions()));
-
-  scoped_refptr<X509Certificate> server_cert =
-      spawned_test_server()->GetCertificate();
-
-  // Certificate is trusted and chains to a public root.
-  CertVerifyResult verify_result;
-  verify_result.is_issued_by_known_root = true;
-  verify_result.verified_cert = server_cert;
-  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
-
-  SSLContextConfig config;
-  config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
-  ssl_config_service_->UpdateSSLConfigAndNotify(config);
-
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  EXPECT_THAT(rv, IsOk());
-  EXPECT_TRUE(sock_->IsConnected());
-}
-
-// Test downgrade enforcement ignores unknown roots when configured to.
-TEST_F(SSLClientSocketTest, TLS13DowngradeEnforcedKnownUnknown) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(
-      features::kEnforceTLS13Downgrade, {{"known_roots_only", "true"}});
-
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.simulate_tls13_downgrade = true;
-  ssl_options.tls_max_version =
-      SpawnedTestServer::SSLOptions::TLS_MAX_VERSION_TLS1_2;
-  ASSERT_TRUE(StartTestServer(ssl_options));
-
-  scoped_refptr<X509Certificate> server_cert =
-      spawned_test_server()->GetCertificate();
-
-  // Certificate is trusted and chains to a public root.
-  CertVerifyResult verify_result;
-  verify_result.is_issued_by_known_root = false;
-  verify_result.verified_cert = server_cert;
-  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
-
-  SSLContextConfig config;
-  config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
-  ssl_config_service_->UpdateSSLConfigAndNotify(config);
-
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
-  EXPECT_THAT(rv, IsOk());
-  EXPECT_TRUE(sock_->IsConnected());
+          ssl_client_session_cache_->Flush();
+          int rv;
+          ASSERT_TRUE(CreateAndConnectSSLClientSocket(SSLConfig(), &rv));
+          if (should_enforce && downgrade) {
+            EXPECT_THAT(rv, IsError(ERR_TLS13_DOWNGRADE_DETECTED));
+            EXPECT_FALSE(sock_->IsConnected());
+          } else {
+            EXPECT_THAT(rv, IsOk());
+            EXPECT_TRUE(sock_->IsConnected());
+          }
+        }
+      }
+    }
+  }
 }
 
 struct TLS13DowngradeMetricsParams {
@@ -5603,10 +5479,6 @@ TEST_P(TLS13DowngradeMetricsTest, Metrics) {
   const TLS13DowngradeMetricsParams& params = GetParam();
   base::HistogramTester histograms;
 
-  // Metrics are only gathered when enforcement is disabled.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(features::kEnforceTLS13Downgrade);
-
   SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.simulate_tls13_downgrade = params.downgrade;
   ssl_options.key_exchanges = params.key_exchanges;
@@ -5641,7 +5513,7 @@ TEST_P(TLS13DowngradeMetricsTest, Metrics) {
   std::unique_ptr<SSLClientSocket> ssl_socket =
       CreateSSLClientSocket(std::move(transport), host_port_pair, SSLConfig());
   rv = callback.GetResult(ssl_socket->Connect(callback.callback()));
-  EXPECT_THAT(rv, IsOk());
+  EXPECT_THAT(rv, AnyOf(IsOk(), IsError(ERR_TLS13_DOWNGRADE_DETECTED)));
 
   histograms.ExpectUniqueSample("Net.SSLTLS13Downgrade", params.downgrade, 1);
   if (params.tls13_experiment_host) {
@@ -5785,6 +5657,92 @@ TEST_P(SSLHandshakeDetailsTest, Metrics) {
     histograms.ExpectUniqueSample("Net.SSLHandshakeDetails",
                                   GetParam().expected_resume, 1);
   }
+}
+
+TEST_F(SSLClientSocketZeroRTTTest, EarlyDataReasonNewSession) {
+  const char kReasonHistogram[] = "Net.SSLHandshakeEarlyDataReason";
+
+  ASSERT_TRUE(StartServer());
+  base::HistogramTester histograms;
+  ASSERT_TRUE(RunInitialConnection());
+  histograms.ExpectUniqueSample(kReasonHistogram,
+                                ssl_early_data_no_session_offered, 1);
+}
+
+// Test 0-RTT logging when the server declines to resume a connection.
+TEST_F(SSLClientSocketZeroRTTTest, EarlyDataReasonNoResume) {
+  const char kReasonHistogram[] = "Net.SSLHandshakeEarlyDataReason";
+
+  ASSERT_TRUE(StartServer());
+  ASSERT_TRUE(RunInitialConnection());
+
+  SSLServerConfig server_config;
+  server_config.early_data_enabled = false;
+  server_config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
+
+  SetServerConfig(server_config);
+
+  base::HistogramTester histograms;
+
+  // 0-RTT Connection
+  FakeBlockingStreamSocket* socket = MakeClient(true);
+  socket->BlockReadResult();
+  ASSERT_THAT(Connect(), IsOk());
+  constexpr base::StringPiece kRequest = "GET /zerortt HTTP/1.0\r\n\r\n";
+  EXPECT_EQ(static_cast<int>(kRequest.size()), WriteAndWait(kRequest));
+  socket->UnblockReadResult();
+
+  // Expect early data to be rejected.
+  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(4096);
+  int rv = ReadAndWait(buf.get(), 4096);
+  EXPECT_EQ(ERR_EARLY_DATA_REJECTED, rv);
+
+  histograms.ExpectUniqueSample(kReasonHistogram,
+                                ssl_early_data_session_not_resumed, 1);
+}
+
+// Test 0-RTT logging in the standard ConfirmHandshake-after-acceptance case.
+TEST_F(SSLClientSocketZeroRTTTest, EarlyDataReasonZeroRTT) {
+  const char kReasonHistogram[] = "Net.SSLHandshakeEarlyDataReason";
+
+  ASSERT_TRUE(StartServer());
+  ASSERT_TRUE(RunInitialConnection());
+
+  // 0-RTT Connection
+  base::HistogramTester histograms;
+  MakeClient(true);
+  ASSERT_THAT(Connect(), IsOk());
+  TestCompletionCallback callback;
+  ASSERT_THAT(
+      callback.GetResult(ssl_socket()->ConfirmHandshake(callback.callback())),
+      IsOk());
+  histograms.ExpectUniqueSample(kReasonHistogram, ssl_early_data_accepted, 1);
+}
+
+// Check that we're correctly logging 0-rtt success when the handshake
+// concludes during a Read.
+TEST_F(SSLClientSocketZeroRTTTest, EarlyDataReasonReadServerHello) {
+  const char kReasonHistogram[] = "Net.SSLHandshakeEarlyDataReason";
+  ASSERT_TRUE(StartServer());
+  ASSERT_TRUE(RunInitialConnection());
+
+  // 0-RTT Connection
+  base::HistogramTester histograms;
+  MakeClient(true);
+  ASSERT_THAT(Connect(), IsOk());
+  constexpr base::StringPiece kRequest = "GET /zerortt HTTP/1.0\r\n\r\n";
+  EXPECT_EQ(static_cast<int>(kRequest.size()), WriteAndWait(kRequest));
+
+  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(4096);
+  int size = ReadAndWait(buf.get(), 4096);
+  EXPECT_GT(size, 0);
+  EXPECT_EQ('1', buf->data()[size - 1]);
+
+  SSLInfo ssl_info;
+  ASSERT_TRUE(GetSSLInfo(&ssl_info));
+  EXPECT_EQ(SSLInfo::HANDSHAKE_RESUME, ssl_info.handshake_type);
+
+  histograms.ExpectUniqueSample(kReasonHistogram, ssl_early_data_accepted, 1);
 }
 
 TEST_F(SSLClientSocketTest, VersionOverride) {

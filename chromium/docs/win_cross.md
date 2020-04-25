@@ -12,11 +12,9 @@ swarming.  This document describes how to set that up, and current restrictions.
 
 What does *not* work:
 
-* 64-bit renderer processes don't use V8 snapshots, slowing down their startup
-  ([bug](https://crbug.com/803591))
-* on Mac hosts, 32-bit builds don't use V8 snapshots either
-  ([bug](https://crbug.com/794838) has more information, but this is unlikely
-  to ever change)
+* `js2gtest` tests are omitted from the build ([bug](https://crbug.com/1010561))
+* on Mac hosts, 32-bit builds don't work ([bug](https://crbug.com/794838) has
+  more information, and this is unlikely to ever change)
 
 All other targets build fine (including `chrome`, `browser_tests`, ...).
 
@@ -102,7 +100,7 @@ to correctly symbolize stack traces (or if you want to attach a debugger).
 
 You can run the Windows binaries you built on swarming, like so:
 
-    tools/run-swarmed.py -C out/gnwin -t base_unittests [ --gtest_filter=... ]
+    tools/run-swarmed.py out/gnwin base_unittests [ --gtest_filter=... ]
 
 See the contents of run-swarmed.py for how to do this manually.
 

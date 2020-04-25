@@ -29,6 +29,7 @@
 #include "base/time/time.h"
 #include "net/base/net_export.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_access_delegate.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_monster_change_dispatcher.h"
 #include "net/cookies/cookie_store.h"
@@ -164,6 +165,8 @@ class NET_EXPORT CookieMonster : public CookieStore {
                                      const CookieOptions& options,
                                      GetCookieListCallback callback) override;
   void GetAllCookiesAsync(GetAllCookiesCallback callback) override;
+  void GetAllCookiesWithAccessSemanticsAsync(
+      GetAllCookiesWithAccessSemanticsCallback callback) override;
   void DeleteCanonicalCookieAsync(const CanonicalCookie& cookie,
                                   DeleteCallback callback) override;
   void DeleteAllCreatedInTimeRangeAsync(
@@ -353,6 +356,10 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   void GetAllCookies(GetAllCookiesCallback callback);
 
+  void AttachAccessSemanticsListForCookieList(
+      GetAllCookiesWithAccessSemanticsCallback callback,
+      const CookieList& cookie_list);
+
   void GetCookieListWithOptions(const GURL& url,
                                 const CookieOptions& options,
                                 GetCookieListCallback callback);
@@ -527,6 +534,11 @@ class NET_EXPORT CookieMonster : public CookieStore {
                                              base::Time* earliest_time);
 
   bool HasCookieableScheme(const GURL& url);
+
+  // Get the cookie's access semantics (LEGACY or NONLEGACY) from the cookie
+  // access delegate, if it is non-null. Otherwise return UNKNOWN.
+  CookieAccessSemantics GetAccessSemanticsForCookie(
+      const CanonicalCookie& cookie) const;
 
   // Statistics support
 

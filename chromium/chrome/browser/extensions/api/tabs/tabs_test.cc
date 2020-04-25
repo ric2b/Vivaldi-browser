@@ -48,7 +48,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/mime_handler_view_mode.h"
-#include "content/public/common/page_zoom.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -61,6 +60,7 @@
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/widget/widget.h"
@@ -98,6 +98,8 @@ class ExtensionWindowCreateTest : public InProcessBrowserTest {
 };
 
 const int kUndefinedId = INT_MIN;
+const ExtensionTabUtil::ScrubTabBehavior kDontScrubBehavior = {
+    ExtensionTabUtil::kDontScrubTab, ExtensionTabUtil::kDontScrubTab};
 
 int GetTabId(base::DictionaryValue* tab) {
   int id = kUndefinedId;
@@ -1136,9 +1138,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DuplicateTab) {
   EXPECT_EQ(window_id, duplicate_tab_window_id);
   EXPECT_EQ(tab_index + 1, duplicate_tab_index);
   // The test empty tab extension has tabs permissions, therefore
-  // |duplicate_result| should contain url, title, and faviconUrl
+  // |duplicate_result| should contain url, pendingUrl, title or faviconUrl
   // in the function result.
-  EXPECT_TRUE(utils::HasPrivacySensitiveFields(duplicate_result.get()));
+  EXPECT_TRUE(utils::HasAnyPrivacySensitiveFields(duplicate_result.get()));
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DuplicateTabNoPermission) {
@@ -1174,8 +1176,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DuplicateTabNoPermission) {
   EXPECT_EQ(window_id, duplicate_tab_window_id);
   EXPECT_EQ(tab_index + 1, duplicate_tab_index);
   // The test empty extension has no permissions, therefore |duplicate_result|
-  // should not contain url, title, and faviconUrl in the function result.
-  EXPECT_FALSE(utils::HasPrivacySensitiveFields(duplicate_result.get()));
+  // should not contain url, pendingUrl, title and faviconUrl in the function
+  // result.
+  EXPECT_FALSE(utils::HasAnyPrivacySensitiveFields(duplicate_result.get()));
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, NoTabsEventOnDevTools) {
@@ -1323,8 +1326,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DiscardedProperty) {
 
   // Creates Tab object to ensure the property is correct for the extension.
   std::unique_ptr<api::tabs::Tab> tab_object_a =
-      ExtensionTabUtil::CreateTabObject(web_contents_a,
-                                        ExtensionTabUtil::kDontScrubTab,
+      ExtensionTabUtil::CreateTabObject(web_contents_a, kDontScrubBehavior,
                                         nullptr, tab_strip_model, 0);
   EXPECT_FALSE(tab_object_a->discarded);
 
@@ -1334,8 +1336,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DiscardedProperty) {
 
   // Make sure the property is changed accordingly after discarding the tab.
   tab_object_a = ExtensionTabUtil::CreateTabObject(
-      web_contents_a, ExtensionTabUtil::kDontScrubTab, nullptr, tab_strip_model,
-      0);
+      web_contents_a, kDontScrubBehavior, nullptr, tab_strip_model, 0);
   EXPECT_TRUE(tab_object_a->discarded);
 
   // Get non-discarded tabs after discarding one tab.
@@ -1530,8 +1531,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, AutoDiscardableProperty) {
   // Creates Tab object to ensure the property is correct for the extension.
   TabStripModel* tab_strip_model = browser()->tab_strip_model();
   std::unique_ptr<api::tabs::Tab> tab_object_a =
-      ExtensionTabUtil::CreateTabObject(web_contents_a,
-                                        ExtensionTabUtil::kDontScrubTab,
+      ExtensionTabUtil::CreateTabObject(web_contents_a, kDontScrubBehavior,
                                         nullptr, tab_strip_model, 0);
   EXPECT_TRUE(tab_object_a->auto_discardable);
 
@@ -1575,8 +1575,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, AutoDiscardableProperty) {
 
   // Make sure the property is changed accordingly after updating the tab.
   tab_object_a = ExtensionTabUtil::CreateTabObject(
-      web_contents_a, ExtensionTabUtil::kDontScrubTab, nullptr, tab_strip_model,
-      0);
+      web_contents_a, kDontScrubBehavior, nullptr, tab_strip_model, 0);
   EXPECT_FALSE(tab_object_a->auto_discardable);
 
   // Get auto-discardable tabs after changing the status of web contents A.
@@ -1847,7 +1846,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsZoomTest, SetAndGetZoom) {
   const double kZoomLevel = 0.8;
   EXPECT_TRUE(RunSetZoom(tab_id, kZoomLevel));
   EXPECT_EQ(kZoomLevel,
-            content::ZoomLevelToZoomFactor(GetZoomLevel(web_contents)));
+            blink::PageZoomLevelToZoomFactor(GetZoomLevel(web_contents)));
 
   // Test chrome.tabs.getZoom().
   zoom_factor = -1;
@@ -1864,9 +1863,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsZoomTest, GetDefaultZoom) {
       zoom::ZoomController::FromWebContents(web_contents);
   double default_zoom_factor = -1.0;
   EXPECT_TRUE(RunGetDefaultZoom(tab_id, &default_zoom_factor));
-  EXPECT_TRUE(content::ZoomValuesEqual(
+  EXPECT_TRUE(blink::PageZoomValuesEqual(
       zoom_controller->GetDefaultZoomLevel(),
-      content::ZoomFactorToZoomLevel(default_zoom_factor)));
+      blink::PageZoomFactorToZoomLevel(default_zoom_factor)));
 
   // Change the default zoom level and verify GetDefaultZoom returns the
   // correct value.
@@ -1880,9 +1879,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsZoomTest, GetDefaultZoom) {
   zoom_prefs->SetDefaultZoomLevelPref(default_zoom_level + 0.5);
   default_zoom_factor = -1.0;
   EXPECT_TRUE(RunGetDefaultZoom(tab_id, &default_zoom_factor));
-  EXPECT_TRUE(content::ZoomValuesEqual(
+  EXPECT_TRUE(blink::PageZoomValuesEqual(
       default_zoom_level + 0.5,
-      content::ZoomFactorToZoomLevel(default_zoom_factor)));
+      blink::PageZoomFactorToZoomLevel(default_zoom_factor)));
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionTabsZoomTest, SetToDefaultZoom) {
@@ -1906,9 +1905,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsZoomTest, SetToDefaultZoom) {
   double observed_zoom_factor = -1.0;
   EXPECT_TRUE(RunSetZoom(tab_id, 0.0));
   EXPECT_TRUE(RunGetZoom(tab_id, &observed_zoom_factor));
-  EXPECT_TRUE(content::ZoomValuesEqual(
+  EXPECT_TRUE(blink::PageZoomValuesEqual(
       new_default_zoom_level,
-      content::ZoomFactorToZoomLevel(observed_zoom_factor)));
+      blink::PageZoomFactorToZoomLevel(observed_zoom_factor)));
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionTabsZoomTest, ZoomSettings) {
@@ -1936,48 +1935,48 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsZoomTest, ZoomSettings) {
   int tab_id_B = ExtensionTabUtil::GetTabId(web_contents_B);
 
   ASSERT_FLOAT_EQ(
-      1.f, content::ZoomLevelToZoomFactor(GetZoomLevel(web_contents_A1)));
+      1.f, blink::PageZoomLevelToZoomFactor(GetZoomLevel(web_contents_A1)));
   ASSERT_FLOAT_EQ(
-      1.f, content::ZoomLevelToZoomFactor(GetZoomLevel(web_contents_A2)));
+      1.f, blink::PageZoomLevelToZoomFactor(GetZoomLevel(web_contents_A2)));
   ASSERT_FLOAT_EQ(
-      1.f, content::ZoomLevelToZoomFactor(GetZoomLevel(web_contents_B)));
+      1.f, blink::PageZoomLevelToZoomFactor(GetZoomLevel(web_contents_B)));
 
   // Test per-origin automatic zoom settings.
   EXPECT_TRUE(RunSetZoom(tab_id_B, 1.f));
   EXPECT_TRUE(RunSetZoom(tab_id_A2, 1.1f));
   EXPECT_FLOAT_EQ(
-      1.1f, content::ZoomLevelToZoomFactor(GetZoomLevel(web_contents_A1)));
+      1.1f, blink::PageZoomLevelToZoomFactor(GetZoomLevel(web_contents_A1)));
   EXPECT_FLOAT_EQ(
-      1.1f, content::ZoomLevelToZoomFactor(GetZoomLevel(web_contents_A2)));
-  EXPECT_FLOAT_EQ(1.f,
-                  content::ZoomLevelToZoomFactor(GetZoomLevel(web_contents_B)));
+      1.1f, blink::PageZoomLevelToZoomFactor(GetZoomLevel(web_contents_A2)));
+  EXPECT_FLOAT_EQ(
+      1.f, blink::PageZoomLevelToZoomFactor(GetZoomLevel(web_contents_B)));
 
   // Test per-tab automatic zoom settings.
   EXPECT_TRUE(RunSetZoomSettings(tab_id_A1, "automatic", "per-tab"));
   EXPECT_TRUE(RunSetZoom(tab_id_A1, 1.2f));
   EXPECT_FLOAT_EQ(
-      1.2f, content::ZoomLevelToZoomFactor(GetZoomLevel(web_contents_A1)));
+      1.2f, blink::PageZoomLevelToZoomFactor(GetZoomLevel(web_contents_A1)));
   EXPECT_FLOAT_EQ(
-      1.1f, content::ZoomLevelToZoomFactor(GetZoomLevel(web_contents_A2)));
+      1.1f, blink::PageZoomLevelToZoomFactor(GetZoomLevel(web_contents_A2)));
 
   // Test 'manual' mode.
   EXPECT_TRUE(RunSetZoomSettings(tab_id_A1, "manual", nullptr));
   EXPECT_TRUE(RunSetZoom(tab_id_A1, 1.3f));
   EXPECT_FLOAT_EQ(
-      1.3f, content::ZoomLevelToZoomFactor(GetZoomLevel(web_contents_A1)));
+      1.3f, blink::PageZoomLevelToZoomFactor(GetZoomLevel(web_contents_A1)));
   EXPECT_FLOAT_EQ(
-      1.1f, content::ZoomLevelToZoomFactor(GetZoomLevel(web_contents_A2)));
+      1.1f, blink::PageZoomLevelToZoomFactor(GetZoomLevel(web_contents_A2)));
 
   // Test 'disabled' mode, which will reset A1's zoom to 1.f.
   EXPECT_TRUE(RunSetZoomSettings(tab_id_A1, "disabled", nullptr));
   std::string error = RunSetZoomExpectError(tab_id_A1, 1.4f);
   EXPECT_TRUE(base::MatchPattern(error, keys::kCannotZoomDisabledTabError));
   EXPECT_FLOAT_EQ(
-      1.f, content::ZoomLevelToZoomFactor(GetZoomLevel(web_contents_A1)));
+      1.f, blink::PageZoomLevelToZoomFactor(GetZoomLevel(web_contents_A1)));
   // We should still be able to zoom A2 though.
   EXPECT_TRUE(RunSetZoom(tab_id_A2, 1.4f));
   EXPECT_FLOAT_EQ(
-      1.4f, content::ZoomLevelToZoomFactor(GetZoomLevel(web_contents_A2)));
+      1.4f, blink::PageZoomLevelToZoomFactor(GetZoomLevel(web_contents_A2)));
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionTabsZoomTest, PerTabResetsOnNavigation) {
@@ -2061,13 +2060,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsZoomTest, CannotZoomInvalidTab) {
 }
 
 // Regression test for crbug.com/660498.
-// TODO(crbug.com/882213) Disabled due to timeouts on Linux builders.
-#if defined(OS_LINUX)
-#define MAYBE_TemporaryAddressSpoof DISABLED_TemporaryAddressSpoof
-#else
-#define MAYBE_TemporaryAddressSpoof TemporaryAddressSpoof
-#endif
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_TemporaryAddressSpoof) {
+IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TemporaryAddressSpoof) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   content::WebContents* first_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -2115,6 +2108,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, MAYBE_TemporaryAddressSpoof) {
             browser()->tab_strip_model()->GetActiveWebContents());
 
   EXPECT_EQ(url, second_web_contents->GetVisibleURL());
+
+  // Wait for the TestNavigationManager-initiated navigation to complete to
+  // avoid a race during browser teardown (see crbug.com/882213).
+  navigation_manager.WaitForNavigationFinished();
 }
 
 // Tests how chrome.windows.create behaves when setSelfAsOpener parameter is

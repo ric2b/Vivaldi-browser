@@ -37,8 +37,6 @@ class VIEWS_EXPORT MenuModelAdapter : public MenuDelegate,
   // (including submenus).
   virtual void BuildMenu(MenuItemView* menu);
 
-  void VivaldiUpdateMenu(MenuItemView* menu, ui::MenuModel* model);
-
   // Convenience for creating and populating a menu. The caller owns the
   // returned MenuItemView.
   MenuItemView* CreateMenu();
@@ -68,6 +66,10 @@ class VIEWS_EXPORT MenuModelAdapter : public MenuDelegate,
   void OnMenuStructureChanged() override;
   void OnMenuClearingDelegate() override;
 
+  // Vivaldi
+  void VivaldiSetModel(MenuItemView* menu, ui::MenuModel* model);
+  void VivaldiUpdateMenu(MenuItemView* menu, ui::MenuModel* model);
+
  protected:
   // Create and add a menu item to |menu| for the item at index |index| in
   // |model|. Subclasses override this to allow custom items to be added to the
@@ -86,10 +88,12 @@ class VIEWS_EXPORT MenuModelAdapter : public MenuDelegate,
   bool IsCommandEnabled(int id) const override;
   bool IsCommandVisible(int id) const override;
   bool IsItemChecked(int id) const override;
-  void VivaldiSelectionChanged(MenuItemView* menu) override;
   void WillShowMenu(MenuItemView* menu) override;
   void WillHideMenu(MenuItemView* menu) override;
   void OnMenuClosed(MenuItemView* menu) override;
+
+  // Vivaldi
+  void VivaldiSelectionChanged(MenuItemView* menu) override;
 
  private:
   // Implementation of BuildMenu().

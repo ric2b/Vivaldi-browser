@@ -19,10 +19,11 @@
 
 namespace blink {
 
-class GPUColor;
-class GPUExtent3D;
-class GPUOrigin3D;
-class GPUPipelineStageDescriptor;
+class DoubleSequenceOrGPUColorDict;
+class GPUColorDict;
+class GPUProgrammableStageDescriptor;
+class UnsignedLongSequenceOrGPUExtent3DDict;
+class UnsignedLongSequenceOrGPUOrigin3DDict;
 
 // Convert WebGPU bitfield values to Dawn enums. These have the same value.
 template <typename DawnEnum>
@@ -37,13 +38,16 @@ DawnEnum AsDawnEnum(const WTF::String& webgpu_enum);
 // These conversions are used multiple times and are declared here. Conversions
 // used only once, for example for object construction, are defined
 // individually.
-DawnColor AsDawnType(const GPUColor*);
-DawnExtent3D AsDawnType(const GPUExtent3D*);
-DawnOrigin3D AsDawnType(const GPUOrigin3D*);
+DawnColor AsDawnColor(const Vector<double>&);
+DawnColor AsDawnType(const GPUColorDict*);
+DawnColor AsDawnType(const DoubleSequenceOrGPUColorDict*);
+DawnExtent3D AsDawnType(const UnsignedLongSequenceOrGPUExtent3DDict*);
+DawnOrigin3D AsDawnType(const UnsignedLongSequenceOrGPUOrigin3DDict*);
 
-using OwnedPipelineStageDescriptor =
-    std::tuple<DawnPipelineStageDescriptor, std::unique_ptr<char[]>>;
-OwnedPipelineStageDescriptor AsDawnType(const GPUPipelineStageDescriptor*);
+using OwnedProgrammableStageDescriptor =
+    std::tuple<DawnProgrammableStageDescriptor, std::unique_ptr<char[]>>;
+OwnedProgrammableStageDescriptor AsDawnType(
+    const GPUProgrammableStageDescriptor*);
 
 // WebGPU objects are converted to Dawn objects by getting the opaque handle
 // which can be passed to Dawn.

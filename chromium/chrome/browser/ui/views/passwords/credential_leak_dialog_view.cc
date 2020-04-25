@@ -11,11 +11,13 @@
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
+#include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
+#include "ui/views/bubble/tooltip_icon.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/layout/box_layout.h"
 
@@ -62,10 +64,8 @@ std::unique_ptr<NonAccessibleImageView> CreateIllustration(
 
 // Creates the content containing the title and description for the dialog
 // rendered below the illustration.
-std::unique_ptr<views::View> CreateContent(
-    const base::string16& title,
-    const base::string16& description,
-    gfx::Range bold_change_password_range) {
+std::unique_ptr<views::View> CreateContent(const base::string16& title,
+                                           const base::string16& description) {
   auto content = std::make_unique<views::View>();
   content->SetLayoutManager(std::make_unique<BoxLayout>(
       BoxLayout::Orientation::kVertical, gfx::Insets(),
@@ -83,15 +83,20 @@ std::unique_ptr<views::View> CreateContent(
 
   auto description_label =
       std::make_unique<views::StyledLabel>(description, nullptr);
-  if (!bold_change_password_range.is_empty()) {
-    views::StyledLabel::RangeStyleInfo style;
-    style.custom_font = description_label->GetDefaultFontList().Derive(
-        0, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::BOLD);
-    description_label->AddStyleRange(bold_change_password_range, style);
-  }
   content->AddChildView(std::move(description_label));
 
   return content;
+}
+
+std::unique_ptr<views::TooltipIcon> CreateInfoIcon() {
+  auto explanation_tooltip = std::make_unique<views::TooltipIcon>(
+      password_manager::GetLeakDetectionTooltip());
+  explanation_tooltip->set_bubble_width(
+      ChromeLayoutProvider::Get()->GetDistanceMetric(
+          DISTANCE_BUBBLE_PREFERRED_WIDTH));
+  explanation_tooltip->set_anchor_point_arrow(
+      views::BubbleBorder::Arrow::TOP_RIGHT);
+  return explanation_tooltip;
 }
 
 }  // namespace
@@ -183,10 +188,10 @@ void CredentialLeakDialogView::InitWindow() {
       CreateIllustration(GetNativeTheme()->ShouldUseDarkColors());
   image_view_ = illustration.get();
   std::unique_ptr<views::View> content =
-      CreateContent(controller_->GetTitle(), controller_->GetDescription(),
-                    controller_->GetChangePasswordBoldRange());
+      CreateContent(controller_->GetTitle(), controller_->GetDescription());
   AddChildView(std::move(illustration));
   AddChildView(std::move(content));
+  SetExtraView(CreateInfoIcon());
 }
 
 CredentialLeakPrompt* CreateCredentialLeakPromptView(

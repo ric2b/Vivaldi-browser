@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="no">
+<translation id="1181037720776840403">Fjern</translation>
 <translation id="125153950246128346">Trykk for å se en annen fane</translation>
 <translation id="1869137256605757565">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> fane}other{<ph name="TABS_COUNT_MANY" /> faner}}</translation>
 <translation id="257674075312929031">Gruppe</translation>
@@ -19,6 +20,7 @@
 <translation id="6615455863669487791">Vis meg</translation>
 <translation id="6803423358608456383">Åpnede faner i halv høyde</translation>
 <translation id="6840760312327750441">For å gruppere faner, trykk og hold på en fane. Dra den deretter oppå en annen fane.</translation>
+<translation id="7151209024774799310">Fjern faner fra gruppen</translation>
 <translation id="7559245342362162951">Vis gruppens faner i fullskjermrutenett</translation>
 <translation id="8582216581279205169">Åpnede faner i full høyde</translation>
 <translation id="9150694013019234766">Bytt mellom faner i fanegruppen på nedre del av skjermen</translation>

@@ -15,7 +15,6 @@ namespace features {
 
 extern const base::Feature kCustomizedTabLoadTimeout;
 extern const base::Feature kProactiveTabFreezeAndDiscard;
-extern const base::Feature kSessionRestorePrioritizesBackgroundUseCases;
 extern const base::Feature kSiteCharacteristicsDatabase;
 extern const base::Feature kStaggeredBackgroundTabOpening;
 extern const base::Feature kStaggeredBackgroundTabOpeningExperiment;
@@ -31,6 +30,11 @@ extern const char kProactiveTabFreezeAndDiscardFeatureName[];
 // The name of the |ShouldProactivelyDiscard| parameter of the
 // ProactiveTabFreezeAndDiscard feature.
 extern const char kProactiveTabFreezeAndDiscard_ShouldProactivelyDiscardParam[];
+
+// The name of the |ShouldPeriodicallyUnfreeze| parameter of the
+// ProactiveTabFreezeAndDiscard feature.
+extern const char
+    kProactiveTabFreezeAndDiscard_ShouldPeriodicallyUnfreezeParam[];
 
 // The name of the |DisableHeuristicsProtections| parameter of the
 // ProactiveTabFreezeAndDiscard feature.
@@ -83,8 +87,8 @@ struct ProactiveTabFreezeAndDiscardParams {
       &features::kProactiveTabFreezeAndDiscard,
       kProactiveTabFreezeAndDiscard_ShouldProactivelyDiscardParam, false};
   static constexpr base::FeatureParam<bool> kShouldPeriodicallyUnfreeze{
-      &features::kProactiveTabFreezeAndDiscard, "ShouldPeriodicallyUnfreeze",
-      false};
+      &features::kProactiveTabFreezeAndDiscard,
+      kProactiveTabFreezeAndDiscard_ShouldPeriodicallyUnfreezeParam, false};
   static constexpr base::FeatureParam<bool>
       kShouldProtectTabsSharingBrowsingInstance{
           &features::kProactiveTabFreezeAndDiscard,
@@ -120,13 +124,12 @@ struct ProactiveTabFreezeAndDiscardParams {
       10 * base::Time::kSecondsPerMinute};
   static constexpr base::FeatureParam<int> kFreezeTimeout{
       &features::kProactiveTabFreezeAndDiscard, "FreezeTimeout",
-      10 * base::Time::kSecondsPerMinute};
+      5 * base::Time::kSecondsPerMinute};
   static constexpr base::FeatureParam<int> kUnfreezeTimeout{
       &features::kProactiveTabFreezeAndDiscard, "UnfreezeTimeout",
       15 * base::Time::kSecondsPerMinute};
   static constexpr base::FeatureParam<int> kRefreezeTimeout{
-      &features::kProactiveTabFreezeAndDiscard, "RefreezeTimeout",
-      10 * base::Time::kSecondsPerMinute};
+      &features::kProactiveTabFreezeAndDiscard, "RefreezeTimeout", 10};
 
   static constexpr base::FeatureParam<bool> kDisableHeuristicsProtections{
       &features::kProactiveTabFreezeAndDiscard,
@@ -207,12 +210,14 @@ struct SiteCharacteristicsDatabaseParams {
   static constexpr base::FeatureParam<int> kNotificationsUsageObservationWindow{
       &features::kSiteCharacteristicsDatabase,
       "NotificationsUsageObservationWindow", 2 * base::Time::kSecondsPerHour};
-  static constexpr base::FeatureParam<int> kTitleOrFaviconChangeGracePeriod{
-      &features::kSiteCharacteristicsDatabase,
-      "TitleOrFaviconChangeGracePeriod", 20 /* 20 seconds */};
-  static constexpr base::FeatureParam<int> kAudioUsageGracePeriod{
-      &features::kSiteCharacteristicsDatabase, "AudioUsageGracePeriod",
-      10 /* 10 seconds */};
+  static constexpr base::FeatureParam<int>
+      kTitleOrFaviconChangePostLoadGracePeriod{
+          &features::kSiteCharacteristicsDatabase,
+          "TitleOrFaviconChangePostLoadGracePeriod", 20 /* 20 seconds */};
+  static constexpr base::FeatureParam<int>
+      kFeatureUsagePostBackgroundGracePeriod{
+          &features::kSiteCharacteristicsDatabase,
+          "FeatureUsagePostBackgroundGracePeriod", 10 /* 10 seconds */};
 
   // Minimum observation window before considering that this website doesn't
   // update its favicon while in background.
@@ -230,12 +235,18 @@ struct SiteCharacteristicsDatabaseParams {
   // change events. It's possible for some site that are loaded in background to
   // use some of these features without this being an attempt to communicate
   // with the user (e.g. the tab is just really finishing to load).
-  base::TimeDelta title_or_favicon_change_grace_period;
-  // The period of time during which we ignore audio usage gets ignored after a
-  // tab gets backgrounded. It's necessary because there might be a delay
-  // between a media request gets initiated and the time the audio actually
-  // starts.
-  base::TimeDelta audio_usage_grace_period;
+  base::TimeDelta title_or_favicon_change_post_load_grace_period;
+  // The period of time during which we ignore events after a tab gets
+  // backgrounded. It's necessary because some events might happen shortly after
+  // backgrounding a tab without this being an attempt to communicate with the
+  // user:
+  //    - There might be a delay between a media request gets initiated and the
+  //      time the audio actually starts.
+  //    - Same-document navigation can cause the title or favicon to change, if
+  //      the user switch tab before this completes this will be recorded as a
+  //      background communication event while in reality it's just a navigation
+  //      event.
+  base::TimeDelta feature_usage_post_background_grace_period;
 };
 
 // Gets parameters for the proactive tab discarding feature. This does no

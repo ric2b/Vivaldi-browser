@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/downloads/downloads_list_tracker.h"
 
 #include <iterator>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -22,12 +23,15 @@
 #include "chrome/browser/download/download_query.h"
 #include "chrome/browser/extensions/api/downloads/downloads_api.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/webui/downloads/downloads.mojom.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/download_item.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/download_manager.h"
 #include "extensions/browser/extension_registry.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/filename_util.h"
 #include "third_party/icu/source/i18n/unicode/datefmt.h"
 #include "ui/base/l10n/time_format.h"
@@ -62,6 +66,11 @@ const char* GetDangerTypeString(download::DownloadDangerType danger_type) {
       return "ASYNC_SCANNING";
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED:
       return "BLOCKED_PASSWORD_PROTECTED";
+    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE:
+    case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING:
+    case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK:
+    case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
+    case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS:
     case download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
     case download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
     case download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
@@ -86,8 +95,9 @@ std::string TimeFormatLongDate(const base::Time& time) {
 
 }  // namespace
 
-DownloadsListTracker::DownloadsListTracker(DownloadManager* download_manager,
-                                           downloads::mojom::PagePtr page)
+DownloadsListTracker::DownloadsListTracker(
+    DownloadManager* download_manager,
+    mojo::PendingRemote<downloads::mojom::Page> page)
     : main_notifier_(download_manager, this),
       page_(std::move(page)),
       should_show_(base::BindRepeating(&DownloadsListTracker::ShouldShow,
@@ -181,7 +191,7 @@ void DownloadsListTracker::OnDownloadRemoved(DownloadManager* manager,
 
 DownloadsListTracker::DownloadsListTracker(
     DownloadManager* download_manager,
-    downloads::mojom::PagePtr page,
+    mojo::PendingRemote<downloads::mojom::Page> page,
     base::Callback<bool(const DownloadItem&)> should_show)
     : main_notifier_(download_manager, this),
       page_(std::move(page)),
@@ -227,7 +237,7 @@ downloads::mojom::DataPtr DownloadsListTracker::CreateDownloadData(
         content::DownloadItemUtils::GetBrowserContext(download_item));
     auto* registry = extensions::ExtensionRegistry::Get(profile);
     const extensions::Extension* extension = registry->GetExtensionById(
-        by_ext->id(), extensions::ExtensionRegistry::COMPATIBILITY);
+        by_ext->id(), extensions::ExtensionRegistry::EVERYTHING);
     if (extension)
       by_ext_name = extension->name();
   }

@@ -20,12 +20,13 @@ namespace prefs {
 // component. Keep alphabetized, and document each in the .cc file.
 extern const char kAutofillAcceptSaveCreditCardPromptState[];
 // Do not get/set the value of this pref directly. Use provided getter/setter.
-extern const char kAutofillCreditCardFIDOAuthEnabled[];
 extern const char kAutofillCreditCardEnabled[];
+extern const char kAutofillCreditCardFidoAuthEnabled[];
+extern const char kAutofillCreditCardFidoAuthOfferCheckboxState[];
 extern const char kAutofillCreditCardSigninPromoImpressionCount[];
 // Please use kAutofillCreditCardEnabled and kAutofillProfileEnabled instead.
 extern const char kAutofillEnabledDeprecated[];
-extern const char kAutofillJapanCityFieldMigrated[];
+extern const char kAutofillJapanCityFieldMigratedDeprecated[];
 extern const char kAutofillLastVersionDeduped[];
 extern const char kAutofillLastVersionValidated[];
 extern const char kAutofillLastVersionDisusedAddressesDeleted[];

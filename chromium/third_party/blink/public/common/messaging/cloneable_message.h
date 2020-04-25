@@ -21,8 +21,8 @@ namespace blink {
 // This type can be serialized as a blink::mojom::CloneableMessage struct.
 struct BLINK_COMMON_EXPORT CloneableMessage {
   CloneableMessage();
-  CloneableMessage(CloneableMessage&&) noexcept;
-  CloneableMessage& operator=(CloneableMessage&&) noexcept;
+  CloneableMessage(CloneableMessage&&);
+  CloneableMessage& operator=(CloneableMessage&&);
   ~CloneableMessage();
 
   // Returns a shallow clone of this message. |encoded_message| in the clone
@@ -48,6 +48,7 @@ struct BLINK_COMMON_EXPORT CloneableMessage {
   uint64_t stack_trace_id = 0;
   int64_t stack_trace_debugger_id_first = 0;
   int64_t stack_trace_debugger_id_second = 0;
+  bool stack_trace_should_pause = false;
 
   // If not null, this message is locked to the given agent cluster ID.
   // See

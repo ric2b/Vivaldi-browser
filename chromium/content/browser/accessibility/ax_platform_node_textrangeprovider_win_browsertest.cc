@@ -382,6 +382,51 @@ class AXPlatformNodeTextRangeProviderWinBrowserTest
 };
 
 IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
+                       GetAttributeValue) {
+  LoadInitialAccessibilityTreeFromHtml(std::string(R"HTML(
+      <!DOCTYPE html>
+      <html>
+        <body>
+          <div style="font-size: 16px">
+            <span style="font-size: 12px">Text1</span>
+            Text2
+          </div>
+        </body>
+      </html>
+  )HTML"));
+
+  ComPtr<IUnknown> mix_attribute_value;
+  EXPECT_HRESULT_SUCCEEDED(
+      UiaGetReservedMixedAttributeValue(&mix_attribute_value));
+
+  auto* node = FindNode(ax::mojom::Role::kStaticText, "Text1");
+  ASSERT_NE(nullptr, node);
+  EXPECT_TRUE(node->PlatformIsLeaf());
+  EXPECT_EQ(0u, node->PlatformChildCount());
+
+  ComPtr<ITextRangeProvider> text_range_provider;
+  GetTextRangeProviderFromTextNode(*node, &text_range_provider);
+  ASSERT_NE(nullptr, text_range_provider.Get());
+  EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"Text1");
+
+  base::win::ScopedVariant value;
+  EXPECT_HRESULT_SUCCEEDED(text_range_provider->GetAttributeValue(
+      UIA_FontSizeAttributeId, value.Receive()));
+  EXPECT_EQ(value.type(), VT_R8);
+  EXPECT_EQ(V_R8(value.ptr()), 12.0);
+
+  EXPECT_HRESULT_SUCCEEDED(
+      text_range_provider->ExpandToEnclosingUnit(TextUnit_Paragraph));
+  EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"Text1 Text2");
+
+  EXPECT_HRESULT_SUCCEEDED(text_range_provider->GetAttributeValue(
+      UIA_FontSizeAttributeId, value.Receive()));
+  EXPECT_EQ(value.type(), VT_UNKNOWN);
+  EXPECT_EQ(V_UNKNOWN(value.ptr()), mix_attribute_value.Get())
+      << "expected 'mixed attribute value' interface pointer";
+}
+
+IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
                        GetBoundingRectangles) {
   LoadInitialAccessibilityTreeFromHtml(std::string(R"HTML(
       <!DOCTYPE html>
@@ -878,7 +923,7 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Paragraph,
       /*count*/ 1,
-      /*expected_text*/ (paragraphs[1] + paragraphs[2]).c_str(),
+      /*expected_text*/ (paragraphs[1] + L"\n" + paragraphs[2]).c_str(),
       /*expected_count*/ 1);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_Start, TextUnit_Paragraph,
@@ -888,7 +933,7 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Paragraph,
       /*count*/ 1,
-      /*expected_text*/ (paragraphs[2] + paragraphs[3]).c_str(),
+      /*expected_text*/ (paragraphs[2] + L"\n" + paragraphs[3]).c_str(),
       /*expected_count*/ 1);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_Start, TextUnit_Paragraph,
@@ -949,7 +994,7 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_Start, TextUnit_Paragraph,
       /*count*/ -1,
-      /*expected_text*/ (paragraphs[2] + paragraphs[3]).c_str(),
+      /*expected_text*/ (paragraphs[2] + L"\n" + paragraphs[3]).c_str(),
       /*expected_count*/ -1);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Paragraph,
@@ -959,7 +1004,7 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_Start, TextUnit_Paragraph,
       /*count*/ -1,
-      /*expected_text*/ (paragraphs[1] + paragraphs[2]).c_str(),
+      /*expected_text*/ (paragraphs[1] + L"\n" + paragraphs[2]).c_str(),
       /*expected_count*/ -1);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Paragraph,
@@ -1087,6 +1132,89 @@ IN_PROC_BROWSER_TEST_F(
       /*count*/ -1,
       /*expected_text*/ (paragraphs[0] + L"\n" + paragraphs[1]).c_str(),
       /*expected_count*/ -1);
+  EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
+      text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Paragraph,
+      /*count*/ -1,
+      /*expected_text*/ paragraphs[0].c_str(),
+      /*expected_count*/ -1);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    AXPlatformNodeTextRangeProviderWinBrowserTest,
+    MoveEndpointByUnitParagraphCollapseConsecutiveParentChildLineBreakingObjects) {
+  LoadInitialAccessibilityTreeFromHtml(
+      R"HTML(<!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          div {
+            width: 100px;
+          }
+
+          code::before {
+            content: "[";
+          }
+
+          code::after {
+            content: "]";
+          }
+
+          /* This will create an empty anonymous layout block before the <b>
+             element. */
+          b::before {
+            content: "";
+            display: block;
+          }
+        </style>
+      </head>
+
+      <body>
+        <div>start</div>
+        <div>
+          text with <code>:before</code>
+          and <code>:after</code> content,
+          then a
+          <div>
+            <b>bold</b> element
+          </div>
+        </div>
+      </body>
+      </html>)HTML");
+  BrowserAccessibility* start_node =
+      FindNode(ax::mojom::Role::kStaticText, "start");
+  ASSERT_NE(nullptr, start_node);
+
+  std::vector<base::string16> paragraphs = {
+      L"start",
+      L"text with [:before] and [:after]content, then a",
+      L"bold element",
+  };
+
+  // Forward navigation.
+  ComPtr<ITextRangeProvider> text_range_provider;
+  GetTextRangeProviderFromTextNode(*start_node, &text_range_provider);
+  ASSERT_NE(nullptr, text_range_provider.Get());
+  EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"start");
+
+  EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
+      text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Paragraph,
+      /*count*/ 1,
+      /*expected_text*/ (paragraphs[0] + L"\n" + paragraphs[1]).c_str(),
+      /*expected_count*/ 1);
+  EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
+      text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Paragraph,
+      /*count*/ 1,
+      /*expected_text*/
+      (paragraphs[0] + L"\n" + paragraphs[1] + L"\n" + paragraphs[2]).c_str(),
+      /*expected_count*/ 1);
+
+  // Reverse navigation.
+  EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
+      text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Paragraph,
+      /*count*/ -1,
+      /*expected_text*/ (paragraphs[0] + L"\n" + paragraphs[1]).c_str(),
+      /*expected_count*/ -1);
+
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Paragraph,
       /*count*/ -1,
@@ -1409,7 +1537,7 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
                                    /*expected_count*/ -1);
 
   text_range_provider->ExpandToEnclosingUnit(TextUnit_Line);
-  EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"Text in iframe\n");
+  EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"Text in iframe");
 
   text_range_provider->ExpandToEnclosingUnit(TextUnit_Document);
   EXPECT_UIA_TEXTRANGE_EQ(text_range_provider,
@@ -1421,7 +1549,7 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
                   /*expected_count*/ 2);
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Word,
                   /*count*/ -1,
-                  /*expected_text*/ L"frame\n",
+                  /*expected_text*/ L"frame",
                   /*expected_count*/ -1);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Character,
@@ -1575,7 +1703,7 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
 
   ASSERT_HRESULT_SUCCEEDED(
       text_range_provider->ExpandToEnclosingUnit(TextUnit_Format));
-  EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"plain\ntext\n");
+  EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"plain\ntext");
 
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Character,
@@ -1609,8 +1737,13 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
 
   AssertMoveByUnitForMarkup(TextUnit_Word,
                             "a <a>link with multiple words</a> and text after.",
-                            {L"a ", L"link ", L"with ", L"multiple ", L"words ",
+                            {L"a ", L"link ", L"with ", L"multiple ", L"words",
                              L"and ", L"text ", L"after."});
+
+  AssertMoveByUnitForMarkup(TextUnit_Word,
+                            "a <span aria-hidden='true'>span with ignored "
+                            "text</span> and text after.",
+                            {L"a ", L"and ", L"text ", L"after."});
 
   // AssertMoveByUnitForMarkup(
   //     TextUnit_Word, "<ul><li>item one</li><li>item two</li></ul>",
@@ -1673,6 +1806,58 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
       "before <span style='font-weight:bold'>bold text</span><span "
       "style='font-style: italic'>italic text</span> after",
       {L"before ", L"bold text", L"italic text", L" after"});
+}
+
+IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
+                       BoundingRectangleOfWordBeforeListItemMarker) {
+  LoadInitialAccessibilityTreeFromHtml(
+      R"HTML(<!DOCTYPE html>
+      <html>
+        <body>
+          <p>Text before list</p>
+          <ul>
+            <li>First list item</li>
+            <li>Second list item</li>
+          </ul>
+        </body>
+      </html>)HTML");
+
+  BrowserAccessibility* text_before_list =
+      FindNode(ax::mojom::Role::kStaticText, "Text before list");
+  ASSERT_NE(nullptr, text_before_list);
+
+  ComPtr<ITextRangeProvider> text_range_provider;
+  GetTextRangeProviderFromTextNode(*text_before_list, &text_range_provider);
+  ASSERT_NE(nullptr, text_range_provider.Get());
+
+  EXPECT_UIA_MOVE(text_range_provider, TextUnit_Character,
+                  /*count*/ 12,
+                  /*expected_text*/ L"l",
+                  /*expected_count*/ 12);
+  text_range_provider->ExpandToEnclosingUnit(TextUnit_Word);
+  EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"list");
+
+  base::win::ScopedSafearray rectangles;
+  ASSERT_HRESULT_SUCCEEDED(
+      text_range_provider->GetBoundingRectangles(rectangles.Receive()));
+
+  gfx::Vector2d view_offset =
+      text_before_list->manager()->GetViewBounds().OffsetFromOrigin();
+  std::vector<double> expected_values = {85 + view_offset.x(),
+                                         16 + view_offset.y(), 20, 17};
+  EXPECT_UIA_DOUBLE_SAFEARRAY_EQ(rectangles.Get(), expected_values);
+
+  EXPECT_UIA_MOVE(text_range_provider, TextUnit_Character,
+                  /*count*/ 17,
+                  /*expected_text*/ L"e",
+                  /*expected_count*/ 17);
+  text_range_provider->ExpandToEnclosingUnit(TextUnit_Word);
+  EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"item");
+
+  ASSERT_HRESULT_SUCCEEDED(
+      text_range_provider->GetBoundingRectangles(rectangles.Receive()));
+  expected_values = {105 + view_offset.x(), 50 + view_offset.y(), 28, 17};
+  EXPECT_UIA_DOUBLE_SAFEARRAY_EQ(rectangles.Get(), expected_values);
 }
 
 }  // namespace content

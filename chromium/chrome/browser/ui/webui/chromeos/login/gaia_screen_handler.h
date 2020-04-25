@@ -39,6 +39,7 @@ class Key;
 class SamlPasswordAttributes;
 class SigninScreenHandler;
 class UserContext;
+class PublicSamlUrlFetcher;
 
 class GaiaView {
  public:
@@ -212,7 +213,9 @@ class GaiaScreenHandler : public BaseScreenHandler,
 
   void HandleCancelActiveDirectoryAuth();
 
-  void HandleUsingSAMLAPI();
+  // Handles SAML/GAIA login flow metrics
+  // is_third_party_idp == false means GAIA-based authentication
+  void HandleUsingSAMLAPI(bool is_third_party_idp);
   void HandleScrapedPasswordCount(int password_count);
   void HandleScrapedPasswordVerificationFailed();
 
@@ -221,7 +224,6 @@ class GaiaScreenHandler : public BaseScreenHandler,
   void HandleIdentifierEntered(const std::string& account_identifier);
 
   void HandleAuthExtensionLoaded();
-  void HandleUpdateOobeDialogSize(int width, int height);
   void HandleHideOobeDialog();
   void HandleShowAddUser(const base::ListValue* args);
   void HandleGetIsSamlUserPasswordless(const std::string& callback_id,
@@ -271,8 +273,8 @@ class GaiaScreenHandler : public BaseScreenHandler,
   void SubmitLoginFormForTest();
 
   // Updates the member variable and UMA histogram indicating whether the
-  // principals API was used during SAML login.
-  void SetSAMLPrincipalsAPIUsed(bool api_used);
+  // Chrome Credentials Passing API was used during SAML login.
+  void SetSAMLPrincipalsAPIUsed(bool is_third_party_idp, bool is_api_used);
 
   // Cancels the request to show the sign-in screen while the asynchronous
   // clean-up process that precedes the screen showing is in progress.
@@ -326,6 +328,10 @@ class GaiaScreenHandler : public BaseScreenHandler,
       UserContext* user_context,
       std::string* error_message);
 
+  bool is_security_token_pin_dialog_running() const {
+    return !security_token_pin_dialog_closed_callback_.is_null();
+  }
+
   // Current state of Gaia frame.
   FrameState frame_state_ = FRAME_STATE_UNKNOWN;
 
@@ -365,12 +371,9 @@ class GaiaScreenHandler : public BaseScreenHandler,
   // The active network at the moment when Gaia page was preloaded.
   std::string gaia_silent_load_network_;
 
-  // If the user authenticated via SAML, this indicates whether the principals
-  // API was used.
-  // TODO(emaxx): This is also currently set when the user authenticated via
-  // Gaia, since Gaia uses the same API for passing the password to Chrome.
-  // Either fix this behavior, or change the naming and the comments to reflect
-  // it.
+  // This flag is set when user authenticated using the Chrome Credentials
+  // Passing API (the login could happen via SAML or, with the current
+  // server-side implementation, via Gaia).
   bool using_saml_api_ = false;
 
   // Test credentials.
@@ -413,6 +416,8 @@ class GaiaScreenHandler : public BaseScreenHandler,
 
   std::unique_ptr<LoginClientCertUsageObserver>
       extension_provided_client_cert_usage_observer_;
+
+  std::unique_ptr<chromeos::PublicSamlUrlFetcher> public_saml_url_fetcher_;
 
   // State of the security token PIN dialogs:
 

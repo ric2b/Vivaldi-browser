@@ -12,6 +12,7 @@ namespace blink {
 
 using ::testing::MatchesRegex;
 using ::testing::UnorderedElementsAre;
+using ::testing::UnorderedElementsAreArray;
 
 void SetUpHTML(PaintAndRasterInvalidationTest& test) {
   test.SetBodyInnerHTML(R"HTML(
@@ -873,26 +874,14 @@ TEST_P(PaintAndRasterInvalidationTest, SVGHiddenContainer) {
   EXPECT_EQ(IntRect(55, 66, 7, 8), real_rect->FirstFragment().VisualRect());
 
   // Should invalidate raster for real_rect only.
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
-    // CAP creates composited layers for the rect and its mask.
-    EXPECT_THAT(GetRasterInvalidationTracking(1)->Invalidations(),
-                UnorderedElementsAre(RasterInvalidationInfo{
-                    real_rect, real_rect->DebugName(), IntRect(0, 0, 7, 8),
-                    PaintInvalidationReason::kFull}));
-    EXPECT_THAT(GetRasterInvalidationTracking(2)->Invalidations(),
-                UnorderedElementsAre(RasterInvalidationInfo{
-                    real_rect, real_rect->DebugName(), IntRect(0, 0, 7, 8),
-                    PaintInvalidationReason::kFull}));
-  } else {
-    EXPECT_THAT(GetRasterInvalidationTracking(1)->Invalidations(),
-                UnorderedElementsAre(
-                    RasterInvalidationInfo{real_rect, real_rect->DebugName(),
-                                           IntRect(155, 166, 7, 8),
-                                           PaintInvalidationReason::kFull},
-                    RasterInvalidationInfo{real_rect, real_rect->DebugName(),
-                                           IntRect(155, 166, 7, 8),
-                                           PaintInvalidationReason::kFull}));
-  }
+  EXPECT_THAT(GetRasterInvalidationTracking()->Invalidations(),
+              UnorderedElementsAre(
+                  RasterInvalidationInfo{real_rect, real_rect->DebugName(),
+                                         IntRect(155, 166, 7, 8),
+                                         PaintInvalidationReason::kFull},
+                  RasterInvalidationInfo{real_rect, real_rect->DebugName(),
+                                         IntRect(155, 166, 7, 8),
+                                         PaintInvalidationReason::kFull}));
 
   GetDocument().View()->SetTracksPaintInvalidations(false);
 }
@@ -1035,6 +1024,44 @@ TEST_P(PaintAndRasterInvalidationTest, ScrollingInvalidatesStickyOffset) {
                                    ->StickyTranslation()
                                    ->Translation2D());
   EXPECT_EQ(PhysicalOffset(), inner->FirstFragment().PaintOffset());
+}
+
+TEST_P(PaintAndRasterInvalidationTest, ResizeElementWhichHasNonCustomResizer) {
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      * { margin: 0;}
+      div {
+        width: 100px;
+        height: 100px;
+        background-color: red;
+        overflow: hidden;
+        resize: both;
+      }
+    </style>
+    <div id='target'></div>
+  )HTML");
+
+  auto* target = GetDocument().getElementById("target");
+  auto* object = target->GetLayoutObject();
+
+  GetDocument().View()->SetTracksPaintInvalidations(true);
+
+  target->setAttribute(html_names::kStyleAttr, "width: 200px");
+  UpdateAllLifecyclePhasesForTest();
+
+  Vector<RasterInvalidationInfo> invalidations;
+  // This is for DisplayItem::kResizerScrollHitTest.
+  invalidations.push_back(RasterInvalidationInfo{
+      object, object->DebugName(), IntRect(0, 0, 200, 100),
+      PaintInvalidationReason::kGeometry});
+  invalidations.push_back(RasterInvalidationInfo{
+      object, object->DebugName(), IntRect(0, 0, 200, 100),
+      PaintInvalidationReason::kGeometry});
+  EXPECT_THAT(GetRasterInvalidationTracking()->Invalidations(),
+              UnorderedElementsAreArray(invalidations));
+
+  GetDocument().View()->SetTracksPaintInvalidations(false);
 }
 
 class PaintInvalidatorTestClient : public RenderingTestChromeClient {

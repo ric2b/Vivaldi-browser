@@ -1,41 +1,29 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="he">
-<translation id="1049795001945932310">הגד&amp;רות שפה</translation>
 <translation id="1056898198331236512">אזהרה</translation>
-<translation id="1084824384139382525">העתק כתו&amp;בת קישור</translation>
-<translation id="1163931534039071049">&amp;צפה במקור המסגרת</translation>
 <translation id="1165039591588034296">שגיאה</translation>
 <translation id="1175364870820465910">הדפס...</translation>
-<translation id="1187722533808055681">הוצאות לא פעילות ממצב שינה</translation>
 <translation id="1244303850296295656">שגיאת תוסף</translation>
 <translation id="1546280085599573572">התוסף הזה שינה את הדף שמוצג כשאתה לוחץ על הלחצן 'דף הבית'.</translation>
 <translation id="1588438908519853928">רגיל</translation>
 <translation id="1635033183663317347">הותקן על ידי האפוטרופוס שלך.</translation>
-<translation id="1723824996674794290">&amp;חלון חדש</translation>
 <translation id="1729533290416704613">הגדרה זו גם קובעת איזה דף מוצג כשאתה מבצע חיפוש מסרגל הכתובות.</translation>
-<translation id="1850508293116537636">סובב &amp;בכיוון השעון</translation>
-<translation id="1901303067676059328">בחר &amp;הכל</translation>
 <translation id="2087822576218954668">הדפס: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">כרטיסיית גלישה בסתר: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">‏<ph name="NEXE_NAME" /> :Native Client יישום </translation>
-<translation id="2218515861914035131">הדבק כטקסט רגיל</translation>
 <translation id="2282146716419988068">‏תהליך GPU</translation>
 <translation id="2301382460326681002">ספריית הבסיס של ההרחבה אינה חוקית.</translation>
-<translation id="2326931316514688470">&amp;טען אפליקציה מחדש</translation>
 <translation id="2327492829706409234">הפעל יישום</translation>
 <translation id="2344028582131185878">הורדות אוטומטיות</translation>
 <translation id="2348176352564285430">יישום: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">בחר את ספריית ההרחבה.</translation>
 <translation id="241082044617551207">פלאגין לא ידוע</translation>
-<translation id="2423578206845792524">שמ&amp;ור תמונה בשם...</translation>
 <translation id="2439110203301358333">‏תכנית אחרת במחשב שלך הוסיפה תוסף שעשוי לשנות את אופן הפעולה של Vivaldi.</translation>
 <translation id="2445081178310039857">ספריית הבסיס של ההרחבה נחוצה.</translation>
 <translation id="2470702053775288986">תוספים שלא נתמכים הושבתו</translation>
-<translation id="2550212893339833758">זיכרון מוחלף</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">הפוך מחדש לפעיל</translation>
-<translation id="2785873697295365461">מתארי קבצים</translation>
 <translation id="2809586584051668049">ועוד <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2850541429955027218">הוסף את העיצוב</translation>
 <translation id="2861941300086904918">‏מנהל האבטחה של Native Client</translation>
@@ -45,22 +33,16 @@
 <translation id="299483336428448530">הותקן על ידי ההורה שלך.</translation>
 <translation id="3080207940057008665">‏תכנית אחרת במחשב שלך הוסיפה עיצוב שעשוי לשנות את אופן הפעולה של Vivaldi.</translation>
 <translation id="3122464029669770682">CPU</translation>
-<translation id="3124111068741548686">מזהים ייחודיים של משתמש</translation>
 <translation id="3222066309010235055">קדם-עיבוד: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">בחר את ספריית הבסיס של התוסף שיש לארוז. כדי לעדכן תוסף, בחר גם את קובץ המפתח הפרטי שבו ניתן להשתמש שוב.</translation>
-<translation id="3280237271814976245">שמור &amp;בשם...</translation>
 <translation id="3288047731229977326">תוספים הרצים במצב מפתח יכולים להזיק למחשב שלך. אם אינך מפתח, עליך להשבית את התוספים הרצים במצב מפתח כדי לשמור על ביטחונך.</translation>
-<translation id="3347086966102161372">העתק כתובת &amp;תמונה</translation>
 <translation id="3378572629723696641">ייתכן שתוסף זה פגום.</translation>
-<translation id="345693547134384690">פתח &amp;תמונה בכרטיסייה חדשה</translation>
 <translation id="3505030558724226696">בטל גישה למכשירים</translation>
-<translation id="3627588569887975815">פתח קישור בחלון גלישה פרטית</translation>
 <translation id="3678156199662914018">תוסף: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">תקן את היישום</translation>
 <translation id="3908501907586732282">הפעל תוסף</translation>
 <translation id="3909791450649380159">גז&amp;ור</translation>
 <translation id="3927932062596804919">דחה</translation>
-<translation id="3936390757709632190">&amp;פתח שמע בכרטיסייה חדשה</translation>
 <translation id="3943582379552582368">&amp;אחורה</translation>
 <translation id="3979395879372752341">תוסף חדש נוסף (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">‏–</translation>
@@ -71,23 +53,16 @@
 <translation id="4100839878934973028">‏תכנית אחרת במחשב שלך הוסיפה יישום שעשוי לשנות את אופן הפעולה של Vivaldi.</translation>
 <translation id="4130207949184424187">התוסף הזה שינה את הדף שמוצג כשאתה מבצע חיפוש מסרגל הכתובות.</translation>
 <translation id="4176463684765177261">מושבת</translation>
-<translation id="4200983522494130825">&amp;כרטיסייה חדשה</translation>
 <translation id="4309420042698375243">‏‎<ph name="NUM_KILOBYTES" />K ‏‎(<ph name="NUM_KILOBYTES_LIVE" />K בשימוש)‎‎</translation>
 <translation id="4384652540891215547">הפעל את התוסף</translation>
 <translation id="4394049700291259645">השבת</translation>
 <translation id="4593021220803146968">&amp;עבור אל <ph name="URL" /></translation>
 <translation id="4595560905247879544">רק המנהל (<ph name="CUSTODIAN_NAME" />) יכול לשנות יישומים ותוספים.</translation>
 <translation id="4613271546271159013">תוסף מסוים שינה את הדף המוצג בעת פתיחת כרטיסייה חדשה.</translation>
-<translation id="4677772697204437347">‏זיכרון GPU</translation>
-<translation id="4711638718396952945">שחזר הגדרות</translation>
-<translation id="4839303808932127586">שמ&amp;ור וידאו כ...</translation>
 <translation id="488785315393301722">הצג פרטים</translation>
-<translation id="49896407730300355">סובב נ&amp;גד כיוון השעון</translation>
-<translation id="4989966318180235467">בדוק את דף ה&amp;רקע</translation>
 <translation id="5027562294707732951">הוסף את התוסף</translation>
 <translation id="5039804452771397117">אפשר</translation>
 <translation id="5143374789336132547">התוסף "<ph name="EXTENSION_NAME" />" שינה את הדף שמוצג כשאתה לוחץ על הלחצן 'דף הבית'.</translation>
-<translation id="5233019165164992427">‏יציאת ניפוי באגים של NaCl</translation>
 <translation id="5233231016133573565">זיהוי תהליך</translation>
 <translation id="52912272896845572">קובץ המפתח הפרטי אינו חוקי</translation>
 <translation id="5301954838959518834">בסדר גמור, הבנתי</translation>
@@ -102,48 +77,31 @@
 <translation id="5575473780076478375">תוסף של גלישה פרטית: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">הגדרה זו גם קובעת איזה דף מוצג כשאתה לוחץ על הלחצן 'דף הבית'.</translation>
 <translation id="5715711091495208045">מתווך פלאגין: <ph name="PLUGIN_NAME" /></translation>
-<translation id="5764483294734785780">ש&amp;מור שמע כ...</translation>
-<translation id="5780973441651030252">עדיפות תהליך</translation>
 <translation id="583281660410589416">לא ידוע</translation>
 <translation id="5956585768868398362">האם זהו דף החיפוש שציפית לראות?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (שיא של <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">הגדרה זו גם קובעת איזה דף מוצג כשאתה לוחץ על הלחצן 'דף הבית' או מבצע חיפוש מסרגל הכתובות.</translation>
 <translation id="6101226222197207147">יישום חדש נוסף (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">החיבור שלך לאינטרנט נשלט על ידי גורם כלשהו</translation>
-<translation id="6156863943908443225">מטמון סקריפטים</translation>
 <translation id="6196854373336333322">‏התוסף "<ph name="EXTENSION_NAME" />" השתלט על הגדרות שרת ה-Proxy. פירוש הדבר שהוא יכול לשנות ולקטוע לכל פעולה שתבצע באינטרנט או לצותת לה. אם אינך יודע בוודאות מדוע שינוי זה התרחש, סביר להניח שזהו שינוי לא רצוי.</translation>
-<translation id="6239558157302047471">טען מחדש את ה&amp;מסגרת</translation>
 <translation id="6247802389331535091">מערכת: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="6251870443722440887">‏מזהים ייחודיים של GDI</translation>
-<translation id="6308937455967653460">שמור קישור&amp; בשם...</translation>
-<translation id="6398765197997659313">צא ממסך מלא</translation>
-<translation id="6406303162637086258">בצע הדמיה של הפעלת דפדפן מחדש</translation>
 <translation id="6445450263907939268">אם לא רצית את השינויים האלו, תוכל לשחזר את ההגדרות הקודמות שלך.</translation>
 <translation id="6447842834002726250">‏קובצי Cookie</translation>
 <translation id="6498249116389603658">&amp;כל השפות שלך</translation>
 <translation id="6503077044568424649">הכי פופולריים</translation>
 <translation id="6508261954199872201">יישום: <ph name="APP_NAME" /></translation>
-<translation id="6518014396551869914">הע&amp;תק תמונה</translation>
-<translation id="6639554308659482635">‏זיכרון SQLite </translation>
 <translation id="6691936601825168937">&amp;קדימה</translation>
 <translation id="6798954102094737107">פלאגין: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6812841287760418429">השאר שינויים</translation>
-<translation id="6886871292305414135">פתח קישור &amp;בכרטיסייה חדשה</translation>
 <translation id="6900284862687837908">יישום רקע: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">בטל גישה לקבצים</translation>
-<translation id="708060913198414444">העתק כתובת &amp;אודיו</translation>
 <translation id="7287143125007575591">הגישה נדחתה.</translation>
-<translation id="7309257895202129721">הצג &amp;פקדים</translation>
 <translation id="7427348830195639090">דף רקע: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7564847347806291057">סיים תהליך</translation>
 <translation id="7629827748548208700">כרטיסייה: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">מקבל: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7685049629764448582">‏זיכרון JavaScript</translation>
 <translation id="7704305437604973648">משימה</translation>
 <translation id="7760004034676677601">האם זהו דף הפתיחה שציפית לראות?</translation>
 <translation id="7791543448312431591">הוסף</translation>
 <translation id="7818135753970109980">עיצוב חדש נוסף (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="782057141565633384">העתק כתובת &amp;וידאו</translation>
 <translation id="7857949311770343000">האם זהו דף הכרטיסייה החדשה שציפית לראות?</translation>
 <translation id="786073089922909430">שירות: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">תכנית שירות: <ph name="UTILITY_TYPE" /></translation>
@@ -159,14 +117,9 @@
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8261378640211443080">התוסף הזה לא רשום ב<ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> וייתכן שנוסף ללא ידיעתך.</translation>
 <translation id="8351419472474436977">‏תוסף זה השתלט על הגדרות שרת ה-Proxy שלך. משמעות הדבר היא שהוא יכול לשנות, לקטוע או לצותת לכל פעולה שתבצע באינטרנט. אם אינך יודע בוודאות מדוע שינוי זה התרחש, סביר להניח שזהו שינוי לא רצוי.</translation>
-<translation id="8546306075665861288">מטמון תמונות</translation>
-<translation id="8584280235376696778">פתח וידאו בכרטיסייה חדשה</translation>
 <translation id="8615618338313291042">יישום גלישה בסתר: <ph name="APP_NAME" /></translation>
-<translation id="862750493060684461">‏מטמון של CSS</translation>
-<translation id="8664389313780386848">&amp;צפה במקור הדף</translation>
 <translation id="8808478386290700967">חנות אינטרנט</translation>
 <translation id="8859174528519900719">תת-מסגרת: <ph name="SUBFRAME_SITE" /></translation>
-<translation id="8899851313684471736">פתח קישור &amp;בחלון חדש</translation>
 <translation id="8916476537757519021">תת-מסגרת לגלישה בסתר: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">הסתר פרטים</translation>
 <translation id="9170848237812810038">&amp;ביטול</translation>

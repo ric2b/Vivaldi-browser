@@ -307,6 +307,27 @@ class ContactsAddEmailAddressFunction : public ContactAsyncFunction {
   DISALLOW_COPY_AND_ASSIGN(ContactsAddEmailAddressFunction);
 };
 
+class ContactsRemoveEmailAddressFunction : public ContactAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("contacts.removeEmailAddress",
+                             CONTACTS_REMOVE_EMAIL)
+  ContactsRemoveEmailAddressFunction() = default;
+
+ protected:
+  ~ContactsRemoveEmailAddressFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void RemoveEmailAddressComplete(
+      std::shared_ptr<contact::ContactResults> results);
+
+  // The task tracker for the ContactService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ContactsRemoveEmailAddressFunction);
+};
+
 class ContactsUpdateEmailAddressFunction : public ContactAsyncFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("contacts.updateEmailAddress",

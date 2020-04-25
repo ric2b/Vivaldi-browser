@@ -9,6 +9,7 @@ import "content/common/frame_messages.mojom";
 import "content/common/native_types.mojom";
 import "content/common/navigation_client.mojom";
 import "content/common/navigation_params.mojom";
+import "content/public/common/browser_controls_state.mojom";
 import "content/public/common/resource_type.mojom";
 import "content/public/common/resource_load_info.mojom";
 import "content/public/common/transferrable_url_loader.mojom";
@@ -21,6 +22,7 @@ import "services/network/public/mojom/url_loader.mojom";
 import "services/network/public/mojom/url_loader_factory.mojom";
 import "services/service_manager/public/mojom/interface_provider.mojom";
 import "services/viz/public/mojom/compositing/surface_id.mojom";
+import "skia/public/mojom/skcolor.mojom";
 import "third_party/blink/public/mojom/blob/blob_url_store.mojom";
 import "third_party/blink/public/mojom/commit_result/commit_result.mojom";
 import "third_party/blink/public/mojom/devtools/console_message.mojom";
@@ -71,6 +73,13 @@ interface Frame {
   ExtractSmartClipData(gfx.mojom.Rect rect)
       => (mojo_base.mojom.String16 text, mojo_base.mojom.String16 html,
               gfx.mojom.Rect clip_rect);
+
+  // Notifies the renderer whether hiding/showing the browser controls is
+  // enabled, what the current state should be, and whether or not to
+  // animate to the proper state.
+  UpdateBrowserControlsState(BrowserControlsState constraints,
+                             BrowserControlsState current,
+                             bool animate);
 };
 
 // Implemented by the frame provider and currently must be associated with the
@@ -252,12 +261,18 @@ interface FrameBindingsControl {
   // that allow JS content extended privileges. See BindingsPolicy for valid
   // flag values.
   AllowBindings(int32 enabled_bindings_flags);
+
+  // Used to tell the RenderFrame to enable Mojo JS bindings, which allows
+  // JS code running in the renderer process to connect to Mojo interfaces
+  // and make method calls on them.
+  // This is used for WebUI only at this time.
+  EnableMojoJsBindings();
 };
 
 // Implemented by a service that provides implementations of the Frame
 // interface. (e.g. renderer processes).
 interface FrameFactory {
-  CreateFrame(int32 frame_routing_id, Frame& frame);
+  CreateFrame(int32 frame_routing_id, pending_receiver<Frame> frame);
 };
 
 struct CreateNewWindowParams {
@@ -323,6 +338,9 @@ struct CreateNewWindowReply {
   // The ID of the widget for the main frame.
   int32 main_frame_widget_route_id;
 
+  // Initial properties for the main frame RenderWidget.
+  VisualProperties visual_properties;
+
   DocumentScopedInterfaceBundle main_frame_interface_bundle;
 
   // Duplicated from CreateNewWindowParams because legacy code.
@@ -371,7 +389,7 @@ interface FrameHost {
           mojo_base.mojom.UnguessableToken devtools_frame_token);
 
   // Creates and returns a KeepAliveHandle.
-  IssueKeepAliveHandle(KeepAliveHandle& keep_alive_handle);
+  IssueKeepAliveHandle(pending_receiver<KeepAliveHandle> keep_alive_handle);
 
   // Sent by the renderer when a navigation commits in the frame.
 
@@ -416,7 +434,7 @@ interface FrameHost {
       CommonNavigationParams common_params,
       BeginNavigationParams begin_params,
       pending_remote<blink.mojom.BlobURLToken>? blob_url_token,
-      associated NavigationClient? navigation_client,
+      pending_associated_remote<NavigationClient>? navigation_client,
       pending_remote<blink.mojom.NavigationInitiator>? navigation_initiator);
 
   // Sent when a subresource response has started.
@@ -465,10 +483,6 @@ interface FrameHost {
   // correctly set the initial size of the frame in case of a cross-process
   // navigation.
   FrameSizeChanged(gfx.mojom.Size size);
-
-  // Notifies the browser that the current frame has either become or is no
-  // longer fullscreen.
-  FullscreenStateChanged(bool is_fullscreen);
 
   // Notifies the browser that the current frame has changed its visibility
   // status.
@@ -549,4 +563,7 @@ interface FrameHost {
   // Evicts the page from the back/forward cache due to e.g., JavaScript
   // execution.
   EvictFromBackForwardCache();
+
+  // Notifies the browser that the current frame has changed theme color.
+  DidChangeThemeColor(skia.mojom.SkColor? theme_color);
 };

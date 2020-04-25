@@ -14,10 +14,17 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/optimization_guide/optimization_guide_navigation_data.h"
 #include "chrome/browser/optimization_guide/optimization_guide_web_contents_observer.h"
+#include "chrome/browser/previews/previews_https_notification_infobar_decider.h"
+#include "chrome/browser/previews/previews_lite_page_redirect_decider.h"
+#include "chrome/browser/previews/previews_service.h"
+#include "chrome/browser/previews/previews_service_factory.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
 #include "components/optimization_guide/bloom_filter.h"
 #include "components/optimization_guide/hints_component_util.h"
 #include "components/optimization_guide/hints_fetcher.h"
+#include "components/optimization_guide/optimization_guide_constants.h"
 #include "components/optimization_guide/optimization_guide_decider.h"
 #include "components/optimization_guide/optimization_guide_enums.h"
 #include "components/optimization_guide/optimization_guide_features.h"
@@ -27,6 +34,7 @@
 #include "components/optimization_guide/proto_database_provider_test_base.h"
 #include "components/optimization_guide/top_host_provider.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/previews/core/previews_switches.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/mock_navigation_handle.h"
 #include "content/public/test/test_web_contents_factory.h"
@@ -122,22 +130,10 @@ class FakeTopHostProvider : public optimization_guide::TopHostProvider {
   explicit FakeTopHostProvider(std::vector<std::string> top_hosts)
       : top_hosts_(top_hosts) {}
 
-  std::vector<std::string> GetTopHosts(size_t max_sites) override {
+  std::vector<std::string> GetTopHosts() override {
     num_top_hosts_called_++;
 
-    if (top_hosts_.size() <= max_sites) {
       return top_hosts_;
-    }
-
-    std::vector<std::string> top_hosts;
-    top_hosts.reserve(max_sites);
-    for (const auto& top_host : top_hosts_) {
-      if (top_hosts.size() >= max_sites)
-        return top_hosts;
-
-      top_hosts.push_back(top_host);
-    }
-    return top_hosts;
   }
 
   int get_num_top_hosts_called() const { return num_top_hosts_called_; }
@@ -170,19 +166,22 @@ class TestHintsFetcher : public optimization_guide::HintsFetcher {
 
   bool FetchOptimizationGuideServiceHints(
       const std::vector<std::string>& hosts,
+      optimization_guide::proto::RequestContext request_context,
       optimization_guide::HintsFetchedCallback hints_fetched_callback)
       override {
     switch (fetch_state_) {
       case HintsFetcherEndState::kFetchFailed:
-        std::move(hints_fetched_callback).Run(base::nullopt);
+        std::move(hints_fetched_callback).Run(request_context, base::nullopt);
         return false;
       case HintsFetcherEndState::kFetchSuccessWithHints:
         hints_fetched_ = true;
-        std::move(hints_fetched_callback).Run(BuildHintsResponse({"host.com"}));
+        std::move(hints_fetched_callback)
+            .Run(request_context, BuildHintsResponse({"host.com"}));
         return true;
       case HintsFetcherEndState::kFetchSuccessWithNoHints:
         hints_fetched_ = true;
-        std::move(hints_fetched_callback).Run(BuildHintsResponse({}));
+        std::move(hints_fetched_callback)
+            .Run(request_context, BuildHintsResponse({}));
         return true;
     }
     return true;
@@ -204,16 +203,23 @@ class OptimizationGuideHintsManagerTest
   void SetUp() override {
     optimization_guide::ProtoDatabaseProviderTestBase::SetUp();
     web_contents_factory_.reset(new content::TestWebContentsFactory);
-    CreateServiceAndHintsManager();
+    drp_test_context_ =
+        data_reduction_proxy::DataReductionProxyTestContext::Builder()
+            .WithMockConfig()
+            .Build();
+    CreateServiceAndHintsManager(/*top_host_provider=*/nullptr);
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        data_reduction_proxy::switches::kEnableDataReductionProxy);
   }
 
   void TearDown() override {
     optimization_guide::ProtoDatabaseProviderTestBase::TearDown();
+    drp_test_context_->DestroySettings();
     ResetHintsManager();
   }
 
   void CreateServiceAndHintsManager(
-      optimization_guide::TopHostProvider* top_host_provider = nullptr) {
+      optimization_guide::TopHostProvider* top_host_provider) {
     if (hints_manager_) {
       ResetHintsManager();
     }
@@ -228,8 +234,9 @@ class OptimizationGuideHintsManagerTest
             &test_url_loader_factory_);
 
     hints_manager_ = std::make_unique<OptimizationGuideHintsManager>(
-        optimization_guide_service_.get(), temp_dir(), pref_service_.get(),
-        db_provider_.get(), top_host_provider, url_loader_factory_);
+        optimization_guide_service_.get(), &testing_profile_, temp_dir(),
+        pref_service_.get(), db_provider_.get(), top_host_provider,
+        url_loader_factory_);
     hints_manager_->SetClockForTesting(task_environment_.GetMockClock());
 
     // Add observer is called after the HintCache is fully initialized,
@@ -311,16 +318,30 @@ class OptimizationGuideHintsManagerTest
     RunUntilIdle();
   }
 
+  void SetUserPermissions(bool data_saver_enabled, bool has_seen_infobar) {
+    drp_test_context_->SetDataReductionProxyEnabled(data_saver_enabled);
+
+    // Make sure infobar not shown.
+    PreviewsService* previews_service =
+        PreviewsServiceFactory::GetForProfile(&testing_profile_);
+    PreviewsLitePageRedirectDecider* decider =
+        previews_service->previews_lite_page_redirect_decider();
+    // Initialize settings here so Lite Pages Decider checks for the Data Saver
+    // bit.
+    decider->OnSettingsInitialized();
+    if (has_seen_infobar) {
+      base::CommandLine::ForCurrentProcess()->AppendSwitch(
+          previews::switches::kDoNotRequireLitePageRedirectInfoBar);
+    }
+  }
+
   // Creates a navigation handle with the OptimizationGuideWebContentsObserver
   // attached.
   std::unique_ptr<content::MockNavigationHandle>
   CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
       const GURL& url) {
-    if (!testing_profile_) {
-      testing_profile_ = std::make_unique<TestingProfile>();
-    }
     content::WebContents* web_contents =
-        web_contents_factory_->CreateWebContents(testing_profile_.get());
+        web_contents_factory_->CreateWebContents(&testing_profile_);
     OptimizationGuideWebContentsObserver::CreateForWebContents(web_contents);
     std::unique_ptr<content::MockNavigationHandle> navigation_handle =
         std::make_unique<content::MockNavigationHandle>(web_contents);
@@ -351,6 +372,10 @@ class OptimizationGuideHintsManagerTest
     return GURL("https://somedomain.org/news/whatever");
   }
 
+  GURL url_without_hints() const {
+    return GURL("https://url_without_hints.org/");
+  }
+
   base::FilePath temp_dir() const { return temp_dir_.GetPath(); }
 
   TestingPrefServiceSimple* pref_service() const { return pref_service_.get(); }
@@ -374,7 +399,9 @@ class OptimizationGuideHintsManagerTest
   content::BrowserTaskEnvironment task_environment_{
       base::test::TaskEnvironment::MainThreadType::UI,
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
-  std::unique_ptr<TestingProfile> testing_profile_;
+  TestingProfile testing_profile_;
+  std::unique_ptr<data_reduction_proxy::DataReductionProxyTestContext>
+      drp_test_context_;
   std::unique_ptr<content::TestWebContentsFactory> web_contents_factory_;
   std::unique_ptr<OptimizationGuideHintsManager> hints_manager_;
   std::unique_ptr<TestOptimizationGuideService> optimization_guide_service_;
@@ -405,7 +432,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
 
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       optimization_guide::switches::kHintsProtoOverride, encoded_config);
-  CreateServiceAndHintsManager();
+  CreateServiceAndHintsManager(/*top_host_provider=*/nullptr);
 
   // The below histogram should not be recorded since hints weren't coming
   // directly from the component.
@@ -422,7 +449,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
 
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       optimization_guide::switches::kHintsProtoOverride, "this-is-not-a-proto");
-  CreateServiceAndHintsManager();
+  CreateServiceAndHintsManager(/*top_host_provider=*/nullptr);
 
   // The below histogram should not be recorded since hints weren't coming
   // directly from the component.
@@ -452,7 +479,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
     base::HistogramTester histogram_tester;
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
         optimization_guide::switches::kHintsProtoOverride, encoded_config);
-    CreateServiceAndHintsManager();
+    CreateServiceAndHintsManager(/*top_host_provider=*/nullptr);
     // The below histogram should not be recorded since hints weren't coming
     // directly from the component.
     histogram_tester.ExpectTotalCount("OptimizationGuide.ProcessHintsResult",
@@ -655,8 +682,8 @@ TEST_F(OptimizationGuideHintsManagerTest,
   navigation_handle->set_has_committed(true);
 
   base::RunLoop run_loop;
-  hints_manager()->LoadHintForNavigation(navigation_handle.get(),
-                                         run_loop.QuitClosure());
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
   run_loop.Run();
 
   histogram_tester.ExpectUniqueSample("OptimizationGuide.LoadedHint.Result",
@@ -679,8 +706,8 @@ TEST_F(OptimizationGuideHintsManagerTest, LoadHintForNavigationWithHint) {
           url_with_hints());
 
   base::RunLoop run_loop;
-  hints_manager()->LoadHintForNavigation(navigation_handle.get(),
-                                         run_loop.QuitClosure());
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
   run_loop.Run();
 
   histogram_tester.ExpectUniqueSample("OptimizationGuide.LoadedHint.Result",
@@ -703,8 +730,8 @@ TEST_F(OptimizationGuideHintsManagerTest, LoadHintForNavigationNoHint) {
           GURL("https://notinhints.com"));
 
   base::RunLoop run_loop;
-  hints_manager()->LoadHintForNavigation(navigation_handle.get(),
-                                         run_loop.QuitClosure());
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
   run_loop.Run();
 
   histogram_tester.ExpectUniqueSample("OptimizationGuide.LoadedHint.Result",
@@ -727,8 +754,8 @@ TEST_F(OptimizationGuideHintsManagerTest, LoadHintForNavigationNoHost) {
           GURL("blargh"));
 
   base::RunLoop run_loop;
-  hints_manager()->LoadHintForNavigation(navigation_handle.get(),
-                                         run_loop.QuitClosure());
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
   run_loop.Run();
 
   histogram_tester.ExpectTotalCount("OptimizationGuide.LoadedHint.Result", 0);
@@ -938,10 +965,29 @@ TEST_F(OptimizationGuideHintsManagerTest,
   feature_list.InitWithFeatures(
       {optimization_guide::features::kOptimizationHintsFetching}, {});
 
-  std::unique_ptr<FakeTopHostProvider> top_host_provider =
-      std::make_unique<FakeTopHostProvider>(std::vector<std::string>({}));
-
+  SetUserPermissions(/*data_saver_enabled=*/true, /*has_seen_infobar=*/true);
   CreateServiceAndHintsManager(/*top_host_provider=*/nullptr);
+  hints_manager()->SetHintsFetcherForTesting(
+      BuildTestHintsFetcher(HintsFetcherEndState::kFetchSuccessWithHints));
+  InitializeWithDefaultConfig("1.0.0");
+
+  // Force timer to expire and schedule a hints fetch.
+  MoveClockForwardBy(base::TimeDelta::FromSeconds(kTestFetchRetryDelaySecs));
+  EXPECT_FALSE(hints_fetcher()->hints_fetched());
+}
+
+TEST_F(OptimizationGuideHintsManagerTest,
+       HintsFetchNotAllowedIfFeatureIsEnabledButDataSaverIsNotEnabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {optimization_guide::features::kOptimizationHintsFetching}, {});
+
+  SetUserPermissions(/*data_saver_enabled=*/false, /*has_seen_infobar=*/true);
+  std::unique_ptr<FakeTopHostProvider> top_host_provider =
+      std::make_unique<FakeTopHostProvider>(
+          std::vector<std::string>({"example1.com", "example2.com"}));
+
+  CreateServiceAndHintsManager(top_host_provider.get());
   hints_manager()->SetHintsFetcherForTesting(
       BuildTestHintsFetcher(HintsFetcherEndState::kFetchSuccessWithHints));
   InitializeWithDefaultConfig("1.0.0");
@@ -953,11 +999,12 @@ TEST_F(OptimizationGuideHintsManagerTest,
 }
 
 TEST_F(OptimizationGuideHintsManagerTest,
-       HintsFetchNotAllowedIfFeatureIsNotEnabledButTopHostProviderIsProvided) {
+       HintsFetchNotAllowedIfFeatureIsNotEnabled) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       {}, {optimization_guide::features::kOptimizationHintsFetching});
 
+  SetUserPermissions(/*data_saver_enabled=*/true, /*has_seen_infobar=*/true);
   std::unique_ptr<FakeTopHostProvider> top_host_provider =
       std::make_unique<FakeTopHostProvider>(
           std::vector<std::string>({"example1.com", "example2.com"}));
@@ -971,7 +1018,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
 }
 
 TEST_F(OptimizationGuideHintsManagerTest,
-       HintsFetchAllowedIfFeatureIsEnabledAndTopHostProviderIsProvided) {
+       HintsFetchAllowedIfFeatureIsEnabledAndDataSaverUserHasNotSeenInfobar) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       {optimization_guide::features::kOptimizationHintsFetching}, {});
@@ -980,6 +1027,30 @@ TEST_F(OptimizationGuideHintsManagerTest,
       std::make_unique<FakeTopHostProvider>(
           std::vector<std::string>({"example1.com", "example2.com"}));
 
+  SetUserPermissions(/*data_saver_enabled=*/true, /*has_seen_infobar=*/false);
+  CreateServiceAndHintsManager(top_host_provider.get());
+  hints_manager()->SetHintsFetcherForTesting(
+      BuildTestHintsFetcher(HintsFetcherEndState::kFetchSuccessWithHints));
+  InitializeWithDefaultConfig("1.0.0");
+
+  // Force timer to expire and schedule a hints fetch.
+  MoveClockForwardBy(base::TimeDelta::FromSeconds(kTestFetchRetryDelaySecs));
+  EXPECT_EQ(0, top_host_provider->get_num_top_hosts_called());
+  EXPECT_FALSE(hints_fetcher()->hints_fetched());
+}
+
+TEST_F(
+    OptimizationGuideHintsManagerTest,
+    HintsFetchAllowedIfFeatureIsEnabledAndUserMeetsAllDataSaverUserCriteria) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {optimization_guide::features::kOptimizationHintsFetching}, {});
+
+  std::unique_ptr<FakeTopHostProvider> top_host_provider =
+      std::make_unique<FakeTopHostProvider>(
+          std::vector<std::string>({"example1.com", "example2.com"}));
+
+  SetUserPermissions(/*data_saver_enabled=*/true, /*has_seen_infobar=*/true);
   CreateServiceAndHintsManager(top_host_provider.get());
   hints_manager()->SetHintsFetcherForTesting(
       BuildTestHintsFetcher(HintsFetcherEndState::kFetchSuccessWithHints));
@@ -996,6 +1067,7 @@ TEST_F(OptimizationGuideHintsManagerTest, HintsFetcherEnabledNoHostsToFetch) {
   feature_list.InitAndEnableFeature(
       optimization_guide::features::kOptimizationHintsFetching);
 
+  SetUserPermissions(/*data_saver_enabled=*/true, /*has_seen_infobar=*/true);
   std::unique_ptr<FakeTopHostProvider> top_host_provider =
       std::make_unique<FakeTopHostProvider>(std::vector<std::string>({}));
   CreateServiceAndHintsManager(top_host_provider.get());
@@ -1015,6 +1087,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   feature_list.InitAndEnableFeature(
       optimization_guide::features::kOptimizationHintsFetching);
 
+  SetUserPermissions(/*data_saver_enabled=*/true, /*has_seen_infobar=*/true);
   std::unique_ptr<FakeTopHostProvider> top_host_provider =
       std::make_unique<FakeTopHostProvider>(
           std::vector<std::string>({"example1.com", "example2.com"}));
@@ -1041,6 +1114,7 @@ TEST_F(OptimizationGuideHintsManagerTest, HintsFetcherTimerRetryDelay) {
   feature_list.InitAndEnableFeature(
       optimization_guide::features::kOptimizationHintsFetching);
 
+  SetUserPermissions(/*data_saver_enabled=*/true, /*has_seen_infobar=*/true);
   std::unique_ptr<FakeTopHostProvider> top_host_provider =
       std::make_unique<FakeTopHostProvider>(
           std::vector<std::string>({"example1.com", "example2.com"}));
@@ -1069,6 +1143,7 @@ TEST_F(OptimizationGuideHintsManagerTest, HintsFetcherTimerFetchSucceeds) {
   feature_list.InitAndEnableFeature(
       optimization_guide::features::kOptimizationHintsFetching);
 
+  SetUserPermissions(/*data_saver_enabled=*/true, /*has_seen_infobar=*/true);
   std::unique_ptr<FakeTopHostProvider> top_host_provider =
       std::make_unique<FakeTopHostProvider>(
           std::vector<std::string>({"example1.com", "example2.com"}));
@@ -1121,7 +1196,7 @@ TEST_F(OptimizationGuideHintsManagerTest, CanApplyOptimizationUrlWithNoHost) {
   optimization_guide::OptimizationTypeDecision optimization_type_decision;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::LITE_PAGE_REDIRECT,
       &optimization_target_decision, &optimization_type_decision,
       /*optimization_metadata=*/nullptr);
@@ -1165,7 +1240,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_guide::OptimizationTypeDecision optimization_type_decision;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::LITE_PAGE_REDIRECT,
       &optimization_target_decision, &optimization_type_decision,
       /*optimization_metadata=*/nullptr);
@@ -1212,7 +1287,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_guide::OptimizationTypeDecision optimization_type_decision;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::LITE_PAGE_REDIRECT,
       &optimization_target_decision, &optimization_type_decision,
       /*optimization_metadata=*/nullptr);
@@ -1259,7 +1334,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_guide::OptimizationTypeDecision optimization_type_decision;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::LITE_PAGE_REDIRECT,
       &optimization_target_decision, &optimization_type_decision,
       /*optimization_metadata=*/nullptr);
@@ -1305,7 +1380,7 @@ TEST_F(OptimizationGuideHintsManagerTest, CanApplyOptimizationNoECTEstimate) {
   optimization_guide::OptimizationTypeDecision optimization_type_decision;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::LITE_PAGE_REDIRECT,
       &optimization_target_decision, &optimization_type_decision,
       /*optimization_metadata=*/nullptr);
@@ -1353,7 +1428,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_guide::OptimizationTypeDecision optimization_type_decision;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::LITE_PAGE_REDIRECT,
       &optimization_target_decision, &optimization_type_decision,
       /*optimization_metadata=*/nullptr);
@@ -1390,8 +1465,8 @@ TEST_F(OptimizationGuideHintsManagerTest,
       CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
           url_with_hints());
   base::RunLoop run_loop;
-  hints_manager()->LoadHintForNavigation(navigation_handle.get(),
-                                         run_loop.QuitClosure());
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
   run_loop.Run();
 
   optimization_guide::OptimizationTargetDecision optimization_target_decision;
@@ -1399,7 +1474,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_guide::OptimizationMetadata optimization_metadata;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::NOSCRIPT, &optimization_target_decision,
       &optimization_type_decision, &optimization_metadata);
   EXPECT_EQ(12345, optimization_metadata.previews_metadata.inflation_percent());
@@ -1429,8 +1504,8 @@ TEST_F(OptimizationGuideHintsManagerTest,
       CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
           url_with_hints());
   base::RunLoop run_loop;
-  hints_manager()->LoadHintForNavigation(navigation_handle.get(),
-                                         run_loop.QuitClosure());
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
   run_loop.Run();
 
   optimization_guide::OptimizationTargetDecision optimization_target_decision;
@@ -1438,7 +1513,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_guide::OptimizationMetadata optimization_metadata;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::NOSCRIPT, &optimization_target_decision,
       &optimization_type_decision, &optimization_metadata);
   EXPECT_EQ(1234, optimization_metadata.previews_metadata.inflation_percent());
@@ -1468,8 +1543,8 @@ TEST_F(OptimizationGuideHintsManagerTest,
       CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
           url_with_hints());
   base::RunLoop run_loop;
-  hints_manager()->LoadHintForNavigation(navigation_handle.get(),
-                                         run_loop.QuitClosure());
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
   run_loop.Run();
 
   optimization_guide::OptimizationTargetDecision optimization_target_decision;
@@ -1477,7 +1552,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_guide::OptimizationMetadata optimization_metadata;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::NOSCRIPT, &optimization_target_decision,
       &optimization_type_decision, &optimization_metadata);
   EXPECT_EQ(1234, optimization_metadata.previews_metadata.inflation_percent());
@@ -1505,15 +1580,16 @@ TEST_F(OptimizationGuideHintsManagerTest,
       CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
           url_with_hints());
   base::RunLoop run_loop;
-  hints_manager()->LoadHintForNavigation(navigation_handle.get(),
-                                         run_loop.QuitClosure());
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
   run_loop.Run();
 
   optimization_guide::OptimizationTargetDecision optimization_target_decision;
   optimization_guide::OptimizationTypeDecision optimization_type_decision;
   optimization_guide::OptimizationMetadata optimization_metadata;
   hints_manager()->CanApplyOptimization(
-      navigation_handle.get(), optimization_guide::OptimizationTarget::kUnknown,
+      navigation_handle.get(),
+      optimization_guide::proto::OPTIMIZATION_TARGET_UNKNOWN,
       optimization_guide::proto::NOSCRIPT, &optimization_target_decision,
       &optimization_type_decision, &optimization_metadata);
   // Make sure metadata is cleared.
@@ -1544,8 +1620,8 @@ TEST_F(OptimizationGuideHintsManagerTest,
       CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
           url_with_hints());
   base::RunLoop run_loop;
-  hints_manager()->LoadHintForNavigation(navigation_handle.get(),
-                                         run_loop.QuitClosure());
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
   run_loop.Run();
 
   optimization_guide::OptimizationTargetDecision optimization_target_decision;
@@ -1553,7 +1629,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_guide::OptimizationMetadata optimization_metadata;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::DEFER_ALL_SCRIPT,
       &optimization_target_decision, &optimization_type_decision,
       /*optimization_metadata=*/nullptr);
@@ -1583,8 +1659,8 @@ TEST_F(OptimizationGuideHintsManagerTest,
       CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
           url_with_hints());
   base::RunLoop run_loop;
-  hints_manager()->LoadHintForNavigation(navigation_handle.get(),
-                                         run_loop.QuitClosure());
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
   run_loop.Run();
 
   // Purposely set the page hint to be null to show that we override the page
@@ -1598,7 +1674,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_guide::OptimizationMetadata optimization_metadata;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::DEFER_ALL_SCRIPT,
       &optimization_target_decision, &optimization_type_decision,
       /*optimization_metadata=*/nullptr);
@@ -1615,6 +1691,247 @@ TEST_F(OptimizationGuideHintsManagerTest,
   EXPECT_EQ(nullptr, navigation_data->page_hint());
 }
 
+TEST_F(OptimizationGuideHintsManagerTest, IsGoogleURL) {
+  const struct {
+    const char* url;
+    bool expect_is_google_url;
+  } tests[] = {
+      {"https://www.google.com/"
+       "search?q=cats&oq=cq&aqs=foo&ie=UTF-8",
+       true},
+      {"https://www.google.com/", true},
+      {"https://www.google.com/:99", true},
+
+      // Try localized search pages.
+      {"https://www.google.co.in/"
+       "search?q=cats&oq=cq&aqs=foo&ie=UTF-8",
+       true},
+      {"https://www.google.co.in/", true},
+      {"https://www.google.co.in/:99", true},
+
+      // Try Google domain pages that are not web search related.
+      {"https://www.not-google.com/", false},
+      {"https://www.youtube.com/", false},
+      {"https://domain.google.com/", false},
+      {"https://images.google.com/", false},
+  };
+
+  for (const auto& test : tests) {
+    GURL url(test.url);
+    EXPECT_TRUE(url.is_valid());
+    EXPECT_EQ(test.expect_is_google_url, hints_manager()->IsGoogleURL(url));
+  }
+}
+
+TEST_F(OptimizationGuideHintsManagerTest, HintsFetched_AtSRP_ECT_SLOW_2G) {
+  hints_manager()->RegisterOptimizationTypes(
+      {optimization_guide::proto::DEFER_ALL_SCRIPT});
+  base::test::ScopedFeatureList scoped_list;
+  scoped_list.InitAndEnableFeature(
+      optimization_guide::features::kOptimizationHintsFetching);
+  InitializeWithDefaultConfig("1.0.0.0");
+
+  // Set ECT estimate so hint is activated.
+  hints_manager()->OnEffectiveConnectionTypeChanged(
+      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_SLOW_2G);
+  std::unique_ptr<content::MockNavigationHandle> navigation_handle =
+      CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
+          url_without_hints());
+  base::HistogramTester histogram_tester;
+  std::vector<GURL> sorted_predicted_urls;
+  sorted_predicted_urls.push_back(GURL("https://foo.com/"));
+  NavigationPredictorKeyedService::Prediction prediction(
+      nullptr, GURL("https://www.google.com/"), sorted_predicted_urls);
+
+  hints_manager()->OnPredictionUpdated(prediction);
+  histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.HintsFetcher.GetHintsRequest.HostCount", 1, 1);
+}
+
+TEST_F(OptimizationGuideHintsManagerTest,
+       HintsFetched_AtSRP_ECT_SLOW_2G_DuplicatesRemoved) {
+  hints_manager()->RegisterOptimizationTypes(
+      {optimization_guide::proto::DEFER_ALL_SCRIPT});
+  base::test::ScopedFeatureList scoped_list;
+  scoped_list.InitAndEnableFeature(
+      optimization_guide::features::kOptimizationHintsFetching);
+  InitializeWithDefaultConfig("1.0.0.0");
+
+  // Set ECT estimate so hint is activated.
+  hints_manager()->OnEffectiveConnectionTypeChanged(
+      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_SLOW_2G);
+  std::unique_ptr<content::MockNavigationHandle> navigation_handle =
+      CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
+          url_without_hints());
+  base::HistogramTester histogram_tester;
+  std::vector<GURL> sorted_predicted_urls;
+  sorted_predicted_urls.push_back(GURL("https://foo.com/page1.html"));
+  sorted_predicted_urls.push_back(GURL("https://foo.com/page2.html"));
+  sorted_predicted_urls.push_back(GURL("https://foo.com/page3.html"));
+  sorted_predicted_urls.push_back(GURL("https://bar.com/"));
+
+  NavigationPredictorKeyedService::Prediction prediction(
+      nullptr, GURL("https://www.google.com/"), sorted_predicted_urls);
+
+  hints_manager()->OnPredictionUpdated(prediction);
+  // Ensure that we only include 2 hosts in the request. These would be foo.com
+  // and bar.com.
+  histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.HintsFetcher.GetHintsRequest.HostCount", 2, 1);
+}
+
+TEST_F(OptimizationGuideHintsManagerTest,
+       HintsFetched_AtSRP_ECT_SLOW_2G_InsecureHostsRemoved) {
+  hints_manager()->RegisterOptimizationTypes(
+      {optimization_guide::proto::DEFER_ALL_SCRIPT});
+  base::test::ScopedFeatureList scoped_list;
+  scoped_list.InitAndEnableFeature(
+      optimization_guide::features::kOptimizationHintsFetching);
+  InitializeWithDefaultConfig("1.0.0.0");
+
+  // Set ECT estimate so hint is activated.
+  hints_manager()->OnEffectiveConnectionTypeChanged(
+      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_SLOW_2G);
+  std::unique_ptr<content::MockNavigationHandle> navigation_handle =
+      CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
+          url_without_hints());
+  base::HistogramTester histogram_tester;
+  std::vector<GURL> sorted_predicted_urls;
+  sorted_predicted_urls.push_back(GURL("https://foo.com/page1.html"));
+  sorted_predicted_urls.push_back(GURL("http://insecure-bar.com/"));
+
+  NavigationPredictorKeyedService::Prediction prediction(
+      nullptr, GURL("https://www.google.com/"), sorted_predicted_urls);
+
+  hints_manager()->OnPredictionUpdated(prediction);
+  // Ensure that we only include 1 secure host in the request. These would be
+  // foo.com.
+  histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.HintsFetcher.GetHintsRequest.HostCount", 1, 1);
+}
+
+TEST_F(OptimizationGuideHintsManagerTest, HintsFetched_AtSRP_ECT_4G) {
+  hints_manager()->RegisterOptimizationTypes(
+      {optimization_guide::proto::DEFER_ALL_SCRIPT});
+  base::test::ScopedFeatureList scoped_list;
+  scoped_list.InitAndEnableFeature(
+      optimization_guide::features::kOptimizationHintsFetching);
+  InitializeWithDefaultConfig("1.0.0.0");
+
+  // Set ECT estimate so hint is activated.
+  hints_manager()->OnEffectiveConnectionTypeChanged(
+      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_4G);
+  std::unique_ptr<content::MockNavigationHandle> navigation_handle =
+      CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
+          url_without_hints());
+  base::HistogramTester histogram_tester;
+  std::vector<GURL> sorted_predicted_urls;
+  sorted_predicted_urls.push_back(GURL("https://foo.com/"));
+  NavigationPredictorKeyedService::Prediction prediction(
+      nullptr, GURL("https://www.google.com/"), sorted_predicted_urls);
+
+  hints_manager()->OnPredictionUpdated(prediction);
+  histogram_tester.ExpectTotalCount(
+      "OptimizationGuide.HintsFetcher.GetHintsRequest.HostCount", 0);
+}
+
+TEST_F(OptimizationGuideHintsManagerTest, HintsFetched_AtNonSRP_ECT_SLOW_2G) {
+  hints_manager()->RegisterOptimizationTypes(
+      {optimization_guide::proto::DEFER_ALL_SCRIPT});
+  base::test::ScopedFeatureList scoped_list;
+  scoped_list.InitAndEnableFeature(
+      optimization_guide::features::kOptimizationHintsFetching);
+  InitializeWithDefaultConfig("1.0.0.0");
+
+  // Set ECT estimate so hint is activated.
+  hints_manager()->OnEffectiveConnectionTypeChanged(
+      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_SLOW_2G);
+  std::unique_ptr<content::MockNavigationHandle> navigation_handle =
+      CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
+          url_without_hints());
+  base::HistogramTester histogram_tester;
+  std::vector<GURL> sorted_predicted_urls;
+  sorted_predicted_urls.push_back(GURL("https://foo.com/"));
+  NavigationPredictorKeyedService::Prediction prediction(
+      nullptr, GURL("https://www.not-google.com/"), sorted_predicted_urls);
+
+  hints_manager()->OnPredictionUpdated(prediction);
+  histogram_tester.ExpectTotalCount(
+      "OptimizationGuide.HintsFetcher.GetHintsRequest.HostCount", 0);
+}
+
+TEST_F(OptimizationGuideHintsManagerTest,
+       HintsFetchedAtNavigationTime_ECT_SLOW_2G) {
+  hints_manager()->RegisterOptimizationTypes(
+      {optimization_guide::proto::DEFER_ALL_SCRIPT});
+  base::test::ScopedFeatureList scoped_list;
+  scoped_list.InitAndEnableFeature(
+      optimization_guide::features::kOptimizationHintsFetching);
+  InitializeWithDefaultConfig("1.0.0.0");
+
+  // Set ECT estimate so hint is activated.
+  hints_manager()->OnEffectiveConnectionTypeChanged(
+      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_SLOW_2G);
+  std::unique_ptr<content::MockNavigationHandle> navigation_handle =
+      CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
+          url_without_hints());
+  base::RunLoop run_loop;
+  base::HistogramTester histogram_tester;
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
+  run_loop.Run();
+  histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.HintsFetcher.GetHintsRequest.HostCount", 1, 1);
+}
+
+TEST_F(OptimizationGuideHintsManagerTest,
+       HintsFetchedAtNavigationTime_HasComponentHintButNotFetched) {
+  hints_manager()->RegisterOptimizationTypes(
+      {optimization_guide::proto::DEFER_ALL_SCRIPT});
+  base::test::ScopedFeatureList scoped_list;
+  scoped_list.InitAndEnableFeature(
+      optimization_guide::features::kOptimizationHintsFetching);
+  InitializeWithDefaultConfig("1.0.0.0");
+
+  // Set ECT estimate so hint is activated.
+  hints_manager()->OnEffectiveConnectionTypeChanged(
+      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_SLOW_2G);
+  std::unique_ptr<content::MockNavigationHandle> navigation_handle =
+      CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
+          url_with_hints());
+  base::RunLoop run_loop;
+  base::HistogramTester histogram_tester;
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
+  run_loop.Run();
+  histogram_tester.ExpectTotalCount(
+      "OptimizationGuide.HintsFetcher.GetHintsRequest.HostCount", 0);
+}
+
+TEST_F(OptimizationGuideHintsManagerTest,
+       HintsNotFetchedAtNavigationTime_ECT_4G) {
+  hints_manager()->RegisterOptimizationTypes(
+      {optimization_guide::proto::DEFER_ALL_SCRIPT});
+  base::test::ScopedFeatureList scoped_list;
+  scoped_list.InitAndEnableFeature(
+      optimization_guide::features::kOptimizationHintsFetching);
+  InitializeWithDefaultConfig("1.0.0.0");
+
+  // Set ECT estimate so hint is activated.
+  hints_manager()->OnEffectiveConnectionTypeChanged(
+      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_4G);
+  std::unique_ptr<content::MockNavigationHandle> navigation_handle =
+      CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
+          url_without_hints());
+  base::HistogramTester histogram_tester;
+  base::RunLoop run_loop;
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
+  run_loop.Run();
+  histogram_tester.ExpectTotalCount(
+      "OptimizationGuide.HintsFetcher.GetHintsRequest.HostCount", 0);
+}
+
 TEST_F(OptimizationGuideHintsManagerTest,
        CanApplyOptimizationNoMatchingPageHint) {
   InitializeWithDefaultConfig("1.0.0.0");
@@ -1626,8 +1943,8 @@ TEST_F(OptimizationGuideHintsManagerTest,
       CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
           GURL("https://somedomain.org/nomatch"));
   base::RunLoop run_loop;
-  hints_manager()->LoadHintForNavigation(navigation_handle.get(),
-                                         run_loop.QuitClosure());
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
   run_loop.Run();
 
   optimization_guide::OptimizationTargetDecision optimization_target_decision;
@@ -1635,7 +1952,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_guide::OptimizationMetadata optimization_metadata;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::NOSCRIPT, &optimization_target_decision,
       &optimization_type_decision,
       /*optimization_metadata=*/nullptr);
@@ -1671,7 +1988,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_metadata.previews_metadata.set_inflation_percent(12345);
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::NOSCRIPT, &optimization_target_decision,
       &optimization_type_decision, &optimization_metadata);
   EXPECT_EQ(0, optimization_metadata.previews_metadata.inflation_percent());
@@ -1706,7 +2023,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_guide::OptimizationMetadata optimization_metadata;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::NOSCRIPT, &optimization_target_decision,
       &optimization_type_decision, &optimization_metadata);
 
@@ -1756,8 +2073,8 @@ TEST_F(OptimizationGuideHintsManagerTest,
   ProcessHints(config, "1.0.0.0");
 
   base::RunLoop run_loop;
-  hints_manager()->LoadHintForNavigation(navigation_handle.get(),
-                                         run_loop.QuitClosure());
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
   run_loop.Run();
 
   // Set ECT estimate so hint is activated.
@@ -1768,7 +2085,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_guide::OptimizationTypeDecision optimization_type_decision;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::LITE_PAGE_REDIRECT,
       &optimization_target_decision, &optimization_type_decision,
       /*optimization_metadata=*/nullptr);
@@ -1821,8 +2138,8 @@ TEST_F(OptimizationGuideHintsManagerTest,
   ProcessHints(config, "1.0.0.0");
 
   base::RunLoop run_loop;
-  hints_manager()->LoadHintForNavigation(navigation_handle.get(),
-                                         run_loop.QuitClosure());
+  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
+                                               run_loop.QuitClosure());
   run_loop.Run();
 
   hints_manager()->OnEffectiveConnectionTypeChanged(
@@ -1832,7 +2149,7 @@ TEST_F(OptimizationGuideHintsManagerTest,
   optimization_guide::OptimizationTypeDecision optimization_type_decision;
   hints_manager()->CanApplyOptimization(
       navigation_handle.get(),
-      optimization_guide::OptimizationTarget::kPainfulPageLoad,
+      optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
       optimization_guide::proto::LITE_PAGE_REDIRECT,
       &optimization_target_decision, &optimization_type_decision,
       /*optimization_metadata=*/nullptr);

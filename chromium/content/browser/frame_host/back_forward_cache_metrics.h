@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
+#include "base/strings/string_piece.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
@@ -18,6 +19,7 @@ class Origin;
 
 namespace content {
 class NavigationEntryImpl;
+class NavigationRequest;
 class RenderFrameHostImpl;
 
 // Helper class for recording metrics around history navigations.
@@ -30,6 +32,51 @@ class RenderFrameHostImpl;
 class BackForwardCacheMetrics
     : public base::RefCounted<BackForwardCacheMetrics> {
  public:
+  enum class CanNotStoreDocumentReason : uint8_t {
+    kNotMainFrame,
+    kBackForwardCacheDisabled,
+    kRelatedActiveContentsExist,
+    kHTTPStatusNotOK,
+    kSchemeNotHTTPOrHTTPS,
+    kLoading,
+    kWasGrantedMediaAccess,
+    kBlocklistedFeatures,
+    kDisableForRenderFrameHostCalled,
+    kDomainNotAllowed,
+    kHTTPMethodNotGET
+  };
+
+  // Please keep in sync with BackForwardCacheHistoryNavigationOutcome in
+  // tools/metrics/histograms/enums.xml. These values should not be renumbered.
+  enum class HistoryNavigationOutcome {
+    kRestored = 0,
+    kNotRestored = 1,
+    kMaxValue = kNotRestored,
+  };
+
+  // Please keep in sync with BackForwardCacheEvictedReason in
+  // tools/metrics/histograms/enums.xml. These values should not be renumbered.
+  enum class EvictedReason {
+    kTimeout = 0,
+    kCacheLimit = 1,
+    kJavaScriptExecution = 2,
+    kRendererProcessKilled = 3,
+    kRendererProcessCrashed = 4,
+    kDialog = 5,
+    kGrantedMediaStreamAccess = 6,
+    kSchedulerTrackedFeatureUsed = 7,
+    kMaxValue = kSchedulerTrackedFeatureUsed,
+  };
+
+  // Please keep in sync with BackForwardCacheEvictedAfterDocumentRestoredReason
+  // in tools/metrics/histograms/enums.xml. These values should not be
+  // renumbered.
+  enum class EvictedAfterDocumentRestoredReason {
+    kRestored = 0,
+    kByJavaScript = 1,
+    kMaxValue = kByJavaScript,
+  };
+
   // Creates a potential new metrics object for the navigation.
   // Note that this object will not be used if the entry we are navigating to
   // already has the BackForwardCacheMetrics object (which happens for history
@@ -44,6 +91,11 @@ class BackForwardCacheMetrics
       bool is_main_frame_navigation,
       int64_t document_sequence_number);
 
+  // Records when the page is evicted after the document is restored e.g. when
+  // the race condition by JavaScript happens.
+  static void RecordEvictedAfterDocumentRestored(
+      EvictedAfterDocumentRestoredReason reason);
+
   // Notifies that the main frame has started a navigation to an entry
   // associated with |this|.
   //
@@ -56,9 +108,7 @@ class BackForwardCacheMetrics
   void MainFrameDidStartNavigationToDocument();
 
   // Notifies that an associated entry has committed a navigation.
-  void DidCommitNavigation(int64_t navigation_id,
-                           int64_t navigation_entry_id,
-                           bool is_main_frame_navigation);
+  void DidCommitNavigation(NavigationRequest* navigation_request);
 
   // Records when another navigation commits away from the most recent entry
   // associated with |this|.  This is the point in time that the previous
@@ -69,6 +119,14 @@ class BackForwardCacheMetrics
   // It should be called at the same time when the document might have been
   // placed in the back-forward cache.
   void RecordFeatureUsage(RenderFrameHostImpl* main_frame);
+
+  // Marks when the page is evicted with the reason. This information is useful
+  // e.g., to know the major cause of eviction.
+  void MarkEvictedFromBackForwardCacheWithReason(
+      BackForwardCacheMetrics::EvictedReason reason);
+
+  // Marks the frame disabled the back forward cache with the reason.
+  void MarkDisableForRenderFrameHost(const base::StringPiece& reason);
 
   // Injects a clock for mocking time.
   // Should be called only from the UI thread.
@@ -85,6 +143,8 @@ class BackForwardCacheMetrics
   // of a given frame.
   void CollectFeatureUsageFromSubtree(RenderFrameHostImpl* rfh,
                                       const url::Origin& main_frame_origin);
+
+  void RecordMetricsForHistoryNavigationCommit(NavigationRequest* navigation);
 
   // Main frame document sequence number that identifies all NavigationEntries
   // this metrics object is associated with.
@@ -108,6 +168,9 @@ class BackForwardCacheMetrics
 
   base::Optional<base::TimeTicks> started_navigation_timestamp_;
   base::Optional<base::TimeTicks> navigated_away_from_main_document_timestamp_;
+
+  std::vector<std::string> disallowed_reasons_;
+  base::Optional<EvictedReason> evicted_reason_;
 
   DISALLOW_COPY_AND_ASSIGN(BackForwardCacheMetrics);
 };

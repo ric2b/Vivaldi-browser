@@ -4,10 +4,10 @@
 
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_pass_encoder.h"
 
+#include "third_party/blink/renderer/bindings/modules/v8/double_sequence_or_gpu_color_dict.h"
 #include "third_party/blink/renderer/modules/webgpu/dawn_conversions.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_bind_group.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_buffer.h"
-#include "third_party/blink/renderer/modules/webgpu/gpu_color.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_device.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_bundle.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_pipeline.h"
@@ -61,8 +61,14 @@ void GPURenderPassEncoder::setPipeline(GPURenderPipeline* pipeline) {
   GetProcs().renderPassEncoderSetPipeline(GetHandle(), pipeline->GetHandle());
 }
 
-void GPURenderPassEncoder::setBlendColor(GPUColor* color) {
-  DawnColor dawn_color = AsDawnType(color);
+void GPURenderPassEncoder::setBlendColor(DoubleSequenceOrGPUColorDict& color,
+                                         ExceptionState& exception_state) {
+  if (color.IsDoubleSequence() && color.GetAsDoubleSequence().size() != 4) {
+    exception_state.ThrowRangeError("color size must be 4");
+    return;
+  }
+
+  DawnColor dawn_color = AsDawnType(&color);
   GetProcs().renderPassEncoderSetBlendColor(GetHandle(), &dawn_color);
 }
 
@@ -92,22 +98,11 @@ void GPURenderPassEncoder::setIndexBuffer(GPUBuffer* buffer, uint64_t offset) {
                                              offset);
 }
 
-void GPURenderPassEncoder::setVertexBuffers(
-    uint32_t startSlot,
-    const HeapVector<Member<GPUBuffer>>& buffers,
-    const Vector<uint64_t>& offsets,
-    ExceptionState& exception_state) {
-  if (buffers.size() != offsets.size()) {
-    exception_state.ThrowRangeError(
-        "buffers array and offsets array must be the same length");
-    return;
-  }
-
-  std::unique_ptr<DawnBuffer[]> dawn_buffers = AsDawnType(buffers);
-
-  GetProcs().renderPassEncoderSetVertexBuffers(
-      GetHandle(), startSlot, buffers.size(), dawn_buffers.get(),
-      offsets.data());
+void GPURenderPassEncoder::setVertexBuffer(uint32_t slot,
+                                           const GPUBuffer* buffer,
+                                           const uint64_t offset) {
+  GetProcs().renderPassEncoderSetVertexBuffer(GetHandle(), slot,
+                                              buffer->GetHandle(), offset);
 }
 
 void GPURenderPassEncoder::draw(uint32_t vertexCount,

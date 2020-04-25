@@ -29,7 +29,6 @@ bool IsInternalPage(const GURL& url) {
       chrome::kChromeUISettingsURL,
       vivaldiInternalURL,
   };
-
   // Prefix-match against the table above. Use strncmp to avoid allocating
   // memory to convert the URL prefix constants into std::strings.
   for (size_t i = 0; i < base::size(kReloadableUrlPrefixes); ++i) {

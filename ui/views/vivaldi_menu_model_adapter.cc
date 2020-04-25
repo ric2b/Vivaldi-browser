@@ -8,6 +8,12 @@
 
 namespace views {
 
+
+void MenuModelAdapter::VivaldiSetModel(MenuItemView* menu,
+                                       ui::MenuModel* model) {
+  menu_map_[menu] = model;
+}
+
 void MenuModelAdapter::VivaldiUpdateMenu(MenuItemView* menu,
   ui::MenuModel* model) {
   // Clear the menu.

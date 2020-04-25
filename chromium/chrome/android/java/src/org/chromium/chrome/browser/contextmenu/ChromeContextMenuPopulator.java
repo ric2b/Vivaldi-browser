@@ -6,12 +6,13 @@ package org.chromium.chrome.browser.contextmenu;
 
 import android.content.Context;
 import android.net.MailTo;
-import android.support.annotation.IntDef;
 import android.text.TextUtils;
 import android.util.Pair;
 import android.view.ContextMenu;
 import android.webkit.MimeTypeMap;
 import android.webkit.URLUtil;
+
+import androidx.annotation.IntDef;
 
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.metrics.RecordHistogram;
@@ -46,6 +47,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     private static final String TAG = "CCMenuPopulator";
     private final ContextMenuItemDelegate mDelegate;
     private final @ContextMenuMode int mMode;
+    private boolean mEnableLensWithSearchByImageText;
 
     /**
      * Defines the Groups of each Context Menu Item
@@ -213,7 +215,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         // Only add new values at the end, right before NUM_ENTRIES.
         @IntDef({LensSupportStatus.LENS_SUPPORTED, LensSupportStatus.NON_GOOGLE_SEARCH_ENGINE,
                 LensSupportStatus.ACTIVITY_NOT_ACCESSIBLE, LensSupportStatus.OUT_OF_DATE,
-                LensSupportStatus.SEARCH_BY_IMAGE_UNAVAILABLE})
+                LensSupportStatus.SEARCH_BY_IMAGE_UNAVAILABLE, LensSupportStatus.LEGACY_OS})
         @Retention(RetentionPolicy.SOURCE)
         public @interface LensSupportStatus {
             int LENS_SUPPORTED = 0;
@@ -221,7 +223,8 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             int ACTIVITY_NOT_ACCESSIBLE = 2;
             int OUT_OF_DATE = 3;
             int SEARCH_BY_IMAGE_UNAVAILABLE = 4;
-            int NUM_ENTRIES = 5;
+            int LEGACY_OS = 5;
+            int NUM_ENTRIES = 6;
         }
 
         /**
@@ -385,7 +388,13 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                         if (enableGoogleLensFeature
                                 && shouldShowLensMenuItemAndRecordMetrics(
                                         context, templateUrlServiceInstance)) {
-                            imageTab.add(new ChromeContextMenuItem(Item.SEARCH_WITH_GOOGLE_LENS));
+                            if (LensUtils.useLensWithSearchByImageText()) {
+                                mEnableLensWithSearchByImageText = true;
+                                imageTab.add(new ChromeContextMenuItem(Item.SEARCH_BY_IMAGE));
+                            } else {
+                                imageTab.add(
+                                        new ChromeContextMenuItem(Item.SEARCH_WITH_GOOGLE_LENS));
+                            }
                         } else {
                             imageTab.add(new ChromeContextMenuItem(Item.SEARCH_BY_IMAGE));
                         }
@@ -546,8 +555,13 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             ContextMenuUma.record(params, ContextMenuUma.Action.SEARCH_WITH_GOOGLE_LENS);
             helper.searchWithGoogleLens(mDelegate.isIncognito());
         } else if (itemId == R.id.contextmenu_search_by_image) {
-            ContextMenuUma.record(params, ContextMenuUma.Action.SEARCH_BY_IMAGE);
-            helper.searchForImage();
+            if (mEnableLensWithSearchByImageText) {
+                ContextMenuUma.record(params, ContextMenuUma.Action.SEARCH_WITH_GOOGLE_LENS);
+                helper.searchWithGoogleLens(mDelegate.isIncognito());
+            } else {
+                ContextMenuUma.record(params, ContextMenuUma.Action.SEARCH_BY_IMAGE);
+                helper.searchForImage();
+            }
         } else if (itemId == R.id.contextmenu_share_image) {
             ContextMenuUma.record(params, ContextMenuUma.Action.SHARE_IMAGE);
             helper.shareImage();
@@ -626,6 +640,11 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         }
         if (LensUtils.isAgsaVersionBelowMinimum(versionName)) {
             ContextMenuUma.recordLensSupportStatus(ContextMenuUma.LensSupportStatus.OUT_OF_DATE);
+            return false;
+        }
+
+        if (LensUtils.isDeviceOsBelowMinimum()) {
+            ContextMenuUma.recordLensSupportStatus(ContextMenuUma.LensSupportStatus.LEGACY_OS);
             return false;
         }
 

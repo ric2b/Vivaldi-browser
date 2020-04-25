@@ -83,8 +83,8 @@
 
             <org.chromium.ui.widget.ChromeImageButton
                 android:id="@+id/menu_button"
-                style="@style/ToolbarMenuButtonTablet"
-                android:src="@drawable/ic_more_vert_24dp"
+                style="@style/VivaldiToolbarMenuButtonTablet"
+                android:src="@drawable/vivaldi_menu_icon_56x56dp"
                 android:contentDescription="@string/accessibility_toolbar_btn_menu"
                 android:layout_gravity="center"
                 app:tint="@color/standard_mode_tint" />

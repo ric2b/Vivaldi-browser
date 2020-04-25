@@ -71,6 +71,11 @@
             "type": "string",
             "description": "Partner id for the node. Vivaldi extended property"
           },
+          "default_favicon_uri": {
+            "type": "string",
+            "description": "Default favicon URI for the node. Vivaldi extended property",
+            "optional": true
+          },
           "speeddial": {
             "type": "boolean",
             "description": "Boolean variable, stating if a folder is a speeddial folder"
@@ -149,6 +154,11 @@
           "partner": {
             "type": "string",
             "description": "Partner id for the node. Vivaldi extended property",
+            "optional": true
+          },
+          "default_favicon_uri": {
+            "type": "string",
+            "description": "Default favicon URI for the node. Vivaldi extended property",
             "optional": true
           },
           "speeddial": {
@@ -434,6 +444,10 @@
                 "optional": true
               },
               "partner": {
+                "type": "string",
+                "optional": true
+              },
+              "default_favicon_uri": {
                 "type": "string",
                 "optional": true
               },

@@ -55,6 +55,16 @@ id<GREYMatcher> HeaderWithAccessibilityLabel(NSString* label) {
   return [ChromeMatchersAppInterface headerWithAccessibilityLabel:label];
 }
 
+id<GREYMatcher> TextFieldForCellWithLabelId(int message_id) {
+  return [ChromeMatchersAppInterface textFieldForCellWithLabelID:message_id];
+}
+
+id<GREYMatcher> IconViewForCellWithLabelId(int message_id,
+                                           NSString* icon_type) {
+  return [ChromeMatchersAppInterface iconViewForCellWithLabelID:message_id
+                                                       iconType:icon_type];
+}
+
 id<GREYMatcher> PrimaryToolbar() {
   return [ChromeMatchersAppInterface primaryToolbar];
 }
@@ -161,10 +171,6 @@ id<GREYMatcher> BookmarksNavigationBarDoneButton() {
   return [ChromeMatchersAppInterface bookmarksNavigationBarDoneButton];
 }
 
-id<GREYMatcher> AccountConsistencySetupSigninButton() {
-  return [ChromeMatchersAppInterface accountConsistencySetupSigninButton];
-}
-
 id<GREYMatcher> AccountConsistencyConfirmationOkButton() {
   return [ChromeMatchersAppInterface accountConsistencyConfirmationOKButton];
 }
@@ -209,6 +215,34 @@ id<GREYMatcher> SyncSettingsConfirmButton() {
   return [ChromeMatchersAppInterface syncSettingsConfirmButton];
 }
 
+id<GREYMatcher> AutofillCreditCardTableView() {
+  return [ChromeMatchersAppInterface autofillCreditCardTableView];
+}
+
+id<GREYMatcher> PaymentMethodsButton() {
+  return [ChromeMatchersAppInterface paymentMethodsButton];
+}
+
+id<GREYMatcher> AddCreditCardView() {
+  return [ChromeMatchersAppInterface addCreditCardView];
+}
+
+id<GREYMatcher> AddPaymentMethodButton() {
+  return [ChromeMatchersAppInterface addPaymentMethodButton];
+}
+
+id<GREYMatcher> AddCreditCardButton() {
+  return [ChromeMatchersAppInterface addCreditCardButton];
+}
+
+id<GREYMatcher> AddCreditCardCancelButton() {
+  return [ChromeMatchersAppInterface addCreditCardCancelButton];
+}
+
+id<GREYMatcher> CreditCardScannerView() {
+  return [ChromeMatchersAppInterface creditCardScannerView];
+}
+
 id<GREYMatcher> ToolsMenuView() {
   return [ChromeMatchersAppInterface toolsMenuView];
 }
@@ -247,10 +281,6 @@ id<GREYMatcher> SettingsImportDataContinueButton() {
 
 id<GREYMatcher> SettingsPrivacyTableView() {
   return [ChromeMatchersAppInterface settingsPrivacyTableView];
-}
-
-id<GREYMatcher> SettingsSyncManageSyncedDataButton() {
-  return [ChromeMatchersAppInterface settingsSyncManageSyncedDataButton];
 }
 
 id<GREYMatcher> AccountsSyncButton() {

@@ -91,8 +91,11 @@ class CreditCardAccessManager : public CreditCardCVCAuthenticator::Requester,
   // If |opt_in| = true, opts the user into using FIDO authentication for card
   // unmasking. Otherwise, opts the user out. If |creation_options| is set,
   // WebAuthn registration prompt will be invoked to create a new credential.
-  void FIDOAuthOptChange(bool opt_in,
-                         base::Value creation_options = base::Value());
+  void FIDOAuthOptChange(bool opt_in);
+
+  // Makes a call to FIDOAuthOptChange() with |opt_in|.
+  // TODO(crbug/949269): Add a rate limiter to counter spam clicking.
+  void OnSettingsPageFIDOAuthToggled(bool opt_in);
 
   CreditCardCVCAuthenticator* GetOrCreateCVCAuthenticator();
 
@@ -128,10 +131,12 @@ class CreditCardAccessManager : public CreditCardCVCAuthenticator::Requester,
   void OnDidGetUnmaskDetails(AutofillClient::PaymentsRpcResult result,
                              AutofillClient::UnmaskDetails& unmask_details);
 
-  // Calls either CreditCardFIDOAuthenticator::Authenticate() or
-  // CreditCardCVCAuthenticator::Authenticate() depending on the response
-  // contained in |unmask_details_|.
-  void Authenticate(bool did_get_unmask_details = false);
+  // If OnDidGetUnmaskDetails() was invoked by PaymentsClient, then
+  // |get_unmask_details_returned| should be set to true. Based on the
+  // contents of |unmask_details_|, either FIDO authentication or CVC
+  // authentication will be prompted. If |get_unmask_details_returned| is false,
+  // then only CVC authentication will be prompted.
+  void Authenticate(bool get_unmask_details_returned = false);
 
   // CreditCardCVCAuthenticator::Requester:
   void OnCVCAuthenticationComplete(
@@ -156,9 +161,24 @@ class CreditCardAccessManager : public CreditCardCVCAuthenticator::Requester,
   // immediately.
   bool AuthenticationRequiresUnmaskDetails();
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  // After card verification starts, shows the verify pending dialog if WebAuthn
+  // is enabled, indicating some verification steps are in progress.
+  void ShowVerifyPendingDialog();
+
+  // The callback function invoked when the cancel button in the verify pending
+  // dialog is clicked. Will cancel the attempt to fetch unmask details.
+  void OnDidCancelCardVerification();
+#endif
+
   // Is set to true only when waiting for the callback to
   // OnCVCAuthenticationComplete() to be executed.
   bool is_authentication_in_progress_ = false;
+
+  // Set to true if the card selected needs to be authenticated through CVC
+  // first, and then FIDO. This happens when a user is opted-in but has not
+  // previously authenticated this card with CVC on this device.
+  bool should_follow_up_cvc_with_fido_auth_ = false;
 
   // The associated autofill driver. Weak reference.
   AutofillDriver* const driver_;
@@ -177,6 +197,9 @@ class CreditCardAccessManager : public CreditCardCVCAuthenticator::Requester,
 
   // For logging metrics. May be NULL for tests.
   CreditCardFormEventLogger* form_event_logger_;
+
+  // Timestamp used for metrics.
+  base::TimeTicks preflight_call_timestamp_;
 
   // Meant for histograms recorded in FullCardRequest.
   base::TimeTicks form_parsed_timestamp_;

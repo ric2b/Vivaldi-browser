@@ -10,9 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/sharing/fake_local_device_info_provider.h"
 #include "chrome/browser/sharing/sharing_constants.h"
-#include "chrome/browser/sharing/sharing_device_capability.h"
 #include "chrome/browser/sharing/sharing_fcm_handler.h"
 #include "chrome/browser/sharing/sharing_fcm_sender.h"
 #include "chrome/browser/sharing/sharing_service.h"
@@ -31,9 +29,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
-using namespace testing;
-using namespace instance_id;
-
 namespace {
 
 const char kPhoneNumber[] = "073%2087%202525%2078";
@@ -41,12 +36,28 @@ const char kExpectedPhoneNumber[] = "073 87 2525 78";
 const char kReceiverGuid[] = "test_receiver_guid";
 const char kReceiverName[] = "test_receiver_name";
 
+class MockSharingDeviceRegistration : public SharingDeviceRegistration {
+ public:
+  MockSharingDeviceRegistration()
+      : SharingDeviceRegistration(/* pref_service_= */ nullptr,
+                                  /* sharing_sync_preference_= */ nullptr,
+                                  /* instance_id_driver_= */ nullptr,
+                                  /* vapid_key_manager_= */ nullptr) {}
+
+  ~MockSharingDeviceRegistration() override = default;
+
+  MOCK_CONST_METHOD0(IsSharedClipboardSupported, bool());
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockSharingDeviceRegistration);
+};
+
 class MockSharingService : public SharingService {
  public:
   explicit MockSharingService(std::unique_ptr<SharingFCMHandler> fcm_handler)
       : SharingService(/* sync_prefs= */ nullptr,
                        /* vapid_key_manager= */ nullptr,
-                       /* sharing_device_registration= */ nullptr,
+                       std::make_unique<MockSharingDeviceRegistration>(),
                        /* fcm_sender= */ nullptr,
                        std::move(fcm_handler),
                        /* gcm_driver= */ nullptr,
@@ -57,9 +68,10 @@ class MockSharingService : public SharingService {
 
   ~MockSharingService() override = default;
 
-  MOCK_CONST_METHOD1(GetDeviceCandidates,
-                     std::vector<std::unique_ptr<syncer::DeviceInfo>>(
-                         int required_capabilities));
+  MOCK_CONST_METHOD1(
+      GetDeviceCandidates,
+      std::vector<std::unique_ptr<syncer::DeviceInfo>>(
+          sync_pb::SharingSpecificFields::EnabledFeatures required_feature));
 
   MOCK_METHOD4(SendMessageToDevice,
                void(const std::string& device_guid,
@@ -78,18 +90,19 @@ class ClickToCallUiControllerTest : public testing::Test {
     SharingServiceFactory::GetInstance()->SetTestingFactory(
         &profile_, base::BindRepeating([](content::BrowserContext* context)
                                            -> std::unique_ptr<KeyedService> {
-          return std::make_unique<NiceMock<MockSharingService>>(
+          return std::make_unique<testing::NiceMock<MockSharingService>>(
               std::make_unique<SharingFCMHandler>(nullptr, nullptr, nullptr));
         }));
     ClickToCallUiController::ShowDialog(
-        web_contents_.get(), GURL(base::StrCat({"tel:", kPhoneNumber})), false);
+        web_contents_.get(), /*initiating_origin=*/base::nullopt,
+        GURL(base::StrCat({"tel:", kPhoneNumber})), false);
     controller_ = ClickToCallUiController::GetOrCreateFromWebContents(
         web_contents_.get());
   }
 
  protected:
-  NiceMock<MockSharingService>* service() {
-    return static_cast<NiceMock<MockSharingService>*>(
+  testing::NiceMock<MockSharingService>* service() {
+    return static_cast<testing::NiceMock<MockSharingService>*>(
         SharingServiceFactory::GetForBrowserContext(&profile_));
   }
 
@@ -109,24 +122,27 @@ MATCHER_P(ProtoEquals, message, "") {
 
 // Check the call to sharing service when a device is chosen.
 TEST_F(ClickToCallUiControllerTest, OnDeviceChosen) {
-  syncer::DeviceInfo device_info(
-      kReceiverGuid, kReceiverName, "chrome_version", "user_agent",
-      sync_pb::SyncEnums_DeviceType_TYPE_PHONE, "device_id",
-      /* last_updated_timestamp= */ base::Time::Now(),
-      /* send_tab_to_self_receiving_enabled= */ false);
+  syncer::DeviceInfo device_info(kReceiverGuid, kReceiverName, "chrome_version",
+                                 "user_agent",
+                                 sync_pb::SyncEnums_DeviceType_TYPE_PHONE,
+                                 "device_id", base::SysInfo::HardwareInfo(),
+                                 /*last_updated_timestamp=*/base::Time::Now(),
+                                 /*send_tab_to_self_receiving_enabled=*/false,
+                                 /*sharing_info=*/base::nullopt);
 
   chrome_browser_sharing::SharingMessage sharing_message;
   sharing_message.mutable_click_to_call_message()->set_phone_number(
       kExpectedPhoneNumber);
   EXPECT_CALL(*service(),
-              SendMessageToDevice(Eq(kReceiverGuid), Eq(kSharingMessageTTL),
-                                  ProtoEquals(sharing_message), _));
+              SendMessageToDevice(testing::Eq(kReceiverGuid),
+                                  testing::Eq(kSharingMessageTTL),
+                                  ProtoEquals(sharing_message), testing::_));
   controller_->OnDeviceChosen(device_info);
 }
 
 // Check the call to sharing service to get all synced devices.
 TEST_F(ClickToCallUiControllerTest, GetSyncedDevices) {
-  EXPECT_CALL(*service(), GetDeviceCandidates(Eq(static_cast<int>(
-                              SharingDeviceCapability::kClickToCall))));
-  controller_->UpdateAndShowDialog();
+  EXPECT_CALL(*service(), GetDeviceCandidates(testing::Eq(
+                              sync_pb::SharingSpecificFields::CLICK_TO_CALL)));
+  controller_->GetDevices();
 }

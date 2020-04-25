@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_idb_observer_callback.h"
 #include "third_party/blink/renderer/core/dom/events/event_queue.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/modules/indexed_db_names.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_any.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_event_dispatcher.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_index.h"
@@ -353,6 +354,14 @@ void IDBDatabase::deleteObjectStore(const String& name,
 IDBTransaction* IDBDatabase::transaction(
     ScriptState* script_state,
     const StringOrStringSequence& store_names,
+    const String& mode,
+    ExceptionState& exception_state) {
+  return transaction(script_state, store_names, mode, nullptr, exception_state);
+}
+
+IDBTransaction* IDBDatabase::transaction(
+    ScriptState* script_state,
+    const StringOrStringSequence& store_names,
     const String& mode_string,
     const IDBTransactionOptions* options,
     ExceptionState& exception_state) {
@@ -421,17 +430,24 @@ IDBTransaction* IDBDatabase::transaction(
           ->GetTaskRunner(TaskType::kDatabaseAccess),
       transaction_id);
 
-  bool relaxed_durability = false;
-  if (RuntimeEnabledFeatures::IDBRelaxedDurabilityEnabled() && options)
-    relaxed_durability = options->relaxedDurability();
+  mojom::IDBTransactionDurability durability =
+      mojom::IDBTransactionDurability::Default;
+  if (options) {
+    DCHECK(RuntimeEnabledFeatures::IDBRelaxedDurabilityEnabled());
+    if (options->durability() == indexed_db_names::kRelaxed) {
+      durability = mojom::IDBTransactionDurability::Relaxed;
+    } else if (options->durability() == indexed_db_names::kStrict) {
+      durability = mojom::IDBTransactionDurability::Strict;
+    }
+  }
 
   backend_->CreateTransaction(transaction_backend->CreateReceiver(),
                               transaction_id, object_store_ids, mode,
-                              relaxed_durability);
+                              durability);
 
   return IDBTransaction::CreateNonVersionChange(
       script_state, std::move(transaction_backend), transaction_id, scope, mode,
-      this);
+      durability, this);
 }
 
 void IDBDatabase::ForceClose() {

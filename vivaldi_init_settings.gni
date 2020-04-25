@@ -5,6 +5,8 @@
 import("//build/toolchain/cc_wrapper.gni")
 
 declare_overrides() {
+  branding_path_component = "vivaldi"
+  branding_file_path = "//vivaldi/app/resources/theme/vivaldi/BRANDING"
   ffmpeg_branding = "Chromium"
   proprietary_codecs = true
   enable_widevine = true
@@ -30,6 +32,8 @@ declare_overrides() {
   if (is_android) {
     enable_gvr_services = false
     enable_vr = false
+    ffmpeg_branding = "Chrome"
+    android_channel = "stable"
   }
 
   enable_hangout_services_extension = true

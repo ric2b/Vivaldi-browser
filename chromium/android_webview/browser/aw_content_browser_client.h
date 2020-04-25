@@ -11,11 +11,13 @@
 #include <string>
 #include <vector>
 
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/web_contents.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
+#include "storage/browser/quota/quota_settings.h"
 
 namespace content {
 class RenderFrameHost;
@@ -53,9 +55,10 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
   // moment during startup. AwContentBrowserClient owns the result.
   AwBrowserContext* InitBrowserContext();
 
+  // content::ContentBrowserClient:
   void OnNetworkServiceCreated(
       network::mojom::NetworkService* network_service) override;
-  network::mojom::NetworkContextPtr CreateNetworkContext(
+  mojo::Remote<network::mojom::NetworkContext> CreateNetworkContext(
       content::BrowserContext* context,
       bool in_memory,
       const base::FilePath& relative_partition_path) override;
@@ -65,6 +68,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
   content::WebContentsViewDelegate* GetWebContentsViewDelegate(
       content::WebContents* web_contents) override;
   void RenderProcessWillLaunch(content::RenderProcessHost* host) override;
+  bool IsExplicitNavigation(ui::PageTransition transition) override;
   bool ShouldUseMobileFlingCurve() override;
   bool IsHandledURL(const GURL& url) override;
   bool ForceSniffingFileUrlsForHtml() override;
@@ -138,7 +142,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       content::RenderFrameHost* render_frame_host,
       const std::string& interface_name,
       mojo::ScopedMessagePipeHandle interface_pipe) override;
-  bool BindAssociatedInterfaceRequestFromFrame(
+  bool BindAssociatedReceiverFromFrame(
       content::RenderFrameHost* render_frame_host,
       const std::string& interface_name,
       mojo::ScopedInterfaceEndpointHandle* handle) override;
@@ -183,6 +187,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       bool is_main_frame,
       ui::PageTransition page_transition,
       bool has_user_gesture,
+      const base::Optional<url::Origin>& initiating_origin,
       network::mojom::URLLoaderFactoryPtr* out_factory) override;
   void RegisterNonNetworkSubresourceURLLoaderFactories(
       int render_process_id,
@@ -190,6 +195,8 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       NonNetworkURLLoaderFactoryMap* factories) override;
   bool ShouldIsolateErrorPage(bool in_main_frame) override;
   bool ShouldEnableStrictSiteIsolation() override;
+  bool ShouldLockToOrigin(content::BrowserContext* browser_context,
+                          const GURL& effective_url) override;
   bool WillCreateURLLoaderFactory(
       content::BrowserContext* browser_context,
       content::RenderFrameHost* frame,
@@ -209,6 +216,8 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       network::mojom::RestrictedCookieManagerRole role,
       content::BrowserContext* browser_context,
       const url::Origin& origin,
+      const GURL& site_for_cookies,
+      const url::Origin& top_frame_origin,
       bool is_service_worker,
       int process_id,
       int routing_id,
@@ -218,6 +227,8 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
   std::string GetUserAgent() override;
   ContentBrowserClient::WideColorGamutHeuristic GetWideColorGamutHeuristic()
       override;
+  void LogWebFeatureForCurrentPage(content::RenderFrameHost* render_frame_host,
+                                   blink::mojom::WebFeature feature) override;
 
   AwFeatureListCreator* aw_feature_list_creator() {
     return aw_feature_list_creator_;

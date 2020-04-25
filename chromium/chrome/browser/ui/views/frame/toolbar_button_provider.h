@@ -5,9 +5,12 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_TOOLBAR_BUTTON_PROVIDER_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_TOOLBAR_BUTTON_PROVIDER_H_
 
+#include "chrome/browser/ui/page_action/page_action_icon_type.h"
+
 class AppMenuButton;
+class AvatarToolbarButton;
 class BrowserActionsContainer;
-class OmniboxPageActionIconContainerView;
+class PageActionIconView;
 class ToolbarActionView;
 
 namespace gfx {
@@ -35,9 +38,9 @@ class ToolbarButtonProvider {
   // ToolbarActionView is not visible or available.
   virtual views::View* GetDefaultExtensionDialogAnchorView() = 0;
 
-  // Gets the omnibox page action icon container.
-  virtual OmniboxPageActionIconContainerView*
-  GetOmniboxPageActionIconContainerView() = 0;
+  // Gets the specified page action icon.
+  virtual PageActionIconView* GetPageActionIconView(
+      PageActionIconType type) = 0;
 
   // Gets the app menu button.
   virtual AppMenuButton* GetAppMenuButton() = 0;
@@ -53,8 +56,14 @@ class ToolbarButtonProvider {
   // Returns the toolbar as an AccessiblePaneView.
   virtual views::AccessiblePaneView* GetAsAccessiblePaneView() = 0;
 
-  // Returns the toolbar as an anchor point.
-  virtual views::View* GetAnchorView() = 0;
+  // Returns the appropriate anchor view for the page action icon.
+  virtual views::View* GetAnchorView(PageActionIconType type) = 0;
+
+  // See comment in browser_window.h for more info.
+  virtual void ZoomChangedForActiveTab(bool can_show_bubble) = 0;
+
+  // Returns the avatar button.
+  virtual AvatarToolbarButton* GetAvatarToolbarButton() = 0;
 
   // TODO(calamity): Move other buttons and button actions into here.
  protected:

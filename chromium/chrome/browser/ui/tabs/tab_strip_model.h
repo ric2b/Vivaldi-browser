@@ -18,13 +18,13 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
+#include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/tabs/tab_group_id.h"
 #include "chrome/browser/ui/tabs/tab_group_visual_data.h"
-#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_order_controller.h"
 #include "chrome/browser/ui/tabs/tab_switch_event_latency_recorder.h"
 #include "ui/base/models/list_selection_model.h"
@@ -36,6 +36,7 @@
 
 class Profile;
 class TabStripModelDelegate;
+class TabStripModelObserver;
 
 namespace content {
 class WebContents;
@@ -67,6 +68,9 @@ class WebContents;
 // TabStrip implements this interface to know when to create new tabs in
 // the View, and the Browser object likewise implements to be able to update
 // its bookkeeping when such events happen.
+//
+// This implementation of TabStripModel is not thread-safe and should only be
+// accessed on the UI thread.
 //
 ////////////////////////////////////////////////////////////////////////////////
 class TabStripModel {
@@ -245,6 +249,8 @@ class TabStripModel {
   // Move the WebContents at the specified index to another index. This
   // method does NOT send Detached/Attached notifications, rather it moves the
   // WebContents inline and sends a Moved notification instead.
+  // EnsureGroupContiguity() is called after the move, so this will never result
+  // in non-contiguous group (though the moved tab's group may change).
   // If |select_after_move| is false, whatever tab was selected before the move
   // will still be selected, but its index may have incremented or decremented
   // one slot. It returns the index the web contents is actually moved to.
@@ -353,9 +359,6 @@ class TabStripModel {
   // Returns the list of tabs in the given |group|.
   std::vector<int> ListTabsInGroup(TabGroupId group) const;
 
-  // Returns true if the tabs in the given |group| are pinned.
-  bool IsGroupPinned(TabGroupId group) const;
-
   // Returns the index of the first tab that is not a pinned tab. This returns
   // |count()| if all of the tabs are pinned tabs, and 0 if none of the tabs are
   // pinned tabs.
@@ -436,6 +439,13 @@ class TabStripModel {
   // code.
   void AddToGroupForRestore(const std::vector<int>& indices, TabGroupId group);
 
+  // Updates the tab group of the tab at |index|. If |group| is nullopt, the tab
+  // will be removed from the current group. If |group| does not exist, it will
+  // create the group then add the tab to the group.
+  void UpdateGroupForDragRevert(int index,
+                                base::Optional<TabGroupId> group_id,
+                                base::Optional<TabGroupVisualData> group_data);
+
   // Removes the set of tabs pointed to by |indices| from the the groups they
   // are in, if any. The tabs are moved out of the group if necessary. |indices|
   // must be sorted in ascending order. This feature is in development and gated
@@ -452,6 +462,7 @@ class TabStripModel {
     CommandReload,
     CommandDuplicate,
     CommandCloseTab,
+    CommandCloseOtherTabs,
     CommandCloseTabsToRight,
     CommandTogglePinned,
     CommandFocusMode,
@@ -513,9 +524,6 @@ class TabStripModel {
   // reset when _any_ active tab change occurs (rather than just one outside the
   // current tree of openers).
   bool ShouldResetOpenerOnActiveTabChange(content::WebContents* contents) const;
-
-  // Get tab ext data at |index|.
-  const std::string GetExtData(int index) const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(TabStripModelTest, GetIndicesClosedByCommand);
@@ -687,6 +695,12 @@ class TabStripModel {
   // opener.
   void FixOpeners(int index);
 
+  // Makes sure the tab at |index| is not causing a group contiguity error. Will
+  // make the minimum change to ensure that the tab's group is not non-
+  // contiguous as well as ensuring that it is not breaking up a non-contiguous
+  // group, possibly by setting or clearing its group.
+  void EnsureGroupContiguity(int index);
+
   // The WebContents data currently hosted within this TabStripModel. This must
   // be kept in sync with |selection_model_|.
   std::vector<std::unique_ptr<WebContentsData>> contents_data_;
@@ -739,5 +753,11 @@ class TabStripModel {
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(TabStripModel);
 };
+
+// Forbid construction of ScopedObserver with TabStripModel:
+// TabStripModelObserver already implements ScopedObserver's functionality
+// natively.
+template <>
+class ScopedObserver<TabStripModel, TabStripModelObserver> {};
 
 #endif  // CHROME_BROWSER_UI_TABS_TAB_STRIP_MODEL_H_

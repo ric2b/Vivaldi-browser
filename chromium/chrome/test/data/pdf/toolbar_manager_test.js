@@ -15,7 +15,7 @@ function getMouseMoveEvents(fromX, fromY, toX, toY, steps) {
       clientX: fromX,
       clientY: fromY,
       movementX: dx,
-      movementY: dy
+      movementY: dy,
     });
     events.push(e);
     fromX += dx;
@@ -102,7 +102,9 @@ var tests = [
     var mockWindow = new MockWindow(1920, 1080);
     var mockZoomToolbar = {
       clientHeight: 400,
-      isPrintPreview: function() { return false; }
+      isPrintPreview: function() {
+        return false;
+      }
     };
     var toolbar = document.getElementById('toolbar');
     var bookmarksDropdown = toolbar.$.bookmarks;
@@ -123,8 +125,8 @@ var tests = [
    */
   function testToolbarKeyboardNavigation() {
     var mockWindow = new MockWindow(1920, 1080);
-    var toolbar =
-        Polymer.Base.create('viewer-pdf-toolbar', {loadProgress: 100});
+    var toolbar = document.createElement('viewer-pdf-toolbar');
+    toolbar.loadProgress = 100;
     document.body.appendChild(toolbar);
     var zoomToolbar = document.createElement('viewer-zoom-toolbar');
     document.body.appendChild(zoomToolbar);
@@ -182,8 +184,9 @@ var tests = [
     chrome.test.assertFalse(zoomToolbar.isVisible());
 
     // Simulate focusing the fit to page button using the tab key.
-    zoomToolbar.$$('#fit-button').dispatchEvent(
-        new CustomEvent('focus', {bubbles: true, composed: true}));
+    zoomToolbar.$$('#fit-button')
+        .dispatchEvent(
+            new CustomEvent('focus', {bubbles: true, composed: true}));
     chrome.test.assertTrue(zoomToolbar.isVisible());
 
     // Call resetKeyboardNavigationAndHideToolbars(). This happens when focus
@@ -195,8 +198,9 @@ var tests = [
 
     // Simulate re-focusing the zoom toolbar with the tab key. See
     // https://crbug.com/982694.
-    zoomToolbar.$$('#fit-button').dispatchEvent(
-        new CustomEvent('keyup', {bubbles: true, composed: true}));
+    zoomToolbar.$$('#fit-button')
+        .dispatchEvent(
+            new CustomEvent('keyup', {bubbles: true, composed: true}));
     mockWindow.runTimeout();
     chrome.test.assertTrue(zoomToolbar.isVisible());
 
@@ -218,8 +222,8 @@ var tests = [
    */
   function testToolbarTouchInteraction() {
     var mockWindow = new MockWindow(1920, 1080);
-    var toolbar =
-        Polymer.Base.create('viewer-pdf-toolbar', {loadProgress: 100});
+    var toolbar = document.createElement('viewer-pdf-toolbar');
+    toolbar.loadProgress = 100;
     document.body.appendChild(toolbar);
     var zoomToolbar = document.createElement('viewer-zoom-toolbar');
     document.body.appendChild(zoomToolbar);
@@ -230,25 +234,25 @@ var tests = [
 
     // Tap anywhere on the screen -> Toolbars open.
     toolbarManager.handleMouseMove(makeTapEvent(500, 500));
-    chrome.test.assertTrue(toolbar.opened, "toolbars open after tap");
+    chrome.test.assertTrue(toolbar.opened, 'toolbars open after tap');
 
     // Tap again -> Toolbars close.
     toolbarManager.handleMouseMove(makeTapEvent(500, 500));
-    chrome.test.assertFalse(toolbar.opened, "toolbars close after tap");
+    chrome.test.assertFalse(toolbar.opened, 'toolbars close after tap');
 
     // Open toolbars, wait 2 seconds -> Toolbars close.
     toolbarManager.handleMouseMove(makeTapEvent(500, 500));
     mockWindow.runTimeout();
-    chrome.test.assertFalse(toolbar.opened, "toolbars close after wait");
+    chrome.test.assertFalse(toolbar.opened, 'toolbars close after wait');
 
     // Open toolbars, tap near toolbars -> Toolbar doesn't close.
     toolbarManager.handleMouseMove(makeTapEvent(500, 500));
     toolbarManager.handleMouseMove(makeTapEvent(100, 75));
-    chrome.test.assertTrue(toolbar.opened,
-                           "toolbars stay open after tap near toolbars");
+    chrome.test.assertTrue(
+        toolbar.opened, 'toolbars stay open after tap near toolbars');
     mockWindow.runTimeout();
-    chrome.test.assertTrue(toolbar.opened,
-                           "tap near toolbars prevents auto close");
+    chrome.test.assertTrue(
+        toolbar.opened, 'tap near toolbars prevents auto close');
 
     chrome.test.succeed();
   }

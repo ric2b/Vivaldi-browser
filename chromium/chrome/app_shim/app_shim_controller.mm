@@ -19,6 +19,7 @@
 #include "base/mac/mach_logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/app_shim/app_shim_delegate.h"
 #include "chrome/browser/ui/cocoa/browser_window_command_handler.h"
 #include "chrome/browser/ui/cocoa/chrome_command_dispatcher_delegate.h"
@@ -26,16 +27,50 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/mac/app_mode_common.h"
+#include "chrome/common/mac/app_shim.mojom.h"
 #include "chrome/common/process_singleton_lock_posix.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/remote_cocoa/app_shim/application_bridge.h"
 #include "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
 #include "components/remote_cocoa/common/application.mojom.h"
 #include "content/public/browser/remote_cocoa.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/platform/named_platform_channel.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/image/image.h"
+
+// The ProfileMenuTarget bridges between Objective C (as the target for the
+// profile menu NSMenuItems) and C++ (the mojo methods called by
+// AppShimController).
+@interface ProfileMenuTarget : NSObject {
+  AppShimController* controller_;
+}
+- (id)initWithController:(AppShimController*)controller;
+- (void)clearController;
+@end
+
+@implementation ProfileMenuTarget
+- (id)initWithController:(AppShimController*)controller {
+  if (self = [super init])
+    controller_ = controller;
+  return self;
+}
+
+- (void)clearController {
+  controller_ = nullptr;
+}
+
+- (void)profileMenuItemSelected:(id)sender {
+  if (controller_)
+    controller_->ProfileMenuItemSelected([sender tag]);
+}
+
+- (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item {
+  return YES;
+}
+@end
 
 namespace {
 // The maximum amount of time to wait for Chrome's AppShimListener to be
@@ -56,11 +91,12 @@ AppShimController::Params::~Params() = default;
 
 AppShimController::AppShimController(const Params& params)
     : params_(params),
-      shim_binding_(this),
-      host_request_(mojo::MakeRequest(&host_)),
+      host_receiver_(host_.BindNewPipeAndPassReceiver()),
       delegate_([[AppShimDelegate alloc] init]),
       launch_app_done_(false),
-      attention_request_id_(0) {
+      attention_request_id_(0),
+      profile_menu_target_(
+          [[ProfileMenuTarget alloc] initWithController:this]) {
   // Since AppShimController is created before the main message loop starts,
   // NSApp will not be set, so use sharedApplication.
   NSApplication* sharedApplication = [NSApplication sharedApplication];
@@ -77,6 +113,7 @@ AppShimController::~AppShimController() {
   // Un-set the delegate since NSApplication does not retain it.
   NSApplication* sharedApplication = [NSApplication sharedApplication];
   [sharedApplication setDelegate:nil];
+  [profile_menu_target_ clearController];
 }
 
 void AppShimController::FindOrLaunchChrome() {
@@ -266,35 +303,41 @@ void AppShimController::CreateChannelAndSendLaunchApp(
   mojo::ScopedMessagePipeHandle message_pipe =
       bootstrap_mojo_connection_.Connect(std::move(endpoint));
   CHECK(message_pipe.is_valid());
-  host_bootstrap_ = chrome::mojom::AppShimHostBootstrapPtr(
-      chrome::mojom::AppShimHostBootstrapPtrInfo(std::move(message_pipe), 0));
-  host_bootstrap_.set_connection_error_with_reason_handler(base::BindOnce(
+  host_bootstrap_.Bind(mojo::PendingRemote<chrome::mojom::AppShimHostBootstrap>(
+      std::move(message_pipe), 0));
+  host_bootstrap_.set_disconnect_with_reason_handler(base::BindOnce(
       &AppShimController::BootstrapChannelError, base::Unretained(this)));
-
-  bool launched_by_chrome = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      app_mode::kLaunchedByChromeProcessId);
-  apps::AppShimLaunchType launch_type =
-      launched_by_chrome ? apps::APP_SHIM_LAUNCH_REGISTER_ONLY
-                         : apps::APP_SHIM_LAUNCH_NORMAL;
-
   [delegate_ setController:this];
 
-  std::vector<base::FilePath> files;
-  [delegate_ getFilesToOpenAtStartup:&files];
+  auto app_shim_info = chrome::mojom::AppShimInfo::New();
+  app_shim_info->profile_path = params_.profile_dir;
+  app_shim_info->app_id = params_.app_id;
+  app_shim_info->app_url = params_.app_url;
+  app_shim_info->launch_type =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          app_mode::kLaunchedByChromeProcessId)
+          ? apps::APP_SHIM_LAUNCH_REGISTER_ONLY
+          : apps::APP_SHIM_LAUNCH_NORMAL;
+  [delegate_ getFilesToOpenAtStartup:&app_shim_info->files];
 
-  host_bootstrap_->LaunchApp(std::move(host_request_), params_.profile_dir,
-                             params_.app_mode_id, launch_type, files,
-                             base::BindOnce(&AppShimController::LaunchAppDone,
-                                            base::Unretained(this)));
+  host_bootstrap_->OnShimConnected(
+      std::move(host_receiver_), std::move(app_shim_info),
+      base::BindOnce(&AppShimController::OnShimConnectedResponse,
+                     base::Unretained(this)));
 }
 
 void AppShimController::SetUpMenu() {
-  chrome::BuildMainMenu(NSApp, delegate_, params_.app_mode_name, true);
+  chrome::BuildMainMenu(NSApp, delegate_, params_.app_name, true);
+
+  // Initialize the profiles menu to be empty. It will be updated from the
+  // browser.
+  UpdateProfileMenu(std::vector<chrome::mojom::ProfileMenuItemPtr>());
 }
 
 void AppShimController::BootstrapChannelError(uint32_t custom_reason,
                                               const std::string& description) {
-  // The bootstrap channel is expected to close after sending LaunchAppDone.
+  // The bootstrap channel is expected to close after sending
+  // OnShimConnectedResponse.
   if (launch_app_done_)
     return;
   LOG(ERROR) << "Channel error custom_reason:" << custom_reason
@@ -309,16 +352,16 @@ void AppShimController::ChannelError(uint32_t custom_reason,
   Close();
 }
 
-void AppShimController::LaunchAppDone(
+void AppShimController::OnShimConnectedResponse(
     apps::AppShimLaunchResult result,
-    chrome::mojom::AppShimRequest app_shim_request) {
+    mojo::PendingReceiver<chrome::mojom::AppShim> app_shim_receiver) {
   if (result != apps::APP_SHIM_LAUNCH_SUCCESS) {
     Close();
     return;
   }
-  shim_binding_.Bind(std::move(app_shim_request),
-                     ui::WindowResizeHelperMac::Get()->task_runner());
-  shim_binding_.set_connection_error_with_reason_handler(
+  shim_receiver_.Bind(std::move(app_shim_receiver),
+                      ui::WindowResizeHelperMac::Get()->task_runner());
+  shim_receiver_.set_disconnect_with_reason_handler(
       base::BindOnce(&AppShimController::ChannelError, base::Unretained(this)));
 
   std::vector<base::FilePath> files;
@@ -352,6 +395,41 @@ void AppShimController::SetBadgeLabel(const std::string& badge_label) {
   NSApp.dockTile.badgeLabel = base::SysUTF8ToNSString(badge_label);
 }
 
+void AppShimController::UpdateProfileMenu(
+    std::vector<chrome::mojom::ProfileMenuItemPtr> profile_menu_items) {
+  profile_menu_items_ = std::move(profile_menu_items);
+
+  NSMenuItem* cocoa_profile_menu =
+      [[NSApp mainMenu] itemWithTag:IDC_PROFILE_MAIN_MENU];
+  if (profile_menu_items_.empty()) {
+    [cocoa_profile_menu setSubmenu:nil];
+    [cocoa_profile_menu setHidden:YES];
+    return;
+  }
+  [cocoa_profile_menu setHidden:NO];
+
+  base::scoped_nsobject<NSMenu> menu(
+      [[NSMenu alloc] initWithTitle:l10n_util::GetNSStringWithFixup(
+                                        IDS_PROFILES_OPTIONS_GROUP_NAME)]);
+  [cocoa_profile_menu setSubmenu:menu];
+
+  // Note that this code to create menu items is nearly identical to the code
+  // in ProfileMenuController in the browser process.
+  for (const auto& mojo_item : profile_menu_items_) {
+    NSString* name = base::SysUTF16ToNSString(mojo_item->name);
+    NSMenuItem* item =
+        [[[NSMenuItem alloc] initWithTitle:name
+                                    action:@selector(profileMenuItemSelected:)
+                             keyEquivalent:@""] autorelease];
+    [item setTag:mojo_item->menu_index];
+    [item setState:mojo_item->active ? NSOnState : NSOffState];
+    [item setTarget:profile_menu_target_.get()];
+    gfx::Image icon(mojo_item->icon);
+    [item setImage:icon.ToNSImage()];
+    [menu insertItem:item atIndex:mojo_item->menu_index];
+  }
+}
+
 void AppShimController::SetUserAttention(
     apps::AppShimAttentionType attention_type) {
   switch (attention_type) {
@@ -383,4 +461,13 @@ bool AppShimController::SendFocusApp(apps::AppShimFocusType focus_type,
   }
 
   return false;
+}
+
+void AppShimController::ProfileMenuItemSelected(uint32_t index) {
+  for (const auto& mojo_item : profile_menu_items_) {
+    if (mojo_item->menu_index == index) {
+      host_->ProfileSelectedFromMenu(mojo_item->profile_path);
+      return;
+    }
+  }
 }

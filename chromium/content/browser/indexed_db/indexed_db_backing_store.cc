@@ -17,7 +17,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -327,7 +327,7 @@ bool IsPathTooLong(const FilePath& leveldb_dir) {
     const int min = 140;
     const int max = 300;
     const int num_buckets = 12;
-    UMA_HISTOGRAM_CUSTOM_COUNTS(
+    base::UmaHistogramCustomCounts(
         "WebCore.IndexedDB.BackingStore.OverlyLargeOriginLength",
         component_length, min, max, num_buckets);
     return true;
@@ -831,9 +831,21 @@ V2SchemaCorruptionStatus IndexedDBBackingStore::HasV2SchemaCorruption() {
 }
 
 std::unique_ptr<IndexedDBBackingStore::Transaction>
-IndexedDBBackingStore::CreateTransaction(bool relaxed_durability) {
-  return std::make_unique<IndexedDBBackingStore::Transaction>(
-      this, relaxed_durability);
+IndexedDBBackingStore::CreateTransaction(
+    blink::mojom::IDBTransactionDurability durability) {
+  return std::make_unique<IndexedDBBackingStore::Transaction>(this, durability);
+}
+
+// static
+bool IndexedDBBackingStore::ShouldSyncOnCommit(
+    blink::mojom::IDBTransactionDurability durability) {
+  switch (durability) {
+    case blink::mojom::IDBTransactionDurability::Default:
+    case blink::mojom::IDBTransactionDurability::Strict:
+      return true;
+    case blink::mojom::IDBTransactionDurability::Relaxed:
+      return false;
+  }
 }
 
 leveldb::Status IndexedDBBackingStore::GetCompleteMetadata(
@@ -1361,10 +1373,10 @@ class IndexedDBBackingStore::Transaction::ChainedBlobWriterImpl
       int64_t database_id,
       base::WeakPtr<IndexedDBBackingStore> backing_store,
       WriteDescriptorVec* blobs,
-      bool relaxed_durability_,
+      blink::mojom::IDBTransactionDurability durability,
       IndexedDBBackingStore::BlobWriteCallback callback) {
     auto writer = base::WrapRefCounted(new ChainedBlobWriterImpl(
-        database_id, backing_store, relaxed_durability_, std::move(callback)));
+        database_id, backing_store, durability, std::move(callback)));
     writer->blobs_.swap(*blobs);
     writer->iter_ = writer->blobs_.begin();
     backing_store->task_runner()->PostTask(
@@ -1406,17 +1418,18 @@ class IndexedDBBackingStore::Transaction::ChainedBlobWriterImpl
   }
 
   storage::FlushPolicy GetFlushPolicy() const override {
-    return relaxed_durability_ ? storage::FlushPolicy::NO_FLUSH_ON_COMPLETION
-                               : storage::FlushPolicy::FLUSH_ON_COMPLETION;
+    return IndexedDBBackingStore::ShouldSyncOnCommit(durability_)
+               ? storage::FlushPolicy::FLUSH_ON_COMPLETION
+               : storage::FlushPolicy::NO_FLUSH_ON_COMPLETION;
   }
 
  private:
   ChainedBlobWriterImpl(int64_t database_id,
                         base::WeakPtr<IndexedDBBackingStore> backing_store,
-                        bool relaxed_durability,
+                        blink::mojom::IDBTransactionDurability durability,
                         IndexedDBBackingStore::BlobWriteCallback callback)
       : waiting_for_callback_(false),
-        relaxed_durability_(relaxed_durability),
+        durability_(durability),
         database_id_(database_id),
         backing_store_(backing_store),
         callback_(std::move(callback)),
@@ -1444,7 +1457,7 @@ class IndexedDBBackingStore::Transaction::ChainedBlobWriterImpl
   }
 
   bool waiting_for_callback_;
-  bool relaxed_durability_;
+  blink::mojom::IDBTransactionDurability durability_;
   scoped_refptr<ChainedBlobWriterImpl> self_ref_;
   WriteDescriptorVec blobs_;
   WriteDescriptorVec::const_iterator iter_;
@@ -1519,7 +1532,7 @@ class LocalWriteClosure : public FileWriterDelegate::DelegateWriteCallback,
     this->last_modified_ = last_modified;
 
     delegate->Start(blob->CreateReader(),
-                    base::Bind(&LocalWriteClosure::Run, this));
+                    base::BindRepeating(&LocalWriteClosure::Run, this));
     chained_blob_writer_->set_delegate(std::move(delegate));
   }
 
@@ -1578,8 +1591,6 @@ bool IndexedDBBackingStore::WriteBlobFile(
     return false;
 
   bool use_copy_file = descriptor.is_file() && !descriptor.file_path().empty();
-  UMA_HISTOGRAM_BOOLEAN("Storage.IndexedDB.WriteBlobFileViaCopy",
-                        use_copy_file);
 
   FilePath path = GetBlobFileName(database_id, descriptor.key());
 
@@ -2849,13 +2860,13 @@ void IndexedDBBackingStore::ForceRunBlobCleanup() {
 // |backing_store| can be null in unittests (see FakeTransaction).
 IndexedDBBackingStore::Transaction::Transaction(
     IndexedDBBackingStore* backing_store,
-    bool relaxed_durability)
+    blink::mojom::IDBTransactionDurability durability)
     : backing_store_(backing_store),
       leveldb_factory_(backing_store ? backing_store->leveldb_factory_
                                      : nullptr),
       database_id_(-1),
       committing_(false),
-      relaxed_durability_(relaxed_durability) {}
+      durability_(durability) {}
 
 IndexedDBBackingStore::Transaction::~Transaction() {
   DCHECK(!committing_);
@@ -3079,8 +3090,8 @@ Status IndexedDBBackingStore::Transaction::CommitPhaseTwo() {
   // Actually commit. If this succeeds, the journals will appropriately
   // reflect pending blob work - dead files that should be deleted
   // immediately, and live files to monitor.
-  bool sync_on_commit = !relaxed_durability_;
-  s = transaction_->Commit(sync_on_commit);
+  s = transaction_->Commit(
+      IndexedDBBackingStore::ShouldSyncOnCommit(durability_));
   transaction_ = nullptr;
 
   if (!s.ok()) {
@@ -3149,7 +3160,7 @@ leveldb::Status IndexedDBBackingStore::Transaction::WriteNewBlobs(
   // can be destructed before the callback is triggered.
   chained_blob_writer_ = ChainedBlobWriterImpl::Create(
       database_id_, backing_store_->AsWeakPtr(), new_files_to_write,
-      relaxed_durability_,
+      durability_,
       base::BindOnce(
           [](base::WeakPtr<IndexedDBBackingStore::Transaction> transaction,
              void* tracing_end_ptr, BlobWriteCallback final_callback,

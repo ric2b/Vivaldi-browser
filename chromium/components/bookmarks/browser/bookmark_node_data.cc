@@ -33,13 +33,6 @@ BookmarkNodeData::Element::Element(const BookmarkNode* node)
       title(node->GetTitle()),
       date_added(node->date_added()),
       date_folder_modified(node->date_folder_modified()),
-      nickname(node->GetNickName()),
-      description(node->GetDescription()),
-      thumbnail(node->GetThumbnail()),
-      partner(node->GetPartner()),
-      speeddial(false),
-      bookmarkbar(false),
-      date_visited(node->date_visited()),
       id_(node->id()) {
   if (node->GetMetaInfoMap())
     meta_info_map = *node->GetMetaInfoMap();
@@ -57,12 +50,6 @@ void BookmarkNodeData::Element::WriteToPickle(base::Pickle* pickle) const {
   pickle->WriteBool(is_url);
   pickle->WriteString(url.spec());
   pickle->WriteString16(title);
-  pickle->WriteString16(nickname);
-  pickle->WriteString16(description);
-  pickle->WriteString16(thumbnail);
-  pickle->WriteString16(partner);
-  pickle->WriteBool(speeddial);
-  pickle->WriteBool(bookmarkbar);
   pickle->WriteInt64(id_);
   pickle->WriteUInt32(static_cast<uint32_t>(meta_info_map.size()));
   for (auto it = meta_info_map.begin(); it != meta_info_map.end(); ++it) {
@@ -82,19 +69,12 @@ bool BookmarkNodeData::Element::ReadFromPickle(base::PickleIterator* iterator) {
   if (!iterator->ReadBool(&is_url) ||
       !iterator->ReadString(&url_spec) ||
       !iterator->ReadString16(&title) ||
-      !iterator->ReadString16(&nickname) ||
-      !iterator->ReadString16(&description) ||
-      !iterator->ReadString16(&thumbnail) ||
-      !iterator->ReadString16(&partner) ||
-      !iterator->ReadBool(&speeddial) ||
-      !iterator->ReadBool(&bookmarkbar) ||
       !iterator->ReadInt64(&id_)) {
     return false;
   }
   url = GURL(url_spec);
   date_added = base::Time();
   date_folder_modified = base::Time();
-  date_visited = base::Time();
   meta_info_map.clear();
   uint32_t meta_field_count;
   if (!iterator->ReadUInt32(&meta_field_count))

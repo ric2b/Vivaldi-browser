@@ -116,7 +116,7 @@ void ShelfContextMenuModel::ExecuteCommand(int command_id, int event_flags) {
       break;
     default:
       if (delegate_) {
-        if (app_list::IsCommandIdAnAppLaunch(command_id)) {
+        if (IsCommandIdAnAppLaunch(command_id)) {
           shell->app_list_controller()->RecordShelfAppLaunched(
               base::nullopt /* recorded_app_list_view_state */,
               base::nullopt /* recorded_home_launcher_shown */);
@@ -153,7 +153,8 @@ void ShelfContextMenuModel::AddShelfAndWallpaperItems() {
   // mode, the shelf alignment option is not shown.
   LoginStatus status = Shell::Get()->session_controller()->login_status();
   if (status == LoginStatus::USER &&
-      !Shell::Get()->tablet_mode_controller()->InTabletMode()) {
+      !Shell::Get()->tablet_mode_controller()->InTabletMode() &&
+      prefs->FindPreference(prefs::kShelfAlignmentLocal)->IsUserModifiable()) {
     alignment_submenu_ = std::make_unique<ui::SimpleMenuModel>(this);
 
     constexpr int group = 0;

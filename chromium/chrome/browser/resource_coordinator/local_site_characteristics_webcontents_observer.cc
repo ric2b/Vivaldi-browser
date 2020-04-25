@@ -7,16 +7,16 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "chrome/browser/performance_manager/performance_manager.h"
-#include "chrome/browser/performance_manager/public/graph/frame_node.h"
-#include "chrome/browser/performance_manager/public/graph/graph.h"
-#include "chrome/browser/performance_manager/public/graph/page_node.h"
-#include "chrome/browser/performance_manager/public/web_contents_proxy.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/local_site_characteristics_data_store_factory.h"
 #include "chrome/browser/resource_coordinator/tab_helper.h"
 #include "chrome/browser/resource_coordinator/time.h"
 #include "chrome/browser/resource_coordinator/utils.h"
+#include "components/performance_manager/performance_manager_impl.h"
+#include "components/performance_manager/public/graph/frame_node.h"
+#include "components/performance_manager/public/graph/graph.h"
+#include "components/performance_manager/public/graph/page_node.h"
+#include "components/performance_manager/public/web_contents_proxy.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 
@@ -59,7 +59,7 @@ class LocalSiteCharacteristicsWebContentsObserver::GraphObserver
  private:
   static void DispatchNonPersistentNotificationCreated(
       WebContentsProxy contents_proxy,
-      int64_t navigation_id);
+      const url::Origin& origin);
 
   // Binds to the task runner where the object is constructed.
   scoped_refptr<base::SequencedTaskRunner> destination_task_runner_;
@@ -72,7 +72,7 @@ LocalSiteCharacteristicsWebContentsObserver::
         content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents) {
   // May not be present in some tests.
-  if (performance_manager::PerformanceManager::IsAvailable()) {
+  if (performance_manager::PerformanceManagerImpl::IsAvailable()) {
     // The performance manager has to be enabled in order to properly track the
     // non-persistent notification events.
     TabLoadTracker::Get()->AddObserver(this);
@@ -86,8 +86,8 @@ LocalSiteCharacteristicsWebContentsObserver::
 
 // static
 void LocalSiteCharacteristicsWebContentsObserver::MaybeCreateGraphObserver() {
-  if (performance_manager::PerformanceManager::IsAvailable()) {
-    performance_manager::PerformanceManager::PassToGraph(
+  if (performance_manager::PerformanceManagerImpl::IsAvailable()) {
+    performance_manager::PerformanceManagerImpl::PassToGraph(
         FROM_HERE, std::make_unique<GraphObserver>());
   }
 }
@@ -105,7 +105,7 @@ void LocalSiteCharacteristicsWebContentsObserver::OnVisibilityChanged(
 
 void LocalSiteCharacteristicsWebContentsObserver::WebContentsDestroyed() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (performance_manager::PerformanceManager::IsAvailable())
+  if (performance_manager::PerformanceManagerImpl::IsAvailable())
     TabLoadTracker::Get()->RemoveObserver(this);
   writer_.reset();
   writer_origin_ = url::Origin();
@@ -229,7 +229,7 @@ void LocalSiteCharacteristicsWebContentsObserver::OnLoadingStateChange(
 void LocalSiteCharacteristicsWebContentsObserver::
     OnNonPersistentNotificationCreated() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(performance_manager::PerformanceManager::IsAvailable());
+  DCHECK(performance_manager::PerformanceManagerImpl::IsAvailable());
 
   MaybeNotifyBackgroundFeatureUsage(
       &SiteCharacteristicsDataWriter::NotifyUsesNotificationsInBackground,
@@ -259,16 +259,20 @@ bool LocalSiteCharacteristicsWebContentsObserver::ShouldIgnoreFeatureUsageEvent(
   if (feature_type == FeatureType::kTitleChange ||
       feature_type == FeatureType::kFaviconChange) {
     DCHECK(!loaded_time_.is_null());
-    if (NowTicks() - loaded_time_ < GetStaticSiteCharacteristicsDatabaseParams()
-                                        .title_or_favicon_change_grace_period) {
+    if (NowTicks() - loaded_time_ <
+        GetStaticSiteCharacteristicsDatabaseParams()
+            .title_or_favicon_change_post_load_grace_period) {
       return true;
     }
-  } else if (feature_type == FeatureType::kAudioUsage) {
-    DCHECK(!backgrounded_time_.is_null());
-    if (NowTicks() - backgrounded_time_ <
-        GetStaticSiteCharacteristicsDatabaseParams().audio_usage_grace_period) {
-      return true;
-    }
+  }
+
+  // Ignore events happening shortly after the tab being backgrounded, they're
+  // usually false positives.
+  DCHECK(!backgrounded_time_.is_null());
+  if (NowTicks() - backgrounded_time_ <
+      GetStaticSiteCharacteristicsDatabaseParams()
+          .feature_usage_post_background_grace_period) {
+    return true;
   }
 
   return false;
@@ -314,9 +318,10 @@ void LocalSiteCharacteristicsWebContentsObserver::GraphObserver::
   const performance_manager::PageNode* page_node = frame_node->GetPageNode();
   destination_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&GraphObserver::DispatchNonPersistentNotificationCreated,
-                     page_node->GetContentsProxy(),
-                     page_node->GetNavigationID()));
+      base::BindOnce(
+          &GraphObserver::DispatchNonPersistentNotificationCreated,
+          page_node->GetContentsProxy(),
+          url::Origin::Create(page_node->GetMainFrameUrl().GetOrigin())));
 }
 
 namespace {
@@ -324,15 +329,12 @@ namespace {
 // Return the WCO if notification is not late, and it's available.
 LocalSiteCharacteristicsWebContentsObserver* MaybeGetWCO(
     performance_manager::WebContentsProxy contents_proxy,
-    int64_t navigation_id) {
-  // Bail if this is a late notification.
-  if (contents_proxy.LastNavigationId() != navigation_id)
-    return nullptr;
-
-  // The proxy is guaranteed to dereference if the navigation ID above was
-  // valid.
+    const url::Origin& origin) {
   content::WebContents* web_contents = contents_proxy.Get();
-  DCHECK(web_contents);
+  // The WC may be dead by the time the task posted from the PM sequence arrives
+  // on the UI thread.
+  if (!web_contents)
+    return nullptr;
 
   // The L41r is not itself WebContentsUserData, but rather stored on
   // the RC TabHelper, so retrieve that first - if available.
@@ -341,7 +343,11 @@ LocalSiteCharacteristicsWebContentsObserver* MaybeGetWCO(
   if (!rc_th)
     return nullptr;
 
-  return rc_th->local_site_characteristics_wc_observer();
+  auto* wco = rc_th->local_site_characteristics_wc_observer();
+  if (wco->writer_origin() != origin)
+    return nullptr;
+
+  return wco;
 }
 
 }  // namespace
@@ -349,8 +355,8 @@ LocalSiteCharacteristicsWebContentsObserver* MaybeGetWCO(
 // static
 void LocalSiteCharacteristicsWebContentsObserver::GraphObserver::
     DispatchNonPersistentNotificationCreated(WebContentsProxy contents_proxy,
-                                             int64_t navigation_id) {
-  if (auto* wco = MaybeGetWCO(contents_proxy, navigation_id))
+                                             const url::Origin& origin) {
+  if (auto* wco = MaybeGetWCO(contents_proxy, origin))
     wco->OnNonPersistentNotificationCreated();
 }
 

@@ -56,12 +56,15 @@
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/common/user_agent.h"
 #include "crypto/sha2.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "net/base/features.h"
 #include "net/net_buildflags.h"
 #include "net/third_party/uri_template/uri_template.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/cross_thread_shared_url_loader_factory_info.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/host_resolver.mojom.h"
 #include "services/proxy_resolver/public/mojom/proxy_resolver.mojom.h"
@@ -252,6 +255,20 @@ bool ShouldEnableAsyncDns() {
          base::FeatureList::IsEnabled(features::kAsyncDns);
 }
 
+#if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
+bool ShouldUseBuiltinCertVerifier(PrefService* local_state) {
+#if BUILDFLAG(BUILTIN_CERT_VERIFIER_POLICY_SUPPORTED)
+  const PrefService::Preference* builtin_cert_verifier_enabled_pref =
+      local_state->FindPreference(prefs::kBuiltinCertificateVerifierEnabled);
+  if (builtin_cert_verifier_enabled_pref->IsManaged())
+    return builtin_cert_verifier_enabled_pref->GetValue()->GetBool();
+#endif
+
+  return base::FeatureList::IsEnabled(
+      net::features::kCertVerifierBuiltinFeature);
+}
+#endif
+
 }  // namespace
 
 // SharedURLLoaderFactory backed by a SystemNetworkContextManager and its
@@ -282,10 +299,11 @@ class SystemNetworkContextManager::URLLoaderFactoryForSystem
         std::move(client), traffic_annotation);
   }
 
-  void Clone(network::mojom::URLLoaderFactoryRequest request) override {
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
+      override {
     if (!manager_)
       return;
-    manager_->GetURLLoaderFactory()->Clone(std::move(request));
+    manager_->GetURLLoaderFactory()->Clone(std::move(receiver));
   }
 
   // SharedURLLoaderFactory implementation:
@@ -309,7 +327,7 @@ class SystemNetworkContextManager::URLLoaderFactoryForSystem
 
 network::mojom::NetworkContext* SystemNetworkContextManager::GetContext() {
   if (!network_service_network_context_ ||
-      network_service_network_context_.encountered_error()) {
+      !network_service_network_context_.is_connected()) {
     // This should call into OnNetworkServiceCreated(), which will re-create
     // the network service, if needed. There's a chance that it won't be
     // invoked, if the NetworkContext has encountered an error but the
@@ -333,6 +351,7 @@ SystemNetworkContextManager::GetURLLoaderFactory() {
       network::mojom::URLLoaderFactoryParams::New();
   params->process_id = network::mojom::kBrowserProcessId;
   params->is_corb_enabled = false;
+  params->is_trusted = true;
   GetContext()->CreateURLLoaderFactory(mojo::MakeRequest(&url_loader_factory_),
                                        std::move(params));
   return url_loader_factory_.get();
@@ -475,6 +494,9 @@ SystemNetworkContextManager::SystemNetworkContextManager(
   pref_change_registrar_.Add(prefs::kKerberosEnabled, auth_pref_callback);
 #endif  // defined(OS_CHROMEOS)
 
+  local_state_->SetDefaultPrefValue(
+      prefs::kEnableReferrers,
+      base::Value(!base::FeatureList::IsEnabled(features::kNoReferrers)));
   enable_referrers_.Init(
       prefs::kEnableReferrers, local_state_,
       base::BindRepeating(&SystemNetworkContextManager::UpdateReferrersEnabled,
@@ -532,6 +554,13 @@ void SystemNetworkContextManager::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kQuickCheckEnabled, true);
 
   registry->RegisterIntegerPref(prefs::kMaxConnectionsPerProxy, -1);
+
+#if BUILDFLAG(BUILTIN_CERT_VERIFIER_POLICY_SUPPORTED)
+  // Note that the default value is not relevant because the pref is only
+  // evaluated when it is managed.
+  registry->RegisterBooleanPref(prefs::kBuiltinCertificateVerifierEnabled,
+                                false);
+#endif
 }
 
 void SystemNetworkContextManager::OnNetworkServiceCreated(
@@ -586,11 +615,6 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
          "text/csv"});
   }
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  network_service->ExcludeSchemeFromRequestInitiatorSiteLockChecks(
-      extensions::kExtensionScheme, base::DoNothing::Once());
-#endif
-
   int max_connections_per_proxy =
       local_state_->GetInteger(prefs::kMaxConnectionsPerProxy);
   if (max_connections_per_proxy != -1)
@@ -598,8 +622,9 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
 
   // The system NetworkContext must be created first, since it sets
   // |primary_network_context| to true.
+  network_service_network_context_.reset();
   network_service->CreateNetworkContext(
-      MakeRequest(&network_service_network_context_),
+      network_service_network_context_.BindNewPipeAndPassReceiver(),
       CreateNetworkContextParams());
 
   mojo::PendingRemote<network::mojom::NetworkContextClient> client_remote;
@@ -718,7 +743,6 @@ SystemNetworkContextManager::CreateDefaultNetworkContextParams() {
   // point, all NetworkContexts will be destroyed as well.
   AddSSLConfigToNetworkContextParams(network_context_params.get());
 
-  bool http_09_on_non_default_ports_enabled = false;
 #if !defined(OS_ANDROID)
 
   if (g_enable_certificate_transparency) {
@@ -750,17 +774,12 @@ SystemNetworkContextManager::CreateDefaultNetworkContextParams() {
       network_context_params->ct_logs.push_back(std::move(log_info));
     }
   }
-
-  const base::Value* value =
-      g_browser_process->policy_service()
-          ->GetPolicies(policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME,
-                                                std::string()))
-          .GetValue(policy::key::kHttp09OnNonDefaultPortsEnabled);
-  if (value)
-    value->GetAsBoolean(&http_09_on_non_default_ports_enabled);
 #endif
-  network_context_params->http_09_on_non_default_ports_enabled =
-      http_09_on_non_default_ports_enabled;
+
+#if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
+  network_context_params->use_builtin_cert_verifier =
+      ShouldUseBuiltinCertVerifier(local_state_);
+#endif
 
   return network_context_params;
 }
@@ -828,7 +847,8 @@ SystemNetworkContextManager::CreateNetworkContextParams() {
 
   // These are needed for PAC scripts that use FTP URLs.
 #if !BUILDFLAG(DISABLE_FTP_SUPPORT)
-  network_context_params->enable_ftp_url_support = true;
+  network_context_params->enable_ftp_url_support =
+      base::FeatureList::IsEnabled(features::kEnableFtp);
 #endif
 
   network_context_params->primary_network_context = true;

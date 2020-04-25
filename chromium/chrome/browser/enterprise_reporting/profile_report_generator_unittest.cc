@@ -31,7 +31,10 @@ class ProfileReportGeneratorTest : public ::testing::Test {
 
   void SetUp() override {
     ASSERT_TRUE(profile_manager_.SetUp());
-    profile_ = profile_manager_.CreateTestingProfile(kProfile);
+    profile_ = profile_manager_.CreateTestingProfile(
+        kProfile, {}, base::UTF8ToUTF16(kProfile), 0, {},
+        IdentityTestEnvironmentProfileAdaptor::
+            GetIdentityTestEnvironmentFactories());
   }
 
   std::unique_ptr<em::ChromeUserProfileInfo> GenerateReport(
@@ -71,7 +74,7 @@ TEST_F(ProfileReportGeneratorTest, ProfileNotActivated) {
       profile_manager()->profiles_dir().AppendASCII(kIdleProfile);
   profile_manager()->profile_attributes_storage()->AddProfile(
       profile_path, base::ASCIIToUTF16(kIdleProfile), std::string(),
-      base::string16(), 0, std::string(), EmptyAccountId());
+      base::string16(), false, 0, std::string(), EmptyAccountId());
   std::unique_ptr<em::ChromeUserProfileInfo> response =
       generator_.MaybeGenerate(profile_path, kIdleProfile);
   ASSERT_FALSE(response.get());

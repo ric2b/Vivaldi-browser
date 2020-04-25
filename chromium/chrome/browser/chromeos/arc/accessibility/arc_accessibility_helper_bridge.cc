@@ -31,6 +31,7 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/gfx/geometry/rect.h"
@@ -109,6 +110,9 @@ class ArcAccessibilityHelperBridgeFactory
     return base::Singleton<ArcAccessibilityHelperBridgeFactory>::get();
   }
 
+ protected:
+  bool ServiceIsCreatedWithBrowserContext() const override { return true; }
+
  private:
   friend struct base::DefaultSingletonTraits<
       ArcAccessibilityHelperBridgeFactory>;
@@ -126,15 +130,6 @@ class ArcAccessibilityHelperBridgeFactory
   ~ArcAccessibilityHelperBridgeFactory() override = default;
 };
 
-}  // namespace
-
-// static
-ArcAccessibilityHelperBridge*
-ArcAccessibilityHelperBridge::GetForBrowserContext(
-    content::BrowserContext* context) {
-  return ArcAccessibilityHelperBridgeFactory::GetForBrowserContext(context);
-}
-
 static constexpr const char* kTextShadowRaised =
     "-2px -2px 4px rgba(0, 0, 0, 0.5)";
 static constexpr const char* kTextShadowDepressed =
@@ -145,11 +140,68 @@ static constexpr const char* kTextShadowUniform =
 static constexpr const char* kTextShadowDropShadow =
     "0px 0px 2px rgba(0, 0, 0, 0.5), 2px 2px 2px black";
 
-void ArcAccessibilityHelperBridge::UpdateCaptionSettings() const {
-  base::Optional<ui::CaptionStyle> prefs_caption_style =
-      pref_names_util::GetCaptionStyleFromPrefs(profile_->GetPrefs());
+std::string GetARGBFromPrefs(PrefService* prefs,
+                             const char* color_pref_name,
+                             const char* opacity_pref_name) {
+  const std::string color = prefs->GetString(color_pref_name);
+  if (color.empty()) {
+    return "";
+  }
+  const int opacity = prefs->GetInteger(opacity_pref_name);
+  return base::StringPrintf("rgba(%s,%s)", color.c_str(),
+                            base::NumberToString(opacity / 100.0).c_str());
+}
 
-  if (!prefs_caption_style)
+}  // namespace
+
+arc::mojom::CaptionStylePtr GetCaptionStyleFromPrefs(PrefService* prefs) {
+  DCHECK(prefs);
+
+  arc::mojom::CaptionStylePtr style = arc::mojom::CaptionStyle::New();
+
+  style->text_size = prefs->GetString(prefs::kAccessibilityCaptionsTextSize);
+  style->text_color =
+      GetARGBFromPrefs(prefs, prefs::kAccessibilityCaptionsTextColor,
+                       prefs::kAccessibilityCaptionsTextOpacity);
+  style->background_color =
+      GetARGBFromPrefs(prefs, prefs::kAccessibilityCaptionsBackgroundColor,
+                       prefs::kAccessibilityCaptionsBackgroundOpacity);
+  style->user_locale = prefs->GetString(language::prefs::kApplicationLocale);
+
+  const std::string test_shadow =
+      prefs->GetString(prefs::kAccessibilityCaptionsTextShadow);
+  if (test_shadow == kTextShadowRaised) {
+    style->text_shadow_type = arc::mojom::CaptionTextShadowType::RAISED;
+  } else if (test_shadow == kTextShadowDepressed) {
+    style->text_shadow_type = arc::mojom::CaptionTextShadowType::DEPRESSED;
+  } else if (test_shadow == kTextShadowUniform) {
+    style->text_shadow_type = arc::mojom::CaptionTextShadowType::UNIFORM;
+  } else if (test_shadow == kTextShadowDropShadow) {
+    style->text_shadow_type = arc::mojom::CaptionTextShadowType::DROP_SHADOW;
+  } else {
+    style->text_shadow_type = arc::mojom::CaptionTextShadowType::NONE;
+  }
+
+  return style;
+}
+
+// static
+void ArcAccessibilityHelperBridge::CreateFactory() {
+  ArcAccessibilityHelperBridgeFactory::GetInstance();
+}
+
+// static
+ArcAccessibilityHelperBridge*
+ArcAccessibilityHelperBridge::GetForBrowserContext(
+    content::BrowserContext* context) {
+  return ArcAccessibilityHelperBridgeFactory::GetForBrowserContext(context);
+}
+
+void ArcAccessibilityHelperBridge::UpdateCaptionSettings() const {
+  arc::mojom::CaptionStylePtr caption_style =
+      GetCaptionStyleFromPrefs(profile_->GetPrefs());
+
+  if (!caption_style)
     return;
 
   auto* instance = ARC_GET_INSTANCE_FOR_METHOD(
@@ -157,29 +209,6 @@ void ArcAccessibilityHelperBridge::UpdateCaptionSettings() const {
 
   if (!instance)
     return;
-
-  arc::mojom::CaptionStylePtr caption_style = arc::mojom::CaptionStyle::New();
-  caption_style->text_size = prefs_caption_style->text_size.c_str();
-  caption_style->background_color = prefs_caption_style->background_color;
-  caption_style->text_color = prefs_caption_style->text_color;
-  caption_style->user_locale =
-      profile_->GetPrefs()->GetString(language::prefs::kApplicationLocale);
-
-  // Convert the text shadow CSS string to a mojom::CaptionTextShadowType enum.
-  if (prefs_caption_style->text_shadow == kTextShadowRaised) {
-    caption_style->text_shadow_type = arc::mojom::CaptionTextShadowType::RAISED;
-  } else if (prefs_caption_style->text_shadow == kTextShadowDepressed) {
-    caption_style->text_shadow_type =
-        arc::mojom::CaptionTextShadowType::DEPRESSED;
-  } else if (prefs_caption_style->text_shadow == kTextShadowUniform) {
-    caption_style->text_shadow_type =
-        arc::mojom::CaptionTextShadowType::UNIFORM;
-  } else if (prefs_caption_style->text_shadow == kTextShadowDropShadow) {
-    caption_style->text_shadow_type =
-        arc::mojom::CaptionTextShadowType::DROP_SHADOW;
-  } else {
-    caption_style->text_shadow_type = arc::mojom::CaptionTextShadowType::NONE;
-  }
 
   instance->SetCaptionStyle(std::move(caption_style));
 }

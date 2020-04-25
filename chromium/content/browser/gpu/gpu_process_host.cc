@@ -23,6 +23,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/numerics/ranges.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
@@ -45,6 +46,7 @@
 #include "content/browser/service_manager/service_manager_context.h"
 #include "content/common/child_process.mojom.h"
 #include "content/common/child_process_host_impl.h"
+#include "content/common/field_trial_recorder.mojom.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/common/service_manager/child_connection.h"
 #include "content/common/view_messages.h"
@@ -54,7 +56,6 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/gpu_utils.h"
 #include "content/public/common/bind_interface_helpers.h"
-#include "content/public/common/connection_filter.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
@@ -72,6 +73,8 @@
 #include "media/base/media_switches.h"
 #include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "mojo/public/cpp/bindings/generic_pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -172,6 +175,10 @@ GpuTerminationStatus ConvertToGpuTerminationStatus(
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED:
       return GpuTerminationStatus::PROCESS_WAS_KILLED;
     case base::TERMINATION_STATUS_PROCESS_CRASHED:
+#if defined(OS_WIN)
+    // Treat integrity failure as a crash on Windows.
+    case base::TERMINATION_STATUS_INTEGRITY_FAILURE:
+#endif
       return GpuTerminationStatus::PROCESS_CRASHED;
     case base::TERMINATION_STATUS_STILL_RUNNING:
       return GpuTerminationStatus::STILL_RUNNING;
@@ -435,10 +442,10 @@ class GpuSandboxedProcessLauncherDelegate
 };
 
 #if defined(OS_ANDROID)
-template <typename Interface>
-void BindJavaInterface(mojo::InterfaceRequest<Interface> request) {
+void BindAndroidOverlayProvider(
+    mojo::PendingReceiver<media::mojom::AndroidOverlayProvider> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  content::GetGlobalJavaInterfaces()->GetInterface(std::move(request));
+  content::GetGlobalJavaInterfaces()->GetInterface(std::move(receiver));
 }
 #endif  // defined(OS_ANDROID)
 
@@ -453,54 +460,26 @@ void RecordAppContainerStatus(int error_code, bool crashed_before) {
 }
 #endif  // defined(OS_WIN)
 
-void BindDiscardableMemoryRequestOnIO(
-    discardable_memory::mojom::DiscardableSharedMemoryManagerRequest request,
+void BindDiscardableMemoryReceiverOnIO(
+    mojo::PendingReceiver<
+        discardable_memory::mojom::DiscardableSharedMemoryManager> receiver,
     discardable_memory::DiscardableSharedMemoryManager* manager) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  service_manager::BindSourceInfo source_info;
-  manager->Bind(std::move(request), source_info);
+  manager->Bind(std::move(receiver));
 }
 
-void BindDiscardableMemoryRequestOnUI(
-    discardable_memory::mojom::DiscardableSharedMemoryManagerRequest request) {
+void BindDiscardableMemoryReceiverOnUI(
+    mojo::PendingReceiver<
+        discardable_memory::mojom::DiscardableSharedMemoryManager> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::PostTask(
       FROM_HERE, {BrowserThread::IO},
       base::BindOnce(
-          &BindDiscardableMemoryRequestOnIO, std::move(request),
+          &BindDiscardableMemoryReceiverOnIO, std::move(receiver),
           discardable_memory::DiscardableSharedMemoryManager::Get()));
 }
 
 }  // anonymous namespace
-
-class GpuProcessHost::ConnectionFilterImpl : public ConnectionFilter {
- public:
-  explicit ConnectionFilterImpl(int gpu_process_id) {
-    auto task_runner = base::CreateSingleThreadTaskRunner({BrowserThread::UI});
-#if defined(OS_ANDROID)
-    registry_.AddInterface(
-        base::BindRepeating(
-            &BindJavaInterface<media::mojom::AndroidOverlayProvider>),
-        task_runner);
-#endif
-  }
-
- private:
-  // ConnectionFilter:
-  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
-                       const std::string& interface_name,
-                       mojo::ScopedMessagePipeHandle* interface_pipe,
-                       service_manager::Connector* connector) override {
-    if (!registry_.TryBindInterface(interface_name, interface_pipe)) {
-      GetContentClient()->browser()->BindInterfaceRequest(
-          source_info, interface_name, interface_pipe);
-    }
-  }
-
-  service_manager::BinderRegistry registry_;
-
-  DISALLOW_COPY_AND_ASSIGN(ConnectionFilterImpl);
-};
 
 // static
 bool GpuProcessHost::ValidateHost(GpuProcessHost* host) {
@@ -570,12 +549,6 @@ GpuProcessHost* GpuProcessHost::Get(GpuProcessKind kind, bool force_create) {
   return nullptr;
 }
 
-// FEATURE_FORCE_ACCESS_TO_GPU
-// static
-void GpuProcessHost::SetForceAllowAccessToGpu(bool enable) {
-  force_allow_access_to_gpu_ = enable;
-}
-
 // static
 void GpuProcessHost::GetHasGpuProcess(base::OnceCallback<void(bool)> callback) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
@@ -613,8 +586,9 @@ void GpuProcessHost::BindInterface(
     mojo::ScopedMessagePipeHandle interface_pipe) {
   if (interface_name ==
       discardable_memory::mojom::DiscardableSharedMemoryManager::Name_) {
-    BindDiscardableMemoryRequest(
-        discardable_memory::mojom::DiscardableSharedMemoryManagerRequest(
+    BindDiscardableMemoryReceiver(
+        mojo::PendingReceiver<
+            discardable_memory::mojom::DiscardableSharedMemoryManager>(
             std::move(interface_pipe)));
     return;
   }
@@ -622,13 +596,28 @@ void GpuProcessHost::BindInterface(
                                               std::move(interface_pipe));
 }
 
-void GpuProcessHost::BindHostReceiver(mojo::GenericPendingReceiver receiver) {
-  if (auto field_trial_receiver = receiver.As<mojom::FieldTrialRecorder>()) {
-    mojom::FieldTrialRecorderRequest request(std::move(field_trial_receiver));
+void GpuProcessHost::BindHostReceiver(
+    mojo::GenericPendingReceiver generic_receiver) {
+  if (auto field_trial_receiver =
+          generic_receiver.As<mojom::FieldTrialRecorder>()) {
+    mojo::PendingReceiver<mojom::FieldTrialRecorder> receiver(
+        std::move(field_trial_receiver));
     base::PostTask(
         FROM_HERE, {BrowserThread::UI},
-        base::BindOnce(&FieldTrialRecorder::Create, std::move(request)));
+        base::BindOnce(&FieldTrialRecorder::Create, std::move(receiver)));
+    return;
   }
+
+#if defined(OS_ANDROID)
+  if (auto r = generic_receiver.As<media::mojom::AndroidOverlayProvider>()) {
+    base::PostTask(FROM_HERE, {BrowserThread::UI},
+                   base::BindOnce(&BindAndroidOverlayProvider, std::move(r)));
+    return;
+  }
+#endif
+
+  GetContentClient()->browser()->BindGpuHostReceiver(
+      std::move(generic_receiver));
 }
 
 void GpuProcessHost::RunService(
@@ -696,9 +685,7 @@ GpuProcessHost::GpuProcessHost(int host_id, GpuProcessKind kind)
       valid_(true),
       in_process_(false),
       kind_(kind),
-      process_launched_(false),
-      connection_filter_id_(
-          ServiceManagerConnection::kInvalidConnectionFilterId) {
+      process_launched_(false) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kSingleProcess) ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -762,7 +749,7 @@ GpuProcessHost::~GpuProcessHost() {
         // Windows always returns PROCESS_CRASHED on abnormal termination, as it
         // doesn't have a way to distinguish the two.
         base::UmaHistogramSparse("GPU.GPUProcessExitCode",
-                                 std::max(0, std::min(100, info.exit_code)));
+                                 base::ClampToRange(info.exit_code, 0, 100));
       }
 
       message = "The GPU process ";
@@ -789,7 +776,7 @@ GpuProcessHost::~GpuProcessHost() {
         UMA_HISTOGRAM_ENUMERATION("GPU.GPUProcessTerminationOrigin",
                                   termination_origin_,
                                   GpuTerminationOrigin::kMax);
-        message += "was killded by you! Why?";
+        message += "was killed by you! Why?";
         break;
       case base::TERMINATION_STATUS_PROCESS_CRASHED:
         message += "crashed!";
@@ -813,6 +800,11 @@ GpuProcessHost::~GpuProcessHost() {
       case base::TERMINATION_STATUS_OOM:
         message += "died due to out of memory.";
         break;
+#if defined(OS_WIN)
+      case base::TERMINATION_STATUS_INTEGRITY_FAILURE:
+        message += "failed integrity checks.";
+        break;
+#endif
       case base::TERMINATION_STATUS_MAX_ENUM:
         NOTREACHED();
         break;
@@ -827,24 +819,12 @@ GpuProcessHost::~GpuProcessHost() {
   // client 3D APIs without prompting.
   if (block_offscreen_contexts && gpu_host_)
     gpu_host_->BlockLiveOffscreenContexts();
-
-  if (ServiceManagerConnection::GetForProcess()) {
-    ServiceManagerConnection::GetForProcess()->RemoveConnectionFilter(
-        connection_filter_id_);
-  }
 }
 
 bool GpuProcessHost::Init() {
   init_start_time_ = base::TimeTicks::Now();
 
   TRACE_EVENT_INSTANT0("gpu", "LaunchGpuProcess", TRACE_EVENT_SCOPE_THREAD);
-
-  // May be null during test execution.
-  if (ServiceManagerConnection::GetForProcess()) {
-    connection_filter_id_ =
-        ServiceManagerConnection::GetForProcess()->AddConnectionFilter(
-            std::make_unique<ConnectionFilterImpl>(process_->GetData().id));
-  }
 
   process_->GetHost()->CreateChannelMojo();
 
@@ -871,8 +851,6 @@ bool GpuProcessHost::Init() {
     if (base::FeatureList::IsEnabled(features::kGpuUseDisplayThreadPriority))
       options.priority = base::ThreadPriority::DISPLAY;
     in_process_gpu_thread_->StartWithOptions(options);
-
-    OnProcessLaunched();  // Fake a callback that the process is ready.
   } else if (!LaunchGpuProcess()) {
     return false;
   }
@@ -884,7 +862,6 @@ bool GpuProcessHost::Init() {
           viz_main_pending_remote.InitWithNewEndpointAndPassReceiver());
   viz::GpuHostImpl::InitParams params;
   params.restart_id = host_id_;
-  params.in_process = in_process_;
   params.disable_gpu_shader_disk_cache =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableGpuShaderDiskCache);
@@ -895,6 +872,11 @@ bool GpuProcessHost::Init() {
       base::CreateSingleThreadTaskRunner({BrowserThread::UI});
   gpu_host_ = std::make_unique<viz::GpuHostImpl>(
       this, std::move(viz_main_pending_remote), std::move(params));
+
+  if (in_process_) {
+    // Fake a callback that the process is ready.
+    OnProcessLaunched();
+  }
 
 #if BUILDFLAG(USE_VIZ_DEVTOOLS)
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -957,10 +939,14 @@ void GpuProcessHost::OnProcessLaunched() {
     RecordAppContainerStatus(sandbox::SBOX_ALL_OK, crashed_before_);
 #endif  // defined(OS_WIN)
 
-  if (!in_process_) {
+  DCHECK(gpu_host_);
+  if (in_process_) {
+    // Don't set |process_id_| as it is publicly available through process_id().
+    gpu_host_->SetProcessId(base::GetCurrentProcId());
+  } else {
     process_id_ = process_->GetProcess().Pid();
     DCHECK_NE(base::kNullProcessId, process_id_);
-    gpu_host_->OnProcessLaunched(process_id_);
+    gpu_host_->SetProcessId(process_id_);
   }
 }
 
@@ -1070,11 +1056,12 @@ void GpuProcessHost::RecordLogMessage(int32_t severity,
   GpuDataManagerImpl::GetInstance()->AddLogMessage(severity, header, message);
 }
 
-void GpuProcessHost::BindDiscardableMemoryRequest(
-    discardable_memory::mojom::DiscardableSharedMemoryManagerRequest request) {
+void GpuProcessHost::BindDiscardableMemoryReceiver(
+    mojo::PendingReceiver<
+        discardable_memory::mojom::DiscardableSharedMemoryManager> receiver) {
   base::PostTask(
       FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(&BindDiscardableMemoryRequestOnUI, std::move(request)));
+      base::BindOnce(&BindDiscardableMemoryReceiverOnUI, std::move(receiver)));
 }
 
 GpuProcessKind GpuProcessHost::kind() {
@@ -1281,6 +1268,12 @@ viz::mojom::GpuService* GpuProcessHost::gpu_service() {
 
 int GpuProcessHost::GetIDForTesting() const {
   return process_->GetData().id;
+}
+
+// FEATURE_FORCE_ACCESS_TO_GPU
+// static
+void GpuProcessHost::SetForceAllowAccessToGpu(bool enable) {
+  force_allow_access_to_gpu_ = enable;
 }
 
 }  // namespace content

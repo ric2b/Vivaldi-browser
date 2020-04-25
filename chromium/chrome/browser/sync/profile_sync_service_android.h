@@ -61,7 +61,8 @@ class ProfileSyncServiceAndroid : public syncer::SyncServiceObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
   void SetFirstSetupComplete(JNIEnv* env,
-                             const base::android::JavaParamRef<jobject>& obj);
+                             const base::android::JavaParamRef<jobject>& obj,
+                             jint source);
   base::android::ScopedJavaLocalRef<jintArray> GetActiveDataTypes(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
@@ -84,7 +85,7 @@ class ProfileSyncServiceAndroid : public syncer::SyncServiceObserver {
       const base::android::JavaParamRef<jobject>& obj);
   void EnableEncryptEverything(JNIEnv* env,
                                const base::android::JavaParamRef<jobject>& obj);
-  jboolean IsPassphraseRequiredForDecryption(
+  jboolean IsPassphraseRequiredForPreferredDataTypes(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
   jboolean IsUsingSecondaryPassphrase(
@@ -183,9 +184,6 @@ class ProfileSyncServiceAndroid : public syncer::SyncServiceObserver {
                       const base::android::JavaParamRef<jobject>& obj);
 
  private:
-  // Returns whether sync is allowed by Android.
-  bool IsSyncAllowedByAndroid() const;
-
   // A reference to the Chrome profile object.
   Profile* profile_;
 

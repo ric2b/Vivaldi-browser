@@ -19,9 +19,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
 #include "base/values.h"
-#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/image_decoder.h"
@@ -32,6 +32,7 @@
 #include "chrome/browser/ui/app_list/arc/arc_default_app_list.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service.h"
 #include "chrome/browser/ui/app_list/arc/arc_pai_starter.h"
+#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/arc/arc_prefs.h"
@@ -65,6 +66,7 @@ constexpr char kName[] = "name";
 constexpr char kNotificationsEnabled[] = "notifications_enabled";
 constexpr char kPackageName[] = "package_name";
 constexpr char kPackageVersion[] = "package_version";
+constexpr char kPinIndex[] = "pin_index";
 constexpr char kPermissionStates[] = "permission_states";
 constexpr char kSticky[] = "sticky";
 constexpr char kShortcut[] = "shortcut";
@@ -408,6 +410,9 @@ ArcAppListPrefs::ArcAppListPrefs(
 }
 
 ArcAppListPrefs::~ArcAppListPrefs() {
+  for (auto& observer : observer_list_)
+    observer.OnArcAppListPrefsDestroyed();
+
   arc::ArcSessionManager* arc_session_manager = arc::ArcSessionManager::Get();
   if (!arc_session_manager)
     return;
@@ -1491,6 +1496,18 @@ void ArcAppListPrefs::OnPackageAppListRefreshed(
     apps_to_remove.erase(app_id);
 
     AddApp(*app);
+  }
+
+  arc::ArcAppScopedPrefUpdate update(prefs_, package_name,
+                                     arc::prefs::kArcPackages);
+  base::DictionaryValue* package_dict = update.Get();
+  if (!apps_to_remove.empty()) {
+    auto* launcher_controller = ChromeLauncherController::instance();
+    if (launcher_controller) {
+      int pin_index =
+          launcher_controller->PinnedItemIndexByAppID(*apps_to_remove.begin());
+      package_dict->SetInteger(kPinIndex, pin_index);
+    }
   }
 
   for (const auto& app_id : apps_to_remove)

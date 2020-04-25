@@ -18,7 +18,6 @@ from __future__ import print_function
 
 import argparse
 import codecs
-import cgi
 import json
 import os
 import shutil
@@ -27,6 +26,10 @@ import subprocess
 import sys
 import tempfile
 
+if sys.version_info.major == 2:
+  import cgi as html
+else:
+  import html
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__),
                                 "..", "..", "scripts", "licenses"))
@@ -616,7 +619,7 @@ def GenerateCredits(
         dictionary of expansions."""
         for key, val in env.items():
             if escape:
-                val = cgi.escape(val)
+                val = html.escape(val)
             template = template.replace('{{%s}}' % key, val)
         return template
 
@@ -624,7 +627,7 @@ def GenerateCredits(
         env = {
             'name': metadata['Name'],
             'url': metadata['URL'],
-            'license': open(metadata['License File'], 'rb').read(),
+            'license': open(metadata['License File']).read(),
         }
         return {
             'name': metadata['Name'],

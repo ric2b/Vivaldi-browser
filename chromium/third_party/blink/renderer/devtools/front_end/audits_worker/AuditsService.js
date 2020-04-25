@@ -5,6 +5,7 @@
 /**
  * @interface
  */
+// eslint-disable-next-line
 const LighthousePort = class {
   /**
    * @param {!string} eventName, 'message', 'close'
@@ -41,7 +42,7 @@ var AuditsService = class {  // eslint-disable-line
    * @return {!Promise<!ReportRenderer.RunnerResult>}
    */
   start(params) {
-    if (Runtime.queryParam('isUnderTest')) {
+    if (Root.Runtime.queryParam('isUnderTest')) {
       this._disableLoggingForTest();
       params.flags.maxWaitForLoad = 2 * 1000;
     }
@@ -110,10 +111,12 @@ var AuditsService = class {  // eslint-disable-line
    * @param {function(string|undefined)} cb
    */
   on(eventName, cb) {
-    if (eventName === 'message')
+    if (eventName === 'message') {
       this._onMessage = cb;
-    if (eventName === 'close')
+    }
+    if (eventName === 'close') {
       this._onClose = cb;
+    }
   }
 
   _disableLoggingForTest() {

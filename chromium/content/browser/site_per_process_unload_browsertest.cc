@@ -21,6 +21,7 @@
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/navigation_controller_impl.h"
@@ -29,6 +30,7 @@
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
+#include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
@@ -377,7 +379,14 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
 // B2  A2
 //     |
 //     C3
-IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, UnloadHandlerSubframes) {
+// TODO(crbug.com/1012185): Flaky timeouts on Linux and Mac.
+#if defined(OS_LINUX) || defined(OS_MACOSX)
+#define MAYBE_UnloadHandlerSubframes DISABLED_UnloadHandlerSubframes
+#else
+#define MAYBE_UnloadHandlerSubframes UnloadHandlerSubframes
+#endif
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       MAYBE_UnloadHandlerSubframes) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b(c(b),c(a(c))),d)"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -473,6 +482,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, SlowUnloadHandlerInIframe) {
 // Navigate from A(B(A(B)) to C. Check the unload handler are executed, executed
 // in the right order and the processes for A and B are removed.
 IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, Unload_ABAB) {
+  web_contents()->GetController().GetBackForwardCache().DisableForTesting(
+      content::BackForwardCache::TEST_USES_UNLOAD_EVENT);
+
   GURL initial_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b(a(b)))"));
   GURL next_url(embedded_test_server()->GetURL("c.com", "/title1.html"));
@@ -608,6 +620,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, UnloadNestedPendingDeletion) {
 // If B1 receives FrameHostMsg_OnDetach before A2, it should not destroy itself
 // and its children, but rather wait for A2.
 IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, PartialUnloadHandler) {
+  web_contents()->GetController().GetBackForwardCache().DisableForTesting(
+      content::BackForwardCache::TEST_USES_UNLOAD_EVENT);
+
   GURL url_aba(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b(a))"));
   GURL url_c(embedded_test_server()->GetURL("c.com", "/title1.html"));

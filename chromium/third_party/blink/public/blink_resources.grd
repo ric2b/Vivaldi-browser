@@ -18,9 +18,6 @@
       <if expr="is_macosx">
         <include name="IDR_UASTYLE_THEME_MAC_CSS" file="../renderer/core/html/resources/mac.css" type="BINDATA" compress="gzip"/>
       </if>
-      <if expr="notouch_build">
-        <include name="IDR_UASTYLE_THEME_TOUCHLESS_CSS" file="../renderer/core/css/touchless.css" type="BINDATA" compress="gzip"/>
-      </if>
       <include name="IDR_UASTYLE_THEME_INPUT_MULTIPLE_FIELDS_CSS" file="../renderer/core/html/resources/input_multiple_fields.css" type="BINDATA" compress="gzip"/>
       <include name="IDR_UASTYLE_THEME_WIN_CSS" file="../renderer/core/html/resources/win.css" type="BINDATA" compress="gzip"/>
       <include name="IDR_UASTYLE_THEME_WIN_QUIRKS_CSS" file="../renderer/core/html/resources/win_quirks.css" type="BINDATA" compress="gzip"/>
@@ -50,6 +47,9 @@
         <include name="IDR_CALENDAR_PICKER_CSS" file="../renderer/core/html/forms/resources/calendarPicker.css" type="BINDATA" compress="gzip"/>
         <include name="IDR_CALENDAR_PICKER_REFRESH_CSS" file="../renderer/core/html/forms/resources/calendar_picker_refresh.css" type="BINDATA" compress="gzip"/>
         <include name="IDR_CALENDAR_PICKER_JS" file="../renderer/core/html/forms/resources/calendarPicker.js" type="BINDATA" compress="gzip"/>
+        <include name="IDR_MONTH_PICKER_JS" file="../renderer/core/html/forms/resources/month_picker.js" type="BINDATA" compress="gzip"/>
+        <include name="IDR_TIME_PICKER_CSS" file="../renderer/core/html/forms/resources/time_picker.css" type="BINDATA" compress="gzip"/>
+        <include name="IDR_TIME_PICKER_JS" file="../renderer/core/html/forms/resources/time_picker.js" type="BINDATA" compress="gzip"/>
         <include name="IDR_PICKER_BUTTON_CSS" file="../renderer/core/html/forms/resources/pickerButton.css" type="BINDATA" compress="gzip"/>
         <include name="IDR_SUGGESTION_PICKER_CSS" file="../renderer/core/html/forms/resources/suggestionPicker.css" type="BINDATA" compress="gzip"/>
         <include name="IDR_SUGGESTION_PICKER_JS" file="../renderer/core/html/forms/resources/suggestionPicker.js" type="BINDATA" compress="gzip"/>

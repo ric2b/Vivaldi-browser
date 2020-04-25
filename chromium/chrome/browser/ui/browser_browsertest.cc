@@ -115,6 +115,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
+#include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/ui_base_features.h"
@@ -887,11 +888,19 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, BeforeUnloadVsBeforeReload) {
   alert->native_dialog()->AcceptAppModalDialog();
 }
 
-IN_PROC_BROWSER_TEST_F(BrowserTest, NewTabFromLinkOpensInGroup) {
-  ASSERT_TRUE(embedded_test_server()->Start());
+class BrowserTestWithTabGroupsEnabled : public BrowserTest {
+ public:
+  BrowserTestWithTabGroupsEnabled() {
+    feature_list_.InitAndEnableFeature(features::kTabGroups);
+  }
 
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kTabGroups);
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsEnabled,
+                       NewTabFromLinkOpensInGroup) {
+  ASSERT_TRUE(embedded_test_server()->Start());
 
   // Add a grouped tab.
   TabStripModel* const model = browser()->tab_strip_model();
@@ -1330,8 +1339,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, ShouldShowLocationBar) {
   // Launch it in a window, as AppLauncherHandler::HandleLaunchApp() would.
   WebContents* app_window =
       apps::LaunchService::Get(browser()->profile())
-          ->OpenApplication(AppLaunchParams(
-              browser()->profile(), extension_app->id(),
+          ->OpenApplication(apps::AppLaunchParams(
+              extension_app->id(),
               apps::mojom::LaunchContainer::kLaunchContainerWindow,
               WindowOpenDisposition::NEW_WINDOW,
               apps::mojom::AppLaunchSource::kSourceTest));
@@ -1502,8 +1511,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, OpenAppWindowLikeNtp) {
   // Launch it in a window, as AppLauncherHandler::HandleLaunchApp() would.
   WebContents* app_window =
       apps::LaunchService::Get(browser()->profile())
-          ->OpenApplication(AppLaunchParams(
-              browser()->profile(), extension_app->id(),
+          ->OpenApplication(apps::AppLaunchParams(
+              extension_app->id(),
               apps::mojom::LaunchContainer::kLaunchContainerWindow,
               WindowOpenDisposition::NEW_WINDOW,
               apps::mojom::AppLaunchSource::kSourceTest));
@@ -2810,7 +2819,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DialogsDropFullscreen) {
 
   // Simulate the tab requesting fullscreen.
   browser_as_wc_delegate->EnterFullscreenModeForTab(
-      tab, GURL(), blink::WebFullscreenOptions());
+      tab, GURL(), blink::mojom::FullscreenOptions());
   EXPECT_TRUE(browser_as_wc_delegate->IsFullscreenForTabOrPending(tab));
 
   // The tab gets a modal dialog.
@@ -2837,7 +2846,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DialogsAllowedInFullscreenWithinTabMode) {
   // Simulate a screen-captured tab requesting fullscreen.
   tab->IncrementCapturerCount(gfx::Size(1280, 720));
   browser_as_wc_delegate->EnterFullscreenModeForTab(
-      tab, GURL(), blink::WebFullscreenOptions());
+      tab, GURL(), blink::mojom::FullscreenOptions());
   EXPECT_TRUE(browser_as_wc_delegate->IsFullscreenForTabOrPending(tab));
 
   // The tab gets a modal dialog.

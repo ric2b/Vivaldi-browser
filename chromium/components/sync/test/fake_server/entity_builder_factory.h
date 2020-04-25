@@ -29,7 +29,10 @@ class EntityBuilderFactory {
   explicit EntityBuilderFactory(const std::string& cache_guid);
   virtual ~EntityBuilderFactory();
 
-  BookmarkEntityBuilder NewBookmarkEntityBuilder(const std::string& title);
+  const BookmarkEntityBuilder NewBookmarkEntityBuilder(
+      const std::string& title,
+      base::Optional<std::string> originator_client_item_id = base::nullopt);
+
   NotesEntityBuilder NewNotesEntityBuilder(const std::string& title,
                                            const GURL& url,
                                            const std::string& content);
@@ -37,10 +40,7 @@ class EntityBuilderFactory {
  private:
   // An identifier used when creating entities. This value is used similarly to
   // the value in the Sync directory code.
-  std::string cache_guid_;
-
-  // The latest client item id assigned to an entity.
-  int64_t latest_client_item_id_;
+  const std::string cache_guid_;
 };
 
 }  // namespace fake_server

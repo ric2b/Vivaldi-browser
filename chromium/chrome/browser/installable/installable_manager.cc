@@ -26,7 +26,7 @@
 #include "net/base/url_util.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "third_party/blink/public/common/manifest/manifest_icon_selector.h"
-#include "third_party/blink/public/common/manifest/web_display_mode.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "url/origin.h"
 
 #if defined(OS_ANDROID)
@@ -41,6 +41,21 @@ const char kPngExtension[] = ".png";
 // factor of a Nexus 5 device (3x). It is the currently advertised minimum icon
 // size for triggering banners.
 const int kMinimumPrimaryIconSizeInPx = 144;
+
+// This constant is the smallest possible adaptive launcher icon size for any
+// device density.
+// The ideal icon size is 83dp (see documentation for
+// R.dimen.webapk_adaptive_icon_size for discussion of maskable icon size). For
+// a manifest to be valid, we do NOT need an maskable icon to be 83dp for the
+// device's screen density. Instead, we only need the maskable icon be larger
+// than (or equal to) 83dp in the smallest screen density (that is the mdpi
+// screen density). For mdpi devices, 1dp is 1px. Therefore, we have 83px here.
+// Requiring the minimum icon size (in pixel) independent of the device's screen
+// density is because we use mipmap-anydpi-v26 to specify adaptive launcher
+// icon, and it will make the icon adaptive as long as there is one usable
+// maskable icon (if that icon is of wrong size, it'll be automatically
+// resized).
+const int kMinimumPrimaryAdaptiveLauncherIconSizeInPx = 83;
 
 #if !defined(OS_ANDROID)
 const int kMinimumBadgeIconSizeInPx = 72;
@@ -70,13 +85,22 @@ int GetIdealBadgeIconSizeInPx() {
 #endif
 }
 
+int GetIdealPrimaryAdaptiveLauncherIconSizeInPx() {
+#if defined(OS_ANDROID)
+  return ShortcutHelper::GetIdealAdaptiveLauncherIconSizeInPx();
+#else
+  return kMinimumPrimaryAdaptiveLauncherIconSizeInPx;
+#endif
+}
+
 using IconPurpose = blink::Manifest::ImageResource::Purpose;
 
-// Returns true if |manifest| specifies a PNG icon of height and width >=
-// kMinimumPrimaryIconSizeInPx (or size "any"), and either
-// 1. with IconPurpose::ANY or IconPurpose::MASKABLE, if maskable icon is
-// preferred, or
-// 2. with IconPurpose::ANY if maskable icon is not preferred.
+// Returns true if |manifest| specifies a PNG icon that either
+// 1. has IconPurpose::ANY, with height and width >= kMinimumPrimaryIconSizeInPx
+// (or size "any")
+// 2. if maskable icon is preferred, has IconPurpose::MASKABLE with height and
+// width >= kMinimumPrimaryAdaptiveLauncherIconSizeInPx (or size "any")
+
 bool DoesManifestContainRequiredIcon(const blink::Manifest& manifest,
                                      bool prefer_maskable_icon) {
   for (const auto& icon : manifest.icons) {
@@ -100,8 +124,17 @@ bool DoesManifestContainRequiredIcon(const blink::Manifest& manifest,
     for (const auto& size : icon.sizes) {
       if (size.IsEmpty())  // "any"
         return true;
-      if (size.width() >= kMinimumPrimaryIconSizeInPx &&
+      if (base::Contains(icon.purpose,
+                         blink::Manifest::ImageResource::Purpose::ANY) &&
+          size.width() >= kMinimumPrimaryIconSizeInPx &&
           size.height() >= kMinimumPrimaryIconSizeInPx) {
+        return true;
+      }
+      if (prefer_maskable_icon &&
+          base::Contains(icon.purpose,
+                         blink::Manifest::ImageResource::Purpose::MASKABLE) &&
+          size.height() >= kMinimumPrimaryAdaptiveLauncherIconSizeInPx &
+              size.width() >= kMinimumPrimaryAdaptiveLauncherIconSizeInPx) {
         return true;
       }
     }
@@ -171,7 +204,6 @@ InstallableManager::InstallableManager(content::WebContents* web_contents)
 }
 
 InstallableManager::~InstallableManager() {
-  // Null in unit tests.
   if (service_worker_context_)
     service_worker_context_->RemoveObserver(this);
 }
@@ -446,8 +478,8 @@ void InstallableManager::WorkOnTask() {
     FetchManifest();
   } else if (params.valid_primary_icon && params.prefer_maskable_icon &&
              !IsIconFetched(IconPurpose::MASKABLE)) {
-    CheckAndFetchBestIcon(GetIdealPrimaryIconSizeInPx(),
-                          GetMinimumPrimaryIconSizeInPx(),
+    CheckAndFetchBestIcon(GetIdealPrimaryAdaptiveLauncherIconSizeInPx(),
+                          kMinimumPrimaryAdaptiveLauncherIconSizeInPx,
                           IconPurpose::MASKABLE);
   } else if (params.valid_primary_icon && !IsIconFetched(IconPurpose::ANY)) {
     CheckAndFetchBestIcon(GetIdealPrimaryIconSizeInPx(),
@@ -545,9 +577,9 @@ bool InstallableManager::IsManifestValidForWebApp(
   }
 
   if (check_webapp_manifest_display &&
-      manifest.display != blink::kWebDisplayModeStandalone &&
-      manifest.display != blink::kWebDisplayModeFullscreen &&
-      manifest.display != blink::kWebDisplayModeMinimalUi) {
+      manifest.display != blink::mojom::DisplayMode::kStandalone &&
+      manifest.display != blink::mojom::DisplayMode::kFullscreen &&
+      manifest.display != blink::mojom::DisplayMode::kMinimalUi) {
     valid_manifest_->errors.push_back(MANIFEST_DISPLAY_NOT_SUPPORTED);
     is_valid = false;
   }
@@ -564,17 +596,12 @@ void InstallableManager::CheckServiceWorker() {
   DCHECK(!worker_->fetched);
   DCHECK(!manifest().IsEmpty());
 
-  if (!manifest().start_url.is_valid()) {
-    worker_->has_worker = false;
-    worker_->error = NO_URL_FOR_SERVICE_WORKER;
-    worker_->fetched = true;
-    WorkOnTask();
+  if (!service_worker_context_)
     return;
-  }
 
-  // Check to see if there is a service worker for the manifest's start url.
+  // Check to see if there is a service worker for the manifest's scope.
   service_worker_context_->CheckHasServiceWorker(
-      manifest().start_url,
+      manifest().scope,
       base::BindOnce(&InstallableManager::OnDidCheckHasServiceWorker,
                      weak_factory_.GetWeakPtr()));
 }
@@ -659,10 +686,8 @@ void InstallableManager::OnIconFetched(const GURL icon_url,
 
 void InstallableManager::OnRegistrationCompleted(const GURL& pattern) {
   // If the scope doesn't match we keep waiting.
-  if (!content::ServiceWorkerContext::ScopeMatches(pattern,
-                                                   manifest().start_url)) {
+  if (!content::ServiceWorkerContext::ScopeMatches(pattern, manifest().scope))
     return;
-  }
 
   bool was_active = task_queue_.HasCurrent();
 
@@ -678,6 +703,11 @@ void InstallableManager::OnRegistrationCompleted(const GURL& pattern) {
     return;  // If the pipeline was already running, we don't restart it.
 
   WorkOnTask();
+}
+
+void InstallableManager::OnDestruct(content::ServiceWorkerContext* context) {
+  service_worker_context_->RemoveObserver(this);
+  service_worker_context_ = nullptr;
 }
 
 void InstallableManager::DidFinishNavigation(

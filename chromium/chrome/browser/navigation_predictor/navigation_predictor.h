@@ -33,7 +33,6 @@ class PrerenderHandle;
 class PrerenderManager;
 }
 
-class SiteEngagementService;
 class TemplateURLService;
 
 // This class gathers metrics of anchor elements from both renderer process
@@ -48,8 +47,8 @@ class NavigationPredictor : public blink::mojom::AnchorElementMetricsHost,
   ~NavigationPredictor() override;
 
   // Create and bind NavigationPredictor.
-  static void Create(mojo::PendingReceiver<AnchorElementMetricsHost> receiver,
-                     content::RenderFrameHost* render_frame_host);
+  static void Create(content::RenderFrameHost* render_frame_host,
+                     mojo::PendingReceiver<AnchorElementMetricsHost> receiver);
 
   // Enum describing the possible set of actions that navigation predictor may
   // take. This enum should remain synchronized with enum
@@ -125,10 +124,6 @@ class NavigationPredictor : public blink::mojom::AnchorElementMetricsHost,
   bool IsValidMetricFromRenderer(
       const blink::mojom::AnchorElementMetrics& metric) const;
 
-  // Returns site engagement service, which can be used to get site engagement
-  // score. Return value is guaranteed to be non-null.
-  SiteEngagementService* GetEngagementService() const;
-
   // Returns template URL service. Guaranteed to be non-null.
   TemplateURLService* GetTemplateURLService() const;
 
@@ -136,8 +131,8 @@ class NavigationPredictor : public blink::mojom::AnchorElementMetricsHost,
   void MergeMetricsSameTargetUrl(
       std::vector<blink::mojom::AnchorElementMetricsPtr>* metrics) const;
 
-  // Computes and stores document level metrics, including |number_of_anchors_|,
-  // |document_engagement_score_|, etc.
+  // Computes and stores document level metrics, including |number_of_anchors_|
+  // etc.
   void ComputeDocumentMetricsOnLoad(
       const std::vector<blink::mojom::AnchorElementMetricsPtr>& metrics);
 
@@ -145,8 +140,6 @@ class NavigationPredictor : public blink::mojom::AnchorElementMetricsHost,
   // returns navigation score. Virtual for testing purposes.
   virtual double CalculateAnchorNavigationScore(
       const blink::mojom::AnchorElementMetrics& metrics,
-      double document_engagement_score,
-      double target_engagement_score,
       int area_rank) const;
 
   // If |sum_page_scales_| is non-zero, return the page-wide score to add to
@@ -157,7 +150,7 @@ class NavigationPredictor : public blink::mojom::AnchorElementMetricsHost,
   // action to take, or decide not to do anything. Example actions including
   // preresolve, preload, prerendering, etc.
   void MaybeTakeActionOnLoad(
-      const url::Origin& document_origin,
+      const GURL& document_url,
       const std::vector<std::unique_ptr<NavigationScore>>&
           sorted_navigation_scores);
 
@@ -169,12 +162,12 @@ class NavigationPredictor : public blink::mojom::AnchorElementMetricsHost,
   virtual void Prefetch(prerender::PrerenderManager* prerender_manager);
 
   base::Optional<GURL> GetUrlToPrefetch(
-      const url::Origin& document_origin,
+      const GURL& document_url,
       const std::vector<std::unique_ptr<NavigationScore>>&
           sorted_navigation_scores) const;
 
   base::Optional<url::Origin> GetOriginToPreconnect(
-      const url::Origin& document_origin,
+      const GURL& document_url,
       const std::vector<std::unique_ptr<NavigationScore>>&
           sorted_navigation_scores) const;
 
@@ -200,9 +193,7 @@ class NavigationPredictor : public blink::mojom::AnchorElementMetricsHost,
   void MaybeSendMetricsToUkm() const;
 
   // After an in-page click, sends the index of the url that was clicked to the
-  // UKM id at |ukm_source_id_|. The index sent corresponds to the index of that
-  // url in |top_urls_|, and is 1-indexed. If the url does not appear in
-  // |top_urls_|, a 0 is returned.
+  // UKM id at |ukm_source_id_|.
   void MaybeSendClickMetricsToUkm(const std::string& clicked_url) const;
 
   // Returns the minimum of the bucket that |value| belongs in, for page-wide
@@ -217,17 +208,17 @@ class NavigationPredictor : public blink::mojom::AnchorElementMetricsHost,
   // |ratio_area|.
   int GetLinearBucketForRatioArea(int value) const;
 
+  // Notifies the keyed service of the updated predicted navigation.
+  void NotifyPredictionUpdated(
+      const std::vector<std::unique_ptr<NavigationScore>>&
+          sorted_navigation_scores);
+
   // Used to get keyed services.
   content::BrowserContext* const browser_context_;
 
   // Maps from target url (href) to navigation score.
   std::unordered_map<std::string, std::unique_ptr<NavigationScore>>
       navigation_scores_map_;
-
-  // The urls of the top anchor elements in the page, in a random order.
-  // If there are 10 or more urls on the page, |top_urls_| contains 10 urls.
-  // Otherwise, it contains all the urls.
-  std::vector<GURL> top_urls_;
 
   // Total number of anchors that: href has the same host as the document,
   // contains image, inside an iframe, href incremented by 1 from document url.
@@ -251,8 +242,6 @@ class NavigationPredictor : public blink::mojom::AnchorElementMetricsHost,
   const int is_same_host_scale_;
   const int contains_image_scale_;
   const int is_url_incremented_scale_;
-  const int source_engagement_score_scale_;
-  const int target_engagement_score_scale_;
   const int area_rank_scale_;
   const int ratio_distance_root_top_scale_;
 
@@ -299,6 +288,9 @@ class NavigationPredictor : public blink::mojom::AnchorElementMetricsHost,
   // all navigation scores for a page.
   const bool normalize_navigation_scores_;
 
+  // A count of clicks to prevent reporting more than 10 clicks to UKM.
+  size_t clicked_count_ = 0;
+
   // Timing of document loaded and last click.
   base::TimeTicks document_loaded_timing_;
   base::TimeTicks last_click_timing_;
@@ -322,8 +314,11 @@ class NavigationPredictor : public blink::mojom::AnchorElementMetricsHost,
   // UKM recorder
   ukm::UkmRecorder* ukm_recorder_ = nullptr;
 
-  // The origin of the current page.
-  url::Origin document_origin_;
+  // The URL of the current page.
+  GURL document_url_;
+
+  // Render frame host of the current page.
+  const content::RenderFrameHost* render_frame_host_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

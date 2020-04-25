@@ -37,6 +37,7 @@ cr.define('print_preview', function() {
    *   decimalDelimiter: string,
    *   unitType: !print_preview.MeasurementSystemUnitType,
    *   previewModifiable: boolean,
+   *   previewIsPdf: boolean,
    *   documentTitle: string,
    *   documentHasSelection: boolean,
    *   shouldPrintSelectionOnly: boolean,
@@ -96,19 +97,6 @@ cr.define('print_preview', function() {
    * }}
    */
   let ProvisionalDestinationInfo;
-
-  /**
-   * Printer types for capabilities and printer list requests.
-   * Should match PrinterType in print_preview_handler.h
-   * @enum {number}
-   */
-  const PrinterType = {
-    PRIVET_PRINTER: 0,
-    EXTENSION_PRINTER: 1,
-    PDF_PRINTER: 2,
-    LOCAL_PRINTER: 3,
-    CLOUD_PRINTER: 4
-  };
 
   /**
    * An interface to the native Chromium printing system layer.
@@ -329,7 +317,6 @@ cr.define('print_preview', function() {
     NativeLayer: NativeLayer,
     PreviewSettings: PreviewSettings,
     PrinterSetupResponse: PrinterSetupResponse,
-    PrinterType: PrinterType,
     PrivetPrinterDescription: PrivetPrinterDescription,
     ProvisionalDestinationInfo: ProvisionalDestinationInfo,
   };

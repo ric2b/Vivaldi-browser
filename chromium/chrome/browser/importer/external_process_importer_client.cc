@@ -19,7 +19,6 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #include "app/vivaldi_resources.h"
-#include "importer/vivaldi_profile_import_process_messages.h"
 
 ExternalProcessImporterClient::ExternalProcessImporterClient(
     base::WeakPtr<ExternalProcessImporterHost> importer_host,
@@ -71,6 +70,7 @@ void ExternalProcessImporterClient::Start() {
   localized_strings.try_emplace(
       IDS_BOOKMARK_BAR_FOLDER_NAME,
       l10n_util::GetStringUTF8(IDS_BOOKMARK_BAR_FOLDER_NAME));
+
   //Vivaldi
   localized_strings.try_emplace(
       IDS_BOOKMARK_GROUP_FROM_OPERA, l10n_util::GetStringUTF8(IDS_BOOKMARK_GROUP_FROM_OPERA));
@@ -82,10 +82,8 @@ void ExternalProcessImporterClient::Start() {
 
   // If the utility process hasn't started yet the message will queue until it
   // does.
-  chrome::mojom::ProfileImportObserverPtr observer;
-  receiver_.Bind(mojo::MakeRequest(&observer));
   profile_import_->StartImport(source_profile_, items_, localized_strings,
-                               std::move(observer));
+                               receiver_.BindNewPipeAndPassRemote());
 }
 
 void ExternalProcessImporterClient::Cancel() {
@@ -143,15 +141,6 @@ void ExternalProcessImporterClient::OnImportItemFinished(
   profile_import_->ReportImportItemFinished(import_item);
 }
 
-void ExternalProcessImporterClient::OnImportItemFailed(
-    importer::ImportItem import_item,
-    const std::string& error_msg) {
-  if (cancelled_)
-    return;
-
-  bridge_->NotifyItemFailed(import_item, error_msg);
-}
-
 void ExternalProcessImporterClient::OnHistoryImportStart(
     uint32_t total_history_rows_count) {
   if (cancelled_)
@@ -204,49 +193,6 @@ void ExternalProcessImporterClient::OnBookmarksImportGroup(
                     bookmarks_group.end());
   if (bookmarks_.size() >= total_bookmarks_count_)
     bridge_->AddBookmarks(bookmarks_, bookmarks_first_folder_name_);
-}
-
-void ExternalProcessImporterClient::OnNotesImportStart(
-    const base::string16& first_folder_name,
-    uint32_t total_notes_count) {
-  if (cancelled_)
-    return;
-
-  notes_first_folder_name_ = first_folder_name;
-  total_notes_count_ = total_notes_count;
-  notes_.reserve(total_notes_count);
-}
-
-void ExternalProcessImporterClient::OnNotesImportGroup(
-    const std::vector<ImportedNotesEntry>& notes_group) {
-  if (cancelled_)
-    return;
-
-  // Collect sets of bookmarks from importer process until we have reached
-  // total_bookmarks_count_:
-  notes_.insert(notes_.end(), notes_group.begin(),
-                    notes_group.end());
-  if (notes_.size() == total_notes_count_)
-    bridge_->AddNotes(notes_, notes_first_folder_name_);
-}
-
-void ExternalProcessImporterClient::OnSpeedDialImportStart(
-    uint32_t total_count) {
-  if (cancelled_)
-    return;
-
-  total_speeddial_count_ = total_count;
-  speeddial_.reserve(total_count);
-}
-
-void ExternalProcessImporterClient::OnSpeedDialImportGroup(
-    const std::vector<ImportedSpeedDialEntry>& group) {
-  if (cancelled_)
-    return;
-
-  speeddial_.insert(speeddial_.end(), group.begin(), group.end());
-  if (speeddial_.size() == total_speeddial_count_)
-    bridge_->AddSpeedDial(speeddial_);
 }
 
 void ExternalProcessImporterClient::OnFaviconsImportStart(

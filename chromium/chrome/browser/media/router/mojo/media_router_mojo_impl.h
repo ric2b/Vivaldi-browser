@@ -27,8 +27,10 @@
 #include "chrome/common/media_router/mojom/media_router.mojom.h"
 #include "chrome/common/media_router/route_request_result.h"
 #include "content/public/browser/browser_thread.h"
-#include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/mojom/presentation/presentation.mojom.h"
 
 namespace content {
@@ -81,10 +83,11 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   void GetMediaController(
       const MediaRoute::Id& route_id,
       mojo::PendingReceiver<mojom::MediaController> controller,
-      mojom::MediaStatusObserverPtr observer) final;
+      mojo::PendingRemote<mojom::MediaStatusObserver> observer) final;
   void RegisterMediaRouteProvider(
       MediaRouteProviderId provider_id,
-      mojom::MediaRouteProviderPtr media_route_provider_ptr,
+      mojo::PendingRemote<mojom::MediaRouteProvider>
+          media_route_provider_remote,
       mojom::MediaRouter::RegisterMediaRouteProviderCallback callback) override;
 
   // Issues 0+ calls to the provider given by |provider_id| to ensure its state
@@ -111,8 +114,8 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   // Removes the pointer from |media_route_providers_|.
   void OnProviderConnectionError(MediaRouteProviderId provider_id);
 
-  // Creates a binding between |this| and |request|.
-  void BindToMojoRequest(mojo::InterfaceRequest<mojom::MediaRouter> request);
+  // Creates a binding between |this| and |receiver|.
+  void BindToMojoReceiver(mojo::PendingReceiver<mojom::MediaRouter> receiver);
 
   // Methods for obtaining a pointer to the provider associated with the given
   // object. They return a nullopt when such a provider is not found.
@@ -129,9 +132,9 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
                        const std::vector<MediaSinkInternal>& internal_sinks,
                        const std::vector<url::Origin>& origins) override;
 
-  // Mojo pointers to media route providers. Providers are added via
+  // Mojo remotes to media route providers. Providers are added via
   // RegisterMediaRouteProvider().
-  base::flat_map<MediaRouteProviderId, mojom::MediaRouteProviderPtr>
+  base::flat_map<MediaRouteProviderId, mojo::Remote<mojom::MediaRouteProvider>>
       media_route_providers_;
 
  private:
@@ -339,21 +342,25 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
       std::vector<mojom::RouteMessagePtr> messages) override;
   void OnMediaRemoterCreated(
       int32_t tab_id,
-      media::mojom::MirrorServiceRemoterPtr remoter,
-      media::mojom::MirrorServiceRemotingSourceRequest source_request) override;
+      mojo::PendingRemote<media::mojom::MirrorServiceRemoter> remoter,
+      mojo::PendingReceiver<media::mojom::MirrorServiceRemotingSource>
+          source_receiver) override;
   void GetMediaSinkServiceStatus(
       mojom::MediaRouter::GetMediaSinkServiceStatusCallback callback) override;
   void GetMirroringServiceHostForTab(
       int32_t target_tab_id,
-      mirroring::mojom::MirroringServiceHostRequest request) override;
+      mojo::PendingReceiver<mirroring::mojom::MirroringServiceHost> receiver)
+      override;
   void GetMirroringServiceHostForDesktop(
       int32_t initiator_tab_id,
       const std::string& desktop_stream_id,
-      mirroring::mojom::MirroringServiceHostRequest request) override;
+      mojo::PendingReceiver<mirroring::mojom::MirroringServiceHost> receiver)
+      override;
   void GetMirroringServiceHostForOffscreenTab(
       const GURL& presentation_url,
       const std::string& presentation_id,
-      mirroring::mojom::MirroringServiceHostRequest request) override;
+      mojo::PendingReceiver<mirroring::mojom::MirroringServiceHost> receiver)
+      override;
 
   // Result callback when Mojo TerminateRoute is invoked.
   // |route_id|: ID of MediaRoute passed to the TerminateRoute request.
@@ -413,8 +420,8 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   // The last reported sink availability from the media route providers.
   ProviderSinkAvailability sink_availability_;
 
-  // Bindings for Mojo pointers to |this| held by media route providers.
-  mojo::BindingSet<mojom::MediaRouter> bindings_;
+  // Receivers for Mojo remotes to |this| held by media route providers.
+  mojo::ReceiverSet<mojom::MediaRouter> receivers_;
 
   content::BrowserContext* const context_;
 

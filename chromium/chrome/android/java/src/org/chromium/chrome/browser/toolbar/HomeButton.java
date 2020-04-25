@@ -29,6 +29,8 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.ui.widget.ChromeImageButton;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * The home button.
  */
@@ -55,12 +57,14 @@ public class HomeButton extends ChromeImageButton
     public HomeButton(Context context, AttributeSet attrs) {
         super(context, attrs);
 
-        final int homeButtonIcon = FeatureUtilities.isNewTabPageButtonEnabled()
-                ? R.drawable.ic_home
-                : R.drawable.btn_toolbar_home;
+        if (ChromeApplication.isVivaldi()) {
+            final int homeButtonIcon = R.drawable.vivaldi_bottom_nav_speed_dial_56dp;
+            setImageDrawable(ContextCompat.getDrawable(context, homeButtonIcon));
+        } else {
+        final int homeButtonIcon = R.drawable.btn_toolbar_home;
         setImageDrawable(ContextCompat.getDrawable(context, homeButtonIcon));
-        if (!FeatureUtilities.isNewTabPageButtonEnabled()
-                && !FeatureUtilities.isBottomToolbarEnabled()) {
+        }
+        if (!FeatureUtilities.isBottomToolbarEnabled()) {
             setOnCreateContextMenuListener(this);
         }
 
@@ -148,8 +152,7 @@ public class HomeButton extends ChromeImageButton
      */
     private void updateButtonEnabledState() {
         // New tab page button takes precedence over homepage.
-        final boolean isHomepageEnabled = !FeatureUtilities.isNewTabPageButtonEnabled()
-                && HomepageManager.isHomepageEnabled();
+        final boolean isHomepageEnabled = HomepageManager.isHomepageEnabled();
         final boolean isEnabled = !isActiveTabNTP()
                 || (isHomepageEnabled && !NewTabPage.isNTPUrl(HomepageManager.getHomepageUri()));
         setEnabled(isEnabled);

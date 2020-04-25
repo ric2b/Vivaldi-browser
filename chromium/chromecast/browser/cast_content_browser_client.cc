@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/files/scoped_file.h"
 #include "base/i18n/rtl.h"
+#include "base/message_loop/message_pump_type.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -51,6 +52,7 @@
 #include "chromecast/media/base/media_resource_tracker.h"
 #include "chromecast/media/cma/backend/cma_backend_factory_impl.h"
 #include "chromecast/media/cma/backend/media_pipeline_backend_manager.h"
+#include "chromecast/media/service/cast_renderer.h"
 #include "chromecast/public/media/media_pipeline_backend.h"
 #include "components/network_hints/browser/network_hints_message_filter.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -75,6 +77,7 @@
 #include "media/audio/audio_thread_impl.h"
 #include "media/base/media_switches.h"
 #include "media/mojo/buildflags.h"
+#include "media/mojo/services/mojo_renderer_service.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "services/service_manager/embedder/descriptors.h"
@@ -82,11 +85,11 @@
 #include "ui/display/screen.h"
 #include "ui/gl/gl_switches.h"
 
-#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#if BUILDFLAG(ENABLE_CAST_RENDERER)
 #include "chromecast/media/service/cast_mojo_media_client.h"
 #include "media/mojo/mojom/constants.mojom.h"  // nogncheck
-#include "media/mojo/services/media_service.h"      // nogncheck
-#endif  // ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS
+#include "media/mojo/services/media_service.h"  // nogncheck
+#endif  // BUILDFLAG(ENABLE_CAST_RENDERER)
 
 #if defined(OS_LINUX) || defined(OS_ANDROID)
 #include "components/crash/content/browser/crash_handler_host_linux.h"
@@ -99,7 +102,6 @@
 #if defined(OS_ANDROID)
 #include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/crash/content/app/crashpad.h"
-#include "media/mojo/services/android_mojo_media_client.h"
 #if !BUILDFLAG(USE_CHROMECAST_CDMS)
 #include "components/cdm/browser/media_drm_storage_impl.h"
 #include "url/origin.h"
@@ -135,15 +137,18 @@
 #include "chromecast/external_mojo/broker_service/broker_service.h"
 #endif
 
+#if BUILDFLAG(ENABLE_CAST_WAYLAND_SERVER)
+#include "chromecast/browser/webview/webview_controller.h"
+#endif  // BUILDFLAG(ENABLE_CAST_WAYLAND_SERVER)
+
 namespace chromecast {
 namespace shell {
 
 namespace {
-#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#if BUILDFLAG(ENABLE_CAST_RENDERER)
 static void CreateMediaService(CastContentBrowserClient* browser_client,
                                service_manager::mojom::ServiceRequest request) {
   std::unique_ptr<::media::MediaService> service;
-#if BUILDFLAG(ENABLE_CAST_RENDERER)
   auto mojo_media_client = std::make_unique<media::CastMojoMediaClient>(
       browser_client->GetCmaBackendFactory(),
       base::Bind(&CastContentBrowserClient::CreateCdmFactory,
@@ -153,15 +158,9 @@ static void CreateMediaService(CastContentBrowserClient* browser_client,
       browser_client->media_resource_tracker());
   service = std::make_unique<::media::MediaService>(
       std::move(mojo_media_client), std::move(request));
-#elif defined(OS_ANDROID)
-  service = std::make_unique<::media::MediaService>(
-      std::make_unique<::media::AndroidMojoMediaClient>(), std::move(request));
-#else
-#error "Unsupported configuration."
-#endif  // defined(ENABLE_CAST_RENDERER)
   service_manager::Service::RunAsyncUntilTermination(std::move(service));
 }
-#endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#endif  // BUILDFLAG(ENABLE_CAST_RENDERER)
 
 #if defined(OS_ANDROID) && !BUILDFLAG(USE_CHROMECAST_CDMS)
 void CreateOriginId(cdm::MediaDrmStorageImpl::OriginIdObtainedCB callback) {
@@ -239,6 +238,8 @@ CastContentBrowserClient::~CastContentBrowserClient() {
 
 std::unique_ptr<CastService> CastContentBrowserClient::CreateCastService(
     content::BrowserContext* browser_context,
+    CastSystemMemoryPressureEvaluatorAdjuster*
+        cast_system_memory_pressure_evaluator_adjuster,
     PrefService* pref_service,
     media::VideoPlaneController* video_plane_controller,
     CastWindowManager* window_manager) {
@@ -257,6 +258,8 @@ CastContentBrowserClient::GetMediaTaskRunner() {
   if (!media_thread_) {
     media_thread_.reset(new base::Thread("CastMediaThread"));
     base::Thread::Options options;
+    // We need the media thread to be IO-capable to use the mixer service.
+    options.message_pump_type = base::MessagePumpType::IO;
     options.priority = base::ThreadPriority::REALTIME_AUDIO;
     CHECK(media_thread_->StartWithOptions(options));
     // Start the media_resource_tracker as soon as the media thread is created.
@@ -337,11 +340,8 @@ bool CastContentBrowserClient::OverridesAudioManager() {
 #if BUILDFLAG(USE_CHROMECAST_CDMS)
 std::unique_ptr<::media::CdmFactory> CastContentBrowserClient::CreateCdmFactory(
     service_manager::mojom::InterfaceProvider* host_interfaces) {
-#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   return std::make_unique<media::CastCdmFactory>(GetMediaTaskRunner(),
                                                  media_resource_tracker());
-#endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  return nullptr;
 }
 #endif  // BUILDFLAG(USE_CHROMECAST_CDMS)
 
@@ -737,7 +737,7 @@ void CastContentBrowserClient::ExposeInterfacesToRenderer(
     blink::AssociatedInterfaceRegistry* associated_registry,
     content::RenderProcessHost* render_process_host) {
   registry->AddInterface(
-      base::Bind(&media::MediaCapsImpl::AddBinding,
+      base::Bind(&media::MediaCapsImpl::AddReceiver,
                  base::Unretained(cast_browser_main_parts_->media_caps())),
       base::ThreadTaskRunnerHandle::Get());
 
@@ -747,7 +747,7 @@ void CastContentBrowserClient::ExposeInterfacesToRenderer(
   }
 
   registry->AddInterface(
-      base::Bind(&MemoryPressureControllerImpl::AddBinding,
+      base::Bind(&MemoryPressureControllerImpl::AddReceiver,
                  base::Unretained(memory_pressure_controller_.get())),
       base::ThreadTaskRunnerHandle::Get());
 #endif  // !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
@@ -781,15 +781,15 @@ void CastContentBrowserClient::GetApplicationMediaInfo(
 void CastContentBrowserClient::RunServiceInstance(
     const service_manager::Identity& identity,
     mojo::PendingReceiver<service_manager::mojom::Service>* receiver) {
-#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  if (identity.name() == ::media::mojom::kMediaServiceName) {
+#if BUILDFLAG(ENABLE_CAST_RENDERER)
+  if (identity.name() == ::media::mojom::kMediaRendererServiceName) {
     service_manager::mojom::ServiceRequest request(std::move(*receiver));
     GetMediaTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(&CreateMediaService, this, std::move(request)));
     return;
   }
-#endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#endif  // BUILDFLAG(ENABLE_CAST_RENDERER)
 
 #if BUILDFLAG(ENABLE_EXTERNAL_MOJO_SERVICES)
   if (identity.name() == external_mojo::BrokerService::kServiceName) {
@@ -942,6 +942,13 @@ CastContentBrowserClient::CreateThrottlesForNavigation(
             handle, general_audience_browsing_service_.get()));
   }
 
+#if BUILDFLAG(ENABLE_CAST_WAYLAND_SERVER)
+  auto webview_throttle = WebviewController::MaybeGetNavigationThrottle(handle);
+  if (webview_throttle) {
+    throttles.push_back(std::move(webview_throttle));
+  }
+#endif  // BUILDFLAG(ENABLE_CAST_WAYLAND_SERVER)
+
   return throttles;
 }
 
@@ -995,7 +1002,7 @@ void CastContentBrowserClient::OnNetworkServiceCreated(
   cast_network_contexts_->OnNetworkServiceCreated(network_service);
 }
 
-network::mojom::NetworkContextPtr
+mojo::Remote<network::mojom::NetworkContext>
 CastContentBrowserClient::CreateNetworkContext(
     content::BrowserContext* context,
     bool in_memory,
@@ -1025,6 +1032,26 @@ void CastContentBrowserClient::CreateGeneralAudienceBrowsingService() {
   general_audience_browsing_service_ =
       std::make_unique<GeneralAudienceBrowsingService>(
           cast_network_contexts_->GetSystemSharedURLLoaderFactory());
+}
+
+void CastContentBrowserClient::BindMediaRenderer(
+    mojo::InterfaceRequest<::media::mojom::Renderer> request) {
+  auto media_task_runner = GetMediaTaskRunner();
+  if (!media_task_runner->BelongsToCurrentThread()) {
+    media_task_runner->PostTask(
+        FROM_HERE, base::BindOnce(&CastContentBrowserClient::BindMediaRenderer,
+                                  base::Unretained(this), std::move(request)));
+    return;
+  }
+
+  ::media::MojoRendererService::Create(
+      nullptr /* mojo_cdm_service_context */,
+      std::make_unique<media::CastRenderer>(
+          GetCmaBackendFactory(), std::move(media_task_runner),
+          GetVideoModeSwitcher(), GetVideoResolutionPolicy(),
+          media_resource_tracker(), nullptr /* connector */,
+          nullptr /* host_interfaces */),
+      std::move(request));
 }
 
 }  // namespace shell

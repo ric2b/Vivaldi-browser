@@ -328,7 +328,8 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
   engine_data.uses_encryption_password =
       sync_manager->GetUserSettings()->IsUsingSecondaryPassphrase();
   engine_data.needs_decryption_password =
-      sync_manager->GetUserSettings()->IsPassphraseRequiredForDecryption();
+      sync_manager->GetUserSettings()
+          ->IsPassphraseRequiredForPreferredDataTypes();
   engine_data.is_setup_in_progress = sync_manager->IsSetupInProgress();
   engine_data.is_first_setup_complete =
       sync_manager->GetUserSettings()->IsFirstSetupComplete();
@@ -482,12 +483,12 @@ SyncGetDefaultSessionNameFunction::~SyncGetDefaultSessionNameFunction() =
 
 ExtensionFunction::ResponseAction SyncGetDefaultSessionNameFunction::Run() {
   base::PostTaskAndReplyWithResult(
-      base::CreateSequencedTaskRunnerWithTraits(
+      base::CreateSequencedTaskRunner(
           {base::ThreadPool(), base::MayBlock(),
            base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})
           .get(),
-      FROM_HERE, base::Bind(&syncer::GetSessionNameBlocking),
+      FROM_HERE, base::Bind(&syncer::GetPersonalizableDeviceNameBlocking),
       base::Bind(&SyncGetDefaultSessionNameFunction::OnGetDefaultSessionName,
                  this));
   return RespondLater();
@@ -565,7 +566,8 @@ ExtensionFunction::ResponseAction SyncSetupCompleteFunction::Run() {
   if (!sync_manager)
     return RespondNow(Error("Sync manager is unavailable"));
 
-  sync_manager->GetUserSettings()->SetFirstSetupComplete();
+  sync_manager->GetUserSettings()->SetFirstSetupComplete(
+      syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
   SyncAPI::GetFactoryInstance()
       ->Get(Profile::FromBrowserContext(context_))
       ->SyncSetupComplete();

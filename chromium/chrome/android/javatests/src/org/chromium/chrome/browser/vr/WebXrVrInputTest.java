@@ -84,7 +84,7 @@ public class WebXrVrInputTest {
     }
 
     @Before
-    public void setUp() throws Exception {
+    public void setUp() {
         mWebXrVrTestFramework = new WebXrVrTestFramework(mTestRule);
         mWebVrTestFramework = new WebVrTestFramework(mTestRule);
     }
@@ -125,7 +125,7 @@ public class WebXrVrInputTest {
             @Restriction(RESTRICTION_TYPE_SVR)
             @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
             public void
             testScreenTapsNotRegistered_WebXr() throws InterruptedException {
@@ -165,7 +165,7 @@ public class WebXrVrInputTest {
     @LargeTest
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-    public void testControllerClicksRegisteredOnDaydream() throws InterruptedException {
+    public void testControllerClicksRegisteredOnDaydream() {
         EmulatedVrController controller = new EmulatedVrController(mTestRule.getActivity());
         mWebVrTestFramework.loadUrlAndAwaitInitialization(
                 WebVrTestFramework.getFileUrlForHtmlTestFile("test_gamepad_button"),
@@ -210,10 +210,9 @@ public class WebXrVrInputTest {
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-            public void testControllerClicksRegisteredOnDaydream_WebXr()
-            throws InterruptedException {
+            public void testControllerClicksRegisteredOnDaydream_WebXr() {
         EmulatedVrController controller = new EmulatedVrController(mTestRule.getActivity());
         mWebXrVrTestFramework.loadUrlAndAwaitInitialization(
                 WebXrVrTestFramework.getFileUrlForHtmlTestFile("test_webxr_input"),
@@ -247,10 +246,9 @@ public class WebXrVrInputTest {
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-            public void testControllerExposedAsGamepadOnDaydream_WebXr()
-            throws InterruptedException {
+            public void testControllerExposedAsGamepadOnDaydream_WebXr() {
         EmulatedVrController controller = new EmulatedVrController(mTestRule.getActivity());
         mWebXrVrTestFramework.loadUrlAndAwaitInitialization(
                 WebXrVrTestFramework.getFileUrlForHtmlTestFile("test_webxr_gamepad_support"),
@@ -365,7 +363,7 @@ public class WebXrVrInputTest {
     @MediumTest
     @Restriction(RESTRICTION_TYPE_VIEWER_NON_DAYDREAM)
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-    public void testScreenTapsRegisteredOnCardboard() throws InterruptedException {
+    public void testScreenTapsRegisteredOnCardboard() {
         mWebVrTestFramework.loadUrlAndAwaitInitialization(
                 WebVrTestFramework.getFileUrlForHtmlTestFile("test_gamepad_button"),
                 PAGE_LOAD_TIMEOUT_S);
@@ -399,9 +397,9 @@ public class WebXrVrInputTest {
     @Restriction(RESTRICTION_TYPE_VIEWER_NON_DAYDREAM)
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-            public void testScreenTapsRegisteredOnCardboard_WebXr() throws InterruptedException {
+            public void testScreenTapsRegisteredOnCardboard_WebXr() {
         mWebXrVrTestFramework.loadUrlAndAwaitInitialization(
                 WebXrVrTestFramework.getFileUrlForHtmlTestFile("test_webxr_input"),
                 PAGE_LOAD_TIMEOUT_S);
@@ -437,10 +435,9 @@ public class WebXrVrInputTest {
     @Restriction(RESTRICTION_TYPE_VIEWER_NON_DAYDREAM)
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-            public void testTransientScreenTapsRegisteredOnCardboard_WebXr()
-            throws InterruptedException {
+            public void testTransientScreenTapsRegisteredOnCardboard_WebXr() {
         mWebXrVrTestFramework.loadUrlAndAwaitInitialization(
                 WebXrVrTestFramework.getFileUrlForHtmlTestFile("test_webxr_transient_input"),
                 PAGE_LOAD_TIMEOUT_S);
@@ -471,7 +468,7 @@ public class WebXrVrInputTest {
     @DisableIf.
     Build(message = "K/M https://crbug.com/897259", sdk_is_less_than = Build.VERSION_CODES.N)
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-    public void testPresentationLocksFocus() throws InterruptedException {
+    public void testPresentationLocksFocus() {
         presentationLocksFocusImpl(
                 WebVrTestFramework.getFileUrlForHtmlTestFile("test_presentation_locks_focus"),
                 mWebVrTestFramework);
@@ -485,16 +482,15 @@ public class WebXrVrInputTest {
     @MediumTest
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-            public void testPresentationLocksFocus_WebXr() throws InterruptedException {
+            public void testPresentationLocksFocus_WebXr() {
         presentationLocksFocusImpl(WebXrVrTestFramework.getFileUrlForHtmlTestFile(
                                            "webxr_test_presentation_locks_focus"),
                 mWebXrVrTestFramework);
     }
 
-    private void presentationLocksFocusImpl(String url, WebXrVrTestFramework framework)
-            throws InterruptedException {
+    private void presentationLocksFocusImpl(String url, WebXrVrTestFramework framework) {
         framework.loadUrlAndAwaitInitialization(url, PAGE_LOAD_TIMEOUT_S);
         framework.enterSessionWithUserGestureOrFail();
         framework.executeStepAndWait("stepSetupFocusLoss()");
@@ -508,7 +504,7 @@ public class WebXrVrInputTest {
     @Test
     @MediumTest
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
-    public void testAppButtonExitsPresentation() throws InterruptedException {
+    public void testAppButtonExitsPresentation() {
         appButtonExitsPresentationImpl(
                 WebVrTestFramework.getFileUrlForHtmlTestFile("generic_webvr_page"),
                 mWebVrTestFramework);
@@ -523,15 +519,14 @@ public class WebXrVrInputTest {
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
-            public void testAppButtonExitsPresentation_WebXr() throws InterruptedException {
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
+            public void testAppButtonExitsPresentation_WebXr() {
         appButtonExitsPresentationImpl(
                 WebXrVrTestFramework.getFileUrlForHtmlTestFile("generic_webxr_page"),
                 mWebXrVrTestFramework);
     }
 
-    private void appButtonExitsPresentationImpl(String url, WebXrVrTestFramework framework)
-            throws InterruptedException {
+    private void appButtonExitsPresentationImpl(String url, WebXrVrTestFramework framework) {
         framework.loadUrlAndAwaitInitialization(url, PAGE_LOAD_TIMEOUT_S);
         framework.enterSessionWithUserGestureOrFail();
         NativeUiUtils.clickAppButton(UserFriendlyElementName.NONE, new PointF());
@@ -547,8 +542,7 @@ public class WebXrVrInputTest {
     @MediumTest
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM)
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-    public void testAppButtonNoopsWhenBrowsingDisabled()
-            throws InterruptedException, ExecutionException {
+    public void testAppButtonNoopsWhenBrowsingDisabled() throws ExecutionException {
         appButtonNoopsTestImpl(WebVrTestFramework.getFileUrlForHtmlTestFile("generic_webvr_page"),
                 mWebVrTestFramework);
     }
@@ -563,7 +557,7 @@ public class WebXrVrInputTest {
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.WAA,
             XrActivityRestriction.SupportedActivity.CCT})
     public void
-    testAppButtonNoopsWhenBrowsingNotSupported() throws InterruptedException, ExecutionException {
+    testAppButtonNoopsWhenBrowsingNotSupported() throws ExecutionException {
         appButtonNoopsTestImpl(WebVrTestFramework.getFileUrlForHtmlTestFile("generic_webvr_page"),
                 mWebVrTestFramework);
     }
@@ -578,9 +572,8 @@ public class WebXrVrInputTest {
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
-            public void testAppButtonNoopsWhenBrowsingDisabled_WebXr()
-            throws InterruptedException, ExecutionException {
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
+            public void testAppButtonNoopsWhenBrowsingDisabled_WebXr() throws ExecutionException {
         appButtonNoopsTestImpl(WebXrVrTestFramework.getFileUrlForHtmlTestFile("generic_webxr_page"),
                 mWebXrVrTestFramework);
     }
@@ -596,16 +589,15 @@ public class WebXrVrInputTest {
             XrActivityRestriction.SupportedActivity.CCT})
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
             public void
-            testAppButtonNoopsWhenBrowsingNotSupported_WebXr()
-            throws InterruptedException, ExecutionException {
+            testAppButtonNoopsWhenBrowsingNotSupported_WebXr() throws ExecutionException {
         appButtonNoopsTestImpl(WebXrVrTestFramework.getFileUrlForHtmlTestFile("generic_webxr_page"),
                 mWebXrVrTestFramework);
     }
 
     private void appButtonNoopsTestImpl(String url, WebXrVrTestFramework framework)
-            throws InterruptedException, ExecutionException {
+            throws ExecutionException {
         VrShellDelegateUtils.getDelegateInstance().setVrBrowsingDisabled(true);
         framework.loadUrlAndAwaitInitialization(url, PAGE_LOAD_TIMEOUT_S);
         framework.enterSessionWithUserGestureOrFail();
@@ -617,7 +609,7 @@ public class WebXrVrInputTest {
         Assert.assertFalse("App button left Chrome",
                 TestThreadUtils.runOnUiThreadBlocking(new Callable<Boolean>() {
                     @Override
-                    public Boolean call() throws Exception {
+                    public Boolean call() {
                         return mockApi.getExitFromVrCalled()
                                 || mockApi.getLaunchVrHomescreenCalled();
                     }
@@ -635,7 +627,7 @@ public class WebXrVrInputTest {
     @MediumTest
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-    public void testFocusUpdatesSynchronously() throws InterruptedException {
+    public void testFocusUpdatesSynchronously() {
         mWebVrTestFramework.loadUrlAndAwaitInitialization(
                 WebVrTestFramework.getFileUrlForHtmlTestFile(
                         "generic_webvr_page_with_activate_listener"),
@@ -664,7 +656,7 @@ public class WebXrVrInputTest {
     @Test
     @MediumTest
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
-    public void testAppButtonAfterPageStopsSubmitting() throws InterruptedException {
+    public void testAppButtonAfterPageStopsSubmitting() {
         appButtonAfterPageStopsSubmittingImpl(
                 WebVrTestFramework.getFileUrlForHtmlTestFile("webvr_page_submits_once"),
                 mWebVrTestFramework);
@@ -679,15 +671,14 @@ public class WebXrVrInputTest {
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
-            public void testAppButtonAfterPageStopsSubmitting_WebXr() throws InterruptedException {
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
+            public void testAppButtonAfterPageStopsSubmitting_WebXr() {
         appButtonAfterPageStopsSubmittingImpl(
                 WebXrVrTestFramework.getFileUrlForHtmlTestFile("webxr_page_submits_once"),
                 mWebXrVrTestFramework);
     }
 
-    private void appButtonAfterPageStopsSubmittingImpl(String url, WebXrVrTestFramework framework)
-            throws InterruptedException {
+    private void appButtonAfterPageStopsSubmittingImpl(String url, WebXrVrTestFramework framework) {
         framework.loadUrlAndAwaitInitialization(url, PAGE_LOAD_TIMEOUT_S);
         framework.enterSessionWithUserGestureOrFail();
         // Wait for page to stop submitting frames.
@@ -707,9 +698,9 @@ public class WebXrVrInputTest {
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-            public void testWebXrInputSourceHasGamepad() throws InterruptedException {
+            public void testWebXrInputSourceHasGamepad() {
         webxrGamepadSupportImpl(true /* daydream */);
     }
 
@@ -723,13 +714,13 @@ public class WebXrVrInputTest {
     @Restriction(RESTRICTION_TYPE_VIEWER_NON_DAYDREAM)
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-            public void testWebXrInputSourceWithoutGamepad_Cardboard() throws InterruptedException {
+            public void testWebXrInputSourceWithoutGamepad_Cardboard() {
         webxrGamepadSupportImpl(false /* daydream */);
     }
 
-    private void webxrGamepadSupportImpl(boolean daydream) throws InterruptedException {
+    private void webxrGamepadSupportImpl(boolean daydream) {
         mWebXrVrTestFramework.loadUrlAndAwaitInitialization(
                 WebXrVrTestFramework.getFileUrlForHtmlTestFile("test_webxr_gamepad_support"),
                 PAGE_LOAD_TIMEOUT_S);
@@ -772,7 +763,7 @@ public class WebXrVrInputTest {
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
             public void testAppButtonLongPressDisplaysPermissions() throws InterruptedException {
         testAppButtonLongPressDisplaysPermissionsImpl();
@@ -787,7 +778,7 @@ public class WebXrVrInputTest {
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.CTA})
             public void testAppButtonLongPressDisplaysPermissionsIncognito()
             throws InterruptedException {
@@ -861,11 +852,11 @@ public class WebXrVrInputTest {
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
             // TODO(https://crbug.com/901494): Make this run everywhere when permissions are
             // unbroken.
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.CTA})
-            public void testInSessionPermissionRequests() throws InterruptedException {
+            public void testInSessionPermissionRequests() {
         testInSessionPermissionRequestsImpl();
     }
 
@@ -874,14 +865,14 @@ public class WebXrVrInputTest {
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
     @CommandLineFlags
             .Remove({"enable-webvr"})
-            @CommandLineFlags.Add({"enable-features=WebXR"})
+            @CommandLineFlags.Add({"enable-features=WebXR,WebXrGamepadModule"})
             @XrActivityRestriction({XrActivityRestriction.SupportedActivity.CTA})
-            public void testInSessionPermissionRequestsIncognito() throws InterruptedException {
+            public void testInSessionPermissionRequestsIncognito() {
         mWebXrVrTestFramework.openIncognitoTab("about:blank");
         testInSessionPermissionRequestsImpl();
     }
 
-    private void testInSessionPermissionRequestsImpl() throws InterruptedException {
+    private void testInSessionPermissionRequestsImpl() {
         // Note that we need to pass in the WebContents to use throughout this because automatically
         // using the first tab's WebContents doesn't work in Incognito.
         mWebXrVrTestFramework.loadUrlAndAwaitInitialization(

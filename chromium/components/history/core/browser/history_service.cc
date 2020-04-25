@@ -1022,11 +1022,11 @@ void HistoryService::DeleteURL(const GURL& url) {
                                                history_backend_, url));
 }
 
-void HistoryService::DeleteURLsForTest(const std::vector<GURL>& urls) {
+void HistoryService::DeleteURLs(const std::vector<GURL>& urls) {
+  TRACE_EVENT0("browser", "HistoryService::DeleteURLs");
   DCHECK(backend_task_runner_) << "History service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
-  // We will update the visited links when we observe the delete
-  // notifications.
+  // We will update the visited links when we observe the delete notifications.
   ScheduleTask(PRIORITY_NORMAL, base::BindOnce(&HistoryBackend::DeleteURLs,
                                                history_backend_, urls));
 }
@@ -1249,44 +1249,6 @@ void HistoryService::NotifyFaviconsChanged(const std::set<GURL>& page_urls,
                                            const GURL& icon_url) {
   DCHECK(thread_checker_.CalledOnValidThread());
   favicon_changed_callback_list_.Notify(page_urls, icon_url);
-}
-
-void HistoryService::TopUrlsPerDay(
-    size_t num_hosts,
-    const UrlVisitCount::TopUrlsPerDayCallback& callback) const {
-  DCHECK(thread_) << "History service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
-  PostTaskAndReplyWithResult(thread_->task_runner().get(), FROM_HERE,
-                             base::Bind(&HistoryBackend::TopUrlsPerDay,
-                                        history_backend_.get(), num_hosts),
-                             callback);
-}
-
-void HistoryService::VisitSearch(
-    const QueryOptions& options,
-    const Visit::VisitsCallback& callback) const {
-  DCHECK(thread_) << "History service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  PostTaskAndReplyWithResult(
-      thread_->task_runner().get(), FROM_HERE,
-      base::Bind(&HistoryBackend::VisitSearch, history_backend_.get(),
-                 options), callback);
-}
-
-base::CancelableTaskTracker::TaskId HistoryService::QueryHistoryWStatement(
-    const char* sql_statement,
-    const std::string& search_string,
-    int max_hits,
-    QueryHistoryCallback callback,
-    base::CancelableTaskTracker* tracker) {
-  DCHECK(thread_) << "History service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
-  return tracker->PostTaskAndReplyWithResult(
-      thread_->task_runner().get(), FROM_HERE,
-      base::BindOnce(&HistoryBackend::QueryHistoryWStatement,
-                 history_backend_.get(), sql_statement, search_string, max_hits),
-      std::move(callback));
 }
 
 }  // namespace history

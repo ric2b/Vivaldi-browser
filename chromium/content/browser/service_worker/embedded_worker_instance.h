@@ -26,14 +26,17 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/content_browser_client.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/embedded_worker.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_installed_scripts_manager.mojom.h"
+#include "third_party/blink/public/mojom/worker/subresource_loader_updater.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -127,10 +130,11 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // Starts the worker. It is invalid to call this when the worker is not in
   // STOPPED status.
   //
-  // |sent_start_callback| is invoked once the Start IPC is sent, or if an error
-  // prevented that from happening. The callback is not invoked in some cases,
-  // e.g., when Stop() is called and aborts the start procedure. Note that when
-  // the callback is invoked with kOk status, the service worker has not yet
+  // |sent_start_callback| is invoked once the Start IPC is sent, and in some
+  // cases may be invoked if an error prevented that from happening. It's not
+  // invoked in some cases, like if the Mojo connection fails to connect, or
+  // when Stop() is called and aborts the start procedure. Note that when the
+  // callback is invoked with kOk status, the service worker has not yet
   // finished starting. Observe OnStarted()/OnStopped() for when start completed
   // or failed.
   void Start(blink::mojom::EmbeddedWorkerStartParamsPtr params,
@@ -206,7 +210,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   static std::string StartingPhaseToString(StartingPhase phase);
 
   using CreateNetworkFactoryCallback = base::RepeatingCallback<void(
-      network::mojom::URLLoaderFactoryRequest request,
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
       int process_id,
       network::mojom::URLLoaderFactoryPtrInfo original_factory)>;
   // Allows overriding the URLLoaderFactory creation for loading subresources
@@ -362,14 +366,14 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // thread.
   base::SequenceBound<ServiceWorkerContentSettingsProxyImpl> content_settings_;
 
-  mojo::StrongBindingPtr<network::mojom::URLLoaderFactory>
+  mojo::SelfOwnedReceiverRef<network::mojom::URLLoaderFactory>
       script_loader_factory_;
 
   const scoped_refptr<base::SequencedTaskRunner> ui_task_runner_;
 
   // Remote interface to talk to a running service worker. Used to update
   // subresource loader factories in the service worker.
-  mojo::Remote<blink::mojom::ServiceWorkerSubresourceLoaderUpdater>
+  mojo::Remote<blink::mojom::SubresourceLoaderUpdater>
       subresource_loader_updater_;
 
   base::WeakPtrFactory<EmbeddedWorkerInstance> weak_factory_{this};

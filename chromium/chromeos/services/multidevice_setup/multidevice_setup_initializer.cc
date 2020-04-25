@@ -98,7 +98,7 @@ MultiDeviceSetupInitializer::MultiDeviceSetupInitializer(
 MultiDeviceSetupInitializer::~MultiDeviceSetupInitializer() = default;
 
 void MultiDeviceSetupInitializer::SetAccountStatusChangeDelegate(
-    mojom::AccountStatusChangeDelegatePtr delegate) {
+    mojo::PendingRemote<mojom::AccountStatusChangeDelegate> delegate) {
   if (multidevice_setup_impl_) {
     multidevice_setup_impl_->SetAccountStatusChangeDelegate(
         std::move(delegate));
@@ -109,7 +109,7 @@ void MultiDeviceSetupInitializer::SetAccountStatusChangeDelegate(
 }
 
 void MultiDeviceSetupInitializer::AddHostStatusObserver(
-    mojom::HostStatusObserverPtr observer) {
+    mojo::PendingRemote<mojom::HostStatusObserver> observer) {
   if (multidevice_setup_impl_) {
     multidevice_setup_impl_->AddHostStatusObserver(std::move(observer));
     return;
@@ -119,7 +119,7 @@ void MultiDeviceSetupInitializer::AddHostStatusObserver(
 }
 
 void MultiDeviceSetupInitializer::AddFeatureStateObserver(
-    mojom::FeatureStateObserverPtr observer) {
+    mojo::PendingRemote<mojom::FeatureStateObserver> observer) {
   if (multidevice_setup_impl_) {
     multidevice_setup_impl_->AddFeatureStateObserver(std::move(observer));
     return;

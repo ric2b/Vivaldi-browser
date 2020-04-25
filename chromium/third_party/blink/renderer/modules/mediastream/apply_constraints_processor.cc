@@ -8,6 +8,7 @@
 
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
+#include "third_party/blink/public/mojom/mediastream/media_devices.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/public/platform/web_media_stream_source.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
@@ -349,7 +350,7 @@ void ApplyConstraintsProcessor::CleanupRequest(
   video_source_ = nullptr;
 }
 
-const blink::mojom::blink::MediaDevicesDispatcherHostPtr&
+blink::mojom::blink::MediaDevicesDispatcherHost*
 ApplyConstraintsProcessor::GetMediaDevicesDispatcher() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return media_devices_dispatcher_cb_.Run();

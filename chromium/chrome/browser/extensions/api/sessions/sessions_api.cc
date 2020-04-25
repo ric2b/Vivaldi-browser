@@ -31,7 +31,6 @@
 #include "chrome/browser/ui/browser_live_tab_context.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/sessions/content/content_live_tab.h"
-#include "components/sessions/core/tab_restore_service.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
 #include "components/sync_sessions/session_sync_service.h"
 #include "components/sync_sessions/synced_session.h"
@@ -109,10 +108,8 @@ api::tabs::Tab CreateTabModelHelper(
 
   ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
       ExtensionTabUtil::GetScrubTabBehavior(extension, context, url);
-  if (scrub_tab_behavior != ExtensionTabUtil::kDontScrubTab) {
-    ExtensionTabUtil::ScrubTabForExtension(extension, nullptr, &tab_struct,
-                                           scrub_tab_behavior);
-  }
+  ExtensionTabUtil::ScrubTabForExtension(extension, nullptr, &tab_struct,
+                                         scrub_tab_behavior);
   return tab_struct;
 }
 
@@ -568,7 +565,6 @@ ExtensionFunction::ResponseAction SessionsRestoreFunction::Run() {
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   Browser* browser = chrome::FindBrowserWithProfile(profile);
-
   if (!browser)
     return RespondNow(Error(kNoBrowserToRestoreSession));
 
@@ -581,7 +577,6 @@ ExtensionFunction::ResponseAction SessionsRestoreFunction::Run() {
   std::unique_ptr<SessionId> session_id(SessionId::Parse(*params->session_id));
   if (!session_id)
     return RespondNow(Error(kInvalidSessionIdError, *params->session_id));
-
 
   return RespondNow(session_id->IsForeign()
                         ? RestoreForeignSession(*session_id, browser)

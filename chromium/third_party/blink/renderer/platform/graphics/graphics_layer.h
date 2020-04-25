@@ -65,7 +65,6 @@ class PictureLayer;
 namespace blink {
 
 class Image;
-class LinkHighlight;
 class PaintController;
 class RasterInvalidationTracking;
 class RasterInvalidator;
@@ -124,18 +123,10 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   const gfx::PointF& GetPosition() const;
   void SetPosition(const gfx::PointF&);
 
-  const gfx::Point3F& TransformOrigin() const;
-  void SetTransformOrigin(const gfx::Point3F&);
-
   // The size of the layer.
   const gfx::Size& Size() const;
   void SetSize(const gfx::Size&);
 
-  const TransformationMatrix& Transform() const { return transform_; }
-  void SetTransform(const TransformationMatrix&);
-
-  bool ShouldFlattenTransform() const;
-  void SetShouldFlattenTransform(bool);
   void SetRenderingContext(int id);
 
   bool MasksToBounds() const;
@@ -169,14 +160,6 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
 
   bool BackfaceVisibility() const;
 
-  float Opacity() const;
-  void SetOpacity(float);
-
-  BlendMode GetBlendMode() const;
-  void SetBlendMode(BlendMode);
-  bool IsRootForIsolatedGroup() const;
-  void SetIsRootForIsolatedGroup(bool);
-
   void SetHitTestable(bool);
   bool GetHitTestable() const { return hit_testable_; }
 
@@ -187,6 +170,7 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   void SetPaintingPhase(GraphicsLayerPaintingPhase);
 
   void SetNeedsDisplay();
+  void SetNeedsDisplayRecursively();
   void SetContentsNeedsDisplay();
 
   // Set that the position/size of the contents (image or video).
@@ -228,25 +212,18 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
                                const IntRect&,
                                PaintInvalidationReason);
 
-  void AddLinkHighlight(LinkHighlight*);
-  void RemoveLinkHighlight(LinkHighlight*);
-  const Vector<LinkHighlight*>& GetLinkHighlights() const {
-    return link_highlights_;
-  }
-
-  int GetRenderingContext3D() const { return rendering_context3d_; }
-
   static void RegisterContentsLayer(cc::Layer*);
   static void UnregisterContentsLayer(cc::Layer*);
 
   IntRect InterestRect();
-  void PaintRecursively();
+  bool PaintRecursively();
   // Returns true if this layer is repainted.
   bool Paint(GraphicsContext::DisabledMode = GraphicsContext::kNothingDisabled);
 
   // cc::LayerClient implementation.
   std::unique_ptr<base::trace_event::TracedValue> TakeDebugInfo(
       const cc::Layer*) override;
+  std::string LayerDebugName(const cc::Layer*) const override;
   void DidChangeScrollbarsHiddenIfOverlay(bool) override;
 
   PaintController& GetPaintController() const;
@@ -370,10 +347,6 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   // know |contents_layer_| is alive and use that for comparisons from that
   // point on.
   int contents_layer_id_;
-
-  Vector<LinkHighlight*> link_highlights_;
-
-  int rendering_context3d_;
 
   SquashingDisallowedReasons squashing_disallowed_reasons_ =
       SquashingDisallowedReason::kNone;

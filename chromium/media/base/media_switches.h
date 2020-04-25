@@ -78,6 +78,8 @@ MEDIA_EXPORT extern const char kClearKeyCdmPathForTesting[];
 MEDIA_EXPORT extern const char kOverrideEnabledCdmInterfaceVersion[];
 MEDIA_EXPORT extern const char kOverrideHardwareSecureCodecsForTesting[];
 
+MEDIA_EXPORT extern const char kVideoCaptureUseGpuMemoryBuffer[];
+
 namespace autoplay {
 
 MEDIA_EXPORT extern const char kDocumentUserActivationRequiredPolicy[];
@@ -99,9 +101,12 @@ MEDIA_EXPORT extern const base::Feature kAutoplayIgnoreWebAudio;
 MEDIA_EXPORT extern const base::Feature kAutoplayDisableSettings;
 MEDIA_EXPORT extern const base::Feature kAutoplayWhitelistSettings;
 MEDIA_EXPORT extern const base::Feature kBackgroundVideoPauseOptimization;
+MEDIA_EXPORT extern const base::Feature kD3D11LimitTo11_0;
+MEDIA_EXPORT extern const base::Feature kD3D11PrintCodecOnCrash;
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoder;
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderIgnoreWorkarounds;
-MEDIA_EXPORT extern const base::Feature kD3D11LimitTo11_0;
+MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderVP9Profile2;
+MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderCopyPictures;
 MEDIA_EXPORT extern const base::Feature kExternalClearKeyForTesting;
 MEDIA_EXPORT extern const base::Feature kFFmpegDecodeOpaqueVP8;
 MEDIA_EXPORT extern const base::Feature kFailUrlProvisionFetcherForTesting;
@@ -130,6 +135,7 @@ MEDIA_EXPORT extern const base::Feature kPreloadMetadataSuspend;
 MEDIA_EXPORT extern const base::Feature kRecordMediaEngagementScores;
 MEDIA_EXPORT extern const base::Feature kRecordWebAudioEngagement;
 MEDIA_EXPORT extern const base::Feature kResumeBackgroundVideo;
+MEDIA_EXPORT extern const base::Feature kRevokeMediaSourceObjectURLOnAttach;
 MEDIA_EXPORT extern const base::Feature kSpecCompliantCanPlayThrough;
 MEDIA_EXPORT extern const base::Feature kUnifiedAutoplay;
 MEDIA_EXPORT extern const base::Feature kUseAndroidOverlay;
@@ -161,6 +167,7 @@ MEDIA_EXPORT extern const base::Feature kCanPlayHls;
 MEDIA_EXPORT extern const base::Feature kPictureInPictureAPI;
 MEDIA_EXPORT extern const base::Feature kHlsPlayer;
 MEDIA_EXPORT extern const base::Feature kUseAudioLatencyFromHAL;
+MEDIA_EXPORT extern const base::Feature kUsePooledSharedImageVideoProvider;
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_WIN)

@@ -24,6 +24,7 @@
 #include "components/payments/content/service_worker_payment_instrument.h"
 #include "components/payments/core/autofill_card_validation.h"
 #include "components/payments/core/autofill_payment_instrument.h"
+#include "components/payments/core/error_strings.h"
 #include "components/payments/core/features.h"
 #include "components/payments/core/payment_instrument.h"
 #include "components/payments/core/payment_request_data_util.h"
@@ -31,6 +32,33 @@
 #include "content/public/common/content_features.h"
 
 namespace payments {
+namespace {
+
+// Checks whether any of the |instruments| return true in
+// IsValidForCanMakePayment().
+bool GetHasEnrolledInstrument(
+    const std::vector<std::unique_ptr<PaymentInstrument>>& instruments) {
+  return std::any_of(instruments.begin(), instruments.end(),
+                     [](const auto& instrument) {
+                       return instrument->IsValidForCanMakePayment();
+                     });
+}
+
+// Invokes the |callback| with |status|.
+void CallStatusCallback(PaymentRequestState::StatusCallback callback,
+                        bool status) {
+  std::move(callback).Run(status);
+}
+
+// Posts the |callback| to be invoked with |status| asynchronously.
+void PostStatusCallback(PaymentRequestState::StatusCallback callback,
+                        bool status) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&CallStatusCallback, std::move(callback), status));
+}
+
+}  // namespace
 
 PaymentRequestState::PaymentRequestState(
     content::WebContents* web_contents,
@@ -45,7 +73,6 @@ PaymentRequestState::PaymentRequestState(
         sw_identity_observer,
     JourneyLogger* journey_logger)
     : is_ready_to_pay_(false),
-      get_all_instruments_finished_(true),
       is_waiting_for_merchant_validation_(false),
       app_locale_(app_locale),
       spec_(spec),
@@ -67,7 +94,6 @@ PaymentRequestState::PaymentRequestState(
   DCHECK(sw_identity_observer_);
   if (base::FeatureList::IsEnabled(::features::kServiceWorkerPaymentApps)) {
     DCHECK(web_contents);
-    get_all_instruments_finished_ = false;
     bool may_crawl_for_installable_payment_apps =
         PaymentsExperimentalFeatures::IsEnabled(
             features::kAlwaysAllowJustInTimePaymentApp) ||
@@ -87,6 +113,8 @@ PaymentRequestState::PaymentRequestState(
   } else {
     PopulateProfileCache();
     SetDefaultProfileSelections();
+    get_all_instruments_finished_ = true;
+    has_enrolled_instrument_ = GetHasEnrolledInstrument(available_instruments_);
   }
   spec_->AddObserver(this);
 }
@@ -136,6 +164,8 @@ void PaymentRequestState::GetAllPaymentAppsCallback(
 void PaymentRequestState::OnSWPaymentInstrumentValidated(
     ServiceWorkerPaymentInstrument* instrument,
     bool result) {
+  has_non_autofill_instrument_ |= result;
+
   // Remove service worker payment instruments failed on validation.
   if (!result) {
     for (size_t i = 0; i < available_instruments_.size(); i++) {
@@ -144,6 +174,17 @@ void PaymentRequestState::OnSWPaymentInstrumentValidated(
         break;
       }
     }
+  }
+
+  std::vector<std::string> instrument_method_names =
+      instrument->GetInstrumentMethodNames();
+  if (base::Contains(instrument_method_names, kGooglePayMethodName) ||
+      base::Contains(instrument_method_names, kAndroidPayMethodName)) {
+    journey_logger_->SetEventOccurred(
+        JourneyLogger::EVENT_AVAILABLE_METHOD_GOOGLE);
+  } else {
+    journey_logger_->SetEventOccurred(
+        JourneyLogger::EVENT_AVAILABLE_METHOD_OTHER);
   }
 
   if (--number_of_pending_sw_payment_instruments_ > 0)
@@ -157,18 +198,18 @@ void PaymentRequestState::FinishedGetAllSWPaymentInstruments() {
   SetDefaultProfileSelections();
 
   get_all_instruments_finished_ = true;
+  has_enrolled_instrument_ = GetHasEnrolledInstrument(available_instruments_);
   are_requested_methods_supported_ |= !available_instruments_.empty();
   NotifyOnGetAllPaymentInstrumentsFinished();
   NotifyInitialized();
 
   // Fulfill the pending CanMakePayment call.
-  if (can_make_payment_callback_) {
-    CheckCanMakePayment(std::move(can_make_payment_callback_));
-  }
+  if (can_make_payment_callback_)
+    std::move(can_make_payment_callback_).Run(are_requested_methods_supported_);
 
   // Fulfill the pending HasEnrolledInstrument call.
   if (has_enrolled_instrument_callback_)
-    CheckHasEnrolledInstrument(std::move(has_enrolled_instrument_callback_));
+    std::move(has_enrolled_instrument_callback_).Run(has_enrolled_instrument_);
 
   // Fulfill the pending AreRequestedMethodsSupported call.
   if (are_requested_methods_supported_callback_)
@@ -226,15 +267,7 @@ void PaymentRequestState::CanMakePayment(StatusCallback callback) {
     return;
   }
 
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&PaymentRequestState::CheckCanMakePayment,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
-}
-
-void PaymentRequestState::CheckCanMakePayment(StatusCallback callback) {
-  DCHECK(get_all_instruments_finished_);
-  std::move(callback).Run(are_requested_methods_supported_);
+  PostStatusCallback(std::move(callback), are_requested_methods_supported_);
 }
 
 void PaymentRequestState::HasEnrolledInstrument(StatusCallback callback) {
@@ -244,22 +277,7 @@ void PaymentRequestState::HasEnrolledInstrument(StatusCallback callback) {
     return;
   }
 
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&PaymentRequestState::CheckHasEnrolledInstrument,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
-}
-
-void PaymentRequestState::CheckHasEnrolledInstrument(StatusCallback callback) {
-  DCHECK(get_all_instruments_finished_);
-  bool has_enrolled_instrument_value = false;
-  for (const auto& instrument : available_instruments_) {
-    if (instrument->IsValidForCanMakePayment()) {
-      has_enrolled_instrument_value = true;
-      break;
-    }
-  }
-  std::move(callback).Run(has_enrolled_instrument_value);
+  PostStatusCallback(std::move(callback), has_enrolled_instrument_);
 }
 
 void PaymentRequestState::AreRequestedMethodsSupported(
@@ -279,8 +297,19 @@ void PaymentRequestState::CheckRequestedMethodsSupported(
     MethodsSupportedCallback callback) {
   DCHECK(get_all_instruments_finished_);
 
-  std::move(callback).Run(are_requested_methods_supported_,
-                          get_all_payment_apps_error_);
+  // Don't modify the value of |are_requested_methods_supported_|, because it's
+  // used for canMakePayment().
+  bool supported = are_requested_methods_supported_;
+  if (supported && is_show_user_gesture_ &&
+      base::Contains(spec_->payment_method_identifiers_set(), "basic-card") &&
+      !has_non_autofill_instrument_ && !has_enrolled_instrument_ &&
+      PaymentsExperimentalFeatures::IsEnabled(
+          features::kStrictHasEnrolledAutofillInstrument)) {
+    supported = false;
+    get_all_payment_apps_error_ = errors::kStrictBasicCardShowReject;
+  }
+
+  std::move(callback).Run(supported, get_all_payment_apps_error_);
 }
 
 std::string PaymentRequestState::GetAuthenticatedEmail() const {
@@ -312,19 +341,18 @@ void PaymentRequestState::OnPaymentAppWindowClosed() {
 }
 
 void PaymentRequestState::RecordUseStats() {
-  if (spec_->request_shipping()) {
+  if (ShouldShowShippingSection()) {
     DCHECK(selected_shipping_profile_);
     personal_data_manager_->RecordUseOf(*selected_shipping_profile_);
   }
 
-  if (spec_->request_payer_name() || spec_->request_payer_email() ||
-      spec_->request_payer_phone()) {
+  if (ShouldShowContactSection()) {
     DCHECK(selected_contact_profile_);
 
     // If the same address was used for both contact and shipping, the stats
     // should only be updated once.
-    if (!spec_->request_shipping() || (selected_shipping_profile_->guid() !=
-                                       selected_contact_profile_->guid())) {
+    if (!ShouldShowShippingSection() || (selected_shipping_profile_->guid() !=
+                                         selected_contact_profile_->guid())) {
       personal_data_manager_->RecordUseOf(*selected_contact_profile_);
     }
   }
@@ -361,6 +389,8 @@ void PaymentRequestState::AddAutofillPaymentInstrument(
   instrument->set_is_requested_autofill_data_available(
       is_requested_autofill_data_available_);
   available_instruments_.push_back(std::move(instrument));
+  journey_logger_->SetEventOccurred(
+      JourneyLogger::EVENT_AVAILABLE_METHOD_BASIC_CARD);
 
   if (selected) {
     SetSelectedInstrument(available_instruments_.back().get(),
@@ -516,6 +546,31 @@ void PaymentRequestState::SelectDefaultShippingAddressAndNotifyObservers() {
   UpdateIsReadyToPayAndNotifyObservers();
 }
 
+bool PaymentRequestState::ShouldShowShippingSection() const {
+  if (!spec_->request_shipping())
+    return false;
+
+  return selected_instrument_ ? !selected_instrument_->HandlesShippingAddress()
+                              : true;
+}
+
+bool PaymentRequestState::ShouldShowContactSection() const {
+  if (spec_->request_payer_name() &&
+      (!selected_instrument_ || !selected_instrument_->HandlesPayerName())) {
+    return true;
+  }
+  if (spec_->request_payer_email() &&
+      (!selected_instrument_ || !selected_instrument_->HandlesPayerEmail())) {
+    return true;
+  }
+  if (spec_->request_payer_phone() &&
+      (!selected_instrument_ || !selected_instrument_->HandlesPayerPhone())) {
+    return true;
+  }
+
+  return false;
+}
+
 base::WeakPtr<PaymentRequestState> PaymentRequestState::AsWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
@@ -543,8 +598,7 @@ void PaymentRequestState::PopulateProfileCache() {
 
   // Set the number of suggestions shown for the sections requested by the
   // merchant.
-  if (spec_->request_payer_name() || spec_->request_payer_phone() ||
-      spec_->request_payer_email()) {
+  if (ShouldShowContactSection()) {
     bool has_complete_contact =
         contact_profiles_.empty()
             ? false
@@ -554,7 +608,7 @@ void PaymentRequestState::PopulateProfileCache() {
         JourneyLogger::Section::SECTION_CONTACT_INFO, contact_profiles_.size(),
         has_complete_contact);
   }
-  if (spec_->request_shipping()) {
+  if (ShouldShowShippingSection()) {
     bool has_complete_shipping =
         shipping_profiles_.empty()
             ? false
@@ -650,13 +704,18 @@ bool PaymentRequestState::ArePaymentOptionsSatisfied() {
   if (is_waiting_for_merchant_validation_)
     return false;
 
-  if (!profile_comparator()->IsShippingComplete(selected_shipping_profile_))
+  if (ShouldShowShippingSection() &&
+      (!spec_->selected_shipping_option() ||
+       !profile_comparator()->IsShippingComplete(selected_shipping_profile_))) {
     return false;
+  }
 
-  if (spec_->request_shipping() && !spec_->selected_shipping_option())
+  if (ShouldShowContactSection() &&
+      !profile_comparator()->IsContactInfoComplete(selected_contact_profile_)) {
     return false;
+  }
 
-  return profile_comparator()->IsContactInfoComplete(selected_contact_profile_);
+  return true;
 }
 
 void PaymentRequestState::OnAddressNormalized(

@@ -155,8 +155,11 @@ BrowserXRRuntime* XRRuntimeManager::GetRuntimeForOptions(
       DVLOG(1) << __func__ << ": non-immersive AR mode is unsupported";
       return nullptr;
     }
-    // Return the ARCore runtime.
-    return GetRuntime(device::mojom::XRDeviceId::ARCORE_DEVICE_ID);
+    // Return the ARCore runtime, but only if it supports all required features.
+    auto* runtime = GetRuntime(device::mojom::XRDeviceId::ARCORE_DEVICE_ID);
+    return runtime && runtime->SupportsAllFeatures(options->required_features)
+               ? runtime
+               : nullptr;
   }
 
   if (options->immersive) {
@@ -360,9 +363,10 @@ bool XRRuntimeManager::AreAllProvidersInitialized() {
   return num_initialized_providers_ == providers_.size();
 }
 
-void XRRuntimeManager::AddRuntime(device::mojom::XRDeviceId id,
-                                  device::mojom::VRDisplayInfoPtr info,
-                                  device::mojom::XRRuntimePtr runtime) {
+void XRRuntimeManager::AddRuntime(
+    device::mojom::XRDeviceId id,
+    device::mojom::VRDisplayInfoPtr info,
+    mojo::PendingRemote<device::mojom::XRRuntime> runtime) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(runtimes_.find(id) == runtimes_.end());
 

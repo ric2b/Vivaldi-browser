@@ -37,7 +37,7 @@ class ScreenRotationTest
     ash::ShellTestApi().SetTabletModeEnabledForTest(true);
     auto* pref = browser()->profile()->GetPrefs();
     pref->SetBoolean(
-        ash::prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted, true);
+        ash::prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted2, true);
 
     int additional_browsers = std::get<0>(GetParam()) - 1;
     ntp_page_ = std::get<1>(GetParam());
@@ -146,7 +146,7 @@ IN_PROC_BROWSER_TEST_P(ScreenRotationTest, RotateInTablet) {
   waiter.Wait();
 }
 
-IN_PROC_BROWSER_TEST_P(ScreenRotationTest, RotateInTableOverview) {
+IN_PROC_BROWSER_TEST_P(ScreenRotationTest, RotateInTabletOverview) {
   // Browser window is used just to identify display.
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
   gfx::NativeWindow browser_window =
@@ -176,8 +176,8 @@ IN_PROC_BROWSER_TEST_P(ScreenRotationTest, RotateInTableOverview) {
   waiter.Wait();
 }
 
-// TODO(oshma): Support split screen in tablet mode.
-// TODO(oshma): Support overview mode.
+// TODO(oshima): Support split screen in tablet mode.
+// TODO(oshima): Support overview mode.
 
 INSTANTIATE_TEST_SUITE_P(,
                          ScreenRotationTest,

@@ -224,21 +224,29 @@ base::TimeDelta OmniboxFieldTrial::StopTimerFieldTrialDuration() {
 }
 
 // static
-std::string OmniboxFieldTrial::GetZeroSuggestVariant(
+std::vector<std::string> OmniboxFieldTrial::GetZeroSuggestVariants(
     OmniboxEventProto::PageClassification page_classification) {
-  // Note: This code is required since at this point we have no way to set the
-  // ZeroSuggestVariant parameter state with Finch Forcing groups.
-  if (base::FeatureList::IsEnabled(omnibox::kZeroSuggestionsOnNTP)) {
-    auto result = internal::GetValueForRuleInContextByFeature(
-        omnibox::kZeroSuggestionsOnNTP, kZeroSuggestVariantRule,
-        page_classification);
-    if (!result.empty())
-      return result;
+  // We check all these features for ZeroSuggestVariant because it's not
+  // possible to enable multiple features using Finch Forcing groups
+  // (omnibox::kOnFocusSuggestions as well as another feature). Therefore, in
+  // order to specify the ZeroSuggestVariant parameter in those groups we allow
+  // it to be associated with the feature that is being force enabled.
+  const base::Feature* features_to_check[] = {
+      &omnibox::kZeroSuggestionsOnNTP,
+      &omnibox::kZeroSuggestionsOnNTPRealbox,
+      &omnibox::kZeroSuggestionsOnSERP,
+      &omnibox::kOnFocusSuggestions,
+  };
+  for (const base::Feature* feature : features_to_check) {
+    auto parameter_value = internal::GetValueForRuleInContextByFeature(
+        *feature, kZeroSuggestVariantRule, page_classification);
+    if (!parameter_value.empty()) {
+      return base::SplitString(parameter_value, ",", base::TRIM_WHITESPACE,
+                               base::SPLIT_WANT_NONEMPTY);
+    }
   }
 
-  return internal::GetValueForRuleInContextByFeature(
-      omnibox::kOnFocusSuggestions, kZeroSuggestVariantRule,
-      page_classification);
+  return {};
 }
 
 bool OmniboxFieldTrial::ShortcutsScoringMaxRelevance(
@@ -634,15 +642,12 @@ bool OmniboxFieldTrial::IsReverseAnswersEnabled() {
 
 bool OmniboxFieldTrial::IsShortBookmarkSuggestionsEnabled() {
   return base::FeatureList::IsEnabled(
-      omnibox::kOmniboxShortBookmarkSuggestions);
+             omnibox::kOmniboxShortBookmarkSuggestions) ||
+         base::FeatureList::IsEnabled(omnibox::kAutocompleteTitles);
 }
 
 bool OmniboxFieldTrial::IsTabSwitchSuggestionsEnabled() {
   return base::FeatureList::IsEnabled(omnibox::kOmniboxTabSwitchSuggestions);
-}
-
-bool OmniboxFieldTrial::IsTabSwitchLogicReversed() {
-  return base::FeatureList::IsEnabled(omnibox::kOmniboxReverseTabSwitchLogic);
 }
 
 bool OmniboxFieldTrial::IsTabSwitchSuggestionsDedicatedRowEnabled() {
@@ -674,10 +679,6 @@ bool OmniboxFieldTrial::IsGroupSuggestionsBySearchVsUrlFeatureEnabled() {
 
 bool OmniboxFieldTrial::IsMaxURLMatchesFeatureEnabled() {
   return base::FeatureList::IsEnabled(omnibox::kOmniboxMaxURLMatches);
-}
-
-bool OmniboxFieldTrial::IsOmniboxWrapPopupPositionEnabled() {
-  return base::FeatureList::IsEnabled(omnibox::kOmniboxWrapPopupPosition);
 }
 
 bool OmniboxFieldTrial::IsOnDeviceHeadProviderEnabledForIncognito() {

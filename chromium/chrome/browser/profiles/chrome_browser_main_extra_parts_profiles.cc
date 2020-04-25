@@ -61,7 +61,6 @@
 #include "chrome/browser/search_engines/template_url_fetcher_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_client_service_factory.h"
-#include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/sharing/sharing_service_factory.h"
 #include "chrome/browser/signin/about_signin_internals_factory.h"
@@ -99,9 +98,11 @@
 #include "chrome/browser/media/android/cdm/media_drm_origin_id_manager_factory.h"
 #else
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/feedback/feedback_uploader_factory_chrome.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_profile_session_durations_service_factory.h"
 #include "chrome/browser/resource_coordinator/local_site_characteristics_data_store_factory.h"
 #include "chrome/browser/search/instant_service_factory.h"
+#include "chrome/browser/storage/storage_notification_service_factory.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/ui/media_router/media_router_ui_service_factory.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
@@ -109,8 +110,11 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/android_sms/android_sms_service_factory.h"
+#include "chrome/browser/chromeos/arc/accessibility/arc_accessibility_helper_bridge.h"
+#include "chrome/browser/chromeos/bluetooth/debug_logs_manager_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_registry_service_factory.h"
 #include "chrome/browser/chromeos/extensions/login_screen/login_state/session_state_changed_event_dispatcher.h"
+#include "chrome/browser/chromeos/extensions/printing_metrics/print_job_finished_event_dispatcher.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_engagement_metrics_service.h"
 #include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
@@ -119,6 +123,7 @@
 #include "chrome/browser/chromeos/printing/cups_print_job_manager_factory.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager_factory.h"
 #include "chrome/browser/chromeos/printing/cups_proxy_service_manager_factory.h"
+#include "chrome/browser/chromeos/printing/history/print_job_history_service_factory.h"
 #include "chrome/browser/chromeos/printing/synced_printers_manager_factory.h"
 #include "chrome/browser/chromeos/smb_client/smb_service_factory.h"
 #include "chrome/browser/chromeos/tether/tether_service_factory.h"
@@ -232,6 +237,9 @@ void ChromeBrowserMainExtraPartsProfiles::
   AccountConsistencyModeManagerFactory::GetInstance();
   AccountInvestigatorFactory::GetInstance();
   AccountReconcilorFactory::GetInstance();
+#if defined(OS_CHROMEOS)
+  arc::ArcAccessibilityHelperBridge::CreateFactory();
+#endif
   AutocompleteClassifierFactory::GetInstance();
   autofill::PersonalDataManagerFactory::GetInstance();
 #if BUILDFLAG(ENABLE_BACKGROUND_CONTENTS)
@@ -271,15 +279,20 @@ void ChromeBrowserMainExtraPartsProfiles::
 #endif
 #if defined(OS_CHROMEOS)
   chromeos::AccountManagerMigratorFactory::GetInstance();
+  chromeos::bluetooth::DebugLogsManagerFactory::GetInstance();
   chromeos::CupsPrintJobManagerFactory::GetInstance();
   chromeos::CupsPrintersManagerFactory::GetInstance();
-  chromeos::CupsProxyServiceManagerFactory::GetInstance();
+  chromeos::PrintJobHistoryServiceFactory::GetInstance();
   chromeos::SyncedPrintersManagerFactory::GetInstance();
   chromeos::smb_client::SmbServiceFactory::GetInstance();
   crostini::CrostiniRegistryServiceFactory::GetInstance();
   extensions::SessionStateChangedEventDispatcher::GetFactoryInstance();
+  extensions::PrintJobFinishedEventDispatcher::GetFactoryInstance();
   extensions::VerifyTrustAPI::GetFactoryInstance();
   TetherServiceFactory::GetInstance();
+#if defined(USE_CUPS)
+  chromeos::CupsProxyServiceManagerFactory::GetInstance();
+#endif
 #endif
   FaviconServiceFactory::GetInstance();
   HistoryUiFaviconRequestHandlerFactory::GetInstance();
@@ -289,6 +302,9 @@ void ChromeBrowserMainExtraPartsProfiles::
   feature_engagement::NewTabTrackerFactory::GetInstance();
 #endif
   feature_engagement::TrackerFactory::GetInstance();
+#if !defined(OS_ANDROID)
+  feedback::FeedbackUploaderFactoryChrome::GetInstance();
+#endif
   FindBarStateFactory::GetInstance();
   GAIAInfoUpdateServiceFactory::GetInstance();
 #if !defined(OS_ANDROID)
@@ -381,9 +397,7 @@ void ChromeBrowserMainExtraPartsProfiles::
 #if defined(OS_ANDROID)
   SearchPermissionsService::Factory::GetInstance();
 #endif
-  if (send_tab_to_self::IsReceivingEnabled()) {
-    send_tab_to_self::SendTabToSelfClientServiceFactory::GetInstance();
-  }
+  send_tab_to_self::SendTabToSelfClientServiceFactory::GetInstance();
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
   SessionServiceFactory::GetInstance();
 #endif
@@ -396,6 +410,9 @@ void ChromeBrowserMainExtraPartsProfiles::
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   SpellcheckServiceFactory::GetInstance();
+#endif
+#if !defined(OS_ANDROID)
+  StorageNotificationServiceFactory::GetInstance();
 #endif
   suggestions::SuggestionsServiceFactory::GetInstance();
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)

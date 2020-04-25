@@ -98,9 +98,9 @@ var IS_HIDPI = window.devicePixelRatio > 1;
 // but navigator.userAgent includes /Safari/.
 // TODO(crbug.com/998999): Fix navigator.userAgent such that it reliably
 // returns an agent string containing "CriOS".
-var IS_IOS = /iPad|iPhone|iPod|MacIntel/.test(window.navigator.platform) &&
-    !(/Safari/.test(window.navigator.userAgent));
-
+var IS_IOS = /CriOS/.test(window.navigator.userAgent) ||
+    /iPad|iPhone|iPod|MacIntel/.test(window.navigator.platform) &&
+        !(/Safari/.test(window.navigator.userAgent));
 
 /** @const */
 var IS_MOBILE = /Android/.test(window.navigator.userAgent) || IS_IOS;
@@ -393,14 +393,6 @@ Runner.prototype = {
 
     this.outerContainerEl.appendChild(this.containerEl);
 
-// <if expr="SHOW_INSTRUCTIONS_FOR_DINO_PAGE">
-    if (this.isArcadeMode()) {
-      document.querySelector('#offline-instruction').classList
-          .remove(HIDDEN_CLASS);
-      this.containerEl.style.top = '50px'
-    }
-// </if>
-
     this.startListening();
     this.update();
 
@@ -487,12 +479,6 @@ Runner.prototype = {
       this.playingIntro = true;
       this.tRex.playingIntro = true;
 
-// <if expr="SHOW_INSTRUCTIONS_FOR_DINO_PAGE">
-      if (this.isArcadeMode()) {
-        document.querySelector('#offline-instruction').classList
-            .add(HIDDEN_CLASS);
-      }
-// </if>
       // CSS animation definition.
       var keyframes = '@-webkit-keyframes intro { ' +
             'from { width:' + Trex.config.WIDTH + 'px }' +
@@ -967,10 +953,6 @@ Runner.prototype = {
         Runner.config.ARCADE_MODE_INITIAL_TOP_POSITION) *
         Runner.config.ARCADE_MODE_TOP_POSITION_PERCENT)) *
         window.devicePixelRatio;
-// <if expr="SHOW_INSTRUCTIONS_FOR_DINO_PAGE">
-    // We add top padding in Runner#init, no need to do it here.
-    translateY = 0;
-// </if>
     this.containerEl.style.transform = 'scale(' + scale + ') translateY(' +
         translateY + 'px)';
   },
@@ -1636,6 +1618,7 @@ function Trex(canvas, spritePos) {
   this.spritePos = spritePos;
   this.xPos = 0;
   this.yPos = 0;
+  this.xInitialPos = 0;
   // Position when on the ground.
   this.groundYPos = 0;
   this.currentFrame = 0;
@@ -1648,7 +1631,6 @@ function Trex(canvas, spritePos) {
   this.config = Trex.config;
   // Current status.
   this.status = Trex.status.WAITING;
-
   this.jumping = false;
   this.ducking = false;
   this.jumpVelocity = 0;
@@ -1797,6 +1779,7 @@ Trex.prototype = {
     if (this.playingIntro && this.xPos < this.config.START_X_POS) {
       this.xPos += Math.round((this.config.START_X_POS /
           this.config.INTRO_DURATION) * deltaTime);
+      this.xInitialPos = this.xPos;
     }
 
     if (this.status == Trex.status.WAITING) {
@@ -1975,6 +1958,7 @@ Trex.prototype = {
    * Reset the t-rex to running at start of game.
    */
   reset: function() {
+    this.xPos = this.xInitialPos;
     this.yPos = this.groundYPos;
     this.jumpVelocity = 0;
     this.jumping = false;

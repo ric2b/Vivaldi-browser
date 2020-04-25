@@ -9,7 +9,9 @@
 #include <utility>
 
 #include "base/feature_list.h"
+#include "base/optional.h"
 #include "base/time/time.h"
+#include "net/nqe/effective_connection_type.h"
 #include "url/gurl.h"
 
 namespace optimization_guide {
@@ -18,9 +20,9 @@ namespace features {
 extern const base::Feature kOptimizationHints;
 extern const base::Feature kOptimizationHintsExperiments;
 constexpr char kOptimizationHintsExperimentNameParam[] = "experiment_name";
-extern const base::Feature kSlowPageTriggering;
 extern const base::Feature kOptimizationHintsFetching;
 extern const base::Feature kOptimizationGuideKeyedService;
+extern const base::Feature kOptimizationTargetPrediction;
 
 // The maximum number of hosts that can be stored in the
 // |kHintsFetcherTopHostBlacklist| dictionary pref when initialized. The top
@@ -72,6 +74,21 @@ bool IsOptimizationGuideKeyedServiceEnabled();
 // a client-side safety limit for RAM use in case server sends too large of
 // a bloom filter.
 int MaxServerBloomFilterByteSize();
+
+// Maximum effective connection type at which hints can be fetched for
+// navigations in real-time. Returns null if the hints fetching for navigations
+// is disabled.
+base::Optional<net::EffectiveConnectionType>
+GetMaxEffectiveConnectionTypeForNavigationHintsFetch();
+
+// Returns the duration of the time window before hints expiration during which
+// the hosts should be refreshed. Example: If the hints for a host expire at
+// time T, then they are eligible for refresh at T -
+// GetHintsFetchRefreshDuration().
+base::TimeDelta GetHintsFetchRefreshDuration();
+
+// Returns true if optimization target prediction is enabled.
+bool IsOptimizationTargetPredictionEnabled();
 
 }  // namespace features
 }  // namespace optimization_guide

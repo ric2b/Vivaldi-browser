@@ -12,6 +12,7 @@
     <output filename="generated_resources_hy.pak" type="data_package" lang="hy" />
     <output filename="generated_resources_io.pak" type="data_package" lang="io" />
     <output filename="generated_resources_is.pak" type="data_package" lang="is" />
+    <output filename="generated_resources_ja-KS.pak" type="data_package" lang="ja-KS" />
     <output filename="generated_resources_jbo.pak" type="data_package" lang="jbo" />
     <output filename="generated_resources_ka.pak" type="data_package" lang="ka" />
     <output filename="generated_resources_ku.pak" type="data_package" lang="ku" />
@@ -48,6 +49,7 @@
     <file path="strings/vivaldi_generated_resources_id.xtb" lang="id" />
     <file path="strings/vivaldi_generated_resources_it.xtb" lang="it" />
     <file path="strings/vivaldi_generated_resources_ja.xtb" lang="ja" />
+    <file path="strings/vivaldi_generated_resources_ja-KS.xtb" lang="ja-KS" />
     <file path="strings/vivaldi_generated_resources_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_generated_resources_ko.xtb" lang="ko" />
     <file path="strings/vivaldi_generated_resources_lt.xtb" lang="lt" />
@@ -101,9 +103,6 @@
       <message name="IDS_IMPORTER_LOCK_TITLE" desc="Dialog title for importer lock dialog">
         Close Browser Before Importing
       </message>
-      <message name="IDS_EXTENSIONS_SHOW_BUTTON" desc="The text for the Show link.">
-        Show button
-      </message>
       <if expr="use_titlecase">
         <message name="IDS_NEW_INCOGNITO_WINDOW" desc="In Title Case: The text label of a menu item for opening a New Private window. Overridden from Chromium">
           New &amp;Private Window
@@ -114,11 +113,6 @@
           New &amp;private window
         </message>
       </if>
-      <if expr="is_macosx">
-        <message name="IDS_VIV_JAVASCRIPT_UNSUPPORTED_ERROR_APPLESCRIPT_MAC" desc="Error dialog title to be displayed when the user attempts to execute JavaScript via AppleScript. Mac-only.">
-          Executing JavaScript through AppleScript is turned off. To turn it on, from the menu bar, go to Tools > Allow JavaScript from Apple Events.
-        </message>
-      </if> <!-- is_macosx -->
     </messages>
   </release>
 </grit>

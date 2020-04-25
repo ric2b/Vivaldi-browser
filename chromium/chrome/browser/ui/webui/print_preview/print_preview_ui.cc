@@ -26,6 +26,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/printing/background_printing_manager.h"
 #include "chrome/browser/printing/print_preview_data_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -64,6 +65,10 @@
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #elif defined(OS_WIN)
 #include "base/enterprise_util.h"
+#endif
+
+#if !BUILDFLAG(OPTIMIZE_WEBUI)
+#include "chrome/browser/ui/webui/managed_ui_handler.h"
 #endif
 
 using content::WebContents;
@@ -223,6 +228,7 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"optionCustomScaling", IDS_PRINT_PREVIEW_OPTION_CUSTOM_SCALING},
     {"optionDefaultScaling", IDS_PRINT_PREVIEW_OPTION_DEFAULT_SCALING},
     {"optionFitToPage", IDS_PRINT_PREVIEW_OPTION_FIT_TO_PAGE},
+    {"optionFitToPaper", IDS_PRINT_PREVIEW_OPTION_FIT_TO_PAPER},
     {"optionHeaderFooter", IDS_PRINT_PREVIEW_OPTION_HEADER_FOOTER},
     {"optionLandscape", IDS_PRINT_PREVIEW_OPTION_LANDSCAPE},
     {"optionLongEdge", IDS_PRINT_PREVIEW_OPTION_LONG_EDGE},
@@ -343,60 +349,44 @@ void SetupPrintPreviewPlugin(content::WebUIDataSource* source) {
     int id;
   } kPdfResources[] = {
     {"pdf/browser_api.js", IDR_PDF_BROWSER_API_JS},
+    {"pdf/controller.js", IDR_PDF_CONTROLLER_JS},
     {"pdf/elements/icons.html", IDR_PDF_ICONS_HTML},
     {"pdf/elements/shared-vars.html", IDR_PDF_SHARED_VARS_HTML},
-    {"pdf/elements/viewer-bookmark/viewer-bookmark.html",
-     IDR_PDF_VIEWER_BOOKMARK_HTML},
-    {"pdf/elements/viewer-bookmark/viewer-bookmark.js",
-     IDR_PDF_VIEWER_BOOKMARK_JS},
-    {"pdf/elements/viewer-error-screen/viewer-error-screen.html",
-     IDR_PDF_VIEWER_ERROR_SCREEN_HTML},
-    {"pdf/elements/viewer-error-screen/viewer-error-screen.js",
-     IDR_PDF_VIEWER_ERROR_SCREEN_JS},
+    {"pdf/elements/viewer-bookmark.html", IDR_PDF_VIEWER_BOOKMARK_HTML},
+    {"pdf/elements/viewer-bookmark.js", IDR_PDF_VIEWER_BOOKMARK_JS},
+    {"pdf/elements/viewer-error-screen.html", IDR_PDF_VIEWER_ERROR_SCREEN_HTML},
+    {"pdf/elements/viewer-error-screen.js", IDR_PDF_VIEWER_ERROR_SCREEN_JS},
 #if defined(OS_CHROMEOS)
-    {"pdf/elements/viewer-ink-host/viewer-ink-host.html",
-     IDR_PDF_VIEWER_INK_HOST_HTML},
-    {"pdf/elements/viewer-ink-host/viewer-ink-host.js",
-     IDR_PDF_VIEWER_INK_HOST_JS},
+    {"pdf/elements/viewer-ink-host.html", IDR_PDF_VIEWER_INK_HOST_HTML},
+    {"pdf/elements/viewer-ink-host.js", IDR_PDF_VIEWER_INK_HOST_JS},
 #endif
-    {"pdf/elements/viewer-page-indicator/viewer-page-indicator.html",
+    {"pdf/elements/viewer-page-indicator.html",
      IDR_PDF_VIEWER_PAGE_INDICATOR_HTML},
-    {"pdf/elements/viewer-page-indicator/viewer-page-indicator.js",
-     IDR_PDF_VIEWER_PAGE_INDICATOR_JS},
-    {"pdf/elements/viewer-page-selector/viewer-page-selector.html",
+    {"pdf/elements/viewer-page-indicator.js", IDR_PDF_VIEWER_PAGE_INDICATOR_JS},
+    {"pdf/elements/viewer-page-selector.html",
      IDR_PDF_VIEWER_PAGE_SELECTOR_HTML},
-    {"pdf/elements/viewer-page-selector/viewer-page-selector.js",
-     IDR_PDF_VIEWER_PAGE_SELECTOR_JS},
-    {"pdf/elements/viewer-password-screen/viewer-password-screen.html",
+    {"pdf/elements/viewer-page-selector.js", IDR_PDF_VIEWER_PAGE_SELECTOR_JS},
+    {"pdf/elements/viewer-password-screen.html",
      IDR_PDF_VIEWER_PASSWORD_SCREEN_HTML},
-    {"pdf/elements/viewer-password-screen/viewer-password-screen.js",
+    {"pdf/elements/viewer-password-screen.js",
      IDR_PDF_VIEWER_PASSWORD_SCREEN_JS},
-    {"pdf/elements/viewer-pdf-toolbar/viewer-pdf-toolbar.html",
-     IDR_PDF_VIEWER_PDF_TOOLBAR_HTML},
-    {"pdf/elements/viewer-pdf-toolbar/viewer-pdf-toolbar.js",
-     IDR_PDF_VIEWER_PDF_TOOLBAR_JS},
+    {"pdf/elements/viewer-pdf-toolbar.html", IDR_PDF_VIEWER_PDF_TOOLBAR_HTML},
+    {"pdf/elements/viewer-pdf-toolbar.js", IDR_PDF_VIEWER_PDF_TOOLBAR_JS},
 #if defined(OS_CHROMEOS)
-    {"pdf/elements/viewer-form-warning/viewer-form-warning.html",
-     IDR_PDF_VIEWER_FORM_WARNING_HTML},
-    {"pdf/elements/viewer-form-warning/viewer-form-warning.js",
-     IDR_PDF_VIEWER_FORM_WARNING_JS},
-    {"pdf/elements/viewer-pen-options/viewer-pen-options.html",
-     IDR_PDF_VIEWER_PEN_OPTIONS_HTML},
-    {"pdf/elements/viewer-pen-options/viewer-pen-options.js",
-     IDR_PDF_VIEWER_PEN_OPTIONS_JS},
+    {"pdf/elements/viewer-form-warning.html", IDR_PDF_VIEWER_FORM_WARNING_HTML},
+    {"pdf/elements/viewer-form-warning.js", IDR_PDF_VIEWER_FORM_WARNING_JS},
+    {"pdf/elements/viewer-pen-options.html", IDR_PDF_VIEWER_PEN_OPTIONS_HTML},
+    {"pdf/elements/viewer-pen-options.js", IDR_PDF_VIEWER_PEN_OPTIONS_JS},
 #endif
-    {"pdf/elements/viewer-toolbar-dropdown/viewer-toolbar-dropdown.html",
+    {"pdf/elements/viewer-toolbar-dropdown.html",
      IDR_PDF_VIEWER_TOOLBAR_DROPDOWN_HTML},
-    {"pdf/elements/viewer-toolbar-dropdown/viewer-toolbar-dropdown.js",
+    {"pdf/elements/viewer-toolbar-dropdown.js",
      IDR_PDF_VIEWER_TOOLBAR_DROPDOWN_JS},
-    {"pdf/elements/viewer-zoom-toolbar/viewer-zoom-button.html",
-     IDR_PDF_VIEWER_ZOOM_BUTTON_HTML},
-    {"pdf/elements/viewer-zoom-toolbar/viewer-zoom-button.js",
-     IDR_PDF_VIEWER_ZOOM_BUTTON_JS},
-    {"pdf/elements/viewer-zoom-toolbar/viewer-zoom-toolbar.html",
+    {"pdf/elements/viewer-zoom-button.html", IDR_PDF_VIEWER_ZOOM_BUTTON_HTML},
+    {"pdf/elements/viewer-zoom-button.js", IDR_PDF_VIEWER_ZOOM_BUTTON_JS},
+    {"pdf/elements/viewer-zoom-toolbar.html",
      IDR_PDF_VIEWER_ZOOM_SELECTOR_HTML},
-    {"pdf/elements/viewer-zoom-toolbar/viewer-zoom-toolbar.js",
-     IDR_PDF_VIEWER_ZOOM_SELECTOR_JS},
+    {"pdf/elements/viewer-zoom-toolbar.js", IDR_PDF_VIEWER_ZOOM_SELECTOR_JS},
     {"pdf/gesture_detector.js", IDR_PDF_GESTURE_DETECTOR_JS},
     {"pdf/index.css", IDR_PDF_INDEX_CSS},
     {"pdf/index.html", IDR_PDF_INDEX_HTML},
@@ -470,7 +460,12 @@ PrintPreviewUI::PrintPreviewUI(content::WebUI* web_ui)
       handler_(CreatePrintPreviewHandlers(web_ui)) {
   // Set up the chrome://print/ data source.
   Profile* profile = Profile::FromWebUI(web_ui);
-  content::WebUIDataSource::Add(profile, CreatePrintPreviewUISource(profile));
+  content::WebUIDataSource* source = CreatePrintPreviewUISource(profile);
+#if !BUILDFLAG(OPTIMIZE_WEBUI)
+  // For the Polymer 3 demo page.
+  ManagedUIHandler::Initialize(web_ui, source);
+#endif
+  content::WebUIDataSource::Add(profile, source);
 
   // Set up the chrome://theme/ source.
   content::URLDataSource::Add(profile, std::make_unique<ThemeSource>(profile));
@@ -574,6 +569,7 @@ void PrintPreviewUI::SetInitialParams(
   PrintPreviewUI* print_preview_ui = static_cast<PrintPreviewUI*>(
       print_preview_dialog->GetWebUI()->GetController());
   print_preview_ui->source_is_modifiable_ = params.is_modifiable;
+  print_preview_ui->source_is_pdf_ = params.is_pdf;
   print_preview_ui->source_has_selection_ = params.has_selection;
   print_preview_ui->print_selection_only_ = params.selection_only;
 }

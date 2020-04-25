@@ -16,7 +16,9 @@
 #include "chrome/browser/sharing/sharing_service_factory.h"
 #include "chrome/browser/sharing/sharing_sync_preference.h"
 #include "chrome/browser/sharing/vapid_key_manager.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -38,12 +40,28 @@ const char kNonTelUrl[] = "https://google.com";
 
 const char kSelectionTextWithNumber[] = "9876543210";
 
+class MockSharingDeviceRegistration : public SharingDeviceRegistration {
+ public:
+  explicit MockSharingDeviceRegistration()
+      : SharingDeviceRegistration(/* pref_service_= */ nullptr,
+                                  /* sharing_sync_preference_= */ nullptr,
+                                  /* instance_id_driver_= */ nullptr,
+                                  /* vapid_key_manager_= */ nullptr) {}
+
+  ~MockSharingDeviceRegistration() override = default;
+
+  MOCK_CONST_METHOD0(IsSharedClipboardSupported, bool());
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockSharingDeviceRegistration);
+};
+
 class MockSharingService : public SharingService {
  public:
   explicit MockSharingService(std::unique_ptr<SharingFCMHandler> fcm_handler)
       : SharingService(/* sync_prefs= */ nullptr,
                        /* vapid_key_manager= */ nullptr,
-                       /* sharing_device_registration= */ nullptr,
+                       std::make_unique<MockSharingDeviceRegistration>(),
                        /* fcm_sender= */ nullptr,
                        std::move(fcm_handler),
                        /* gcm_driver= */ nullptr,
@@ -115,6 +133,14 @@ TEST_F(ClickToCallUtilsTest, NoSharingService_DoNotOfferAnyMenu) {
 TEST_F(ClickToCallUtilsTest, UIFlagDisabled_DoNotOfferAnyMenu) {
   scoped_feature_list_.InitWithFeatures(
       {kClickToCallContextMenuForSelectedText}, {kClickToCallUI});
+  EXPECT_FALSE(ShouldOfferClickToCallForURL(&profile_, GURL(kTelUrl)));
+  ExpectClickToCallDisabledForSelectionText(kSelectionTextWithNumber);
+}
+
+TEST_F(ClickToCallUtilsTest, PolicyDisabled_DoNotOfferAnyMenu) {
+  scoped_feature_list_.InitWithFeatures(
+      {kClickToCallContextMenuForSelectedText, kClickToCallUI}, {});
+  profile_.GetPrefs()->SetBoolean(prefs::kClickToCallEnabled, false);
   EXPECT_FALSE(ShouldOfferClickToCallForURL(&profile_, GURL(kTelUrl)));
   ExpectClickToCallDisabledForSelectionText(kSelectionTextWithNumber);
 }

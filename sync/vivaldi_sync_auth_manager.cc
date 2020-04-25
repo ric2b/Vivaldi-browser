@@ -86,7 +86,7 @@ void VivaldiSyncAuthManager::ConnectionOpened() {
   connection_open_ = true;
   if (account_manager_->has_refresh_token()) {
     access_token_ = account_manager_->access_token();
-    base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+    base::PostTask(FROM_HERE, {content::BrowserThread::UI},
                              credentials_changed_callback_);
   }
 }

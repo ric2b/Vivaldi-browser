@@ -28,7 +28,9 @@
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
+#include "components/password_manager/core/browser/possible_username_data.h"
 #include "components/password_manager/core/browser/statistics_table.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 
 using autofill::FormData;
 using autofill::FormFieldData;
@@ -125,6 +127,21 @@ uint32_t FindFormsDifferences(const FormData& lhs, const FormData& rhs) {
   return differences_bitmask;
 }
 
+bool FormContainsFieldWithName(const FormData& form,
+                               const base::string16& element) {
+  if (element.empty())
+    return false;
+  for (const auto& field : form.fields) {
+    if (base::EqualsCaseInsensitiveASCII(field.name, element))
+      return true;
+  }
+  return false;
+}
+
+bool IsUsernameFirstFlowFeatureEnabled() {
+  return base::FeatureList::IsEnabled(features::kUsernameFirstFlow);
+}
+
 }  // namespace
 
 PasswordFormManager::PasswordFormManager(
@@ -140,6 +157,9 @@ PasswordFormManager::PasswordFormManager(
                           metrics_recorder,
                           PasswordStore::FormDigest(observed_form)) {
   driver_ = driver;
+  if (driver_)
+    driver_id_ = driver->GetId();
+
   observed_form_ = observed_form;
   metrics_recorder_->RecordFormSignature(CalculateFormSignature(observed_form));
   // Do not fetch saved credentials for Chrome sync form, since nor filling nor
@@ -211,10 +231,29 @@ bool PasswordFormManager::IsEqualToSubmittedForm(
     return false;
   if (IsHttpAuth())
     return false;
-  if (form.action == submitted_form_.action)
+
+  if (form.action.is_valid() && !form.is_action_empty &&
+      !submitted_form_.is_action_empty &&
+      submitted_form_.action == form.action) {
     return true;
-  // TODO(https://crbug.com/831123): Implement other checks from a function
-  // IsPasswordFormReappeared from password_manager.cc.
+  }
+
+  // Match the form if username and password fields are same.
+  if (FormContainsFieldWithName(form,
+                                parsed_submitted_form_->username_element) &&
+      FormContainsFieldWithName(form,
+                                parsed_submitted_form_->password_element)) {
+    return true;
+  }
+
+  // Match the form if the observed username field has the same value as in
+  // the submitted form.
+  if (!parsed_submitted_form_->username_value.empty()) {
+    for (const auto& field : form.fields) {
+      if (field.value == parsed_submitted_form_->username_value)
+        return true;
+    }
+  }
   return false;
 }
 
@@ -223,9 +262,9 @@ const GURL& PasswordFormManager::GetOrigin() const {
                                        : observed_form_.url;
 }
 
-const std::map<base::string16, const PasswordForm*>&
-PasswordFormManager::GetBestMatches() const {
-  return best_matches_;
+const std::vector<const PasswordForm*>& PasswordFormManager::GetBestMatches()
+    const {
+  return form_fetcher_->GetBestMatches();
 }
 
 std::vector<const autofill::PasswordForm*>
@@ -237,17 +276,13 @@ const PasswordForm& PasswordFormManager::GetPendingCredentials() const {
   return pending_credentials_;
 }
 
-metrics_util::CredentialSourceType PasswordFormManager::GetCredentialSource() {
+metrics_util::CredentialSourceType PasswordFormManager::GetCredentialSource()
+    const {
   return metrics_util::CredentialSourceType::kPasswordManager;
 }
 
 PasswordFormMetricsRecorder* PasswordFormManager::GetMetricsRecorder() {
   return metrics_recorder_.get();
-}
-
-base::span<const autofill::PasswordForm* const>
-PasswordFormManager::GetBlacklistedMatches() const {
-  return base::make_span(blacklisted_matches_);
 }
 
 base::span<const InteractionsStats> PasswordFormManager::GetInteractionsStats()
@@ -256,20 +291,17 @@ base::span<const InteractionsStats> PasswordFormManager::GetInteractionsStats()
 }
 
 bool PasswordFormManager::IsBlacklisted() const {
-  return !blacklisted_matches_.empty();
+  return form_fetcher_->IsBlacklisted() || newly_blacklisted_;
 }
 
 void PasswordFormManager::Save() {
   DCHECK_EQ(FormFetcher::State::NOT_WAITING, form_fetcher_->GetState());
   DCHECK(!client_->IsIncognito());
-
-  for (auto blacklisted_iterator = blacklisted_matches_.begin();
-       blacklisted_iterator != blacklisted_matches_.end();) {
-    form_saver_->Remove(**blacklisted_iterator);
-    blacklisted_iterator = blacklisted_matches_.erase(blacklisted_iterator);
+  if (IsBlacklisted()) {
+    form_saver_->Unblacklist(ConstructObservedFormDigest());
+    newly_blacklisted_ = false;
   }
 
-  // TODO(https://crbug.com/831123): Implement indicator event metrics.
   if (password_overridden_ &&
       pending_credentials_.type == PasswordForm::Type::kGenerated &&
       !HasGeneratedPassword()) {
@@ -284,7 +316,7 @@ void PasswordFormManager::Save() {
     SanitizePossibleUsernames(&pending_credentials_);
     pending_credentials_.date_created = base::Time::Now();
     votes_uploader_.SendVotesOnSave(observed_form_, *parsed_submitted_form_,
-                                    best_matches_, &pending_credentials_);
+                                    GetBestMatches(), &pending_credentials_);
     SavePendingToStore(false /*update*/);
   } else {
     ProcessUpdate();
@@ -307,9 +339,6 @@ void PasswordFormManager::Update(const PasswordForm& credentials_to_update) {
   metrics_recorder_->SetSubmissionIndicatorEvent(
       parsed_submitted_form_->submission_event);
 
-  std::unique_ptr<PasswordForm> parsed_observed_form =
-      parser_.Parse(observed_form_, FormDataParser::Mode::kFilling);
-
   base::string16 password_to_save = pending_credentials_.password_value;
   bool skip_zero_click = pending_credentials_.skip_zero_click;
   pending_credentials_ = credentials_to_update;
@@ -328,6 +357,8 @@ void PasswordFormManager::UpdateUsername(const base::string16& new_username) {
   DCHECK(parsed_submitted_form_);
   parsed_submitted_form_->username_value = new_username;
   parsed_submitted_form_->username_element.clear();
+
+  metrics_recorder_->set_username_updated_in_bubble(true);
 
   // |has_username_edited_vote_| is true iff |new_username| was typed in another
   // field. Otherwise, |has_username_edited_vote_| is false and no vote will be
@@ -372,6 +403,12 @@ void PasswordFormManager::UpdatePasswordValue(
   CreatePendingCredentials();
 }
 
+void PasswordFormManager::UpdateSubmissionIndicatorEvent(
+    autofill::mojom::SubmissionIndicatorEvent event) {
+  parsed_submitted_form_->form_data.submission_event = event;
+  parsed_submitted_form_->submission_event = event;
+}
+
 void PasswordFormManager::OnNopeUpdateClicked() {
   votes_uploader_.UploadPasswordVote(*parsed_submitted_form_,
                                      *parsed_submitted_form_,
@@ -384,6 +421,8 @@ void PasswordFormManager::OnNeverClicked() {
   votes_uploader_.UploadPasswordVote(*parsed_submitted_form_,
                                      *parsed_submitted_form_,
                                      autofill::UNKNOWN_TYPE, std::string());
+
+  votes_uploader_.MaybeSendSingleUsernameVote(false /* credentials_saved */);
   PermanentlyBlacklist();
 }
 
@@ -394,28 +433,30 @@ void PasswordFormManager::OnNoInteraction(bool is_update) {
       *parsed_submitted_form_, *parsed_submitted_form_,
       is_update ? autofill::PROBABLY_NEW_PASSWORD : autofill::UNKNOWN_TYPE,
       std::string());
+
+  votes_uploader_.MaybeSendSingleUsernameVote(false /* credentials_saved */);
 }
 
 void PasswordFormManager::PermanentlyBlacklist() {
   DCHECK(!client_->IsIncognito());
+  form_saver_->PermanentlyBlacklist(ConstructObservedFormDigest());
+  newly_blacklisted_ = true;
+}
 
-  if (!new_blacklisted_) {
-    new_blacklisted_ = std::make_unique<PasswordForm>();
-    if (observed_not_web_form_digest_) {
-      new_blacklisted_->origin = observed_not_web_form_digest_->origin;
-      // GetSignonRealm is not suitable for http auth credentials.
-      new_blacklisted_->signon_realm =
-          IsHttpAuth() ? observed_not_web_form_digest_->signon_realm
+PasswordStore::FormDigest PasswordFormManager::ConstructObservedFormDigest() {
+  std::string signon_realm;
+  GURL origin;
+  if (observed_not_web_form_digest_) {
+    origin = observed_not_web_form_digest_->origin;
+    // GetSignonRealm is not suitable for http auth credentials.
+    signon_realm = IsHttpAuth()
+                       ? observed_not_web_form_digest_->signon_realm
                        : GetSignonRealm(observed_not_web_form_digest_->origin);
-    } else {
-      new_blacklisted_->origin = observed_form_.url;
-      new_blacklisted_->signon_realm = GetSignonRealm(observed_form_.url);
-    }
-    new_blacklisted_->scheme = GetScheme();
-    blacklisted_matches_.push_back(new_blacklisted_.get());
+  } else {
+    origin = observed_form_.url;
+    signon_realm = GetSignonRealm(observed_form_.url);
   }
-  *new_blacklisted_ = form_saver_->PermanentlyBlacklist(
-      PasswordStore::FormDigest(*new_blacklisted_));
+  return PasswordStore::FormDigest(GetScheme(), signon_realm, origin);
 }
 
 void PasswordFormManager::OnPasswordsRevealed() {
@@ -480,9 +521,8 @@ bool PasswordFormManager::IsPasswordUpdate() const {
   return password_overridden_;
 }
 
-std::vector<base::WeakPtr<PasswordManagerDriver>>
-PasswordFormManager::GetDrivers() const {
-  return {driver_};
+base::WeakPtr<PasswordManagerDriver> PasswordFormManager::GetDriver() const {
+  return driver_;
 }
 
 const PasswordForm* PasswordFormManager::GetSubmittedForm() const {
@@ -596,13 +636,9 @@ PasswordFormManager::PasswordFormManager(
 
 void PasswordFormManager::OnFetchCompleted() {
   received_stored_credentials_time_ = TimeTicks::Now();
-  best_matches_ = form_fetcher_->GetBestMatches();
-  preferred_match_ = form_fetcher_->GetPreferredMatch();
 
   // Copy out blacklisted matches.
-  new_blacklisted_.reset();
-  blacklisted_matches_ = form_fetcher_->GetBlacklistedMatches();
-
+  newly_blacklisted_ = false;
   autofills_left_ = kMaxTimesAutofill;
 
   if (IsCredentialAPISave()) {
@@ -630,7 +666,8 @@ void PasswordFormManager::OnFetchCompleted() {
 
 bool PasswordFormManager::ProvisionallySave(
     const FormData& submitted_form,
-    const PasswordManagerDriver* driver) {
+    const PasswordManagerDriver* driver,
+    const PossibleUsernameData* possible_username) {
   DCHECK(DoesManage(submitted_form, driver));
 
   std::unique_ptr<PasswordForm> parsed_submitted_form =
@@ -648,7 +685,21 @@ bool PasswordFormManager::ProvisionallySave(
   submitted_form_ = submitted_form;
   is_submitted_ = true;
   CalculateFillingAssistanceMetric(submitted_form);
+  metrics_recorder_->set_possible_username_used(false);
+  votes_uploader_.clear_single_username_vote_data();
 
+  if (IsUsernameFirstFlowFeatureEnabled() &&
+      parsed_submitted_form_->username_value.empty() && possible_username &&
+      IsPossibleUsernameValid(*possible_username,
+                              parsed_submitted_form_->signon_realm,
+                              base::Time::Now())) {
+    parsed_submitted_form_->username_value = possible_username->value;
+    metrics_recorder_->set_possible_username_used(true);
+    if (possible_username->form_predictions) {
+      votes_uploader_.set_single_username_vote_data(
+          possible_username->renderer_id, *possible_username->form_predictions);
+    }
+  }
   CreatePendingCredentials();
   return true;
 }
@@ -721,8 +772,6 @@ void PasswordFormManager::Fill() {
   if (!observed_password_form)
     return;
 
-  RecordMetricOnCompareParsingResult(*observed_password_form);
-
   if (observed_password_form->is_new_password_reliable && !IsBlacklisted()) {
 #if defined(OS_IOS)
     driver_->FormEligibleForGenerationFound(
@@ -745,10 +794,10 @@ void PasswordFormManager::Fill() {
     return;
 #endif
 
-  SendFillInformationToRenderer(client_, driver_.get(),
-                                *observed_password_form.get(), best_matches_,
-                                form_fetcher_->GetFederatedMatches(),
-                                preferred_match_, metrics_recorder_.get());
+  SendFillInformationToRenderer(
+      client_, driver_.get(), *observed_password_form.get(),
+      form_fetcher_->GetBestMatches(), form_fetcher_->GetFederatedMatches(),
+      form_fetcher_->GetPreferredMatch(), metrics_recorder_.get());
 }
 
 void PasswordFormManager::FillForm(const FormData& observed_form) {
@@ -774,7 +823,9 @@ void PasswordFormManager::OnGeneratedPasswordAccepted(
                            return generation_element_id ==
                                   field_data.unique_renderer_id;
                          });
-  DCHECK(it != form_data.fields.end());
+  // The parameters are coming from the renderer and can't be trusted.
+  if (it == form_data.fields.end())
+    return;
   it->value = password;
   std::unique_ptr<PasswordForm> parsed_form =
       ParseFormAndMakeLogging(form_data, FormDataParser::Mode::kSaving);
@@ -801,7 +852,7 @@ PasswordFormManager::PasswordFormManager(
       metrics_recorder_(metrics_recorder),
       owned_form_fetcher_(form_fetcher
                               ? nullptr
-                              : std::make_unique<FormFetcherImpl>(
+                              : FormFetcherImpl::CreateFormFetcherImpl(
                                     std::move(form_digest),
                                     client_,
                                     true /* should_migrate_http_passwords */)),
@@ -813,44 +864,6 @@ PasswordFormManager::PasswordFormManager(
   if (!metrics_recorder_) {
     metrics_recorder_ = base::MakeRefCounted<PasswordFormMetricsRecorder>(
         client_->IsMainFrameSecure(), client_->GetUkmSourceId());
-  }
-}
-
-void PasswordFormManager::RecordMetricOnCompareParsingResult(
-    const PasswordForm& parsed_form) {
-  bool same =
-      parsed_form.username_element == old_parsing_result_.username_element &&
-      parsed_form.password_element == old_parsing_result_.password_element &&
-      parsed_form.new_password_element ==
-          old_parsing_result_.new_password_element &&
-      parsed_form.confirmation_password_element ==
-          old_parsing_result_.confirmation_password_element;
-  if (same) {
-    metrics_recorder_->RecordParsingsComparisonResult(
-        PasswordFormMetricsRecorder::ParsingComparisonResult::kSame);
-    return;
-  }
-
-  // In the old parsing for fields with empty name, placeholders are used. The
-  // reason for this is that an empty "..._element" attribute in a PasswordForm
-  // means that no corresponding input element exists. The new form parsing sets
-  // empty string in that case because renderer ids are used instead of element
-  // names for fields identification. Hence in case of anonymous fields, the
-  // results will be different for sure. Compare to placeholders and record this
-  // case.
-  if (old_parsing_result_.username_element ==
-          base::ASCIIToUTF16("anonymous_username") ||
-      old_parsing_result_.password_element ==
-          base::ASCIIToUTF16("anonymous_password") ||
-      old_parsing_result_.new_password_element ==
-          base::ASCIIToUTF16("anonymous_new_password") ||
-      old_parsing_result_.confirmation_password_element ==
-          base::ASCIIToUTF16("anonymous_confirmation_password")) {
-    metrics_recorder_->RecordParsingsComparisonResult(
-        PasswordFormMetricsRecorder::ParsingComparisonResult::kAnonymousFields);
-  } else {
-    metrics_recorder_->RecordParsingsComparisonResult(
-        PasswordFormMetricsRecorder::ParsingComparisonResult::kDifferent);
   }
 }
 
@@ -891,7 +904,7 @@ void PasswordFormManager::CreatePendingCredentials() {
 
   // Calculate the user's action based on existing matches and the submitted
   // form.
-  metrics_recorder_->CalculateUserAction(best_matches_,
+  metrics_recorder_->CalculateUserAction(GetBestMatches(),
                                          *parsed_submitted_form_);
 
   // This function might be called multiple times so set variables that are
@@ -903,7 +916,7 @@ void PasswordFormManager::CreatePendingCredentials() {
   // Look for the actually submitted credentials in the list of previously saved
   // credentials that were available to autofilling.
   const PasswordForm* saved_form = password_manager_util::GetMatchForUpdating(
-      *parsed_submitted_form_, best_matches_);
+      *parsed_submitted_form_, GetBestMatches());
   if (saved_form) {
     // A similar credential exists in the store already.
     pending_credentials_ = *saved_form;
@@ -1011,7 +1024,8 @@ void PasswordFormManager::CreatePendingCredentialsForNewCredentials(
 
 void PasswordFormManager::ProcessUpdate() {
   DCHECK_EQ(FormFetcher::State::NOT_WAITING, form_fetcher_->GetState());
-  DCHECK(preferred_match_ || pending_credentials_.IsFederatedCredential());
+  DCHECK(form_fetcher_->GetPreferredMatch() ||
+         pending_credentials_.IsFederatedCredential());
   // If we're doing an Update, we either autofilled correctly and need to
   // update the stats, or the user typed in a new password for autofilled
   // username, or the user selected one of the non-preferred matches,
@@ -1041,16 +1055,16 @@ void PasswordFormManager::ProcessUpdate() {
   }
 
   if (pending_credentials_.times_used == 1) {
-    votes_uploader_.UploadFirstLoginVotes(best_matches_, pending_credentials_,
-                                          *parsed_submitted_form_);
+    votes_uploader_.UploadFirstLoginVotes(
+        GetBestMatches(), pending_credentials_, *parsed_submitted_form_);
   }
 }
 
 void PasswordFormManager::FillHttpAuth() {
   DCHECK(IsHttpAuth());
-  if (!preferred_match_)
+  if (!form_fetcher_->GetPreferredMatch())
     return;
-  client_->AutofillHttpAuth(*preferred_match_, this);
+  client_->AutofillHttpAuth(*form_fetcher_->GetPreferredMatch(), this);
 }
 
 std::unique_ptr<PasswordForm> PasswordFormManager::ParseFormAndMakeLogging(
@@ -1135,7 +1149,7 @@ void PasswordFormManager::CalculateFillingAssistanceMetric(
 
 void PasswordFormManager::SavePendingToStore(bool update) {
   const PasswordForm* saved_form = password_manager_util::GetMatchForUpdating(
-      *parsed_submitted_form_, best_matches_);
+      *parsed_submitted_form_, GetBestMatches());
   if ((update || password_overridden_) &&
       !pending_credentials_.IsFederatedCredential()) {
     DCHECK(saved_form);

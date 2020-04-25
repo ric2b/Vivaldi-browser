@@ -10,6 +10,8 @@ import android.content.Context;
 import android.text.TextUtils;
 import android.view.View;
 
+import androidx.browser.customtabs.CustomTabsIntent;
+
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -32,12 +34,11 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserverRegistrar;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.ui.util.TokenHolder;
 
 import javax.inject.Inject;
 import javax.inject.Named;
 
-import androidx.browser.customtabs.CustomTabsIntent;
 import dagger.Lazy;
 
 /**
@@ -69,7 +70,7 @@ public class CustomTabToolbarCoordinator implements InflationObserver {
     private final CustomTabStatusBarColorProvider mStatusBarColorProvider;
     private final CustomTabBrowserControlsVisibilityDelegate mVisibilityDelegate;
 
-    private int mControlsHidingToken = FullscreenManager.INVALID_TOKEN;
+    private int mControlsHidingToken = TokenHolder.INVALID_TOKEN;
     private boolean mInitializedToolbarWithNative;
 
     @Inject
@@ -112,9 +113,7 @@ public class CustomTabToolbarCoordinator implements InflationObserver {
         ToolbarManager manager = mToolbarManager.get();
         assert manager != null : "Toolbar manager not initialized";
 
-        manager.setCloseButtonDrawable(FeatureUtilities.isNoTouchModeEnabled()
-                ? null
-                : mIntentDataProvider.getCloseButtonDrawable());
+        manager.setCloseButtonDrawable(mIntentDataProvider.getCloseButtonDrawable());
         manager.setShowTitle(
                 mIntentDataProvider.getTitleVisibilityState() == CustomTabsIntent.SHOW_PAGE_TITLE);
         if (mConnection.shouldHideDomainForSession(mIntentDataProvider.getSession())) {
@@ -167,12 +166,6 @@ public class CustomTabToolbarCoordinator implements InflationObserver {
             @Override
             public void onPageLoadFinished(Tab tab, String url) {
                 // Update the color when the page load finishes.
-                updateColor(tab);
-            }
-
-            @Override
-            public void didReloadLoFiImages(Tab tab) {
-                // Update the color when the LoFi preview is reloaded.
                 updateColor(tab);
             }
 

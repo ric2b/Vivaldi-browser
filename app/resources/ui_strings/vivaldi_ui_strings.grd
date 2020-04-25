@@ -15,6 +15,7 @@
     <output filename="ui_strings_hy.pak" type="data_package" lang="hy" />
     <output filename="ui_strings_io.pak" type="data_package" lang="io" />
     <output filename="ui_strings_is.pak" type="data_package" lang="is" />
+    <output filename="ui_strings_ja-KS.pak" type="data_package" lang="ja-KS" />
     <output filename="ui_strings_jbo.pak" type="data_package" lang="jbo" />
     <output filename="ui_strings_ka.pak" type="data_package" lang="ka" />
     <output filename="ui_strings_ku.pak" type="data_package" lang="ku" />
@@ -48,6 +49,7 @@
     <file path="strings/vivaldi_ui_strings_id.xtb" lang="id" />
     <file path="strings/vivaldi_ui_strings_it.xtb" lang="it" />
     <file path="strings/vivaldi_ui_strings_ja.xtb" lang="ja" />
+    <file path="strings/vivaldi_ui_strings_ja-KS.xtb" lang="ja-KS" />
     <file path="strings/vivaldi_ui_strings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_ui_strings_ko.xtb" lang="ko" />
     <file path="strings/vivaldi_ui_strings_lt.xtb" lang="lt" />

@@ -20,6 +20,7 @@
 <translation id="1087788677726983142">Sembunyikan penapis strim acara</translation>
 <translation id="1088219014394087294">Tiada tajuk.</translation>
 <translation id="1106741348836243114">Hidupkan atau matikan maklum balas bunyi (earcon).</translation>
+<translation id="1114836634143403764">Cadangan</translation>
 <translation id="1120743664840974483">{"a": "alpha", "b": "bravo", "c": "charlie", "d": "delta", "e": "echo", "f": "foxtrot", "g": "golf", "h": "hotel", "i": "india", "j": "juliet","k": "kilo", "l": "lima", "m": "mike", "n": "november", "o": "oscar","p": "papa", "q": "quebec", "r": "romeo", "s": "sierra", "t": "tango", "u": "uniform", "v": "victor", "w": "whiskey","x": "xray", "y": "yankee", "z": "zulu"}</translation>
 <translation id="1120938014254001895">Leret dua jari ke atas</translation>
 <translation id="1124771028211010580">Gaya paparan semasa adalah bersebelahan.</translation>
@@ -126,6 +127,7 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="1845944666972354496">Ketik dua kali untuk mengaktifkan</translation>
 <translation id="1846771122725914429">Paparan Braille Bluetooth</translation>
 <translation id="1865601187525349519">Penghujung teks</translation>
+<translation id="1875375785454778375">Kehadiran langsung</translation>
 <translation id="1876229593313240038">doc</translation>
 <translation id="188130072164734898">Sebutkan masa dan tarikh semasa.</translation>
 <translation id="1902396333223336119">Sel</translation>
@@ -146,6 +148,7 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="2009187674653301682">Bukan superskrip</translation>
 <translation id="2010555995361223825">Menu ChromeVox</translation>
 <translation id="2045490512405922022">tidak ditandai</translation>
+<translation id="2049107626739254612">Maklumat pengarangan</translation>
 <translation id="20601713649439366">Tiada ungkapan matematik sebelumnya.</translation>
 <translation id="2063539687800151747">Epigraf</translation>
 <translation id="207477615537953741">Semantik dimatikan</translation>
@@ -156,6 +159,7 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="2110480898214777136">Mulakan daripada permulaan kepada penghujung atau daripada penghujung kepada permulaan dalam halaman, dialog atau bekas lain</translation>
 <translation id="2119965627982867824">spnbtn</translation>
 <translation id="2121067395472282800">kekunci akses:<ph name="KEY" /></translation>
+<translation id="2126597928985245619">Tiada teks tersedia bagi item ini</translation>
 <translation id="2127747486437921899">Huruf condong</translation>
 <translation id="2138345533858834403">Menyerupai output paparan braille yang boleh dimuat semula
         dalam panel ChromeVox di sebelah atas skrin.</translation>
@@ -168,6 +172,7 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="2203046366315513658">Kurangkan nilai</translation>
 <translation id="2220529011494928058">Laporkan isu</translation>
 <translation id="2223693656926968778">Ambil tindakan terhadap item semasa</translation>
+<translation id="224426591676115802">Tiada suara yang tersedia untuk bahasa: <ph name="LANGUAGE" /></translation>
 <translation id="225732394367814946">Tingkatkan kadar pertuturan</translation>
 <translation id="2267538686624070261">Meninggalkan kesilapan ejaan</translation>
 <translation id="2267945578749931355">Aksara Seterusnya</translation>
@@ -209,7 +214,6 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="2582407057977008361">Ke sebelah</translation>
 <translation id="2592212930811759050">Ketik dua kali untuk mula mengedit</translation>
 <translation id="2598495320872286378">Kesilapan tatabahasa</translation>
-<translation id="2606210917827248971">dengan {COUNT,plural, =1{# item}other{# item}}</translation>
 <translation id="2614981083756825552">Reka Letak ML Matematik</translation>
 <translation id="2624431853467395961">Buka mod belajar</translation>
 <translation id="2626530649491650971">boleh klik</translation>
@@ -236,6 +240,7 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="27527859628328957">Langkau ke item boleh fokus seterusnya</translation>
 <translation id="2770781857296573485">Masukkan penerokaan kumpulan</translation>
 <translation id="2777845298774924149">Keluar</translation>
+<translation id="2783001728278437613">{COUNT,plural, =1{+#}other{+#}}</translation>
 <translation id="2784959586797362050">Seperti biasa, anda boleh menghantar terus maklum balas dengan menekan Carian+a, kemudian i. Kami mengalu-alukan pendapat daripada anda.</translation>
 <translation id="2800204403141299078">Tiada lagi unsur yang berbeza.</translation>
 <translation id="2800780099804980316">Tiada tajuk tahap 1 terdahulu.</translation>
@@ -261,6 +266,7 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="2911433807131383493">Buka tutorial ChromeVox</translation>
 <translation id="2912405967290226587">Leret tiga jari ke kanan</translation>
 <translation id="2932083475399492303">Togol jenis baris antara struktur atau reka letak</translation>
+<translation id="293796669683825859">Ulasan</translation>
 <translation id="2942710183375260152">Biru Loh Gelap</translation>
 <translation id="2943596527105977722">Batang Emas Gelap</translation>
 <translation id="2944762337049891859">Baca halaman secara automatik selepas selesai dimuatkan.</translation>
@@ -322,6 +328,7 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="3241052487511142956">Pautan yang dilawati sebelumnya</translation>
 <translation id="3241638166094654466">Sel dalam setiap baris:</translation>
 <translation id="3244209481693235975"><ph name="LANGUAGE" />: <ph name="CONTENT" /></translation>
+<translation id="3260949043575829030">Item serupa sebelumnya</translation>
 <translation id="3286372614333682499">potret</translation>
 <translation id="3286390186030710347">Peluncur</translation>
 <translation id="3299925995433437805">Tiada pautan yang dilawati seterusnya.</translation>
@@ -337,6 +344,7 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="3324983252691184275">Merah lembayung</translation>
 <translation id="3338224621010291843">Peluncur <ph name="VALUE" /> <ph name="NAME" /></translation>
 <translation id="335581015389089642">Pertuturan</translation>
+<translation id="3356951775008366684">Umumkan sebutan fonetik untuk perkataan</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{campur}other{# tanda campur}}</translation>
 <translation id="338583716107319301">Pemisah</translation>
@@ -375,6 +383,7 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="3646890046000188562">{COUNT,plural, =1{tanda belakang}other{# tanda belakang}}</translation>
 <translation id="3650317109285159359">chkmnuitm</translation>
 <translation id="3655855170848725876">{COUNT,plural, =1{dolar}other{# tanda dolar}}</translation>
+<translation id="3658742229777143148">Semakan</translation>
 <translation id="3659787053479271466">alrt</translation>
 <translation id="3665563998540286755">Kotak senarai, <ph name="VALUE" /></translation>
 <translation id="3681531118904532409">Air Betik</translation>
@@ -393,7 +402,6 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="3781428340399460090">Merah Jambu Hangat</translation>
 <translation id="3783725005098956899">Tunjukkan Log</translation>
 <translation id="3793710123303304873">Keluar dari dialog.</translation>
-<translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">Senarai autolengkap</translation>
 <translation id="3810838688059735925">Video</translation>
 <translation id="3813387282697781382">Batu Karang Cerah</translation>
@@ -503,6 +511,7 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="4517854969512651305">Tingkatkan nilai</translation>
 <translation id="4529987814483543472">Peta kekunci klasik</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{garis condong}other{# garis condong}}</translation>
+<translation id="4537277403911487429">Item serupa seterusnya</translation>
 <translation id="4547556996012970016">Tajuk tahap 5 seterusnya</translation>
 <translation id="4562381607973973258">Pengepala</translation>
 <translation id="4569941707103739422">Tekan anak panah ke atas atau ke bawah untuk menavigasi; enter untuk mengaktifkan.</translation>
@@ -533,6 +542,7 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="4763480195061959176">video</translation>
 <translation id="4764692524839457597">lalai</translation>
 <translation id="4772771694153161212">Tidak bergaris bawah</translation>
+<translation id="4787577491510559358">Umumkan pemformatan untuk item semasa</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">Putuskan sambungan</translation>
 <translation id="481165870889056555">Umumkan tajuk halaman semasa</translation>
@@ -569,6 +579,7 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="4983588134362688868">Langkau ke bahagian atas halaman</translation>
 <translation id="4986606102545753256">Tetingkap, <ph name="NAME" /></translation>
 <translation id="4993152509206108683">Kadar <ph name="PERCENT" /> peratus</translation>
+<translation id="4994420463726586413">Umumkan status bateri semasa</translation>
 <translation id="4996716799442435517">Visual</translation>
 <translation id="4997282455736854877">Butang radio, <ph name="NAME" /> dipilih</translation>
 <translation id="4997475792277222884">Tiada item seterusnya yang bukan pautan.</translation>
@@ -717,6 +728,7 @@ Jika anda ingin keluar daripada tutorial, gunakan ChromeVox untuk menavigasi ke 
 <translation id="5956928062748260866">Dialog</translation>
 <translation id="5963413905009737549">Bahagian</translation>
 <translation id="5968607524793740041">Paparkan menu konteks</translation>
+<translation id="597121107011153418">{COUNT,plural, =1{yang mengandungi # item}other{yang mengandungi # item}}</translation>
 <translation id="5981446804259161541">Sian Cerah</translation>
 <translation id="5983179082906765664">Tingkatkan kebutiran navigasi</translation>
 <translation id="5992285135956208197">Dokumen grafik</translation>

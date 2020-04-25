@@ -55,12 +55,12 @@ enum class PreviewsEligibilityReason {
   // DEPRECATED: The host is explicitly blacklisted by the server, so the user
   // was not shown
   // a preview.
-  // Replaced by NOT_ALLOWED_BY_OPTIMIZATION_HINTS.
+  // Replaced by NOT_ALLOWED_BY_OPTIMIZATION_GUIDE.
   DEPRECATED_HOST_BLACKLISTED_BY_SERVER = 9,
   // DEPRECATED: The host is not whitelisted by the server for a preview
   // decision that uses
   // server optimization hints.
-  // Replaced by NOT_ALLOWED_BY_OPTIMIZATION_HINTS.
+  // Replaced by NOT_ALLOWED_BY_OPTIMIZATION_GUIDE.
   DEPRECATED_HOST_NOT_WHITELISTED_BY_SERVER = 10,
   // The preview is allowed but without an expected check of server optimization
   // hints because they are not enabled (features::kOptimizationHints).
@@ -87,6 +87,10 @@ enum class PreviewsEligibilityReason {
   NOT_ALLOWED_BY_OPTIMIZATION_GUIDE = 19,
   // The preview was not performed due to a coinflip experiment holdback.
   COINFLIP_HOLDBACK = 20,
+  // A redirect loop was detected.
+  REDIRECT_LOOP_DETECTED = 21,
+  // URL matched the deny list.
+  DENY_LIST_MATCHED = 22,
   LAST,
 };
 

@@ -29,6 +29,9 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #import "ios/chrome/browser/passwords/save_passwords_consumer.h"
+#import "ios/chrome/browser/signin/authentication_service.h"
+#include "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/chrome_identity_service_observer_bridge.h"
 #include "ios/chrome/browser/system_flags.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_cells_constants.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_cell.h"
@@ -151,6 +154,7 @@ std::vector<std::unique_ptr<autofill::PasswordForm>> CopyOf(
 
 @interface PasswordsTableViewController () <
     BooleanObserver,
+    ChromeIdentityServiceObserver,
     PasswordDetailsTableViewControllerDelegate,
     PasswordExporterDelegate,
     PasswordExportActivityViewControllerDelegate,
@@ -182,6 +186,8 @@ std::vector<std::unique_ptr<autofill::PasswordForm>> CopyOf(
   password_manager::DuplicatesMap blacklistedPasswordDuplicates_;
   // The current Chrome browser state.
   ios::ChromeBrowserState* browserState_;
+  // Authentication Service Observer.
+  std::unique_ptr<ChromeIdentityServiceObserverBridge> identityServiceObserver_;
   // Object storing the time of the previous successful re-authentication.
   // This is meant to be used by the |ReauthenticationModule| for keeping
   // re-authentications valid for a certain time interval within the scope
@@ -472,16 +478,18 @@ std::vector<std::unique_ptr<autofill::PasswordForm>> CopyOf(
 #pragma mark - BooleanObserver
 
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
-  DCHECK_EQ(observableBoolean, passwordManagerEnabled_);
+  if (observableBoolean == passwordManagerEnabled_) {
+    // Update the item.
+    savePasswordsItem_.on = [passwordManagerEnabled_ value];
 
-  // Update the item.
-  savePasswordsItem_.on = [passwordManagerEnabled_ value];
-
-  // Update the cell if it's not removed by presenting search controller.
-  if ([self.tableViewModel
-          hasItemForItemType:ItemTypeSavePasswordsSwitch
-           sectionIdentifier:SectionIdentifierSavePasswordsSwitch]) {
-    [self reconfigureCellsForItems:@[ savePasswordsItem_ ]];
+    // Update the cell if it's not removed by presenting search controller.
+    if ([self.tableViewModel
+            hasItemForItemType:ItemTypeSavePasswordsSwitch
+             sectionIdentifier:SectionIdentifierSavePasswordsSwitch]) {
+      [self reconfigureCellsForItems:@[ savePasswordsItem_ ]];
+    }
+  } else {
+    NOTREACHED();
   }
 }
 
@@ -623,6 +631,7 @@ std::vector<std::unique_ptr<autofill::PasswordForm>> CopyOf(
     // a scrollView and it seems that we get an empty frame when attaching to
     // it.
     AddSameConstraints(self.scrimView, self.view.superview);
+    self.tableView.accessibilityElementsHidden = YES;
     self.tableView.scrollEnabled = NO;
     [UIView animateWithDuration:kTableViewNavigationScrimFadeDuration
                      animations:^{
@@ -641,6 +650,7 @@ std::vector<std::unique_ptr<autofill::PasswordForm>> CopyOf(
         }
         completion:^(BOOL finished) {
           [self.scrimView removeFromSuperview];
+          self.tableView.accessibilityElementsHidden = NO;
           self.tableView.scrollEnabled = YES;
         }];
   }
@@ -663,10 +673,11 @@ std::vector<std::unique_ptr<autofill::PasswordForm>> CopyOf(
     [indexSet addIndex:blacklistedSection];
   }
   if (indexSet.count > 0) {
+    BOOL animationsWereEnabled = [UIView areAnimationsEnabled];
     [UIView setAnimationsEnabled:NO];
     [self.tableView reloadSections:indexSet
                   withRowAnimation:UITableViewRowAnimationAutomatic];
-    [UIView setAnimationsEnabled:YES];
+    [UIView setAnimationsEnabled:animationsWereEnabled];
   }
 }
 
@@ -1190,6 +1201,16 @@ std::vector<std::unique_ptr<autofill::PasswordForm>> CopyOf(
 
 - (PasswordExporter*)getPasswordExporter {
   return _passwordExporter;
+}
+
+#pragma mark - ChromeIdentityServiceObserver
+
+- (void)identityListChanged {
+  [self reloadData];
+}
+
+- (void)chromeIdentityServiceWillBeDestroyed {
+  identityServiceObserver_.reset();
 }
 
 @end

@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
@@ -43,6 +44,8 @@ class UnrecoverableErrorHandler;
 // interface will handle crossing threads if necessary.
 class SyncEngine : public ModelTypeConfigurer {
  public:
+  using AllNodesCallback =
+      base::OnceCallback<void(ModelType, std::unique_ptr<base::ListValue>)>;
   using HttpPostProviderFactoryGetter =
       base::OnceCallback<std::unique_ptr<HttpPostProviderFactory>(
           CancelationSignal*)>;
@@ -132,6 +135,15 @@ class SyncEngine : public ModelTypeConfigurer {
   // are no pending keys.
   virtual void SetDecryptionPassphrase(const std::string& passphrase) = 0;
 
+  // Analogous to SetDecryptionPassphrase but specifically for
+  // TRUSTED_VAULT_PASSPHRASE: it provides new decryption keys that could
+  // allow decrypting pending Nigori keys. Notifies observers of the result of
+  // the operation via OnTrustedVaultKeyAccepted if the provided keys
+  // successfully decrypted pending keys. |done_cb| is invoked at the very end.
+  virtual void AddTrustedVaultDecryptionKeys(
+      const std::vector<std::string>& keys,
+      base::OnceClosure done_cb) = 0;
+
   // Kick off shutdown procedure. Attempts to cut short any long-lived or
   // blocking sync thread tasks so that the shutdown on sync thread task that
   // we're about to post won't have to wait very long.
@@ -189,6 +201,9 @@ class SyncEngine : public ModelTypeConfigurer {
 
   // Enables/Disables invalidations for session sync related datatypes.
   virtual void SetInvalidationsForSessionsEnabled(bool enabled) = 0;
+
+  // Returns a ListValue representing Nigori node.
+  virtual void GetNigoriNodeForDebugging(AllNodesCallback callback) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SyncEngine);

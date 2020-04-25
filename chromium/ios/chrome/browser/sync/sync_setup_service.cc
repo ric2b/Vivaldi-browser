@@ -12,7 +12,6 @@
 #include "components/sync/base/user_selectable_type.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
-#include "components/unified_consent/feature.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 
 namespace {
@@ -150,7 +149,8 @@ SyncSetupService::SyncServiceState SyncSetupService::GetSyncServiceState() {
   }
   if (sync_service_->HasUnrecoverableError())
     return kSyncServiceUnrecoverableError;
-  if (sync_service_->GetUserSettings()->IsPassphraseRequiredForDecryption())
+  if (sync_service_->GetUserSettings()
+          ->IsPassphraseRequiredForPreferredDataTypes())
     return kSyncServiceNeedsPassphrase;
   if (!IsFirstSetupComplete() && IsSyncEnabled())
     return kSyncSettingsNotConfirmed;
@@ -174,13 +174,13 @@ void SyncSetupService::PrepareForFirstSyncSetup() {
     sync_blocker_ = sync_service_->GetSetupInProgressHandle();
 }
 
-void SyncSetupService::SetFirstSetupComplete() {
-  DCHECK(unified_consent::IsUnifiedConsentFeatureEnabled());
+void SyncSetupService::SetFirstSetupComplete(
+    syncer::SyncFirstSetupCompleteSource source) {
   DCHECK(sync_blocker_);
   // Turn on the sync setup completed flag only if the user did not turn sync
   // off.
   if (sync_service_->CanSyncFeatureStart()) {
-    sync_service_->GetUserSettings()->SetFirstSetupComplete();
+    sync_service_->GetUserSettings()->SetFirstSetupComplete(source);
   }
 }
 
@@ -188,21 +188,7 @@ bool SyncSetupService::IsFirstSetupComplete() const {
   return sync_service_->GetUserSettings()->IsFirstSetupComplete();
 }
 
-void SyncSetupService::PreUnityCommitChanges() {
-  DCHECK(!unified_consent::IsUnifiedConsentFeatureEnabled());
-  // If this was the first Sync setup and the user did not turn Sync off, then
-  // turn on the first-setup-complete flag now.
-  if (sync_service_->IsSetupInProgress() &&
-      !sync_service_->GetUserSettings()->IsFirstSetupComplete() &&
-      sync_service_->CanSyncFeatureStart()) {
-    sync_service_->GetUserSettings()->SetFirstSetupComplete();
-  }
-
-  sync_blocker_.reset();
-}
-
 void SyncSetupService::CommitSyncChanges() {
-  DCHECK(unified_consent::IsUnifiedConsentFeatureEnabled());
   sync_blocker_.reset();
 }
 

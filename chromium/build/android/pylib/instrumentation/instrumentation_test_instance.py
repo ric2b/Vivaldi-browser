@@ -446,6 +446,8 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._additional_apks = []
     self._apk_under_test = None
     self._apk_under_test_incremental_install_json = None
+    self._modules = None
+    self._fake_modules = None
     self._package_info = None
     self._suite = None
     self._test_apk = None
@@ -506,7 +508,8 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   def _initializeApkAttributes(self, args, error_func):
     if args.apk_under_test:
       apk_under_test_path = args.apk_under_test
-      if not args.apk_under_test.endswith('.apk'):
+      if (not args.apk_under_test.endswith('.apk')
+          and not args.apk_under_test.endswith('.apks')):
         apk_under_test_path = os.path.join(
             constants.GetOutDirectory(), constants.SDK_BUILD_APKS_DIR,
             '%s.apk' % args.apk_under_test)
@@ -520,24 +523,20 @@ class InstrumentationTestInstance(test_instance.TestInstance):
 
       self._apk_under_test = apk_helper.ToHelper(apk_under_test_path)
 
-    if args.test_apk.endswith('.apk'):
-      self._suite = os.path.splitext(os.path.basename(args.test_apk))[0]
-      test_apk_path = args.test_apk
-      self._test_apk = apk_helper.ToHelper(args.test_apk)
-    else:
-      self._suite = args.test_apk
+    test_apk_path = args.test_apk
+    if not os.path.exists(test_apk_path):
       test_apk_path = os.path.join(
           constants.GetOutDirectory(), constants.SDK_BUILD_APKS_DIR,
           '%s.apk' % args.test_apk)
-
-    # TODO(jbudorick): Move the realpath up to the argument parser once
-    # APK-by-name is no longer supported.
-    test_apk_path = os.path.realpath(test_apk_path)
+      # TODO(jbudorick): Move the realpath up to the argument parser once
+      # APK-by-name is no longer supported.
+      test_apk_path = os.path.realpath(test_apk_path)
 
     if not os.path.exists(test_apk_path):
       error_func('Unable to find test APK: %s' % test_apk_path)
 
     self._test_apk = apk_helper.ToHelper(test_apk_path)
+    self._suite = os.path.splitext(os.path.basename(args.test_apk))[0]
 
     self._apk_under_test_incremental_install_json = (
         args.apk_under_test_incremental_install_json)
@@ -548,13 +547,14 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       assert self._suite.endswith('_incremental')
       self._suite = self._suite[:-len('_incremental')]
 
+    self._modules = args.modules
+    self._fake_modules = args.fake_modules
+
     self._test_jar = args.test_jar
     self._test_support_apk = apk_helper.ToHelper(os.path.join(
         constants.GetOutDirectory(), constants.SDK_BUILD_TEST_JAVALIB_DIR,
         '%sSupport.apk' % self._suite))
 
-    if not os.path.exists(self._test_apk.path):
-      error_func('Unable to find test APK: %s' % self._test_apk.path)
     if not self._test_jar:
       logging.warning('Test jar not specified. Test runner will not have '
                       'Java annotation info available. May not handle test '
@@ -655,7 +655,10 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       with open(args.device_flags_file) as device_flags_file:
         stripped_lines = (l.strip() for l in device_flags_file)
         self._flags.extend(flag for flag in stripped_lines if flag)
-    if args.strict_mode and args.strict_mode != 'off':
+    if args.strict_mode and args.strict_mode != 'off' and (
+        # TODO(yliuyliu): Turn on strict mode for coverage once
+        # crbug/1006397 is fixed.
+        not args.coverage_dir):
       self._flags.append('--strict-mode=' + args.strict_mode)
 
   def _initializeDriverAttributes(self):
@@ -715,6 +718,14 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   @property
   def apk_under_test_incremental_install_json(self):
     return self._apk_under_test_incremental_install_json
+
+  @property
+  def modules(self):
+    return self._modules
+
+  @property
+  def fake_modules(self):
+    return self._fake_modules
 
   @property
   def coverage_directory(self):

@@ -187,6 +187,10 @@ SkColor ChromeTypographyProvider::GetColor(const views::View& view,
   const ui::NativeTheme* native_theme = view.GetNativeTheme();
   DCHECK(native_theme);
   if (ShouldIgnoreHarmonySpec(*native_theme)) {
+    if (context == views::style::CONTEXT_MENU ||
+        context == views::style::CONTEXT_TOUCH_MENU) {
+      return TypographyProvider::GetColor(view, context, style);
+    }
     return GetHarmonyTextColorForNonStandardNativeTheme(context, style,
                                                         *native_theme);
   }
@@ -211,6 +215,12 @@ SkColor ChromeTypographyProvider::GetColor(const views::View& view,
     } else if (style == STYLE_PRIMARY_MONOSPACED) {
       style = STYLE_SECONDARY_MONOSPACED;
     }
+  }
+
+  if (context == views::style::CONTEXT_MENU &&
+      style == views::style::STYLE_DISABLED &&
+      native_theme->ShouldUseDarkColors()) {
+    return gfx::kGoogleGrey600;
   }
 
   switch (style) {

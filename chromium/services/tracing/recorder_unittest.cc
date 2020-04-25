@@ -25,15 +25,17 @@ class RecorderTest : public testing::Test {
     message_loop_.reset();
   }
 
-  void CreateRecorder(mojom::RecorderRequest request,
+  void CreateRecorder(mojo::PendingReceiver<mojom::Recorder> receiver,
                       mojom::TraceDataType data_type,
-                      const base::Closure& callback) {
-    recorder_.reset(new Recorder(std::move(request), data_type, callback));
+                      const base::RepeatingClosure& callback) {
+    recorder_.reset(new Recorder(std::move(receiver), data_type, callback));
   }
 
   void CreateRecorder(mojom::TraceDataType data_type,
-                      const base::Closure& callback) {
-    CreateRecorder(nullptr, data_type, callback);
+                      const base::RepeatingClosure& callback) {
+    mojo::PendingRemote<mojom::Recorder> dead_end_remote;
+    CreateRecorder(dead_end_remote.InitWithNewPipeAndPassReceiver(), data_type,
+                   callback);
   }
 
   void AddChunk(const std::string& chunk) { recorder_->AddChunk(chunk); }
@@ -116,17 +118,18 @@ TEST_F(RecorderTest, OnConnectionError) {
   base::RunLoop run_loop;
   size_t num_calls = 0;
   {
-    mojom::RecorderPtr ptr;
-    auto request = MakeRequest(&ptr);
-    CreateRecorder(std::move(request), mojom::TraceDataType::STRING,
-                   base::BindRepeating(
-                       [](size_t* num_calls, base::Closure quit_closure) {
-                         (*num_calls)++;
-                         quit_closure.Run();
-                       },
-                       base::Unretained(&num_calls), run_loop.QuitClosure()));
+    mojo::PendingRemote<mojom::Recorder> remote;
+    auto receiver = remote.InitWithNewPipeAndPassReceiver();
+    CreateRecorder(
+        std::move(receiver), mojom::TraceDataType::STRING,
+        base::BindRepeating(
+            [](size_t* num_calls, base::RepeatingClosure quit_closure) {
+              (*num_calls)++;
+              quit_closure.Run();
+            },
+            base::Unretained(&num_calls), run_loop.QuitClosure()));
   }
-  // |ptr| is deleted at this point and so the recorder should notify us that
+  // |remote| is deleted at this point and so the recorder should notify us that
   // the client is not going to send any more data by running the callback.
   run_loop.Run();
   EXPECT_EQ(1u, num_calls);

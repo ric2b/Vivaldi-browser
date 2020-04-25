@@ -11,15 +11,19 @@
 
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/window_state_type.h"
+#include "ash/rotator/screen_rotation_animator_observer.h"
 #include "base/compiler_specific.h"
+#include "base/scoped_observer.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
-#include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/model.mojom.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "ui/base/clipboard/clipboard_monitor.h"
+#include "ui/base/clipboard/clipboard_observer.h"
+#include "ui/display/display.h"
 #include "ui/snapshot/screenshot_grabber.h"
 
 namespace crostini {
@@ -27,6 +31,18 @@ enum class CrostiniResult;
 }
 
 namespace extensions {
+
+class AssistantInteractionHelper;
+
+class AutotestPrivateInitializeEventsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.initializeEvents",
+                             AUTOTESTPRIVATE_INITIALIZEEVENTS)
+
+ private:
+  ~AutotestPrivateInitializeEventsFunction() override;
+  ResponseAction Run() override;
+};
 
 class AutotestPrivateLogoutFunction : public ExtensionFunction {
  public:
@@ -317,6 +333,26 @@ class AutotestPrivateCloseAppFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class AutotestPrivateGetClipboardTextDataFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.getClipboardTextData",
+                             AUTOTESTPRIVATE_GETCLIPBOARDTEXTDATA)
+
+ private:
+  ~AutotestPrivateGetClipboardTextDataFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateSetClipboardTextDataFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.setClipboardTextData",
+                             AUTOTESTPRIVATE_SETCLIPBOARDTEXTDATA)
+
+ private:
+  ~AutotestPrivateSetClipboardTextDataFunction() override;
+  ResponseAction Run() override;
+};
+
 class AutotestPrivateSetCrostiniEnabledFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autotestPrivate.setCrostiniEnabled",
@@ -392,6 +428,21 @@ class AutotestPrivateTakeScreenshotFunction : public ExtensionFunction {
 
  private:
   ~AutotestPrivateTakeScreenshotFunction() override;
+  ResponseAction Run() override;
+
+  void ScreenshotTaken(std::unique_ptr<ui::ScreenshotGrabber> grabber,
+                       ui::ScreenshotResult screenshot_result,
+                       scoped_refptr<base::RefCountedMemory> png_data);
+};
+
+class AutotestPrivateTakeScreenshotForDisplayFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.takeScreenshotForDisplay",
+                             AUTOTESTPRIVATE_TAKESCREENSHOTFORDISPLAY)
+
+ private:
+  ~AutotestPrivateTakeScreenshotForDisplayFunction() override;
   ResponseAction Run() override;
 
   void ScreenshotTaken(std::unique_ptr<ui::ScreenshotGrabber> grabber,
@@ -483,21 +534,18 @@ class AutotestPrivateSetAssistantEnabledFunction
   ResponseAction Run() override;
 
   // ash::AssistantStateObserver overrides:
-  void OnAssistantStatusChanged(
-      ash::mojom::VoiceInteractionState state) override;
+  void OnAssistantStatusChanged(ash::mojom::AssistantState state) override;
 
   // Called when the Assistant service does not respond in a timely fashion. We
   // will respond with an error.
   void Timeout();
 
-  base::Optional<ash::mojom::VoiceInteractionState> expected_state_;
+  base::Optional<bool> enabled_;
   base::OneShotTimer timeout_timer_;
 };
 
 // Send text query to Assistant and return response.
-class AutotestPrivateSendAssistantTextQueryFunction
-    : public ExtensionFunction,
-      public chromeos::assistant::mojom::AssistantInteractionSubscriber {
+class AutotestPrivateSendAssistantTextQueryFunction : public ExtensionFunction {
  public:
   AutotestPrivateSendAssistantTextQueryFunction();
   DECLARE_EXTENSION_FUNCTION("autotestPrivate.sendAssistantTextQuery",
@@ -507,44 +555,39 @@ class AutotestPrivateSendAssistantTextQueryFunction
   ~AutotestPrivateSendAssistantTextQueryFunction() override;
   ResponseAction Run() override;
 
-  using AssistantInteractionMetadataPtr =
-      chromeos::assistant::mojom::AssistantInteractionMetadataPtr;
-  using AssistantInteractionResolution =
-      chromeos::assistant::mojom::AssistantInteractionResolution;
-  using AssistantSuggestionPtr =
-      chromeos::assistant::mojom::AssistantSuggestionPtr;
-
-  // chromeos::assistant::mojom::AssistantInteractionSubscriber:
-  void OnHtmlResponse(const std::string& response,
-                      const std::string& fallback) override;
-  void OnTextResponse(const std::string& response) override;
-  void OnInteractionFinished(
-      AssistantInteractionResolution resolution) override;
-  void OnInteractionStarted(AssistantInteractionMetadataPtr metadata) override {
-  }
-  void OnSuggestionsResponse(
-      std::vector<AssistantSuggestionPtr> response) override {}
-  void OnOpenUrlResponse(const GURL& url, bool in_background) override {}
-  void OnSpeechRecognitionStarted() override {}
-  void OnSpeechRecognitionIntermediateResult(
-      const std::string& high_confidence_text,
-      const std::string& low_confidence_text) override {}
-  void OnSpeechRecognitionEndOfUtterance() override {}
-  void OnSpeechRecognitionFinalResult(
-      const std::string& final_result) override {}
-  void OnSpeechLevelUpdated(float speech_level) override {}
-  void OnTtsStarted(bool due_to_error) override {}
-  void OnWaitStarted() override {}
+  // Called when the interaction finished with non-empty response.
+  void OnInteractionFinishedCallback(bool success);
 
   // Called when Assistant service fails to respond in a certain amount of
   // time. We will respond with an error.
   void Timeout();
 
-  chromeos::assistant::mojom::AssistantPtr assistant_;
-  mojo::Binding<chromeos::assistant::mojom::AssistantInteractionSubscriber>
-      assistant_interaction_subscriber_binding_;
+  std::unique_ptr<AssistantInteractionHelper> interaction_helper_;
   base::OneShotTimer timeout_timer_;
-  std::unique_ptr<base::DictionaryValue> result_;
+};
+
+// Wait for the next text/voice query interaction completed and respond with
+// the query status if any valid response was caught before time out.
+class AutotestPrivateWaitForAssistantQueryStatusFunction
+    : public ExtensionFunction {
+ public:
+  AutotestPrivateWaitForAssistantQueryStatusFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.waitForAssistantQueryStatus",
+                             AUTOTESTPRIVATE_WAITFORASSISTANTQUERYSTATUS)
+
+ private:
+  ~AutotestPrivateWaitForAssistantQueryStatusFunction() override;
+  ResponseAction Run() override;
+
+  // Called when the current interaction finished with non-empty response.
+  void OnInteractionFinishedCallback(bool success);
+
+  // Called when Assistant service fails to respond in a certain amount of
+  // time. We will respond with an error.
+  void Timeout();
+
+  std::unique_ptr<AssistantInteractionHelper> interaction_helper_;
+  base::OneShotTimer timeout_timer_;
 };
 
 // Set user pref value in the pref tree.
@@ -570,7 +613,8 @@ class AutotestPrivateSetCrostiniAppScaledFunction : public ExtensionFunction {
 };
 
 // The profile-keyed service that manages the autotestPrivate extension API.
-class AutotestPrivateAPI : public BrowserContextKeyedAPI {
+class AutotestPrivateAPI : public BrowserContextKeyedAPI,
+                           public ui::ClipboardObserver {
  public:
   static BrowserContextKeyedAPIFactory<AutotestPrivateAPI>*
   GetFactoryInstance();
@@ -582,7 +626,7 @@ class AutotestPrivateAPI : public BrowserContextKeyedAPI {
  private:
   friend class BrowserContextKeyedAPIFactory<AutotestPrivateAPI>;
 
-  AutotestPrivateAPI();
+  explicit AutotestPrivateAPI(content::BrowserContext* context);
   ~AutotestPrivateAPI() override;
 
   // BrowserContextKeyedAPI implementation.
@@ -590,6 +634,13 @@ class AutotestPrivateAPI : public BrowserContextKeyedAPI {
   static const bool kServiceIsNULLWhileTesting = true;
   static const bool kServiceRedirectedInIncognito = true;
 
+  // ui::ClipboardObserver
+  void OnClipboardDataChanged() override;
+
+  ScopedObserver<ui::ClipboardMonitor, ui::ClipboardObserver>
+      clipboard_observer_;
+
+  content::BrowserContext* const browser_context_;
   bool test_mode_;  // true for AutotestPrivateApiTest.AutotestPrivate test.
 };
 
@@ -778,6 +829,38 @@ class AutotestPrivateGetArcAppWindowInfoFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+// Starts ARC app performance tracing for the current ARC app window.
+class AutotestPrivateArcAppTracingStartFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateArcAppTracingStartFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.arcAppTracingStart",
+                             AUTOTESTPRIVATE_ARCAPPTRACINGSTART)
+
+ private:
+  ~AutotestPrivateArcAppTracingStartFunction() override;
+  ResponseAction Run() override;
+};
+
+// Stops active ARC app performance tracing if it was active and analyzes
+// results. Result is returned to the previously registered callback for
+// traceActiveArcAppStart.
+class AutotestPrivateArcAppTracingStopAndAnalyzeFunction
+    : public ExtensionFunction {
+ public:
+  AutotestPrivateArcAppTracingStopAndAnalyzeFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.arcAppTracingStopAndAnalyze",
+                             AUTOTESTPRIVATE_ARCAPPTRACINGSTOPANDANALYZE)
+
+ private:
+  ~AutotestPrivateArcAppTracingStopAndAnalyzeFunction() override;
+  ResponseAction Run() override;
+
+  void OnTracingResult(bool success,
+                       double fps,
+                       double commit_deviation,
+                       double render_quality);
+};
+
 class AutotestPrivateSwapWindowsInSplitViewFunction : public ExtensionFunction {
  public:
   AutotestPrivateSwapWindowsInSplitViewFunction();
@@ -787,6 +870,28 @@ class AutotestPrivateSwapWindowsInSplitViewFunction : public ExtensionFunction {
  private:
   ~AutotestPrivateSwapWindowsInSplitViewFunction() override;
   ResponseAction Run() override;
+};
+
+class AutotestPrivateWaitForDisplayRotationFunction
+    : public ExtensionFunction,
+      public ash::ScreenRotationAnimatorObserver {
+ public:
+  AutotestPrivateWaitForDisplayRotationFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.waitForDisplayRotation",
+                             AUTOTESTPRIVATE_WAITFORDISPLAYROTATION)
+
+  void OnScreenCopiedBeforeRotation() override;
+  void OnScreenRotationAnimationFinished(ash::ScreenRotationAnimator* animator,
+                                         bool canceled) override;
+
+ private:
+  ~AutotestPrivateWaitForDisplayRotationFunction() override;
+  ResponseAction Run() override;
+
+  int64_t display_id_ = display::kInvalidDisplayId;
+  display::Display::Rotation target_rotation_ = display::Display::ROTATE_0;
+  // A reference to keep the instance alive while waiting for rotation.
+  scoped_refptr<ExtensionFunction> self_;
 };
 
 template <>

@@ -41,16 +41,17 @@ namespace {
 
 // This function is called to check if window[i] is eligible to be carried over
 // to split view mode during clamshell <-> tablet mode transition or multi-user
-// switch transition. Returns true if windows[i] exists, can snap in split view,
-// is not showing in overview, and is not ARC window.
+// switch transition. Returns true if windows[i] exists, is on |root_window|,
+// can snap in split view, and is not an ARC window.
 // TODO(xdai): Make it work for ARC windows. (see
 // https://crbug.com/922282 and
 // https://buganizer.corp.google.com/issues/123432223).
 bool IsCarryOverCandidateForSplitView(
     const MruWindowTracker::WindowList& windows,
-    size_t i) {
-  return windows.size() > i && CanSnapInSplitview(windows[i]) &&
-         !windows[i]->GetProperty(kIsShowingInOverviewKey) &&
+    size_t i,
+    aura::Window* root_window) {
+  return windows.size() > i && windows[i]->GetRootWindow() == root_window &&
+         CanSnapInSplitview(windows[i]) &&
          static_cast<ash::AppType>(windows[i]->GetProperty(
              aura::client::kAppType)) != AppType::ARC_APP;
 }
@@ -61,16 +62,23 @@ bool IsCarryOverCandidateForSplitView(
 base::flat_map<aura::Window*, WindowStateType>
 GetCarryOverWindowsInSplitView() {
   base::flat_map<aura::Window*, WindowStateType> windows;
-  // Check the topmost window and the second topmost's window state to see if
-  // they are eligible to be carried over to splitscreen. A window must meet
+  // Check the states of the topmost two non-overview windows to see if they are
+  // eligible to be carried over to splitscreen. A window must meet
   // IsCarryOverCandidateForSplitView() to be carried over to splitscreen.
   MruWindowTracker::WindowList mru_windows =
       Shell::Get()->mru_window_tracker()->BuildWindowForCycleList(kActiveDesk);
-  if (IsCarryOverCandidateForSplitView(mru_windows, 0u)) {
+  mru_windows.erase(
+      std::remove_if(mru_windows.begin(), mru_windows.end(),
+                     [](aura::Window* window) {
+                       return window->GetProperty(kIsShowingInOverviewKey);
+                     }),
+      mru_windows.end());
+  aura::Window* root_window = Shell::GetPrimaryRootWindow();
+  if (IsCarryOverCandidateForSplitView(mru_windows, 0u, root_window)) {
     if (WindowState::Get(mru_windows[0])->GetStateType() ==
         WindowStateType::kLeftSnapped) {
       windows.emplace(mru_windows[0], WindowStateType::kLeftSnapped);
-      if (IsCarryOverCandidateForSplitView(mru_windows, 1u) &&
+      if (IsCarryOverCandidateForSplitView(mru_windows, 1u, root_window) &&
           WindowState::Get(mru_windows[1])->GetStateType() ==
               WindowStateType::kRightSnapped) {
         windows.emplace(mru_windows[1], WindowStateType::kRightSnapped);
@@ -78,7 +86,7 @@ GetCarryOverWindowsInSplitView() {
     } else if (WindowState::Get(mru_windows[0])->GetStateType() ==
                WindowStateType::kRightSnapped) {
       windows.emplace(mru_windows[0], WindowStateType::kRightSnapped);
-      if (IsCarryOverCandidateForSplitView(mru_windows, 1u) &&
+      if (IsCarryOverCandidateForSplitView(mru_windows, 1u, root_window) &&
           WindowState::Get(mru_windows[1])->GetStateType() ==
               WindowStateType::kLeftSnapped) {
         windows.emplace(mru_windows[1], WindowStateType::kLeftSnapped);
@@ -127,8 +135,8 @@ int CalculateCarryOverDividerPostion(
       return left_window ? work_area.height() - left_window_bounds.height()
                          : right_window_bounds.height();
     default:
-      return Shell::Get()->split_view_controller()->GetDefaultDividerPosition(
-          left_window ? left_window : right_window);
+      return SplitViewController::Get(Shell::GetPrimaryRootWindow())
+          ->GetDefaultDividerPosition();
   }
 }
 
@@ -140,7 +148,7 @@ void DoSplitViewTransition(
     return;
 
   SplitViewController* split_view_controller =
-      Shell::Get()->split_view_controller();
+      SplitViewController::Get(Shell::GetPrimaryRootWindow());
   // If split view mode is already active, use its own divider position.
   if (!split_view_controller->InSplitViewMode())
     split_view_controller->InitDividerPositionForTransition(divider_position);
@@ -240,7 +248,7 @@ void TabletModeWindowManager::Init() {
   }
   AddWindowCreationObservers();
   display::Screen::GetScreen()->AddObserver(this);
-  Shell::Get()->AddShellObserver(this);
+  SplitViewController::Get(Shell::GetPrimaryRootWindow())->AddObserver(this);
   Shell::Get()->session_controller()->AddObserver(this);
   Shell::Get()->overview_controller()->AddObserver(this);
   accounts_since_entering_tablet_.insert(
@@ -249,6 +257,8 @@ void TabletModeWindowManager::Init() {
 }
 
 void TabletModeWindowManager::Shutdown() {
+  SplitViewController* split_view_controller =
+      SplitViewController::Get(Shell::GetPrimaryRootWindow());
   base::flat_map<aura::Window*, WindowStateType> carryover_windows_in_splitview;
   const bool was_in_overview =
       Shell::Get()->overview_controller()->InOverviewSession();
@@ -281,14 +291,12 @@ void TabletModeWindowManager::Shutdown() {
     // single split case to match the clamshell split view behavior. (there is
     // no both snapped state or single split state in clamshell split view). The
     // windows will still be kept snapped though.
-    SplitViewController* split_view_controller =
-        Shell::Get()->split_view_controller();
     if (split_view_controller->InSplitViewMode()) {
       OverviewController* overview_controller =
           Shell::Get()->overview_controller();
       if (!overview_controller->InOverviewSession() ||
           overview_controller->overview_session()->IsEmpty()) {
-        Shell::Get()->split_view_controller()->EndSplitView(
+        split_view_controller->EndSplitView(
             SplitViewController::EndReason::kExitTabletMode);
         overview_controller->EndOverview();
       }
@@ -298,7 +306,7 @@ void TabletModeWindowManager::Shutdown() {
   for (aura::Window* window : added_windows_)
     window->RemoveObserver(this);
   added_windows_.clear();
-  Shell::Get()->RemoveShellObserver(this);
+  split_view_controller->RemoveObserver(this);
   Shell::Get()->session_controller()->RemoveObserver(this);
   Shell::Get()->overview_controller()->RemoveObserver(this);
   display::Screen::GetScreen()->RemoveObserver(this);
@@ -356,7 +364,8 @@ void TabletModeWindowManager::OnOverviewModeEndingAnimationComplete(
   if (canceled)
     return;
 
-  auto* split_view_controller = Shell::Get()->split_view_controller();
+  SplitViewController* split_view_controller =
+      SplitViewController::Get(Shell::GetPrimaryRootWindow());
 
   // Maximize all snapped windows upon exiting overview mode except snapped
   // windows in splitview mode. Note the snapped window might not be tracked in
@@ -373,12 +382,15 @@ void TabletModeWindowManager::OnOverviewModeEndingAnimationComplete(
   }
 }
 
-// ShellObserver:
-void TabletModeWindowManager::OnSplitViewModeEnded() {
-  switch (Shell::Get()->split_view_controller()->end_reason()) {
+void TabletModeWindowManager::OnSplitViewStateChanged(
+    SplitViewController::State previous_state,
+    SplitViewController::State state) {
+  if (state != SplitViewController::State::kNoSnap)
+    return;
+  switch (
+      SplitViewController::Get(Shell::GetPrimaryRootWindow())->end_reason()) {
     case SplitViewController::EndReason::kNormal:
     case SplitViewController::EndReason::kUnsnappableWindowActivated:
-    case SplitViewController::EndReason::kPipExpanded:
       break;
     case SplitViewController::EndReason::kHomeLauncherPressed:
     case SplitViewController::EndReason::kActiveUserChanged:
@@ -509,7 +521,7 @@ void TabletModeWindowManager::OnDisplayRemoved(
 void TabletModeWindowManager::OnActiveUserSessionChanged(
     const AccountId& account_id) {
   SplitViewController* split_view_controller =
-      Shell::Get()->split_view_controller();
+      SplitViewController::Get(Shell::GetPrimaryRootWindow());
 
   // There is only one SplitViewController object for all user sessions, but
   // functionally, each user session independently can be in split view or not.

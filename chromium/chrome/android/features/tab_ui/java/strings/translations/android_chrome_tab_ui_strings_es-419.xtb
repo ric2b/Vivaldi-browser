@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="es-419">
+<translation id="1181037720776840403">Quitar</translation>
 <translation id="125153950246128346">Presiona para ver otra pestaña</translation>
 <translation id="1869137256605757565">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> pestaña}other{<ph name="TABS_COUNT_MANY" /> pestañas}}</translation>
 <translation id="257674075312929031">Grupo</translation>
@@ -19,6 +20,7 @@
 <translation id="6615455863669487791">Mostrarme</translation>
 <translation id="6803423358608456383">Pestañas abiertas a media altura</translation>
 <translation id="6840760312327750441">Para agrupar pestañas, mantén presionada una y arrástrala hasta otra.</translation>
+<translation id="7151209024774799310">Quitar pestañas del grupo</translation>
 <translation id="7559245342362162951">Muestra las pestañas del grupo en la cuadrícula de pantalla completa</translation>
 <translation id="8582216581279205169">Pestañas abiertas en pantalla completa</translation>
 <translation id="9150694013019234766">Alterna entre las pestañas que aparecen en el grupo de pestañas cerca de la parte inferior de la pantalla</translation>

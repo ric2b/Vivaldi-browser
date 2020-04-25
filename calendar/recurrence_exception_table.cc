@@ -38,7 +38,7 @@ bool RecurrrenceExceptionTable ::CreateRecurringExceptionTable() {
   return GetDB().Execute(sql.c_str());
 }
 
-RecurrenceID RecurrrenceExceptionTable ::CreateRecurrenceException(
+RecurrenceExceptionID RecurrrenceExceptionTable ::CreateRecurrenceException(
     RecurrenceExceptionRow row) {
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE,

@@ -4,10 +4,12 @@
 
 #include "third_party/blink/renderer/modules/native_file_system/native_file_system_directory_handle.h"
 
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_error.mojom-blink.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_manager.mojom-blink.h"
+#include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/fileapi/file_error.h"
@@ -28,10 +30,12 @@ constexpr const char kSandboxRootDirectoryName[] = "";
 using mojom::blink::NativeFileSystemErrorPtr;
 
 NativeFileSystemDirectoryHandle::NativeFileSystemDirectoryHandle(
+    ExecutionContext* context,
     const String& name,
-    RevocableInterfacePtr<mojom::blink::NativeFileSystemDirectoryHandle>
-        mojo_ptr)
-    : NativeFileSystemHandle(name), mojo_ptr_(std::move(mojo_ptr)) {
+    mojo::PendingRemote<mojom::blink::NativeFileSystemDirectoryHandle> mojo_ptr)
+    : NativeFileSystemHandle(context, name),
+      mojo_ptr_(std::move(mojo_ptr),
+                context->GetTaskRunner(TaskType::kMiscPlatformAPI)) {
   DCHECK(mojo_ptr_);
 }
 
@@ -57,10 +61,7 @@ ScriptPromise NativeFileSystemDirectoryHandle::getFile(
               return;
             }
             resolver->Resolve(MakeGarbageCollected<NativeFileSystemFileHandle>(
-                name,
-                RevocableInterfacePtr<mojom::blink::NativeFileSystemFileHandle>(
-                    std::move(handle), context->GetInterfaceInvalidator(),
-                    context->GetTaskRunner(TaskType::kMiscPlatformAPI))));
+                context, name, std::move(handle)));
           },
           WrapPersistent(resolver), name));
 
@@ -74,12 +75,19 @@ ScriptPromise NativeFileSystemDirectoryHandle::getDirectory(
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise result = resolver->Promise();
 
+  if (!mojo_ptr_) {
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kInvalidStateError));
+    return result;
+  }
+
   mojo_ptr_->GetDirectory(
       name, options->create(),
       WTF::Bind(
           [](ScriptPromiseResolver* resolver, const String& name,
              NativeFileSystemErrorPtr result,
-             mojom::blink::NativeFileSystemDirectoryHandlePtr handle) {
+             mojo::PendingRemote<mojom::blink::NativeFileSystemDirectoryHandle>
+                 handle) {
             ExecutionContext* context = resolver->GetExecutionContext();
             if (!context)
               return;
@@ -89,12 +97,7 @@ ScriptPromise NativeFileSystemDirectoryHandle::getDirectory(
             }
             resolver->Resolve(
                 MakeGarbageCollected<NativeFileSystemDirectoryHandle>(
-                    name,
-                    RevocableInterfacePtr<
-                        mojom::blink::NativeFileSystemDirectoryHandle>(
-                        handle.PassInterface(),
-                        context->GetInterfaceInvalidator(),
-                        context->GetTaskRunner(TaskType::kMiscPlatformAPI))));
+                    context, name, std::move(handle)));
           },
           WrapPersistent(resolver), name));
 
@@ -124,7 +127,7 @@ ScriptValue NativeFileSystemDirectoryHandle::getEntries(
            .ToChecked()) {
     return ScriptValue();
   }
-  return ScriptValue(script_state, result);
+  return ScriptValue(script_state->GetIsolate(), result);
 }
 
 ScriptPromise NativeFileSystemDirectoryHandle::removeEntry(
@@ -133,6 +136,12 @@ ScriptPromise NativeFileSystemDirectoryHandle::removeEntry(
     const FileSystemRemoveOptions* options) {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise result = resolver->Promise();
+
+  if (!mojo_ptr_) {
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kInvalidStateError));
+    return result;
+  }
 
   mojo_ptr_->RemoveEntry(
       name, options->recursive(),
@@ -170,7 +179,8 @@ ScriptPromise NativeFileSystemDirectoryHandle::getSystemDirectory(
       [](ScriptPromiseResolver* resolver,
          mojo::Remote<mojom::blink::NativeFileSystemManager>,
          NativeFileSystemErrorPtr result,
-         mojom::blink::NativeFileSystemDirectoryHandlePtr handle) {
+         mojo::PendingRemote<mojom::blink::NativeFileSystemDirectoryHandle>
+             handle) {
         ExecutionContext* context = resolver->GetExecutionContext();
         if (!context)
           return;
@@ -179,27 +189,28 @@ ScriptPromise NativeFileSystemDirectoryHandle::getSystemDirectory(
           return;
         }
         resolver->Resolve(MakeGarbageCollected<NativeFileSystemDirectoryHandle>(
-            kSandboxRootDirectoryName,
-            RevocableInterfacePtr<
-                mojom::blink::NativeFileSystemDirectoryHandle>(
-                handle.PassInterface(), context->GetInterfaceInvalidator(),
-                context->GetTaskRunner(TaskType::kMiscPlatformAPI))));
+            context, kSandboxRootDirectoryName, std::move(handle)));
       },
       WrapPersistent(resolver), std::move(manager)));
 
   return result;
 }
 
-mojom::blink::NativeFileSystemTransferTokenPtr
+mojo::PendingRemote<mojom::blink::NativeFileSystemTransferToken>
 NativeFileSystemDirectoryHandle::Transfer() {
-  mojom::blink::NativeFileSystemTransferTokenPtr result;
-  mojo_ptr_->Transfer(mojo::MakeRequest(&result));
+  mojo::PendingRemote<mojom::blink::NativeFileSystemTransferToken> result;
+  if (mojo_ptr_)
+    mojo_ptr_->Transfer(result.InitWithNewPipeAndPassReceiver());
   return result;
 }
 
 void NativeFileSystemDirectoryHandle::QueryPermissionImpl(
     bool writable,
     base::OnceCallback<void(mojom::blink::PermissionStatus)> callback) {
+  if (!mojo_ptr_) {
+    std::move(callback).Run(mojom::blink::PermissionStatus::DENIED);
+    return;
+  }
   mojo_ptr_->GetPermissionStatus(writable, std::move(callback));
 }
 
@@ -207,7 +218,20 @@ void NativeFileSystemDirectoryHandle::RequestPermissionImpl(
     bool writable,
     base::OnceCallback<void(mojom::blink::NativeFileSystemErrorPtr,
                             mojom::blink::PermissionStatus)> callback) {
+  if (!mojo_ptr_) {
+    std::move(callback).Run(
+        mojom::blink::NativeFileSystemError::New(
+            mojom::blink::NativeFileSystemStatus::kInvalidState,
+            base::File::Error::FILE_ERROR_FAILED, "Context Destroyed"),
+        mojom::blink::PermissionStatus::DENIED);
+    return;
+  }
+
   mojo_ptr_->RequestPermission(writable, std::move(callback));
+}
+
+void NativeFileSystemDirectoryHandle::ContextDestroyed(ExecutionContext*) {
+  mojo_ptr_.reset();
 }
 
 }  // namespace blink

@@ -108,6 +108,8 @@
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_version_info.h"
+#include "ui/gl/gpu_switching_manager.h"
+#include "ui/gl/gpu_switching_observer.h"
 #include "ui/gl/gpu_timing.h"
 #include "ui/gl/init/create_gr_gl_interface.h"
 #include "ui/gl/scoped_make_current.h"
@@ -599,7 +601,9 @@ int GLES2Decoder::GetRasterDecoderId() const {
 
 // This class implements GLES2Decoder so we don't have to expose all the GLES2
 // cmd stuff to outside this class.
-class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
+class GLES2DecoderImpl : public GLES2Decoder,
+                         public ErrorStateClient,
+                         public ui::GpuSwitchingObserver {
  public:
   GLES2DecoderImpl(DecoderClient* client,
                    CommandBufferServiceBase* command_buffer_service,
@@ -746,6 +750,9 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
                     unsigned type,
                     const gfx::Rect& cleared_rect) override;
 
+  // Implements GpuSwitchingObserver.
+  void OnGpuSwitched() override;
+
   // Restores the current state to the user's settings.
   void RestoreCurrentFramebufferBindings();
 
@@ -818,7 +825,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
     kFramebufferInvalidateSub
   };
 
-  enum BindIndexedBufferFunctionType {
+  enum class BindIndexedBufferFunctionType {
     kBindBufferBase,
     kBindBufferRange
   };
@@ -1555,7 +1562,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   // error. Returns true if |api_type| is valid for the uniform
   bool CheckUniformForApiType(const Program::UniformInfo* info,
                               const char* function_name,
-                              Program::UniformApiType api_type);
+                              UniformApiType api_type);
 
   // Gets the type of a uniform for a location in the current program. Sets GL
   // errors if the current program is not valid. Returns true if the current
@@ -1563,7 +1570,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   // does not overflow the uniform.
   bool PrepForSetUniformByLocation(GLint fake_location,
                                    const char* function_name,
-                                   Program::UniformApiType api_type,
+                                   UniformApiType api_type,
                                    GLint* real_location,
                                    GLenum* type,
                                    GLsizei* count);
@@ -2113,6 +2120,9 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   void DoInsertEventMarkerEXT(GLsizei length, const GLchar* marker);
   void DoPushGroupMarkerEXT(GLsizei length, const GLchar* group);
   void DoPopGroupMarkerEXT(void);
+
+  // Wrapper for ContextVisibilityHintCHROMIUM.
+  void DoContextVisibilityHintCHROMIUM(GLboolean visibility);
 
   // Gets the number of values that will be returned by glGetXXX. Returns
   // false if pname is unknown.
@@ -3174,20 +3184,20 @@ bool BackTexture::AllocateNativeGpuMemoryBuffer(const gfx::Size& size,
     buffer_format = gfx::BufferFormat::RGBX_8888;
 #endif
   }
-  DCHECK_EQ(format, gpu::InternalFormatForGpuMemoryBufferFormat(buffer_format));
   scoped_refptr<gl::GLImage> image =
       decoder_->GetContextGroup()->image_factory()->CreateAnonymousImage(
           size, buffer_format, gfx::BufferUsage::SCANOUT, &is_cleared);
-  if (!image || !image->BindTexImage(Target()))
+  if (!image)
+    return false;
+  DCHECK_EQ(format, image->GetDataFormat());
+  if (!image->BindTexImage(Target()))
     return false;
 
   image_ = image;
   decoder_->texture_manager()->SetLevelInfo(
       texture_ref_.get(), Target(), 0, image_->GetInternalFormat(),
-      size.width(), size.height(), 1, 0,
-      TextureManager::ExtractFormatFromStorageFormat(
-          image_->GetInternalFormat()),
-      GL_UNSIGNED_BYTE, gfx::Rect(size));
+      size.width(), size.height(), 1, 0, image->GetDataFormat(),
+      image->GetDataType(), gfx::Rect(size));
   decoder_->texture_manager()->SetLevelImage(texture_ref_.get(), Target(), 0,
                                              image_.get(), Texture::BOUND);
 
@@ -3285,7 +3295,7 @@ bool BackRenderbuffer::AllocateStorage(const gfx::Size& size,
     GLuint fbo;
     api()->glGenFramebuffersEXTFn(1, &fbo);
     {
-      ScopedFramebufferBinder binder(decoder_, fbo);
+      ScopedFramebufferBinder frame_binder(decoder_, fbo);
       api()->glFramebufferRenderbufferEXTFn(
           GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, id_);
       api()->glClearColorFn(0, 0, 0, decoder_->BackBufferAlphaClearColor());
@@ -3605,6 +3615,11 @@ gpu::ContextResult GLES2DecoderImpl::Initialize(
   bool needs_emulation = true;
   transform_feedback_manager_.reset(new TransformFeedbackManager(
       group_->max_transform_feedback_separate_attribs(), needs_emulation));
+
+  // Register this object as a GPU switching observer.
+  if (feature_info_->IsWebGLContext()) {
+    ui::GpuSwitchingManager::GetInstance()->AddObserver(this);
+  }
 
   if (feature_info_->IsWebGL2OrES3Context()) {
     // Verified in ContextGroup.
@@ -5271,6 +5286,11 @@ void GLES2DecoderImpl::SetLevelInfo(uint32_t client_id,
                                   0 /* border */, format, type, cleared_rect);
 }
 
+void GLES2DecoderImpl::OnGpuSwitched() {
+  // Send OnGpuSwitched notification to renderer process via decoder client.
+  client()->OnGpuSwitched();
+}
+
 void GLES2DecoderImpl::Destroy(bool have_context) {
   if (!initialized())
     return;
@@ -5484,6 +5504,11 @@ void GLES2DecoderImpl::Destroy(bool have_context) {
   if (gpu_tracer_) {
     gpu_tracer_->Destroy(have_context);
     gpu_tracer_.reset();
+  }
+
+  // Unregister this object as a GPU switching observer.
+  if (feature_info_->IsWebGLContext()) {
+    ui::GpuSwitchingManager::GetInstance()->RemoveObserver(this);
   }
 
   if (group_.get()) {
@@ -5804,8 +5829,8 @@ error::Error GLES2DecoderImpl::HandleResizeCHROMIUM(
   static_assert(sizeof(GLuint) >= sizeof(int), "Unexpected GLuint size.");
   static const GLuint kMaxDimension =
       static_cast<GLuint>(std::numeric_limits<int>::max());
-  width = std::min(std::max(1U, width), kMaxDimension);
-  height = std::min(std::max(1U, height), kMaxDimension);
+  width = base::ClampToRange(width, 1U, kMaxDimension);
+  height = base::ClampToRange(height, 1U, kMaxDimension);
 
   gl::GLSurface::ColorSpace surface_color_space =
       gl::GLSurface::ColorSpace::UNSPECIFIED;
@@ -6080,7 +6105,7 @@ void GLES2DecoderImpl::BindIndexedBufferImpl(
       break;
   }
 
-  if (function_type == kBindBufferRange) {
+  if (function_type == BindIndexedBufferFunctionType::kBindBufferRange) {
     switch (target) {
       case GL_TRANSFORM_FEEDBACK_BUFFER:
         if ((size % 4 != 0) || (offset % 4 != 0)) {
@@ -6154,10 +6179,10 @@ void GLES2DecoderImpl::BindIndexedBufferImpl(
   }
   DCHECK(bindings);
   switch (function_type) {
-    case kBindBufferBase:
+    case BindIndexedBufferFunctionType::kBindBufferBase:
       bindings->DoBindBufferBase(index, buffer);
       break;
-    case kBindBufferRange:
+    case BindIndexedBufferFunctionType::kBindBufferRange:
       bindings->DoBindBufferRange(index, buffer, offset, size);
       break;
     default:
@@ -6170,7 +6195,8 @@ void GLES2DecoderImpl::BindIndexedBufferImpl(
 void GLES2DecoderImpl::DoBindBufferBase(GLenum target, GLuint index,
                                         GLuint client_id) {
   BindIndexedBufferImpl(target, index, client_id, 0, 0,
-                        kBindBufferBase, "glBindBufferBase");
+                        BindIndexedBufferFunctionType::kBindBufferBase,
+                        "glBindBufferBase");
 }
 
 void GLES2DecoderImpl::DoBindBufferRange(GLenum target, GLuint index,
@@ -6178,7 +6204,8 @@ void GLES2DecoderImpl::DoBindBufferRange(GLenum target, GLuint index,
                                          GLintptr offset,
                                          GLsizeiptr size) {
   BindIndexedBufferImpl(target, index, client_id, offset, size,
-                        kBindBufferRange, "glBindBufferRange");
+                        BindIndexedBufferFunctionType::kBindBufferRange,
+                        "glBindBufferRange");
 }
 
 bool GLES2DecoderImpl::BoundFramebufferAllowsChangesToAlphaChannel() {
@@ -8351,13 +8378,13 @@ void GLES2DecoderImpl::DoEnable(GLenum cap) {
 }
 
 void GLES2DecoderImpl::DoDepthRangef(GLclampf znear, GLclampf zfar) {
-  state_.z_near = std::min(1.0f, std::max(0.0f, znear));
-  state_.z_far = std::min(1.0f, std::max(0.0f, zfar));
+  state_.z_near = base::ClampToRange(znear, 0.0f, 1.0f);
+  state_.z_far = base::ClampToRange(zfar, 0.0f, 1.0f);
   api()->glDepthRangeFn(znear, zfar);
 }
 
 void GLES2DecoderImpl::DoSampleCoverage(GLclampf value, GLboolean invert) {
-  state_.sample_coverage_value = std::min(1.0f, std::max(0.0f, value));
+  state_.sample_coverage_value = base::ClampToRange(value, 0.0f, 1.0f);
   state_.sample_coverage_invert = (invert != 0);
   api()->glSampleCoverageFn(state_.sample_coverage_value, invert);
 }
@@ -9697,7 +9724,7 @@ void GLES2DecoderImpl::DoRenderbufferStorage(
 
 void GLES2DecoderImpl::DoLineWidth(GLfloat width) {
   api()->glLineWidthFn(
-      std::min(std::max(width, line_width_range_[0]), line_width_range_[1]));
+      base::ClampToRange(width, line_width_range_[0], line_width_range_[1]));
 }
 
 void GLES2DecoderImpl::DoLinkProgram(GLuint program_id) {
@@ -10043,12 +10070,11 @@ bool GLES2DecoderImpl::ValidateUniformBlockBackings(const char* func_name) {
       uniform_block_sizes, 1, func_name, "uniform buffers");
 }
 
-bool GLES2DecoderImpl::CheckUniformForApiType(
-    const Program::UniformInfo* info,
-    const char* function_name,
-    Program::UniformApiType api_type) {
+bool GLES2DecoderImpl::CheckUniformForApiType(const Program::UniformInfo* info,
+                                              const char* function_name,
+                                              UniformApiType api_type) {
   DCHECK(info);
-  if ((api_type & info->accepts_api_type) == 0) {
+  if ((api_type & info->accepts_api_type) == UniformApiType::kUniformNone) {
     LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, function_name,
                        "wrong uniform function for type");
     return false;
@@ -10056,13 +10082,12 @@ bool GLES2DecoderImpl::CheckUniformForApiType(
   return true;
 }
 
-bool GLES2DecoderImpl::PrepForSetUniformByLocation(
-    GLint fake_location,
-    const char* function_name,
-    Program::UniformApiType api_type,
-    GLint* real_location,
-    GLenum* type,
-    GLsizei* count) {
+bool GLES2DecoderImpl::PrepForSetUniformByLocation(GLint fake_location,
+                                                   const char* function_name,
+                                                   UniformApiType api_type,
+                                                   GLint* real_location,
+                                                   GLenum* type,
+                                                   GLsizei* count) {
   DCHECK(type);
   DCHECK(count);
   DCHECK(real_location);
@@ -10099,12 +10124,9 @@ void GLES2DecoderImpl::DoUniform1i(GLint fake_location, GLint v0) {
   GLenum type = 0;
   GLsizei count = 1;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniform1i",
-                                   Program::kUniform1i,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniform1i",
+                                   UniformApiType::kUniform1i, &real_location,
+                                   &type, &count)) {
     return;
   }
   if (!state_.current_program->SetSamplers(
@@ -10121,12 +10143,9 @@ void GLES2DecoderImpl::DoUniform1iv(GLint fake_location,
                                     const volatile GLint* values) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniform1iv",
-                                   Program::kUniform1i,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniform1iv",
+                                   UniformApiType::kUniform1i, &real_location,
+                                   &type, &count)) {
     return;
   }
   auto values_copy = std::make_unique<GLint[]>(count);
@@ -10149,12 +10168,9 @@ void GLES2DecoderImpl::DoUniform1uiv(GLint fake_location,
                                      const volatile GLuint* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniform1uiv",
-                                   Program::kUniform1ui,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniform1uiv",
+                                   UniformApiType::kUniform1ui, &real_location,
+                                   &type, &count)) {
     return;
   }
   api()->glUniform1uivFn(real_location, count,
@@ -10166,12 +10182,9 @@ void GLES2DecoderImpl::DoUniform1fv(GLint fake_location,
                                     const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniform1fv",
-                                   Program::kUniform1f,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniform1fv",
+                                   UniformApiType::kUniform1f, &real_location,
+                                   &type, &count)) {
     return;
   }
   if (type == GL_BOOL) {
@@ -10191,12 +10204,9 @@ void GLES2DecoderImpl::DoUniform2fv(GLint fake_location,
                                     const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniform2fv",
-                                   Program::kUniform2f,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniform2fv",
+                                   UniformApiType::kUniform2f, &real_location,
+                                   &type, &count)) {
     return;
   }
   if (type == GL_BOOL_VEC2) {
@@ -10217,12 +10227,9 @@ void GLES2DecoderImpl::DoUniform3fv(GLint fake_location,
                                     const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniform3fv",
-                                   Program::kUniform3f,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniform3fv",
+                                   UniformApiType::kUniform3f, &real_location,
+                                   &type, &count)) {
     return;
   }
   if (type == GL_BOOL_VEC3) {
@@ -10243,12 +10250,9 @@ void GLES2DecoderImpl::DoUniform4fv(GLint fake_location,
                                     const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniform4fv",
-                                   Program::kUniform4f,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniform4fv",
+                                   UniformApiType::kUniform4f, &real_location,
+                                   &type, &count)) {
     return;
   }
   if (type == GL_BOOL_VEC4) {
@@ -10269,12 +10273,9 @@ void GLES2DecoderImpl::DoUniform2iv(GLint fake_location,
                                     const volatile GLint* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniform2iv",
-                                   Program::kUniform2i,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniform2iv",
+                                   UniformApiType::kUniform2i, &real_location,
+                                   &type, &count)) {
     return;
   }
   api()->glUniform2ivFn(real_location, count, const_cast<const GLint*>(value));
@@ -10285,12 +10286,9 @@ void GLES2DecoderImpl::DoUniform2uiv(GLint fake_location,
                                      const volatile GLuint* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniform2uiv",
-                                   Program::kUniform2ui,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniform2uiv",
+                                   UniformApiType::kUniform2ui, &real_location,
+                                   &type, &count)) {
     return;
   }
   api()->glUniform2uivFn(real_location, count,
@@ -10302,12 +10300,9 @@ void GLES2DecoderImpl::DoUniform3iv(GLint fake_location,
                                     const volatile GLint* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniform3iv",
-                                   Program::kUniform3i,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniform3iv",
+                                   UniformApiType::kUniform3i, &real_location,
+                                   &type, &count)) {
     return;
   }
   api()->glUniform3ivFn(real_location, count, const_cast<const GLint*>(value));
@@ -10318,12 +10313,9 @@ void GLES2DecoderImpl::DoUniform3uiv(GLint fake_location,
                                      const volatile GLuint* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniform3uiv",
-                                   Program::kUniform3ui,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniform3uiv",
+                                   UniformApiType::kUniform3ui, &real_location,
+                                   &type, &count)) {
     return;
   }
   api()->glUniform3uivFn(real_location, count,
@@ -10335,12 +10327,9 @@ void GLES2DecoderImpl::DoUniform4iv(GLint fake_location,
                                     const volatile GLint* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniform4iv",
-                                   Program::kUniform4i,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniform4iv",
+                                   UniformApiType::kUniform4i, &real_location,
+                                   &type, &count)) {
     return;
   }
   api()->glUniform4ivFn(real_location, count, const_cast<const GLint*>(value));
@@ -10351,12 +10340,9 @@ void GLES2DecoderImpl::DoUniform4uiv(GLint fake_location,
                                      const volatile GLuint* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniform4uiv",
-                                   Program::kUniform4ui,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniform4uiv",
+                                   UniformApiType::kUniform4ui, &real_location,
+                                   &type, &count)) {
     return;
   }
   api()->glUniform4uivFn(real_location, count,
@@ -10374,12 +10360,9 @@ void GLES2DecoderImpl::DoUniformMatrix2fv(GLint fake_location,
         GL_INVALID_VALUE, "glUniformMatrix2fv", "transpose not FALSE");
     return;
   }
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniformMatrix2fv",
-                                   Program::kUniformMatrix2f,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniformMatrix2fv",
+                                   UniformApiType::kUniformMatrix2f,
+                                   &real_location, &type, &count)) {
     return;
   }
   api()->glUniformMatrix2fvFn(real_location, count, transpose,
@@ -10397,12 +10380,9 @@ void GLES2DecoderImpl::DoUniformMatrix3fv(GLint fake_location,
         GL_INVALID_VALUE, "glUniformMatrix3fv", "transpose not FALSE");
     return;
   }
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniformMatrix3fv",
-                                   Program::kUniformMatrix3f,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniformMatrix3fv",
+                                   UniformApiType::kUniformMatrix3f,
+                                   &real_location, &type, &count)) {
     return;
   }
   api()->glUniformMatrix3fvFn(real_location, count, transpose,
@@ -10420,12 +10400,9 @@ void GLES2DecoderImpl::DoUniformMatrix4fv(GLint fake_location,
         GL_INVALID_VALUE, "glUniformMatrix4fv", "transpose not FALSE");
     return;
   }
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniformMatrix4fv",
-                                   Program::kUniformMatrix4f,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniformMatrix4fv",
+                                   UniformApiType::kUniformMatrix4f,
+                                   &real_location, &type, &count)) {
     return;
   }
   api()->glUniformMatrix4fvFn(real_location, count, transpose,
@@ -10472,8 +10449,8 @@ void GLES2DecoderImpl::DoUniformMatrix4fvStreamTextureMatrixCHROMIUM(
   GLint real_location = -1;
   GLsizei count = 1;
   if (!PrepForSetUniformByLocation(fake_location, "glUniformMatrix4fv",
-                                   Program::kUniformMatrix4f, &real_location,
-                                   &type, &count)) {
+                                   UniformApiType::kUniformMatrix4f,
+                                   &real_location, &type, &count)) {
     return;
   }
 
@@ -10486,12 +10463,9 @@ void GLES2DecoderImpl::DoUniformMatrix2x3fv(GLint fake_location,
                                             const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniformMatrix2x3fv",
-                                   Program::kUniformMatrix2x3f,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniformMatrix2x3fv",
+                                   UniformApiType::kUniformMatrix2x3f,
+                                   &real_location, &type, &count)) {
     return;
   }
   api()->glUniformMatrix2x3fvFn(real_location, count, transpose,
@@ -10504,12 +10478,9 @@ void GLES2DecoderImpl::DoUniformMatrix2x4fv(GLint fake_location,
                                             const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniformMatrix2x4fv",
-                                   Program::kUniformMatrix2x4f,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniformMatrix2x4fv",
+                                   UniformApiType::kUniformMatrix2x4f,
+                                   &real_location, &type, &count)) {
     return;
   }
   api()->glUniformMatrix2x4fvFn(real_location, count, transpose,
@@ -10522,12 +10493,9 @@ void GLES2DecoderImpl::DoUniformMatrix3x2fv(GLint fake_location,
                                             const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniformMatrix3x2fv",
-                                   Program::kUniformMatrix3x2f,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniformMatrix3x2fv",
+                                   UniformApiType::kUniformMatrix3x2f,
+                                   &real_location, &type, &count)) {
     return;
   }
   api()->glUniformMatrix3x2fvFn(real_location, count, transpose,
@@ -10540,12 +10508,9 @@ void GLES2DecoderImpl::DoUniformMatrix3x4fv(GLint fake_location,
                                             const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniformMatrix3x4fv",
-                                   Program::kUniformMatrix3x4f,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniformMatrix3x4fv",
+                                   UniformApiType::kUniformMatrix3x4f,
+                                   &real_location, &type, &count)) {
     return;
   }
   api()->glUniformMatrix3x4fvFn(real_location, count, transpose,
@@ -10558,12 +10523,9 @@ void GLES2DecoderImpl::DoUniformMatrix4x2fv(GLint fake_location,
                                             const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniformMatrix4x2fv",
-                                   Program::kUniformMatrix4x2f,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniformMatrix4x2fv",
+                                   UniformApiType::kUniformMatrix4x2f,
+                                   &real_location, &type, &count)) {
     return;
   }
   api()->glUniformMatrix4x2fvFn(real_location, count, transpose,
@@ -10576,12 +10538,9 @@ void GLES2DecoderImpl::DoUniformMatrix4x3fv(GLint fake_location,
                                             const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (!PrepForSetUniformByLocation(fake_location,
-                                   "glUniformMatrix4x3fv",
-                                   Program::kUniformMatrix4x3f,
-                                   &real_location,
-                                   &type,
-                                   &count)) {
+  if (!PrepForSetUniformByLocation(fake_location, "glUniformMatrix4x3fv",
+                                   UniformApiType::kUniformMatrix4x3f,
+                                   &real_location, &type, &count)) {
     return;
   }
   api()->glUniformMatrix4x3fvFn(real_location, count, transpose,
@@ -13118,13 +13077,13 @@ error::Error GLES2DecoderImpl::HandleReadPixels(uint32_t immediate_data_size,
   if (!max_rect.Contains(rect)) {
     rect.Intersect(max_rect);
     if (!rect.IsEmpty()) {
-      std::unique_ptr<ScopedFramebufferCopyBinder> binder;
+      std::unique_ptr<ScopedFramebufferCopyBinder> copy_binder;
       if (workarounds()
               .use_copyteximage2d_instead_of_readpixels_on_multisampled_textures &&
           framebuffer_state_.bound_read_framebuffer.get() &&
           framebuffer_state_.bound_read_framebuffer.get()
               ->GetReadBufferIsMultisampledTexture()) {
-        binder = std::make_unique<ScopedFramebufferCopyBinder>(this);
+        copy_binder = std::make_unique<ScopedFramebufferCopyBinder>(this);
       }
       if (y < 0) {
         pixels += static_cast<uint32_t>(-y) * padded_row_size;;
@@ -13167,9 +13126,9 @@ error::Error GLES2DecoderImpl::HandleReadPixels(uint32_t immediate_data_size,
       // a PIXEL_PACK_BUFFER is bound (in which case the client can
       // implement something similar on their own - all necessary functions
       // should be exposed).
-      GLuint buffer = 0;
-      api()->glGenBuffersARBFn(1, &buffer);
-      api()->glBindBufferFn(GL_PIXEL_PACK_BUFFER_ARB, buffer);
+      GLuint buffer_handle = 0;
+      api()->glGenBuffersARBFn(1, &buffer_handle);
+      api()->glBindBufferFn(GL_PIXEL_PACK_BUFFER_ARB, buffer_handle);
       // For ANGLE client version 2, GL_STREAM_READ is not available.
       const GLenum usage_hint =
           gl_version_info().is_angle ? GL_STATIC_DRAW : GL_STREAM_READ;
@@ -13186,13 +13145,13 @@ error::Error GLES2DecoderImpl::HandleReadPixels(uint32_t immediate_data_size,
             &GLES2DecoderImpl::FinishReadPixels, weak_ptr_factory_.GetWeakPtr(),
             width, height, format, type, pixels_shm_id, pixels_shm_offset,
             result_shm_id, result_shm_offset, state_.pack_alignment,
-            read_format, buffer));
+            read_format, buffer_handle));
         api()->glBindBufferFn(GL_PIXEL_PACK_BUFFER_ARB, 0);
         return error::kNoError;
       } else {
         // On error, unbind pack buffer and fall through to sync readpixels
         api()->glBindBufferFn(GL_PIXEL_PACK_BUFFER_ARB, 0);
-        api()->glDeleteBuffersARBFn(1, &buffer);
+        api()->glDeleteBuffersARBFn(1, &buffer_handle);
       }
     }
     if (pixels_shm_id == 0 &&
@@ -13235,7 +13194,7 @@ error::Error GLES2DecoderImpl::HandleReadPixels(uint32_t immediate_data_size,
         framebuffer_state_.bound_read_framebuffer.get() &&
         framebuffer_state_.bound_read_framebuffer.get()
             ->GetReadBufferIsMultisampledTexture()) {
-      ScopedFramebufferCopyBinder binder(this, x, y, width, height);
+      ScopedFramebufferCopyBinder copy_binder(this, x, y, width, height);
       api()->glReadPixelsFn(0, 0, width, height, format, type, pixels);
     } else {
       api()->glReadPixelsFn(x, y, width, height, format, type, pixels);
@@ -14917,9 +14876,19 @@ error::Error GLES2DecoderImpl::HandleTexImage2D(uint32_t immediate_data_size,
   }
 
   TextureManager::DoTexImageArguments args = {
-    target, level, internal_format, width, height, 1, border, format, type,
-    pixels, pixels_size, padding,
-    TextureManager::DoTexImageArguments::kTexImage2D };
+      target,
+      level,
+      internal_format,
+      width,
+      height,
+      1,
+      border,
+      format,
+      type,
+      pixels,
+      pixels_size,
+      padding,
+      TextureManager::DoTexImageArguments::CommandType::kTexImage2D};
   texture_manager()->ValidateAndDoTexImage(
       &texture_state_, &state_, error_state_.get(), &framebuffer_state_,
       func_name, args);
@@ -15015,9 +14984,19 @@ error::Error GLES2DecoderImpl::HandleTexImage3D(uint32_t immediate_data_size,
   }
 
   TextureManager::DoTexImageArguments args = {
-    target, level, internal_format, width, height, depth, border, format, type,
-    pixels, pixels_size, padding,
-    TextureManager::DoTexImageArguments::kTexImage3D };
+      target,
+      level,
+      internal_format,
+      width,
+      height,
+      depth,
+      border,
+      format,
+      type,
+      pixels,
+      pixels_size,
+      padding,
+      TextureManager::DoTexImageArguments::CommandType::kTexImage3D};
   texture_manager()->ValidateAndDoTexImage(
       &texture_state_, &state_, error_state_.get(), &framebuffer_state_,
       func_name, args);
@@ -15398,7 +15377,7 @@ void GLES2DecoderImpl::DoCopyTexImage2D(
         nullptr,
         pixels_size,
         0,
-        TextureManager::DoTexImageArguments::kTexImage2D};
+        TextureManager::DoTexImageArguments::CommandType::kTexImage2D};
     texture_manager()->WorkaroundCopyTexImageCubeMap(
         &texture_state_, &state_, error_state_.get(), &framebuffer_state_,
         texture_ref, func_name, args);
@@ -15442,9 +15421,19 @@ void GLES2DecoderImpl::DoCopyTexImage2D(
         target != GL_TEXTURE_CUBE_MAP_POSITIVE_X) {
       for (int i = 0; i < 2; ++i) {
         TextureManager::DoTexImageArguments args = {
-          target, i, final_internal_format, width, height, 1, border,
-          format, type, nullptr, pixels_size, 0,
-          TextureManager::DoTexImageArguments::kTexImage2D };
+            target,
+            i,
+            final_internal_format,
+            width,
+            height,
+            1,
+            border,
+            format,
+            type,
+            nullptr,
+            pixels_size,
+            0,
+            TextureManager::DoTexImageArguments::CommandType::kTexImage2D};
         texture_manager()->WorkaroundCopyTexImageCubeMap(
             &texture_state_, &state_, error_state_.get(), &framebuffer_state_,
             texture_ref, func_name, args);
@@ -15483,8 +15472,8 @@ void GLES2DecoderImpl::DoCopyTexImage2D(
       {
         // Copy from the read framebuffer into |temp_texture|.
         api()->glGenTexturesFn(1, &temp_texture);
-        ScopedTextureBinder binder(&state_, error_state_.get(), temp_texture,
-                                   source_texture_target);
+        ScopedTextureBinder texture_binder(&state_, error_state_.get(),
+                                           temp_texture, source_texture_target);
         api()->glCopyTexImage2DFn(source_texture_target, 0,
                                   temp_internal_format, x, y, width, height,
                                   border);
@@ -15513,9 +15502,19 @@ void GLES2DecoderImpl::DoCopyTexImage2D(
           texture->target() == GL_TEXTURE_CUBE_MAP &&
           target != GL_TEXTURE_CUBE_MAP_POSITIVE_X) {
         TextureManager::DoTexImageArguments args = {
-          target, level, final_internal_format, width, height, 1, border,
-          format, type, nullptr, pixels_size, 0,
-          TextureManager::DoTexImageArguments::kTexImage2D };
+            target,
+            level,
+            final_internal_format,
+            width,
+            height,
+            1,
+            border,
+            format,
+            type,
+            nullptr,
+            pixels_size,
+            0,
+            TextureManager::DoTexImageArguments::CommandType::kTexImage2D};
         texture_manager()->WorkaroundCopyTexImageCubeMap(
             &texture_state_, &state_, error_state_.get(), &framebuffer_state_,
             texture_ref, func_name, args);
@@ -15831,9 +15830,20 @@ error::Error GLES2DecoderImpl::HandleTexSubImage2D(
   }
 
   TextureManager::DoTexSubImageArguments args = {
-      target, level, xoffset, yoffset, 0, width, height, 1,
-      format, type, pixels, pixels_size, padding,
-      TextureManager::DoTexSubImageArguments::kTexSubImage2D};
+      target,
+      level,
+      xoffset,
+      yoffset,
+      0,
+      width,
+      height,
+      1,
+      format,
+      type,
+      pixels,
+      pixels_size,
+      padding,
+      TextureManager::DoTexSubImageArguments::CommandType::kTexSubImage2D};
   texture_manager()->ValidateAndDoTexSubImage(
       this, &texture_state_, &state_, error_state_.get(), &framebuffer_state_,
       func_name, args);
@@ -15925,9 +15935,20 @@ error::Error GLES2DecoderImpl::HandleTexSubImage3D(
   }
 
   TextureManager::DoTexSubImageArguments args = {
-      target, level, xoffset, yoffset, zoffset, width, height, depth,
-      format, type, pixels, pixels_size, padding,
-      TextureManager::DoTexSubImageArguments::kTexSubImage3D};
+      target,
+      level,
+      xoffset,
+      yoffset,
+      zoffset,
+      width,
+      height,
+      depth,
+      format,
+      type,
+      pixels,
+      pixels_size,
+      padding,
+      TextureManager::DoTexSubImageArguments::CommandType::kTexSubImage3D};
   texture_manager()->ValidateAndDoTexSubImage(
       this, &texture_state_, &state_, error_state_.get(), &framebuffer_state_,
       func_name, args);
@@ -16823,6 +16844,10 @@ error::Error GLES2DecoderImpl::HandleRequestExtensionCHROMIUM(
       std::string::npos) {
     feature_info_->EnableEXTColorBufferHalfFloat();
   }
+  if (feature_str.find("GL_EXT_texture_filter_anisotropic ") !=
+      std::string::npos) {
+    feature_info_->EnableEXTTextureFilterAnisotropic();
+  }
   if (feature_str.find("GL_OES_texture_float_linear ") != std::string::npos) {
     feature_info_->EnableOESTextureFloatLinear();
   }
@@ -17050,7 +17075,8 @@ error::Error GLES2DecoderImpl::HandleDescheduleUntilFinishedCHROMIUM(
   if (!gl::GLFence::IsSupported())
     return error::kNoError;
   std::unique_ptr<gl::GLFence> fence = gl::GLFence::Create();
-  deschedule_until_finished_fences_.push_back(std::move(fence));
+  if (fence)
+    deschedule_until_finished_fences_.push_back(std::move(fence));
 
   if (deschedule_until_finished_fences_.size() == 1)
     return error::kNoError;
@@ -17824,11 +17850,11 @@ void GLES2DecoderImpl::DoCopyTextureCHROMIUM(
   // GL_TEXTURE_EXTERNAL_OES texture requires that we apply a transform matrix
   // before presenting.
   if (source_target == GL_TEXTURE_EXTERNAL_OES) {
-    if (GLStreamTextureImage* image =
+    if (GLStreamTextureImage* texture_image =
             source_texture->GetLevelStreamTextureImage(GL_TEXTURE_EXTERNAL_OES,
                                                        source_level)) {
       GLfloat transform_matrix[16];
-      image->GetTextureMatrix(transform_matrix);
+      texture_image->GetTextureMatrix(transform_matrix);
       copy_texture_chromium_->DoCopyTextureWithTransform(
           this, source_target, source_texture->service_id(), source_level,
           source_internal_format, dest_target, dest_texture->service_id(),
@@ -18036,11 +18062,11 @@ void GLES2DecoderImpl::CopySubTextureHelper(const char* function_name,
   // GL_TEXTURE_EXTERNAL_OES texture requires apply a transform matrix
   // before presenting.
   if (source_target == GL_TEXTURE_EXTERNAL_OES) {
-    if (GLStreamTextureImage* image =
+    if (GLStreamTextureImage* texture_image =
             source_texture->GetLevelStreamTextureImage(GL_TEXTURE_EXTERNAL_OES,
                                                        source_level)) {
       GLfloat transform_matrix[16];
-      image->GetTextureMatrix(transform_matrix);
+      texture_image->GetTextureMatrix(transform_matrix);
       copy_texture_chromium_->DoCopySubTextureWithTransform(
           this, source_target, source_texture->service_id(), source_level,
           source_internal_format, dest_target, dest_texture->service_id(),
@@ -18399,9 +18425,7 @@ void GLES2DecoderImpl::DoTexStorage2DImageCHROMIUM(GLenum target,
 
   texture_manager()->SetLevelInfo(
       texture_ref, target, 0, image->GetInternalFormat(), width, height, 1, 0,
-      TextureManager::ExtractFormatFromStorageFormat(
-          image->GetInternalFormat()),
-      GL_UNSIGNED_BYTE, cleared_rect);
+      image->GetDataFormat(), image->GetDataType(), cleared_rect);
   texture_manager()->SetLevelImage(texture_ref, target, 0, image.get(),
                                    Texture::BOUND);
 
@@ -18742,11 +18766,10 @@ void GLES2DecoderImpl::BindTexImage2DCHROMIUMImpl(const char* function_name,
   gfx::Size size = image->GetSize();
   GLenum texture_internalformat =
       internalformat ? internalformat : image->GetInternalFormat();
-  texture_manager()->SetLevelInfo(
-      texture_ref, target, 0, texture_internalformat, size.width(),
-      size.height(), 1, 0,
-      TextureManager::ExtractFormatFromStorageFormat(texture_internalformat),
-      GL_UNSIGNED_BYTE, gfx::Rect(size));
+  texture_manager()->SetLevelInfo(texture_ref, target, 0,
+                                  texture_internalformat, size.width(),
+                                  size.height(), 1, 0, image->GetDataFormat(),
+                                  image->GetDataType(), gfx::Rect(size));
   texture_manager()->SetLevelImage(texture_ref, target, 0, image, image_state);
 }
 
@@ -19931,7 +19954,7 @@ error::Error GLES2DecoderImpl::HandlePathParameterfCHROMIUM(
       hasValueError = std::isnan(value) || !std::isfinite(value) || value < 0;
       break;
     case GL_PATH_STROKE_BOUND_CHROMIUM:
-      value = std::max(std::min(1.0f, value), 0.0f);
+      value = base::ClampToRange(value, 0.0f, 1.0f);
       break;
     case GL_PATH_END_CAPS_CHROMIUM:
       hasValueError = !validators_->path_parameter_cap_values.IsValid(
@@ -19984,7 +20007,7 @@ error::Error GLES2DecoderImpl::HandlePathParameteriCHROMIUM(
       hasValueError = value < 0;
       break;
     case GL_PATH_STROKE_BOUND_CHROMIUM:
-      value = std::max(std::min(1, value), 0);
+      value = base::ClampToRange(value, 0, 1);
       break;
     case GL_PATH_END_CAPS_CHROMIUM:
       hasValueError = !validators_->path_parameter_cap_values.IsValid(value);
@@ -20684,6 +20707,11 @@ void GLES2DecoderImpl::RestoreAllExternalTextureBindingsIfNeeded() {
 
   texture_manager_service_id_generation_ =
       texture_manager()->GetServiceIdGeneration();
+}
+
+void GLES2DecoderImpl::DoContextVisibilityHintCHROMIUM(GLboolean visibility) {
+  if (feature_info_->IsWebGLContext())
+    context_->SetVisibility(visibility == GL_TRUE);
 }
 
 error::Error GLES2DecoderImpl::HandleInitializeDiscardableTextureCHROMIUM(

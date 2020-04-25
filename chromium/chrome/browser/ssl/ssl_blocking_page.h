@@ -15,8 +15,8 @@
 #include "base/time/time.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/ssl_blocking_page_base.h"
-#include "chrome/browser/ssl/ssl_cert_reporter.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
+#include "components/security_interstitials/content/ssl_cert_reporter.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "extensions/buildflags/buildflags.h"
 #include "net/ssl/ssl_info.h"
@@ -52,7 +52,7 @@ class SSLBlockingPage : public SSLBlockingPageBase {
   // Creates an SSL blocking page. If the blocking page isn't shown, the caller
   // is responsible for cleaning up the blocking page, otherwise the
   // interstitial takes ownership when shown. |options_mask| must be a bitwise
-  // mask of SSLErrorUI::SSLErrorOptionsMask values.
+  // mask of SSLErrorOptionsMask values.
   // This is static because the constructor uses expensive to compute parameters
   // more than once (e.g. overrideable).
   static SSLBlockingPage* Create(

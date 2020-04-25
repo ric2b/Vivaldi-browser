@@ -56,28 +56,13 @@ public final class ReturnToChromeExperimentsUtil {
     }
 
     /**
-     * Whether we should display the omnibox on the tab switcher in addition to the
-     *  tab switcher toolbar.
-     *
-     * Depends on tab grid being enabled.
-     *
-     * @return true if the tab switcher on return and tab grid features are both ON, else false.
-     */
-    public static boolean shouldShowOmniboxOnTabSwitcher() {
-        return ChromeFeatureList.isInitialized()
-                && (FeatureUtilities.isGridTabSwitcherEnabled()
-                        || FeatureUtilities.isTabGroupsAndroidEnabled())
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.TAB_SWITCHER_ON_RETURN);
-    }
-
-    /**
      * Check if we should handle the navigation. If so, create a new tab and load the URL.
      *
      * @param url The URL to load.
      * @param transition The page transition type.
      * @return true if we have handled the navigation, false otherwise.
      */
-    public static boolean willHandleLoadUrlFromLocationBar(
+    public static boolean willHandleLoadUrlFromStartSurface(
             String url, @PageTransition int transition) {
         ChromeActivity chromeActivity = getActivityPresentingOverviewWithOmnibox();
         if (chromeActivity == null) return false;
@@ -89,11 +74,15 @@ public final class ReturnToChromeExperimentsUtil {
         chromeActivity.getTabCreator(model.isIncognito())
                 .createNewTab(params, TabLaunchType.FROM_CHROME_UI, null);
 
-        RecordUserAction.record("MobileOmniboxUse.GridTabSwitcher");
+        if (transition == PageTransition.AUTO_BOOKMARK) {
+            RecordUserAction.record("Suggestions.Tile.Tapped.GridTabSwitcher");
+        } else {
+            RecordUserAction.record("MobileOmniboxUse.GridTabSwitcher");
 
-        // These are duplicated here but would have been recorded by LocationBarLayout#loadUrl.
-        RecordUserAction.record("MobileOmniboxUse");
-        LocaleManager.getInstance().recordLocaleBasedSearchMetrics(false, url, transition);
+            // These are duplicated here but would have been recorded by LocationBarLayout#loadUrl.
+            RecordUserAction.record("MobileOmniboxUse");
+            LocaleManager.getInstance().recordLocaleBasedSearchMetrics(false, url, transition);
+        }
 
         return true;
     }
@@ -109,7 +98,7 @@ public final class ReturnToChromeExperimentsUtil {
      * @return The ChromeActivity if it is presenting the omnibox on the tab switcher, else null.
      */
     private static ChromeActivity getActivityPresentingOverviewWithOmnibox() {
-        if (!shouldShowOmniboxOnTabSwitcher()) return null;
+        if (!FeatureUtilities.isStartSurfaceEnabled()) return null;
 
         Activity activity = ApplicationStatus.getLastTrackedFocusedActivity();
         if (!(activity instanceof ChromeActivity)) return null;

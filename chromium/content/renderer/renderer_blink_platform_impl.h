@@ -130,21 +130,11 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   CreateRTCPeerConnectionHandler(
       blink::WebRTCPeerConnectionHandlerClient* client,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
-  std::unique_ptr<blink::WebRTCCertificateGenerator>
-  CreateRTCCertificateGenerator() override;
   scoped_refptr<base::SingleThreadTaskRunner> GetWebRtcWorkerThread() override;
-  rtc::Thread* GetWebRtcWorkerThreadRtcThread() override;
-  scoped_refptr<base::SingleThreadTaskRunner> GetWebRtcSignalingTaskRunner()
-      override;
   std::unique_ptr<cricket::PortAllocator> CreateWebRtcPortAllocator(
       blink::WebLocalFrame* frame) override;
   std::unique_ptr<webrtc::AsyncResolverFactory>
   CreateWebRtcAsyncResolverFactory() override;
-  std::unique_ptr<webrtc::RtpCapabilities> GetRtpSenderCapabilities(
-      const blink::WebString& kind) override;
-  std::unique_ptr<webrtc::RtpCapabilities> GetRtpReceiverCapabilities(
-      const blink::WebString& kind) override;
-  void UpdateWebRTCAPICount(blink::WebRTCAPIName api_name) override;
   base::Optional<double> GetWebRtcMaxCaptureFrameRate() override;
   scoped_refptr<media::AudioRendererSink> NewAudioRendererSink(
       blink::WebAudioDeviceSourceType source_type,
@@ -152,13 +142,30 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       const media::AudioSinkParameters& params) override;
   media::AudioLatency::LatencyType GetAudioSourceLatencyType(
       blink::WebAudioDeviceSourceType source_type) override;
-  blink::WebRtcAudioDeviceImpl* GetWebRtcAudioDevice() override;
   base::Optional<std::string> GetWebRTCAudioProcessingConfiguration() override;
+  bool ShouldEnforceWebRTCRoutingPreferences() override;
+  bool UsesFakeCodecForPeerConnection() override;
+  bool IsWebRtcEncryptionEnabled() override;
+  bool IsWebRtcStunOriginEnabled() override;
+  base::Optional<std::string> WebRtcStunProbeTrialParameter() override;
+  media::MediaPermission* GetWebRTCMediaPermission(
+      blink::WebLocalFrame* web_frame) override;
+  void GetWebRTCRendererPreferences(blink::WebLocalFrame* web_frame,
+                                    blink::WebString* ip_handling_policy,
+                                    uint16_t* udp_min_port,
+                                    uint16_t* udp_max_port,
+                                    bool* allow_mdns_obfuscation) override;
   base::Optional<int> GetAgcStartupMinimumVolume() override;
   void TrackGetUserMedia(
       const blink::WebUserMediaRequest& web_request) override;
   bool IsWebRtcHWH264DecodingEnabled(
       webrtc::VideoCodecType video_coded_type) override;
+  bool IsWebRtcHWEncodingEnabled() override;
+  bool IsWebRtcHWDecodingEnabled() override;
+  bool IsWebRtcSrtpAesGcmEnabled() override;
+  bool IsWebRtcSrtpEncryptedHeadersEnabled() override;
+  bool AllowsLoopbackInPeerConnection() override;
+
   blink::WebVideoCaptureImplManager* GetVideoCaptureImplManager() override;
 
   std::unique_ptr<blink::WebGraphicsContext3DProvider>
@@ -179,8 +186,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   void RecordRappor(const char* metric,
                     const blink::WebString& sample) override;
   void RecordRapporURL(const char* metric, const blink::WebURL& url) override;
-  blink::WebTransmissionEncodingInfoHandler* TransmissionEncodingInfoHandler()
-      override;
 
   std::unique_ptr<blink::WebDedicatedWorkerHostFactoryClient>
   CreateDedicatedWorkerHostFactoryClient(
@@ -248,9 +253,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   mojo::PendingRemote<blink::mojom::CodeCacheHost> code_cache_host_remote_;
   mojo::SharedRemote<blink::mojom::CodeCacheHost> code_cache_host_;
-
-  std::unique_ptr<blink::WebTransmissionEncodingInfoHandler>
-      web_transmission_encoding_info_handler_;
 
 #if defined(OS_LINUX)
   sk_sp<font_service::FontLoader> font_loader_;

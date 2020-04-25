@@ -18,7 +18,7 @@ using base::TimeDelta;
 namespace password_manager {
 
 namespace {
-constexpr size_t kMaxNumberOfCharactersToStore = 30;
+constexpr size_t kMaxNumberOfCharactersToStore = 45;
 constexpr TimeDelta kMaxInactivityTime = TimeDelta::FromSeconds(10);
 }
 
@@ -64,7 +64,7 @@ void PasswordReuseDetectionManager::OnKeyPressed(const base::string16& text) {
     input_characters_.erase(
         0, input_characters_.size() - kMaxNumberOfCharactersToStore);
   }
-  PasswordStore* store = client_->GetPasswordStore();
+  PasswordStore* store = client_->GetProfilePasswordStore();
   if (!store)
     return;
   store->CheckReuse(input_characters_, main_frame_url_.GetOrigin().spec(),
@@ -78,7 +78,7 @@ void PasswordReuseDetectionManager::OnPaste(const base::string16 text) {
   base::string16 input = std::move(text);
   if (input.size() > kMaxNumberOfCharactersToStore)
     input = text.substr(input.size() - kMaxNumberOfCharactersToStore);
-  PasswordStore* store = client_->GetPasswordStore();
+  PasswordStore* store = client_->GetProfilePasswordStore();
   if (!store)
     return;
   store->CheckReuse(input, main_frame_url_.GetOrigin().spec(), this);
@@ -90,28 +90,32 @@ void PasswordReuseDetectionManager::OnReuseFound(
     const std::vector<std::string>& matching_domains,
     int saved_passwords) {
   reuse_on_this_page_was_found_ = true;
-  std::unique_ptr<BrowserSavePasswordProgressLogger> logger;
   metrics_util::PasswordType reused_password_type = GetReusedPasswordType(
       reused_protected_password_hash, matching_domains.size());
 
   if (password_manager_util::IsLoggingActive(client_)) {
-    logger.reset(
-        new BrowserSavePasswordProgressLogger(client_->GetLogManager()));
+    BrowserSavePasswordProgressLogger logger(client_->GetLogManager());
     std::vector<std::string> domains_to_log(matching_domains);
-    if (reused_password_type ==
-        metrics_util::PasswordType::PRIMARY_ACCOUNT_PASSWORD) {
-      domains_to_log.push_back("CHROME SYNC PASSWORD");
-    } else if (reused_password_type ==
-               metrics_util::PasswordType::OTHER_GAIA_PASSWORD) {
-      domains_to_log.push_back("OTHER GAIA PASSWORD");
-    } else if (reused_password_type ==
-               metrics_util::PasswordType::ENTERPRISE_PASSWORD) {
-      domains_to_log.push_back("ENTERPRISE PASSWORD");
+    switch (reused_password_type) {
+      case metrics_util::PasswordType::PRIMARY_ACCOUNT_PASSWORD:
+        domains_to_log.push_back("CHROME SYNC PASSWORD");
+        break;
+      case metrics_util::PasswordType::OTHER_GAIA_PASSWORD:
+        domains_to_log.push_back("OTHER GAIA PASSWORD");
+        break;
+      case metrics_util::PasswordType::ENTERPRISE_PASSWORD:
+        domains_to_log.push_back("ENTERPRISE PASSWORD");
+        break;
+      case metrics_util::PasswordType::SAVED_PASSWORD:
+        domains_to_log.push_back("SAVED PASSWORD");
+        break;
+      default:
+        break;
     }
-    // TODO(nparker): Implement LogList() to log all domains in one call.
+
     for (const auto& domain : domains_to_log) {
-      logger->LogString(BrowserSavePasswordProgressLogger::STRING_REUSE_FOUND,
-                        domain);
+      logger.LogString(BrowserSavePasswordProgressLogger::STRING_REUSE_FOUND,
+                       domain);
     }
   }
 
@@ -124,10 +128,13 @@ void PasswordReuseDetectionManager::OnReuseFound(
   metrics_util::LogPasswordReuse(password_length, saved_passwords,
                                  matching_domains.size(),
                                  password_field_detected, reused_password_type);
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
   if (reused_password_type ==
       metrics_util::PasswordType::PRIMARY_ACCOUNT_PASSWORD)
     client_->LogPasswordReuseDetectedEvent();
+#endif
+
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
   std::string username = reused_protected_password_hash.has_value()
                              ? reused_protected_password_hash->username
                              : "";

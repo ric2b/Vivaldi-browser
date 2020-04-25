@@ -216,7 +216,7 @@ void ExtensionLauncherContextMenu::BuildMenu(ui::SimpleMenuModel* menu_model) {
                                          : IDS_APP_LIST_EXTENSIONS_UNINSTALL);
   }
 
-  if (controller()->CanDoShowAppInfoFlow() && !is_system_web_app) {
+  if (controller()->CanDoShowAppInfoFlow(profile, app_id)) {
     AddContextMenuOption(menu_model, ash::SHOW_APP_INFO,
                          IDS_APP_CONTEXT_MENU_SHOW_INFO);
   }

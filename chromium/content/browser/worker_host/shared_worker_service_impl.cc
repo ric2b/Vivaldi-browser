@@ -17,7 +17,7 @@
 #include "base/macros.h"
 #include "base/task/post_task.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
-#include "content/browser/file_url_loader_factory.h"
+#include "content/browser/loader/file_url_loader_factory.h"
 #include "content/browser/service_worker/service_worker_navigation_handle.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/browser/url_loader_factory_getter.h"
@@ -32,6 +32,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/shared_worker_instance.h"
 #include "content/public/common/bind_interface_helpers.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -71,7 +72,7 @@ void SharedWorkerServiceImpl::AddObserver(Observer* observer) {
   observers_.AddObserver(observer);
 }
 
-void SharedWorkerServiceImpl::RemoveObserver(const Observer* observer) {
+void SharedWorkerServiceImpl::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
@@ -117,11 +118,23 @@ void SharedWorkerServiceImpl::ConnectToWorker(
     return;
   }
 
+  // Enforce same-origin policy.
+  // data: URLs are not considered a different origin.
+  url::Origin constructor_origin = render_frame_host->GetLastCommittedOrigin();
+  bool is_cross_origin = !info->url.SchemeIs(url::kDataScheme) &&
+                         url::Origin::Create(info->url) != constructor_origin;
+  if (is_cross_origin &&
+      !GetContentClient()->browser()->DoesSchemeAllowCrossOriginSharedWorker(
+          constructor_origin.scheme())) {
+    ScriptLoadFailed(std::move(client));
+    return;
+  }
+
   RenderFrameHost* main_frame =
       render_frame_host->frame_tree_node()->frame_tree()->GetMainFrame();
   if (!GetContentClient()->browser()->AllowSharedWorker(
-          info->url, main_frame->GetLastCommittedURL(), info->name,
-          render_frame_host->GetLastCommittedOrigin(),
+          info->url, render_frame_host->ComputeSiteForCookies(),
+          main_frame->GetLastCommittedOrigin(), info->name, constructor_origin,
           WebContentsImpl::FromRenderFrameHostID(client_process_id, frame_id)
               ->GetBrowserContext(),
           client_process_id, frame_id)) {
@@ -130,9 +143,9 @@ void SharedWorkerServiceImpl::ConnectToWorker(
   }
 
   SharedWorkerInstance instance(
-      info->url, info->name, render_frame_host->GetLastCommittedOrigin(),
-      info->content_security_policy, info->content_security_policy_type,
-      info->creation_address_space, creation_context_type);
+      info->url, info->name, constructor_origin, info->content_security_policy,
+      info->content_security_policy_type, info->creation_address_space,
+      creation_context_type);
 
   SharedWorkerHost* host = FindMatchingSharedWorkerHost(
       instance.url(), instance.name(), instance.constructor_origin());
@@ -330,6 +343,18 @@ void SharedWorkerServiceImpl::StartWorker(
   // terminate the worker. This also means clients that were still waiting for
   // the shared worker to start will fail.
   if (!worker_process_host || IsShuttingDown(worker_process_host)) {
+    DestroyHost(host.get());
+    return;
+  }
+
+  // Also drop this request if |client|'s render frame host no longer exists and
+  // the worker has no other clients. This is possible if the frame was deleted
+  // between the CreateWorker() and DidCreateScriptLoader() calls. This avoids
+  // starting a shared worker and immediately stopping it because its sole
+  // client is already being torn down and avoids sending a OnClientAdded()
+  // notification for a frame that is already destroyed.
+  if (!RenderFrameHost::FromID(client_process_id, frame_id) &&
+      !host->HasClients()) {
     DestroyHost(host.get());
     return;
   }

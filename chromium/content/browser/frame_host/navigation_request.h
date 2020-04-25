@@ -17,6 +17,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "content/browser/frame_host/navigation_controller_impl.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/frame_host/navigation_throttle_runner.h"
 #include "content/browser/initiator_csp_context.h"
@@ -26,10 +27,14 @@
 #include "content/common/content_export.h"
 #include "content/common/navigation_params.h"
 #include "content/common/navigation_params.mojom.h"
+#include "content/public/browser/global_routing_id.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/navigation_type.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/common/previews_state.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/proxy_server.h"
@@ -43,16 +48,17 @@
 namespace network {
 class ResourceRequestBody;
 struct URLLoaderCompletionStatus;
-}
+}  // namespace network
 
 struct FrameHostMsg_DidCommitProvisionalLoad_Params;
 
 namespace content {
 
 class AppCacheNavigationHandle;
+class BundledExchangesHandleTracker;
+class BundledExchangesNavigationInfo;
 class FrameNavigationEntry;
 class FrameTreeNode;
-class NavigationHandleImpl;
 class NavigationURLLoader;
 class NavigationUIData;
 class NavigatorDelegate;
@@ -66,7 +72,8 @@ struct SubresourceLoaderParams;
 // ResourceDispatcherHost (that lives on the IO thread).
 // TODO(clamy): Describe the interactions between the UI and IO thread during
 // the navigation following its refactoring.
-class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
+class CONTENT_EXPORT NavigationRequest : public NavigationHandle,
+                                         public NavigationURLLoaderDelegate,
                                          NavigationThrottleRunner::Delegate,
                                          private RenderProcessHostObserver {
  public:
@@ -80,7 +87,8 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
     // request is created, this stage is skipped.
     WAITING_FOR_RENDERER_RESPONSE,
 
-    // The request was sent to the IO thread.
+    // The request was sent to the IO thread and the NavigatorDelegate has been
+    // notified.
     STARTED,
 
     // The response started on the IO thread and is ready to be committed. This
@@ -156,11 +164,13 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
       int current_history_list_length,
       bool override_user_agent,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
-      mojom::NavigationClientAssociatedPtrInfo navigation_client,
+      mojo::PendingAssociatedRemote<mojom::NavigationClient> navigation_client,
       mojo::PendingRemote<blink::mojom::NavigationInitiator>
           navigation_initiator,
       scoped_refptr<PrefetchedSignedExchangeCache>
-          prefetched_signed_exchange_cache);
+          prefetched_signed_exchange_cache,
+      std::unique_ptr<BundledExchangesHandleTracker>
+          bundled_exchanges_handle_tracker);
 
   // Creates a request at commit time. This should only be used for
   // renderer-initiated same-document navigations, and navigations whose
@@ -175,7 +185,74 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
       bool is_renderer_initiated,
       bool is_same_document);
 
+  static NavigationRequest* From(NavigationHandle* handle);
+
   ~NavigationRequest() override;
+
+  // NavigationHandle implementation:
+  int64_t GetNavigationId() override;
+  const GURL& GetURL() override;
+  SiteInstanceImpl* GetStartingSiteInstance() override;
+  SiteInstanceImpl* GetSourceSiteInstance() override;
+  bool IsInMainFrame() override;
+  bool IsParentMainFrame() override;
+  bool IsRendererInitiated() override;
+  bool WasServerRedirect() override;
+  const std::vector<GURL>& GetRedirectChain() override;
+  int GetFrameTreeNodeId() override;
+  RenderFrameHostImpl* GetParentFrame() override;
+  base::TimeTicks NavigationStart() override;
+  base::TimeTicks NavigationInputStart() override;
+  bool IsPost() override;
+  const blink::mojom::Referrer& GetReferrer() override;
+  bool HasUserGesture() override;
+  ui::PageTransition GetPageTransition() override;
+  NavigationUIData* GetNavigationUIData() override;
+  bool IsExternalProtocol() override;
+  net::Error GetNetErrorCode() override;
+  RenderFrameHostImpl* GetRenderFrameHost() override;
+  bool IsSameDocument() override;
+  bool HasCommitted() override;
+  bool IsErrorPage() override;
+  bool HasSubframeNavigationEntryCommitted() override;
+  bool DidReplaceEntry() override;
+  bool ShouldUpdateHistory() override;
+  const GURL& GetPreviousURL() override;
+  net::IPEndPoint GetSocketAddress() override;
+  const net::HttpRequestHeaders& GetRequestHeaders() override;
+  void RemoveRequestHeader(const std::string& header_name) override;
+  void SetRequestHeader(const std::string& header_name,
+                        const std::string& header_value) override;
+  const net::HttpResponseHeaders* GetResponseHeaders() override;
+  net::HttpResponseInfo::ConnectionInfo GetConnectionInfo() override;
+  const base::Optional<net::SSLInfo>& GetSSLInfo() override;
+  const base::Optional<net::AuthChallengeInfo>& GetAuthChallengeInfo() override;
+  void RegisterThrottleForTesting(
+      std::unique_ptr<NavigationThrottle> navigation_throttle) override;
+  bool IsDeferredForTesting() override;
+  bool WasStartedFromContextMenu() override;
+  const GURL& GetSearchableFormURL() override;
+  const std::string& GetSearchableFormEncoding() override;
+  ReloadType GetReloadType() override;
+  RestoreType GetRestoreType() override;
+  const GURL& GetBaseURLForDataURL() override;
+  const GlobalRequestID& GetGlobalRequestID() override;
+  bool IsDownload() override;
+  bool IsFormSubmission() override;
+  bool WasInitiatedByLinkClick() override;
+  bool IsSignedExchangeInnerResponse() override;
+  bool HasPrefetchedAlternativeSubresourceSignedExchange() override;
+  bool WasResponseCached() override;
+  const net::ProxyServer& GetProxyServer() override;
+  const std::string& GetHrefTranslate() override;
+  const base::Optional<url::Origin>& GetInitiatorOrigin() override;
+  bool IsSameProcess() override;
+  int GetNavigationEntryOffset() override;
+  bool FromDownloadCrossOriginRedirect() override;
+  void RegisterSubresourceOverride(
+      mojom::TransferrableURLLoaderPtr transferrable_loader) override;
+  GlobalFrameRoutingId GetPreviousRenderFrameHostId() override;
+  bool IsServedFromBackForwardCache() override;
 
   // Called on the UI thread by the Navigator to start the navigation.
   // The NavigationRequest can be deleted while BeginNavigation() is called.
@@ -204,27 +281,15 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
 
   FrameTreeNode* frame_tree_node() const { return frame_tree_node_; }
 
-  SiteInstanceImpl* source_site_instance() const {
-    return source_site_instance_.get();
-  }
-
   SiteInstanceImpl* dest_site_instance() const {
     return dest_site_instance_.get();
   }
-
-  RestoreType restore_type() const { return restore_type_; }
-
-  ReloadType reload_type() const { return reload_type_; }
 
   bool is_view_source() const { return is_view_source_; }
 
   int bindings() const { return bindings_; }
 
-  SiteInstanceImpl* starting_site_instance() const {
-    return starting_site_instance_.get();
-  }
-
-  bool browser_initiated() const { return browser_initiated_ ; }
+  bool browser_initiated() const { return browser_initiated_; }
 
   bool from_begin_navigation() const { return from_begin_navigation_; }
 
@@ -237,11 +302,6 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
 
   void set_was_discarded() { commit_params_->was_discarded = true; }
 
-  NavigationHandleImpl* navigation_handle() const {
-    return navigation_handle_.get();
-  }
-
-  net::Error net_error() { return net_error_; }
   void set_net_error(net::Error net_error) { net_error_ = net_error; }
 
   const std::string& GetMimeType() {
@@ -249,40 +309,16 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
                           : base::EmptyString();
   }
 
-  // The RenderFrameHost that will commit the navigation or an error page.
-  // This is computed when the response is received, or when the navigation
-  // fails and error page should be displayed.
-  RenderFrameHostImpl* render_frame_host() const {
-    // Only allow the RenderFrameHost to be retrieved once it has been set for
-    // this navigation. This will happens either at WillProcessResponse time for
-    // regular navigations or at WillFailRequest time for error pages.
-    CHECK_GE(handle_state_, PROCESSING_WILL_FAIL_REQUEST)
-        << "This accessor should only be called after a RenderFrameHost has "
-           "been picked for this navigation.";
-    static_assert(
-        WILL_FAIL_REQUEST < WILL_PROCESS_RESPONSE,
-        "WillFailRequest state should come before WillProcessResponse");
-    return render_frame_host_;
-  }
-
   const network::ResourceResponse* response() { return response_head_.get(); }
-  const GlobalRequestID& request_id() const {
-    DCHECK_GE(handle_state_, PROCESSING_WILL_PROCESS_RESPONSE);
-    return request_id_;
-  }
-  bool is_download() const { return is_download_; }
-  const base::Optional<net::SSLInfo>& ssl_info() { return ssl_info_; }
-  const base::Optional<net::AuthChallengeInfo>& auth_challenge_info() {
-    return auth_challenge_info_;
-  }
 
   void SetWaitingForRendererResponse();
 
-  // Creates a NavigationHandle. This should be called after any previous
-  // NavigationRequest for the FrameTreeNode has been destroyed. |is_for_commit|
-  // should only be true when creating a NavigationHandle at commit time (this
-  // happens for renderer-initiated same-document navigations).
-  void CreateNavigationHandle(bool is_for_commit);
+  // Notifies the NavigatorDelegate the navigation started. This should be
+  // called after any previous NavigationRequest for the FrameTreeNode has been
+  // destroyed. |is_for_commit| should only be true when creating a
+  // NavigationRequest at commit time (this happens for renderer-initiated
+  // same-document navigations).
+  void StartNavigation(bool is_for_commit);
 
   void set_on_start_checks_complete_closure_for_testing(
       const base::Closure& closure) {
@@ -321,9 +357,6 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   // due to another navigation committing in the meantime.
   void ResetForCrossDocumentRestart();
 
-  void RegisterSubresourceOverride(
-      mojom::TransferrableURLLoaderPtr transferrable_loader);
-
   // Lazily initializes and returns the mojo::NavigationClient interface used
   // for commit. Only used with PerNavigationMojoInterface enabled.
   mojom::NavigationClient* GetCommitNavigationClient();
@@ -340,15 +373,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   // navigation_client used to commit.
   void IgnoreCommitInterfaceDisconnection();
 
-  bool IsSameDocument() const;
-
-  int navigation_entry_offset() { return navigation_entry_offset_; }
-
   NavigationHandleState handle_state() { return handle_state_; }
-
-  NavigationUIData* navigation_ui_data() const {
-    return navigation_ui_data_.get();
-  }
 
   // Resume and CancelDeferredNavigation must only be called by the
   // NavigationThrottle that is currently deferring the navigation.
@@ -361,11 +386,6 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   // Simulates the navigation resuming. Most callers should just let the
   // deferring NavigationThrottle do the resuming.
   void CallResumeForTesting();
-
-  void RegisterThrottleForTesting(
-      std::unique_ptr<NavigationThrottle> navigation_throttle);
-
-  bool IsDeferredForTesting();
 
   typedef base::OnceCallback<void(NavigationThrottle::ThrottleCheckResult)>
       ThrottleChecksFinishedCallback;
@@ -392,35 +412,6 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
     return navigation_type_;
   }
 
-  bool did_replace_entry() const {
-    DCHECK(handle_state_ == DID_COMMIT ||
-           handle_state_ == DID_COMMIT_ERROR_PAGE);
-    return did_replace_entry_;
-  }
-
-  bool should_update_history() const {
-    DCHECK(handle_state_ == DID_COMMIT ||
-           handle_state_ == DID_COMMIT_ERROR_PAGE);
-    return should_update_history_;
-  }
-
-  bool subframe_entry_committed() const {
-    DCHECK(!frame_tree_node_->IsMainFrame());
-    DCHECK(handle_state_ == DID_COMMIT ||
-           handle_state_ == DID_COMMIT_ERROR_PAGE);
-    return subframe_entry_committed_;
-  }
-
-  const GURL& previous_url() const {
-    DCHECK(handle_state_ == DID_COMMIT ||
-           handle_state_ == DID_COMMIT_ERROR_PAGE);
-    return previous_url_;
-  }
-
-  bool from_download_cross_origin_redirect() const {
-    return from_download_cross_origin_redirect_;
-  }
-
 #if defined(OS_ANDROID)
   // Returns a reference to |navigation_handle_| Java counterpart. It is used
   // by Java WebContentsObservers.
@@ -429,15 +420,14 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   }
 #endif
 
-  bool was_redirected() { return was_redirected_; }
-
-  void set_error_page_html(const std::string& error_page_html) {
-    error_page_html_ = error_page_html;
+  const std::string& post_commit_error_page_html() {
+    return post_commit_error_page_html_;
   }
 
-  std::vector<GURL>& redirect_chain() { return redirect_chain_; }
-
-  blink::mojom::Referrer& sanitized_referrer() { return *sanitized_referrer_; }
+  void set_post_commit_error_page_html(
+      const std::string& post_commit_error_page_html) {
+    post_commit_error_page_html_ = post_commit_error_page_html;
+  }
 
   void set_from_download_cross_origin_redirect(
       bool from_download_cross_origin_redirect) {
@@ -449,7 +439,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   // navigation in a subframe. This allows a browser-initiated NavigationRequest
   // to be canceled by the renderer.
   void SetNavigationClient(
-      mojom::NavigationClientAssociatedPtrInfo navigation_client,
+      mojo::PendingAssociatedRemote<mojom::NavigationClient> navigation_client,
       int32_t associated_site_instance_id);
 
   // Whether the new document created by this navigation will be loaded from a
@@ -459,69 +449,28 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
 
   std::unique_ptr<AppCacheNavigationHandle> TakeAppCacheHandle();
 
-  bool is_same_process() {
-    DCHECK(handle_state_ == DID_COMMIT ||
-           handle_state_ == DID_COMMIT_ERROR_PAGE);
-    return is_same_process_;
-  }
-
   void set_complete_callback_for_testing(
       ThrottleChecksFinishedCallback callback) {
     complete_callback_for_testing_ = std::move(callback);
   }
 
-  const net::ProxyServer& proxy_server() { return proxy_server_; }
-
-  int64_t navigation_handle_id() { return navigation_handle_id_; }
-
   // Sets the READY_TO_COMMIT -> DID_COMMIT timeout. Resets the timeout to the
   // default value if |timeout| is zero.
   static void SetCommitTimeoutForTesting(const base::TimeDelta& timeout);
-
-  const net::HttpRequestHeaders& request_headers() { return request_headers_; }
-
-  // Remove a request's header. If the header is not present, it has no effect.
-  // Must be called during a redirect.
-  void RemoveRequestHeader(const std::string& header_name);
-
-  // Set a request's header. If the header is already present, its value is
-  // overwritten. When modified during a navigation start, the headers will be
-  // applied to the initial network request. When modified during a redirect,
-  // the headers will be applied to the redirected request.
-  void SetRequestHeader(const std::string& header_name,
-                        const std::string& header_value);
 
   void set_response_headers_for_testing(
       scoped_refptr<net::HttpResponseHeaders> response_headers) {
     response_headers_for_testing_ = response_headers;
   }
 
-  const net::HttpResponseHeaders* GetResponseHeaders();
-
-  // Whether this navigation was served from the back-forward cache.
-  bool is_served_from_back_forward_cache() {
-    return rfh_restored_from_back_forward_cache_ != nullptr;
-  }
-
   RenderFrameHostImpl* rfh_restored_from_back_forward_cache() {
     return rfh_restored_from_back_forward_cache_;
   }
 
-  // NavigationHandle implementation:
-  // TODO(https://crbug.com/995268): Make NavigationRequest inherit from
-  // NavigationHandle, once NavigationHandleImpl is deleted.
-  bool IsExternalProtocol();
-  bool IsSignedExchangeInnerResponse();
-  net::IPEndPoint GetSocketAddress();
-  bool HasCommitted();
-  bool IsErrorPage();
-  net::HttpResponseInfo::ConnectionInfo GetConnectionInfo();
-  bool IsInMainFrame();
-  RenderFrameHostImpl* GetParentFrame();
-  bool IsParentMainFrame();
-  int GetFrameTreeNodeId();
-  bool WasResponseCached();
-  bool HasPrefetchedAlternativeSubresourceSignedExchange();
+  const BundledExchangesNavigationInfo* bundled_exchanges_navigation_info()
+      const {
+    return bundled_exchanges_navigation_info_.get();
+  }
 
   // The NavigatorDelegate to notify/query for various navigation events.
   // Normally this is the WebContents, except if this NavigationHandle was
@@ -535,23 +484,44 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   // expose the NavigationHandle when navigating to an InterstitialPage.
   NavigatorDelegate* GetDelegate() const;
 
+  blink::mojom::RequestContextType request_context_type() const {
+    DCHECK_GE(handle_state_, PROCESSING_WILL_START_REQUEST);
+    return begin_params_->request_context_type;
+  }
+
+  blink::WebMixedContentContextType mixed_content_context_type() const {
+    DCHECK_GE(handle_state_, PROCESSING_WILL_START_REQUEST);
+    return begin_params_->mixed_content_context_type;
+  }
+
+  // Returns true if the navigation was started by the Navigator by calling
+  // BeginNavigation(), or if the request was created at commit time by calling
+  // CreateForCommit().
+  bool IsNavigationStarted() const;
+
+  // Stop referencing the pending NavigationEntry.
+  //
+  // Note: To be removed after removing DidFailProvisionalLoadWithError().
+  void DropPendingEntryRef();
+
  private:
   friend class NavigationRequestTest;
 
-  NavigationRequest(FrameTreeNode* frame_tree_node,
-                    mojom::CommonNavigationParamsPtr common_params,
-                    mojom::BeginNavigationParamsPtr begin_params,
-                    mojom::CommitNavigationParamsPtr commit_params,
-                    bool browser_initiated,
-                    bool from_begin_navigation,
-                    bool is_for_commit,
-                    const FrameNavigationEntry* frame_navigation_entry,
-                    NavigationEntryImpl* navitation_entry,
-                    std::unique_ptr<NavigationUIData> navigation_ui_data,
-                    mojom::NavigationClientAssociatedPtrInfo navigation_client,
-                    mojo::PendingRemote<blink::mojom::NavigationInitiator>
-                        navigation_initiator,
-                    RenderFrameHostImpl* rfh_restored_from_back_forward_cache);
+  NavigationRequest(
+      FrameTreeNode* frame_tree_node,
+      mojom::CommonNavigationParamsPtr common_params,
+      mojom::BeginNavigationParamsPtr begin_params,
+      mojom::CommitNavigationParamsPtr commit_params,
+      bool browser_initiated,
+      bool from_begin_navigation,
+      bool is_for_commit,
+      const FrameNavigationEntry* frame_navigation_entry,
+      NavigationEntryImpl* navitation_entry,
+      std::unique_ptr<NavigationUIData> navigation_ui_data,
+      mojo::PendingAssociatedRemote<mojom::NavigationClient> navigation_client,
+      mojo::PendingRemote<blink::mojom::NavigationInitiator>
+          navigation_initiator,
+      RenderFrameHostImpl* rfh_restored_from_back_forward_cache);
 
   // NavigationURLLoaderDelegate implementation.
   void OnRequestRedirected(
@@ -682,8 +652,9 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   // Binds the given error_handler to be called when an interface disconnection
   // happens on the renderer side.
   // Only used with PerNavigationMojoInterface enabled.
-  void HandleInterfaceDisconnection(mojom::NavigationClientAssociatedPtr*,
-                                    base::OnceClosure error_handler);
+  void HandleInterfaceDisconnection(
+      mojo::AssociatedRemote<mojom::NavigationClient>*,
+      base::OnceClosure error_handler);
 
   // When called, this NavigationRequest will no longer interpret the interface
   // disconnection on the renderer side as an AbortNavigation.
@@ -776,6 +747,11 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   // Note: |site_url_| should only be updated with the result of this function.
   GURL GetSiteForCommonParamsURL() const;
 
+  // Returns the network isolation key for this NavigationRequest. If
+  // |network_isolation_key_| is empty, the key will be based off request url
+  // origin and top frame origin.
+  net::NetworkIsolationKey GetNetworkIsolationKey() const;
+
   // Updates the state of the navigation handle after encountering a server
   // redirect.
   void UpdateStateFollowingRedirect(const GURL& new_referrer_url,
@@ -806,7 +782,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   //
   // Note #3: Navigations that do not use a URL loader also bypass
   //          NavigationThrottle.
-  bool NeedsUrlLoader() const;
+  bool NeedsUrlLoader();
 
   // Called when the navigation is ready to be committed. This will update the
   // |handle_state_| and inform the delegate.
@@ -842,8 +818,21 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   }
 
   // Helper functions to trace the start and end of |navigation_handle_|.
-  void TraceNavigationHandleStart();
-  void TraceNavigationHandleEnd();
+  void TraceNavigationStart();
+  void TraceNavigationEnd();
+
+  // Returns true if the contents of |common_params_| requires
+  // |source_site_instance_| to be set. This is used to ensure that data:
+  // URLs with valid initiator origins always have |source_site_instance_| set
+  // so that site isolation enforcements work properly.
+  bool RequiresSourceSiteInstance() const;
+
+  // Sets |source_site_instance_| to a SiteInstance that is derived from
+  // |common_params_->initiator_origin| and related to the |frame_tree_node_|'s
+  // current SiteInstance. |source_site_instance_| is only set if it doesn't
+  // already have a value, |common_params_->initiator_origin| has a valid
+  // origin, and RequiresSourceSiteInstance() return true.
+  void SetSourceSiteInstanceToInitiatorIfNeeded();
 
   FrameTreeNode* frame_tree_node_;
 
@@ -859,10 +848,13 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   // modified during redirects.
   // Note: |commit_params_| is not const because was_discarded will
   // be set in CreatedNavigationRequest.
+  // Note: |browser_initiated_| and |common_params_| may be mutated by
+  // ContentBrowserClient::OverrideNavigationParams at StartNavigation time
+  // (i.e. before we actually kick off the navigation).
   mojom::CommonNavigationParamsPtr common_params_;
   mojom::BeginNavigationParamsPtr begin_params_;
   mojom::CommitNavigationParamsPtr commit_params_;
-  const bool browser_initiated_;
+  bool browser_initiated_;
 
   // Stores the NavigationUIData for this navigation until the NavigationHandle
   // is created. This can be null if the embedded did not provide a
@@ -874,12 +866,6 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
 
   NavigationState state_;
 
-  // It's important to ensure |navigation_handle_| outlives |loader_|, since the
-  // loader holds raw pointers to objects owned by the navigation handle
-  // (namely, the AppCache and service worker handles). The destruction order
-  // matters because it occurs over separate tasks on the IO thread. So, declare
-  // the handle before the loader.
-  std::unique_ptr<NavigationHandleImpl> navigation_handle_;
   std::unique_ptr<NavigationURLLoader> loader_;
 
 #if defined(OS_ANDROID)
@@ -962,14 +948,14 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   // case of a renderer initiated navigation. It is expected to be bound until
   // this navigation commits or is canceled.
   // Only valid when PerNavigationMojoInterface is enabled.
-  mojom::NavigationClientAssociatedPtr request_navigation_client_;
+  mojo::AssociatedRemote<mojom::NavigationClient> request_navigation_client_;
   base::Optional<int32_t> associated_site_instance_id_;
 
   // The NavigationClient interface used to commit the navigation. For now, this
   // is only used for same-site renderer-initiated navigation.
   // TODO(clamy, ahemery): Extend to all types of navigation.
   // Only valid when PerNavigationMojoInterface is enabled.
-  mojom::NavigationClientAssociatedPtr commit_navigation_client_;
+  mojo::AssociatedRemote<mojom::NavigationClient> commit_navigation_client_;
 
   // If set, any redirects to HTTP for this navigation will be upgraded to
   // HTTPS. This is used only on subframe navigations, when
@@ -1030,6 +1016,12 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   scoped_refptr<PrefetchedSignedExchangeCache>
       prefetched_signed_exchange_cache_;
 
+  // Tracks navigations within bundled exchanges file. Used when
+  // BundledHTTPExchanges feature is enabled or
+  // TrustableBundledExchangesFileUrl switch is set.
+  std::unique_ptr<BundledExchangesHandleTracker>
+      bundled_exchanges_handle_tracker_;
+
   // The time this navigation was ready to commit.
   base::TimeTicks ready_to_commit_time_;
 
@@ -1043,7 +1035,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
 
   // If set, starting the navigation will immediately result in an error page
   // with this html as content and |net_error| as the network error.
-  std::string error_page_html_;
+  std::string post_commit_error_page_html_;
 
   // This callback will be run when all throttle checks have been performed.
   // TODO(zetamoo): This can be removed once the navigation states are merged.
@@ -1057,7 +1049,21 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   // The instance to process the BundledExchanges that's bound to this request.
   // Used to navigate to the main resource URL of the BundledExchanges, and
   // load it from the corresponding entry.
+  // This is created in OnStartChecksComplete() and passed to the
+  // RenderFrameHostImpl in CommitNavigation().
   std::unique_ptr<BundledExchangesHandle> bundled_exchanges_handle_;
+
+  // Keeps the bundled exchanges related information when |this| is for a
+  // navigation within a bundled exchanges file. Used when
+  // BundledHTTPExchanges feature is enabled or
+  // TrustableBundledExchangesFileUrl switch is set.
+  // For navigations to bundled exchanges file, this is cloned from
+  // |bundled_exchanges_handle_| in CommitNavigation(), and is passed to
+  // NavigationEntry for the navigation. And for history (back / forward)
+  // navigations within the bundled exchanges file, this is cloned from the
+  // NavigationEntry and is used to create a BundledExchangesHandle.
+  std::unique_ptr<BundledExchangesNavigationInfo>
+      bundled_exchanges_navigation_info_;
 
   // Which proxy server was used for this navigation, if any.
   net::ProxyServer proxy_server_;
@@ -1100,6 +1106,18 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate,
   // NavigationRequest is associated with (if any).
   int64_t frame_entry_item_sequence_number_ = -1;
   int64_t frame_entry_document_sequence_number_ = -1;
+
+  // If non-empty, it represents the network isolation key explicitly asked to
+  // be used for this NavigationRequest.
+  base::Optional<net::NetworkIsolationKey> network_isolation_key_;
+
+  // This is used to store the current_frame_host id at request creation time.
+  GlobalFrameRoutingId previous_render_frame_host_id_;
+
+  // This tracks a connection between the current pending entry and this
+  // request, such that the pending entry can be discarded if no requests are
+  // left referencing it.
+  std::unique_ptr<NavigationControllerImpl::PendingEntryRef> pending_entry_ref_;
 
   base::WeakPtrFactory<NavigationRequest> weak_factory_{this};
 

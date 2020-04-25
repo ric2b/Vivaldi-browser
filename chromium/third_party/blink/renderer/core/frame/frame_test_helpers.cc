@@ -370,6 +370,9 @@ WebViewImpl* WebViewHelper::InitializeWithOpener(
   // the case by this point).
   web_view_->DidAttachLocalMainFrame();
 
+  web_view_->SetDeviceScaleFactor(
+      test_web_widget_client_->GetScreenInfo().device_scale_factor);
+
   // Set an initial size for subframes.
   if (frame->Parent())
     frame->FrameWidget()->Resize(WebSize());
@@ -488,8 +491,15 @@ void WebViewHelper::InitializeWebView(TestWebViewClient* web_view_client,
   // Consequently, all external image resources must be mocked.
   web_view_->GetSettings()->SetLoadsImagesAutomatically(true);
 
-  web_view_->SetDeviceScaleFactor(
-      test_web_view_client_->GetScreenInfo().device_scale_factor);
+  // If a test turned off this settings, opened WebViews should propagate that.
+  if (opener) {
+    web_view_->GetSettings()->SetAllowUniversalAccessFromFileURLs(
+        static_cast<WebViewImpl*>(opener)
+            ->GetPage()
+            ->GetSettings()
+            .GetAllowUniversalAccessFromFileURLs());
+  }
+
   web_view_->SetDefaultPageScaleLimits(1, 4);
 }
 
@@ -647,10 +657,6 @@ void TestWebWidgetClient::SetBackgroundColor(SkColor color) {
   layer_tree_host()->set_background_color(color);
 }
 
-void TestWebWidgetClient::SetAllowGpuRasterization(bool allow) {
-  layer_tree_host()->SetHasGpuRasterizationTrigger(allow);
-}
-
 void TestWebWidgetClient::SetPageScaleStateAndLimits(
     float page_scale_factor,
     bool is_pinch_gesture_active,
@@ -698,11 +704,6 @@ void TestWebWidgetClient::StartDeferringCommits(base::TimeDelta timeout) {
 void TestWebWidgetClient::StopDeferringCommits(
     cc::PaintHoldingCommitTrigger trigger) {
   layer_tree_host()->StopDeferringCommits(trigger);
-}
-
-void TestWebWidgetClient::RegisterViewportLayers(
-    const cc::ViewportLayers& layers) {
-  layer_tree_host()->RegisterViewportLayers(layers);
 }
 
 void TestWebWidgetClient::RegisterSelection(

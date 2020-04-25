@@ -47,7 +47,7 @@ class ScriptValue;
 class V8Function;
 class WorkerGlobalScope;
 
-class ScheduledAction final : public GarbageCollectedFinalized<ScheduledAction>,
+class ScheduledAction final : public GarbageCollected<ScheduledAction>,
                               public NameClient {
   DISALLOW_COPY_AND_ASSIGN(ScheduledAction);
 
@@ -55,14 +55,14 @@ class ScheduledAction final : public GarbageCollectedFinalized<ScheduledAction>,
   static ScheduledAction* Create(ScriptState*,
                                  ExecutionContext* target,
                                  V8Function* handler,
-                                 const Vector<ScriptValue>& arguments);
+                                 const HeapVector<ScriptValue>& arguments);
   static ScheduledAction* Create(ScriptState*,
                                  ExecutionContext* target,
                                  const String& handler);
 
   explicit ScheduledAction(ScriptState*,
                            V8Function* handler,
-                           const Vector<ScriptValue>& arguments);
+                           const HeapVector<ScriptValue>& arguments);
   explicit ScheduledAction(ScriptState*, const String& handler);
   // Creates an empty ScheduledAction.
   explicit ScheduledAction(ScriptState*);
@@ -83,7 +83,7 @@ class ScheduledAction final : public GarbageCollectedFinalized<ScheduledAction>,
 
   Member<ScriptStateProtectingContext> script_state_;
   Member<V8Function> function_;
-  Vector<ScriptValue> arguments_;
+  HeapVector<ScriptValue> arguments_;
   String code_;
 };
 

@@ -133,10 +133,10 @@ cca.device.VideoConstraintsPreferrer =
     super(resolBroker, doReconfigureStream);
 
     /**
-     * Object saving information of supported constant fps. Each of its key as
-     * device id and value as an object mapping from resolution to all constant
-     * fps options supported by that resolution.
-     * @type {!Object<string, Object<Array<number>, Array<number>>>}
+     * Object saving information of device supported constant fps. Each of its
+     * key as device id and value as an object mapping from resolution to all
+     * constant fps options supported by that resolution.
+     * @type {!Object<string, !Object<!Array<number>, !Array<number>>>}
      * @private
      */
     this.constFpsInfo_ = {};
@@ -242,12 +242,12 @@ cca.device.VideoConstraintsPreferrer =
       }
       this.prefResolution_[deviceId] = {width, height};
 
-      const constFpses = cca.device.SUPPORTED_CONSTANT_FPS.filter(
-          (fps) => !!fpsRanges.find(
-              ([minFps, maxFps]) => minFps === fps && maxFps === fps));
+      const constFpses =
+          fpsRanges.filter(([minFps, maxFps]) => minFps === maxFps)
+              .map(([fps]) => fps);
       const fpsInfo = {};
-      for (const r of Object.keys(videoMaxFps).map((r) => r.toString())) {
-        fpsInfo[r] = constFpses.filter((fps) => fps <= videoMaxFps[r]);
+      for (const [resolution, maxFps] of Object.entries(videoMaxFps)) {
+        fpsInfo[resolution] = constFpses.filter((fps) => fps <= maxFps);
       }
       this.constFpsInfo_[deviceId] = fpsInfo;
     });
@@ -267,11 +267,11 @@ cca.device.VideoConstraintsPreferrer =
     this.resolBroker_.notifyVideoPrefResolChange(deviceId, width, height);
 
     const fps = stream.getVideoTracks()[0].getSettings().frameRate;
-    const availableFpses = this.constFpsInfo_[deviceId][[width, height]];
-    if (availableFpses.includes(fps)) {
-      this.setPreferredConstFps_(deviceId, width, height, fps);
-    }
-    cca.state.set('multi-fps', availableFpses.length > 1);
+    this.setPreferredConstFps_(deviceId, width, height, fps);
+    const supportedConstFpses =
+        this.constFpsInfo_[deviceId][[width, height]].filter(
+            (fps) => cca.device.SUPPORTED_CONSTANT_FPS.includes(fps));
+    cca.state.set('multi-fps', supportedConstFpses.length > 1);
   }
 
   /**
@@ -309,18 +309,28 @@ cca.device.VideoConstraintsPreferrer =
     // support multiple constant fps options. The resolution-fps tuple are
     // sorted by user preference of constant fps.
     const getFpses = (r) => {
-      let constFpses = [null];
-      if (this.constFpsInfo_[deviceId][r].includes(30) &&
-          this.constFpsInfo_[deviceId][r].includes(60)) {
+      let constFpses;
+      const constFpsInfo = this.constFpsInfo_[deviceId][r];
+      // The higher constant fps will be ignored if constant 30 and 60 presented
+      // due to currently lack of UI support for toggling it.
+      if (constFpsInfo.includes(30) && constFpsInfo.includes(60)) {
         const prefFps =
             this.prefFpses_[deviceId] && this.prefFpses_[deviceId][r] || 30;
         constFpses = prefFps == 30 ? [30, 60] : [60, 30];
+      } else {
+        constFpses = [null];
+        if (constFpsInfo.length > 0) {
+          const maxConstFps = Math.max(...constFpsInfo);
+          if (maxConstFps >= 30) {
+            constFpses.unshift(maxConstFps);
+          }
+        }
       }
       return constFpses.map((fps) => [...r, fps]);
     };
 
     const toConstraints = (width, height, fps) => ({
-      audio: true,
+      audio: {echoCancellation: false},
       video: {
         deviceId: {exact: deviceId},
         frameRate: fps ? {exact: fps} : {min: 24},
@@ -385,7 +395,6 @@ cca.device.PhotoResolPreferrer = class extends cca.device.ConstraintsPreferrer {
             (maxR, R) => (maxR[0] * maxR[1] < R[0] * R[1] ? R : maxR), [0, 0]);
       }
       this.prefResolution_[deviceId] = {width, height};
-      return [deviceId, width, height, photoResols];
     });
     cca.proxy.browserProxy.localStorageSet(
         {devicePhotoResolution: this.prefResolution_});
@@ -450,22 +459,43 @@ cca.device.PhotoResolPreferrer = class extends cca.device.ConstraintsPreferrer {
                 (captureR, r) => (r[0] > captureR[0] ? r : captureR), [0, -1]);
           }
 
-          const filterByScreenSize = ([w, h], index, arr) =>
-              index == arr.length - 1 ||
-              (w <= window.screen.width && h <= window.screen.height);
+          /**
+           * @param {!ResolList} rs
+           * @return {!ResolList}
+           */
+          const sortPreview = (rs) => {
+            if (rs.length == 0) {
+              return [];
+            }
+            rs = [...rs].sort(([w, h], [w2, h2]) => w2 - w);
 
-          const candidates = [...previewRs]
-                                 .sort(([w, h], [w2, h2]) => w2 - w)
-                                 .filter(filterByScreenSize)
-                                 .map(([width, height]) => ({
-                                        audio: false,
-                                        video: {
-                                          deviceId: {exact: deviceId},
-                                          frameRate: {min: 24},
-                                          width,
-                                          height,
-                                        },
-                                      }));
+            // Promote resolution slightly larget than screen size to the first.
+            const screenW =
+                Math.floor(window.screen.width * window.devicePixelRatio);
+            const screenH =
+                Math.floor(window.screen.height * window.devicePixelRatio);
+            let minIdx = null;
+            rs.forEach(([w, h], idx) => {
+              if (w >= screenW && h >= screenH) {
+                minIdx = idx;
+              }
+            });
+            if (minIdx !== null) {
+              rs.unshift(...rs.splice(minIdx, 1));
+            }
+
+            return rs;
+          };
+
+          const candidates =
+              sortPreview(previewRs).map(([width, height]) => ({
+                                           audio: false,
+                                           video: {
+                                             deviceId: {exact: deviceId},
+                                             width,
+                                             height,
+                                           },
+                                         }));
           // Format of map result:
           // [
           //   [[CaptureW 1, CaptureH 1], [CaptureW 2, CaptureH 2], ...],

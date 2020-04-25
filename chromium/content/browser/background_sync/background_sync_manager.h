@@ -125,6 +125,11 @@ class CONTENT_EXPORT BackgroundSyncManager
     clock_ = clock;
   }
 
+  void set_proxy_for_testing(std::unique_ptr<BackgroundSyncProxy> proxy) {
+    DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+    proxy_ = std::move(proxy);
+  }
+
   // Called from DevTools
   void EmulateDispatchSyncEvent(
       const std::string& tag,
@@ -142,7 +147,7 @@ class CONTENT_EXPORT BackgroundSyncManager
   // Scans the list of available events and fires those of type |sync_type| that
   // are ready to fire. For those that can't yet be fired, wakeup alarms are
   // set. Once all of this is done, invokes |callback|.
-  void FireReadyEvents(
+  virtual void FireReadyEvents(
       blink::mojom::BackgroundSyncType sync_type,
       bool reschedule,
       base::OnceClosure callback,
@@ -208,8 +213,6 @@ class CONTENT_EXPORT BackgroundSyncManager
       const std::string& tag,
       scoped_refptr<ServiceWorkerVersion> active_version,
       ServiceWorkerVersion::StatusCallback callback);
-  virtual void ScheduleDelayedTask(blink::mojom::BackgroundSyncType sync_type,
-                                   base::TimeDelta delay);
   virtual void HasMainFrameProviderHost(const url::Origin& origin,
                                         BoolCallback callback);
 
@@ -336,16 +339,18 @@ class CONTENT_EXPORT BackgroundSyncManager
   void ScheduleDelayedProcessingOfRegistrations(
       blink::mojom::BackgroundSyncType sync_type);
 
-  base::CancelableOnceClosure& get_delayed_task(
-      blink::mojom::BackgroundSyncType sync_type);
-
-  void ResetAndScheduleDelayedSyncTask(
-      blink::mojom::BackgroundSyncType sync_type,
-      base::TimeDelta soonest_wakeup_delta);
-
+  // Fires ready events for |sync_type|.
+  // |reschedule| is true when it's ok to schedule background processing from
+  // this method, false otherwise.
+  // |scheduler_id| is an id unique to the |op_scheduler_| task. It's passed to
+  // correctly mark this operation as finished with the |op_scheduler_| and run
+  // the next operation scheduled.
+  // |keepalive| is used to keep the browser alive until the first attempt to
+  // fire a sync event has been made.
   void FireReadyEventsImpl(
       blink::mojom::BackgroundSyncType sync_type,
       bool reschedule,
+      int scheduler_id,
       base::OnceClosure callback,
       std::unique_ptr<BackgroundSyncEventKeepAlive> keepalive);
 
@@ -390,7 +395,8 @@ class CONTENT_EXPORT BackgroundSyncManager
       blink::mojom::BackgroundSyncType sync_type,
       const base::TimeTicks& start_time,
       bool from_wakeup_task,
-      int number_of_batched_sync_events);
+      int number_of_batched_sync_events,
+      base::OnceClosure callback);
 
   // OnRegistrationDeleted callbacks
   void OnRegistrationDeletedImpl(int64_t sw_registration_id,
@@ -458,7 +464,7 @@ class CONTENT_EXPORT BackgroundSyncManager
 
   CacheStorageScheduler op_scheduler_;
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
-  BackgroundSyncProxy proxy_;
+  std::unique_ptr<BackgroundSyncProxy> proxy_;
 
   scoped_refptr<DevToolsBackgroundServicesContextImpl> devtools_context_;
   std::unique_ptr<BackgroundSyncParameters> parameters_;
@@ -469,9 +475,6 @@ class CONTENT_EXPORT BackgroundSyncManager
   // The number of registrations currently in the firing state.
   int num_firing_registrations_one_shot_;
   int num_firing_registrations_periodic_;
-
-  base::CancelableOnceClosure delayed_one_shot_sync_task_;
-  base::CancelableOnceClosure delayed_periodic_sync_task_;
 
   bool delayed_processing_scheduled_one_shot_sync_ = false;
   bool delayed_processing_scheduled_periodic_sync_ = false;

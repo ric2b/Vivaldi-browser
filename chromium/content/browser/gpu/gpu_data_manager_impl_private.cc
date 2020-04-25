@@ -12,10 +12,12 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/rand_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
@@ -35,7 +37,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
-#include "gpu/config/gpu_blacklist.h"
+#include "gpu/config/gpu_blocklist.h"
 #include "gpu/config/gpu_driver_bug_list.h"
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "gpu/config/gpu_feature_info.h"
@@ -57,6 +59,9 @@
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/gpu_switching_manager.h"
 
+#if defined(OS_ANDROID)
+#include "base/android/application_status_listener.h"
+#endif
 #if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
 #endif
@@ -70,6 +75,22 @@
 namespace content {
 
 namespace {
+
+#if defined(OS_ANDROID)
+// NOINLINE to ensure this function is used in crash reports.
+NOINLINE void FatalGpuProcessLaunchFailureOnBackground() {
+  if (!base::android::ApplicationStatusListener::HasVisibleActivities()) {
+    // We expect the platform to aggressively kill services when the app is
+    // backgrounded. A FATAL error creates a dialog notifying users that the
+    // app has crashed which doesn't look good. So we use SIGKILL instead. But
+    // still do a crash dump for 1% cases to make sure we're not regressing this
+    // case.
+    if (base::RandInt(1, 100) == 1)
+      base::debug::DumpWithoutCrashing();
+    kill(getpid(), SIGKILL);
+  }
+}
+#endif
 
 #if defined(OS_WIN)
 int GetGpuBlacklistHistogramValueWin(gpu::GpuFeatureStatus status) {
@@ -93,7 +114,7 @@ int GetGpuBlacklistHistogramValueWin(gpu::GpuFeatureStatus status) {
 // Send UMA histograms about the enabled features and GPU properties.
 void UpdateFeatureStats(const gpu::GpuFeatureInfo& gpu_feature_info) {
   // Update applied entry stats.
-  std::unique_ptr<gpu::GpuBlacklist> blacklist(gpu::GpuBlacklist::Create());
+  std::unique_ptr<gpu::GpuBlocklist> blacklist(gpu::GpuBlocklist::Create());
   DCHECK(blacklist.get() && blacklist->max_entry_id() > 0);
   uint32_t max_entry_id = blacklist->max_entry_id();
   // Use entry 0 to capture the total number of times that data
@@ -251,36 +272,6 @@ void RequestVideoMemoryUsageStats(
       base::BindOnce(&OnVideoMemoryUsageStats, std::move(callback)));
 }
 
-#if defined(OS_WIN)
-void UpdateDxDiagNodeOnIO(const gpu::DxDiagNode& dx_diagnostics) {
-  // This function is called on the IO thread, but GPUInfo on GpuDataManagerImpl
-  // should be updated on the UI thread since it can call into functions that
-  // expect to run in the UI thread.
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(
-          [](const gpu::DxDiagNode& dx_diagnostics) {
-            GpuDataManagerImpl::GetInstance()->UpdateDxDiagNode(dx_diagnostics);
-          },
-          dx_diagnostics));
-}
-
-void UpdateDx12VulkanInfoOnIO(
-    const gpu::Dx12VulkanVersionInfo& dx12_vulkan_version_info) {
-  // This function is called on the IO thread, but GPUInfo on GpuDataManagerImpl
-  // should be updated on the UI thread since it can call into functions that
-  // expect to run in the UI thread.
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(
-          [](const gpu::Dx12VulkanVersionInfo& dx12_vulkan_version_info) {
-            GpuDataManagerImpl::GetInstance()->UpdateDx12VulkanInfo(
-                dx12_vulkan_version_info);
-          },
-          dx12_vulkan_version_info));
-}
-#endif
-
 // Determines if SwiftShader is available as a fallback for WebGL.
 bool SwiftShaderAllowed() {
 #if !BUILDFLAG(ENABLE_SWIFTSHADER)
@@ -390,38 +381,48 @@ bool GpuDataManagerImplPrivate::GpuProcessStartAllowed() const {
   return false;
 }
 
-void GpuDataManagerImplPrivate::RequestCompleteGpuInfoIfNeeded() {
-  if (complete_gpu_info_already_requested_)
-    return;
-  if (!NeedsCompleteGpuInfoCollection())
-    return;
+void GpuDataManagerImplPrivate::RequestDxdiagDx12VulkanGpuInfoIfNeeded(
+    GpuInfoRequest request,
+    bool delayed) {
+  if (request & kGpuInfoRequestDxDiag) {
+    // Delay is not supported in DxDiag request
+    DCHECK(!delayed);
+    RequestDxDiagNodeData();
+  }
 
+  if (request & kGpuInfoRequestDx12Vulkan)
+    RequestGpuSupportedRuntimeVersion(delayed);
+}
+
+void GpuDataManagerImplPrivate::RequestDxDiagNodeData() {
 #if defined(OS_WIN)
-  complete_gpu_info_already_requested_ = true;
-  GpuProcessHost::CallOnIO(GPU_PROCESS_KIND_UNSANDBOXED_NO_GL,
-                           true /* force_create */,
-                           base::BindOnce([](GpuProcessHost* host) {
-                             if (!host)
-                               return;
-                             host->gpu_service()->RequestCompleteGpuInfo(
-                                 base::BindOnce(&UpdateDxDiagNodeOnIO));
-                           }));
-#else
-  // NeedsCompleteGpuInfoCollection() always returns false on platforms other
-  // than Windows.
-  NOTREACHED();
+  if (gpu_info_dx_diag_requested_)
+    return;
+  gpu_info_dx_diag_requested_ = true;
+  GpuProcessHost::CallOnIO(
+      GPU_PROCESS_KIND_UNSANDBOXED_NO_GL, true /* force_create */,
+      base::BindOnce([](GpuProcessHost* host) {
+        if (!host) {
+          GpuDataManagerImpl::GetInstance()->UpdateDxDiagNodeRequestStatus(
+              false);
+          return;
+        }
+        GpuDataManagerImpl::GetInstance()->UpdateDxDiagNodeRequestStatus(true);
+        host->gpu_service()->RequestCompleteGpuInfo(
+            base::BindOnce([](const gpu::DxDiagNode& dx_diagnostics) {
+              GpuDataManagerImpl::GetInstance()->UpdateDxDiagNode(
+                  dx_diagnostics);
+            }));
+      }));
 #endif
 }
 
 void GpuDataManagerImplPrivate::RequestGpuSupportedRuntimeVersion(
     bool delayed) {
 #if defined(OS_WIN)
-  if (gpu_info_dx12_vulkan_valid_) {
-    NotifyGpuInfoUpdate();
-    return;
-  }
-
   base::OnceClosure task = base::BindOnce([]() {
+    if (GpuDataManagerImpl::GetInstance()->Dx12VulkanRequested())
+      return;
     GpuProcessHost* host = GpuProcessHost::Get(
         GPU_PROCESS_KIND_UNSANDBOXED_NO_GL, true /* force_create */);
     if (!host) {
@@ -430,20 +431,17 @@ void GpuDataManagerImplPrivate::RequestGpuSupportedRuntimeVersion(
     }
     GpuDataManagerImpl::GetInstance()->UpdateDx12VulkanRequestStatus(true);
     host->gpu_service()->GetGpuSupportedRuntimeVersion(
-        base::BindOnce(&UpdateDx12VulkanInfoOnIO));
+        base::BindOnce([](const gpu::Dx12VulkanVersionInfo& info) {
+          GpuDataManagerImpl::GetInstance()->UpdateDx12VulkanInfo(info);
+        }));
   });
 
   if (delayed) {
     base::PostDelayedTask(FROM_HERE, {BrowserThread::IO}, std::move(task),
                           base::TimeDelta::FromSeconds(120));
   } else {
-    gpu_info_dx12_vulkan_requested_ = true;
-    gpu_info_dx12_vulkan_request_failed_ = false;
     base::PostTask(FROM_HERE, {BrowserThread::IO}, std::move(task));
   }
-
-#else
-  NOTREACHED();
 #endif
 }
 
@@ -454,10 +452,11 @@ bool GpuDataManagerImplPrivate::IsEssentialGpuInfoAvailable() const {
 
 bool GpuDataManagerImplPrivate::IsDx12VulkanVersionAvailable() const {
 #if defined(OS_WIN)
-  // gpu_integration_test needs dx12/Vulkan info. If this info is needed,
-  // --no-delay-for-dx12-vulkan-info-collection should be added to the browser
-  // command line. This function returns the status of availability to the tests
-  // based on whether gpu info has been requested or not.
+  // Certain gpu_integration_test needs dx12/Vulkan info. If this info is
+  // needed, --no-delay-for-dx12-vulkan-info-collection should be added to the
+  // browser command line, so that the collection of this info isn't delayed.
+  // This function returns the status of availability to the tests based on
+  // whether gpu info has been requested or not.
 
   return gpu_info_dx12_vulkan_valid_ || !gpu_info_dx12_vulkan_requested_ ||
          gpu_info_dx12_vulkan_request_failed_;
@@ -557,8 +556,6 @@ void GpuDataManagerImplPrivate::UpdateGpuInfo(
 void GpuDataManagerImplPrivate::UpdateDxDiagNode(
     const gpu::DxDiagNode& dx_diagnostics) {
   gpu_info_.dx_diagnostics = dx_diagnostics;
-  if (complete_gpu_info_already_requested_)
-    complete_gpu_info_already_requested_ = false;
   // No need to call GetContentClient()->SetGpuInfo().
   NotifyGpuInfoUpdate();
 }
@@ -572,6 +569,14 @@ void GpuDataManagerImplPrivate::UpdateDx12VulkanInfo(
   NotifyGpuInfoUpdate();
 }
 
+void GpuDataManagerImplPrivate::UpdateDxDiagNodeRequestStatus(
+    bool request_continues) {
+  gpu_info_dx_diag_request_failed_ = !request_continues;
+
+  if (gpu_info_dx_diag_request_failed_)
+    NotifyGpuInfoUpdate();
+}
+
 void GpuDataManagerImplPrivate::UpdateDx12VulkanRequestStatus(
     bool request_continues) {
   gpu_info_dx12_vulkan_requested_ = true;
@@ -579,6 +584,10 @@ void GpuDataManagerImplPrivate::UpdateDx12VulkanRequestStatus(
 
   if (gpu_info_dx12_vulkan_request_failed_)
     NotifyGpuInfoUpdate();
+}
+
+bool GpuDataManagerImplPrivate::Dx12VulkanRequested() const {
+  return gpu_info_dx12_vulkan_requested_;
 }
 #endif
 
@@ -952,14 +961,6 @@ int64_t GpuDataManagerImplPrivate::GetBlockAllDomainsDurationInMs() const {
   return kBlockAllDomainsMs;
 }
 
-bool GpuDataManagerImplPrivate::NeedsCompleteGpuInfoCollection() const {
-#if defined(OS_WIN)
-  return gpu_info_.dx_diagnostics.IsEmpty();
-#else
-  return false;
-#endif
-}
-
 gpu::GpuMode GpuDataManagerImplPrivate::GetGpuMode() const {
   return gpu_mode_;
 }
@@ -969,6 +970,9 @@ void GpuDataManagerImplPrivate::FallBackToNextGpuMode() {
   // Android and Chrome OS can't switch to software compositing. If the GPU
   // process initialization fails or GPU process is too unstable then crash the
   // browser process to reset everything.
+#if defined(OS_ANDROID)
+  FatalGpuProcessLaunchFailureOnBackground();
+#endif
   LOG(FATAL) << "GPU process isn't usable. Goodbye.";
 #else
   switch (gpu_mode_) {

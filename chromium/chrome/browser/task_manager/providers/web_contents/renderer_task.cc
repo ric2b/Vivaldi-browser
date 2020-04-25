@@ -21,6 +21,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -33,7 +34,7 @@ namespace {
 // |render_process_host|.
 ProcessResourceUsage* CreateRendererResourcesSampler(
     content::RenderProcessHost* render_process_host) {
-  content::mojom::ResourceUsageReporterPtr service;
+  mojo::PendingRemote<content::mojom::ResourceUsageReporter> service;
   BindInterface(render_process_host, &service);
   return new ProcessResourceUsage(std::move(service));
 }
@@ -88,7 +89,7 @@ RendererTask::RendererTask(const base::string16& title,
       render_process_id_(render_process_host_->GetID()),
       v8_memory_allocated_(0),
       v8_memory_used_(0),
-      webcache_stats_(blink::WebCache::ResourceTypeStats()),
+      webcache_stats_(blink::WebCacheResourceTypeStats()),
       profile_name_(GetRendererProfileName(render_process_host_)),
       termination_status_(base::TERMINATION_STATUS_STILL_RUNNING),
       termination_error_code_(0) {
@@ -134,7 +135,7 @@ void RendererTask::Refresh(const base::TimeDelta& update_interval,
       renderer_resources_sampler_->GetV8MemoryAllocated());
   v8_memory_used_ = base::saturated_cast<int64_t>(
       renderer_resources_sampler_->GetV8MemoryUsed());
-  webcache_stats_ = renderer_resources_sampler_->GetWebCoreCacheStats();
+  webcache_stats_ = renderer_resources_sampler_->GetBlinkMemoryCacheStats();
 }
 
 Task::Type RendererTask::GetType() const {
@@ -174,7 +175,7 @@ bool RendererTask::ReportsWebCacheStats() const {
   return true;
 }
 
-blink::WebCache::ResourceTypeStats RendererTask::GetWebCacheStats() const {
+blink::WebCacheResourceTypeStats RendererTask::GetWebCacheStats() const {
   return webcache_stats_;
 }
 

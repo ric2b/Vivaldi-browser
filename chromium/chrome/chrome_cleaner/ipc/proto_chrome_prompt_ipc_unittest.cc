@@ -18,7 +18,7 @@
 #include "base/win/win_util.h"
 #include "chrome/chrome_cleaner/ipc/ipc_test_util.h"
 #include "chrome/chrome_cleaner/ipc/proto_chrome_prompt_ipc.h"
-#include "chrome/chrome_cleaner/logging/scoped_logging.h"
+#include "chrome/chrome_cleaner/test/child_process_logger.h"
 #include "components/chrome_cleaner/public/constants/constants.h"
 #include "components/chrome_cleaner/public/proto/chrome_prompt.pb.h"
 #include "components/chrome_cleaner/public/proto/chrome_prompt_for_tests.pb.h"
@@ -41,8 +41,8 @@ constexpr char kExpectedPromptResultSwitch[] = "expected-prompt-result";
 constexpr char kExpectedChromeDisconnectPointSwitch[] =
     "expected-parent-disconnected";
 
-const base::char16 kInvalidUTF16String[] = {0xDC00, 0xD800, 0xD800, 0xDFFF,
-                                            0xDFFF, 0xDBFF, 0};
+constexpr base::char16 kInvalidUTF16String[] = {0xDC00, 0xD800, 0xD800, 0xDFFF,
+                                                0xDFFF, 0xDBFF, 0};
 const base::FilePath kInvalidFilePath(kInvalidUTF16String);
 const base::FilePath kNonASCIIFilePath(L"ééààçç");
 const base::string16 kInvalidRegistryKey(kInvalidUTF16String);
@@ -419,9 +419,7 @@ class MockChrome {
 // Gtest to log.
 class ChildProcess {
  public:
-  ChildProcess()
-      : scopped_logging_(
-            std::make_unique<ScopedLogging>(internal::GetLogPathSuffix())) {
+  ChildProcess() {
     mock_chrome_ = std::make_unique<MockChrome>(
         ExtractHandleFromCommandLine(chrome_cleaner::kChromeReadHandleSwitch),
         ExtractHandleFromCommandLine(chrome_cleaner::kChromeWriteHandleSwitch));
@@ -570,7 +568,6 @@ class ChildProcess {
 
  private:
   std::unique_ptr<MockChrome> mock_chrome_;
-  std::unique_ptr<ScopedLogging> scopped_logging_;
 
   ChromeDisconnectPoint expected_disconnect_point_ =
       ChromeDisconnectPoint::kUnspecified;
@@ -582,7 +579,7 @@ class ChildProcess {
 
 // This mimics the Chrome side of the IPC.
 MULTIPROCESS_TEST_MAIN(ProtoChromePromptIPCClientMain) {
-  base::test::ScopedTaskEnvironment scoped_task_environment;
+  base::test::TaskEnvironment task_environment;
 
   ChildProcess child_process;
   if (!child_process.Run()) {
@@ -596,12 +593,15 @@ class ProtoChromePromptIPCTest
     : public ::testing::TestWithParam<
           std::tuple<bool, bool, PromptAcceptance, ChromeDisconnectPoint>> {
  private:
-  base::test::ScopedTaskEnvironment scoped_task_environment;
+  base::test::TaskEnvironment task_environment;
 };
 
 class ParentProcess {
  public:
   bool Initialize() {
+    if (!child_process_logger_.Initialize())
+      return false;
+
     // Inject the flags related to the the config in the command line.
     test_config_.EnhanceCommandLine(&command_line_);
 
@@ -630,11 +630,13 @@ class ParentProcess {
   }
 
   void Run() {
-    ASSERT_TRUE(internal::DeleteChildProcessLogs());
+    child_process_logger_.UpdateLaunchOptions(&launch_options_);
 
     // Pass the command to the child process and launch the child process.
     base::Process child_process = base::SpawnMultiProcessTestChild(
         "ProtoChromePromptIPCClientMain", command_line_, launch_options_);
+    if (!child_process.IsRunning())
+      child_process_logger_.DumpLogs();
     ASSERT_TRUE(child_process.IsRunning());
 
     // Close our references to the handles as they are now handled by the child
@@ -701,9 +703,8 @@ class ParentProcess {
 
     EXPECT_EQ(expected_exit_code, rv);
 
-    if (!success || rv != 0) {
-      internal::PrintChildProcessLogs();
-    }
+    if (!success || rv != 0)
+      child_process_logger_.DumpLogs();
   }
 
   TestConfig& GetTestConfig() { return test_config_; }
@@ -727,6 +728,8 @@ class ParentProcess {
   // Blocks until we receive the response from Chrome or an error occurs.
   base::RunLoop main_runloop_;
   bool error_occurred_ = false;
+
+  ChildProcessLogger child_process_logger_;
 };
 
 // This contains calls to the chrome_cleaner_ipc implementation.
@@ -839,7 +842,7 @@ class ProtoChromePromptSameProcessTest : public ::testing::Test {
   }
 
  protected:
-  base::test::ScopedTaskEnvironment scoped_task_environment;
+  base::test::TaskEnvironment task_environment;
 
   std::unique_ptr<MockChrome> mock_chrome_;
   std::unique_ptr<ProtoChromePromptIPC> chrome_prompt_ipc_;

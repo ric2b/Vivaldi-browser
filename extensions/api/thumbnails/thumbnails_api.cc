@@ -44,6 +44,7 @@
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_skia_utils.h"
 #include "ui/vivaldi_ui_utils.h"
@@ -392,7 +393,7 @@ void ThumbnailsCaptureUIFunction::OnCaptureDone(bool success,
     return;
   }
 
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE,
       {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
@@ -404,7 +405,7 @@ void ThumbnailsCaptureUIFunction::ProcessImageOnWorkerThread(
     SkBitmap bitmap) {
   bool success = SaveBitmapOnWorkerThread(std::move(bitmap), format_,
                                           &image_data_, &file_path_);
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&ThumbnailsCaptureUIFunction::SendResult, this, success));
 }
@@ -502,7 +503,15 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
 
   ::vivaldi::CapturePage::CaptureParams capture_params;
   capture_params.full_page = capture_full_page;
-  capture_params.rect = rect;
+
+// Need to transform the rect to pixelsize from device-size.
+  double scale = 1.0f;
+  display::Screen* screen = display::Screen::GetScreen();
+  if (screen) {
+    scale = screen->GetDisplayNearestPoint(gfx::Point(rect.x(), rect.y()))
+                .device_scale_factor();
+  }
+  capture_params.rect = gfx::ConvertRectToPixel(scale, rect);
   capture_params.target_size = out_dimension;
 
   ::vivaldi::CapturePage::Capture(
@@ -515,7 +524,7 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
 
 void ThumbnailsCaptureTabFunction::OnThumbnailsCaptureCompleted(
     ::vivaldi::CapturePage::Result captured) {
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE,
       {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
@@ -538,7 +547,7 @@ void ThumbnailsCaptureTabFunction::ConvertImageOnWorkerThread(
                                        &image_data_, &file_path_);
   } while (false);
 
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&ThumbnailsCaptureTabFunction::OnImageConverted, this,
                      success));
@@ -609,7 +618,7 @@ void ThumbnailsCaptureUrlFunction::OnCaptured(
     SendResult(false);
     return;
   }
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE,
       {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
@@ -636,7 +645,7 @@ void ThumbnailsCaptureUrlFunction::ConvertImageOnWorkerThread(
     return;
   } while (false);
 
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&ThumbnailsCaptureUrlFunction::SendResult, this,
                      false));

@@ -39,8 +39,8 @@
 #include "chrome/browser/chromeos/account_manager/account_manager_migrator.h"
 #include "chrome/browser/chromeos/account_manager/account_manager_util.h"
 #include "chrome/browser/chromeos/arc/arc_migration_guide_notification.h"
-#include "chrome/browser/chromeos/arc/arc_service_launcher.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/base/locale_util.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/child_accounts/child_policy_observer.h"
@@ -158,9 +158,9 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/page_zoom.h"
 #include "extensions/common/features/feature_session_type.h"
 #include "rlz/buildflags/buildflags.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -364,7 +364,7 @@ bool CanPerformEarlyRestart() {
   if (controller->password_changed())
     return false;
 
-  if (controller->auth_mode() != LoginPerformer::AUTH_MODE_INTERNAL)
+  if (controller->auth_mode() != LoginPerformer::AuthorizationMode::kInternal)
     return false;
 
   // No early restart if Easy unlock key needs to be updated.
@@ -1172,8 +1172,7 @@ void UserSessionManager::InitializeAccountManager() {
   base::FilePath profile_path =
       ProfileHelper::GetProfilePathByUserIdHash(user_context_.GetUserIDHash());
 
-  if (features::IsAccountManagerEnabled() &&
-      ProfileHelper::IsRegularProfilePath(profile_path)) {
+  if (ProfileHelper::IsRegularProfilePath(profile_path)) {
     chromeos::InitializeAccountManager(
         profile_path,
         base::BindOnce(&UserSessionManager::PrepareProfile, AsWeakPtr(),
@@ -1346,14 +1345,11 @@ void UserSessionManager::InitProfilePreferences(
     }
 
     bool should_use_legacy_flow = false;
-    if (!features::IsAccountManagerEnabled()) {
-      // Always use the legacy flow if Account Manager has not been enabled yet.
-      should_use_legacy_flow = true;
-    } else if (!identity_manager
-                    ->FindExtendedAccountInfoForAccountWithRefreshTokenByGaiaId(
-                        gaia_id)
-                    .has_value() &&
-               user_context.GetRefreshToken().empty()) {
+    if (!identity_manager
+             ->FindExtendedAccountInfoForAccountWithRefreshTokenByGaiaId(
+                 gaia_id)
+             .has_value() &&
+        user_context.GetRefreshToken().empty()) {
       // Edge case: |AccountManager| is enabled but neither |IdentityManager|
       // nor |user_context| has the refresh token. This means that an existing
       // user has switched on Account Manager for the first time and has not
@@ -1626,7 +1622,7 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
   // Record each user's "Page zoom" setting for https://crbug.com/955071.
   // This can be removed after M79.
   double zoom_level = profile->GetZoomLevelPrefs()->GetDefaultZoomLevelPref();
-  double zoom_factor = content::ZoomLevelToZoomFactor(zoom_level);
+  double zoom_factor = blink::PageZoomLevelToZoomFactor(zoom_level);
   int zoom_percent = std::floor(zoom_factor * 100);
   // Zoom can be greater than 100%.
   UMA_HISTOGRAM_COUNTS_1000("Login.DefaultPageZoom", zoom_percent);
@@ -2210,7 +2206,7 @@ UserSessionManager::GetDefaultIMEState(Profile* profile) {
   return state;
 }
 
-void UserSessionManager::CheckEolStatus(Profile* profile) {
+void UserSessionManager::CheckEolInfo(Profile* profile) {
   if (!EolNotification::ShouldShowEolNotification())
     return;
 
@@ -2222,7 +2218,7 @@ void UserSessionManager::CheckEolStatus(Profile* profile) {
                .insert(std::make_pair(profile, std::move(eol_notification)))
                .first;
   }
-  iter->second->CheckEolStatus();
+  iter->second->CheckEolInfo();
 }
 
 void UserSessionManager::StartAccountManagerMigration(Profile* profile) {
@@ -2303,7 +2299,7 @@ void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
 
   // Check to see if this profile should show EndOfLife Notification and show
   // the message accordingly.
-  CheckEolStatus(profile);
+  CheckEolInfo(profile);
 
   // Check to see if this profile should show TPM Firmware Update Notification
   // and show the message accordingly.

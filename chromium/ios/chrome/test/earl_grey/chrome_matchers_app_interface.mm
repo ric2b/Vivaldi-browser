@@ -21,17 +21,19 @@
 #import "ios/chrome/browser/ui/payments/payment_request_view_controller.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_constants.h"
+#import "ios/chrome/browser/ui/settings/autofill/autofill_add_credit_card_view_controller.h"
+#import "ios/chrome/browser/ui/settings/autofill/autofill_credit_card_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/cells/clear_browsing_data_constants.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_cell.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_item.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_ui_constants.h"
+#import "ios/chrome/browser/ui/settings/credit_card_scanner/credit_card_scanner_view_controller.h"
 #import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/google_services/advanced_signin_settings_coordinator.h"
 #import "ios/chrome/browser/ui/settings/import_data_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/privacy_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller.h"
-#import "ios/chrome/browser/ui/settings/sync/sync_settings_table_view_controller.h"
 #import "ios/chrome/browser/ui/static_content/static_html_view_controller.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/tab_grid/tab_grid_constants.h"
@@ -199,6 +201,19 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
                     grey_accessibilityTrait(UIAccessibilityTraitHeader), nil);
 }
 
++ (id<GREYMatcher>)textFieldForCellWithLabelID:(int)messageID {
+  return grey_allOf(grey_accessibilityID([l10n_util::GetNSStringWithFixup(
+                        messageID) stringByAppendingString:@"_textField"]),
+                    grey_kindOfClass([UITextField class]), nil);
+}
+
++ (id<GREYMatcher>)iconViewForCellWithLabelID:(int)messageID
+                                     iconType:(NSString*)iconType {
+  return grey_allOf(grey_accessibilityID([l10n_util::GetNSStringWithFixup(
+                        messageID) stringByAppendingString:iconType]),
+                    grey_kindOfClass([UIImageView class]), nil);
+}
+
 + (id<GREYMatcher>)primaryToolbar {
   return grey_kindOfClass([PrimaryToolbarView class]);
 }
@@ -209,8 +224,9 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
 }
 
 + (id<GREYMatcher>)closeButton {
-  return
-      [ChromeMatchersAppInterface buttonWithAccessibilityLabelID:(IDS_CLOSE)];
+  return grey_allOf(
+      [ChromeMatchersAppInterface buttonWithAccessibilityLabelID:(IDS_CLOSE)],
+      grey_not(grey_accessibilityTrait(UIAccessibilityTraitNotEnabled)), nil);
 }
 
 + (id<GREYMatcher>)forwardButton {
@@ -360,12 +376,6 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
   return grey_accessibilityID(kBookmarkHomeNavigationBarDoneButtonIdentifier);
 }
 
-+ (id<GREYMatcher>)accountConsistencySetupSigninButton {
-  return [ChromeMatchersAppInterface
-      buttonWithAccessibilityLabelID:
-          (IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON)];
-}
-
 + (id<GREYMatcher>)accountConsistencyConfirmationOKButton {
   int labelID = IDS_IOS_ACCOUNT_UNIFIED_CONSENT_OK_BUTTON;
   return [ChromeMatchersAppInterface buttonWithAccessibilityLabelID:labelID];
@@ -418,6 +428,35 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
   return grey_accessibilityID(kSyncSettingsConfirmButtonId);
 }
 
++ (id<GREYMatcher>)paymentMethodsButton {
+  return [ChromeMatchersAppInterface
+      buttonWithAccessibilityLabelID:(IDS_AUTOFILL_PAYMENT_METHODS)];
+}
+
++ (id<GREYMatcher>)addCreditCardView {
+  return grey_accessibilityID(kAddCreditCardViewID);
+}
+
++ (id<GREYMatcher>)autofillCreditCardTableView {
+  return grey_accessibilityID(kAutofillCreditCardTableViewId);
+}
+
++ (id<GREYMatcher>)addPaymentMethodButton {
+  return grey_accessibilityID(kSettingsAddPaymentMethodButtonId);
+}
+
++ (id<GREYMatcher>)addCreditCardButton {
+  return grey_accessibilityID(kSettingsAddCreditCardButtonID);
+}
+
++ (id<GREYMatcher>)addCreditCardCancelButton {
+  return grey_accessibilityID(kSettingsAddCreditCardCancelButtonID);
+}
+
++ (id<GREYMatcher>)creditCardScannerView {
+  return grey_accessibilityID(kCreditCardScannerViewID);
+}
+
 + (id<GREYMatcher>)toolsMenuView {
   return grey_accessibilityID(kPopupMenuToolsMenuTableViewId);
 }
@@ -456,10 +495,6 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
 
 + (id<GREYMatcher>)settingsPrivacyTableView {
   return grey_accessibilityID(kPrivacyTableViewId);
-}
-
-+ (id<GREYMatcher>)settingsSyncManageSyncedDataButton {
-  return grey_accessibilityID(kSettingsSyncId);
 }
 
 + (id<GREYMatcher>)accountsSyncButton {

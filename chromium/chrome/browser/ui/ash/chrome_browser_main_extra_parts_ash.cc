@@ -14,6 +14,7 @@
 #include "base/command_line.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/night_light/night_light_client.h"
 #include "chrome/browser/chromeos/policy/display_resolution_handler.h"
@@ -137,15 +138,20 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
       chromeos::input_method::InputMethodManager::Get());
   ime_controller_client_->Init();
 
+  // NOTE: The WallpaperControllerClient must be initialized before the
+  // session controller, because the session controller triggers the loading
+  // of users, which itself calls a code path which eventually reaches the
+  // WallpaperControllerClient singleton instance via
+  // chromeos::ChromeUserManagerImpl.
+  wallpaper_controller_client_ = std::make_unique<WallpaperControllerClient>();
+  wallpaper_controller_client_->Init();
+
   session_controller_client_ = std::make_unique<SessionControllerClientImpl>();
   session_controller_client_->Init();
 
   system_tray_client_ = std::make_unique<SystemTrayClient>();
   tablet_mode_page_behavior_ = std::make_unique<TabletModePageBehavior>();
   vpn_list_forwarder_ = std::make_unique<VpnListForwarder>();
-
-  wallpaper_controller_client_ = std::make_unique<WallpaperControllerClient>();
-  wallpaper_controller_client_->Init();
 
   chrome_launcher_controller_initializer_ =
       std::make_unique<internal::ChromeLauncherControllerInitializer>();

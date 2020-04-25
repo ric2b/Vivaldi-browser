@@ -134,11 +134,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   GraphicsLayer* ChildForSuperlayers() const;
   void SetSublayers(const GraphicsLayerVector&);
 
-  bool HasChildTransformLayer() const { return child_transform_layer_.get(); }
-  GraphicsLayer* ChildTransformLayer() const {
-    return child_transform_layer_.get();
-  }
-
   GraphicsLayer* SquashingContainmentLayer() const {
     return squashing_containment_layer_.get();
   }
@@ -173,8 +168,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   void FinishAccumulatingSquashingLayers(
       wtf_size_t next_squashed_layer_index,
       Vector<PaintLayer*>& layers_needing_paint_invalidation);
-  void UpdateRenderingContext();
-  void UpdateShouldFlattenTransform();
   void UpdateElementId();
 
   // GraphicsLayerClient interface
@@ -228,8 +221,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // We may similarly need to reattach the layer for outlines and decorations.
   GraphicsLayer* DetachLayerForDecorationOutline();
 
-  void UpdateBackdropFilters();
-
   void SetBlendMode(BlendMode);
 
   bool NeedsGraphicsLayerUpdate() {
@@ -265,8 +256,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   const GraphicsLayerPaintInfo* ContainingSquashedLayer(
       const LayoutObject*,
       unsigned max_squashed_layer_index);
-
-  void UpdateScrollingBlockSelection();
 
   // Returns whether an adjustment happend.
   bool AdjustForCompositedScrolling(const GraphicsLayer*,
@@ -334,9 +323,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
       IntPoint graphics_layer_parent_location);
   void UpdateChildTransformLayerGeometry();
   void UpdateMaskLayerGeometry();
-  void UpdateTransformGeometry(
-      const IntPoint& snapped_offset_from_composited_ancestor,
-      const IntRect& relative_compositing_bounds);
   void UpdateForegroundLayerGeometry();
   void UpdateDecorationOutlineLayerGeometry(
       const IntSize& relative_compositing_bounds_size);
@@ -361,7 +347,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
 
   void UpdateInternalHierarchy();
   void UpdatePaintingPhases();
-  bool UpdateChildTransformLayer(bool needs_child_transform_layer);
   bool UpdateOverflowControlsLayers(bool needs_horizontal_scrollbar_layer,
                                     bool needs_vertical_scrollbar_layer,
                                     bool needs_scroll_corner_layer);
@@ -374,9 +359,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   bool UpdateScrollingLayers(bool scrolling_layers);
   bool UpdateSquashingLayers(bool needs_squashing_layers);
   void UpdateDrawsContentAndPaintsHitTest();
-  void UpdateChildrenTransform();
   void UpdateCompositedBounds();
-  void UpdateSnapContainerData();
 
   // Also sets subpixelAccumulation on the layer.
   void ComputeBoundsOfOwningLayer(
@@ -391,12 +374,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // Result is transform origin in pixels.
   FloatPoint3D ComputeTransformOrigin(const IntRect& border_box) const;
 
-  void UpdateOpacity(const ComputedStyle&);
   void UpdateTransform(const ComputedStyle&);
-  void UpdateLayerBlendMode(const ComputedStyle&);
-  void UpdateIsRootForIsolatedGroup();
-  // Return the opacity value that this layer should use for compositing.
-  float CompositingOpacity(float layout_object_opacity) const;
 
   bool PaintsChildren() const;
 
@@ -432,9 +410,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
       const Vector<GraphicsLayerPaintInfo>& layers,
       GraphicsLayerPaintInfo&);
 
-  const PaintLayer* CompositedClipParent() const;
-  void UpdateClipInheritanceAncestor(const PaintLayer* compositing_container);
-
   // Clear the groupedMapping entry on the layer at the given index, only if
   // that layer does not appear earlier in the set of layers for this object.
   bool InvalidateLayerIfNoPrecedingEntry(wtf_size_t);
@@ -448,8 +423,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // looks like this:
   //
   //    + graphics_layer_
-  //      + child_transform_layer_ [OPTIONAL]
-  //      |   (scrolling_layer_ + scrolling_contents_layer_) [OPTIONAL]
+  //      + (scrolling_layer_ + scrolling_contents_layer_) [OPTIONAL]
   //      | + overflow_controls_host_layer_ [OPTIONAL]
   //      |   + layer_for_vertical_scrollbar_ [OPTIONAL]
   //      |   + layer_for_horizontal_scrollbar_ [OPTIONAL]
@@ -459,9 +433,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // tree by the RLC to ensure that they stack above scrolling content.
 
   std::unique_ptr<GraphicsLayer> graphics_layer_;
-
-  // Only used if we have perspective.
-  std::unique_ptr<GraphicsLayer> child_transform_layer_;
 
   // Only used if the layer is using composited scrolling.
   std::unique_ptr<GraphicsLayer> scrolling_layer_;

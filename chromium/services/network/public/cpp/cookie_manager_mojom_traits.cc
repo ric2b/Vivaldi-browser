@@ -86,6 +86,43 @@ bool EnumTraits<network::mojom::CookieSameSite, net::CookieSameSite>::FromMojom(
   return false;
 }
 
+network::mojom::CookieAccessSemantics EnumTraits<
+    network::mojom::CookieAccessSemantics,
+    net::CookieAccessSemantics>::ToMojom(net::CookieAccessSemantics input) {
+  switch (input) {
+    case net::CookieAccessSemantics::UNKNOWN:
+      return network::mojom::CookieAccessSemantics::UNKNOWN;
+    case net::CookieAccessSemantics::NONLEGACY:
+      return network::mojom::CookieAccessSemantics::NONLEGACY;
+    case net::CookieAccessSemantics::LEGACY:
+      return network::mojom::CookieAccessSemantics::LEGACY;
+    default:
+      break;
+  }
+  NOTREACHED();
+  return static_cast<network::mojom::CookieAccessSemantics>(input);
+}
+
+bool EnumTraits<network::mojom::CookieAccessSemantics,
+                net::CookieAccessSemantics>::
+    FromMojom(network::mojom::CookieAccessSemantics input,
+              net::CookieAccessSemantics* output) {
+  switch (input) {
+    case network::mojom::CookieAccessSemantics::UNKNOWN:
+      *output = net::CookieAccessSemantics::UNKNOWN;
+      return true;
+    case network::mojom::CookieAccessSemantics::NONLEGACY:
+      *output = net::CookieAccessSemantics::NONLEGACY;
+      return true;
+    case network::mojom::CookieAccessSemantics::LEGACY:
+      *output = net::CookieAccessSemantics::LEGACY;
+      return true;
+    default:
+      break;
+  }
+  return false;
+}
+
 network::mojom::CookieInclusionStatusWarningReason
 EnumTraits<network::mojom::CookieInclusionStatusWarningReason,
            net::CanonicalCookie::CookieInclusionStatus::WarningReason>::
@@ -154,9 +191,34 @@ EnumTraits<network::mojom::CookieSameSiteContext,
       return network::mojom::CookieSameSiteContext::SAME_SITE_LAX_METHOD_UNSAFE;
     case net::CookieOptions::SameSiteCookieContext::CROSS_SITE:
       return network::mojom::CookieSameSiteContext::CROSS_SITE;
+    case net::CookieOptions::SameSiteCookieContext::
+        SAME_SITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_SECURE_URL:
+      return network::mojom::CookieSameSiteContext::
+          SAME_SITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_SECURE_URL;
+    case net::CookieOptions::SameSiteCookieContext::
+        SAME_SITE_LAX_CROSS_SCHEME_SECURE_URL:
+      return network::mojom::CookieSameSiteContext::
+          SAME_SITE_LAX_CROSS_SCHEME_SECURE_URL;
+    case net::CookieOptions::SameSiteCookieContext::
+        SAME_SITE_STRICT_CROSS_SCHEME_SECURE_URL:
+      return network::mojom::CookieSameSiteContext::
+          SAME_SITE_STRICT_CROSS_SCHEME_SECURE_URL;
+    case net::CookieOptions::SameSiteCookieContext::
+        SAME_SITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_INSECURE_URL:
+      return network::mojom::CookieSameSiteContext::
+          SAME_SITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_INSECURE_URL;
+    case net::CookieOptions::SameSiteCookieContext::
+        SAME_SITE_LAX_CROSS_SCHEME_INSECURE_URL:
+      return network::mojom::CookieSameSiteContext::
+          SAME_SITE_LAX_CROSS_SCHEME_INSECURE_URL;
+    case net::CookieOptions::SameSiteCookieContext::
+        SAME_SITE_STRICT_CROSS_SCHEME_INSECURE_URL:
+      return network::mojom::CookieSameSiteContext::
+          SAME_SITE_STRICT_CROSS_SCHEME_INSECURE_URL;
+    default:
+      NOTREACHED();
+      return network::mojom::CookieSameSiteContext::CROSS_SITE;
   }
-  NOTREACHED();
-  return network::mojom::CookieSameSiteContext::CROSS_SITE;
 }
 
 bool EnumTraits<network::mojom::CookieSameSiteContext,
@@ -177,6 +239,92 @@ bool EnumTraits<network::mojom::CookieSameSiteContext,
     case network::mojom::CookieSameSiteContext::CROSS_SITE:
       *output = net::CookieOptions::SameSiteCookieContext::CROSS_SITE;
       return true;
+    case network::mojom::CookieSameSiteContext::
+        SAME_SITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_SECURE_URL:
+      *output = net::CookieOptions::SameSiteCookieContext::
+          SAME_SITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_SECURE_URL;
+      return true;
+    case network::mojom::CookieSameSiteContext::
+        SAME_SITE_LAX_CROSS_SCHEME_SECURE_URL:
+      *output = net::CookieOptions::SameSiteCookieContext::
+          SAME_SITE_LAX_CROSS_SCHEME_SECURE_URL;
+      return true;
+    case network::mojom::CookieSameSiteContext::
+        SAME_SITE_STRICT_CROSS_SCHEME_SECURE_URL:
+      *output = net::CookieOptions::SameSiteCookieContext::
+          SAME_SITE_STRICT_CROSS_SCHEME_SECURE_URL;
+      return true;
+    case network::mojom::CookieSameSiteContext::
+        SAME_SITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_INSECURE_URL:
+      *output = net::CookieOptions::SameSiteCookieContext::
+          SAME_SITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_INSECURE_URL;
+      return true;
+    case network::mojom::CookieSameSiteContext::
+        SAME_SITE_LAX_CROSS_SCHEME_INSECURE_URL:
+      *output = net::CookieOptions::SameSiteCookieContext::
+          SAME_SITE_LAX_CROSS_SCHEME_INSECURE_URL;
+      return true;
+    case network::mojom::CookieSameSiteContext::
+        SAME_SITE_STRICT_CROSS_SCHEME_INSECURE_URL:
+      *output = net::CookieOptions::SameSiteCookieContext::
+          SAME_SITE_STRICT_CROSS_SCHEME_INSECURE_URL;
+      return true;
+  }
+  return false;
+}
+
+network::mojom::CookieChangeCause
+EnumTraits<network::mojom::CookieChangeCause, net::CookieChangeCause>::ToMojom(
+    net::CookieChangeCause input) {
+  switch (input) {
+    case net::CookieChangeCause::INSERTED:
+      return network::mojom::CookieChangeCause::INSERTED;
+    case net::CookieChangeCause::EXPLICIT:
+      return network::mojom::CookieChangeCause::EXPLICIT;
+    case net::CookieChangeCause::UNKNOWN_DELETION:
+      return network::mojom::CookieChangeCause::UNKNOWN_DELETION;
+    case net::CookieChangeCause::OVERWRITE:
+      return network::mojom::CookieChangeCause::OVERWRITE;
+    case net::CookieChangeCause::EXPIRED:
+      return network::mojom::CookieChangeCause::EXPIRED;
+    case net::CookieChangeCause::EVICTED:
+      return network::mojom::CookieChangeCause::EVICTED;
+    case net::CookieChangeCause::EXPIRED_OVERWRITE:
+      return network::mojom::CookieChangeCause::EXPIRED_OVERWRITE;
+    default:
+      break;
+  }
+  NOTREACHED();
+  return static_cast<network::mojom::CookieChangeCause>(input);
+}
+
+bool EnumTraits<network::mojom::CookieChangeCause, net::CookieChangeCause>::
+    FromMojom(network::mojom::CookieChangeCause input,
+              net::CookieChangeCause* output) {
+  switch (input) {
+    case network::mojom::CookieChangeCause::INSERTED:
+      *output = net::CookieChangeCause::INSERTED;
+      return true;
+    case network::mojom::CookieChangeCause::EXPLICIT:
+      *output = net::CookieChangeCause::EXPLICIT;
+      return true;
+    case network::mojom::CookieChangeCause::UNKNOWN_DELETION:
+      *output = net::CookieChangeCause::UNKNOWN_DELETION;
+      return true;
+    case network::mojom::CookieChangeCause::OVERWRITE:
+      *output = net::CookieChangeCause::OVERWRITE;
+      return true;
+    case network::mojom::CookieChangeCause::EXPIRED:
+      *output = net::CookieChangeCause::EXPIRED;
+      return true;
+    case network::mojom::CookieChangeCause::EVICTED:
+      *output = net::CookieChangeCause::EVICTED;
+      return true;
+    case network::mojom::CookieChangeCause::EXPIRED_OVERWRITE:
+      *output = net::CookieChangeCause::EXPIRED_OVERWRITE;
+      return true;
+    default:
+      break;
   }
   return false;
 }
@@ -300,6 +448,25 @@ bool StructTraits<network::mojom::CookieAndLineWithStatusDataView,
 
   *out = {cookie, cookie_string, status};
 
+  return true;
+}
+
+bool StructTraits<
+    network::mojom::CookieChangeInfoDataView,
+    net::CookieChangeInfo>::Read(network::mojom::CookieChangeInfoDataView info,
+                                 net::CookieChangeInfo* out) {
+  net::CanonicalCookie cookie;
+  net::CookieAccessSemantics access_semantics =
+      net::CookieAccessSemantics::UNKNOWN;
+  net::CookieChangeCause cause = net::CookieChangeCause::EXPLICIT;
+  if (!info.ReadCookie(&cookie))
+    return false;
+  if (!info.ReadAccessSemantics(&access_semantics))
+    return false;
+  if (!info.ReadCause(&cause))
+    return false;
+
+  *out = net::CookieChangeInfo(cookie, access_semantics, cause);
   return true;
 }
 

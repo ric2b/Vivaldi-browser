@@ -17,12 +17,12 @@ namespace ash {
 
 // A test implementation of AppListClient that records function call counts.
 // Registers itself as the presenter for the app list on construction.
-class TestAppListClient : public app_list::AppListClient {
+class TestAppListClient : public AppListClient {
  public:
   TestAppListClient();
   ~TestAppListClient() override;
 
-  // app_list::AppListClient:
+  // AppListClient:
   void OnAppListControllerDestroyed() override {}
   void StartSearch(const base::string16& trimmed_query) override {}
   void OpenSearchResult(const std::string& result_id,
@@ -44,7 +44,7 @@ class TestAppListClient : public app_list::AppListClient {
   void GetContextMenuModel(int profile_id,
                            const std::string& id,
                            GetContextMenuModelCallback callback) override;
-  void OnAppListTargetVisibilityChanged(bool visible) override {}
+  void OnAppListVisibilityWillChange(bool visible) override {}
   void OnAppListVisibilityChanged(bool visible) override {}
   void OnFolderCreated(int profile_id,
                        std::unique_ptr<AppListItemMetadata> item) override {}

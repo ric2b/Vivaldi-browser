@@ -311,6 +311,11 @@ void BrowserCommandController::ExtensionStateChanged() {
   UpdateCommandsForBookmarkEditing();
 }
 
+void BrowserCommandController::TabKeyboardFocusChangedTo(
+    base::Optional<int> index) {
+  UpdateCommandsForTabKeyboardFocus(index);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // BrowserCommandController, CommandUpdater implementation:
 
@@ -546,6 +551,12 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_MIGRATE_LOCAL_CREDIT_CARD_FOR_PAGE:
       MigrateLocalCards(browser_);
       break;
+    case IDC_SHOW_SAVE_LOCAL_CARD_SIGN_IN_PROMO_IF_APPLICABLE:
+      MaybeShowSaveLocalCardSignInPromo(browser_);
+      break;
+    case IDC_CLOSE_SIGN_IN_PROMO:
+      CloseSaveLocalCardSignInPromo(browser_);
+      break;
     case IDC_TRANSLATE_PAGE:
       Translate(browser_);
       break;
@@ -744,6 +755,15 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       ShowSingletonTab(browser_, GURL(kChromeUIManagementURL));
       break;
     }
+    case IDC_MUTE_TARGET_SITE:
+      MuteSiteForKeyboardFocusedTab(browser_);
+      break;
+    case IDC_PIN_TARGET_TAB:
+      PinKeyboardFocusedTab(browser_);
+      break;
+    case IDC_DUPLICATE_TARGET_TAB:
+      DuplicateKeyboardFocusedTab(browser_);
+      break;
     // Hosted App commands
     case IDC_COPY_URL:
       CopyURL(browser_);
@@ -756,7 +776,7 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
           browser_,
           browser_->tab_strip_model()->GetActiveWebContents()->GetVisibleURL());
       break;
-    case IDC_HOSTED_APP_MENU_APP_INFO: {
+    case IDC_WEB_APP_MENU_APP_INFO: {
       content::WebContents* const web_contents =
           browser_->tab_strip_model()->GetActiveWebContents();
       if (web_contents) {
@@ -985,6 +1005,9 @@ void BrowserCommandController::InitCommandState() {
   if (normal_window)
     command_updater_.UpdateCommandEnabled(IDC_SHOW_AVATAR_MENU, true);
 #endif
+  command_updater_.UpdateCommandEnabled(
+      IDC_SHOW_SAVE_LOCAL_CARD_SIGN_IN_PROMO_IF_APPLICABLE, true);
+  command_updater_.UpdateCommandEnabled(IDC_CLOSE_SIGN_IN_PROMO, true);
 
   UpdateShowSyncState(true);
 
@@ -998,8 +1021,7 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_COPY_URL, is_web_app);
   command_updater_.UpdateCommandEnabled(IDC_OPEN_IN_CHROME, is_web_app);
   command_updater_.UpdateCommandEnabled(IDC_SITE_SETTINGS, is_web_app);
-  command_updater_.UpdateCommandEnabled(IDC_HOSTED_APP_MENU_APP_INFO,
-                                        is_web_app);
+  command_updater_.UpdateCommandEnabled(IDC_WEB_APP_MENU_APP_INFO, is_web_app);
 
   // Window management commands
   command_updater_.UpdateCommandEnabled(IDC_SELECT_NEXT_TAB, normal_window);
@@ -1031,6 +1053,7 @@ void BrowserCommandController::InitCommandState() {
   UpdateCommandsForContentRestrictionState();
   UpdateCommandsForBookmarkEditing();
   UpdateCommandsForIncognitoAvailability();
+  UpdateCommandsForTabKeyboardFocus(GetKeyboardFocusedTabIndex(browser_));
 
   vivaldi::UpdateCommandsForVivaldi(&command_updater_);
 }
@@ -1139,6 +1162,7 @@ void BrowserCommandController::UpdateCommandsForTabState() {
   UpdateCommandsForMediaRouter();
   // Update the zoom commands when an active tab is selected.
   UpdateCommandsForZoomState();
+  UpdateCommandsForTabKeyboardFocus(GetKeyboardFocusedTabIndex(browser_));
 }
 
 void BrowserCommandController::UpdateCommandsForZoomState() {
@@ -1433,6 +1457,19 @@ void BrowserCommandController::UpdateCommandsForMediaRouter() {
 
   command_updater_.UpdateCommandEnabled(IDC_ROUTE_MEDIA,
                                         CanRouteMedia(browser_));
+}
+
+void BrowserCommandController::UpdateCommandsForTabKeyboardFocus(
+    base::Optional<int> target_index) {
+  command_updater_.UpdateCommandEnabled(
+      IDC_DUPLICATE_TARGET_TAB, !browser_->deprecated_is_app() &&
+                                    target_index.has_value() &&
+                                    CanDuplicateTabAt(browser_, *target_index));
+  const bool normal_window = browser_->is_type_normal();
+  command_updater_.UpdateCommandEnabled(
+      IDC_MUTE_TARGET_SITE, normal_window && target_index.has_value());
+  command_updater_.UpdateCommandEnabled(
+      IDC_PIN_TARGET_TAB, normal_window && target_index.has_value());
 }
 
 void BrowserCommandController::AddInterstitialObservers(WebContents* contents) {

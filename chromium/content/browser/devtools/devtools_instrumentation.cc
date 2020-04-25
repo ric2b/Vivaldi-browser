@@ -4,6 +4,7 @@
 #include "content/browser/devtools/devtools_instrumentation.h"
 
 #include "content/browser/devtools/browser_devtools_agent_host.h"
+#include "content/browser/devtools/devtools_url_loader_interceptor.h"
 #include "content/browser/devtools/protocol/emulation_handler.h"
 #include "content/browser/devtools/protocol/fetch_handler.h"
 #include "content/browser/devtools/protocol/network_handler.h"
@@ -13,7 +14,6 @@
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_package/signed_exchange_envelope.h"
@@ -49,6 +49,22 @@ void DispatchToAgents(int frame_tree_node_id,
   FrameTreeNode* ftn = FrameTreeNode::GloballyFindByID(frame_tree_node_id);
   if (ftn)
     DispatchToAgents(ftn, method, std::forward<Args>(args)...);
+}
+
+template <typename Handler, typename... MethodArgs, typename... Args>
+void DispatchToWorkerAgents(int32_t worker_process_id,
+                            int32_t worker_route_id,
+                            void (Handler::*method)(MethodArgs...),
+                            Args&&... args) {
+  ServiceWorkerDevToolsAgentHost* service_worker_host =
+      ServiceWorkerDevToolsManager::GetInstance()
+          ->GetDevToolsAgentHostForWorker(worker_process_id, worker_route_id);
+  if (!service_worker_host)
+    return;
+  for (auto* h : Handler::ForAgentHost(service_worker_host))
+    (h->*method)(std::forward<Args>(args)...);
+
+  // TODO(crbug.com/1004979): Look for shared worker hosts here as well.
 }
 
 FrameTreeNode* GetFtnForNetworkRequest(int process_id, int routing_id) {
@@ -130,16 +146,34 @@ void OnSignedExchangeReceived(
                    envelope, certificate, ssl_info, errors);
 }
 
+namespace inspector_will_send_navigation_request_event {
+std::unique_ptr<base::trace_event::TracedValue> Data(
+    const base::UnguessableToken& request_id) {
+  auto value = std::make_unique<base::trace_event::TracedValue>();
+  value->SetString("requestId", request_id.ToString());
+  return value;
+}
+}  // namespace inspector_will_send_navigation_request_event
+
 void OnSignedExchangeCertificateRequestSent(
     FrameTreeNode* frame_tree_node,
     const base::UnguessableToken& request_id,
     const base::UnguessableToken& loader_id,
     const network::ResourceRequest& request,
     const GURL& signed_exchange_url) {
+  // Make sure both back-ends yield the same timestamp.
+  auto timestamp = base::TimeTicks::Now();
   DispatchToAgents(frame_tree_node, &protocol::NetworkHandler::RequestSent,
                    request_id.ToString(), loader_id.ToString(), request,
                    protocol::Network::Initiator::TypeEnum::SignedExchange,
-                   signed_exchange_url);
+                   signed_exchange_url, timestamp);
+
+  auto value = std::make_unique<base::trace_event::TracedValue>();
+  value->SetString("requestId", request_id.ToString());
+  TRACE_EVENT_INSTANT_WITH_TIMESTAMP1(
+      "devtools.timeline", "ResourceWillSendRequest", TRACE_EVENT_SCOPE_PROCESS,
+      timestamp, "data",
+      inspector_will_send_navigation_request_event::Data(request_id));
 }
 
 void OnSignedExchangeCertificateResponseReceived(
@@ -164,9 +198,10 @@ void OnSignedExchangeCertificateRequestCompleted(
 }
 
 std::vector<std::unique_ptr<NavigationThrottle>> CreateNavigationThrottles(
-    NavigationHandleImpl* navigation_handle) {
+    NavigationHandle* navigation_handle) {
   std::vector<std::unique_ptr<NavigationThrottle>> result;
-  FrameTreeNode* frame_tree_node = navigation_handle->frame_tree_node();
+  FrameTreeNode* frame_tree_node =
+      NavigationRequest::From(navigation_handle)->frame_tree_node();
 
   DevToolsAgentHostImpl* agent_host =
       RenderFrameDevToolsAgentHost::GetFor(frame_tree_node);
@@ -180,9 +215,12 @@ std::vector<std::unique_ptr<NavigationThrottle>> CreateNavigationThrottles(
                    ->GetFrameTree()
                    ->root();
     } else {
-      return result;
+      parent = frame_tree_node->original_opener();
     }
   }
+  if (!parent)
+    return result;
+
   agent_host = RenderFrameDevToolsAgentHost::GetFor(parent);
   if (agent_host) {
     for (auto* target_handler :
@@ -356,9 +394,16 @@ bool WillCreateURLLoaderFactory(
 
 void OnNavigationRequestWillBeSent(
     const NavigationRequest& navigation_request) {
+  // Make sure both back-ends yield the same timestamp.
+  auto timestamp = base::TimeTicks::Now();
   DispatchToAgents(navigation_request.frame_tree_node(),
                    &protocol::NetworkHandler::NavigationRequestWillBeSent,
-                   navigation_request);
+                   navigation_request, timestamp);
+  TRACE_EVENT_INSTANT_WITH_TIMESTAMP1(
+      "devtools.timeline", "ResourceWillSendRequest", TRACE_EVENT_SCOPE_PROCESS,
+      timestamp, "data",
+      inspector_will_send_navigation_request_event::Data(
+          navigation_request.devtools_navigation_token()));
 }
 
 // Notify the provided agent host of a certificate error. Returns true if one of
@@ -422,11 +467,22 @@ void OnRequestWillBeSentExtraInfo(
     const net::CookieStatusList& request_cookie_list,
     const std::vector<network::mojom::HttpRawHeaderPairPtr>& request_headers) {
   FrameTreeNode* ftn = GetFtnForNetworkRequest(process_id, routing_id);
-  if (!ftn)
+  if (ftn) {
+    DispatchToAgents(ftn,
+                     &protocol::NetworkHandler::OnRequestWillBeSentExtraInfo,
+                     devtools_request_id, request_cookie_list, request_headers);
     return;
+  }
 
-  DispatchToAgents(ftn, &protocol::NetworkHandler::OnRequestWillBeSentExtraInfo,
-                   devtools_request_id, request_cookie_list, request_headers);
+  // In the case of service worker network requests, there is no
+  // FrameTreeNode to use so instead we use the "routing_id" created with the
+  // worker and sent to the renderer process to send as the render_frame_id in
+  // the renderer's network::ResourceRequest which gets plubmed to here as
+  // routing_id.
+  DispatchToWorkerAgents(
+      process_id, routing_id,
+      &protocol::NetworkHandler::OnRequestWillBeSentExtraInfo,
+      devtools_request_id, request_cookie_list, request_headers);
 }
 
 void OnResponseReceivedExtraInfo(
@@ -437,12 +493,19 @@ void OnResponseReceivedExtraInfo(
     const std::vector<network::mojom::HttpRawHeaderPairPtr>& response_headers,
     const base::Optional<std::string>& response_headers_text) {
   FrameTreeNode* ftn = GetFtnForNetworkRequest(process_id, routing_id);
-  if (!ftn)
+  if (ftn) {
+    DispatchToAgents(ftn,
+                     &protocol::NetworkHandler::OnResponseReceivedExtraInfo,
+                     devtools_request_id, response_cookie_list,
+                     response_headers, response_headers_text);
     return;
+  }
 
-  DispatchToAgents(ftn, &protocol::NetworkHandler::OnResponseReceivedExtraInfo,
-                   devtools_request_id, response_cookie_list, response_headers,
-                   response_headers_text);
+  // See comment on DispatchToWorkerAgents in OnRequestWillBeSentExtraInfo.
+  DispatchToWorkerAgents(process_id, routing_id,
+                         &protocol::NetworkHandler::OnResponseReceivedExtraInfo,
+                         devtools_request_id, response_cookie_list,
+                         response_headers, response_headers_text);
 }
 
 }  // namespace devtools_instrumentation

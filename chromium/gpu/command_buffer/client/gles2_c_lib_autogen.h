@@ -1275,6 +1275,14 @@ void GL_APIENTRY GLES2DispatchCompute(GLuint num_groups_x,
 void GL_APIENTRY GLES2DispatchComputeIndirect(GLintptr offset) {
   gles2::GetGLContext()->DispatchComputeIndirect(offset);
 }
+void GL_APIENTRY GLES2DrawArraysIndirect(GLenum mode, const void* offset) {
+  gles2::GetGLContext()->DrawArraysIndirect(mode, offset);
+}
+void GL_APIENTRY GLES2DrawElementsIndirect(GLenum mode,
+                                           GLenum type,
+                                           const void* offset) {
+  gles2::GetGLContext()->DrawElementsIndirect(mode, type, offset);
+}
 void GL_APIENTRY GLES2GetProgramInterfaceiv(GLuint program,
                                             GLenum program_interface,
                                             GLenum pname,
@@ -1802,6 +1810,9 @@ GLES2ProgramPathFragmentInputGenCHROMIUM(GLuint program,
                                          const GLfloat* coeffs) {
   gles2::GetGLContext()->ProgramPathFragmentInputGenCHROMIUM(
       program, location, genMode, components, coeffs);
+}
+void GL_APIENTRY GLES2ContextVisibilityHintCHROMIUM(GLboolean visibility) {
+  gles2::GetGLContext()->ContextVisibilityHintCHROMIUM(visibility);
 }
 void GL_APIENTRY GLES2CoverageModulationCHROMIUM(GLenum components) {
   gles2::GetGLContext()->CoverageModulationCHROMIUM(components);
@@ -2976,6 +2987,14 @@ extern const NameToFunc g_gles2_function_table[] = {
         reinterpret_cast<GLES2FunctionPointer>(glDispatchComputeIndirect),
     },
     {
+        "glDrawArraysIndirect",
+        reinterpret_cast<GLES2FunctionPointer>(glDrawArraysIndirect),
+    },
+    {
+        "glDrawElementsIndirect",
+        reinterpret_cast<GLES2FunctionPointer>(glDrawElementsIndirect),
+    },
+    {
         "glGetProgramInterfaceiv",
         reinterpret_cast<GLES2FunctionPointer>(glGetProgramInterfaceiv),
     },
@@ -3317,6 +3336,10 @@ extern const NameToFunc g_gles2_function_table[] = {
         "glProgramPathFragmentInputGenCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(
             glProgramPathFragmentInputGenCHROMIUM),
+    },
+    {
+        "glContextVisibilityHintCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(glContextVisibilityHintCHROMIUM),
     },
     {
         "glCoverageModulationCHROMIUM",

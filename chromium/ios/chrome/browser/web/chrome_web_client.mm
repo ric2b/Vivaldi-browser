@@ -25,6 +25,7 @@
 #import "ios/chrome/browser/ui/elements/windowed_container_view.h"
 #import "ios/chrome/browser/web/error_page_util.h"
 #include "ios/public/provider/chrome/browser/browser_url_rewriter_provider.h"
+#import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/voice/audio_session_controller.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
@@ -101,6 +102,20 @@ std::string ChromeWebClient::GetApplicationLocale() const {
 
 bool ChromeWebClient::IsAppSpecificURL(const GURL& url) const {
   return url.SchemeIs(kChromeUIScheme);
+}
+
+bool ChromeWebClient::ShouldBlockUrlDuringRestore(
+    const GURL& url,
+    web::WebState* web_state) const {
+  return ios::GetChromeBrowserProvider()->ShouldBlockUrlDuringRestore(
+      url, web_state);
+}
+
+void ChromeWebClient::AddSerializableData(
+    web::SerializableUserDataManager* user_data_manager,
+    web::WebState* web_state) {
+  return ios::GetChromeBrowserProvider()->AddSerializableData(user_data_manager,
+                                                              web_state);
 }
 
 base::string16 ChromeWebClient::GetPluginNotSupportedText() const {
@@ -184,13 +199,16 @@ void ChromeWebClient::AllowCertificateError(
     const net::SSLInfo& info,
     const GURL& request_url,
     bool overridable,
+    int64_t navigation_id,
     const base::Callback<void(bool)>& callback) {
+  base::OnceCallback<void(NSString*)> null_callback;
   // TODO(crbug.com/760873): IOSSSLErrorHandler will present an interstitial
   // for the user to decide if it is safe to proceed.
   // Handle the case of web_state not presenting UI to users like prerender tabs
   // or web_state used to fetch offline content in Reading List.
   IOSSSLErrorHandler::HandleSSLError(web_state, cert_error, info, request_url,
-                                     overridable, callback);
+                                     overridable, navigation_id, callback,
+                                     std::move(null_callback));
 }
 
 void ChromeWebClient::PrepareErrorPage(

@@ -134,12 +134,6 @@ class WebViewPermissionHelper
 
   void SetDownloadInformation(const content::DownloadInformation& info);
 
-  virtual void RequestNotificationPermission(int bridge_id,
-                                    const GURL& requesting_frame,
-                                    bool user_gesture,
-                                    const base::Callback<void(bool)>& callback);
-  virtual void CancelNotificationPermissionRequest(int bridge_id);
-
  protected:
   // vivaldi download information
   content::DownloadInformation download_info_;

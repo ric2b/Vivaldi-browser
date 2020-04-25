@@ -73,6 +73,9 @@ sys.path.insert(2, os.path.join(BASEDIR, '../../../tools/python'))
 
 from grit.extern import tclib
 
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "app", "resources"))
+import vivaldi_resources as vivaldi
+
 class GrdHandler(sax.handler.ContentHandler):
   """Extracts selected strings from a .grd file.
 
@@ -140,7 +143,10 @@ class GrdHandler(sax.handler.ContentHandler):
   def __OnCloseMessage(self):
     """Invoked at the end of a message."""
     if self.__IsExtractingMessage():
-      self.messages[self.__message_name] = ''.join(self.__text_scraps).strip()
+      message_text = ''.join(self.__text_scraps).strip()
+      if self.__message_name not in vivaldi.REPLACE_GOOGLE_EXCEPTIONS:
+        message_text = (vivaldi.ReplaceGoogleInString(message_text), message_text)
+      self.messages[self.__message_name] = message_text
       self.__message_name = None
       self.__text_scraps = []
       self.__characters_callback = None
@@ -217,6 +223,7 @@ class XtbHandler(sax.handler.ContentHandler):
   def __OnCloseTranslation(self):
     if self.__string_ids:
       translated_string = ''.join(self.__text_scraps).strip()
+      translated_string = vivaldi.ReplaceGoogleInString(translated_string)
       for string_id in self.__string_ids:
         self.translations[string_id] = translated_string
       self.__string_ids = None
@@ -290,7 +297,7 @@ class StringRcMaker(object):
 
   def __ReadSourceAndTranslatedStrings(self):
     """Reads the source strings and translations from all inputs."""
-    translated_strings = []
+    translated_strings = {}
     all_xtb_files = []
     for grd_file, xtb_dir in self.inputs:
       # Get the name of the grd file sans extension.
@@ -300,8 +307,18 @@ class StringRcMaker(object):
                                  '%s*.xtb' % source_name)
       local_xtb_files = [x.replace('\\', '/') for x in glob.glob(xtb_pattern)]
       all_xtb_files.extend(local_xtb_files)
-      translated_strings.extend(
-        self.__ReadSourceAndTranslationsFrom(grd_file, local_xtb_files))
+      translated_strings.update(dict([((x.resource_id_str, x.language), x) for x in
+        self.__ReadSourceAndTranslationsFrom(grd_file, local_xtb_files)]))
+
+    msg_ids = set([x[0] for x in translated_strings.keys()])
+    locales = set([x[1] for x in translated_strings.keys()])
+    for msg_id in msg_ids:
+      for locale in locales:
+        if (msg_id, locale) not in translated_strings:
+          translated_strings[(msg_id, locale)] = self.__TranslationData(msg_id, locale,
+                                                translated_strings[(msg_id, "EN_US")].translation)
+
+    translated_strings = list(translated_strings.values())
     translated_strings.sort()
     all_xtb_files.sort()
 
@@ -355,13 +372,23 @@ Extra input files:
       source_xtb_files.append(relative_xtb_file_path)
     missing_xtb_files = list(set(source_xtb_files) - set(xtb_files))
 
+    def pick_vivaldi_string(message):
+      if isinstance(message, tuple):
+        return message[0]
+      return message
+
+    def pick_chromium_string(message):
+      if isinstance(message, tuple):
+        return message[1]
+      return message
+
     # Manually put the source strings as en-US in the list of translated
     # strings.
     translated_strings = []
     for string_id, message_text in source_strings.items():
       translated_strings.append(self.__TranslationData(string_id,
                                                        'EN_US',
-                                                       message_text))
+                                                       pick_vivaldi_string(message_text)))
 
     # Generate the message ID for each source string to correlate it with its
     # translations in the .xtb files. Multiple source strings may have the same
@@ -369,7 +396,7 @@ Extra input files:
     # instead of a single value.
     translation_ids = {}
     for (string_id, message_text) in source_strings.items():
-      message_id = tclib.GenerateMessageId(message_text)
+      message_id = tclib.GenerateMessageId(pick_chromium_string(message_text))
       translation_ids.setdefault(message_id, []).append(string_id);
 
     # Track any xtb files that appear in the xtb folder but are not present in
@@ -385,7 +412,7 @@ Extra input files:
       sax_parser.parse(xtb_filename)
       for string_id, message_text in source_strings.items():
         translated_string = xtb_handler.translations.get(string_id,
-                                                         message_text)
+                                                         pick_vivaldi_string(message_text))
         translated_strings.append(self.__TranslationData(string_id,
                                                          xtb_handler.lang,
                                                          translated_string))
@@ -575,7 +602,7 @@ def main():
       parser.error('A brand was specified (' + brand + ') but no mode '
         'specific strings were given.')
     valid_brands = [b for b in
-      mode_specific_strings.itervalues().next().iterkeys()]
+      next(iter(mode_specific_strings.values())).keys()]
     if not brand in valid_brands:
       parser.error('A brand was specified (' + brand + ') but it is not '
         'a valid brand [' + ', '.join(valid_brands) + '].')

@@ -7,19 +7,22 @@
 #include "base/atomic_ref_count.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/containers/span.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task_runner_util.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread.h"
+#include "components/services/leveldb/leveldb_database_impl.h"
 #include "components/services/leveldb/public/cpp/util.h"
 #include "components/services/leveldb/public/mojom/leveldb.mojom.h"
+#include "components/services/storage/dom_storage/dom_storage_database.h"
 #include "content/browser/dom_storage/test/storage_area_test_util.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/test/barrier_builder.h"
-#include "content/test/fake_leveldb_database.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -31,7 +34,6 @@ using test::GetAllCallback;
 using test::MakeGetAllCallback;
 using test::MakeSuccessCallback;
 using CacheMode = StorageAreaImpl::CacheMode;
-using DatabaseError = leveldb::mojom::DatabaseError;
 
 const char* kTestSource = "source";
 const size_t kTestSizeLimit = 512;
@@ -40,8 +42,8 @@ std::string ToString(const std::vector<uint8_t>& input) {
   return leveldb::Uint8VectorToStdString(input);
 }
 
-std::vector<uint8_t> ToBytes(const std::string& input) {
-  return leveldb::StdStringToUint8Vector(input);
+std::vector<uint8_t> ToBytes(base::StringPiece input) {
+  return std::vector<uint8_t>(input.begin(), input.end());
 }
 
 class MockDelegate : public StorageAreaImpl::Delegate {
@@ -50,16 +52,13 @@ class MockDelegate : public StorageAreaImpl::Delegate {
   ~MockDelegate() override {}
 
   void OnNoBindings() override {}
-  std::vector<leveldb::mojom::BatchedOperationPtr> PrepareToCommit() override {
-    return std::vector<leveldb::mojom::BatchedOperationPtr>();
-  }
-  void DidCommit(DatabaseError error) override {
-    if (error != DatabaseError::OK)
+  void DidCommit(leveldb::Status status) override {
+    if (!status.ok())
       LOG(ERROR) << "error committing!";
     if (committed_)
       std::move(committed_).Run();
   }
-  void OnMapLoaded(DatabaseError error) override { map_load_count_++; }
+  void OnMapLoaded(leveldb::Status) override { map_load_count_++; }
   std::vector<StorageAreaImpl::Change> FixUpData(
       const StorageAreaImpl::ValueMap& data) override {
     return std::move(mock_changes_);
@@ -122,44 +121,86 @@ class StorageAreaImplTest : public testing::Test,
     bool should_send_old_value;
   };
 
-  StorageAreaImplTest() : db_(&mock_data_) {
-    auto request = level_db_database_remote_.BindNewPipeAndPassReceiver();
-    db_.Bind(std::move(request));
+  StorageAreaImplTest() {
+    base::RunLoop loop;
+    db_ = leveldb::LevelDBDatabaseImpl::OpenInMemory(
+        base::nullopt, "StorageAreaImplTest",
+        base::CreateSequencedTaskRunner({base::MayBlock(), base::ThreadPool()}),
+        base::BindLambdaForTesting(
+            [&](leveldb::Status status) { loop.Quit(); }));
+    loop.Run();
 
     StorageAreaImpl::Options options =
         GetDefaultTestingOptions(CacheMode::KEYS_ONLY_WHEN_POSSIBLE);
-    storage_area_ = std::make_unique<StorageAreaImpl>(
-        level_db_database_remote_.get(), test_prefix_, &delegate_, options);
+    storage_area_ = std::make_unique<StorageAreaImpl>(db_.get(), test_prefix_,
+                                                      &delegate_, options);
 
-    set_mock_data(test_prefix_ + test_key1_, test_value1_);
-    set_mock_data(test_prefix_ + test_key2_, test_value2_);
-    set_mock_data("123", "baddata");
+    SetDatabaseEntry(test_prefix_ + test_key1_, test_value1_);
+    SetDatabaseEntry(test_prefix_ + test_key2_, test_value2_);
+    SetDatabaseEntry("123", "baddata");
 
     storage_area_->Bind(storage_area_remote_.BindNewPipeAndPassReceiver());
     storage_area_remote_->AddObserver(
         observer_receiver_.BindNewEndpointAndPassRemote());
   }
 
-  ~StorageAreaImplTest() override {}
+  ~StorageAreaImplTest() override = default;
 
-  void set_mock_data(const std::string& key, const std::string& value) {
-    mock_data_[ToBytes(key)] = ToBytes(value);
+  void SetDatabaseEntry(const std::vector<uint8_t>& key,
+                        const std::vector<uint8_t>& value) {
+    base::RunLoop loop;
+    db_->database().PostTaskWithThisObject(
+        FROM_HERE,
+        base::BindLambdaForTesting([&](const storage::DomStorageDatabase& db) {
+          ASSERT_TRUE(db.Put(key, value).ok());
+          loop.Quit();
+        }));
+    loop.Run();
   }
 
-  void set_mock_data(const std::vector<uint8_t>& key,
-                     const std::vector<uint8_t>& value) {
-    mock_data_[key] = value;
+  void SetDatabaseEntry(base::StringPiece key, base::StringPiece value) {
+    SetDatabaseEntry(ToBytes(key), ToBytes(value));
   }
 
-  bool has_mock_data(const std::string& key) {
-    return mock_data_.find(ToBytes(key)) != mock_data_.end();
+  std::string GetDatabaseEntry(base::StringPiece key) {
+    std::vector<uint8_t> value;
+    base::RunLoop loop;
+    db_->database().PostTaskWithThisObject(
+        FROM_HERE,
+        base::BindLambdaForTesting([&](const storage::DomStorageDatabase& db) {
+          ASSERT_TRUE(db.Get(ToBytes(key), &value).ok());
+          loop.Quit();
+        }));
+    loop.Run();
+    return std::string(value.begin(), value.end());
   }
 
-  std::string get_mock_data(const std::string& key) {
-    return has_mock_data(key) ? ToString(mock_data_[ToBytes(key)]) : "";
+  bool HasDatabaseEntry(base::StringPiece key) {
+    base::RunLoop loop;
+    leveldb::Status status;
+    db_->database().PostTaskWithThisObject(
+        FROM_HERE,
+        base::BindLambdaForTesting([&](const storage::DomStorageDatabase& db) {
+          std::vector<uint8_t> value;
+          status = db.Get(ToBytes(key), &value);
+          loop.Quit();
+        }));
+    loop.Run();
+    return status.ok();
   }
 
-  void clear_mock_data() { mock_data_.clear(); }
+  void ClearDatabase() {
+    base::RunLoop loop;
+    db_->database().PostTaskWithThisObject(
+        FROM_HERE,
+        base::BindLambdaForTesting([&](const storage::DomStorageDatabase& db) {
+          leveldb::WriteBatch batch;
+          ASSERT_TRUE(db.DeletePrefixed({}, &batch).ok());
+          ASSERT_TRUE(db.Commit(&batch).ok());
+          loop.Quit();
+        }));
+    loop.Run();
+  }
 
   blink::mojom::StorageArea* storage_area() {
     return storage_area_remote_.get();
@@ -233,16 +274,12 @@ class StorageAreaImplTest : public testing::Test,
       area->ScheduleImmediateCommit();
       loop.Run();
     }
-
-    db_.FlushBindingsForTesting();
   }
 
   const std::vector<Observation>& observations() { return observations_; }
 
   MockDelegate* delegate() { return &delegate_; }
-  leveldb::mojom::LevelDBDatabase* database() const {
-    return level_db_database_remote_.get();
-  }
+  leveldb::LevelDBDatabaseImpl* database() { return db_.get(); }
 
   void should_record_send_old_value_observations(bool value) {
     should_record_send_old_value_observations_ = value;
@@ -264,7 +301,6 @@ class StorageAreaImplTest : public testing::Test,
   const std::vector<uint8_t> test_key2_bytes_ = ToBytes(test_key2_);
   const std::vector<uint8_t> test_value1_bytes_ = ToBytes(test_value1_);
   const std::vector<uint8_t> test_value2_bytes_ = ToBytes(test_value2_);
-  mojo::Remote<leveldb::mojom::LevelDBDatabase> level_db_database_remote_;
 
  private:
   // LevelDBObserver:
@@ -299,8 +335,7 @@ class StorageAreaImplTest : public testing::Test,
   }
 
   BrowserTaskEnvironment task_environment_;
-  std::map<std::vector<uint8_t>, std::vector<uint8_t>> mock_data_;
-  FakeLevelDBDatabase db_;
+  std::unique_ptr<leveldb::LevelDBDatabaseImpl> db_;
   MockDelegate delegate_;
   std::unique_ptr<StorageAreaImpl> storage_area_;
   mojo::Remote<blink::mojom::StorageArea> storage_area_remote_;
@@ -445,13 +480,13 @@ TEST_P(StorageAreaImplParamTest, CommitPutToDB) {
   EXPECT_TRUE(put_success2);
   EXPECT_TRUE(put_success3);
 
-  EXPECT_FALSE(has_mock_data(test_prefix_ + key2));
+  EXPECT_FALSE(HasDatabaseEntry(test_prefix_ + key2));
 
   BlockingCommit();
-  EXPECT_TRUE(has_mock_data(test_prefix_ + key1));
-  EXPECT_EQ(value1, get_mock_data(test_prefix_ + key1));
-  EXPECT_TRUE(has_mock_data(test_prefix_ + key2));
-  EXPECT_EQ(value2, get_mock_data(test_prefix_ + key2));
+  EXPECT_TRUE(HasDatabaseEntry(test_prefix_ + key1));
+  EXPECT_EQ(value1, GetDatabaseEntry(test_prefix_ + key1));
+  EXPECT_TRUE(HasDatabaseEntry(test_prefix_ + key2));
+  EXPECT_EQ(value2, GetDatabaseEntry(test_prefix_ + key2));
 }
 
 TEST_P(StorageAreaImplParamTest, PutObservations) {
@@ -492,7 +527,7 @@ TEST_P(StorageAreaImplParamTest, DeleteExistingKey) {
   storage_area_impl()->SetCacheModeForTesting(GetParam());
   std::string key = "newkey";
   std::string value = "foo";
-  set_mock_data(test_prefix_ + key, value);
+  SetDatabaseEntry(test_prefix_ + key, value);
 
   EXPECT_TRUE(DeleteSync(ToBytes(key), ToBytes(value)));
   ASSERT_EQ(1u, observations().size());
@@ -501,10 +536,10 @@ TEST_P(StorageAreaImplParamTest, DeleteExistingKey) {
   EXPECT_EQ(value, observations()[0].old_value);
   EXPECT_EQ(test_source_, observations()[0].source);
 
-  EXPECT_TRUE(has_mock_data(test_prefix_ + key));
+  EXPECT_TRUE(HasDatabaseEntry(test_prefix_ + key));
 
   BlockingCommit();
-  EXPECT_FALSE(has_mock_data(test_prefix_ + key));
+  EXPECT_FALSE(HasDatabaseEntry(test_prefix_ + key));
 }
 
 TEST_P(StorageAreaImplParamTest, DeleteAllWithoutLoadedMap) {
@@ -512,20 +547,20 @@ TEST_P(StorageAreaImplParamTest, DeleteAllWithoutLoadedMap) {
   std::string key = "newkey";
   std::string value = "foo";
   std::string dummy_key = "foobar";
-  set_mock_data(dummy_key, value);
-  set_mock_data(test_prefix_ + key, value);
+  SetDatabaseEntry(dummy_key, value);
+  SetDatabaseEntry(test_prefix_ + key, value);
 
   EXPECT_TRUE(DeleteAllSync());
   ASSERT_EQ(1u, observations().size());
   EXPECT_EQ(Observation::kDeleteAll, observations()[0].type);
   EXPECT_EQ(test_source_, observations()[0].source);
 
-  EXPECT_TRUE(has_mock_data(test_prefix_ + key));
-  EXPECT_TRUE(has_mock_data(dummy_key));
+  EXPECT_TRUE(HasDatabaseEntry(test_prefix_ + key));
+  EXPECT_TRUE(HasDatabaseEntry(dummy_key));
 
   BlockingCommit();
-  EXPECT_FALSE(has_mock_data(test_prefix_ + key));
-  EXPECT_TRUE(has_mock_data(dummy_key));
+  EXPECT_FALSE(HasDatabaseEntry(test_prefix_ + key));
+  EXPECT_TRUE(HasDatabaseEntry(dummy_key));
 
   // Deleting all again should still work, but not cause an observation.
   EXPECT_TRUE(DeleteAllSync());
@@ -541,7 +576,7 @@ TEST_P(StorageAreaImplParamTest, DeleteAllWithLoadedMap) {
   std::string key = "newkey";
   std::string value = "foo";
   std::string dummy_key = "foobar";
-  set_mock_data(dummy_key, value);
+  SetDatabaseEntry(dummy_key, value);
 
   EXPECT_TRUE(PutSync(ToBytes(key), ToBytes(value), base::nullopt));
 
@@ -550,11 +585,11 @@ TEST_P(StorageAreaImplParamTest, DeleteAllWithLoadedMap) {
   EXPECT_EQ(Observation::kDeleteAll, observations()[1].type);
   EXPECT_EQ(test_source_, observations()[1].source);
 
-  EXPECT_TRUE(has_mock_data(dummy_key));
+  EXPECT_TRUE(HasDatabaseEntry(dummy_key));
 
   BlockingCommit();
-  EXPECT_FALSE(has_mock_data(test_prefix_ + key));
-  EXPECT_TRUE(has_mock_data(dummy_key));
+  EXPECT_FALSE(HasDatabaseEntry(test_prefix_ + key));
+  EXPECT_TRUE(HasDatabaseEntry(dummy_key));
 }
 
 TEST_P(StorageAreaImplParamTest, DeleteAllWithPendingMapLoad) {
@@ -562,7 +597,7 @@ TEST_P(StorageAreaImplParamTest, DeleteAllWithPendingMapLoad) {
   std::string key = "newkey";
   std::string value = "foo";
   std::string dummy_key = "foobar";
-  set_mock_data(dummy_key, value);
+  SetDatabaseEntry(dummy_key, value);
 
   storage_area()->Put(ToBytes(key), ToBytes(value), base::nullopt, kTestSource,
                       base::DoNothing());
@@ -572,16 +607,16 @@ TEST_P(StorageAreaImplParamTest, DeleteAllWithPendingMapLoad) {
   EXPECT_EQ(Observation::kDeleteAll, observations()[1].type);
   EXPECT_EQ(test_source_, observations()[1].source);
 
-  EXPECT_TRUE(has_mock_data(dummy_key));
+  EXPECT_TRUE(HasDatabaseEntry(dummy_key));
 
   BlockingCommit();
-  EXPECT_FALSE(has_mock_data(test_prefix_ + key));
-  EXPECT_TRUE(has_mock_data(dummy_key));
+  EXPECT_FALSE(HasDatabaseEntry(test_prefix_ + key));
+  EXPECT_TRUE(HasDatabaseEntry(dummy_key));
 }
 
 TEST_P(StorageAreaImplParamTest, DeleteAllWithoutLoadedEmptyMap) {
   storage_area_impl()->SetCacheModeForTesting(GetParam());
-  clear_mock_data();
+  ClearDatabase();
 
   EXPECT_TRUE(DeleteAllSync());
   ASSERT_EQ(0u, observations().size());
@@ -615,7 +650,7 @@ TEST_F(StorageAreaImplParamTest, PutWhenAlreadyOverQuota) {
   std::vector<uint8_t> value(kTestSizeLimit, 4);
   std::vector<uint8_t> old_value = value;
 
-  set_mock_data(test_prefix_ + key, ToString(value));
+  SetDatabaseEntry(test_prefix_ + key, ToString(value));
 
   // Put with same data should succeed.
   EXPECT_TRUE(PutSync(ToBytes(key), value, base::nullopt));
@@ -649,7 +684,7 @@ TEST_F(StorageAreaImplParamTest, PutWhenAlreadyOverQuotaBecauseOfLargeKey) {
   std::vector<uint8_t> value = ToBytes("value");
   std::vector<uint8_t> old_value = value;
 
-  set_mock_data(test_prefix_ + ToString(key), ToString(value));
+  SetDatabaseEntry(test_prefix_ + ToString(key), ToString(value));
 
   // Put with same data size should succeed.
   value[0] = 'X';
@@ -717,9 +752,9 @@ TEST_P(StorageAreaImplParamTest, FixUpData) {
   EXPECT_EQ(test_key1_, ToString(data[1]->key));
   EXPECT_EQ("foo", ToString(data[1]->value));
 
-  EXPECT_FALSE(has_mock_data(test_prefix_ + test_key2_));
-  EXPECT_EQ("foo", get_mock_data(test_prefix_ + test_key1_));
-  EXPECT_EQ("bla", get_mock_data(test_prefix_ + test_prefix_));
+  EXPECT_FALSE(HasDatabaseEntry(test_prefix_ + test_key2_));
+  EXPECT_EQ("foo", GetDatabaseEntry(test_prefix_ + test_key1_));
+  EXPECT_EQ("bla", GetDatabaseEntry(test_prefix_ + test_prefix_));
 }
 
 TEST_F(StorageAreaImplTest, SetOnlyKeysWithoutDatabase) {
@@ -800,7 +835,7 @@ TEST_P(StorageAreaImplParamTest, CommitOnDifferentCacheModes) {
 
   BlockingCommit();
 
-  EXPECT_EQ("foo2", get_mock_data(test_prefix_ + test_key2_));
+  EXPECT_EQ("foo2", GetDatabaseEntry(test_prefix_ + test_key2_));
   if (GetParam() == CacheMode::KEYS_AND_VALUES)
     EXPECT_EQ(2u, storage_area_impl()->keys_values_map_.size());
   else
@@ -823,10 +858,10 @@ TEST_P(StorageAreaImplParamTest, CommitOnDifferentCacheModes) {
     EXPECT_EQ(value3, it->second);
   }
 
-  clear_mock_data();
+  ClearDatabase();
   EXPECT_TRUE(storage_area_impl()->has_changes_to_commit());
   BlockingCommit();
-  EXPECT_EQ("foobar", get_mock_data(test_prefix_ + test_key2_));
+  EXPECT_EQ("foobar", GetDatabaseEntry(test_prefix_ + test_key2_));
   EXPECT_FALSE(storage_area_impl()->has_changes_to_commit());
 }
 
@@ -846,7 +881,6 @@ TEST_F(StorageAreaImplTest, GetAllWhenCacheOnlyKeys) {
   bool result = false;
 
   base::RunLoop loop;
-
   bool put_result1 = false;
   bool put_result2 = false;
   {
@@ -867,10 +901,8 @@ TEST_F(StorageAreaImplTest, GetAllWhenCacheOnlyKeys) {
 
   // GetAll triggers a commit when it's switching map types.
   EXPECT_TRUE(put_result1);
-  EXPECT_EQ("foo", get_mock_data(test_prefix_ + test_key2_));
+  EXPECT_EQ("foo", GetDatabaseEntry(test_prefix_ + test_key2_));
 
-  EXPECT_FALSE(put_result2);
-  EXPECT_FALSE(result);
   loop.Run();
 
   EXPECT_TRUE(result);
@@ -886,12 +918,12 @@ TEST_F(StorageAreaImplTest, GetAllWhenCacheOnlyKeys) {
   EXPECT_TRUE(get_all_success);
 
   // The last "put" isn't committed yet.
-  EXPECT_EQ("foo", get_mock_data(test_prefix_ + test_key2_));
+  EXPECT_EQ("foo", GetDatabaseEntry(test_prefix_ + test_key2_));
 
   ASSERT_TRUE(storage_area_impl()->has_changes_to_commit());
   BlockingCommit();
 
-  EXPECT_EQ("foobar", get_mock_data(test_prefix_ + test_key2_));
+  EXPECT_EQ("foobar", GetDatabaseEntry(test_prefix_ + test_key2_));
 }
 
 TEST_F(StorageAreaImplTest, GetAllAfterSetCacheMode) {
@@ -927,11 +959,11 @@ TEST_F(StorageAreaImplTest, GetAllAfterSetCacheMode) {
         key, value, value2, test_source_,
         MakeSuccessCallback(barrier.AddClosure(), &put_success));
 
-    // Put task triggers database upgrade, so there are no more changes
-    // to commit.
-    FlushAreaBinding();
-    EXPECT_FALSE(storage_area_impl()->has_changes_to_commit());
-    EXPECT_TRUE(storage_area_impl()->has_pending_load_tasks());
+    // Put task triggers database upgrade, so there should be another map load.
+    base::RunLoop upgrade_loop;
+    storage_area_impl()->SetOnLoadCallbackForTesting(
+        upgrade_loop.QuitClosure());
+    upgrade_loop.Run();
 
     storage_area()->GetAll(
         GetAllCallback::CreateAndBind(&get_all_success, barrier.AddClosure()),
@@ -958,12 +990,12 @@ TEST_F(StorageAreaImplTest, GetAllAfterSetCacheMode) {
 
   // GetAll shouldn't trigger a commit before it runs now because the value
   // map should be loading.
-  EXPECT_EQ("foobar", get_mock_data(test_prefix_ + test_key2_));
+  EXPECT_EQ("foobar", GetDatabaseEntry(test_prefix_ + test_key2_));
 
   ASSERT_TRUE(storage_area_impl()->has_changes_to_commit());
   BlockingCommit();
 
-  EXPECT_FALSE(has_mock_data(test_prefix_ + test_key2_));
+  EXPECT_FALSE(HasDatabaseEntry(test_prefix_ + test_key2_));
 }
 
 TEST_F(StorageAreaImplTest, SetCacheModeConsistent) {
@@ -976,7 +1008,7 @@ TEST_F(StorageAreaImplTest, SetCacheModeConsistent) {
               CacheMode::KEYS_ONLY_WHEN_POSSIBLE);
 
   // Clear the database before the area loads data.
-  clear_mock_data();
+  ClearDatabase();
 
   EXPECT_TRUE(PutSync(key, value, base::nullopt));
   EXPECT_TRUE(storage_area_impl()->has_changes_to_commit());
@@ -1116,16 +1148,16 @@ TEST_P(StorageAreaImplParamTest, PrefixForking) {
   BlockingCommit(&fork1_delegate, fork1.get());
 
   // test_key1_ values.
-  EXPECT_EQ(value3, get_mock_data(test_prefix_ + test_key1_));
-  EXPECT_EQ(test_value1_, get_mock_data(test_copy_prefix1_ + test_key1_));
-  EXPECT_EQ(test_value1_, get_mock_data(test_copy_prefix2_ + test_key1_));
-  EXPECT_EQ(value3, get_mock_data(test_copy_prefix3_ + test_key1_));
+  EXPECT_EQ(value3, GetDatabaseEntry(test_prefix_ + test_key1_));
+  EXPECT_EQ(test_value1_, GetDatabaseEntry(test_copy_prefix1_ + test_key1_));
+  EXPECT_EQ(test_value1_, GetDatabaseEntry(test_copy_prefix2_ + test_key1_));
+  EXPECT_EQ(value3, GetDatabaseEntry(test_copy_prefix3_ + test_key1_));
 
   // test_key2_ values.
-  EXPECT_EQ(test_value2_, get_mock_data(test_prefix_ + test_key2_));
-  EXPECT_EQ(value5, get_mock_data(test_copy_prefix1_ + test_key2_));
-  EXPECT_EQ(value4, get_mock_data(test_copy_prefix2_ + test_key2_));
-  EXPECT_EQ(test_value2_, get_mock_data(test_copy_prefix3_ + test_key2_));
+  EXPECT_EQ(test_value2_, GetDatabaseEntry(test_prefix_ + test_key2_));
+  EXPECT_EQ(value5, GetDatabaseEntry(test_copy_prefix1_ + test_key2_));
+  EXPECT_EQ(value4, GetDatabaseEntry(test_copy_prefix2_ + test_key2_));
+  EXPECT_EQ(test_value2_, GetDatabaseEntry(test_copy_prefix3_ + test_key2_));
 }
 
 TEST_P(StorageAreaImplParamTest, PrefixForkAfterLoad) {
@@ -1146,7 +1178,7 @@ TEST_P(StorageAreaImplParamTest, PrefixForkAfterLoad) {
 
   BlockingCommit(delegate(), storage_area_impl());
 
-  EXPECT_EQ(kValue, get_mock_data(test_copy_prefix1_ + test_key1_));
+  EXPECT_EQ(kValue, GetDatabaseEntry(test_copy_prefix1_ + test_key1_));
 }
 
 namespace {
@@ -1290,12 +1322,12 @@ TEST_F(StorageAreaImplTest, PrefixForkingPsuedoFuzzer) {
     std::vector<uint8_t> prefix = areas[i]->prefix();
     std::string key1 = ToString(prefix) + kKey1;
     std::string key2 = ToString(prefix) + kKey2;
-    EXPECT_EQ(!!state.val1, has_mock_data(key1));
+    EXPECT_EQ(!!state.val1, HasDatabaseEntry(key1));
     if (state.val1)
-      EXPECT_EQ(ToString(state.val1.value()), get_mock_data(key1));
-    EXPECT_EQ(!!state.val2, has_mock_data(key2));
+      EXPECT_EQ(ToString(state.val1.value()), GetDatabaseEntry(key1));
+    EXPECT_EQ(!!state.val2, HasDatabaseEntry(key2));
     if (state.val2)
-      EXPECT_EQ(ToString(state.val2.value()), get_mock_data(key2));
+      EXPECT_EQ(ToString(state.val2.value()), GetDatabaseEntry(key2));
 
     EXPECT_FALSE(areas[i]->has_pending_load_tasks()) << i;
   }
@@ -1306,13 +1338,13 @@ TEST_P(StorageAreaImplParamTest, EmptyMapIgnoresDisk) {
   const std::vector<uint8_t> kValueVec = ToBytes(kValue);
 
   // Set fake data to ensure that our shortcut doesn't read it.
-  set_mock_data(test_copy_prefix1_ + test_key1_, kValue);
+  SetDatabaseEntry(test_copy_prefix1_ + test_key1_, kValue);
 
   // Create an empty map that will have no data in it.
   StorageAreaImpl::Options options =
       GetDefaultTestingOptions(CacheMode::KEYS_ONLY_WHEN_POSSIBLE);
   auto empty_storage_area = std::make_unique<StorageAreaImpl>(
-      level_db_database_remote_.get(), test_copy_prefix1_, delegate(), options);
+      database(), test_copy_prefix1_, delegate(), options);
   empty_storage_area->InitializeAsEmpty();
 
   // Check the forked state, which should be empty.
@@ -1324,13 +1356,13 @@ TEST_P(StorageAreaImplParamTest, ForkFromEmptyMap) {
   const std::vector<uint8_t> kValueVec = ToBytes(kValue);
 
   // Set fake data to ensure that our shortcut doesn't read it.
-  set_mock_data(test_copy_prefix1_ + test_key1_, kValue);
+  SetDatabaseEntry(test_copy_prefix1_ + test_key1_, kValue);
 
   // Create an empty map that will have no data in it.
   StorageAreaImpl::Options options =
       GetDefaultTestingOptions(CacheMode::KEYS_ONLY_WHEN_POSSIBLE);
   auto empty_storage_area = std::make_unique<StorageAreaImpl>(
-      level_db_database_remote_.get(), test_copy_prefix1_, delegate(), options);
+      database(), test_copy_prefix1_, delegate(), options);
   empty_storage_area->InitializeAsEmpty();
 
   // Execute the fork, which should shortcut disk and just be empty.

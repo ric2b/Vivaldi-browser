@@ -273,7 +273,7 @@ void EasyUnlockServiceRegular::SetStoredRemoteDevices(
   else
     pairing_update->SetKey(kKeyDevices, devices.Clone());
 
-  RefreshCryptohomeKeysIfPossible();
+  CheckCryptohomeKeysAndMaybeHardlock();
 }
 
 proximity_auth::ProximityAuthPrefManager*
@@ -292,17 +292,6 @@ AccountId EasyUnlockServiceRegular::GetAccountId() const {
   return primary_user->GetAccountId();
 }
 
-void EasyUnlockServiceRegular::SetHardlockAfterKeyOperation(
-    EasyUnlockScreenlockStateHandler::HardlockState state_on_success,
-    bool success) {
-  if (success)
-    SetHardlockStateForUser(GetAccountId(), state_on_success);
-
-  // Even if the refresh keys operation suceeded, we still fetch and check the
-  // cryptohome keys against the keys in local preferences as a sanity check.
-  CheckCryptohomeKeysAndMaybeHardlock();
-}
-
 void EasyUnlockServiceRegular::ClearPermitAccess() {
   DictionaryPrefUpdate pairing_update(profile()->GetPrefs(),
                                       prefs::kEasyUnlockPairing);
@@ -319,10 +308,12 @@ const base::ListValue* EasyUnlockServiceRegular::GetRemoteDevices() const {
 }
 
 std::string EasyUnlockServiceRegular::GetChallenge() const {
+  NOTREACHED();
   return std::string();
 }
 
 std::string EasyUnlockServiceRegular::GetWrappedSecret() const {
+  NOTREACHED();
   return std::string();
 }
 
@@ -338,31 +329,29 @@ void EasyUnlockServiceRegular::RecordPasswordLoginEvent(
 }
 
 void EasyUnlockServiceRegular::InitializeInternal() {
-  // If |device_sync_client_| is not ready yet, wait for it to call back on
-  // OnReady().
-  if (device_sync_client_->is_ready())
-    OnReady();
-
-  device_sync_client_->AddObserver(this);
-
-  OnFeatureStatesChanged(multidevice_setup_client_->GetFeatureStates());
-
-  multidevice_setup_client_->AddObserver(this);
-
-  proximity_auth::ScreenlockBridge::Get()->AddObserver(this);
-
   pref_manager_.reset(new proximity_auth::ProximityAuthProfilePrefManager(
       profile()->GetPrefs(), multidevice_setup_client_));
   pref_manager_->StartSyncingToLocalState(g_browser_process->local_state(),
                                           GetAccountId());
 
-  LoadRemoteDevices();
-
   registrar_.Init(profile()->GetPrefs());
   registrar_.Add(
       proximity_auth::prefs::kProximityAuthIsChromeOSLoginEnabled,
-      base::Bind(&EasyUnlockServiceRegular::RefreshCryptohomeKeysIfPossible,
+      base::Bind(&EasyUnlockServiceRegular::CheckCryptohomeKeysAndMaybeHardlock,
                  weak_ptr_factory_.GetWeakPtr()));
+
+  // If |device_sync_client_| is not ready yet, wait for it to call back on
+  // OnReady().
+  if (device_sync_client_->is_ready())
+    OnReady();
+  device_sync_client_->AddObserver(this);
+
+  OnFeatureStatesChanged(multidevice_setup_client_->GetFeatureStates());
+  multidevice_setup_client_->AddObserver(this);
+
+  proximity_auth::ScreenlockBridge::Get()->AddObserver(this);
+
+  LoadRemoteDevices();
 }
 
 void EasyUnlockServiceRegular::ShutdownInternal() {
@@ -482,16 +471,16 @@ void EasyUnlockServiceRegular::ShowNotificationIfNewDevicePresent(
   // if EasyUnlock was enabled through the setup app.
   if (!public_keys_after_sync.empty()) {
     if (public_keys_before_sync.empty()) {
-        multidevice_setup::MultiDeviceSetupDialog* multidevice_setup_dialog =
-            multidevice_setup::MultiDeviceSetupDialog::Get();
-        if (multidevice_setup_dialog) {
-          // Delay showing the "Chromebook added" notification until the
-          // MultiDeviceSetupDialog is closed.
-          multidevice_setup_dialog->AddOnCloseCallback(base::BindOnce(
-              &EasyUnlockServiceRegular::ShowChromebookAddedNotification,
-              weak_ptr_factory_.GetWeakPtr()));
-          return;
-        }
+      multidevice_setup::MultiDeviceSetupDialog* multidevice_setup_dialog =
+          multidevice_setup::MultiDeviceSetupDialog::Get();
+      if (multidevice_setup_dialog) {
+        // Delay showing the "Chromebook added" notification until the
+        // MultiDeviceSetupDialog is closed.
+        multidevice_setup_dialog->AddOnCloseCallback(base::BindOnce(
+            &EasyUnlockServiceRegular::ShowChromebookAddedNotification,
+            weak_ptr_factory_.GetWeakPtr()));
+        return;
+      }
 
       notification_controller_->ShowChromebookAddedNotification();
     } else {
@@ -499,11 +488,6 @@ void EasyUnlockServiceRegular::ShowNotificationIfNewDevicePresent(
       notification_controller_->ShowPairingChangeNotification();
     }
   }
-}
-
-void EasyUnlockServiceRegular::OnForceSyncCompleted(bool success) {
-  if (!success)
-    PA_LOG(WARNING) << "Failed to force device sync.";
 }
 
 void EasyUnlockServiceRegular::OnScreenDidLock(
@@ -569,10 +553,6 @@ void EasyUnlockServiceRegular::OnScreenDidUnlock(
 void EasyUnlockServiceRegular::OnFocusedUserChanged(
     const AccountId& account_id) {
   // Nothing to do.
-}
-
-void EasyUnlockServiceRegular::RefreshCryptohomeKeysIfPossible() {
-  CheckCryptohomeKeysAndMaybeHardlock();
 }
 
 multidevice::RemoteDeviceRefList EasyUnlockServiceRegular::GetUnlockKeys() {

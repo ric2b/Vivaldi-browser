@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NGContainerFragmentBuilder_h
-#define NGContainerFragmentBuilder_h
+#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_CONTAINER_FRAGMENT_BUILDER_H_
+#define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_CONTAINER_FRAGMENT_BUILDER_H_
 
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -13,6 +13,8 @@
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_margin_strut.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/list/ng_unpositioned_list_marker.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_break_appeal.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_early_break.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_floats_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_link.h"
@@ -214,6 +216,9 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   NGBreakTokenVector child_break_tokens_;
   NGBreakTokenVector inline_break_tokens_;
 
+  scoped_refptr<const NGEarlyBreak> early_break_;
+  NGBreakAppeal break_appeal_ = kBreakAppealLastResort;
+
   NGAdjoiningObjectTypes adjoining_object_types_ = kAdjoiningNone;
   bool has_adjoining_object_descendants_ = false;
 
@@ -221,7 +226,6 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   bool is_pushed_by_floats_ = false;
   bool is_legacy_layout_root_ = false;
 
-  bool has_last_resort_break_ = false;
   bool has_floating_descendants_ = false;
   bool has_orthogonal_flow_roots_ = false;
   bool has_descendant_that_depends_on_percentage_block_size_ = false;
@@ -235,4 +239,4 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
 WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(
     blink::NGContainerFragmentBuilder::ChildWithOffset)
 
-#endif  // NGContainerFragmentBuilder
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_CONTAINER_FRAGMENT_BUILDER_H_

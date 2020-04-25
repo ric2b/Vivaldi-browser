@@ -76,19 +76,6 @@ void VivaldiWindowsAPI::Observe(
   }
 }
 
-void VivaldiWindowsAPI::Notify(app_modal::JavaScriptAppModalDialog* dialog) {
-  if (dialog->is_before_unload_dialog()) {
-    // We notify the UI which tab opened a beforeunload dialog so
-    // appropiate action can be taken.
-    int id = SessionTabHelper::IdForTab(dialog->web_contents()).id();
-
-    ::vivaldi::BroadcastEvent(
-        vivaldi::window_private::OnBeforeUnloadDialogOpened::kEventName,
-        vivaldi::window_private::OnBeforeUnloadDialogOpened::Create(id),
-        browser_context_);
-  }
-}
-
 // static
 void VivaldiWindowsAPI::WindowsForProfileClosing(Profile* profile) {
   if (profile->IsGuestSession()) {

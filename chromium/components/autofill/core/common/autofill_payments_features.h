@@ -19,17 +19,17 @@ namespace autofill {
 namespace features {
 
 // All features in alphabetical order.
+extern const base::Feature kAutofillAlwaysReturnCloudTokenizedCard;
 extern const base::Feature kAutofillCreditCardAblationExperiment;
 extern const base::Feature kAutofillCreditCardAuthentication;
 extern const base::Feature kAutofillCreditCardUploadFeedback;
 extern const base::Feature kAutofillDoNotMigrateUnsupportedLocalCards;
-extern const base::Feature kAutofillDownstreamUseGooglePayBrandingOniOS;
 extern const base::Feature kAutofillEnableLocalCardMigrationForNonSyncUser;
 extern const base::Feature kAutofillEnableToolbarStatusChip;
-extern const base::Feature kAutofillImportDynamicForms;
 extern const base::Feature kAutofillLocalCardMigrationUsesStrikeSystemV2;
 extern const base::Feature kAutofillNoLocalSaveOnUnmaskSuccess;
 extern const base::Feature kAutofillNoLocalSaveOnUploadSuccess;
+extern const base::Feature kAutofillSaveCardDismissOnNavigation;
 extern const base::Feature kAutofillSaveCardShowNoThanks;
 extern const base::Feature kAutofillSaveCreditCardUsesImprovedMessaging;
 extern const base::Feature kAutofillUpdatedCardUnmaskPromptUi;

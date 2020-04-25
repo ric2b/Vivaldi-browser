@@ -12,8 +12,6 @@
 
 namespace content {
 
-class NavigationHandleImpl;
-
 // This class owns the set of NavigationThrottles added to a NavigationHandle.
 // It is responsible for calling the various sets of events on its
 // NavigationThrottle, and notifying its delegate of the results of said events.
@@ -74,10 +72,10 @@ class CONTENT_EXPORT NavigationThrottleRunner {
 
   // The NavigationHandle associated with the NavigationThrottles this
   // NavigationThrottleRunner manages.
-  // Note: |handle_| is not defined as a NavigationHandleImpl* so that a
+  // Note: |handle_| is not defined as a NavigationRequest* so that a
   // MockNavigationHandle can be used in unit_tests. Unit tests that use a
   // MockNavigationHandle should never call RegisterNavigationThrottles as this
-  // function expects |handle_| to be a NavigationHandleImpl instead.
+  // function expects |handle_| to be a NavigationRequest instead.
   NavigationHandle* handle_;
 
   // A list of Throttles registered for this navigation.

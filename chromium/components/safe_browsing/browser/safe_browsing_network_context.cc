@@ -15,7 +15,9 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_context_client_base.h"
 #include "content/public/browser/network_service_instance.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/net_buildflags.h"
 #include "services/network/network_context.h"
@@ -41,9 +43,11 @@ class SafeBrowsingNetworkContext::SharedURLLoaderFactory
 
   network::mojom::NetworkContext* GetNetworkContext() {
     DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
-    if (!network_context_ || network_context_.encountered_error()) {
+    if (!network_context_ || !network_context_.is_connected()) {
+      network_context_.reset();
       content::GetNetworkService()->CreateNetworkContext(
-          MakeRequest(&network_context_), CreateNetworkContextParams());
+          network_context_.BindNewPipeAndPassReceiver(),
+          CreateNetworkContextParams());
 
       mojo::PendingRemote<network::mojom::NetworkContextClient> client_remote;
       mojo::MakeSelfOwnedReceiver(
@@ -77,8 +81,9 @@ class SafeBrowsingNetworkContext::SharedURLLoaderFactory
         std::move(client), traffic_annotation);
   }
 
-  void Clone(network::mojom::URLLoaderFactoryRequest request) override {
-    GetURLLoaderFactory()->Clone(std::move(request));
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
+      override {
+    GetURLLoaderFactory()->Clone(std::move(receiver));
   }
 
   // network::SharedURLLoaderFactory implementation:
@@ -94,6 +99,7 @@ class SafeBrowsingNetworkContext::SharedURLLoaderFactory
           network::mojom::URLLoaderFactoryParams::New();
       params->process_id = network::mojom::kBrowserProcessId;
       params->is_corb_enabled = false;
+      params->is_trusted = true;
       GetNetworkContext()->CreateURLLoaderFactory(
           MakeRequest(&url_loader_factory_), std::move(params));
     }
@@ -128,7 +134,7 @@ class SafeBrowsingNetworkContext::SharedURLLoaderFactory
 
   base::FilePath user_data_dir_;
   NetworkContextParamsFactory network_context_params_factory_;
-  network::mojom::NetworkContextPtr network_context_;
+  mojo::Remote<network::mojom::NetworkContext> network_context_;
   network::mojom::URLLoaderFactoryPtr url_loader_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SharedURLLoaderFactory);

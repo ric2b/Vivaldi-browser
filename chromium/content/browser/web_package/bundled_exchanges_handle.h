@@ -6,62 +6,85 @@
 #define CONTENT_BROWSER_WEB_PACKAGE_BUNDLED_EXCHANGES_HANDLE_H_
 
 #include <memory>
-#include <string>
 
-#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/optional.h"
-#include "content/browser/web_package/bundled_exchanges_source.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/data_decoder/public/mojom/bundled_exchanges_parser.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
 
-class BundledExchangesReader;
+class BundledExchangesSource;
 class BundledExchangesURLLoaderFactory;
+class BundledExchangesHandleTracker;
+class BundledExchangesNavigationInfo;
+class BundledExchangesReader;
 class NavigationLoaderInterceptor;
 
 // A class to provide interfaces to communicate with a BundledExchanges for
 // loading. Running on the UI thread.
-class BundledExchangesHandle final {
+class BundledExchangesHandle {
  public:
-  BundledExchangesHandle();
-  explicit BundledExchangesHandle(const BundledExchangesSource& source);
+  static std::unique_ptr<BundledExchangesHandle> CreateForFile(
+      int frame_tree_node_id);
+  static std::unique_ptr<BundledExchangesHandle> CreateForTrustableFile(
+      std::unique_ptr<BundledExchangesSource> source,
+      int frame_tree_node_id);
+  static std::unique_ptr<BundledExchangesHandle> CreateForTrackedNavigation(
+      scoped_refptr<BundledExchangesReader> reader,
+      int frame_tree_node_id);
+  static std::unique_ptr<BundledExchangesHandle> CreateForNavigationInfo(
+      std::unique_ptr<BundledExchangesNavigationInfo> navigation_info,
+      int frame_tree_node_id);
+
   ~BundledExchangesHandle();
 
-  // Creates a NavigationLoaderInterceptor instance to handle the request for
+  // Takes a NavigationLoaderInterceptor instance to handle the request for
   // a BundledExchanges, to redirect to the entry URL of the BundledExchanges,
   // and to load the main exchange from the BundledExchanges.
-  std::unique_ptr<NavigationLoaderInterceptor> CreateInterceptor();
+  std::unique_ptr<NavigationLoaderInterceptor> TakeInterceptor();
 
   // Creates a URLLoaderFactory to load resources from the BundledExchanges.
   void CreateURLLoaderFactory(
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
       mojo::Remote<network::mojom::URLLoaderFactory> fallback_factory);
 
+  // Creates a BundledExchangesHandleTracker to track navigations within the
+  // bundled exchanges file. Returns null if not yet succeeded to load the
+  // exchanges file.
+  std::unique_ptr<BundledExchangesHandleTracker> MaybeCreateTracker();
+
   // Checks if a valid BundledExchanges is attached, opened, and ready for use.
   bool IsReadyForLoading();
 
+  // The base URL which will be set for the document to support relative path
+  // subresource loading in unsigned bundled exchanges file.
+  const GURL& base_url_override() const { return base_url_override_; }
+
+  const BundledExchangesNavigationInfo* navigation_info() const {
+    return navigation_info_.get();
+  }
+
  private:
-  class PrimaryURLRedirectLoader;
+  BundledExchangesHandle();
 
-  void CreateURLLoader(const network::ResourceRequest& resource_request,
-                       network::mojom::URLLoaderRequest request,
-                       network::mojom::URLLoaderClientPtr client);
-  void OnMetadataReady(data_decoder::mojom::BundleMetadataParseErrorPtr error);
+  void SetInterceptor(std::unique_ptr<NavigationLoaderInterceptor> interceptor);
 
-  const BundledExchangesSource source_;
+  // Called when succeeded to load the bundled exchanges file.
+  // |target_inner_url| is the URL of the resource in the bundled exchanges
+  // file, which are used for the navigation.
+  void OnBundledExchangesFileLoaded(
+      const GURL& target_inner_url,
+      std::unique_ptr<BundledExchangesURLLoaderFactory> url_loader_factory);
 
-  base::OnceClosure pending_create_url_loader_task_;
+  std::unique_ptr<NavigationLoaderInterceptor> interceptor_;
 
-  std::unique_ptr<BundledExchangesReader> reader_;
+  GURL base_url_override_;
+  std::unique_ptr<BundledExchangesNavigationInfo> navigation_info_;
+
   std::unique_ptr<BundledExchangesURLLoaderFactory> url_loader_factory_;
-  GURL primary_url_;
-  data_decoder::mojom::BundleMetadataParseErrorPtr metadata_error_;
 
   base::WeakPtrFactory<BundledExchangesHandle> weak_factory_{this};
 

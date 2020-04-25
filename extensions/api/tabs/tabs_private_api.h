@@ -100,9 +100,12 @@ class VivaldiPrivateTabObserver
                              content::RenderViewHost* new_host) override;
   void WebContentsDestroyed() override;
   bool OnMessageReceived(const IPC::Message& message) override;
-  void DocumentAvailableInMainFrame() override;
+  void DidFinishLoad(content::RenderFrameHost* render_frame_host,
+                             const GURL& validated_url) override;
   void WebContentsDidDetach() override;
   void WebContentsDidAttach() override;
+  void BeforeUnloadFired(bool proceed,
+                         const base::TimeTicks& proceed_time) override;
 
   void SetShowImages(bool show_images);
   void SetLoadFromCacheOnly(bool load_from_cache_only);
@@ -121,6 +124,7 @@ class VivaldiPrivateTabObserver
   bool enable_plugins() { return enable_plugins_; }
   std::string contents_mime_type() { return contents_mime_type_; }
   bool mute() { return mute_; }
+  bool NeedToFireBeforeUnload();
 
   // Commit setting to the active RenderViewHost
   void CommitSettings();

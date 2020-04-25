@@ -7,15 +7,15 @@ package org.chromium.chrome.browser.compositor.bottombar;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.ColorInt;
-import android.support.annotation.Nullable;
 import android.view.ViewGroup;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
 import org.chromium.chrome.browser.util.MathUtils;
@@ -150,8 +150,8 @@ abstract class OverlayPanelBase {
         mProgressBarHeight = PROGRESS_BAR_HEIGHT_DP;
         mBarBorderHeight = BAR_BORDER_HEIGHT_DP;
 
-        int bar_height_dimen = isNewLayout() ? R.dimen.overlay_panel_bar_height
-                                             : R.dimen.overlay_panel_bar_height_legacy;
+        int bar_height_dimen = OverlayPanel.isNewLayout() ? R.dimen.overlay_panel_bar_height
+                                                          : R.dimen.overlay_panel_bar_height_legacy;
         mBarHeight = mContext.getResources().getDimension(bar_height_dimen) * mPxToDp;
 
         final Resources resources = mContext.getResources();
@@ -163,7 +163,7 @@ abstract class OverlayPanelBase {
         mButtonPaddingDps =
                 (int) (mPxToDp * resources.getDimension(R.dimen.overlay_panel_button_padding));
         mBarShadowVisible = true;
-        mPanelShadowVisible = !isNewLayout();
+        mPanelShadowVisible = true;
     }
 
     // ============================================================================================
@@ -354,10 +354,9 @@ abstract class OverlayPanelBase {
         return Math.round(mMaximumHeight / mPxToDp);
     }
 
-    /** @return Whether we're using the new Overlay layout feature. */
-    private boolean isNewLayout() {
-        return ChromeFeatureList.isInitialized()
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.OVERLAY_NEW_LAYOUT);
+    /** @return The offset for the page content in DPs. */
+    protected float getLayoutOffsetYDps() {
+        return mLayoutYOffset * mPxToDp;
     }
 
     // ============================================================================================
@@ -507,7 +506,7 @@ abstract class OverlayPanelBase {
      * @return The opacity of the arrow icon.
      */
     public float getArrowIconOpacity() {
-        return isNewLayout() ? ARROW_ICON_OPACITY_TRANSPARENT : mArrowIconOpacity;
+        return OverlayPanel.isNewLayout() ? ARROW_ICON_OPACITY_TRANSPARENT : mArrowIconOpacity;
     }
 
     /**
@@ -1108,7 +1107,7 @@ abstract class OverlayPanelBase {
      * portion of the Base Page visible when a Panel is in expanded state. To facilitate the
      * calculation, the first argument contains the height of the Panel in the expanded state.
      *
-     * @return The desired offset for the Base Page
+     * @return The desired offset for the Base Page in DPs
      */
     protected float calculateBasePageDesiredOffset() {
         return 0.f;
@@ -1130,7 +1129,7 @@ abstract class OverlayPanelBase {
      * consideration the Toolbar height, and adjust the offset accordingly, in order to
      * move the Toolbar out of the view as the Panel expands.
      *
-     * @return The target offset Y.
+     * @return The target offset Y in DPs.
      */
     private float calculateBasePageTargetY() {
         // Only a fullscreen wide Panel should offset the base page. A small panel should
@@ -1139,7 +1138,7 @@ abstract class OverlayPanelBase {
 
         // Start with the desired offset taking viewport offset into consideration and make sure
         // the result is <= 0 so the page moves up and not down.
-        float offset = Math.min(calculateBasePageDesiredOffset() - mLayoutYOffset, 0.0f);
+        float offset = Math.min(calculateBasePageDesiredOffset() - getLayoutOffsetYDps(), 0.0f);
 
         // Make sure the offset is not greater than the expanded height, because
         // there's nothing to render below the Page.

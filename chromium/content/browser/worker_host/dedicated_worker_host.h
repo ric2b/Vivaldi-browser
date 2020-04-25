@@ -5,8 +5,10 @@
 #ifndef CONTENT_BROWSER_WORKER_HOST_DEDICATED_WORKER_HOST_H_
 #define CONTENT_BROWSER_WORKER_HOST_DEDICATED_WORKER_HOST_H_
 
+#include "build/build_config.h"
 #include "content/browser/browser_interface_broker_impl.h"
 #include "content/public/browser/render_process_host.h"
+#include "media/mojo/mojom/video_decode_perf_history.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -15,10 +17,17 @@
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom-forward.h"
 #include "third_party/blink/public/mojom/idle/idle_manager.mojom-forward.h"
+#include "third_party/blink/public/mojom/payments/payment_app.mojom-forward.h"
+#include "third_party/blink/public/mojom/sms/sms_receiver.mojom-forward.h"
 #include "third_party/blink/public/mojom/usb/web_usb_service.mojom-forward.h"
 #include "third_party/blink/public/mojom/websockets/websocket_connector.mojom-forward.h"
 #include "third_party/blink/public/mojom/worker/dedicated_worker_host.mojom.h"
 #include "third_party/blink/public/mojom/worker/dedicated_worker_host_factory.mojom.h"
+#include "third_party/blink/public/mojom/worker/subresource_loader_updater.mojom.h"
+
+#if !defined(OS_ANDROID)
+#include "third_party/blink/public/mojom/serial/serial.mojom-forward.h"
+#endif
 
 namespace url {
 class Origin;
@@ -28,6 +37,7 @@ namespace content {
 
 class ServiceWorkerNavigationHandle;
 class ServiceWorkerObjectHost;
+class StoragePartitionImpl;
 
 // Creates a host factory for a dedicated worker. This must be called on the UI
 // thread.
@@ -64,8 +74,23 @@ class DedicatedWorkerHost final
 
   void BindFileSystemManager(
       mojo::PendingReceiver<blink::mojom::FileSystemManager> receiver);
+  void BindVideoDecodePerfHistory(
+      mojo::PendingReceiver<media::mojom::VideoDecodePerfHistory> receiver);
   void CreateIdleManager(
       mojo::PendingReceiver<blink::mojom::IdleManager> receiver);
+  void CreatePaymentManager(
+      mojo::PendingReceiver<payments::mojom::PaymentManager> receiver);
+  void CreateIDBFactory(
+      mojo::PendingReceiver<blink::mojom::IDBFactory> receiver);
+  void BindSmsReceiverReceiver(
+      mojo::PendingReceiver<blink::mojom::SmsReceiver> receiver);
+  void CreateWebUsbService(
+      mojo::PendingReceiver<blink::mojom::WebUsbService> receiver);
+
+#if !defined(OS_ANDROID)
+  void BindSerialService(
+      mojo::PendingReceiver<blink::mojom::SerialService> receiver);
+#endif
 
   // service_manager::mojom::InterfaceProvider:
   void GetInterface(const std::string& interface_name,
@@ -115,6 +140,9 @@ class DedicatedWorkerHost final
           controller_service_worker_object_host,
       bool success);
 
+  // Sets up the observer of network service crash.
+  void ObserveNetworkServiceCrash(StoragePartitionImpl* storage_partition_impl);
+
   // Creates a network factory for subresource requests from this worker. The
   // network factory is meant to be passed to the renderer.
   mojo::PendingRemote<network::mojom::URLLoaderFactory>
@@ -122,14 +150,15 @@ class DedicatedWorkerHost final
                                       RenderFrameHostImpl* render_frame_host,
                                       bool* bypass_redirect_checks);
 
-  void CreateWebUsbService(
-      mojo::PendingReceiver<blink::mojom::WebUsbService> receiver);
-
   void CreateWebSocketConnector(
       mojo::PendingReceiver<blink::mojom::WebSocketConnector> receiver);
 
   void CreateNestedDedicatedWorker(
       mojo::PendingReceiver<blink::mojom::DedicatedWorkerHostFactory> receiver);
+
+  // Updates subresource loader factories. This is supposed to be called when
+  // out-of-process Network Service crashes.
+  void UpdateSubresourceLoaderFactories();
 
   // May return a nullptr.
   RenderFrameHostImpl* GetAncestorRenderFrameHost();
@@ -167,8 +196,17 @@ class DedicatedWorkerHost final
       &broker_};
   mojo::Receiver<blink::mojom::DedicatedWorkerHost> host_receiver_;
 
+  // Indicates if subresource loaders of this worker support file URLs.
+  bool file_url_support_ = false;
+
   // The liveness state of the dedicated worker in the renderer.
   bool is_frozen_ = false;
+
+  // For observing Network Service connection errors only.
+  network::mojom::URLLoaderFactoryPtr
+      network_service_connection_error_handler_holder_;
+  mojo::Remote<blink::mojom::SubresourceLoaderUpdater>
+      subresource_loader_updater_;
 
   base::WeakPtrFactory<DedicatedWorkerHost> weak_factory_{this};
 

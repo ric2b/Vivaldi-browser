@@ -90,6 +90,7 @@
 #include "chrome/grit/component_extension_resources.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/services/multidevice_setup/public/mojom/constants.mojom.h"
+#include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"  // nogncheck
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
@@ -490,20 +491,23 @@ service_manager::Connector* OobeUI::GetLoggedInUserMojoConnector() {
 }
 
 void OobeUI::BindMultiDeviceSetup(
-    multidevice_setup::mojom::MultiDeviceSetupRequest request) {
-  GetLoggedInUserMojoConnector()->BindInterface(
-      multidevice_setup::mojom::kServiceName, std::move(request));
+    mojo::PendingReceiver<multidevice_setup::mojom::MultiDeviceSetup>
+        receiver) {
+  GetLoggedInUserMojoConnector()->Connect(
+      multidevice_setup::mojom::kServiceName, std::move(receiver));
 }
 
 void OobeUI::BindPrivilegedHostDeviceSetter(
-    multidevice_setup::mojom::PrivilegedHostDeviceSetterRequest request) {
-  GetLoggedInUserMojoConnector()->BindInterface(
-      multidevice_setup::mojom::kServiceName, std::move(request));
+    mojo::PendingReceiver<multidevice_setup::mojom::PrivilegedHostDeviceSetter>
+        receiver) {
+  GetLoggedInUserMojoConnector()->Connect(
+      multidevice_setup::mojom::kServiceName, std::move(receiver));
 }
 
 void OobeUI::BindCrosNetworkConfig(
-    chromeos::network_config::mojom::CrosNetworkConfigRequest request) {
-  ash::GetNetworkConfigService(std::move(request));
+    mojo::PendingReceiver<chromeos::network_config::mojom::CrosNetworkConfig>
+        receiver) {
+  ash::GetNetworkConfigService(std::move(receiver));
 }
 
 OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
@@ -622,7 +626,7 @@ void OobeUI::CurrentScreenChanged(OobeScreenId new_screen) {
 
   current_screen_ = new_screen;
   for (Observer& observer : observer_list_)
-    observer.OnCurrentScreenChanged(current_screen_, new_screen);
+    observer.OnCurrentScreenChanged(previous_screen_, new_screen);
 }
 
 bool OobeUI::IsScreenInitialized(OobeScreenId screen) {

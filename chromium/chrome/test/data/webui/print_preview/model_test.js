@@ -35,11 +35,11 @@ cr.define('model_test', function() {
         dpi: {},
         mediaSize: {},
         marginsType: 0, /* default */
-        customScaling: false,
         scaling: '100',
+        scalingType: print_preview.ScalingType.DEFAULT,
+        scalingTypePdf: print_preview.ScalingType.DEFAULT,
         isHeaderFooterEnabled: true,
         isCssBackgroundEnabled: false,
-        isFitToPageEnabled: false,
         isCollateEnabled: true,
         isDuplexEnabled: true,
         isDuplexShortEdge: false,
@@ -59,11 +59,11 @@ cr.define('model_test', function() {
         dpi: {horizontal_dpi: 1000, vertical_dpi: 500},
         mediaSize: {width_microns: 43180, height_microns: 21590},
         marginsType: 2, /* none */
-        customScaling: true,
         scaling: '85',
+        scalingType: print_preview.ScalingType.CUSTOM,
+        scalingTypePdf: print_preview.ScalingType.FIT_TO_PAGE,
         isHeaderFooterEnabled: false,
         isCssBackgroundEnabled: true,
-        isFitToPageEnabled: true,
         isCollateEnabled: false,
         isDuplexEnabled: false,
         isDuplexShortEdge: true,
@@ -129,16 +129,15 @@ cr.define('model_test', function() {
               .then(
                   () =>
                       testStickySetting('duplexShortEdge', 'isDuplexShortEdge'))
-              .then(() => testStickySetting('fitToPage', 'isFitToPageEnabled'))
               .then(
                   () => testStickySetting(
                       'headerFooter', 'isHeaderFooterEnabled'))
               .then(() => testStickySetting('layout', 'isLandscapeEnabled'))
               .then(() => testStickySetting('margins', 'marginsType'))
               .then(() => testStickySetting('mediaSize', 'mediaSize'))
-              .then(() => testStickySetting('customScaling', 'customScaling'))
               .then(() => testStickySetting('scaling', 'scaling'))
-              .then(() => testStickySetting('fitToPage', 'isFitToPageEnabled'))
+              .then(() => testStickySetting('scalingType', 'scalingType'))
+              .then(() => testStickySetting('scalingTypePdf', 'scalingTypePdf'))
               .then(() => testStickySetting('vendorItems', 'vendorOptions'));
       if (cr.isChromeOS) {
         promise = promise.then(() => testStickySetting('pin', 'isPinEnabled'))
@@ -178,9 +177,6 @@ cr.define('model_test', function() {
 
     /** @param {!print_preview.Destination} testDestination */
     function toggleSettings(testDestination) {
-      // Some non default setting values to change to.
-      // Manually set fit to page to available so it can be toggled.
-      model.settings.fitToPage.available = true;
       const settingsChange = {
         pages: [2],
         copies: 2,
@@ -188,7 +184,7 @@ cr.define('model_test', function() {
         layout: true,
         color: false,
         mediaSize: testDestination.capabilities.printer.media_size.option[1],
-        margins: print_preview.ticket_items.MarginsTypeValue.CUSTOM,
+        margins: print_preview.MarginsType.CUSTOM,
         customMargins: {
           marginTop: 100,
           marginRight: 200,
@@ -199,9 +195,9 @@ cr.define('model_test', function() {
           horizontal_dpi: 100,
           vertical_dpi: 100,
         },
-        fitToPage: false,
-        customScaling: true,
         scaling: '90',
+        scalingType: print_preview.ScalingType.CUSTOM,
+        scalingTypePdf: print_preview.ScalingType.CUSTOM,
         duplex: true,
         duplexShortEdge: true,
         cssBackground: true,
@@ -230,6 +226,7 @@ cr.define('model_test', function() {
         hasCssMediaStyles: false,
         hasSelection: true,
         isModifiable: true,
+        isPdf: false,
         isScalingDisabled: false,
         fitToPageScaling: 100,
         pageCount: 3,
@@ -254,9 +251,10 @@ cr.define('model_test', function() {
      * print ticket.
      */
     test(assert(TestNames.GetPrintTicket), function() {
+      const origin = cr.isChromeOS ? print_preview.DestinationOrigin.CROS :
+                                     print_preview.DestinationOrigin.LOCAL;
       const testDestination = new print_preview.Destination(
-          'FooDevice', print_preview.DestinationType.LOCAL,
-          print_preview.DestinationOrigin.LOCAL, 'FooName',
+          'FooDevice', print_preview.DestinationType.LOCAL, origin, 'FooName',
           print_preview.DestinationConnectionStatus.ONLINE);
       testDestination.capabilities =
           print_preview_test_utils.getCddTemplateWithAdvancedSettings(2)
@@ -277,30 +275,33 @@ cr.define('model_test', function() {
         landscape: false,
         color: testDestination.getNativeColorModel(true),
         headerFooterEnabled: false,  // Only used in print preview
-        marginsType: print_preview.ticket_items.MarginsTypeValue.DEFAULT,
+        marginsType: print_preview.MarginsType.DEFAULT,
         duplex: print_preview.DuplexMode.SIMPLEX,
         copies: 1,
         collate: true,
         shouldPrintBackgrounds: false,
         shouldPrintSelectionOnly: false,
         previewModifiable: true,
-        printToPDF: false,
         printToGoogleDrive: false,
-        printWithCloudPrint: false,
-        printWithPrivet: false,
-        printWithExtension: false,
+        printerType: print_preview.PrinterType.LOCAL_PRINTER,
         rasterizePDF: false,
         scaleFactor: 100,
+        scalingType: print_preview.ScalingType.DEFAULT,
         pagesPerSheet: 1,
         dpiHorizontal: 200,
         dpiVertical: 200,
         dpiDefault: true,
         deviceName: 'FooDevice',
-        fitToPageEnabled: true,
         pageWidth: 612,
         pageHeight: 792,
         showSystemDialog: false,
       };
+      if (cr.isChromeOS) {
+        expectedDefaultTicketObject.advancedSettings = {
+          printArea: 4,
+          paperType: 0,
+        };
+      }
       expectEquals(JSON.stringify(expectedDefaultTicketObject), defaultTicket);
 
       // Toggle all the values and create a new print ticket.
@@ -312,26 +313,23 @@ cr.define('model_test', function() {
         landscape: true,
         color: testDestination.getNativeColorModel(false),
         headerFooterEnabled: false,
-        marginsType: print_preview.ticket_items.MarginsTypeValue.CUSTOM,
+        marginsType: print_preview.MarginsType.CUSTOM,
         duplex: print_preview.DuplexMode.SHORT_EDGE,
         copies: 2,
         collate: false,
         shouldPrintBackgrounds: true,
         shouldPrintSelectionOnly: false,  // Only for Print Preview.
         previewModifiable: true,
-        printToPDF: false,
         printToGoogleDrive: false,
-        printWithCloudPrint: false,
-        printWithPrivet: false,
-        printWithExtension: false,
+        printerType: print_preview.PrinterType.LOCAL_PRINTER,
         rasterizePDF: true,
         scaleFactor: 90,
+        scalingType: print_preview.ScalingType.CUSTOM,
         pagesPerSheet: 1,
         dpiHorizontal: 100,
         dpiVertical: 100,
         dpiDefault: false,
         deviceName: 'FooDevice',
-        fitToPageEnabled: false,
         pageWidth: 612,
         pageHeight: 792,
         showSystemDialog: false,
@@ -344,6 +342,10 @@ cr.define('model_test', function() {
       };
       if (cr.isChromeOS) {
         expectedNewTicketObject.pinValue = '0000';
+        expectedNewTicketObject.advancedSettings = {
+          printArea: 6,
+          paperType: 1,
+        };
       }
 
       expectEquals(JSON.stringify(expectedNewTicketObject), newTicket);

@@ -67,8 +67,7 @@ import java.util.regex.Pattern;
  * application
  */
 @RunWith(AwJUnit4ClassRunner.class)
-@CommandLineFlags.
-Add({"allow-pre-commit-input", ContentSwitches.HOST_RESOLVER_RULES + "=MAP * 127.0.0.1"})
+@CommandLineFlags.Add({ContentSwitches.HOST_RESOLVER_RULES + "=MAP * 127.0.0.1"})
 public class AwSettingsTest {
     @Rule
     public AwActivityTestRule mActivityTestRule =
@@ -2404,6 +2403,7 @@ public class AwSettingsTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
+    @DisabledTest(message = "crbug.com/1010034")
     // As our implementation of network loads blocking uses the same net::URLRequest settings, make
     // sure that setting cache mode doesn't accidentally enable network loads.  The reference
     // behaviour is that when network loads are blocked, setting cache mode has no effect.
@@ -2498,16 +2498,15 @@ public class AwSettingsTest {
             return mManifestPath;
         }
 
-        int waitUntilHtmlIsRequested(final int initialRequestCount) throws Exception {
+        int waitUntilHtmlIsRequested(final int initialRequestCount) {
             return waitUntilResourceIsRequested(mHtmlPath, initialRequestCount);
         }
 
-        int waitUntilManifestIsRequested(final int initialRequestCount) throws Exception {
+        int waitUntilManifestIsRequested(final int initialRequestCount) {
             return waitUntilResourceIsRequested(mManifestPath, initialRequestCount);
         }
 
-        private int waitUntilResourceIsRequested(
-                final String path, final int initialRequestCount) throws Exception {
+        private int waitUntilResourceIsRequested(final String path, final int initialRequestCount) {
             AwActivityTestRule.pollInstrumentationThread(
                     () -> mWebServer.getRequestCount(path) > initialRequestCount);
             return mWebServer.getRequestCount(path);
@@ -3049,7 +3048,7 @@ public class AwSettingsTest {
     private TestDependencyFactory mOverridenFactory;
 
     @After
-    public void tearDown() throws Exception {
+    public void tearDown() {
         mOverridenFactory = null;
     }
 
@@ -3184,7 +3183,7 @@ public class AwSettingsTest {
                 expectedResult, getSelectionChangeCountForSelectionUpdateTest(awContents, client));
     }
 
-    private void pollTitleAs(final String title, final AwContents awContents) throws Exception {
+    private void pollTitleAs(final String title, final AwContents awContents) {
         AwActivityTestRule.pollInstrumentationThread(
                 () -> title.equals(mActivityTestRule.getTitleOnUiThread(awContents)));
     }
@@ -3311,11 +3310,11 @@ public class AwSettingsTest {
         helper1.ensureSettingHasInitialValue();
     }
 
-    private ViewPair createViews() throws Throwable {
+    private ViewPair createViews() {
         return createViews(false);
     }
 
-    private ViewPair createViews(boolean supportsLegacyQuirks) throws Throwable {
+    private ViewPair createViews(boolean supportsLegacyQuirks) {
         TestAwContentsClient client0 = new TestAwContentsClient();
         TestAwContentsClient client1 = new TestAwContentsClient();
         return new ViewPair(mActivityTestRule.createAwTestContainerViewOnMainSync(
@@ -3359,8 +3358,7 @@ public class AwSettingsTest {
         return TestContentProvider.createContentUrl(target);
     }
 
-    private void simulateDoubleTapCenterOfWebViewOnUiThread(final AwTestContainerView webView)
-            throws Throwable {
+    private void simulateDoubleTapCenterOfWebViewOnUiThread(final AwTestContainerView webView) {
         final int x = (webView.getRight() - webView.getLeft()) / 2;
         final int y = (webView.getBottom() - webView.getTop()) / 2;
         final AwContents awContents = webView.getAwContents();

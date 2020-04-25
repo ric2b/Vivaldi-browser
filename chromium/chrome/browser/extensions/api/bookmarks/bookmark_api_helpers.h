@@ -59,12 +59,6 @@ bool RemoveNode(bookmarks::BookmarkModel* model,
 void GetMetaInfo(const bookmarks::BookmarkNode& node,
                  base::DictionaryValue* id_to_meta_info_map);
 
-bool MoveNodeToTrash(bookmarks::BookmarkModel* model,
-                     bookmarks::ManagedBookmarkService* managed,
-                     int64_t id,
-                     int insert_pos,
-                     std::string* error);
-
 }  // namespace bookmark_api_helpers
 }  // namespace extensions
 

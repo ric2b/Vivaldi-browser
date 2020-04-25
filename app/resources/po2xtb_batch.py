@@ -14,44 +14,31 @@ options = argparser.parse_args()
 
 scriptdir = os.path.dirname(__file__)
 
-# keep in sync with FILE list in vivapp/bin/gettext/update-chromium.sh
-filemap = [
-  {
-    "name": "vivaldi_native_strings",
-    "dir": os.path.join(scriptdir, "../native_resources"),
-  },
-  {
-    "name": "vivaldi_components",
-    "dir": os.path.join(scriptdir, "components"),
-  },
-  {
-    "name": "vivaldi_components_strings",
-    "dir": os.path.join(scriptdir, "components_strings"),
-  },
-  {
-    "name": "vivaldi_generated_resources",
-    "dir": os.path.join(scriptdir, "generated"),
-  },
-  {
-    "name": "vivaldi_strings",
-    "dir": os.path.join(scriptdir, "strings"),
-  },
-  {
-    "name": "vivaldi_ui_strings",
-    "dir": os.path.join(scriptdir, "ui_strings"),
-  },
-]
+# Keep in sync with:
+#   FILE list in vivapp/bin/gettext/update-chromium.sh
+#   filemap in app/resources/po2xtb_batch.py
+#   CHROMIUM_VIVALDI_RESOURCE_LIST in app/resources_list.gni
+filemap = {
+  # Android
+  "vivaldi_android_chrome_strings": "android",
+  "vivaldi_android_strings": os.path.join("..", "android"),
+  # Desktop
+  "vivaldi_components_strings": "components_strings",
+  "vivaldi_components": "components",
+  "vivaldi_content_strings": "content",
+  "vivaldi_generated_resources": "generated",
+  "vivaldi_native_strings": os.path.join("..", "native_resources"),
+  "vivaldi_strings": "strings",
+  "vivaldi_ui_strings": "ui_strings",
+}
 
-for mapentry in filemap:
-  name_prefix = mapentry["name"]
-  dir = mapentry["dir"]
+for name_prefix, dir in filemap.items():
   for locale in options.locales:
     subprocess.check_call(["python",
-          os.path.join(scriptdir, "po2xtb.py"),
-          "--locale", locale if locale != "nb" else "no",
-          "--vivaldi-file", name_prefix,
-          options.po_file_prefix+locale+".po",
-          os.path.join(dir, name_prefix+".grd"),
-          os.path.join(dir, "strings", name_prefix+"_"+locale+".xtb"),
-          ]
-        )
+      os.path.join(scriptdir, "po2xtb.py"),
+      "--locale", locale if locale != "nb" else "no",
+      "--vivaldi-file", name_prefix,
+      options.po_file_prefix+locale+".po",
+      os.path.join(scriptdir, dir, name_prefix+".grd"),
+      os.path.join(scriptdir, dir, "strings", name_prefix+"_"+locale+".xtb"),
+    ])

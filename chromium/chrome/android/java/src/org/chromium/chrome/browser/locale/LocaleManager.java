@@ -8,8 +8,9 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.StrictMode;
-import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApiCompatibilityUtils;
@@ -31,9 +32,9 @@ import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
+import org.chromium.chrome.browser.ui.widget.PromoDialog;
 import org.chromium.chrome.browser.vr.OnExitVrRequestListener;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
-import org.chromium.chrome.browser.widget.PromoDialog;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.ui.base.PageTransition;
 
@@ -42,6 +43,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.concurrent.Callable;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Manager for some locale specific logics.
@@ -258,7 +261,7 @@ public class LocaleManager {
             }
         };
         if (TemplateUrlServiceFactory.get().isDefaultSearchManaged()
-                || ApiCompatibilityUtils.isDemoUser(activity)) {
+                || ApiCompatibilityUtils.isDemoUser()) {
             finalizeInternalCallback.onResult(true);
             return;
         }
@@ -379,6 +382,7 @@ public class LocaleManager {
      */
     @SearchEnginePromoType
     public int getSearchEnginePromoShowType() {
+        if (ChromeApplication.isVivaldi()) return SearchEnginePromoType.DONT_SHOW;
         if (!isSpecialLocaleEnabled()) return SearchEnginePromoType.DONT_SHOW;
         SharedPreferences preferences = ContextUtils.getAppSharedPreferences();
         if (preferences.getBoolean(PREF_PROMO_SHOWN, false)) {

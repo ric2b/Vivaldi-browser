@@ -35,6 +35,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "chrome/browser/battery/battery_metrics.h"
+#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -606,7 +607,7 @@ void BrowserProcessImpl::EndSession() {
   // processes to launch, this can result in a hang. See
   // http://crbug.com/318527.
   rundown_counter->TimedWait(kEndSessionTimeout);
-#elif !defined(OS_MACOSX)
+#else
   NOTIMPLEMENTED();
 #endif
 }
@@ -881,11 +882,6 @@ BrowserProcessImpl::resource_coordinator_parts() {
   return resource_coordinator_parts_.get();
 }
 
-shell_integration::DefaultWebClientState
-BrowserProcessImpl::CachedDefaultWebClientState() {
-  return cached_default_web_client_state_;
-}
-
 // static
 void BrowserProcessImpl::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kDefaultBrowserSettingEnabled,
@@ -1150,8 +1146,6 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
           ->Clone());
 #endif
 
-  CacheDefaultWebClientState();
-
   platform_part_->PreMainMessageLoopRun();
 
   if (base::FeatureList::IsEnabled(network_time::kNetworkTimeServiceQuerying)) {
@@ -1338,14 +1332,6 @@ void BrowserProcessImpl::ApplyDefaultBrowserPolicy() {
     set_browser_worker->set_interactive_permitted(false);
     set_browser_worker->StartSetAsDefault();
   }
-}
-
-void BrowserProcessImpl::CacheDefaultWebClientState() {
-#if defined(OS_CHROMEOS)
-  cached_default_web_client_state_ = shell_integration::IS_DEFAULT;
-#elif !defined(OS_ANDROID)
-  cached_default_web_client_state_ = shell_integration::GetDefaultBrowser();
-#endif
 }
 
 void BrowserProcessImpl::Pin() {

@@ -78,6 +78,9 @@ GlobalErrorBubbleView::GlobalErrorBubbleView(
     : BubbleDialogDelegateView(anchor_view, arrow),
       browser_(browser),
       error_(error) {
+  if (error_)
+    DialogDelegate::set_default_button(error_->GetDefaultDialogButton());
+
   if (!anchor_view) {
     SetAnchorRect(anchor_rect);
     set_parent_window(
@@ -148,21 +151,6 @@ void GlobalErrorBubbleView::Init() {
   set_close_on_deactivate(error_->ShouldCloseOnDeactivate());
 }
 
-void GlobalErrorBubbleView::UpdateButton(views::LabelButton* button,
-                                         ui::DialogButton type) {
-  if (error_) {
-    // UpdateButton can result in calls back in to GlobalErrorBubbleView,
-    // possibly accessing |error_|.
-    BubbleDialogDelegateView::UpdateButton(button, type);
-    if (type == ui::DIALOG_BUTTON_OK &&
-        error_->ShouldAddElevationIconToAcceptButton()) {
-      elevation_icon_setter_ = std::make_unique<ElevationIconSetter>(
-          button, base::BindOnce(&GlobalErrorBubbleView::SizeToContents,
-                                 base::Unretained(this)));
-    }
-  }
-}
-
 bool GlobalErrorBubbleView::ShouldShowCloseButton() const {
   return error_ && error_->ShouldShowCloseButton();
 }
@@ -186,12 +174,6 @@ int GlobalErrorBubbleView::GetDialogButtons() const {
               : ui::DIALOG_BUTTON_CANCEL);
 }
 
-int GlobalErrorBubbleView::GetDefaultDialogButton() const {
-  if (!error_)
-    return views::BubbleDialogDelegateView::GetDefaultDialogButton();
-  return error_->GetDefaultDialogButton();
-}
-
 std::unique_ptr<views::View> GlobalErrorBubbleView::CreateExtraView() {
   if (!error_ || error_->GetBubbleViewCancelButtonLabel().empty() ||
       !error_->ShouldUseExtraView())
@@ -199,6 +181,15 @@ std::unique_ptr<views::View> GlobalErrorBubbleView::CreateExtraView() {
   auto view = views::MdTextButton::CreateSecondaryUiButton(
       this, error_->GetBubbleViewCancelButtonLabel());
   return view;
+}
+
+void GlobalErrorBubbleView::OnDialogInitialized() {
+  views::LabelButton* ok_button = GetOkButton();
+  if (ok_button && error_ && error_->ShouldAddElevationIconToAcceptButton()) {
+    elevation_icon_setter_ = std::make_unique<ElevationIconSetter>(
+        ok_button, base::BindOnce(&GlobalErrorBubbleView::SizeToContents,
+                                  base::Unretained(this)));
+  }
 }
 
 bool GlobalErrorBubbleView::Cancel() {

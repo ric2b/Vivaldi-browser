@@ -18,12 +18,13 @@
 #include "base/sequence_checker.h"
 #include "base/strings/string16.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
+#include "content/browser/indexed_db/indexed_db_execution_context_connection_tracker.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host_observer.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/unique_associated_receiver_set.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
 
@@ -52,8 +53,11 @@ class CONTENT_EXPORT IndexedDBDispatcherHost
       scoped_refptr<IndexedDBContextImpl> indexed_db_context,
       scoped_refptr<ChromeBlobStorageContext> blob_storage_context);
 
-  void AddBinding(blink::mojom::IDBFactoryRequest request,
-                  const url::Origin& origin);
+  void AddReceiver(
+      int render_process_id,
+      int render_frame_id,
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::IDBFactory> pending_receiver);
 
   void AddDatabaseBinding(
       std::unique_ptr<blink::mojom::IDBDatabase> database,
@@ -135,12 +139,15 @@ class CONTENT_EXPORT IndexedDBDispatcherHost
   // Used to set file permissions for blob storage.
   const int ipc_process_id_;
 
-  // State for each client held in |bindings_|.
-  struct BindingState {
+  // State for each client held in |receivers_|.
+  struct ReceiverState {
     url::Origin origin;
+
+    // Tracks connections for this receiver.
+    IndexedDBExecutionContextConnectionTracker connection_tracker;
   };
 
-  mojo::BindingSet<blink::mojom::IDBFactory, BindingState> bindings_;
+  mojo::ReceiverSet<blink::mojom::IDBFactory, ReceiverState> receivers_;
   mojo::UniqueAssociatedReceiverSet<blink::mojom::IDBDatabase>
       database_receivers_;
   mojo::UniqueAssociatedReceiverSet<blink::mojom::IDBCursor> cursor_receivers_;

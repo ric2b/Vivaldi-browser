@@ -99,6 +99,7 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/resource_response.h"
 #include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/gl/gl_switches.h"
@@ -762,13 +763,9 @@ IN_PROC_BROWSER_TEST_F(DevToolsBeforeUnloadTest,
 
 // Tests that BeforeUnload event gets called on devtools that are opened
 // on another devtools.
-#if defined(OS_CHROMEOS) || defined(OS_LINUX)
 // TODO(https://crbug.com/1000654): Re-enable this test.
-#define MAYBE_TestDevToolsOnDevTools DISABLED_TestDevToolsOnDevTools
-#else
-#define MAYBE_TestDevToolsOnDevTools TestDevToolsOnDevTools
-#endif
-IN_PROC_BROWSER_TEST_F(DevToolsBeforeUnloadTest, MAYBE_TestDevToolsOnDevTools) {
+IN_PROC_BROWSER_TEST_F(DevToolsBeforeUnloadTest,
+                       DISABLED_TestDevToolsOnDevTools) {
   ASSERT_TRUE(spawned_test_server()->Start());
   LoadTestPage(kDebuggerTestPage);
 
@@ -831,9 +828,16 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestShowScriptsTab) {
 // Tests that scripts tab is populated with inspected scripts even if it
 // hadn't been shown by the moment inspected paged refreshed.
 // @see http://crbug.com/26312
-IN_PROC_BROWSER_TEST_F(
-    DevToolsSanityTest,
-    TestScriptsTabIsPopulatedOnInspectedPageRefresh) {
+// This test is flaky on windows and linux asan. See https://crbug.com/1013003
+#if defined(OS_WIN) || defined(OS_MACOSX)
+#define MAYBE_TestScriptsTabIsPopulatedOnInspectedPageRefresh \
+  DISABLED_TestScriptsTabIsPopulatedOnInspectedPageRefresh
+#else
+#define MAYBE_TestScriptsTabIsPopulatedOnInspectedPageRefresh \
+  TestScriptsTabIsPopulatedOnInspectedPageRefresh
+#endif
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
+                       MAYBE_TestScriptsTabIsPopulatedOnInspectedPageRefresh) {
   RunTest("testScriptsTabIsPopulatedOnInspectedPageRefresh",
           kDebuggerTestPage);
 }

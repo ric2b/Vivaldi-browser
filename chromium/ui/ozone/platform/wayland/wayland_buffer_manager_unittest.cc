@@ -14,10 +14,13 @@
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/ozone/common/linux/drm_util_linux.h"
 #include "ui/ozone/platform/wayland/gpu/wayland_surface_gpu.h"
+#include "ui/ozone/platform/wayland/host/wayland_connection.h"
+#include "ui/ozone/platform/wayland/host/wayland_zwp_linux_dmabuf.h"
 #include "ui/ozone/platform/wayland/test/mock_surface.h"
-#include "ui/ozone/platform/wayland/test/mock_zwp_linux_buffer_params.h"
 #include "ui/ozone/platform/wayland/test/mock_zwp_linux_dmabuf.h"
+#include "ui/ozone/platform/wayland/test/test_zwp_linux_buffer_params.h"
 #include "ui/ozone/platform/wayland/test/wayland_test.h"
 
 using testing::_;
@@ -81,7 +84,7 @@ class WaylandBufferManagerTest : public WaylandTest {
     // callback and bind the interface again if the manager failed.
     manager_host_->SetTerminateGpuCallback(callback_.Get());
     auto interface_ptr = manager_host_->BindInterface();
-    buffer_manager_gpu_->SetWaylandBufferManagerHost(std::move(interface_ptr));
+    buffer_manager_gpu_->Initialize(std::move(interface_ptr), {}, false);
   }
 
  protected:
@@ -109,11 +112,15 @@ class WaylandBufferManagerTest : public WaylandTest {
           .Times(1)
           .WillRepeatedly(::testing::Invoke([this, callback](std::string) {
             manager_host_->OnChannelDestroyed();
+
             manager_host_->SetTerminateGpuCallback(callback->Get());
 
             auto interface_ptr = manager_host_->BindInterface();
-            buffer_manager_gpu_->SetWaylandBufferManagerHost(
-                std::move(interface_ptr));
+            // Recreate the gpu side manager (the production code does the
+            // same).
+            buffer_manager_gpu_ = std::make_unique<WaylandBufferManagerGpu>();
+            buffer_manager_gpu_->Initialize(std::move(interface_ptr), {},
+                                            false);
           }));
     }
   }
@@ -199,6 +206,54 @@ TEST_P(WaylandBufferManagerTest, CreateDmabufBasedBuffers) {
                                                    kDmabufBufferId);
   DestroyBufferAndSetTerminateExpectation(widget, kDmabufBufferId,
                                           false /*fail*/);
+}
+
+TEST_P(WaylandBufferManagerTest, VerifyModifiers) {
+  constexpr uint32_t kDmabufBufferId = 1;
+  constexpr uint32_t kFourccFormatR8 = DRM_FORMAT_R8;
+  constexpr uint64_t kFormatModiferLinear = DRM_FORMAT_MOD_LINEAR;
+
+  const std::vector<uint64_t> kFormatModifiers{DRM_FORMAT_MOD_INVALID,
+                                               kFormatModiferLinear};
+
+  // Tests that fourcc format is added, but invalid modifier is ignored first.
+  // Then, when valid modifier comes, it is stored.
+  for (const auto& modifier : kFormatModifiers) {
+    uint32_t modifier_hi = modifier >> 32;
+    uint32_t modifier_lo = modifier & UINT32_MAX;
+    zwp_linux_dmabuf_v1_send_modifier(server_.zwp_linux_dmabuf_v1()->resource(),
+                                      kFourccFormatR8, modifier_hi,
+                                      modifier_lo);
+
+    Sync();
+
+    auto buffer_formats = connection_->zwp_dmabuf()->supported_buffer_formats();
+    DCHECK_EQ(buffer_formats.size(), 1u);
+    DCHECK_EQ(buffer_formats.begin()->first,
+              GetBufferFormatFromFourCCFormat(kFourccFormatR8));
+
+    auto modifiers = buffer_formats.begin()->second;
+    if (modifier == DRM_FORMAT_MOD_INVALID) {
+      DCHECK_EQ(modifiers.size(), 0u);
+    } else {
+      DCHECK_EQ(modifiers.size(), 1u);
+      DCHECK_EQ(modifiers[0], modifier);
+    }
+  }
+
+  EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
+  const gfx::AcceleratedWidget widget = window_->GetWidget();
+
+  CreateDmabufBasedBufferAndSetTerminateExpecation(
+      false /*fail*/, widget, kDmabufBufferId, base::ScopedFD(), kDefaultSize,
+      {1}, {2}, {kFormatModiferLinear}, kFourccFormatR8, 1);
+
+  Sync();
+
+  auto params_vector = server_.zwp_linux_dmabuf_v1()->buffer_params();
+  EXPECT_EQ(params_vector.size(), 1u);
+  EXPECT_EQ(params_vector[0]->modifier_hi_, kFormatModiferLinear >> 32);
+  EXPECT_EQ(params_vector[0]->modifier_lo_, kFormatModiferLinear & UINT32_MAX);
 }
 
 TEST_P(WaylandBufferManagerTest, CreateShmBasedBuffers) {
@@ -473,6 +528,195 @@ TEST_P(WaylandBufferManagerTest, TestCommitBufferConditions) {
   EXPECT_CALL(*mock_surface, Commit()).Times(1);
 
   mock_surface->SendFrameCallback();
+
+  Sync();
+}
+
+TEST_P(WaylandBufferManagerTest, HandleAnonymousBuffers) {
+  constexpr uint32_t kBufferId1 = 1;
+  constexpr uint32_t kBufferId2 = 2;
+
+  const gfx::AcceleratedWidget widget = window_->GetWidget();
+  constexpr gfx::AcceleratedWidget null_widget = gfx::kNullAcceleratedWidget;
+
+  // This section tests that it is impossible to create buffers with the same
+  // id regardless of the passed widget.
+  {
+    EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(2);
+    CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/,
+                                                     null_widget, kBufferId1);
+    CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, widget,
+                                                     kBufferId2);
+
+    // Can't create buffer with existing id.
+    CreateDmabufBasedBufferAndSetTerminateExpecation(true /*fail*/, null_widget,
+                                                     kBufferId2);
+    // Can't destroy buffer with non-existing id (the manager cleared the
+    // state after the previous failure).
+    DestroyBufferAndSetTerminateExpectation(null_widget, kBufferId2,
+                                            true /*fail*/);
+  }
+
+  // Tests that can't destroy anonymous buffer with the same id as the
+  // previous non-anonymous buffer and other way round.
+  {
+    EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(2);
+    // Same id for anonymous and non-anonymous.
+    CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, widget,
+                                                     kBufferId1);
+    DestroyBufferAndSetTerminateExpectation(null_widget, kBufferId1,
+                                            true /*fail*/);
+
+    // Same id for non-anonymous and anonymous.
+    CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/,
+                                                     null_widget, kBufferId1);
+    DestroyBufferAndSetTerminateExpectation(widget, kBufferId1, true
+                                            /*fail*/);
+  }
+
+  // This section tests that it is impossible to destroy buffers with
+  // non-existing ids (for example, if the have already been destroyed) for
+  // anonymous buffers.
+  {
+    EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
+    CreateDmabufBasedBufferAndSetTerminateExpecation(false
+                                                     /*fail*/,
+                                                     null_widget, kBufferId1);
+    DestroyBufferAndSetTerminateExpectation(null_widget, kBufferId1, false
+                                            /*fail*/);
+    // Can't destroy the same buffer twice (non-existing id).
+    DestroyBufferAndSetTerminateExpectation(null_widget, kBufferId1, true
+                                            /*fail*/);
+  }
+
+  // Makes sure the anonymous buffer can be attached to a surface and
+  // destroyed.
+  {
+    EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
+    CreateDmabufBasedBufferAndSetTerminateExpecation(false
+                                                     /*fail*/,
+                                                     null_widget, kBufferId1);
+
+    buffer_manager_gpu_->CommitBuffer(widget, kBufferId1, window_->GetBounds());
+
+    // Now, we must be able to destroy this buffer with widget provided. That
+    // is, if the buffer has been attached to a surface, it can be destroyed.
+    DestroyBufferAndSetTerminateExpectation(widget, kBufferId1, false
+                                            /*fail*/);
+
+    // And now test we can't destroy the same buffer providing a null widget.
+    DestroyBufferAndSetTerminateExpectation(null_widget, kBufferId1, true
+                                            /*fail*/);
+  }
+}
+
+// The buffer that is not originally attached to any of the surfaces,
+// must be attached when a commit request comes. Also, it must setup a buffer
+// release listener and OnSubmission must be called for that buffer if it is
+// released.
+TEST_P(WaylandBufferManagerTest, AnonymousBufferAttachedAndReleased) {
+  constexpr uint32_t kBufferId1 = 1;
+  constexpr uint32_t kBufferId2 = 2;
+  constexpr uint32_t kBufferId3 = 3;
+
+  const gfx::AcceleratedWidget widget = window_->GetWidget();
+  const gfx::Rect bounds = gfx::Rect({0, 0}, kDefaultSize);
+  window_->SetBounds(bounds);
+
+  MockSurfaceGpu mock_surface_gpu(buffer_manager_gpu_.get(), widget_);
+
+  auto* linux_dmabuf = server_.zwp_linux_dmabuf_v1();
+  EXPECT_CALL(*linux_dmabuf, CreateParams(_, _, _)).Times(1);
+  CreateDmabufBasedBufferAndSetTerminateExpecation(
+      false /*fail*/, gfx::kNullAcceleratedWidget, kBufferId1);
+
+  Sync();
+
+  ProcessCreatedBufferResourcesWithExpectation(1u /* expected size */,
+                                               false /* fail */);
+
+  auto* mock_surface = server_.GetObject<wl::MockSurface>(widget);
+
+  constexpr uint32_t kNumberOfCommits = 3;
+  EXPECT_CALL(*mock_surface, Attach(_, _, _)).Times(kNumberOfCommits);
+  EXPECT_CALL(*mock_surface, Frame(_)).Times(kNumberOfCommits);
+  EXPECT_CALL(*mock_surface, Commit()).Times(kNumberOfCommits);
+
+  // All the other expectations must come in order.
+  ::testing::InSequence sequence;
+  EXPECT_CALL(mock_surface_gpu,
+              OnSubmission(kBufferId1, gfx::SwapResult::SWAP_ACK))
+      .Times(1);
+  EXPECT_CALL(mock_surface_gpu, OnPresentation(kBufferId1, _)).Times(1);
+
+  // Commit second buffer now.
+  buffer_manager_gpu_->CommitBuffer(widget, kBufferId1, bounds);
+
+  Sync();
+
+  mock_surface->SendFrameCallback();
+
+  Sync();
+
+  // Now synchronously create a second buffer and commit it. The release
+  // callback must be setup and OnSubmission must be called.
+  EXPECT_CALL(*linux_dmabuf, CreateParams(_, _, _)).Times(1);
+  CreateDmabufBasedBufferAndSetTerminateExpecation(
+      false /*fail*/, gfx::kNullAcceleratedWidget, kBufferId2);
+
+  Sync();
+
+  ProcessCreatedBufferResourcesWithExpectation(1u /* expected size */,
+                                               false /* fail */);
+
+  EXPECT_CALL(mock_surface_gpu,
+              OnSubmission(kBufferId2, gfx::SwapResult::SWAP_ACK))
+      .Times(1);
+  EXPECT_CALL(mock_surface_gpu, OnPresentation(kBufferId2, _)).Times(1);
+
+  // Commit second buffer now.
+  buffer_manager_gpu_->CommitBuffer(widget, kBufferId2, bounds);
+
+  Sync();
+
+  mock_surface->ReleasePrevAttachedBuffer();
+
+  Sync();
+
+  mock_surface->SendFrameCallback();
+
+  // Now asynchronously create another buffer so that a commit request
+  // comes earlier than it is created by the Wayland compositor, but it can
+  // released once the buffer is committed and processed (that is, it must be
+  // able to setup a buffer release callback).
+  EXPECT_CALL(*linux_dmabuf, CreateParams(_, _, _)).Times(1);
+  CreateDmabufBasedBufferAndSetTerminateExpecation(
+      false /*fail*/, gfx::kNullAcceleratedWidget, kBufferId3);
+
+  Sync();
+
+  EXPECT_CALL(mock_surface_gpu,
+              OnSubmission(kBufferId3, gfx::SwapResult::SWAP_ACK))
+      .Times(0);
+  EXPECT_CALL(mock_surface_gpu, OnPresentation(kBufferId3, _)).Times(0);
+
+  buffer_manager_gpu_->CommitBuffer(widget, kBufferId3, bounds);
+
+  Sync();
+
+  EXPECT_CALL(mock_surface_gpu,
+              OnSubmission(kBufferId3, gfx::SwapResult::SWAP_ACK))
+      .Times(1);
+  EXPECT_CALL(mock_surface_gpu, OnPresentation(kBufferId3, _)).Times(1);
+
+  // Now, create the buffer from the Wayland compositor side and let the buffer
+  // manager complete the commit request.
+  ProcessCreatedBufferResourcesWithExpectation(1u /* expected size */,
+                                               false /* fail */);
+
+  Sync();
+
+  mock_surface->ReleasePrevAttachedBuffer();
 
   Sync();
 }

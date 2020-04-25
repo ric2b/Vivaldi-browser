@@ -131,8 +131,8 @@ SkBitmap CreateSquareBitmap(int size) {
   return bitmap;
 }
 
-WebApplicationInfo::IconInfo CreateIconInfoWithBitmap(int size) {
-  WebApplicationInfo::IconInfo icon_info;
+WebApplicationIconInfo CreateIconInfoWithBitmap(int size) {
+  WebApplicationIconInfo icon_info;
   icon_info.width = size;
   icon_info.height = size;
   icon_info.data = CreateSquareBitmap(size);
@@ -237,13 +237,8 @@ class ExtensionCrxInstallerTest : public ExtensionBrowserTest {
         strict_manifest_checks);
   }
 
-  ExtensionService* extension_service() {
-    return extensions::ExtensionSystem::Get(browser()->profile())
-        ->extension_service();
-  }
-
   const Extension* GetInstalledExtension(const std::string& extension_id) {
-    return extension_service()->GetInstalledExtension(extension_id);
+    return extension_registry()->GetInstalledExtension(extension_id);
   }
 
   std::unique_ptr<base::ScopedTempDir> UnpackedCrxTempDir() {
@@ -704,7 +699,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, Blacklist) {
   EXPECT_FALSE(InstallExtension(crx_path, 0));
 
   auto installation_failure =
-      InstallationReporter::Get(profile(), extension_id);
+      InstallationReporter::Get(profile())->Get(extension_id);
   EXPECT_EQ(InstallationReporter::FailureReason::CRX_INSTALL_ERROR_DECLINED,
             installation_failure.failure_reason);
   EXPECT_EQ(CrxInstallErrorDetail::EXTENSION_IS_BLOCKLISTED,
@@ -967,7 +962,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
   EXPECT_EQ("0.0", extension->VersionString());
 
   auto installation_failure =
-      InstallationReporter::Get(profile(), extension_id);
+      InstallationReporter::Get(profile())->Get(extension_id);
   EXPECT_EQ(InstallationReporter::FailureReason::
                 CRX_INSTALL_ERROR_SANDBOXED_UNPACKER_FAILURE,
             installation_failure.failure_reason);
@@ -1010,7 +1005,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
   EXPECT_EQ("0.0", extension->VersionString());
 
   auto installation_failure =
-      InstallationReporter::Get(profile(), extension_id);
+      InstallationReporter::Get(profile())->Get(extension_id);
   EXPECT_EQ(InstallationReporter::FailureReason::CRX_INSTALL_ERROR_OTHER,
             installation_failure.failure_reason);
   EXPECT_EQ(CrxInstallErrorDetail::UNEXPECTED_ID,

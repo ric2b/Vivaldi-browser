@@ -54,28 +54,27 @@ AssistantOptInFlowScreenHandler::AssistantOptInFlowScreenHandler(
 }
 
 AssistantOptInFlowScreenHandler::~AssistantOptInFlowScreenHandler() {
-  if (arc::VoiceInteractionControllerClient::Get()) {
-    arc::VoiceInteractionControllerClient::Get()->RemoveObserver(this);
-  }
-  if (screen_) {
+  if (client_binding_)
+    StopSpeakerIdEnrollment();
+  if (ash::AssistantState::Get())
+    ash::AssistantState::Get()->RemoveObserver(this);
+  if (screen_)
     screen_->OnViewDestroyed(this);
-  }
 }
 
 void AssistantOptInFlowScreenHandler::DeclareLocalizedValues(
     ::login::LocalizedValuesBuilder* builder) {
   builder->Add("locale", g_browser_process->GetApplicationLocale());
-  builder->Add("assistantLogo", IDS_VOICE_INTERACTION_LOGO);
-  builder->Add("assistantOptinLoading",
-               IDS_VOICE_INTERACTION_VALUE_PROP_LOADING);
+  builder->Add("assistantLogo", IDS_ASSISTANT_LOGO);
+  builder->Add("assistantOptinLoading", IDS_ASSISTANT_VALUE_PROP_LOADING);
   builder->Add("assistantOptinLoadErrorTitle",
-               IDS_VOICE_INTERACTION_VALUE_PROP_LOAD_ERROR_TITLE);
+               IDS_ASSISTANT_VALUE_PROP_LOAD_ERROR_TITLE);
   builder->Add("assistantOptinLoadErrorMessage",
-               IDS_VOICE_INTERACTION_VALUE_PROP_LOAD_ERROR_MESSAGE);
+               IDS_ASSISTANT_VALUE_PROP_LOAD_ERROR_MESSAGE);
   builder->Add("assistantOptinSkipButton",
-               IDS_VOICE_INTERACTION_VALUE_PROP_SKIP_BUTTON);
+               IDS_ASSISTANT_VALUE_PROP_SKIP_BUTTON);
   builder->Add("assistantOptinRetryButton",
-               IDS_VOICE_INTERACTION_VALUE_PROP_RETRY_BUTTON);
+               IDS_ASSISTANT_VALUE_PROP_RETRY_BUTTON);
   builder->Add("assistantVoiceMatchTitle", IDS_ASSISTANT_VOICE_MATCH_TITLE);
   builder->Add("assistantVoiceMatchMessage", IDS_ASSISTANT_VOICE_MATCH_MESSAGE);
   builder->Add("assistantVoiceMatchNoDspMessage",
@@ -147,6 +146,14 @@ void AssistantOptInFlowScreenHandler::RegisterMessages() {
               &AssistantOptInFlowScreenHandler::HandleFlowInitialized);
 }
 
+void AssistantOptInFlowScreenHandler::GetAdditionalParameters(
+    base::DictionaryValue* dict) {
+  dict->SetBoolean("hotwordDspAvailable", chromeos::IsHotwordDspAvailable());
+  dict->SetBoolean("voiceMatchDisabled",
+                   chromeos::assistant::features::IsVoiceMatchDisabled());
+  BaseScreenHandler::GetAdditionalParameters(dict);
+}
+
 void AssistantOptInFlowScreenHandler::Bind(AssistantOptInFlowScreen* screen) {
   BaseScreenHandler::SetBaseScreen(screen);
   screen_ = screen;
@@ -216,9 +223,9 @@ void AssistantOptInFlowScreenHandler::SetupAssistantConnection() {
   // Make sure enable Assistant service since we need it during the flow.
   prefs->SetBoolean(chromeos::assistant::prefs::kAssistantEnabled, true);
 
-  if (arc::VoiceInteractionControllerClient::Get()->voice_interaction_state() ==
-      ash::mojom::VoiceInteractionState::NOT_READY) {
-    arc::VoiceInteractionControllerClient::Get()->AddObserver(this);
+  if (ash::AssistantState::Get()->assistant_state() ==
+      ash::mojom::AssistantState::NOT_READY) {
+    ash::AssistantState::Get()->AddObserver(this);
   } else {
     BindAssistantSettingsManager();
   }
@@ -270,11 +277,11 @@ void AssistantOptInFlowScreenHandler::OnDialogClosed() {
   }
 }
 
-void AssistantOptInFlowScreenHandler::OnStateChanged(
-    ash::mojom::VoiceInteractionState state) {
-  if (state != ash::mojom::VoiceInteractionState::NOT_READY) {
+void AssistantOptInFlowScreenHandler::OnAssistantStatusChanged(
+    ash::mojom::AssistantState state) {
+  if (state != ash::mojom::AssistantState::NOT_READY) {
     BindAssistantSettingsManager();
-    arc::VoiceInteractionControllerClient::Get()->RemoveObserver(this);
+    ash::AssistantState::Get()->RemoveObserver(this);
   }
 }
 
@@ -323,6 +330,14 @@ void AssistantOptInFlowScreenHandler::OnGetSettingsResponse(
       base::TimeTicks::Now() - send_request_time_;
   UMA_HISTOGRAM_TIMES("Assistant.OptInFlow.GetSettingsRequestTime",
                       time_since_request_sent);
+
+  if (ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
+          assistant::prefs::kAssistantDisabledByPolicy)) {
+    DVLOG(1) << "Assistant is disabled by domain policy. Skip Assistant "
+                "opt-in flow.";
+    HandleFlowFinished();
+    return;
+  }
 
   assistant::SettingsUi settings_ui;
   if (!settings_ui.ParseFromString(settings)) {

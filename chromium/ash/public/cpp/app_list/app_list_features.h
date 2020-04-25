@@ -21,11 +21,6 @@ namespace app_list_features {
 // Enables the answer card in the app list.
 ASH_PUBLIC_EXPORT extern const base::Feature kEnableAnswerCard;
 
-// Enables background blur for the app list, lock screen, and tab switcher, also
-// enables the AppsGridView mask layer. In this mode, slower devices may have
-// choppier app list animations. crbug.com/765292.
-ASH_PUBLIC_EXPORT extern const base::Feature kEnableBackgroundBlur;
-
 // Enables the Play Store app search.
 ASH_PUBLIC_EXPORT extern const base::Feature kEnablePlayStoreAppSearch;
 
@@ -74,13 +69,19 @@ ASH_PUBLIC_EXPORT extern const base::Feature kEnableSearchBoxSelection;
 // Enables using the aggregated Ml model to rank suggested apps.
 ASH_PUBLIC_EXPORT extern const base::Feature kEnableAggregatedMlAppRanking;
 
+// Enables using the fuzzy search algorithm for app search provider.
+ASH_PUBLIC_EXPORT extern const base::Feature kEnableFuzzyAppSearch;
+
 // If enabled, app list will support separate configurations (for app list items
 // sizing and spacing) for smaller screens (instead of a single configuration
 // that optionally gets scaled down).
 ASH_PUBLIC_EXPORT extern const base::Feature kScalableAppList;
 
+// Enables using aggregated model in ranking non-app results for
+// non empty queries.
+ASH_PUBLIC_EXPORT extern const base::Feature kEnableAggregatedMlSearchRanking;
+
 bool ASH_PUBLIC_EXPORT IsAnswerCardEnabled();
-bool ASH_PUBLIC_EXPORT IsBackgroundBlurEnabled();
 bool ASH_PUBLIC_EXPORT IsPlayStoreAppSearchEnabled();
 bool ASH_PUBLIC_EXPORT IsAppDataSearchEnabled();
 bool ASH_PUBLIC_EXPORT IsSettingsShortcutSearchEnabled();
@@ -97,6 +98,8 @@ bool ASH_PUBLIC_EXPORT IsAppListLaunchRecordingEnabled();
 bool ASH_PUBLIC_EXPORT IsSearchBoxSelectionEnabled();
 bool ASH_PUBLIC_EXPORT IsAggregatedMlAppRankingEnabled();
 bool ASH_PUBLIC_EXPORT IsScalableAppListEnabled();
+bool ASH_PUBLIC_EXPORT IsFuzzyAppSearchEnabled();
+bool ASH_PUBLIC_EXPORT IsAggregatedMlSearchRankingEnabled();
 
 std::string ASH_PUBLIC_EXPORT AnswerServerUrl();
 std::string ASH_PUBLIC_EXPORT AnswerServerQuerySuffix();

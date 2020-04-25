@@ -74,7 +74,7 @@ int FeaturePodsContainerView::GetExpandedHeight() const {
   int number_of_lines = (visible_count + kUnifiedFeaturePodItemsInRow - 1) /
                         kUnifiedFeaturePodItemsInRow;
 
-  if (features::IsSystemTrayFeaturePodsPaginationEnabled())
+  if (features::IsUnifiedMessageCenterRefactorEnabled())
     number_of_lines = std::min(number_of_lines, feature_pod_rows_);
 
   return kUnifiedFeaturePodBottomPadding +
@@ -161,6 +161,23 @@ int FeaturePodsContainerView::GetVisibleCount() const {
       children().cbegin(), children().cend(), [](const auto* v) {
         return static_cast<const FeaturePodButton*>(v)->visible_preferred();
       });
+}
+
+void FeaturePodsContainerView::EnsurePageWithButton(FeaturePodButton* button) {
+  int index = visible_buttons_.GetIndexOfView(button->parent());
+  if (index < 0)
+    return;
+
+  int tiles_per_page = GetTilesPerPage();
+  int first_index = pagination_model_->selected_page() * tiles_per_page;
+  int last_index =
+      ((pagination_model_->selected_page() + 1) * tiles_per_page) - 1;
+  if (index < first_index || index > last_index) {
+    int page = ((index + 1) / tiles_per_page) +
+               ((index + 1) % tiles_per_page ? 1 : 0) - 1;
+
+    pagination_model_->SelectPage(page, true /*animate*/);
+  }
 }
 
 gfx::Point FeaturePodsContainerView::GetButtonPosition(
@@ -315,7 +332,7 @@ void FeaturePodsContainerView::CalculateIdealBoundsForFeaturePods() {
 }
 
 int FeaturePodsContainerView::GetTilesPerPage() const {
-  if (features::IsSystemTrayFeaturePodsPaginationEnabled())
+  if (features::IsUnifiedMessageCenterRefactorEnabled())
     return kUnifiedFeaturePodItemsInRow * feature_pod_rows_;
   else
     return children().size();

@@ -7,8 +7,10 @@
 ; Put the denials first.
 ; crbug.com/799149: These operations are allowed by default.
 (if (>= os-version 1013)
-  (deny iokit-get-properties process-info* nvram*)
-)
+  (if (param-true? disable-sandbox-denial-logging)
+    (deny iokit-get-properties process-info* nvram* (with no-log))
+    (deny iokit-get-properties process-info* nvram*)
+))
 
 ; Allow cf prefs to work.
 (allow user-preference-read)
@@ -85,10 +87,12 @@
 (if (>= os-version 1013)
   (allow iokit-get-properties
     (iokit-property "CaseSensitive")
+    (iokit-property "CoreStorage Encrypted")
     (iokit-property "Ejectable")
     (iokit-property "Encrypted")
     (iokit-property "IOClassNameOverride")
     (iokit-property "IOMediaIcon")
+    (iokit-property "Product Identification")
     (iokit-property "Protocol Characteristics")
     (iokit-property "Removable")
     (iokit-property "image-encrypted")
@@ -186,46 +190,3 @@
       (syscall-number SYS_write_nocancel)
       (syscall-number SYS_writev)
 )))
-
-; NOTE(tomas@vivaldi.com): Add video permissions, VB-55187.
-(allow mach-lookup (global-name "com.apple.coremedia.videodecoder"))
-
-; *** NOTE(jarle@vivaldi.com): Add audio permissions.
-; *** Ref. VB-42787, VB-40858.
-; File access.
-(allow file-read*
-  (path (user-homedir-path "/Library/Caches/com.apple.coreaudio.components.plist"))
-  (regex (user-homedir-path #"/Library/Preferences/com.apple.coreaudio.*"))
-  (subpath (user-homedir-path "/Library/Audio/Plug-Ins"))
-  (subpath "/Library/Audio/Plug-Ins")
-  (subpath "/Library/QuickTime")
-  (subpath "/System/Library/Components")
-  (subpath "/System/Library/Extensions"))
-
-(allow iokit-open
-  (iokit-user-client-class "IOAudioControlUserClient")
-  (iokit-user-client-class "IOAudioEngineUserClient"))
-
-(allow ipc-posix-shm-read* ipc-posix-shm-write-data
-  (ipc-posix-name-regex #"^AudioIO"))
-
-; Mach IPC.
-(allow mach-lookup
-  (global-name "com.apple.audio.SystemSoundServer-OSX")
-  (global-name "com.apple.audio.VDCAssistant")
-  (global-name "com.apple.audio.coreaudiod")
-  (global-name "com.apple.audio.audiohald"))
-
-(if (>= os-version 1013)
-  (allow mach-lookup
-    (global-name "com.apple.audio.AudioComponentRegistrar")
-    (xpc-service-name "com.apple.audio.SandboxHelper")))
-
-; sysctls.
-(allow sysctl-read
-  (sysctl-name "hw.optional.avx2_0")
-  (sysctl-name "hw.optional.avx1_0")
-  (sysctl-name "hw.optional.sse4_2")
-  (sysctl-name "hw.optional.sse4_1")
-  (sysctl-name "hw.optional.sse3")
-  (sysctl-name "hw.optional.sse2"))

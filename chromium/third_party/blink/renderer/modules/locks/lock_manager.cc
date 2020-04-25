@@ -7,7 +7,7 @@
 #include <algorithm>
 
 #include "mojo/public/cpp/bindings/associated_receiver.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_lock_granted_callback.h"
@@ -23,6 +23,8 @@
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
+#include "third_party/blink/renderer/platform/scheduler/public/scheduling_policy.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -54,7 +56,7 @@ HeapVector<Member<LockInfo>> ToLockInfos(
 }  // namespace
 
 class LockManager::LockRequestImpl final
-    : public GarbageCollectedFinalized<LockRequestImpl>,
+    : public GarbageCollected<LockRequestImpl>,
       public NameClient,
       public mojom::blink::LockRequest {
   USING_PRE_FINALIZER(LockManager::LockRequestImpl, Dispose);
@@ -215,6 +217,10 @@ ScriptPromise LockManager::request(ScriptState* script_state,
   ExecutionContext* context = ExecutionContext::From(script_state);
   DCHECK(context->IsContextThread());
 
+  context->GetScheduler()->RegisterStickyFeature(
+      blink::SchedulingPolicy::Feature::kWebLocks,
+      {blink::SchedulingPolicy::RecordMetricsForBackForwardCache()});
+
   // 5. If origin is an opaque origin, then reject promise with a
   // "SecurityError" DOMException.
   if (!context->GetSecurityOrigin()->CanAccessLocks()) {
@@ -227,10 +233,10 @@ ScriptPromise LockManager::request(ScriptState* script_state,
   }
 
   if (!service_.is_bound()) {
-    if (auto* provider = context->GetInterfaceProvider()) {
-      provider->GetInterface(service_.BindNewPipeAndPassReceiver(
-          context->GetTaskRunner(TaskType::kMiscPlatformAPI)));
-    }
+    context->GetBrowserInterfaceBroker().GetInterface(
+        service_.BindNewPipeAndPassReceiver(
+            context->GetTaskRunner(TaskType::kMiscPlatformAPI)));
+
     if (!service_.is_bound()) {
       exception_state.ThrowTypeError("Service not available.");
       return ScriptPromise();
@@ -347,10 +353,10 @@ ScriptPromise LockManager::query(ScriptState* script_state,
   }
 
   if (!service_.is_bound()) {
-    if (auto* provider = context->GetInterfaceProvider()) {
-      provider->GetInterface(service_.BindNewPipeAndPassReceiver(
-          context->GetTaskRunner(TaskType::kMiscPlatformAPI)));
-    }
+    context->GetBrowserInterfaceBroker().GetInterface(
+        service_.BindNewPipeAndPassReceiver(
+            context->GetTaskRunner(TaskType::kMiscPlatformAPI)));
+
     if (!service_.is_bound()) {
       exception_state.ThrowTypeError("Service not available.");
       return ScriptPromise();

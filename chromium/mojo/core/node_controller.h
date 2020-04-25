@@ -19,6 +19,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/writable_shared_memory_region.h"
+#include "base/optional.h"
 #include "base/task_runner.h"
 #include "build/build_config.h"
 #include "mojo/core/atomic_flag.h"
@@ -120,6 +121,11 @@ class MOJO_SYSTEM_IMPL_EXPORT NodeController : public ports::NodeDelegate,
   void NotifyBadMessageFrom(const ports::NodeName& source_node,
                             const std::string& error);
 
+  // Force-closes the connection to another process to simulate connection
+  // failures for testing. |process_id| must correspond to a process to which
+  // this node has an active NodeChannel.
+  void ForceDisconnectProcessForTesting(base::ProcessId process_id);
+
   static void DeserializeRawBytesAsEventForFuzzer(
       base::span<const unsigned char> data);
   static void DeserializeMessageAsEventForFuzzer(Channel::MessagePtr message);
@@ -156,7 +162,8 @@ class MOJO_SYSTEM_IMPL_EXPORT NodeController : public ports::NodeDelegate,
       ports::NodeName token,
       const ProcessErrorCallback& process_error_callback);
   void AcceptBrokerClientInvitationOnIOThread(
-      ConnectionParams connection_params);
+      ConnectionParams connection_params,
+      base::Optional<PlatformHandle> broker_host_handle);
 
   void ConnectIsolatedOnIOThread(ConnectionParams connection_params,
                                  ports::PortRef port,
@@ -237,6 +244,9 @@ class MOJO_SYSTEM_IMPL_EXPORT NodeController : public ports::NodeDelegate,
   // requested, this checks the Node's status to see if clean shutdown is
   // possible. If so, shutdown is performed and the shutdown callback is run.
   void AttemptShutdownIfRequested();
+
+  // See |ForceDisconnectProcessForTesting()|.
+  void ForceDisconnectProcessForTestingOnIOThread(base::ProcessId process_id);
 
   // These are safe to access from any thread as long as the Node is alive.
   Core* const core_;

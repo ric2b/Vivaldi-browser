@@ -271,7 +271,7 @@ void PageHandler::Wire(UberDispatcher* dispatcher) {
 }
 
 void PageHandler::OnSynchronousSwapCompositorFrame(
-    const DevToolsFrameMetadata& frame_metadata) {
+    const cc::RenderFrameMetadata& frame_metadata) {
   // Cache |frame_metadata_| as InnerSwapCompositorFrame may also be called on
   // screencast start.
   frame_metadata_ = frame_metadata;
@@ -514,9 +514,9 @@ void PageHandler::NavigationReset(NavigationRequest* navigation_request) {
     return;
   std::string frame_id =
       navigation_request->frame_tree_node()->devtools_frame_token().ToString();
-  bool success = navigation_request->net_error() == net::OK;
+  bool success = navigation_request->GetNetErrorCode() == net::OK;
   std::string error_string =
-      net::ErrorToString(navigation_request->net_error());
+      net::ErrorToString(navigation_request->GetNetErrorCode());
   navigate_callback->second->sendSuccess(
       frame_id,
       Maybe<std::string>(
@@ -1102,8 +1102,8 @@ void PageHandler::InnerSwapCompositorFrame() {
       BuildScreencastFrameMetadata(
           surface_size, frame_metadata_->device_scale_factor,
           frame_metadata_->page_scale_factor,
-          frame_metadata_->root_scroll_offset, top_controls_height,
-          top_controls_shown_ratio);
+          frame_metadata_->root_scroll_offset.value_or(gfx::Vector2dF()),
+          top_controls_height, top_controls_shown_ratio);
   if (!page_metadata)
     return;
 

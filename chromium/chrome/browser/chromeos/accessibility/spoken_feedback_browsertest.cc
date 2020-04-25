@@ -57,6 +57,10 @@
 #include "ui/base/test/ui_controls.h"
 #include "ui/views/widget/widget.h"
 
+namespace {
+const double kExpectedPhoneticSpeechAndHintDelayMS = 1000;
+}  // namespace
+
 namespace chromeos {
 
 LoggedInSpokenFeedbackTest::LoggedInSpokenFeedbackTest()
@@ -826,6 +830,87 @@ IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, DISABLED_SpokenFeedbackInOobe) {
   EXPECT_EQ("English ( United States)", speech_monitor_.GetNextUtterance());
   EXPECT_TRUE(base::MatchPattern(speech_monitor_.GetNextUtterance(),
                                  "Combo box * of *"));
+}
+
+// This test is flaky (https://crbug.com/1013551).
+IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest,
+                       DISABLED_ChromeVoxPanelTabsMenuEmpty) {
+  // The ChromeVox panel should not populate the tabs menu if we are in the
+  // OOBE.
+  ASSERT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
+  AccessibilityManager::Get()->EnableSpokenFeedback(true);
+  // Included to reduce flakiness.
+  while (speech_monitor_.GetNextUtterance() !=
+         "Press Search plus Space to activate.") {
+  }
+  // Press [search + .] to open ChromeVox Panel
+  ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+      nullptr, ui::VKEY_OEM_PERIOD, false, false, false, true));
+  while (speech_monitor_.GetNextUtterance() != "ChromeVox Panel") {
+  }
+  // Go to tabs menu and verify that it has no items.
+  ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+      nullptr, ui::VKEY_RIGHT, false, false, false, false));
+  while (speech_monitor_.GetNextUtterance() != "Speech") {
+  }
+  ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+      nullptr, ui::VKEY_RIGHT, false, false, false, false));
+  while (speech_monitor_.GetNextUtterance() != "Tabs") {
+  }
+  EXPECT_EQ("Menu", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("No items.", speech_monitor_.GetNextUtterance());
+}
+
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
+                       MoveByCharacterPhoneticSpeechAndHints) {
+  EnableChromeVox();
+
+  ui_test_utils::NavigateToURL(
+      browser(), GURL("data:text/html,<button autofocus>Click me</button>"));
+  EXPECT_EQ("Web Content", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("Click me", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("Button", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("Press Search plus Space to activate.",
+            speech_monitor_.GetNextUtterance());
+
+  // Move by character through the button.
+  // Assert that phonetic speech and hints are delayed.
+  SendKeyPressWithSearchAndShift(ui::VKEY_RIGHT);
+  EXPECT_EQ("L", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("lima", speech_monitor_.GetNextUtterance());
+  EXPECT_TRUE(speech_monitor_.GetDelayForLastUtteranceMS() >=
+              kExpectedPhoneticSpeechAndHintDelayMS);
+  EXPECT_EQ("Press Search plus Space to activate.",
+            speech_monitor_.GetNextUtterance());
+  EXPECT_TRUE(speech_monitor_.GetDelayForLastUtteranceMS() >=
+              kExpectedPhoneticSpeechAndHintDelayMS);
+  SendKeyPressWithSearchAndShift(ui::VKEY_RIGHT);
+  EXPECT_EQ("I", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("india", speech_monitor_.GetNextUtterance());
+  EXPECT_TRUE(speech_monitor_.GetDelayForLastUtteranceMS() >=
+              kExpectedPhoneticSpeechAndHintDelayMS);
+  EXPECT_EQ("Press Search plus Space to activate.",
+            speech_monitor_.GetNextUtterance());
+  EXPECT_TRUE(speech_monitor_.GetDelayForLastUtteranceMS() >=
+              kExpectedPhoneticSpeechAndHintDelayMS);
+  SendKeyPressWithSearchAndShift(ui::VKEY_RIGHT);
+  EXPECT_EQ("C", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("charlie", speech_monitor_.GetNextUtterance());
+  EXPECT_TRUE(speech_monitor_.GetDelayForLastUtteranceMS() >=
+              kExpectedPhoneticSpeechAndHintDelayMS);
+  EXPECT_EQ("Press Search plus Space to activate.",
+            speech_monitor_.GetNextUtterance());
+  EXPECT_TRUE(speech_monitor_.GetDelayForLastUtteranceMS() >=
+              kExpectedPhoneticSpeechAndHintDelayMS);
+  SendKeyPressWithSearchAndShift(ui::VKEY_RIGHT);
+  EXPECT_EQ("K", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("kilo", speech_monitor_.GetNextUtterance());
+  EXPECT_TRUE(speech_monitor_.GetDelayForLastUtteranceMS() >=
+              kExpectedPhoneticSpeechAndHintDelayMS);
+  EXPECT_EQ("Press Search plus Space to activate.",
+            speech_monitor_.GetNextUtterance());
+  EXPECT_TRUE(speech_monitor_.GetDelayForLastUtteranceMS() >=
+              kExpectedPhoneticSpeechAndHintDelayMS);
 }
 
 }  // namespace chromeos

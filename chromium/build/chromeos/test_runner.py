@@ -350,7 +350,7 @@ class TastTest(RemoteTest):
         # See the link below for the format of these errors:
         # https://godoc.org/chromium.googlesource.com/chromiumos/platform/tast.git/src/chromiumos/tast/testing#Error
         for err in errors:
-          error_log += str(err['stack']) + '\n'
+          error_log += err['stack'].encode('utf-8') + '\n'
       error_log += (
            "\nIf you're unsure why this test failed, consult the steps "
            'outlined in\n%s\n' % TAST_DEBUG_DOC)
@@ -450,7 +450,7 @@ class GTestTest(RemoteTest):
       ])
 
     test_invocation = (
-        './%s --test-launcher-shard-index=%d '
+        'LD_LIBRARY_PATH=./ ./%s --test-launcher-shard-index=%d '
         '--test-launcher-total-shards=%d' % (
             self._test_exe, self._test_launcher_shard_index,
             self._test_launcher_total_shards)

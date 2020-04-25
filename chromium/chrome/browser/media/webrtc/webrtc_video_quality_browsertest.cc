@@ -233,9 +233,16 @@ class WebRtcVideoQualityBrowserTest : public WebRtcTestBase,
 
   void TestVideoQuality(const std::string& video_codec,
                         bool prefer_hw_video_codec) {
+    ASSERT_GE(TestTimeouts::test_launcher_timeout().InSeconds(), 150)
+        << "This is a long-running test; you must specify "
+           "--test-launcher-timeout to have a value of at least 150000.";
     ASSERT_GE(TestTimeouts::action_max_timeout().InSeconds(), 150)
         << "This is a long-running test; you must specify "
            "--ui-test-action-max-timeout to have a value of at least 150000.";
+    ASSERT_LT(TestTimeouts::action_max_timeout(),
+              TestTimeouts::test_launcher_timeout())
+        << "action_max_timeout needs to be strictly-less-than "
+           "test_launcher_timeout";
     ASSERT_TRUE(test::HasReferenceFilesInCheckout());
     ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -320,16 +327,31 @@ IN_PROC_BROWSER_TEST_P(WebRtcVideoQualityBrowserTest,
   TestVideoQuality("VP8", false /* prefer_hw_video_codec */);
 }
 
+// Flaky on windows.
+// TODO(crbug.com/1008766): re-enable when flakiness is investigated, diagnosed
+// and resolved.
+#if defined(OS_WIN)
+#define MAYBE_MANUAL_TestVideoQualityVp9 DISABLED_MANUAL_TestVideoQualityVp9
+#else
+#define MAYBE_MANUAL_TestVideoQualityVp9 MANUAL_TestVideoQualityVp9
+#endif
 IN_PROC_BROWSER_TEST_P(WebRtcVideoQualityBrowserTest,
-                       MANUAL_TestVideoQualityVp9) {
+                       MAYBE_MANUAL_TestVideoQualityVp9) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   TestVideoQuality("VP9", true /* prefer_hw_video_codec */);
 }
 
 #if BUILDFLAG(RTC_USE_H264)
 
+// Flaky on mac: crbug.com/754684
+#if defined(OS_MACOSX)
+#define MAYBE_MANUAL_TestVideoQualityH264 DISABLED_MANUAL_TestVideoQualityH264
+#else
+#define MAYBE_MANUAL_TestVideoQualityH264 MANUAL_TestVideoQualityH264
+#endif
+
 IN_PROC_BROWSER_TEST_P(WebRtcVideoQualityBrowserTest,
-                       MANUAL_TestVideoQualityH264) {
+                       MAYBE_MANUAL_TestVideoQualityH264) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   // Only run test if run-time feature corresponding to |rtc_use_h264| is on.
   if (!base::FeatureList::IsEnabled(

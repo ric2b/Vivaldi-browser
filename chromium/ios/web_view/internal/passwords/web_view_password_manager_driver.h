@@ -45,6 +45,7 @@ class WebViewPasswordManagerDriver
   ~WebViewPasswordManagerDriver() override;
 
   // password_manager::PasswordManagerDriver implementation.
+  int GetId() const override;
   void FillPasswordForm(
       const autofill::PasswordFormFillData& form_data) override;
   void InformNoSavedCredentials() override;
@@ -53,8 +54,6 @@ class WebViewPasswordManagerDriver
                       const base::string16& password) override;
   void PreviewSuggestion(const base::string16& username,
                          const base::string16& password) override;
-  void ShowInitialPasswordAccountSuggestions(
-      const autofill::PasswordFormFillData& form_data) override;
   void ClearPreviewedForm() override;
   password_manager::PasswordGenerationFrameHelper* GetPasswordGenerationHelper()
       override;

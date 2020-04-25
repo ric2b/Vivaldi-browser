@@ -22,6 +22,8 @@ from util import manifest_utils
 
 _LINT_MD_URL = 'https://chromium.googlesource.com/chromium/src/+/master/build/android/docs/lint.md' # pylint: disable=line-too-long
 
+if os.environ.get("CHROME_HEADLESS", 0) and "DISPLAY" in os.environ:
+  del os.environ["DISPLAY"]
 
 def _OnStaleMd5(lint_path,
                 config_path,
@@ -50,7 +52,7 @@ def _OnStaleMd5(lint_path,
       path: A path relative to cwd.
     """
     ret = os.path.relpath(os.path.abspath(path), build_utils.DIR_SOURCE_ROOT)
-    # If it's outside of src/, just use abspath.
+    # If it's outside of src/, just use abspath. #NOTE VIVALDI
     if ret.startswith('..'):
       ret = os.path.abspath(path)
     return ret
@@ -173,7 +175,8 @@ def _OnStaleMd5(lint_path,
       dst = PathInDir(src_dir, src)
       if src == dst:
         continue
-      os.symlink(src, dst)
+      if not(os.path.isfile(src)): #VIVALDI check
+        os.symlink(src, dst)
 
     if srcjars:
       srcjar_paths = build_utils.ParseGnList(srcjars)
@@ -439,8 +442,7 @@ def main():
       input_paths=input_paths,
       input_strings=input_strings,
       output_paths=output_paths,
-      depfile_deps=classpath,
-      add_pydeps=False)
+      depfile_deps=classpath)
 
 
 if __name__ == '__main__':

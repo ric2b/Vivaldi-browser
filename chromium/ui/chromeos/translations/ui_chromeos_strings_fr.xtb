@@ -75,11 +75,9 @@
 <translation id="1829129547161959350">Pingouin</translation>
 <translation id="183183971458492120">Chargement des informations…</translation>
 <translation id="1838709767668011582">Site Google</translation>
-<translation id="1839704667838141620">Modifiez le mode de partage de ce fichier.</translation>
 <translation id="1844692022597038441">Ce fichier n'est pas disponible hors connexion.</translation>
 <translation id="184633654410729720">Clavier thaï (kedmanee)</translation>
 <translation id="1847880352285315359">Enregistré</translation>
-<translation id="1864676585353837027">Modifiez le mode de partage de ces fichiers.</translation>
 <translation id="1864756863218646478">Fichier introuvable.</translation>
 <translation id="1921986354447415460">Clavier turc en F</translation>
 <translation id="1931134289871235022">Slovaque</translation>
@@ -89,7 +87,6 @@
 <translation id="1943097386230153518">Installer un nouveau service</translation>
 <translation id="1947424002851288782">Clavier allemand</translation>
 <translation id="1972984168337863910">Développer les panneaux de commentaires sur les fichiers</translation>
-<translation id="197560921582345123">Éditeur</translation>
 <translation id="1984603991036629094">Clavier phonétique arménien</translation>
 <translation id="2001796770603320721">Gérer dans Drive</translation>
 <translation id="2009067268969781306">Le formatage d'une clé entraîne la suppression de toutes les données qui y sont stockées. Cette action est irréversible.</translation>
@@ -226,6 +223,7 @@
 <translation id="3645531960514756307">Retirer le dossier</translation>
 <translation id="3678559383040232393">Clavier maltais</translation>
 <translation id="3685122418104378273">Par défaut, la synchronisation Google Drive est désactivée lors de l'utilisation des données mobiles.</translation>
+<translation id="3689865792480713551">Annulez <ph name="ACTIVITY_DESCRIPTION" />.</translation>
 <translation id="3726463242007121105">Impossible d'ouvrir ce périphérique, car son système de fichiers n'est pas compatible.</translation>
 <translation id="3741243925913727067">Sauvegardez les photos et les vidéos de votre périphérique multimédia sur Google Drive.</translation>
 <translation id="3749289110408117711">Nom du fichier</translation>
@@ -286,7 +284,6 @@
 <translation id="4522570452068850558">Détails</translation>
 <translation id="4552678318981539154">Acheter de l'espace de stockage supplémentaire</translation>
 <translation id="4559767610552730302">Bokeh</translation>
-<translation id="4568854179928172494">Heure de modification</translation>
 <translation id="4572815280350369984">Fichier <ph name="FILE_TYPE" /></translation>
 <translation id="457386861538956877">Autres...</translation>
 <translation id="4579744207439506346">Élément <ph name="ENTRY_NAME" /> ajouté à la sélection.</translation>
@@ -467,6 +464,7 @@
 <translation id="6339145975392024142">Clavier international américain (PC)</translation>
 <translation id="6346310558342052870">Accès limité</translation>
 <translation id="6353618411602605519">Clavier croate</translation>
+<translation id="6356685157277930264">Fenêtre de commentaires sur les fichiers</translation>
 <translation id="6358884629796491903">Dragon</translation>
 <translation id="637062427944097960">Ce fichier est ouvert sur un autre bureau. Utilisez le compte de <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />) pour l'afficher.</translation>
 <translation id="6395575651121294044"><ph name="NUMBER_OF_FILES" /> éléments</translation>
@@ -592,7 +590,6 @@
 <translation id="7827012282502221009"><ph name="NUMBER_OF_TB" /> To</translation>
 <translation id="7839804798877833423">L'opération de récupération de ces fichiers consommera environ <ph name="FILE_SIZE" /> de données mobiles.</translation>
 <translation id="7846076177841592234">Annuler la sélection</translation>
-<translation id="7850851215703745691">Ces fichiers Drive n'ont pas encore été partagés</translation>
 <translation id="7853966320808728790">BÉPO français</translation>
 <translation id="7864662577698025113">Ajouter un service</translation>
 <translation id="7873831373602885875">Impossible d'enregistrer les modifications dans <ph name="FOLDER_NAME" />. Toutes les modifications seront enregistrées dans <ph name="DOWNLOADS_FOLDER" /> du dossier "Téléchargements".</translation>
@@ -608,7 +605,6 @@
 <translation id="7969525169268594403">Slovène</translation>
 <translation id="7982283708762922719">Hauteur</translation>
 <translation id="7987485481246785146">Clavier kurde sorani (arabe)</translation>
-<translation id="799923393800005025">Lecteur</translation>
 <translation id="8008366997883261463">Jack Russell Terrier</translation>
 <translation id="8028993641010258682">Taille</translation>
 <translation id="8031722894461705849">Clavier slovaque</translation>
@@ -670,8 +666,6 @@
 <translation id="8600173386174225982">Les fichiers s'affichent désormais sous forme de vignettes.</translation>
 <translation id="8601932370724196034">Fichier image Crostini</translation>
 <translation id="8669949407341943408">Déplacement en cours…</translation>
-<translation id="8671210955687109937">Commentateur</translation>
-<translation id="8686213429977032554">Ce fichier Drive n'a pas encore été partagé</translation>
 <translation id="8698464937041809063">Dessin Google</translation>
 <translation id="8714406895390098252">Vélo</translation>
 <translation id="8719721339511222681">Élément <ph name="ENTRY_NAME" /> sélectionné.</translation>
@@ -695,7 +689,7 @@
 <translation id="9035012421917565900">Les éléments ne pourront pas être redéplacés vers "<ph name="DESTINATION_NAME" />". Cette action est donc irréversible.</translation>
 <translation id="9038620279323455325">Le nom "<ph name="FILE_NAME" />" est déjà attribué à un fichier. Veuillez en choisir un autre.</translation>
 <translation id="9064939804718829769">Transfert en cours…</translation>
-<translation id="9065203028668620118">Modifier</translation>
+<translation id="9065203028668620118">Édition</translation>
 <translation id="9099674669267916096">Nombre de pages</translation>
 <translation id="9110990317705400362">Nous recherchons constamment à rendre votre navigation plus sûre. Auparavant, vous pouviez être invité à ajouter une extension dans votre navigateur par n'importe quel site Web. Dans les dernières versions de Google Chrome, vous devez explicitement indiquer que vous souhaitez installer une extension en l'ajoutant via la page "Extensions". <ph name="BEGIN_LINK" />En savoir plus<ph name="END_LINK" /></translation>
 <translation id="912419004897138677">Codec</translation>

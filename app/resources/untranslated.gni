@@ -6,7 +6,6 @@ import("//vivaldi/app/resources/generate_untranslated.gni")
 gritinfo_cmd = "//tools/grit/grit_info.py"
 _grit_cmd = "//tools/grit/grit.py"
 _default_grit_resource_ids = "//tools/gritsettings/resource_ids"
-_list_lang_cmd = "//vivaldi/app/list_lang_xmb_files.py"
 if (!defined(locales)) {
   locales = []
 }
@@ -16,31 +15,30 @@ template("vivaldi_extract_untranslated") {
   forward_variables_from(invoker,
                          [
                            "source",
-                           "original_source",
                            "vivaldi_source",
                            "deps",
                            "extra_grit_defines",
                            "grit_defines",
-                           "grit_additional_defines",
+                           "source_translations",
+                           "vivaldi_translations",
                          ])
-  if (!defined(original_source)) {
-    original_source = source
-  }
+  # Some of these jobs are memory intensive, use link pool to limit
+  # number of parallel jobs (link pool allocates 8 GB to each link job)
+  pool = "//build/toolchain:link_pool($default_toolchain)"
   if (!defined(extra_grit_defines)) {
     extra_grit_defines = []
   }
   if (!defined(grit_defines)) {
     grit_defines = []
   }
-  if (!defined(grit_additional_defines)) {
-    grit_additional_defines = []
-  }
+  assert(defined(source_translations))
   if (defined(vivaldi_source)) {
+    assert(defined(vivaldi_translations))
     file_target1= get_path_info(vivaldi_source, "name")
-    file_target2= get_path_info(original_source, "name")
+    file_target2= get_path_info(source, "name")
     file_target = "${file_target2}.${file_target1}"
   } else {
-    file_target= get_path_info(original_source, "name")
+    file_target= get_path_info(source, "name")
   }
 
   deps_list = []
@@ -50,23 +48,57 @@ template("vivaldi_extract_untranslated") {
   foreach(locale, locales + vivaldi_pending_locales) {
     name = "${target_name}_extract_$locale"
     deps_list += [":"+name]
+
+    xtb_sources = []
+    # Vivaldi support locales that Chromium doesn't, exclude ours for source in merge mode
+    use_source_locale = !defined(vivaldi_source)
+    foreach(test_locale, locales - ["en-US"]) {
+      if (test_locale == locale) {
+        use_source_locale = true
+      }
+    }
+    if (use_source_locale && locale != "en-US"){
+      corrected_locale = locale
+      if (defined(vivaldi_source) && (!defined(invoker.no_override_locales) || !invoker.no_override_locales)) {
+        # Chromium uses "iw" for "he" and "no" for "nb" locales
+        if(locale == "he") {
+          corrected_locale = "iw"
+        } else if (locale == "nb") {
+          corrected_locale = "no"
+        }
+      }
+      xtb_sources += ["${source_translations}${corrected_locale}.xtb"]
+    }
+    if (defined(vivaldi_source)) {
+      if (locale != "en-US") {
+        xtb_sources += ["${vivaldi_translations}$locale.xtb"]
+      }
+    }
+
     action(name) {
       script = "//vivaldi/app/resources/extract_translations.py"
       inputs = [
+        "//vivaldi/app/resources/vivaldi_resources.py",
         idlist,
         source,
-      ]
+      ] + xtb_sources
       outputs = [
         _untranslated_target_prefix+"_$locale.po"
       ]
       args = [
         "--locale", locale,
         "--vivaldi-file", file_target,
-      ] + grit_defines + extra_grit_defines + grit_additional_defines
+      ] + grit_defines + extra_grit_defines
       if (defined(vivaldi_source)) {
+        inputs += [vivaldi_source]
+        if (locale != "en-US"){
+          inputs += ["${vivaldi_translations}$locale.xtb"]
+        }
         args += [
           "--messages",
           rebase_path(idlist, root_build_dir),
+          "--extra-grd-file",
+          rebase_path(vivaldi_source, root_build_dir),
         ]
       }
       args += [
@@ -80,15 +112,21 @@ template("vivaldi_extract_untranslated") {
   deps_list += [":"+ name]
   action(name) {
     script = "//vivaldi/app/resources/extract_translations.py"
-    inputs = [ source ]
+    inputs = [
+      idlist,
+      source,
+    ] + xtb_sources
     outputs = [ _untranslated_target_prefix+".pot" ]
     args = [
       "--vivaldi-file", file_target,
-    ] + grit_defines + extra_grit_defines + grit_additional_defines
+    ] + grit_defines + extra_grit_defines
     if (defined(vivaldi_source)) {
+      inputs += [ vivaldi_source ]
       args += [
         "--messages",
         rebase_path(idlist, root_build_dir),
+        "--extra-grd-file",
+        rebase_path(vivaldi_source, root_build_dir),
       ]
     }
     args += [

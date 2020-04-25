@@ -31,6 +31,12 @@
 // static
 const char BackgroundSyncControllerImpl::kFieldTrialName[] = "BackgroundSync";
 const char BackgroundSyncControllerImpl::kDisabledParameterName[] = "disabled";
+#if defined(OS_ANDROID)
+const char BackgroundSyncControllerImpl::kRelyOnAndroidNetworkDetection[] =
+    "rely_on_android_network_detection";
+#endif
+const char BackgroundSyncControllerImpl::kKeepBrowserAwakeParameterName[] =
+    "keep_browser_awake_till_events_complete";
 const char BackgroundSyncControllerImpl::kMaxAttemptsParameterName[] =
     "max_sync_attempts";
 const char BackgroundSyncControllerImpl::
@@ -106,6 +112,11 @@ void BackgroundSyncControllerImpl::GetParameterOverrides(
   if (base::LowerCaseEqualsASCII(field_params[kDisabledParameterName],
                                  "true")) {
     parameters->disable = true;
+  }
+
+  if (base::LowerCaseEqualsASCII(field_params[kKeepBrowserAwakeParameterName],
+                                 "true")) {
+    parameters->keep_browser_awake_till_events_complete = true;
   }
 
   if (base::Contains(field_params,
@@ -242,9 +253,8 @@ int BackgroundSyncControllerImpl::GetSiteEngagementPenalty(const GURL& url) {
     case blink::mojom::EngagementLevel::MINIMAL:
       return kEngagementLevelMinimalPenalty;
     case blink::mojom::EngagementLevel::LOW:
-      return kEngagementLevelLowPenalty;
     case blink::mojom::EngagementLevel::MEDIUM:
-      return kEngagementLevelMediumPenalty;
+      return kEngagementLevelLowOrMediumPenalty;
     case blink::mojom::EngagementLevel::HIGH:
     case blink::mojom::EngagementLevel::MAX:
       // Very few sites reach max engagement level.
