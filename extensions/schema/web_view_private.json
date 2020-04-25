@@ -29,16 +29,6 @@
             "type": "number",
             "description": "Set scale of the output bitmap, defaults to 0.5. Note that |width.height| will be used if both |scale| and |width.height| are set.",
             "optional": true
-          },
-          "incognito":  {
-            "type":  "boolean",
-            "description":  "Should this capture be done in incognito mode, which means nothing will be stored on disk except bookmark thumbnails.",
-            "optional": true
-          },
-          "bookmarkId":  {
-            "type":  "integer",
-            "description":  "This is the bookmark id for the thumbnail, when used with bookmark capture functions.",
-            "optional": true
           }
         }
       }
@@ -79,58 +69,6 @@
                 "name": "thumbnail",
                 "type": "string",
                 "description": "Thumbnail in base64 format."
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "name": "getThumbnailFromService",
-        "type": "function",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "description": "Returns results",
-            "parameters": [
-              {
-                "name": "thumbnail",
-                "optional": false,
-                "type": "string",
-                "description": "Thumbnail in base64 format from the thumbnail service."
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "name": "addToThumbnailService",
-        "type": "function",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
-          },
-          {
-            "name": "params",
-            "$ref": "ThumbnailParams"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "description": "Returns results",
-            "parameters": [
-              {
-                "name": "thumbnail",
-                "optional": false,
-                "type": "string",
-                "description": "Url to reference the thumbnail with."
               }
             ]
           }

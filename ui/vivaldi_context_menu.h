@@ -4,8 +4,11 @@
 #ifndef UI_VIVALDI_CONTEXT_MENU_H_
 #define UI_VIVALDI_CONTEXT_MENU_H_
 
+#include <vector>
+
 #include "browser/menus/bookmark_sorter.h"
 #include "browser/menus/bookmark_support.h"
+#include "extensions/schema/bookmark_context_menu.h"
 
 namespace bookmarks {
 class BookmarkNode;
@@ -34,6 +37,24 @@ class VivaldiContextMenu;
 }
 
 namespace vivaldi {
+
+struct FolderEntry {
+  // Bookmark folder id
+  int64_t id;
+  // Offset into folder
+  int offset;
+  // When true, sorted content will have folders first or last in list
+  bool folder_group;
+  // Left position of item that opens menu, screen coordinates.
+  int x;
+  // Top position of item that opens menu, screen coordinates.
+  int y;
+  // Width of item that opens menu.
+  int width;
+  // Height of item that opens menu.
+  int height;
+};
+
 struct BookmarkMenuParams {
   BookmarkMenuParams();
   ~BookmarkMenuParams();
@@ -49,6 +70,8 @@ struct BookmarkMenuParams {
   // What to sort for and order
   vivaldi::BookmarkSorter::SortField sort_field;
   vivaldi::BookmarkSorter::SortOrder sort_order;
+  // All folders that can be opnend
+  std::vector<FolderEntry> siblings;
 };
 
 VivaldiContextMenu* CreateVivaldiContextMenu(
@@ -56,6 +79,9 @@ VivaldiContextMenu* CreateVivaldiContextMenu(
     ui::SimpleMenuModel* menu_model,
     const content::ContextMenuParams& params);
 
+void ConvertBookmarkButtonRectToScreen(
+    content::WebContents* web_contents,
+    vivaldi::BookmarkMenuParams& params);
 VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     content::WebContents* web_contents,
     const BookmarkMenuParams& params,

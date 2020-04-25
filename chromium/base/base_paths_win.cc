@@ -131,15 +131,11 @@ bool PathProviderWin(int key, FilePath* result) {
       // On Windows, unit tests execute two levels deep from the source root.
       // For example:  chrome/{Debug|Release}/ui_tests.exe
       PathService::Get(base::DIR_EXE, &executableDir);
-      cur = executableDir.DirName().DirName()
-#if defined(VIVALDI_BUILD)
-            .Append(FILE_PATH_LITERAL("chromium"))
-#endif
-            ;
+      cur = executableDir.DirName().DirName();
       break;
     }
     case base::DIR_APP_SHORTCUTS: {
-      if (win::GetVersion() < win::VERSION_WIN8)
+      if (win::GetVersion() < win::Version::WIN8)
         return false;
 
       base::win::ScopedCoMem<wchar_t> path_buf;

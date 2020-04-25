@@ -30,7 +30,6 @@
 #include "extensions/schema/vivaldi_sessions.h"
 #include "ui/vivaldi_session_service.h"
 
-using extensions::vivaldi::sessions_private::SessionItem;
 using extensions::vivaldi::sessions_private::SessionOpenOptions;
 
 namespace {
@@ -81,26 +80,20 @@ base::FilePath GenerateFilename(Profile* profile,
   return base::FilePath();
 }
 
-Browser* GetActiveBrowser() {
-  return BrowserList::GetInstance()->GetLastActive();
-}
-
 }  // namespace
 
 namespace extensions {
 
-SessionsPrivateSaveOpenTabsFunction::SessionsPrivateSaveOpenTabsFunction() {}
+ExtensionFunction::ResponseAction SessionsPrivateSaveOpenTabsFunction::Run() {
+  using vivaldi::sessions_private::SaveOpenTabs::Params;
+  namespace Results = vivaldi::sessions_private::SaveOpenTabs::Results;
 
-SessionsPrivateSaveOpenTabsFunction::~SessionsPrivateSaveOpenTabsFunction() {}
-
-bool SessionsPrivateSaveOpenTabsFunction::RunAsync() {
-  std::unique_ptr<vivaldi::sessions_private::SaveOpenTabs::Params> params(
-      vivaldi::sessions_private::SaveOpenTabs::Params::Create(*args_));
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int error_code = SessionErrorCodes::kNoError;
-  std::unique_ptr<::vivaldi::VivaldiSessionService> service(
-      new ::vivaldi::VivaldiSessionService(GetProfile()));
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  ::vivaldi::VivaldiSessionService service(profile);
 
   int save_window_id = params->options.save_only_window_id;
   std::vector<int>* ids = params->options.ids.get();
@@ -108,7 +101,7 @@ bool SessionsPrivateSaveOpenTabsFunction::RunAsync() {
   if (params->name.empty()) {
     error_code = SessionErrorCodes::kErrorMissingName;
   } else {
-    base::FilePath path = GenerateFilename(GetProfile(), params->name, true);
+    base::FilePath path = GenerateFilename(profile, params->name, true);
 
     for (auto* browser : *BrowserList::GetInstance()) {
       // Make sure the browser has tabs and a window. Browser's destructor
@@ -117,41 +110,39 @@ bool SessionsPrivateSaveOpenTabsFunction::RunAsync() {
       // for us to get a handle to a browser that is about to be removed. If
       // the tab count is 0 or the window is NULL, the browser is about to be
       // deleted, so we ignore it.
-      if (service->ShouldTrackWindow(browser, GetProfile()) &&
+      if (service.ShouldTrackWindow(browser, profile) &&
           browser->tab_strip_model()->count() && browser->window()) {
         if (save_window_id == 0 ||
             (save_window_id && browser->session_id().id() == save_window_id)) {
-          service->BuildCommandsForBrowser(browser, ids);
+          service.BuildCommandsForBrowser(browser, ids);
         }
       }
     }
-    bool success = service->Save(path);
+    bool success = service.Save(path);
     if (!success) {
       error_code = SessionErrorCodes::kErrorWriting;
     }
   }
-  results_ =
-      vivaldi::sessions_private::SaveOpenTabs::Results::Create(error_code);
 
-  SendResponse(true);
-  return true;
+  return RespondNow(ArgumentList(Results::Create(error_code)));
 }
 
-SessionsPrivateGetAllFunction::SessionsPrivateGetAllFunction() {}
+ExtensionFunction::ResponseAction SessionsPrivateGetAllFunction::Run() {
+  using vivaldi::sessions_private::SessionItem;
+  namespace Results = vivaldi::sessions_private::GetAll::Results;
 
-SessionsPrivateGetAllFunction::~SessionsPrivateGetAllFunction() {}
-
-bool SessionsPrivateGetAllFunction::RunAsync() {
   base::ThreadRestrictions::ScopedAllowIO allow_io;
 
   std::vector<SessionItem> sessions;
-  base::FilePath path(GetProfile()->GetPath());
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  base::FilePath path(profile->GetPath());
   path = path.Append(kSessionPath);
 
   base::FileEnumerator iter(path, false, base::FileEnumerator::FILES,
                             FILE_PATH_LITERAL("*.bin"));
   for (base::FilePath name = iter.Next(); !name.empty(); name = iter.Next()) {
-    SessionItem* new_item = new SessionItem;
+    sessions.emplace_back();
+    SessionItem* new_item = &sessions.back();
 #if defined(OS_POSIX)
     std::string filename = name.BaseName().value();
 #elif defined(OS_WIN)
@@ -167,60 +158,61 @@ bool SessionsPrivateGetAllFunction::RunAsync() {
     base::FileEnumerator::FileInfo info = iter.GetInfo();
     base::Time modified = info.GetLastModifiedTime();
     new_item->create_date_js = modified.ToJsTime();
-
-    sessions.push_back(std::move(*new_item));
   }
-  results_ = vivaldi::sessions_private::GetAll::Results::Create(sessions);
-
-  SendResponse(true);
-  return true;
+  return RespondNow(ArgumentList(Results::Create(sessions)));
 }
 
-SessionsPrivateOpenFunction::SessionsPrivateOpenFunction() {}
+ExtensionFunction::ResponseAction SessionsPrivateOpenFunction::Run() {
+  using vivaldi::sessions_private::Open::Params;
+  namespace Results = vivaldi::sessions_private::Open::Results;
 
-SessionsPrivateOpenFunction::~SessionsPrivateOpenFunction() {}
-
-bool SessionsPrivateOpenFunction::RunAsync() {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
-  std::unique_ptr<vivaldi::sessions_private::Open::Params> params(
-      vivaldi::sessions_private::Open::Params::Create(*args_));
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
 
   ::vivaldi::SessionOptions opts;
   if (params->options.get()) {
     opts.openInNewWindow_ = params->options->open_in_new_window;
   }
 
-  int error_code = SessionErrorCodes::kNoError;
-  base::FilePath path = GenerateFilename(GetProfile(), params->name, false);
-  if (!base::PathExists(path)) {
-    error_code = kErrorFileMissing;
-  } else {
-    Browser* browser = GetActiveBrowser();
-    std::unique_ptr<::vivaldi::VivaldiSessionService> service(
-        new ::vivaldi::VivaldiSessionService(GetProfile()));
-    if (!service->Load(path, browser, opts)) {
-      error_code = kErrorFileMissing;
-    }
-  }
-  results_ = vivaldi::sessions_private::Open::Results::Create(error_code);
+  Profile* profile = Profile::FromBrowserContext(browser_context());
 
-  SendResponse(true);
-  return true;
+  // TODO(igor@vivaldi.com): consider switching to lastError error reporting.
+  int error_code = SessionErrorCodes::kErrorFileMissing;
+  base::FilePath path = GenerateFilename(profile, params->name, false);
+  do {
+    if (!base::PathExists(path))
+      break;
+    content::WebContents* web_contents = GetSenderWebContents();
+    if (!web_contents)
+      break;
+    Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
+        web_contents->GetOutermostWebContents());
+    if (!browser)
+      break;
+
+    ::vivaldi::VivaldiSessionService service(profile);
+    if (!service.Load(path, browser, opts))
+      break;
+
+    error_code = SessionErrorCodes::kNoError;
+  } while (false);
+  return RespondNow(ArgumentList(Results::Create(error_code)));
 }
 
-SessionsPrivateDeleteFunction::SessionsPrivateDeleteFunction() {}
+ExtensionFunction::ResponseAction SessionsPrivateDeleteFunction::Run() {
+  using vivaldi::sessions_private::Delete::Params;
+  namespace Results = vivaldi::sessions_private::Delete::Results;
 
-SessionsPrivateDeleteFunction::~SessionsPrivateDeleteFunction() {}
-
-bool SessionsPrivateDeleteFunction::RunAsync() {
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
-  std::unique_ptr<vivaldi::sessions_private::Delete::Params> params(
-      vivaldi::sessions_private::Delete::Params::Create(*args_));
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
   int error_code = SessionErrorCodes::kNoError;
-  base::FilePath path = GenerateFilename(GetProfile(), params->name, false);
+  base::FilePath path = GenerateFilename(profile, params->name, false);
   if (!base::PathExists(path)) {
     error_code = kErrorFileMissing;
   } else {
@@ -228,10 +220,7 @@ bool SessionsPrivateDeleteFunction::RunAsync() {
       error_code = kErrorDeleteFailure;
     }
   }
-  results_ = vivaldi::sessions_private::Delete::Results::Create(error_code);
-
-  SendResponse(true);
-  return true;
+  return RespondNow(ArgumentList(Results::Create(error_code)));
 }
 
 }  // namespace extensions

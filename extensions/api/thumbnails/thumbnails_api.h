@@ -8,7 +8,7 @@
 #include <string>
 
 #include "base/memory/shared_memory_handle.h"
-#include "browser/thumbnails/vivaldi_capture_contents.h"
+#include "browser/thumbnails/capture_page.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "extensions/common/api/extension_types.h"
 #include "extensions/schema/thumbnails.h"
@@ -25,23 +25,6 @@ class Size;
 using extensions::api::extension_types::ImageFormat;
 
 namespace extensions {
-
-class ThumbnailsIsThumbnailAvailableFunction
-    : public ChromeAsyncExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("thumbnails.isThumbnailAvailable",
-                             THUMBNAILS_ISTHUMBNAILAVAILABLE)
-  ThumbnailsIsThumbnailAvailableFunction();
-
- protected:
-  ~ThumbnailsIsThumbnailAvailableFunction() override;
-
-  // ExtensionFunction:
-  bool RunAsync() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ThumbnailsIsThumbnailAvailableFunction);
-};
 
 class ThumbnailsCaptureUIFunction : public ChromeAsyncExtensionFunction {
  public:
@@ -91,21 +74,13 @@ class ThumbnailsCaptureTabFunction : public ChromeAsyncExtensionFunction {
  protected:
   ~ThumbnailsCaptureTabFunction() override;
 
-  void OnThumbnailsCaptureCompleted(base::SharedMemoryHandle handle,
-                                    const gfx::Size image_size,
-                                    int callback_id,
-                                    bool success);
+  void OnThumbnailsCaptureCompleted(::vivaldi::CapturePage::Result captured);
 
-  void ScaleAndConvertImage(base::SharedMemoryHandle handle,
-                            const gfx::Size image_size,
-                            int callback_id);
+  void ScaleAndConvertImage(::vivaldi::CapturePage::Result captured);
 
-  void ScaleAndConvertImageDoneOnUIThread(const SkBitmap bitmap,
-                                          const std::string image_data,
-                                          int callback_id);
-
-  void DispatchErrorOnUIThread(const std::string& error_msg);
-  void DispatchError(const std::string& error_msg);
+  void ScaleAndConvertImageDoneOnUIThread(const SkBitmap& bitmap,
+                                          const std::string& image_data,
+                                          bool success);
 
   // ExtensionFunction:
   bool RunAsync() override;
@@ -119,8 +94,8 @@ class ThumbnailsCaptureTabFunction : public ChromeAsyncExtensionFunction {
   bool save_to_disk_ = false;
   base::FilePath file_path_;
   std::string save_folder_;
-  int width_ = 0;
-  int height_ = 0;
+  gfx::Rect rect_;
+  gfx::Size out_dimension_;
   std::string save_file_pattern_;
   GURL url_;
   std::string title_;
@@ -133,18 +108,25 @@ class ThumbnailsCaptureUrlFunction : public UIThreadExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("thumbnails.captureUrl", THUMBNAILS_CAPTUREURL)
   ThumbnailsCaptureUrlFunction();
 
- protected:
+ private:
   ~ThumbnailsCaptureUrlFunction() override;
 
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void OnCapturedAndScaled(const SkBitmap& bitmap, bool success);
-  void OnBookmarkThumbnailStored(int bookmark_id, std::string& image_url);
+  void OnCaptured(::vivaldi::CapturePage::Result captured);
 
- private:
-  scoped_refptr<::vivaldi::ThumbnailCaptureContents> capture_page_;
-  int bookmark_id_ = 0;
+  void ScaleAndConvertImageOnWorkerThread(
+      ::vivaldi::CapturePage::Result captured);
+
+  void OnCapturedAndScaled(scoped_refptr<base::RefCountedMemory> thumbnail,
+                           bool success);
+
+  void SendResult(bool success);
+
+  int64_t bookmark_id_ = 0;
+  gfx::Size scaled_size_;
+  GURL url_;
 
   DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureUrlFunction);
 };

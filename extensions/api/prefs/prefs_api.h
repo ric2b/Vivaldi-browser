@@ -9,9 +9,9 @@
 #include <vector>
 
 #include "base/memory/singleton.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "extensions/browser/extension_function.h"
 #include "prefs/vivaldi_browser_prefs.h"
 
 class Profile;
@@ -27,8 +27,6 @@ class VivaldiPrefsApiNotification;
 class VivaldiPrefsApiNotificationFactory
     : public BrowserContextKeyedServiceFactory {
  public:
-  static VivaldiPrefsApiNotification* GetForProfile(Profile* profile);
-
   static VivaldiPrefsApiNotificationFactory* GetInstance();
 
   static ::vivaldi::PrefProperties* GetPrefProperties(const std::string& path);
@@ -36,6 +34,7 @@ class VivaldiPrefsApiNotificationFactory
  private:
   friend struct base::DefaultSingletonTraits<
       VivaldiPrefsApiNotificationFactory>;
+  friend class VivaldiPrefsApiNotification;
 
   VivaldiPrefsApiNotificationFactory();
   ~VivaldiPrefsApiNotificationFactory() override;
@@ -57,14 +56,13 @@ class VivaldiPrefsApiNotificationFactory
 // prefs value has changed.
 class VivaldiPrefsApiNotification : public KeyedService {
  public:
+  static VivaldiPrefsApiNotification* FromBrowserContext(
+      content::BrowserContext* browser_context);
+
   explicit VivaldiPrefsApiNotification(Profile* profile);
   ~VivaldiPrefsApiNotification() override;
 
   void RegisterPref(const std::string& path, bool local_pref);
-
-  static void BroadcastEvent(const std::string& eventname,
-                             std::unique_ptr<base::ListValue> args,
-                             content::BrowserContext* context);
 
   void OnChanged(const std::string& path);
 
@@ -82,47 +80,50 @@ class VivaldiPrefsApiNotification : public KeyedService {
   DISALLOW_COPY_AND_ASSIGN(VivaldiPrefsApiNotification);
 };
 
-class PrefsGetFunction : public ChromeAsyncExtensionFunction {
+class PrefsGetFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("prefs.get", PREFS_GET)
   PrefsGetFunction() = default;
 
  private:
   ~PrefsGetFunction() override = default;
-  bool RunAsync() override;
+  ResponseAction Run() override;
+
   DISALLOW_COPY_AND_ASSIGN(PrefsGetFunction);
 };
 
-class PrefsSetFunction : public ChromeAsyncExtensionFunction {
+class PrefsSetFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("prefs.set", PREFS_SET)
   PrefsSetFunction() = default;
 
  private:
   ~PrefsSetFunction() override = default;
-  bool RunAsync() override;
+  ResponseAction Run() override;
+
   DISALLOW_COPY_AND_ASSIGN(PrefsSetFunction);
 };
 
-class PrefsResetFunction : public ChromeAsyncExtensionFunction {
+class PrefsResetFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("prefs.reset", PREFS_RESET)
   PrefsResetFunction() = default;
 
  private:
   ~PrefsResetFunction() override = default;
-  bool RunAsync() override;
+  ResponseAction Run() override;
+
   DISALLOW_COPY_AND_ASSIGN(PrefsResetFunction);
 };
 
-class PrefsGetForCacheFunction : public ChromeAsyncExtensionFunction {
+class PrefsGetForCacheFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("prefs.getForCache", PREFS_GET_FOR_CACHE)
   PrefsGetForCacheFunction() = default;
 
  private:
   ~PrefsGetForCacheFunction() override = default;
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(PrefsGetForCacheFunction);
 };

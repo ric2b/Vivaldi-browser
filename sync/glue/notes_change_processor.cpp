@@ -544,7 +544,7 @@ void NotesChangeProcessor::ApplyChangesFromSyncModel(
 
     // Children of a deleted node should not be deleted; they may be
     // reparented by a later change record.  Move them to a temporary place.
-    if (!dst->empty()) {
+    if (!dst->children().empty()) {
       if (!foster_parent) {
         foster_parent = model->AddFolder(model->other_node(),
                                          model->other_node()->child_count(),

@@ -114,6 +114,9 @@ class BookmarkMenuController : public bookmarks::BaseBookmarkModelObserver,
                                       views::MenuAnchorPosition* anchor,
                                       bool* has_mnemonics,
                                       views::MenuButton** button) override;
+  views::MenuItemView* GetVivaldiSiblingMenu(views::MenuItemView* menu,
+                                             const gfx::Point& screen_point,
+                                             gfx::Rect* rect) override;
   int GetMaxWidthForMenu(views::MenuItemView* view) override;
   void WillShowMenu(views::MenuItemView* menu) override;
   bool ShouldTryPositioningBesideAnchor() const override;

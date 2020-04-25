@@ -478,8 +478,13 @@ void GuestViewBase::DidAttach(int guest_proxy_routing_id) {
 
   SetUpSizing(*attach_params());
 
-  // The guest should have the same muting state as the owner.
+  // NOTE(andre@vivaldi.com) : We can set muting on a tab, which is a guest. So
+  // we cannot do the default behaviour of copying the parents mute-state. Check
+  // bail if the owner is our app-window. The guest should have the same muting
+  if (!extensions::VivaldiAppHelper::FromWebContents(owner_web_contents())){
+  // state as the owner.
   web_contents()->SetAudioMuted(owner_web_contents()->IsAudioMuted());
+  } // if the owner is the Vivaldi app-window.
 
   // Give the derived class an opportunity to perform some actions.
   DidAttachToEmbedder();

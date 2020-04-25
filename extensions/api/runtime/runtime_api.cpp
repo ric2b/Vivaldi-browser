@@ -57,7 +57,6 @@
 #include "ui/vivaldi_ui_utils.h"
 
 using base::PathService;
-using vivaldi::ui_tools::EncodeBitmap;
 
 namespace extensions {
 
@@ -100,12 +99,7 @@ void VivaldiRuntimeFeatures::LoadRuntimeFeatures() {
   base::FilePath path;
 
 #if defined(OS_MACOSX)
-#if !BUILDFLAG(NEW_MAC_BUNDLE_STRUCTURE)
-  path = chrome::GetVersionedDirectory();
-  if (!path.empty()) {
-#else
   if(PathService::Get(chrome::DIR_RESOURCES, &path)) {
-#endif
 #else
   if (PathService::Get(base::DIR_MODULE, &path)) {
 #endif  // defined(OS_MACOSX)
@@ -614,6 +608,19 @@ RuntimePrivateUpdateActiveProfileFunction::Run() {
       profiles::UpdateProfileName(profile, name);
       success = true;
     }
+    if (params->create_desktop_icon.get()) {
+      if (ProfileShortcutManager::IsFeatureEnabled()) {
+        ProfileShortcutManager* shortcut_manager =
+          g_browser_process->profile_manager()->profile_shortcut_manager();
+        DCHECK(shortcut_manager);
+
+        if (*params->create_desktop_icon.get()) {
+          shortcut_manager->CreateProfileShortcut(profile->GetPath());
+        } else {
+          shortcut_manager->RemoveProfileShortcuts(profile->GetPath());
+        }
+      }
+    }
   }
   return RespondNow(ArgumentList(Results::Create(success)));
 }
@@ -686,11 +693,13 @@ void RuntimePrivateCreateProfileFunction::CreateShortcutAndShowSuccess(
     Profile* profile) {
   if (create_shortcut) {
     DCHECK(ProfileShortcutManager::IsFeatureEnabled());
-    ProfileShortcutManager* shortcut_manager =
+    if (ProfileShortcutManager::IsFeatureEnabled()) {
+      ProfileShortcutManager* shortcut_manager =
         g_browser_process->profile_manager()->profile_shortcut_manager();
-    DCHECK(shortcut_manager);
-    if (shortcut_manager)
-      shortcut_manager->CreateProfileShortcut(profile->GetPath());
+      DCHECK(shortcut_manager);
+      if (shortcut_manager)
+        shortcut_manager->CreateProfileShortcut(profile->GetPath());
+    }
   }
   // Opening the new window must be the last action, after all callbacks
   // have been run, to give them a chance to initialize the profile.
@@ -810,6 +819,36 @@ RuntimePrivateDeleteProfileFunction::Run() {
       ProfileMetrics::DELETE_PROFILE_SETTINGS);
 
   return RespondNow(ArgumentList(Results::Create(true)));
+}
+
+ExtensionFunction::ResponseAction
+RuntimePrivateHasDesktopShortcutFunction::Run() {
+  namespace Results = vivaldi::runtime_private::HasDesktopShortcut::Results;
+#if defined(OS_WIN)
+  if (ProfileShortcutManager::IsFeatureEnabled()) {
+    ProfileShortcutManager* shortcut_manager =
+      g_browser_process->profile_manager()->profile_shortcut_manager();
+    DCHECK(shortcut_manager);
+    Profile* profile = Profile::FromBrowserContext(browser_context());
+    shortcut_manager->HasProfileShortcuts(
+      profile->GetPath(),
+      base::Bind(
+        &RuntimePrivateHasDesktopShortcutFunction::OnHasProfileShortcuts,
+        this));
+    return RespondLater();
+  } else {
+    return RespondNow(ArgumentList(Results::Create(false, false)));
+  }
+#else
+  return RespondNow(ArgumentList(Results::Create(false, false)));
+#endif  // defined(OS_WIN)
+}
+
+void RuntimePrivateHasDesktopShortcutFunction::OnHasProfileShortcuts(
+    bool has_shortcuts) {
+  namespace Results = vivaldi::runtime_private::HasDesktopShortcut::Results;
+
+  return Respond(ArgumentList(Results::Create(has_shortcuts, true)));
 }
 
 }  // namespace extensions

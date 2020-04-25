@@ -18,9 +18,9 @@
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "remoting/base/grpc_support/grpc_test_util.h"
 #include "remoting/base/grpc_support/scoped_grpc_server_stream.h"
-#include "remoting/signaling/ftl.pb.h"
+#include "remoting/base/grpc_test_support/grpc_test_util.h"
+#include "remoting/proto/ftl/v1/ftl_messages.pb.h"
 #include "remoting/signaling/ftl_grpc_context.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -306,12 +306,13 @@ TEST_F(FtlMessageReceptionChannelTest, StreamsTwoMessages) {
             on_incoming_msg.Run(response);
             response.Clear();
 
-            std::move(on_channel_closed).Run(grpc::Status::OK);
+            std::move(on_channel_closed).Run(grpc::Status::CANCELLED);
           }));
 
   channel_->StartReceivingMessages(
-      base::DoNothing(), test::CheckStatusThenQuitRunLoopCallback(
-                             FROM_HERE, grpc::StatusCode::OK, &run_loop));
+      base::DoNothing(),
+      test::CheckStatusThenQuitRunLoopCallback(
+          FROM_HERE, grpc::StatusCode::CANCELLED, &run_loop));
 
   run_loop.Run();
 }
@@ -357,7 +358,7 @@ TEST_F(FtlMessageReceptionChannelTest, NoPongWithinTimeout_ResetsStream) {
   run_loop.Run();
 }
 
-TEST_F(FtlMessageReceptionChannelTest, LifetimeExceeded_ResetsStream) {
+TEST_F(FtlMessageReceptionChannelTest, ServerClosesStream_ResetsStream) {
   base::RunLoop run_loop;
 
   base::WeakPtr<FakeScopedGrpcServerStream> old_stream;
@@ -368,18 +369,8 @@ TEST_F(FtlMessageReceptionChannelTest, LifetimeExceeded_ResetsStream) {
             auto fake_server_stream = CreateFakeServerStream();
             on_incoming_msg.Run(CreateStartOfBatchResponse());
 
-            // Keep sending pong until lifetime exceeded.
-            base::TimeDelta pong_period =
-                FtlMessageReceptionChannel::kPongTimeout -
-                base::TimeDelta::FromSeconds(1);
-            ASSERT_LT(base::TimeDelta(), pong_period);
-            base::TimeDelta ticked_time;
-
-            // The last FastForwardBy() will make the channel reopen the stream.
-            while (ticked_time <= FtlMessageReceptionChannel::kPongTimeout) {
-              scoped_task_environment_.FastForwardBy(pong_period);
-              ticked_time += pong_period;
-            }
+            // Close the stream with OK.
+            std::move(on_channel_closed).Run(grpc::Status::OK);
           },
           &old_stream))
       .WillOnce(StartStream(

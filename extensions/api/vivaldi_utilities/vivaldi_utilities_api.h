@@ -267,13 +267,14 @@ class UtilitiesCreateUrlMappingFunction : public UIThreadExtensionFunction {
                              UTILITIES_CREATEURLMAPPING)
   UtilitiesCreateUrlMappingFunction() = default;
 
- protected:
+ private:
   ~UtilitiesCreateUrlMappingFunction() override = default;
 
   // ExtensionFunction:
   ResponseAction Run() override;
 
- private:
+  void OnAddMappingFinished(std::string file, bool success, std::string url);
+
   DISALLOW_COPY_AND_ASSIGN(UtilitiesCreateUrlMappingFunction);
 };
 
@@ -283,38 +284,50 @@ class UtilitiesRemoveUrlMappingFunction : public UIThreadExtensionFunction {
                              UTILITIES_REMOVEURLMAPPING)
   UtilitiesRemoveUrlMappingFunction() = default;
 
- protected:
+ private:
   ~UtilitiesRemoveUrlMappingFunction() override = default;
 
   // ExtensionFunction:
   ResponseAction Run() override;
 
- private:
+  void OnRemoveMappingFinished(bool success);
+
   DISALLOW_COPY_AND_ASSIGN(UtilitiesRemoveUrlMappingFunction);
 };
 
-class UtilitiesSelectFileFunction : public UIThreadExtensionFunction,
-                                    public ui::SelectFileDialog::Listener {
+class UtilitiesSelectFileFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.selectFile", UTILITIES_SELECTFILE)
-  UtilitiesSelectFileFunction();
+  UtilitiesSelectFileFunction() = default;
 
- protected:
-  ~UtilitiesSelectFileFunction() override;
+ private:
+  ~UtilitiesSelectFileFunction() override = default;
 
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  // ui::SelectFileDialog::Listener:
-  void FileSelected(const base::FilePath& path,
-                    int index,
-                    void* params) override;
-  void FileSelectionCanceled(void* params) override;
-
- private:
-  scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
+  void OnFileSelected(base::FilePath path);
 
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSelectFileFunction);
+};
+
+class UtilitiesSelectLocalImageFunction : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.selectLocalImage",
+                             UTILITIES_SELECTLOCALIMAGE)
+  UtilitiesSelectLocalImageFunction() = default;
+
+ private:
+  ~UtilitiesSelectLocalImageFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void OnFileSelected(base::FilePath path);
+
+  void OnAddMappingFinished(bool success, std::string data_mapping_url);
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesSelectLocalImageFunction);
 };
 
 class UtilitiesGetVersionFunction : public UIThreadExtensionFunction {

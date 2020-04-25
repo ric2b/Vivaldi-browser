@@ -63,7 +63,7 @@ bool CalendarTable::CreateDefaultCalendar() {
 
   CalendarRow row;
   row.set_name(base::UTF8ToUTF16("Default"));
-  row.set_color("#000000");
+  row.set_color("#C2EBAE");
   CalendarID id = CreateCalendar(row);
   if (id)
     return true;

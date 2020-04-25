@@ -1,6 +1,7 @@
 // Copyright 2013 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
 
 #include "chrome/browser/win/chrome_process_finder.h"
 
@@ -22,11 +23,8 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 
-#include <tlhelp32.h>
-#include "base/path_service.h"
-#include "base/strings/stringprintf.h"
-#include "chrome/browser/policy/policy_path_parser.h"
-#include "chrome/common/chrome_paths_internal.h"
+#include "browser/win/vivaldi_utils.h"
+
 
 namespace {
 
@@ -35,107 +33,6 @@ uint32_t g_timeout_in_milliseconds = 20 * 1000;
 }  // namespace
 
 namespace chrome {
-
-void KillVivaldiProcesses(std::vector<DWORD>& process_ids) {
-  if (process_ids.empty())
-    return;
-
-  std::wstring cmd_line_string(L"taskkill.exe /F");
-  std::vector<DWORD>::iterator it;
-  for (it = process_ids.begin(); it != process_ids.end(); it++) {
-    DWORD pid = *it;
-    cmd_line_string += base::StringPrintf(L" /PID %d", pid);
-  }
-
-  std::unique_ptr<wchar_t[]> cmd_line(new wchar_t[cmd_line_string.length() + 1]);
-  std::copy(cmd_line_string.begin(), cmd_line_string.end(), cmd_line.get());
-  cmd_line[cmd_line_string.length()] = 0;
-
-  STARTUPINFO si = { sizeof(si) };
-  PROCESS_INFORMATION pi = { 0 };
-
-  if (CreateProcess(NULL, cmd_line.get(), NULL, NULL, FALSE, CREATE_NO_WINDOW,
-      NULL, NULL, &si, &pi)) {
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-  }
-}
-
-typedef BOOL(WINAPI *LPQueryFullProcessImageName)(
-    HANDLE hProcess, DWORD dwFlags, LPWSTR lpExeName, PDWORD lpdwSize);
-
-static LPQueryFullProcessImageName fpQueryFullProcessImageName = NULL;
-
-bool LoadQueryFullProcessImageNameFunc()
-{
-  HMODULE hDLL = LoadLibrary(L"kernel32.dll");
-  if (!hDLL)
-    return false;
-
-  fpQueryFullProcessImageName =
-    (LPQueryFullProcessImageName)GetProcAddress(hDLL,
-      "QueryFullProcessImageNameW");
-
-  if (!fpQueryFullProcessImageName)
-    return false;
-
-  return true;
-}
-
-void GetRunningVivaldiProcesses(const std::wstring& path,
-    std::vector<DWORD>& process_ids) {
-
-  if (!fpQueryFullProcessImageName) {
-    if (!LoadQueryFullProcessImageNameFunc())
-      return;
-  }
-
-  process_ids.clear();
-  PROCESSENTRY32 entry = { sizeof(PROCESSENTRY32) };
-  HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL);
-  if (snapshot && Process32First(snapshot, &entry)) {
-    while (Process32Next(snapshot, &entry)) {
-      if (!wcsicmp(entry.szExeFile, L"vivaldi.exe")) {
-        if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
-          HANDLE process =
-            OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, entry.th32ProcessID);
-          if (process) {
-            wchar_t process_image_name[MAX_PATH] = { 0 };
-            DWORD size = MAX_PATH;
-            if (fpQueryFullProcessImageName(process, 0, process_image_name,
-                &size)) {
-              std::wstring proc_path(process_image_name);
-              std::wstring::size_type pos = proc_path.rfind(L"\\vivaldi.exe");
-              if (pos != std::wstring::npos)
-                proc_path = proc_path.substr(0, pos);
-
-              if (proc_path != path ||
-                  GetCurrentProcessId() == entry.th32ProcessID) {
-                CloseHandle(process);
-                continue;
-              }
-            }
-            CloseHandle(process);
-          }
-        }
-        process_ids.push_back(entry.th32ProcessID);
-      }
-    }
-  }
-  if (snapshot)
-    CloseHandle(snapshot);
-}
-
-void AttemptToKillTheUndead() {
-  base::FilePath exe_path;
-  base::PathService::Get(base::DIR_EXE, &exe_path);
-
-  std::vector<DWORD> process_ids;
-  GetRunningVivaldiProcesses(exe_path.value(), process_ids);
-  if (!process_ids.empty())
-    KillVivaldiProcesses(process_ids);
-}
 
 HWND FindRunningChromeWindow(const base::FilePath& user_data_dir) {
   return base::win::MessageWindow::FindWindow(user_data_dir.value());
@@ -193,11 +90,11 @@ NotifyChromeResult AttemptToNotifyRunningChrome(HWND remote_window,
 
   // It is possible that the process owning this window may have died by now.
   if (!::IsWindow(remote_window)) {
-    AttemptToKillTheUndead();
+    vivaldi::AttemptToKillTheUndead();
     return NOTIFY_FAILED;
   }
 
-  AttemptToKillTheUndead();
+  vivaldi::AttemptToKillTheUndead();
   // If the window couldn't be notified but still exists, assume it is hung.
   return NOTIFY_WINDOW_HUNG;
 }

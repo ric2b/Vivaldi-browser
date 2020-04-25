@@ -17,7 +17,6 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/format_macros.h"
 #include "base/location.h"
@@ -151,8 +150,7 @@ static bool HeaderMatches(const HttpRequestHeaders& headers,
 
     HttpUtil::ValuesIterator v(header_value.begin(), header_value.end(), ',');
     while (v.GetNext()) {
-      if (base::LowerCaseEqualsASCII(
-              base::StringPiece(v.value_begin(), v.value_end()), search->value))
+      if (base::LowerCaseEqualsASCII(v.value_piece(), search->value))
         return true;
     }
   }
@@ -184,6 +182,7 @@ HttpCache::Transaction::Transaction(RequestPriority priority, HttpCache* cache)
       bypass_lock_for_test_(false),
       bypass_lock_after_headers_for_test_(false),
       fail_conditionalization_for_test_(false),
+      read_buf_len_(0),
       io_buf_len_(0),
       read_offset_(0),
       effective_load_flags_(0),
@@ -378,7 +377,7 @@ int HttpCache::Transaction::Read(IOBuffer* buf,
 
   reading_ = true;
   read_buf_ = buf;
-  io_buf_len_ = buf_len;
+  read_buf_len_ = buf_len;
   int rv = TransitionToReadingState();
   if (rv != OK || next_state_ == STATE_NONE)
     return rv;
@@ -1032,7 +1031,7 @@ int HttpCache::Transaction::DoLoop(int result) {
 
   if (rv != ERR_IO_PENDING && !callback_.is_null()) {
     read_buf_ = nullptr;  // Release the buffer before invoking the callback.
-    base::ResetAndReturn(&callback_).Run(rv);
+    std::move(callback_).Run(rv);
   }
 
   return rv;
@@ -1057,7 +1056,7 @@ int HttpCache::Transaction::DoGetBackendComplete(int result) {
 
   // Keep track of the fraction of requests that we can double-key.
   UMA_HISTOGRAM_BOOLEAN("HttpCache.TopFrameOriginPresent",
-                        request_->top_frame_origin.has_value());
+                        request_->network_isolation_key.IsFullyPopulated());
 
   if (!ShouldPassThrough()) {
     cache_key_ = cache_->GenerateCacheKey(request_);
@@ -1840,7 +1839,7 @@ int HttpCache::Transaction::DoSuccessfulSendRequest() {
   // Invalidate any cached GET with a successful POST.
   if (!(effective_load_flags_ & LOAD_DISABLE_CACHE) && method_ == "POST" &&
       NonErrorResponse(new_response->headers->response_code())) {
-    cache_->DoomMainEntryForUrl(request_->url, request_->top_frame_origin);
+    cache_->DoomMainEntryForUrl(request_->url, request_->network_isolation_key);
   }
 
   RecordNoStoreHeaderHistogram(request_->load_flags, new_response);
@@ -2209,7 +2208,7 @@ int HttpCache::Transaction::DoNetworkReadCacheWrite() {
   TRACE_EVENT0("io", "HttpCacheTransaction::DoNetworkReadCacheWrite");
   DCHECK(InWriters());
   TransitionToState(STATE_NETWORK_READ_CACHE_WRITE_COMPLETE);
-  return entry_->writers->Read(read_buf_, io_buf_len_, io_callback_, this);
+  return entry_->writers->Read(read_buf_, read_buf_len_, io_callback_, this);
 }
 
 int HttpCache::Transaction::DoNetworkReadCacheWriteComplete(int result) {
@@ -2282,7 +2281,7 @@ int HttpCache::Transaction::DoPartialNetworkReadCompleted(int result) {
 int HttpCache::Transaction::DoNetworkRead() {
   TRACE_EVENT0("io", "HttpCacheTransaction::DoNetworkRead");
   TransitionToState(STATE_NETWORK_READ_COMPLETE);
-  return network_trans_->Read(read_buf_.get(), io_buf_len_, io_callback_);
+  return network_trans_->Read(read_buf_.get(), read_buf_len_, io_callback_);
 }
 
 int HttpCache::Transaction::DoNetworkReadComplete(int result) {
@@ -2314,12 +2313,12 @@ int HttpCache::Transaction::DoCacheReadData() {
   if (net_log_.IsCapturing())
     net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_READ_DATA);
   if (partial_) {
-    return partial_->CacheRead(entry_->disk_entry, read_buf_.get(), io_buf_len_,
-                               io_callback_);
+    return partial_->CacheRead(entry_->disk_entry, read_buf_.get(),
+                               read_buf_len_, io_callback_);
   }
 
   return entry_->disk_entry->ReadData(kResponseContentIndex, read_offset_,
-                                      read_buf_.get(), io_buf_len_,
+                                      read_buf_.get(), read_buf_len_,
                                       io_callback_);
 }
 
@@ -2484,7 +2483,7 @@ bool HttpCache::Transaction::ShouldPassThrough() {
   // cache otherwise resources from different pages could share a cached entry
   // in such cases.
   if (base::FeatureList::IsEnabled(features::kSplitCacheByTopFrameOrigin) &&
-      (!request_->top_frame_origin || request_->top_frame_origin->opaque())) {
+      request_->network_isolation_key.IsTransient()) {
     return true;
   }
 

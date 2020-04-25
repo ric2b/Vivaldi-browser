@@ -72,7 +72,7 @@ syncer::SyncTokenStatus VivaldiSyncAuthManager::GetSyncTokenStatus() const {
       partial_token_status_.connection_status_update_time;
   token_status.connection_status = partial_token_status_.connection_status;
   token_status.token_request_time = account_manager_->GetTokenRequestTime();
-  token_status.token_receive_time = account_manager_->token_received_time();
+  token_status.token_response_time = account_manager_->token_received_time();
   token_status.has_token = !account_manager_->access_token().empty();
   token_status.next_token_request_time =
       account_manager_->GetNextTokenRequestTime();

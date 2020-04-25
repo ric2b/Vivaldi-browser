@@ -3,11 +3,14 @@
       source_lang_id="en" enc_check="möl">
   <outputs>
     <if expr="not vivaldi_chromium_file">
+      <output filename="components_google_chrome_strings_af.pak" type="data_package" lang="af" />
       <output filename="components_google_chrome_strings_be.pak" type="data_package" lang="be" />
+      <output filename="components_google_chrome_strings_de-CH.pak" type="data_package" lang="de-CH" />
       <output filename="components_google_chrome_strings_eo.pak" type="data_package" lang="eo" />
       <output filename="components_google_chrome_strings_es-PE.pak" type="data_package" lang="es-PE" />
       <output filename="components_google_chrome_strings_eu.pak" type="data_package" lang="eu" />
       <output filename="components_google_chrome_strings_fy.pak" type="data_package" lang="fy" />
+      <output filename="components_google_chrome_strings_gd.pak" type="data_package" lang="gd" />
       <output filename="components_google_chrome_strings_gl.pak" type="data_package" lang="gl" />
       <output filename="components_google_chrome_strings_hy.pak" type="data_package" lang="hy" />
       <output filename="components_google_chrome_strings_io.pak" type="data_package" lang="io" />
@@ -74,11 +77,14 @@
     <file path="strings/vivaldi_components_zh-TW.xtb" lang="zh-TW" />
     <file path="strings/vivaldi_components_es-419.xtb" lang="es-419" />
     <file path="strings/vivaldi_components_pt-BR.xtb" lang="pt-BR" />
+    <file path="strings/vivaldi_components_af.xtb" lang="af" />
     <file path="strings/vivaldi_components_be.xtb" lang="be" />
+    <file path="strings/vivaldi_components_de-CH.xtb" lang="de-CH" />
     <file path="strings/vivaldi_components_eo.xtb" lang="eo" />
     <file path="strings/vivaldi_components_es-PE.xtb" lang="es-PE" />
     <file path="strings/vivaldi_components_eu.xtb" lang="eu" />
     <file path="strings/vivaldi_components_fy.xtb" lang="fy" />
+    <file path="strings/vivaldi_components_gd.xtb" lang="gd" />
     <file path="strings/vivaldi_components_gl.xtb" lang="gl" />
     <file path="strings/vivaldi_components_hy.xtb" lang="hy" />
     <file path="strings/vivaldi_components_io.xtb" lang="io" />

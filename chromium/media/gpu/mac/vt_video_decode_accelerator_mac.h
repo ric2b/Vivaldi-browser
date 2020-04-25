@@ -46,7 +46,7 @@ class VTVideoDecodeAccelerator : public VideoDecodeAccelerator,
 
   // VideoDecodeAccelerator implementation.
   bool Initialize(const Config& config, Client* client) override;
-  void Decode(const BitstreamBuffer& bitstream) override;
+  void Decode(BitstreamBuffer bitstream) override;
   void Decode(scoped_refptr<DecoderBuffer> buffer,
               int32_t bitstream_id) override;
   void AssignPictureBuffers(

@@ -150,6 +150,26 @@
             "description": "The event type id.",
             "type": "string",
             "optional": true
+          },
+          "task": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Whether this event is a task. Tasks can be marked as completed"
+          },
+          "complete": {
+            "type": "boolean",
+            "optional": true,
+            "description": "If this event is a task type you can mark it as complete."
+          },
+          "trash": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Is this event trashed."
+          },
+          "trash_time": {
+            "description": "When this event was trashed, in milliseconds since the epoch",
+            "type": "number",
+            "optional": true
           }
         }
       },
@@ -230,6 +250,16 @@
             "type": "string",
             "optional": true,
             "description": "The event uid."
+          },
+          "task": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Whether this event is a task. Tasks can be marked as completed"
+          },
+          "complete": {
+            "type": "boolean",
+            "optional": true,
+            "description": "If this event is a task type you can mark it as complete."
           }
         }
       },
@@ -631,6 +661,21 @@
                 "description": "The event type id.",
                 "type": "string",
                 "optional": true
+              },
+              "task": {
+                "type": "boolean",
+                "optional": true,
+                "description": "Whether this event is a task. Tasks can be marked as completed"
+              },
+              "complete": {
+                "type": "boolean",
+                "optional": true,
+                "description": "If this event is a task type you can mark it as complete."
+              },
+              "trash": {
+                "type": "boolean",
+                "optional": true,
+                "description": "Is this event trashed."
               }
             }
           }

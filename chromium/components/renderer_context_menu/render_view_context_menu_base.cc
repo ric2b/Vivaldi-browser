@@ -428,7 +428,7 @@ void RenderViewContextMenuBase::OpenURLWithExtraHeaders(
   // correct Profile is used in incognito mode. See disposition new_window in
   // WebViewGuest::NewGuestWebViewCallback.
   open_url_params.source_site_instance =
-      GetRenderFrameHost()->GetSiteInstance();
+      GetRenderFrameHost() ? GetRenderFrameHost()->GetSiteInstance() : nullptr;
 
   source_web_contents_->OpenURL(open_url_params);
 }

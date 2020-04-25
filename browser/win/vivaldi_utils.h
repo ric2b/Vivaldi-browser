@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2018 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2016-2019 Vivaldi Technologies AS. All rights reserved
 
 #ifndef BROWSER_WIN_VIVALDI_UTILS_H_
 #define BROWSER_WIN_VIVALDI_UTILS_H_
@@ -24,6 +24,9 @@ void SetVivaldiExiting();
 
 // Called when shutdown has been started.
 void OnShutdownStarted();
+
+// Attempts to kill lingering Vivaldi processes.
+void AttemptToKillTheUndead();
 
 }  // namespace vivaldi
 

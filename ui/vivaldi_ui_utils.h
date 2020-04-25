@@ -48,14 +48,11 @@ extern content::WebContents* GetWebContentsFromTabStrip(
 extern bool IsOutsideAppWindow(int screen_x, int screen_y);
 
 extern bool EncodeBitmap(
-    const SkBitmap& screen_capture,
+    const SkBitmap& bitmap,
     std::vector<unsigned char>* data,
     std::string* mime_type,
     extensions::api::extension_types::ImageFormat image_format,
-    gfx::Size size,
-    double scale,
-    int image_quality,
-    bool resize);
+    int image_quality);
 
 extern gfx::Rect GetClippingRect(const gfx::Size& source_size,
                                  const gfx::Size& desired_size,

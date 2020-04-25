@@ -12,18 +12,3 @@ const int VivaldiTabCheck::kVivaldiTabObserverContextKey = 0;
 bool VivaldiTabCheck::IsVivaldiTab(content::WebContents* web_contents) {
   return web_contents->GetUserData(&kVivaldiTabObserverContextKey);
 }
-
-// static
-bool VivaldiTabCheck::IsVivaldiTabFrame(
-    content::RenderWidgetHostViewChildFrame* child_frame) {
-  if (content::RenderWidgetHostImpl* host = child_frame->host()) {
-    if (content::RenderWidgetHostDelegate* delegate = host->delegate()) {
-      // When delegate is InterstitialPageImpl like for authentication dialogs
-      // and similar windows web_contents is null.
-      if (content::WebContents* web_contents = delegate->GetAsWebContents()) {
-        return IsVivaldiTab(web_contents);
-      }
-    }
-  }
-  return false;
-}

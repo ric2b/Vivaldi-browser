@@ -354,7 +354,6 @@ if (is_linux) {
 
   update_target("//third_party/ffmpeg:ffmpeg") {
     configs += [ "//vivaldi/gn/config:linux_386_linking"]
-    output_dir = "$root_out_dir/lib"
   }
 
   update_target("//chrome:chrome_initial") {

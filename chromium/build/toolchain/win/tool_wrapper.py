@@ -202,12 +202,7 @@ class WinTool(object):
     rcpy_res_output = rcpy_args[-2]
     assert rcpy_res_output.startswith('/fo')
     assert rcpy_res_output.endswith('.res')
-    if rcpy_res_output.endswith("setup.res"):
-      rc_res_output = rcpy_res_output
-      rcpy_res_output= rcpy_res_output+"_chr_rc"
-      rcpy_args[-2] = rcpy_res_output
-    else:
-      rc_res_output = rcpy_res_output + '_ms_rc'
+    rc_res_output = rcpy_res_output + '_ms_rc'
     args[-2] = rc_res_output
     rcpy_args.append('/showIncludes')
     rc_exe_exit_code = subprocess.call(rcpy_args, env=env)
@@ -229,7 +224,7 @@ class WinTool(object):
       if rc_exe_exit_code == 0:
         import filecmp
         # Strip "/fo" prefix.
-        #assert filecmp.cmp(rc_res_output[3:], rcpy_res_output[3:])
+        assert filecmp.cmp(rc_res_output[3:], rcpy_res_output[3:])
     return rc_exe_exit_code
 
   def ExecActionWrapper(self, arch, rspfile, *dirname):

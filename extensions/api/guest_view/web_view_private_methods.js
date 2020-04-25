@@ -18,13 +18,11 @@
 // web_view_private_impl.js.
 var VIVALDI_WEB_VIEW_API_METHODS = [
   // Vivaldi methods
-  'addToThumbnailService',
   'allowBlockedInsecureContent',
   'discardPage',
   'getFocusedElementInfo',
   'getPageHistory',
   'getThumbnail',
-  'getThumbnailFromService',
   'setIsFullscreen',
   'setVisible',
   'showPageInfo',

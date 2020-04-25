@@ -94,11 +94,7 @@ bool PathProviderPosix(int key, FilePath* result) {
       // On POSIX, unit tests execute two levels deep from the source root.
       // For example:  out/{Debug|Release}/net_unittest
       if (PathService::Get(DIR_EXE, &path)) {
-        *result = path.DirName().DirName()
-#if defined(VIVALDI_BUILD)
-            .Append(FILE_PATH_LITERAL("chromium"))
-#endif
-          ;
+        *result = path.DirName().DirName();
         return true;
       }
 

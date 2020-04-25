@@ -111,7 +111,7 @@ void DoPostUninstallOperations(const base::Version& version) {
                        base::ASCIIToUTF16(version.GetString()) + L"&" +
                        kOSParam + L"=" + os_version;
 
-  if (os_info->version() >= base::win::VERSION_WIN10 &&
+  if (os_info->version() >= base::win::Version::WIN10 &&
       NavigateToUrlWithEdge(url)) {
     return;
   }

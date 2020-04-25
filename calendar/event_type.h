@@ -49,6 +49,9 @@ enum UpdateEventFields {
   HREF = 1 << 14,
   UID = 1 << 15,
   EVENT_TYPE_ID = 1 << 16,
+  TASK = 1 << 17,
+  COMPLETE = 1 << 18,
+  TRASH = 1 << 18,
 };
 
 // Represents a simplified version of a event.
@@ -73,6 +76,10 @@ struct CalendarEvent {
   std::string href;
   std::string uid;
   EventTypeID event_type_id;
+  bool task;
+  bool complete;
+  bool trash;
+  base::Time trash_time;
   int updateFields;
 };
 
@@ -99,7 +106,10 @@ class EventRow {
            std::string etag,
            std::string href,
            std::string uid,
-           EventTypeID event_type_id);
+           EventTypeID event_type_id,
+           bool task,
+           bool complete,
+           bool trash);
   ~EventRow();
 
   EventRow(const EventRow& row);
@@ -170,6 +180,18 @@ class EventRow {
     event_type_id_ = event_type_id;
   }
 
+  bool task() const { return task_; }
+  void set_task(bool task) { task_ = task; }
+
+  bool complete() const { return complete_; }
+  void set_complete(bool complete) { complete_ = complete; }
+
+  bool trash() const { return trash_; }
+  void set_trash(bool trash) { trash_ = trash; }
+
+  base::Time trash_time() const { return trash_time_; }
+  void set_trash_time(base::Time trash_time) { trash_time_ = trash_time; }
+
   EventID id_;
   CalendarID calendar_id_;
   AlarmID alarm_id_ = 0;
@@ -188,6 +210,10 @@ class EventRow {
   std::string href_;
   std::string uid_;
   EventTypeID event_type_id_ = 0;
+  bool task_;
+  bool complete_;
+  bool trash_ = false;
+  base::Time trash_time_;
 
  protected:
   void Swap(EventRow* other);

@@ -118,9 +118,12 @@ template("generated_json_strings") {
   }
 
   # Compute the contents of the library/source set.
-  lib_sources =
-      invoker.sources + get_target_outputs(":$bundle_generator_schema_name")
+  lib_sources = get_target_outputs(":$bundle_generator_schema_name")
   lib_deps = [ ":$bundle_generator_schema_name" ]
+  lib_public_deps = [
+    # For base::StringPiece.
+    "//base",
+  ]
   lib_extra_configs = []
   if (defined(invoker.configs)) {
     lib_extra_configs += invoker.configs
@@ -133,7 +136,7 @@ template("generated_json_strings") {
   static_library(target_name) {
     sources = lib_sources
     deps = lib_deps
-    public_deps = []
+    public_deps = lib_public_deps
     configs += lib_extra_configs
     public_configs = [ ":$generated_config_name" ]
 
@@ -222,8 +225,7 @@ template("function_registration") {
   }
 
   # Compute the contents of the library/source set.
-  lib_sources = invoker.sources +
-                get_target_outputs(":$bundle_generator_registration_name")
+  lib_sources = get_target_outputs(":$bundle_generator_registration_name")
   lib_deps = [ ":$bundle_generator_registration_name" ]
   lib_extra_configs = []
   if (defined(invoker.configs)) {
@@ -305,7 +307,7 @@ template("generated_types") {
   }
 
   # Compute the contents of the library/source set.
-  lib_sources = invoker.sources + get_target_outputs(":$schema_generator_name")
+  lib_sources = get_target_outputs(":$schema_generator_name")
   lib_public_deps = [ ":$schema_generator_name" ]
   lib_deps = [
     "//base",

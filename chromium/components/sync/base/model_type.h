@@ -137,6 +137,8 @@ enum ModelType {
   SEND_TAB_TO_SELF,
   // Commit only security events.
   SECURITY_EVENTS,
+  // Wi-Fi network configurations + credentials
+  WIFI_CONFIGURATIONS,
 
   // Notes items
   NOTES,
@@ -205,7 +207,8 @@ constexpr ModelTypeSet ProtocolTypes() {
       PRINTERS, READING_LIST, USER_EVENTS, NIGORI, DEPRECATED_EXPERIMENTS,
       MOUNTAIN_SHARES,
       NOTES,
-      USER_CONSENTS, SEND_TAB_TO_SELF, SECURITY_EVENTS);
+      USER_CONSENTS, SEND_TAB_TO_SELF, SECURITY_EVENTS,
+      WIFI_CONFIGURATIONS);
 }
 
 // These are the normal user-controlled types. This is to distinguish from

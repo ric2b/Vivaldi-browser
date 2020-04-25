@@ -20,7 +20,7 @@ class VivaldiRenderFrameObserver
                              std::string* role);
 
   private:
-   void FocusedNodeChanged(const blink::WebNode& node) override;
+   void FocusedElementChanged(const blink::WebElement& element) override;
    void OnResumeParser();
    void OnDestruct() override;
 };

@@ -1,5 +1,9 @@
 //
-// Copyright (c) 2014-2015 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2014-2019 Vivaldi Technologies AS. All rights reserved.
+//
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 //
 
 #include "extensions/api/show_menu/show_menu_api.h"
@@ -23,13 +27,16 @@
 #include "browser/menus/bookmark_support.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/platform_apps/app_load_service.h"
+#include "chrome/browser/banners/app_banner_manager.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/devtools_util.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -47,10 +54,13 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/devtools/devtools_connector.h"
+#include "ui/gfx/text_elider.h"
 #include "ui/vivaldi_context_menu.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #define BOOKMARK_ID_BASE 100000
+
+constexpr size_t kMaxAppNameLength = 30;
 
 namespace gfx {
 class Rect;
@@ -345,7 +355,9 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate,
   bool IsBookmarkSeparator(const bookmarks::BookmarkNode* node);
   bool HasDeveloperTools();
   bool IsDeveloperTools(int command_id) const;
+  bool IsPWAItem(int command_id) const;
   void HandleDeveloperToolsCommand(int command_id);
+  void HandlePWACommand(int command_id);
   const Extension* GetExtension() const;
   void LoadFavicon(int command_id, const std::string& url);
   void OnFaviconDataAvailable(
@@ -405,6 +417,21 @@ VivaldiMenuController::~VivaldiMenuController() {
   EnableBookmarkObserver(false);
 }
 
+// Returns the appropriate menu label for the IDC_INSTALL_PWA command if
+// available.
+// Copied from app_menu_model.cc.
+base::Optional<base::string16> GetInstallPWAAppMenuItemName(Browser* browser) {
+  WebContents* web_contents =
+    browser->tab_strip_model()->GetActiveWebContents();
+  if (!web_contents)
+    return base::nullopt;
+  base::string16 app_name =
+    banners::AppBannerManager::GetInstallableWebAppName(web_contents);
+  if (app_name.empty())
+    return base::nullopt;
+  return l10n_util::GetStringFUTF16(IDS_INSTALL_TO_OS_LAUNCH_SURFACE, app_name);
+}
+
 void VivaldiMenuController::Show() {
   // Populate menu
   for (std::vector<show_menu::MenuItem>::const_iterator it =
@@ -412,6 +439,32 @@ void VivaldiMenuController::Show() {
        it != params_->items.end(); ++it) {
     const show_menu::MenuItem& menuitem = *it;
     PopulateModel(&menuitem, &menu_model_, -1);
+  }
+  Browser* browser =
+      ::vivaldi::FindBrowserForEmbedderWebContents(web_contents_);
+  if (browser &&
+      VivaldiRuntimeFeatures::IsEnabled(browser->profile(), "install_pwa")) {
+    const extensions::Extension* pwa =
+      extensions::util::GetPwaForSecureActiveTab(browser);
+    if (pwa) {
+      menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+      menu_model_.AddItem(
+          IDC_OPEN_IN_PWA_WINDOW,
+          l10n_util::GetStringFUTF16(
+              IDS_OPEN_IN_APP_WINDOW,
+              gfx::TruncateString(base::UTF8ToUTF16(pwa->name()),
+                                  kMaxAppNameLength, gfx::CHARACTER_BREAK)));
+    } else {
+      base::Optional<base::string16> install_pwa_item_name =
+        GetInstallPWAAppMenuItemName(browser);
+      if (install_pwa_item_name) {
+        menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+        menu_model_.AddItem(IDC_INSTALL_PWA, *install_pwa_item_name);
+
+        menu_model_.AddItemWithStringId(IDC_CREATE_SHORTCUT,
+                                        IDS_ADD_TO_OS_LAUNCH_SURFACE);
+      }
+    }
   }
 
   if (HasDeveloperTools()) {
@@ -491,6 +544,32 @@ bool VivaldiMenuController::IsDeveloperTools(int command_id) const {
          command_id == IDC_CONTENT_CONTEXT_RESTART_PACKAGED_APP ||
          command_id == IDC_CONTENT_CONTEXT_INSPECTELEMENT ||
          command_id == IDC_CONTENT_CONTEXT_INSPECTBACKGROUNDPAGE;
+}
+
+bool VivaldiMenuController::IsPWAItem(int command_id) const {
+  return command_id == IDC_INSTALL_PWA || command_id == IDC_CREATE_SHORTCUT ||
+         command_id == IDC_OPEN_IN_PWA_WINDOW;
+}
+
+void VivaldiMenuController::HandlePWACommand(int command_id) {
+  Browser* browser =
+      ::vivaldi::FindBrowserForEmbedderWebContents(web_contents_);
+
+  switch (command_id) {
+  case IDC_CREATE_SHORTCUT:
+    chrome::CreateBookmarkAppFromCurrentWebContents(browser,
+      true /* force_shortcut_app */);
+    break;
+  case IDC_INSTALL_PWA:
+    chrome::CreateBookmarkAppFromCurrentWebContents(browser,
+      false /* force_shortcut_app */);
+    break;
+  case IDC_OPEN_IN_PWA_WINDOW:
+    ReparentSecureActiveTabIntoPwaWindow(browser);
+    break;
+  default:
+    break;
+  }
 }
 
 void VivaldiMenuController::HandleDeveloperToolsCommand(int command_id) {
@@ -847,7 +926,7 @@ void VivaldiMenuController::LoadFavicon(int command_id,
       base::Bind(&VivaldiMenuController::OnFaviconDataAvailable,
                  base::Unretained(this), command_id);
 
-  favicon_service_->GetFaviconImageForPageURL(GURL(url), callback,
+  favicon_service_->GetFaviconImageForPageURL(GURL(url), std::move(callback),
                                               &cancelable_task_tracker_);
 }
 
@@ -872,17 +951,30 @@ bool VivaldiMenuController::IsCommandIdEnabled(int command_id) const {
     return true;
   }
   const show_menu::MenuItem* item = getItemByCommandId(command_id);
-  return item != nullptr || IsDeveloperTools(command_id);
+  return item != nullptr || IsDeveloperTools(command_id) ||
+         IsPWAItem(command_id);
 }
 
 bool VivaldiMenuController::IsItemForCommandIdDynamic(int command_id) const {
-  return false;
+  return command_id == IDC_INSTALL_PWA;
 }
 
 base::string16 VivaldiMenuController::GetLabelForCommandId(
     int command_id) const {
-  const show_menu::MenuItem* item = getItemByCommandId(command_id);
-  return base::UTF8ToUTF16(item ? item->name : std::string());
+  switch (command_id) {
+    case IDC_INSTALL_PWA: {
+      Browser* browser =
+        ::vivaldi::FindBrowserForEmbedderWebContents(web_contents_);
+      if (browser) {
+        return GetInstallPWAAppMenuItemName(browser).value();
+      }
+      return base::string16();
+    }
+    default: {
+      const show_menu::MenuItem* item = getItemByCommandId(command_id);
+      return base::UTF8ToUTF16(item ? item->name : std::string());
+    }
+  }
 }
 
 bool VivaldiMenuController::GetAcceleratorForCommandId(
@@ -939,7 +1031,9 @@ void VivaldiMenuController::VivaldiCommandIdHighlighted(int command_id) {
 }
 
 void VivaldiMenuController::ExecuteCommand(int command_id, int event_flags) {
-  if (IsDeveloperTools(command_id)) {
+  if (IsPWAItem(command_id)) {
+    HandlePWACommand(command_id);
+  } else if (IsDeveloperTools(command_id)) {
     // These are the commands we only get when running with npm.
     // For JS, this menu has been canceled since we handle the actions here.
     HandleDeveloperToolsCommand(command_id);

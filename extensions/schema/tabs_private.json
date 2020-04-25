@@ -39,6 +39,11 @@
             "type": "string",
             "optional": true,
             "description": "The current documents mimetype."
+          },
+          "muteTab": {
+            "type": "boolean",
+            "optional": true,
+            "description": "If the tab should be quiet."
           }
         }
       },

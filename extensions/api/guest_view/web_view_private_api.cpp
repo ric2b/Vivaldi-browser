@@ -87,63 +87,24 @@ namespace {
 const float kDefaultThumbnailScale = 1.0f;
 }  // namespace
 
-WebViewInternalThumbnailFunction::WebViewInternalThumbnailFunction()
+WebViewPrivateGetThumbnailFunction::WebViewPrivateGetThumbnailFunction()
     : image_quality_(90 /*kDefaultQuality*/),  // Default quality setting.
       scale_(kDefaultThumbnailScale),  // Scale of window dimension to thumb.
       height_(0),
       width_(0),
-      is_incognito_(false),
       image_format_(api::extension_types::IMAGE_FORMAT_JPEG)  // Default
                                                               // format is
                                                               // PNG.
 {}
 
-WebViewInternalThumbnailFunction::~WebViewInternalThumbnailFunction() {}
-
-// Turn a bitmap of the screen into an image, set that image as the result,
-// and call SendResponse().
-void WebViewInternalThumbnailFunction::SendResultFromBitmap(
-    const SkBitmap& screen_capture) {
-  std::vector<unsigned char> data;
-  std::string mime_type;
-  gfx::Size dst_size_pixels;
-  SkBitmap bitmap;
-  bool need_resize = true;
-
-  if (scale_ != kDefaultThumbnailScale) {
-    // Scale has changed, use that.
-    dst_size_pixels = gfx::ScaleToRoundedSize(
-        gfx::Size(screen_capture.width(), screen_capture.height()), scale_);
-    bitmap = skia::ImageOperations::Resize(
-        screen_capture, skia::ImageOperations::RESIZE_BEST,
-        dst_size_pixels.width(), dst_size_pixels.height());
-    need_resize = false;
-  } else if (width_ != 0 && height_ != 0) {
-    bitmap = SmartCropAndSize(screen_capture, width_, height_);
-    need_resize = false;
-  } else {
-    bitmap = screen_capture;
-  }
-  gfx::Size size(width_, height_);
-  bool encoded = EncodeBitmap(bitmap, &data, &mime_type, image_format_, size,
-                              scale_, image_quality_, need_resize);
-  if (!encoded) {
+WebViewPrivateGetThumbnailFunction::~WebViewPrivateGetThumbnailFunction() {
+  if (!did_respond()) {
     error_ = "Internal Thumbnail error";
     SendResponse(false);
-    return;
   }
-  std::string base64_result;
-  base::StringPiece stream_as_string(reinterpret_cast<const char*>(data.data()),
-                                     data.size());
-
-  base::Base64Encode(stream_as_string, &base64_result);
-  base64_result.insert(
-      0, base::StringPrintf("data:%s;base64,", mime_type.c_str()));
-  SetResult(std::make_unique<base::Value>(base64_result));
-  SendResponse(true);
 }
 
-bool WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
+bool WebViewPrivateGetThumbnailFunction::InternalRunAsyncSafe(
     const vivaldi::web_view_private::ThumbnailParams& params) {
   if (params.scale) {
     scale_ = *params.scale;
@@ -154,17 +115,7 @@ bool WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
   if (params.height) {
     height_ = *params.height;
   }
-  if (params.bookmark_id) {
-    bookmark_id_ = *params.bookmark_id;
-  }
 
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  is_incognito_ = profile->IsOffTheRecord();
-  // The thumbnail service should not store data in incognito so
-  // only allow overriding it if we're not in incognito already.
-  if (is_incognito_ == false && params.incognito.get()) {
-    is_incognito_ = *params.incognito.get();
-  }
   WebContents* web_contents = guest_->web_contents();
 
   content::RenderWidgetHostView* view = web_contents->GetRenderWidgetHostView();
@@ -200,13 +151,13 @@ bool WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
   embedder_view->CopyFromSurface(
       source_rect, source_rect.size(),
       base::Bind(
-          &WebViewInternalThumbnailFunction::CopyFromBackingStoreComplete,
+          &WebViewPrivateGetThumbnailFunction::CopyFromBackingStoreComplete,
           this));
 
   return true;
 }
 
-void WebViewInternalThumbnailFunction::CopyFromBackingStoreComplete(
+void WebViewPrivateGetThumbnailFunction::CopyFromBackingStoreComplete(
     const SkBitmap& bitmap) {
   if (!bitmap.drawsNothing()) {
     VLOG(1) << "captureVisibleTab() got image from backing store.";
@@ -215,123 +166,51 @@ void WebViewInternalThumbnailFunction::CopyFromBackingStoreComplete(
   }
 }
 
-WebViewPrivateGetThumbnailFunction::WebViewPrivateGetThumbnailFunction() {}
-
-WebViewPrivateGetThumbnailFunction::~WebViewPrivateGetThumbnailFunction() {
-  if (!did_respond()) {
-    SendInternalError();
-  }
-}
-
 bool WebViewPrivateGetThumbnailFunction::RunAsync() {
   std::unique_ptr<vivaldi::web_view_private::GetThumbnail::Params> params(
       vivaldi::web_view_private::GetThumbnail::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  return WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
-      params->params);
-}
-
-void WebViewPrivateGetThumbnailFunction::SendInternalError() {
-  error_ = "Internal Thumbnail error";
-  SendResponse(false);
-}
-
-WebViewPrivateGetThumbnailFromServiceFunction::
-    WebViewPrivateGetThumbnailFromServiceFunction() {}
-
-WebViewPrivateGetThumbnailFromServiceFunction::
-    ~WebViewPrivateGetThumbnailFromServiceFunction() {}
-
-bool WebViewPrivateGetThumbnailFromServiceFunction::RunAsync() {
-  std::unique_ptr<vivaldi::web_view_private::AddToThumbnailService::Params>
-      params(vivaldi::web_view_private::AddToThumbnailService::Params::Create(
-          *args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-  url_ = guest_->web_contents()->GetURL();
-
-  return WebViewInternalThumbnailFunction::InternalRunAsyncSafe(params->params);
+  return InternalRunAsyncSafe(params->params);
 }
 
 // Turn a bitmap of the screen into an image, set that image as the result,
 // and call SendResponse().
-void WebViewPrivateGetThumbnailFromServiceFunction::SendResultFromBitmap(
+void WebViewPrivateGetThumbnailFunction::SendResultFromBitmap(
     const SkBitmap& screen_capture) {
-
-  // Scale the  bitmap.
+  std::vector<unsigned char> data;
+  std::string mime_type;
   gfx::Size dst_size_pixels;
+  SkBitmap bitmap;
 
-  if (scale_ != kDefaultThumbnailScale) {
-    // Scale has changed, use that.
-    dst_size_pixels = gfx::ScaleToRoundedSize(
-      gfx::Size(screen_capture.width(), screen_capture.height()), scale_);
-    bitmap_ = std::make_unique<SkBitmap>(skia::ImageOperations::Resize(
-      screen_capture, skia::ImageOperations::RESIZE_BEST,
-      dst_size_pixels.width(), dst_size_pixels.height()));
-  } else {
-    bitmap_ = std::make_unique<SkBitmap>(SmartCropAndSize(screen_capture, width_, height_));
-  }
-  extensions::VivaldiDataSourcesAPI::AddImageDataForBookmark(
-      browser_context(), bookmark_id_, std::move(bitmap_),
-      base::BindOnce(&WebViewPrivateGetThumbnailFromServiceFunction::
-                         OnBookmarkThumbnailStored,
-                     this));
-}
-
-void WebViewPrivateGetThumbnailFromServiceFunction::OnBookmarkThumbnailStored(
-    int bookmark_id,
-    std::string& image_url) {
-  SetResult(std::make_unique<base::Value>(image_url));
-  SendResponse(true);
-}
-
-WebViewPrivateAddToThumbnailServiceFunction::
-    WebViewPrivateAddToThumbnailServiceFunction() {}
-
-WebViewPrivateAddToThumbnailServiceFunction::
-    ~WebViewPrivateAddToThumbnailServiceFunction() {}
-
-bool WebViewPrivateAddToThumbnailServiceFunction::RunAsync() {
-  std::unique_ptr<vivaldi::web_view_private::AddToThumbnailService::Params>
-      params(vivaldi::web_view_private::AddToThumbnailService::Params::Create(
-          *args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  url_ = guest_->web_contents()->GetURL();
-
-  return WebViewInternalThumbnailFunction::InternalRunAsyncSafe(params->params);
-}
-
-// Turn a bitmap of the screen into an image, set that image as the result,
-// and call SendResponse().
-void WebViewPrivateAddToThumbnailServiceFunction::SendResultFromBitmap(
-    const SkBitmap& screen_capture) {
-
-  // Scale the  bitmap.
-  gfx::Size dst_size_pixels;
-
+  // TODO(igor@vivaldi.com): scale and encode on a worker thread.
   if (scale_ != kDefaultThumbnailScale) {
     // Scale has changed, use that.
     dst_size_pixels = gfx::ScaleToRoundedSize(
         gfx::Size(screen_capture.width(), screen_capture.height()), scale_);
-    bitmap_ = std::make_unique<SkBitmap>(skia::ImageOperations::Resize(
+    bitmap = skia::ImageOperations::Resize(
         screen_capture, skia::ImageOperations::RESIZE_BEST,
-        dst_size_pixels.width(), dst_size_pixels.height()));
+        dst_size_pixels.width(), dst_size_pixels.height());
+  } else if (width_ != 0 && height_ != 0) {
+    bitmap = SmartCropAndSize(screen_capture, width_, height_);
   } else {
-    bitmap_ = std::make_unique<SkBitmap>(
-        SmartCropAndSize(screen_capture, width_, height_));
+    bitmap = screen_capture;
   }
-  extensions::VivaldiDataSourcesAPI::AddImageDataForBookmark(
-      browser_context(), bookmark_id_, std::move(bitmap_),
-      base::BindOnce(&WebViewPrivateAddToThumbnailServiceFunction::
-                         OnBookmarkThumbnailStored,
-                     this));
-}
+  bool encoded = EncodeBitmap(bitmap, &data, &mime_type, image_format_,
+                              image_quality_);
+  if (!encoded) {
+    error_ = "Internal Thumbnail error";
+    SendResponse(false);
+    return;
+  }
+  std::string base64_result;
+  base::StringPiece stream_as_string(reinterpret_cast<const char*>(data.data()),
+                                     data.size());
 
-void WebViewPrivateAddToThumbnailServiceFunction::OnBookmarkThumbnailStored(
-    int bookmark_id,
-    std::string& image_url) {
-  SetResult(std::make_unique<base::Value>(image_url));
+  base::Base64Encode(stream_as_string, &base64_result);
+  base64_result.insert(
+      0, base::StringPrintf("data:%s;base64,", mime_type.c_str()));
+  SetResult(std::make_unique<base::Value>(base64_result));
   SendResponse(true);
 }
 

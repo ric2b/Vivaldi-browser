@@ -20,7 +20,7 @@ jumbo_static_library("apis") {
     "//content/public/browser",
 
     #"//content/public/common",
-    "//extensions/browser:browser",
+    "//extensions/browser",
     "//skia:skia",
     "//third_party/cacheinvalidation",
     "//third_party/blink/public:blink_headers",

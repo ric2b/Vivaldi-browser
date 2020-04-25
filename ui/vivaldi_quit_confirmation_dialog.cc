@@ -115,7 +115,7 @@ bool VivaldiQuitConfirmationDialog::ShouldShowCloseButton() const {
 }
 
 bool VivaldiQuitConfirmationDialog::IsChecked() {
-  return checkbox_ && checkbox_->checked();
+  return checkbox_ && checkbox_->GetChecked();
 }
 
 

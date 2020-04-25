@@ -85,7 +85,7 @@ class HistoryPrivateDbSearchFunction : public HistoryFunctionWithCallback {
   ExtensionFunction::ResponseAction Run() override;
 
   // Callback for the history function to provide results.
-  void SearchComplete(history::QueryResults* results);
+  void SearchComplete(history::QueryResults results);
 };
 
 class HistoryPrivateSearchFunction : public HistoryFunctionWithCallback {
@@ -99,7 +99,7 @@ class HistoryPrivateSearchFunction : public HistoryFunctionWithCallback {
   ExtensionFunction::ResponseAction Run() override;
 
   // Callback for the history function to provide results.
-  void SearchComplete(history::QueryResults* results);
+  void SearchComplete(history::QueryResults results);
 };
 
 class HistoryPrivateDeleteVisitsFunction : public HistoryFunctionWithCallback {

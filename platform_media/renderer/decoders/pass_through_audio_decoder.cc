@@ -19,19 +19,19 @@ PassThroughAudioDecoder::~PassThroughAudioDecoder() {
 
 void PassThroughAudioDecoder::Initialize(const AudioDecoderConfig& config,
                                          CdmContext* cdm_context,
-                                         const InitCB& init_cb,
+                                         InitCB init_cb,
                                          const OutputCB& output_cb,
                                          const WaitingCB& waiting_for_decryption_key_cb) {
-  impl_.Initialize(config, init_cb, output_cb);
+  impl_.Initialize(config, std::move(init_cb), output_cb);
 }
 
 void PassThroughAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                                      const DecodeCB& decode_cb) {
-  impl_.Decode(buffer, decode_cb);
+  impl_.Decode(buffer, std::move(decode_cb));
 }
 
-void PassThroughAudioDecoder::Reset(const base::Closure& closure) {
-  impl_.Reset(closure);
+void PassThroughAudioDecoder::Reset(base::OnceClosure closure) {
+  impl_.Reset(std::move(closure));
 }
 
 std::string PassThroughAudioDecoder::GetDisplayName() const {

@@ -3,6 +3,7 @@
 #ifndef COMPONENTS_ADVERSE_ADBLOCKING_ADVERSE_AD_FILTER_LIST_FACTORY_H_
 #define COMPONENTS_ADVERSE_ADBLOCKING_ADVERSE_AD_FILTER_LIST_FACTORY_H_
 
+#include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
 class AdverseAdFilterListService;

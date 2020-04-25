@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/memory/singleton.h"
+#include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list_observer.h"
@@ -50,6 +51,7 @@ class ExtensionActionUtil
     : public KeyedService,
       public extensions::ExtensionActionAPI::Observer,
       public extensions::ExtensionRegistryObserver,
+      public CommandService::Observer,
       public TabStripModelObserver {
   friend struct base::DefaultSingletonTraits<ExtensionActionUtil>;
 
@@ -72,14 +74,6 @@ class ExtensionActionUtil
       content::WebContents* web_contents,
       content::BrowserContext* browser_context) override;
 
-  // Called when there is a change to the extension action's visibility.
-  void OnExtensionActionVisibilityChanged(const std::string& extension_id,
-                                          bool is_now_visible) override;
-
-  // Called when the page actions have been refreshed do to a possible change
-  // in count or visibility.
-  void OnPageActionsUpdated(content::WebContents* web_contents) override;
-
   // Overridden from extensions::ExtensionRegistryObserver:
   void OnExtensionUninstalled(content::BrowserContext* browser_context,
                               const extensions::Extension* extension,
@@ -90,6 +84,13 @@ class ExtensionActionUtil
       content::BrowserContext* browser_context,
       const extensions::Extension* extension,
       extensions::UnloadedExtensionReason reason) override;
+
+  // Overridden from CommandService::Observer
+  void OnExtensionCommandAdded(const std::string& extension_id,
+      const Command& added_command) override;
+
+  void OnExtensionCommandRemoved(const std::string& extension_id,
+      const Command& removed_command) override;
 
   // Overridden from TabStripModelObserver:
   void OnTabStripModelChanged(

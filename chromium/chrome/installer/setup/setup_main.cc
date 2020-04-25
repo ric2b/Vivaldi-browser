@@ -477,7 +477,6 @@ installer::InstallStatus RenameChromeExecutables(
   // Move chrome_proxy.exe to old_chrome_proxy.exe if it exists (a previous
   // installation may not have included it), then move new_chrome_proxy.exe to
   // chrome_proxy.exe.
-  if (!installer_state->is_vivaldi()) {
   std::unique_ptr<WorkItemList> existing_proxy_rename_list(
       WorkItem::CreateConditionalWorkItemList(
           new ConditionRunIfFileExists(chrome_proxy_exe)));
@@ -490,7 +489,6 @@ installer::InstallStatus RenameChromeExecutables(
       chrome_proxy_new_exe.value(), chrome_proxy_exe.value(),
       temp_path.path().value(), WorkItem::ALWAYS_MOVE);
   install_list->AddDeleteTreeWorkItem(chrome_proxy_new_exe, temp_path.path());
-  }
 
   // Add work items to delete Chrome's "opv", "cpv", and "cmd" values.
   // TODO(grt): Clean this up; https://crbug.com/577816.

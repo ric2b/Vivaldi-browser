@@ -17,6 +17,7 @@ class Size;
 namespace content {
 
 class GuestHost;
+class RenderFrameHost;
 class RenderWidgetHost;
 class SiteInstance;
 class BrowserPluginGuest;
@@ -82,6 +83,9 @@ class CONTENT_EXPORT BrowserPluginGuestDelegate {
   // Returns true if the corresponding guest is allowed to be embedded inside an
   // <iframe> which is cross process.
   virtual bool CanBeEmbeddedInsideCrossProcessFrames();
+
+  // Returns the embedder frame for this guest.
+  virtual RenderFrameHost* GetEmbedderFrame() const;
 
   // It is always set for tab and inspected webviews that might move between
   // embedders. Used to reset guest_host_ in between hand-overs.

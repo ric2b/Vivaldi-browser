@@ -41,8 +41,13 @@ namespace {
 constexpr base::FilePath::CharType kIconChecksumFileExt[] =
     FILE_PATH_LITERAL(".ico.md5");
 
+#ifdef VIVALDI_BUILD
+constexpr base::FilePath::CharType kChromeProxyExecutable[] =
+    FILE_PATH_LITERAL("vivaldi_proxy.exe");
+#else
 constexpr base::FilePath::CharType kChromeProxyExecutable[] =
     FILE_PATH_LITERAL("chrome_proxy.exe");
+#endif  // VIVALDI_BUILD
 
 base::FilePath GetChromeProxyPath() {
   base::FilePath chrome_dir;

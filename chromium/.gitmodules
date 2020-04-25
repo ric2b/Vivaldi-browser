@@ -22,9 +22,6 @@
 [submodule "third_party/harfbuzz-ng/src"]
 	path = third_party/harfbuzz-ng/src
 	url = ../../external/github.com/harfbuzz/harfbuzz.git
-[submodule "third_party/openmax_dl"]
-	path = third_party/openmax_dl
-	url = ../../webrtc/deps/third_party/openmax.git
 [submodule "third_party/cros_system_api"]
 	path = third_party/cros_system_api
 	url = ../../chromiumos/platform2/system_api.git
@@ -94,9 +91,6 @@
 [submodule "third_party/pefile"]
 	path = third_party/pefile
 	url = ../../external/pefile.git
-[submodule "third_party/webdriver/pylib"]
-	path = third_party/webdriver/pylib
-	url = ../../external/selenium/py.git
 [submodule "third_party/spirv-cross/spirv-cross"]
 	path = third_party/spirv-cross/spirv-cross
 	url = ../../external/github.com/KhronosGroup/SPIRV-Cross.git
@@ -157,9 +151,6 @@
 [submodule "third_party/sfntly/src"]
 	path = third_party/sfntly/src
 	url = ../../external/github.com/googlei18n/sfntly.git
-[submodule "third_party/pyftpdlib/src"]
-	path = third_party/pyftpdlib/src
-	url = ../../external/pyftpdlib.git
 [submodule "third_party/libvpx/source/libvpx"]
 	path = third_party/libvpx/source/libvpx
 	url = ../../webm/libvpx.git
@@ -181,9 +172,6 @@
 [submodule "third_party/depot_tools"]
 	path = third_party/depot_tools
 	url = ../tools/depot_tools.git
-[submodule "third_party/googletest/src"]
-	path = third_party/googletest/src
-	url = ../../external/github.com/google/googletest.git
 [submodule "third_party/openscreen/src"]
 	path = third_party/openscreen/src
 	url = ../../openscreen.git
@@ -205,9 +193,9 @@
 [submodule "chrome/test/data/xr/webvr_info"]
 	path = chrome/test/data/xr/webvr_info
 	url = ../../external/github.com/toji/webvr.info.git
-[submodule "chrome/test/data/xr/webxr_samples"]
-	path = chrome/test/data/xr/webxr_samples
-	url = ../../external/github.com/immersive-web/webxr-samples.git
+[submodule "third_party/googletest/src"]
+	path = third_party/googletest/src
+	url = ../../external/github.com/google/googletest.git
 [submodule "third_party/quic_trace/src"]
 	path = third_party/quic_trace/src
 	url = ../../external/github.com/google/quic-trace.git

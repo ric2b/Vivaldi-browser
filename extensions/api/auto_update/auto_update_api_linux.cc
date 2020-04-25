@@ -4,32 +4,28 @@
 
 namespace extensions {
 
-bool AutoUpdateCheckForUpdatesFunction::RunAsync() {
-  std::unique_ptr<vivaldi::auto_update::CheckForUpdates::Params> params(
-      vivaldi::auto_update::CheckForUpdates::Params::Create(*args_));
+ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
+  using vivaldi::auto_update::CheckForUpdates::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
-  SendResponse(false);
-  return true;
+
+  return RespondNow(Error("Not implemented"));
 }
 
-bool AutoUpdateIsUpdateNotifierEnabledFunction::RunAsync() {
-  SendResponse(false);
-  return true;
+ExtensionFunction::ResponseAction
+AutoUpdateIsUpdateNotifierEnabledFunction::Run() {
+  return RespondNow(Error("Not implemented"));
 }
 
-bool AutoUpdateEnableUpdateNotifierFunction::RunAsync() {
-  SendResponse(false);
-  return true;
+ExtensionFunction::ResponseAction
+AutoUpdateEnableUpdateNotifierFunction::Run() {
+  return RespondNow(Error("Not implemented"));
 }
 
-AutoUpdateDisableUpdateNotifierFunction::
-    AutoUpdateDisableUpdateNotifierFunction() {}
-AutoUpdateDisableUpdateNotifierFunction::
-    ~AutoUpdateDisableUpdateNotifierFunction() {}
-
-bool AutoUpdateDisableUpdateNotifierFunction::RunAsync() {
-  SendResponse(false);
-  return true;
+ExtensionFunction::ResponseAction
+AutoUpdateDisableUpdateNotifierFunction::Run() {
+  return RespondNow(Error("Not implemented"));
 }
 
 }  // namespace extensions

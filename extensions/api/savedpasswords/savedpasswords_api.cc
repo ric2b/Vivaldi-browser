@@ -123,7 +123,7 @@ ExtensionFunction::ResponseAction SavedpasswordsAddFunction::Run() {
   }
 
   autofill::PasswordForm password_form = {};
-  password_form.scheme = autofill::PasswordForm::SCHEME_OTHER;
+  password_form.scheme = autofill::PasswordForm::Scheme::kOther;
   password_form.signon_realm = params->password_form.signon_realm;
   password_form.origin = GURL(params->password_form.origin);
   password_form.username_value =
@@ -157,8 +157,8 @@ ExtensionFunction::ResponseAction SavedpasswordsGetFunction::Run() {
   username_ = params->password_form.username;
 
   password_manager::PasswordStore::FormDigest form_digest(
-      autofill::PasswordForm::SCHEME_OTHER, params->password_form.signon_realm,
-      GURL(params->password_form.origin));
+      autofill::PasswordForm::Scheme::kOther,
+      params->password_form.signon_realm, GURL(params->password_form.origin));
 
   // Adding a ref on the behalf of the password store, which expects us to
   // remain alive
@@ -202,7 +202,7 @@ ExtensionFunction::ResponseAction SavedpasswordsDeleteFunction::Run() {
                                        : ServiceAccessType::IMPLICIT_ACCESS));
 
   autofill::PasswordForm password_form = {};
-  password_form.scheme = autofill::PasswordForm::SCHEME_OTHER;
+  password_form.scheme = autofill::PasswordForm::Scheme::kOther;
   password_form.signon_realm = params->password_form.signon_realm;
   password_form.origin = GURL(params->password_form.origin);
   password_form.username_value =

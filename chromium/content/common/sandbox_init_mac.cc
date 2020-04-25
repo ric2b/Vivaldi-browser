@@ -37,7 +37,8 @@ base::OnceClosure MaybeWrapWithGPUSandboxHook(
     service_manager::SandboxType sandbox_type,
     base::OnceClosure original) {
   if (sandbox_type == service_manager::SANDBOX_TYPE_GPU) {
-    return base::Bind([](base::OnceClosure arg) {
+    return base::BindOnce(
+      [](base::OnceClosure arg) {
         // We need to gather GPUInfo and compute GpuFeatureInfo here, so we can
         // decide if initializing core profile or compatibility profile GL,
         // depending on gpu driver bug workarounds.
@@ -79,9 +80,9 @@ base::OnceClosure MaybeWrapWithGPUSandboxHook(
         if (!arg.is_null())
           std::move(arg).Run();
       },
-      base::Passed(std::move(original)));
+      std::move(original));
     } else if (sandbox_type == service_manager::SANDBOX_TYPE_RENDERER) {
-      return base::Bind([](base::OnceClosure arg) {
+      return base::BindOnce([](base::OnceClosure arg) {
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
         media::InitializeAudioToolbox();
@@ -91,7 +92,7 @@ base::OnceClosure MaybeWrapWithGPUSandboxHook(
         if (!arg.is_null())
             std::move(arg).Run();
       },
-      base::Passed(std::move(original)));
+      std::move(original));
     } else {
       return original;
     }

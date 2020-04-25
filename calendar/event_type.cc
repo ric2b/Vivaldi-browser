@@ -20,6 +20,7 @@ CalendarEvent::CalendarEvent()
     : title(base::ASCIIToUTF16("")),
       description(base::ASCIIToUTF16("")),
       all_day(false),
+      trash(false),
       updateFields(0) {}
 
 CalendarEvent::CalendarEvent(const CalendarEvent& event)
@@ -39,6 +40,10 @@ CalendarEvent::CalendarEvent(const CalendarEvent& event)
       href(event.href),
       uid(event.uid),
       event_type_id(event.event_type_id),
+      task(event.task),
+      complete(event.complete),
+      trash(event.trash),
+      trash_time(event.trash_time),
       updateFields(event.updateFields) {}
 
 CalendarEvent::~CalendarEvent() {}
@@ -62,7 +67,10 @@ EventRow::EventRow(EventID id,
                    std::string etag,
                    std::string href,
                    std::string uid,
-                   EventTypeID event_type_id)
+                   EventTypeID event_type_id,
+                   bool task,
+                   bool complete,
+                   bool trash)
     : id_(id),
       calendar_id_(calendar_id),
       alarm_id_(alarm_id),
@@ -80,7 +88,10 @@ EventRow::EventRow(EventID id,
       etag_(etag),
       href_(href),
       uid_(uid),
-      event_type_id_(event_type_id) {}
+      event_type_id_(event_type_id),
+      task_(task),
+      complete_(complete),
+      trash_(trash) {}
 
 EventRow::~EventRow() {}
 
@@ -102,6 +113,10 @@ void EventRow::Swap(EventRow* other) {
   std::swap(href_, other->href_);
   std::swap(uid_, other->uid_);
   std::swap(event_type_id_, other->event_type_id_);
+  std::swap(task_, other->task_);
+  std::swap(complete_, other->complete_);
+  std::swap(trash_, other->trash_);
+  std::swap(trash_time_, other->trash_time_);
 }
 
 EventRow::EventRow(const EventRow& other) = default;
@@ -124,7 +139,11 @@ EventRow::EventRow(const EventRow&& other) noexcept
       etag_(other.etag_),
       href_(other.href_),
       uid_(other.uid_),
-      event_type_id_(other.event_type_id_) {}
+      event_type_id_(other.event_type_id_),
+      task_(other.task_),
+      complete_(other.complete_),
+      trash_(other.trash_),
+      trash_time_(other.trash_time_) {}
 
 EventResult::EventResult() {}
 

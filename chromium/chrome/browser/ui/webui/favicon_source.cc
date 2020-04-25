@@ -11,13 +11,17 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
+#include "chrome/browser/favicon/large_icon_service_factory.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_io_context.h"
+#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/session_sync_service_factory.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/common/webui_url_constants.h"
 #include "components/favicon_base/favicon_url_parser.h"
 #include "components/history/core/browser/top_sites.h"
+#include "components/sync/driver/sync_service_utils.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
 #include "components/sync_sessions/session_sync_service.h"
 #include "content/public/browser/web_contents.h"
@@ -29,15 +33,42 @@
 #include "ui/resources/grit/ui_resources.h"
 #include "url/gurl.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 favicon::FaviconRequestOrigin ParseFaviconRequestOrigin(const GURL& url) {
   GURL history_url(chrome::kChromeUIHistoryURL);
-  if (url == history_url.Resolve("/syncedTabs"))
+  if (url == history_url.Resolve(chrome::kChromeUIHistorySyncedTabs))
     return favicon::FaviconRequestOrigin::HISTORY_SYNCED_TABS;
   if (url == history_url)
     return favicon::FaviconRequestOrigin::HISTORY;
   return favicon::FaviconRequestOrigin::UNKNOWN;
 }
+
+sync_sessions::OpenTabsUIDelegate* GetOpenTabsUIDelegate(Profile* profile) {
+  sync_sessions::SessionSyncService* session_sync_service =
+      SessionSyncServiceFactory::GetInstance()->GetForProfile(profile);
+  DCHECK(session_sync_service);
+  return session_sync_service->GetOpenTabsUIDelegate();
+}
+
+scoped_refptr<base::RefCountedMemory> GetSyncedFaviconForPageURL(
+    Profile* profile,
+    const GURL& page_url) {
+  sync_sessions::OpenTabsUIDelegate* open_tabs = GetOpenTabsUIDelegate(profile);
+  return open_tabs ? open_tabs->GetSyncedFaviconForPageURL(page_url.spec())
+                   : nullptr;
+}
+
+// Check if user settings allow querying a Google server using history
+// information.
+bool CanSendHistoryDataToServer(Profile* profile) {
+  return syncer::GetUploadToGoogleState(
+             ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile),
+             syncer::ModelType::HISTORY_DELETE_DIRECTIVES) ==
+         syncer::UploadState::ACTIVE;
+}
+
 }  // namespace
 
 FaviconSource::IconRequest::IconRequest()
@@ -112,7 +143,7 @@ void FaviconSource::StartDataRequest(
     // IconType.
     favicon_service->GetRawFavicon(
         url, favicon_base::IconType::kFavicon, desired_size_in_pixel,
-        base::Bind(
+        base::BindRepeating(
             &FaviconSource::OnFaviconDataAvailable, base::Unretained(this),
             IconRequest(callback, url, parsed.size_in_dip,
                         parsed.device_scale_factor, unsafe_request_origin)),
@@ -135,38 +166,31 @@ void FaviconSource::StartDataRequest(
       }
     }
 
-    // |url| is an origin, and it may not have had a favicon associated with it.
-    // A trickier case is when |url| only has domain-scoped cookies, but
-    // visitors are redirected to HTTPS on visiting. Then |url| defaults to a
-    // HTTP scheme, but the favicon will be associated with the HTTPS URL and
-    // hence won't be found if we include the scheme in the lookup. Set
-    // |fallback_to_host|=true so the favicon database will fall back to
-    // matching only the hostname to have the best chance of finding a favicon.
-    //const bool fallback_to_host = true;
-    // NOTE(espen@vivaldi.com): Original chromium code above. We need to make
-    // an exception for at least preloaded bookmark urls. Otherwise they will
-    // all be shown with the same icon.
-    const bool fallback_to_host =
-        url.spec().find("https://vivaldi.com/bk/") != 0;
-    if (!fallback_to_host) {
+    if (vivaldi::IsVivaldiRunning()) {
       // NOTE(espen@vivaldi.com): We append a query section to favicon requests
-      // to prevent a caching problem when an icon becomes available. Remove
-      // that section here. Removal is required when we do not allow falling
-      // back to the host for matching.
+      // to prevent a caching problem in react when an icon becomes available.
+      // Remove that section here.
       int s = url.spec().rfind("/?");
       if (s != -1) {
         url = GURL(url.spec().substr(0, s));
       }
     }
 
-    favicon_service->GetRawFaviconForPageURL(
-        url, {favicon_base::IconType::kFavicon}, desired_size_in_pixel,
-        fallback_to_host,
-        base::Bind(
+    sync_sessions::OpenTabsUIDelegate* open_tabs =
+        GetOpenTabsUIDelegate(profile_);
+    favicon_request_handler_.GetRawFaviconForPageURL(
+        url, desired_size_in_pixel,
+        base::BindOnce(
             &FaviconSource::OnFaviconDataAvailable, base::Unretained(this),
             IconRequest(callback, url, parsed.size_in_dip,
                         parsed.device_scale_factor, unsafe_request_origin)),
-        &cancelable_task_tracker_);
+        unsafe_request_origin, favicon::FaviconRequestPlatform::kDesktop,
+        favicon_service,
+        LargeIconServiceFactory::GetForBrowserContext(profile_),
+        /*icon_url_for_uma=*/
+        open_tabs ? open_tabs->GetIconUrlForPageUrl(url) : GURL(),
+        base::BindOnce(&GetSyncedFaviconForPageURL, base::Unretained(profile_)),
+        CanSendHistoryDataToServer(profile_), &cancelable_task_tracker_);
   }
 }
 
@@ -198,23 +222,6 @@ bool FaviconSource::ShouldServiceRequest(
                                              render_process_id);
 }
 
-bool FaviconSource::HandleMissingResource(const IconRequest& request) {
-  // If the favicon is not available, try to use the synced favicon.
-  sync_sessions::SessionSyncService* service =
-      SessionSyncServiceFactory::GetInstance()->GetForProfile(profile_);
-  sync_sessions::OpenTabsUIDelegate* open_tabs =
-      service ? service->GetOpenTabsUIDelegate() : nullptr;
-
-  scoped_refptr<base::RefCountedMemory> response;
-  if (open_tabs &&
-      open_tabs->GetSyncedFaviconForPageURL(request.request_path.spec(),
-                                            &response)) {
-    request.callback.Run(response.get());
-    return true;
-  }
-  return false;
-}
-
 ui::NativeTheme* FaviconSource::GetNativeTheme() {
   return ui::NativeTheme::GetInstanceForNativeUi();
 }
@@ -223,18 +230,9 @@ void FaviconSource::OnFaviconDataAvailable(
     const IconRequest& request,
     const favicon_base::FaviconRawBitmapResult& bitmap_result) {
   if (bitmap_result.is_valid()) {
-    favicon::RecordFaviconRequestMetric(request.icon_request_origin,
-                                        favicon::FaviconAvailability::kLocal);
     // Forward the data along to the networking system.
     request.callback.Run(bitmap_result.bitmap_data.get());
-  } else if (HandleMissingResource(request)) {
-    favicon::RecordFaviconRequestMetric(request.icon_request_origin,
-                                        favicon::FaviconAvailability::kSync);
-    // The response was already treated by HandleMissingResource.
   } else {
-    favicon::RecordFaviconRequestMetric(
-        request.icon_request_origin,
-        favicon::FaviconAvailability::kNotAvailable);
     SendDefaultResponse(request);
   }
 }

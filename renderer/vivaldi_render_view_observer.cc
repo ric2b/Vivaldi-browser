@@ -135,16 +135,16 @@ void VivaldiRenderViewObserver::OnScrollPage(std::string scroll_type) {
 
   if (scroll_type == "up") {
     local_frame->GetEventHandler().BubblingScroll(
-        blink::kScrollBlockDirectionBackward, blink::kScrollByPage);
+        blink::kScrollBlockDirectionBackward, blink::ScrollGranularity::kScrollByPage);
   } else if (scroll_type == "down") {
     local_frame->GetEventHandler().BubblingScroll(
-        blink::kScrollBlockDirectionForward, blink::kScrollByPage);
+        blink::kScrollBlockDirectionForward, blink::ScrollGranularity::kScrollByPage);
   } else if (scroll_type == "top") {
     local_frame->GetEventHandler().BubblingScroll(
-        blink::kScrollBlockDirectionBackward, blink::kScrollByDocument);
+        blink::kScrollBlockDirectionBackward, blink::ScrollGranularity::kScrollByDocument);
   } else if (scroll_type == "bottom") {
     local_frame->GetEventHandler().BubblingScroll(
-        blink::kScrollBlockDirectionForward, blink::kScrollByDocument);
+        blink::kScrollBlockDirectionForward, blink::ScrollGranularity::kScrollByDocument);
   } else {
     NOTREACHED();
   }
@@ -163,8 +163,7 @@ bool ToSkBitmap(
 
 bool SnapshotPage(blink::LocalFrame* local_frame,
                   bool full_page,
-                  float width,
-                  float height,
+                  blink::IntRect rect,
                   SkBitmap& bitmap) {
   blink::Document* document = local_frame->GetDocument();
   if (!document || !document->GetLayoutView())
@@ -209,7 +208,8 @@ bool SnapshotPage(blink::LocalFrame* local_frame,
     blink::FloatSize float_page_size = local_frame->ResizePageRectsKeepingRatio(
       blink::FloatSize(document_rect.Width(), document_rect.Height()),
       blink::FloatSize(document_rect.Width(), document_rect.Height()));
-    float_page_size.SetHeight(std::min(float_page_size.Height(), height));
+    float_page_size.SetHeight(
+        std::min(float_page_size.Height(), static_cast<float>(rect.Height())));
     page_size = ExpandedIntSize(float_page_size);
   } else {
     page_size.SetWidth(visible_content_rect.Width());
@@ -248,7 +248,7 @@ bool SnapshotPage(blink::LocalFrame* local_frame,
   SkSurfaceProps surface_props(0, kUnknown_SkPixelGeometry);
   sk_sp<SkSurface> surface =
     SkSurface::MakeRasterN32Premul(
-      page_size.Width(), page_size.Height(), &surface_props);
+      page_rect.Width(), page_rect.Height(), &surface_props);
   if (!surface)
     return false;
 
@@ -280,9 +280,15 @@ bool SnapshotPage(blink::LocalFrame* local_frame,
     DCHECK(!blink::PaintChunksToCcLayer::TopClipToIgnore());
   }
 
-  scoped_refptr<blink::StaticBitmapImage> image =
-    blink::StaticBitmapImage::Create(surface->makeImageSnapshot());
-  return ToSkBitmap(image, bitmap);
+  // Crop to rect if required.
+  scoped_refptr<blink::StaticBitmapImage> image;
+  if (rect.IsEmpty() || full_page) {
+    image = blink::StaticBitmapImage::Create(surface->makeImageSnapshot());
+  } else {
+    image = blink::StaticBitmapImage::Create(
+        surface->makeImageSnapshot(SkIRect(rect)));
+  }
+  return image ? ToSkBitmap(image, bitmap) : false;
 }
 
 bool CopyBitmapToSharedMem(const SkBitmap& bitmap,
@@ -338,10 +344,15 @@ void VivaldiRenderViewObserver::OnRequestThumbnailForFrame(
     if (!local_frame)
       break;
 
-    gfx::Size size = params.size;
     SkBitmap bitmap;
+    blink::IntRect rect;
+    rect.SetX(params.rect.x());
+    rect.SetY(params.rect.y());
+    rect.SetWidth(params.rect.width());
+    rect.SetHeight(params.rect.height());
+
     if (!SnapshotPage(local_frame, params.full_page,
-                      size.width(), size.height(), bitmap))
+                      rect, bitmap))
       break;
 
     SkBitmap thumbnail;
@@ -356,15 +367,17 @@ void VivaldiRenderViewObserver::OnRequestThumbnailForFrame(
     if (!CopyBitmapToSharedMem(thumbnail, &shared_memory_handle))
       break;
 
-    size = gfx::Size(thumbnail.width(), thumbnail.height());
+    gfx::Rect ack_rect =
+        gfx::Rect(rect.X(), rect.Y(), thumbnail.width(), thumbnail.height());
 
     Send(new VivaldiViewHostMsg_RequestThumbnailForFrame_ACK(
-        routing_id(), shared_memory_handle, size, params.callback_id, true));
+        routing_id(), shared_memory_handle, ack_rect, params.callback_id,
+        true));
     return;
   } while (false);
 
   Send(new VivaldiViewHostMsg_RequestThumbnailForFrame_ACK(
-      routing_id(), shared_memory_handle, gfx::Size(), params.callback_id,
+      routing_id(), shared_memory_handle, gfx::Rect(), params.callback_id,
       false));
 }
 

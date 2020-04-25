@@ -60,7 +60,7 @@ class EventDatabase {
 #define CALENDAR_EVENT_ROW_FIELDS                                            \
   " id, calendar_id, alarm_id, title, description, start, end, all_day, "    \
   "is_recurring, start_recurring, end_recurring, location, url, etag, href," \
-  " uid, event_type_id "
+  " uid, event_type_id, task, complete, trash, trash_time "
 
 }  // namespace calendar
 

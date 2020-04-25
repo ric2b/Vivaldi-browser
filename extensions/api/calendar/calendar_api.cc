@@ -363,6 +363,11 @@ std::unique_ptr<CalendarEvent> CreateVivaldiEvent(
   cal_event->uid.reset(new std::string(event.uid()));
   cal_event->event_type_id.reset(
       new std::string(base::NumberToString(event.event_type_id())));
+  cal_event->task.reset(new bool(event.task()));
+  cal_event->complete.reset(new bool(event.complete()));
+  cal_event->trash.reset(new bool(event.trash()));
+  cal_event->trash_time.reset(
+    new double(MilliSecondsFromTime(event.trash_time())));
 
   RecurrencePattern* pattern = new RecurrencePattern();
   pattern->frequency = RecurrenceToUiRecurrence(event.recurrence().frequency);
@@ -476,6 +481,14 @@ calendar::EventRow GetEventRow(const vivaldi::calendar::CreateDetails& event) {
   calendar::CalendarID calendar_id;
   if (GetStdStringAsInt64(event.calendar_id, &calendar_id)) {
     row.set_calendar_id(calendar_id);
+  }
+
+  if (event.task.get()) {
+    row.set_task(*event.task);
+  }
+
+  if (event.complete.get()) {
+    row.set_complete(*event.complete);
   }
 
   return row;
@@ -654,6 +667,21 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
   if (params->changes.uid.get()) {
     updatedEvent.uid = *params->changes.uid;
     updatedEvent.updateFields |= calendar::UID;
+  }
+
+  if (params->changes.task.get()) {
+    updatedEvent.task = *params->changes.task;
+    updatedEvent.updateFields |= calendar::TASK;
+  }
+
+  if (params->changes.complete.get()) {
+    updatedEvent.complete = *params->changes.complete;
+    updatedEvent.updateFields |= calendar::COMPLETE;
+  }
+
+  if (params->changes.trash.get()) {
+    updatedEvent.trash = *params->changes.trash;
+    updatedEvent.updateFields |= calendar::TRASH;
   }
 
   if (params->changes.event_type_id.get()) {

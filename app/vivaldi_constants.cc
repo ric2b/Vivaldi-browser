@@ -34,13 +34,21 @@ const char kVivaldiReservedApiError[] =
 
 const char kVivaldiUIScheme[] = "vivaldi";
 
-const char kVivaldiUIDataHost[] = "vivaldi-data";
-const char kVivaldiWebUIHost[] = "vivaldi-webui";
-const char kVivaldiThumbDataHost[] = "thumb";
+const char kVivaldiUIDataHost[] = VIVALDI_DATA_URL_HOST;
+const char kVivaldiWebUIHost[] = VIVALDI_WEBUI_URL_HOST;
+const char kVivaldiThumbDataHost[] = VIVALDI_THUMB_URL_HOST;
 
-const char kVivaldiUIDataURL[] = "chrome://vivaldi-data/";
-const char kVivaldiWebUIURL[] = "chrome://vivaldi-webui/";
-const char kVivaldiThumbURL[] = "chrome://thumb/";
+const char kVivaldiUIDataURL[] =
+    VIVALDI_DATA_URL_SCHEME "://" VIVALDI_DATA_URL_HOST "/";
+
+const char kBaseFileMappingUrl[] = VIVALDI_DATA_URL_SCHEME
+    "://" VIVALDI_DATA_URL_HOST VIVALDI_DATA_URL_MAPPING_DIR;
+
+const char kVivaldiWebUIURL[] =
+    VIVALDI_DATA_URL_SCHEME "://" VIVALDI_WEBUI_URL_HOST "/";
+
+const char kVivaldiThumbURL[] =
+    VIVALDI_DATA_URL_SCHEME "://" VIVALDI_THUMB_URL_HOST "/";
 
 const char kWindowExtDataKey[] = "extData";
 

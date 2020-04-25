@@ -64,7 +64,7 @@ gfx::NativeView WebContentsViewChildFrame::GetContentNativeView() const {
 }
 
 gfx::NativeWindow WebContentsViewChildFrame::GetTopLevelNativeWindow() const {
-  return GetOuterView()->GetTopLevelNativeWindow();
+  return GetOuterView() ? GetOuterView()->GetTopLevelNativeWindow() : nullptr;
 }
 
 void WebContentsViewChildFrame::GetContainerBounds(gfx::Rect* out) const {

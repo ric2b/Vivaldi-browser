@@ -18,8 +18,6 @@
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
 
-#include "base/threading/thread_restrictions.h"
-
 namespace base {
 
 bool PathProvider(int key, FilePath* result);
@@ -216,13 +214,8 @@ bool PathService::Get(int key, FilePath* result) {
     return false;
 
   if (path.ReferencesParent()) {
-    // Lift the thread's disallowance of blocking IO, if necessary,
-    // just for the absolute path operation
-    bool last_ioallow = base::ThreadRestrictions::SetIOAllowed(true);
     // Make sure path service never returns a path with ".." in it.
     path = MakeAbsoluteFilePath(path);
-    // Turn it back on, if it was on.
-    base::ThreadRestrictions::SetIOAllowed(last_ioallow);
     if (path.empty())
       return false;
   }

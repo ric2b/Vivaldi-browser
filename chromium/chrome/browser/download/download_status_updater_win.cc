@@ -15,8 +15,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "ui/views/win/hwnd_util.h"
 
-#include "browser/vivaldi_download_status.h"
-
 namespace {
 
 void UpdateTaskbarProgressBar(int download_count,
@@ -60,12 +58,4 @@ void DownloadStatusUpdater::UpdateAppIconDownloadProgress(
   int download_count = 0;
   bool progress_known = GetProgress(&progress, &download_count);
   UpdateTaskbarProgressBar(download_count, progress_known, progress);
-
-#ifdef VIVALDI_BUILD
-  // Only update progress for Vivaldi when running.
-  vivaldi::UpdateTaskbarProgressBarForVivaldiWindows(
-                                download->IsPaused() ? 0 : download_count,
-                                progress_known,
-                                progress);
-#endif //VIVALDI_BUILD
 }

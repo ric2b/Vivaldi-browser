@@ -23,12 +23,6 @@
 #include "renderer/vivaldi_render_messages.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
-typedef base::Callback<void(base::SharedMemoryHandle handle,
-                            const gfx::Size image_size,
-                            int callback_id,
-                            bool success)>
-    CaptureTabDoneCallback;
-
 typedef base::OnceCallback<void(
     std::vector<VivaldiViewMsg_AccessKeyDefinition>)>
     AccessKeysCallback;
@@ -114,6 +108,9 @@ class VivaldiPrivateTabObserver
   void SetContentsMimeType(std::string mimetype) {
     contents_mime_type_ = mimetype;
   }
+
+  void SetMuted(bool mute);
+
   void UpdateAllowTabCycleIntoUI();
   void UpdateAllowAccessKeys();
 
@@ -121,6 +118,7 @@ class VivaldiPrivateTabObserver
   bool load_from_cache_only() { return load_from_cache_only_; }
   bool enable_plugins() { return enable_plugins_; }
   std::string contents_mime_type() { return contents_mime_type_; }
+  bool mute() { return mute_; }
 
   // Commit setting to the active RenderViewHost
   void CommitSettings();
@@ -129,27 +127,15 @@ class VivaldiPrivateTabObserver
   void OnZoomChanged(
       const zoom::ZoomController::ZoomChangedEventData& data) override;
 
-  void SetZoomLevelForTab(double level);
-
-  void CaptureTab(gfx::Size size,
-                  bool full_page,
-                  const CaptureTabDoneCallback& callback);
+  void SetZoomLevelForTab(double new_level, double old_level);
 
   // Message handlers
-  void OnRequestThumbnailForFrameResponse(base::SharedMemoryHandle handle,
-                                          const gfx::Size image_size,
-                                          int callback_id,
-                                          bool success);
-
   void OnGetAccessKeysForPageResponse(
       std::vector<VivaldiViewMsg_AccessKeyDefinition> access_keys);
 
   void GetAccessKeys(AccessKeysCallback callback);
 
   void AccessKeyAction(std::string);
-
-  // Returns true if a capture is already underway for this WebContents.
-  bool IsCapturing();
 
   // If a page is accessing a resource controlled by a permission this will
   // fire.
@@ -178,8 +164,8 @@ private:
   // Mimetype of displayed document.
   std::string contents_mime_type_;
 
-  // Callback to call when we get an capture response message from the renderer.
-  CaptureTabDoneCallback capture_callback_;
+  // The tab is muted.
+  bool mute_ = false;
 
   AccessKeysCallback access_keys_callback_;
 

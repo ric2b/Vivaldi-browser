@@ -38,8 +38,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 
-#include "extensions/browser/event_router.h"
-#include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/manifest_handlers/background_info.h"
@@ -141,38 +139,10 @@ const std::string ImportItemToString(importer::ImportItem item) {
 }
 }  // namespace
 
-ImportDataEventRouter::ImportDataEventRouter(Profile* profile)
-    : browser_context_(profile) {}
-
-ImportDataEventRouter::~ImportDataEventRouter() {}
-
-// Helper to actually dispatch an event to extension listeners.
-void ImportDataEventRouter::DispatchEvent(
-    const std::string& event_name,
-    std::unique_ptr<base::ListValue> event_args) {
-  EventRouter* event_router = EventRouter::Get(browser_context_);
-  if (event_router) {
-    event_router->BroadcastEvent(base::WrapUnique(
-        new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
-                              event_name, std::move(event_args))));
-  }
-}
-
 ImportDataAPI::ImportDataAPI(content::BrowserContext* context)
     : browser_context_(context),
       importer_host_(nullptr),
       import_succeeded_count_(0) {
-  EventRouter* event_router = EventRouter::Get(browser_context_);
-  event_router->RegisterObserver(
-      this, vivaldi::import_data::OnImportStarted::kEventName);
-  event_router->RegisterObserver(
-      this, vivaldi::import_data::OnImportEnded::kEventName);
-  event_router->RegisterObserver(
-      this, vivaldi::import_data::OnImportItemStarted::kEventName);
-  event_router->RegisterObserver(
-      this, vivaldi::import_data::OnImportItemEnded::kEventName);
-  event_router->RegisterObserver(
-      this, vivaldi::import_data::OnImportItemFailed::kEventName);
 }
 
 ImportDataAPI::~ImportDataAPI() {}
@@ -188,41 +158,44 @@ void ImportDataAPI::StartImport(const importer::SourceProfile& source_profile,
 
   // If another import is already ongoing, let it finish silently.
   if (importer_host_)
-    importer_host_->set_observer(NULL);
+    importer_host_->set_observer(nullptr);
 
   base::Value importing(true);
 
   importer_host_ = new ExternalProcessImporterHost();
   importer_host_->set_observer(this);
 
-  Profile* profile = static_cast<Profile*>(browser_context_);
+  Profile* profile = Profile::FromBrowserContext(browser_context_);
 
-  importer_host_->StartImportSettings(source_profile, profile, imported_items,
-                                      new ProfileWriter(profile));
+  importer_host_->StartImportSettings(
+      source_profile, profile, imported_items,
+      base::MakeRefCounted<ProfileWriter>(profile).get());
 }
 
 void ImportDataAPI::ImportStarted() {
-  event_router_->DispatchEvent(
-      vivaldi::import_data::OnImportStarted::kEventName,
-      vivaldi::import_data::OnImportStarted::Create());
+  ::vivaldi::BroadcastEvent(vivaldi::import_data::OnImportStarted::kEventName,
+                            vivaldi::import_data::OnImportStarted::Create(),
+                            browser_context_);
 }
 
 void ImportDataAPI::ImportItemStarted(importer::ImportItem item) {
   import_succeeded_count_++;
   const std::string item_name = ImportItemToString(item);
 
-  event_router_->DispatchEvent(
+  ::vivaldi::BroadcastEvent(
       vivaldi::import_data::OnImportItemStarted::kEventName,
-      vivaldi::import_data::OnImportItemStarted::Create(item_name));
+      vivaldi::import_data::OnImportItemStarted::Create(item_name),
+      browser_context_);
 }
 
 void ImportDataAPI::ImportItemEnded(importer::ImportItem item) {
   import_succeeded_count_--;
   const std::string item_name = ImportItemToString(item);
 
-  event_router_->DispatchEvent(
+  ::vivaldi::BroadcastEvent(
       vivaldi::import_data::OnImportItemEnded::kEventName,
-      vivaldi::import_data::OnImportItemEnded::Create(item_name));
+      vivaldi::import_data::OnImportItemEnded::Create(item_name),
+      browser_context_);
 }
 void ImportDataAPI::ImportItemFailed(importer::ImportItem item,
                                      const std::string& error) {
@@ -230,22 +203,20 @@ void ImportDataAPI::ImportItemFailed(importer::ImportItem item,
   import_succeeded_count_++;
   const std::string item_name = ImportItemToString(item);
 
-  event_router_->DispatchEvent(
+  ::vivaldi::BroadcastEvent(
       vivaldi::import_data::OnImportItemFailed::kEventName,
-      vivaldi::import_data::OnImportItemFailed::Create(item_name, error));
+      vivaldi::import_data::OnImportItemFailed::Create(item_name, error),
+      browser_context_);
 }
 
 void ImportDataAPI::ImportEnded() {
-  importer_host_->set_observer(NULL);
-  importer_host_ = NULL;
+  importer_host_->set_observer(nullptr);
+  importer_host_ = nullptr;
 
-  event_router_->DispatchEvent(
+  ::vivaldi::BroadcastEvent(
       vivaldi::import_data::OnImportEnded::kEventName,
-      vivaldi::import_data::OnImportEnded::Create(import_succeeded_count_));
-}
-
-void ImportDataAPI::Shutdown() {
-  EventRouter::Get(browser_context_)->UnregisterObserver(this);
+      vivaldi::import_data::OnImportEnded::Create(import_succeeded_count_),
+      browser_context_);
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<ImportDataAPI> >::
@@ -257,43 +228,20 @@ ImportDataAPI::GetFactoryInstance() {
   return g_factory_import.Pointer();
 }
 
-void ImportDataAPI::OnListenerAdded(const EventListenerInfo& details) {
-  event_router_.reset(
-      new ImportDataEventRouter(Profile::FromBrowserContext(browser_context_)));
-  EventRouter::Get(browser_context_)->UnregisterObserver(this);
-}
+ImportDataGetProfilesFunction::ImportDataGetProfilesFunction() {}
 
-ImporterApiFunction::ImporterApiFunction() {}
+ImportDataGetProfilesFunction::~ImportDataGetProfilesFunction() {}
 
-ImporterApiFunction::~ImporterApiFunction() {}
+void ImportDataGetProfilesFunction::Finished() {
+  namespace Results = vivaldi::import_data::GetProfiles::Results;
 
-void ImporterApiFunction::SendResponseToCallback() {
-  SendResponse(true);
-  Release();  // Balanced in RunAsync().
-}
-
-bool ImporterApiFunction::RunAsync() {
-  AddRef();  // Balanced in SendAsyncResponse() and below.
-  bool retval = RunAsyncImpl();
-  if (false == retval)
-    Release();
-  return retval;
-}
-
-void ImporterApiFunction::SendAsyncResponse() {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&ImporterApiFunction::SendResponseToCallback,
-                            base::Unretained(this)));
-}
-
-void ImporterApiFunction::Finished() {
   std::vector<vivaldi::import_data::ProfileItem> nodes;
-
-  for (size_t i = 0; i < api_importer_list->count(); ++i) {
+  for (size_t i = 0; i < api_importer_list_->count(); ++i) {
     const importer::SourceProfile& source_profile =
-        api_importer_list->GetSourceProfileAt(i);
-    vivaldi::import_data::ProfileItem* profile =
-        new vivaldi::import_data::ProfileItem;
+        api_importer_list_->GetSourceProfileAt(i);
+
+    nodes.emplace_back();
+    vivaldi::import_data::ProfileItem* profile = &nodes.back();
 
     uint16_t browser_services = source_profile.services_supported;
 
@@ -334,73 +282,72 @@ void ImporterApiFunction::Finished() {
     std::vector<vivaldi::import_data::UserProfileItem> profileItems;
 
     for (size_t i = 0; i < source_profile.user_profile_names.size(); ++i) {
-      vivaldi::import_data::UserProfileItem* profItem =
-          new vivaldi::import_data::UserProfileItem;
+      profileItems.emplace_back();
+      vivaldi::import_data::UserProfileItem* profItem = &profileItems.back();
 
       profItem->profile_display_name = base::UTF16ToUTF8(
           source_profile.user_profile_names.at(i).profileDisplayName);
       profItem->profile_name =
           source_profile.user_profile_names.at(i).profileName;
 
-      profileItems.push_back(std::move(*profItem));
     }
 
     profile->user_profiles = std::move(profileItems);
-
-    nodes.push_back(std::move(*profile));
   }
 
-  results_ = vivaldi::import_data::GetProfiles::Results::Create(nodes);
-  SendAsyncResponse();
+  Respond(ArgumentList(Results::Create(nodes)));
 }
 
-ImportDataGetProfilesFunction::ImportDataGetProfilesFunction() {}
-
-bool ImportDataGetProfilesFunction::RunAsyncImpl() {
+ExtensionFunction::ResponseAction ImportDataGetProfilesFunction::Run() {
   ProfileSingletonFactory* singl = ProfileSingletonFactory::getInstance();
-  api_importer_list = singl->getInstance()->getImporterList();
+  api_importer_list_ = singl->getInstance()->getImporterList();
 
   // if (!singl->getProfileRequested() &&
   // !api_importer_list->count()){
   singl->setProfileRequested(true);
-  // AddRef(); // Balanced in OnSourceProfilesLoaded
-  api_importer_list->DetectSourceProfiles(
+  api_importer_list_->DetectSourceProfiles(
       g_browser_process->GetApplicationLocale(), true,
-      base::Bind(&ImporterApiFunction::Finished, base::Unretained(this)));
-  return true;
+      base::Bind(&ImportDataGetProfilesFunction::Finished, this));
+  return RespondLater();
   // }
 }
 
-ImportDataGetProfilesFunction::~ImportDataGetProfilesFunction() {}
-
 ImportDataStartImportFunction::ImportDataStartImportFunction() {}
 
+ImportDataStartImportFunction::~ImportDataStartImportFunction() {
+  if (select_file_dialog_)
+    select_file_dialog_->ListenerDestroyed();
+}
+
 // ExtensionFunction:
-bool ImportDataStartImportFunction::RunAsyncImpl() {
-  api_importer_list =
-      ProfileSingletonFactory::getInstance()->getInstance()->getImporterList();
+ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
+  using vivaldi::import_data::StartImport::Params;
+  namespace Results = vivaldi::import_data::StartImport::Results;
 
-  std::unique_ptr<vivaldi::import_data::StartImport::Params> params(
-      vivaldi::import_data::StartImport::Params::Create(*args_));
-
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   base::string16 dialog_title;
 
   std::vector<std::string>& ids = params->items_to_import;
   size_t count = ids.size();
-  EXTENSION_FUNCTION_VALIDATE(count > 0);
+  if (count < 9) {
+    return RespondNow(Error("items_to_import must have at least 9 elements"));
+  }
 
   int browser_index;
   if (!base::StringToInt(ids[0], &browser_index)) {
-    NOTREACHED();
-    return false;
+    return RespondNow(Error("items_to_import is not an integer"));
   }
+
+  ImporterList* api_importer_list =
+      ProfileSingletonFactory::getInstance()->getInstance()->getImporterList();
 
   importer::SourceProfile source_profile =
       api_importer_list->GetSourceProfileAt(browser_index);
   int supported_items = source_profile.services_supported;
   int selected_items = importer::NONE;
+  importer_type_ = source_profile.importer_type;
 
   if (ids[1] == "true") {
     selected_items |= importer::HISTORY;
@@ -425,54 +372,54 @@ bool ImportDataStartImportFunction::RunAsyncImpl() {
     selected_items |= importer::SPEED_DIAL;
   }
 
-  int imported_items = (selected_items & supported_items);
+  imported_items_ = (selected_items & supported_items);
 
   base::FilePath path;
-  if (source_profile.importer_type == importer::TYPE_BOOKMARKS_FILE) {
+  if (importer_type_ == importer::TYPE_BOOKMARKS_FILE) {
     dialog_title =
         l10n_util::GetStringUTF16(IDS_IMPORT_HTML_BOOKMARKS_FILE_TITLE);
-    HandleChooseBookmarksFileOrFolder(dialog_title, "html", imported_items,
-                                      source_profile.importer_type, path, true);
-    return true;
-  } else if (source_profile.importer_type ==
-             importer::TYPE_OPERA_BOOKMARK_FILE) {
+    return HandleChooseBookmarksFileOrFolder(dialog_title, "html", path, true);
+  } else if (importer_type_ == importer::TYPE_OPERA_BOOKMARK_FILE) {
     dialog_title =
         l10n_util::GetStringUTF16(IDS_IMPORT_OPERA_BOOKMARKS_FILE_TITLE);
     path = path.AppendASCII("bookmarks.adr");
-    HandleChooseBookmarksFileOrFolder(dialog_title, "adr", imported_items,
-                                      source_profile.importer_type, path, true);
-    return true;
-  } else if ((source_profile.importer_type == importer::TYPE_OPERA ||
-              source_profile.importer_type == importer::TYPE_VIVALDI) &&
+    return HandleChooseBookmarksFileOrFolder(dialog_title, "adr", path, true);
+  } else if ((importer_type_ == importer::TYPE_OPERA ||
+              importer_type_ == importer::TYPE_VIVALDI) &&
              ids[6] == "false") {
-    dialog_title = l10n_util::GetStringUTF16(
-        source_profile.importer_type == importer::TYPE_VIVALDI
-            ? IDS_IMPORT_VIVALDI_PROFILE_TITLE
-            : IDS_IMPORT_OPERA_PROFILE_TITLE);
-    HandleChooseBookmarksFileOrFolder(dialog_title, "ini", imported_items,
-                                      source_profile.importer_type, path,
-                                      false);
-    return true;
+    dialog_title =
+        l10n_util::GetStringUTF16(importer_type_ == importer::TYPE_VIVALDI
+                                      ? IDS_IMPORT_VIVALDI_PROFILE_TITLE
+                                      : IDS_IMPORT_OPERA_PROFILE_TITLE);
+    return HandleChooseBookmarksFileOrFolder(dialog_title, "ini", path, false);
   } else {
-    if (imported_items) {
-      StartImport(source_profile, imported_items);
+    if (imported_items_) {
+      StartImport(source_profile);
     } else {
       LOG(WARNING) << "There were no settings to import from '"
                    << source_profile.importer_name << "'.";
     }
+    return RespondNow(ArgumentList(Results::Create("Ok")));
   }
-  return true;
 }
 
-void ImportDataStartImportFunction::HandleChooseBookmarksFileOrFolder(
+ExtensionFunction::ResponseAction
+ImportDataStartImportFunction::HandleChooseBookmarksFileOrFolder(
     const base::string16& title,
-    const std::string& extension,
-    int imported_items,
-    importer::ImporterType importer_type,
+    base::StringPiece extension,
     const base::FilePath& default_file,
     bool file_selection) {
   if (!dispatcher())
-    return;  // Extension was unloaded.
+    return RespondNow(Error("Extension was unloaded"));
+  content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
+
+  AddRef();
+
+  select_file_dialog_ = ui::SelectFileDialog::Create(this, nullptr);
+
+  gfx::NativeWindow window =
+      web_contents ? platform_util::GetTopLevel(web_contents->GetNativeView())
+                   : nullptr;
 
   ui::SelectFileDialog::FileTypeInfo file_type_info;
 
@@ -482,32 +429,19 @@ void ImportDataStartImportFunction::HandleChooseBookmarksFileOrFolder(
     file_type_info.extensions[0].push_back(
         base::FilePath::FromUTF8Unsafe(extension).value());
   }
-  AddRef();
-
-  WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
-
-  select_file_dialog_ = ui::SelectFileDialog::Create(this, nullptr);
-
-  gfx::NativeWindow window =
-      web_contents ? platform_util::GetTopLevel(web_contents->GetNativeView())
-                   : nullptr;
-
-  DialogParams* params = new DialogParams();
-  params->imported_items = imported_items;
-  params->importer_type = importer_type;
-  params->file_dialog = file_selection;
-
   select_file_dialog_->SelectFile(
       file_selection ? ui::SelectFileDialog::SELECT_OPEN_FILE
                      : ui::SelectFileDialog::SELECT_FOLDER,
       title, default_file, &file_type_info, 0, base::FilePath::StringType(),
-      window, reinterpret_cast<void*>(params));
+      window, nullptr);
+  return RespondLater();
 }
 
 void ImportDataStartImportFunction::FileSelectionCanceled(void* params) {
-  delete reinterpret_cast<DialogParams*>(params);
-  results_ = vivaldi::import_data::StartImport::Results::Create("Cancel");
-  SendAsyncResponse();
+  namespace Results = vivaldi::import_data::StartImport::Results;
+
+  DCHECK(!params);
+  Respond(ArgumentList(Results::Create("Cancel")));
 
   Release();  // Balanced in HandleChooseBookmarksFileOrFolder()
 }
@@ -515,31 +449,24 @@ void ImportDataStartImportFunction::FileSelectionCanceled(void* params) {
 void ImportDataStartImportFunction::FileSelected(const base::FilePath& path,
                                                  int /*index*/,
                                                  void* params) {
-  DialogParams* dlgparams = reinterpret_cast<DialogParams*>(params);
-  int imported_items = dlgparams->imported_items;
-  importer::ImporterType importer_type = dlgparams->importer_type;
-  delete dlgparams;
+  namespace Results = vivaldi::import_data::StartImport::Results;
 
+  DCHECK(!params);
   importer::SourceProfile source_profile;
   source_profile.source_path = path;
-  source_profile.importer_type = importer_type;
+  source_profile.importer_type = importer_type_;
 
-  StartImport(source_profile, imported_items);
+  StartImport(source_profile);
+  Respond(ArgumentList(Results::Create("Ok")));
 
   Release();  // Balanced in HandleChooseBookmarksFileOrFolder()
 }
 
-ImportDataStartImportFunction::~ImportDataStartImportFunction() {
-  if (select_file_dialog_.get())
-    select_file_dialog_->ListenerDestroyed();
-}
-
 void ImportDataStartImportFunction::StartImport(
-    const importer::SourceProfile& source_profile,
-    uint16_t imported_items) {
+    const importer::SourceProfile& source_profile) {
   ImportDataAPI::GetFactoryInstance()
-      ->Get(GetProfile())
-      ->StartImport(source_profile, imported_items);
+      ->Get(browser_context())
+      ->StartImport(source_profile, imported_items_);
 }
 
 }  // namespace extensions

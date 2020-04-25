@@ -20,9 +20,6 @@ class CONTENT_EXPORT VivaldiTabCheck {
   static const int kVivaldiTabObserverContextKey;
 
   static bool IsVivaldiTab(content::WebContents* web_contents);
-
-  static bool IsVivaldiTabFrame(
-      content::RenderWidgetHostViewChildFrame* child_frame);
 };
 
 #endif  // UI_CONTENT_VIVALDI_TAB_CHECK_H_

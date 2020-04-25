@@ -58,10 +58,16 @@
 
 using content::BrowserThread;
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
+#ifdef VIVALDI_BUILD
+const char kProfileIconFileName[] = "Vivaldi Profile.ico";
+#else
 // Name of the badged icon file generated for a given profile.
 const char kProfileIconFileName[] = "Google Profile.ico";
+#endif  // VIVALDI_BUILD
 
 // Characters that are not allowed in Windows filenames. Taken from
 // http://msdn.microsoft.com/en-us/library/aa365247.aspx
@@ -1000,6 +1006,10 @@ void ProfileShortcutManagerWin::CreateOrUpdateShortcutsForProfileAtPath(
       // image data on the thread we post to.
       params.avatar_image_1x = GetImageResourceSkBitmapCopy(resource_id_1x);
 
+      if (vivaldi::IsVivaldiRunning()) {
+        // All Vivaldi icons are big and can be used directly.
+        params.avatar_image_2x = params.avatar_image_1x;
+      } else
       if (profiles::IsModernAvatarIconIndex(icon_index)) {
         // Modern avatars are large(192px) by default, which makes them big
         // enough for 2x.

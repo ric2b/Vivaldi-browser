@@ -193,14 +193,14 @@ void CoreAudioDemuxerStream::Read(const ReadCB& read_cb) {
   read_cb_ = read_cb;
 
   if (!audio_queue_) {
-    base::ResetAndReturn(&read_cb_).Run(kAborted, NULL);
+    std::move(read_cb_).Run(kAborted, NULL);
     return;
   }
 
   if (!is_enabled_) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Read from disabled stream, returning EOS";
-    base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
+    std::move(read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
     return;
   }
 
@@ -223,7 +223,7 @@ void CoreAudioDemuxerStream::ReadCompleted(uint8_t* read_data, int read_size) {
   if (err != noErr) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << " AudioFileStreamParseBytes error: " << err;
-    base::ResetAndReturn(&read_cb_).Run(kAborted, NULL);
+    std::move(read_cb_).Run(kAborted, NULL);
     return;
   }
 
@@ -232,19 +232,19 @@ void CoreAudioDemuxerStream::ReadCompleted(uint8_t* read_data, int read_size) {
     // i.e., it is still reading tags, cover art, etc.  We ignore the non-audio
     // data and return an empty buffer.  We will continue parsing with the next
     // call to |Read()|.
-    base::ResetAndReturn(&read_cb_).Run(kOk, new DecoderBuffer(0));
+    std::move(read_cb_).Run(kOk, new DecoderBuffer(0));
     return;
   }
 
   if (EnqueueBuffer() != noErr) {
-    base::ResetAndReturn(&read_cb_).Run(kAborted, NULL);
+    std::move(read_cb_).Run(kAborted, NULL);
     return;
   }
 
-  base::ResetAndReturn(&read_cb_)
-      .Run(kOk, DecoderBuffer::CopyFrom(
-                    reinterpret_cast<uint8_t*>(output_buffer_->mAudioData),
-                    frames_decoded_));
+  std::move(read_cb_).Run(
+      kOk, DecoderBuffer::CopyFrom(
+               reinterpret_cast<uint8_t*>(output_buffer_->mAudioData),
+               frames_decoded_));
 }
 
 AudioDecoderConfig CoreAudioDemuxerStream::audio_decoder_config() {
@@ -269,8 +269,8 @@ bool CoreAudioDemuxerStream::SupportsConfigChanges() { return false; }
 
 void CoreAudioDemuxerStream::Stop() {
   if (!read_cb_.is_null()) {
-    base::ResetAndReturn(&read_cb_)
-        .Run(DemuxerStream::kOk, DecoderBuffer::CreateEOSBuffer());
+    std::move(read_cb_).Run(DemuxerStream::kOk,
+                            DecoderBuffer::CreateEOSBuffer());
   }
 
   demuxer_->ResetDataSourceOffset();
@@ -278,7 +278,7 @@ void CoreAudioDemuxerStream::Stop() {
 
 void CoreAudioDemuxerStream::Abort() {
   if (!read_cb_.is_null()) {
-    base::ResetAndReturn(&read_cb_).Run(kAborted, NULL);
+    std::move(read_cb_).Run(kAborted, NULL);
   }
 }
 

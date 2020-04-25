@@ -30,11 +30,14 @@ base::scoped_nsobject<NSMenuItem> BuildAppMenu(NSApplication* nsapp,
                 .tag(IDC_ABOUT)
                 .target(app_controller)
                 .action(@selector(orderFrontStandardAboutPanel:)),
+            Item(IDS_SERVICES_MAC).tag(-1).submenu({}),
             Item(IDS_HIDE_APP_MAC)
                 .string_format_1(appname)
                 .tag(IDC_HIDE_APP)
                 .target(app_controller)
                 .action(@selector(hide:)),
+            Item(IDS_SHOW_ALL_MAC)
+                .action(@selector(unhideAllApplications:)),
             Item(IDS_EXIT_MAC)
                 .string_format_1(appname)
                 .tag(IDC_EXIT)

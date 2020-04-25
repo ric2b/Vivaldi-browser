@@ -84,7 +84,10 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
     InitializeSparkle(command_line, base::Bind(&IsAutoupdateEnabled, profile));
 #endif
   }
-  LaunchUpdateNotifier(profile);
+  // Never launch the update notifier process from guest windows
+  if (!profile->IsGuestSession()) {
+    LaunchUpdateNotifier(profile);
+  }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   AppLaunchParams params(profile, extension, extensions::LAUNCH_CONTAINER_NONE,

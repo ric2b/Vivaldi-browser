@@ -28,6 +28,21 @@ class MailPrivateGetPathsFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(MailPrivateGetPathsFunction);
 };
 
+class MailPrivateSaveBufferFunction : public UIThreadExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.saveBuffer", MAIL_SAVE_FILE_BUFFER)
+ public:
+  MailPrivateSaveBufferFunction() = default;
+
+ protected:
+  ~MailPrivateSaveBufferFunction() override = default;
+  void OnFinished(bool result);
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateSaveBufferFunction);
+};
+
 class MailPrivateSaveFunction : public UIThreadExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.save", MAIL_SAVE)
  public:
@@ -76,6 +91,21 @@ class MailPrivateReadFunction : public UIThreadExtensionFunction {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MailPrivateReadFunction);
+};
+
+class MailPrivateReadBufferFunction : public UIThreadExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.readBuffer", MAIL_READ_FILE_BUFFER)
+ public:
+  MailPrivateReadBufferFunction() = default;
+
+ protected:
+  ~MailPrivateReadBufferFunction() override = default;
+  void OnFinished(ReadFileResult result);
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateReadBufferFunction);
 };
 
 class MailPrivateReadFileFunction : public UIThreadExtensionFunction {

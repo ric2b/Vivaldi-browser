@@ -1,4 +1,5 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="be">
+  <translation id="IDS_ACCEPT_LANGUAGES">be-BY,be,ru,ru-RU</translation>
 </translationbundle>

@@ -83,7 +83,7 @@ class PlatformMediaPipelineIntegrationTest
 #if defined(OS_MACOSX)
     return true;
 #elif defined(OS_WIN)
-    if (base::win::GetVersion() >= base::win::VERSION_WIN7)
+    if (base::win::GetVersion() >= base::win::Version::WIN7)
       return true;
 #endif
     LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
@@ -339,12 +339,12 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_0) {
 
   // This is known not to work on Windows systems older than 8.
 #if defined(OS_WIN)
-  if (base::win::GetVersion() < base::win::VERSION_WIN8)
+  if (base::win::GetVersion() < base::win::Version::WIN8)
     return;
 #endif
 
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_0.mp4"));
-  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_0, metadata_.video_decoder_config.video_rotation());
+  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_0, metadata_.video_decoder_config.video_transformation());
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_90) {
@@ -353,12 +353,12 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_90) {
 
   // This is known not to work on Windows systems older than 8.
 #if defined(OS_WIN)
-  if (base::win::GetVersion() < base::win::VERSION_WIN8)
+  if (base::win::GetVersion() < base::win::Version::WIN8)
     return;
 #endif
 
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_90.mp4"));
-  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_90, metadata_.video_decoder_config.video_rotation());
+  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_90, metadata_.video_decoder_config.video_transformation());
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_180) {
@@ -367,12 +367,12 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_180) {
 
   // This is known not to work on Windows systems older than 8.
 #if defined(OS_WIN)
-  if (base::win::GetVersion() < base::win::VERSION_WIN8)
+  if (base::win::GetVersion() < base::win::Version::WIN8)
     return;
 #endif
 
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_180.mp4"));
-  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_180, metadata_.video_decoder_config.video_rotation());
+  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_180, metadata_.video_decoder_config.video_transformation());
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_270) {
@@ -381,12 +381,12 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_270) {
 
   // This is known not to work on Windows systems older than 8.
 #if defined(OS_WIN)
-  if (base::win::GetVersion() < base::win::VERSION_WIN8)
+  if (base::win::GetVersion() < base::win::Version::WIN8)
     return;
 #endif
 
   ASSERT_EQ(PipelineStatus::PIPELINE_OK, Start("bear_rotate_270.mp4"));
-  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_270, metadata_.video_decoder_config.video_rotation());
+  ASSERT_EQ(VideoRotation::VIDEO_ROTATION_270, metadata_.video_decoder_config.video_transformation());
 }
 
 // Configuration change happens only on Windows.

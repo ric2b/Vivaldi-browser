@@ -28,7 +28,7 @@ namespace vivaldi {
 // is false.
 bool IsChromeDefaultBrowser() {
   bool chrome_default = false;
-  if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
+  if (base::win::GetVersion() >= base::win::Version::VISTA) {
     base::string16 app_cmd;
     base::win::RegKey key(HKEY_CURRENT_USER, ShellUtil::kRegVistaUrlPrefs,
                           KEY_READ);
@@ -60,7 +60,7 @@ bool IsChromeDefaultBrowser() {
 // is false.
 bool IsOperaDefaultBrowser() {
   bool opera_default = false;
-  if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
+  if (base::win::GetVersion() >= base::win::Version::VISTA) {
     base::string16 app_cmd;
     base::win::RegKey key(HKEY_CURRENT_USER, ShellUtil::kRegVistaUrlPrefs,
                           KEY_READ);

@@ -14,7 +14,6 @@
 #include "app/vivaldi_constants.h"
 #include "app/vivaldi_version_info.h"
 #include "base/command_line.h"
-#include "base/guid.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
@@ -82,8 +81,6 @@ bool IsValidUserId(const std::string& user_id) {
 }  // anonymous namespace
 
 namespace extensions {
-
-const char kBaseFileMappingUrl[] = "chrome://vivaldi-data/local-image/";
 
 namespace {
 
@@ -574,7 +571,6 @@ ExtensionFunction::ResponseAction UtilitiesGetSelectedTextFunction::Run() {
 
 ExtensionFunction::ResponseAction UtilitiesCreateUrlMappingFunction::Run() {
   using vivaldi::utilities::CreateUrlMapping::Params;
-  namespace Results = vivaldi::utilities::CreateUrlMapping::Results;
 
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -582,41 +578,132 @@ ExtensionFunction::ResponseAction UtilitiesCreateUrlMappingFunction::Run() {
   // PathExists() triggers IO restriction.
   base::ThreadRestrictions::ScopedAllowIO allow_io;
   std::string file = params->local_path;
-  std::string guid = base::GenerateGUID();
   base::FilePath path = base::FilePath::FromUTF8Unsafe(file);
   if (!base::PathExists(path)) {
     return RespondNow(Error("File does not exists: " + file));
   }
-  if (!VivaldiDataSourcesAPI::AddMapping(browser_context(), guid, path)) {
-    return RespondNow(Error("Mapping for file failed: " + file));
+  VivaldiDataSourcesAPI::AddMapping(
+      browser_context(), std::move(path),
+      base::BindOnce(&UtilitiesCreateUrlMappingFunction::OnAddMappingFinished,
+                     this, std::move(file)));
+  return RespondLater();
+}
+
+void UtilitiesCreateUrlMappingFunction::OnAddMappingFinished(std::string file,
+                                                             bool success,
+                                                             std::string url) {
+  namespace Results = vivaldi::utilities::CreateUrlMapping::Results;
+
+  if (!success) {
+    Respond(Error("Mapping for file failed: " + file));
+    return;
   }
-  std::string retval = kBaseFileMappingUrl + guid;
-  return RespondNow(ArgumentList(Results::Create(retval)));
+  Respond(ArgumentList(Results::Create(url)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesRemoveUrlMappingFunction::Run() {
   using vivaldi::utilities::RemoveUrlMapping::Params;
-  namespace Results = vivaldi::utilities::RemoveUrlMapping::Results;
 
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  // Extract the ID from the given url first.
-  GURL url(params->url);
-  std::string id = url.ExtractFileName();
+  VivaldiDataSourcesAPI::RemoveMapping(
+      browser_context(), params->url,
+      base::BindOnce(
+          &UtilitiesRemoveUrlMappingFunction::OnRemoveMappingFinished, this));
+  return RespondLater();
+}
 
-  bool success = VivaldiDataSourcesAPI::RemoveMapping(browser_context(), id);
+void UtilitiesRemoveUrlMappingFunction::OnRemoveMappingFinished(bool success) {
+  namespace Results = vivaldi::utilities::RemoveUrlMapping::Results;
 
-  return RespondNow(ArgumentList(Results::Create(success)));
+  Respond(ArgumentList(Results::Create(success)));
 }
 
 namespace {
-// Converts file extensions to a ui::SelectFileDialog::FileTypeInfo.
-ui::SelectFileDialog::FileTypeInfo ConvertExtensionsToFileTypeInfo(
-    const std::vector<vivaldi::utilities::FileExtension>&
-        extensions) {
-  ui::SelectFileDialog::FileTypeInfo file_type_info;
 
+
+// Helpers to simply the usage of ui::SelectFileDialog when implementing
+// extension functions.
+
+struct FileSelectionOptions {
+  void SetTitle(base::StringPiece str);
+
+  base::string16 title;
+  ui::SelectFileDialog::Type type = ui::SelectFileDialog::SELECT_OPEN_FILE;
+  ui::SelectFileDialog::FileTypeInfo file_type_info;
+};
+
+class FileSelectionRunner : private ui::SelectFileDialog::Listener {
+ public:
+  using ResultCallback = base::OnceCallback<void(base::FilePath file_path)>;
+
+  static void Start(content::WebContents* web_contents,
+                    const FileSelectionOptions& options,
+                    ResultCallback callback);
+ private:
+  FileSelectionRunner(ResultCallback callback);
+  ~FileSelectionRunner() override;
+
+  // ui::SelectFileDialog::Listener:
+  void FileSelected(const base::FilePath& path,
+                    int index,
+                    void* params) override;
+  void FileSelectionCanceled(void* params) override;
+
+  ResultCallback callback_;
+  scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
+
+  DISALLOW_COPY_AND_ASSIGN(FileSelectionRunner);
+};
+
+void FileSelectionOptions::SetTitle(base::StringPiece str) {
+  title = base::UTF8ToUTF16(str);
+}
+
+FileSelectionRunner::FileSelectionRunner(ResultCallback callback)
+    : callback_(std::move(callback)),
+      select_file_dialog_(ui::SelectFileDialog::Create(this, nullptr)) {}
+
+FileSelectionRunner::~FileSelectionRunner() {
+  select_file_dialog_->ListenerDestroyed();
+}
+
+// static
+void FileSelectionRunner::Start(content::WebContents* web_contents,
+                                const FileSelectionOptions& options,
+                                ResultCallback callback) {
+  gfx::NativeWindow window =
+      web_contents ? platform_util::GetTopLevel(web_contents->GetNativeView())
+                   : nullptr;
+
+  FileSelectionRunner* runner = new FileSelectionRunner(std::move(callback));
+  runner->select_file_dialog_->SelectFile(
+      options.type, options.title, base::FilePath(), &options.file_type_info, 0,
+      base::FilePath::StringType(), window, nullptr);
+}
+
+void FileSelectionRunner::FileSelected(const base::FilePath& path,
+                                       int index,
+                                       void* params) {
+  DCHECK(!params);
+  ResultCallback callback = std::move(callback_);
+  base::FilePath path_copy = path;
+  delete this;
+  std::move(callback).Run(std::move(path_copy));
+}
+
+void FileSelectionRunner::FileSelectionCanceled(void* params) {
+  DCHECK(!params);
+  ResultCallback callback = std::move(callback_);
+  delete this;
+  std::move(callback).Run(base::FilePath());
+}
+
+// Converts file extensions to a ui::SelectFileDialog::FileTypeInfo.
+void ConvertExtensionsToFileTypeInfo(
+    const std::vector<vivaldi::utilities::FileExtension>&
+        extensions, ui::SelectFileDialog::FileTypeInfo* file_type_info) {
   for (const auto& item : extensions) {
     base::FilePath::StringType allowed_extension =
       base::FilePath::FromUTF8Unsafe(item.ext).value();
@@ -625,71 +712,91 @@ ui::SelectFileDialog::FileTypeInfo ConvertExtensionsToFileTypeInfo(
     // group equivalent extensions, but we don't use this feature here.
     std::vector<base::FilePath::StringType> inner_vector;
     inner_vector.push_back(allowed_extension);
-    file_type_info.extensions.push_back(inner_vector);
+    file_type_info->extensions.push_back(std::move(inner_vector));
   }
-  return file_type_info;
 }
+
 }  // namespace
-
-UtilitiesSelectFileFunction::UtilitiesSelectFileFunction() {}
-
-UtilitiesSelectFileFunction::~UtilitiesSelectFileFunction() {
-  if (select_file_dialog_) {
-    select_file_dialog_->ListenerDestroyed();
-  }
-}
 
 ExtensionFunction::ResponseAction UtilitiesSelectFileFunction::Run() {
   using vivaldi::utilities::SelectFile::Params;
-  using vivaldi::utilities::SelectFileDialogType;
 
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 title;
-
-  if (params->title.get()) {
-    title = base::UTF8ToUTF16(*params->title.get());
+  FileSelectionOptions options;
+  if (params->title) {
+    options.SetTitle(*params->title);
   }
-  SelectFileDialogType type = params->type;
-  ui::SelectFileDialog::FileTypeInfo file_type_info;
+  options.type =
+      params->type == vivaldi::utilities::SELECT_FILE_DIALOG_TYPE_FOLDER
+          ? ui::SelectFileDialog::SELECT_EXISTING_FOLDER
+          : ui::SelectFileDialog::SELECT_OPEN_FILE;
 
-  if (params->accepts.get()) {
-    file_type_info = ConvertExtensionsToFileTypeInfo(*params->accepts.get());
+  if (params->accepts) {
+    ConvertExtensionsToFileTypeInfo(*params->accepts, &options.file_type_info);
   }
-  file_type_info.include_all_files = true;
-
-  AddRef();
-
-  select_file_dialog_ = ui::SelectFileDialog::Create(this, nullptr);
+  options.file_type_info.include_all_files = true;
 
   content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
-  gfx::NativeWindow window =
-      web_contents ? platform_util::GetTopLevel(web_contents->GetNativeView())
-                   : nullptr;
-
-  select_file_dialog_->SelectFile(
-      type == vivaldi::utilities::SELECT_FILE_DIALOG_TYPE_FOLDER
-          ? ui::SelectFileDialog::SELECT_EXISTING_FOLDER
-          : ui::SelectFileDialog::SELECT_OPEN_FILE,
-      title, base::FilePath(), &file_type_info, 0, base::FilePath::StringType(),
-      window, nullptr);
+  FileSelectionRunner::Start(
+      web_contents, options,
+      base::BindOnce(&UtilitiesSelectFileFunction::OnFileSelected, this));
 
   return RespondLater();
 }
 
-void UtilitiesSelectFileFunction::FileSelected(const base::FilePath& path,
-                                               int index,
-                                               void* params) {
+void UtilitiesSelectFileFunction::OnFileSelected(base::FilePath path) {
   namespace Results = vivaldi::utilities::SelectFile::Results;
 
-  Respond(ArgumentList(Results::Create(path.AsUTF8Unsafe())));
-  Release();
+  if (path.empty()) {
+    Respond(Error("File selection aborted."));
+  } else {
+    Respond(ArgumentList(Results::Create(path.AsUTF8Unsafe())));
+  }
 }
 
-void UtilitiesSelectFileFunction::FileSelectionCanceled(void* params) {
-  Respond(Error("File selection aborted."));
-  Release();
+ExtensionFunction::ResponseAction UtilitiesSelectLocalImageFunction::Run() {
+  using vivaldi::utilities::SelectLocalImage::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  FileSelectionOptions options;
+  options.SetTitle(params->params.title);
+  options.type = ui::SelectFileDialog::SELECT_OPEN_FILE;
+  options.file_type_info.include_all_files = true;
+
+  content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
+  FileSelectionRunner::Start(
+      web_contents, options,
+      base::BindOnce(&UtilitiesSelectLocalImageFunction::OnFileSelected, this));
+
+  return RespondLater();
+}
+
+void UtilitiesSelectLocalImageFunction::OnFileSelected(
+    base::FilePath path) {
+  namespace Results = vivaldi::utilities::SelectLocalImage::Results;
+
+  std::string result;
+  if (path.empty()) {
+    Respond(ArgumentList(Results::Create(std::string())));
+    return;
+  }
+
+  VivaldiDataSourcesAPI::AddMapping(
+      browser_context(), std::move(path),
+      base::BindOnce(&UtilitiesSelectLocalImageFunction::OnAddMappingFinished,
+                     this));
+}
+
+void UtilitiesSelectLocalImageFunction::OnAddMappingFinished(
+    bool success,
+    std::string data_mapping_url) {
+  namespace Results = vivaldi::utilities::SelectLocalImage::Results;
+
+  Respond(ArgumentList(Results::Create(data_mapping_url)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesGetVersionFunction::Run() {

@@ -379,7 +379,7 @@ bool VivaldiNativeAppWindowViews::IsFullscreen() const {
 }
 
 gfx::NativeWindow VivaldiNativeAppWindowViews::GetNativeWindow() const {
-  return widget_->GetNativeWindow();
+  return widget_ ? widget_->GetNativeWindow() : nullptr;
 }
 
 gfx::Rect VivaldiNativeAppWindowViews::GetRestoredBounds() const {

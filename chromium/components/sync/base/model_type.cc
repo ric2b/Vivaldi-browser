@@ -152,6 +152,9 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
      42},
     {SECURITY_EVENTS, "SECURITY_EVENT", "security_events", "Security Events",
      sync_pb::EntitySpecifics::kSecurityEventFieldNumber, 43},
+    {WIFI_CONFIGURATIONS, "WIFI_CONFIGURATION", "wifi_configurations",
+     "Wifi Configurations",
+     sync_pb::EntitySpecifics::kWifiConfigurationFieldNumber, 44},
     {NOTES, "NOTES", "vivaldi_notes",
       "Notes", sync_pb::EntitySpecifics::kNotesFieldNumber, 300},
     // ---- Proxy types ----
@@ -166,11 +169,11 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
 static_assert(base::size(kModelTypeInfoMap) == ModelType::NUM_ENTRIES,
               "kModelTypeInfoMap should have ModelType::NUM_ENTRIES elements");
 
-static_assert(44 + 1 /* notes */ == syncer::ModelType::NUM_ENTRIES,
+static_assert(45 + 1 /* notes */ == syncer::ModelType::NUM_ENTRIES,
               "When adding a new type, update enum SyncModelTypes in enums.xml "
               "and suffix SyncModelType in histograms.xml.");
 
-static_assert(44 + 1 /* notes */ == syncer::ModelType::NUM_ENTRIES,
+static_assert(45 + 1 /* notes */ == syncer::ModelType::NUM_ENTRIES,
               "When adding a new type, update kAllocatorDumpNameWhitelist in "
               "base/trace_event/memory_infra_background_whitelist.cc.");
 
@@ -306,6 +309,9 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case DEPRECATED_EXPERIMENTS:
       specifics->mutable_experiments();
       break;
+    case WIFI_CONFIGURATIONS:
+      specifics->mutable_wifi_configuration();
+      break;
     case ModelType::NUM_ENTRIES:
       break;
     case NOTES:
@@ -358,7 +364,7 @@ ModelType GetModelType(const sync_pb::SyncEntity& sync_entity) {
 }
 
 ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
-  static_assert(44 + 1 /* notes */ == ModelType::NUM_ENTRIES,
+  static_assert(45 + 1 /* notes */ == ModelType::NUM_ENTRIES,
                 "When adding new protocol types, the following type lookup "
                 "logic must be updated.");
   if (specifics.has_bookmark())
@@ -443,6 +449,8 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
     return SEND_TAB_TO_SELF;
   if (specifics.has_security_event())
     return SECURITY_EVENTS;
+  if (specifics.has_wifi_configuration())
+    return WIFI_CONFIGURATIONS;
 
   if (specifics.has_notes())
     return NOTES;
@@ -451,7 +459,7 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
 }
 
 ModelTypeSet EncryptableUserTypes() {
-  static_assert(44 + 1 /* notes */ == ModelType::NUM_ENTRIES,
+  static_assert(45 + 1 /* notes */ == ModelType::NUM_ENTRIES,
                 "If adding an unencryptable type, remove from "
                 "encryptable_user_types below.");
   ModelTypeSet encryptable_user_types = UserTypes();

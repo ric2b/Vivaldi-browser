@@ -124,7 +124,6 @@
 <translation id="4384652540891215547">Aktiveeri laiendus</translation>
 <translation id="4394049700291259645">Keela</translation>
 <translation id="4409697491990005945">Veerised</translation>
-<translation id="4423482519432579560">&amp;Õigekirjakontroll</translation>
 <translation id="4434045419905280838">Hüpikaknad ja ümbersuunamised</translation>
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4593021220803146968">&amp;Ava <ph name="URL" /></translation>
@@ -174,7 +173,6 @@
 <translation id="5780973441651030252">Protsessi prioriteet</translation>
 <translation id="5828633471261496623">Printimine...</translation>
 <translation id="583281660410589416">Tundmatu</translation>
-<translation id="5877584842898320529">Valitud printer kas pole saadaval või pole õigesti seadistatud. <ph name="BR" /> Kontrolli printerit või proovi mõnda teist printerit kasutada.</translation>
 <translation id="5956585768868398362">Kas see on otsinguleht, mida ootasid?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (tipp <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Lisaks juhib see seda, mis leht kuvatakse avalehe nupul klõpsamisel või omnikastikeses otsingu tegemisel.</translation>

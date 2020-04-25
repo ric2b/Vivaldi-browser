@@ -115,10 +115,6 @@ class DeveloperPrivateEventRouter : public ExtensionRegistryObserver,
   void OnExtensionCommandRemoved(const std::string& extension_id,
                                  const Command& removed_command) override;
 
-  // ExtensionActionAPI::Observer:
-  void OnExtensionActionVisibilityChanged(const std::string& extension_id,
-                                          bool is_now_visible) override;
-
   // ExtensionPrefsObserver:
   void OnExtensionDisableReasonsChanged(const std::string& extension_id,
                                         int disable_reasons) override;

@@ -188,7 +188,6 @@
 <translation id="4384652540891215547">Aktivovat rozšíření</translation>
 <translation id="4394049700291259645">Deaktivovat</translation>
 <translation id="4409697491990005945">Okraje</translation>
-<translation id="4423482519432579560">&amp;Kontrola pravopisu</translation>
 <translation id="4434045419905280838">Vyskakovací okna a přesměrování</translation>
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Nelze odeslat do <ph name="HOST_NAME" />.</translation>
@@ -261,7 +260,6 @@
 <translation id="583281660410589416">Neznámé</translation>
 <translation id="5838456317242088717">Stávající soukromé sezení</translation>
 <translation id="5860491529813859533">Zapnout</translation>
-<translation id="5877584842898320529">Zvolená tiskárna není dostupná nebo není správně nainstalovaná. <ph name="BR" /> Zkontrolujte tiskárnu nebo vyberte jinou.</translation>
 <translation id="5908769186679515905">Zamezit spouštění obsahu Flash na stránkách</translation>
 <translation id="5956585768868398362">Je toto stránka vyhledávání, kterou jste očekávali?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (maximum: <ph name="NUM_KILOBYTES_LIVE" />)</translation>

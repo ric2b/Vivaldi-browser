@@ -308,7 +308,7 @@ void WMFMediaPipeline::InitializeDone(bool success,
                                       PlatformVideoConfig video_config) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(initialize_cb_);
-  base::ResetAndReturn(&initialize_cb_)
+  std::move(initialize_cb_)
       .Run(success, bitrate, time_info, audio_config, video_config);
 }
 
@@ -341,11 +341,11 @@ void WMFMediaPipeline::ReadDataDone(PlatformMediaDataType type,
   switch (type) {
     case PlatformMediaDataType::PLATFORM_MEDIA_AUDIO:
       DCHECK(read_audio_data_cb_);
-      base::ResetAndReturn(&read_audio_data_cb_).Run(decoded_data);
+      std::move(read_audio_data_cb_).Run(decoded_data);
       return;
     case PlatformMediaDataType::PLATFORM_MEDIA_VIDEO:
       DCHECK(read_video_data_cb_);
-      base::ResetAndReturn(&read_video_data_cb_).Run(decoded_data);
+      std::move(read_video_data_cb_).Run(decoded_data);
       return;
     default:
       NOTREACHED() << "Unknown stream type";
@@ -365,7 +365,7 @@ void WMFMediaPipeline::Seek(base::TimeDelta time, const SeekCB& seek_cb) {
 void WMFMediaPipeline::SeekDone(bool success) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(seek_cb_);
-  base::ResetAndReturn(&seek_cb_).Run(success);
+  std::move(seek_cb_).Run(success);
 }
 
 void WMFMediaPipeline::AudioConfigChanged(PlatformAudioConfig audio_config) {

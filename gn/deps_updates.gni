@@ -76,12 +76,10 @@ foreach(_target, _targets) {
 }
 
 _targets=[]
-_targets = [
-  "//chrome/test:browser_tests",
-]
 
 if (!is_android) {
   _targets += [
+    "//chrome/test:browser_tests",
     "//chrome/test:interactive_ui_tests",
     "//chrome/test:sync_integration_tests",
   ]

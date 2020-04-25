@@ -78,6 +78,7 @@ jumbo_static_library("browser") {
     deps = [
       "//base:base",
       #"//chrome/common:common",
+      "//components/autofill/core/common",
       "//url:url",
       "//vivaldi/app:resources",
       "//vivaldi/app:vivaldi_native_strings",

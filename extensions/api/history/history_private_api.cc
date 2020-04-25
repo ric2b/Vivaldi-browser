@@ -224,7 +224,7 @@ ExtensionFunction::ResponseAction HistoryPrivateDbSearchFunction::Run() {
   const std::string search_text = "%" + params->query.text + "%";
   hs->QueryHistoryWStatement(
       sql_statement, search_text, max_hits,
-      base::Bind(&HistoryPrivateDbSearchFunction::SearchComplete,
+      base::BindOnce(&HistoryPrivateDbSearchFunction::SearchComplete,
                  base::Unretained(this)),
       &task_tracker_);
 
@@ -233,12 +233,12 @@ ExtensionFunction::ResponseAction HistoryPrivateDbSearchFunction::Run() {
 }
 
 void HistoryPrivateDbSearchFunction::SearchComplete(
-    history::QueryResults* results) {
+    history::QueryResults results) {
   HistoryItemList history_item_vec;
-  if (results && !results->empty()) {
+  if (!results.empty()) {
     for (history::QueryResults::URLResultVector::const_iterator iterator =
-             results->begin();
-         iterator != results->end(); ++iterator) {
+             results.begin();
+         iterator != results.end(); ++iterator) {
       history_item_vec.push_back(
           std::move(*base::WrapUnique(GetHistoryItem(*iterator).release())));
     }
@@ -282,7 +282,7 @@ ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
       GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
 
   hs->QueryHistory(search_text, options,
-                   base::Bind(&HistoryPrivateSearchFunction::SearchComplete,
+                   base::BindOnce(&HistoryPrivateSearchFunction::SearchComplete,
                               base::Unretained(this)),
                    &task_tracker_);
 
@@ -316,12 +316,12 @@ HistoryPrivateItem GetHistoryAndVisitItem(const history::URLResult& row,
 }
 
 void HistoryPrivateSearchFunction::SearchComplete(
-    history::QueryResults* results) {
+    history::QueryResults results) {
   HistoryItemList history_item_vec;
   BookmarkModel* model =
       BookmarkModelFactory::GetForBrowserContext(GetProfile());
-  if (results && !results->empty()) {
-    for (const auto item : *results)
+  if (!results.empty()) {
+    for (const auto item : results)
       history_item_vec.push_back(GetHistoryAndVisitItem(item, model));
   }
   Respond(ArgumentList(DBSearch::Results::Create(history_item_vec)));

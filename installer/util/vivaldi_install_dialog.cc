@@ -130,7 +130,7 @@ VivaldiInstallDialog::VivaldiInstallDialog(
     dpi_scale_ = DPI_XXL;
 
   enable_set_as_default_checkbox_ =
-      (base::win::GetVersion() < base::win::VERSION_WIN10);
+      (base::win::GetVersion() < base::win::Version::WIN10);
 
   enable_register_browser_checkbox_ = IsRegisterBrowserValid();
 }
@@ -408,7 +408,7 @@ void VivaldiInstallDialog::OnLanguageSelection() {
 bool VivaldiInstallDialog::GetRegisterBrowser() const {
   return register_browser_ ||
          (set_as_default_browser_ &&
-          base::win::GetVersion() < base::win::VERSION_WIN10);
+          base::win::GetVersion() < base::win::Version::WIN10);
 }
 
 /* static */
@@ -571,7 +571,7 @@ void VivaldiInstallDialog::UpdateRegisterCheckboxVisibility() {
 
 bool VivaldiInstallDialog::IsRegisterBrowserValid() const {
   return (install_type_ == INSTALL_STANDALONE &&
-          base::win::GetVersion() >= base::win::VERSION_WIN10);
+          base::win::GetVersion() >= base::win::Version::WIN10);
 }
 
 void VivaldiInstallDialog::InitCtlBrushes(HWND hdlg) {

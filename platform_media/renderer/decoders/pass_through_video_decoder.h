@@ -25,12 +25,12 @@ class MEDIA_EXPORT PassThroughVideoDecoder : public VideoDecoder {
   void Initialize(const VideoDecoderConfig& config,
                   bool low_delay,
                   CdmContext* cdm_context,
-                  const InitCB& init_cb,
+                  InitCB init_cb,
                   const OutputCB& output_cb,
                   const WaitingCB& waiting_for_decryption_key_cb) override;
   void Decode(scoped_refptr<DecoderBuffer> buffer,
-              const DecodeCB& decode_cb) override;
-  void Reset(const base::Closure& closure) override;
+              DecodeCB decode_cb) override;
+  void Reset(base::OnceClosure closure) override;
   std::string GetDisplayName() const override;
 
  private:

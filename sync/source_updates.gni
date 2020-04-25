@@ -11,7 +11,7 @@ if(!is_android) {
   }
 }
 
-update_template_instance("//components/sync:base") {
+update_template_instance("//components/sync/base:base") {
   sources += [
     "//vivaldi/sync/vivaldi_hash_util.h",
     "//vivaldi/sync/vivaldi_prefs_names.cc",

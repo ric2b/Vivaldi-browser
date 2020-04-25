@@ -24,7 +24,7 @@
 class Browser;
 class PrefService;
 class Profile;
-class ToolbarActionsBar;
+class ExtensionsContainer;
 class ToolbarActionViewController;
 
 namespace extensions {
@@ -39,7 +39,7 @@ class ExtensionRegistry;
 // model, but if the window is too narrow, actions may end up pushed into the
 // overflow menu on a per-window basis. Callers interested in the arrangement of
 // actions in a particular window should check that window's instance of
-// ToolbarActionsBar, which is responsible for the per-window layout.
+// ExtensionsContainer, which is responsible for the per-window layout.
 class ToolbarActionsModel : public extensions::ExtensionActionAPI::Observer,
                             public extensions::LoadErrorReporter::Observer,
                             public extensions::ExtensionRegistryObserver,
@@ -140,11 +140,11 @@ class ToolbarActionsModel : public extensions::ExtensionActionAPI::Observer,
 
   std::vector<std::unique_ptr<ToolbarActionViewController>> CreateActions(
       Browser* browser,
-      ToolbarActionsBar* main_bar,
+      ExtensionsContainer* main_bar,
       bool in_overflow_menu);
   std::unique_ptr<ToolbarActionViewController> CreateActionForId(
       Browser* browser,
-      ToolbarActionsBar* main_bar,
+      ExtensionsContainer* main_bar,
       bool in_overflow_menu,
       const ActionId& action_id);
 
@@ -205,8 +205,6 @@ class ToolbarActionsModel : public extensions::ExtensionActionAPI::Observer,
   void OnLoadFailure(content::BrowserContext* browser_context,
                      const base::FilePath& extension_path,
                      const std::string& error) override;
-
-  void OnPageActionsUpdated(content::WebContents* web_contents) override;
 
   // To be called after the extension service is ready; gets loaded extensions
   // from the ExtensionRegistry, their saved order from the pref service, and

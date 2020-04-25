@@ -118,8 +118,8 @@ repack_locales("vivaldi_merge_repacks") {
     "//components/strings:components_google_chrome_strings",
     "//components/strings:components_strings",
     "//components/strings:components_locale_settings",
-    "//content/app/strings:strings",
-    "//ui/strings:ui_strings",
+    "//content/app/strings",
+    "//ui/strings",
     "//vivaldi/app:vivaldi_native_strings",
   ]
   input_locales = vivaldi_pending_locales

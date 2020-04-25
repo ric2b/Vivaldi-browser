@@ -27,11 +27,6 @@
 #include "ui/base/ui_base_paths.h"  // nogncheck
 #endif
 
-#if defined(OS_LINUX)
-#include "base/environment.h"
-#include "base/nix/xdg_util.h"
-#endif
-
 #if defined(OS_MACOSX)
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
@@ -319,9 +314,6 @@ bool PathProvider(int key, base::FilePath* result) {
         return false;
       cur = cur.Append(kPepperFlashSystemBaseDirectory);
       cur = cur.Append(chrome::kPepperFlashPluginFilename);
-#elif defined(OS_LINUX)
-      cur = base::FilePath(
-          FILE_PATH_LITERAL("/usr/lib/adobe-flashplugin/libpepflashplayer.so"));
 #else
       // Chrome on iOS does not supports PPAPI binaries, return false.
       // TODO(wfh): If Adobe release PPAPI binaries for Linux, add support here.
@@ -524,7 +516,7 @@ bool PathProvider(int key, base::FilePath* result) {
 #if defined(OS_LINUX) || defined(OS_MACOSX)
     case chrome::DIR_NATIVE_MESSAGING:
 #if defined(OS_MACOSX)
-#if defined(GOOGLE_CHROME_BUILD) || defined(VIVALDI_BUILD)
+#if defined(GOOGLE_CHROME_BUILD)
       cur = base::FilePath(FILE_PATH_LITERAL(
            "/Library/Google/Chrome/NativeMessagingHosts"));
 #else
@@ -532,7 +524,7 @@ bool PathProvider(int key, base::FilePath* result) {
           "/Library/Application Support/Chromium/NativeMessagingHosts"));
 #endif
 #else  // defined(OS_MACOSX)
-#if defined(GOOGLE_CHROME_BUILD) || defined(VIVALDI_BUILD)
+#if defined(GOOGLE_CHROME_BUILD)
       cur = base::FilePath(FILE_PATH_LITERAL(
           "/etc/opt/chrome/native-messaging-hosts"));
 #else
@@ -557,15 +549,12 @@ bool PathProvider(int key, base::FilePath* result) {
 #endif  // !defined(OS_ANDROID)
 #if defined(OS_LINUX)
     case chrome::FILE_COMPONENT_FLASH_HINT:
-    {
-      std::unique_ptr<base::Environment> env(base::Environment::Create());
-      cur = base::nix::GetXDGDirectory(
-          env.get(), base::nix::kXdgConfigHomeEnvVar, base::nix::kDotConfigDir);
-      cur = cur.Append("google-chrome");
-      cur = cur.Append(kPepperFlashBaseDirectory);
+      if (!base::PathService::Get(
+              chrome::DIR_COMPONENT_UPDATED_PEPPER_FLASH_PLUGIN, &cur)) {
+        return false;
+      }
       cur = cur.Append(kComponentUpdatedFlashHint);
       break;
-    }
 #endif  // defined(OS_LINUX)
 #if defined(OS_CHROMEOS)
     case chrome::FILE_CHROME_OS_COMPONENT_FLASH:

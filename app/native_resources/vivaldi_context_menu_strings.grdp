@@ -37,6 +37,9 @@
     <message name="IDS_VIV_COPY_TO_NOTE" desc="Save selected text as a new note">
         Copy to Note
     </message>
+    <message name="IDS_VIV_ADD_AS_EVENT" desc="Adds the selected text as a new event">
+        Add as Event
+    </message>
     <message name="IDS_VIV_BOOKMARK_PAGE" desc="Save current page as a bookmark">
         Bookmark Page
     </message>

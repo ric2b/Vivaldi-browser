@@ -30,7 +30,7 @@ PassThroughDecoderImpl<StreamType>::PassThroughDecoderImpl(
 template <DemuxerStream::Type StreamType>
 void PassThroughDecoderImpl<StreamType>::Initialize(
     const DecoderConfig& config,
-    const InitCB& init_cb,
+    InitCB init_cb,
     const OutputCB& output_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(config.IsValidConfig());
@@ -39,7 +39,7 @@ void PassThroughDecoderImpl<StreamType>::Initialize(
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Media Config not accepted for codec : "
             << GetCodecName(config.codec());
-    task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
+    task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), false));
     return;
   } else {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -50,13 +50,13 @@ void PassThroughDecoderImpl<StreamType>::Initialize(
   config_ = config;
   output_cb_ = output_cb;
 
-  task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, true));
+  task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), true));
 }
 
 template <DemuxerStream::Type StreamType>
 void PassThroughDecoderImpl<StreamType>::Decode(
     scoped_refptr<DecoderBuffer> buffer,
-    const DecodeCB& decode_cb) {
+    DecodeCB decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(IsValidConfig(config_));
 
@@ -81,13 +81,13 @@ void PassThroughDecoderImpl<StreamType>::Decode(
     }
   }
 
-  task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));
+  task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(decode_cb), status));
 }
 
 template <DemuxerStream::Type StreamType>
-void PassThroughDecoderImpl<StreamType>::Reset(const base::Closure& closure) {
+void PassThroughDecoderImpl<StreamType>::Reset(base::OnceClosure closure) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  task_runner_->PostTask(FROM_HERE, closure);
+  task_runner_->PostTask(FROM_HERE, std::move(closure));
 }
 
 template <>

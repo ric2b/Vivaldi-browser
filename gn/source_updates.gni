@@ -63,3 +63,14 @@ if (is_win) {
     ]
   }
 }
+
+if (is_android) {
+  update_template_instance("//chrome/browser:browser") {
+    if (!defined(jumbo_excluded_sources)) {
+      jumbo_excluded_sources = []
+    }
+    jumbo_excluded_sources += [
+      "android/foreign_session_helper.cc",
+    ]
+  }
+}

@@ -9,7 +9,6 @@
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
-#include "extensions/browser/event_router.h"
 
 using extensions::BrowserContextKeyedAPI;
 using extensions::BrowserContextKeyedAPIFactory;
@@ -18,23 +17,8 @@ using bookmarks::BookmarkNode;
 
 namespace extensions {
 
-class VivaldiBookmarksEventRouter {
- public:
-  explicit VivaldiBookmarksEventRouter(Profile* profile);
-  ~VivaldiBookmarksEventRouter();
-
-  // Helper to actually dispatch an event to extension listeners.
-  void DispatchEvent(const std::string& event_name,
-                     std::unique_ptr<base::ListValue> event_args);
-
- private:
-  content::BrowserContext* browser_context_;
-  DISALLOW_COPY_AND_ASSIGN(VivaldiBookmarksEventRouter);
-};
-
 class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
-                            public BrowserContextKeyedAPI,
-                            public EventRouter::Observer {
+                            public BrowserContextKeyedAPI {
  public:
   explicit VivaldiBookmarksAPI(content::BrowserContext* context);
   ~VivaldiBookmarksAPI() override;
@@ -48,9 +32,9 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 
   void SetPartnerUpgradeActive(bool active);
 
-  // EventRouter::Observer implementation.
-  void OnListenerAdded(const EventListenerInfo& details) override;
+  static std::string GetThumbnailUrl(const bookmarks::BookmarkNode* node);
 
+ private:
   // bookmarks::BookmarkModelObserver
   void BookmarkNodeMoved(BookmarkModel* model,
                          const BookmarkNode* old_parent,
@@ -82,14 +66,11 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
       BookmarkModel* model,
       const std::set<GURL>& removed_urls) override {}
 
- private:
   friend class BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>;
 
   content::BrowserContext* browser_context_;
 
   bookmarks::BookmarkModel* bookmark_model_;
-
-  std::unique_ptr<VivaldiBookmarksEventRouter> event_router_;
 
   bool partner_upgrade_active_;
 
@@ -100,20 +81,20 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 };
 
 class BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction
-    : public ChromeAsyncExtensionFunction {
+    : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION(
       "bookmarksPrivate.updateSpeedDialsForWindowsJumplist",
       BOOKMARKSPRIVATE_UPDATESPEEDDIALSFORWINDOWSJUMPLIST)
 
-  BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction();
-
- protected:
-  ~BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction() override;
+  BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction() = default;
 
  private:
-  // BookmarksFunction:
-  bool RunAsync() override;
+  ~BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction() override =
+      default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(
       BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction);
@@ -124,12 +105,11 @@ class BookmarksPrivateEmptyTrashFunction : public BookmarksFunction {
   DECLARE_EXTENSION_FUNCTION("bookmarksPrivate.emptyTrash",
                              BOOKMARKSPRIVATE_EMPTYTRASH)
 
-  BookmarksPrivateEmptyTrashFunction();
-
- protected:
-  ~BookmarksPrivateEmptyTrashFunction() override;
+  BookmarksPrivateEmptyTrashFunction() = default;
 
  private:
+  ~BookmarksPrivateEmptyTrashFunction() override = default;
+
   // BookmarksFunction:
   bool RunOnReady() override;
 
@@ -151,6 +131,23 @@ class BookmarksPrivateUpgradePartnerFunction : public BookmarksUpdateFunction {
   bool RunOnReady() override;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarksPrivateUpgradePartnerFunction);
+};
+
+class BookmarksPrivateIsCustomThumbnailFunction : public BookmarksFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("bookmarksPrivate.isCustomThumbnail",
+                             BOOKMARKSPRIVATE_ISCUSTOMTHUMBNAIL)
+
+  BookmarksPrivateIsCustomThumbnailFunction() = default;
+
+ protected:
+  ~BookmarksPrivateIsCustomThumbnailFunction() override = default;
+
+ private:
+  // BookmarksFunction:
+  bool RunOnReady() override;
+
+  DISALLOW_COPY_AND_ASSIGN(BookmarksPrivateIsCustomThumbnailFunction);
 };
 
 }  // namespace extensions

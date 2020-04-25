@@ -40,8 +40,6 @@ class VivaldiBookmarkMenuViews : public vivaldi::VivaldiBookmarkMenu,
 
   void set_observer(vivaldi::VivaldiBookmarkMenuObserver* observer) override;
 
-  void set_button_rect(const gfx::Rect& button_rect);
-
   static gfx::NativeView GetActiveNativeViewFromWebContents(
       content::WebContents* web_contents);
 

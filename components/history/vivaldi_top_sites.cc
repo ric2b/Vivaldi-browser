@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "components/history/core/browser/top_sites_backend.h"
@@ -35,8 +36,8 @@ bool TopSitesDatabase::ConvertThumbnailData(
       if (pos != std::string::npos) {
         url = url.substr(pos + 1);
       }
-      int bookmark_id = url.empty() ? 0 : std::atoi(url.c_str());
-      if (bookmark_id) {
+      int64_t bookmark_id = 0;
+      if (!url.empty() && base::StringToInt64(url, &bookmark_id)) {
         base::PostTaskWithTraits(
             FROM_HERE, {content::BrowserThread::UI},
             base::Bind(callback, path, bookmark_id, std::move(thumbnail)));

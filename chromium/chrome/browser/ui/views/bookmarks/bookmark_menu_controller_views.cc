@@ -6,7 +6,7 @@
 
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/bookmarks/bookmark_stats.h"
+#include "chrome/browser/ui/bookmarks/bookmark_stats.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_controller_observer.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.h"
@@ -20,6 +20,7 @@
 #include "ui/views/widget/widget.h"
 
 #include "app/vivaldi_apptools.h"
+#include "browser/menus/vivaldi_bookmark_context_menu.h"
 
 using base::UserMetricsAction;
 using bookmarks::BookmarkNode;
@@ -63,7 +64,8 @@ void BookmarkMenuController::RunMenuAt(BookmarkBarView* bookmark_bar) {
   menu_delegate_->GetBookmarkModel()->AddObserver(this);
   // We only delete ourself after the menu completes, so we can safely ignore
   // the return value.
-  menu_runner_->RunMenuAt(menu_delegate_->parent(), menu_button, bounds, anchor,
+  menu_runner_->RunMenuAt(menu_delegate_->parent(),
+                          menu_button->button_controller(), bounds, anchor,
                           ui::MENU_SOURCE_NONE);
 }
 
@@ -178,6 +180,19 @@ views::MenuItemView* BookmarkMenuController::GetSiblingMenu(
   *button = bookmark_bar_->GetMenuButtonForNode(node);
   bookmark_bar_->GetAnchorPositionForButton(*button, anchor);
   *has_mnemonics = false;
+  return this->menu();
+}
+
+views::MenuItemView* BookmarkMenuController::GetVivaldiSiblingMenu(
+    views::MenuItemView* menu,
+    const gfx::Point& screen_point,
+    gfx::Rect* rect) {
+  int start_index;
+  const BookmarkNode* node = vivaldi::GetNodeByPosition(
+      menu_delegate_->GetBookmarkModel(), screen_point, &start_index, rect);
+  if (!node || !node->is_folder())
+    return nullptr;
+  menu_delegate_->SetActiveMenu(node, start_index);
   return this->menu();
 }
 

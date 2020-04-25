@@ -8,11 +8,14 @@ declare_args() {
 
 # Locales about to be added, but not ready
 vivaldi_pending_locales = [
+  "af",
   "be",
+  "de-CH",
   "eo",
   "es-PE",
   "eu",
   "fy",
+  "gd",
   "gl",
   "hy",
   "io",

@@ -495,12 +495,6 @@ void DeveloperPrivateEventRouter::OnExtensionCommandRemoved(
                             extension_id);
 }
 
-void DeveloperPrivateEventRouter::OnExtensionActionVisibilityChanged(
-    const std::string& extension_id,
-    bool is_now_visible) {
-  BroadcastItemStateChanged(developer::EVENT_TYPE_PREFS_CHANGED, extension_id);
-}
-
 void DeveloperPrivateEventRouter::OnExtensionDisableReasonsChanged(
     const std::string& extension_id, int disable_reasons) {
   BroadcastItemStateChanged(developer::EVENT_TYPE_PREFS_CHANGED, extension_id);

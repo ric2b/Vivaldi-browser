@@ -56,6 +56,9 @@ class VivaldiNativeAppWindowViewsMac : public VivaldiNativeAppWindowViews {
 
   void OnWidgetDestroyed(views::Widget* widget) override;
 
+  // WidgetDelegate implementation.
+  void DeleteDelegate() override;
+
   // NativeAppWindow implementation.
   // These are used to simulate Mac-style hide/show. Since windows can be hidden
   // and shown using the app.window API, this sets is_hidden_with_app_ to

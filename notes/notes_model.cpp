@@ -712,8 +712,8 @@ void Notes_Model::SortChildren(const Notes_Node* parent) {
   if (U_FAILURE(error))
     collator.reset(NULL);
   Notes_Node* mutable_parent = AsMutable(parent);
-  std::sort(mutable_parent->children().begin(),
-            mutable_parent->children().end(), SortComparator(collator.get()));
+  std::sort(mutable_parent->children_.begin(),
+            mutable_parent->children_.end(), SortComparator(collator.get()));
 
   if (store_.get())
     store_->ScheduleSave();
@@ -740,11 +740,11 @@ void Notes_Model::ReorderChildren(
 
     std::vector<std::unique_ptr<Notes_Node>> new_children(ordered_nodes.size());
     Notes_Node* mutable_parent = AsMutable(parent);
-    for (auto& child : mutable_parent->children()) {
+    for (auto& child : mutable_parent->children_) {
       size_t new_location = order[child.get()];
       new_children[new_location] = std::move(child);
     }
-    mutable_parent->children().swap(new_children);
+    mutable_parent->children_.swap(new_children);
   }
 
   if (store_.get())

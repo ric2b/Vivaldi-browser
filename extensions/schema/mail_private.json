@@ -11,12 +11,12 @@
       {
         "name": "getPaths",
         "type": "function",
-        "description": "Returns array of mail paths (.vmail and .vflags) under a given directory. The root folder location is the profile directory of the current running instance. / Mail",
+        "description": "Returns array of mail paths (.eml) under a given directory. The root folder location is the profile directory of the current running instance. / Mail",
         "parameters": [
           {
             "name": "paths",
             "type": "array",
-            "description": "String array that that builds up a folder structure as starting point for searching for mails and flags",
+            "description": "String array that that builds up a folder structure as starting point for searching for mails",
             "items": {
               "type": "string"
             }
@@ -31,7 +31,7 @@
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "description": "Paths to mail and flags files"
+                  "description": "Paths to mail files"
                 }
               }
             ]
@@ -75,9 +75,45 @@
         ]
       },
       {
+        "name": "saveBuffer",
+        "type": "function",
+        "description": "Saves a mail to disk. The root folder location is the profile directory of the current running instance /Mail",
+        "parameters": [
+          {
+            "name": "paths",
+            "type": "array",
+            "description": "String array that is used to create a folder structure, starting at user default profile /Mail The function returns error if empty",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fileName",
+            "type": "string",
+            "description": "The file name to be created/saved/overridden."
+          },
+          {
+            "name": "raw",
+            "type": "binary",
+            "description": "The raw mail content as arrayBuffer"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
         "name": "delete",
         "type": "function",
-        "description": "Deletes a mail (.vmail) and its associated flag file (.vflags). The root folder location is the profile directory of the current running instance /Mail",
+        "description": "Deletes a mail (.eml). The root folder location is the profile directory of the current running instance /Mail",
         "parameters": [
           {
             "name": "paths",
@@ -90,7 +126,7 @@
           {
             "name": "fileName",
             "type": "string",
-            "description": "The file name to be deleted. Do not specicy file endings. The function automatically adds .vflag and .vmail "
+            "description": "The file name to be deleted. Do not specicy file endings. The function automatically adds .eml"
           },
           {
             "type": "function",
@@ -132,6 +168,38 @@
                 "name": "raw",
                 "type": "string",
                 "description": "The mail raw content."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "readBuffer",
+        "type": "function",
+        "description": "Reads a mail. The root folder location is the profile directory of the current running instance /Mail",
+        "parameters": [
+          {
+            "name": "paths",
+            "type": "array",
+            "description": "String array that is used to build path to the file. Starting at user default profile/Mail.",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fileName",
+            "type": "string",
+            "description": "The file name to be read."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "raw",
+                "type": "binary",
+                "description": "The mail raw content. as arrayBuffer"
               }
             ]
           }

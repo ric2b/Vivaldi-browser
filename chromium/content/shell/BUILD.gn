@@ -116,8 +116,6 @@ jumbo_static_library("content_shell_lib") {
     "browser/shell_application_mac.mm",
     "browser/shell_browser_context.cc",
     "browser/shell_browser_context.h",
-    "browser/shell_browser_main.cc",
-    "browser/shell_browser_main.h",
     "browser/shell_browser_main_parts.cc",
     "browser/shell_browser_main_parts.h",
     "browser/shell_browser_main_parts_mac.mm",
@@ -136,9 +134,6 @@ jumbo_static_library("content_shell_lib") {
     "browser/shell_javascript_dialog_manager.cc",
     "browser/shell_javascript_dialog_manager.h",
     "browser/shell_javascript_dialog_win.cc",
-    "browser/shell_login_dialog.cc",
-    "browser/shell_login_dialog.h",
-    "browser/shell_login_dialog_mac.mm",
     "browser/shell_mac.mm",
     "browser/shell_net_log.cc",
     "browser/shell_net_log.h",
@@ -166,6 +161,10 @@ jumbo_static_library("content_shell_lib") {
     "browser/web_test/devtools_protocol_test_bindings.h",
     "browser/web_test/fake_bluetooth_chooser.cc",
     "browser/web_test/fake_bluetooth_chooser.h",
+    "browser/web_test/fake_bluetooth_chooser_factory.cc",
+    "browser/web_test/fake_bluetooth_chooser_factory.h",
+    "browser/web_test/fake_bluetooth_scanning_prompt.cc",
+    "browser/web_test/fake_bluetooth_scanning_prompt.h",
     "browser/web_test/leak_detector.cc",
     "browser/web_test/leak_detector.h",
     "browser/web_test/mojo_web_test_helper.cc",
@@ -261,6 +260,9 @@ jumbo_static_library("content_shell_lib") {
     # #include'ed by renderer/web_test/blink_test_runner.h
     ":mojo_bindings",
 
+    # The generated mojom JS bindings are used by web tests.
+    ":mojo_bindings_js",
+
     # This exposes all public content APIs.
     "//content/public/app:both",
     "//content/public/browser",
@@ -289,7 +291,6 @@ jumbo_static_library("content_shell_lib") {
     "//components/download/public/background_service:public",
     "//components/download/public/common:public",
     "//components/keyed_service/content",
-    "//components/keyed_service/core:test_support",
     "//components/network_session_configurator/browser",
     "//components/plugins/renderer",
     "//components/url_formatter",
@@ -319,7 +320,7 @@ jumbo_static_library("content_shell_lib") {
     "//net:test_support",
     "//ppapi/buildflags",
     "//sandbox",
-    "//services/device/public/cpp/test:test_support",
+    "//services/device/public/cpp:test_support",
     "//services/device/public/mojom",
     "//services/network/public/cpp",
     "//services/service_manager/embedder:embedder_result_codes",
@@ -403,10 +404,6 @@ jumbo_static_library("content_shell_lib") {
   }
 
   if (is_android) {
-    sources += [
-      "browser/web_test/scoped_android_configuration.cc",
-      "browser/web_test/scoped_android_configuration.h",
-    ]
     deps += [
       "//base/test:test_support",
       "//components/embedder_support/android:view",
@@ -456,9 +453,6 @@ jumbo_static_library("content_shell_lib") {
   if (is_chromeos) {
     deps += [
       "//chromeos/dbus",
-      "//services/ws/test_ws:lib",
-      "//services/ws/test_ws:manifest",
-      "//services/ws/test_ws:mojom",
       "//ui/wm:test_support",
     ]
   }
@@ -659,27 +653,6 @@ if (is_android) {
 }
 
 if (is_mac) {
-  bundle_data("content_shell_framework_helpers") {
-    testonly = true
-    sources = [
-      "$root_out_dir/chrome_crashpad_handler",
-    ]
-    outputs = [
-      "{{bundle_contents_dir}}/Helpers/{{source_file_part}}",
-    ]
-    public_deps = [
-      "//components/crash/content/app:chrome_crashpad_handler",
-    ]
-  }
-
-  mac_xib_bundle_data("content_shell_framework_xibs") {
-    sources = [
-      "app/English.lproj/HttpAuth.xib",
-      "app/English.lproj/MainMenu.xib",
-    ]
-    output_path = "{{bundle_resources_dir}}/English.lproj"
-  }
-
   bundle_data("content_shell_framework_resources") {
     testonly = true
     sources = [
@@ -735,6 +708,21 @@ if (is_mac) {
   content_shell_framework_name = "$content_shell_product_name Framework"
   content_shell_helper_name = "$content_shell_product_name Helper"
 
+  bundle_data("content_shell_framework_helpers") {
+    testonly = true
+    sources = [
+      "$root_out_dir/$content_shell_helper_name.app",
+      "$root_out_dir/chrome_crashpad_handler",
+    ]
+    outputs = [
+      "{{bundle_contents_dir}}/Helpers/{{source_file_part}}",
+    ]
+    public_deps = [
+      ":content_shell_helper_app",
+      "//components/crash/content/app:chrome_crashpad_handler",
+    ]
+  }
+
   tweak_info_plist("content_shell_framework_plist") {
     testonly = true
     info_plist = "app/framework-Info.plist"
@@ -774,7 +762,6 @@ if (is_mac) {
       ":content_shell_angle_library",
       ":content_shell_framework_helpers",
       ":content_shell_framework_resources",
-      ":content_shell_framework_xibs",
       ":content_shell_swiftshader_library",
       "//third_party/icu:icudata",
     ]
@@ -831,10 +818,12 @@ if (is_mac) {
       "//sandbox/mac:seatbelt",
     ]
     ldflags = [
-      # The helper is in Content Shell.app/Contents/Frameworks/Content Shell Helper.app/Contents/MacOS/
+      # The helper is in Content Shell.app/Contents/Frameworks/
+      #     Content Shell Framework.framework/Versions/C/Helpers/
+      #     Content Shell Helper.app/Contents/MacOS/
       # so set rpath up to the base.
       "-rpath",
-      "@executable_path/../../../../../..",
+      "@executable_path/../../../../../../../../../..",
     ]
     info_plist_target = ":content_shell_helper_plist"
   }
@@ -843,14 +832,12 @@ if (is_mac) {
     testonly = true
     sources = [
       "$root_out_dir/$content_shell_framework_name.framework",
-      "$root_out_dir/$content_shell_helper_name.app",
     ]
     outputs = [
       "{{bundle_contents_dir}}/Frameworks/{{source_file_part}}",
     ]
     public_deps = [
       ":content_shell_framework",
-      ":content_shell_helper_app",
     ]
   }
 
@@ -923,6 +910,7 @@ mojom("mojo_bindings") {
     "//skia/public/interfaces",
     "//ui/gfx/geometry/mojo",
     "//url/mojom:url_mojom_gurl",
+    "//url/mojom:url_mojom_origin",
   ]
 }
 
@@ -947,18 +935,18 @@ group("content_shell_crash_test") {
   if (is_win) {
     data_deps += [ "//build/win:copy_cdb_to_output" ]
   }
-  if (is_posix && !is_android) {
+  if (is_posix) {
     data_deps += [
-      "//third_party/breakpad:dump_syms($host_toolchain)",
-      "//third_party/breakpad:minidump_stackwalk($host_toolchain)",
+      "//third_party/breakpad:dump_syms",
+      "//third_party/breakpad:minidump_stackwalk",
     ]
   }
   if (is_android) {
     data_deps += [
-      "//third_party/breakpad:dump_syms",
+      "//build/android:devil_chromium_py",
+      "//build/android:test_runner_py",
       "//third_party/breakpad:microdump_stackwalk",
       "//third_party/breakpad:minidump_dump",
-      "//third_party/breakpad:minidump_stackwalk",
       "//third_party/breakpad:symupload",
       "//tools/android/forwarder2",
     ]

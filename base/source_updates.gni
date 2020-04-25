@@ -22,6 +22,8 @@ update_target("//base:base_static") {
 
 update_target("//base/test:test_support") {
   sources += [
+    "//vivaldi/base/test/vivaldi_testinit.cc",
+    "//vivaldi/base/test/vivaldi_testinit.h",
     "//vivaldi/base/vivaldi_paths.cc",
     "//vivaldi/base/vivaldi_paths.h",
   ]

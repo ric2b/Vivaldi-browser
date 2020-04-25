@@ -7,15 +7,15 @@
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted_memory.h"
 
-typedef base::RepeatingCallback<void(const base::FilePath path,
-                            int bookmark_id,
-                            scoped_refptr<base::RefCountedMemory> thumbnail)>
-    ConvertThumbnailDataCallback;
+using ConvertThumbnailDataCallback = base::RepeatingCallback<void(
+    const base::FilePath& path,
+    int64_t bookmark_id,
+    scoped_refptr<base::RefCountedMemory> thumbnail)>;
 
 namespace vivaldi {
 void ConvertThumbnailDataOnUIThread(
-  const base::FilePath path,
-  int bookmark_id,
+  const base::FilePath& path,
+  int64_t bookmark_id,
   scoped_refptr<base::RefCountedMemory> thumbnail);
 }
 

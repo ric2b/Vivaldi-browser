@@ -579,7 +579,7 @@ void DownloadRequestLimiter::CanDownloadImpl(
           state->SetDownloadStatusAndNotify(DOWNLOADS_NOT_ALLOWED);
           ret = false;
           std::move(callback).Run(false);
-          return;
+          break;
         }
         case CONTENT_SETTING_DEFAULT:
         case CONTENT_SETTING_ASK:

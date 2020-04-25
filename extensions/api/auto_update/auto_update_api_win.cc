@@ -27,10 +27,12 @@ base::FilePath GetUpdateNotifierPath() {
 
 namespace extensions {
 
-bool AutoUpdateCheckForUpdatesFunction::RunAsync() {
-  std::unique_ptr<vivaldi::auto_update::CheckForUpdates::Params> params(
-      vivaldi::auto_update::CheckForUpdates::Params::Create(*args_));
+ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
+  using vivaldi::auto_update::CheckForUpdates::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
+
   base::CommandLine update_notifier_command(GetUpdateNotifierPath());
   update_notifier_command.AppendSwitch(::vivaldi_update_notifier::kCheckForUpdates);
 
@@ -44,11 +46,13 @@ bool AutoUpdateCheckForUpdatesFunction::RunAsync() {
 
   base::LaunchProcess(update_notifier_command, base::LaunchOptions());
 
-  SendResponse(true);
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool AutoUpdateIsUpdateNotifierEnabledFunction::RunAsync() {
+ExtensionFunction::ResponseAction
+AutoUpdateIsUpdateNotifierEnabledFunction::Run() {
+  namespace Results = vivaldi::auto_update::IsUpdateNotifierEnabled::Results;
+
   base::string16 command;
   base::string16 notifier_path_string(
       L"\"" + GetUpdateNotifierPath().value() + L"\"");
@@ -59,19 +63,16 @@ bool AutoUpdateIsUpdateNotifierEnabledFunction::RunAsync() {
             notifier_path_string) ||
          base::FilePath::CompareEqualIgnoreCase(command,
             GetUpdateNotifierPath().value()));
-  results_ =
-      vivaldi::auto_update::IsUpdateNotifierEnabled::Results::Create(result);
-  SendResponse(true);
-  return true;
+  return RespondNow(ArgumentList(Results::Create(result)));
 }
 
-bool AutoUpdateEnableUpdateNotifierFunction::RunAsync() {
+ExtensionFunction::ResponseAction
+AutoUpdateEnableUpdateNotifierFunction::Run() {
   base::string16 command(L"\"" + GetUpdateNotifierPath().value() + L"\"");
   if (!base::win::AddCommandToAutoRun(HKEY_CURRENT_USER,
                                       ::vivaldi::kUpdateNotifierAutorunName,
                                       command)) {
-    SendResponse(false);
-    return true;
+    return RespondNow(Error("base::win::AddCommandToAutoRun failed"));
   }
 
   base::CommandLine* vivaldi_command_line =
@@ -84,20 +85,14 @@ bool AutoUpdateEnableUpdateNotifierFunction::RunAsync() {
                                          switches::kVivaldiUpdateURL));
   base::LaunchProcess(update_notifier_command, base::LaunchOptions());
 
-  SendResponse(true);
-  return true;
+  return RespondNow(NoArguments());
 }
 
-AutoUpdateDisableUpdateNotifierFunction::
-    AutoUpdateDisableUpdateNotifierFunction() {}
-AutoUpdateDisableUpdateNotifierFunction::
-    ~AutoUpdateDisableUpdateNotifierFunction() {}
-
-bool AutoUpdateDisableUpdateNotifierFunction::RunAsync() {
+ExtensionFunction::ResponseAction
+AutoUpdateDisableUpdateNotifierFunction::Run() {
   if (!base::win::RemoveCommandFromAutoRun(
           HKEY_CURRENT_USER, ::vivaldi::kUpdateNotifierAutorunName)) {
-    SendResponse(false);
-    return true;
+    return RespondNow(Error("base::win::RemoveCommandFromAutoRun failed"));
   }
   // Run the update_notifier with the --q switch to terminate any
   // running instance launched from the same filepath as ourselves.
@@ -105,8 +100,7 @@ bool AutoUpdateDisableUpdateNotifierFunction::RunAsync() {
   update_notifier_command.AppendSwitch(::vivaldi_update_notifier::kQuit);
   base::LaunchProcess(update_notifier_command, base::LaunchOptions());
 
-  SendResponse(true);
-  return true;
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

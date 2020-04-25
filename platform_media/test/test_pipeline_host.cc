@@ -155,8 +155,8 @@ void TestPipelineHost::Initialized(
 
   success = success && bitrate >= 0;
 
-  base::ResetAndReturn(&init_cb_)
-      .Run(success, bitrate, time_info, audio_config, video_config);
+  std::move(init_cb_).Run(success, bitrate, time_info, audio_config,
+                          video_config);
 }
 
 void TestPipelineHost::DataReady(
@@ -177,15 +177,14 @@ void TestPipelineHost::DataReady(
     }
   }
 
-  base::ResetAndReturn(&read_cb_[type])
-      .Run(DemuxerStream::kOk, decoder_buffer);
+  std::move(read_cb_[type]).Run(DemuxerStream::kOk, decoder_buffer);
 }
 
 void TestPipelineHost::OnAudioConfigChanged(
     const PlatformAudioConfig& audio_config) {
   CHECK(!read_cb_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO].is_null());
   audio_config_ = audio_config;
-  base::ResetAndReturn(&read_cb_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO])
+  std::move(read_cb_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO])
       .Run(DemuxerStream::kConfigChanged, nullptr);
 }
 
@@ -193,7 +192,7 @@ void TestPipelineHost::OnVideoConfigChanged(
     const PlatformVideoConfig& video_config) {
   CHECK(!read_cb_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO].is_null());
   video_config_ = video_config;
-  base::ResetAndReturn(&read_cb_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO])
+  std::move(read_cb_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO])
       .Run(DemuxerStream::kConfigChanged, nullptr);
 }
 

@@ -12,9 +12,8 @@ void MenuModelAdapter::VivaldiUpdateMenu(MenuItemView* menu,
   ui::MenuModel* model) {
   // Clear the menu.
   if (menu->HasSubmenu()) {
-    const int subitem_count = menu->GetSubmenu()->child_count();
-    for (int i = 0; i < subitem_count; ++i)
-      menu->RemoveMenuItemAt(0);
+    for (auto* subitem: menu->GetSubmenu()->GetMenuItems())
+      menu->RemoveMenuItem(subitem);
   }
 
   // Leave entries in the map if the menu is being shown.  This

@@ -7,14 +7,13 @@
 #include <string>
 
 #include "base/memory/ref_counted.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/browser/importer/importer_progress_observer.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/common/importer/importer_type.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
-#include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_function.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
 class ImporterList;
@@ -41,26 +40,8 @@ class ProfileSingletonFactory {
   DISALLOW_COPY_AND_ASSIGN(ProfileSingletonFactory);
 };
 
-// Observes import process and then routes the notifications as events to
-// the extension system.
-class ImportDataEventRouter {
- public:
-  explicit ImportDataEventRouter(Profile* profile);
-  ~ImportDataEventRouter();
-
-  // Helper to actually dispatch an event to extension listeners.
-  void DispatchEvent(const std::string& event_name,
-                     std::unique_ptr<base::ListValue> event_args);
-
- private:
-  content::BrowserContext* browser_context_;
-
-  DISALLOW_COPY_AND_ASSIGN(ImportDataEventRouter);
-};
-
 class ImportDataAPI : public importer::ImporterProgressObserver,
-                      public BrowserContextKeyedAPI,
-                      public EventRouter::Observer {
+                      public BrowserContextKeyedAPI {
  public:
   explicit ImportDataAPI(content::BrowserContext* context);
   ~ImportDataAPI() override;
@@ -76,14 +57,8 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
   void ImportItemFailed(importer::ImportItem item,
                         const std::string& error) override;
 
-  // KeyedService implementation.
-  void Shutdown() override;
-
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<ImportDataAPI>* GetFactoryInstance();
-
-  // EventRouter::Observer implementation.
-  void OnListenerAdded(const EventListenerInfo& details) override;
 
  private:
   friend class BrowserContextKeyedAPIFactory<ImportDataAPI>;
@@ -95,9 +70,6 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
   static const bool kServiceIsNULLWhileTesting = true;
   static const bool kServiceRedirectedInIncognito = true;
 
-  // Created lazily upon OnListenerAdded.
-  std::unique_ptr<ImportDataEventRouter> event_router_;
-
   // If non-null it means importing is in progress. ImporterHost takes care
   // of deleting itself when import is complete.
   ExternalProcessImporterHost* importer_host_;
@@ -107,63 +79,33 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
   int import_succeeded_count_;
 };
 
-class ImporterApiFunction : public ChromeAsyncExtensionFunction {
- public:
-  ImporterApiFunction();
-  // AsyncExtensionFunction:
-  virtual void SendAsyncResponse();
-  ImporterList* api_importer_list;
-  virtual void Finished();
-
- protected:
-  ~ImporterApiFunction() override;
-
-  bool RunAsync() override;
-
-  virtual void SendResponseToCallback();
-  virtual bool RunAsyncImpl() = 0;
-};
-
-class ImportDataGetProfilesFunction : public ImporterApiFunction {
+class ImportDataGetProfilesFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.getProfiles", IMPORTDATA_GETPROFILES)
   ImportDataGetProfilesFunction();
 
- protected:
-  ~ImportDataGetProfilesFunction() override;
-  bool RunAsyncImpl() override;
-
  private:
+  ~ImportDataGetProfilesFunction() override;
+  ResponseAction Run() override;
+
+  void Finished();
+
+  ImporterList* api_importer_list_ = nullptr;
+
   DISALLOW_COPY_AND_ASSIGN(ImportDataGetProfilesFunction);
 };
 
-class ImportDataStartImportFunction : public ImporterApiFunction,
+class ImportDataStartImportFunction : public UIThreadExtensionFunction,
                                       public ui::SelectFileDialog::Listener {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.startImport", IMPORTDATA_STARTIMPORT)
   ImportDataStartImportFunction();
 
- protected:
+ private:
   ~ImportDataStartImportFunction() override;
 
-  struct DialogParams {
-    DialogParams()
-        : imported_items(0),
-          importer_type(importer::TYPE_UNKNOWN),
-          file_dialog(true) {}
-
-    // Items to import
-    int imported_items;
-
-    // The importer type, need to select correct dialog
-    importer::ImporterType importer_type;
-
-    // Is this a file or folder dialog?
-    bool file_dialog;
-  };
-
   // ExtensionFunction:
-  bool RunAsyncImpl() override;
+  ResponseAction Run() override;
 
   // ui::SelectFileDialog::Listener:
   void FileSelected(const base::FilePath& path,
@@ -171,19 +113,22 @@ class ImportDataStartImportFunction : public ImporterApiFunction,
                     void* params) override;
   void FileSelectionCanceled(void* params) override;
 
-  void StartImport(const importer::SourceProfile& source_profile,
-                   uint16_t imported_items);
+  void StartImport(const importer::SourceProfile& source_profile);
   void ImportData(const base::ListValue* args);
 
-  void HandleChooseBookmarksFileOrFolder(const base::string16& title,
-                                         const std::string& extension,
-                                         int imported_items,
-                                         importer::ImporterType importer_type,
-                                         const base::FilePath& default_file,
-                                         bool file_selection);
+  ResponseAction HandleChooseBookmarksFileOrFolder(
+      const base::string16& title,
+      base::StringPiece extension,
+      const base::FilePath& default_file,
+      bool file_selection);
 
- private:
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
+
+  // Items to import
+  int imported_items_ = 0;
+
+  // The importer type, need to select correct dialog
+  importer::ImporterType importer_type_ = importer::TYPE_UNKNOWN;
 
   DISALLOW_COPY_AND_ASSIGN(ImportDataStartImportFunction);
 };

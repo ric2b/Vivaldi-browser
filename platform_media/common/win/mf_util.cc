@@ -37,7 +37,7 @@ void ReportMFStatus(MFStatus status) {
 }
 
 bool CheckOSVersion() {
-  if (base::win::GetVersion() < base::win::VERSION_VISTA) {
+  if (base::win::GetVersion() < base::win::Version::VISTA) {
     LOG(WARNING) << " PROPMEDIA(COMMON) : " << __FUNCTION__
                  << " We don't support proprietary media codecs in this Windows version";
     return false;
@@ -160,11 +160,11 @@ bool LoadMFVideoDecoderLibraries() {
 std::string GetMFAudioDecoderLibraryName(AudioCodec codec) {
   std::string name;
   const base::win::Version version = base::win::GetVersion();
-  if (version >= base::win::VERSION_WIN8)
+  if (version >= base::win::Version::WIN8)
     name = "msauddecmft.dll";
-  else if (version == base::win::VERSION_WIN7)
+  else if (version == base::win::Version::WIN7)
     name = "msmpeg2adec.dll";
-  else if (version == base::win::VERSION_VISTA)
+  else if (version == base::win::Version::VISTA)
     name = "mfheaacdec.dll";
   else
     NOTREACHED() << "Unexpected Windows version";
@@ -175,9 +175,9 @@ std::string GetMFAudioDecoderLibraryName(AudioCodec codec) {
 std::string GetMFVideoDecoderLibraryName() {
   std::string name;
   const base::win::Version version = base::win::GetVersion();
-  if (version >= base::win::VERSION_WIN7)
+  if (version >= base::win::Version::WIN7)
     name = "msmpeg2vdec.dll";
-  else if (version == base::win::VERSION_VISTA)
+  else if (version == base::win::Version::VISTA)
     name = "mfh264dec.dll";
   else
     NOTREACHED() << "Unexpected Windows version";

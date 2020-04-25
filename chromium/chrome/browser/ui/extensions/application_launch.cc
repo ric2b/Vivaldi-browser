@@ -54,6 +54,8 @@
 #include "chrome/browser/ui/browser_commands_mac.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 using content::WebContents;
 using extensions::Extension;
 using extensions::ExtensionPrefs;
@@ -346,6 +348,21 @@ Browser* ReparentWebContentsWithBrowserCreateParams(
   Browser* source_browser = chrome::FindBrowserWithWebContents(contents);
   Browser* target_browser = Browser::Create(browser_params);
 
+  if (vivaldi::IsVivaldiRunning() && !browser_params.is_vivaldi) {
+    // If this is a non-vivaldi window, we cannot move the tab over due
+    // to WebContentsChildFrame vs WebContentsView conflict.
+    WebContents::CreateParams params(browser_params.profile);
+    std::unique_ptr<WebContents> source_contents(WebContents::Create(params));
+
+    source_contents->GetController().CopyStateFrom(&contents->GetController(),
+                                                   true);
+
+    target_browser->tab_strip_model()->AppendWebContents(
+        std::move(source_contents), true);
+    target_browser->window()->Show();
+
+    return target_browser;
+  }
   TabStripModel* source_tabstrip = source_browser->tab_strip_model();
   // Avoid causing the existing browser window to close if this is the last tab
   // remaining.
@@ -397,6 +414,9 @@ Browser* CreateApplicationWindow(const AppLaunchParams& params,
   browser_params.initial_show_state =
       DetermineWindowShowState(profile, params.container, extension);
 
+  browser_params.is_vivaldi =
+      extension ? vivaldi::IsVivaldiApp(extension->id()) : false;
+
   return new Browser(browser_params);
 }
 
@@ -417,7 +437,7 @@ WebContents* ShowApplicationWindow(const AppLaunchParams& params,
   WebContents* web_contents = nav_params.navigated_or_inserted_contents;
 
   extensions::HostedAppBrowserController::SetAppPrefsForWebContents(
-      browser->web_app_controller(), web_contents);
+      browser->app_controller(), web_contents);
   if (extension) {
     web_app::WebAppTabHelperBase* tab_helper =
         web_app::WebAppTabHelperBase::FromWebContents(web_contents);
@@ -498,6 +518,10 @@ Browser* ReparentWebContentsIntoAppBrowser(
       web_app::GenerateApplicationNameFromAppId(extension->id()),
       true /* trusted_source */, gfx::Rect(), profile,
       true /* user_gesture */));
+
+  // We're not using a Vivaldi popup for PWAs as we need full functionality.
+  browser_params.is_vivaldi = false;
+
   return ReparentWebContentsWithBrowserCreateParams(contents, browser_params);
 }
 

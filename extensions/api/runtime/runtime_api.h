@@ -394,6 +394,24 @@ class RuntimePrivateDeleteProfileFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateDeleteProfileFunction);
 };
 
+class RuntimePrivateHasDesktopShortcutFunction
+    : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("runtimePrivate.hasDesktopShortcut",
+                             RUNTIME_HASDESKTOPSHORTCUT)
+
+  RuntimePrivateHasDesktopShortcutFunction() = default;
+
+ private:
+  ~RuntimePrivateHasDesktopShortcutFunction() override = default;
+
+  ResponseAction Run() override;
+
+  void OnHasProfileShortcuts(bool has_shortcuts);
+
+  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateHasDesktopShortcutFunction);
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_RUNTIME_RUNTIME_API_H_

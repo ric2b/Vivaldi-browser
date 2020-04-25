@@ -105,37 +105,23 @@ bool IsOutsideAppWindow(int screen_x, int screen_y) {
   return outside;
 }
 
-bool EncodeBitmap(const SkBitmap& screen_capture,
+bool EncodeBitmap(const SkBitmap& bitmap,
                   std::vector<unsigned char>* data,
                   std::string* mime_type,
                   extensions::api::extension_types::ImageFormat image_format,
-                  gfx::Size size,
-                  double scale,
-                  int image_quality,
-                  bool resize) {
-  gfx::Size dst_size_pixels;
-  if (size.width() && size.height()) {
-    dst_size_pixels.SetSize(size.width(), size.height());
-  } else {
-    dst_size_pixels = gfx::ScaleToRoundedSize(
-        gfx::Size(screen_capture.width(), screen_capture.height()), scale);
-  }
-  SkBitmap bitmap;
-  if (resize) {
-    bitmap = skia::ImageOperations::Resize(
-        screen_capture, skia::ImageOperations::RESIZE_BEST,
-        dst_size_pixels.width(), dst_size_pixels.height());
-  } else {
-    bitmap = screen_capture;
-  }
+                  int image_quality) {
   bool encoded = false;
 
   switch (image_format) {
     case extensions::api::extension_types::IMAGE_FORMAT_JPEG:
       if (bitmap.getPixels()) {
-        encoded = gfx::JPEGCodec::Encode(
-            bitmap, image_quality, data);
+        encoded = gfx::JPEGCodec::Encode(bitmap, image_quality, data);
         *mime_type = "image/jpeg";  // kMimeTypeJpeg;
+        if (!encoded) {
+          LOG(ERROR) << "Failed to encode bitmap as jpeg";
+        }
+      } else {
+        LOG(ERROR) << "Cannot encode empty bitmap as jpeg";
       }
       break;
     case extensions::api::extension_types::IMAGE_FORMAT_PNG:
@@ -144,6 +130,9 @@ bool EncodeBitmap(const SkBitmap& screen_capture,
                                             true,  // Discard transparency.
                                             data);
       *mime_type = "image/png";  // kMimeTypePng;
+      if (!encoded) {
+        LOG(ERROR) << "Failed to encode bitmap as png";
+      }
       break;
     default:
       NOTREACHED() << "Invalid image format.";

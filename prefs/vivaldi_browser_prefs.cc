@@ -75,6 +75,12 @@ PrefProperties::EnumProperties::~EnumProperties() = default;
 
 void RegisterLocalState(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(vivaldiprefs::kVivaldiUniqueUserId, "");
+  registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsNextDailyPing,
+                             base::Time());
+  registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsNextWeeklyPing,
+                             base::Time());
+  registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsNextMonthlyPing,
+                             base::Time());
 }
 
 std::unique_ptr<base::Value> GetComputedDefault(const std::string& path) {
@@ -252,8 +258,7 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
 
     prefs_properties->insert(
         std::make_pair(current_path, PrefProperties(false)));
-    registry->RegisterListPref(current_path, default_value->Clone(),
-                               flags);
+    registry->RegisterListPref(current_path, default_value->Clone(), flags);
 
   } else if (type.compare(kTypeDictionaryName) == 0) {
     if (!default_value->is_dict()) {

@@ -53,14 +53,22 @@ jumbo_static_library("browser") {
     ]
   }
   sources = [
-    "../app/vivaldi_command_controller.cpp",
-    "../app/vivaldi_command_controller.h",
-    "../app/vivaldi_commands.h",
+    "stats_reporter_impl_android.cc",
+    "stats_reporter_impl_linux.cc",
+    "stats_reporter_impl_mac.mm",
+    "stats_reporter_impl_win.cc",
+    "stats_reporter_impl.cc",
+    "stats_reporter_impl.h",
+    "stats_reporter.cc",
+    "stats_reporter.h",
     "../components/adverse_adblocking/adverse_ad_filter_list_factory.cc",
     "../components/adverse_adblocking/adverse_ad_filter_list_factory.h",
   ]
   if (!is_android) {
     sources += [
+      "../app/vivaldi_command_controller.cpp",
+      "../app/vivaldi_command_controller.h",
+      "../app/vivaldi_commands.h",
       "menus/vivaldi_menus.cpp",
       "menus/vivaldi_menus.h",
       "menus/vivaldi_bookmark_context_menu.cpp",
@@ -69,16 +77,10 @@ jumbo_static_library("browser") {
       "vivaldi_browser_finder.h",
       "vivaldi_webcontents_util.cc",
       "vivaldi_webcontents_util.h",
-      "thumbnails/vivaldi_capture_contents.cc",
-      "thumbnails/vivaldi_capture_contents.h",
-      "thumbnails/vivaldi_thumbnail_utils.cc",
-      "thumbnails/vivaldi_thumbnail_utils.h",
-    ]
-  }
-  if (is_win) {
-    sources += [
-      "vivaldi_download_status.cpp",
-      "vivaldi_download_status.h",
+      "thumbnails/thumbnail_capture_contents.cc",
+      "thumbnails/thumbnail_capture_contents.h",
+      "thumbnails/capture_page.cc",
+      "thumbnails/capture_page.h",
     ]
   }
   if (is_mac) {

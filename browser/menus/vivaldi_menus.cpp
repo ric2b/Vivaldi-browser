@@ -42,33 +42,33 @@ namespace vivaldi {
 // string in some cases.
 static base::string16 s_selection_text;
 
-base::string16 GetModifierStringFromEventFlags(int event_flags) {
-  base::string16 modifiers;
+std::string GetModifierStringFromEventFlags(int event_flags) {
+  std::string modifiers;
   if (event_flags & ui::EF_CONTROL_DOWN)
-    modifiers.append(base::ASCIIToUTF16("ctrl"));
+    modifiers.append("ctrl");
   if (event_flags & ui::EF_SHIFT_DOWN) {
     if (modifiers.length() > 0)
-      modifiers.append(base::ASCIIToUTF16(","));
-    modifiers.append(base::ASCIIToUTF16("shift"));
+      modifiers.append(",");
+    modifiers.append("shift");
   }
   if (event_flags & ui::EF_ALT_DOWN) {
     if (modifiers.length() > 0)
-      modifiers.append(base::ASCIIToUTF16(","));
-    modifiers.append(base::ASCIIToUTF16("alt"));
+      modifiers.append(",");
+    modifiers.append("alt");
   }
   if (event_flags & ui::EF_COMMAND_DOWN) {
     if (modifiers.length() > 0)
-      modifiers.append(base::ASCIIToUTF16(","));
-    modifiers.append(base::ASCIIToUTF16("cmd"));
+      modifiers.append(",");
+    modifiers.append("cmd");
   }
   return modifiers;
 }
 
 void SendSimpleAction(WebContents* web_contents,
                       int event_flags,
-                      const std::string& command,
-                      const base::string16& text = base::ASCIIToUTF16(""),
-                      const std::string& url = "") {
+                      base::StringPiece command,
+                      base::StringPiece text = base::StringPiece(),
+                      base::StringPiece url = base::StringPiece()) {
   WebContents* wc = web_contents;
   // NOTE(david@vivaldi): If we're viewing a MimeHandlerViewGuest, use its
   // embedder WebContents.
@@ -78,14 +78,24 @@ void SendSimpleAction(WebContents* web_contents,
     wc = guest_view->embedder_web_contents();
 #endif
   WebViewGuest* guestView = WebViewGuest::FromWebContents(wc);
-  DCHECK(guestView);
-  base::ListValue* args = new base::ListValue;
-  args->Append(std::make_unique<base::Value>(command));
-  args->Append(std::make_unique<base::Value>(text));
-  args->Append(std::make_unique<base::Value>(url));
-  base::string16 modifiers = GetModifierStringFromEventFlags(event_flags);
-  args->Append(std::make_unique<base::Value>(modifiers));
-  guestView->SimpleAction(*args);
+  if (!guestView)
+    return;
+
+  std::vector<base::Value> args;
+  args.emplace_back(command);
+  args.emplace_back(text);
+  args.emplace_back(url);
+  args.emplace_back(GetModifierStringFromEventFlags(event_flags));
+  guestView->SimpleAction(base::ListValue(std::move(args)));
+}
+
+void SendSimpleAction(WebContents* web_contents,
+                      int event_flags,
+                      base::StringPiece command,
+                      base::StringPiece16 text,
+                      base::StringPiece url) {
+  SendSimpleAction(web_contents, event_flags, command, base::UTF16ToUTF8(text),
+                   url);
 }
 
 bool IsVivaldiCommandId(int id) {
@@ -114,8 +124,10 @@ void VivaldiAddLinkItems(SimpleMenuModel* menu,
     menu->RemoveItemAt(firstIndex);
     int index =
         menu->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW);
-    DCHECK_GE(index, 0);
-    menu->RemoveItemAt(index);
+    if (index > -1) {
+      // Might not be there for links in a PWA window.
+      menu->RemoveItemAt(index);
+    }
     index = menu->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD);
     DCHECK_GE(index, 0);
     menu->RemoveItemAt(index);
@@ -147,11 +159,17 @@ void VivaldiAddLinkItems(SimpleMenuModel* menu,
       menu->InsertItemWithStringIdAt(++index, IDC_VIV_ADD_LINK_TO_WEBPANEL,
                                      IDS_VIV_ADD_LINK_TO_WEBPANEL);
 #if !defined(OFFICIAL_BUILD)
+      // Text under context menu is always auto selected on mac so we can not
+      // test for selected text to determine behavior in that OS.
+#if !defined(OS_MACOSX)
       if (params.selection_text.empty()) {
+#endif
         menu->InsertItemWithStringIdAt(++index, IDC_VIV_SEND_LINK_BY_MAIL,
                                        IDS_VIV_SEND_LINK_BY_MAIL);
+#if !defined(OS_MACOSX)
       }
 #endif
+#endif  // OFFICIAL_BUILD
     }
   }
 }
@@ -210,6 +228,7 @@ void VivaldiAddCopyItems(SimpleMenuModel* menu,
 #if !defined(OFFICIAL_BUILD)
     menu->AddItemWithStringId(IDC_VIV_SEND_SELECTION_BY_MAIL,
                               IDS_VIV_SEND_BY_MAIL);
+    menu->AddItemWithStringId(IDC_VIV_ADD_AS_EVENT, IDS_VIV_ADD_AS_EVENT);
 #endif
   }
 }
@@ -363,6 +382,10 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel& menu,
       *enabled = !params.selection_text.empty();
       break;
 
+    case IDC_VIV_ADD_AS_EVENT:
+      *enabled = !params.selection_text.empty();
+      break;
+
     case IDC_VIV_BOOKMARK_PAGE:
     case IDC_VIV_BOOKMARK_LINK:
     case IDC_VIV_ADD_PAGE_TO_WEBPANEL:
@@ -439,20 +462,19 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
         base::string16 text;
         ui::Clipboard::GetForCurrentThread()->ReadText(
             ui::CLIPBOARD_TYPE_COPY_PASTE, &text);
-        base::string16 target;
+        std::string target;
         if (params.vivaldi_input_type == "vivaldi-addressfield")
-          target = base::ASCIIToUTF16("url");
+          target = "url";
         else if (params.vivaldi_input_type == "vivaldi-searchfield")
-          target = base::ASCIIToUTF16("search");
-        base::string16 modifiers = GetModifierStringFromEventFlags(event_flags);
-        base::ListValue* args = new base::ListValue;
-        args->Append(std::make_unique<base::Value>(text));
-        args->Append(std::make_unique<base::Value>(target));
-        args->Append(std::make_unique<base::Value>(modifiers));
+          target = "search";
+        std::vector<base::Value> args;
+        args.emplace_back(text);
+        args.emplace_back(std::move(target));
+        args.emplace_back(GetModifierStringFromEventFlags(event_flags));
         extensions::WebViewGuest* current_webviewguest =
             vivaldi::ui_tools::GetActiveWebViewGuest();
         if (current_webviewguest) {
-          current_webviewguest->PasteAndGo(*args);
+          current_webviewguest->PasteAndGo(base::ListValue(std::move(args)));
         }
       }
       break;
@@ -461,17 +483,24 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
       base::string16 keyword(TemplateURL::GenerateKeyword(params.page_url));
       WebViewGuest* vivGuestView =
           WebViewGuest::FromWebContents(source_web_contents);
-      base::ListValue* args = new base::ListValue;
-      args->Append(std::make_unique<base::Value>(keyword));
-      args->Append(
-          std::make_unique<base::Value>(params.vivaldi_keyword_url.spec()));
-
-      vivGuestView->CreateSearch(*args);
+      if (vivGuestView) {
+        std::vector<base::Value> args;
+        args.emplace_back(keyword);
+        args.emplace_back(params.vivaldi_keyword_url.spec());
+        vivGuestView->CreateSearch(base::ListValue(std::move(args)));
+      }
     } break;
 
     case IDC_VIV_COPY_TO_NOTE:
       if (IsVivaldiRunning()) {
         SendSimpleAction(source_web_contents, event_flags, "copyToNote",
+                         s_selection_text, params.page_url.spec());
+      }
+      break;
+
+    case IDC_VIV_ADD_AS_EVENT:
+      if (IsVivaldiRunning()) {
+        SendSimpleAction(source_web_contents, event_flags, "addAsEvent",
                          s_selection_text, params.page_url.spec());
       }
       break;
@@ -493,11 +522,10 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
     case IDC_VIV_ADD_PAGE_TO_WEBPANEL:
     case IDC_VIV_ADD_LINK_TO_WEBPANEL:
       if (IsVivaldiRunning()) {
-        SendSimpleAction(source_web_contents, event_flags, "addUrlToWebPanel",
-                         base::ASCIIToUTF16(""),
-                         id == IDC_VIV_ADD_PAGE_TO_WEBPANEL
-                             ? params.page_url.spec()
-                             : params.link_url.spec());
+        SendSimpleAction(
+            source_web_contents, event_flags, "addUrlToWebPanel", "",
+            id == IDC_VIV_ADD_PAGE_TO_WEBPANEL ? params.page_url.spec()
+                                               : params.link_url.spec());
       }
       break;
 
@@ -524,14 +552,14 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
     case IDC_VIV_COPY_PAGE_ADDRESS:
       if (IsVivaldiRunning()) {
         SendSimpleAction(source_web_contents, event_flags, "copyUrlToClipboard",
-                         base::ASCIIToUTF16(""), params.page_url.spec());
+                         "", params.page_url.spec());
       }
       break;
 
     case IDC_VIV_INSPECT_IMAGE:
       if (IsVivaldiRunning()) {
         SendSimpleAction(source_web_contents, event_flags, "inspectImageUrl",
-                         base::ASCIIToUTF16(""), params.src_url.spec());
+                         "", params.src_url.spec());
       }
       break;
 
@@ -562,11 +590,11 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
             }
           }
           SendSimpleAction(source_web_contents, event_flags,
-                           "useLocalImageAsBackground", base::ASCIIToUTF16(""),
+                           "useLocalImageAsBackground", "",
                            filename);
         } else {
           SendSimpleAction(source_web_contents, event_flags,
-                           "useImageAsBackground", base::ASCIIToUTF16(""),
+                           "useImageAsBackground", "",
                            params.src_url.spec());
         }
       }
@@ -575,7 +603,7 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
     case IDC_VIV_VALIDATE_PAGE:
       if (IsVivaldiRunning()) {
         SendSimpleAction(source_web_contents, event_flags, "validateUrl",
-                         base::ASCIIToUTF16(""), params.page_url.spec());
+                         "", params.page_url.spec());
       }
       break;
 

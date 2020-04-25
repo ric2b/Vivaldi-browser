@@ -5,70 +5,66 @@
 #ifndef EXTENSIONS_API_SESSIONS_VIVALDI_SESSIONS_API_H_
 #define EXTENSIONS_API_SESSIONS_VIVALDI_SESSIONS_API_H_
 
-#include "chrome/browser/extensions/chrome_extension_function.h"
+#include "extensions/browser/extension_function.h"
 #include "extensions/schema/vivaldi_sessions.h"
 
 namespace extensions {
 
 class SessionsPrivateSaveOpenTabsFunction
-    : public ChromeAsyncExtensionFunction {
+    : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sessionsPrivate.saveOpenTabs",
                              SESSIONS_SAVEOPENTABS)
-  SessionsPrivateSaveOpenTabsFunction();
-
- protected:
-  ~SessionsPrivateSaveOpenTabsFunction() override;
-
-  // ExtensionFunction:
-  bool RunAsync() override;
+  SessionsPrivateSaveOpenTabsFunction() = default;
 
  private:
+  ~SessionsPrivateSaveOpenTabsFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
   DISALLOW_COPY_AND_ASSIGN(SessionsPrivateSaveOpenTabsFunction);
 };
 
-class SessionsPrivateGetAllFunction : public ChromeAsyncExtensionFunction {
+class SessionsPrivateGetAllFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sessionsPrivate.getAll", SESSIONS_GETALL)
-  SessionsPrivateGetAllFunction();
-
- protected:
-  ~SessionsPrivateGetAllFunction() override;
-
-  // ExtensionFunction:
-  bool RunAsync() override;
+  SessionsPrivateGetAllFunction() = default;
 
  private:
+  ~SessionsPrivateGetAllFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
   DISALLOW_COPY_AND_ASSIGN(SessionsPrivateGetAllFunction);
 };
 
-class SessionsPrivateOpenFunction : public ChromeAsyncExtensionFunction {
+class SessionsPrivateOpenFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sessionsPrivate.open", SESSIONS_OPEN)
-  SessionsPrivateOpenFunction();
-
- protected:
-  ~SessionsPrivateOpenFunction() override;
-
-  // ExtensionFunction:
-  bool RunAsync() override;
+  SessionsPrivateOpenFunction() = default;
 
  private:
+  ~SessionsPrivateOpenFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
   DISALLOW_COPY_AND_ASSIGN(SessionsPrivateOpenFunction);
 };
 
-class SessionsPrivateDeleteFunction : public ChromeAsyncExtensionFunction {
+class SessionsPrivateDeleteFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sessionsPrivate.delete", SESSIONS_DELETE)
-  SessionsPrivateDeleteFunction();
-
- protected:
-  ~SessionsPrivateDeleteFunction() override;
-
-  // ExtensionFunction:
-  bool RunAsync() override;
+  SessionsPrivateDeleteFunction() = default;
 
  private:
+  ~SessionsPrivateDeleteFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
   DISALLOW_COPY_AND_ASSIGN(SessionsPrivateDeleteFunction);
 };
 

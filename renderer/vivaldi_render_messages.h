@@ -9,6 +9,7 @@
 #include "base/memory/shared_memory_handle.h"
 #include "content/common/content_export.h"
 #include "ipc/ipc_message_macros.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
 #undef IPC_MESSAGE_EXPORT
@@ -17,7 +18,7 @@
 #define IPC_MESSAGE_START VivaldiMsgStart
 
 IPC_STRUCT_BEGIN(VivaldiViewMsg_RequestThumbnailForFrame_Params)
-  IPC_STRUCT_MEMBER(gfx::Size, size)
+  IPC_STRUCT_MEMBER(gfx::Rect, rect)
   IPC_STRUCT_MEMBER(bool, full_page)
   IPC_STRUCT_MEMBER(int, callback_id)
 IPC_STRUCT_END()
@@ -41,11 +42,11 @@ IPC_MESSAGE_ROUTED4(VivaldiMsg_DidUpdateFocusedElementInfo,
                     std::string)
 
 // Asks the renderer for a snapshot of web page. If |full_page| is true,
-// the full page is captured and not scaled down, |size|
-// is then ignored.  If |full_page| is false, only the visible part of the page
-// is captured and scaled.
-// The possibly downsampled image will be
-// returned in a VivaldiViewHostMsg_RequestThumbnailForFrame_ACK message.
+// the full page is captured and not scaled down, |rect.height| is used to bound
+// the capture height, the rest of rect is ignored. If |full_page| is false the
+// visible part of the page is captured, and, if |rect| is not empty, the result
+// is cropped to the rectangle. The possibly downsampled image will be returned
+// in a VivaldiViewHostMsg_RequestThumbnailForFrame_ACK message.
 IPC_MESSAGE_ROUTED1(VivaldiViewMsg_RequestThumbnailForFrame,
                     VivaldiViewMsg_RequestThumbnailForFrame_Params)
 
@@ -53,7 +54,7 @@ IPC_MESSAGE_ROUTED1(VivaldiViewMsg_RequestThumbnailForFrame,
 // Thumbnail data will be empty if a thumbnail could not be produced.
 IPC_MESSAGE_ROUTED4(VivaldiViewHostMsg_RequestThumbnailForFrame_ACK,
                     base::SharedMemoryHandle /* handle */,
-                    gfx::Size /* original size of the image */,
+                    gfx::Rect /* original rect of the image */,
                     int /* ID of the callback */,
                     bool /* true if success */)
 

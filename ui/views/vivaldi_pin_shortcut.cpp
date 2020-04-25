@@ -24,8 +24,8 @@ void VivaldiShortcutPinToTaskbar(const base::string16& app_id) {
   const wchar_t kVivaldiKey[] = L"Software\\Vivaldi";
   const wchar_t kVivaldiPinToTaskbarValue[] = L"EnablePinToTaskbar";
 
-  if (base::win::GetVersion() >= base::win::VERSION_WIN7 &&
-      base::win::GetVersion() < base::win::VERSION_WIN10) {
+  if (base::win::GetVersion() >= base::win::Version::WIN7 &&
+      base::win::GetVersion() < base::win::Version::WIN10) {
     base::win::RegKey key_ptt(HKEY_CURRENT_USER, kVivaldiKey, KEY_ALL_ACCESS);
     if (!key_ptt.Valid())
       return;

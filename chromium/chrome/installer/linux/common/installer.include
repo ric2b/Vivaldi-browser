@@ -203,9 +203,9 @@ stage_install_common() {
   fi
 
   # ffmpeg libs
-  if [ -f "${BUILDDIR}/lib/libffmpeg.so" ]; then
+  if [ -f "${BUILDDIR}/libffmpeg.so" ]; then
     for file in libffmpeg.so; do
-      buildfile="${BUILDDIR}/lib/${file}"
+      buildfile="${BUILDDIR}/${file}"
       strippedfile="${buildfile}.stripped-$RANDOM"
       debugfile="${buildfile}.debug"
       arm-linux-gnueabihf-strip -s -o "${strippedfile}" "${buildfile}" 2> /dev/null || true

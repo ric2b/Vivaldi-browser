@@ -22,6 +22,7 @@
 #endif
 #include "chrome/common/extensions/api/bookmarks.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/datasource/vivaldi_data_source_api.h"
 #include "components/history/core/browser/top_sites.h"
 #include "extensions/schema/bookmarks_private.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -92,22 +93,6 @@ static void ClearPartnerId(BookmarkModel* model, const BookmarkNode* node,
   }
 }
 
-VivaldiBookmarksEventRouter::VivaldiBookmarksEventRouter(Profile* profile)
-    : browser_context_(profile) {}
-
-VivaldiBookmarksEventRouter::~VivaldiBookmarksEventRouter() {}
-
-void VivaldiBookmarksEventRouter::DispatchEvent(
-    const std::string& event_name,
-    std::unique_ptr<base::ListValue> event_args) {
-  EventRouter* event_router = EventRouter::Get(browser_context_);
-  if (event_router) {
-    event_router->BroadcastEvent(base::WrapUnique(
-        new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
-                              event_name, std::move(event_args))));
-  }
-}
-
 VivaldiBookmarksAPI::VivaldiBookmarksAPI(content::BrowserContext* context)
     : browser_context_(context),
       bookmark_model_(nullptr),
@@ -115,23 +100,12 @@ VivaldiBookmarksAPI::VivaldiBookmarksAPI(content::BrowserContext* context)
   bookmark_model_ = BookmarkModelFactory::GetForBrowserContext(context);
   DCHECK(bookmark_model_);
   bookmark_model_->AddObserver(this);
-
-  EventRouter* event_router = EventRouter::Get(browser_context_);
-  event_router->RegisterObserver(
-      this, bookmarks_private::OnFaviconChanged::kEventName);
 }
 
 VivaldiBookmarksAPI::~VivaldiBookmarksAPI() {}
 
 void VivaldiBookmarksAPI::Shutdown() {
   bookmark_model_->RemoveObserver(this);
-  EventRouter::Get(browser_context_)->UnregisterObserver(this);
-}
-
-void VivaldiBookmarksAPI::OnListenerAdded(const EventListenerInfo& details) {
-  event_router_.reset(new VivaldiBookmarksEventRouter(
-      Profile::FromBrowserContext(browser_context_)));
-  EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI> >::
@@ -145,6 +119,15 @@ VivaldiBookmarksAPI::GetFactoryInstance() {
 
 void VivaldiBookmarksAPI::SetPartnerUpgradeActive(bool active) {
   partner_upgrade_active_ = active;
+}
+
+// static
+std::string VivaldiBookmarksAPI::GetThumbnailUrl(
+    const bookmarks::BookmarkNode* node) {
+  std::string thumbnail_url;
+  if (!node->GetMetaInfo("Thumbnail", &thumbnail_url))
+    return std::string();
+  return thumbnail_url;
 }
 
 namespace {
@@ -215,37 +198,27 @@ void VivaldiBookmarksAPI::BookmarkMetaInfoChanged(BookmarkModel* model,
       new std::string(base::UTF16ToUTF8(node->GetNickName())));
   // We can add visited time here if we want. Currently not used in UI.
 
-  if (event_router_) {
-    event_router_->DispatchEvent(
-        bookmarks_private::OnMetaInfoChanged::kEventName,
-        bookmarks_private::OnMetaInfoChanged::Create(
-            base::NumberToString(node->id()), change_info));
-  }
+  ::vivaldi::BroadcastEvent(bookmarks_private::OnMetaInfoChanged::kEventName,
+                            bookmarks_private::OnMetaInfoChanged::Create(
+                                base::NumberToString(node->id()), change_info),
+                            browser_context_);
 }
 
 void VivaldiBookmarksAPI::BookmarkNodeFaviconChanged(BookmarkModel* model,
                                                      const BookmarkNode* node) {
-  if (event_router_) {
-    event_router_->DispatchEvent(
-        bookmarks_private::OnFaviconChanged::kEventName,
-        bookmarks_private::OnFaviconChanged::Create(
-            base::NumberToString(node->id())));
-  }
+  ::vivaldi::BroadcastEvent(bookmarks_private::OnFaviconChanged::kEventName,
+                            bookmarks_private::OnFaviconChanged::Create(
+                                base::NumberToString(node->id())),
+                            browser_context_);
 }
 
+ExtensionFunction::ResponseAction
+BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::Run() {
+  using vivaldi::bookmarks_private::UpdateSpeedDialsForWindowsJumplist::Params;
 
-BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::
-    BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction() {}
-
-BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::
-    ~BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction() {}
-
-bool BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::RunAsync() {
-  std::unique_ptr<bookmarks_private::UpdateSpeedDialsForWindowsJumplist::Params>
-      params(
-          bookmarks_private::UpdateSpeedDialsForWindowsJumplist::Params::Create(
-              *args_));
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
+
 #if defined(OS_WIN)
   Browser* browser = FindVivaldiBrowser();
   if (browser && browser->is_vivaldi()) {
@@ -254,15 +227,12 @@ bool BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::RunAsync() {
       jump_list->NotifyVivaldiSpeedDialsChanged(params->speed_dials);
   }
 #endif
-  SendResponse(true);
-  return true;
+  return RespondNow(NoArguments());
 }
 
-BookmarksPrivateEmptyTrashFunction::BookmarksPrivateEmptyTrashFunction() {}
-
-BookmarksPrivateEmptyTrashFunction::~BookmarksPrivateEmptyTrashFunction() {}
-
 bool BookmarksPrivateEmptyTrashFunction::RunOnReady() {
+  namespace Results = vivaldi::bookmarks_private::EmptyTrash::Results;
+
   bool success = false;
 
   BookmarkModel* model = GetBookmarkModel();
@@ -274,13 +244,31 @@ bool BookmarksPrivateEmptyTrashFunction::RunOnReady() {
     }
     success = true;
   }
-  results_ = vivaldi::bookmarks_private::EmptyTrash::Results::Create(success);
+  results_ = Results::Create(success);
   return true;
 }
 
 bool BookmarksPrivateUpgradePartnerFunction::RunOnReady() {
-  ::vivaldi::SetPartnerUpgrade auto_set(GetProfile(), true);
+  ::vivaldi::SetPartnerUpgrade auto_set(browser_context(), true);
   return BookmarksUpdateFunction::RunOnReady();
+}
+
+bool BookmarksPrivateIsCustomThumbnailFunction::RunOnReady() {
+  using vivaldi::bookmarks_private::IsCustomThumbnail::Params;
+  namespace Results = vivaldi::bookmarks_private::IsCustomThumbnail::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  const BookmarkNode* node = GetBookmarkNodeFromId(params->bookmark_id);
+  if (!node)
+    return false;
+
+  std::string url = VivaldiBookmarksAPI::GetThumbnailUrl(node);
+  bool is_custom_thumbnail =
+      !url.empty() && !VivaldiDataSourcesAPI::IsBookmarkCapureUrl(url);
+  results_ = Results::Create(is_custom_thumbnail);
+  return true;
 }
 
 }  // namespace extensions

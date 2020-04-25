@@ -34,22 +34,6 @@ WebViewImpl.prototype.getThumbnail = function (dimensions, callback) {
   $Function.apply(WebViewPrivate.getThumbnail, null, args);
 };
 
-WebViewImpl.prototype.getThumbnailFromService = function (callback) {
-  if (!this.guest.getId()) {
-    return false;
-  }
-  WebViewPrivate.getThumbnailFromService(this.guest.getId(), callback);
-};
-
-WebViewImpl.prototype.addToThumbnailService = function (
-      dimensions, callback) {
-  if (!this.guest.getId()) {
-    return false;
-  }
-  WebViewPrivate.addToThumbnailService(
-      this.guest.getId(), dimensions, callback);
-};
-
 WebViewImpl.prototype.setIsFullscreen = function (isFullscreen,
                                                   skipWindowState) {
   if (!this.guest.getId()) {

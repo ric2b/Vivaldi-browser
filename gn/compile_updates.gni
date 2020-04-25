@@ -61,15 +61,21 @@ if (is_mac) {
 
 if (is_linux) {
   update_target("//chrome:chrome_initial") {
-    configs -= [ "//vivaldi/gn/config:disable_new_dtags" ]
-
-    # Find lib/libffmpeg.so without the executable wrapper script. Note that
-    # RUNPATH is used over RPATH since the wrapper script uses LD_LIBRARY_PATH
-    # which has lower priority than RPATH but higher than RUNPATH.
+    # Find libffmpeg.so without the executable wrapper script. Note that
+    # RUNPATH (new-dtags) is used over RPATH because otherwise there will be a
+    # failure when building packages.
     ldflags += [
       "-rpath",
-      "\$ORIGIN/lib/",
+      "\$ORIGIN/lib/", # Linux packages use lib/libffmpeg.so
+      "-rpath",
+      "\$ORIGIN/", # Local builds use libffmpeg.so
       "-Wl,--enable-new-dtags",
+    ]
+  }
+  update_target("//tools/v8_context_snapshot:v8_context_snapshot_generator") {
+    ldflags = [
+      "-rpath",
+      "\$ORIGIN/", # Find libffmpeg.so
     ]
   }
   if (target_cpu == "arm64") {

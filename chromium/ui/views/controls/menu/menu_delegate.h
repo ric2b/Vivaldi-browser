@@ -210,7 +210,9 @@ class VIEWS_EXPORT MenuDelegate {
                                        MenuAnchorPosition* anchor,
                                        bool* has_mnemonics,
                                        MenuButton** button);
-
+  virtual MenuItemView* GetVivaldiSiblingMenu(views::MenuItemView* menu,
+                                              const gfx::Point& screen_point,
+                                              gfx::Rect* rect);
   // Returns the max width menus can grow to be.
   virtual int GetMaxWidthForMenu(MenuItemView* menu);
 

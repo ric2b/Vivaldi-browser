@@ -159,7 +159,6 @@ WebUIDataSource* CreateVersionUIDataSource() {
 
   vivaldi::UpdateVersionUIDataSource(html_source);
 
-  html_source->UseGzip();
   return html_source;
 }
 

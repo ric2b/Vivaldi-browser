@@ -18,8 +18,6 @@
 #include "content/public/browser/render_view_host.h"
 #endif
 
-#include "content/public/browser/web_contents_delegate.h"
-
 using content::BrowserThread;
 
 namespace {
@@ -118,7 +116,7 @@ void DownloadResourceThrottle::WillProcessResponse(bool* defer) {
   WillDownload(defer);
 }
 
-const char* DownloadResourceThrottle::GetNameForLogging() const {
+const char* DownloadResourceThrottle::GetNameForLogging() {
   return "DownloadResourceThrottle";
 }
 

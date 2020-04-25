@@ -1,9 +1,7 @@
 import("//vivaldi/gn/config/features.gni")
 import("//build/config/locales.gni")
 
-declare_args() {
-  generate_untranslated = false
-}
+import("//vivaldi/app/resources/generate_untranslated.gni")
 
 gritinfo_cmd = "//tools/grit/grit_info.py"
 _grit_cmd = "//tools/grit/grit.py"

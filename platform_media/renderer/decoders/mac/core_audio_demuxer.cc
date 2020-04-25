@@ -83,7 +83,7 @@ void CoreAudioDemuxerStream::set_enabled(bool enabled, base::TimeDelta timestamp
   if (!is_enabled_ && !read_cb_.is_null()) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Read from disabled stream, returning EOS";
-    base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
+    std::move(read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
     return;
   }
 }

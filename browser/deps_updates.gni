@@ -23,11 +23,13 @@ if (is_win) {
       "//chrome/chrome_proxy",
       "//chrome/elevation_service",
     ]
+    data_deps += [ "//vivaldi/tools/vivaldi_proxy" ]
   }
   update_target("//chrome/installer/mini_installer:chrome_runtime_deps") {
     data_deps -= [
       "//chrome/chrome_proxy",
     ]
+    data_deps += [ "//vivaldi/tools/vivaldi_proxy" ]
   }
 }
 

@@ -53,11 +53,11 @@ class PassThroughDecoderImpl {
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
 
   void Initialize(const DecoderConfig& config,
-                  const InitCB& init_cb,
+                  InitCB init_cb,
                   const OutputCB& output_cb);
   void Decode(scoped_refptr<DecoderBuffer> buffer,
-              const DecodeCB& decode_cb);
-  void Reset(const base::Closure& closure);
+              DecodeCB decode_cb);
+  void Reset(base::OnceClosure closure);
 
  private:
   // Performs decoder config checks specific to the pass-through decoder,

@@ -3,11 +3,17 @@
 #ifndef EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_H_
 #define EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 
 class Profile;
+
+namespace vivaldi {
+class StatsReporter;
+}
 
 class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
  public:
@@ -25,8 +31,11 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
   static void PostProfileInit(Profile* profile);
 
   static VivaldiBrowserMainExtraParts* Create();
+
  private:
   void EnsureBrowserContextKeyedServiceFactoriesBuilt();
+
+  std::unique_ptr<vivaldi::StatsReporter> stats_reporter_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserMainExtraParts);
 };

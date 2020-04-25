@@ -1,8 +1,46 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="nn">
+<translation id="1127811143501539442">{DAYS, plural, =1 {1 dag sidan} other {# dagar sidan}}</translation>
+<translation id="1156623771253174079">{SECONDS, plural, =1 {1 minutt sidan} other {# minutt sidan}}</translation>
 <translation id="1368832886055348810">Venstre mot høgre</translation>
+<translation id="1591184457164800433">{MINUTES, plural, =1 {1 minutt og } other {# minutt og }}</translation>
+<translation id="1752946267035950200">{MINUTES, plural, =1 {1 minutt} other {# minutt}}</translation>
+<translation id="1761785978543082658"><ph name="QUANTITY" /> B</translation>
+<translation id="1801827354178857021">Punktum</translation>
+<translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
+<translation id="1830179671306812954">{HOURS, plural, =1 {1 time og } other {# timar og }}</translation>
 <translation id="1859234291848436338">Skriveretning</translation>
+<translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
+<translation id="3291688615589870984">{DAYS, plural, =1 {1 dag} other {# dagar}}</translation>
+<translation id="3600566671520689681">{DAYS, plural, =1 {1 dag igjen} other {# dagar igjen}}</translation>
+<translation id="3618849550573277856">Slå opp “<ph name="LOOKUP_STRING" />”</translation>
+<translation id="3740362395218339114"><ph name="QUANTITY" /> GB/s</translation>
+<translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
+<translation id="3889424535448813030">Høgrepil</translation>
+<translation id="4968171027979920686">{SECONDS, plural, =1 {1 sekund} other {# sekund}}</translation>
+<translation id="5076340679995252485">&amp;Lim inn</translation>
+<translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
+<translation id="5613020302032141669">Venstrepil</translation>
+<translation id="5754277640426581776">{MINUTES, plural, =1 {1 min} other {# min}}</translation>
+<translation id="5768079895599174203">{DAYS, plural, =1 {1 dag og } other {# dagar og }}</translation>
+<translation id="5906667377645263094">{SECONDS, plural, =1 {1 sekund igjen} other {# sekund igjen}}</translation>
+<translation id="5943826764092288734">{HOURS, plural, =1 {1 time} other {# timar}}</translation>
+<translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
+<translation id="6404817160109697034">{SECONDS, plural, =1 {1 sek sidan} other {# sek sidan}}</translation>
+<translation id="6483402905448010557">{SECONDS, plural, =1 {1 sekund sidan} other {# sekund sidan}}</translation>
+<translation id="6863590663815976734">{HOURS, plural, =1 {1 time igjen} other {# timar igjen}}</translation>
+<translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6974053822202609517">Høgre mot venstre</translation>
+<translation id="7238427729722629793">{MINUTES, plural, =1 {1 min igjen} other {# min igjen}}</translation>
+<translation id="7365057348334984696">{MINUTES, plural, =1 {1 min sidan} other {# min sidan}}</translation>
+<translation id="7410957453383678442">{MINUTES, plural, =1 {1 minutt igjen} other {# minutt igjen}}</translation>
+<translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
+<translation id="8106081041558092062">{HOURS, plural, =1 {1 time sidan} other {# timar sidan}}</translation>
+<translation id="8131263257437993507">{SECONDS, plural, =1 {1 sek igjen} other {# sek igjen}}</translation>
+<translation id="8677655579646609597"><ph name="QUANTITY" /> kB/s</translation>
 <translation id="8798099450830957504">Standard</translation>
+<translation id="8901569739625249689"><ph name="QUANTITY" /> kB</translation>
+<translation id="9044832324875206639">{SECONDS, plural, =1 {1 sek} other {# sek}}</translation>
 </translationbundle>

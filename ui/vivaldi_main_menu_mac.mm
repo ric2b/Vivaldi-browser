@@ -136,12 +136,12 @@ void FaviconLoaderMac::LoadFavicon(NSMenuItem *item, const std::string& url) {
   }
 
   favicon_base::FaviconImageCallback callback =
-    base::Bind(&FaviconLoaderMac::OnFaviconDataAvailable,
+    base::BindOnce(&FaviconLoaderMac::OnFaviconDataAvailable,
         base::Unretained(this), item);
 
   favicon_service_->GetFaviconImageForPageURL(
       GURL(url),
-      callback,
+      std::move(callback),
       cancelable_task_tracker_.get());
 }
 
@@ -435,6 +435,9 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
     NSString* title = base::SysUTF8ToNSString(item.name);
     NSMenu* subMenu;
 
+    // We want to keep the service sub menu of the original menu.
+    bool isAppMenu = topLevel && item.id == IDC_CHROME_MENU;
+
     // Special care for the bookmarks menu as we manage it two places.
     // Here and in bookmark_menu_bridge.mm. We never clear its content
     // and we replace menu items if they already exists.
@@ -444,10 +447,11 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
     // that are added by the OS. Avoid that.
     bool isEditMenu = topLevel && item.id == IDC_EDIT_MENU;
     long editMenuLength = 0;
+    long appIndex = 0;
 
     if ([menuItem hasSubmenu]) {
       subMenu = [menuItem submenu];
-      if (!isBookmarkMenu && !isEditMenu) {
+      if (!isAppMenu && !isBookmarkMenu && !isEditMenu) {
         [subMenu removeAllItems];
       }
       if (isEditMenu) {
@@ -460,6 +464,17 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
         [subMenu insertItem:[NSMenuItem separatorItem] atIndex:0];
         editMenuLength = [subMenu numberOfItems];
       }
+      if (isAppMenu) {
+        // Remove all but the Service menu and the 'Show All' entry. The service
+        // menu is the only sub menu.
+        for (NSMenuItem* item in [subMenu itemArray]) {
+          if (!item.hasSubmenu &&
+              [item action] !=
+                  NSSelectorFromString(@"unhideAllApplications:")) {
+            [subMenu removeItem:item];
+          }
+        }
+      }
       subMenu.title = title;
     } else {
       subMenu = [[[NSMenu alloc] initWithTitle:title] autorelease];
@@ -471,7 +486,25 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
         it != item.items->end(); ++it) {
       const menubar::MenuItem& child = *it;
       long index = -1;
-      if (isBookmarkMenu) {
+      if (isAppMenu) {
+        // Add all our menu items before the service menu until we are about
+        // to add the 'hide vivaldi' entry. There we start to add after leaving
+        // the service menu in front.
+        // Next step one more to make room for the "Show All" entry that is to
+        // be shown after "hide others".
+        if (child.id == IDC_HIDE_APP) {
+          NSMenuItem* menuItem = [NSMenuItem separatorItem];
+          [subMenu insertItem:menuItem atIndex:appIndex + 1];
+          appIndex += 2;
+        }
+        PopulateMenu(child, subMenu, false, appIndex, faviconLoader);
+        if (child.id == IDC_VIV_HIDE_OTHERS) {
+          appIndex ++;
+        }
+        appIndex ++;
+        continue;
+      }
+      else if (isBookmarkMenu) {
         NSMenuItem* item = [subMenu itemWithTag:child.id];
         if (item) {
           // Just update the item (we may have a new shortcut etc).

@@ -19,11 +19,11 @@
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/invalidation/public/invalidator_state.h"
 #include "components/invalidation/public/object_id_invalidation_map.h"
-#include "components/sync/base/get_session_name.h"
 #include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_token_status.h"
+#include "components/sync_device_info/local_device_info_util.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/sync.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -298,7 +298,7 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
           vivaldi::sync::EngineState::ENGINE_STATE_STARTED;
     }
 
-  } else if (sync_manager->GetSyncTokenStatus().connection_status ==
+  } else if (sync_manager->GetSyncTokenStatusForDebugging().connection_status ==
              syncer::CONNECTION_SERVER_ERROR) {
     engine_data.engine_state =
         vivaldi::sync::EngineState::ENGINE_STATE_STARTING_SERVER_ERROR;

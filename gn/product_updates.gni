@@ -45,7 +45,7 @@ if (is_win) {
     ]
   }
 
-  update_target("//chrome_elf:chrome_elf") {
+  update_target("//chrome/chrome_elf:chrome_elf") {
     output_name = "vivaldi_elf"
   }
 
@@ -70,12 +70,14 @@ if (is_win) {
     inputs += [
       "$root_out_dir/vivaldi.dll",
       "$root_out_dir/vivaldi.exe",
+      "$root_out_dir/vivaldi_proxy.exe",
       "$root_out_dir/update_notifier.exe",
       vivaldi_release_file
     ]
     deps+= [
       "//vivaldi/update_notifier",
-      "//vivaldi/installer/win:vivaldi_release"
+      "//vivaldi/installer/win:vivaldi_release",
+      "//vivaldi/tools/vivaldi_proxy"
     ]
     sign_executables =
         defined(invoker.sign_executables) && invoker.sign_executables
@@ -118,16 +120,9 @@ if (is_win) {
   }
 }
 
-# Write compiler path to win_toolchain.json file used by PGO benchmark script
-if (is_win) {
-  import("//build/config/win/visual_studio_version.gni")
-  write_file("$root_build_dir/win_toolchain.json",
-      "{ \"path\":\""+ rebase_path(visual_studio_path) +"\" }")
-}
-
 if (is_android) {
   update_template_instance("//chrome/android:chrome_public_apk") {
-    apk_name = "Vivaldi"
+    apk_name = "Vivaldi.${vivaldi_version_full}"
   }
 
   update_template_instance("//chrome/android:chrome_public_apk_resources") {

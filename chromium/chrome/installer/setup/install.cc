@@ -426,7 +426,7 @@ void CreateOrUpdateShortcuts(const base::FilePath& target,
       shortcut_operation ==
           ShellUtil::SHELL_SHORTCUT_CREATE_IF_NO_SYSTEM_LEVEL) {
     start_menu_properties.set_pin_to_taskbar(!do_not_create_taskbar_shortcut);
-    if (base::win::GetVersion() >= base::win::VERSION_WIN7) {
+    if (base::win::GetVersion() >= base::win::Version::WIN7) {
       base::win::RegKey key(HKEY_CURRENT_USER,
                             vivaldi::constants::kVivaldiKey, KEY_ALL_ACCESS);
       if (key.Valid()) {

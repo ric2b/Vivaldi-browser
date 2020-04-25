@@ -18,7 +18,8 @@ chromium_git_hooks_folder = os.path.join(SRC, ".git", "modules", "chromium", "ho
 
 depot_tools_path = os.path.join(SRC, "chromium/third_party/depot_tools")
 os.environ["PATH"] = os.pathsep.join([depot_tools_path, os.environ["PATH"]])
-os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"]="0"
+if platform.system() == "Windows":
+  os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"]="0"
 
 OS_CHOICES = {
   "win32": "win",
@@ -76,8 +77,15 @@ def GetGNVars():
 
   return dict(env_items)
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--clobber-out", action="store_true");
+parser.add_argument("--args-gn")
+parser.add_argument("--checkout-os")
+
+args = parser.parse_args()
+
 host_os = OS_CHOICES.get(sys.platform, 'unix')
-checkout_os = host_os
+checkout_os =  args.checkout_os or host_os
 checkout_cpu = "x64"
 if IsAndroidEnabled():
   checkout_os = "android"
@@ -90,12 +98,6 @@ if "target_cpu" in gnvars:
   checkout_cpu = gnvars["target_cpu"]
 
 checkout_cpu = "checkout_"+checkout_cpu
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--clobber-out", action="store_true");
-parser.add_argument("--args-gn")
-
-args = parser.parse_args()
 
 prefix_name = os.path.split(SRC)[1]
 

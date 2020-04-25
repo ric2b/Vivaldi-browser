@@ -174,7 +174,7 @@ void AVFDataBufferQueue::SatisfyPendingRead() {
     if (buffer.get() != NULL) {
       VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
               << " " << DescribeBufferSize();
-      base::ResetAndReturn(&read_cb_).Run(buffer);
+      std::move(read_cb_).Run(buffer);
     } else {
       VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
               << " Not enough data available to satisfy read request. Request "

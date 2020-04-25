@@ -303,6 +303,21 @@
             "name": "windowId"
           }
         ]
+      },
+      {
+        "name": "onActiveTabStatusText",
+        "type": "function",
+        "description": "Fired when the active tab has new loadstate text. Will reset to <empty> string",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          },
+          {
+            "type": "string",
+            "name": "statusText"
+          }
+        ]
       }
     ]
   }

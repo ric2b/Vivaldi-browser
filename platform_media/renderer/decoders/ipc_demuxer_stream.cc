@@ -64,7 +64,7 @@ void IPCDemuxerStream::Read(const ReadCB& read_cb) {
             << " Read from disabled stream, returning EOS";
     // Callback can be unset, see VB-51064.
     if (!read_cb_.is_null()) {
-      base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
+      std::move(read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
     }
     return;
   }
@@ -88,7 +88,7 @@ void IPCDemuxerStream::set_enabled(bool enabled, base::TimeDelta timestamp) {
   if (!is_enabled_ && !read_cb_.is_null()) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Read from disabled stream, returning EOS";
-    base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
+    std::move(read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
     return;
   }
 }
@@ -183,8 +183,8 @@ void IPCDemuxerStream::Stop() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!read_cb_.is_null()) {
-    base::ResetAndReturn(&read_cb_)
-        .Run(DemuxerStream::kOk, DecoderBuffer::CreateEOSBuffer());
+    std::move(read_cb_).Run(DemuxerStream::kOk,
+                            DecoderBuffer::CreateEOSBuffer());
   }
 
   ipc_media_pipeline_host_ = NULL;
@@ -195,7 +195,7 @@ void IPCDemuxerStream::DataReady(Status status,
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!read_cb_.is_null())
-    base::ResetAndReturn(&read_cb_).Run(status, buffer);
+    std::move(read_cb_).Run(status, buffer);
 }
 
 }  // namespace media

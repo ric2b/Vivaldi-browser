@@ -357,6 +357,12 @@ void WebViewGuest::NavigationStateChanged(
   if (browser) {
     static_cast<content::WebContentsDelegate*>(browser)->NavigationStateChanged(
         web_contents(), changed_flags);
+    // Notify the Vivaldi browser window about load state.
+    VivaldiBrowserWindow* app_win =
+        static_cast<VivaldiBrowserWindow*>(browser->window());
+    if (app_win) {
+      app_win->NavigationStateChanged(web_contents(), changed_flags);
+    }
   }
 }
 
@@ -655,7 +661,7 @@ void WebViewGuest::OnMouseLeave() {
 }
 
 void WebViewGuest::ShowRepostFormWarningDialog(WebContents* source) {
-  TabModalConfirmDialog::Create(new RepostFormWarningController(source),
+  TabModalConfirmDialog::Create(std::make_unique<RepostFormWarningController>(source),
                                 source);
 }
 

@@ -2,11 +2,14 @@
 <grit base_dir="." latest_public_release="0" current_release="1"
       source_lang_id="en" enc_check="möl">
   <outputs>
+    <output filename="platform_locale_settings_af.pak" type="data_package" lang="af" />
     <output filename="platform_locale_settings_be.pak" type="data_package" lang="be" />
+    <output filename="platform_locale_settings_de-CH.pak" type="data_package" lang="de-CH" />
     <output filename="platform_locale_settings_eo.pak" type="data_package" lang="eo" />
     <output filename="platform_locale_settings_es-PE.pak" type="data_package" lang="es-PE" />
     <output filename="platform_locale_settings_eu.pak" type="data_package" lang="eu" />
     <output filename="platform_locale_settings_fy.pak" type="data_package" lang="fy" />
+    <output filename="platform_locale_settings_gd.pak" type="data_package" lang="gd" />
     <output filename="platform_locale_settings_gl.pak" type="data_package" lang="gl" />
     <output filename="platform_locale_settings_hy.pak" type="data_package" lang="hy" />
     <output filename="platform_locale_settings_io.pak" type="data_package" lang="io" />
@@ -72,11 +75,14 @@
     <file path="strings/vivaldi_platform_locale_settings_zh-TW.xtb" lang="zh-TW" />
     <file path="strings/vivaldi_platform_locale_settings_es-419.xtb" lang="es-419" />
     <file path="strings/vivaldi_platform_locale_settings_pt-BR.xtb" lang="pt-BR" />
+    <file path="strings/vivaldi_platform_locale_settings_af.xtb" lang="af" />
     <file path="strings/vivaldi_platform_locale_settings_be.xtb" lang="be" />
+    <file path="strings/vivaldi_platform_locale_settings_de-CH.xtb" lang="de-CH" />
     <file path="strings/vivaldi_platform_locale_settings_eo.xtb" lang="eo" />
     <file path="strings/vivaldi_platform_locale_settings_es-PE.xtb" lang="es-PE" />
     <file path="strings/vivaldi_platform_locale_settings_eu.xtb" lang="eu" />
     <file path="strings/vivaldi_platform_locale_settings_fy.xtb" lang="fy" />
+    <file path="strings/vivaldi_platform_locale_settings_gd.xtb" lang="gd" />
     <file path="strings/vivaldi_platform_locale_settings_gl.xtb" lang="gl" />
     <file path="strings/vivaldi_platform_locale_settings_hy.xtb" lang="hy" />
     <file path="strings/vivaldi_platform_locale_settings_io.xtb" lang="io" />

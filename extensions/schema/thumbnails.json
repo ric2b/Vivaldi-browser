@@ -6,27 +6,12 @@
     "description": "Thumbnail capture support api.",
     "types": [
       {
-        "id": "ThumbnailQueryResult",
-        "type": "object",
-        "description": "A structure containing the result of the isThumbnailAvailable call.",
-        "properties": {
-          "hasThumbnail": {
-            "type": "boolean",
-            "description": "true if a thumbnail is available, otherwise false."
-          },
-          "thumbnailUrl": {
-            "type": "string",
-            "description": "The url pointing to the available thumbnail"
-          }
-        }
-      },
-      {
         "id": "CaptureUrlParams",
         "type": "object",
         "description": "A structure containing parameters for the captureUrl call.",
         "properties": {
           "bookmarkId": {
-            "type": "integer",
+            "type": "string",
             "description": "Bookmark id to associate the captured thumbnail with."
           },
           "url": {
@@ -106,10 +91,33 @@
             "optional": true,
             "description": "If true, will copy the image to clipboard in a raw and uncompressed format. This will override any file path arguments. Default is false."
           },
-          "saveFilePattern":  {
+          "saveFilePattern": {
             "type": "string",
             "optional": true,
             "description": "If set, will use this pattern to contruct the filename. Note that the file name is still guaranteed to be unique, and (1), (2) etc might be appended if needed."
+          }
+        }
+      },
+      {
+        "id": "CaptureRect",
+        "type": "object",
+        "description": "Rect struct for capture actions where the result wanted is a cut-out of the full tab.",
+        "properties": {
+          "left": {
+            "type": "integer",
+            "description": "x"
+          },
+          "top": {
+            "type": "integer",
+            "description": "y"
+          },
+          "width": {
+            "type": "integer",
+            "description": "width"
+          },
+          "height": {
+            "type": "integer",
+            "description": "height"
           }
         }
       },
@@ -132,6 +140,11 @@
             "type": "boolean",
             "optional": true,
             "description": "true to capture the full height of the page, restricted to 20000 pixels height. Default is false."
+          },
+          "rect": {
+            "$ref": "CaptureRect",
+            "optional": true,
+            "description": "Wanted rect, output is not scaled."
           },
           "width": {
             "type": "integer",
@@ -158,7 +171,7 @@
             "optional": true,
             "description": "If true, will copy the image to clipboard in a raw and uncompressed format. This will override any file path arguments. Default is false."
           },
-          "saveFilePattern":  {
+          "saveFilePattern": {
             "type": "string",
             "optional": true,
             "description": "If set, will use this pattern to contruct the filename. Note that the file name is still guaranteed to be unique, and (1), (2) etc might be appended if needed."
@@ -167,29 +180,6 @@
       }
     ],
     "functions": [
-      {
-        "name": "isThumbnailAvailable",
-        "type": "function",
-        "description": "Checks whether a thumbnail is available for the given data",
-        "parameters": [
-          {
-            "name": "bookmarkId",
-            "type": "integer",
-            "description": "The bookmark id to check for available thumbnail"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "ThumbnailQueryResult"
-              }
-            ]
-          }
-        ]
-      },
       {
         "name": "captureUI",
         "type": "function",
@@ -231,11 +221,6 @@
             "name": "callback",
             "parameters": [
               {
-                "name": "tabId",
-                "type": "integer",
-                "description": "The tab id that was captured."
-              },
-              {
                 "name": "image",
                 "type": "string",
                 "description": "base64-encoded jpg of the captured image or, if |saveToBasePath| is used, the full path to the image on disk."
@@ -257,16 +242,6 @@
             "type": "function",
             "name": "callback",
             "parameters": [
-              {
-                "name": "bookmarkId",
-                "type": "integer",
-                "description": "The bookmark id that was captured. Is set even on failure"
-              },
-              {
-                "name": "success",
-                "type": "boolean",
-                "description": "true if capture succeeded, otherwise false."
-              },
               {
                 "name": "thumbnailUrl",
                 "type": "string",

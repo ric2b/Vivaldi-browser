@@ -812,7 +812,6 @@ bool AppendPostInstallTasks(const InstallerState& installer_state,
         product_rename_cmd.GetCommandLineString(), true);
 
     // Delay deploying the new chrome_proxy while chrome is running.
-    if (!installer_state.is_vivaldi())
     in_use_update_work_items->AddCopyTreeWorkItem(
         src_path.Append(kChromeProxyExe).value(),
         target_path.Append(kChromeProxyNewExe).value(), temp_path.value(),
@@ -840,7 +839,6 @@ bool AppendPostInstallTasks(const InstallerState& installer_state,
 
     // Only copy chrome_proxy.exe directly when chrome.exe isn't in use to avoid
     // different versions getting mixed up between the two binaries.
-    if (!installer_state.is_vivaldi())
     regular_update_work_items->AddCopyTreeWorkItem(
         src_path.Append(kChromeProxyExe).value(),
         target_path.Append(kChromeProxyExe).value(), temp_path.value(),

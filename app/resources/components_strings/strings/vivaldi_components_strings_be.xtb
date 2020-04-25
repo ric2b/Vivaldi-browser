@@ -60,7 +60,7 @@
 <translation id="3176929007561373547">Спраўдзіце налады proxy-сэрвэру або папрасіце кіраўніка сеткі
 …пераканацца, ці працуе proxy-сэрвэр. Калі Вы упэўнены, то карыстайцеся:
 …<ph name="PLATFORM_TEXT" /></translation>
-<translation id="3226128629678568754">Націсні пераладаваць для адпраўкі дадзеных POST зноў.</translation>
+<translation id="3226128629678568754">Націсні перазагрузіць для адпраўкі дадзеных POST зноў.</translation>
 <translation id="3227137524299004712">Мікрафон</translation>
 <translation id="3234666976984236645">Заўседы вызначаць важны змест на гэтым сайце</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> недасягальны.</translation>
@@ -122,7 +122,7 @@
 …<ph name="LINE_BREAK" />
 …Паспрабуйце пагутарыць аб гэтым з кіраўніком сеткі.</translation>
 <translation id="5510766032865166053">Можа, ён быў перамешчаны або выдалены.</translation>
-<translation id="5556459405103347317">Пераладаваць</translation>
+<translation id="5556459405103347317">Перазагрузіць</translation>
 <translation id="5571347317547569613">({NUM_COOKIES, plural, =1 {Скарыстаны 1 файл} other {Скарыстана # файлаў}})</translation>
 <translation id="5610142619324316209">Спраўдка падлучэння</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> пераадрэсаваў Вас занадта многа разоў.</translation>
@@ -192,6 +192,7 @@
 <translation id="8025119109950072390">Завітанне на гэты сайт можа прывесці да усталёўкі шкадлівага ПЗ або крадзяжу уласнай інфармацыі (напрыклад, пароль, тэлефоннага нумару, або банкаўскіх картак).</translation>
 <translation id="8037357227543935929">Спытаць (па змаўчанні)</translation>
 <translation id="8041940743680923270">Выкарыстоўваць глабальна (спытаць)</translation>
+<translation id="808894953321890993">Змяніць пароль</translation>
 <translation id="8142868475871995937">Завітаце &lt;strong&gt; vivaldi://policy&lt;/strong&gt; , каб убачыць спіс чорных URL-аў і іншыя правілы.</translation>
 <translation id="8149426793427495338">Твой кампутар заснуў.</translation>
 <translation id="8150722005171944719">Файл па адрасу <ph name="URL" />  не чытальны. Магчыма, ен быў выдален, ці няма права доступа да файла.</translation>
@@ -207,7 +208,7 @@
 <translation id="8503813439785031346">Імя карыстальніка</translation>
 <translation id="859285277496340001">У серціфікаце не пазначаны механізм спраўджання ці быў ён скасаваны.</translation>
 <translation id="8703575177326907206">Твае падлучэнне да <ph name="DOMAIN" /> не шыфраванае.</translation>
-<translation id="8740359287975076522">Не атрымліваецца знайсці &lt;abbr id="dnsDefinition"&gt;DNS-адрэс&lt;/abbr&gt; сайту <ph name="HOST_NAME" /> . Выконваецца дзіягносціка.</translation>
+<translation id="8740359287975076522">Не атрымліваецца знайсці &lt;abbr id="dnsDefinition"&gt;DNS-адрас&lt;/abbr&gt; сайту <ph name="HOST_NAME" /> . Выконваецца дзіягносціка.</translation>
 <translation id="9001074447101275817">Proxy <ph name="DOMAIN" /> патрабуе імя карыстальніка і пароль.</translation>
 <translation id="9008201768610948239">Ігнараваць</translation>
 <translation id="9011424611726486705">Адчыніць налады сайту</translation>
@@ -217,6 +218,7 @@
 <translation id="9169664750068251925">Заўседы блакаваць на гэтым сайце</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> выкарустоўвае не падтрымлівальны пратакол.</translation>
 <translation id="9219103736887031265">Малюнкі</translation>
+<translation id="936602727769022409">Вы можаце страіць уліковы запіс Google. Рэкамендуем змяніць пароль. Пасля гэтага спатрэбіцца зноў зайсці ва ўліковы запіс.</translation>
 <translation id="969892804517981540">Афицыйная зборка</translation>
 <translation id="988159990683914416">Зборка для распрацоўнікаў</translation>
 </translationbundle>

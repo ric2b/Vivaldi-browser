@@ -49,7 +49,6 @@ update_template_instance("//chrome/browser/ui:ui") {
   if (!is_android) {
     sources += [
       "//vivaldi/browser/ui/viv_settings_import_data_handler.cc",
-      "//vivaldi/browser/ui/viv_toolbar_actions_model.cc",
       "//vivaldi/sync/vivaldi_browser_synced_window_delegate.cc",
       "//vivaldi/sync/vivaldi_browser_synced_window_delegate.h",
     ]

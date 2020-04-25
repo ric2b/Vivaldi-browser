@@ -96,7 +96,6 @@ base::CommandLine CommandLineArgsForLauncher(
                                                 base::BlockingType::MAY_BLOCK);
   base::CommandLine new_cmd_line(base::CommandLine::NO_PROGRAM);
 
-  if (!vivaldi::IsVivaldiRunning()) {
   AppendProfileArgs(
       extension_app_id.empty() ? base::FilePath() : profile_path,
       &new_cmd_line);
@@ -110,9 +109,7 @@ base::CommandLine CommandLineArgsForLauncher(
     // Use '--app=url' instead of just 'url' to launch the browser with minimal
     // chrome.
     // Note: Do not change this flag!  Old Gears shortcuts will break if you do!
-    // we can't have this switch for the Vivaldi app
     new_cmd_line.AppendSwitchASCII(switches::kApp, url.spec());
-  }
   }
   return new_cmd_line;
 }

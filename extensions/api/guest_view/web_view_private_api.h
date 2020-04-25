@@ -46,35 +46,8 @@ class WebViewPrivateSetVisibleFunction
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateSetVisibleFunction);
 };
 
-class WebViewInternalThumbnailFunction
-    : public VivaldiWebViewChromeAsyncExtensionFunction {
- public:
-  WebViewInternalThumbnailFunction();
-
- protected:
-  ~WebViewInternalThumbnailFunction() override;
-  virtual void SendResultFromBitmap(const SkBitmap& screen_capture);
-  bool InternalRunAsyncSafe(const web_view_private::ThumbnailParams& params);
-
-  // Quality setting to use when encoding jpegs.  Set in RunImpl().
-  int image_quality_;
-  double scale_;
-  int height_;
-  int width_;
-  // Are we running in incognito mode?
-  bool is_incognito_;
-  int bookmark_id_ = 0;
-
-  // The format (JPEG vs PNG) of the resulting image.  Set in RunImpl().
-  api::extension_types::ImageFormat image_format_;
-
- private:
-  // Callback for the RWH::CopyFromBackingStore call.
-  void CopyFromBackingStoreComplete(const SkBitmap& bitmap);
-};
-
 class WebViewPrivateGetThumbnailFunction
-    : public WebViewInternalThumbnailFunction {
+    : public VivaldiWebViewChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.getThumbnail",
                              WEBVIEWINTERNAL_GETTHUMBNAIL)
@@ -83,56 +56,23 @@ class WebViewPrivateGetThumbnailFunction
 
  protected:
   ~WebViewPrivateGetThumbnailFunction() override;
+  void SendResultFromBitmap(const SkBitmap& screen_capture);
+  bool InternalRunAsyncSafe(const web_view_private::ThumbnailParams& params);
+
   bool RunAsync() override;
 
- private:
-  void SendInternalError();
+  // Quality setting to use when encoding jpegs.  Set in RunImpl().
+  int image_quality_;
+  double scale_;
+  int height_;
+  int width_;
 
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetThumbnailFunction);
-};
-
-class WebViewPrivateGetThumbnailFromServiceFunction
-    : public WebViewInternalThumbnailFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewPrivate.getThumbnailFromService",
-                             WEBVIEWINTERNAL_GETTHUMBNAILFROMSERVICE)
-
-  WebViewPrivateGetThumbnailFromServiceFunction();
-
- protected:
-  ~WebViewPrivateGetThumbnailFromServiceFunction() override;
-  bool RunAsync() override;
-  void SendResultFromBitmap(const SkBitmap& screen_capture) override;
-  void OnBookmarkThumbnailStored(int bookmark_id, std::string& image_url);
-
-  GURL url_;
-  bool incognito = false;
-  std::unique_ptr<SkBitmap> bitmap_;
+  // The format (JPEG vs PNG) of the resulting image.  Set in RunImpl().
+  api::extension_types::ImageFormat image_format_;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateGetThumbnailFromServiceFunction);
-};
-
-class WebViewPrivateAddToThumbnailServiceFunction
-    : public WebViewInternalThumbnailFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewPrivate.addToThumbnailService",
-                             WEBVIEWINTERNAL_ADDTOTHUMBNAILSERVICE)
-
-  WebViewPrivateAddToThumbnailServiceFunction();
-
- protected:
-  ~WebViewPrivateAddToThumbnailServiceFunction() override;
-  bool RunAsync() override;
-  void SendResultFromBitmap(const SkBitmap& screen_capture) override;
-  void OnBookmarkThumbnailStored(int bookmark_id, std::string& image_url);
-
-  GURL url_;
-  bool incognito = false;
-  std::unique_ptr<SkBitmap> bitmap_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateAddToThumbnailServiceFunction);
+  // Callback for the RWH::CopyFromBackingStore call.
+  void CopyFromBackingStoreComplete(const SkBitmap& bitmap);
 };
 
 class WebViewPrivateShowPageInfoFunction

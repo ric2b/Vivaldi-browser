@@ -39,7 +39,7 @@ void VivaldiAccountPasswordHandler::SetPassword(const std::string& password) {
   DCHECK(!password.empty());
 
   autofill::PasswordForm password_form = {};
-  password_form.scheme = autofill::PasswordForm::SCHEME_OTHER;
+  password_form.scheme = autofill::PasswordForm::Scheme::kOther;
   password_form.signon_realm = kSyncSignonRealm;
   password_form.origin = GURL(kSyncOrigin);
   password_form.username_value = base::UTF8ToUTF16(delegate_->GetUsername());
@@ -51,7 +51,7 @@ void VivaldiAccountPasswordHandler::SetPassword(const std::string& password) {
 
 void VivaldiAccountPasswordHandler::ForgetPassword() {
   autofill::PasswordForm password_form = {};
-  password_form.scheme = autofill::PasswordForm::SCHEME_OTHER;
+  password_form.scheme = autofill::PasswordForm::Scheme::kOther;
   password_form.signon_realm = kSyncSignonRealm;
   password_form.origin = GURL(kSyncOrigin);
   password_form.username_value = base::UTF8ToUTF16(delegate_->GetUsername());
@@ -85,7 +85,7 @@ void VivaldiAccountPasswordHandler::OnLoginsChanged(
 
 void VivaldiAccountPasswordHandler::UpdatePassword() {
   password_manager::PasswordStore::FormDigest form_digest(
-      autofill::PasswordForm::SCHEME_OTHER, kSyncSignonRealm,
+      autofill::PasswordForm::Scheme::kOther, kSyncSignonRealm,
       GURL(kSyncOrigin));
 
   password_store_->GetLogins(form_digest, this);

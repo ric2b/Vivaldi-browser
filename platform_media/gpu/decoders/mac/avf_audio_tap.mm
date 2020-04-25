@@ -310,7 +310,7 @@ base::scoped_nsobject<AVAudioMix> AVFAudioTap::GetAudioMix() {
 
   audio_tap::Context::InitParams params;
   params.task_runner = task_runner_;
-  params.format_known_cb = base::ResetAndReturn(&format_known_cb_);
+  params.format_known_cb = std::move(format_known_cb_);
   params.samples_ready_cb = samples_ready_cb_;
 
   MTAudioProcessingTapCallbacks tap_callbacks;

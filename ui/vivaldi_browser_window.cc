@@ -35,6 +35,7 @@
 #include "chrome/browser/ui/browser_window_state.h"
 #include "chrome/browser/ui/color_chooser.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
+#include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/download/download_in_progress_dialog_view.h"
@@ -273,6 +274,10 @@ void VivaldiAppWindowContentsImpl::PrintCrossProcessSubframe(
   }
 }
 
+void VivaldiAppWindowContentsImpl::ActivateContents(WebContents* contents) {
+  host_->Activate();
+}
+
 void VivaldiAppWindowContentsImpl::RenderViewCreated(
     content::RenderViewHost* render_view_host) {
   // An incognito profile is not initialized with the UI zoom value. Set it up
@@ -327,15 +332,25 @@ void VivaldiAppWindowContentsImpl::RenderProcessGone(
   // abnormally we may still have some tabs with WebContents that will be
   // destroyed without telling TabStripModel leading to access of freed
   // memory.
-  if (status ==
+  if (status !=
       base::TerminationStatus::TERMINATION_STATUS_NORMAL_TERMINATION) {
-    DCHECK(!host_->browser() || host_->browser()->tab_strip_model()->empty());
-  } else {
+    LOG(ERROR) << "UI Process crashes with status " << status << '!';
     if (host_->browser()) {
-      host_->browser()->tab_strip_model()->CloseAllTabs();
+      TabStripModel* tab_strip_model = host_->browser()->tab_strip_model();
+      tab_strip_model->vivaldi_force_tab_close_ = true;
+      tab_strip_model->CloseAllTabs();
+      tab_strip_model->vivaldi_force_tab_close_ = false;
+      if (!tab_strip_model->empty()) {
+        LOG(ERROR) << tab_strip_model->count()
+                   << " tabs are still alive after attempting to close them";
+      }
     }
   }
+  DCHECK(!host_->browser() || host_->browser()->tab_strip_model()->empty());
 #ifndef _DEBUG
+  // TODO(igor@vivaldi.com): Consider restarting on
+  // TERMINATION_STATUS_PROCESS_WAS_KILLED in addition to crashes in case the
+  // user accidentally kills the UI process in the task manager.
   if (status == base::TerminationStatus::TERMINATION_STATUS_PROCESS_CRASHED) {
     chrome::AttemptRestart();
   }
@@ -362,7 +377,7 @@ void VivaldiAppWindowContentsImpl::DidFinishNavigation(
     return;
    }
 
-  // ExtensionFrameHelper::DidStartProvisionalLoad() will suspend the parser
+  // ExtensionFrameHelper::ReadyToCommitNavigation() will suspend the parser
   // to avoid a race condition reported in
   // https://bugs.chromium.org/p/chromium/issues/detail?id=822650.
   // We need to resume the parser here as we do not use the app window bindings.
@@ -854,17 +869,18 @@ void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
     const security_state::VisibleSecurityState& visible_security_state,
     gfx::Point pos) {
 #if defined(USE_AURA)
-  // This is only for AURA.  Mac is done in VivaldiBrowserCocoa.
   PageInfoBubbleView::ShowPopupAtPos(pos, profile, web_contents, url,
                                      security_level, visible_security_state,
                                      browser_.get(), GetNativeWindow());
-#endif
-#if defined(OS_MACOSX)
+#elif defined(OS_MACOSX)
   gfx::Rect anchor_rect = gfx::Rect(pos, gfx::Size());
   views::BubbleDialogDelegateView* bubble =
       PageInfoBubbleView::CreatePageInfoBubble(
           nullptr, anchor_rect, GetNativeWindow(), profile, web_contents, url,
-          security_level, visible_security_state);
+          security_level, visible_security_state,
+          // Use a simple lambda for the callback. We do not do anything there.
+          base::BindOnce([](views::Widget::ClosedReason closed_reason,
+              bool reload_prompt) {}));
   bubble->GetWidget()->Show();
 #endif
 }
@@ -1299,11 +1315,13 @@ void VivaldiBrowserWindow::VivaldiManagePasswordsIconView::SetState(
 }
 
 void VivaldiBrowserWindow::VivaldiManagePasswordsIconView::Update() {
-  content::WebContents* contents =
+  // contents can be null when we recover after UI process crash.
+  content::WebContents* web_contents =
       browser_->tab_strip_model()->GetActiveWebContents();
-
-  ManagePasswordsUIController::FromWebContents(contents)
-      ->UpdateIconAndBubbleState(this);
+  if (web_contents) {
+    ManagePasswordsUIController::FromWebContents(web_contents)
+        ->UpdateIconAndBubbleState(this);
+  }
 }
 
 VivaldiBrowserWindow::VivaldiPageActionIconContainer::
@@ -1321,5 +1339,34 @@ void VivaldiBrowserWindow::VivaldiPageActionIconContainer::UpdatePageActionIcon(
       icon_view_.reset(new VivaldiManagePasswordsIconView(profile_, browser_));
     }
     icon_view_->Update();
+  }
+}
+
+void VivaldiBrowserWindow::VivaldiPageActionIconContainer::
+    ExecutePageActionIconForTesting(PageActionIconType type) {}
+
+send_tab_to_self::SendTabToSelfBubbleView*
+VivaldiBrowserWindow::ShowSendTabToSelfBubble(
+    content::WebContents* contents,
+    send_tab_to_self::SendTabToSelfBubbleController* controller,
+    bool is_user_gesture) {
+  return nullptr;
+}
+
+void VivaldiBrowserWindow::NavigationStateChanged(
+    content::WebContents* source,
+    content::InvalidateTypes changed_flags) {
+  if (changed_flags & content::INVALIDATE_TYPE_LOAD) {
+    if (source == GetActiveWebContents()) {
+      int windowId = browser()->session_id().id();
+      base::string16 statustext =
+          CoreTabHelper::FromWebContents(source)->GetStatusText();
+      ::vivaldi::BroadcastEvent(
+          extensions::vivaldi::window_private::OnActiveTabStatusText::
+              kEventName,
+          extensions::vivaldi::window_private::OnActiveTabStatusText::Create(
+              windowId, base::UTF16ToUTF8(statustext)),
+          GetProfile());
+    }
   }
 }

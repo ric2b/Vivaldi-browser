@@ -17,7 +17,6 @@ import fnmatch
 import glob
 import optparse
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -191,9 +190,12 @@ def SignTargets(config, options, distribution, staging_dir,enable_hidpi):
     for option in config.options(section):
       if option.endswith('dir'):
         continue
+      # We don't re-sign MS files.
+      if option == "d3dcompiler_47.dll":
+        continue
 
       src_dir = os.path.join(staging_dir, config.get(section, option))
-      src_paths = glob.glob(os.path.join(src_dir, option))
+      src_paths = glob.glob(os.path.join(src_dir, os.path.basename(option) if src_dir[-1] in ["\\", "/"] else option))
       for target in src_paths:
         SignTarget(options, target)
   print "Completed signing"

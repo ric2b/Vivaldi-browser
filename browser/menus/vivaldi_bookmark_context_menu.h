@@ -40,6 +40,10 @@ void ExecuteBookmarkContextMenuCommand(Browser* browser,
 void ExecuteBookmarkMenuCommand(Browser* browser, int menu_command,
                                 int64_t bookmark_id, int mouse_event_flags);
 void HandleHoverUrl(Browser* browser, const std::string& url);
+void HandleOpenMenu(Browser* browser, int64_t id);
+const bookmarks::BookmarkNode* GetNodeByPosition(
+    bookmarks::BookmarkModel* model, const gfx::Point& screen_point,
+    int* start_index, gfx::Rect* rect);
 void SetBookmarkMenuProperties(const BookmarkMenuParams* params);
 void SortBookmarkNodes(const bookmarks::BookmarkNode* parent,
                        std::vector<bookmarks::BookmarkNode*>& nodes);

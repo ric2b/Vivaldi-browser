@@ -8,6 +8,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
 #include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -64,6 +65,9 @@ bool NeedsDisabledMacMenuItem(int action) {
     case IDC_VIV_TASK_MANAGER:
     case IDC_VIV_DEVELOPER_TOOLS:
     case IDC_VIV_WINDOW_MINIMIZE:
+    case IDC_VIV_DEVTOOLS_INSPECTOR:
+    case IDC_VIV_DEVTOOLS_CONSOLE:
+    case IDC_VIV_COMMAND_IMPORT_CALENDAR:
       return true;
     break;
   }
@@ -133,6 +137,22 @@ void UpdateCommandsForVivaldi(CommandUpdater* command_updater_) {
                                          true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_WINDOW_MINIMIZE, true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_ALLOW_APPLE_EVENTS, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_DEVTOOLS_INSPECTOR, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_DEVTOOLS_CONSOLE, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_COMMAND_IMPORT_CALENDAR, true);
+
+  command_updater_->UpdateCommandEnabled(IDC_VIV_MAIL_REPLY, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_MAIL_FORWARD, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_MAIL_DELETE_PERMANENTLY, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_MAIL_MARK_READ, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_MAIL_MARK_THREAD_READ, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_MAIL_MARK_THREAD_UNREAD, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_MAIL_MARK_UNREAD, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_MAIL_ENABLE_SENDER_VIEW, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_MAIL_ENABLE_THREADED_VIEW,
+                                         true);
+  command_updater_->UpdateCommandEnabled(
+      IDC_VIV_MAIL_MARK_READ_AND_GOTO_NEXT_UNREAD, true);
 }
 
 bool ExecuteVivaldiCommands(Browser* browser, int id) {
@@ -192,7 +212,20 @@ bool ExecuteVivaldiCommands(Browser* browser, int id) {
     case IDC_VIV_TOGGLE_IMAGES:
     case IDC_VIV_WINDOW_PANEL:
     case IDC_VIV_WINDOW_MINIMIZE:
-    case IDC_VIV_ALLOW_APPLE_EVENTS: {
+    case IDC_VIV_ALLOW_APPLE_EVENTS:
+    case IDC_VIV_DEVTOOLS_INSPECTOR:
+    case IDC_VIV_DEVTOOLS_CONSOLE:
+    case IDC_VIV_COMMAND_IMPORT_CALENDAR:
+    case IDC_VIV_MAIL_REPLY:
+    case IDC_VIV_MAIL_FORWARD:
+    case IDC_VIV_MAIL_DELETE_PERMANENTLY:
+    case IDC_VIV_MAIL_MARK_READ:
+    case IDC_VIV_MAIL_MARK_THREAD_READ:
+    case IDC_VIV_MAIL_MARK_THREAD_UNREAD:
+    case IDC_VIV_MAIL_MARK_UNREAD:
+    case IDC_VIV_MAIL_ENABLE_SENDER_VIEW:
+    case IDC_VIV_MAIL_ENABLE_THREADED_VIEW:
+    case IDC_VIV_MAIL_MARK_READ_AND_GOTO_NEXT_UNREAD: {
       // The API is registered with a regular profile.
       Profile* profile = browser->profile()->GetOriginalProfile();
       extensions::MenubarAPI::SendOnActivated(

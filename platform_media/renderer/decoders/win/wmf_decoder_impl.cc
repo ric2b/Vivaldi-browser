@@ -93,7 +93,7 @@ WMFDecoderImpl<StreamType>::WMFDecoderImpl(
 
 template <DemuxerStream::Type StreamType>
 void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
-                                            const InitCB& init_cb,
+                                            InitCB init_cb,
                                             const OutputCB& output_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
@@ -101,7 +101,7 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Media Config not accepted for codec : "
             << GetCodecName(config.codec());
-    init_cb.Run(false);
+    std::move(init_cb).Run(false);
     return;
   } else {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -119,7 +119,7 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
             << " Creating/Configuring failed for codec : "
             << GetCodecName(config.codec());
     ReportInitResult<StreamType>(false);
-    init_cb.Run(false);
+    std::move(init_cb).Run(false);
     return;
   }
 
@@ -129,13 +129,13 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
   ResetTimestampState();
 
   ReportInitResult<StreamType>(true);
-  init_cb.Run(true);
+  std::move(init_cb).Run(true);
 }
 
 template <DemuxerStream::Type StreamType>
 void WMFDecoderImpl<StreamType>::Decode(
     scoped_refptr<DecoderBuffer> buffer,
-    const DecodeCB& decode_cb) {
+    DecodeCB decode_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   debug_buffer_logger_.Log(buffer);
@@ -149,7 +149,7 @@ void WMFDecoderImpl<StreamType>::Decode(
         << " Drain did not succeed - returning DECODE_ERROR";
     task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(decode_cb,
+        base::BindOnce(std::move(decode_cb),
                    drained_ok ? DecodeStatus::OK : DecodeStatus::DECODE_ERROR));
     return;
   }
@@ -168,11 +168,11 @@ void WMFDecoderImpl<StreamType>::Decode(
       << " PROPMEDIA(RENDERER) : " << __FUNCTION__
       << " processing buffer failed, returning DECODE_ERROR";
 
-  task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));
+  task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(decode_cb), status));
 }
 
 template <DemuxerStream::Type StreamType>
-void WMFDecoderImpl<StreamType>::Reset(const base::Closure& closure) {
+void WMFDecoderImpl<StreamType>::Reset(base::OnceClosure closure) {
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
@@ -181,7 +181,7 @@ void WMFDecoderImpl<StreamType>::Reset(const base::Closure& closure) {
 
   ResetTimestampState();
 
-  task_runner_->PostTask(FROM_HERE, closure);
+  task_runner_->PostTask(FROM_HERE, std::move(closure));
 }
 
 template <>
@@ -757,7 +757,7 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::ProcessBuffer(
   const scoped_refptr<DecoderBuffer> dequeued_input = queued_input_.front();
   queued_input_.pop_front();
 
-  return discard_helper_->ProcessBuffers(*dequeued_input, output);
+  return discard_helper_->ProcessBuffers(*dequeued_input, output.get());
 }
 
 template <>

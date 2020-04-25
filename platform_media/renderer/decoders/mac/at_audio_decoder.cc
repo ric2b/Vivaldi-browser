@@ -217,7 +217,7 @@ std::string ATAudioDecoder::GetDisplayName() const {
 
 void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
                                 CdmContext* cdm_context,
-                                const InitCB& init_cb,
+                                InitCB init_cb,
                                 const OutputCB& output_cb,
                                 const WaitingCB& waiting_for_decryption_key_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
@@ -230,7 +230,7 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
   if (config.is_encrypted()) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Unsupported Encrypted Audio codec : " << GetCodecName(config.codec());
-    task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
+    task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), false));
     return;
   }
 
@@ -238,14 +238,14 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
   if (!codec_helper_) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Unsupported codec: " << GetCodecName(config.codec());
-    task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
+    task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), false));
     return;
   }
 
   if (!IsPlatformAudioDecoderAvailable(config.codec())) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " PlatformAudioDecoder Not Available for codec : " << GetCodecName(config.codec());
-    task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
+    task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), false));
     return;
   }
 
@@ -267,7 +267,7 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
           base::Bind(&ATAudioDecoder::ConvertAudio, base::Unretained(this)))) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << ": Initialize helper failed for codec : " << GetCodecName(config.codec());
-    task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, false));
+    task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), false));
     return;
   }
 
@@ -276,7 +276,7 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
 
   debug_buffer_logger_.Initialize(GetCodecName(config_.codec()));
 
-  task_runner_->PostTask(FROM_HERE, base::Bind(init_cb, true));
+  task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), true));
 }
 
 void ATAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
@@ -299,7 +299,7 @@ void ATAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
   task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));
 }
 
-void ATAudioDecoder::Reset(const base::Closure& closure) {
+void ATAudioDecoder::Reset(base::OnceClosure closure) {
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
@@ -315,7 +315,7 @@ void ATAudioDecoder::Reset(const base::Closure& closure) {
 
   ResetTimestampState();
 
-  task_runner_->PostTask(FROM_HERE, closure);
+  task_runner_->PostTask(FROM_HERE, std::move(closure));
 }
 
 bool ATAudioDecoder::InitializeConverter(
@@ -488,7 +488,7 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
             << dequeued_input->timestamp();
 
     // ProcessBuffers() computes and sets the timestamp on |output|.
-    if (discard_helper_->ProcessBuffers(*dequeued_input, output))
+    if (discard_helper_->ProcessBuffers(*dequeued_input, output.get()))
       task_runner_->PostTask(FROM_HERE, base::Bind(output_cb_, output));
   }
 

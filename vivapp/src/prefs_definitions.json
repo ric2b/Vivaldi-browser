@@ -272,7 +272,8 @@
           "week": 1,
           "multiweek": 2,
           "month": 3,
-          "agenda": 4
+          "year": 4,
+          "agenda": 5
         },
         "default": "month",
         "syncable": false
@@ -443,6 +444,11 @@
         "enable_single_key": {
           "type": "boolean",
           "default": false,
+          "syncable": true
+        },
+        "enable_single_key_for_mail": {
+          "type": "boolean",
+          "default": true,
           "syncable": true
         },
         "space_fast_forwards": {
@@ -1133,8 +1139,21 @@
         "default": false,
         "syncable": true
       },
+      "page_load_info": {
+        "description": "Tab page loading progress display",
+        "type": "enum",
+        "enum_values": {
+          "none": 0,
+          "progress_bar": 1,
+          "progress_icon": 2,
+          "spinner": 3
+        },
+        "default": "progress_bar",
+        "syncable": true
+      },
       "favicon_spinner": {
         "enabled": {
+          "description": "[DEPRECATED 2019/6]",
           "type": "boolean",
           "default": false,
           "syncable": true

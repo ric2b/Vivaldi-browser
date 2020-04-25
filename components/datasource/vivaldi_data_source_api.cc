@@ -2,10 +2,13 @@
 
 #include "components/datasource/vivaldi_data_source_api.h"
 
+#include "base/guid.h"
 #include "base/files/file_util.h"
+#include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/path_service.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
@@ -15,27 +18,13 @@
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/common/api/extension_types.h"
-#include "ui/vivaldi_ui_utils.h"
 
 const char kDatasourceFilemappingFilename[] = "file_mapping.json";
+const char kDatasourceFilemappingTmpFilename[] = "file_mapping.tmp";
 const base::FilePath::StringPieceType kThumbnailDirectory =
     FILE_PATH_LITERAL("VivaldiThumbnails");
 
-using extensions::api::extension_types::ImageFormat;
-using vivaldi::ui_tools::EncodeBitmap;
-
 namespace extensions {
-
-struct VivaldiDataSourceItem {
-  explicit VivaldiDataSourceItem(const base::FilePath& file_path);
-  ~VivaldiDataSourceItem();
-
-  // The file on disk.
-  const base::FilePath file_path;
-
-  // The cached image data.
-  scoped_refptr<base::RefCountedMemory> cached_image_data;
-};
 
 // Helper to store ref-counted VivaldiDataSourcesAPI in BrowserContext.
 class VivaldiDataSourcesAPIHolder : public BrowserContextKeyedAPI {
@@ -57,70 +46,114 @@ class VivaldiDataSourcesAPIHolder : public BrowserContextKeyedAPI {
   static const bool kServiceIsNULLWhileTesting = false;
   static const bool kServiceRedirectedInIncognito = true;
 
+  void Shutdown() override;
+
   scoped_refptr<VivaldiDataSourcesAPI> api_;
 };
 
-VivaldiDataSourceItem::VivaldiDataSourceItem(const base::FilePath& file_path)
-    : file_path(file_path) {}
+VivaldiDataSourcesAPI::DataSourceItem::DataSourceItem() = default;
 
-VivaldiDataSourceItem::~VivaldiDataSourceItem() {}
+VivaldiDataSourcesAPI::DataSourceItem::DataSourceItem(base::FilePath file_path)
+    : file_path_(std::move(file_path)) {}
+
+VivaldiDataSourcesAPI::DataSourceItem::DataSourceItem(DataSourceItem&&) =
+    default;
+
+VivaldiDataSourcesAPI::DataSourceItem& VivaldiDataSourcesAPI::DataSourceItem::
+operator=(DataSourceItem&&) = default;
+
+VivaldiDataSourcesAPI::DataSourceItem::~DataSourceItem() = default;
 
 VivaldiDataSourcesAPI::VivaldiDataSourcesAPI(base::FilePath user_data_dir)
     : user_data_dir_(user_data_dir),
-      id_to_file_map_(LoadMappings(user_data_dir)) {}
+      sequence_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
+          {base::TaskPriority::USER_VISIBLE, base::MayBlock()})) {
+}
 
 VivaldiDataSourcesAPI::~VivaldiDataSourcesAPI() {}
+
+// static
+bool VivaldiDataSourcesAPI::ReadFileOnBlockingThread(
+    const base::FilePath& file_path,
+    std::vector<unsigned char>* buffer) {
+  base::File file(file_path, base::File::FLAG_READ | base::File::FLAG_OPEN);
+  if (!file.IsValid()) {
+    // Treat the file that does not exist as an empty file and do not log the
+    // error.
+    if (file.error_details() != base::File::FILE_ERROR_NOT_FOUND) {
+      LOG(ERROR) << "Failed to open file " << file_path.value()
+                 << " for reading";
+    }
+    return false;
+  }
+  int64_t len64 = file.GetLength();
+  if (len64 < 0 || len64 >= (static_cast<int64_t>(1) << 31)) {
+    LOG(ERROR) << "Unexpected file length for " << file_path.value() << " - "
+               << len64;
+    return false;
+  }
+  int len = static_cast<int>(len64);
+  if (len == 0)
+    return false;
+
+  buffer->resize(static_cast<size_t>(len));
+  int read_len = file.Read(0, reinterpret_cast<char*>(buffer->data()), len);
+  if (read_len != len) {
+    LOG(ERROR) << "Failed to read " << len << "bytes from "
+               << file_path.value();
+    return false;
+  }
+  return true;
+}
 
 // static
 scoped_refptr<base::RefCountedMemory>
 VivaldiDataSourcesAPI::ReadFileOnBlockingThread(
     const base::FilePath& file_path) {
-  base::File file(file_path, base::File::FLAG_READ | base::File::FLAG_OPEN);
-  if (file.IsValid()) {
-    int64_t len = file.GetLength();
-    if (len > 0) {
-      std::vector<unsigned char> buffer(len);
-      int read_len =
-          file.Read(0, reinterpret_cast<char*>(buffer.data()), len);
-      if (read_len == len) {
-        return base::RefCountedBytes::TakeVector(&buffer);
-      }
-    }
+  std::vector<unsigned char> buffer;
+  if (ReadFileOnBlockingThread(file_path, &buffer)) {
+    return base::RefCountedBytes::TakeVector(&buffer);
   }
   return scoped_refptr<base::RefCountedMemory>();
 }
 
-// static
-VivaldiDataSourcesAPI::IdFileMap VivaldiDataSourcesAPI::LoadMappings(
-    const base::FilePath& user_data_dir) {
-  // This might be called outside the startup, eg. during creation of a guest
-  // window, so need to allow IO.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
-
-  base::FilePath path =
-      user_data_dir.AppendASCII(kDatasourceFilemappingFilename);
-
-  // TODO(igor@vivaldi.com): use JsonReader as the store is only used to read
-  // the data.
-  scoped_refptr<JsonPrefStore> store = base::MakeRefCounted<JsonPrefStore>(
-      path, std::unique_ptr<PrefFilter>(),
-      base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()}).get());
-
-  store->ReadPrefs();
-
-  const base::Value* mappings_value;
-  if (store->GetValue("mappings", &mappings_value)) {
-    const base::DictionaryValue* dict;
-    if (mappings_value->GetAsDictionary(&dict))
-      return GetMappings(dict);
-  }
-  return IdFileMap();
+void VivaldiDataSourcesAPI::LoadMappings() {
+  sequence_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&VivaldiDataSourcesAPI::LoadMappingsOnFileThread, this));
 }
 
-// static
-VivaldiDataSourcesAPI::IdFileMap VivaldiDataSourcesAPI::GetMappings(
+void VivaldiDataSourcesAPI::LoadMappingsOnFileThread() {
+  DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
+  DCHECK(id_to_file_map_.empty());
+
+  base::FilePath file_path = GetFileMappingFilePath();
+  std::vector<unsigned char> data;
+  if (!ReadFileOnBlockingThread(file_path, &data))
+    return;
+
+  base::JSONReader json_reader;
+  base::Optional<base::Value> root = json_reader.ReadToValue(
+      base::StringPiece(reinterpret_cast<char*>(data.data()), data.size()));
+  if (!root) {
+    LOG(ERROR) << file_path.value() << " is not a valid JSON - "
+               << json_reader.GetErrorMessage();
+    return;
+  }
+
+  if (root->is_dict()) {
+    if (const base::Value* mappings_value = root->FindDictKey("mappings")) {
+      InitMappingsOnFileThread(
+          static_cast<const base::DictionaryValue*>(mappings_value));
+    }
+  }
+}
+
+void VivaldiDataSourcesAPI::InitMappingsOnFileThread(
     const base::DictionaryValue* dict) {
-  IdFileMap id_to_file_map;
+  DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
+  DCHECK(id_to_file_map_.empty());
+
   for (base::DictionaryValue::Iterator it(*dict); !it.IsAtEnd(); it.Advance()) {
     const std::string& id = it.key();
     const base::Value* root = nullptr;
@@ -144,174 +177,286 @@ VivaldiDataSourcesAPI::IdFileMap VivaldiDataSourcesAPI::GetMappings(
 #elif defined(OS_WIN)
               base::FilePath path(base::UTF8ToWide(file));
 #endif
-              auto entry = std::make_unique<VivaldiDataSourceItem>(path);
-              id_to_file_map.insert(std::make_pair(id, std::move(entry)));
+              id_to_file_map_.emplace(id, DataSourceItem(std::move(path)));
             }
           }
         }
       }
     }
   }
-  return id_to_file_map;
 }
 
-void VivaldiDataSourcesAPI::ScheduleSaveMappings() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+std::string VivaldiDataSourcesAPI::GetMappingJSONOnFileThread() {
+  DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
 
-  base::PostTaskWithTraits(
-      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-      base::BindOnce(&VivaldiDataSourcesAPI::SaveMappingsOnFileThread,
-                     this));
+  if (id_to_file_map_.empty())
+    return std::string();
+
+  std::vector<base::Value::DictStorage::value_type> items;
+  for (const auto& it : id_to_file_map_) {
+    const base::FilePath& path = it.second.GetFilePath();
+    auto item = std::make_unique<base::Value>(base::Value::Type::DICTIONARY);
+    if (path.IsAbsolute()) {
+      item->SetStringKey("local_path", path.value());
+    } else {
+      item->SetStringKey("relative_path", path.value());
+    }
+    items.emplace_back(it.first, std::move(item));
+  }
+
+  base::Value root(base::Value::Type::DICTIONARY);
+  root.SetKey("mappings",
+              base::Value(base::Value::DictStorage(std::move(items))));
+
+  std::string json;
+  base::JSONWriter::WriteWithOptions(
+      root, base::JSONWriter::OPTIONS_PRETTY_PRINT, &json);
+  return json;
 }
 
 void VivaldiDataSourcesAPI::SaveMappingsOnFileThread() {
-  auto item = std::make_unique<base::DictionaryValue>();
+  DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
 
-  {
-    base::AutoLock lock(lock_);
-    for (auto& it : id_to_file_map_) {
-      const base::FilePath& path = it.second->file_path;
-      auto subitems = std::make_unique<base::DictionaryValue>();
-      if (path.IsAbsolute()) {
-        subitems->SetString("local_path", path.value());
-      } else {
-        subitems->SetString("relative_path", path.value());
-      }
-      item->Set(it.first, std::move(subitems));
+  std::string json = GetMappingJSONOnFileThread();
+  base::FilePath path = GetFileMappingFilePath();
+  if (json.empty()) {
+    if (!base::DeleteFile(path, false)) {
+      LOG(ERROR) << "failed to delete " << path.value();
     }
-  }
-
-  std::unique_ptr<base::DictionaryValue> root(new base::DictionaryValue);
-  root->Set("mappings", std::move(item));
-
-  base::FilePath path =
-      user_data_dir_.AppendASCII(kDatasourceFilemappingFilename);
-  base::File file(path,
-                  base::File::FLAG_WRITE | base::File::FLAG_CREATE_ALWAYS);
-  if (!file.IsValid()) {
-    NOTREACHED();
     return;
   }
-  std::string json;
-  base::JSONWriter::WriteWithOptions(
-      *root, base::JSONWriter::OPTIONS_PRETTY_PRINT, &json);
-  if (!json.empty()) {
-    file.Write(0, json.c_str(), json.length());
+
+  if (json.length() >= (1U << 31)) {
+    LOG(ERROR) << "the size to write is too big - " << json.length();
+    return;
   }
-  file.Close();
+
+  // Write via a temporary to prevent leaving a corrupted file on browser
+  // crashes, disk full etc. Note that still can leave the file corrupted
+  // on OS crashes or power loss, but loosing thumbnails is not the end of
+  // the world.
+
+  base::FilePath tmp_path =
+      user_data_dir_.AppendASCII(kDatasourceFilemappingTmpFilename);
+
+  int length = static_cast<int>(json.length());
+  if (length != base::WriteFile(tmp_path, json.data(), length)) {
+    LOG(ERROR) << "Failed to write to " << tmp_path.value() << " " << length
+               << " bytes";
+    return;
+  }
+  if (!base::ReplaceFile(tmp_path, path, nullptr)) {
+    LOG(ERROR) << "Failed to rename " << tmp_path.value() << " to "
+               << path.value();
+  }
+}
+
+base::FilePath VivaldiDataSourcesAPI::GetFileMappingFilePath() {
+  return user_data_dir_.AppendASCII(kDatasourceFilemappingFilename);
+}
+
+base::FilePath VivaldiDataSourcesAPI::GetBookmarkThumbnailPath(
+    int64_t bookmark_id) {
+  base::FilePath path = user_data_dir_.Append(kThumbnailDirectory);
+  std::string filename =
+      base::StringPrintf("%jd.png", static_cast<intmax_t>(bookmark_id));
+#if defined(OS_POSIX)
+  path = path.Append(filename);
+#elif defined(OS_WIN)
+  path = path.Append(base::UTF8ToUTF16(filename));
+#endif
+  return path;
 }
 
 // static
-bool VivaldiDataSourcesAPI::AddMapping(content::BrowserContext* browser_context,
-                                       const std::string& id,
-                                       const base::FilePath& file_path) {
-  VivaldiDataSourcesAPI* api = FromBrowserContext(browser_context);
-  DCHECK(api);
-  if (!api)
+std::string VivaldiDataSourcesAPI::GetBookmarkThumbnailUrl(
+    int64_t bookmark_id) {
+  return base::StringPrintf("%s%jd", ::vivaldi::kBaseFileMappingUrl,
+                            static_cast<intmax_t>(bookmark_id));
+}
+
+// static
+bool VivaldiDataSourcesAPI::IsBookmarkCapureUrl(const std::string& url) {
+  std::string id;
+  int64_t bookmark_id = 0;
+  return GetDataMappingId(url, &id) && base::StringToInt64(id, &bookmark_id);
+}
+
+// static
+bool VivaldiDataSourcesAPI::GetDataMappingId(const std::string& url,
+                                             std::string* id) {
+  if (url.empty())
     return false;
 
-  {
-    base::AutoLock lock(api->lock_);
+  // Special-case resource URLs that do not have scheme or path components
+  if (base::StringPiece(url).starts_with("/resources/"))
+    return false;
 
-    // Should not be previously registered.
-    auto it = api->id_to_file_map_.find(id);
-    if (it != api->id_to_file_map_.end()) {
-      // Remove mapping first.
-      return false;
+  GURL gurl(url);
+  if (!gurl.is_valid()) {
+    LOG(WARNING) << "The url argument is not a valid URL - " << url;
+    return false;
+  }
+
+  if (gurl.SchemeIs(VIVALDI_DATA_URL_SCHEME) &&
+      gurl.host_piece() == VIVALDI_DATA_URL_HOST) {
+    base::StringPiece path = gurl.path_piece();
+    if (path.starts_with(VIVALDI_DATA_URL_MAPPING_DIR)) {
+      path.remove_prefix(strlen(VIVALDI_DATA_URL_MAPPING_DIR));
+      path.CopyToString(id);
+      return true;
     }
-    api->id_to_file_map_.insert(std::make_pair(
-        id, std::make_unique<VivaldiDataSourceItem>(file_path)));
   }
-
-  api->ScheduleSaveMappings();
-  return true;
+  return false;
 }
 
 // static
-bool VivaldiDataSourcesAPI::RemoveMapping(
-    content::BrowserContext* browser_context,
-    const std::string& id) {
+std::string VivaldiDataSourcesAPI::GetDataMappingUrl(const std::string& id) {
+  return base::StringPrintf("%s%s", ::vivaldi::kBaseFileMappingUrl, id.c_str());
+}
+
+// static
+void VivaldiDataSourcesAPI::AddMapping(content::BrowserContext* browser_context,
+                                       base::FilePath file_path,
+                                       AddMappingCallback callback) {
   VivaldiDataSourcesAPI* api = FromBrowserContext(browser_context);
   DCHECK(api);
-  if (!api)
-    return false;
-
-  {
-    base::AutoLock lock(api->lock_);
-
-    auto it = api->id_to_file_map_.find(id);
-    if (it == api->id_to_file_map_.end())
-      return false;
-    api->id_to_file_map_.erase(it);
+  if (!api) {
+    std::move(callback).Run(false, std::string());
+    return;
   }
 
-  api->ScheduleSaveMappings();
-  return true;
+  api->sequence_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&VivaldiDataSourcesAPI::AddMappingOnFileThread,
+                     api, std::move(file_path), std::move(callback)));
 }
 
-// This method can be called on any thread and will call the callback on the
-// same thread.
+void VivaldiDataSourcesAPI::AddMappingOnFileThread(
+    base::FilePath file_path,
+    AddMappingCallback callback) {
+  DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
+
+  std::string id = base::GenerateGUID();
+  id_to_file_map_.emplace(id, DataSourceItem(std::move(file_path)));
+
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
+      base::BindOnce(&VivaldiDataSourcesAPI::FinishAddMappingOnUIThread, this,
+                     std::move(id), std::move(callback)));
+  SaveMappingsOnFileThread();
+}
+
+void VivaldiDataSourcesAPI::FinishAddMappingOnUIThread(
+    std::string id,
+    AddMappingCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  std::move(callback).Run(true, GetDataMappingUrl(id));
+}
+
 // static
+void VivaldiDataSourcesAPI::RemoveMapping(
+    content::BrowserContext* browser_context,
+    std::string url,
+    RemoveMappingCallback callback) {
+  VivaldiDataSourcesAPI* api = FromBrowserContext(browser_context);
+  DCHECK(api);
+  if (!api) {
+    std::move(callback).Run(false);
+    return;
+  }
+
+  api->sequence_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&VivaldiDataSourcesAPI::RemoveMappingOnFileThread,
+                     api, std::move(url), std::move(callback)));
+}
+
+void VivaldiDataSourcesAPI::RemoveMappingOnFileThread(
+    std::string url,
+    RemoveMappingCallback callback) {
+  DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
+
+  std::string id;
+  bool success = GetDataMappingId(url, &id) && id_to_file_map_.erase(id);
+
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           base::BindOnce(std::move(callback), success));
+  if (success) {
+    base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
+      base::BindOnce(&VivaldiDataSourcesAPI::ClearCacheOnIOThread,
+                      this, std::move(id)));
+  }
+
+  SaveMappingsOnFileThread();
+}
+
+void VivaldiDataSourcesAPI::SetCacheOnIOThread(
+    std::string id,
+    scoped_refptr<base::RefCountedMemory> data) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  DCHECK(data);
+  io_thread_data_cache_[id] = std::move(data);
+}
+
+void VivaldiDataSourcesAPI::ClearCacheOnIOThread(std::string id) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  io_thread_data_cache_.erase(id);
+}
+
 void VivaldiDataSourcesAPI::GetDataForId(
     const std::string& id,
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  scoped_refptr<base::RefCountedMemory> data;
-  bool should_read_data = false;
-
-  // This must be a value, not a reference, as we store the value outside the
-  // lock.
-  base::FilePath file_path;
-
-  // Accessed from multiple threads.
-  {
-    base::AutoLock lock(lock_);
-    auto it = id_to_file_map_.find(id);
-    if (it != id_to_file_map_.end()) {
-      if (it->second->cached_image_data) {
-        data = it->second->cached_image_data;
-      } else {
-        should_read_data = true;
-        file_path = it->second->file_path;
-      }
-    }
-  }
-
-  if (!should_read_data) {
-    callback.Run(std::move(data));
+  auto it = io_thread_data_cache_.find(id);
+  if (it != io_thread_data_cache_.end()) {
+    callback.Run(it->second);
     return;
   }
 
-  base::FilePath full_path =
-      file_path.IsAbsolute() ? file_path : user_data_dir_.Append(file_path);
-
-  base::PostTaskWithTraitsAndReplyWithResult(
+  sequence_task_runner_->PostTask(
       FROM_HERE,
-      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
-       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(&VivaldiDataSourcesAPI::ReadFileOnBlockingThread,
-                     full_path),
-      base::BindOnce(&VivaldiDataSourcesAPI::FinishGetDataForId, this, id,
-                     file_path, callback));
+      base::BindOnce(&VivaldiDataSourcesAPI::GetDataForIdOnFileThread, this, id,
+                     std::move(callback)));
 }
 
-void VivaldiDataSourcesAPI::FinishGetDataForId(
-    const std::string& id,
-    const base::FilePath& file_path,
-    const content::URLDataSource::GotDataCallback& callback,
-    scoped_refptr<base::RefCountedMemory> data) {
-  // Cache the data unless the mapping was already removed or modified.
-  bool valid = false;
-  if (data) {
-    base::AutoLock lock(lock_);
-    auto it = id_to_file_map_.find(id);
-    if (it != id_to_file_map_.end() && it->second->file_path == file_path) {
-      it->second->cached_image_data = data;
-      valid = true;
+void VivaldiDataSourcesAPI::GetDataForIdOnFileThread(
+    std::string id,
+    content::URLDataSource::GotDataCallback callback) {
+  DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
+
+  // It is not an error if id is not in id_to_file_map_. The IO thread may not
+  // be aware yet that the id was removed when it called this.
+  scoped_refptr<base::RefCountedMemory> data;
+
+  auto it = id_to_file_map_.find(id);
+  if (it != id_to_file_map_.end()) {
+    base::FilePath file_path = it->second.GetFilePath();
+    if (!file_path.empty()) {
+      if (!file_path.IsAbsolute()) {
+        file_path = user_data_dir_.Append(file_path);
+      }
+      data = ReadFileOnBlockingThread(file_path);
     }
   }
-  if (!valid) {
-    data.reset();
+
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::IO},
+      base::BindOnce(&VivaldiDataSourcesAPI::FinishGetDataForIdOnIOThread, this,
+                     std::move(id), std::move(data), std::move(callback)));
+}
+
+void VivaldiDataSourcesAPI::FinishGetDataForIdOnIOThread(
+    std::string id,
+    scoped_refptr<base::RefCountedMemory> data,
+    content::URLDataSource::GotDataCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+  if (data) {
+    SetCacheOnIOThread(std::move(id), data);
   }
   callback.Run(std::move(data));
 }
@@ -319,144 +464,66 @@ void VivaldiDataSourcesAPI::FinishGetDataForId(
 // static
 void VivaldiDataSourcesAPI::AddImageDataForBookmark(
     content::BrowserContext* browser_context,
-    int bookmark_id,
-    std::unique_ptr<SkBitmap> bitmap,
-    AddBookmarkImageCallback callback) {
-  VivaldiDataSourcesAPI* api = FromBrowserContext(browser_context);
-  DCHECK(api);
-  if (!api)
-    return;
-
-  base::PostTaskWithTraits(
-      FROM_HERE,
-      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
-       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(
-          &VivaldiDataSourcesAPI::AddImageDataForBookmarkOnFileThread,
-          api, bookmark_id, std::move(bitmap),
-          std::move(callback), content::BrowserThread::UI));
-}
-
-// static
-void VivaldiDataSourcesAPI::AddImageDataForBookmark(
-    content::BrowserContext* browser_context,
-    int bookmark_id,
+    int64_t bookmark_id,
     scoped_refptr<base::RefCountedMemory> png_data,
     AddBookmarkImageCallback callback) {
+  DCHECK(png_data->size() > 0);
   VivaldiDataSourcesAPI* api = FromBrowserContext(browser_context);
   DCHECK(api);
-  if (!api)
+  if (!api) {
+    std::move(callback).Run(false);
     return;
+  }
 
-  base::PostTaskWithTraits(
+  api->sequence_task_runner_->PostTask(
       FROM_HERE,
-      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
-       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(
-          &VivaldiDataSourcesAPI::AddRawImageDataForBookmarkOnFileThread,
-          api, bookmark_id, std::move(png_data),
-          std::move(callback), content::BrowserThread::UI));
-}
-
-void VivaldiDataSourcesAPI::AddRawImageDataForBookmarkOnFileThread(
-    int bookmark_id,
-    scoped_refptr<base::RefCountedMemory> png_data,
-    AddBookmarkImageCallback callback,
-    content::BrowserThread::ID thread_id) {
-  base::FilePath path = user_data_dir_.Append(kThumbnailDirectory);
-
-  if (!base::DirectoryExists(path)) {
-    LOG(INFO) << "Creating thumbnail directory: " << path.value();
-    base::CreateDirectory(path);
-  }
-  std::string filename = base::StringPrintf("%d.png", bookmark_id);
-#if defined(OS_POSIX)
-  path = path.Append(filename);
-#elif defined(OS_WIN)
-  path = path.Append(base::UTF8ToUTF16(filename));
-#endif
-  size_t bytes = base::WriteFile(
-      path, reinterpret_cast<const char*>(png_data->front()), png_data->size());
-  if (bytes < 0 || bytes != png_data->size()) {
-    LOG(ERROR) << "Error writing to file: " << path.value();
-  }
-  // We use the relative path in the mapping file.
-  base::FilePath relative_path = base::FilePath(kThumbnailDirectory);
-#if defined(OS_POSIX)
-  relative_path = relative_path.Append(filename);
-#elif defined(OS_WIN)
-  relative_path = relative_path.Append(base::UTF8ToUTF16(filename));
-#endif
-
-  std::string id = base::StringPrintf("%d", bookmark_id);
-  auto item = std::make_unique<VivaldiDataSourceItem>(relative_path);
-  // TODO(igor@vivaldi.com): consider initializing item->cached_image_data
-  // with written data.
-  {
-    base::AutoLock lock(lock_);
-
-    // We silently overwrite any old mapping for this bookmark.
-    id_to_file_map_[id] = std::move(item);
-  }
-
-  base::PostTaskWithTraits(
-      FROM_HERE, {thread_id},
-      base::BindOnce(
-          &VivaldiDataSourcesAPI::PostAddBookmarkImageResultsOnThread,
-          std::move(callback), bookmark_id));
-
-  SaveMappingsOnFileThread();
+          &VivaldiDataSourcesAPI::AddImageDataForBookmarkOnFileThread, api,
+          bookmark_id, std::move(png_data), std::move(callback)));
 }
 
 void VivaldiDataSourcesAPI::AddImageDataForBookmarkOnFileThread(
-    int bookmark_id,
-    std::unique_ptr<SkBitmap> bitmap,
-    AddBookmarkImageCallback callback,
-    content::BrowserThread::ID thread_id) {
-  std::vector<unsigned char> data;
-  std::string mime_type;
+    int64_t bookmark_id,
+    scoped_refptr<base::RefCountedMemory> png_data,
+    AddBookmarkImageCallback callback) {
+  DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
 
-  bool encoded = EncodeBitmap(
-      *bitmap, &data, &mime_type, ImageFormat::IMAGE_FORMAT_PNG,
-      gfx::Size(bitmap->width(), bitmap->height()), 100, 100, false);
-  if (!encoded) {
-    LOG(ERROR) << "Error encoding image data to png";
-    return;
+  bool success = false;
+  base::FilePath path = GetBookmarkThumbnailPath(bookmark_id);
+  base::FilePath dir = path.DirName();
+  if (!base::DirectoryExists(dir)) {
+    LOG(INFO) << "Creating thumbnail directory: " << path.value();
+    base::CreateDirectory(dir);
   }
-  scoped_refptr<base::RefCountedMemory> thumbnail =
-      base::RefCountedBytes::TakeVector(&data);
+  // The caller must ensure that data fit 2G.
+  int bytes = base::WriteFile(path, png_data->front_as<char>(),
+                              static_cast<int>(png_data->size()));
+  if (bytes < 0 || static_cast<size_t>(bytes) != png_data->size()) {
+    LOG(ERROR) << "Error writing to file: " << path.value();
+  } else {
+    // We use the relative path in the mapping file.
+    base::FilePath relative_path =
+        base::FilePath(kThumbnailDirectory).Append(path.BaseName());
 
-  AddRawImageDataForBookmarkOnFileThread(bookmark_id, std::move(thumbnail),
-                                         std::move(callback), thread_id);
-}
+    std::string id = std::to_string(bookmark_id);
 
-// static
-void VivaldiDataSourcesAPI::PostAddBookmarkImageResultsOnThread(
-    AddBookmarkImageCallback callback,
-    int bookmark_id) {
-  std::string image_url =
-      base::StringPrintf("chrome://vivaldi-data/local-image/%d", bookmark_id);
+    // If the old mapping for bookmark captured thumbnail exists, it should
+    // match the new one.  But the file may be editted etc. so we do not check
+    // and always overwrite it.
+    id_to_file_map_[id] = DataSourceItem(std::move(relative_path));
+    success = true;
 
-  std::move(callback).Run(bookmark_id, image_url);
-}
-
-// static
-bool VivaldiDataSourcesAPI::HasBookmarkThumbnail(
-    content::BrowserContext* browser_context,
-    int bookmark_id) {
-  VivaldiDataSourcesAPI* api = FromBrowserContext(browser_context);
-  DCHECK(api);
-  if (!api)
-    return false;
-
-  if (bookmark_id) {
-    std::string id = base::StringPrintf("%d", bookmark_id);
-
-    // We only check the mapping, not if the actual file is on disk.
-    base::AutoLock lock(api->lock_);
-    return api->id_to_file_map_.find(id) != api->id_to_file_map_.end();
+    // Populate the cache
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::IO},
+        base::BindOnce(&VivaldiDataSourcesAPI::SetCacheOnIOThread, this,
+                       std::move(id), std::move(png_data)));
   }
-  return false;
+
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           base::BindOnce(std::move(callback), success));
+
+  SaveMappingsOnFileThread();
 }
 
 // static
@@ -479,6 +546,7 @@ VivaldiDataSourcesAPIHolder::VivaldiDataSourcesAPIHolder(
     content::BrowserContext* context) {
   Profile* profile = Profile::FromBrowserContext(context);
   api_ = base::MakeRefCounted<VivaldiDataSourcesAPI>(profile->GetPath());
+  api_->LoadMappings();
 }
 
 VivaldiDataSourcesAPIHolder::~VivaldiDataSourcesAPIHolder() {}
@@ -491,6 +559,12 @@ VivaldiDataSourcesAPIHolder::GetFactoryInstance() {
       LAZY_INSTANCE_INITIALIZER;
 
   return factory.Pointer();
+}
+
+void VivaldiDataSourcesAPIHolder::Shutdown() {
+  // Prevent farther access to api_ from UI thread. Note that if it can still
+  // be used on IO or worker threads.
+  api_.reset();
 }
 
 }  // namespace extensions

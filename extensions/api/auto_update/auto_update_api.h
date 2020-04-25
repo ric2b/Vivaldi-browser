@@ -6,12 +6,12 @@
 #include <memory>
 
 #include "base/synchronization/waitable_event.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
+#include "extensions/browser/extension_function.h"
 #include "extensions/schema/autoupdate.h"
 
 namespace extensions {
 
-class AutoUpdateCheckForUpdatesFunction : public ChromeAsyncExtensionFunction {
+class AutoUpdateCheckForUpdatesFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autoUpdate.checkForUpdates",
                              AUTOUPDATE_CHECKFORUPDATES)
@@ -19,12 +19,13 @@ class AutoUpdateCheckForUpdatesFunction : public ChromeAsyncExtensionFunction {
 
  private:
   ~AutoUpdateCheckForUpdatesFunction() override = default;
-  bool RunAsync() override;
+  ResponseAction Run() override;
+
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateCheckForUpdatesFunction);
 };
 
 class AutoUpdateIsUpdateNotifierEnabledFunction
-    : public ChromeAsyncExtensionFunction {
+    : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autoUpdate.isUpdateNotifierEnabled",
                              AUTOUPDATE_ISUPDATENOTIFIERENABLED)
@@ -32,11 +33,13 @@ class AutoUpdateIsUpdateNotifierEnabledFunction
 
  private:
   ~AutoUpdateIsUpdateNotifierEnabledFunction() override = default;
-  bool RunAsync() override;
+  ResponseAction Run() override;
+
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateIsUpdateNotifierEnabledFunction);
 };
 
-class AutoUpdateEnableUpdateNotifierFunction : public ChromeAsyncExtensionFunction {
+class AutoUpdateEnableUpdateNotifierFunction
+    : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autoUpdate.enableUpdateNotifier",
                              AUTOUPDATE_ENABLEUPDATENOTIFIER)
@@ -44,21 +47,22 @@ class AutoUpdateEnableUpdateNotifierFunction : public ChromeAsyncExtensionFuncti
 
  private:
   ~AutoUpdateEnableUpdateNotifierFunction() override = default;
-  bool RunAsync() override;
+  ResponseAction Run() override;
+
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateEnableUpdateNotifierFunction);
 };
 
-class AutoUpdateDisableUpdateNotifierFunction : public ChromeAsyncExtensionFunction {
+class AutoUpdateDisableUpdateNotifierFunction
+    : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autoUpdate.disableUpdateNotifier",
                              AUTOUPDATE_DISABLEUPDATENOTIFIER)
-  AutoUpdateDisableUpdateNotifierFunction();
+  AutoUpdateDisableUpdateNotifierFunction() = default;
 
  private:
-  ~AutoUpdateDisableUpdateNotifierFunction() override;
-  bool RunAsync() override;
+  ~AutoUpdateDisableUpdateNotifierFunction() override = default;
+  ResponseAction Run() override;
 
-  std::unique_ptr<base::WaitableEvent> quit_all_update_notifiers_event_;
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateDisableUpdateNotifierFunction);
 };
 

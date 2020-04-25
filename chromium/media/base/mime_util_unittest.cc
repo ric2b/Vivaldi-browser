@@ -231,7 +231,7 @@ TEST(MimeUtilTest, CommonMediaMimeTypeSystemCodecs) {
   proprietary_video_supported = true;
 #elif defined(OS_WIN)
   proprietary_audio_supported =
-      base::win::GetVersion() >= base::win::VERSION_WIN7;
+      base::win::GetVersion() >= base::win::Version::WIN7;
   proprietary_video_supported = proprietary_audio_supported;
 #endif
 

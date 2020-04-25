@@ -26,9 +26,7 @@ bool VivaldiRenderFrameObserver::OnMessageReceived(
 
 void VivaldiRenderFrameObserver::OnResumeParser() {
   blink::WebDocumentLoader* loader =
-      render_frame()->GetWebFrame()->GetProvisionalDocumentLoader()
-          ? render_frame()->GetWebFrame()->GetProvisionalDocumentLoader()
-          : render_frame()->GetWebFrame()->GetDocumentLoader();
+      render_frame()->GetWebFrame()->GetDocumentLoader();
 
   if (!loader) {
     NOTREACHED();
@@ -37,16 +35,14 @@ void VivaldiRenderFrameObserver::OnResumeParser() {
   loader->ResumeParser();
 }
 
-void VivaldiRenderFrameObserver::FocusedNodeChanged(
-    const blink::WebNode& node) {
+void VivaldiRenderFrameObserver::FocusedElementChanged(
+    const blink::WebElement& element) {
   std::string tagname = "";
   std::string type = "";
   bool editable = false;
   std::string role = "";
 
-  if (!node.IsNull() && node.IsElementNode()) {
-    blink::WebElement element =
-        const_cast<blink::WebNode&>(node).To<blink::WebElement>();
+  if (!element.IsNull()) {
     tagname = element.TagName().Utf8();
     if (element.HasAttribute("type")) {
       type = element.GetAttribute("type").Utf8();

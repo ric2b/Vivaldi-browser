@@ -117,12 +117,12 @@ class VivaldiAppWindowContentsImpl : public AppWindowContents,
                                   const viz::SurfaceId& surface_id,
                                   const gfx::Size& natural_size) override;
   void ExitPictureInPicture() override;
-
   void PrintCrossProcessSubframe(
       content::WebContents* web_contents,
       const gfx::Rect& rect,
       int document_cookie,
       content::RenderFrameHost* subframe_host) const override;
+  void ActivateContents(content::WebContents* contents) override;
 
  private:
   // content::WebContentsObserver
@@ -228,7 +228,9 @@ class VivaldiBrowserWindow
   // infobars::InfoBarContainer::Delegate
   void InfoBarContainerStateChanged(bool is_animating) override;
 
-  // BrowserWindow:
+  //
+  // BrowserWindow overrides
+  //
   void Show() override;
   void ShowInactive() override {}
   void Hide() override;
@@ -283,8 +285,8 @@ class VivaldiBrowserWindow
   bool HandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) override;
   gfx::Size GetContentsSize() const override;
+  void SetContentsSize(const gfx::Size& size) override {}
   void ShowEmojiPanel() override;
-
   bool IsBookmarkBarVisible() const override;
   bool IsBookmarkBarAnimating() const override;
   bool IsTabStripEditable() const override;
@@ -325,7 +327,6 @@ class VivaldiBrowserWindow
   void ShowHatsBubbleFromAppMenuButton() override {}
 #endif
   bool CanUserExitFullscreen() const override;
-
   FindBar* CreateFindBar() override;
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost()
       override;
@@ -339,6 +340,33 @@ class VivaldiBrowserWindow
       const base::string16& email,
       base::OnceCallback<void(bool)> start_sync_callback) override {}
   void OnTabRestored(int command_id) override {}
+  PageActionIconContainer* GetOmniboxPageActionIconContainer() override;
+  PageActionIconContainer* GetToolbarPageActionIconContainer() override;
+  autofill::LocalCardMigrationBubble* ShowLocalCardMigrationBubble(
+    content::WebContents* contents,
+    autofill::LocalCardMigrationBubbleController* controller,
+    bool is_user_gesture) override;
+  void OnTabDetached(content::WebContents* contents, bool was_active) override {
+  }
+  void TabDraggingStatusChanged(bool is_dragging) override {}
+  void UpdateToolbarVisibility(bool visible, bool animate) override {}
+#if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
+  // Shows in-product help for the given feature.
+  void ShowInProductHelpPromo(InProductHelpFeature iph_feature) override {}
+#endif
+  void UpdateFrameColor() override {}
+#if !defined(OS_ANDROID)
+  void ShowIntentPickerBubble(
+    std::vector<apps::IntentPickerAppInfo> app_info,
+    bool show_stay_in_chrome,
+    bool show_remember_selection,
+    IntentPickerResponse callback) override {}
+#endif
+  send_tab_to_self::SendTabToSelfBubbleView* ShowSendTabToSelfBubble(
+    content::WebContents* contents,
+    send_tab_to_self::SendTabToSelfBubbleController* controller,
+    bool is_user_gesture) override;
+  // BrowserWindow overrides end
 
   // web_modal::WebContentsModalDialogManagerDelegate implementation.
   void SetWebContentsBlocked(content::WebContents* web_contents,
@@ -402,6 +430,9 @@ class VivaldiBrowserWindow
   void OnPositionChanged() override;
   void FocusInactivePopupForAccessibility() override {}
 
+  void NavigationStateChanged(content::WebContents* source,
+    content::InvalidateTypes changed_flags);
+
   // Enable or disable fullscreen mode.
   void SetFullscreen(bool enable);
 
@@ -426,35 +457,6 @@ class VivaldiBrowserWindow
   WindowType type() {
     return window_type_;
   }
-  PageActionIconContainer* GetOmniboxPageActionIconContainer() override;
-  PageActionIconContainer* GetToolbarPageActionIconContainer() override;
-  autofill::LocalCardMigrationBubble* ShowLocalCardMigrationBubble(
-    content::WebContents* contents,
-    autofill::LocalCardMigrationBubbleController* controller,
-    bool is_user_gesture) override;
-
-  void OnTabDetached(content::WebContents* contents, bool was_active) override {
-  }
-
-  void TabDraggingStatusChanged(bool is_dragging) override {}
-
-  void UpdateToolbarVisibility(bool visible, bool animate) override {}
-
-#if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
-  // Shows in-product help for the given feature.
-  void ShowInProductHelpPromo(InProductHelpFeature iph_feature) override {}
-#endif
-
-  void UpdateFrameColor() override {}
-
-#if !defined(OS_ANDROID)
-  void ShowIntentPickerBubble(
-    std::vector<apps::IntentPickerAppInfo> app_info,
-    bool show_stay_in_chrome,
-    bool show_remember_selection,
-    IntentPickerResponse callback) override {}
-  void SetIntentPickerViewVisibility(bool visible) override {}
-#endif
 
  protected:
   void DestroyBrowser() override;
@@ -493,6 +495,8 @@ class VivaldiBrowserWindow
     ~VivaldiPageActionIconContainer() override;
 
     void UpdatePageActionIcon(PageActionIconType type) override;
+
+    void ExecutePageActionIconForTesting(PageActionIconType type) override;
 
    private:
     Profile* profile_ = nullptr;

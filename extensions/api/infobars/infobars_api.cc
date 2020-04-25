@@ -39,6 +39,15 @@ ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
           infobar->delegate()->AsConfirmInfoBarDelegate();
       DCHECK(delegate);
       if (delegate) {
+
+
+        std::unique_ptr<base::ListValue> args(
+          extensions::vivaldi::infobars::OnInfobarRemoved::Create(
+            tab_id, delegate->GetIdentifier()));
+        ::vivaldi::BroadcastEvent(
+          extensions::vivaldi::infobars::OnInfobarRemoved::kEventName,
+          std::move(args), browser_context());
+
         if (action == extensions::vivaldi::infobars::ToString(
                           extensions::vivaldi::infobars::ButtonAction::
                               BUTTON_ACTION_ACCEPT)) {
@@ -53,13 +62,6 @@ ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
           delegate->InfoBarDismissed();
         }
         infobar->RemoveSelf();
-
-        std::unique_ptr<base::ListValue> args(
-          extensions::vivaldi::infobars::OnInfobarRemoved::Create(
-            tab_id, delegate->GetIdentifier()));
-        ::vivaldi::BroadcastEvent(
-            extensions::vivaldi::infobars::OnInfobarRemoved::kEventName,
-            std::move(args), browser_context());
       }
     }
   }

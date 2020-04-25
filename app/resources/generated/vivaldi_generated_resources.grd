@@ -19,6 +19,9 @@
     <output filename="generated_resources_sc.pak" type="data_package" lang="sc" />
     <output filename="generated_resources_sq.pak" type="data_package" lang="sq" />
     <output filename="generated_resources_nn.pak" type="data_package" lang="nn" />
+    <output filename="generated_resources_de-CH.pak" type="data_package" lang="de-CH" />
+    <output filename="generated_resources_gd.pak" type="data_package" lang="gd" />
+    <output filename="generated_resources_af.pak" type="data_package" lang="af" />
   </outputs>
   <translations>
     <file path="strings/vivaldi_generated_resources_am.xtb" lang="am" />
@@ -89,6 +92,9 @@
     <file path="strings/vivaldi_generated_resources_sc.xtb" lang="sc" />
     <file path="strings/vivaldi_generated_resources_sq.xtb" lang="sq" />
     <file path="strings/vivaldi_generated_resources_nn.xtb" lang="nn" />
+    <file path="strings/vivaldi_generated_resources_de-CH.xtb" lang="de-CH" />
+    <file path="strings/vivaldi_generated_resources_gd.xtb" lang="gd" />
+    <file path="strings/vivaldi_generated_resources_af.xtb" lang="af" />
   </translations>
   <release seq="1" allow_pseudo="false">
     <messages fallback_to_english="true">

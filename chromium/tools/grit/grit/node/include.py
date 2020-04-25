@@ -79,7 +79,12 @@ class IncludeNode(base.Node):
       if "${" not in self.attrs['file']:
         self.attrs['file'] = util.PathSearcher.LocatePath(
           os.path.join(self.attrs.get('use_base_dir', self.attrs['file'])))
-      return os.path.relpath(self.attrs['file'], self.GetRoot().GetBaseDir())
+      # Normalize the directory path to use the appropriate OS separator.
+      # GetBaseDir() may return paths\like\this or paths/like/this, since it is
+      # read from the base_dir attribute in the grd file.
+      norm_base_dir = os.path.normpath(
+              self.GetRoot().GetBaseDir().replace('\\', '/'))
+      return os.path.relpath(self.attrs['file'], norm_base_dir)
 
     if "${" not in self.attrs['file']:
       self.attrs['file'] = util.PathSearcher.LocatePath(self.attrs['file'])

@@ -234,6 +234,36 @@
         ]
       },
       {
+        "name": "onCommandAdded",
+        "type": "function",
+        "description": "Fired when a keyboard shortcut is added to an extension.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "extensionId"
+          },
+          {
+            "type": "string",
+            "name": "shortcut"
+          }
+        ]
+      },
+      {
+        "name": "onCommandRemoved",
+        "type": "function",
+        "description": "Fired when a keyboard shortcut is removed from an extension.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "extensionId"
+          },
+          {
+            "type": "string",
+            "name": "shortcut"
+          }
+        ]
+      },
+      {
         "name": "onIconLoaded",
         "type": "function",
         "description": "Fired when an extension-icon is fully loaded. Note that only ExtensionInfo.id and ExtensionInfo.badgeIcon is filled!",

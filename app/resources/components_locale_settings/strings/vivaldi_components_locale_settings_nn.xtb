@@ -1,4 +1,5 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="nn">
+  <translation id="IDS_ACCEPT_LANGUAGES">nn-NO,nn,no,nb,en-US,en</translation>
 </translationbundle>

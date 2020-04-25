@@ -9,7 +9,6 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/download/download_request_limiter.h"
 #include "content/public/browser/resource_throttle.h"
-#include "content/public/browser/web_contents_delegate.h"
 
 class GURL;
 
@@ -63,7 +62,7 @@ class DownloadResourceThrottle
   void WillRedirectRequest(const net::RedirectInfo& redirect_info,
                            bool* defer) override;
   void WillProcessResponse(bool* defer) override;
-  const char* GetNameForLogging() const override;
+  const char* GetNameForLogging() override;
 
   void ContinueDownload(bool storage_permission_granted, bool allow);
 

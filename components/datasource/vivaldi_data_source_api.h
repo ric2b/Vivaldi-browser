@@ -9,19 +9,15 @@
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/synchronization/lock.h"
 #include "components/prefs/json_pref_store.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/url_data_source.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 
 namespace content {
 class BrowserContext;
 }
 
 namespace extensions {
-
-struct VivaldiDataSourceItem;
 
 /*
 This is used to setup and control the mapping between local images and the
@@ -30,9 +26,6 @@ images exposed to the UI using the chrome://vivaldi-data/ protocol.
 class VivaldiDataSourcesAPI
     : public base::RefCountedThreadSafe<VivaldiDataSourcesAPI> {
  public:
-  using AddBookmarkImageCallback =
-      base::OnceCallback<void(int bookmark_id, std::string& image_url)>;
-
   explicit VivaldiDataSourcesAPI(base::FilePath user_data_dir);
 
   static void InitFactory();
@@ -40,90 +33,122 @@ class VivaldiDataSourcesAPI
   static VivaldiDataSourcesAPI* FromBrowserContext(
       content::BrowserContext* browser_context);
 
-  // Read the given file. This should only be used on threads that are allowed
-  // to block. On errors or when the file doesn't exist or is empty return a
-  // null reference.
+  // Read the given file into the vector. Return false when file does not exit
+  // or is empty or on errors. The errors are logged. This should only be used
+  // on threads that are allowed to block.
+  static bool ReadFileOnBlockingThread(const base::FilePath& file_path,
+                                       std::vector<unsigned char>* data);
+
   static scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
       const base::FilePath& file_path);
 
-  // Most methods are static taking the context argument to spare the caller
-  // from calling FromBrowserContext and checking the result.
+  static bool IsBookmarkCapureUrl(const std::string& url);
+  static std::string GetBookmarkThumbnailUrl(int64_t bookmarkId);
+
+  // The following methods taking the BrowserContext* argument are static to
+  // spare the caller from calling FromBrowserContext and checking the result.
 
   // Creates a straight mapping between an absolute path and an id.
-  static bool AddMapping(content::BrowserContext* browser_context,
-                         const std::string& id,
-                         const base::FilePath& file_path);
+  using AddMappingCallback =
+      base::OnceCallback<void(bool success, std::string image_url)>;
+  static void AddMapping(content::BrowserContext* browser_context,
+                         base::FilePath file_path,
+                         AddMappingCallback callback);
 
-  static bool RemoveMapping(content::BrowserContext* browser_context,
-                            const std::string& id);
+  using RemoveMappingCallback = base::OnceCallback<void(bool success)>;
+  static void RemoveMapping(content::BrowserContext* browser_context,
+                            std::string url,
+                            RemoveMappingCallback callback);
 
   // Add image data to disk and set up a mapping so it can be requested
   // using the usual image data protocol.
-  static void AddImageDataForBookmark(content::BrowserContext* browser_context,
-                                      int bookmark_id,
-                                      std::unique_ptr<SkBitmap> bitmap,
-                                      AddBookmarkImageCallback callback);
-
+  using AddBookmarkImageCallback = base::OnceCallback<void(bool success)>;
   static void AddImageDataForBookmark(
       content::BrowserContext* browser_context,
-      int bookmark_id,
+      int64_t bookmark_id,
       scoped_refptr<base::RefCountedMemory> png_data,
       AddBookmarkImageCallback callback);
 
-  static bool HasBookmarkThumbnail(content::BrowserContext* browser_context,
-                                   int bookmark_id);
-
-  // This method can be called from any thread.
+  // This method must be called from the IO thread.
   void GetDataForId(const std::string& id,
-                    const content::URLDataSource::GotDataCallback& callback);
+                    content::URLDataSource::GotDataCallback callback);
+
+  void LoadMappings();
 
  private:
   friend class base::RefCountedThreadSafe<VivaldiDataSourcesAPI>;
 
-  using IdFileMap =
-      std::map<std::string, std::unique_ptr<VivaldiDataSourceItem>>;
+  class DataSourceItem {
+   public:
+    DataSourceItem();
+    explicit DataSourceItem(base::FilePath file_path);
+    DataSourceItem(DataSourceItem&&);
+    DataSourceItem& operator=(DataSourceItem&&);
+    ~DataSourceItem();
+
+    const base::FilePath& GetFilePath() const { return file_path_; }
+
+   private:
+    // The file on disk.
+    base::FilePath file_path_;
+
+    DISALLOW_COPY_AND_ASSIGN(DataSourceItem);
+  };
 
   ~VivaldiDataSourcesAPI();
 
   static scoped_refptr<base::RefCountedMemory> ReadFileOnFileThread(
       const base::FilePath& file_path);
 
-  void FinishGetDataForId(
-      const std::string& id,
-      const base::FilePath& file_path,
-      const content::URLDataSource::GotDataCallback& callback,
-      scoped_refptr<base::RefCountedMemory> data);
+  static bool GetDataMappingId(const std::string& url, std::string* id);
+  static std::string GetDataMappingUrl(const std::string& id);
 
-  void AddRawImageDataForBookmarkOnFileThread(
-      int bookmark_id,
-      scoped_refptr<base::RefCountedMemory> png_data,
-      AddBookmarkImageCallback callback,
-      content::BrowserThread::ID thread_id);
+  void AddMappingOnFileThread(base::FilePath file_path,
+                              AddMappingCallback callback);
+  void FinishAddMappingOnUIThread(std::string id, AddMappingCallback callback);
+
+  void RemoveMappingOnFileThread(std::string url,
+                                 RemoveMappingCallback callback);
+
+  void SetCacheOnIOThread(std::string id,
+                          scoped_refptr<base::RefCountedMemory> data);
+  void ClearCacheOnIOThread(std::string id);
+  void GetDataForIdOnFileThread(
+      std::string id,
+      content::URLDataSource::GotDataCallback callback);
+  void FinishGetDataForIdOnIOThread(
+      std::string id,
+      scoped_refptr<base::RefCountedMemory> data,
+      content::URLDataSource::GotDataCallback callback);
+
   void AddImageDataForBookmarkOnFileThread(
-      int bookmark_id,
-      std::unique_ptr<SkBitmap> bitmap,
-      AddBookmarkImageCallback callback,
-      content::BrowserThread::ID thread_id);
+      int64_t bookmark_id,
+      scoped_refptr<base::RefCountedMemory> png_data,
+      AddBookmarkImageCallback callback);
 
-  static void PostAddBookmarkImageResultsOnThread(
-      AddBookmarkImageCallback callback,
-      int bookmark_id);
+  void LoadMappingsOnFileThread();
+  void InitMappingsOnFileThread(const base::DictionaryValue* dict);
 
-  static IdFileMap LoadMappings(const base::FilePath& user_data_dir);
-  static IdFileMap GetMappings(const base::DictionaryValue* dict);
-
-  void ScheduleSaveMappings();
+  std::string GetMappingJSONOnFileThread();
   void SaveMappingsOnFileThread();
+
+  base::FilePath GetFileMappingFilePath();
+  base::FilePath GetBookmarkThumbnailPath(int64_t bookmark_id);
 
   const base::FilePath user_data_dir_;
 
-  // Access to any mutable field must be protected by this lock.
-  // TODO(igor@vivaldi.com): consider eliminating the lock and accessing
-  // id_to_file_map_ only from UI thread.
-  base::Lock lock_;
+  // Runner to ensure that tasks to manipulate the data mapping runs in sequence
+  // with the proper order.
+  scoped_refptr<base::SequencedTaskRunner> sequence_task_runner_;
 
-  // This is a map between the exposed id and the file name
-  IdFileMap id_to_file_map_;
+  // Outside constructor or destructor this must be accessed only from the
+  // sequence_task_runner_.
+  std::map<std::string, DataSourceItem> id_to_file_map_;
+
+  // Outside constructor or destructor this must be accessed only from the IO
+  // thread.
+  std::map<std::string, scoped_refptr<base::RefCountedMemory>>
+      io_thread_data_cache_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiDataSourcesAPI);
 };

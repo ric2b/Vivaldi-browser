@@ -23,10 +23,10 @@ std::string WMFAudioDecoder::GetDisplayName() const {
 
 void WMFAudioDecoder::Initialize(const AudioDecoderConfig& config,
                                  CdmContext* cdm_context,
-                                 const InitCB& init_cb,
+                                 InitCB init_cb,
                                  const OutputCB& output_cb,
                                  const WaitingCB& waiting_for_decryption_key_cb) {
-  impl_.Initialize(config, init_cb, output_cb);
+  impl_.Initialize(config, std::move(init_cb), output_cb);
 }
 
 void WMFAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
@@ -34,9 +34,9 @@ void WMFAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
   impl_.Decode(buffer, decode_cb);
 }
 
-void WMFAudioDecoder::Reset(const base::Closure& closure) {
+void WMFAudioDecoder::Reset(base::OnceClosure closure) {
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
-  impl_.Reset(closure);
+  impl_.Reset(std::move(closure));
 }
 
 }  // namespace media

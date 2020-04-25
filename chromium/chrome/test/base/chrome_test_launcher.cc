@@ -75,6 +75,10 @@ int ChromeTestSuiteRunner::RunTestSuite(int argc, char** argv) {
   ChromeTestSuite test_suite(argc, argv);
   // Browser tests are expected not to tear-down various globals.
   test_suite.DisableCheckForLeakedGlobals();
+#if defined(OS_ANDROID)
+  // Android browser tests run child processes as threads instead.
+  content::ContentTestSuiteBase::RegisterInProcessThreads();
+#endif
   return test_suite.Run();
 }
 
@@ -138,6 +142,7 @@ bool ChromeTestLauncherDelegate::AdjustChildProcessCommandLine(
   return true;
 }
 
+#if !defined(OS_ANDROID)
 content::ContentMainDelegate*
 ChromeTestLauncherDelegate::CreateContentMainDelegate() {
 #if defined(VIVALDI_BUILD)
@@ -146,6 +151,7 @@ ChromeTestLauncherDelegate::CreateContentMainDelegate() {
   return new ChromeMainDelegate();
 #endif
 }
+#endif
 
 void ChromeTestLauncherDelegate::PreSharding() {
 #if defined(OS_WIN)

@@ -8,6 +8,7 @@ update_target("//components/bookmarks/browser:browser") {
 
 update_target("//components/history/core/browser:browser") {
   sources += [
+    "//vivaldi/components/history/vivaldi_history_backend.cc",
     "//vivaldi/components/history/vivaldi_top_sites.cc",
     "//vivaldi/components/history/vivaldi_url_database.cc",
     "//vivaldi/components/history/vivaldi_visit_database.cc",
@@ -76,12 +77,12 @@ update_target("//chrome/test:unit_tests") {
   deps += [ "//vivaldi/components:adverse_adblocking" ]
 }
 
-update_target("//chrome/test:browser_tests") {
-  sources += [ "//vivaldi/components/adverse_adblocking/adverse_ad_filter_list_browsertests.cc" ]
-  deps += [ "//vivaldi/components:adverse_adblocking" ]
-}
-
 if (!is_android) {
+  update_target("//chrome/test:browser_tests") {
+    sources += [ "//vivaldi/components/adverse_adblocking/adverse_ad_filter_list_browsertests.cc" ]
+    deps += [ "//vivaldi/components:adverse_adblocking" ]
+  }
+
   update_target("//chrome/browser/extensions:extensions") {
     sources += [
       "//vivaldi/components/browser/vivaldi_component_loader.cc",

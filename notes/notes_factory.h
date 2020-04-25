@@ -4,7 +4,6 @@
 #define NOTES_NOTES_FACTORY_H_
 
 #include "base/memory/singleton.h"
-#include "components/keyed_service/content/browser_context_keyed_base_factory.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
 class Profile;

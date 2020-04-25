@@ -64,10 +64,10 @@ struct OperaNotesInfo {
 const wchar_t kTestMasterPassword[] = L"0perav1v";
 
 const OperaPasswordInfo OperaPasswords[] = {
-    {false, autofill::PasswordForm::SCHEME_HTML, "http://localhost:8081/login",
+    {false, autofill::PasswordForm::Scheme::kHtml, "http://localhost:8081/login",
      "http://localhost:8081/", L"username", L"user1", L"password", L"password1",
      false},
-    {false, autofill::PasswordForm::SCHEME_HTML, "http://localhost:8082/login",
+    {false, autofill::PasswordForm::Scheme::kHtml, "http://localhost:8082/login",
      "http://localhost:8082/", L"username", L"user2", L"password", L"password2",
      false},
 };

@@ -161,7 +161,7 @@ views::NonClientFrameView*
 }
 
 bool VivaldiNativeAppWindowViewsMac::IsMaximized() const {
-  return !IsMinimized() && !IsFullscreen() &&
+  return GetWidget() && !IsMinimized() && !IsFullscreen() &&
          vivaldi::NSWindowIsMaximized(GetNativeWindow().GetNativeNSWindow());
 }
 
@@ -227,9 +227,21 @@ void VivaldiNativeAppWindowViewsMac::OnWidgetCreated(views::Widget* widget) {
 }
 
 void VivaldiNativeAppWindowViewsMac::OnWidgetDestroyed(views::Widget* widget) {
-  widget->RemoveObserver(this);
-  [nswindow_observer_ stopObserving];
-  menubarTracker_.reset();
+  if (GetWidget() == widget) {
+    // We do not reset the widget pointer as it is needed in DeleteDelegate()
+    widget->RemoveObserver(this);
+    [nswindow_observer_ stopObserving];
+    menubarTracker_.reset();
+  }
+}
+
+void VivaldiNativeAppWindowViewsMac::DeleteDelegate() {
+  // Call base class function. For Mac it is necessary that the widget exists
+  // at this point. See OnWidgetDestroyed()
+  DCHECK(GetWidget());
+  VivaldiNativeAppWindowViews::DeleteDelegate();
+  // Call base class function with the sole purpose to reset the widget pointer.
+  VivaldiNativeAppWindowViews::OnWidgetDestroyed(GetWidget());
 }
 
 void VivaldiNativeAppWindowViewsMac::ShowWithApp() {

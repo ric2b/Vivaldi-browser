@@ -23,6 +23,18 @@
       "description": "Allow for CSS modifications set in appearance in settings.",
       "value": "false",
       "internal_value": "false"
+    },
+    "glorified_find_in_page_results": {
+      "friendly_name": "Styled find in page",
+      "description": "Added some shine to the find in page results.",
+      "value": "false",
+      "internal_value": "true"
+    },
+    "install_pwa": {
+      "friendly_name": "Menu entries for installing Progressive Web Apps.",
+      "description": "Enables menu entries to do installation of Progressive Web Apps.",
+      "value": "false",
+      "internal_value": "true"
     }
   }
 }

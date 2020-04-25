@@ -1089,14 +1089,13 @@ bool HistoryBackend::GetURLByID(URLID url_id, URLRow* url_row) {
   return false;
 }
 
-void HistoryBackend::QueryURL(const GURL& url,
-                              bool want_visits,
-                              QueryURLResult* result) {
-  DCHECK(result);
-  result->success = db_ && db_->GetRowForURL(url, &result->row);
+QueryURLResult HistoryBackend::QueryURL(const GURL& url, bool want_visits) {
+  QueryURLResult result;
+  result.success = db_ && db_->GetRowForURL(url, &result.row);
   // Optionally query the visits.
-  if (result->success && want_visits)
-    db_->GetVisitsForURL(result->row.id(), &result->visits);
+  if (result.success && want_visits)
+    db_->GetVisitsForURL(result.row.id(), &result.visits);
+  return result;
 }
 
 base::WeakPtr<syncer::ModelTypeControllerDelegate>
@@ -1247,43 +1246,22 @@ void HistoryBackend::RemoveDownloads(const std::set<uint32_t>& ids) {
   DCHECK_GE(ids.size(), num_downloads_deleted);
 }
 
-void HistoryBackend::QueryHistoryWStatement(const char* sql_query,
-                                            const std::string& search_string,
-                                            int max_hits,
-                                            QueryResults* query_results) {
-  if (db_) {
-    URLRows text_matches;
-    db_->GetMatchesWStatement(sql_query, search_string, max_hits,
-                              &text_matches);
-
-    std::vector<URLResult> matching_results;
-    // todo: Check if this can be further optimized.
-    for (size_t i = 0; i < text_matches.size(); i++) {
-      const URLRow& text_match = text_matches[i];
-      // Get all visits for given URL match.
-      URLResult url_result(text_match);
-      matching_results.push_back(std::move(url_result));
-    }
-    query_results->SetURLResults(std::move(matching_results));
-  }
-}
-
-void HistoryBackend::QueryHistory(const base::string16& text_query,
-                                  const QueryOptions& options,
-                                  QueryResults* query_results) {
-  DCHECK(query_results);
+QueryResults HistoryBackend::QueryHistory(const base::string16& text_query,
+                                          const QueryOptions& options) {
+  QueryResults query_results;
   base::TimeTicks beginning_time = base::TimeTicks::Now();
   if (db_) {
     if (text_query.empty()) {
       // Basic history query for the main database.
-      QueryHistoryBasic(options, query_results);
+      QueryHistoryBasic(options, &query_results);
     } else {
       // Text history query.
-      QueryHistoryText(text_query, options, query_results);
+      QueryHistoryText(text_query, options, &query_results);
     }
   }
   UMA_HISTOGRAM_TIMES("History.QueryHistory",
                       TimeTicks::Now() - beginning_time);
+  return query_results;
 }
 
 // Basic time-based querying of history.
@@ -1367,32 +1345,32 @@ void HistoryBackend::QueryHistoryText(const base::string16& text_query,
     result->set_reached_beginning(true);
 }
 
-void HistoryBackend::QueryRedirectsFrom(const GURL& from_url,
-                                        RedirectList* redirects) {
-  redirects->clear();
+RedirectList HistoryBackend::QueryRedirectsFrom(const GURL& from_url) {
   if (!db_)
-    return;
+    return {};
 
   URLID from_url_id = db_->GetRowForURL(from_url, nullptr);
   VisitID cur_visit = db_->GetMostRecentVisitForURL(from_url_id, nullptr);
   if (!cur_visit)
-    return;  // No visits for URL.
+    return {};  // No visits for URL.
 
-  GetRedirectsFromSpecificVisit(cur_visit, redirects);
+  RedirectList redirects;
+  GetRedirectsFromSpecificVisit(cur_visit, &redirects);
+  return redirects;
 }
 
-void HistoryBackend::QueryRedirectsTo(const GURL& to_url,
-                                      RedirectList* redirects) {
-  redirects->clear();
+RedirectList HistoryBackend::QueryRedirectsTo(const GURL& to_url) {
   if (!db_)
-    return;
+    return {};
 
   URLID to_url_id = db_->GetRowForURL(to_url, nullptr);
   VisitID cur_visit = db_->GetMostRecentVisitForURL(to_url_id, nullptr);
   if (!cur_visit)
-    return;  // No visits for URL.
+    return {};  // No visits for URL.
 
-  GetRedirectsToSpecificVisit(cur_visit, redirects);
+  RedirectList redirects;
+  GetRedirectsToSpecificVisit(cur_visit, &redirects);
+  return redirects;
 }
 
 void HistoryBackend::GetVisibleVisitCountToHost(
@@ -1421,8 +1399,7 @@ void HistoryBackend::QueryMostVisitedURLs(int result_count,
       url_filter);
 
   for (const std::unique_ptr<PageUsageData>& current_data : data) {
-    RedirectList redirects;
-    QueryRedirectsFrom(current_data->GetURL(), &redirects);
+    RedirectList redirects = QueryRedirectsFrom(current_data->GetURL());
     result->emplace_back(current_data->GetURL(), current_data->GetTitle(),
                          redirects);
   }
@@ -1471,8 +1448,8 @@ void HistoryBackend::GetRedirectsToSpecificVisit(VisitID cur_visit,
 }
 
 void HistoryBackend::ScheduleAutocomplete(
-    const base::Callback<void(HistoryBackend*, URLDatabase*)>& callback) {
-  callback.Run(this, db_.get());
+    base::OnceCallback<void(HistoryBackend*, URLDatabase*)> callback) {
+  std::move(callback).Run(this, db_.get());
 }
 
 void HistoryBackend::DeleteFTSIndexDatabases() {
@@ -2815,29 +2792,6 @@ bool HistoryBackend::ClearAllMainHistory(const URLRows& kept_urls) {
   db_->GetStartDate(&first_recorded_time_);
 
   return true;
-}
-
-// Vivaldi
-UrlVisitCount::TopUrlsPerDayList HistoryBackend::TopUrlsPerDay(
-    size_t num_hosts) const {
-  if (!db_)
-    return UrlVisitCount::TopUrlsPerDayList();
-
-  auto top_urls = db_->TopUrlsPerDay(num_hosts);
-  return top_urls;
-}
-
-Visit::VisitsList HistoryBackend::VisitSearch(
-    const QueryOptions& options) const {
-  if (!db_)
-    return Visit::VisitsList();
-
-  auto visits = db_->VisitSearch(options);
-  return visits;
-}
-
-void HistoryBackend::DropHistoryTables() {
-  db_->DropHistoryTables();
 }
 
 }  // namespace history

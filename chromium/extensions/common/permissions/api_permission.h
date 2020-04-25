@@ -258,6 +258,8 @@ class APIPermission {
     kSystemPowerSource = 214,
     kArcAppsPrivate = 215,
     kEnterpriseHardwarePlatform = 216,
+    kLoginScreenUi = 217,
+    kDeclarativeNetRequestFeedback = 218,
 
     // vivaldi permissions
 

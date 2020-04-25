@@ -31,6 +31,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/usb/usb_tab_helper.h"
 #include "components/device_event_log/device_event_log.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
@@ -182,7 +183,7 @@ StateChangeReason DiscardReasonToStateChangeReason(
 }
 
 struct FeatureUsageEntry {
-  SiteFeatureUsage usage;
+  performance_manager::SiteFeatureUsage usage;
   DecisionFailureReason failure_reason;
 };
 
@@ -202,9 +203,10 @@ void CheckFeatureUsage(const SiteCharacteristicsDataReader* reader,
 
   const auto* last = features + base::size(features);
   for (const auto* f = features; f != last; f++) {
-    if (f->usage == SiteFeatureUsage::kSiteFeatureInUse) {
+    if (f->usage == performance_manager::SiteFeatureUsage::kSiteFeatureInUse) {
       details->AddReason(f->failure_reason);
-    } else if (f->usage == SiteFeatureUsage::kSiteFeatureUsageUnknown) {
+    } else if (f->usage == performance_manager::SiteFeatureUsage::
+                               kSiteFeatureUsageUnknown) {
       insufficient_observation = true;
     }
   }
@@ -279,6 +281,10 @@ class TabLifecycleUnitExternalImpl : public TabLifecycleUnitExternal {
 
   int GetDiscardCount() const override {
     return tab_lifecycle_unit_->GetDiscardCount();
+  }
+
+  bool IsFrozen() const override {
+    return IsFrozenOrPendingFreeze(tab_lifecycle_unit_->GetState());
   }
 
   void SetIsDiscarded() override { tab_lifecycle_unit_->SetIsDiscarded(); }
@@ -459,15 +465,6 @@ base::ProcessHandle TabLifecycleUnitSource::TabLifecycleUnit::GetProcessHandle()
 
 LifecycleUnit::SortKey TabLifecycleUnitSource::TabLifecycleUnit::GetSortKey()
     const {
-  if (base::FeatureList::IsEnabled(features::kTabRanker)) {
-    const base::Optional<float> reactivation_score =
-        resource_coordinator::TabActivityWatcher::GetInstance()
-            ->CalculateReactivationScore(web_contents());
-    if (reactivation_score.has_value())
-      return SortKey(reactivation_score.value(), last_focused_time_);
-    return SortKey(SortKey::kMaxScore, last_focused_time_);
-  }
-
   return SortKey(last_focused_time_);
 }
 
@@ -779,13 +776,29 @@ void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
   if (vivaldi::IsVivaldiRunning()) {
     // Vivaldi stores vital tab info in extdata.
     raw_null_contents->SetExtData(old_contents->GetExtData());
-  }
 
+    // In Vivaldi the frametree structure will break down if we release the
+    // webcontents here the frametree is not updated as the proxies are gone
+    // already when the DOM is updated. This will most likely be the default
+    // behaviour when the Chromium guys fixes the below TODO
+    content::RenderFrameHostManager* rfh_manager =
+        static_cast<content::WebContentsImpl*>(old_contents)
+            ->GetFrameTree()
+            ->root()
+            ->render_manager();
+
+    if (rfh_manager->IsMainFrameForInnerDelegate()) {
+      // This will eventually destroy the webcontents.
+      rfh_manager->RemoveOuterDelegateFrame();
+    }
+    old_contents_deleter.release();
+  } else {
   // Discard the old tab's renderer.
   // TODO(jamescook): This breaks script connections with other tabs. Find a
   // different approach that doesn't do that, perhaps based on
   // RenderFrameProxyHosts.
   old_contents_deleter.reset();
+  }
 
   SetState(LifecycleUnitState::DISCARDED,
            DiscardReasonToStateChangeReason(discard_reason));
@@ -910,6 +923,14 @@ void TabLifecycleUnitSource::TabLifecycleUnit::OnLifecycleUnitStateChanged(
     for (auto& observer : *observers_)
       observer.OnDiscardedStateChange(web_contents(), GetDiscardReason(),
                                       is_discarded);
+  }
+
+  // Invoke OnFrozenStateChange() if necessary.
+  const bool was_frozen = IsFrozenOrPendingFreeze(last_state);
+  const bool is_frozen = IsFrozenOrPendingFreeze(GetState());
+  if (was_frozen != is_frozen) {
+    for (auto& observer : *observers_)
+      observer.OnFrozenStateChange(web_contents(), is_frozen);
   }
 }
 

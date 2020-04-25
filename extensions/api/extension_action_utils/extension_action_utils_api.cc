@@ -16,6 +16,7 @@
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
+#include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
@@ -46,10 +47,14 @@
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "skia/ext/image_operations.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/vivaldi_ui_utils.h"
+
+using vivaldi::ui_tools::EncodeBitmap;
 
 namespace extensions {
 
@@ -87,7 +92,7 @@ std::string GetShortcutTextForExtensionAction(
 }
 
 // Encodes the passed bitmap as a PNG represented as a dataurl.
-std::string* EncodeBitmapToPng(const SkBitmap* bitmap) {
+std::string EncodeBitmapToPng(const SkBitmap* bitmap) {
   unsigned char* inputAddr =
       bitmap->bytesPerPixel() == 1
           ? reinterpret_cast<unsigned char*>(bitmap->getAddr8(0, 0))
@@ -104,9 +109,74 @@ std::string* EncodeBitmapToPng(const SkBitmap* bitmap) {
                                  png_data.size());
   std::string base64_output;
   Base64Encode(base64_input, &base64_output);
+  base64_output.insert(0, "data:image/png;base64,");
 
-  return new std::string("data:image/png;base64," + base64_output);
+  return base64_output;
 }
+
+gfx::ImageSkiaRep ScaleImageSkiaRep(const gfx::ImageSkiaRep& rep,
+  int target_width_dp,
+  float target_scale) {
+  int width_px = target_width_dp * target_scale;
+  return gfx::ImageSkiaRep(
+    skia::ImageOperations::Resize(rep.GetBitmap(),
+      skia::ImageOperations::RESIZE_BEST,
+      width_px, width_px),
+    target_scale);
+}
+
+#define USE_HARDCODED_SCALE 1
+
+void FillBitmapForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
+                        ExtensionAction* action,
+                        int tab_id,
+                        content::BrowserContext* browser_context) {
+  // Icon precedence:
+  //   3. default
+  //   2. declarative
+  //   1. explicit
+
+  extensions::IconImage* default_icon_image = action->default_icon_image();
+
+  gfx::Image explicit_icon = action->GetExplicitlySetIcon(tab_id);
+  gfx::Image declarative_icon = action->GetDeclarativeIcon(tab_id);
+  gfx::Image image;
+
+  if (!explicit_icon.IsEmpty()) {
+    image = explicit_icon;
+  } else if (!declarative_icon.IsEmpty()) {
+    image = declarative_icon;
+  } else if (default_icon_image) {
+    image = default_icon_image->image();
+  }
+  if (!image.IsEmpty()) {
+    // Get the image from the extension that matches the DPI we're using
+    // on the monitor.
+#ifdef USE_HARDCODED_SCALE
+    // This matches the previous behavior where we send 32x32 images to JS,
+    // which scales them down to 16x16.
+    float device_scale = 2.0f;
+#else
+    Browser* browser = BrowserList::GetInstance()->GetLastActive();
+    float device_scale = ui::GetScaleFactorForNativeView(
+        browser ? browser->window()->GetNativeWindow() : nullptr);
+#endif  // USE_HARDCODED_SCALE
+    gfx::ImageSkia skia = image.AsImageSkia();
+    gfx::ImageSkiaRep rep = skia.GetRepresentation(device_scale);
+    if (rep.scale() != device_scale) {
+      skia.AddRepresentation(ScaleImageSkiaRep(
+        rep, ExtensionAction::ActionIconSize(), device_scale));
+    }
+    if (rep.is_null()) {
+      info->badge_icon = std::make_unique<std::string>();
+    } else {
+      info->badge_icon = std::make_unique<std::string>(EncodeBitmapToPng(&rep.GetBitmap()));
+    }
+  } else {
+    info->badge_icon.reset(new std::string(""));
+  }
+}
+
 
 void FillInfoForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
                       ExtensionAction* action,
@@ -142,34 +212,7 @@ void FillInfoForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
       new bool(!ExtensionActionAPI::Get(browser_context)
                     ->GetBrowserActionVisibility(action->extension_id())));
 
-  // Icon precedence:
-  //   3. default
-  //   2. declarative
-  //   1. explicit
-
-  extensions::IconImage* defaultIconImage = action->default_icon_image();
-
-  gfx::Image explicitIcon = action->GetExplicitlySetIcon(tab_id);
-
-  gfx::Image declarativeIcon = action->GetDeclarativeIcon(tab_id);
-
-  const SkBitmap* bitmap = nullptr;
-
-  if (!explicitIcon.IsEmpty()) {
-    bitmap = explicitIcon.ToSkBitmap();
-  } else if (!declarativeIcon.IsEmpty()) {
-    bitmap = declarativeIcon.ToSkBitmap();
-  } else {
-    if (defaultIconImage) {
-      bitmap = defaultIconImage->image_skia().bitmap();
-    }
-  }
-
-  if (bitmap) {
-    info->badge_icon.reset(EncodeBitmapToPng(bitmap));
-  } else {
-    info->badge_icon.reset(new std::string(""));
-  }
+  FillBitmapForTabId(info, action, tab_id, browser_context);
 }
 
 void FillInfoFromManifest(vivaldi::extension_action_utils::ExtensionInfo* info,
@@ -232,7 +275,6 @@ content::BrowserContext* ExtensionActionUtilFactory::GetBrowserContextToUse(
   return extensions::ExtensionsBrowserClient::Get()->GetOriginalContext(
       context);
 }
-
 // static
 void ExtensionActionUtil::SendIconLoaded(
     content::BrowserContext* browser_context,
@@ -242,20 +284,30 @@ void ExtensionActionUtil::SendIconLoaded(
     return;
 
   extensions::vivaldi::extension_action_utils::ExtensionInfo info;
+  const Extension* extension =
+      ExtensionRegistry::Get(browser_context)
+          ->GetExtensionById(extension_id,
+                             extensions::ExtensionRegistry::EVERYTHING);
+  ExtensionActionManager* manager =
+      ExtensionActionManager::Get(browser_context);
+  ExtensionAction* action = manager->GetExtensionAction(*extension);
 
-  info.id = extension_id;
-  info.badge_icon.reset(EncodeBitmapToPng(image.ToSkBitmap()));
+  if (action) {
+    FillBitmapForTabId(&info, action, -1, browser_context);
+    info.id = extension_id;
 
-  ::vivaldi::BroadcastEvent(
+    ::vivaldi::BroadcastEvent(
       vivaldi::extension_action_utils::OnIconLoaded::kEventName,
       vivaldi::extension_action_utils::OnIconLoaded::Create(info),
       browser_context);
+  }
 }
 
 ExtensionActionUtil::ExtensionActionUtil(Profile* profile)
     : profile_(profile) {
   ExtensionRegistry::Get(profile_)->AddObserver(this);
   ExtensionActionAPI::Get(profile)->AddObserver(this);
+  CommandService::Get(profile_)->AddObserver(this);
 }
 
 ExtensionActionUtil::~ExtensionActionUtil() {}
@@ -263,12 +315,14 @@ ExtensionActionUtil::~ExtensionActionUtil() {}
 void ExtensionActionUtil::Shutdown() {
   ExtensionRegistry::Get(profile_)->RemoveObserver(this);
   ExtensionActionAPI::Get(profile_)->RemoveObserver(this);
+  CommandService::Get(profile_)->RemoveObserver(this);
 }
 
 void ExtensionActionUtil::OnExtensionActionUpdated(
     ExtensionAction* extension_action,
     content::WebContents* web_contents,
     content::BrowserContext* browser_context) {
+
   // TODO(igor@vivaldi.com): web_contents is null when
   // extension_action->action_type() is ActionInfo::TYPE_BROWSER or
   // ActionInfo::TYPE_SYSTEM_INDICATOR when tab_id should be
@@ -313,36 +367,6 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
       vivaldi::extension_action_utils::OnUpdated::Create(info),
       browser_context);
 }
-
-// Called when there is a change to the extension action's visibility.
-void ExtensionActionUtil::OnExtensionActionVisibilityChanged(
-    const std::string& extension_id,
-    bool is_now_visible) {
-  const Extension* extension =
-      extensions::ExtensionRegistry::Get(profile_)->GetExtensionById(
-          extension_id, extensions::ExtensionRegistry::ENABLED);
-  if (!extension)
-    return;
-
-  extensions::ExtensionActionManager* action_manager =
-      extensions::ExtensionActionManager::Get(profile_);
-
-  ExtensionAction* action = action_manager->GetExtensionAction(*extension);
-  if (!action)
-    return;
-
-  vivaldi::extension_action_utils::ExtensionInfo info;
-  FillInfoForTabId(&info, action, ExtensionAction::kDefaultTabId, profile_);
-
-  ::vivaldi::BroadcastEvent(
-      vivaldi::extension_action_utils::OnUpdated::kEventName,
-      vivaldi::extension_action_utils::OnUpdated::Create(info), profile_);
-}
-
-// Called when the page actions have been refreshed do to a possible change
-// in count or visibility.
-void ExtensionActionUtil::OnPageActionsUpdated(
-    content::WebContents* web_contents) {}
 
 void ExtensionActionUtil::OnExtensionUninstalled(
     content::BrowserContext* browser_context,
@@ -393,15 +417,8 @@ void ExtensionActionUtil::OnExtensionLoaded(
       browser_context);
 
   std::unique_ptr<extensions::ExtensionResource> icon_resource;
-  ExtensionAction* pageorbrowser_action = nullptr;
-
-  if (extension->manifest()->HasKey(
-          extensions::manifest_keys::kBrowserAction)) {
-    pageorbrowser_action = action_manager->GetBrowserAction(*extension);
-  } else if (extension->manifest()->HasKey(
-                 extensions::manifest_keys::kPageAction)) {
-    pageorbrowser_action = action_manager->GetPageAction(*extension);
-  }
+  ExtensionAction* pageorbrowser_action =
+      action_manager->GetExtensionAction(*extension);
 
   if (pageorbrowser_action) {
     std::set<base::FilePath> image_paths;
@@ -451,6 +468,38 @@ void ExtensionActionUtil::OnExtensionUnloaded(
       vivaldi::extension_action_utils::OnRemoved::kEventName,
       vivaldi::extension_action_utils::OnRemoved::Create(info),
       browser_context);
+}
+
+void ExtensionActionUtil::OnExtensionCommandAdded(
+    const std::string& extension_id, const Command& added_command) {
+  // TODO(daniel@vivaldi.com): Currently we only support shortcuts for
+  // _execute_browser_action ("Activate the Extension"). Some extensions come
+  // with other keyboard shortcuts of their own. Until we add support for those,
+  // only send _execute_browser_action through.
+  if (added_command.command_name() != "_execute_browser_action")
+    return;
+  std::string shortcut_text =
+      ::vivaldi::ShortcutText(added_command.accelerator().key_code(),
+                              added_command.accelerator().modifiers(), 0);
+  ::vivaldi::BroadcastEvent(
+      vivaldi::extension_action_utils::OnCommandAdded::kEventName,
+      vivaldi::extension_action_utils::OnCommandAdded::Create(
+          extension_id, shortcut_text), profile_);
+}
+
+void ExtensionActionUtil::OnExtensionCommandRemoved(
+    const std::string& extension_id, const Command& removed_command) {
+  if (removed_command.command_name() != "_execute_browser_action")
+    return;
+  std::string shortcut_text =
+      ::vivaldi::ShortcutText(removed_command.accelerator().key_code(),
+                              removed_command.accelerator().modifiers(), 0);
+
+  ::vivaldi::BroadcastEvent(
+      vivaldi::extension_action_utils::OnCommandRemoved::kEventName,
+      vivaldi::extension_action_utils::OnCommandRemoved::Create(
+          extension_id, shortcut_text),
+      profile_);
 }
 
 void ExtensionActionUtil::OnTabStripModelChanged(

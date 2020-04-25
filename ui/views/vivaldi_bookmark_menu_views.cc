@@ -44,10 +44,6 @@ void VivaldiBookmarkMenuViews::set_observer(
   observer_ = observer;
 }
 
-void VivaldiBookmarkMenuViews::set_button_rect(const gfx::Rect& button_rect) {
-  button_rect_ = button_rect;
-}
-
 bool VivaldiBookmarkMenuViews::CanShow() {
   return controller_ != nullptr;
 }

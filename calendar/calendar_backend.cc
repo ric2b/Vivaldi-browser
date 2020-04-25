@@ -351,6 +351,18 @@ void CalendarBackend::UpdateEvent(EventID event_id,
       event_row.set_event_type_id(event.event_type_id);
     }
 
+    if (event.updateFields & calendar::TASK) {
+      event_row.set_task(event.task);
+    }
+
+    if (event.updateFields & calendar::COMPLETE) {
+      event_row.set_complete(event.complete);
+    }
+
+    if (event.updateFields & calendar::TRASH) {
+      event_row.set_trash(event.trash);
+    }
+
     if (event.updateFields & calendar::RECURRENCE) {
       RecurrenceRow recurrence_row;
       db_->GetRecurrenceRow(event_id, &recurrence_row);

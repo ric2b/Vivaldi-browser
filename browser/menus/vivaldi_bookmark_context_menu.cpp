@@ -3,7 +3,6 @@
 #include "browser/menus/vivaldi_bookmark_context_menu.h"
 
 #include "app/vivaldi_resources.h"
-#include "base/strings/utf_string_conversions.h"
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -27,16 +26,13 @@ typedef std::map<int, const bookmarks::BookmarkNode*> MenuIDToNodeMap;
 static int NextMenuId = 0;
 static MenuIDToNodeMap MenuIdMap;
 
-
-
-
 void BuildBookmarkContextMenu(ui::SimpleMenuModel* menu_model) {
-  menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB,
-      IDS_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB);
   menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_NEW_TAB,
       IDS_VIV_BOOKMARK_BAR_OPEN_NEW_TAB);
   menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB,
       IDS_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB);
+  menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB,
+      IDS_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB);
   menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_OPEN_NEW_WINDOW,
       IDS_VIV_BOOKMARK_BAR_OPEN_NEW_WINDOW);
@@ -76,9 +72,6 @@ void ExecuteBookmarkContextMenuCommand(Browser* browser,
                                        bookmarks::BookmarkModel* model,
                                        int64_t id,
                                        int command) {
-  extensions::BookmarkContextMenuAPI* api =
-    extensions::BookmarkContextMenuAPI::GetFactoryInstance()
-        ->Get(browser->profile()->GetOriginalProfile());
   switch (command) {
     case IDC_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB:
     case IDC_VIV_BOOKMARK_BAR_OPEN_NEW_TAB:
@@ -92,7 +85,8 @@ void ExecuteBookmarkContextMenuCommand(Browser* browser,
     case IDC_CUT:
     case IDC_COPY:
     case IDC_PASTE:
-      api->OnAction(id, 0, command);
+      extensions::BookmarkContextMenuAPI::SendAction(browser->profile(), id, 0,
+                                                     command);
       break;
     case IDC_BOOKMARK_BAR_REMOVE:
       // Handle locally so we can use chrome's code to keep menu open.
@@ -103,24 +97,43 @@ void ExecuteBookmarkContextMenuCommand(Browser* browser,
 
 void ExecuteBookmarkMenuCommand(Browser* browser, int menu_command,
                                 int64_t bookmark_id, int mouse_event_flags) {
-  extensions::BookmarkContextMenuAPI* api =
-    extensions::BookmarkContextMenuAPI::GetFactoryInstance()
-        ->Get(browser->profile()->GetOriginalProfile());
   if (IsVivaldiMenuItem(menu_command)) {
     // Currently (and probably forever we only have one specific menu item) so
     // no more tests.
-    api->OnAction(MenuIdMap[menu_command]->id(), 0,
+    extensions::BookmarkContextMenuAPI::SendAction(
+        browser->profile(), MenuIdMap[menu_command]->id(), 0,
         IDC_VIV_BOOKMARK_BAR_ADD_ACTIVE_TAB);
   } else if (bookmark_id != -1) {
-    api->OnActivated(bookmark_id, mouse_event_flags);
+    extensions::BookmarkContextMenuAPI::SendActivated(
+        browser->profile(), bookmark_id, mouse_event_flags);
   }
 }
 
 void HandleHoverUrl(Browser* browser, const std::string& url) {
-  extensions::BookmarkContextMenuAPI* api =
-    extensions::BookmarkContextMenuAPI::GetFactoryInstance()
-        ->Get(browser->profile()->GetOriginalProfile());
-  api->OnHover(url);
+  extensions::BookmarkContextMenuAPI::SendHover(browser->profile(), url);
+}
+
+void HandleOpenMenu(Browser* browser, int64_t id) {
+  for (const ::vivaldi::FolderEntry& e:  Params->siblings) {
+    if (e.id == id) {
+      extensions::BookmarkContextMenuAPI::SendOpen(browser->profile(), id);
+      break;
+    }
+  }
+}
+
+const bookmarks::BookmarkNode* GetNodeByPosition(
+    bookmarks::BookmarkModel* model, const gfx::Point& screen_point,
+    int* start_index, gfx::Rect* rect) {
+  for (const ::vivaldi::FolderEntry& e: Params->siblings) {
+    gfx::Rect candidate(e.x, e.y, e.width, e.height);
+    if (candidate.Contains(screen_point)) {
+      *rect = candidate;
+      *start_index = e.offset;
+      return bookmarks::GetBookmarkNodeByID(model, e.id);
+    }
+  }
+  return nullptr;
 }
 
 void SetBookmarkMenuProperties(const BookmarkMenuParams* params) {

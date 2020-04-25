@@ -114,6 +114,17 @@
         ]
       },
       {
+        "id": "SelectLocalImageParams",
+        "type": "object",
+        "description": "Option object for selectLocalImage.",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Title for the file selection dialog."
+          }
+        }
+      },
+      {
         "id": "SharedDataValue",
         "type": "object",
         "description": "Data key+value pair.",
@@ -360,6 +371,28 @@
                 "type": "string",
                 "description": "Full path to the selected file.",
                 "name": "path"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "selectLocalImage",
+        "type": "function",
+        "description": "Ask the user to select an image file and return as a data mapping URL",
+        "parameters": [
+          {
+            "name": "params",
+            "$ref": "SelectLocalImageParams"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "url",
+                "type": "string",
+                "description": "data mapping url for the selected image or empty if the user canceled the selection."
               }
             ]
           }

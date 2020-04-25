@@ -12,7 +12,7 @@
 
 #include "media/base/sample_format.h"
 #include "media/base/video_frame.h"
-#include "media/base/video_rotation.h"
+#include "media/base/video_transformation.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 

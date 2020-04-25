@@ -4,11 +4,14 @@
       source_lang_id="en" enc_check="möl">
   <outputs>
     <if expr="not vivaldi_chromium_file">
+      <output filename="google_chrome_strings_af.pak" type="data_package" lang="af" />
       <output filename="google_chrome_strings_be.pak" type="data_package" lang="be" />
+      <output filename="google_chrome_strings_de-CH.pak" type="data_package" lang="de-CH" />
       <output filename="google_chrome_strings_eo.pak" type="data_package" lang="eo" />
       <output filename="google_chrome_strings_es-PE.pak" type="data_package" lang="es-PE" />
       <output filename="google_chrome_strings_eu.pak" type="data_package" lang="eu" />
       <output filename="google_chrome_strings_fy.pak" type="data_package" lang="fy" />
+      <output filename="google_chrome_strings_gd.pak" type="data_package" lang="gd" />
       <output filename="google_chrome_strings_gl.pak" type="data_package" lang="gl" />
       <output filename="google_chrome_strings_hy.pak" type="data_package" lang="hy" />
       <output filename="google_chrome_strings_io.pak" type="data_package" lang="io" />
@@ -75,11 +78,14 @@
     <file path="strings/vivaldi_strings_zh-TW.xtb" lang="zh-TW" />
     <file path="strings/vivaldi_strings_es-419.xtb" lang="es-419" />
     <file path="strings/vivaldi_strings_pt-BR.xtb" lang="pt-BR" />
+    <file path="strings/vivaldi_strings_af.xtb" lang="af" />
     <file path="strings/vivaldi_strings_be.xtb" lang="be" />
+    <file path="strings/vivaldi_strings_de-CH.xtb" lang="de-CH" />
     <file path="strings/vivaldi_strings_eo.xtb" lang="eo" />
     <file path="strings/vivaldi_strings_es-PE.xtb" lang="es-PE" />
     <file path="strings/vivaldi_strings_eu.xtb" lang="eu" />
     <file path="strings/vivaldi_strings_fy.xtb" lang="fy" />
+    <file path="strings/vivaldi_strings_gd.xtb" lang="gd" />
     <file path="strings/vivaldi_strings_gl.xtb" lang="gl" />
     <file path="strings/vivaldi_strings_hy.xtb" lang="hy" />
     <file path="strings/vivaldi_strings_io.xtb" lang="io" />
@@ -120,6 +126,9 @@
         <ph name="PAGE_TITLE">
           $1<ex>Google</ex>
         </ph> - Vivaldi Canary
+      </message>
+      <message name="IDS_APP_SHORTCUTS_SUBDIR_NAME" desc="Name for the Vivaldi Apps Start Menu folder name.">
+        Vivaldi Apps
       </message>
     </messages>
   </release>

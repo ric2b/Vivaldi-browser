@@ -249,6 +249,7 @@ hooks = [
                 'chromium/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--no_auth',
+                '--num_threads=4',
                 '--bucket', 'chromium-browser-clang/orderfiles',
                 '-d', 'chromium/chrome/build',
     ],

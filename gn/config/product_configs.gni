@@ -5,8 +5,6 @@ vivaldi_compiler_configs = [
   "//vivaldi/gn/config:extra_cfi_flags",
 ]
 
-vivaldi_executable_configs = [ "//vivaldi/gn/config:disable_new_dtags" ]
-
 default_compiler_configs += vivaldi_compiler_configs
 
 # Static libraries and source sets use only the compiler ones.
@@ -19,14 +17,7 @@ set_defaults("source_set") {
   configs = default_compiler_configs
 }
 
-# end users already contain product_extra_default_compiler_configs
-# and product_extra_linker_configs
-product_extra_executable_configs = [ "//vivaldi/gn/config:disable_new_dtags" ]
-
-# end users already contain product_extra_default_compiler_configs
-# and product_extra_linker_configs
-
-default_executable_configs += vivaldi_compiler_configs + vivaldi_executable_configs
+default_executable_configs += vivaldi_compiler_configs
 
 set_defaults("executable") {
   configs = default_executable_configs

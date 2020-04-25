@@ -37,7 +37,7 @@ void EnableHighDPISupport() {
   // Enable per-monitor DPI for Win10 or above instead of Win8.1 since Win8.1
   // does not have EnableChildWindowDpiMessage, necessary for correct non-client
   // area scaling across monitors.
-  bool allowed_platform = base::win::GetVersion() >= base::win::VERSION_WIN10;
+  bool allowed_platform = base::win::GetVersion() >= base::win::Version::WIN10;
   PROCESS_DPI_AWARENESS process_dpi_awareness =
       allowed_platform ? PROCESS_PER_MONITOR_DPI_AWARE
                        : PROCESS_SYSTEM_DPI_AWARE;

@@ -36,6 +36,9 @@ const char kVivaldiLastTopSitesVacuumDate[] =
 
 // Local state prefs go here
 const char kVivaldiUniqueUserId[] = "vivaldi.unique_user_id";
+const char kVivaldiStatsNextDailyPing[] = "vivaldi.stats.next_daily_ping";
+const char kVivaldiStatsNextWeeklyPing[] = "vivaldi.stats.next_weekly_ping";
+const char kVivaldiStatsNextMonthlyPing[] = "vivaldi.stats.next_monthly_ping";
 
 // Enable native window decoration
 const char kOldVivaldiUseNativeWindowDecoration[] =

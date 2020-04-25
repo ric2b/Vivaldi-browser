@@ -24,10 +24,6 @@ declare_overrides() {
     }
   }
 
-  use_v8_context_snapshot = is_mac || is_win
-
-  exclude_unwind_tables = is_official_build
-
   # enable jumbo file compile
   use_jumbo_build = true
 
